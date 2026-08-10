@@ -32,6 +32,36 @@ public class ElementInfoRoleTests
         Assert.Contains("interactive", element.Traits!);
     }
 
+    [Fact]
+    public void DeclaredCapabilities_AddTraitsWhenRoleCannotInferThem()
+    {
+        var element = Element("CustomNativeControl");
+        element.Capabilities = ["invoke", "focus", "scroll"];
+
+        Assert.Contains("interactive", element.Traits!);
+        Assert.Contains("focusable", element.Traits!);
+        Assert.Contains("scrollable", element.Traits!);
+    }
+
+    [Fact]
+    public void SliderRole_RemainsInteractiveWithoutDeclaredCapabilities()
+    {
+        var element = Element("NSSlider");
+
+        Assert.Equal("slider", element.Role);
+        Assert.Contains("interactive", element.Traits!);
+    }
+
+    [Fact]
+    public void DeclaredCapabilities_TakePrecedenceOverRoleInference()
+    {
+        var element = Element("NSButton");
+        element.Capabilities = ["select"];
+
+        Assert.DoesNotContain("interactive", element.Traits ?? []);
+        Assert.DoesNotContain("focusable", element.Traits ?? []);
+    }
+
     [Theory]
     [InlineData("NSButton", "button")]      // AppKit
     [InlineData("UIButton", "button")]      // UIKit

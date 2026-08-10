@@ -27,8 +27,31 @@ public sealed class ScreenshotResult
     /// <summary>Optional actionable suggestions surfaced by the agent.</summary>
     public IReadOnlyList<string>? Suggestions { get; init; }
 
+    /// <summary>Capture epoch associated with the screenshot.</summary>
+    public long? CaptureEpoch { get; init; }
+
+    /// <summary>Native registration generation associated with the screenshot.</summary>
+    public long? RegistryGeneration { get; init; }
+
+    /// <summary>Window index associated with the screenshot.</summary>
+    public int? WindowId { get; init; }
+
     public static ScreenshotResult Ok(byte[] data) =>
-        new() { Success = true, Data = data };
+        Ok(data, captureEpoch: null, registryGeneration: null, windowId: null);
+
+    public static ScreenshotResult Ok(
+        byte[] data,
+        long? captureEpoch,
+        long? registryGeneration,
+        int? windowId) =>
+        new()
+        {
+            Success = true,
+            Data = data,
+            CaptureEpoch = captureEpoch,
+            RegistryGeneration = registryGeneration,
+            WindowId = windowId
+        };
 
     public static ScreenshotResult Failure(
         string? error,

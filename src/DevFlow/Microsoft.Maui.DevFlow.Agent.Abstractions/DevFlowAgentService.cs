@@ -142,6 +142,18 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     {
     }
 
+    /// <summary>
+    /// Stops backend-owned runtime hooks before the HTTP server is stopped.
+    /// </summary>
+    protected virtual Task StopBackendAsync() => Task.CompletedTask;
+
+    /// <summary>
+    /// Notifies the active backend that a successful UI operation completed.
+    /// </summary>
+    protected virtual void OnUiOperationSucceeded()
+    {
+    }
+
     // ── Lifecycle ─────────────────────────────────────────────────────────
 
     /// <summary>
@@ -266,7 +278,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     private static readonly string[] s_noFeatures = [];
 
-    private static object Capability(int version, bool supported, string[] features, string? reason)
+    protected static object Capability(int version, bool supported, string[] features, string? reason)
         => supported
             ? new { version, supported = true, features, reason = (string?)null }
             : new { version, supported = false, features = s_noFeatures, reason };
@@ -560,6 +572,15 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     /// <summary>Handles <c>POST /api/v1/ui/scroll</c>.</summary>
     protected virtual Task<HttpResponse> HandleScroll(HttpRequest request) => NotSupportedTask("ui.actions");
+
+    /// <summary>
+    /// Executes a UI mutation. Backends can override this to serialize mutations and invalidate
+    /// capture-bound state; the neutral backend simply invokes the handler.
+    /// </summary>
+    protected virtual Task<HttpResponse> ExecuteUiMutationAsync(
+        HttpRequest request,
+        Func<HttpRequest, Task<HttpResponse>> handler)
+        => handler(request);
 
     /// <summary>Installs automatic UI correlation hooks used by the profiler.</summary>
     protected virtual void EnsureAutoUiHooks()

@@ -1,15 +1,25 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.DevFlow.Agent.Core;
 using Microsoft.Maui.DevFlow.Driver;
 using Microsoft.Maui.Dispatching;
+using DriverElementInfo = Microsoft.Maui.DevFlow.Driver.ElementInfo;
 
 namespace Microsoft.Maui.DevFlow.Tests;
 
 public class DevFlowAgentServiceLifecycleTests
 {
+    private static readonly byte[] NativeScreenshotPng =
+    [
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+        0x00, 0x00, 0x00, 0x00
+    ];
+
     [Fact]
     public async Task StartServerOnly_AllowsLateAppBinding()
     {
@@ -198,6 +208,904 @@ public class DevFlowAgentServiceLifecycleTests
     }
 
     [Fact]
+    public async Task CaptureEpoch_RemainsValidAcrossPollingAndExpiresAfterMutation()
+    {
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var invoked = false;
+        var button = new Button
+        {
+            AutomationId = "CaptureEpochButton",
+            Text = "Invoke"
+        };
+        button.Clicked += (_, _) => invoked = true;
+        var app = new Application();
+        var window = new Window(new ContentPage { Content = button });
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var firstTree = await client.GetTreeAsync();
+        var firstButton = Assert.Single(
+            Flatten(firstTree),
+            element => element.AutomationId == "CaptureEpochButton");
+        var secondTree = await client.GetTreeAsync();
+        var secondButton = Assert.Single(
+            Flatten(secondTree),
+            element => element.AutomationId == "CaptureEpochButton");
+
+        Assert.True(firstButton.CaptureEpoch > 0);
+        Assert.True(secondButton.CaptureEpoch > firstButton.CaptureEpoch);
+        Assert.True(await client.TapAsync(
+            firstButton.Id,
+            firstButton.CaptureEpoch,
+            firstButton.RegistryGeneration));
+        Assert.True(invoked);
+
+        invoked = false;
+        var thirdTree = await client.GetTreeAsync();
+        var thirdButton = Assert.Single(
+            Flatten(thirdTree),
+            element => element.AutomationId == "CaptureEpochButton");
+        Assert.True(await client.TapAsync(
+            thirdButton.Id,
+            thirdButton.CaptureEpoch,
+            thirdButton.RegistryGeneration));
+        Assert.True(invoked);
+
+        invoked = false;
+        Assert.False(await client.TapAsync(
+            thirdButton.Id,
+            thirdButton.CaptureEpoch,
+            thirdButton.RegistryGeneration));
+        Assert.False(invoked);
+    }
+
+    [Fact]
+    public async Task CaptureEpoch_ExpiresAfterExternalElementPropertyChange()
+    {
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var invoked = false;
+        var button = new Button
+        {
+            AutomationId = "ExternallyChangedButton",
+            Text = "Before"
+        };
+        button.Clicked += (_, _) => invoked = true;
+        var app = new Application();
+        var window = new Window(new ContentPage { Content = button });
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var tree = await client.GetTreeAsync();
+        var buttonInfo = Assert.Single(
+            Flatten(tree),
+            element => element.AutomationId == "ExternallyChangedButton");
+
+        button.Text = "After";
+
+        Assert.False(await client.TapAsync(
+            buttonInfo.Id,
+            buttonInfo.CaptureEpoch,
+            buttonInfo.RegistryGeneration));
+        Assert.False(invoked);
+    }
+
+    [Fact]
+    public async Task CaptureEpoch_ExpiresAfterSuccessfulPhysicalUiOperation()
+    {
+        var port = GetFreePort();
+        using var service = new UiOperationProbeAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var invoked = false;
+        var button = new Button
+        {
+            AutomationId = "PhysicalOperationButton",
+            Text = "Invoke"
+        };
+        button.Clicked += (_, _) => invoked = true;
+        var app = new Application();
+        var window = new Window(new ContentPage { Content = button });
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var tree = await client.GetTreeAsync();
+        var buttonInfo = Assert.Single(
+            Flatten(tree),
+            element => element.AutomationId == "PhysicalOperationButton");
+
+        service.ReportSuccessfulUiOperation();
+
+        Assert.False(await client.TapAsync(
+            buttonInfo.Id,
+            buttonInfo.CaptureEpoch,
+            buttonInfo.RegistryGeneration));
+        Assert.False(invoked);
+    }
+
+    [Fact]
+    public async Task CaptureEpoch_ExpiresWhenDuplicateIdIsInsertedBeforeCapturedElement()
+    {
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var originalInvocations = 0;
+        var insertedInvocations = 0;
+        var original = new Button
+        {
+            AutomationId = "DuplicateButton",
+            Text = "Original"
+        };
+        original.Clicked += (_, _) => originalInvocations++;
+        var layout = new VerticalStackLayout { Children = { original } };
+        var app = new Application();
+        var window = new Window(new ContentPage { Content = layout });
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var tree = await client.GetTreeAsync();
+        var originalInfo = Assert.Single(
+            Flatten(tree),
+            element => element.AutomationId == "DuplicateButton");
+        var inserted = new Button
+        {
+            AutomationId = "DuplicateButton",
+            Text = "Inserted"
+        };
+        inserted.Clicked += (_, _) => insertedInvocations++;
+        layout.Children.Insert(0, inserted);
+
+        Assert.False(await client.TapAsync(
+            originalInfo.Id,
+            originalInfo.CaptureEpoch,
+            originalInfo.RegistryGeneration));
+        Assert.Equal(0, originalInvocations);
+        Assert.Equal(0, insertedInvocations);
+    }
+
+    [Fact]
+    public async Task CaptureEpoch_RejectsElementIdNotEmittedByThatCapture()
+    {
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var invoked = false;
+        var first = new Button { AutomationId = "FirstCaptureButton", Text = "First" };
+        var second = new Button { AutomationId = "SecondCaptureButton", Text = "Second" };
+        second.Clicked += (_, _) => invoked = true;
+        var app = new Application();
+        var window = new Window(new ContentPage
+        {
+            Content = new VerticalStackLayout { Children = { first, second } }
+        });
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var tree = await client.GetTreeAsync();
+        var secondInfo = Assert.Single(
+            Flatten(tree),
+            element => element.AutomationId == "SecondCaptureButton");
+        var firstQuery = await client.QueryAsync(automationId: "FirstCaptureButton");
+        var firstInfo = Assert.Single(firstQuery);
+
+        Assert.False(await client.TapAsync(
+            secondInfo.Id,
+            firstInfo.CaptureEpoch,
+            firstInfo.RegistryGeneration));
+        Assert.False(invoked);
+    }
+
+    [Fact]
+    public async Task Screenshot_RejectsElementIdNotEmittedByCapture()
+    {
+        var port = GetFreePort();
+        using var service = new NativeScreenshotAgentService(
+            new AgentOptions { Port = port },
+            new RegisteredNativeElementRegistry());
+        using var client = new AgentClient("localhost", port);
+        var first = new Button { AutomationId = "FirstScreenshotButton", Text = "First" };
+        var second = new Button { AutomationId = "SecondScreenshotButton", Text = "Second" };
+        var app = new Application();
+        var window = new Window(new ContentPage
+        {
+            Content = new VerticalStackLayout { Children = { first, second } }
+        });
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var tree = await client.GetTreeAsync();
+        var secondInfo = Assert.Single(
+            Flatten(tree),
+            element => element.AutomationId == "SecondScreenshotButton");
+        var firstInfo = Assert.Single(await client.QueryAsync(automationId: "FirstScreenshotButton"));
+
+        var result = await client.ScreenshotResultAsync(
+            window: null,
+            elementId: secondInfo.Id,
+            selector: null,
+            maxWidth: null,
+            scale: null,
+            captureEpoch: firstInfo.CaptureEpoch,
+            registryGeneration: firstInfo.RegistryGeneration);
+
+        Assert.False(result.Success);
+        Assert.Equal("stale-capture-epoch", result.Reason);
+    }
+
+    [Fact]
+    public async Task TreeAndQuery_DefaultToAllWindowsAndPreserveWindowIds()
+    {
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var app = new Application();
+        var firstWindow = new Window(new ContentPage
+        {
+            Content = new Label { AutomationId = "FirstWindowLabel", Text = "First" }
+        });
+        var secondWindow = new Window(new ContentPage
+        {
+            Content = new Label { AutomationId = "SecondWindowLabel", Text = "Second" }
+        });
+        var addWindow = typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        addWindow.Invoke(app, [firstWindow]);
+        addWindow.Invoke(app, [secondWindow]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var allWindows = await client.GetTreeAsync();
+        Assert.Equal(2, allWindows.Count);
+        Assert.Equal(0, allWindows[0].WindowId);
+        Assert.Equal(1, allWindows[1].WindowId);
+        Assert.Equal(
+            0,
+            Assert.Single(
+                Flatten(allWindows),
+                element => element.AutomationId == "FirstWindowLabel").WindowId);
+        Assert.Equal(
+            1,
+            Assert.Single(
+                Flatten(allWindows),
+                element => element.AutomationId == "SecondWindowLabel").WindowId);
+
+        var secondWindowOnly = await client.GetTreeAsync(window: 1);
+        var secondRoot = Assert.Single(secondWindowOnly);
+        Assert.Equal(1, secondRoot.WindowId);
+        Assert.DoesNotContain(
+            Flatten(secondWindowOnly),
+            element => element.AutomationId == "FirstWindowLabel");
+        Assert.Contains(
+            Flatten(secondWindowOnly),
+            element => element.AutomationId == "SecondWindowLabel");
+
+        var labels = await client.QueryAsync(type: "Label");
+        Assert.Equal(
+            0,
+            Assert.Single(
+                labels,
+                element => element.AutomationId == "FirstWindowLabel").WindowId);
+        Assert.Equal(
+            1,
+            Assert.Single(
+                labels,
+                element => element.AutomationId == "SecondWindowLabel").WindowId);
+    }
+
+    [Fact]
+    public async Task WindowScopedTree_DuplicateAutomationId_PreservesGlobalIdAndTargetsCorrectWindow()
+    {
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var firstInvocations = 0;
+        var secondInvocations = 0;
+        var thirdInvocations = 0;
+        var firstButton = new Button { AutomationId = "SharedWindowButton", Text = "First" };
+        var secondButton = new Button { AutomationId = "SharedWindowButton", Text = "Second" };
+        var thirdButton = new Button { AutomationId = "SharedWindowButton", Text = "Third" };
+        firstButton.Clicked += (_, _) => firstInvocations++;
+        secondButton.Clicked += (_, _) => secondInvocations++;
+        thirdButton.Clicked += (_, _) => thirdInvocations++;
+        var app = new Application();
+        var addWindow = typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        addWindow.Invoke(app, [new Window(new ContentPage { Content = firstButton })]);
+        addWindow.Invoke(app, [new Window(new ContentPage
+        {
+            Content = new VerticalStackLayout { Children = { secondButton, thirdButton } }
+        })]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var allWindows = await client.GetTreeAsync();
+        var globalSecond = Assert.Single(
+            Flatten(allWindows),
+            element => element.Text == "Second");
+        var globalThird = Assert.Single(
+            Flatten(allWindows),
+            element => element.Text == "Third");
+        var secondWindow = await client.GetTreeAsync(window: 1);
+        var scopedSecond = Assert.Single(
+            Flatten(secondWindow),
+            element => element.Text == "Second");
+        var scopedThird = Assert.Single(
+            Flatten(secondWindow),
+            element => element.Text == "Third");
+
+        Assert.Equal(globalSecond.Id, scopedSecond.Id);
+        Assert.Equal(globalThird.Id, scopedThird.Id);
+        Assert.NotEqual(scopedSecond.Id, scopedThird.Id);
+        Assert.Equal(1, scopedSecond.WindowId);
+
+        var detail = await client.GetElementAsync(scopedSecond.Id);
+        Assert.NotNull(detail);
+        Assert.Equal(1, detail!.WindowId);
+        Assert.Same(
+            secondButton,
+            new VisualTreeWalker().GetElementById(scopedSecond.Id, app));
+
+        Assert.True(await client.TapAsync(
+            scopedSecond.Id,
+            scopedSecond.CaptureEpoch,
+            scopedSecond.RegistryGeneration));
+        Assert.Equal(0, firstInvocations);
+        Assert.Equal(1, secondInvocations);
+        Assert.Equal(0, thirdInvocations);
+    }
+
+    [Fact]
+    public async Task WindowScopedCapture_IsNotInvalidatedByAnotherWindowChange()
+    {
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var firstLabel = new Label { AutomationId = "FirstWindowStatus", Text = "Before" };
+        var secondInvocations = 0;
+        var secondButton = new Button
+        {
+            AutomationId = "SecondWindowAction",
+            Text = "Invoke"
+        };
+        secondButton.Clicked += (_, _) => secondInvocations++;
+        var app = new Application();
+        var addWindow = typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        addWindow.Invoke(app, [new Window(new ContentPage { Content = firstLabel })]);
+        addWindow.Invoke(app, [new Window(new ContentPage { Content = secondButton })]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        await client.GetTreeAsync();
+        var secondCapture = Assert.Single(
+            Flatten(await client.GetTreeAsync(window: 1)),
+            element => element.AutomationId == "SecondWindowAction");
+
+        firstLabel.Text = "After";
+
+        Assert.True(await client.TapAsync(
+            secondCapture.Id,
+            secondCapture.CaptureEpoch,
+            secondCapture.RegistryGeneration));
+        Assert.Equal(1, secondInvocations);
+    }
+
+    [Fact]
+    public async Task HitTest_WithoutWindow_DefaultsToWindowZero()
+    {
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var app = new Application();
+        var addWindow = typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        addWindow.Invoke(app, [new Window(new ContentPage())]);
+        addWindow.Invoke(app, [new Window(new ContentPage())]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var response = await client.HitTestAsync(0, 0);
+        using var document = JsonDocument.Parse(response);
+
+        Assert.Equal(0, document.RootElement.GetProperty("window").GetInt32());
+        Assert.True(document.RootElement.GetProperty("captureEpoch").GetInt64() > 0);
+    }
+
+    [Fact]
+    public void HitTestCoordinates_UseInvariantCulture()
+    {
+        var originalCulture = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = new CultureInfo("de-DE");
+
+            Assert.True(MauiDevFlowAgentService.TryParseCoordinate("95.5", out var coordinate));
+            Assert.Equal(95.5, coordinate);
+            Assert.False(MauiDevFlowAgentService.TryParseCoordinate("95,5", out _));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+        }
+    }
+
+    [Fact]
+    public async Task CaptureEpoch_RetainsConcurrentClientLeaseWindow()
+    {
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var invoked = false;
+        var button = new Button
+        {
+            AutomationId = "LeaseWindowButton",
+            Text = "Invoke"
+        };
+        button.Clicked += (_, _) => invoked = true;
+        var app = new Application();
+        var window = new Window(new ContentPage { Content = button });
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var firstTree = await client.GetTreeAsync();
+        var firstButton = Assert.Single(
+            Flatten(firstTree),
+            element => element.AutomationId == "LeaseWindowButton");
+        for (var i = 0; i < 64; i++)
+            await client.GetTreeAsync();
+
+        Assert.True(await client.TapAsync(
+            firstButton.Id,
+            firstButton.CaptureEpoch,
+            firstButton.RegistryGeneration));
+        Assert.True(invoked);
+    }
+
+    [Fact]
+    public async Task StaleMutationRequest_DoesNotInvalidateAnotherClientCapture()
+    {
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var invoked = false;
+        var button = new Button
+        {
+            AutomationId = "LeaseIsolationButton",
+            Text = "Invoke"
+        };
+        button.Clicked += (_, _) => invoked = true;
+        var app = new Application();
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [new Window(new ContentPage { Content = button })]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var validCapture = Assert.Single(
+            Flatten(await client.GetTreeAsync()),
+            element => element.AutomationId == "LeaseIsolationButton");
+
+        Assert.False(await client.TapAsync(
+            validCapture.Id,
+            validCapture.CaptureEpoch + 10_000,
+            validCapture.RegistryGeneration));
+        Assert.True(await client.TapAsync(
+            validCapture.Id,
+            validCapture.CaptureEpoch,
+            validCapture.RegistryGeneration));
+        Assert.True(invoked);
+    }
+
+    [Fact]
+    public async Task NativeElement_GenericPropertyEndpointsAreRejected()
+    {
+        var port = GetFreePort();
+        var registry = new RegisteredNativeElementRegistry();
+        var nativeElement = new NativePropertyTarget { IsEnabled = true };
+        var elementId = registry.Register(
+            new ToolbarItem { Text = "Native" },
+            nativeElement,
+            "ToolbarItem");
+        using var service = new MauiDevFlowAgentService(
+            new AgentOptions { Port = port },
+            registry,
+            nativeElementSubscription: null);
+        using var client = new AgentClient("localhost", port);
+        var app = new Application();
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => client.GetPropertyAsync(elementId, nameof(NativePropertyTarget.IsEnabled)));
+        Assert.Contains("native-property-not-supported", ex.Message);
+        Assert.Contains("Generic property reflection is not supported for native elements", ex.Message);
+        Assert.False(await client.SetPropertyAsync(
+            elementId,
+            nameof(NativePropertyTarget.IsEnabled),
+            "false"));
+        Assert.True(nativeElement.IsEnabled);
+    }
+
+    [Fact]
+    public async Task CaptureEpoch_AllowsOnlyOneConcurrentMutation()
+    {
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var invocationCount = 0;
+        var button = new Button
+        {
+            AutomationId = "ConcurrentMutationButton",
+            Text = "Invoke"
+        };
+        button.Clicked += (_, _) => Interlocked.Increment(ref invocationCount);
+        var app = new Application();
+        var window = new Window(new ContentPage { Content = button });
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var tree = await client.GetTreeAsync();
+        var buttonInfo = Assert.Single(
+            Flatten(tree),
+            element => element.AutomationId == "ConcurrentMutationButton");
+        var results = await Task.WhenAll(
+            client.TapAsync(
+                buttonInfo.Id,
+                buttonInfo.CaptureEpoch,
+                buttonInfo.RegistryGeneration),
+            client.TapAsync(
+                buttonInfo.Id,
+                buttonInfo.CaptureEpoch,
+                buttonInfo.RegistryGeneration));
+
+        Assert.Equal(1, results.Count(result => result));
+        Assert.Equal(1, invocationCount);
+    }
+
+    [Fact]
+    public async Task Batch_WithCaptureLease_ExecutesAllActionsAgainstCapturedTargets()
+    {
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var invoked = false;
+        var entry = new Entry { AutomationId = "BatchEntry" };
+        var button = new Button { AutomationId = "BatchButton", Text = "Submit" };
+        button.Clicked += (_, _) => invoked = true;
+        var page = new ContentPage
+        {
+            Content = new VerticalStackLayout
+            {
+                Children = { entry, button }
+            }
+        };
+        var app = new Application();
+        var window = new Window(page);
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var tree = await client.GetTreeAsync();
+        var entryInfo = Assert.Single(Flatten(tree), element => element.AutomationId == "BatchEntry");
+        var buttonInfo = Assert.Single(Flatten(tree), element => element.AutomationId == "BatchButton");
+        var result = await client.BatchAsync(
+            [
+                new JsonObject
+                {
+                    ["action"] = "fill",
+                    ["elementId"] = entryInfo.Id,
+                    ["text"] = "hello"
+                },
+                new JsonObject
+                {
+                    ["action"] = "tap",
+                    ["elementId"] = buttonInfo.Id
+                }
+            ],
+            continueOnError: false,
+            captureEpoch: entryInfo.CaptureEpoch,
+            registryGeneration: entryInfo.RegistryGeneration);
+
+        Assert.True(result.GetProperty("success").GetBoolean());
+        Assert.Equal("hello", entry.Text);
+        Assert.True(invoked);
+    }
+
+    [Fact]
+    public async Task Batch_WithCaptureLease_StopsWhenEarlierActionRemovesLaterTarget()
+    {
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var removedTargetInvoked = false;
+        var layout = new VerticalStackLayout();
+        var removeButton = new Button { AutomationId = "RemoveTarget", Text = "Remove" };
+        var removedTarget = new Button { AutomationId = "RemovedTarget", Text = "Target" };
+        removeButton.Clicked += (_, _) => layout.Children.Remove(removedTarget);
+        removedTarget.Clicked += (_, _) => removedTargetInvoked = true;
+        layout.Children.Add(removeButton);
+        layout.Children.Add(removedTarget);
+        var app = new Application();
+        var window = new Window(new ContentPage { Content = layout });
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var tree = await client.GetTreeAsync();
+        var removeInfo = Assert.Single(Flatten(tree), element => element.AutomationId == "RemoveTarget");
+        var removedInfo = Assert.Single(Flatten(tree), element => element.AutomationId == "RemovedTarget");
+        var result = await client.BatchAsync(
+            [
+                new JsonObject
+                {
+                    ["action"] = "tap",
+                    ["elementId"] = removeInfo.Id
+                },
+                new JsonObject
+                {
+                    ["action"] = "tap",
+                    ["elementId"] = removedInfo.Id
+                }
+            ],
+            continueOnError: false,
+            captureEpoch: removeInfo.CaptureEpoch,
+            registryGeneration: removeInfo.RegistryGeneration);
+
+        Assert.False(result.GetProperty("success").GetBoolean());
+        Assert.False(removedTargetInvoked);
+        var results = result.GetProperty("results");
+        Assert.Equal(2, results.GetArrayLength());
+        Assert.True(results[0].GetProperty("success").GetBoolean());
+        Assert.Equal(409, results[1].GetProperty("statusCode").GetInt32());
+    }
+
+    [Fact]
+    public async Task Batch_WithCaptureLease_ContinueOnError_ExecutesLaterActions()
+    {
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var invoked = false;
+        var button = new Button { AutomationId = "ContinueBatchButton", Text = "Continue" };
+        button.Clicked += (_, _) => invoked = true;
+        var app = new Application();
+        var window = new Window(new ContentPage { Content = button });
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var buttonInfo = Assert.Single(
+            Flatten(await client.GetTreeAsync()),
+            element => element.AutomationId == "ContinueBatchButton");
+        var result = await client.BatchAsync(
+            [
+                new JsonObject { ["action"] = "unsupported" },
+                new JsonObject
+                {
+                    ["action"] = "tap",
+                    ["elementId"] = buttonInfo.Id
+                }
+            ],
+            continueOnError: true,
+            captureEpoch: buttonInfo.CaptureEpoch,
+            registryGeneration: buttonInfo.RegistryGeneration);
+
+        Assert.False(result.GetProperty("success").GetBoolean());
+        Assert.True(invoked);
+        var results = result.GetProperty("results");
+        Assert.Equal(2, results.GetArrayLength());
+        Assert.False(results[0].GetProperty("success").GetBoolean());
+        Assert.True(results[1].GetProperty("success").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Screenshot_RegisteredNativeElement_UsesNativeCaptureHook()
+    {
+        var port = GetFreePort();
+        var registry = new RegisteredNativeElementRegistry();
+        var owner = new ToolbarItem { Text = "Native" };
+        var nativeElement = new object();
+        var nativeId = registry.Register(owner, nativeElement, "ToolbarItem");
+        using var service = new NativeScreenshotAgentService(
+            new AgentOptions { Port = port },
+            registry);
+        using var client = new AgentClient("localhost", port);
+        var page = new ContentPage();
+        page.ToolbarItems.Add(owner);
+        var app = new Application();
+        var window = new Window(page);
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var result = await client.ScreenshotResultAsync(elementId: nativeId);
+
+        Assert.True(result.Success);
+        Assert.Equal(NativeScreenshotPng, result.Data);
+        Assert.Same(nativeElement, service.CapturedNativeElement);
+    }
+
+    [Fact]
+    public async Task Screenshot_DetachedNativeElement_DoesNotUseUiDispatcher()
+    {
+        var port = GetFreePort();
+        var dispatcher = new RejectingDispatcher();
+        using var service = new DetachedNativeScreenshotAgentService(
+            new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var app = new Application();
+        var window = new Window(new ContentPage());
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+
+        service.StartServerOnly(dispatcher);
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+        dispatcher.RejectDispatch = true;
+
+        var result = await client.ScreenshotResultAsync(
+            elementId: DetachedNativeTreeWalker.ElementId);
+
+        Assert.True(
+            result.Success,
+            $"Screenshot failed: {result.Error}; reason={result.Reason}");
+        Assert.Equal(NativeScreenshotPng, result.Data);
+        Assert.Same(service.Walker.NativeElement, service.CapturedNativeElement);
+        Assert.Equal(0, dispatcher.RejectedDispatchCount);
+    }
+
+    [Fact]
+    public async Task Screenshot_FreshElementCapture_ReturnedEpochCanCaptureSameElementAgain()
+    {
+        var port = GetFreePort();
+        var registry = new RegisteredNativeElementRegistry();
+        var owner = new ToolbarItem { Text = "Reusable native screenshot" };
+        var nativeElement = new object();
+        var nativeId = registry.Register(owner, nativeElement, "ToolbarItem");
+        using var service = new NativeScreenshotAgentService(
+            new AgentOptions { Port = port },
+            registry);
+        using var client = new AgentClient("localhost", port);
+        var page = new ContentPage();
+        page.ToolbarItems.Add(owner);
+        var app = new Application();
+        var window = new Window(page);
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var first = await client.ScreenshotResultAsync(elementId: nativeId);
+        Assert.True(
+            first.Success,
+            $"Screenshot failed: {first.Error}; reason={first.Reason}");
+        Assert.True(first.CaptureEpoch > 0);
+
+        var second = await client.ScreenshotResultAsync(
+            window: null,
+            elementId: nativeId,
+            selector: null,
+            maxWidth: null,
+            scale: null,
+            captureEpoch: first.CaptureEpoch,
+            registryGeneration: first.RegistryGeneration);
+
+        Assert.True(
+            second.Success,
+            $"Screenshot failed: {second.Error}; reason={second.Reason}");
+        Assert.Same(nativeElement, service.CapturedNativeElement);
+    }
+
+    [Fact]
+    public async Task NativeProbe_WhenPreviousProbeTimedOut_DoesNotStartAnotherWorker()
+    {
+        var port = GetFreePort();
+        using var service = new BlockingNativeProbeAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var app = new Application();
+        var window = new Window(new ContentPage
+        {
+            Content = new Label { Text = "Managed tree remains available" }
+        });
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        try
+        {
+            Assert.NotEmpty(await client.GetTreeAsync());
+            await service.Walker.ProbeStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.NotEmpty(await client.GetTreeAsync());
+
+            Assert.Equal(1, service.Walker.InvocationCount);
+            Assert.Equal(1, service.Walker.MaxConcurrentInvocations);
+        }
+        finally
+        {
+            service.Walker.ReleaseProbe.Set();
+        }
+    }
+
+    [Fact]
     public void StartServerOnly_RejectsDuplicateExtensionNamespace()
     {
         var options = new AgentOptions { Port = GetFreePort() };
@@ -228,11 +1136,170 @@ public class DevFlowAgentServiceLifecycleTests
         return ((IPEndPoint)listener.LocalEndpoint).Port;
     }
 
+    private static IEnumerable<DriverElementInfo> Flatten(IEnumerable<DriverElementInfo> elements)
+    {
+        foreach (var element in elements)
+        {
+            yield return element;
+            if (element.Children is null)
+                continue;
+
+            foreach (var child in Flatten(element.Children))
+                yield return child;
+        }
+    }
+
     private sealed class ListOnlyJobsAgentService(AgentOptions options) : MauiDevFlowAgentService(options)
     {
         protected override bool IsJobsSupported => true;
 
         protected override bool IsJobRunSupported => false;
+    }
+
+    private sealed class UiOperationProbeAgentService(AgentOptions options) : MauiDevFlowAgentService(options)
+    {
+        public void ReportSuccessfulUiOperation()
+            => PublishUiOperationSpan(
+                "ui.input.physical",
+                DateTime.UtcNow,
+                success: true);
+    }
+
+    private sealed class NativeScreenshotAgentService : MauiDevFlowAgentService
+    {
+        public NativeScreenshotAgentService(
+            AgentOptions options,
+            RegisteredNativeElementRegistry registry)
+            : base(options, registry, nativeElementSubscription: null)
+        {
+        }
+
+        public object? CapturedNativeElement { get; private set; }
+
+        protected override VisualTreeWalker CreateTreeWalker()
+            => new(NativeElementRegistry!);
+
+        protected override Task<byte[]?> CaptureNativeElementScreenshotAsync(
+            object nativeElement,
+            Microsoft.Maui.DevFlow.Agent.Core.ElementInfo? elementInfo)
+        {
+            CapturedNativeElement = nativeElement;
+            return Task.FromResult<byte[]?>(NativeScreenshotPng);
+        }
+    }
+
+    private sealed class DetachedNativeScreenshotAgentService : MauiDevFlowAgentService
+    {
+        private DetachedNativeTreeWalker? _walker;
+
+        public DetachedNativeScreenshotAgentService(AgentOptions options)
+            : base(options)
+        {
+        }
+
+        public DetachedNativeTreeWalker Walker => _walker!;
+
+        public object? CapturedNativeElement { get; private set; }
+
+        protected override VisualTreeWalker CreateTreeWalker()
+            => _walker ??= new DetachedNativeTreeWalker();
+
+        protected override bool IsMainThreadDispatchRequired() => false;
+
+        protected override Task<byte[]?> CaptureNativeElementScreenshotAsync(
+            object nativeElement,
+            Microsoft.Maui.DevFlow.Agent.Core.ElementInfo? elementInfo)
+        {
+            CapturedNativeElement = nativeElement;
+            return Task.FromResult<byte[]?>(NativeScreenshotPng);
+        }
+    }
+
+    private sealed class DetachedNativeTreeWalker : VisualTreeWalker
+    {
+        public const string ElementId = "native:detached:test";
+
+        public object NativeElement { get; } = new();
+
+        public override bool SupportsNativeElements => true;
+
+        public override object? GetNativeElementById(string id)
+            => id == ElementId ? NativeElement : null;
+
+        public override Microsoft.Maui.DevFlow.Agent.Core.ElementInfo? GetNativeElementInfoById(
+            string id)
+            => id == ElementId
+                ? new Microsoft.Maui.DevFlow.Agent.Core.ElementInfo
+                {
+                    Id = ElementId,
+                    Type = "Button",
+                    Framework = "test-native",
+                    NativeProperties = new Dictionary<string, string?>
+                    {
+                        ["displayDensity"] = "1"
+                    }
+                }
+                : null;
+    }
+
+    private sealed class BlockingNativeProbeAgentService : MauiDevFlowAgentService
+    {
+        private BlockingNativeTreeWalker? _walker;
+
+        public BlockingNativeProbeAgentService(AgentOptions options)
+            : base(options)
+        {
+        }
+
+        public BlockingNativeTreeWalker Walker => _walker!;
+
+        protected override VisualTreeWalker CreateTreeWalker()
+            => _walker ??= new BlockingNativeTreeWalker();
+    }
+
+    private sealed class BlockingNativeTreeWalker : VisualTreeWalker
+    {
+        private int _concurrentInvocations;
+        private int _invocationCount;
+        private int _maxConcurrentInvocations;
+
+        public override bool SupportsNativeElements => true;
+        public TaskCompletionSource ProbeStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public ManualResetEventSlim ReleaseProbe { get; } = new(initialState: false);
+        public int InvocationCount => Volatile.Read(ref _invocationCount);
+        public int MaxConcurrentInvocations => Volatile.Read(ref _maxConcurrentInvocations);
+
+        public override List<Microsoft.Maui.DevFlow.Agent.Core.ElementInfo> WalkNativeTree(
+            IReadOnlyList<IntPtr> knownWindowHandles,
+            int maxDepth = 0)
+        {
+            Interlocked.Increment(ref _invocationCount);
+            var concurrent = Interlocked.Increment(ref _concurrentInvocations);
+            UpdateMaximum(ref _maxConcurrentInvocations, concurrent);
+            ProbeStarted.TrySetResult();
+            try
+            {
+                ReleaseProbe.Wait(TimeSpan.FromSeconds(10));
+                return [];
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _concurrentInvocations);
+            }
+        }
+
+        private static void UpdateMaximum(ref int location, int value)
+        {
+            while (true)
+            {
+                var current = Volatile.Read(ref location);
+                if (current >= value
+                    || Interlocked.CompareExchange(ref location, value, current) == current)
+                {
+                    return;
+                }
+            }
+        }
     }
 
     private sealed class DispatchProbeAgentService : MauiDevFlowAgentService
@@ -313,6 +1380,37 @@ public class DevFlowAgentServiceLifecycleTests
         }
 
         public IDispatcherTimer CreateTimer() => new ImmediateDispatcherTimer();
+    }
+
+    private sealed class RejectingDispatcher : IDispatcher
+    {
+        public bool RejectDispatch { get; set; }
+
+        public int RejectedDispatchCount { get; private set; }
+
+        public bool IsDispatchRequired => RejectDispatch;
+
+        public bool Dispatch(Action action)
+        {
+            if (RejectDispatch)
+            {
+                RejectedDispatchCount++;
+                throw new InvalidOperationException("UI dispatcher is blocked.");
+            }
+
+            action();
+            return true;
+        }
+
+        public bool DispatchDelayed(TimeSpan delay, Action action)
+            => Dispatch(action);
+
+        public IDispatcherTimer CreateTimer() => new ImmediateDispatcherTimer();
+    }
+
+    private sealed class NativePropertyTarget
+    {
+        public bool IsEnabled { get; set; }
     }
 
     private sealed class ImmediateDispatcherTimer : IDispatcherTimer

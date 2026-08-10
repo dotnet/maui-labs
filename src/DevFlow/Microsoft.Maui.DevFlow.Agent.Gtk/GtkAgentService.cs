@@ -12,12 +12,24 @@ public class GtkAgentService : MauiDevFlowAgentService
 {
     public GtkAgentService(AgentOptions? options = null) : base(options) { }
 
-    protected override VisualTreeWalker CreateTreeWalker() => new GtkVisualTreeWalker();
+    internal GtkAgentService(
+        AgentOptions? options,
+        RegisteredNativeElementRegistry nativeElementRegistry,
+        IDisposable nativeElementSubscription)
+        : base(options, nativeElementRegistry, nativeElementSubscription)
+    {
+    }
+
+    protected override VisualTreeWalker CreateTreeWalker()
+        => NativeElementRegistry is null
+            ? new GtkVisualTreeWalker()
+            : new GtkVisualTreeWalker(NativeElementRegistry);
     protected override IProfilerCollector CreateProfilerCollector() => new RuntimeProfilerCollector();
 
     protected override string PlatformName => "Linux";
     protected override string DeviceTypeName => "Virtual";
     protected override string IdiomName => "Desktop";
+    protected override bool SupportsNativeElementScreenshots => true;
 
     protected override double GetWindowDisplayDensity(IWindow? window)
     {
@@ -160,6 +172,13 @@ public class GtkAgentService : MauiDevFlowAgentService
         return Task.FromResult<byte[]?>(null);
     }
 
+    protected override Task<byte[]?> CaptureNativeElementScreenshotAsync(
+        object nativeElement,
+        ElementInfo? elementInfo)
+        => Task.FromResult(nativeElement is global::Gtk.Widget widget
+            ? CaptureGtkWidget(widget)
+            : null);
+
     protected override async Task<byte[]?> CaptureScreenshotAsync(VisualElement rootElement)
     {
         // Try the standard MAUI API first
@@ -250,7 +269,7 @@ public class GtkAgentService : MauiDevFlowAgentService
         }
     }
 
-    protected override async Task<byte[]?> CaptureFullScreenAsync()
+    protected override async Task<byte[]?> CaptureFullScreenAsync(int? windowIndex = null)
     {
         // Use XDG Desktop Portal Screenshot via DBUS to capture the full screen
         // including all windows (modal dialogs, popups, etc.)

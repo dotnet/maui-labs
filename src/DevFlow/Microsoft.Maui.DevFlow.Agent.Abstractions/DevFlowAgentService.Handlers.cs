@@ -266,6 +266,7 @@ public partial class DevFlowAgentService
     public async Task StopAsync()
     {
         await StopProfilerAsync();
+        await StopBackendAsync();
         await _server.StopAsync();
     }
 
@@ -283,18 +284,18 @@ public partial class DevFlowAgentService
         _server.MapPost("/api/v1/ui/hit-test", HandleHitTest);
         _server.MapGet("/api/v1/ui/screenshot", HandleScreenshot);
         _server.MapGet("/api/v1/ui/elements/{id}/properties/{name}", HandleProperty);
-        _server.MapPut("/api/v1/ui/elements/{id}/properties/{name}", HandleSetProperty);
-        _server.MapPost("/api/v1/ui/actions/tap", HandleTap);
-        _server.MapPost("/api/v1/ui/actions/fill", HandleFill);
-        _server.MapPost("/api/v1/ui/actions/clear", HandleClear);
-        _server.MapPost("/api/v1/ui/actions/focus", HandleFocus);
-        _server.MapPost("/api/v1/ui/actions/navigate", HandleNavigate);
-        _server.MapPost("/api/v1/ui/actions/resize", HandleResize);
-        _server.MapPost("/api/v1/ui/actions/scroll", HandleScroll);
-        _server.MapPost("/api/v1/ui/actions/back", HandleBack);
-        _server.MapPost("/api/v1/ui/actions/key", HandleKey);
-        _server.MapPost("/api/v1/ui/actions/gesture", HandleGesture);
-        _server.MapPost("/api/v1/ui/actions/batch", HandleBatch);
+        _server.MapPut("/api/v1/ui/elements/{id}/properties/{name}", request => ExecuteUiMutationAsync(request, HandleSetProperty));
+        _server.MapPost("/api/v1/ui/actions/tap", request => ExecuteUiMutationAsync(request, HandleTap));
+        _server.MapPost("/api/v1/ui/actions/fill", request => ExecuteUiMutationAsync(request, HandleFill));
+        _server.MapPost("/api/v1/ui/actions/clear", request => ExecuteUiMutationAsync(request, HandleClear));
+        _server.MapPost("/api/v1/ui/actions/focus", request => ExecuteUiMutationAsync(request, HandleFocus));
+        _server.MapPost("/api/v1/ui/actions/navigate", request => ExecuteUiMutationAsync(request, HandleNavigate));
+        _server.MapPost("/api/v1/ui/actions/resize", request => ExecuteUiMutationAsync(request, HandleResize));
+        _server.MapPost("/api/v1/ui/actions/scroll", request => ExecuteUiMutationAsync(request, HandleScroll));
+        _server.MapPost("/api/v1/ui/actions/back", request => ExecuteUiMutationAsync(request, HandleBack));
+        _server.MapPost("/api/v1/ui/actions/key", request => ExecuteUiMutationAsync(request, HandleKey));
+        _server.MapPost("/api/v1/ui/actions/gesture", request => ExecuteUiMutationAsync(request, HandleGesture));
+        _server.MapPost("/api/v1/ui/actions/batch", request => ExecuteUiMutationAsync(request, HandleBatch));
 
         _server.MapGet("/api/v1/logs", HandleLogs);
         _server.MapWebSocket("/ws/v1/logs", HandleLogsWebSocket);
@@ -304,10 +305,10 @@ public partial class DevFlowAgentService
         _server.MapGet("/api/v1/webview/source", HandleCdpSource);
         _server.MapGet("/api/v1/webview/dom", HandleWebViewDom);
         _server.MapPost("/api/v1/webview/dom/query", HandleWebViewDomQuery);
-        _server.MapPost("/api/v1/webview/navigate", HandleWebViewNavigate);
-        _server.MapPost("/api/v1/webview/input/click", HandleWebViewInputClick);
-        _server.MapPost("/api/v1/webview/input/fill", HandleWebViewInputFill);
-        _server.MapPost("/api/v1/webview/input/text", HandleWebViewInputText);
+        _server.MapPost("/api/v1/webview/navigate", request => ExecuteUiMutationAsync(request, HandleWebViewNavigate));
+        _server.MapPost("/api/v1/webview/input/click", request => ExecuteUiMutationAsync(request, HandleWebViewInputClick));
+        _server.MapPost("/api/v1/webview/input/fill", request => ExecuteUiMutationAsync(request, HandleWebViewInputFill));
+        _server.MapPost("/api/v1/webview/input/text", request => ExecuteUiMutationAsync(request, HandleWebViewInputText));
         _server.MapGet("/api/v1/webview/network", HandleWebViewNetwork);
         _server.MapGet("/api/v1/webview/console", HandleWebViewConsole);
         _server.MapGet("/api/v1/webview/screenshot", HandleWebViewScreenshot);
@@ -570,14 +571,14 @@ public partial class DevFlowAgentService
 
     protected record ResizeRequest(int Width, int Height);
 
-    protected sealed class KeyActionRequest
+    protected sealed class KeyActionRequest : CaptureBoundRequest
     {
         public string? ElementId { get; set; }
         public string? Key { get; set; }
         public string? Text { get; set; }
     }
 
-    protected sealed class GestureActionRequest
+    protected sealed class GestureActionRequest : CaptureBoundRequest
     {
         public string? ElementId { get; set; }
         public string? Type { get; set; }
@@ -586,7 +587,7 @@ public partial class DevFlowAgentService
         public int DurationMs { get; set; } = 200;
     }
 
-    protected sealed class BatchRequest
+    protected sealed class BatchRequest : CaptureBoundRequest
     {
         public List<BatchActionRequest> Actions { get; set; } = [];
         public bool ContinueOnError { get; set; }
@@ -1125,6 +1126,9 @@ public partial class DevFlowAgentService
         string? elementPath = null,
         object? tags = null)
     {
+        if (success)
+            OnUiOperationSucceeded();
+
         var endTsUtc = DateTime.UtcNow;
         var route = GetCurrentRouteLocation();
         var span = new ProfilerSpan
@@ -2728,12 +2732,18 @@ public sealed class ScreenshotCaptureFailure
 }
 
 // Request DTOs
-public class ActionRequest
+public class CaptureBoundRequest
+{
+    public long? CaptureEpoch { get; set; }
+    public long? RegistryGeneration { get; set; }
+}
+
+public class ActionRequest : CaptureBoundRequest
 {
     public string? ElementId { get; set; }
 }
 
-public class FillRequest
+public class FillRequest : CaptureBoundRequest
 {
     public string? ElementId { get; set; }
     public string? Text { get; set; }
@@ -2774,12 +2784,12 @@ public class WebViewInputTextRequest
     public string? ContextId { get; set; }
 }
 
-public class SetPropertyRequest
+public class SetPropertyRequest : CaptureBoundRequest
 {
     public string? Value { get; set; }
 }
 
-public class ScrollRequest
+public class ScrollRequest : CaptureBoundRequest
 {
     public string? ElementId { get; set; }
     public double DeltaX { get; set; }

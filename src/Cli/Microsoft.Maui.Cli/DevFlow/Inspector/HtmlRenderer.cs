@@ -14,9 +14,19 @@ namespace Microsoft.Maui.Cli.DevFlow.Inspector;
 /// </summary>
 public static class HtmlRenderer
 {
+    private const string RedactedValue = "[REDACTED]";
     private static readonly Lazy<string> _templateCache = new(LoadTemplate, LazyThreadSafetyMode.ExecutionAndPublication);
 
-    public static string Render(List<ElementInfo> tree, bool hasScreenshot, int screenshotWidth = 0, int screenshotHeight = 0, double density = 1, double elementScale = 1, double rootOffsetX = 0, double rootOffsetY = 0)
+    public static string Render(
+        List<ElementInfo> tree,
+        bool hasScreenshot,
+        int screenshotWidth = 0,
+        int screenshotHeight = 0,
+        double density = 1,
+        double elementScale = 1,
+        double rootOffsetX = 0,
+        double rootOffsetY = 0,
+        string? screenshotUrl = null)
     {
         var template = _templateCache.Value;
         var (viewportWidth, viewportHeight) = ComputeViewportSize(tree, screenshotWidth, screenshotHeight);
@@ -27,7 +37,7 @@ public static class HtmlRenderer
 
         // Build screenshot tag
         var screenshotHtml = hasScreenshot
-            ? "<img id=\"screenshot\" src=\"screenshot.png\" alt=\"App screenshot\">"
+            ? $"<img id=\"screenshot\" src=\"{HttpUtility.HtmlAttributeEncode(screenshotUrl ?? "screenshot.png")}\" alt=\"App screenshot\">"
             : "";
 
         // Replace scalar placeholders first (all produce known-safe, non-user
@@ -136,6 +146,20 @@ public static class HtmlRenderer
             attrs.Append($" data-fullType=\"{Escape(element.FullType)}\"");
         if (!string.IsNullOrEmpty(element.Framework))
             attrs.Append($" data-framework=\"{Escape(element.Framework)}\"");
+        if (!string.IsNullOrEmpty(element.Origin))
+            attrs.Append($" data-origin=\"{Escape(element.Origin)}\"");
+        if (!string.IsNullOrEmpty(element.OwnerId))
+            attrs.Append($" data-ownerId=\"{Escape(element.OwnerId)}\"");
+        if (!string.IsNullOrEmpty(element.Discriminator))
+            attrs.Append($" data-discriminator=\"{Escape(element.Discriminator)}\"");
+        if (!string.IsNullOrEmpty(element.BoundsQuality))
+            attrs.Append($" data-boundsQuality=\"{Escape(element.BoundsQuality)}\"");
+        if (element.CaptureEpoch > 0)
+            attrs.Append(CultureInfo.InvariantCulture, $" data-captureEpoch=\"{element.CaptureEpoch}\"");
+        if (element.RegistryGeneration > 0)
+            attrs.Append(CultureInfo.InvariantCulture, $" data-registryGeneration=\"{element.RegistryGeneration}\"");
+        if (element.WindowId.HasValue)
+            attrs.Append(CultureInfo.InvariantCulture, $" data-windowId=\"{element.WindowId.Value}\"");
         if (!string.IsNullOrEmpty(element.AutomationId))
             attrs.Append($" data-automationId=\"{Escape(element.AutomationId)}\"");
         if (!string.IsNullOrEmpty(element.Text))
@@ -144,6 +168,8 @@ public static class HtmlRenderer
             attrs.Append($" data-value=\"{Escape(element.Value)}\"");
         if (!string.IsNullOrEmpty(element.Role))
             attrs.Append($" data-role=\"{Escape(element.Role)}\"");
+        if (IsSensitive(element))
+            attrs.Append(" data-sensitive=\"true\"");
 
         attrs.Append($" data-isVisible=\"{element.IsVisible.ToString().ToLowerInvariant()}\"");
         attrs.Append($" data-isEnabled=\"{element.IsEnabled.ToString().ToLowerInvariant()}\"");
@@ -158,8 +184,24 @@ public static class HtmlRenderer
             attrs.Append($" data-styleClass=\"{Escape(string.Join(",", element.StyleClass))}\"");
         if (!string.IsNullOrEmpty(element.NativeType))
             attrs.Append($" data-nativeType=\"{Escape(element.NativeType)}\"");
+        if (element.Capabilities is { Count: > 0 })
+            attrs.Append($" data-capabilities=\"{Escape(string.Join(",", element.Capabilities))}\"");
 
         sb.AppendLine($"    <div class=\"devflow-element\"{attrs} style=\"{style}\"></div>");
+    }
+
+    private static bool IsSensitive(ElementInfo element)
+    {
+        if (element.NativeProperties?.TryGetValue("isPassword", out var isPassword) == true
+            && bool.TryParse(isPassword, out var parsed)
+            && parsed)
+        {
+            return true;
+        }
+
+        return string.Equals(element.Type, "Entry", StringComparison.OrdinalIgnoreCase)
+            && (string.Equals(element.Text, RedactedValue, StringComparison.Ordinal)
+                || string.Equals(element.Value, RedactedValue, StringComparison.Ordinal));
     }
 
     private static string Escape(string value) => HttpUtility.HtmlAttributeEncode(value);

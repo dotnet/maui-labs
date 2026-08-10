@@ -28,19 +28,43 @@ public class ScreenshotAgentClientTests
             using var client = await AcceptAsync(listener);
             using var stream = client.GetStream();
             var request = await ReadRequestAsync(stream);
-            Assert.Contains("GET /api/v1/ui/screenshot", request, StringComparison.Ordinal);
-            await WriteResponseAsync(stream, 200, "OK", "image/png", SamplePng);
+            Assert.Contains(
+                "GET /api/v1/ui/screenshot?captureEpoch=42&registryGeneration=7",
+                request,
+                StringComparison.Ordinal);
+            await WriteResponseAsync(
+                stream,
+                200,
+                "OK",
+                "image/png",
+                SamplePng,
+                new Dictionary<string, string>
+                {
+                    ["X-DevFlow-Capture-Epoch"] = "42",
+                    ["X-DevFlow-Registry-Generation"] = "7",
+                    ["X-DevFlow-Window-Id"] = "2"
+                });
         });
 
         using var agent = new AgentClient("localhost", port);
 
-        var result = await agent.ScreenshotResultAsync();
+        var result = await agent.ScreenshotResultAsync(
+            window: null,
+            elementId: null,
+            selector: null,
+            maxWidth: null,
+            scale: null,
+            captureEpoch: 42,
+            registryGeneration: 7);
 
         Assert.True(result.Success);
         Assert.NotNull(result.Data);
         Assert.Equal(SamplePng, result.Data);
         Assert.Null(result.Error);
         Assert.False(result.Retryable);
+        Assert.Equal(42, result.CaptureEpoch);
+        Assert.Equal(7, result.RegistryGeneration);
+        Assert.Equal(2, result.WindowId);
 
         await serverTask;
     }
@@ -89,6 +113,52 @@ public class ScreenshotAgentClientTests
         Assert.Equal(2, result.Suggestions!.Count);
         Assert.Contains(result.Suggestions, s => s.Contains("foreground", StringComparison.OrdinalIgnoreCase));
 
+        await serverTask;
+    }
+
+    [Fact]
+    public async Task ScreenshotResultAsync_CaptureChangedDuringRead_Retries()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+        var serverTask = Task.Run(async () =>
+        {
+            for (var attempt = 0; attempt < 2; attempt++)
+            {
+                using var client = await AcceptAsync(listener);
+                using var stream = client.GetStream();
+                await ReadRequestAsync(stream);
+                if (attempt == 0)
+                {
+                    const string error =
+                        """{"success":false,"error":"UI changed","reason":"capture-changed-during-read"}""";
+                    await WriteResponseAsync(
+                        stream,
+                        409,
+                        "Conflict",
+                        "application/json",
+                        Encoding.UTF8.GetBytes(error));
+                }
+                else
+                {
+                    await WriteResponseAsync(
+                        stream,
+                        200,
+                        "OK",
+                        "image/png",
+                        SamplePng);
+                }
+            }
+        });
+
+        using var agent = new AgentClient("localhost", port);
+
+        var result = await agent.ScreenshotResultAsync();
+
+        Assert.True(result.Success);
+        Assert.Equal(SamplePng, result.Data);
         await serverTask;
     }
 
@@ -196,11 +266,26 @@ public class ScreenshotAgentClientTests
         return -1;
     }
 
-    private static async Task WriteResponseAsync(NetworkStream stream, int statusCode, string statusText, string contentType, byte[] body)
+    private static async Task WriteResponseAsync(
+        NetworkStream stream,
+        int statusCode,
+        string statusText,
+        string contentType,
+        byte[] body,
+        IReadOnlyDictionary<string, string>? headers = null)
     {
-        var header = Encoding.ASCII.GetBytes(
-            $"HTTP/1.1 {statusCode} {statusText}\r\nContent-Type: {contentType}\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n");
-        await stream.WriteAsync(header);
+        var builder = new StringBuilder()
+            .Append($"HTTP/1.1 {statusCode} {statusText}\r\n")
+            .Append($"Content-Type: {contentType}\r\n")
+            .Append($"Content-Length: {body.Length}\r\n");
+        if (headers is not null)
+        {
+            foreach (var header in headers)
+                builder.Append($"{header.Key}: {header.Value}\r\n");
+        }
+        builder.Append("Connection: close\r\n\r\n");
+        var headerBytes = Encoding.ASCII.GetBytes(builder.ToString());
+        await stream.WriteAsync(headerBytes);
         await stream.WriteAsync(body);
     }
 }

@@ -8,6 +8,7 @@ using Microsoft.Maui;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.DevFlow.Agent.Core;
 using Microsoft.Maui.DevFlow.Agent.Core.Profiling;
+using Microsoft.Maui.DevFlow.Agent.Windows;
 
 namespace Microsoft.Maui.DevFlow.Agent.WPF;
 
@@ -18,12 +19,24 @@ public class WpfAgentService : MauiDevFlowAgentService
 {
     public WpfAgentService(AgentOptions? options = null) : base(options) { }
 
-    protected override VisualTreeWalker CreateTreeWalker() => new WpfVisualTreeWalker();
+    internal WpfAgentService(
+        AgentOptions? options,
+        RegisteredNativeElementRegistry nativeElementRegistry,
+        IDisposable nativeElementSubscription)
+        : base(options, nativeElementRegistry, nativeElementSubscription)
+    {
+    }
+
+    protected override VisualTreeWalker CreateTreeWalker()
+        => NativeElementRegistry is null
+            ? new WpfVisualTreeWalker()
+            : new WpfVisualTreeWalker(NativeElementRegistry);
     protected override IProfilerCollector CreateProfilerCollector() => new RuntimeProfilerCollector();
 
     protected override string PlatformName => "WPF";
     protected override string DeviceTypeName => "Virtual";
     protected override string IdiomName => "Desktop";
+    protected override bool SupportsNativeElementScreenshots => true;
 
     protected override double GetWindowDisplayDensity(IWindow? window)
     {
@@ -135,7 +148,7 @@ public class WpfAgentService : MauiDevFlowAgentService
         return false;
     }
 
-    protected override bool TryScheduleNativeTapFirst(VisualElement ve)
+    protected override async Task<bool> TryNativeTapFirstAsync(VisualElement ve)
     {
         try
         {
@@ -145,58 +158,67 @@ public class WpfAgentService : MauiDevFlowAgentService
             var peer = System.Windows.Automation.Peers.UIElementAutomationPeer.FromElement(buttonBase)
                 ?? System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(buttonBase);
 
-            // Wrap the dispatched lambdas in try/catch: WPF surfaces unhandled
-            // BeginInvoke exceptions through Application.DispatcherUnhandledException,
-            // which can crash the host app if it's not subscribed (or rethrows). The
-            // common cases (button disabled or stale by the time the dispatcher
-            // runs the work) are expected and should be silently dropped.
+            async Task<bool> DispatchInvocationAsync(Action invocation, string actionName)
+            {
+                var completion = new TaskCompletionSource<bool>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+                var invocationState = 0;
+                _ = buttonBase.Dispatcher.BeginInvoke(() =>
+                {
+                    if (Interlocked.CompareExchange(ref invocationState, 1, 0) != 0)
+                    {
+                        completion.TrySetResult(false);
+                        return;
+                    }
+
+                    try
+                    {
+                        _ = buttonBase.Dispatcher.BeginInvoke(
+                            System.Windows.Threading.DispatcherPriority.Background,
+                            new Action(() => completion.TrySetResult(true)));
+                        invocation();
+                        completion.TrySetResult(true);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[Microsoft.Maui.DevFlow] WPF native {actionName} skipped: {ex.GetBaseException().Message}");
+                        completion.TrySetResult(false);
+                    }
+                });
+                var winner = await Task.WhenAny(
+                    completion.Task,
+                    Task.Delay(TimeSpan.FromSeconds(5)));
+                if (winner == completion.Task)
+                    return await completion.Task;
+
+                if (Interlocked.CompareExchange(ref invocationState, 2, 0) == 0)
+                {
+                    completion.TrySetResult(false);
+                    return false;
+                }
+
+                // The native invocation already started. Treat it as handled so the
+                // caller does not also fire the managed fallback and execute twice.
+                return true;
+            }
+
             if (peer?.GetPattern(System.Windows.Automation.Peers.PatternInterface.Invoke)
                 is System.Windows.Automation.Provider.IInvokeProvider invoke)
             {
-                buttonBase.Dispatcher.BeginInvoke(() =>
-                {
-                    try { invoke.Invoke(); }
-                    catch (Exception ex) when (ex is System.Windows.Automation.ElementNotEnabledException
-                                                  or System.Windows.Automation.ElementNotAvailableException
-                                                  or System.Runtime.InteropServices.COMException
-                                                  or InvalidOperationException)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] WPF native invoke skipped: {ex.GetBaseException().Message}");
-                    }
-                });
-                return true;
+                return await DispatchInvocationAsync(invoke.Invoke, "invoke");
             }
 
             if (peer?.GetPattern(System.Windows.Automation.Peers.PatternInterface.Toggle)
                 is System.Windows.Automation.Provider.IToggleProvider toggle)
             {
-                buttonBase.Dispatcher.BeginInvoke(() =>
-                {
-                    try { toggle.Toggle(); }
-                    catch (Exception ex) when (ex is System.Windows.Automation.ElementNotEnabledException
-                                                  or System.Windows.Automation.ElementNotAvailableException
-                                                  or System.Runtime.InteropServices.COMException
-                                                  or InvalidOperationException)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] WPF native toggle skipped: {ex.GetBaseException().Message}");
-                    }
-                });
-                return true;
+                return await DispatchInvocationAsync(toggle.Toggle, "toggle");
             }
 
-            buttonBase.Dispatcher.BeginInvoke(() =>
-            {
-                try
-                {
-                    buttonBase.RaiseEvent(new System.Windows.RoutedEventArgs(ButtonBase.ClickEvent, buttonBase));
-                }
-                catch (Exception ex) when (ex is InvalidOperationException
-                                              or System.Runtime.InteropServices.COMException)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] WPF RaiseEvent skipped: {ex.GetBaseException().Message}");
-                }
-            });
-            return true;
+            return await DispatchInvocationAsync(
+                () => buttonBase.RaiseEvent(
+                    new System.Windows.RoutedEventArgs(ButtonBase.ClickEvent, buttonBase)),
+                "raise-event");
         }
         catch { }
 
@@ -224,6 +246,15 @@ public class WpfAgentService : MauiDevFlowAgentService
 
         return null;
     }
+
+    protected override Task<byte[]?> CaptureNativeElementScreenshotAsync(
+        object nativeElement,
+        ElementInfo? elementInfo)
+        => Task.FromResult(nativeElement switch
+        {
+            FrameworkElement frameworkElement => CaptureFrameworkElement(frameworkElement),
+            _ => WpfVisualTreeWalker.CaptureNativeElementScreenshot(nativeElement)
+        });
 
     protected override async Task<byte[]?> CaptureScreenshotAsync(VisualElement rootElement)
     {
@@ -256,21 +287,22 @@ public class WpfAgentService : MauiDevFlowAgentService
         return null;
     }
 
-    protected override async Task<byte[]?> CaptureFullScreenAsync()
+    protected override async Task<byte[]?> CaptureFullScreenAsync(int? windowIndex = null)
     {
         try
         {
-            byte[]? bytes = null;
-            var app = System.Windows.Application.Current;
-            if (app?.Dispatcher != null)
+            var index = windowIndex ?? 0;
+            var mauiWindow = Microsoft.Maui.Controls.Application.Current?
+                .Windows.ElementAtOrDefault(index);
+            if (mauiWindow?.Handler?.PlatformView is System.Windows.Window window)
             {
-                await app.Dispatcher.InvokeAsync(() =>
-                {
-                    if (app.MainWindow != null)
-                        bytes = CaptureFrameworkElement(app.MainWindow);
-                });
+                var hwnd = await window.Dispatcher.InvokeAsync(
+                    () => new System.Windows.Interop.WindowInteropHelper(window).Handle);
+                return hwnd == IntPtr.Zero
+                    ? null
+                    : await Task.Run(
+                        () => NativeWindowProbe.CaptureCompositedWindowScreenshot(hwnd));
             }
-            return bytes;
         }
         catch { }
         return null;

@@ -53,6 +53,23 @@ public class NativeDevFlowAgentService : DevFlowAgentService
     protected override bool IsScreenshotSupported => true;
 
     /// <inheritdoc />
+    protected override void PopulateCapabilities(Dictionary<string, object> capabilities)
+    {
+        capabilities["ui.tree"] = Capability(1, supported: true,
+            ["css-selector", "type", "text", "accessibility-id"],
+            reason: null);
+        capabilities["ui.hit-test"] = Capability(1, supported: true,
+            ["window-logical-coordinates"],
+            reason: null);
+        capabilities["ui.actions"] = Capability(1, supported: true,
+            ["tap", "fill", "clear", "focus", "scroll", "back", "key", "gesture", "properties"],
+            reason: null);
+        capabilities["ui.screenshot"] = Capability(1, supported: true,
+            ["element", "fullscreen"],
+            reason: null);
+    }
+
+    /// <inheritdoc />
     public override bool IsAppBound => _bound;
 
     /// <inheritdoc />

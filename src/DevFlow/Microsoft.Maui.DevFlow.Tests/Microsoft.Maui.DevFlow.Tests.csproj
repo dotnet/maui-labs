@@ -21,6 +21,25 @@
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Logging\Microsoft.Maui.DevFlow.Logging.csproj" />
   </ItemGroup>
 
+  <!-- Compiled by reference (not a project reference) because the source lives in the
+       macOS-only (net10.0-macos) MacOS platform project, which this net10.0 test project
+       cannot reference. Both files have no AppKit/MAUI dependency, so they can be compiled
+       and unit tested here directly. -->
+  <ItemGroup>
+    <Compile Include="..\..\..\platforms\MacOS\src\MacOS\Platform\DialogNativeRegistrationScope.cs"
+              Link="DialogNativeRegistrationScope.cs" />
+    <Compile Include="..\..\..\platforms\MacOS\src\MacOS\Platform\DialogNativeElementContract.cs"
+              Link="DialogNativeElementContract.cs" />
+    <Compile Include="..\..\..\platforms\MacOS\src\MacOS\Platform\DialogCompletionScope.cs"
+              Link="DialogCompletionScope.cs" />
+    <Compile Include="..\..\..\platforms\MacOS\src\MacOS\Platform\ToolbarItemInvocationOutcome.cs"
+              Link="ToolbarItemInvocationOutcome.cs" />
+    <Compile Include="..\..\..\platforms\MacOS\src\MacOS\Platform\ActionSheetResultResolver.cs"
+              Link="ActionSheetResultResolver.cs" />
+    <Compile Include="..\..\..\platforms\MacOS\src\MacOS\Platform\ShellSearchHandlerCoordinator.cs"
+              Link="ShellSearchHandlerCoordinator.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>

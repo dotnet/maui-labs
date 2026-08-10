@@ -15,6 +15,16 @@
       },
       "description": "Optional data to include in the action response."
     },
+    "CaptureEpoch": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Epoch returned by the tree, query, hit-test, or element capture that produced the target ID. Agents advertising stale-capture-rejection reserve this epoch for one mutation request and reject stale or retargeted IDs with HTTP 409."
+    },
+    "RegistryGeneration": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Native registration generation returned with captureEpoch. When supplied, captureEpoch is required."
+    },
     "TapRequest": {
       "type": "object",
       "description": "Request to perform a tap/click action on an element or at coordinates.",
@@ -25,6 +35,12 @@
             "null"
           ],
           "description": "Target element identifier. Either elementId or coordinates must be provided."
+        },
+        "captureEpoch": {
+          "$ref": "#/$defs/CaptureEpoch"
+        },
+        "registryGeneration": {
+          "$ref": "#/$defs/RegistryGeneration"
         },
         "x": {
           "type": [
@@ -62,6 +78,12 @@
           "type": "string",
           "description": "Text content to fill into the element."
         },
+        "captureEpoch": {
+          "$ref": "#/$defs/CaptureEpoch"
+        },
+        "registryGeneration": {
+          "$ref": "#/$defs/RegistryGeneration"
+        },
         "include": {
           "$ref": "#/$defs/IncludeOption",
           "description": "Optional data to include in the response."
@@ -78,6 +100,12 @@
         "elementId": {
           "type": "string",
           "description": "Target input element identifier."
+        },
+        "captureEpoch": {
+          "$ref": "#/$defs/CaptureEpoch"
+        },
+        "registryGeneration": {
+          "$ref": "#/$defs/RegistryGeneration"
         },
         "include": {
           "$ref": "#/$defs/IncludeOption",
@@ -96,6 +124,12 @@
           "type": "string",
           "description": "Target element identifier to receive focus."
         },
+        "captureEpoch": {
+          "$ref": "#/$defs/CaptureEpoch"
+        },
+        "registryGeneration": {
+          "$ref": "#/$defs/RegistryGeneration"
+        },
         "include": {
           "$ref": "#/$defs/IncludeOption",
           "description": "Optional data to include in the response."
@@ -112,6 +146,12 @@
             "null"
           ],
           "description": "Target scrollable element identifier. If null, scrolls the primary scrollable view."
+        },
+        "captureEpoch": {
+          "$ref": "#/$defs/CaptureEpoch"
+        },
+        "registryGeneration": {
+          "$ref": "#/$defs/RegistryGeneration"
         },
         "deltaX": {
           "type": "number",
@@ -227,9 +267,22 @@
         "key"
       ],
       "properties": {
+        "elementId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Optional target input element identifier."
+        },
         "key": {
           "type": "string",
           "description": "Key identifier to press (e.g. 'Enter', 'Escape', 'Tab', 'a', 'F1')."
+        },
+        "captureEpoch": {
+          "$ref": "#/$defs/CaptureEpoch"
+        },
+        "registryGeneration": {
+          "$ref": "#/$defs/RegistryGeneration"
         },
         "include": {
           "$ref": "#/$defs/IncludeOption",
@@ -294,6 +347,19 @@
         "actions"
       ],
       "properties": {
+        "elementId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Optional target element identifier."
+        },
+        "captureEpoch": {
+          "$ref": "#/$defs/CaptureEpoch"
+        },
+        "registryGeneration": {
+          "$ref": "#/$defs/RegistryGeneration"
+        },
         "actions": {
           "type": "array",
           "items": {
@@ -453,7 +519,7 @@
     },
     "BatchRequest": {
       "type": "object",
-      "description": "Request to perform multiple actions in sequence as a single batch operation.",
+      "description": "Request to perform multiple actions in sequence as a single batch operation. A capture-bound batch reserves its epoch once, validates every referenced target before the first mutation, and revalidates each target before execution. Earlier successful actions remain applied when a later action fails.",
       "required": [
         "actions"
       ],
@@ -464,6 +530,12 @@
             "$ref": "#/$defs/BatchAction"
           },
           "description": "Ordered list of actions to perform."
+        },
+        "captureEpoch": {
+          "$ref": "#/$defs/CaptureEpoch"
+        },
+        "registryGeneration": {
+          "$ref": "#/$defs/RegistryGeneration"
         },
         "include": {
           "$ref": "#/$defs/IncludeOption",

@@ -66,27 +66,53 @@
       "examples": [
         {
           "ui.tree": {
-            "version": 1,
+            "version": 2,
             "features": [
-              "find",
-              "query",
-              "snapshot"
+              "css-selector",
+              "type",
+              "text",
+              "accessibility-id",
+              "native-owner",
+              "capture-epoch",
+              "registry-generation",
+              "window-id"
+            ]
+          },
+          "ui.hit-test": {
+            "version": 2,
+            "features": [
+              "native-first",
+              "capture-epoch",
+              "window-logical-coordinates"
             ]
           },
           "ui.actions": {
-            "version": 1,
+            "version": 2,
             "features": [
               "tap",
               "fill",
+              "clear",
+              "focus",
               "scroll",
-              "gesture"
+              "navigate",
+              "resize",
+              "back",
+              "key",
+              "gesture",
+              "batch",
+              "capture-bound-batch",
+              "properties",
+              "stale-capture-rejection"
             ]
           },
           "ui.screenshot": {
-            "version": 1,
+            "version": 2,
             "features": [
-              "fullPage",
-              "element"
+              "element",
+              "native-element",
+              "fullscreen",
+              "selector",
+              "capture-epoch"
             ]
           },
           "webview": {

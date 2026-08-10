@@ -22,6 +22,38 @@ public class ElementInfo
     [JsonPropertyName("framework")]
     public string Framework { get; set; } = "maui";
 
+    [JsonPropertyName("origin")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Origin { get; set; }
+
+    [JsonPropertyName("ownerId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? OwnerId { get; set; }
+
+    [JsonPropertyName("discriminator")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Discriminator { get; set; }
+
+    [JsonPropertyName("boundsQuality")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? BoundsQuality { get; set; }
+
+    [JsonPropertyName("captureEpoch")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public long CaptureEpoch { get; set; }
+
+    [JsonPropertyName("registryGeneration")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public long RegistryGeneration { get; set; }
+
+    [JsonPropertyName("windowId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? WindowId { get; set; }
+
+    [JsonPropertyName("capabilities")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? Capabilities { get; set; }
+
     [JsonPropertyName("automationId")]
     public string? AutomationId { get; set; }
 
@@ -143,6 +175,9 @@ public class ElementInfo
     [JsonIgnore]
     public bool IsSelected { get; set; }
 
+    [JsonIgnore]
+    internal object? IdentityToken { get; set; }
+
     private string? _role;
     private List<string>? _traits;
 
@@ -206,20 +241,38 @@ public class ElementInfo
     {
         var traits = new List<string>();
         var role = Role;
+        var hasDeclaredCapabilities = Capabilities is { Count: > 0 };
 
-        if (role is "button" or "textbox" or "checkbox" or "radio" or "switch" or "link" or "slider")
+        if (hasDeclaredCapabilities)
+        {
+            if (Capabilities!.Contains("invoke") || Capabilities.Contains("set-value"))
+                traits.Add("interactive");
+        }
+        else if (role is "button" or "textbox" or "checkbox" or "radio" or "switch" or "link" or "slider")
+        {
             traits.Add("interactive");
+        }
 
         if (Gestures is { Count: > 0 } && !traits.Contains("interactive"))
             traits.Add("interactive");
 
-        if (role is "button" or "textbox" or "checkbox" or "radio" or "switch" or "link" or "slider" or "window" || IsFocused)
+        if (IsFocused
+            || hasDeclaredCapabilities && Capabilities!.Contains("focus")
+            || (!hasDeclaredCapabilities
+                && role is ("button" or "textbox" or "checkbox" or "radio" or "switch" or "link" or "slider" or "window")))
+        {
             traits.Add("focusable");
+        }
 
-        if (Type is "ScrollView" or "CollectionView" or "ListView" or "CarouselView"
-            or "HorizontalScrollView" or "NestedScrollView" or "RecyclerView" or "ViewPager2"
-            or "UIScrollView" or "UITableView" or "UICollectionView"
-            or "NSScrollView" or "NSTableView" or "NSOutlineView")
+        if (hasDeclaredCapabilities)
+        {
+            if (Capabilities!.Contains("scroll"))
+                traits.Add("scrollable");
+        }
+        else if (Type is "ScrollView" or "CollectionView" or "ListView" or "CarouselView"
+                 or "HorizontalScrollView" or "NestedScrollView" or "RecyclerView" or "ViewPager2"
+                 or "UIScrollView" or "UITableView" or "UICollectionView"
+                 or "NSScrollView" or "NSTableView" or "NSOutlineView")
         {
             traits.Add("scrollable");
         }
@@ -229,6 +282,42 @@ public class ElementInfo
 
         return traits.Count > 0 ? traits : null;
     }
+
+    internal ElementInfo WithoutChildren() => new()
+    {
+        Id = Id,
+        ParentId = ParentId,
+        Type = Type,
+        FullType = FullType,
+        Framework = Framework,
+        Origin = Origin,
+        OwnerId = OwnerId,
+        Discriminator = Discriminator,
+        BoundsQuality = BoundsQuality,
+        CaptureEpoch = CaptureEpoch,
+        RegistryGeneration = RegistryGeneration,
+        WindowId = WindowId,
+        Capabilities = Capabilities,
+        AutomationId = AutomationId,
+        Text = Text,
+        Value = Value,
+        Role = Role,
+        IsVisible = IsVisible,
+        IsEnabled = IsEnabled,
+        IsFocused = IsFocused,
+        IsSelected = IsSelected,
+        IdentityToken = IdentityToken,
+        Opacity = Opacity,
+        Traits = Traits,
+        Bounds = Bounds,
+        WindowBounds = WindowBounds,
+        Gestures = Gestures,
+        StyleClass = StyleClass,
+        NativeType = NativeType,
+        NativeProperties = NativeProperties,
+        FrameworkProperties = FrameworkProperties,
+        Children = null
+    };
 }
 
 /// <summary>
