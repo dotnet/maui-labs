@@ -116,6 +116,26 @@ The same value can also be supplied via the `MAUI_DEVFLOW_SESSION_ID` environmen
 - **Agent Extensions** — expose app-specific diagnostic tools under `/api/v1/ext/{namespace}/...` with self-describing metadata for CLI and MCP discovery
 - **Multi-Platform** — iOS, Android, Mac Catalyst, Windows, Linux/GTK
 
+## Agent API
+
+The in-app agent still exposes the HTTP/JSON and WebSocket API used by the CLI,
+MCP tools, and `Microsoft.Maui.DevFlow.Driver`. The server listens on loopback at
+`http://localhost:<port>`; the broker normally discovers its dynamic port, with
+9223 used as the direct-connection fallback.
+
+The current API is versioned under `/api/v1/*`, with streaming channels under
+`/ws/v1/*`. The endpoint table from the original `Redth/MauiDevFlow` repository
+describes the earlier unversioned API and should not be used with the
+`Microsoft.Maui.DevFlow` packages.
+
+- [HTTP API (OpenAPI)](../../docs/DevFlow/spec/openapi.yaml)
+- [WebSocket API (AsyncAPI)](../../docs/DevFlow/spec/asyncapi.yaml)
+- [Protocol overview and schemas](../../docs/DevFlow/spec/README.md)
+
+For application code, prefer the typed `AgentClient` in
+`Microsoft.Maui.DevFlow.Driver`; use the protocol documents when implementing a
+client in another language or integrating directly with the agent.
+
 ## CLI Commands
 
 All DevFlow commands are available under `maui devflow`. Run `maui devflow <command> --help` for details.
@@ -159,7 +179,7 @@ These options apply to all `maui devflow` subcommands:
 ## Documentation
 
 - [Broker Architecture](../../docs/DevFlow/broker.md)
-- [Protocol Spec](../../docs/DevFlow/spec/README.md)
+- [Agent API / Protocol Spec](../../docs/DevFlow/spec/README.md)
 - [Android Setup](../../docs/DevFlow/setup-guides/android-setup.md)
 - [Apple Platforms Setup](../../docs/DevFlow/setup-guides/apple-platforms-setup.md)
 - [Windows Setup](../../docs/DevFlow/setup-guides/windows-setup.md)

@@ -36,6 +36,8 @@ tags:
     description: Device info, sensors, jobs, permissions, geolocation
   - name: storage
     description: Preferences, secure storage, and sandboxed app files
+  - name: invoke
+    description: App-registered DevFlow Action discovery and invocation
   - name: extensions
     description: Third-party extension routes
 
@@ -855,6 +857,88 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/webview/network:
+    get:
+      operationId: getWebViewNetworkRequests
+      tags: [webview]
+      summary: List network requests captured from WebViews
+      description: >
+        Convenience alias for `/api/v1/network/requests`. Returns captured HTTP
+        requests, optionally filtered by host, method, or status code.
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of requests to return.
+          schema:
+            type: integer
+            minimum: 1
+        - name: host
+          in: query
+          description: Filter by host name.
+          schema:
+            type: string
+        - name: method
+          in: query
+          description: Filter by HTTP method.
+          schema:
+            type: string
+        - name: statusCode
+          in: query
+          description: Filter by status code.
+          schema:
+            type: integer
+            minimum: 100
+            maximum: 599
+      responses:
+        "200":
+          description: Array of network request summaries.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "./schemas/network.json#/$defs/NetworkRequestSummary"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/webview/console:
+    get:
+      operationId: getWebViewConsoleLogs
+      tags: [webview]
+      summary: Query WebView console logs
+      description: >
+        Convenience alias for `/api/v1/logs` with the source fixed to `webview`.
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of log entries.
+          schema:
+            type: integer
+            minimum: 1
+        - name: skip
+          in: query
+          description: Number of entries to skip.
+          schema:
+            type: integer
+            minimum: 0
+        - name: level
+          in: query
+          description: Minimum log level.
+          schema:
+            type: string
+            enum: [trace, debug, info, warning, error, critical]
+      responses:
+        "200":
+          description: Array of WebView console log entries.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "./schemas/logs.json#/$defs/LogEntry"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/webview/screenshot:
     get:
       operationId: captureWebViewScreenshot
@@ -1293,6 +1377,59 @@ paths:
             application/json:
               schema:
                 $ref: "./schemas/device.json#/$defs/ConnectivityInfo"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/device/version-tracking:
+    get:
+      operationId: getVersionTrackingInfo
+      tags: [device]
+      summary: Get application version history
+      description: >
+        Returns the current, previous, and first-installed application versions
+        and builds, along with launch state and recorded history.
+      responses:
+        "200":
+          description: Application version tracking information.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - currentVersion
+                  - currentBuild
+                  - isFirstLaunchEver
+                  - isFirstLaunchForCurrentVersion
+                  - isFirstLaunchForCurrentBuild
+                  - versionHistory
+                  - buildHistory
+                properties:
+                  currentVersion:
+                    type: string
+                  currentBuild:
+                    type: string
+                  previousVersion:
+                    type: [string, "null"]
+                  previousBuild:
+                    type: [string, "null"]
+                  firstInstalledVersion:
+                    type: [string, "null"]
+                  firstInstalledBuild:
+                    type: [string, "null"]
+                  isFirstLaunchEver:
+                    type: boolean
+                  isFirstLaunchForCurrentVersion:
+                    type: boolean
+                  isFirstLaunchForCurrentBuild:
+                    type: boolean
+                  versionHistory:
+                    type: array
+                    items:
+                      type: string
+                  buildHistory:
+                    type: array
+                    items:
+                      type: string
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1963,6 +2100,100 @@ paths:
           description: Value deleted.
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ─────────────────────────────── Invoke ───────────────────────────────
+  /api/v1/invoke/actions:
+    get:
+      operationId: listInvokeActions
+      tags: [invoke]
+      summary: List registered DevFlow Actions
+      description: >
+        Returns methods registered with `DevFlowActionAttribute`, including their
+        parameter metadata.
+      responses:
+        "200":
+          description: Registered action descriptors.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [actions]
+                properties:
+                  actions:
+                    type: array
+                    items:
+                      type: object
+                      required: [name, declaringType, parameters]
+                      properties:
+                        name:
+                          type: string
+                        description:
+                          type: [string, "null"]
+                        declaringType:
+                          type: string
+                        parameters:
+                          type: array
+                          items:
+                            type: object
+                            required: [name, type, isRequired]
+                            properties:
+                              name:
+                                type: string
+                              type:
+                                type: string
+                              description:
+                                type: [string, "null"]
+                              defaultValue:
+                                type: [string, "null"]
+                              isRequired:
+                                type: boolean
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/invoke/actions/{name}:
+    post:
+      operationId: invokeAction
+      tags: [invoke]
+      summary: Invoke a registered DevFlow Action
+      description: Invokes a registered action by name with positional arguments.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          description: Registered action name.
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                args:
+                  type: array
+                  items: {}
+      responses:
+        "200":
+          description: Action invocation result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, action]
+                properties:
+                  success:
+                    type: boolean
+                  action:
+                    type: string
+                  returnValue:
+                    type: [string, "null"]
+                  returnType:
+                    type: [string, "null"]
+        "400":
+          $ref: "#/components/responses/InvalidArgument"
         "500":
           $ref: "#/components/responses/InternalError"
 

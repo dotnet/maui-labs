@@ -267,7 +267,7 @@ channels:
 
   # ── Sensor Readings Stream ──────────────────────────────────────────────
   sensors:
-    address: /ws/v1/device/sensors
+    address: /ws/v1/sensors
     description: |
       Live sensor data streaming. Connect with query parameters to specify the
       sensor, reading speed, and throttle interval. Supports subscribing to

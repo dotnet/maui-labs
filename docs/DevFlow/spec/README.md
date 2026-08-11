@@ -9,6 +9,18 @@ This directory contains the canonical DevFlow protocol contract used by the MAUI
 
 These spec files are intended to stay framework-agnostic so the same DevFlow contract can be implemented across MAUI and other UI stacks.
 
+## API versions
+
+The current Agent API is versioned under `/api/v1/*`, and its WebSocket channels
+are versioned under `/ws/v1/*`. The unversioned `/api/*` and `/ws/*` endpoints
+documented in the original `Redth/MauiDevFlow` repository predate this contract
+and are not compatibility aliases in the maui-labs implementation.
+
+The agent listens on IPv4 loopback. The broker normally discovers its dynamic
+port; direct clients can use the configured agent port, with 9223 as the
+fallback. The typed `AgentClient` in `Microsoft.Maui.DevFlow.Driver` is the
+preferred .NET client for this protocol.
+
 Do not commit a generated JSON copy of the OpenAPI document. If a consumer needs JSON, generate it from `openapi.yaml` as part of that workflow so there is only one source of truth.
 
 The DevFlow unit tests parse `openapi.yaml` with OpenAPI tooling and validate YAML/JSON syntax plus `$ref` targets across this directory.
