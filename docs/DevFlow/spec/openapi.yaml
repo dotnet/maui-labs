@@ -882,7 +882,7 @@ paths:
           description: Filter by HTTP method.
           schema:
             type: string
-        - name: statusCode
+        - name: status
           in: query
           description: Filter by status code.
           schema:
@@ -921,12 +921,6 @@ paths:
           schema:
             type: integer
             minimum: 0
-        - name: level
-          in: query
-          description: Minimum log level.
-          schema:
-            type: string
-            enum: [trace, debug, info, warning, error, critical]
       responses:
         "200":
           description: Array of WebView console log entries.
@@ -1208,7 +1202,7 @@ paths:
           description: Filter by HTTP method.
           schema:
             type: string
-        - name: statusCode
+        - name: status
           in: query
           description: Filter by status code.
           schema:
@@ -1293,12 +1287,6 @@ paths:
           schema:
             type: string
             enum: [native, webview, framework]
-        - name: level
-          in: query
-          description: Minimum log level.
-          schema:
-            type: string
-            enum: [trace, debug, info, warning, error, critical]
       responses:
         "200":
           description: Array of log entries.
@@ -2079,6 +2067,7 @@ paths:
                 properties:
                   success:
                     type: boolean
+                    const: true
         "500":
           $ref: "#/components/responses/InternalError"
 

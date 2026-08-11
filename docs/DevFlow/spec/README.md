@@ -17,9 +17,10 @@ documented in the original `Redth/MauiDevFlow` repository predate this contract
 and are not compatibility aliases in the maui-labs implementation.
 
 The agent listens on IPv4 loopback. The broker normally discovers its dynamic
-port; direct clients can use the configured agent port, with 9223 as the
-fallback. The typed `AgentClient` in `Microsoft.Maui.DevFlow.Driver` is the
-preferred .NET client for this protocol.
+port through its separate port 19223. Direct clients should use the configured
+or discovered agent port. Port 9223 is only the agent's last-resort default when
+no configured or broker-assigned port is available. The typed `AgentClient` in
+`Microsoft.Maui.DevFlow.Driver` is the preferred .NET client for this protocol.
 
 Do not commit a generated JSON copy of the OpenAPI document. If a consumer needs JSON, generate it from `openapi.yaml` as part of that workflow so there is only one source of truth.
 

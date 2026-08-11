@@ -120,8 +120,10 @@ The same value can also be supplied via the `MAUI_DEVFLOW_SESSION_ID` environmen
 
 The in-app agent still exposes the HTTP/JSON and WebSocket API used by the CLI,
 MCP tools, and `Microsoft.Maui.DevFlow.Driver`. The server listens on loopback at
-`http://localhost:<port>`; the broker normally discovers its dynamic port, with
-9223 used as the direct-connection fallback.
+`http://localhost:<port>`. Use the broker (port 19223), CLI, MCP tools, or
+`AgentClient` to discover the agent's dynamic port. Port 9223 is only the
+agent's last-resort default when no configured or broker-assigned port is
+available; it is not the broker port.
 
 The current API is versioned under `/api/v1/*`, with streaming channels under
 `/ws/v1/*`. The endpoint table from the original `Redth/MauiDevFlow` repository

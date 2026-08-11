@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Microsoft.OpenApi;
 using Microsoft.OpenApi.Reader;
 using YamlDotNet.Serialization;
@@ -103,6 +104,61 @@ public class ProtocolSpecTests
     }
 
     [Fact]
+    public void RegisteredAgentRoutes_AreDocumentedInProtocolSpecs()
+    {
+        var repoRoot = Path.GetFullPath(Path.Combine(SpecRoot.Value, "..", "..", ".."));
+        var servicePath = Path.Combine(
+            repoRoot,
+            "src",
+            "DevFlow",
+            "Microsoft.Maui.DevFlow.Agent.Core",
+            "DevFlowAgentService.cs");
+        var serviceSource = File.ReadAllText(servicePath);
+        var routePattern = new Regex(
+            "_server\\.Map(?<method>Get|Post|Put|Delete|WebSocket)\\(\"(?<path>[^\"]+)\"",
+            RegexOptions.CultureInvariant);
+
+        var registeredHttpRoutes = new HashSet<string>(StringComparer.Ordinal);
+        var registeredWebSocketRoutes = new HashSet<string>(StringComparer.Ordinal);
+        foreach (Match match in routePattern.Matches(serviceSource))
+        {
+            var method = match.Groups["method"].Value;
+            var path = NormalizeRoute(match.Groups["path"].Value);
+            if (method == "WebSocket")
+                registeredWebSocketRoutes.Add(path);
+            else
+                registeredHttpRoutes.Add($"{method.ToUpperInvariant()} {path}");
+        }
+
+        var openApi = LoadDocument(Path.Combine(SpecRoot.Value, "openapi.yaml"));
+        var documentedHttpRoutes = new HashSet<string>(StringComparer.Ordinal);
+        var paths = openApi["paths"]?.AsObject()
+            ?? throw new InvalidOperationException("OpenAPI document has no paths object.");
+        foreach (var (path, operationsNode) in paths)
+        {
+            if (operationsNode is not JsonObject operations)
+                continue;
+
+            foreach (var (method, _) in operations)
+            {
+                if (method is "get" or "post" or "put" or "delete")
+                    documentedHttpRoutes.Add($"{method.ToUpperInvariant()} {NormalizeRoute(path)}");
+            }
+        }
+
+        var asyncApi = LoadDocument(Path.Combine(SpecRoot.Value, "asyncapi.yaml"));
+        var documentedWebSocketRoutes = asyncApi["channels"]?.AsObject()
+            .Select(channel => channel.Value?["address"]?.GetValue<string>())
+            .Where(address => address is not null)
+            .Select(address => NormalizeRoute(address!))
+            .ToHashSet(StringComparer.Ordinal)
+            ?? throw new InvalidOperationException("AsyncAPI document has no channels object.");
+
+        Assert.Empty(registeredHttpRoutes.Except(documentedHttpRoutes));
+        Assert.Empty(registeredWebSocketRoutes.Except(documentedWebSocketRoutes));
+    }
+
+    [Fact]
     public void PointerExists_HandlesEscapedSegmentsAndNullValues()
     {
         var document = JsonNode.Parse(
@@ -169,6 +225,9 @@ public class ProtocolSpecTests
         return path.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase) ||
             path.EndsWith(".yml", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static string NormalizeRoute(string route)
+        => Regex.Replace(route, """\{[^}]+\}""", "{}");
 
     private static IEnumerable<SpecReference> EnumerateReferences(JsonNode? node, string jsonPath = "$")
     {

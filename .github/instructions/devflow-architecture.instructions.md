@@ -61,9 +61,9 @@ Microsoft.Maui.DevFlow.Logging (standalone — no MAUI dependency)
 
 ### Adding a New HTTP Endpoint
 
-1. Add route in `Agent.Core/DevFlowAgentService.cs` → `ConfigureRoutes()`:
+1. Add the versioned route in `Agent.Core/DevFlowAgentService.cs` → `RegisterRoutes()`:
    ```csharp
-   _server.MapGet("/api/myfeature", HandleMyFeature);
+   _server.MapGet("/api/v1/myfeature", HandleMyFeature);
    ```
 2. Implement handler (virtual for platform override):
    ```csharp
@@ -71,7 +71,13 @@ Microsoft.Maui.DevFlow.Logging (standalone — no MAUI dependency)
    ```
 3. Add DTO class at bottom of `DevFlowAgentService.cs` if needed
 4. Add client method in `Driver/AgentClient.cs`
-5. Optionally expose as MCP tool and/or CLI command
+5. Update the canonical protocol contract in `docs/DevFlow/spec/openapi.yaml`,
+   including exact query parameters, request/response schemas, status codes, and
+   examples. Update `asyncapi.yaml` for any `/ws/v1/*` channel. Route and
+   protocol changes must be made in the same PR.
+6. Run `ProtocolSpecTests`; registered routes must be represented in OpenAPI or
+   AsyncAPI.
+7. Optionally expose as MCP tool and/or CLI command
 
 ### Adding a New MCP Tool
 
