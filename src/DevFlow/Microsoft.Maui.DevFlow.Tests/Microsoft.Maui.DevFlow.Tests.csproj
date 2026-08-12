@@ -21,6 +21,26 @@
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Logging\Microsoft.Maui.DevFlow.Logging.csproj" />
   </ItemGroup>
 
+  <!--
+    MauiFreeAssemblyTests reads Agent.Native and Agent.Native.Essentials straight out of
+    artifacts/bin via PE metadata, because their real TFMs (android/ios/maccatalyst/macos) cannot
+    be a normal compile-time ProjectReference from this net10.0 project. Without something forcing
+    a build, "dotnet test" on this project alone finds stale or absent output and the guard passes
+    vacuously. These are build-only references (no assembly is added to this project's compilation)
+    that force MSBuild to build the android TFM — present unconditionally on every OS — as part of
+    building this test project, so the assemblies the guard inspects are always current.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Microsoft.Maui.DevFlow.Agent.Native\Microsoft.Maui.DevFlow.Agent.Native.csproj"
+                       ReferenceOutputAssembly="false"
+                       SkipGetTargetFrameworkProperties="true"
+                       SetTargetFramework="TargetFramework=net10.0-android" />
+    <ProjectReference Include="..\Microsoft.Maui.DevFlow.Agent.Native.Essentials\Microsoft.Maui.DevFlow.Agent.Native.Essentials.csproj"
+                       ReferenceOutputAssembly="false"
+                       SkipGetTargetFrameworkProperties="true"
+                       SetTargetFramework="TargetFramework=net10.0-android" />
+  </ItemGroup>
+
   <!-- Compiled by reference (not a project reference) because the source lives in the
        macOS-only (net10.0-macos) MacOS platform project, which this net10.0 test project
        cannot reference. Both files have no AppKit/MAUI dependency, so they can be compiled
@@ -38,6 +58,19 @@
               Link="ActionSheetResultResolver.cs" />
     <Compile Include="..\..\..\platforms\MacOS\src\MacOS\Platform\ShellSearchHandlerCoordinator.cs"
               Link="ShellSearchHandlerCoordinator.cs" />
+    <!-- The production diagnostic publishers used by the non-MAUI platform backends. Linking the
+         real bridges — rather than
+         re-typing its DiagnosticListener name/event names/payload shape by hand in a test — is
+         what makes NativeElementDiagnosticContractTests an actual cross-assembly contract check
+         instead of a test that only compares MauiNativeElementDiagnosticSubscriber's constants
+         against themselves. Has no AppKit/MAUI Controls dependency; only needs IMauiContext,
+         which is already on the graph via Agent.Core -> Microsoft.Maui.Controls. -->
+    <Compile Include="..\..\..\platforms\MacOS\src\MacOS\Platform\NativeElementDiagnosticsBridge.cs"
+              Link="NativeElementDiagnosticsBridge.cs" />
+    <Compile Include="..\..\..\platforms\Linux.Gtk4\src\Linux.Gtk4\Platform\NativeElementDiagnosticsBridge.cs"
+              Link="GtkNativeElementDiagnosticsBridge.cs" />
+    <Compile Include="..\..\..\platforms\Windows.WPF\src\Windows.WPF\Platform\NativeElementDiagnosticsBridge.cs"
+              Link="WpfNativeElementDiagnosticsBridge.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -67,36 +67,7 @@ public sealed class iOSSimulatorFixture : AppFixtureBase
             versionPattern = null;
 
         var json = await RunProcessCheckedAsync("xcrun", "simctl list devices --json");
-        var doc = JsonDocument.Parse(json);
-        var devicesRoot = doc.RootElement.GetProperty("devices");
-
-        var candidates = new List<(string Udid, string Name, string Runtime, string State)>();
-
-        foreach (var runtime in devicesRoot.EnumerateObject())
-        {
-            if (!runtime.Name.Contains("iOS", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            var osVersion = ExtractOsVersion(runtime.Name);
-            if (osVersion == null)
-                continue;
-
-            if (versionPattern != null && !MatchesVersionPattern(osVersion, versionPattern))
-                continue;
-
-            foreach (var device in runtime.Value.EnumerateArray())
-            {
-                var name = device.GetProperty("name").GetString() ?? string.Empty;
-                var udid = device.GetProperty("udid").GetString() ?? string.Empty;
-                var state = device.GetProperty("state").GetString() ?? string.Empty;
-                var isAvailable = !device.TryGetProperty("isAvailable", out var available) || available.GetBoolean();
-
-                if (!isAvailable || !name.Contains("iPhone", StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                candidates.Add((udid, name, osVersion, state));
-            }
-        }
+        var candidates = ParseIPhoneCandidates(json, versionPattern);
 
         if (candidates.Count == 0)
             throw new InvalidOperationException(versionPattern != null
@@ -120,16 +91,98 @@ public sealed class iOSSimulatorFixture : AppFixtureBase
     static Task WaitForBootCompletionAsync(string udid) =>
         RunProcessCheckedAsync("xcrun", $"simctl bootstatus {udid} -b", timeoutSeconds: 180);
 
-    static (string Udid, string Name, string Runtime, string State) SelectBestDevice(
-        List<(string Udid, string Name, string Runtime, string State)> devices) =>
+    /// <summary>
+    /// Parses <c>xcrun simctl list devices --json</c> output into the set of available iPhone
+    /// simulator candidates, optionally narrowed to an iOS version pattern.
+    /// </summary>
+    /// <remarks>
+    /// Pulled out of <see cref="FindOrBootSimulatorAsync"/> so it can be unit tested against
+    /// synthetic JSON without a simulator, an Xcode install, or a device — a booted simulator
+    /// whose user-visible name has been customized (e.g. renamed to "GDUI-Test" in Simulator.app
+    /// or via <c>simctl rename</c>) is otherwise silently excluded and the fixture picks a
+    /// different, unintended device instead of failing loudly.
+    /// </remarks>
+    internal static IReadOnlyList<SimulatorDeviceCandidate> ParseIPhoneCandidates(
+        string simctlListDevicesJson,
+        string? versionPattern)
+    {
+        using var doc = JsonDocument.Parse(simctlListDevicesJson);
+        var devicesRoot = doc.RootElement.GetProperty("devices");
+
+        var candidates = new List<SimulatorDeviceCandidate>();
+
+        foreach (var runtime in devicesRoot.EnumerateObject())
+        {
+            if (!runtime.Name.Contains("iOS", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var osVersion = ExtractOsVersion(runtime.Name);
+            if (osVersion == null)
+                continue;
+
+            if (versionPattern != null && !MatchesVersionPattern(osVersion, versionPattern))
+                continue;
+
+            foreach (var device in runtime.Value.EnumerateArray())
+            {
+                var name = device.GetProperty("name").GetString() ?? string.Empty;
+                var udid = device.GetProperty("udid").GetString() ?? string.Empty;
+                var state = device.GetProperty("state").GetString() ?? string.Empty;
+                var isAvailable = !device.TryGetProperty("isAvailable", out var available) || available.GetBoolean();
+                var deviceTypeIdentifier = device.TryGetProperty("deviceTypeIdentifier", out var deviceType)
+                    ? deviceType.GetString()
+                    : null;
+
+                if (!isAvailable || !IsIPhoneDeviceType(deviceTypeIdentifier, name))
+                    continue;
+
+                candidates.Add(new SimulatorDeviceCandidate(udid, name, osVersion, state, deviceTypeIdentifier));
+            }
+        }
+
+        return candidates;
+    }
+
+    /// <summary>
+    /// Decides whether a simulator device is an iPhone.
+    /// </summary>
+    /// <remarks>
+    /// Prefers <c>deviceTypeIdentifier</c> (e.g.
+    /// <c>com.apple.CoreSimulator.SimDeviceType.iPhone-15-Pro</c>), which simctl derives from the
+    /// device's actual hardware model and does not change when a user renames the device. Checking
+    /// <c>name.Contains("iPhone")</c> alone — the previous behavior — excludes any iPhone whose
+    /// user-visible name was customized (e.g. "GDUI-Test"), even though it is unambiguously an
+    /// iPhone. Falls back to the name check only when <c>deviceTypeIdentifier</c> is absent, which
+    /// covers older simctl JSON that never emitted the field.
+    /// </remarks>
+    internal static bool IsIPhoneDeviceType(string? deviceTypeIdentifier, string name)
+    {
+        if (!string.IsNullOrEmpty(deviceTypeIdentifier))
+        {
+            var lastDot = deviceTypeIdentifier.LastIndexOf('.');
+            var typeName = lastDot >= 0 ? deviceTypeIdentifier[(lastDot + 1)..] : deviceTypeIdentifier;
+            return typeName.StartsWith("iPhone", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return name.Contains("iPhone", StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static SimulatorDeviceCandidate SelectBestDevice(IReadOnlyList<SimulatorDeviceCandidate> devices) =>
         devices
-            .OrderByDescending(d => ExtractIPhoneModelNumber(d.Name))
+            .OrderByDescending(ExtractIPhoneModelNumber)
             .ThenByDescending(d => d.Runtime)
             .First();
 
-    static int ExtractIPhoneModelNumber(string name)
+    static int ExtractIPhoneModelNumber(SimulatorDeviceCandidate device)
     {
-        var match = Regex.Match(name, @"iPhone\s+(\d+)");
+        var match = Regex.Match(
+            device.DeviceTypeIdentifier ?? string.Empty,
+            @"(?:^|\.)iPhone-(\d+)",
+            RegexOptions.IgnoreCase);
+        if (match.Success)
+            return int.Parse(match.Groups[1].Value);
+
+        match = Regex.Match(device.Name, @"iPhone\s+(\d+)");
         return match.Success ? int.Parse(match.Groups[1].Value) : 0;
     }
 
@@ -197,3 +250,13 @@ public sealed class iOSSimulatorFixture : AppFixtureBase
             timeoutSeconds: 90);
     }
 }
+
+/// <summary>
+/// One iPhone simulator entry parsed out of <c>xcrun simctl list devices --json</c>.
+/// </summary>
+internal readonly record struct SimulatorDeviceCandidate(
+    string Udid,
+    string Name,
+    string Runtime,
+    string State,
+    string? DeviceTypeIdentifier);

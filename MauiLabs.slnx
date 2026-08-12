@@ -17,6 +17,7 @@
     <Project Path="samples/DevFlow.Sample.Native/iOS/DevFlow.Sample.Native.iOS.csproj" />
     <Project Path="samples/DevFlow.Sample.Native/MacCatalyst/DevFlow.Sample.Native.MacCatalyst.csproj" />
     <Project Path="samples/DevFlow.Sample.Native/MacOS/DevFlow.Sample.Native.MacOS.csproj" />
+    <Project Path="samples/DevFlow.Sample.WPF/DevFlow.Sample.WPF.csproj" />
     <Project Path="samples/DevFlow.Sample/DevFlow.Sample.csproj" />
     <Project Path="samples/EssentialsAISample/EssentialsAISample.csproj" />
   </Folder>

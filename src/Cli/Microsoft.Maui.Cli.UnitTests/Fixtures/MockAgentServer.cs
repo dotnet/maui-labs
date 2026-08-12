@@ -29,6 +29,8 @@ public sealed class MockAgentServer : IAsyncDisposable
     private readonly bool _malformedPropertyResponse;
     private readonly bool _propertyFailureWithoutReason;
     private readonly bool _propertyNotFound;
+    private readonly int _capabilitiesErrorResponseCount;
+    private int _capabilitiesRequestCount;
     private int _hitTestCount;
     private int _tapCount;
     private int _fillCount;
@@ -53,7 +55,8 @@ public sealed class MockAgentServer : IAsyncDisposable
         bool rejectNativeProperty = false,
         bool malformedPropertyResponse = false,
         bool propertyFailureWithoutReason = false,
-        bool propertyNotFound = false)
+        bool propertyNotFound = false,
+        int capabilitiesErrorResponseCount = 0)
     {
         _supportsCaptureEpoch = supportsCaptureEpoch;
         _failFirstHitTestCandidate = failFirstHitTestCandidate;
@@ -72,6 +75,7 @@ public sealed class MockAgentServer : IAsyncDisposable
         _malformedPropertyResponse = malformedPropertyResponse;
         _propertyFailureWithoutReason = propertyFailureWithoutReason;
         _propertyNotFound = propertyNotFound;
+        _capabilitiesErrorResponseCount = capabilitiesErrorResponseCount;
     }
 
     public int Port { get; private set; }
@@ -148,11 +152,21 @@ public sealed class MockAgentServer : IAsyncDisposable
     private void RegisterAgentEndpoints(WebApplication app)
     {
         app.MapGet("/api/v1/agent/status", () => Results.Content(MockAgentResponses.AgentStatus, "application/json"));
-        app.MapGet("/api/v1/agent/capabilities", () => Results.Content(
-            _supportsCaptureEpoch
-                ? MockAgentResponses.AgentCapabilities
-                : MockAgentResponses.LegacyAgentCapabilities,
-            "application/json"));
+        app.MapGet("/api/v1/agent/capabilities", () =>
+        {
+            if (Interlocked.Increment(ref _capabilitiesRequestCount) <= _capabilitiesErrorResponseCount)
+            {
+                return Results.Json(
+                    new { success = false, error = "Capabilities temporarily unavailable" },
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+
+            return Results.Content(
+                _supportsCaptureEpoch
+                    ? MockAgentResponses.AgentCapabilities
+                    : MockAgentResponses.LegacyAgentCapabilities,
+                "application/json");
+        });
     }
 
     private static void RegisterExtensionEndpoints(WebApplication app)

@@ -43,6 +43,7 @@ public sealed class InspectorServer : IDisposable
     private long? _registryGeneration;
     private int? _windowId;
     private bool _fullscreenScreenshot;
+    private Task<bool?>? _requiresCaptureEpochTask;
     private static readonly TimeSpan ScreenshotCacheDuration = TimeSpan.FromMilliseconds(200);
     private const int MaxScreenshotSnapshots = 16;
 
@@ -333,31 +334,56 @@ public sealed class InspectorServer : IDisposable
             }));
     }
 
-    private Task<bool> RequiresCaptureEpochAsync()
-        => DetectCaptureEpochRequirementAsync();
-
-    private async Task<bool> DetectCaptureEpochRequirementAsync()
+    private async Task<bool> RequiresCaptureEpochAsync()
     {
+        Task<bool?> detectionTask;
+        lock (_cacheLock)
+            detectionTask = _requiresCaptureEpochTask ??= DetectCaptureEpochRequirementAsync();
+
         try
         {
-            var response = await _client.GetCapabilitiesAsync();
-            if (!response.TryGetProperty("capabilities", out var capabilities)
-                || !capabilities.TryGetProperty("ui.actions", out var uiActions)
-                || !uiActions.TryGetProperty("features", out var features)
-                || features.ValueKind != JsonValueKind.Array)
-            {
-                return false;
-            }
-
-            return features.EnumerateArray().Any(feature =>
-                feature.ValueKind == JsonValueKind.String
-                && feature.GetString() == "stale-capture-rejection");
+            var detected = await detectionTask;
+            if (detected.HasValue)
+                return detected.Value;
         }
         catch
         {
-            lock (_cacheLock)
-                return _captureEpoch.HasValue;
         }
+
+        // A transport failure or non-capabilities JSON response must not permanently downgrade
+        // this connection. Share one in-flight request, then let the next interaction retry.
+        lock (_cacheLock)
+        {
+            if (ReferenceEquals(_requiresCaptureEpochTask, detectionTask))
+                _requiresCaptureEpochTask = null;
+
+            return _captureEpoch.HasValue;
+        }
+    }
+
+    private async Task<bool?> DetectCaptureEpochRequirementAsync()
+    {
+        var response = await _client.GetCapabilitiesAsync();
+        if (response.ValueKind != JsonValueKind.Object
+            || !response.TryGetProperty("capabilities", out var capabilities)
+            || capabilities.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        if (!capabilities.TryGetProperty("ui.actions", out var uiActions)
+            || uiActions.ValueKind != JsonValueKind.Object
+            || !uiActions.TryGetProperty("features", out var features))
+        {
+            return false;
+        }
+
+        if (features.ValueKind != JsonValueKind.Array)
+            return null;
+
+        return features.EnumerateArray().Any(feature =>
+            feature.ValueKind == JsonValueKind.String
+            && feature.GetString() == "stale-capture-rejection");
     }
 
     /// <summary>

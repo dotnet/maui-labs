@@ -127,6 +127,8 @@ paths:
           $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/elements/{id}:
     get:
@@ -150,6 +152,8 @@ paths:
           $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/elements:
     get:
@@ -204,6 +208,8 @@ paths:
           $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/hit-test:
     get:
@@ -297,6 +303,8 @@ paths:
                       additionalProperties: true
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/screenshot:
     get:
@@ -371,6 +379,8 @@ paths:
           $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   # ─────────────────────────── UI Actions ──────────────────────────────
   /api/v1/ui/actions/tap:
@@ -399,6 +409,8 @@ paths:
           $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/actions/fill:
     post:
@@ -426,6 +438,8 @@ paths:
           $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/actions/clear:
     post:
@@ -453,6 +467,8 @@ paths:
           $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/actions/focus:
     post:
@@ -480,6 +496,8 @@ paths:
           $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/actions/scroll:
     post:
@@ -507,6 +525,8 @@ paths:
           $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/actions/navigate:
     post:
@@ -528,6 +548,8 @@ paths:
           $ref: "#/components/responses/Timeout"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/actions/resize:
     post:
@@ -551,6 +573,8 @@ paths:
           $ref: "#/components/responses/Timeout"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/actions/back:
     post:
@@ -572,6 +596,8 @@ paths:
           $ref: "#/components/responses/Timeout"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/actions/key:
     post:
@@ -595,6 +621,8 @@ paths:
           $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/actions/gesture:
     post:
@@ -619,6 +647,8 @@ paths:
           $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/actions/batch:
     post:
@@ -645,6 +675,8 @@ paths:
           $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   # ──────────────────────── UI Element Properties ──────────────────────
   /api/v1/ui/elements/{id}/properties/{name}:
@@ -676,6 +708,8 @@ paths:
           $ref: "#/components/responses/ElementNotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
     put:
       operationId: setElementProperty
@@ -722,6 +756,8 @@ paths:
           $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   # ──────────────────────────── WebView ────────────────────────────────
   /api/v1/webview/contexts:
@@ -1357,6 +1393,8 @@ paths:
                 $ref: "./schemas/device.json#/$defs/DeviceInfo"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/device/display:
     get:
@@ -1374,6 +1412,8 @@ paths:
                 $ref: "./schemas/device.json#/$defs/DisplayInfo"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/device/battery:
     get:
@@ -1391,6 +1431,8 @@ paths:
                 $ref: "./schemas/device.json#/$defs/BatteryInfo"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/device/connectivity:
     get:
@@ -1408,6 +1450,8 @@ paths:
                 $ref: "./schemas/device.json#/$defs/ConnectivityInfo"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/device/app:
     get:
@@ -1425,6 +1469,8 @@ paths:
                 $ref: "./schemas/device.json#/$defs/AppInfo"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/device/app/theme:
     get:
@@ -1444,6 +1490,8 @@ paths:
                 $ref: "./schemas/device.json#/$defs/ThemeInfo"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
     put:
       operationId: setAppTheme
@@ -1470,6 +1518,8 @@ paths:
           $ref: "#/components/responses/InvalidArgument"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/device/sensors:
     get:
@@ -1489,6 +1539,8 @@ paths:
                   $ref: "./schemas/device.json#/$defs/SensorInfo"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/device/sensors/{name}/start:
     post:
@@ -1522,7 +1574,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "501":
-          $ref: "#/components/responses/UnsupportedCapability"
+          $ref: "#/components/responses/BackendNotSupported"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1551,6 +1603,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/device/jobs:
     get:
@@ -1570,6 +1624,8 @@ paths:
                 $ref: "./schemas/device.json#/$defs/JobListResponse"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/device/jobs/{identifier}/run:
     post:
@@ -1603,7 +1659,7 @@ paths:
               schema:
                 $ref: "./schemas/device.json#/$defs/JobRunResponse"
         "501":
-          $ref: "#/components/responses/UnsupportedCapability"
+          $ref: "#/components/responses/BackendNotSupported"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1625,6 +1681,8 @@ paths:
                   $ref: "./schemas/device.json#/$defs/PermissionInfo"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/device/permissions/{name}:
     get:
@@ -1651,6 +1709,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/device/geolocation:
     get:
@@ -1681,7 +1741,7 @@ paths:
         "408":
           $ref: "#/components/responses/Timeout"
         "501":
-          $ref: "#/components/responses/UnsupportedCapability"
+          $ref: "#/components/responses/BackendNotSupported"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1710,6 +1770,8 @@ paths:
                   $ref: "./schemas/storage.json#/$defs/PreferenceEntry"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
     delete:
       operationId: clearPreferences
@@ -1728,6 +1790,8 @@ paths:
           description: Preferences cleared.
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/storage/preferences/{key}:
     get:
@@ -1764,6 +1828,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
     put:
       operationId: setPreference
@@ -1793,6 +1859,8 @@ paths:
                 $ref: "./schemas/storage.json#/$defs/PreferenceEntry"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
     delete:
       operationId: deletePreference
@@ -1819,6 +1887,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/storage/roots:
     get:
@@ -1995,6 +2065,8 @@ paths:
           description: Secure storage cleared.
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/storage/secure/{key}:
     get:
@@ -2025,6 +2097,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
     put:
       operationId: setSecureValue
@@ -2057,6 +2131,8 @@ paths:
                     type: boolean
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
     delete:
       operationId: deleteSecureValue
@@ -2078,6 +2154,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   # ─────────────────────────────── Extensions ───────────────────────────
   /api/v1/ext/{namespace}/{path}:
@@ -2258,6 +2336,26 @@ components:
         type: integer
         minimum: 0
 
+  schemas:
+    BackendNotSupported:
+      type: object
+      description: >
+        Uniform response returned when the connected DevFlow backend does not
+        implement the requested capability.
+      required: [error, capability, reason]
+      properties:
+        error:
+          type: string
+          const: not_supported
+        capability:
+          type: string
+          description: Capability group required by the endpoint.
+        reason:
+          type: string
+          minLength: 1
+          description: Backend-specific explanation of why the capability is unavailable.
+      additionalProperties: false
+
   responses:
     ActionSuccess:
       description: Action completed.
@@ -2360,17 +2458,16 @@ components:
             status: 408
             errorCode: timeout
 
-    UnsupportedCapability:
-      description: Capability not supported on this platform.
+    BackendNotSupported:
+      description: Capability not implemented by the connected backend.
       content:
         application/json:
           schema:
-            $ref: "./schemas/common.json#/$defs/ProblemDetails"
+            $ref: "#/components/schemas/BackendNotSupported"
           example:
-            type: "urn:devflow:error:unsupported-capability"
-            title: Unsupported capability
-            status: 501
-            errorCode: unsupported-capability
+            error: not_supported
+            capability: app.theme
+            reason: Not supported by the 'android-views' DevFlow backend.
 
     NotFound:
       description: Resource not found.

@@ -131,6 +131,108 @@ public class InspectorServerCaptureMetadataTests
         }
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ElementIdActions_DetectCaptureEpochSupportOncePerInspectorConnection(
+        bool supportsCaptureEpoch)
+    {
+        await using var agent = new MockAgentServer(supportsCaptureEpoch: supportsCaptureEpoch);
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            var requestJson = supportsCaptureEpoch
+                ? """{"elementId":"element-42","captureEpoch":42,"registryGeneration":7}"""
+                : """{"elementId":"element-42"}""";
+
+            for (var i = 0; i < 3; i++)
+            {
+                using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
+                using var response = await client.PostAsync(
+                    $"http://localhost:{inspectorPort}/api/tap",
+                    request);
+                Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            }
+
+            Assert.Equal(
+                1,
+                agent.RecordedRequests.Count(
+                    recorded => recorded.Path == "/api/v1/agent/capabilities"));
+            Assert.Equal(
+                3,
+                agent.RecordedRequests.Count(
+                    recorded => recorded.Path == "/api/v1/ui/actions/tap"));
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task ElementIdActions_RetryCapabilityDetectionAfterJsonErrorResponse()
+    {
+        await using var agent = new MockAgentServer(capabilitiesErrorResponseCount: 1);
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+
+            using (var firstRequest = new StringContent(
+                """{"elementId":"element-42"}""",
+                Encoding.UTF8,
+                "application/json"))
+            using (var firstResponse = await client.PostAsync(
+                $"http://localhost:{inspectorPort}/api/tap",
+                firstRequest))
+            {
+                Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
+            }
+
+            using (var secondRequest = new StringContent(
+                """{"elementId":"element-42"}""",
+                Encoding.UTF8,
+                "application/json"))
+            using (var secondResponse = await client.PostAsync(
+                $"http://localhost:{inspectorPort}/api/tap",
+                secondRequest))
+            {
+                Assert.Equal(HttpStatusCode.BadRequest, secondResponse.StatusCode);
+            }
+
+            using (var thirdRequest = new StringContent(
+                """{"elementId":"element-42","captureEpoch":42,"registryGeneration":7}""",
+                Encoding.UTF8,
+                "application/json"))
+            using (var thirdResponse = await client.PostAsync(
+                $"http://localhost:{inspectorPort}/api/tap",
+                thirdRequest))
+            {
+                Assert.Equal(HttpStatusCode.OK, thirdResponse.StatusCode);
+            }
+
+            Assert.Equal(
+                2,
+                agent.RecordedRequests.Count(
+                    recorded => recorded.Path == "/api/v1/agent/capabilities"));
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
     [Fact]
     public async Task CoordinateTap_WhenFirstCandidateRejects_RehitTestsBeforeParentFallback()
     {

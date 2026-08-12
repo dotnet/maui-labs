@@ -121,7 +121,10 @@ public abstract class AppFixtureBase : IAppFixture
     {
         CleanBuildOutputs(projectPath, targetFramework);
 
-        var args = $"build \"{projectPath}\" -f {targetFramework} -c Debug --nologo -v q";
+        // Persistent MSBuild worker nodes inherit redirected output handles and keep them open
+        // after the build exits, which can leave ReadToEndAsync waiting forever. Integration
+        // fixtures build once, so node reuse provides no benefit here.
+        var args = $"build \"{projectPath}\" -f {targetFramework} -c Debug --nologo -v q -nodeReuse:false";
         if (!string.IsNullOrEmpty(extraArgs))
             args += $" {extraArgs}";
 
@@ -255,7 +258,21 @@ public abstract class AppFixtureBase : IAppFixture
     protected static string GetSampleProjectPath(string platform)
     {
         if (!TestFramework.IsNative)
-            return GetSampleProjectPath();
+        {
+            var projectName = platform switch
+            {
+                "macos" => "DevFlow.Sample.MacOS",
+                "gtk" => "DevFlow.Sample.Linux",
+                "wpf" => "DevFlow.Sample.WPF",
+                _ => "DevFlow.Sample",
+            };
+            var mauiPath = Path.Combine(
+                FindRepoRoot(), "samples", projectName, $"{projectName}.csproj");
+            if (!File.Exists(mauiPath))
+                throw new InvalidOperationException($"MAUI sample project not found at: {mauiPath}");
+
+            return mauiPath;
+        }
 
         var head = TestFramework.NativeHeadFor(platform);
         var path = Path.Combine(
@@ -293,7 +310,29 @@ public abstract class AppFixtureBase : IAppFixture
     protected static string GetSampleBuildOutputRoot(string platform)
     {
         if (!TestFramework.IsNative)
-            return GetSampleBuildOutputRoot();
+        {
+            var projectName = platform switch
+            {
+                "macos" => "DevFlow.Sample.MacOS",
+                "gtk" => "DevFlow.Sample.Linux",
+                "wpf" => "DevFlow.Sample.WPF",
+                _ => "DevFlow.Sample",
+            };
+            var mauiRepoRoot = FindRepoRoot();
+            var mauiArtifactsPath = Path.Combine(
+                mauiRepoRoot, "artifacts", "bin", projectName, "Debug");
+            if (Directory.Exists(mauiArtifactsPath))
+                return mauiArtifactsPath;
+
+            var mauiProjectBinPath = Path.Combine(
+                mauiRepoRoot, "samples", projectName, "bin", "Debug");
+            if (Directory.Exists(mauiProjectBinPath))
+                return mauiProjectBinPath;
+
+            throw new InvalidOperationException(
+                $"Could not locate {projectName} build output. " +
+                $"Checked '{mauiArtifactsPath}' and '{mauiProjectBinPath}'.");
+        }
 
         var repoRoot = FindRepoRoot();
         var name = NativeSampleName(platform);

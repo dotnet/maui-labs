@@ -11,8 +11,10 @@ name: DevFlow Integration Tests
 #   Android   -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/AndroidEmulatorFixture.cs
 #   iOS       -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/iOSSimulatorFixture.cs
 #   Mac Catalyst -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/MacCatalystFixture.cs
-#   macOS     -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/MacOSFixture.cs (native only)
+#   macOS     -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/MacOSFixture.cs
+#   GTK       -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/GtkFixture.cs
 #   Windows   -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/WindowsFixture.cs
+#   WPF       -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/WpfFixture.cs
 
 on:
   workflow_dispatch:
@@ -27,7 +29,9 @@ on:
           - ios
           - maccatalyst
           - macos
+          - gtk
           - windows
+          - wpf
       framework:
         description: App framework to drive (native runs the plain .NET samples)
         default: maui
@@ -50,7 +54,13 @@ on:
     paths:
       - 'src/DevFlow/**'
       - 'samples/DevFlow.Sample/**'
+      - 'samples/DevFlow.Sample.Linux/**'
+      - 'samples/DevFlow.Sample.MacOS/**'
       - 'samples/DevFlow.Sample.Native/**'
+      - 'samples/DevFlow.Sample.WPF/**'
+      - 'platforms/Linux.Gtk4/**'
+      - 'platforms/MacOS/**'
+      - 'platforms/Windows.WPF/**'
       - '.github/workflows/devflow-integration.yml'
 
 concurrency:
@@ -74,9 +84,11 @@ jobs:
       run-ios: ${{ steps.decide.outputs.ios }}
       run-maccatalyst: ${{ steps.decide.outputs.maccatalyst }}
       run-macos: ${{ steps.decide.outputs.macos }}
+      run-gtk: ${{ steps.decide.outputs.gtk }}
       run-windows: ${{ steps.decide.outputs.windows }}
-      # JSON array consumed as a matrix axis by the platform jobs. Windows has no plain .NET head,
-      # so it always runs maui only.
+      run-wpf: ${{ steps.decide.outputs.wpf }}
+      # JSON array consumed as a matrix axis by the platform jobs. Windows, WPF, and GTK have no
+      # plain .NET heads, so those jobs run only when the matrix includes maui.
       frameworks: ${{ steps.decide.outputs.frameworks }}
     steps:
       - id: decide
@@ -109,7 +121,9 @@ jobs:
             echo "ios=$(should_run ios)"
             echo "maccatalyst=$(should_run maccatalyst)"
             echo "macos=$(should_run macos)"
+            echo "gtk=$(should_run gtk)"
             echo "windows=$(should_run windows)"
+            echo "wpf=$(should_run wpf)"
             case "${FRAMEWORK:-$DEFAULT_FRAMEWORK}" in
               native) echo 'frameworks=["native"]' ;;
               both)   echo 'frameworks=["maui","native"]' ;;
@@ -360,14 +374,23 @@ jobs:
 
   macos:
     needs: plan
-    # AppKit only exists in the plain .NET samples: MAUI has no in-box macOS head, so this job has
-    # nothing to say about the maui axis and runs native-only regardless of the framework input.
-    if: needs.plan.outputs.run-macos == 'true' && contains(needs.plan.outputs.frameworks, 'native')
+    if: needs.plan.outputs.run-macos == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        framework: ${{ fromJSON(needs.plan.outputs.frameworks) }}
     runs-on: macos-15
     timeout-minutes: 60
     env:
       DEVFLOW_TEST_PLATFORM: macos
-      DEVFLOW_TEST_FRAMEWORK: native
+      DEVFLOW_TEST_FRAMEWORK: ${{ matrix.framework }}
+      # The custom AppKit backend does not yet provide Blazor CDP, generic gestures/list scrolling,
+      # or every Essentials API. Keep those known platform gaps explicit while still running the
+      # full UI tree/action/property suite, including the registered native-element bridge.
+      TEST_FILTER: >-
+        ${{ matrix.framework == 'native'
+          && 'framework!=maui'
+          || 'Category!=WebView&FullyQualifiedName!~UiActionTests.Gesture_ReturnsExpectedResponse&FullyQualifiedName!~UiActionTests.Scroll_Element_Succeeds&FullyQualifiedName!~SensorTests.List_ReturnsSensors&FullyQualifiedName!~SecureStorageTests.Clear_RemovesAll&FullyQualifiedName!~DeviceTests.Display_ReturnsMetrics&FullyQualifiedName!~DeviceTests.AppInfo_NameMatchesSample&FullyQualifiedName!~DeviceTests.AppInfo_ReturnsValidInfo' }}
     steps:
       - uses: actions/checkout@v6
 
@@ -411,17 +434,68 @@ jobs:
         run: >
           dotnet test $TEST_PROJECT
           -c Debug
-          --filter framework!=maui
-          --logger "trx;LogFileName=devflow-integration-macos-native.trx"
+          --logger "trx;LogFileName=devflow-integration-macos-${{ matrix.framework }}.trx"
           --logger "console;verbosity=normal"
           --results-directory ./artifacts/TestResults/devflow-integration/macos
+          --filter "$TEST_FILTER"
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: devflow-integration-macos-native-results
+          name: devflow-integration-macos-${{ matrix.framework }}-results
           path: ./artifacts/TestResults/devflow-integration/macos/
+          retention-days: 30
+
+  gtk:
+    needs: plan
+    if: needs.plan.outputs.run-gtk == 'true' && contains(needs.plan.outputs.frameworks, 'maui')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      DEVFLOW_TEST_PLATFORM: gtk
+      DEVFLOW_TEST_FRAMEWORK: maui
+      GDK_BACKEND: x11
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Install GTK integration dependencies
+        run: >
+          sudo apt-get update &&
+          sudo apt-get install -y
+          libgtk-4-dev
+          libwebkitgtk-6.0-dev
+          gobject-introspection
+          libgirepository1.0-dev
+          gir1.2-gtk-4.0
+          gir1.2-webkit-6.0
+          pkg-config
+          xvfb
+          xauth
+          dbus-x11
+
+      - name: Run DevFlow integration tests (GTK)
+        run: >
+          dbus-run-session --
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24"
+          dotnet test $TEST_PROJECT
+          -c Debug
+          --filter "Category!=Device&Category!=Sensors&Category!=SecureStorage"
+          --logger "trx;LogFileName=devflow-integration-gtk-maui.trx"
+          --logger "console;verbosity=normal"
+          --results-directory ./artifacts/TestResults/devflow-integration/gtk
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: devflow-integration-gtk-maui-results
+          path: ./artifacts/TestResults/devflow-integration/gtk/
           retention-days: 30
 
   windows:
@@ -461,4 +535,41 @@ jobs:
         with:
           name: devflow-integration-windows-results
           path: .\artifacts\TestResults\devflow-integration\windows\
+          retention-days: 30
+
+  wpf:
+    needs: plan
+    if: needs.plan.outputs.run-wpf == 'true' && contains(needs.plan.outputs.frameworks, 'maui')
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      DEVFLOW_TEST_PLATFORM: wpf
+      DEVFLOW_TEST_FRAMEWORK: maui
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Install MAUI workload
+        run: dotnet workload install maui --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+
+      - name: Run DevFlow integration tests (WPF)
+        shell: pwsh
+        run: >
+          dotnet test $env:TEST_PROJECT
+          -c Debug
+          --filter "Category!=WebView&Category!=Device&Category!=Sensors&Category!=SecureStorage"
+          --logger "trx;LogFileName=devflow-integration-wpf-maui.trx"
+          --logger "console;verbosity=normal"
+          --results-directory .\artifacts\TestResults\devflow-integration\wpf
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: devflow-integration-wpf-maui-results
+          path: .\artifacts\TestResults\devflow-integration\wpf\
           retention-days: 30

@@ -3,11 +3,8 @@ using System.Diagnostics;
 namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 
 /// <summary>
-/// Fixture that builds and launches the plain .NET macOS (AppKit) sample head.
-///
-/// This platform is native-only: MAUI has no in-box AppKit backend, so <c>DevFlow.Sample</c> has no
-/// macOS head to drive. Without this fixture the AppKit UI backend had no automated coverage at all
-/// — every other native backend is exercised through Mac Catalyst, iOS or Android.
+/// Fixture that builds and launches either the plain .NET AppKit sample or the
+/// MAUI-on-AppKit sample head.
 /// </summary>
 public sealed class MacOSFixture : AppFixtureBase
 {
@@ -19,13 +16,6 @@ public sealed class MacOSFixture : AppFixtureBase
 
     protected override async Task InitializePlatformAsync()
     {
-        if (!TestFramework.IsNative)
-        {
-            throw new InvalidOperationException(
-                "DEVFLOW_TEST_PLATFORM=macos is only valid with DEVFLOW_TEST_FRAMEWORK=native: the MAUI " +
-                "sample has no AppKit head. Use maccatalyst to drive MAUI on a Mac.");
-        }
-
         await WithBuildLockAsync(async () =>
         {
             await BuildSampleAsync(GetSampleProjectPath("macos"), TargetFramework);
@@ -75,11 +65,9 @@ public sealed class MacOSFixture : AppFixtureBase
         var psi = new ProcessStartInfo(executablePath)
         {
             UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
         };
 
-        // The sample reads this to pick its agent port; see samples/DevFlow.Sample.Native/Shared/SampleAgentOptions.cs.
+        // Both AppKit sample heads read this to pick the agent port.
         psi.Environment["DEVFLOW_TEST_PORT"] = AgentPort.ToString();
 
         _appProcess = Process.Start(psi)

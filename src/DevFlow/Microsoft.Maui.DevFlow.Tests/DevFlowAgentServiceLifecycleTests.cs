@@ -8,10 +8,12 @@ using Microsoft.Maui.Controls;
 using Microsoft.Maui.DevFlow.Agent.Core;
 using Microsoft.Maui.DevFlow.Driver;
 using Microsoft.Maui.Dispatching;
+using Microsoft.Maui.Platforms.MacOS.Platform;
 using DriverElementInfo = Microsoft.Maui.DevFlow.Driver.ElementInfo;
 
 namespace Microsoft.Maui.DevFlow.Tests;
 
+[Collection(NativeElementDiagnosticsCollection.Name)]
 public class DevFlowAgentServiceLifecycleTests
 {
     private static readonly byte[] NativeScreenshotPng =
@@ -69,9 +71,10 @@ public class DevFlowAgentServiceLifecycleTests
         Assert.False(jobs.GetProperty("supported").GetBoolean());
         Assert.Empty(jobs.GetProperty("jobs").EnumerateArray());
 
-        var run = await client.RunJobAsync("missing-job");
-        Assert.False(run.GetProperty("success").GetBoolean());
-        Assert.Contains("not supported", run.GetProperty("error").GetString(), StringComparison.OrdinalIgnoreCase);
+        var error = await Assert.ThrowsAsync<NotSupportedByAgentException>(
+            () => client.RunJobAsync("missing-job"));
+        Assert.Equal("device.jobs", error.Capability);
+        Assert.Contains("not supported", error.Reason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -264,6 +267,71 @@ public class DevFlowAgentServiceLifecycleTests
             thirdButton.CaptureEpoch,
             thirdButton.RegistryGeneration));
         Assert.False(invoked);
+    }
+
+    [Fact]
+    public async Task CaptureEpoch_RoundTrip_StaleEpochReturns409ThenFreshEpochSucceeds()
+    {
+        // Exercises the actual /api/v1/ui/actions/tap route (ExecuteUiMutationAsync -> HandleTap
+        // -> PrepareUiMutationAsync -> ValidateUiCapture/BuildStaleCaptureResponse), not just the
+        // private capture-epoch helper methods directly, using AgentClient.TapResultAsync so the
+        // HTTP status code and "reason" the wire actually returns are asserted rather than only
+        // the collapsed bool TapAsync gives back.
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var invocationCount = 0;
+        var button = new Button
+        {
+            AutomationId = "RoundTripCaptureEpochButton",
+            Text = "Invoke"
+        };
+        button.Clicked += (_, _) => invocationCount++;
+        var app = new Application();
+        var window = new Window(new ContentPage { Content = button });
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        // Obtain a valid capture epoch and use it for a mutation: this must succeed over the real
+        // route and invalidate that epoch as a side effect (mutations bump the mutation generation).
+        var firstCapture = Assert.Single(
+            Flatten(await client.GetTreeAsync()),
+            element => element.AutomationId == "RoundTripCaptureEpochButton");
+        var validResult = await client.TapResultAsync(
+            firstCapture.Id,
+            firstCapture.CaptureEpoch,
+            firstCapture.RegistryGeneration);
+        Assert.True(validResult.Success, $"Tap failed: {validResult.Error}; reason={validResult.Reason}");
+        Assert.Equal(1, invocationCount);
+
+        // Replay the now-stale epoch: the actual HTTP handler must answer 409 with
+        // reason "stale-capture-epoch", not merely "failed".
+        var staleResult = await client.TapResultAsync(
+            firstCapture.Id,
+            firstCapture.CaptureEpoch,
+            firstCapture.RegistryGeneration);
+        Assert.False(staleResult.Success);
+        Assert.Equal(409, staleResult.StatusCode);
+        Assert.Equal("stale-capture-epoch", staleResult.Reason);
+        Assert.True(staleResult.Retryable);
+        Assert.Equal(1, invocationCount);
+
+        // A fresh capture epoch for the same element must succeed again over the same route.
+        var freshCapture = Assert.Single(
+            Flatten(await client.GetTreeAsync()),
+            element => element.AutomationId == "RoundTripCaptureEpochButton");
+        Assert.True(freshCapture.CaptureEpoch > firstCapture.CaptureEpoch);
+        var freshResult = await client.TapResultAsync(
+            freshCapture.Id,
+            freshCapture.CaptureEpoch,
+            freshCapture.RegistryGeneration);
+        Assert.True(freshResult.Success, $"Tap failed: {freshResult.Error}; reason={freshResult.Reason}");
+        Assert.Equal(2, invocationCount);
     }
 
     [Fact]
@@ -776,6 +844,55 @@ public class DevFlowAgentServiceLifecycleTests
     }
 
     [Fact]
+    public async Task DiagnosticListenerRegistration_BecomesVisibleAsNativeRegisteredElement_AndResolvesById()
+    {
+        // Fires through the real production publisher (NativeElementDiagnosticsBridge, linked in
+        // from platforms/MacOS — see NativeElementDiagnosticContractTests) rather than calling
+        // RegisteredNativeElementRegistry.Register directly, so this covers the whole seam: a
+        // DiagnosticListener event -> MauiNativeElementDiagnosticSubscriber -> registry ->
+        // VisualTreeWalker -> the tree/query HTTP service path -> resolution by id.
+        var port = GetFreePort();
+        var registry = new RegisteredNativeElementRegistry();
+        using var subscriber = new MauiNativeElementDiagnosticSubscriber(registry);
+        using var service = new RegistryBackedAgentService(
+            new AgentOptions { Port = port },
+            registry,
+            nativeElementSubscription: subscriber);
+        using var client = new AgentClient("localhost", port);
+
+        var owner = new ToolbarItem { Text = "Diagnostics" };
+        var nativeElement = new object();
+        var page = new ContentPage();
+        page.ToolbarItems.Add(owner);
+        var app = new Application();
+        var window = new Window(page);
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        NativeElementDiagnosticsBridge.Register(owner, nativeElement, "ToolbarItem", "RealizedView");
+        Assert.NotEmpty(registry.GetSnapshot());
+
+        var tree = await client.GetTreeAsync();
+        var registered = Assert.Single(
+            Flatten(tree),
+            element => element.Id.StartsWith("native:registered:", StringComparison.Ordinal));
+        Assert.Equal("native", registered.Framework);
+        Assert.NotNull(registered.OwnerId);
+
+        var resolved = await client.GetElementAsync(registered.Id);
+        Assert.NotNull(resolved);
+        Assert.Equal(registered.Id, resolved!.Id);
+        Assert.Equal("native", resolved.Framework);
+
+        NativeElementDiagnosticsBridge.Unregister(nativeElement);
+    }
+
+    [Fact]
     public async Task CaptureEpoch_AllowsOnlyOneConcurrentMutation()
     {
         var port = GetFreePort();
@@ -1186,6 +1303,27 @@ public class DevFlowAgentServiceLifecycleTests
             CapturedNativeElement = nativeElement;
             return Task.FromResult<byte[]?>(NativeScreenshotPng);
         }
+    }
+
+    /// <summary>
+    /// A registry-backed agent whose tree walker actually consumes that registry.
+    /// </summary>
+    /// <remarks>
+    /// The base <c>MauiDevFlowAgentService.CreateTreeWalker()</c> deliberately returns a bare
+    /// <c>new VisualTreeWalker()</c> — wiring a registry into the walker is a platform backend's
+    /// job (see <c>Agent</c>/<c>Agent.Gtk</c>/<c>Agent.WPF</c>'s own <c>AgentServiceExtensions</c>).
+    /// A registry passed to <see cref="MauiDevFlowAgentService"/>'s internal constructor without a
+    /// matching <c>CreateTreeWalker()</c> override lets <c>NativeElementRegistry</c>/property
+    /// endpoints resolve entries directly, but <c>ui.tree</c>/<c>ui.elements</c> never surface them,
+    /// because <see cref="VisualTreeWalker.SupportsNativeElements"/>'s registered-element merge
+    /// requires the walker instance itself to hold the registry. This stands in for that wiring.
+    /// </remarks>
+    private sealed class RegistryBackedAgentService(
+        AgentOptions options,
+        RegisteredNativeElementRegistry registry,
+        IDisposable? nativeElementSubscription) : MauiDevFlowAgentService(options, registry, nativeElementSubscription)
+    {
+        protected override VisualTreeWalker CreateTreeWalker() => new(NativeElementRegistry!);
     }
 
     private sealed class DetachedNativeScreenshotAgentService : MauiDevFlowAgentService

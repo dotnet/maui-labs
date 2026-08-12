@@ -243,6 +243,34 @@ public class UiInspectionTests : IntegrationTestBase
         Assert.True(await Client.TapAsync(okButton.Id));
     }
 
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
+    [Fact]
+    public async Task Tree_CustomMauiBackend_IncludesRegisteredNativeElement()
+    {
+        if (Platform is not ("macos" or "gtk" or "wpf"))
+        {
+            Output.WriteLine("Registered toolbar bridge test only applies to custom MAUI desktop backends.");
+            return;
+        }
+
+        await NavigateToMainPageAsync();
+
+        var expectedRole = Platform == "macos" ? "toolbar-item" : "shell-flyout";
+        ElementInfo? registeredNativeElement = null;
+        await WaitForAsync(async () =>
+        {
+            var tree = await Client.GetTreeAsync(maxDepth: 12);
+            registeredNativeElement = Flatten(tree).FirstOrDefault(element =>
+                element.Id.StartsWith("native:registered:", StringComparison.Ordinal)
+                && element.Role == expectedRole);
+            return registeredNativeElement is not null;
+        }, timeoutMs: 10000);
+
+        Assert.NotNull(registeredNativeElement!.OwnerId);
+        Assert.Equal("native", registeredNativeElement.Origin);
+        Assert.NotEmpty(registeredNativeElement.Capabilities ?? []);
+    }
+
     async Task<ElementInfo> WaitForNativeButtonAsync(string text)
     {
         ElementInfo? match = null;

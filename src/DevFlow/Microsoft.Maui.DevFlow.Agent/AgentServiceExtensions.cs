@@ -70,7 +70,7 @@ public static class AgentServiceExtensions
 
         void EnsureAgentStarted(IDispatcher? dispatcher = null)
         {
-            var app = Application.Current;
+            var app = ResolveCurrentApplication();
             if (app != null)
             {
                 if (!service.IsRunning)
@@ -164,7 +164,7 @@ public static class AgentServiceExtensions
     {
         for (int i = 0; i < 30; i++)
         {
-            var app = Application.Current;
+            var app = ResolveCurrentApplication();
             if (app != null)
             {
                 app.Dispatcher.Dispatch(() => service.Start(app, app.Dispatcher));
@@ -191,7 +191,7 @@ public static class AgentServiceExtensions
 
         for (int i = 0; i < 30; i++)
         {
-            var app = Application.Current;
+            var app = ResolveCurrentApplication();
             if (app != null)
             {
                 app.Dispatcher.Dispatch(() => service.BindApp(app));
@@ -203,6 +203,21 @@ public static class AgentServiceExtensions
         }
 
         Console.WriteLine("[Microsoft.Maui.DevFlow] Application.Current was still null after late-bind retries; continuing in app-less mode");
+    }
+
+    private static Application? ResolveCurrentApplication()
+    {
+        if (Application.Current is { } current)
+            return current;
+
+        try
+        {
+            return IPlatformApplication.Current?.Application as Application;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static (string Platform, string AppName) GetMauiHostIdentity()

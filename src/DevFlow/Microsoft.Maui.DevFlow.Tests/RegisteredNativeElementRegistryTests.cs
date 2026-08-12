@@ -6,6 +6,7 @@ using System.Runtime.CompilerServices;
 
 namespace Microsoft.Maui.DevFlow.Tests;
 
+[Collection(NativeElementDiagnosticsCollection.Name)]
 public class RegisteredNativeElementRegistryTests
 {
     private sealed class FakeNativeElement(string? stableKey = null)

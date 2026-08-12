@@ -359,7 +359,7 @@ internal static partial class NativeUi
         var pixelWidth = Math.Max(1, (int)Math.Ceiling(bounds.Width * scale));
         var pixelHeight = Math.Max(1, (int)Math.Ceiling(bounds.Height * scale));
 
-        var rep = new NSBitmapImageRep(
+        using var rep = new NSBitmapImageRep(
             IntPtr.Zero,
             pixelWidth,
             pixelHeight,
@@ -413,10 +413,10 @@ internal static partial class NativeUi
         var cgImagePtr = CGWindowListCreateImage(CGRect.Null, 0x08, (uint)window.WindowNumber, 0x01);
         if (cgImagePtr == IntPtr.Zero) return null;
 
-        var cgImage = Runtime.GetINativeObject<CGImage>(cgImagePtr, owns: true);
+        using var cgImage = Runtime.GetINativeObject<CGImage>(cgImagePtr, owns: true);
         if (cgImage == null) return null;
 
-        var rep = new NSBitmapImageRep(cgImage);
+        using var rep = new NSBitmapImageRep(cgImage);
         using var data = rep.RepresentationUsingTypeProperties(NSBitmapImageFileType.Png, new NSDictionary());
         return data?.ToArray();
     }

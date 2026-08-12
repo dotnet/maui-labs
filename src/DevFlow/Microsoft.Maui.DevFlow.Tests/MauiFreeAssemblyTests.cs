@@ -58,10 +58,33 @@ public class MauiFreeAssemblyTests
     {
         // The native agent is the whole point of the split: it must be hostable from a plain
         // .NET Android/iOS/Mac Catalyst/macOS app that never restores a MAUI package.
-        var assemblies = TestRepo.FindBuiltAssemblies("Microsoft.Maui.DevFlow.Agent.Native");
+        //
+        // This test project force-builds Agent.Native's android TFM via a build-only
+        // ProjectReference (see the .csproj) specifically so this list is never empty: an absent
+        // or stale build must fail loudly here rather than let an empty foreach pass vacuously.
+        var assemblies = TestRepo.FindBuiltAssemblies(
+            "Microsoft.Maui.DevFlow.Agent.Native",
+            TestRepo.CurrentConfiguration,
+            "net10.0-android");
+
+        Assert.True(
+            assemblies.Count > 0,
+            "Expected at least one built Microsoft.Maui.DevFlow.Agent.Native.dll under artifacts/bin. " +
+            "The test project force-builds its android TFM; if none was found the build graph is broken.");
 
         foreach (var assembly in assemblies)
             AssemblyReferenceGuard.AssertMauiFree(assembly);
+
+        foreach (var targetFramework in new[] { "net10.0-ios", "net10.0-maccatalyst", "net10.0-macos" })
+        {
+            foreach (var assembly in TestRepo.FindBuiltAssemblies(
+                "Microsoft.Maui.DevFlow.Agent.Native",
+                TestRepo.CurrentConfiguration,
+                targetFramework))
+            {
+                AssemblyReferenceGuard.AssertMauiFree(assembly);
+            }
+        }
     }
 
     [Fact]
@@ -69,10 +92,32 @@ public class MauiFreeAssemblyTests
     {
         // The add-on is allowed to depend on Essentials — that is its whole job — but pulling in
         // Controls would drag the consuming plain .NET app into MAUI, which defeats the point.
-        var assemblies = TestRepo.FindBuiltAssemblies("Microsoft.Maui.DevFlow.Agent.Native.Essentials");
+        //
+        // Same rationale as Native_DoesNotReferenceMaui: force-built by the test project, and
+        // asserted non-empty so an absent/stale build cannot pass this test vacuously.
+        var assemblies = TestRepo.FindBuiltAssemblies(
+            "Microsoft.Maui.DevFlow.Agent.Native.Essentials",
+            TestRepo.CurrentConfiguration,
+            "net10.0-android");
+
+        Assert.True(
+            assemblies.Count > 0,
+            "Expected at least one built Microsoft.Maui.DevFlow.Agent.Native.Essentials.dll under artifacts/bin. " +
+            "The test project force-builds its android TFM; if none was found the build graph is broken.");
 
         foreach (var assembly in assemblies)
             AssemblyReferenceGuard.AssertControlsFree(assembly);
+
+        foreach (var targetFramework in new[] { "net10.0-ios", "net10.0-maccatalyst", "net10.0-macos" })
+        {
+            foreach (var assembly in TestRepo.FindBuiltAssemblies(
+                "Microsoft.Maui.DevFlow.Agent.Native.Essentials",
+                TestRepo.CurrentConfiguration,
+                targetFramework))
+            {
+                AssemblyReferenceGuard.AssertControlsFree(assembly);
+            }
+        }
     }
 
     [Fact]

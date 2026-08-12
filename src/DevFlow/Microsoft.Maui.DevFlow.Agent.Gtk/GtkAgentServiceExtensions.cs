@@ -121,7 +121,7 @@ public static class GtkAgentServiceExtensions
                         for (int i = 0; i < 50 && app == null; i++)
                         {
                             await Task.Delay(200);
-                            app = Application.Current;
+                            app = ResolveCurrentApplication();
                         }
                         if (app != null)
                             app.StartDevFlowAgent();
@@ -151,6 +151,21 @@ public static class GtkAgentServiceExtensions
         try
         {
             return app.Handler?.MauiContext?.Services.GetService<MauiDevFlowAgentService>();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static Application? ResolveCurrentApplication()
+    {
+        if (Application.Current is { } current)
+            return current;
+
+        try
+        {
+            return IPlatformApplication.Current?.Application as Application;
         }
         catch
         {

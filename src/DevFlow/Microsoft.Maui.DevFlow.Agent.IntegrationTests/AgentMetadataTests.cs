@@ -58,6 +58,7 @@ public class AgentMetadataTests : IntegrationTestBase
             "ios" => "ios",
             "android" => "android",
             "windows" => "win",
+            "gtk" => "linux",
             _ => Platform
         };
 

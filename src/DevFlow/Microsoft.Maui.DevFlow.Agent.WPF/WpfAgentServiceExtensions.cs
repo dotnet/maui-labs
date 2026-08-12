@@ -118,7 +118,7 @@ public static class WpfAgentServiceExtensions
                         for (int i = 0; i < 50 && app == null; i++)
                         {
                             await Task.Delay(200);
-                            app = Application.Current;
+                            app = ResolveCurrentApplication();
                         }
                         app?.StartDevFlowAgent();
                     });
@@ -141,6 +141,21 @@ public static class WpfAgentServiceExtensions
     {
         try { return app.Handler?.MauiContext?.Services.GetService<MauiDevFlowAgentService>(); }
         catch { return null; }
+    }
+
+    private static Application? ResolveCurrentApplication()
+    {
+        if (Application.Current is { } current)
+            return current;
+
+        try
+        {
+            return IPlatformApplication.Current?.Application as Application;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static string? ReadAssemblyMetadata(string key)

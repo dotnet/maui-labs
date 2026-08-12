@@ -2697,7 +2697,7 @@ public partial class DevFlowAgentService
 
         var result = await RunPlatformJobAsync(identifier, type);
         if (result == null)
-            return HttpResponse.Error($"Running jobs is not supported on {PlatformName}", 501, "unsupported-capability");
+            return NotSupported("device.jobs", $"Running jobs is not supported on {PlatformName}.");
 
         return HttpResponse.Json(result);
     }

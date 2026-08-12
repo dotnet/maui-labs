@@ -57,6 +57,31 @@ public class UnsupportedCapabilityTests
     }
 
     [Fact]
+    public async Task JobRun_WithoutPlatformResult_ReturnsUniformNotSupportedEnvelope()
+    {
+        var port = GetFreePort();
+        using var service = new JobHostWithoutRunSupport(new AgentOptions { Port = port });
+        service.StartServerOnly(dispatcher: null);
+
+        using var http = new HttpClient();
+        using var statusResponse = await WaitForServerAsync(http, port, "/api/v1/agent/status");
+
+        using var content = new StringContent(
+            "{}",
+            System.Text.Encoding.UTF8,
+            "application/json");
+        using var response = await http.PostAsync(
+            $"http://localhost:{port}/api/v1/device/jobs/example/run",
+            content);
+
+        Assert.Equal(HttpStatusCode.NotImplemented, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("not_supported", json.RootElement.GetProperty("error").GetString());
+        Assert.Equal("device.jobs", json.RootElement.GetProperty("capability").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(json.RootElement.GetProperty("reason").GetString()));
+    }
+
+    [Fact]
     public async Task Status_ReportsTheBackendFramework()
     {
         var port = GetFreePort();
@@ -164,6 +189,12 @@ public class UnsupportedCapabilityTests
     {
         protected override bool IsUiSupported => true;
         protected override bool IsScreenshotSupported => true;
+    }
+
+    private sealed class JobHostWithoutRunSupport(AgentOptions options) : DevFlowAgentService(options)
+    {
+        protected override bool IsJobsSupported => true;
+        protected override bool IsJobRunSupported => true;
     }
 
     private static async Task<HttpResponseMessage> WaitForServerAsync(HttpClient http, int port, string path)

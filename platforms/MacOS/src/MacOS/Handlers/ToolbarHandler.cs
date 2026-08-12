@@ -1195,7 +1195,8 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
         var iconSource = mauiItem.IconImageSource;
         NSImage? image = null;
         if (iconSource is FileImageSource fileSource && !string.IsNullOrEmpty(fileSource.File))
-            image = NSImage.GetSystemSymbol(fileSource.File, null) ?? new NSImage(fileSource.File);
+            image = NSImage.GetSystemSymbol(fileSource.File, null)
+                ?? ImageHandler.FindBundleImage(fileSource.File);
 
         if (image != null)
         {
