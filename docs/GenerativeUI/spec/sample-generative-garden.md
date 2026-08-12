@@ -212,7 +212,9 @@ sample's `ChatClientBuilder(innerChatClient).UseFunctionInvocation().Build(rootP
 
 - You are a shopping assistant for a garden shop, rendered as generative UI.
 - **Discover before you call:** use `list_endpoints`/`describe_endpoint`/`describe_model` to learn
-  the API; use `read_api` for reads and `write_api` for changes (changes need approval).
+  the API; use `read_api` for reads and invoke `write_api` directly once target/parameters are
+  clear. Its infrastructure automatically presents the one Approve/Reject UI—never ask for typed
+  confirmation or call `show_confirm` first.
 - **The canvas is stateful:** `render_ui` describes structure; `set_state` seeds bound data;
   `apply_patch` mutates it in place. Do not regenerate the UI for cart quantity/add/remove changes.
 - **Always show results in the canvas** — the chat column is for short confirmations, not data
@@ -223,7 +225,8 @@ sample's `ChatClientBuilder(innerChatClient).UseFunctionInvocation().Build(rootP
   `list_ui_capabilities` (automatic prompt seeding and `describe_*` tools are planned).
 - For edits, render a form, honor "set X to Y" via `set_field`/`apply_patch`, and gather via
   `get_state` before `write_api`.
-- For destructive actions, show a confirm and wait for yes.
+- For destructive server actions, call `write_api` directly and let its automatic approval banner
+  confirm the operation. Use `show_confirm` only for UI-local choices.
 - Optionally seed the reduced endpoint index + UI capability catalog here (see the OpenAPI
   appendix §6 and the Extensibility appendix §4).
 
@@ -314,7 +317,7 @@ Status:
    `write_api POST /products` *(approval)* → 201 → update/replace the surface.
 4. ✅ **"delete the tomato seeds"**
    `read_api GET /products/tomato-seeds` → `render_ui` (detail, **`danger`**-styled Delete button)
-   → `show_confirm` → user: "yes" → `write_api DELETE /products/tomato-seeds` *(approval)* →
+   → `write_api DELETE /products/tomato-seeds` → automatic Approve/Reject UI →
    204 → patch/remove it from any bound list (or structurally show confirmation).
 5. ✅ **"add 3 tomato seed packs to my cart"**
    `write_api POST /cart/items {sku, quantity:3}` *(approval)* → `read_api GET /cart` →
@@ -398,8 +401,8 @@ watermarking**, **full-screen handoff**, **overlay presentation**, and **runtime
 6. **Validation errors:** which endpoints return `ProblemDetails` (e.g. bad price) so we can
    demonstrate the model surfacing validation in the UI?
 7. **Seed parity:** exactly mirror the current catalog, or trim/expand for better demos?
-8. **Approval UX in-sample:** rely on `write_api` approval alone, add `show_confirm` for
-   destructive ops, or both (see overview §11)?
+8. ✅ **Approval UX:** `write_api`'s automatic banner is the sole server-write confirmation.
+   `show_confirm` is UI-local only, preventing typed-yes + button double approval.
 9. **Checkout screen boundary:** does `CheckoutScreen` place the order itself (`POST /orders`) or hand
    back to the model to do so? Where does the `write_api` approval fit when a full screen owns the
    action?

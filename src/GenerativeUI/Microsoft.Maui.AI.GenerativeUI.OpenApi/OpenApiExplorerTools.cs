@@ -106,7 +106,7 @@ public sealed class OpenApiExplorerTools
     }
 
     [ExportAIFunction("write_api", ApprovalRequired = true)]
-    [Description("Invoke a mutating (POST/PUT/PATCH/DELETE) operation by operationId. Path/query values go as flat top-level keys in args; the request payload goes under an explicit \"body\" key (e.g. { \"sku\": \"tomato-seeds\", \"body\": { \"quantity\": 5 } }). Requires user approval before executing.")]
+    [Description("Invoke a mutating (POST/PUT/PATCH/DELETE) operation by operationId. Path/query values go as flat top-level keys in args; the request payload goes under an explicit \"body\" key (e.g. { \"sku\": \"tomato-seeds\", \"body\": { \"quantity\": 5 } }). The tool infrastructure automatically displays the app's Approve/Reject UI and pauses before execution. Once intent and parameters are clear, invoke this tool directly—do not ask for conversational confirmation or call show_confirm first.")]
     public async Task<string> WriteApiAsync(
         [Description("The POST/PUT/PATCH/DELETE operationId to invoke.")] string operationId,
         [Description("Path/query values as flat top-level keys; the request payload under \"body\".")] JsonObject? args = null,

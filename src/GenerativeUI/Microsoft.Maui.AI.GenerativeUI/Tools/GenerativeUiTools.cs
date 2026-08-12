@@ -16,7 +16,7 @@ namespace Microsoft.Maui.AI.GenerativeUI.Tools;
 
 /// <summary>
 /// The AI-facing client-UI tools. They let a model render bespoke, data-bound UI into the canvas,
-/// live-edit and read back a form, confirm destructive actions, and hand off to registered screens.
+/// live-edit and read back a form, handle UI-only choices, and hand off to registered screens.
 /// Canvas/form mutations marshal to the main thread. See
 /// <c>docs/GenerativeUI/spec/appendix-ui-dsl.md</c>.
 /// </summary>
@@ -204,8 +204,9 @@ public sealed class GenerativeUiTools(
 
     [ExportAIFunction("show_confirm")]
     [Description(
-        "Show a confirmation overlay before a destructive or important action (e.g. delete). Resolves " +
-        "when the user taps the button or types 'yes'. After it is confirmed, proceed with the write.")]
+        "Show a confirmation overlay for a UI-only choice that does NOT invoke approval-gated " +
+        "write_api (for example discarding unsaved local form edits). Never use this before " +
+        "write_api: write_api automatically shows the app's Approve/Reject UI.")]
     public async Task<string> ShowConfirmAsync(
         [Description("Short title, e.g. 'Delete product?'")] string title,
         [Description("Message explaining what will happen.")] string message,
@@ -215,7 +216,7 @@ public sealed class GenerativeUiTools(
     {
         await MainThread.InvokeOnMainThreadAsync(() =>
             canvas.ShowConfirm(title, message, confirmLabel, cancelLabel)).ConfigureAwait(false);
-        return "Showing the confirmation. Wait for the user to confirm (button or 'yes') before writing.";
+        return "Showing the UI-only confirmation. Do not use this result to duplicate write_api approval.";
     }
 
     [ExportAIFunction("clear_ui")]

@@ -37,8 +37,13 @@ public sealed partial class ChatViewModel : ObservableObject, IChatBridge
 
         SERVER API:
         - Discover first: list_endpoints, then describe_endpoint / describe_model for shapes.
-        - read_api for GET (safe). write_api for changes (create/update/delete, checkout) — these
-          require user approval.
+        - read_api for GET (safe). write_api for changes (create/update/delete, checkout).
+        - IMPORTANT: write_api's tool-calling infrastructure AUTOMATICALLY pauses and displays the
+          app's Approve/Reject UI. Once the user's intent and all parameters are clear, call
+          write_api immediately. Do NOT ask "are you sure?", wait for a typed "yes", render a
+          confirmation button, or call show_confirm first—that would duplicate the built-in
+          approval. Ask a conversational question only when a required parameter or target is
+          genuinely ambiguous, never merely to obtain approval.
         - Pass path/query values as flat keys; put a request body under an explicit "body" key.
         - After a write, re-read the affected resource so you reflect current server state.
 
@@ -92,7 +97,8 @@ public sealed partial class ChatViewModel : ObservableObject, IChatBridge
           stock as Caption/Badge, full useful description, then actions. This is normally a static
           snapshot: inline the actual text and image URL returned by the API rather than binding
           fields (unless the detail is explicitly expected to live-update). Destructive actions are
-          danger-styled and require confirmation.
+          danger-styled; when tapped, call write_api directly and let its automatic approval UI
+          confirm the action.
         - CART: compact bound itemsBind list; each line shows name, quantity, unit/subtotal as useful,
           and remove/change actions without marketing descriptions. Show the total prominently once.
         - ORDERS: Title + bound order Cards showing date, total, status/item count, with details hidden
@@ -123,8 +129,10 @@ public sealed partial class ChatViewModel : ObservableObject, IChatBridge
         - Add/edit forms: Field nodes (kind text/number/multiline/bool) two-way bound via "key" into
           the state, with a Save Button intent "submit". "set the quantity to 3" -> apply_patch or
           set_field. "save"/tap Save -> get_state then write_api.
-        - Destructive actions: render the item with a danger-styled confirm Button (or show_confirm);
-          only after the user confirms call write_api. Then reflect the result by patching state.
+        - Destructive actions: render the item with a danger-styled action Button. On an explicit
+          user request/tap, call write_api directly; its automatic Approve/Reject UI is the sole
+          confirmation. Never pair show_confirm or a typed "yes" with write_api. After approval and
+          success, reflect the result by patching state.
         - Keep the server and the canvas state in sync: after a write_api, patch the state (or re-read
           and set_state) so the canvas matches the server.
 

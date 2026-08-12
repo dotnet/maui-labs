@@ -202,8 +202,8 @@ Reserved intents:
 | Intent | Raised by | Effect |
 |---|---|---|
 | `submit` | a form's submit `Button` | Posts a synthetic user turn: "The user submitted the form" + `get_state()` values, so the model calls the right `write_api`. |
-| `confirm` | `show_confirm` confirm button | Signals approval so the model proceeds. |
-| `cancel` | `show_confirm` cancel button | Signals rejection. |
+| `confirm` | `show_confirm` confirm button | Resolves a UI-local choice (never duplicates `write_api` approval). |
+| `cancel` | `show_confirm` cancel button | Cancels a UI-local choice. |
 | `action:<name>` | any `Button` | Posts "The user tapped <name>" (+ `payload`) so the model decides what to do. |
 
 The bridge is an `IChatBridge` the library raises and the app's chat VM implements. This keeps

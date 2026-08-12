@@ -305,17 +305,15 @@ This mutate-don't-repaint model, and its AG-UI-compatible snapshot/delta shapes,
 
 ## 11. Approval & destructive actions
 
-Two layered mechanisms, reusing the existing `Microsoft.Maui.AI.Attributes` approval flow (which is
-built on `Microsoft.Extensions.AI`'s `ToolApprovalRequestContent`/`ToolApprovalResponseContent` —
-the same types AG-UI uses, so we are already approval-shape-compatible):
+**One approval mechanism for server writes.** `write_api` is `ApprovalRequired`; its
+`Microsoft.Extensions.AI` tool-calling infrastructure automatically pauses the call and presents the
+app's Approve/Reject banner (`ToolApprovalRequestContent` / `ToolApprovalResponseContent`, also
+AG-UI-aligned). Once intent and parameters are clear, the model invokes `write_api` directly. It
+must **not** ask for a typed "yes" or call `show_confirm` first, because that creates duplicate
+approval.
 
-1. **`write_api` is `ApprovalRequired`.** All mutating HTTP calls pause the chat and show the
-   inline approve/reject banner before executing. This is the safety net.
-2. **`show_confirm`** lets the model build a richer, in-canvas confirmation ("Delete *Heirloom
-   Tomato Seeds*? This cannot be undone.") that resolves by button tap **or** by the user typing
-   "yes"/"delete it". The model then issues the `write_api` call.
-
-See [Open Questions](#16-open-questions) on whether both are needed or one suffices.
+`show_confirm` remains only for **UI-local decisions that do not immediately invoke
+approval-gated `write_api`** (for example, discarding unsaved local form edits).
 
 ## 12. Configuration
 
@@ -348,8 +346,8 @@ Acceptance scenarios (each must work end to end):
 2. **Detail** — "show me the basil seeds" → generic GET → detail card.
 3. **Create (bound form)** — "add a new product called pears" → form (name prefilled) → "set the
    quantity to 3" (`set_field`) → "save for me" (`get_state` + `write_api POST`).
-4. **Delete (confirm)** — "delete the tomato seeds" → detail + `show_confirm` → "yes" →
-   `write_api DELETE`.
+4. **Delete (confirm)** — "delete the tomato seeds" → detail/danger action → `write_api DELETE`;
+   the infrastructure presents the single Approve/Reject UI automatically.
 5. **Cart** — add / change qty / remove / clear (server-backed, rendered).
 6. **Orders** — checkout (approval) / list / reorder / clear.
 7. **Reviews** — submit / list / per-product.
@@ -428,7 +426,8 @@ by area.
      snapshot resync, like AG-UI?
 
 ### Interaction & UX
-11. Confirmation: keep both `write_api` approval **and** `show_confirm`, or just one?
+11. ✅ Server writes use **only** `write_api`'s automatic approval UI. `show_confirm` is reserved
+    for UI-local choices and must not precede `write_api`.
 12. How does "save for me" work precisely — model calls `get_state` then `write_api`, or a
     submit `intent` carries the values? What happens on validation errors from the server?
 13. New-chat/reset semantics: does resetting the chat clear the canvas and server-side cart?

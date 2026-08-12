@@ -88,8 +88,9 @@ The in-app loop already uses `Microsoft.Extensions.AI` approval content
 `FunctionInvokingChatClient`. AG-UI's .NET integration uses the same M.E.AI content/lifecycle
 concepts, so approval signaling is already conceptually aligned.
 
-AG-UI does **not** replace our richer in-canvas `show_confirm`; it could carry the resulting intent
-or interrupt in a future adapter.
+AG-UI does **not** replace our in-canvas `show_confirm`, which is reserved for UI-local choices.
+Server writes use only `write_api`'s automatic tool approval, avoiding double confirmation. A future
+adapter could carry either lifecycle as an interrupt/event.
 
 ### 2.3 No equivalent in AG-UI
 
@@ -241,4 +242,3 @@ direct NuGet.org source to work around that.
 | `IChatBridge` intents | event/interrupt channel only | action events | keep now; adapt later |
 | M.E.AI in-app loop | client/server adapter, not loop ownership | none | keep |
 | approval gating | M.E.AI/AG-UI-aligned approval content | none | already aligned |
-
