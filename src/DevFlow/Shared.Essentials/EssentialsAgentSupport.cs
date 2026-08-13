@@ -379,6 +379,27 @@ internal sealed class EssentialsAgentSupport
         => FileSystem.AppDataDirectory;
 
 
+    public Task<HttpResponse> HandlePlatformAppInfo(HttpRequest request)
+    {
+        try
+        {
+            var info = AppInfo.Current;
+            return Task.FromResult(HttpResponse.Json(new
+            {
+                name = info.Name,
+                packageName = info.PackageName,
+                version = info.VersionString,
+                buildNumber = info.BuildString,
+                requestedTheme = info.RequestedTheme.ToString(),
+                requestedLayoutDirection = info.RequestedLayoutDirection.ToString(),
+            }));
+        }
+        catch (Exception ex)
+        {
+            return Task.FromResult(CreatePlatformError($"Failed to get app info: {ex.Message}", ex));
+        }
+    }
+
     public Task<HttpResponse> HandlePlatformDeviceInfo(HttpRequest request)
     {
         try
