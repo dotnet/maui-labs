@@ -61,9 +61,17 @@ public class UIAgent<TState> : UIAgent where TState : class, new()
 
     internal override ChatResponseUpdate ApplyStateMapper(ChatResponseUpdate update)
     {
-        var mapped = base.ApplyStateMapper(update, out var stateValue);
-        if (stateValue is TState typedState)
-            State.Value = typedState;
+        var mapped = base.ApplyStateMapper(update, out var stateContext);
+        if (stateContext?.StateValue is TState typedState)
+        {
+            if (stateContext.IsPredictiveState)
+                State.SetPredictiveValue(typedState);
+            else
+                State.Value = typedState;
+        }
         return mapped;
     }
+
+    internal override void RejectPendingPredictiveState() =>
+        State.RejectPredictiveState();
 }

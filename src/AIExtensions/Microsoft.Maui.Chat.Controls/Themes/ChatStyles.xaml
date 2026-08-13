@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                    x:Class="Microsoft.Maui.Chat.Controls.Themes.ChatStyles">
+
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <!-- Design tokens and styles for the chat controls.                 -->
+    <!--                                                                 -->
+    <!-- Every key is prefixed "MauiChat." so it cannot collide with a   -->
+    <!-- host application's resources. Light and dark values live in the -->
+    <!-- styles through AppThemeBinding, so overriding a single style     -->
+    <!-- keeps the rest of the theme (and its dark variant) intact.       -->
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+
+    <!-- Palette: light -->
+    <Color x:Key="MauiChat.Light.IncomingBubble">#F1F2F4</Color>
+    <Color x:Key="MauiChat.Light.IncomingText">#16181C</Color>
+    <Color x:Key="MauiChat.Light.OutgoingBubble">#2C6BED</Color>
+    <Color x:Key="MauiChat.Light.OutgoingText">#FFFFFF</Color>
+    <Color x:Key="MauiChat.Light.Metadata">#6B7280</Color>
+    <Color x:Key="MauiChat.Light.Avatar">#E2E5EA</Color>
+    <Color x:Key="MauiChat.Light.AvatarText">#454B54</Color>
+    <Color x:Key="MauiChat.Light.Surface">#F6F7F9</Color>
+    <Color x:Key="MauiChat.Light.SurfaceText">#16181C</Color>
+    <Color x:Key="MauiChat.Light.Accent">#2C6BED</Color>
+    <Color x:Key="MauiChat.Light.AccentText">#FFFFFF</Color>
+    <Color x:Key="MauiChat.Light.SuggestionBubble">#EAF0FE</Color>
+    <Color x:Key="MauiChat.Light.SuggestionText">#1E4FBF</Color>
+    <Color x:Key="MauiChat.Light.Error">#B3261E</Color>
+    <Color x:Key="MauiChat.Light.Overlay">#14000000</Color>
+
+    <!-- Palette: dark -->
+    <Color x:Key="MauiChat.Dark.IncomingBubble">#2A2D33</Color>
+    <Color x:Key="MauiChat.Dark.IncomingText">#E9EAEE</Color>
+    <Color x:Key="MauiChat.Dark.OutgoingBubble">#3B82F6</Color>
+    <Color x:Key="MauiChat.Dark.OutgoingText">#FFFFFF</Color>
+    <Color x:Key="MauiChat.Dark.Metadata">#9BA3AF</Color>
+    <Color x:Key="MauiChat.Dark.Avatar">#3A3F47</Color>
+    <Color x:Key="MauiChat.Dark.AvatarText">#D6D9DE</Color>
+    <Color x:Key="MauiChat.Dark.Surface">#23262C</Color>
+    <Color x:Key="MauiChat.Dark.SurfaceText">#E9EAEE</Color>
+    <Color x:Key="MauiChat.Dark.Accent">#3B82F6</Color>
+    <Color x:Key="MauiChat.Dark.AccentText">#FFFFFF</Color>
+    <Color x:Key="MauiChat.Dark.SuggestionBubble">#22304A</Color>
+    <Color x:Key="MauiChat.Dark.SuggestionText">#C7D8FF</Color>
+    <Color x:Key="MauiChat.Dark.Error">#F2B8B5</Color>
+    <Color x:Key="MauiChat.Dark.Overlay">#22FFFFFF</Color>
+
+    <!-- Bubbles -->
+    <Style x:Key="MauiChat.Bubble.Incoming" TargetType="Border">
+        <Setter Property="BackgroundColor"
+                Value="{AppThemeBinding Light={StaticResource MauiChat.Light.IncomingBubble},
+                                        Dark={StaticResource MauiChat.Dark.IncomingBubble}}" />
+    </Style>
+
+    <Style x:Key="MauiChat.Bubble.Outgoing" TargetType="Border">
+        <Setter Property="BackgroundColor"
+                Value="{AppThemeBinding Light={StaticResource MauiChat.Light.OutgoingBubble},
+                                        Dark={StaticResource MauiChat.Dark.OutgoingBubble}}" />
+    </Style>
+
+    <Style x:Key="MauiChat.Text.Incoming" TargetType="Label">
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource MauiChat.Light.IncomingText},
+                                        Dark={StaticResource MauiChat.Dark.IncomingText}}" />
+    </Style>
+
+    <Style x:Key="MauiChat.Text.Outgoing" TargetType="Label">
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource MauiChat.Light.OutgoingText},
+                                        Dark={StaticResource MauiChat.Dark.OutgoingText}}" />
+    </Style>
+
+    <!-- Message chrome -->
+    <Style x:Key="MauiChat.ParticipantName" TargetType="Label">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="Margin" Value="4,0" />
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource MauiChat.Light.Metadata},
+                                        Dark={StaticResource MauiChat.Dark.Metadata}}" />
+    </Style>
+
+    <Style x:Key="MauiChat.Metadata" TargetType="Label">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Margin" Value="4,0" />
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource MauiChat.Light.Metadata},
+                                        Dark={StaticResource MauiChat.Dark.Metadata}}" />
+    </Style>
+
+    <Style x:Key="MauiChat.Avatar" TargetType="Border">
+        <Setter Property="BackgroundColor"
+                Value="{AppThemeBinding Light={StaticResource MauiChat.Light.Avatar},
+                                        Dark={StaticResource MauiChat.Dark.Avatar}}" />
+    </Style>
+
+    <Style x:Key="MauiChat.AvatarText" TargetType="Label">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource MauiChat.Light.AvatarText},
+                                        Dark={StaticResource MauiChat.Dark.AvatarText}}" />
+    </Style>
+
+    <!-- File card -->
+    <Style x:Key="MauiChat.FileCard" TargetType="Border">
+        <Setter Property="BackgroundColor"
+                Value="{AppThemeBinding Light={StaticResource MauiChat.Light.Overlay},
+                                        Dark={StaticResource MauiChat.Dark.Overlay}}" />
+    </Style>
+
+    <Style x:Key="MauiChat.FileName" TargetType="Label">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontAttributes" Value="Bold" />
+    </Style>
+
+    <Style x:Key="MauiChat.FileDetail" TargetType="Label">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Opacity" Value="0.75" />
+    </Style>
+
+    <!-- Suggestions and attachments -->
+    <Style x:Key="MauiChat.Suggestion" TargetType="Button">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Padding" Value="12,6" />
+        <Setter Property="CornerRadius" Value="16" />
+        <Setter Property="BackgroundColor"
+                Value="{AppThemeBinding Light={StaticResource MauiChat.Light.SuggestionBubble},
+                                        Dark={StaticResource MauiChat.Dark.SuggestionBubble}}" />
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource MauiChat.Light.SuggestionText},
+                                        Dark={StaticResource MauiChat.Dark.SuggestionText}}" />
+    </Style>
+
+    <Style x:Key="MauiChat.Attachment" TargetType="Border">
+        <Setter Property="BackgroundColor"
+                Value="{AppThemeBinding Light={StaticResource MauiChat.Light.IncomingBubble},
+                                        Dark={StaticResource MauiChat.Dark.IncomingBubble}}" />
+    </Style>
+
+    <!-- Composer -->
+    <Style x:Key="MauiChat.InputArea" TargetType="Border">
+        <Setter Property="BackgroundColor"
+                Value="{AppThemeBinding Light={StaticResource MauiChat.Light.Surface},
+                                        Dark={StaticResource MauiChat.Dark.Surface}}" />
+    </Style>
+
+    <Style x:Key="MauiChat.InputEntry" TargetType="Entry">
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="BackgroundColor" Value="Transparent" />
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource MauiChat.Light.SurfaceText},
+                                        Dark={StaticResource MauiChat.Dark.SurfaceText}}" />
+    </Style>
+
+    <Style x:Key="MauiChat.SendButton" TargetType="Button">
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="20" />
+        <Setter Property="WidthRequest" Value="40" />
+        <Setter Property="HeightRequest" Value="40" />
+        <Setter Property="BackgroundColor"
+                Value="{AppThemeBinding Light={StaticResource MauiChat.Light.Accent},
+                                        Dark={StaticResource MauiChat.Dark.Accent}}" />
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource MauiChat.Light.AccentText},
+                                        Dark={StaticResource MauiChat.Dark.AccentText}}" />
+    </Style>
+
+    <Style x:Key="MauiChat.AttachButton" TargetType="Button">
+        <Setter Property="FontSize" Value="18" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="WidthRequest" Value="36" />
+        <Setter Property="HeightRequest" Value="40" />
+        <Setter Property="BackgroundColor" Value="Transparent" />
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource MauiChat.Light.Metadata},
+                                        Dark={StaticResource MauiChat.Dark.Metadata}}" />
+    </Style>
+
+    <Style x:Key="MauiChat.ErrorText" TargetType="Label">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource MauiChat.Light.Error},
+                                        Dark={StaticResource MauiChat.Dark.Error}}" />
+    </Style>
+
+    <!-- Welcome panel -->
+    <Style x:Key="MauiChat.WelcomeIcon" TargetType="Label">
+        <Setter Property="FontSize" Value="44" />
+        <Setter Property="HorizontalOptions" Value="Center" />
+    </Style>
+
+    <Style x:Key="MauiChat.WelcomeMessage" TargetType="Label">
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="HorizontalTextAlignment" Value="Center" />
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource MauiChat.Light.Metadata},
+                                        Dark={StaticResource MauiChat.Dark.Metadata}}" />
+    </Style>
+
+</ResourceDictionary>

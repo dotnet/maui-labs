@@ -7,6 +7,7 @@ Microsoft.Maui.AI.Chat.AgentContext.Clear() -> void
 Microsoft.Maui.AI.Chat.AgentContext.Dispose() -> void
 Microsoft.Maui.AI.Chat.AgentContext.Error.get -> System.Exception?
 Microsoft.Maui.AI.Chat.AgentContext.RegisterOnBlockAdded(System.Action<Microsoft.Maui.AI.Chat.ConversationTurn!, Microsoft.Maui.AI.Chat.ContentBlock!>! callback) -> System.IDisposable!
+Microsoft.Maui.AI.Chat.AgentContext.RegisterOnResponseBlocksCleared(System.Action<Microsoft.Maui.AI.Chat.ConversationTurn!>! callback) -> System.IDisposable!
 Microsoft.Maui.AI.Chat.AgentContext.RegisterOnStatusChanged(System.Action<Microsoft.Maui.AI.Chat.ConversationStatus>! callback) -> System.IDisposable!
 Microsoft.Maui.AI.Chat.AgentContext.RegisterOnTurnAdded(System.Action<Microsoft.Maui.AI.Chat.ConversationTurn!>! callback) -> System.IDisposable!
 Microsoft.Maui.AI.Chat.AgentContext.RestoreAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
@@ -16,7 +17,10 @@ Microsoft.Maui.AI.Chat.AgentContext.SendMessageAsync(string! text, System.Thread
 Microsoft.Maui.AI.Chat.AgentContext.Status.get -> Microsoft.Maui.AI.Chat.ConversationStatus
 Microsoft.Maui.AI.Chat.AgentContext.Turns.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Maui.AI.Chat.ConversationTurn!>!
 Microsoft.Maui.AI.Chat.AgentState<T>
+Microsoft.Maui.AI.Chat.AgentState<T>.AcceptPredictiveState() -> void
+Microsoft.Maui.AI.Chat.AgentState<T>.HasPendingPredictiveState.get -> bool
 Microsoft.Maui.AI.Chat.AgentState<T>.OnChanged(System.Action! callback) -> System.IDisposable!
+Microsoft.Maui.AI.Chat.AgentState<T>.RejectPredictiveState() -> void
 Microsoft.Maui.AI.Chat.AgentState<T>.Value.get -> T!
 Microsoft.Maui.AI.Chat.AgentState<T>.Value.set -> void
 Microsoft.Maui.AI.Chat.ApprovalStatus
@@ -205,13 +209,20 @@ Microsoft.Maui.AI.Chat.RichContentBlock
 Microsoft.Maui.AI.Chat.RichContentBlock.Content.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Maui.AI.Chat.RichTextNode!>!
 Microsoft.Maui.AI.Chat.RichContentBlock.Content.set -> void
 Microsoft.Maui.AI.Chat.RichContentBlock.RawText.get -> string!
+Microsoft.Maui.AI.Chat.RichContentBlock.ReplaceContent(string! text, System.Collections.Generic.IReadOnlyList<Microsoft.Maui.AI.Chat.RichTextNode!>! content) -> void
 Microsoft.Maui.AI.Chat.RichContentBlock.RichContentBlock() -> void
+Microsoft.Maui.AI.Chat.RichTextContent
+Microsoft.Maui.AI.Chat.RichTextContent.Nodes.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Maui.AI.Chat.RichTextNode!>!
+Microsoft.Maui.AI.Chat.RichTextContent.RichTextContent(string! text, System.Collections.Generic.IReadOnlyList<Microsoft.Maui.AI.Chat.RichTextNode!>! nodes) -> void
+Microsoft.Maui.AI.Chat.RichTextContent.Text.get -> string!
 Microsoft.Maui.AI.Chat.RichTextNode
 Microsoft.Maui.AI.Chat.RichTextNode.AddChild(Microsoft.Maui.AI.Chat.RichTextNode! child) -> void
 Microsoft.Maui.AI.Chat.RichTextNode.Children.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Maui.AI.Chat.RichTextNode!>!
 Microsoft.Maui.AI.Chat.RichTextNode.RichTextNode() -> void
 Microsoft.Maui.AI.Chat.StateMapperContext
+Microsoft.Maui.AI.Chat.StateMapperContext.IsPredictiveState.get -> bool
 Microsoft.Maui.AI.Chat.StateMapperContext.MarkHandled(Microsoft.Extensions.AI.AIContent! content) -> void
+Microsoft.Maui.AI.Chat.StateMapperContext.SetPredictiveState(object! value) -> void
 Microsoft.Maui.AI.Chat.StateMapperContext.SetState(object! value) -> void
 Microsoft.Maui.AI.Chat.StateMapperContext.StateValue.get -> object?
 Microsoft.Maui.AI.Chat.StateMapperContext.UnhandledContents.get -> Microsoft.Maui.AI.Chat.StateMapperContext.UnhandledContentsEnumerable
@@ -303,4 +314,5 @@ static Microsoft.Maui.AI.Chat.BlockMappingResult<TState>.Complete() -> Microsoft
 static Microsoft.Maui.AI.Chat.BlockMappingResult<TState>.Emit(Microsoft.Maui.AI.Chat.ContentBlock! block, TState state) -> Microsoft.Maui.AI.Chat.BlockMappingResult<TState>
 static Microsoft.Maui.AI.Chat.BlockMappingResult<TState>.Pass() -> Microsoft.Maui.AI.Chat.BlockMappingResult<TState>
 static Microsoft.Maui.AI.Chat.BlockMappingResult<TState>.Update(TState state) -> Microsoft.Maui.AI.Chat.BlockMappingResult<TState>
+virtual Microsoft.Maui.AI.Chat.ContentBlockHandler<TState>.ApplyFunctionResult(TState state, Microsoft.Extensions.AI.FunctionResultContent! result) -> bool
 virtual Microsoft.Maui.AI.Chat.RichContentBlock.AppendText(string! text) -> void

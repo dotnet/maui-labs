@@ -89,6 +89,22 @@ public class ChatAppearanceTests
     }
 
     [Fact]
+    public void NestedMessageListTemplateChanges_DoNotMutateOuterNeutralTemplates()
+    {
+        var chat = new CopilotChatView();
+        var list = new MessageListView();
+        var outerTemplate = new TextContentTemplate();
+        chat.ContentTemplates.Add(outerTemplate);
+        chat.AttachMessageListPart(list);
+
+        list.ContentTemplates.Add(new ErrorContentTemplate());
+
+        var neutralTemplates =
+            ((Microsoft.Maui.Chat.Controls.ChatView)chat).ContentTemplates;
+        Assert.Same(outerTemplate, Assert.Single(neutralTemplates));
+    }
+
+    [Fact]
     public void InputAppearance_UpdatesAttachedTemplatePartsLive()
     {
         var chat = new CopilotChatView();

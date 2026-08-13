@@ -14,6 +14,10 @@
         <ShellContent Route="chat"
                       ContentTemplate="{DataTemplate pages:MainPage}" />
 
+        <!-- Provider-neutral group chat — exercises Microsoft.Maui.Chat.Controls without AI types -->
+        <ShellContent Route="team"
+                      ContentTemplate="{DataTemplate pages:TeamChatPage}" />
+
         <!-- Products / Catalog — normal navigation, not modal -->
         <ShellContent Route="products"
                       ContentTemplate="{DataTemplate pages:CatalogPage}" />

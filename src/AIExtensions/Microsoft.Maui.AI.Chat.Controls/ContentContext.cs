@@ -1,106 +1,196 @@
-using Microsoft.Maui.AI.Chat;
 using Microsoft.Extensions.AI;
+using Microsoft.Maui.AI.Chat;
+using Microsoft.Maui.Chat.Controls;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
 
 /// <summary>
-/// Thin MAUI wrapper around a <see cref="ContentBlock"/> from the Core engine, exposing UI-friendly
-/// helpers (role, tool name, approval state) for templates and views to bind against.
+/// AI-specific projected row that preserves the existing block/turn/template binding surface while
+/// participating in the provider-neutral chat controls.
 /// </summary>
-/// <remarks>
-/// One <see cref="ContentContext"/> is created per block by <see cref="CopilotChatView"/>; a
-/// <see cref="ContentTemplateSelector"/> then picks the <see cref="ContentTemplate"/> that renders it.
-/// </remarks>
-public sealed class ContentContext
+public sealed class ContentContext : ChatContentItem, IDisposable
 {
-    public ContentContext(AgentContext agentContext, ContentBlock block)
-        : this(agentContext, block, owner: null)
-    {
-    }
-
-    internal ContentContext(AgentContext agentContext, ContentBlock block, MessageListView? owner)
-        : this(agentContext, block, owner, turn: null)
+    /// <summary>Creates a standalone context for a block.</summary>
+    public ContentContext(
+        AgentContext agentContext,
+        ContentBlock block)
+        : this(
+            CreateStandalone(
+                agentContext ?? throw new ArgumentNullException(nameof(agentContext)),
+                block ?? throw new ArgumentNullException(nameof(block))),
+            agentContext,
+            owner: null)
     {
     }
 
     internal ContentContext(
         AgentContext agentContext,
         ContentBlock block,
-        MessageListView? owner,
-        ConversationTurn? turn)
+        MessageListView? owner)
+        : this(
+            CreateStandalone(
+                agentContext ?? throw new ArgumentNullException(nameof(agentContext)),
+                block ?? throw new ArgumentNullException(nameof(block))),
+            agentContext,
+            owner)
     {
-        AgentContext = agentContext ?? throw new ArgumentNullException(nameof(agentContext));
-        Block = block ?? throw new ArgumentNullException(nameof(block));
-        Owner = owner;
-        Turn = turn;
     }
 
+    private ContentContext(
+        StandaloneContext standalone,
+        AgentContext agentContext,
+        MessageListView? owner)
+        : base(
+            standalone.Message,
+            standalone.Content,
+            conversation: null,
+            owner?.Appearance ?? new ChatAppearance())
+    {
+        AgentContext = agentContext;
+        AgentContent = standalone.Content;
+        Owner = owner;
+        AgentContent.ContentChanged += OnAgentContentChanged;
+    }
+
+    internal ContentContext(
+        AgentContext agentContext,
+        ConversationMessage message,
+        AgentBlockContent content,
+        AgentChatConversation conversation,
+        ChatAppearance appearance,
+        MessageListView? owner)
+        : base(
+            message,
+            content,
+            conversation,
+            appearance)
+    {
+        AgentContext = agentContext;
+        AgentContent = content;
+        Owner = owner;
+        AgentContent.ContentChanged += OnAgentContentChanged;
+    }
+
+    /// <summary>Gets the AI conversation context.</summary>
     public AgentContext AgentContext { get; }
 
-    public ContentBlock Block { get; }
+    /// <summary>Gets the underlying renderable block.</summary>
+    public ContentBlock Block => AgentContent.Block;
 
-    /// <summary>Gets the conversation turn containing this block, when it is part of persisted history.</summary>
-    public ConversationTurn? Turn { get; }
+    /// <summary>Gets the containing conversation turn, when persisted.</summary>
+    public ConversationTurn? Turn => AgentContent.Turn;
 
-    /// <summary>Gets the stable turn identifier, when available.</summary>
+    /// <summary>Gets the stable containing turn identifier.</summary>
     public string? TurnId => Turn?.Id;
 
     /// <summary>Gets whether this block belongs to the request side of its turn.</summary>
-    public bool IsRequest => Turn?.RequestBlocks.Contains(Block) == true;
+    public bool IsRequest => AgentContent.IsRequest;
 
-    /// <summary>Gets whether this is the first block rendered for its turn.</summary>
+    /// <summary>Gets whether this is the first rendered block in its turn.</summary>
     public bool IsFirstInTurn =>
         Turn is not null
         && (Turn.RequestBlocks.FirstOrDefault()
             ?? Turn.ResponseBlocks.FirstOrDefault()) == Block;
 
-    /// <summary>Gets whether this is the last block currently rendered for its turn.</summary>
+    /// <summary>Gets whether this is the last rendered block in its turn.</summary>
     public bool IsLastInTurn =>
         Turn is not null
         && (Turn.ResponseBlocks.LastOrDefault()
             ?? Turn.RequestBlocks.LastOrDefault()) == Block;
 
-    internal MessageListView? Owner { get; }
-
-    /// <summary>The role of this block (User, Assistant, Tool).</summary>
+    /// <summary>Gets the source block role.</summary>
     public ChatRole? Role => Block.Role;
 
-    /// <summary>True if this is a user message.</summary>
+    /// <summary>Gets whether this block came from the user.</summary>
     public bool IsUser => Block.Role == ChatRole.User;
 
-    /// <summary>True if this is an assistant message.</summary>
+    /// <summary>Gets whether this block came from the assistant.</summary>
     public bool IsAssistant => Block.Role == ChatRole.Assistant;
 
-    /// <summary>The block lifecycle state (Pending, Active, Inactive).</summary>
+    /// <summary>Gets the block lifecycle state.</summary>
     public BlockLifecycleState LifecycleState => Block.LifecycleState;
 
-    /// <summary>Tool name for function invocation/approval blocks.</summary>
+    /// <summary>Gets the tool name for function, approval, and UI-action blocks.</summary>
     public string? ToolName => Block switch
     {
-        FunctionInvocationContentBlock ficb => ficb.Call?.Name,
-        ToolApprovalBlock fab => fab.ToolName,
+        FunctionInvocationContentBlock function => function.Call?.Name,
+        ToolApprovalBlock approval => approval.ToolName,
         UIActionBlock action => action.ToolName,
         _ => null,
     };
 
-    /// <summary>Whether this block is awaiting human input.</summary>
-    public bool IsInteractive => Block is IInteractiveBlock and not UIActionBlock;
+    /// <summary>Gets whether this block is waiting for human input.</summary>
+    public bool IsInteractive =>
+        Block is IInteractiveBlock and not UIActionBlock;
 
-    /// <summary>Gets the text content if this is a <see cref="RichContentBlock"/>.</summary>
-    public string? TextContent => Block is RichContentBlock rich ? rich.RawText : null;
+    /// <summary>Gets rich text content when available.</summary>
+    public string? TextContent =>
+        Block is RichContentBlock rich ? rich.RawText : null;
 
-    /// <summary>Approval status for ToolApprovalBlock, null otherwise.</summary>
-    public ApprovalStatus? ApprovalState => Block is ToolApprovalBlock fab ? fab.Status : null;
+    /// <summary>Gets approval status for an approval block.</summary>
+    public ApprovalStatus? ApprovalState =>
+        Block is ToolApprovalBlock approval ? approval.Status : null;
 
-    /// <summary>Whether approval has been resolved (approved or rejected).</summary>
+    /// <summary>Gets whether approval has been resolved.</summary>
     public bool ApprovalResolved =>
-        ApprovalState is ApprovalStatus.Approved or ApprovalStatus.Rejected;
+        ApprovalState is ApprovalStatus.Approved
+            or ApprovalStatus.Rejected;
 
-    /// <summary>Resolution text for resolved approval blocks.</summary>
+    /// <summary>Gets user-safe approval resolution text.</summary>
     public string? ApprovalResolutionText => ApprovalState switch
     {
         ApprovalStatus.Approved => $"Approved - {ToolName ?? "Tool"}",
         ApprovalStatus.Rejected => $"Rejected - {ToolName ?? "Tool"}",
         _ => null,
     };
+
+    internal MessageListView? Owner { get; }
+
+    /// <summary>Stops relaying block changes through this projected context.</summary>
+    public void Dispose()
+    {
+        AgentContent.ContentChanged -= OnAgentContentChanged;
+    }
+
+    internal void NotifyBlockChanged() =>
+        AgentContent.NotifyChanged();
+
+    private void OnAgentContentChanged(object? sender, EventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        OnPropertyChanged(string.Empty);
+    }
+
+    internal AgentBlockContent AgentContent { get; }
+
+    private static StandaloneContext CreateStandalone(
+        AgentContext agentContext,
+        ContentBlock block)
+    {
+        var participant = new ChatParticipant(
+            block.Role?.Value ?? "assistant",
+            block.AuthorName
+                ?? (block.Role == ChatRole.User ? "You" : "Assistant"),
+            block.Role == ChatRole.User
+                ? ChatParticipantKind.Local
+                : ChatParticipantKind.Agent);
+        var content = new AgentBlockContent(
+            block,
+            turn: null,
+            isRequest: block.Role == ChatRole.User);
+        var message = new ConversationMessage(
+            participant,
+            string.IsNullOrWhiteSpace(block.Id)
+                ? Guid.NewGuid().ToString("N")
+                : block.Id,
+            block.CreatedAt);
+        content.AttachMessage(message);
+        message.Contents.Add(content);
+        return new StandaloneContext(message, content);
+    }
+
+    private sealed record StandaloneContext(
+        ConversationMessage Message,
+        AgentBlockContent Content);
 }

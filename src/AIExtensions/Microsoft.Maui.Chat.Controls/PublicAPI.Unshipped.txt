@@ -1,0 +1,507 @@
+#nullable enable
+Microsoft.Maui.Chat.Controls.AppBuilderExtensions
+Microsoft.Maui.Chat.Controls.ChatAppearance
+Microsoft.Maui.Chat.Controls.ChatAppearance.AvatarSize.get -> double
+Microsoft.Maui.Chat.Controls.ChatAppearance.AvatarSize.set -> void
+Microsoft.Maui.Chat.Controls.ChatAppearance.BubbleCornerRadius.get -> double
+Microsoft.Maui.Chat.Controls.ChatAppearance.BubbleCornerRadius.set -> void
+Microsoft.Maui.Chat.Controls.ChatAppearance.BubbleStrokeColor.get -> Microsoft.Maui.Graphics.Color?
+Microsoft.Maui.Chat.Controls.ChatAppearance.BubbleStrokeColor.set -> void
+Microsoft.Maui.Chat.Controls.ChatAppearance.BubbleStrokeThickness.get -> double
+Microsoft.Maui.Chat.Controls.ChatAppearance.BubbleStrokeThickness.set -> void
+Microsoft.Maui.Chat.Controls.ChatAppearance.ChatAppearance() -> void
+Microsoft.Maui.Chat.Controls.ChatAppearance.ContentSpacing.get -> double
+Microsoft.Maui.Chat.Controls.ChatAppearance.ContentSpacing.set -> void
+Microsoft.Maui.Chat.Controls.ChatAppearance.FormatTimestamp(System.DateTimeOffset timestamp) -> string!
+Microsoft.Maui.Chat.Controls.ChatAppearance.GroupSpacing.get -> double
+Microsoft.Maui.Chat.Controls.ChatAppearance.GroupSpacing.set -> void
+Microsoft.Maui.Chat.Controls.ChatAppearance.IncomingBubbleColor.get -> Microsoft.Maui.Graphics.Color?
+Microsoft.Maui.Chat.Controls.ChatAppearance.IncomingBubbleColor.set -> void
+Microsoft.Maui.Chat.Controls.ChatAppearance.IncomingTextColor.get -> Microsoft.Maui.Graphics.Color?
+Microsoft.Maui.Chat.Controls.ChatAppearance.IncomingTextColor.set -> void
+Microsoft.Maui.Chat.Controls.ChatAppearance.MaxBubbleWidth.get -> double
+Microsoft.Maui.Chat.Controls.ChatAppearance.MaxBubbleWidth.set -> void
+Microsoft.Maui.Chat.Controls.ChatAppearance.OutgoingBubbleColor.get -> Microsoft.Maui.Graphics.Color?
+Microsoft.Maui.Chat.Controls.ChatAppearance.OutgoingBubbleColor.set -> void
+Microsoft.Maui.Chat.Controls.ChatAppearance.OutgoingTextColor.get -> Microsoft.Maui.Graphics.Color?
+Microsoft.Maui.Chat.Controls.ChatAppearance.OutgoingTextColor.set -> void
+Microsoft.Maui.Chat.Controls.ChatAppearance.ShowAvatars.get -> bool
+Microsoft.Maui.Chat.Controls.ChatAppearance.ShowAvatars.set -> void
+Microsoft.Maui.Chat.Controls.ChatAppearance.ShowMessageStatus.get -> bool
+Microsoft.Maui.Chat.Controls.ChatAppearance.ShowMessageStatus.set -> void
+Microsoft.Maui.Chat.Controls.ChatAppearance.ShowParticipantNames.get -> bool
+Microsoft.Maui.Chat.Controls.ChatAppearance.ShowParticipantNames.set -> void
+Microsoft.Maui.Chat.Controls.ChatAppearance.ShowTimestamps.get -> bool
+Microsoft.Maui.Chat.Controls.ChatAppearance.ShowTimestamps.set -> void
+Microsoft.Maui.Chat.Controls.ChatAppearance.TimestampFormat.get -> string!
+Microsoft.Maui.Chat.Controls.ChatAppearance.TimestampFormat.set -> void
+Microsoft.Maui.Chat.Controls.ChatAttachment
+Microsoft.Maui.Chat.Controls.ChatAttachment.AltText.get -> string?
+Microsoft.Maui.Chat.Controls.ChatAttachment.ByteCount.get -> long
+Microsoft.Maui.Chat.Controls.ChatAttachment.ChatAttachment(string! fileName, string! mediaType, System.ReadOnlyMemory<byte> data) -> void
+Microsoft.Maui.Chat.Controls.ChatAttachment.ChatAttachment(string! fileName, string! mediaType, System.ReadOnlyMemory<byte> data, string? altText) -> void
+Microsoft.Maui.Chat.Controls.ChatAttachment.ChatAttachment(string! fileName, string! mediaType, System.Uri! uri) -> void
+Microsoft.Maui.Chat.Controls.ChatAttachment.ChatAttachment(string! fileName, string! mediaType, System.Uri! uri, string? altText) -> void
+Microsoft.Maui.Chat.Controls.ChatAttachment.Data.get -> System.ReadOnlyMemory<byte>
+Microsoft.Maui.Chat.Controls.ChatAttachment.FileName.get -> string!
+Microsoft.Maui.Chat.Controls.ChatAttachment.IsImage.get -> bool
+Microsoft.Maui.Chat.Controls.ChatAttachment.MediaType.get -> string!
+Microsoft.Maui.Chat.Controls.ChatAttachment.ToContent() -> Microsoft.Maui.Chat.Controls.MediaMessageContent!
+Microsoft.Maui.Chat.Controls.ChatAttachment.Uri.get -> System.Uri?
+Microsoft.Maui.Chat.Controls.ChatBubbleView
+Microsoft.Maui.Chat.Controls.ChatBubbleView.ApplyBubbleTextStyle(Microsoft.Maui.Controls.Label! label) -> void
+Microsoft.Maui.Chat.Controls.ChatBubbleView.BubbleContent.get -> Microsoft.Maui.Controls.View?
+Microsoft.Maui.Chat.Controls.ChatBubbleView.BubbleContent.set -> void
+Microsoft.Maui.Chat.Controls.ChatBubbleView.ChatBubbleView() -> void
+Microsoft.Maui.Chat.Controls.ChatContentItem
+Microsoft.Maui.Chat.Controls.ChatContentItem.Appearance.get -> Microsoft.Maui.Chat.Controls.ChatAppearance!
+Microsoft.Maui.Chat.Controls.ChatContentItem.Appearance.set -> void
+Microsoft.Maui.Chat.Controls.ChatContentItem.ChatContentItem(Microsoft.Maui.Chat.Controls.ConversationMessage! message, Microsoft.Maui.Chat.Controls.MessageContent! content, Microsoft.Maui.Chat.Controls.ChatConversation? conversation = null, Microsoft.Maui.Chat.Controls.ChatAppearance? appearance = null) -> void
+Microsoft.Maui.Chat.Controls.ChatContentItem.Content.get -> Microsoft.Maui.Chat.Controls.MessageContent!
+Microsoft.Maui.Chat.Controls.ChatContentItem.Conversation.get -> Microsoft.Maui.Chat.Controls.ChatConversation?
+Microsoft.Maui.Chat.Controls.ChatContentItem.IsFirstFromParticipant.get -> bool
+Microsoft.Maui.Chat.Controls.ChatContentItem.IsFirstInMessage.get -> bool
+Microsoft.Maui.Chat.Controls.ChatContentItem.IsIncoming.get -> bool
+Microsoft.Maui.Chat.Controls.ChatContentItem.IsLastFromParticipant.get -> bool
+Microsoft.Maui.Chat.Controls.ChatContentItem.IsLastInMessage.get -> bool
+Microsoft.Maui.Chat.Controls.ChatContentItem.IsOutgoing.get -> bool
+Microsoft.Maui.Chat.Controls.ChatContentItem.Message.get -> Microsoft.Maui.Chat.Controls.ConversationMessage!
+Microsoft.Maui.Chat.Controls.ChatContentItem.NotifyContentUpdated() -> void
+Microsoft.Maui.Chat.Controls.ChatContentItem.NotifyMessageUpdated() -> void
+Microsoft.Maui.Chat.Controls.ChatContentItem.Participant.get -> Microsoft.Maui.Chat.Controls.ChatParticipant!
+Microsoft.Maui.Chat.Controls.ChatContentItem.Timestamp.get -> System.DateTimeOffset
+Microsoft.Maui.Chat.Controls.ChatContentItem.UpdateFlags(bool isOutgoing, bool isFirstInMessage, bool isLastInMessage, bool isFirstFromParticipant, bool isLastFromParticipant) -> void
+Microsoft.Maui.Chat.Controls.ChatContentTemplate
+Microsoft.Maui.Chat.Controls.ChatContentTemplate.ChatContentTemplate() -> void
+Microsoft.Maui.Chat.Controls.ChatContentTemplate.GetTemplate() -> Microsoft.Maui.Controls.DataTemplate!
+Microsoft.Maui.Chat.Controls.ChatContentTemplate.InvalidateTemplate() -> void
+Microsoft.Maui.Chat.Controls.ChatContentTemplate.Priority.get -> int
+Microsoft.Maui.Chat.Controls.ChatContentTemplate.Priority.set -> void
+Microsoft.Maui.Chat.Controls.ChatContentTemplate.ViewType.get -> System.Type?
+Microsoft.Maui.Chat.Controls.ChatContentTemplate.ViewType.set -> void
+Microsoft.Maui.Chat.Controls.ChatContentTemplateSelector
+Microsoft.Maui.Chat.Controls.ChatContentTemplateSelector.ChatContentTemplateSelector() -> void
+Microsoft.Maui.Chat.Controls.ChatContentTemplateSelector.FallbackTemplates.get -> System.Collections.Generic.IList<Microsoft.Maui.Chat.Controls.ChatContentTemplate!>!
+Microsoft.Maui.Chat.Controls.ChatContentTemplateSelector.Templates.get -> System.Collections.Generic.IList<Microsoft.Maui.Chat.Controls.ChatContentTemplate!>!
+Microsoft.Maui.Chat.Controls.ChatContentView
+Microsoft.Maui.Chat.Controls.ChatContentView.Appearance.get -> Microsoft.Maui.Chat.Controls.ChatAppearance!
+Microsoft.Maui.Chat.Controls.ChatContentView.ChatContentView() -> void
+Microsoft.Maui.Chat.Controls.ChatContentView.Item.get -> Microsoft.Maui.Chat.Controls.ChatContentItem?
+Microsoft.Maui.Chat.Controls.ChatContentView.Item.set -> void
+Microsoft.Maui.Chat.Controls.ChatConversation
+Microsoft.Maui.Chat.Controls.ChatConversation.ChatConversation() -> void
+Microsoft.Maui.Chat.Controls.ChatConversation.LocalParticipant.get -> Microsoft.Maui.Chat.Controls.ChatParticipant?
+Microsoft.Maui.Chat.Controls.ChatConversation.LocalParticipant.set -> void
+Microsoft.Maui.Chat.Controls.ChatConversation.MessageList.get -> System.Collections.ObjectModel.ObservableCollection<Microsoft.Maui.Chat.Controls.ConversationMessage!>!
+Microsoft.Maui.Chat.Controls.ChatConversation.Messages.get -> System.Collections.ObjectModel.ReadOnlyObservableCollection<Microsoft.Maui.Chat.Controls.ConversationMessage!>!
+Microsoft.Maui.Chat.Controls.ChatConversation.Participants.get -> System.Collections.ObjectModel.ObservableCollection<Microsoft.Maui.Chat.Controls.ChatParticipant!>!
+Microsoft.Maui.Chat.Controls.ChatConversation.RaiseChange(Microsoft.Maui.Chat.Controls.ChatConversationChange change) -> void
+Microsoft.Maui.Chat.Controls.ChatConversation.SendAsync(Microsoft.Maui.Chat.Controls.ChatDraft! draft, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+Microsoft.Maui.Chat.Controls.ChatConversation.Status.get -> Microsoft.Maui.Chat.Controls.ChatConversationStatus
+Microsoft.Maui.Chat.Controls.ChatConversation.Status.set -> void
+Microsoft.Maui.Chat.Controls.ChatConversation.Subscribe(System.Action<Microsoft.Maui.Chat.Controls.ChatConversationChange>! onChange) -> System.IDisposable!
+Microsoft.Maui.Chat.Controls.ChatConversation.TypingParticipants.get -> System.Collections.ObjectModel.ObservableCollection<Microsoft.Maui.Chat.Controls.ChatParticipant!>!
+Microsoft.Maui.Chat.Controls.ChatConversationChange
+Microsoft.Maui.Chat.Controls.ChatConversationChange.ChatConversationChange() -> void
+Microsoft.Maui.Chat.Controls.ChatConversationChange.Content.get -> Microsoft.Maui.Chat.Controls.MessageContent?
+Microsoft.Maui.Chat.Controls.ChatConversationChange.Index.get -> int
+Microsoft.Maui.Chat.Controls.ChatConversationChange.Kind.get -> Microsoft.Maui.Chat.Controls.ChatConversationChangeKind
+Microsoft.Maui.Chat.Controls.ChatConversationChange.Message.get -> Microsoft.Maui.Chat.Controls.ConversationMessage?
+Microsoft.Maui.Chat.Controls.ChatConversationChange.Status.get -> Microsoft.Maui.Chat.Controls.ChatConversationStatus
+Microsoft.Maui.Chat.Controls.ChatConversationChangeKind
+Microsoft.Maui.Chat.Controls.ChatConversationChangeKind.ContentAdded = 4 -> Microsoft.Maui.Chat.Controls.ChatConversationChangeKind
+Microsoft.Maui.Chat.Controls.ChatConversationChangeKind.ContentChanged = 6 -> Microsoft.Maui.Chat.Controls.ChatConversationChangeKind
+Microsoft.Maui.Chat.Controls.ChatConversationChangeKind.ContentRemoved = 5 -> Microsoft.Maui.Chat.Controls.ChatConversationChangeKind
+Microsoft.Maui.Chat.Controls.ChatConversationChangeKind.MessageAdded = 1 -> Microsoft.Maui.Chat.Controls.ChatConversationChangeKind
+Microsoft.Maui.Chat.Controls.ChatConversationChangeKind.MessageChanged = 3 -> Microsoft.Maui.Chat.Controls.ChatConversationChangeKind
+Microsoft.Maui.Chat.Controls.ChatConversationChangeKind.MessageRemoved = 2 -> Microsoft.Maui.Chat.Controls.ChatConversationChangeKind
+Microsoft.Maui.Chat.Controls.ChatConversationChangeKind.Reset = 0 -> Microsoft.Maui.Chat.Controls.ChatConversationChangeKind
+Microsoft.Maui.Chat.Controls.ChatConversationChangeKind.StatusChanged = 7 -> Microsoft.Maui.Chat.Controls.ChatConversationChangeKind
+Microsoft.Maui.Chat.Controls.ChatConversationStatus
+Microsoft.Maui.Chat.Controls.ChatConversationStatus.AwaitingInput = 2 -> Microsoft.Maui.Chat.Controls.ChatConversationStatus
+Microsoft.Maui.Chat.Controls.ChatConversationStatus.Busy = 1 -> Microsoft.Maui.Chat.Controls.ChatConversationStatus
+Microsoft.Maui.Chat.Controls.ChatConversationStatus.Error = 3 -> Microsoft.Maui.Chat.Controls.ChatConversationStatus
+Microsoft.Maui.Chat.Controls.ChatConversationStatus.Idle = 0 -> Microsoft.Maui.Chat.Controls.ChatConversationStatus
+Microsoft.Maui.Chat.Controls.ChatDraft
+Microsoft.Maui.Chat.Controls.ChatDraft.Attachments.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Maui.Chat.Controls.ChatAttachment!>!
+Microsoft.Maui.Chat.Controls.ChatDraft.ChatDraft(string? text, System.Collections.Generic.IEnumerable<Microsoft.Maui.Chat.Controls.ChatAttachment!>? attachments = null) -> void
+Microsoft.Maui.Chat.Controls.ChatDraft.CreateContents() -> System.Collections.Generic.IReadOnlyList<Microsoft.Maui.Chat.Controls.MessageContent!>!
+Microsoft.Maui.Chat.Controls.ChatDraft.HasText.get -> bool
+Microsoft.Maui.Chat.Controls.ChatDraft.IsEmpty.get -> bool
+Microsoft.Maui.Chat.Controls.ChatDraft.Text.get -> string!
+Microsoft.Maui.Chat.Controls.ChatFileContentTemplate
+Microsoft.Maui.Chat.Controls.ChatFileContentTemplate.ChatFileContentTemplate() -> void
+Microsoft.Maui.Chat.Controls.ChatFileContentView
+Microsoft.Maui.Chat.Controls.ChatFileContentView.ChatFileContentView() -> void
+Microsoft.Maui.Chat.Controls.ChatMediaContentTemplate
+Microsoft.Maui.Chat.Controls.ChatMediaContentTemplate.ChatMediaContentTemplate() -> void
+Microsoft.Maui.Chat.Controls.ChatMediaContentView
+Microsoft.Maui.Chat.Controls.ChatMediaContentView.ChatMediaContentView() -> void
+Microsoft.Maui.Chat.Controls.ChatMessagesView
+Microsoft.Maui.Chat.Controls.ChatMessagesView.Appearance.get -> Microsoft.Maui.Chat.Controls.ChatAppearance!
+Microsoft.Maui.Chat.Controls.ChatMessagesView.Appearance.set -> void
+Microsoft.Maui.Chat.Controls.ChatMessagesView.AutoScrollToLatest.get -> bool
+Microsoft.Maui.Chat.Controls.ChatMessagesView.AutoScrollToLatest.set -> void
+Microsoft.Maui.Chat.Controls.ChatMessagesView.ChatMessagesView() -> void
+Microsoft.Maui.Chat.Controls.ChatMessagesView.ContentTemplates.get -> System.Collections.Generic.IList<Microsoft.Maui.Chat.Controls.ChatContentTemplate!>!
+Microsoft.Maui.Chat.Controls.ChatMessagesView.ContentTemplates.set -> void
+Microsoft.Maui.Chat.Controls.ChatMessagesView.Conversation.get -> Microsoft.Maui.Chat.Controls.ChatConversation?
+Microsoft.Maui.Chat.Controls.ChatMessagesView.Conversation.set -> void
+virtual Microsoft.Maui.Chat.Controls.ChatMessagesView.CreateItem(Microsoft.Maui.Chat.Controls.ConversationMessage! message, Microsoft.Maui.Chat.Controls.MessageContent! content, Microsoft.Maui.Chat.Controls.ChatConversation? conversation, Microsoft.Maui.Chat.Controls.ChatAppearance! appearance) -> Microsoft.Maui.Chat.Controls.ChatContentItem!
+Microsoft.Maui.Chat.Controls.ChatMessagesView.FindPart<T>(string! name) -> T?
+Microsoft.Maui.Chat.Controls.ChatMessagesView.ItemTemplateSelector.get -> Microsoft.Maui.Controls.DataTemplateSelector?
+Microsoft.Maui.Chat.Controls.ChatMessagesView.Items.get -> System.Collections.ObjectModel.ReadOnlyObservableCollection<Microsoft.Maui.Chat.Controls.ChatContentItem!>!
+Microsoft.Maui.Chat.Controls.ChatMessagesView.LoadEarlierCommand.get -> System.Windows.Input.ICommand?
+Microsoft.Maui.Chat.Controls.ChatMessagesView.LoadEarlierCommand.set -> void
+Microsoft.Maui.Chat.Controls.ChatMessagesView.LoadEarlierRequested -> System.EventHandler?
+Microsoft.Maui.Chat.Controls.ChatMessagesView.LoadEarlierThreshold.get -> int
+Microsoft.Maui.Chat.Controls.ChatMessagesView.LoadEarlierThreshold.set -> void
+Microsoft.Maui.Chat.Controls.ChatMessagesView.UseDefaultContentTemplates.get -> bool
+Microsoft.Maui.Chat.Controls.ChatMessagesView.UseDefaultContentTemplates.set -> void
+Microsoft.Maui.Chat.Controls.ChatParticipant
+Microsoft.Maui.Chat.Controls.ChatParticipant.Avatar.get -> Microsoft.Maui.Controls.ImageSource?
+Microsoft.Maui.Chat.Controls.ChatParticipant.Avatar.set -> void
+Microsoft.Maui.Chat.Controls.ChatParticipant.ChatParticipant(string! id, string? displayName = null, Microsoft.Maui.Chat.Controls.ChatParticipantKind kind = Microsoft.Maui.Chat.Controls.ChatParticipantKind.Remote) -> void
+Microsoft.Maui.Chat.Controls.ChatParticipant.DisplayName.get -> string!
+Microsoft.Maui.Chat.Controls.ChatParticipant.DisplayName.set -> void
+Microsoft.Maui.Chat.Controls.ChatParticipant.Id.get -> string!
+Microsoft.Maui.Chat.Controls.ChatParticipant.Initials.get -> string!
+Microsoft.Maui.Chat.Controls.ChatParticipant.IsLocal.get -> bool
+Microsoft.Maui.Chat.Controls.ChatParticipant.Kind.get -> Microsoft.Maui.Chat.Controls.ChatParticipantKind
+Microsoft.Maui.Chat.Controls.ChatParticipant.Kind.set -> void
+Microsoft.Maui.Chat.Controls.ChatParticipantKind
+Microsoft.Maui.Chat.Controls.ChatParticipantKind.Agent = 2 -> Microsoft.Maui.Chat.Controls.ChatParticipantKind
+Microsoft.Maui.Chat.Controls.ChatParticipantKind.Local = 0 -> Microsoft.Maui.Chat.Controls.ChatParticipantKind
+Microsoft.Maui.Chat.Controls.ChatParticipantKind.Remote = 1 -> Microsoft.Maui.Chat.Controls.ChatParticipantKind
+Microsoft.Maui.Chat.Controls.ChatParticipantKind.System = 3 -> Microsoft.Maui.Chat.Controls.ChatParticipantKind
+Microsoft.Maui.Chat.Controls.ChatSuggestion
+Microsoft.Maui.Chat.Controls.ChatSuggestion.ChatSuggestion(string! label, string? prompt = null, string? icon = null) -> void
+Microsoft.Maui.Chat.Controls.ChatSuggestion.DisplayText.get -> string!
+Microsoft.Maui.Chat.Controls.ChatSuggestion.HasIcon.get -> bool
+Microsoft.Maui.Chat.Controls.ChatSuggestion.Icon.get -> string?
+Microsoft.Maui.Chat.Controls.ChatSuggestion.Icon.init -> void
+Microsoft.Maui.Chat.Controls.ChatSuggestion.Label.get -> string!
+Microsoft.Maui.Chat.Controls.ChatSuggestion.Prompt.get -> string!
+Microsoft.Maui.Chat.Controls.ChatTextContentTemplate
+Microsoft.Maui.Chat.Controls.ChatTextContentTemplate.ChatTextContentTemplate() -> void
+Microsoft.Maui.Chat.Controls.ChatTextContentView
+Microsoft.Maui.Chat.Controls.ChatTextContentView.ChatTextContentView() -> void
+Microsoft.Maui.Chat.Controls.ChatView
+Microsoft.Maui.Chat.Controls.ChatView.AddAttachment(Microsoft.Maui.Chat.Controls.ChatAttachment! attachment) -> void
+Microsoft.Maui.Chat.Controls.ChatView.AllowAttachments.get -> bool
+Microsoft.Maui.Chat.Controls.ChatView.AllowAttachments.set -> void
+Microsoft.Maui.Chat.Controls.ChatView.Appearance.get -> Microsoft.Maui.Chat.Controls.ChatAppearance!
+Microsoft.Maui.Chat.Controls.ChatView.Appearance.set -> void
+Microsoft.Maui.Chat.Controls.ChatView.AttachButtonText.get -> string!
+Microsoft.Maui.Chat.Controls.ChatView.AttachButtonText.set -> void
+Microsoft.Maui.Chat.Controls.ChatView.AttachmentError.get -> string?
+Microsoft.Maui.Chat.Controls.ChatView.AttachmentFileTypes.get -> Microsoft.Maui.Storage.FilePickerFileType?
+Microsoft.Maui.Chat.Controls.ChatView.AttachmentFileTypes.set -> void
+Microsoft.Maui.Chat.Controls.ChatView.AttachmentPicker.get -> Microsoft.Maui.Chat.Controls.IChatAttachmentPicker?
+Microsoft.Maui.Chat.Controls.ChatView.AttachmentPicker.set -> void
+Microsoft.Maui.Chat.Controls.ChatView.AttachmentTemplate.get -> Microsoft.Maui.Controls.DataTemplate?
+Microsoft.Maui.Chat.Controls.ChatView.AttachmentTemplate.set -> void
+Microsoft.Maui.Chat.Controls.ChatView.Attachments.get -> System.Collections.ObjectModel.ReadOnlyObservableCollection<Microsoft.Maui.Chat.Controls.ChatAttachment!>!
+Microsoft.Maui.Chat.Controls.ChatView.AttachSuggestionsPart(Microsoft.Maui.Controls.Layout? suggestionsPart) -> void
+Microsoft.Maui.Chat.Controls.ChatView.AutoScrollToLatest.get -> bool
+Microsoft.Maui.Chat.Controls.ChatView.AutoScrollToLatest.set -> void
+Microsoft.Maui.Chat.Controls.ChatView.CanSend.get -> bool
+Microsoft.Maui.Chat.Controls.ChatView.ChatView() -> void
+Microsoft.Maui.Chat.Controls.ChatView.ClearAttachments() -> void
+Microsoft.Maui.Chat.Controls.ChatView.ContentTemplates.get -> System.Collections.Generic.IList<Microsoft.Maui.Chat.Controls.ChatContentTemplate!>!
+Microsoft.Maui.Chat.Controls.ChatView.ContentTemplates.set -> void
+Microsoft.Maui.Chat.Controls.ChatView.Conversation.get -> Microsoft.Maui.Chat.Controls.ChatConversation?
+Microsoft.Maui.Chat.Controls.ChatView.Conversation.set -> void
+Microsoft.Maui.Chat.Controls.ChatView.CreateDraft() -> Microsoft.Maui.Chat.Controls.ChatDraft!
+Microsoft.Maui.Chat.Controls.ChatView.EffectiveSuggestions.get -> System.Collections.ObjectModel.ReadOnlyObservableCollection<Microsoft.Maui.Chat.Controls.ChatSuggestion!>!
+Microsoft.Maui.Chat.Controls.ChatView.EmptyViewTemplate.get -> Microsoft.Maui.Controls.DataTemplate?
+Microsoft.Maui.Chat.Controls.ChatView.EmptyViewTemplate.set -> void
+Microsoft.Maui.Chat.Controls.ChatView.FindPart<T>(string! name) -> T?
+Microsoft.Maui.Chat.Controls.ChatView.FooterTemplate.get -> Microsoft.Maui.Controls.DataTemplate?
+Microsoft.Maui.Chat.Controls.ChatView.FooterTemplate.set -> void
+Microsoft.Maui.Chat.Controls.ChatView.HasAttachmentError.get -> bool
+Microsoft.Maui.Chat.Controls.ChatView.HasAttachments.get -> bool
+Microsoft.Maui.Chat.Controls.ChatView.HasSendError.get -> bool
+Microsoft.Maui.Chat.Controls.ChatView.HeaderTemplate.get -> Microsoft.Maui.Controls.DataTemplate?
+Microsoft.Maui.Chat.Controls.ChatView.HeaderTemplate.set -> void
+Microsoft.Maui.Chat.Controls.ChatView.IsBusy.get -> bool
+Microsoft.Maui.Chat.Controls.ChatView.IsEmpty.get -> bool
+Microsoft.Maui.Chat.Controls.ChatView.MaxAttachmentBytes.get -> long
+Microsoft.Maui.Chat.Controls.ChatView.MaxAttachmentBytes.set -> void
+Microsoft.Maui.Chat.Controls.ChatView.PickAttachmentsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Microsoft.Maui.Chat.Controls.ChatView.Placeholder.get -> string!
+Microsoft.Maui.Chat.Controls.ChatView.Placeholder.set -> void
+Microsoft.Maui.Chat.Controls.ChatView.RemoveAttachment(Microsoft.Maui.Chat.Controls.ChatAttachment! attachment) -> bool
+Microsoft.Maui.Chat.Controls.ChatView.SendAsync() -> System.Threading.Tasks.Task!
+Microsoft.Maui.Chat.Controls.ChatView.SendButtonText.get -> string!
+Microsoft.Maui.Chat.Controls.ChatView.SendButtonText.set -> void
+Microsoft.Maui.Chat.Controls.ChatView.SendError.get -> string?
+Microsoft.Maui.Chat.Controls.ChatView.ShowEmptyView.get -> bool
+Microsoft.Maui.Chat.Controls.ChatView.ShowSuggestions.get -> bool
+Microsoft.Maui.Chat.Controls.ChatView.ShowWelcome.get -> bool
+Microsoft.Maui.Chat.Controls.ChatView.SuggestionPrompts.get -> System.Collections.Generic.IList<string!>!
+Microsoft.Maui.Chat.Controls.ChatView.SuggestionPrompts.set -> void
+Microsoft.Maui.Chat.Controls.ChatView.SuggestionTemplate.get -> Microsoft.Maui.Controls.DataTemplate?
+Microsoft.Maui.Chat.Controls.ChatView.SuggestionTemplate.set -> void
+Microsoft.Maui.Chat.Controls.ChatView.Suggestions.get -> System.Collections.Generic.IList<Microsoft.Maui.Chat.Controls.ChatSuggestion!>!
+Microsoft.Maui.Chat.Controls.ChatView.Suggestions.set -> void
+Microsoft.Maui.Chat.Controls.ChatView.Text.get -> string!
+Microsoft.Maui.Chat.Controls.ChatView.Text.set -> void
+Microsoft.Maui.Chat.Controls.ChatView.UseDefaultContentTemplates.get -> bool
+Microsoft.Maui.Chat.Controls.ChatView.UseDefaultContentTemplates.set -> void
+Microsoft.Maui.Chat.Controls.ChatView.WelcomeIcon.get -> string!
+Microsoft.Maui.Chat.Controls.ChatView.WelcomeIcon.set -> void
+Microsoft.Maui.Chat.Controls.ChatView.WelcomeMessage.get -> string!
+Microsoft.Maui.Chat.Controls.ChatView.WelcomeMessage.set -> void
+Microsoft.Maui.Chat.Controls.ConversationMessage
+Microsoft.Maui.Chat.Controls.ConversationMessage.AddContent<T>(T! content) -> T!
+Microsoft.Maui.Chat.Controls.ConversationMessage.Contents.get -> System.Collections.ObjectModel.ObservableCollection<Microsoft.Maui.Chat.Controls.MessageContent!>!
+Microsoft.Maui.Chat.Controls.ConversationMessage.ConversationMessage(Microsoft.Maui.Chat.Controls.ChatParticipant! participant) -> void
+Microsoft.Maui.Chat.Controls.ConversationMessage.ConversationMessage(Microsoft.Maui.Chat.Controls.ChatParticipant! participant, string? id, System.DateTimeOffset? createdAt) -> void
+Microsoft.Maui.Chat.Controls.ConversationMessage.ConversationMessage(Microsoft.Maui.Chat.Controls.ChatParticipant! participant, string? text) -> void
+Microsoft.Maui.Chat.Controls.ConversationMessage.ConversationMessage(Microsoft.Maui.Chat.Controls.ChatParticipant! participant, string? text, string? id, System.DateTimeOffset? createdAt) -> void
+Microsoft.Maui.Chat.Controls.ConversationMessage.CreatedAt.get -> System.DateTimeOffset
+Microsoft.Maui.Chat.Controls.ConversationMessage.ErrorText.get -> string?
+Microsoft.Maui.Chat.Controls.ConversationMessage.ErrorText.set -> void
+Microsoft.Maui.Chat.Controls.ConversationMessage.Id.get -> string!
+Microsoft.Maui.Chat.Controls.ConversationMessage.Participant.get -> Microsoft.Maui.Chat.Controls.ChatParticipant!
+Microsoft.Maui.Chat.Controls.ConversationMessage.Status.get -> Microsoft.Maui.Chat.Controls.ConversationMessageStatus
+Microsoft.Maui.Chat.Controls.ConversationMessage.Status.set -> void
+Microsoft.Maui.Chat.Controls.ConversationMessageStatus
+Microsoft.Maui.Chat.Controls.ConversationMessageStatus.Delivered = 3 -> Microsoft.Maui.Chat.Controls.ConversationMessageStatus
+Microsoft.Maui.Chat.Controls.ConversationMessageStatus.Draft = 0 -> Microsoft.Maui.Chat.Controls.ConversationMessageStatus
+Microsoft.Maui.Chat.Controls.ConversationMessageStatus.Failed = 5 -> Microsoft.Maui.Chat.Controls.ConversationMessageStatus
+Microsoft.Maui.Chat.Controls.ConversationMessageStatus.Read = 4 -> Microsoft.Maui.Chat.Controls.ConversationMessageStatus
+Microsoft.Maui.Chat.Controls.ConversationMessageStatus.Sending = 1 -> Microsoft.Maui.Chat.Controls.ConversationMessageStatus
+Microsoft.Maui.Chat.Controls.ConversationMessageStatus.Sent = 2 -> Microsoft.Maui.Chat.Controls.ConversationMessageStatus
+Microsoft.Maui.Chat.Controls.FileChatAttachmentPicker
+Microsoft.Maui.Chat.Controls.FileChatAttachmentPicker.FileChatAttachmentPicker() -> void
+Microsoft.Maui.Chat.Controls.FileChatAttachmentPicker.PickAsync(Microsoft.Maui.Storage.FilePickerFileType? fileTypes, long maxBytesPerFile, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Microsoft.Maui.Chat.Controls.ChatAttachment!>!>!
+Microsoft.Maui.Chat.Controls.GenericChatContentTemplate
+Microsoft.Maui.Chat.Controls.GenericChatContentTemplate.ContentType.get -> System.Type?
+Microsoft.Maui.Chat.Controls.GenericChatContentTemplate.ContentType.set -> void
+Microsoft.Maui.Chat.Controls.GenericChatContentTemplate.GenericChatContentTemplate() -> void
+Microsoft.Maui.Chat.Controls.GenericChatContentTemplate.IsOutgoing.get -> bool?
+Microsoft.Maui.Chat.Controls.GenericChatContentTemplate.IsOutgoing.set -> void
+Microsoft.Maui.Chat.Controls.GenericChatContentTemplate.ParticipantKind.get -> Microsoft.Maui.Chat.Controls.ChatParticipantKind?
+Microsoft.Maui.Chat.Controls.GenericChatContentTemplate.ParticipantKind.set -> void
+Microsoft.Maui.Chat.Controls.IChatAttachmentPicker
+Microsoft.Maui.Chat.Controls.IChatAttachmentPicker.PickAsync(Microsoft.Maui.Storage.FilePickerFileType? fileTypes, long maxBytesPerFile, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Microsoft.Maui.Chat.Controls.ChatAttachment!>!>!
+Microsoft.Maui.Chat.Controls.MediaMessageContent
+Microsoft.Maui.Chat.Controls.MediaMessageContent.AltText.get -> string?
+Microsoft.Maui.Chat.Controls.MediaMessageContent.AltText.set -> void
+Microsoft.Maui.Chat.Controls.MediaMessageContent.ByteCount.get -> long
+Microsoft.Maui.Chat.Controls.MediaMessageContent.Data.get -> System.ReadOnlyMemory<byte>
+Microsoft.Maui.Chat.Controls.MediaMessageContent.DisplayName.get -> string!
+Microsoft.Maui.Chat.Controls.MediaMessageContent.FileName.get -> string?
+Microsoft.Maui.Chat.Controls.MediaMessageContent.FileName.set -> void
+Microsoft.Maui.Chat.Controls.MediaMessageContent.HasData.get -> bool
+Microsoft.Maui.Chat.Controls.MediaMessageContent.IsImage.get -> bool
+Microsoft.Maui.Chat.Controls.MediaMessageContent.MediaMessageContent(System.ReadOnlyMemory<byte> data, string! mediaType) -> void
+Microsoft.Maui.Chat.Controls.MediaMessageContent.MediaMessageContent(System.ReadOnlyMemory<byte> data, string! mediaType, string? id) -> void
+Microsoft.Maui.Chat.Controls.MediaMessageContent.MediaMessageContent(System.Uri! uri, string! mediaType) -> void
+Microsoft.Maui.Chat.Controls.MediaMessageContent.MediaMessageContent(System.Uri! uri, string! mediaType, string? id) -> void
+Microsoft.Maui.Chat.Controls.MediaMessageContent.MediaType.get -> string!
+Microsoft.Maui.Chat.Controls.MediaMessageContent.PixelHeight.get -> int
+Microsoft.Maui.Chat.Controls.MediaMessageContent.PixelHeight.set -> void
+Microsoft.Maui.Chat.Controls.MediaMessageContent.PixelWidth.get -> int
+Microsoft.Maui.Chat.Controls.MediaMessageContent.PixelWidth.set -> void
+Microsoft.Maui.Chat.Controls.MediaMessageContent.Uri.get -> System.Uri?
+Microsoft.Maui.Chat.Controls.MessageContent
+Microsoft.Maui.Chat.Controls.MessageContent.ContentChanged -> System.EventHandler?
+Microsoft.Maui.Chat.Controls.MessageContent.Id.get -> string!
+Microsoft.Maui.Chat.Controls.MessageContent.MessageContent(string? id = null) -> void
+Microsoft.Maui.Chat.Controls.MessageContent.RaiseContentChanged() -> void
+Microsoft.Maui.Chat.Controls.ObservableChatConversation
+Microsoft.Maui.Chat.Controls.ObservableChatConversation.AddContent<T>(Microsoft.Maui.Chat.Controls.ConversationMessage! message, T! content) -> T!
+Microsoft.Maui.Chat.Controls.ObservableChatConversation.AddMessage(Microsoft.Maui.Chat.Controls.ChatParticipant! participant, string? text) -> Microsoft.Maui.Chat.Controls.ConversationMessage!
+Microsoft.Maui.Chat.Controls.ObservableChatConversation.AddMessage(Microsoft.Maui.Chat.Controls.ConversationMessage! message) -> Microsoft.Maui.Chat.Controls.ConversationMessage!
+Microsoft.Maui.Chat.Controls.ObservableChatConversation.NotifyContentChanged(Microsoft.Maui.Chat.Controls.ConversationMessage! message, Microsoft.Maui.Chat.Controls.MessageContent! content) -> void
+Microsoft.Maui.Chat.Controls.ObservableChatConversation.ObservableChatConversation() -> void
+Microsoft.Maui.Chat.Controls.ObservableChatConversation.ObservableChatConversation(Microsoft.Maui.Chat.Controls.ChatParticipant! localParticipant) -> void
+Microsoft.Maui.Chat.Controls.ObservableChatConversation.RemoveMessage(Microsoft.Maui.Chat.Controls.ConversationMessage! message) -> bool
+Microsoft.Maui.Chat.Controls.ObservableChatConversation.Reset() -> void
+Microsoft.Maui.Chat.Controls.ObservableChatConversation.SendHandler.get -> System.Func<Microsoft.Maui.Chat.Controls.ObservableChatConversation!, Microsoft.Maui.Chat.Controls.ChatDraft!, System.Threading.CancellationToken, System.Threading.Tasks.Task<bool>!>?
+Microsoft.Maui.Chat.Controls.ObservableChatConversation.SendHandler.set -> void
+Microsoft.Maui.Chat.Controls.ObservableChatConversation.SetStatus(Microsoft.Maui.Chat.Controls.ChatConversationStatus status) -> void
+Microsoft.Maui.Chat.Controls.TextMessageContent
+Microsoft.Maui.Chat.Controls.TextMessageContent.Append(string? text) -> void
+Microsoft.Maui.Chat.Controls.TextMessageContent.IsEmpty.get -> bool
+Microsoft.Maui.Chat.Controls.TextMessageContent.Text.get -> string!
+Microsoft.Maui.Chat.Controls.TextMessageContent.Text.set -> void
+Microsoft.Maui.Chat.Controls.TextMessageContent.TextMessageContent() -> void
+Microsoft.Maui.Chat.Controls.TextMessageContent.TextMessageContent(string? text, string? id = null) -> void
+Microsoft.Maui.Chat.Controls.Themes.ChatControlsTheme
+Microsoft.Maui.Chat.Controls.Themes.ChatControlsTheme.ChatControlsTheme() -> void
+Microsoft.Maui.Chat.Controls.Themes.ChatMessagesTheme
+Microsoft.Maui.Chat.Controls.Themes.ChatMessagesTheme.ChatMessagesTheme() -> void
+Microsoft.Maui.Chat.Controls.Themes.ChatStyles
+Microsoft.Maui.Chat.Controls.Themes.ChatStyles.ChatStyles() -> void
+Microsoft.Maui.Chat.Controls.Themes.ChatThemeKeys
+Microsoft.Maui.Chat.Controls.Themes.ChatViewTheme
+Microsoft.Maui.Chat.Controls.Themes.ChatViewTheme.ChatViewTheme() -> void
+abstract Microsoft.Maui.Chat.Controls.ChatBubbleView.GetContentDescription() -> string!
+abstract Microsoft.Maui.Chat.Controls.ChatContentTemplate.When(Microsoft.Maui.Chat.Controls.ChatContentItem! item) -> bool
+abstract Microsoft.Maui.Chat.Controls.ChatContentView.RefreshContent() -> void
+abstract Microsoft.Maui.Chat.Controls.ChatConversation.SendCoreAsync(Microsoft.Maui.Chat.Controls.ChatDraft! draft, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
+const Microsoft.Maui.Chat.Controls.ChatMessagesView.MessagesPartName = "PART_Messages" -> string!
+const Microsoft.Maui.Chat.Controls.ChatView.AttachButtonPartName = "PART_AttachButton" -> string!
+const Microsoft.Maui.Chat.Controls.ChatView.AttachmentsPartName = "PART_Attachments" -> string!
+const Microsoft.Maui.Chat.Controls.ChatView.BusyIndicatorPartName = "PART_BusyIndicator" -> string!
+const Microsoft.Maui.Chat.Controls.ChatView.DefaultAttachmentErrorMessage = "That attachment could not be added." -> string!
+const Microsoft.Maui.Chat.Controls.ChatView.DefaultSendErrorMessage = "Your message could not be sent. Please try again." -> string!
+const Microsoft.Maui.Chat.Controls.ChatView.EmptyViewPartName = "PART_EmptyView" -> string!
+const Microsoft.Maui.Chat.Controls.ChatView.FooterPartName = "PART_Footer" -> string!
+const Microsoft.Maui.Chat.Controls.ChatView.HeaderPartName = "PART_Header" -> string!
+const Microsoft.Maui.Chat.Controls.ChatView.InputAreaPartName = "PART_InputArea" -> string!
+const Microsoft.Maui.Chat.Controls.ChatView.InputEntryPartName = "PART_InputEntry" -> string!
+const Microsoft.Maui.Chat.Controls.ChatView.MessageListPartName = "PART_MessageList" -> string!
+const Microsoft.Maui.Chat.Controls.ChatView.SendButtonPartName = "PART_SendButton" -> string!
+const Microsoft.Maui.Chat.Controls.ChatView.SuggestionsPartName = "PART_Suggestions" -> string!
+const Microsoft.Maui.Chat.Controls.ChatView.WelcomeIconPartName = "PART_WelcomeIcon" -> string!
+const Microsoft.Maui.Chat.Controls.ChatView.WelcomeMessagePartName = "PART_WelcomeMessage" -> string!
+const Microsoft.Maui.Chat.Controls.ChatView.WelcomePanelPartName = "PART_WelcomePanel" -> string!
+const Microsoft.Maui.Chat.Controls.Themes.ChatThemeKeys.AttachButtonStyle = "MauiChat.AttachButton" -> string!
+const Microsoft.Maui.Chat.Controls.Themes.ChatThemeKeys.AttachmentStyle = "MauiChat.Attachment" -> string!
+const Microsoft.Maui.Chat.Controls.Themes.ChatThemeKeys.AvatarStyle = "MauiChat.Avatar" -> string!
+const Microsoft.Maui.Chat.Controls.Themes.ChatThemeKeys.AvatarTextStyle = "MauiChat.AvatarText" -> string!
+const Microsoft.Maui.Chat.Controls.Themes.ChatThemeKeys.ChatMessagesViewTemplate = "MauiChat.ChatMessagesViewTemplate" -> string!
+const Microsoft.Maui.Chat.Controls.Themes.ChatThemeKeys.ChatViewTemplate = "MauiChat.ChatViewTemplate" -> string!
+const Microsoft.Maui.Chat.Controls.Themes.ChatThemeKeys.ErrorTextStyle = "MauiChat.ErrorText" -> string!
+const Microsoft.Maui.Chat.Controls.Themes.ChatThemeKeys.FileCardStyle = "MauiChat.FileCard" -> string!
+const Microsoft.Maui.Chat.Controls.Themes.ChatThemeKeys.FileDetailStyle = "MauiChat.FileDetail" -> string!
+const Microsoft.Maui.Chat.Controls.Themes.ChatThemeKeys.FileNameStyle = "MauiChat.FileName" -> string!
+const Microsoft.Maui.Chat.Controls.Themes.ChatThemeKeys.IncomingBubbleStyle = "MauiChat.Bubble.Incoming" -> string!
+const Microsoft.Maui.Chat.Controls.Themes.ChatThemeKeys.IncomingTextStyle = "MauiChat.Text.Incoming" -> string!
+const Microsoft.Maui.Chat.Controls.Themes.ChatThemeKeys.InputAreaStyle = "MauiChat.InputArea" -> string!
+const Microsoft.Maui.Chat.Controls.Themes.ChatThemeKeys.InputEntryStyle = "MauiChat.InputEntry" -> string!
+const Microsoft.Maui.Chat.Controls.Themes.ChatThemeKeys.MetadataStyle = "MauiChat.Metadata" -> string!
+const Microsoft.Maui.Chat.Controls.Themes.ChatThemeKeys.OutgoingBubbleStyle = "MauiChat.Bubble.Outgoing" -> string!
+const Microsoft.Maui.Chat.Controls.Themes.ChatThemeKeys.OutgoingTextStyle = "MauiChat.Text.Outgoing" -> string!
+const Microsoft.Maui.Chat.Controls.Themes.ChatThemeKeys.ParticipantNameStyle = "MauiChat.ParticipantName" -> string!
+const Microsoft.Maui.Chat.Controls.Themes.ChatThemeKeys.SendButtonStyle = "MauiChat.SendButton" -> string!
+const Microsoft.Maui.Chat.Controls.Themes.ChatThemeKeys.SuggestionStyle = "MauiChat.Suggestion" -> string!
+const Microsoft.Maui.Chat.Controls.Themes.ChatThemeKeys.WelcomeIconStyle = "MauiChat.WelcomeIcon" -> string!
+const Microsoft.Maui.Chat.Controls.Themes.ChatThemeKeys.WelcomeMessageStyle = "MauiChat.WelcomeMessage" -> string!
+override Microsoft.Maui.Chat.Controls.ChatBubbleView.RefreshContent() -> void
+override Microsoft.Maui.Chat.Controls.ChatContentTemplateSelector.OnSelectTemplate(object! item, Microsoft.Maui.Controls.BindableObject! container) -> Microsoft.Maui.Controls.DataTemplate!
+override Microsoft.Maui.Chat.Controls.ChatFileContentTemplate.When(Microsoft.Maui.Chat.Controls.ChatContentItem! item) -> bool
+override Microsoft.Maui.Chat.Controls.ChatFileContentView.GetContentDescription() -> string!
+override Microsoft.Maui.Chat.Controls.ChatFileContentView.RefreshContent() -> void
+override Microsoft.Maui.Chat.Controls.ChatMediaContentTemplate.When(Microsoft.Maui.Chat.Controls.ChatContentItem! item) -> bool
+override Microsoft.Maui.Chat.Controls.ChatMediaContentView.GetContentDescription() -> string!
+override Microsoft.Maui.Chat.Controls.ChatMediaContentView.OnItemChanged(Microsoft.Maui.Chat.Controls.ChatContentItem? oldItem, Microsoft.Maui.Chat.Controls.ChatContentItem? newItem) -> void
+override Microsoft.Maui.Chat.Controls.ChatMediaContentView.RefreshContent() -> void
+override Microsoft.Maui.Chat.Controls.ChatMessagesView.OnApplyTemplate() -> void
+override Microsoft.Maui.Chat.Controls.ChatMessagesView.OnParentSet() -> void
+override Microsoft.Maui.Chat.Controls.ChatTextContentTemplate.When(Microsoft.Maui.Chat.Controls.ChatContentItem! item) -> bool
+override Microsoft.Maui.Chat.Controls.ChatTextContentView.GetContentDescription() -> string!
+override Microsoft.Maui.Chat.Controls.ChatTextContentView.OnContentUpdated() -> void
+override Microsoft.Maui.Chat.Controls.ChatTextContentView.RefreshContent() -> void
+override Microsoft.Maui.Chat.Controls.ChatView.OnApplyTemplate() -> void
+override Microsoft.Maui.Chat.Controls.ChatView.OnParentSet() -> void
+override Microsoft.Maui.Chat.Controls.GenericChatContentTemplate.GetPriority(Microsoft.Maui.Chat.Controls.ChatContentItem! item) -> int
+override Microsoft.Maui.Chat.Controls.GenericChatContentTemplate.When(Microsoft.Maui.Chat.Controls.ChatContentItem! item) -> bool
+override Microsoft.Maui.Chat.Controls.ObservableChatConversation.SendCoreAsync(Microsoft.Maui.Chat.Controls.ChatDraft! draft, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
+static Microsoft.Maui.Chat.Controls.AppBuilderExtensions.UseChatControls(this Microsoft.Maui.Hosting.MauiAppBuilder! builder) -> Microsoft.Maui.Hosting.MauiAppBuilder!
+static Microsoft.Maui.Chat.Controls.ChatAppearance.Default.get -> Microsoft.Maui.Chat.Controls.ChatAppearance!
+static Microsoft.Maui.Chat.Controls.ChatContentItem.IsOutgoingFor(Microsoft.Maui.Chat.Controls.ChatConversation? conversation, Microsoft.Maui.Chat.Controls.ChatParticipant? participant) -> bool
+static Microsoft.Maui.Chat.Controls.ChatContentTemplate.CreateView(System.Type! viewType, System.IServiceProvider? services = null) -> Microsoft.Maui.Controls.View!
+static Microsoft.Maui.Chat.Controls.ChatContentTemplate.PrepareView<T>(T! view) -> T!
+static Microsoft.Maui.Chat.Controls.ChatContentTemplateSelector.GetHiddenTemplate() -> Microsoft.Maui.Controls.DataTemplate!
+static Microsoft.Maui.Chat.Controls.ChatConversationChange.ContentAdded(Microsoft.Maui.Chat.Controls.ConversationMessage! message, Microsoft.Maui.Chat.Controls.MessageContent! content, int index) -> Microsoft.Maui.Chat.Controls.ChatConversationChange
+static Microsoft.Maui.Chat.Controls.ChatConversationChange.ContentChanged(Microsoft.Maui.Chat.Controls.ConversationMessage! message, Microsoft.Maui.Chat.Controls.MessageContent! content) -> Microsoft.Maui.Chat.Controls.ChatConversationChange
+static Microsoft.Maui.Chat.Controls.ChatConversationChange.ContentRemoved(Microsoft.Maui.Chat.Controls.ConversationMessage! message, Microsoft.Maui.Chat.Controls.MessageContent! content, int index) -> Microsoft.Maui.Chat.Controls.ChatConversationChange
+static Microsoft.Maui.Chat.Controls.ChatConversationChange.MessageAdded(Microsoft.Maui.Chat.Controls.ConversationMessage! message, int index) -> Microsoft.Maui.Chat.Controls.ChatConversationChange
+static Microsoft.Maui.Chat.Controls.ChatConversationChange.MessageChanged(Microsoft.Maui.Chat.Controls.ConversationMessage! message) -> Microsoft.Maui.Chat.Controls.ChatConversationChange
+static Microsoft.Maui.Chat.Controls.ChatConversationChange.MessageRemoved(Microsoft.Maui.Chat.Controls.ConversationMessage! message, int index) -> Microsoft.Maui.Chat.Controls.ChatConversationChange
+static Microsoft.Maui.Chat.Controls.ChatConversationChange.Reset() -> Microsoft.Maui.Chat.Controls.ChatConversationChange
+static Microsoft.Maui.Chat.Controls.ChatConversationChange.StatusChanged(Microsoft.Maui.Chat.Controls.ChatConversationStatus status) -> Microsoft.Maui.Chat.Controls.ChatConversationChange
+static Microsoft.Maui.Chat.Controls.ChatMediaContentView.CreateImageSource(Microsoft.Maui.Chat.Controls.MediaMessageContent! media) -> Microsoft.Maui.Controls.ImageSource?
+static Microsoft.Maui.Chat.Controls.FileChatAttachmentPicker.Default.get -> Microsoft.Maui.Chat.Controls.FileChatAttachmentPicker!
+static Microsoft.Maui.Chat.Controls.Themes.ChatControlsTheme.EnsureLoaded() -> void
+static Microsoft.Maui.Chat.Controls.Themes.ChatControlsTheme.EnsureLoaded(Microsoft.Maui.Controls.ResourceDictionary! resources) -> void
+static readonly Microsoft.Maui.Chat.Controls.ChatAppearance.AvatarSizeProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatAppearance.BubbleCornerRadiusProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatAppearance.BubbleStrokeColorProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatAppearance.BubbleStrokeThicknessProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatAppearance.ContentSpacingProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatAppearance.GroupSpacingProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatAppearance.IncomingBubbleColorProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatAppearance.IncomingTextColorProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatAppearance.MaxBubbleWidthProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatAppearance.OutgoingBubbleColorProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatAppearance.OutgoingTextColorProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatAppearance.ShowAvatarsProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatAppearance.ShowMessageStatusProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatAppearance.ShowParticipantNamesProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatAppearance.ShowTimestampsProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatAppearance.TimestampFormatProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatContentTemplate.PriorityProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatContentTemplate.ViewTypeProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatContentView.ItemProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatConversation.LocalParticipantProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatConversation.StatusProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatMessagesView.AppearanceProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatMessagesView.AutoScrollToLatestProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatMessagesView.ContentTemplatesProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatMessagesView.ConversationProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatMessagesView.ItemTemplateSelectorProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatMessagesView.ItemsProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatMessagesView.LoadEarlierCommandProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatMessagesView.LoadEarlierThresholdProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatMessagesView.UseDefaultContentTemplatesProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatParticipant.AvatarProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatParticipant.DisplayNameProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatParticipant.KindProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.AllowAttachmentsProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.AppearanceProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.AttachButtonTextProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.AttachmentErrorProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.AttachmentFileTypesProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.AttachmentPickerProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.AttachmentTemplateProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.AttachmentsProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.AutoScrollToLatestProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.CanSendProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.ContentTemplatesProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.ConversationProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.EmptyViewTemplateProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.FooterTemplateProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.HasAttachmentErrorProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.HasAttachmentsProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.HasSendErrorProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.HeaderTemplateProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.IsBusyProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.IsEmptyProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.MaxAttachmentBytesProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.PlaceholderProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.SendButtonTextProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.SendErrorProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.ShowEmptyViewProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.ShowSuggestionsProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.ShowWelcomeProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.SuggestionPromptsProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.SuggestionTemplateProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.SuggestionsProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.TextProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.UseDefaultContentTemplatesProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.WelcomeIconProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ChatView.WelcomeMessageProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ConversationMessage.ErrorTextProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.ConversationMessage.StatusProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.GenericChatContentTemplate.ContentTypeProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.GenericChatContentTemplate.IsOutgoingProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.GenericChatContentTemplate.ParticipantKindProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.MediaMessageContent.AltTextProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.MediaMessageContent.FileNameProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.MediaMessageContent.PixelHeightProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.MediaMessageContent.PixelWidthProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.Chat.Controls.TextMessageContent.TextProperty -> Microsoft.Maui.Controls.BindableProperty!
+virtual Microsoft.Maui.Chat.Controls.ChatContentTemplate.CreateTemplate() -> Microsoft.Maui.Controls.DataTemplate!
+virtual Microsoft.Maui.Chat.Controls.ChatContentTemplate.GetPriority(Microsoft.Maui.Chat.Controls.ChatContentItem! item) -> int
+virtual Microsoft.Maui.Chat.Controls.ChatContentView.OnContentUpdated() -> void
+virtual Microsoft.Maui.Chat.Controls.ChatContentView.OnItemChanged(Microsoft.Maui.Chat.Controls.ChatContentItem? oldItem, Microsoft.Maui.Chat.Controls.ChatContentItem? newItem) -> void
+virtual Microsoft.Maui.Chat.Controls.ChatContentView.OnItemPropertyUpdated(string? propertyName) -> void
+virtual Microsoft.Maui.Chat.Controls.ChatConversation.CanSend(Microsoft.Maui.Chat.Controls.ChatDraft? draft) -> bool
+virtual Microsoft.Maui.Chat.Controls.ChatMessagesView.CreateTemplateSelector() -> Microsoft.Maui.Chat.Controls.ChatContentTemplateSelector!

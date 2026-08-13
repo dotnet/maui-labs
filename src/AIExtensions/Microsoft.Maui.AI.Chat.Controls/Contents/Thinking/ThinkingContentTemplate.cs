@@ -8,13 +8,11 @@ public class ThinkingContentTemplate : ContentTemplate
 {
     public override bool When(ContentContext context) => context.Block is ThinkingContentBlock;
 
-    internal override DataTemplate GetTemplate()
+    protected override DataTemplate CreateTemplate()
     {
         if (ViewType is not null)
-            return base.GetTemplate();
+            return base.CreateTemplate();
 
-        return _cachedTemplate ??= new DataTemplate(() => PrepareDataTemplateView(new ThinkingView()));
+        return new DataTemplate(() => PrepareDataTemplateView(new ThinkingView()));
     }
-
-    private DataTemplate? _cachedTemplate;
 }

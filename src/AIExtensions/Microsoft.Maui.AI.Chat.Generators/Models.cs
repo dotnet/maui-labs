@@ -9,27 +9,36 @@ namespace Microsoft.Maui.AI.Chat.Generators;
 
 internal sealed class ToolPropertyModel : IEquatable<ToolPropertyModel>
 {
-    internal ToolPropertyModel(string propertyName, string key, string typeName)
+    internal ToolPropertyModel(
+        string propertyName,
+        string key,
+        string typeName,
+        bool hasExplicitName)
     {
         PropertyName = propertyName;
         Key = key;
         TypeName = typeName;
+        HasExplicitName = hasExplicitName;
     }
 
     internal string PropertyName { get; }
     internal string Key { get; }
     internal string TypeName { get; }
+    internal bool HasExplicitName { get; }
 
     public bool Equals(ToolPropertyModel? other) =>
         other is not null
         && PropertyName == other.PropertyName
         && Key == other.Key
-        && TypeName == other.TypeName;
+        && TypeName == other.TypeName
+        && HasExplicitName == other.HasExplicitName;
 
     public override bool Equals(object? obj) => Equals(obj as ToolPropertyModel);
 
     public override int GetHashCode() =>
-        Hash.Combine(Hash.Combine(PropertyName, Key), TypeName.GetHashCode());
+        Hash.Combine(
+            Hash.Combine(Hash.Combine(PropertyName, Key), TypeName.GetHashCode()),
+            HasExplicitName.GetHashCode());
 }
 
 internal sealed class ToolBlockModel : IEquatable<ToolBlockModel>

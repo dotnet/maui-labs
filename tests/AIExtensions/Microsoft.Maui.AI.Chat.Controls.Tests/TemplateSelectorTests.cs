@@ -214,7 +214,7 @@ public class TemplateSelectorTests
     public void MessageListView_ZeroConfiguration_ProvidesVisibleBuiltInFallbacks()
     {
         var view = new MessageListView();
-        var selector = view.CreateTemplateSelector();
+        var selector = view.CreateAiTemplateSelector();
         var session = SessionFactory.Create();
 
         Assert.IsType<ChatMessageView>(
@@ -243,7 +243,7 @@ public class TemplateSelectorTests
     public void MessageListView_ZeroConfiguration_HidesRawFunctionInvocationsAndUnknownBlocks()
     {
         var view = new MessageListView();
-        var selector = view.CreateTemplateSelector();
+        var selector = view.CreateAiTemplateSelector();
         var session = SessionFactory.Create();
 
         AssertRendersNothing(selector.SelectTemplate(BlockFactory.MakeToolCall("get_weather"), null!));
@@ -263,7 +263,7 @@ public class TemplateSelectorTests
         block.Role = ChatRole.Assistant;
         var context = new ContentContext(SessionFactory.Create(), block, view);
 
-        var selected = view.CreateTemplateSelector().SelectTemplate(context, null!);
+        var selected = view.CreateAiTemplateSelector().SelectTemplate(context, null!);
 
         Assert.IsType<Editor>(selected.CreateContent());
     }
@@ -274,7 +274,7 @@ public class TemplateSelectorTests
         var view = new MessageListView { UseDefaultContentTemplates = false };
         var context = BlockFactory.MakeText("Assistant", "Hello");
 
-        AssertRendersNothing(view.CreateTemplateSelector().SelectTemplate(context, null!));
+        AssertRendersNothing(view.CreateAiTemplateSelector().SelectTemplate(context, null!));
 
         view.ContentTemplates.Add(new TextContentTemplate
         {
@@ -282,7 +282,7 @@ public class TemplateSelectorTests
             Priority = -20_000,
         });
 
-        var selected = view.CreateTemplateSelector().SelectTemplate(context, null!);
+        var selected = view.CreateAiTemplateSelector().SelectTemplate(context, null!);
         Assert.IsType<Label>(selected.CreateContent());
     }
 

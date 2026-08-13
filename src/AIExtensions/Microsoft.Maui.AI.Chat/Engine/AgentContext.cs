@@ -27,6 +27,7 @@ public class AgentContext(UIAgent agent) : IDisposable
     private readonly List<Action<ConversationTurn>> _turnAddedCallbacks = new();
     private readonly List<Action<ConversationStatus>> _statusChangedCallbacks = new();
     private readonly List<Action<ConversationTurn, ContentBlock>> _blockAddedCallbacks = new();
+    private readonly List<Action<ConversationTurn>> _responseBlocksClearedCallbacks = new();
     private CancellationTokenSource? _streamingCts;
     private ChatMessage? _retryMessage;
     private UIAgent.HistoryCheckpoint _retryHistoryCheckpoint;
@@ -47,6 +48,7 @@ public class AgentContext(UIAgent agent) : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         CancelAndDisposeStreaming();
+        agent.RejectPendingPredictiveState();
         _turns.Clear();
         agent.ClearHistory();
         _retryMessage = null;
@@ -148,6 +150,7 @@ public class AgentContext(UIAgent agent) : IDisposable
 
         var turn = _turns[^1];
         turn.ClearResponseBlocks();
+        NotifyResponseBlocksCleared(turn);
         agent.RestoreHistory(_retryHistoryCheckpoint);
 
         await RunAttemptAsync(
@@ -213,18 +216,18 @@ public class AgentContext(UIAgent agent) : IDisposable
 
         try
         {
-            ChatMessage? currentMessage = message;
+            IReadOnlyList<ChatMessage> currentMessages = [message];
             var startsThreadTurn = true;
             var isInitialRequest = true;
 
-            while (currentMessage is not null)
+            while (currentMessages.Count > 0)
             {
                 var humanInputBlocks = new List<IInteractiveBlock>();
                 var uiActionBlocks = new List<UIActionBlock>();
                 var uninvokedToolBlocks = new List<FunctionInvocationContentBlock>();
 
-                await foreach (var block in agent.SendMessageAsync(
-                    currentMessage,
+                await foreach (var block in agent.SendMessagesAsync(
+                    currentMessages,
                     startsThreadTurn,
                     completesThreadTurn: false,
                     cancellationToken).WithCancellation(cancellationToken))
@@ -246,7 +249,8 @@ public class AgentContext(UIAgent agent) : IDisposable
                         uninvokedToolBlocks.Add(ficb);
                     }
 
-                    if (block.Role == currentMessage.Role)
+                    if (currentMessages.Any(request =>
+                        block.Role == request.Role))
                     {
                         if (!isInitialRequest || includeInitialRequestBlocks)
                         {
@@ -263,7 +267,7 @@ public class AgentContext(UIAgent agent) : IDisposable
 
                 startsThreadTurn = false;
                 isInitialRequest = false;
-                currentMessage = null;
+                currentMessages = [];
 
                 uninvokedToolBlocks.RemoveAll(b => b.Result is not null);
 
@@ -294,13 +298,36 @@ public class AgentContext(UIAgent agent) : IDisposable
 
                 if (results.Length > 0)
                 {
-                    var role = results.Any(r => r is not FunctionResultContent)
-                        ? ChatRole.User
-                        : ChatRole.Tool;
-                    currentMessage = new ChatMessage(role, [.. results])
+                    var messages = new List<ChatMessage>(2);
+                    var toolResults = results
+                        .OfType<FunctionResultContent>()
+                        .Cast<AIContent>()
+                        .ToArray();
+                    if (toolResults.Length > 0)
                     {
-                        MessageId = Guid.NewGuid().ToString("N"),
-                    };
+                        messages.Add(new ChatMessage(
+                            ChatRole.Tool,
+                            toolResults)
+                        {
+                            MessageId = Guid.NewGuid().ToString("N"),
+                        });
+                    }
+
+                    var userResults = results
+                        .Where(static result =>
+                            result is not FunctionResultContent)
+                        .ToArray();
+                    if (userResults.Length > 0)
+                    {
+                        messages.Add(new ChatMessage(
+                            ChatRole.User,
+                            userResults)
+                        {
+                            MessageId = Guid.NewGuid().ToString("N"),
+                        });
+                    }
+
+                    currentMessages = messages;
                 }
 
                 Status = ConversationStatus.Streaming;
@@ -309,6 +336,7 @@ public class AgentContext(UIAgent agent) : IDisposable
 
             cancellationToken.ThrowIfCancellationRequested();
             agent.CompleteThreadTurn();
+            agent.RejectPendingPredictiveState();
 
             _retryMessage = null;
             _retryHistoryCheckpoint = default;
@@ -318,11 +346,13 @@ public class AgentContext(UIAgent agent) : IDisposable
         }
         catch (Exception) when (cancellationToken.IsCancellationRequested)
         {
+            agent.RejectPendingPredictiveState();
             CleanupCanceledTurn(turn, historyCheckpoint, message);
             return AttemptOutcome.Canceled;
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
+            agent.RejectPendingPredictiveState();
             agent.RollbackHistory(historyCheckpoint, message);
             _retryMessage = message;
             _retryHistoryCheckpoint = historyCheckpoint;
@@ -340,6 +370,7 @@ public class AgentContext(UIAgent agent) : IDisposable
         var result = await agent.InvokeToolAsync(block.Call!, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         block.Result = result;
+        agent.ApplyFunctionResult(block, result);
         block.InvokeNotifyChanged();
         return result;
     }
@@ -362,9 +393,11 @@ public class AgentContext(UIAgent agent) : IDisposable
 
         _disposed = true;
         CancelAndDisposeStreaming();
+        agent.RejectPendingPredictiveState();
         _turnAddedCallbacks.Clear();
         _statusChangedCallbacks.Clear();
         _blockAddedCallbacks.Clear();
+        _responseBlocksClearedCallbacks.Clear();
     }
 
     private (CancellationTokenSource Source, CancellationToken Token)
@@ -394,6 +427,7 @@ public class AgentContext(UIAgent agent) : IDisposable
         ChatMessage requestMessage)
     {
         turn.ClearResponseBlocks();
+        NotifyResponseBlocksCleared(turn);
         agent.RollbackHistory(historyCheckpoint, requestMessage);
         _retryMessage = null;
         _retryHistoryCheckpoint = default;
@@ -434,6 +468,18 @@ public class AgentContext(UIAgent agent) : IDisposable
         return new CallbackRegistration<Action<ConversationTurn, ContentBlock>>(_blockAddedCallbacks, callback);
     }
 
+    /// <summary>
+    /// Registers a callback invoked when retry or cancellation removes every response block in a turn.
+    /// </summary>
+    public IDisposable RegisterOnResponseBlocksCleared(Action<ConversationTurn> callback)
+    {
+        ArgumentNullException.ThrowIfNull(callback);
+        _responseBlocksClearedCallbacks.Add(callback);
+        return new CallbackRegistration<Action<ConversationTurn>>(
+            _responseBlocksClearedCallbacks,
+            callback);
+    }
+
     private void NotifyStatusChanged()
     {
         var snapshot = _statusChangedCallbacks.ToArray();
@@ -453,6 +499,13 @@ public class AgentContext(UIAgent agent) : IDisposable
         var snapshot = _blockAddedCallbacks.ToArray();
         foreach (var cb in snapshot)
             cb(turn, block);
+    }
+
+    private void NotifyResponseBlocksCleared(ConversationTurn turn)
+    {
+        var snapshot = _responseBlocksClearedCallbacks.ToArray();
+        foreach (var callback in snapshot)
+            callback(turn);
     }
 
     private enum AttemptOutcome

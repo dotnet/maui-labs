@@ -49,7 +49,7 @@ internal sealed class UIActionHandler
             var innerBlock = new FunctionInvocationContentBlock { Call = call };
             var block = new UIActionBlock(action, innerBlock, _services)
             {
-                Id = call.CallId,
+                Id = innerBlock.Id,
             };
             state.Block = block;
             return BlockMappingResult<UIActionHandlerState>.Emit(block, state);

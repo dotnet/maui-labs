@@ -171,6 +171,104 @@ public class StateMapperTests
         Assert.Same(update, context.GetFilteredUpdate());
     }
 
+    [Fact]
+    public async Task PredictiveState_Unaccepted_RollsBackWhenTurnCompletes()
+    {
+        var initial = new RecipeState { Title = "Initial" };
+        var agent = CreatePredictiveAgent(
+            CreateClient(EmitStateOnly()),
+            initial);
+        var observed = new List<string>();
+        agent.State.OnChanged(() => observed.Add(agent.State.Value.Title));
+        var context = new AgentContext(agent);
+
+        await context.SendMessageAsync("Recipe?");
+
+        Assert.Equal(["Pasta", "Initial"], observed);
+        Assert.Same(initial, agent.State.Value);
+        Assert.False(agent.State.HasPendingPredictiveState);
+    }
+
+    [Fact]
+    public async Task PredictiveState_AcceptedDuringTurn_Persists()
+    {
+        var initial = new RecipeState { Title = "Initial" };
+        var agent = CreatePredictiveAgent(
+            CreateClient(EmitStateOnly()),
+            initial);
+        agent.State.OnChanged(() =>
+        {
+            if (agent.State.HasPendingPredictiveState)
+                agent.State.AcceptPredictiveState();
+        });
+        var context = new AgentContext(agent);
+
+        await context.SendMessageAsync("Recipe?");
+
+        Assert.Equal("Pasta", agent.State.Value.Title);
+        Assert.False(agent.State.HasPendingPredictiveState);
+    }
+
+    [Fact]
+    public async Task PredictiveState_Error_RollsBack()
+    {
+        var initial = new RecipeState { Title = "Initial" };
+        var agent = CreatePredictiveAgent(
+            CreateClient(EmitStateThenThrow()),
+            initial);
+        var context = new AgentContext(agent);
+
+        await context.SendMessageAsync("Recipe?");
+
+        Assert.Equal(ConversationStatus.Error, context.Status);
+        Assert.Same(initial, agent.State.Value);
+        Assert.False(agent.State.HasPendingPredictiveState);
+    }
+
+    [Fact]
+    public async Task PredictiveState_Cancel_RollsBack()
+    {
+        var initial = new RecipeState { Title = "Initial" };
+        var started = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((_, _, cancellationToken) =>
+            EmitStateThenWait(started, cancellationToken));
+        var agent = CreatePredictiveAgent(
+            client,
+            initial);
+        var context = new AgentContext(agent);
+
+        var sendTask = context.SendMessageAsync("Recipe?");
+        await started.Task;
+        Assert.True(agent.State.HasPendingPredictiveState);
+
+        await context.CancelAsync();
+        await sendTask;
+
+        Assert.Equal(ConversationStatus.Idle, context.Status);
+        Assert.Same(initial, agent.State.Value);
+        Assert.False(agent.State.HasPendingPredictiveState);
+    }
+
+    [Fact]
+    public void PredictiveState_ClearAndDispose_RollBack()
+    {
+        var initial = new RecipeState { Title = "Initial" };
+        var agent = new UIAgent<RecipeState>(
+            new DelegatingStreamingChatClient(),
+            initial);
+        var context = new AgentContext(agent);
+
+        agent.State.SetPredictiveValue(new RecipeState { Title = "Clear" });
+        context.Clear();
+        Assert.Same(initial, agent.State.Value);
+
+        agent.State.SetPredictiveValue(new RecipeState { Title = "Dispose" });
+        context.Dispose();
+        Assert.Same(initial, agent.State.Value);
+    }
+
     private static UIAgent<RecipeState> CreateRecipeAgent(
         IChatClient client,
         IConversationThread? thread = null)
@@ -200,6 +298,37 @@ public class StateMapperTests
                 return false;
             };
         });
+    }
+
+    private static UIAgent<RecipeState> CreatePredictiveAgent(
+        IChatClient client,
+        RecipeState initial)
+    {
+        return new UIAgent<RecipeState>(client, options =>
+        {
+            options.StateMapper = context =>
+            {
+                foreach (var content in context.UnhandledContents)
+                {
+                    if (content is not TextContent textContent
+                        || textContent.Text is not { } text
+                        || !text.StartsWith('{'))
+                    {
+                        continue;
+                    }
+
+                    var state = JsonSerializer.Deserialize<RecipeState>(text);
+                    if (state is null)
+                        continue;
+
+                    context.MarkHandled(content);
+                    context.SetPredictiveState(state);
+                    return true;
+                }
+
+                return false;
+            };
+        }, initial);
     }
 
     private static AIContent GetFirstUnhandled(StateMapperContext context)
@@ -258,5 +387,25 @@ public class StateMapperTests
             ],
         };
         await Task.CompletedTask;
+    }
+
+    private static async IAsyncEnumerable<ChatResponseUpdate> EmitStateThenThrow(
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await foreach (var update in EmitStateOnly(cancellationToken))
+            yield return update;
+
+        throw new InvalidOperationException("failure after prediction");
+    }
+
+    private static async IAsyncEnumerable<ChatResponseUpdate> EmitStateThenWait(
+        TaskCompletionSource started,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await foreach (var update in EmitStateOnly(cancellationToken))
+            yield return update;
+
+        started.SetResult();
+        await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
     }
 }

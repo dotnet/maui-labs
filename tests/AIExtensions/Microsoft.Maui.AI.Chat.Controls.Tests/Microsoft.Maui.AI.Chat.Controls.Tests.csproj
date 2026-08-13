@@ -12,6 +12,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\AIExtensions\Microsoft.Maui.AI.Chat\Microsoft.Maui.AI.Chat.csproj" />
     <ProjectReference Include="..\..\..\src\AIExtensions\Microsoft.Maui.AI.Chat.Controls\Microsoft.Maui.AI.Chat.Controls.csproj" />
+    <ProjectReference Include="..\..\..\src\AIExtensions\Microsoft.Maui.Chat.Controls\Microsoft.Maui.Chat.Controls.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />

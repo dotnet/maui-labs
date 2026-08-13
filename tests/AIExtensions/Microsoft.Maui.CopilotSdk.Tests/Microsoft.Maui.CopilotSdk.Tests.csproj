@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Microsoft.Maui.CopilotSdk.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsShipping>false</IsShipping>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Deterministic tests use a fake backend and never launch the runtime; live tests locate the
+         installed CLI explicitly. Skip the build-time CLI download so the test build stays offline. -->
+    <CopilotSkipCliDownload>true</CopilotSkipCliDownload>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.Extensions.AI" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="GitHub.Copilot.SDK" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\AIExtensions\Microsoft.Maui.CopilotSdk\Microsoft.Maui.CopilotSdk.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

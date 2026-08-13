@@ -194,4 +194,39 @@ public class ContentContextTests
         var session = SessionFactory.Create("ok");
         Assert.Throws<ArgumentNullException>(() => new ContentContext(session, null!));
     }
+
+    [Fact]
+    public void BlockChange_RaisesPropertyChangedWithoutReplacingContext()
+    {
+        var context = BlockFactory.MakeText("Assistant", "streaming");
+        var changed = 0;
+        context.PropertyChanged += (_, _) => changed++;
+
+        Assert.IsType<TextContentBlock>(context.Block).AppendText(" more");
+        context.NotifyBlockChanged();
+
+        Assert.Equal(1, changed);
+    }
+
+    [Fact]
+    public void ContentContextView_RefreshesWhenSameContextChanges()
+    {
+        var context = BlockFactory.MakeText("Assistant", "streaming");
+        var view = new CountingContentContextView();
+
+        view.ApplyContentContext(context);
+        Assert.IsType<TextContentBlock>(context.Block).AppendText(" more");
+        context.NotifyBlockChanged();
+
+        Assert.Same(context, view.ContentContext);
+        Assert.Equal(2, view.RefreshCount);
+    }
+
+    private sealed class CountingContentContextView : ContentContextView
+    {
+        internal int RefreshCount { get; private set; }
+
+        protected override void RefreshFromContentContext() =>
+            RefreshCount++;
+    }
 }

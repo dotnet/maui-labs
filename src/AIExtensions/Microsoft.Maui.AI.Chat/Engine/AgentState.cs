@@ -12,6 +12,7 @@ namespace Microsoft.Maui.AI.Chat;
 public sealed class AgentState<T> where T : class, new()
 {
     private T _value;
+    private T? _valueBeforePrediction;
     private readonly List<Action> _callbacks = new();
 
     internal AgentState(T? initialValue = null)
@@ -27,8 +28,41 @@ public sealed class AgentState<T> where T : class, new()
         {
             ArgumentNullException.ThrowIfNull(value);
             _value = value;
+            _valueBeforePrediction = null;
             NotifyChanged();
         }
+    }
+
+    /// <summary>Gets whether the current value is provisional and can still be rejected.</summary>
+    public bool HasPendingPredictiveState => _valueBeforePrediction is not null;
+
+    /// <summary>Accepts the current predictive value as the committed state.</summary>
+    public void AcceptPredictiveState()
+    {
+        if (_valueBeforePrediction is null)
+            return;
+
+        _valueBeforePrediction = null;
+        NotifyChanged();
+    }
+
+    /// <summary>Restores the state that was current before the pending prediction.</summary>
+    public void RejectPredictiveState()
+    {
+        if (_valueBeforePrediction is not { } previous)
+            return;
+
+        _value = previous;
+        _valueBeforePrediction = null;
+        NotifyChanged();
+    }
+
+    internal void SetPredictiveValue(T value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        _valueBeforePrediction ??= _value;
+        _value = value;
+        NotifyChanged();
     }
 
     /// <summary>Registers a callback invoked whenever <see cref="Value"/> is replaced.</summary>

@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.AI.Attributes;
 using Microsoft.Maui.AI.Chat;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AIExtensions.Sample.Garden.ViewModels;
 
@@ -77,23 +78,29 @@ public sealed partial class ChatViewModel : ObservableObject,
         FORMATTING:
         - Format text answers with **bold** for emphasis and "- " bullets for lists.
 
+        Be concise and friendly.
+        """;
+
+    private const string ImagePrompt =
+        """
+
         IMAGES:
         - When the user asks you to draw, generate, or picture something, use image generation.
-
-        Be concise and friendly.
         """;
 
     private bool _turnActive;
 
     private readonly IChatClient _chatClient;
+    private readonly bool _imageGenerationEnabled;
 
     // The handler mode of the current Session. Switching mode requires a new session (handlers are baked
     // into the pipeline), so this is tracked here and compared against incoming new-session requests.
     private bool _useCustomHandlers = true;
 
-    public ChatViewModel(IChatClient chatClient)
+    public ChatViewModel(IChatClient chatClient, IServiceProvider services)
     {
         _chatClient = chatClient;
+        _imageGenerationEnabled = services.GetService<IImageGenerator>() is not null;
 
         // A single live session. Its handler set is baked into the pipeline, so switching handler mode
         // recreates the session (see the StartNewChatSessionMessage handler) rather than holding several.
@@ -113,19 +120,20 @@ public sealed partial class ChatViewModel : ObservableObject,
     /// </summary>
     private AgentContext CreateSession(bool useCustomHandlers)
     {
-        // Image generation is always available: the hosted tool lets the model produce images inline,
-        // and MauiProgram wires the matching UseImageGeneration middleware beneath function invocation
-        // so the image streams back as DataContent and renders through the built-in MediaContentTemplate.
-        var tools = new List<AITool>(GardenShopTools.Default.Tools)
-        {
-            new HostedImageGenerationTool(),
-        };
+        // Image generation is optional. MauiProgram registers its middleware only when an image
+        // deployment is configured; in that case the hosted tool streams DataContent that the
+        // built-in MediaContentTemplate renders.
+        var tools = new List<AITool>(GardenShopTools.Default.Tools);
+        if (_imageGenerationEnabled)
+            tools.Add(new HostedImageGenerationTool());
 
         var agent = new UIAgent(_chatClient, options =>
         {
             options.ChatOptions = new ChatOptions
             {
-                Instructions = SystemPrompt,
+                Instructions = _imageGenerationEnabled
+                    ? SystemPrompt + ImagePrompt
+                    : SystemPrompt,
                 Tools = [.. tools],
             };
 

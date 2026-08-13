@@ -17,6 +17,7 @@ public class FunctionInvocationContentBlockTests
         };
 
         Assert.Equal("GetWeather", block.ToolName);
+        Assert.Equal("call-1", block.Id);
     }
 
     [Fact]
@@ -60,5 +61,20 @@ public class FunctionInvocationContentBlockTests
     {
         var block = new FunctionInvocationContentBlock();
         Assert.Null(block.Arguments);
+    }
+
+    [Fact]
+    public void Call_EmptyCallId_AssignsStableFallbackId()
+    {
+        var block = new FunctionInvocationContentBlock
+        {
+            Call = new FunctionCallContent("", "GetWeather", null),
+        };
+        var assignedId = block.Id;
+
+        block.Call = new FunctionCallContent("", "GetWeather", null);
+
+        Assert.False(string.IsNullOrWhiteSpace(assignedId));
+        Assert.Equal(assignedId, block.Id);
     }
 }
