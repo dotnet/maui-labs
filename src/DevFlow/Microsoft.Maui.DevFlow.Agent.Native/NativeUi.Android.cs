@@ -91,8 +91,13 @@ internal static partial class NativeUi
         var density = DisplayDensity;
         var type = view.GetType();
 
+        // GetLocationInWindow (not GetLocationOnScreen) so bounds land in DevFlow's advertised
+        // window-logical coordinate space — relative to this window's own origin, not the
+        // screen. Using screen coordinates here would desync hit testing and Inspector overlays
+        // from tap/screenshot coordinates the moment the window isn't at the screen origin (e.g.
+        // multi-window/free-form mode on large-screen and ChromeOS devices).
         var location = new int[2];
-        view.GetLocationOnScreen(location);
+        view.GetLocationInWindow(location);
 
         var descriptor = new NativeViewDescriptor
         {

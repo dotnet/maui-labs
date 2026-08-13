@@ -39,7 +39,13 @@ internal sealed class NativeViewDescriptor
 
     public double Opacity { get; set; } = 1.0;
 
-    /// <summary>Bounds in device-independent units, relative to the screen.</summary>
+    /// <summary>
+    /// Bounds in device-independent units, in window-logical coordinates: top-left origin,
+    /// relative to the containing window (not the screen). This matches the
+    /// <c>window-logical-coordinates</c> feature every native backend advertises under
+    /// <c>ui.hit-test</c>, so hit testing and Inspector overlays stay correct even when the
+    /// window isn't at the screen origin.
+    /// </summary>
     public double X { get; set; }
 
     public double Y { get; set; }

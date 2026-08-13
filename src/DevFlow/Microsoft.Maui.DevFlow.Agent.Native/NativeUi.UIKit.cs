@@ -81,6 +81,11 @@ internal static partial class NativeUi
     {
         var view = (UIView)viewObject;
         var type = view.GetType();
+
+        // ConvertRectToView(bounds, null) yields UIKit's window base coordinates — top-left
+        // origin, already relative to the containing window rather than the screen. That already
+        // matches the window-logical coordinates DevFlow's ui.hit-test capability advertises, so,
+        // unlike AppKit/Android, no further flip or offset is needed here.
         var frame = view.ConvertRectToView(view.Bounds, null);
 
         var descriptor = new NativeViewDescriptor

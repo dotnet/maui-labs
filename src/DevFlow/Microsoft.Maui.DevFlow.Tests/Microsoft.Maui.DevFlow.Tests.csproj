@@ -85,6 +85,12 @@
          drives this code is nondeterministic. -->
     <Compile Include="..\Microsoft.Maui.DevFlow.Agent.Native\NativeElementRegistry.cs"
              Link="Native\NativeElementRegistry.cs" />
+    <!-- The AppKit window-base-to-top-left flip is pure math with no AppKit dependency, so it is
+         worth covering here directly: it is the part of the native agent's coordinate reporting
+         most likely to regress silently, since the bug it fixes (screen-absolute bounds instead
+         of window-logical ones) only shows up once a window moves away from the screen origin. -->
+    <Compile Include="..\Microsoft.Maui.DevFlow.Agent.Native\NativeUi.Coordinates.cs"
+             Link="Native\NativeUi.Coordinates.cs" />
   </ItemGroup>
 
 </Project>

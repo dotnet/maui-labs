@@ -75,13 +75,15 @@ internal static partial class NativeUi
         var type = view.GetType();
         var window = view.Window;
 
-        // AppKit's origin is bottom-left; DevFlow reports top-left screen coordinates.
+        // ConvertRectToView(bounds, null) yields AppKit's window base coordinates: bottom-left
+        // origin, already relative to the containing window (not the screen). DevFlow's
+        // ui.hit-test capability advertises window-logical coordinates — top-left origin,
+        // relative to that same window — so flip against the window's own frame height rather
+        // than the screen's, or hit testing and Inspector overlays go stale the moment the
+        // window moves away from the screen origin.
         var inWindow = view.ConvertRectToView(view.Bounds, null);
-        var screenY = window == null
-            ? inWindow.Y
-            : (window.Screen ?? NSScreen.MainScreen)!.Frame.Height
-              - (window.Frame.Y + inWindow.Y + inWindow.Height);
-        var screenX = window == null ? inWindow.X : window.Frame.X + inWindow.X;
+        var windowHeight = window?.Frame.Height ?? inWindow.Y + inWindow.Height;
+        var (windowX, windowY) = FlipAppKitWindowBaseToTopLeft(inWindow.X, inWindow.Y, inWindow.Height, windowHeight);
 
         var descriptor = new NativeViewDescriptor
         {
@@ -94,8 +96,8 @@ internal static partial class NativeUi
             IsFocused = window?.FirstResponder == view
                 || view is NSTextField { CurrentEditor: { } editor } && window?.FirstResponder == editor,
             Opacity = view.AlphaValue,
-            X = screenX,
-            Y = screenY,
+            X = windowX,
+            Y = windowY,
             Width = view.Bounds.Width,
             Height = view.Bounds.Height,
             IsScrollable = view is NSScrollView,
