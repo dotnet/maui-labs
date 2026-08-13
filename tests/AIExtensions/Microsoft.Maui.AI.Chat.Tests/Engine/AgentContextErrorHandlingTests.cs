@@ -199,6 +199,8 @@ public class AgentContextErrorHandlingTests
 
         var agent = new UIAgent(client);
         var context = new AgentContext(agent);
+        ConversationTurn? clearedTurn = null;
+        context.RegisterOnResponseBlocksCleared(turn => clearedTurn = turn);
 
         var sendTask = context.SendMessageAsync("Hello");
         await streamStarted.Task;
@@ -208,6 +210,7 @@ public class AgentContextErrorHandlingTests
 
         var turn = context.Turns[0];
         Assert.Empty(turn.ResponseBlocks);
+        Assert.Same(turn, clearedTurn);
 
         static async IAsyncEnumerable<ChatResponseUpdate> SlowStream(
             TaskCompletionSource streamStarted,

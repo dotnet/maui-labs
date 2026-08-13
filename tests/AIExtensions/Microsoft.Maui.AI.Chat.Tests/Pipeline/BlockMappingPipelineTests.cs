@@ -153,11 +153,14 @@ public class BlockMappingPipelineTests
         };
         var blocks = await ProcessAsync(pipeline, update);
         var block = blocks[0];
+        var changed = 0;
+        using var subscription = block.OnChanged(() => changed++);
         Assert.Equal(BlockLifecycleState.Active, block.LifecycleState);
 
         pipeline.Finalize();
 
         Assert.Equal(BlockLifecycleState.Inactive, block.LifecycleState);
+        Assert.Equal(1, changed);
     }
 
     [Fact]

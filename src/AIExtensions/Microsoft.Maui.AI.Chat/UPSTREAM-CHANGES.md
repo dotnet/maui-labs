@@ -1,128 +1,164 @@
 # ASP.NET Components.AI convergence
 
 `Microsoft.Maui.AI.Chat` shares its block/pipeline ancestry with the experimental
-`Microsoft.AspNetCore.Components.AI` work in
-[dotnet/aspnetcore PR #67673](https://github.com/dotnet/aspnetcore/pull/67673)
-(`javiercn/components-ai-full`).
+`Microsoft.AspNetCore.Components.AI` work in dotnet/aspnetcore.
 
-This document records the current semantic relationship. It is not an old MVP "removed features"
-list: the portable engine capabilities have been re-evaluated and brought back where appropriate.
+The old monolithic PR #67673 is closed. The current reference is the incremental
+01-09 stack whose top is:
 
-Compared reference during the August 2026 convergence:
+- PR: [dotnet/aspnetcore#68335](https://github.com/dotnet/aspnetcore/pull/68335)
+- Branch: `javiercn-components-ai-09-predictive-state`
+- Compared SHA: `6c0a11d222844fb83840b136ec0d2ef0cdab1b83`
+- Compared on: 2026-08-13
 
-- ASP.NET head: `ee195cbda0b8e4fe831ec54bfa40e03795a93e1e`
-- MAUI branch: `mattleibow/ai-chat-mvp`
-
-The ASP.NET PR remains experimental, unapproved, and may change. Revalidate this map when updating
-the reference.
+The 01 streaming-chat layer is merged to ASP.NET `main`; layers 02 rich text
+through 09 predictive state remain stacked open PRs. All open layers require
+review and have no human approval yet. Completed Components E2E runs at the
+stack merge ref report no failures in the main CoreCLR/Mono legs; unrelated
+quarantine buckets make the aggregate run partially successful.
 
 ## Portable engine status
 
 | Capability | MAUI status |
 |---|---|
-| Block lifecycle/change notifications | Converged; `ContentBlock.Id` stays publicly settable for external custom blocks |
+| Block lifecycle/change notifications | Converged; `ContentBlock.Id` remains publicly settable for external custom blocks |
 | Two-phase block mapping/custom handlers | Converged |
-| Streaming rich text | Converged with compatibility `TextContentBlock : RichContentBlock` |
-| Rich-text node vocabulary | Converged; built-in projection intentionally produces paragraphs/text only |
-| Function call/result pairing | Converged with MAUI fix for batched out-of-order results |
-| Media | Converged plus hosted-image result extraction |
-| Approval | Converged as `ToolApprovalBlock`; decisions are single-use |
-| Reasoning/protected reasoning | Converged |
-| Automatic UI actions | Converged and improved: non-human actions auto-run without `AwaitingInput` |
-| Typed state/state mapper | Converged (`UIAgent<TState>`, `AgentState<T>`, `StateMapperContext`) |
+| Streaming plain text | Converged |
+| Provider-supplied rich AST | Converged with `RichTextContent` + `RichTextContentHandler` |
+| Rich-text node vocabulary | Converged; provider supplies a parsed tree and the library does not claim a Markdown parser |
+| Native rich rendering | MAUI equivalent covers headings, inline styles, code, quotes, lists, safe links/images, tables, and footnotes |
+| Function call/result pairing | Converged with order-independent `CallId` matching |
+| Media | MAUI superset; current ASP.NET stack removed media blocks/handlers |
+| Reasoning/protected reasoning | MAUI preserved; current ASP.NET stack removed reasoning blocks/handlers |
+| Approval | Converged; decisions are single-use and rejection reasons propagate |
+| Automatic UI actions | MAUI improvement: actions auto-run without entering human `AwaitingInput` |
+| Typed state/state mapper | Converged |
+| Predictive state | Converged: provisional values can be accepted/rejected and otherwise roll back at turn completion, cancellation, error, clear, or dispose |
+| Shared state/stateful provider | Converged through thread replay plus `ConversationId` forwarding |
 | Conversation threads/restore | Converged plus explicit thread `Clear()` |
 | Retry/cancellation | Converged with separate graceful cancel and observable caller cancellation |
 | `[ToolBlock]` generator | Converged in `Microsoft.Maui.AI.Chat.Generators` |
-| Activity blocks | Not added: upstream activity support is opt-in scaffolding and not in its default pipeline |
+| Activity blocks | Not added to defaults; ASP.NET still leaves activity handlers unregistered |
+
+## Current ASP.NET changes deliberately interpreted, not copied
+
+### Rich text
+
+ASP.NET now accepts a `RichTextContent` `AIContent` carrying both source text and
+an already-parsed node tree. It does not parse Markdown in the library. MAUI
+uses the same contract and renders the shared node vocabulary with native
+controls rather than HTML.
+
+### Predictive state
+
+`StateMapperContext.SetPredictiveState` applies a typed state value
+provisionally. `AgentState<T>.AcceptPredictiveState()` commits it;
+`RejectPredictiveState()` restores the value that existed before the first
+pending prediction. An unaccepted prediction is rejected when the turn ends,
+is cancelled, fails, is cleared, or the context is disposed.
+
+This remains inbound server-to-client state mapping. Neither implementation
+ships a symmetric outbound state channel.
+
+### Minimal UI surface
+
+The current ASP.NET stack removed media/reasoning components, drawer/bubble
+shells, suggestions, attachment input, SSR form components, and component-based
+block renderers. Those removals are not a specification for native MAUI.
 
 ## Deliberate MAUI differences
 
 ### Package layering
 
-MAUI keeps the portable engine and native UI in separate shipping packages:
+- `Microsoft.Maui.AI.Chat` - plain `net10.0`, no MAUI/Blazor dependency.
+- `Microsoft.Maui.AI.Chat.Controls` - native AI controls/templates.
+- `Microsoft.Maui.Chat.Controls` - provider-neutral human/group chat surface.
 
-- `Microsoft.Maui.AI.Chat` — plain `net10.0`, no MAUI/Blazor dependency.
-- `Microsoft.Maui.AI.Chat.Controls` — native MAUI controls/templates.
-
-ASP.NET currently ships engine and Blazor components together.
+ASP.NET currently ships its engine and Blazor components together.
 
 ### Native rendering
 
-Blazor `MessageList`, `BlockRenderer<T>`, `ChatPage`, CSS, SSR forms, drawer, and bubble components
-are not copied literally. MAUI uses:
+MAUI uses:
 
-- virtualized `MessageListView`;
-- zero-config `CopilotChatView`;
-- priority-based XAML `ContentTemplate`s;
-- replaceable `ControlTemplate`;
+- virtualized `CollectionView` message rendering;
+- zero-configuration `CopilotChatView`;
+- a provider-neutral `ChatView`;
+- priority-based XAML content templates;
+- replaceable control templates;
 - dynamic resource theming;
-- native file picker attachments;
-- 50 ms streaming refresh coalescing;
-- explicit `Session` binding instead of cascading components.
-
-A host can place the same control in a page, drawer, flyout, or floating layout without adding
-web-specific shell APIs.
+- native file picking/media;
+- coalesced in-place streaming refresh;
+- explicit session/conversation binding.
 
 ### Tool generation
 
-Two complementary generators ship:
+- `Microsoft.Maui.AI.Attributes` generates AOT-friendly `AIFunction`s with
+  DI/keyed-DI binding.
+- `Microsoft.Maui.AI.Chat.Generators` generates simple one-call/one-result block
+  handlers.
 
-- `Microsoft.Maui.AI.Attributes` generates AOT-friendly `AIFunction`s with DI/keyed-DI binding.
-- `Microsoft.Maui.AI.Chat.Generators` generates simple one-call/one-result block handlers.
-
-Many-to-one aggregation and nontrivial custom event projection remain handwritten handlers.
+Many-to-one aggregation and custom event projection remain handwritten
+handlers.
 
 ### Threading
 
-The engine and controls are deliberately single-thread-affine and not thread-safe. Callers
-serialize access and dispatch background entry to the owning application thread. No locks,
-semaphores, or arbitrary concurrent-caller contract is added.
+The engine and controls are deliberately single-thread-affine and not
+thread-safe. Callers serialize access and enter the owning application thread.
+No locks, semaphores, operation gates, or arbitrary concurrent-caller contract
+is added.
 
 ## MAUI improvements intentionally preserved
 
-- Public `ContentBlock.Id` supports external arbitrary custom blocks. ASP.NET's internal setter
-  prevents its documented external custom-block pattern from compiling.
-- Function results are matched by scanning for the correct `CallId`, including reverse-order
-  batches. The compared ASP.NET handler takes the first result and can miss the match.
+- Public `ContentBlock.Id` keeps arbitrary external custom blocks viable.
+- Function results match by `CallId`, including reverse-order batches.
 - `ImageGenerationToolResultContent.Outputs` are unwrapped into media blocks.
-- `AgentContext.Clear()` resets local and persistent conversation state coherently.
-- UI actions auto-run; ASP.NET currently stalls until app code manually invokes them.
-- Default errors are generic; exceptions remain available through `AgentContext.Error`.
-- Native `CollectionView` virtualization and update coalescing are retained.
+- Media and reasoning remain supported despite their removal upstream.
+- `AgentContext.Clear()` resets local and persistent history coherently.
+- UI actions auto-run and do not stall in `AwaitingInput`.
+- Default errors are generic; diagnostics remain on `AgentContext.Error`.
+- Native virtualization and streaming coalescing are retained.
+- Response-block removals are notified precisely rather than rediscovered with
+  an O(n) projection diff.
 - The full XAML/template/resource customization model remains MAUI-native.
 
-## Upstream surfaces deliberately not copied
+## Upstream limitations not copied
 
-- Static SSR form posts, antiforgery, and render-mode plumbing.
-- Blazor render-tree/cascading-value APIs and CSS class contracts.
-- Dormant `RichContentBlock.MediaItems`.
-- Unused `BlockLifecycleState.Pending` semantics.
-- Activity handlers that are not default-wired.
-- Internal block ID restrictions.
-- UI-action orchestration that incorrectly enters human `AwaitingInput`.
-- Raw exception rendering in turnkey shells.
+- External non-function custom blocks still cannot assign ASP.NET's required
+  internal-set `ContentBlock.Id`.
+- Client/UI actions still require renderer code to call `InvokeAsync`; the
+  engine otherwise waits indefinitely.
+- The activity handler remains unregistered and `Pending` lifecycle remains
+  unused.
+- Restore still rebuilds display history rather than resumable interactions.
+- `RawRepresentation` is not a durable serialized discriminator.
+- No production conversation-thread provider ships.
+- Pipeline handler cancellation remains reserved rather than propagated.
+- Blazor `MessageList` is not virtualized.
+- The rich-text library accepts provider ASTs but does not parse Markdown.
+- Media/multimodal and reasoning handling are absent in the current stack.
 
 ## Persistence limitations
 
-`IConversationThread` stores committed raw `ChatResponseUpdate`s, not rendered block snapshots.
-Restore replays updates through the current handlers and state mapper.
+`IConversationThread` stores committed raw `ChatResponseUpdate`s, not rendered
+block snapshots. Restore replays updates through current handlers and the state
+mapper.
 
-- No storage provider ships.
+- Applications own persistence and serialization.
 - Custom handlers must remain registered.
-- Custom discriminators must survive serialization; `RawRepresentation` is not durable unless an
-  implementation explicitly persists it.
-- Restored pending approvals/UI actions are display history, not resumable live work.
-- The MAUI thread contract adds `Clear()` to preserve the control's explicit new-chat behavior.
+- Custom discriminators must survive serialization.
+- Restored pending approvals/UI actions are display history, not resumable work.
+- The thread must round-trip roles, IDs, contents, additional properties, and
+  provider conversation IDs.
 
 ## Updating the reference
 
-Use a separate read-only checkout that tracks the reference branch:
+The read-only comparison worktree used for this review tracks the stack top:
 
 ```bash
-git clone --branch javiercn/components-ai-full https://github.com/dotnet/aspnetcore.git
-cd aspnetcore
+cd /Users/matthew/.copilot/repos/copilot-worktrees/aspnetcore/mattleibow-vigilant-potato
 git pull --ff-only
 ```
 
-After refreshing, compare the portable `Blocks/`, `Engine/`, `Pipeline/`, attributes/generator,
-tests, and PR discussion. Do not assume the open ASP.NET PR is a finalized specification.
+Re-check the entire effective stack, not only PR #68335's predictive-state
+delta: blocks, engine, pipeline, generator, tests, dojo scenarios, review
+threads, and completed CI runs.

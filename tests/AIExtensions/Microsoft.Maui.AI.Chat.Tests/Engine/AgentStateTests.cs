@@ -80,4 +80,79 @@ public class AgentStateTests
 
         Assert.Throws<ArgumentNullException>(() => agent.State.Value = null!);
     }
+
+    [Fact]
+    public void PredictiveValue_Reject_RestoresOriginalValue()
+    {
+        var initial = new TestState { Name = "initial" };
+        var agent = new UIAgent<TestState>(
+            new DelegatingStreamingChatClient(),
+            initial);
+        var predicted = new TestState { Name = "predicted" };
+
+        agent.State.SetPredictiveValue(predicted);
+
+        Assert.True(agent.State.HasPendingPredictiveState);
+        Assert.Same(predicted, agent.State.Value);
+
+        agent.State.RejectPredictiveState();
+
+        Assert.False(agent.State.HasPendingPredictiveState);
+        Assert.Same(initial, agent.State.Value);
+    }
+
+    [Fact]
+    public void PredictiveValue_Accept_KeepsPredictedValue()
+    {
+        var agent = new UIAgent<TestState>(new DelegatingStreamingChatClient());
+        var predicted = new TestState { Name = "predicted" };
+
+        agent.State.SetPredictiveValue(predicted);
+        agent.State.AcceptPredictiveState();
+
+        Assert.False(agent.State.HasPendingPredictiveState);
+        Assert.Same(predicted, agent.State.Value);
+    }
+
+    [Fact]
+    public void PredictiveValue_MultipleUpdates_RejectsToOriginalValue()
+    {
+        var initial = new TestState { Name = "initial" };
+        var agent = new UIAgent<TestState>(
+            new DelegatingStreamingChatClient(),
+            initial);
+
+        agent.State.SetPredictiveValue(new TestState { Name = "first" });
+        agent.State.SetPredictiveValue(new TestState { Name = "second" });
+        agent.State.RejectPredictiveState();
+
+        Assert.Same(initial, agent.State.Value);
+    }
+
+    [Fact]
+    public void Value_CommittedWhilePredictionPending_ClearsPrediction()
+    {
+        var agent = new UIAgent<TestState>(new DelegatingStreamingChatClient());
+        agent.State.SetPredictiveValue(new TestState { Name = "predicted" });
+        var committed = new TestState { Name = "committed" };
+
+        agent.State.Value = committed;
+        agent.State.RejectPredictiveState();
+
+        Assert.False(agent.State.HasPendingPredictiveState);
+        Assert.Same(committed, agent.State.Value);
+    }
+
+    [Fact]
+    public void AcceptAndReject_WithoutPrediction_AreNoOps()
+    {
+        var agent = new UIAgent<TestState>(new DelegatingStreamingChatClient());
+        var changed = 0;
+        agent.State.OnChanged(() => changed++);
+
+        agent.State.AcceptPredictiveState();
+        agent.State.RejectPredictiveState();
+
+        Assert.Equal(0, changed);
+    }
 }

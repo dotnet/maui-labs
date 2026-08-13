@@ -52,6 +52,9 @@ internal class BlockMappingPipeline
         // Built-in media handler (before text so DataContent is claimed before fallback)
         _handlers.Add(new HandlerEntry<MediaContentBlock>(new MediaContentHandler()));
 
+        // Provider-supplied rich snapshots take precedence over the plain text fallback.
+        _handlers.Add(new HandlerEntry<RichContentBlock>(new RichTextContentHandler()));
+
         // Built-in text handler is always last (fallback)
         _handlers.Add(new HandlerEntry<TextContentBlock>(new TextBlockHandler()));
     }
@@ -157,6 +160,7 @@ internal class BlockMappingPipeline
         foreach (var active in _activeStack)
         {
             active.Block.LifecycleState = BlockLifecycleState.Inactive;
+            active.Block.InvokeNotifyChanged();
         }
         _activeStack.Clear();
 

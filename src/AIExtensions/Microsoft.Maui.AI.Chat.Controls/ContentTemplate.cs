@@ -1,96 +1,50 @@
-using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Maui.AI.Chat;
+using Microsoft.Maui.Chat.Controls;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
 
 /// <summary>
-/// Maps a <see cref="ContentContext"/> to a view via the <see cref="When"/> predicate and a
-/// <c>ViewType</c>. Declare instances in XAML inside <see cref="CopilotChatView"/>.ContentTemplates.
+/// AI-specific content template bridge. Existing consumers keep matching <see cref="ContentContext"/>
+/// while the neutral selector operates on <see cref="ChatContentItem"/>.
 /// </summary>
-/// <remarks>
-/// The <see cref="ContentTemplateSelector"/> evaluates all templates and picks the highest-priority
-/// match. Subclasses target a specific <see cref="ContentBlock"/> kind (text, tool call/result, media,
-/// approval); <see cref="GenericContentTemplate"/> matches declaratively by role/tool/block type.
-/// </remarks>
-public abstract class ContentTemplate : BindableObject
+public abstract class ContentTemplate : ChatContentTemplate
 {
-    public static readonly BindableProperty ViewTypeProperty =
-        BindableProperty.Create(nameof(ViewType), typeof(Type), typeof(ContentTemplate));
+    /// <inheritdoc />
+    public sealed override bool When(ChatContentItem item) =>
+        item is ContentContext context && When(context);
 
-    public static readonly BindableProperty PriorityProperty =
-        BindableProperty.Create(nameof(Priority), typeof(int), typeof(ContentTemplate), 0);
-
-    public Type? ViewType
-    {
-        get => (Type?)GetValue(ViewTypeProperty);
-        set => SetValue(ViewTypeProperty, value);
-    }
-
-    /// <summary>
-    /// Gets the selection priority for this template. Higher priorities win over lower priorities.
-    /// Templates with the same priority preserve declaration order.
-    /// </summary>
-    public int Priority
-    {
-        get => (int)GetValue(PriorityProperty);
-        set => SetValue(PriorityProperty, value);
-    }
-
-    /// <summary>Return true if this template should handle the given content.</summary>
+    /// <summary>Gets whether this template handles an AI content context.</summary>
     public abstract bool When(ContentContext context);
 
-    private DataTemplate? _cachedTemplate;
+    /// <inheritdoc />
+    public sealed override int GetPriority(ChatContentItem item) =>
+        item is ContentContext context
+            ? GetPriority(context)
+            : int.MinValue;
 
-    /// <summary>
-    /// Returns a cached DataTemplate for the ViewType. MAUI requires the same
-    /// instance on repeated calls to avoid memory leaks and broken virtualization.
-    /// Subclasses can override to customize template creation (e.g. to compose wrapper + inner content).
-    /// </summary>
-    internal virtual DataTemplate GetTemplate()
-    {
-        var type = ViewType ?? throw new InvalidOperationException($"{GetType().Name} has no ViewType set.");
-        return _cachedTemplate ??= new DataTemplate(() => PrepareDataTemplateView(CreateView(type)));
-    }
+    internal virtual int GetPriority(ContentContext context) =>
+        Priority;
 
-    internal virtual int GetPriority(ContentContext context) => Priority;
-
-    internal static View CreateView(Type type, IServiceProvider? services = null)
-    {
-        if (!typeof(View).IsAssignableFrom(type))
-            throw new InvalidOperationException($"{type.Name} must derive from {nameof(View)}.");
-
-        services ??= Application.Current?.Handler?.MauiContext?.Services;
-
-        if (services is not null)
-        {
-            try
-            {
-                return (View)ActivatorUtilities.CreateInstance(services, type);
-            }
-            catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
-            {
-                throw new InvalidOperationException(
-                    $"Could not create '{type.Name}'. Register the view and any constructor dependencies in DI, or provide a public parameterless constructor.",
-                    ex);
-            }
-        }
-
-        try
-        {
-            return (View)Activator.CreateInstance(type)!;
-        }
-        catch (MissingMethodException ex)
-        {
-            throw new InvalidOperationException(
-                $"Could not create '{type.Name}' because the MAUI service provider is unavailable and the view has no public parameterless constructor.",
-                ex);
-        }
-    }
+    internal static new View CreateView(
+        Type type,
+        IServiceProvider? services = null) =>
+        ChatContentTemplate.CreateView(type, services);
 
     internal static T PrepareDataTemplateView<T>(T view)
         where T : View
     {
         if (view is ContentContextView contextView)
-            contextView.SetBinding(ContentContextView.ContentContextProperty, new Binding("."));
+        {
+            contextView.SetBinding(
+                ContentContextView.ContentContextProperty,
+                new Binding("."));
+        }
+        else if (view is ChatContentView contentView)
+        {
+            contentView.SetBinding(
+                ChatContentView.ItemProperty,
+                new Binding("."));
+        }
 
         return view;
     }

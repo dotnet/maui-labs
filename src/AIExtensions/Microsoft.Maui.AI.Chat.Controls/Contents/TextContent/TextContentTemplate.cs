@@ -29,12 +29,12 @@ public class TextContentTemplate : ContentTemplate
         return true;
     }
 
-    internal override DataTemplate GetTemplate()
+    protected override DataTemplate CreateTemplate()
     {
         if (ViewType is not null)
-            return base.GetTemplate();
+            return base.CreateTemplate();
 
-        return _cachedTemplate ??= new DataTemplate(() =>
+        return new DataTemplate(() =>
         {
             var view = new ChatMessageView();
             view.SetDynamicResource(ContentView.ControlTemplateProperty, ChatThemeKeys.ChatMessageTemplate);
@@ -44,6 +44,4 @@ public class TextContentTemplate : ContentTemplate
 
     internal override int GetPriority(ContentContext context) =>
         base.GetPriority(context) + (Role is null ? 0 : 100);
-
-    private DataTemplate? _cachedTemplate;
 }

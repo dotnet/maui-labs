@@ -1,5 +1,6 @@
 using Microsoft.Maui.AI.Chat;
 using Microsoft.Extensions.AI;
+using Microsoft.Maui.Chat.Controls;
 using Microsoft.Maui.AI.Chat.Controls.Tests.TestHelpers;
 
 namespace Microsoft.Maui.AI.Chat.Controls.Tests;
@@ -11,6 +12,21 @@ namespace Microsoft.Maui.AI.Chat.Controls.Tests;
 /// </summary>
 public class ChatPageTests
 {
+    [Fact]
+    public void CopilotChatView_IsANeutralChatViewWithAnAgentConversationAdapter()
+    {
+        var session = SessionFactory.Create("Hello");
+        var control = new CopilotChatView { Session = session };
+
+        Assert.IsAssignableFrom<ChatView>(control);
+        var conversation = Assert.IsType<AgentChatConversation>(
+            control.Conversation);
+        Assert.Same(session, conversation.Session);
+
+        control.Session = null;
+        Assert.Null(control.Conversation);
+    }
+
     [Fact]
     public void Session_CanBeSetAndCleared()
     {
@@ -81,14 +97,24 @@ public class ChatPageTests
     }
 
     [Fact]
-    public void SendMessage_WhenBusy_Blocked()
+    public async Task SendMessage_WhenBusy_Blocked()
     {
-        var control = new CopilotChatView();
+        var response = new TaskCompletionSource<ChatResponse>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var control = new CopilotChatView
+        {
+            Session = SessionFactory.Create(new TestChatClient(
+                (_, _, _) => response.Task)),
+            Text = "Hello",
+        };
 
-        control.IsBusy = true;
-
-        // IsBusy prevents sending (guard in SendCurrentTextAsync)
+        var send = control.SendCurrentTextAsync();
+        await Task.Yield();
         Assert.True(control.IsBusy);
+
+        response.SetResult(new ChatResponse(
+            [new ChatMessage(ChatRole.Assistant, "done")]));
+        await send;
     }
 
     [Fact]
@@ -122,5 +148,56 @@ public class ChatPageTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await sendTask);
         Assert.Equal(ConversationStatus.Idle, session.Status);
+    }
+
+    [Fact]
+    public async Task SendCurrentText_DisposedSession_RestoresDraftAndSurfacesGenericError()
+    {
+        var session = SessionFactory.Create("unused");
+        session.Dispose();
+        var control = new CopilotChatView
+        {
+            Session = session,
+            Text = "Keep this draft",
+        };
+
+        await control.SendCurrentTextAsync();
+
+        Assert.Equal("Keep this draft", control.Text);
+        Assert.Equal(
+            "Your message could not be sent. Please try again.",
+            control.SendError);
+    }
+
+    [Fact]
+    public async Task SendCurrentText_SecondSendWhileFirstActive_IsIgnored()
+    {
+        var started = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var response = new TaskCompletionSource<ChatResponse>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var client = new TestChatClient((_, _, _) =>
+        {
+            started.TrySetResult();
+            return response.Task;
+        });
+        var control = new CopilotChatView
+        {
+            Session = SessionFactory.Create(client),
+            Text = "first",
+        };
+
+        var firstSend = control.SendCurrentTextAsync();
+        await started.Task;
+        control.Text = "second";
+
+        await control.SendCurrentTextAsync();
+        response.SetResult(new ChatResponse(
+            [new ChatMessage(ChatRole.Assistant, "done")]));
+        await firstSend;
+
+        Assert.Single(client.SentMessages);
+        Assert.Equal("second", control.Text);
+        Assert.Null(control.SendError);
     }
 }

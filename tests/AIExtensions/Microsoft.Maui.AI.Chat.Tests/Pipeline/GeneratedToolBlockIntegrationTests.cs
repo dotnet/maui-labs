@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using Microsoft.Extensions.AI;
+using Microsoft.Maui.AI.Chat.Tests.TestHelpers;
 
 namespace Microsoft.Maui.AI.Chat.Tests.Pipeline;
 
@@ -75,6 +76,83 @@ public class GeneratedToolBlockIntegrationTests
 
         Assert.Equal("Summary", block.Title);
         Assert.Equal(3, block.Count);
+    }
+
+    [Fact]
+    public async Task GeneratedHandler_SingleNamedResult_MapsNamedJsonProperty()
+    {
+        var pipeline = CreatePipeline();
+        var block = Assert.IsType<GeneratedTitleBlock>(
+            Assert.Single(await ProcessAsync(
+                pipeline,
+                new ChatResponseUpdate
+                {
+                    Role = ChatRole.Assistant,
+                    Contents = [new FunctionCallContent("call-title", "get_title")],
+                })));
+        var result = JsonSerializer.SerializeToElement(new
+        {
+            title = "Summary",
+        });
+
+        await ProcessAsync(
+            pipeline,
+            new ChatResponseUpdate
+            {
+                Role = ChatRole.Tool,
+                Contents =
+                [
+                    new FunctionResultContent("call-title", result),
+                ],
+            });
+
+        Assert.Equal("Summary", block.Title);
+    }
+
+    [Fact]
+    public async Task GeneratedHandler_BackendInvocation_AppliesTypedResultProperties()
+    {
+        var function = AIFunctionFactory.Create(
+            (string orderId, bool includeHistory) =>
+                new GeneratedOrder(
+                    orderId,
+                    includeHistory ? 42.50m : 10m),
+            "find_order",
+            "Finds an order");
+        var client = new DelegatingStreamingChatClient();
+        var callCount = 0;
+        client.SetHandler((messages, options, cancellationToken) =>
+        {
+            _ = messages;
+            _ = options;
+            callCount++;
+            return callCount == 1
+                ? ResponseEmitters.EmitToolCallResponse(
+                    "backend-generated",
+                    "find_order",
+                    new Dictionary<string, object?>
+                    {
+                        ["orderId"] = "ORD-123",
+                        ["includeHistory"] = true,
+                    })
+                : ResponseEmitters.EmitTextResponse("Done");
+        });
+        var agent = new UIAgent(client, options =>
+        {
+            options.ChatOptions = new ChatOptions { Tools = [function] };
+            options.AddGeneratedToolBlocks();
+        });
+        var context = new AgentContext(agent);
+
+        await context.SendMessageAsync("Find my order");
+
+        var block = Assert.IsType<GeneratedOrderBlock>(
+            Assert.Single(context.Turns[0].ResponseBlocks, block =>
+                block is GeneratedOrderBlock));
+        Assert.NotNull(block.Result);
+        Assert.Equal(
+            new GeneratedOrder("ORD-123", 42.50m),
+            block.Order);
     }
 
     [Fact]
@@ -189,4 +267,11 @@ public sealed partial class GeneratedSummaryBlock : FunctionInvocationContentBlo
 
     [ToolResult(Name = "count")]
     public int Count { get; set; }
+}
+
+[ToolBlock("get_title")]
+public sealed partial class GeneratedTitleBlock : FunctionInvocationContentBlock
+{
+    [ToolResult(Name = "title")]
+    public string Title { get; set; } = string.Empty;
 }

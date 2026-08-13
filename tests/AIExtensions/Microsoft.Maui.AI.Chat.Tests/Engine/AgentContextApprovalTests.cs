@@ -199,4 +199,82 @@ public class AgentContextApprovalTests
 
         Assert.Equal(new[] { ConversationStatus.Streaming, ConversationStatus.Idle }, statuses);
     }
+
+    [Fact]
+    public async Task MixedApprovalAndBackendTool_ContinuationPreservesPerMessageRoles()
+    {
+        var backendTool = AIFunctionFactory.Create(
+            () => "sunny",
+            "GetWeather",
+            "Gets the weather");
+        var client = new DelegatingStreamingChatClient();
+        IReadOnlyList<ChatMessage>? continuation = null;
+        var callCount = 0;
+        client.SetHandler((messages, options, cancellationToken) =>
+        {
+            _ = options;
+            callCount++;
+            if (callCount == 1)
+            {
+                return EmitMixedRequest(cancellationToken);
+            }
+
+            continuation = messages.ToArray();
+            return ResponseEmitters.EmitTextResponse("Done");
+        });
+        var agent = new UIAgent(
+            client,
+            new ChatOptions { Tools = [backendTool] });
+        var context = new AgentContext(agent);
+        context.RegisterOnStatusChanged(status =>
+        {
+            if (status == ConversationStatus.AwaitingInput)
+            {
+                context.Turns[^1]
+                    .ResponseBlocks
+                    .OfType<ToolApprovalBlock>()
+                    .Single()
+                    .Approve();
+            }
+        });
+
+        await context.SendMessageAsync("Run both");
+
+        Assert.NotNull(continuation);
+        var toolMessage = Assert.Single(
+            continuation,
+            message => message.Contents.Any(
+                content => content is FunctionResultContent));
+        Assert.Equal(ChatRole.Tool, toolMessage.Role);
+        var approvalMessage = Assert.Single(
+            continuation,
+            message => message.Contents.Any(
+                content => content is ToolApprovalResponseContent));
+        Assert.Equal(ChatRole.User, approvalMessage.Role);
+    }
+
+    private static async IAsyncEnumerable<ChatResponseUpdate> EmitMixedRequest(
+        [System.Runtime.CompilerServices.EnumeratorCancellation]
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var approvalCall = new FunctionCallContent(
+            "approval-call",
+            "DeleteFile");
+        yield return new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            MessageId = "mixed-response",
+            Contents =
+            [
+                new ToolApprovalRequestContent(
+                    "approval-request",
+                    approvalCall),
+                new FunctionCallContent(
+                    "backend-call",
+                    "GetWeather"),
+            ],
+        };
+        await Task.CompletedTask;
+    }
 }

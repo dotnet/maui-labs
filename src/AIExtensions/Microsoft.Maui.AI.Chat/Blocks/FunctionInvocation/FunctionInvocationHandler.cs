@@ -29,7 +29,6 @@ internal sealed class FunctionInvocationHandler : ContentBlockHandler<FunctionIn
             {
                 context.MarkHandled(callContent);
                 state.Call = callContent;
-                state.Id = callContent.CallId;
                 return BlockMappingResult<FunctionInvocationContentBlock>.Emit(state, state);
             }
         }

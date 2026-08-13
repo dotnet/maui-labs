@@ -48,10 +48,41 @@ public class ToolBlockGeneratorTests
             "\n",
             driver.GetRunResult().GeneratedTrees.Select(tree => tree.GetText().ToString()));
         Assert.Contains("WeatherBlockGeneratedHandler", generated);
-        Assert.Contains("state.Id = call.CallId", generated);
+        Assert.Contains("state.Call = call", generated);
+        Assert.DoesNotContain("state.Id = call.CallId", generated);
         Assert.Contains("arguments.TryGetValue(\"city\"", generated);
         Assert.Contains("state.Weather = ConvertValue", generated);
         Assert.Contains("AddGeneratedToolBlocks", generated);
+    }
+
+    [Fact]
+    public void SingleNamedResult_GeneratesNamedPropertyExtraction()
+    {
+        const string source = """
+            using Microsoft.Maui.AI.Chat;
+
+            [ToolBlock("get_title")]
+            public sealed partial class TitleBlock : FunctionInvocationContentBlock
+            {
+                [ToolResult(Name = "title")]
+                public string Title { get; set; } = "";
+            }
+            """;
+
+        var driver = GeneratorTestHarness.Run(
+            source,
+            out var compilation,
+            out var diagnostics);
+
+        Assert.Empty(diagnostics);
+        Assert.Empty(compilation.GetDiagnostics().Where(IsError));
+        var generated = string.Join(
+            "\n",
+            driver.GetRunResult().GeneratedTrees.Select(
+                tree => tree.GetText().ToString()));
+        Assert.Contains(
+            "resultObject.TryGetProperty(\"title\"",
+            generated);
     }
 
     [Theory]

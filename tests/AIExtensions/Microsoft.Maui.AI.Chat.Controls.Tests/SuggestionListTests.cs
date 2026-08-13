@@ -53,10 +53,10 @@ public class SuggestionListTests
     {
         var control = CreateControl();
 
-        control.WelcomeMessage = null;
+        control.WelcomeMessage = string.Empty;
 
-        // Null message means no welcome panel even if items is empty
-        Assert.Null(control.WelcomeMessage);
+        // An empty message means no welcome copy even if items is empty.
+        Assert.Empty(control.WelcomeMessage);
     }
 
     [Fact]

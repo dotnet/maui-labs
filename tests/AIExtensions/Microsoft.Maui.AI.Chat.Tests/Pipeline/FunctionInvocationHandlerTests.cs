@@ -47,6 +47,23 @@ public class FunctionInvocationHandlerTests
     }
 
     [Fact]
+    public async Task FunctionCallContent_EmptyCallId_EmitsBlockWithFallbackId()
+    {
+        var pipeline = CreatePipeline();
+        var update = new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            Contents = [new FunctionCallContent("", "GetWeather", null)],
+            FinishReason = ChatFinishReason.ToolCalls,
+        };
+
+        var block = Assert.IsType<FunctionInvocationContentBlock>(
+            Assert.Single(await CollectBlocks(pipeline, update)));
+
+        Assert.False(string.IsNullOrWhiteSpace(block.Id));
+    }
+
+    [Fact]
     public async Task FunctionResultContent_MatchingCallId_CompletesBlock()
     {
         var pipeline = CreatePipeline();

@@ -293,7 +293,9 @@
     <!-- ControlTemplate: MessageListView — just the messages, no chrome  -->
     <!-- ═══════════════════════════════════════════════════════════════ -->
     <ControlTemplate x:Key="MauiAIChat.MessageListViewTemplate">
-        <CollectionView x:Name="PART_Messages" AutomationId="ChatMessages" />
+        <CollectionView x:Name="PART_Messages"
+                        AutomationId="ChatMessages"
+                        ItemsUpdatingScrollMode="KeepLastItemInView" />
     </ControlTemplate>
 
     <!-- ═══════════════════════════════════════════════════════════════ -->

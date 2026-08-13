@@ -48,15 +48,29 @@ public class ErrorRetryTests
         Assert.Contains(list.Items, item =>
             item.Block is TextContentBlock { RawText: "partial" });
         Assert.Contains(list.Items, item => item.Block is ErrorContentBlock);
+        ContentContext[]? itemsWhenRetryStarted = null;
+        session.RegisterOnStatusChanged(status =>
+        {
+            if (status == ConversationStatus.Streaming
+                && itemsWhenRetryStarted is null)
+            {
+                itemsWhenRetryStarted = list.Items.ToArray();
+            }
+        });
 
-        session.Turns[0].ClearResponseBlocks();
-        list.OnStatusChanged(ConversationStatus.Streaming);
+        await session.RetryAsync();
 
-        var remaining = Assert.Single(list.Items);
+        var retryItems = itemsWhenRetryStarted
+            ?? throw new Xunit.Sdk.XunitException("Retry never entered streaming.");
+        var remaining = Assert.Single(
+            retryItems,
+            item => item.Block is not ThinkingContentBlock);
         Assert.True(remaining.IsRequest);
-        Assert.DoesNotContain(list.Items, item =>
+        Assert.DoesNotContain(retryItems, item =>
             item.Block is TextContentBlock { RawText: "partial" });
-        Assert.DoesNotContain(list.Items, item => item.Block is ErrorContentBlock);
+        Assert.DoesNotContain(
+            retryItems,
+            item => item.Block is ErrorContentBlock);
     }
 
     private sealed class PartialFailureClient : IChatClient

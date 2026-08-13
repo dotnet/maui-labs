@@ -175,6 +175,7 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
             }
 
             var key = property.Name;
+            var hasExplicitName = false;
             foreach (var argument in attribute.NamedArguments)
             {
                 if (argument.Key == "Name"
@@ -182,6 +183,7 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
                     && !string.IsNullOrWhiteSpace(overrideName))
                 {
                     key = overrideName;
+                    hasExplicitName = true;
                     break;
                 }
             }
@@ -198,7 +200,8 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
             properties.Add(new(
                 property.Name,
                 key,
-                property.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+                property.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                hasExplicitName));
         }
 
         return properties.ToImmutable();
@@ -267,7 +270,6 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
         builder.AppendLine("            {");
         builder.AppendLine("                context.MarkHandled(call);");
         builder.AppendLine("                state.Call = call;");
-        builder.AppendLine("                state.Id = call.CallId;");
         EmitCallProperties(builder, model.Parameters);
         builder.Append("                return global::Microsoft.Maui.AI.Chat.BlockMappingResult<")
             .Append(model.FullyQualifiedType).AppendLine(">.Emit(state, state);");
@@ -283,8 +285,7 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
         builder.AppendLine("                    && result.CallId == state.Call.CallId)");
         builder.AppendLine("                {");
         builder.AppendLine("                    context.MarkHandled(result);");
-        builder.AppendLine("                    state.Result = result;");
-        EmitResultProperties(builder, model.Results);
+        builder.AppendLine("                    ApplyFunctionResult(state, result);");
         builder.Append("                    return global::Microsoft.Maui.AI.Chat.BlockMappingResult<")
             .Append(model.FullyQualifiedType).AppendLine(">.Complete();");
         builder.AppendLine("                }");
@@ -293,6 +294,20 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
         builder.AppendLine();
         builder.Append("        return global::Microsoft.Maui.AI.Chat.BlockMappingResult<")
             .Append(model.FullyQualifiedType).AppendLine(">.Pass();");
+        builder.AppendLine("    }");
+        builder.AppendLine();
+        builder.Append("    protected override bool ApplyFunctionResult(")
+            .Append(model.FullyQualifiedType).AppendLine(" state,");
+        builder.AppendLine(
+            "        global::Microsoft.Extensions.AI.FunctionResultContent result)");
+        builder.AppendLine("    {");
+        builder.AppendLine(
+            "        if (state.Call is null || result.CallId != state.Call.CallId)");
+        builder.AppendLine("            return false;");
+        builder.AppendLine();
+        builder.AppendLine("        state.Result = result;");
+        EmitResultProperties(builder, model.Results);
+        builder.AppendLine("        return true;");
         builder.AppendLine("    }");
         EmitConversionHelper(builder);
         builder.AppendLine("}");
@@ -342,14 +357,44 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
         if (properties.Length == 1)
         {
             var property = properties[0];
-            builder.AppendLine("                        try");
-            builder.AppendLine("                        {");
-            builder.Append("                            state.")
-                .Append(EscapeIdentifier(property.PropertyName))
-                .Append(" = ConvertValue<").Append(property.TypeName)
-                .AppendLine(">(result.Result);");
-            builder.AppendLine("                        }");
-            builder.AppendLine("                        catch (global::System.Exception) { }");
+            if (property.HasExplicitName)
+            {
+                var local = "__" + SanitizeIdentifier(property.PropertyName);
+                builder.AppendLine(
+                    "                        var resultObject = result.Result is global::System.Text.Json.JsonElement element");
+                builder.AppendLine(
+                    "                            ? element");
+                builder.AppendLine(
+                    "                            : global::System.Text.Json.JsonSerializer.SerializeToElement(result.Result, JsonOptions);");
+                builder.AppendLine(
+                    "                        if (resultObject.ValueKind == global::System.Text.Json.JsonValueKind.Object");
+                builder.Append("                            && resultObject.TryGetProperty(\"")
+                    .Append(EscapeString(property.Key)).Append("\", out var ")
+                    .Append(local)
+                    .Append(") && ").Append(local)
+                    .AppendLine(".ValueKind is not global::System.Text.Json.JsonValueKind.Null and not global::System.Text.Json.JsonValueKind.Undefined)");
+                builder.AppendLine("                        {");
+                builder.AppendLine("                            try");
+                builder.AppendLine("                            {");
+                builder.Append("                                state.")
+                    .Append(EscapeIdentifier(property.PropertyName))
+                    .Append(" = ConvertValue<").Append(property.TypeName).Append(">(")
+                    .Append(local).AppendLine(");");
+                builder.AppendLine("                            }");
+                builder.AppendLine("                            catch (global::System.Exception) { }");
+                builder.AppendLine("                        }");
+            }
+            else
+            {
+                builder.AppendLine("                        try");
+                builder.AppendLine("                        {");
+                builder.Append("                            state.")
+                    .Append(EscapeIdentifier(property.PropertyName))
+                    .Append(" = ConvertValue<").Append(property.TypeName)
+                    .AppendLine(">(result.Result);");
+                builder.AppendLine("                        }");
+                builder.AppendLine("                        catch (global::System.Exception) { }");
+            }
         }
         else
         {

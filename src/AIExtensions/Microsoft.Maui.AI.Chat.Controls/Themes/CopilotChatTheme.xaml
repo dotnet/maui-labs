@@ -21,7 +21,7 @@
             <Grid Grid.Row="1">
                 <!-- Welcome panel (shown when no messages) -->
                 <VerticalStackLayout x:Name="PART_WelcomePanel"
-                                     IsVisible="False"
+                                     IsVisible="{TemplateBinding ShowWelcome}"
                                      VerticalOptions="Center" HorizontalOptions="Center"
                                      Spacing="12" Padding="24">
                     <Label x:Name="PART_WelcomeIcon" Text="💬" FontSize="48"
@@ -33,18 +33,22 @@
 
                 <!-- Custom empty-state host (shown when EmptyViewTemplate is set) -->
                 <ContentView x:Name="PART_EmptyView"
-                             IsVisible="False"
+                             IsVisible="{TemplateBinding ShowEmptyView}"
                              VerticalOptions="Fill" HorizontalOptions="Fill" />
 
                 <!-- Messages list (a nested MessageListView renders the blocks) -->
                 <chat:MessageListView x:Name="PART_MessageList"
                                       AutomationId="ChatMessages"
+                                      Conversation="{TemplateBinding Conversation}"
+                                      UseDefaultContentTemplates="{TemplateBinding UseDefaultContentTemplates}"
+                                      Appearance="{TemplateBinding Appearance}"
+                                      AutoScrollToLatest="{TemplateBinding AutoScrollToLatest}"
                                       Margin="12,8,12,0" />
             </Grid>
 
             <!-- Row 3: Suggestion chips -->
             <FlexLayout x:Name="PART_Suggestions" Grid.Row="3"
-                        IsVisible="False"
+                        IsVisible="{TemplateBinding ShowSuggestions}"
                         Wrap="Wrap" JustifyContent="Center"
                         Margin="12,4" />
 
@@ -58,22 +62,30 @@
                 <Border.StrokeShape>
                     <RoundRectangle CornerRadius="{TemplateBinding InputAreaCornerRadius}" />
                 </Border.StrokeShape>
-                <Grid RowDefinitions="Auto,Auto,Auto"
+                <Grid RowDefinitions="Auto,Auto,Auto,Auto"
                       ColumnDefinitions="Auto,*,Auto"
                       ColumnSpacing="6"
                       RowSpacing="4">
                     <FlexLayout x:Name="PART_Attachments"
                                 Grid.ColumnSpan="3"
-                                IsVisible="False"
+                                IsVisible="{TemplateBinding HasAttachments}"
                                 Wrap="Wrap" />
                     <Label Grid.Row="1"
                            Grid.ColumnSpan="3"
                            Text="{TemplateBinding AttachmentError}"
+                           IsVisible="{TemplateBinding HasAttachmentError}"
                            TextColor="{DynamicResource MauiAIChat.Error.TextColor}"
                            FontSize="11"
                            SemanticProperties.Description="Attachment selection error" />
+                    <Label Grid.Row="2"
+                           Grid.ColumnSpan="3"
+                           Text="{TemplateBinding SendError}"
+                           IsVisible="{TemplateBinding HasSendError}"
+                           TextColor="{DynamicResource MauiAIChat.Error.TextColor}"
+                           FontSize="11"
+                           SemanticProperties.Description="Message send error" />
                     <Button x:Name="PART_AttachButton"
-                            Grid.Row="2"
+                            Grid.Row="3"
                             Text="＋"
                             IsVisible="{TemplateBinding AllowAttachments}"
                             AutomationId="AddAttachmentButton"
@@ -83,18 +95,19 @@
                             WidthRequest="36" HeightRequest="42"
                             Padding="0" />
                     <Entry x:Name="PART_InputEntry"
-                           Grid.Row="2" Grid.Column="1"
+                           Grid.Row="3" Grid.Column="1"
                            Placeholder="{TemplateBinding Placeholder}"
                            AutomationId="ChatInput"
                            SemanticProperties.Description="Chat message input"
                            Text="{TemplateBinding Text, Mode=TwoWay}"
                            FontSize="14"
                            BackgroundColor="Transparent" />
-                    <Button x:Name="PART_SendButton" Grid.Row="2" Grid.Column="2"
+                    <Button x:Name="PART_SendButton" Grid.Row="3" Grid.Column="2"
                             Text="{TemplateBinding SendButtonText}"
                             AutomationId="SendMessageButton"
                             SemanticProperties.Description="Send message"
                             BackgroundColor="{TemplateBinding EffectiveSendButtonBackgroundColor}"
+                            IsEnabled="{TemplateBinding CanSend}"
                             TextColor="{DynamicResource MauiAIChat.Send.TextColor}"
                             FontSize="16"
                             WidthRequest="42" HeightRequest="42"

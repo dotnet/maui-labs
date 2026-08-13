@@ -44,7 +44,9 @@ internal sealed class ToolApprovalHandler : ContentBlockHandler<ToolApprovalHand
 
         var block = new ToolApprovalBlock(innerBlock, approvalRequest);
         block.Id = approvalRequest.ToolCall is FunctionCallContent fcc
-            ? fcc.CallId
+            ? string.IsNullOrEmpty(fcc.CallId)
+                ? innerBlock.Id
+                : fcc.CallId
             : Guid.NewGuid().ToString("N");
 
         return BlockMappingResult<ApprovalHandlerState>.Emit(block, state);

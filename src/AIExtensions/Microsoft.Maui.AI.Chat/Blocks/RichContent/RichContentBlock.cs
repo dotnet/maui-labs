@@ -30,4 +30,16 @@ public class RichContentBlock : ContentBlock
         _segments.Add(text);
         _cachedText = null;
     }
+
+    /// <summary>Replaces the complete text and structured projection with one provider snapshot.</summary>
+    public void ReplaceContent(string text, IReadOnlyList<RichTextNode> content)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(content);
+
+        _segments.Clear();
+        _segments.Add(text);
+        _cachedText = text;
+        Content = content;
+    }
 }
