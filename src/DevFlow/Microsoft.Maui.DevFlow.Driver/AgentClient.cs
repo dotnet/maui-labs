@@ -751,6 +751,9 @@ public class AgentClient : IDisposable
     /// the result carries the agent-provided error message, machine-readable reason, retryable
     /// flag, and any actionable suggestions (e.g. the macOS app window not being frontmost),
     /// instead of collapsing every failure into <c>null</c> as <see cref="ScreenshotAsync"/> does.
+    /// This never throws <see cref="NotSupportedByAgentException"/>: a backend that does not
+    /// implement screenshots is reported as a failure result with <c>Reason</c> set to
+    /// <c>"not_supported"</c>, same as any other structured failure.
     /// </summary>
     public Task<ScreenshotResult> ScreenshotResultAsync(
         int? window = null,
@@ -854,6 +857,13 @@ public class AgentClient : IDisposable
 
                 return ParseScreenshotError(body);
             }
+        }
+        // The shared retry path turns a uniform 501 not_supported envelope into this typed
+        // exception. ScreenshotResultAsync's documented contract is to report failures through
+        // the returned ScreenshotResult rather than throwing, so translate it back into one here.
+        catch (NotSupportedByAgentException ex)
+        {
+            return ScreenshotResult.Failure(ex.Message, "not_supported");
         }
         catch (Exception ex) when (IsExpectedClientException(ex)) { return ScreenshotResult.Failure(null); }
     }
@@ -1173,6 +1183,12 @@ public class AgentClient : IDisposable
                 : null);
     }
 
+    /// <summary>
+    /// Hit-tests a point and returns a structured <see cref="UiReadResult"/> rather than
+    /// throwing. This never throws <see cref="NotSupportedByAgentException"/>: a backend that
+    /// does not implement hit testing is reported as a failure result with <c>Reason</c> set to
+    /// <c>"not_supported"</c>, same as any other structured failure.
+    /// </summary>
     public async Task<UiReadResult> HitTestResultAsync(
         double x,
         double y,
@@ -1229,6 +1245,19 @@ public class AgentClient : IDisposable
                     retryable,
                     TransportFailure: false);
             }
+        }
+        // The shared retry path turns a uniform 501 not_supported envelope into this typed
+        // exception. HitTestResultAsync's documented contract is to report failures through the
+        // returned UiReadResult rather than throwing, so translate it back into one here.
+        catch (NotSupportedByAgentException ex)
+        {
+            return new UiReadResult(
+                Success: false,
+                StatusCode: (int)HttpStatusCode.NotImplemented,
+                Body: ex.Message,
+                Reason: "not_supported",
+                Retryable: false,
+                TransportFailure: false);
         }
         catch (Exception ex) when (IsExpectedClientException(ex))
         {
@@ -1464,6 +1493,22 @@ public class AgentClient : IDisposable
                 TransportFailure: false)
             {
                 Error = error
+            };
+        }
+        // The shared retry path turns a uniform 501 not_supported envelope into this typed
+        // exception. The *ResultAsync action APIs (Tap, Fill, Clear, Focus, Key, Gesture, Scroll,
+        // SetProperty) document reporting failures through the returned ActionResult rather than
+        // throwing, so translate it back into one here.
+        catch (NotSupportedByAgentException ex)
+        {
+            return new ActionResult(
+                Success: false,
+                StatusCode: (int)HttpStatusCode.NotImplemented,
+                Reason: "not_supported",
+                Retryable: false,
+                TransportFailure: false)
+            {
+                Error = ex.Message
             };
         }
         catch (Exception ex) when (IsExpectedClientException(ex))
@@ -2021,6 +2066,13 @@ public class AgentClient : IDisposable
     }
 }
 
+/// <summary>
+/// Result of an action request made through one of the <c>*ResultAsync</c> action APIs
+/// (e.g. <see cref="AgentClient.TapResultAsync"/>, <see cref="AgentClient.FillResultAsync"/>).
+/// Reports failures — including a backend not supporting the action's capability, surfaced with
+/// <see cref="Reason"/> set to <c>"not_supported"</c> — through this structure instead of
+/// throwing <see cref="NotSupportedByAgentException"/>.
+/// </summary>
 public readonly record struct ActionResult(
     bool Success,
     int? StatusCode,
@@ -2032,6 +2084,12 @@ public readonly record struct ActionResult(
     public string? Error { get; init; }
 }
 
+/// <summary>
+/// Result of a UI read request made through <see cref="AgentClient.HitTestResultAsync"/>.
+/// Reports failures — including a backend not supporting the capability, surfaced with
+/// <see cref="Reason"/> set to <c>"not_supported"</c> — through this structure instead of
+/// throwing <see cref="NotSupportedByAgentException"/>.
+/// </summary>
 public readonly record struct UiReadResult(
     bool Success,
     int? StatusCode,

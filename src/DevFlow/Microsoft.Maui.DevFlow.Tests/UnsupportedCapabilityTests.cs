@@ -56,6 +56,99 @@ public class UnsupportedCapabilityTests
         Assert.Contains("ui.tree", error.Message, StringComparison.Ordinal);
     }
 
+    // The *ResultAsync APIs (ScreenshotResultAsync, HitTestResultAsync, and the ActionResult
+    // family built on SendActionResultAsync) document reporting every failure through their
+    // returned result type instead of throwing. The shared retry path in AgentClient raises
+    // NotSupportedByAgentException for the uniform 501 envelope before these methods get a
+    // chance to inspect the response, so each one must translate it back into a failure result
+    // rather than let it leak out and break that documented contract.
+
+    [Fact]
+    public async Task ScreenshotResultAsync_ReportsNotSupported_AsFailureResult_WithoutThrowing()
+    {
+        var port = GetFreePort();
+        using var service = new DevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        service.StartServerOnly(dispatcher: null);
+
+        using (var http = new HttpClient())
+            await WaitForServerAsync(http, port, "/api/v1/agent/status");
+
+        var result = await client.ScreenshotResultAsync();
+
+        Assert.False(result.Success);
+        Assert.Null(result.Data);
+        Assert.Equal("not_supported", result.Reason);
+        Assert.False(result.Retryable);
+        Assert.False(string.IsNullOrWhiteSpace(result.Error));
+        Assert.Contains("ui.screenshot", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HitTestResultAsync_ReportsNotSupported_AsFailureResult_WithoutThrowing()
+    {
+        var port = GetFreePort();
+        using var service = new DevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        service.StartServerOnly(dispatcher: null);
+
+        using (var http = new HttpClient())
+            await WaitForServerAsync(http, port, "/api/v1/agent/status");
+
+        var result = await client.HitTestResultAsync(1, 1);
+
+        Assert.False(result.Success);
+        Assert.Equal((int)HttpStatusCode.NotImplemented, result.StatusCode);
+        Assert.Equal("not_supported", result.Reason);
+        Assert.False(result.Retryable);
+        Assert.False(result.TransportFailure);
+        Assert.Contains("ui.tree", result.Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TapResultAsync_ReportsNotSupported_AsFailureResult_WithoutThrowing()
+    {
+        var port = GetFreePort();
+        using var service = new DevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        service.StartServerOnly(dispatcher: null);
+
+        using (var http = new HttpClient())
+            await WaitForServerAsync(http, port, "/api/v1/agent/status");
+
+        var result = await client.TapResultAsync("some-element", captureEpoch: null, registryGeneration: null);
+
+        Assert.False(result.Success);
+        Assert.Equal((int)HttpStatusCode.NotImplemented, result.StatusCode);
+        Assert.Equal("not_supported", result.Reason);
+        Assert.False(result.Retryable);
+        Assert.False(result.TransportFailure);
+        Assert.False(string.IsNullOrWhiteSpace(result.Error));
+        Assert.Contains("ui.actions", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TapAsync_StillThrowsNotSupportedByAgentException_PreservingConvenienceApiContract()
+    {
+        // Unlike the *ResultAsync APIs above, the plain bool-returning convenience wrappers
+        // (TapAsync, FillAsync, etc.) never promised a non-throwing contract — the same
+        // capability rejection reaches them as a NotSupportedByAgentException, same as
+        // GetTreeAsync above. This proves the fix is scoped to the *ResultAsync family and does
+        // not change the established behavior of the convenience APIs.
+        var port = GetFreePort();
+        using var service = new DevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        service.StartServerOnly(dispatcher: null);
+
+        using (var http = new HttpClient())
+            await WaitForServerAsync(http, port, "/api/v1/agent/status");
+
+        var error = await Assert.ThrowsAsync<NotSupportedByAgentException>(
+            () => client.TapAsync("some-element", captureEpoch: null, registryGeneration: null));
+
+        Assert.Equal("ui.actions", error.Capability);
+    }
+
     [Fact]
     public async Task JobRun_WithoutPlatformResult_ReturnsUniformNotSupportedEnvelope()
     {

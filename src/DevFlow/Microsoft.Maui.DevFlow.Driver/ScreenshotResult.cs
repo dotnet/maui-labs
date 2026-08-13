@@ -5,7 +5,9 @@ namespace Microsoft.Maui.DevFlow.Driver;
 /// On success, <see cref="Data"/> holds the captured PNG bytes. On failure, <see cref="Error"/>,
 /// <see cref="Reason"/>, <see cref="Retryable"/>, and <see cref="Suggestions"/> describe an
 /// actionable cause when the agent could provide one (for example, the macOS app window not
-/// being the frontmost application).
+/// being the frontmost application). A backend that does not support screenshots is also
+/// reported this way, with <see cref="Reason"/> set to <c>"not_supported"</c>, instead of
+/// throwing <see cref="NotSupportedByAgentException"/>.
 /// </summary>
 public sealed class ScreenshotResult
 {
