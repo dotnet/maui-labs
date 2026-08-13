@@ -221,4 +221,30 @@ public class NativeElementRegistryTests
         Assert.NotEqual(original, recycled);
         Assert.Null(registry.Resolve(original));
     }
+
+    // CurrentWalk is what NativeDevFlowAgentService.HandleHitTest reports as the hit-test response's
+    // captureEpoch (see openapi.yaml — captureEpoch has "minimum: 1"), so it must never surface as 0
+    // and must actually change per walk rather than being a fixed stand-in value.
+    [Fact]
+    public void CurrentWalk_BeforeAnyWalk_IsZero()
+    {
+        var registry = CreateRegistry();
+
+        Assert.Equal(0, registry.CurrentWalk);
+    }
+
+    [Fact]
+    public void CurrentWalk_AfterBeginWalk_IsPositiveAndIncrements()
+    {
+        var registry = CreateRegistry();
+
+        registry.BeginWalk();
+        var first = registry.CurrentWalk;
+        Assert.True(first >= 1, "captureEpoch must be >= 1 per the OpenAPI contract once a walk has run.");
+
+        registry.BeginWalk();
+        var second = registry.CurrentWalk;
+
+        Assert.True(second > first, "Each walk (and therefore each hit-test/tree/query capture) must report a distinct epoch.");
+    }
 }

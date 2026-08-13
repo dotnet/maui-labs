@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.Json;
 using Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 using Microsoft.Maui.DevFlow.Driver;
 using Xunit.Abstractions;
@@ -179,6 +181,46 @@ public class UiInspectionTests : IntegrationTestBase
 
         Assert.NotNull(elementId);
         Assert.NotEmpty(elementId);
+    }
+
+    // Guards the documented hit-test envelope (openapi.yaml requires x/y/window/captureEpoch/
+    // registryGeneration/elements) that InspectorServer's click-to-select path depends on: it looks
+    // for a root-level "elements" property and silently treats a bare array — or any other missing
+    // field — as "no element here". This is a plain JsonElement parse (not AgentClient.HitTestAsync,
+    // which just hands back the raw body) so a regression to the old bare-array shape fails here
+    // across every platform, native included, rather than only being caught by Inspector consumers.
+    [Fact]
+    public async Task HitTest_Response_MatchesDocumentedEnvelope()
+    {
+        await NavigateToMainPageAsync();
+        var addButton = await FindElementAsync("AddButton");
+        Assert.NotNull(addButton.Bounds);
+
+        var centerX = addButton.Bounds!.X + (addButton.Bounds.Width / 2);
+        var centerY = addButton.Bounds.Y + (addButton.Bounds.Height / 2);
+
+        var json = await GetJsonAsync(
+            $"/api/v1/ui/hit-test?x={centerX.ToString(CultureInfo.InvariantCulture)}&y={centerY.ToString(CultureInfo.InvariantCulture)}");
+
+        Assert.Equal(JsonValueKind.Object, json.ValueKind);
+
+        Assert.True(json.TryGetProperty("x", out _), "Response is missing 'x'.");
+        Assert.True(json.TryGetProperty("y", out _), "Response is missing 'y'.");
+
+        Assert.True(json.TryGetProperty("window", out var windowProperty), "Response is missing 'window'.");
+        Assert.Equal(0, windowProperty.GetInt32());
+
+        Assert.True(json.TryGetProperty("captureEpoch", out var epochProperty), "Response is missing 'captureEpoch'.");
+        Assert.True(epochProperty.GetInt64() >= 1, "captureEpoch must be a positive integer per the OpenAPI contract.");
+
+        Assert.True(json.TryGetProperty("registryGeneration", out var generationProperty), "Response is missing 'registryGeneration'.");
+        Assert.True(generationProperty.GetInt64() >= 0, "registryGeneration must be non-negative per the OpenAPI contract.");
+
+        Assert.True(json.TryGetProperty("elements", out var elementsProperty), "Response is missing root-level 'elements' — InspectorServer's click-to-select would silently find no candidate.");
+        Assert.Equal(JsonValueKind.Array, elementsProperty.ValueKind);
+        var elements = elementsProperty.EnumerateArray().ToList();
+        Assert.NotEmpty(elements);
+        Assert.Contains(elements, element => element.GetProperty("id").GetString() == addButton.Id);
     }
 
     [Fact]

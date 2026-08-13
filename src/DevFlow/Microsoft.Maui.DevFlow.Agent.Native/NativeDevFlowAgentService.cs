@@ -188,10 +188,12 @@ public class NativeDevFlowAgentService : DevFlowAgentService
         if (!TryParseDouble(request, "x", out var x) || !TryParseDouble(request, "y", out var y))
             return HttpResponse.Error("x and y query parameters are required");
 
-        var hits = await DispatchAsync(() =>
+        var windowIndex = ParseWindowIndex(request) ?? 0;
+
+        var result = await DispatchAsync(() =>
         {
             var matches = new List<(ElementInfo Element, int Depth)>();
-            VisitWithDepth(BuildTree(0, null), 0, (element, depth) =>
+            VisitWithDepth(BuildTree(0, windowIndex), 0, (element, depth) =>
             {
                 var bounds = element.Bounds;
                 if (bounds == null || !element.IsVisible) return;
@@ -200,14 +202,31 @@ public class NativeDevFlowAgentService : DevFlowAgentService
                 matches.Add((Detach(element), depth));
             });
 
-            return matches
+            var elements = matches
                 .OrderByDescending(match => match.Depth)
                 .ThenBy(match => (match.Element.Bounds?.Width ?? double.MaxValue) * (match.Element.Bounds?.Height ?? double.MaxValue))
                 .Select(match => match.Element)
                 .ToList();
+
+            // Match the documented hit-test envelope (see openapi.yaml): InspectorServer and the
+            // OpenAPI contract both require x/y/window/captureEpoch/registryGeneration alongside
+            // the elements array, not a bare array. captureEpoch is the registry's walk counter —
+            // the same value BuildTree just bumped — so it honestly reflects "this hit test's
+            // snapshot", without pretending the native agent has MAUI's stale-capture-rejection
+            // machinery (it does not advertise that ui.actions feature). registryGeneration has no
+            // independent native concept to report, so it stays at its schema-minimum default of 0.
+            return new
+            {
+                x,
+                y,
+                window = windowIndex,
+                captureEpoch = _registry.CurrentWalk,
+                registryGeneration = 0,
+                elements
+            };
         });
 
-        return HttpResponse.Json(hits);
+        return HttpResponse.Json(result);
     }
 
     // ── Properties ────────────────────────────────────────────────────────

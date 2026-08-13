@@ -48,6 +48,16 @@ internal sealed class NativeElementRegistry
     private long _walk;
     private int _next;
 
+    /// <summary>
+    /// The generation counter of the most recent <see cref="BeginWalk"/> call. Starts at 1 once a
+    /// walk has run, so it doubles as an honest <c>captureEpoch</c>: it changes on every tree walk,
+    /// which is exactly when element ids and bounds can shift.
+    /// </summary>
+    public long CurrentWalk
+    {
+        get { lock (_gate) return _walk; }
+    }
+
     public NativeElementRegistry()
         : this(GetStableKey)
     {
