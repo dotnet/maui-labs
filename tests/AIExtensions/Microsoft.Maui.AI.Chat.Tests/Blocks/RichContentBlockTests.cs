@@ -45,4 +45,33 @@ public class RichContentBlockTests
 
         Assert.Throws<ArgumentNullException>(() => block.AppendText(null!));
     }
+
+    [Fact]
+    public void ReplaceContent_ReplacesTextAndNodes()
+    {
+        var block = new RichContentBlock();
+        block.AppendText("old");
+        IReadOnlyList<RichTextNode> nodes =
+        [
+            new HeadingNode(2)
+            {
+            },
+        ];
+
+        block.ReplaceContent("new", nodes);
+
+        Assert.Equal("new", block.RawText);
+        Assert.Same(nodes, block.Content);
+    }
+
+    [Fact]
+    public void ReplaceContent_NullArguments_Throw()
+    {
+        var block = new RichContentBlock();
+
+        Assert.Throws<ArgumentNullException>(() =>
+            block.ReplaceContent(null!, Array.Empty<RichTextNode>()));
+        Assert.Throws<ArgumentNullException>(() =>
+            block.ReplaceContent("", null!));
+    }
 }

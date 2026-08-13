@@ -14,7 +14,22 @@ namespace Microsoft.Maui.AI.Chat;
 /// </remarks>
 public class FunctionInvocationContentBlock : ContentBlock
 {
-    public FunctionCallContent? Call { get; set; }
+    private FunctionCallContent? _call;
+
+    public FunctionCallContent? Call
+    {
+        get => _call;
+        set
+        {
+            _call = value;
+            if (value is not null && string.IsNullOrEmpty(Id))
+            {
+                Id = string.IsNullOrEmpty(value.CallId)
+                    ? Guid.NewGuid().ToString("N")
+                    : value.CallId;
+            }
+        }
+    }
 
     public FunctionResultContent? Result { get; set; }
 

@@ -27,12 +27,12 @@ public class FunctionInvocationTemplate : ContentTemplate
         return true;
     }
 
-    internal override DataTemplate GetTemplate()
+    protected override DataTemplate CreateTemplate()
     {
         if (ViewType is not null)
-            return base.GetTemplate();
+            return base.CreateTemplate();
 
-        return _cachedTemplate ??= new DataTemplate(() =>
+        return new DataTemplate(() =>
         {
             var view = new FunctionInvocationView();
             view.SetDynamicResource(ContentView.ControlTemplateProperty, ChatThemeKeys.FunctionInvocationTemplate);
@@ -42,6 +42,4 @@ public class FunctionInvocationTemplate : ContentTemplate
 
     internal override int GetPriority(ContentContext context) =>
         base.GetPriority(context) + (ToolName is null ? -100 : 100);
-
-    private DataTemplate? _cachedTemplate;
 }

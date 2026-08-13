@@ -1,6 +1,8 @@
 using System.Linq;
+using System.Collections.Specialized;
 using Microsoft.Maui.AI.Chat;
 using Microsoft.Maui.AI.Chat.Controls.Tests.TestHelpers;
+using Microsoft.Maui.Chat.Controls;
 
 namespace Microsoft.Maui.AI.Chat.Controls.Tests;
 
@@ -109,7 +111,7 @@ public class MessageListViewTests
     }
 
     [Fact]
-    public async Task CancellationReconciliation_PreservesPriorStickyError()
+    public async Task ResponseClearNotification_PreservesStickyErrorUntilRetryStarts()
     {
         var client = new TestChatClient((_, _, _) =>
             throw new InvalidOperationException("diagnostic"));
@@ -117,14 +119,64 @@ public class MessageListViewTests
         await session.SendMessageAsync("Hi");
         var view = new MessageListView { Session = session };
         var error = Assert.Single(view.Items, item => item.Block is ErrorContentBlock);
+        var observedClear = false;
+        session.RegisterOnResponseBlocksCleared(_ =>
+        {
+            observedClear = true;
+            Assert.Contains(error, view.Items);
+            Assert.DoesNotContain(
+                view.Items,
+                item => item.Block.Role == Microsoft.Extensions.AI.ChatRole.Assistant
+                    && item.Block is not ErrorContentBlock);
+        });
 
-        session.Turns[0].ClearResponseBlocks();
-        view.ReconcileItemsWithSession();
+        await session.RetryAsync();
 
-        Assert.Contains(error, view.Items);
-        Assert.DoesNotContain(
+        Assert.True(observedClear);
+    }
+
+    [Fact]
+    public async Task LiveStreaming_UpdatesContextInPlaceWithoutCollectionReplace()
+    {
+        var session = SessionFactory.Create(TestChatClient.MultiToken(
+            "Hello",
+            " world",
+            "!"));
+        var view = new MessageListView { Session = session };
+        var replacements = 0;
+        ((INotifyCollectionChanged)view.Items).CollectionChanged += (_, args) =>
+        {
+            if (args.Action == NotifyCollectionChangedAction.Replace)
+                replacements++;
+        };
+
+        await session.SendMessageAsync("Hi");
+
+        var response = Assert.Single(
             view.Items,
-            item => item.Block.Role == Microsoft.Extensions.AI.ChatRole.Assistant
-                && item.Block is not ErrorContentBlock);
+            item => item.Block is TextContentBlock
+                && item.Block.Role == Microsoft.Extensions.AI.ChatRole.Assistant);
+        Assert.Equal(
+            "Hello world!",
+            Assert.IsType<TextContentBlock>(response.Block).RawText);
+        Assert.Equal(0, replacements);
+    }
+
+    [Fact]
+    public void NeutralConversation_DoesNotCrashTypedCompatibilityProjection()
+    {
+        var participant = new ChatParticipant(
+            "local",
+            "Local",
+            ChatParticipantKind.Local);
+        var conversation = new ObservableChatConversation(participant);
+        conversation.AddMessage(participant, "Hello");
+        var view = new MessageListView
+        {
+            Conversation = conversation,
+        };
+
+        Assert.Empty(view.Items);
+        Assert.Single(((ChatMessagesView)view).Items);
     }
 }

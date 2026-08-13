@@ -9,6 +9,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.AI.Chat.Controls;
+using Microsoft.Maui.CopilotSdk;
 using Microsoft.Maui.DevFlow.Agent;
 
 namespace AIExtensions.Sample.Garden;
@@ -53,7 +54,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<CurrentCart>();
         builder.Services.AddSingleton<ReviewStore>();
 
-        builder.AddOpenAIServices();
+        builder.AddAIServices();
 
         builder.Services.AddSingleton<ChatViewModel>();
         builder.Services.AddSingleton<CartViewModel>();
@@ -63,7 +64,9 @@ public static class MauiProgram
         builder.Services.AddTransient<ProductReviewViewModel>();
         builder.Services.AddTransient<OrderDetailViewModel>();
         builder.Services.AddSingleton<MainViewModel>();
+        builder.Services.AddSingleton<TeamChatViewModel>();
         builder.Services.AddTransient<MainPage>();
+        builder.Services.AddTransient<TeamChatPage>();
         builder.Services.AddTransient<OrdersPage>();
         builder.Services.AddTransient<CatalogPage>();
         builder.Services.AddTransient<CartPage>();
@@ -91,52 +94,126 @@ public static class MauiProgram
         }
     }
 
-    private static MauiAppBuilder AddOpenAIServices(this MauiAppBuilder builder)
+    private static MauiAppBuilder AddAIServices(this MauiAppBuilder builder)
     {
         var aiSection = builder.Configuration.GetSection("AI");
+        var provider = aiSection["Provider"] ?? GetDefaultProvider();
         var apiKey = aiSection["ApiKey"];
         var endpoint = aiSection["Endpoint"];
         var deploymentName = aiSection["DeploymentName"];
         var imageDeploymentName = aiSection["ImageDeploymentName"];
-
-        if (string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(deploymentName) || string.IsNullOrEmpty(imageDeploymentName))
+        AzureOpenAIClient? azureClient = null;
+        if (!string.IsNullOrEmpty(apiKey) && !string.IsNullOrEmpty(endpoint))
         {
-            throw new InvalidOperationException(
-                """
-                AI services are not configured. Set up user secrets (shared across all AIExtensions samples):
-
-                  dotnet user-secrets --id ai-attributes-secrets set "AI:Endpoint" "<your-endpoint>"
-                  dotnet user-secrets --id ai-attributes-secrets set "AI:ApiKey" "<your-key>"
-                  dotnet user-secrets --id ai-attributes-secrets set "AI:DeploymentName" "<your-deployment>"
-                  dotnet user-secrets --id ai-attributes-secrets set "AI:ImageDeploymentName" "<your-image-deployment>"
-                """);
+            azureClient = new AzureOpenAIClient(
+                new Uri(endpoint),
+                new ApiKeyCredential(apiKey));
         }
 
-        var azureClient = new AzureOpenAIClient(
-            new Uri(endpoint),
-            new ApiKeyCredential(apiKey));
-        var chatClient = azureClient.GetChatClient(deploymentName);
+        IImageGenerator? imageGenerator = null;
+        if (azureClient is not null && !string.IsNullOrEmpty(imageDeploymentName))
+        {
+            imageGenerator = azureClient
+                .GetImageClient(imageDeploymentName)
+                .AsIImageGenerator();
+            builder.Services.AddSingleton(imageGenerator);
+        }
 
-        // Image generation is always enabled: UseImageGeneration lets the chat model produce images
-        // inline; the image arrives as DataContent and renders as a MediaContentBlock. The ChatViewModel
-        // always adds the matching HostedImageGenerationTool.
-        var imageGenerator = azureClient.GetImageClient(imageDeploymentName).AsIImageGenerator();
-
-        // Build the full client here (with the root service provider) so source-generated tools bind
-        // their [FromServices] parameters. Image generation must be registered BEFORE function
-        // invocation so the hosted image tool is handled beneath the function-invocation loop.
         builder.Services.AddSingleton<IChatClient>(sp =>
         {
             var lf = sp.GetRequiredService<ILoggerFactory>();
-            var clientBuilder = chatClient.AsIChatClient()
+            IChatClient baseClient = provider.Equals(
+                "Copilot",
+                StringComparison.OrdinalIgnoreCase)
+                ? new CopilotSdkChatClient(new CopilotSdkConfiguration
+                {
+                    Model = aiSection["Model"],
+                    GitHubToken = aiSection["GitHubToken"]
+                        ?? Environment.GetEnvironmentVariable("GITHUB_TOKEN"),
+                    UseLoggedInUser = string.IsNullOrEmpty(
+                        aiSection["GitHubToken"]
+                            ?? Environment.GetEnvironmentVariable("GITHUB_TOKEN")),
+                    CliPath = ResolveCopilotCliPath(
+                        aiSection["CopilotCliPath"]),
+                    // Leave WorkingDirectory unset. Pointing the installed CLI at the Mac Catalyst
+                    // app-data container can stall a session after setup while it scans that location.
+                })
+                : CreateAzureChatClient(
+                    azureClient,
+                    deploymentName);
+
+            var clientBuilder = baseClient
                 .AsBuilder()
-                .UseLogging(lf)
-                .UseImageGeneration(imageGenerator)
-                .UseFunctionInvocation(lf);
+                .UseLogging(lf);
+            if (imageGenerator is not null)
+                clientBuilder.UseImageGeneration(imageGenerator);
+            clientBuilder.UseFunctionInvocation(lf);
 
             return clientBuilder.Build(sp);
         });
 
         return builder;
+    }
+
+    private static IChatClient CreateAzureChatClient(
+        AzureOpenAIClient? client,
+        string? deploymentName)
+    {
+        if (client is null || string.IsNullOrEmpty(deploymentName))
+        {
+            throw new InvalidOperationException(
+                """
+                Azure OpenAI is not configured. Set AI:Provider to Copilot on a desktop,
+                or configure AI:Endpoint, AI:ApiKey, and AI:DeploymentName.
+                """);
+        }
+
+        return client.GetChatClient(deploymentName).AsIChatClient();
+    }
+
+    private static string GetDefaultProvider()
+    {
+#if MACCATALYST || WINDOWS
+        return "Copilot";
+#else
+        return "AzureOpenAI";
+#endif
+    }
+
+    private static string? ResolveCopilotCliPath(string? configuredPath)
+    {
+        if (!string.IsNullOrWhiteSpace(configuredPath))
+            return configuredPath;
+
+        var names = OperatingSystem.IsWindows()
+            ? new[] { "copilot.exe", "copilot.cmd" }
+            : new[] { "copilot" };
+        var path = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+        foreach (var directory in path.Split(
+            Path.PathSeparator,
+            StringSplitOptions.RemoveEmptyEntries))
+        {
+            foreach (var name in names)
+            {
+                var candidate = Path.Combine(directory, name);
+                if (File.Exists(candidate))
+                    return candidate;
+            }
+        }
+
+        if (!OperatingSystem.IsWindows())
+        {
+            foreach (var candidate in new[]
+            {
+                "/opt/homebrew/bin/copilot",
+                "/usr/local/bin/copilot",
+            })
+            {
+                if (File.Exists(candidate))
+                    return candidate;
+            }
+        }
+
+        return null;
     }
 }

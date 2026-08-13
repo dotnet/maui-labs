@@ -107,7 +107,8 @@ public class UIAgentTests
             }
         }
 
-        Assert.Equal(2, changeCount);
+        // Two appended tokens after the initial emission, plus finalization.
+        Assert.Equal(3, changeCount);
     }
 
     [Fact]

@@ -7,12 +7,12 @@ public class DefaultContentTemplate : ContentTemplate
 {
     public override bool When(ContentContext context) => true;
 
-    internal override DataTemplate GetTemplate()
+    protected override DataTemplate CreateTemplate()
     {
         if (ViewType is not null)
-            return base.GetTemplate();
+            return base.CreateTemplate();
 
-        return _cachedTemplate ??= new DataTemplate(() =>
+        return new DataTemplate(() =>
         {
             var view = new DefaultMessageView();
             view.SetDynamicResource(ContentView.ControlTemplateProperty, ChatThemeKeys.DefaultTemplate);
@@ -22,6 +22,4 @@ public class DefaultContentTemplate : ContentTemplate
 
     internal override int GetPriority(ContentContext context) =>
         base.GetPriority(context) - 1000;
-
-    private DataTemplate? _cachedTemplate;
 }

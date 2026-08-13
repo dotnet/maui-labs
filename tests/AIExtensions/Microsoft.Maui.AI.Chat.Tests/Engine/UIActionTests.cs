@@ -177,7 +177,7 @@ public class UIActionTests
     }
 
     [Fact]
-    public async Task UIAction_EmptyCallId_FailsFast()
+    public async Task UIAction_EmptyCallId_AssignsFallbackId()
     {
         var action = AIFunctionFactory.Create(() => "ok", "ClientTool", "Client tool");
         var client = new DelegatingStreamingChatClient();
@@ -185,11 +185,15 @@ public class UIActionTests
             EmitUIActionCall(string.Empty, "ClientTool", cancellationToken));
         var agent = new UIAgent(client, options => options.RegisterUIAction(action));
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => EnumerateAsync(agent.SendMessageAsync(
-                new ChatMessage(ChatRole.User, "Go"))));
+        var blocks = new List<ContentBlock>();
+        await foreach (var item in agent.SendMessageAsync(
+            new ChatMessage(ChatRole.User, "Go")))
+        {
+            blocks.Add(item);
+        }
 
-        Assert.Contains("without assigning an Id", exception.Message);
+        var block = Assert.Single(blocks.OfType<UIActionBlock>());
+        Assert.False(string.IsNullOrWhiteSpace(block.Id));
     }
 
     [Fact]

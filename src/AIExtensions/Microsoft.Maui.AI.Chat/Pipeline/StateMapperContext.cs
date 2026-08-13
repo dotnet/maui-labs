@@ -53,11 +53,26 @@ public sealed class StateMapperContext
     /// <summary>Gets the state value supplied by the mapper, if any.</summary>
     public object? StateValue { get; private set; }
 
+    /// <summary>Gets whether <see cref="StateValue"/> is provisional until explicitly accepted.</summary>
+    public bool IsPredictiveState { get; private set; }
+
     /// <summary>Supplies the new typed state value for a <see cref="UIAgent{TState}"/>.</summary>
     public void SetState(object value)
     {
         ArgumentNullException.ThrowIfNull(value);
         StateValue = value;
+        IsPredictiveState = false;
+    }
+
+    /// <summary>
+    /// Supplies a provisional typed state value that is rolled back when the current turn ends
+    /// unless the application accepts it.
+    /// </summary>
+    public void SetPredictiveState(object value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        StateValue = value;
+        IsPredictiveState = true;
     }
 
     internal bool HasHandledContent => _handledCount > 0;

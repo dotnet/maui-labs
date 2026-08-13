@@ -1,120 +1,140 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
-using Microsoft.Maui.AI.Chat;
 using Microsoft.Extensions.AI;
+using Microsoft.Maui.AI.Chat;
+using Microsoft.Maui.AI.Chat.Controls.Themes;
+using Microsoft.Maui.Chat.Controls;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
 
 /// <summary>
-/// A drop-in MAUI chat control for AI agents.
-/// <para>
-/// The entire visual tree is defined by a <see cref="ControlTemplate"/> and can be
-/// replaced wholesale. Individual sections (header, messages, welcome, busy indicator,
-/// suggestions, footer, input area) are located by well-known <c>PART_*</c> names:
-/// </para>
-/// <list type="bullet">
-/// <item><c>PART_Header</c> — <see cref="ContentView"/> for header content</item>
-/// <item><c>PART_MessageList</c> — <see cref="MessageListView"/> that renders chat messages</item>
-/// <item><c>PART_WelcomePanel</c> — <see cref="View"/> shown when there are no messages</item>
-/// <item><c>PART_WelcomeIcon</c> — <see cref="Label"/> for the welcome icon</item>
-/// <item><c>PART_WelcomeMessage</c> — <see cref="Label"/> for the welcome text</item>
-/// <item><c>PART_EmptyView</c> — <see cref="ContentView"/> host for a custom <see cref="EmptyViewTemplate"/></item>
-/// <item><c>PART_BusyIndicator</c> — <see cref="ActivityIndicator"/> for the busy state</item>
-/// <item><c>PART_Suggestions</c> — <see cref="Layout"/> for suggestion chips</item>
-/// <item><c>PART_Footer</c> — <see cref="ContentView"/> for footer content</item>
-/// <item><c>PART_InputEntry</c> — <see cref="Entry"/> for user text input</item>
-/// <item><c>PART_SendButton</c> — <see cref="Button"/> to send the message</item>
-/// <item><c>PART_InputArea</c> — <see cref="Border"/> wrapping the input row</item>
-/// </list>
+/// A drop-in AI chat control backed by <see cref="AgentContext"/>.
 /// </summary>
+/// <remarks>
+/// The composer, empty state, suggestions, attachments, and virtualized message surface come from
+/// <see cref="ChatView"/>. This type only adapts an AI session and keeps the AI-specific content
+/// template and appearance aliases used by existing XAML.
+/// </remarks>
 [ContentProperty(nameof(ContentTemplates))]
-public partial class CopilotChatView : TemplatedView
+public class CopilotChatView : ChatView
 {
-    // ── Core bindable properties ──
-
+    /// <summary>Backing property for <see cref="Session"/>.</summary>
     public static readonly BindableProperty SessionProperty =
         BindableProperty.Create(
             nameof(Session),
             typeof(AgentContext),
             typeof(CopilotChatView),
-            propertyChanged: OnSessionChanged);
+            default(AgentContext),
+            propertyChanged: static (bindable, oldValue, newValue) =>
+                ((CopilotChatView)bindable).OnSessionChanged(
+                    (AgentContext?)oldValue,
+                    (AgentContext?)newValue));
 
-    public static readonly BindableProperty TextProperty =
-        BindableProperty.Create(
-            nameof(Text),
-            typeof(string),
-            typeof(CopilotChatView),
-            default(string),
-            BindingMode.TwoWay);
-
-    public static readonly BindableProperty IsBusyProperty =
-        BindableProperty.Create(
-            nameof(IsBusy),
-            typeof(bool),
-            typeof(CopilotChatView),
-            false,
-            propertyChanged: (b, _, _) => ((CopilotChatView)b).OnIsBusyChanged());
-
-    public AgentContext? Session
-    {
-        get => (AgentContext?)GetValue(SessionProperty);
-        set => SetValue(SessionProperty, value);
-    }
-
-    public string? Text
-    {
-        get => (string?)GetValue(TextProperty);
-        set => SetValue(TextProperty, value);
-    }
-
-    public bool IsBusy
-    {
-        get => (bool)GetValue(IsBusyProperty);
-        set => SetValue(IsBusyProperty, value);
-    }
-
-    // ── Template parts (resolved in OnApplyTemplate) ──
-
-    private ContentView? _headerPart;
-    private MessageListView? _messageListPart;
-    private View? _welcomePanelPart;
-    private Label? _welcomeIconPart;
-    private Label? _welcomeMessagePart;
-    private ContentView? _emptyViewHostPart;
-    private ActivityIndicator? _busyIndicatorPart;
-    private Layout? _suggestionsPart;
-    private ContentView? _footerPart;
-    private Entry? _inputEntryPart;
-    private Button? _sendButtonPart;
-    private Button? _attachButtonPart;
-    private Layout? _attachmentsPart;
-    private readonly ObservableCollection<ChatAttachment> _attachments = [];
-    private readonly ReadOnlyObservableCollection<ChatAttachment> _readOnlyAttachments;
-
-    public static readonly BindableProperty ContentTemplatesProperty =
+    /// <summary>AI-typed content templates retained for source-compatible XAML.</summary>
+    public new static readonly BindableProperty ContentTemplatesProperty =
         BindableProperty.Create(
             nameof(ContentTemplates),
             typeof(IList<ContentTemplate>),
             typeof(CopilotChatView),
-            defaultValueCreator: _ => new ObservableCollection<ContentTemplate>(),
-            propertyChanged: (b, o, n) =>
-            {
-                var self = (CopilotChatView)b;
-                if (o is System.Collections.Specialized.INotifyCollectionChanged oldNcc)
-                    oldNcc.CollectionChanged -= self.OnContentTemplatesChanged;
-                if (n is System.Collections.Specialized.INotifyCollectionChanged newNcc)
-                    newNcc.CollectionChanged += self.OnContentTemplatesChanged;
-                self.SyncContentTemplates();
-            });
+            defaultValueCreator: static _ => new ObservableCollection<ContentTemplate>(),
+            propertyChanged: static (bindable, oldValue, newValue) =>
+                ((CopilotChatView)bindable).OnContentTemplatesChanged(
+                    oldValue as IList<ContentTemplate>,
+                    newValue as IList<ContentTemplate>));
 
-    public static readonly BindableProperty UseDefaultContentTemplatesProperty =
+    /// <summary>Backing property for <see cref="UseDefaultContentTemplates"/>.</summary>
+    public new static readonly BindableProperty UseDefaultContentTemplatesProperty =
         BindableProperty.Create(
             nameof(UseDefaultContentTemplates),
             typeof(bool),
             typeof(CopilotChatView),
             true,
-            propertyChanged: (b, _, _) => ((CopilotChatView)b).SyncContentTemplates());
+            propertyChanged: static (bindable, _, value) =>
+                ((CopilotChatView)bindable).OnUseDefaultContentTemplatesChanged(
+                    (bool)value));
 
+    /// <summary>Backing property for <see cref="ShowAvatars"/>.</summary>
+    public static readonly BindableProperty ShowAvatarsProperty =
+        BindableProperty.Create(
+            nameof(ShowAvatars),
+            typeof(bool),
+            typeof(CopilotChatView),
+            false,
+            propertyChanged: OnAppearanceAliasChanged);
+
+    /// <summary>Backing property for <see cref="AvatarSize"/>.</summary>
+    public static readonly BindableProperty AvatarSizeProperty =
+        BindableProperty.Create(
+            nameof(AvatarSize),
+            typeof(double),
+            typeof(CopilotChatView),
+            28.0,
+            propertyChanged: OnAppearanceAliasChanged);
+
+    /// <summary>Backing property for <see cref="UserDisplayName"/>.</summary>
+    public static readonly BindableProperty UserDisplayNameProperty =
+        BindableProperty.Create(
+            nameof(UserDisplayName),
+            typeof(string),
+            typeof(CopilotChatView),
+            "You",
+            propertyChanged: OnParticipantAliasChanged);
+
+    /// <summary>Backing property for <see cref="AssistantDisplayName"/>.</summary>
+    public static readonly BindableProperty AssistantDisplayNameProperty =
+        BindableProperty.Create(
+            nameof(AssistantDisplayName),
+            typeof(string),
+            typeof(CopilotChatView),
+            "Assistant",
+            propertyChanged: OnParticipantAliasChanged);
+
+    /// <summary>Backing property for <see cref="ShowTimestamps"/>.</summary>
+    public static readonly BindableProperty ShowTimestampsProperty =
+        BindableProperty.Create(
+            nameof(ShowTimestamps),
+            typeof(bool),
+            typeof(CopilotChatView),
+            false,
+            propertyChanged: OnAppearanceAliasChanged);
+
+    /// <summary>Backing property for <see cref="BubbleCornerRadius"/>.</summary>
+    public static readonly BindableProperty BubbleCornerRadiusProperty =
+        BindableProperty.Create(
+            nameof(BubbleCornerRadius),
+            typeof(double),
+            typeof(CopilotChatView),
+            16.0,
+            propertyChanged: OnAppearanceAliasChanged);
+
+    /// <summary>Backing property for <see cref="BubbleStrokeThickness"/>.</summary>
+    public static readonly BindableProperty BubbleStrokeThicknessProperty =
+        BindableProperty.Create(
+            nameof(BubbleStrokeThickness),
+            typeof(double),
+            typeof(CopilotChatView),
+            0.0,
+            propertyChanged: OnAppearanceAliasChanged);
+
+    /// <summary>Backing property for <see cref="BubbleStrokeColor"/>.</summary>
+    public static readonly BindableProperty BubbleStrokeColorProperty =
+        BindableProperty.Create(
+            nameof(BubbleStrokeColor),
+            typeof(Color),
+            typeof(CopilotChatView),
+            propertyChanged: OnAppearanceAliasChanged);
+
+    /// <summary>Backing property for <see cref="MaxBubbleWidth"/>.</summary>
+    public static readonly BindableProperty MaxBubbleWidthProperty =
+        BindableProperty.Create(
+            nameof(MaxBubbleWidth),
+            typeof(double),
+            typeof(CopilotChatView),
+            560.0,
+            propertyChanged: OnAppearanceAliasChanged);
+
+    /// <summary>Backing property for <see cref="SendButtonBackgroundColor"/>.</summary>
     internal static readonly BindableProperty EffectiveSendButtonBackgroundColorProperty =
         BindableProperty.Create(
             nameof(EffectiveSendButtonBackgroundColor),
@@ -127,734 +147,30 @@ public partial class CopilotChatView : TemplatedView
             typeof(Color),
             typeof(CopilotChatView));
 
-    private static readonly BindablePropertyKey AttachmentErrorPropertyKey =
-        BindableProperty.CreateReadOnly(
-            nameof(AttachmentError),
-            typeof(string),
-            typeof(CopilotChatView),
-            default(string));
-
-    public static readonly BindableProperty AttachmentErrorProperty =
-        AttachmentErrorPropertyKey.BindableProperty;
-
-    private IDisposable? _statusChangedReg;
-
-    public IList<ContentTemplate> ContentTemplates
-    {
-        get => (IList<ContentTemplate>)GetValue(ContentTemplatesProperty);
-        set => SetValue(ContentTemplatesProperty, value);
-    }
-
-    /// <summary>
-    /// Gets or sets whether the nested message list uses the built-in text, approval, media, thinking, and
-    /// error templates when no consumer template matches. Set this to <see langword="false"/> for strict
-    /// allow-list rendering using only <see cref="ContentTemplates"/>.
-    /// </summary>
-    public bool UseDefaultContentTemplates
-    {
-        get => (bool)GetValue(UseDefaultContentTemplatesProperty);
-        set => SetValue(UseDefaultContentTemplatesProperty, value);
-    }
-
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    public Color? EffectiveSendButtonBackgroundColor =>
-        (Color?)GetValue(EffectiveSendButtonBackgroundColorProperty);
-
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    public Color? EffectiveInputAreaBackgroundColor =>
-        (Color?)GetValue(EffectiveInputAreaBackgroundColorProperty);
-
-    /// <summary>Gets the most recent user-facing attachment selection error.</summary>
-    public string? AttachmentError =>
-        (string?)GetValue(AttachmentErrorProperty);
-
-    public CopilotChatView()
-    {
-        _readOnlyAttachments = new(_attachments);
-        _attachments.CollectionChanged += (_, _) => UpdateAttachmentsView();
-
-        if (ContentTemplates is System.Collections.Specialized.INotifyCollectionChanged ctNcc)
-            ctNcc.CollectionChanged += OnContentTemplatesChanged;
-
-        SetDynamicResource(MaxBubbleWidthProperty, Themes.ChatThemeKeys.BubbleMaxWidth);
-        RestoreEffectiveInputColor(
-            EffectiveSendButtonBackgroundColorProperty,
-            Themes.ChatThemeKeys.SendBackground);
-        RestoreEffectiveInputColor(
-            EffectiveInputAreaBackgroundColorProperty,
-            Themes.ChatThemeKeys.InputBackground);
-
-        // Bind the default ControlTemplate via DynamicResource so it resolves
-        // once the theme dictionary is available in the resource tree. The actual
-        // theme loading is done by UseChatControls() at startup or deferred to
-        // OnParentSet to avoid mutating app resources while the tree is being built.
-        SetDynamicResource(ControlTemplateProperty, Themes.ChatThemeKeys.CopilotChatViewTemplate);
-
-        // Subscribe to collection changes on the default ObservableCollection so
-        // XAML-added items (via .Add()) trigger suggestion chip rebuilds.
-        if (SuggestionPrompts is System.Collections.Specialized.INotifyCollectionChanged ncc)
-            ncc.CollectionChanged += OnSuggestionPromptsCollectionChanged;
-        if (Suggestions is System.Collections.Specialized.INotifyCollectionChanged suggestionsNcc)
-            suggestionsNcc.CollectionChanged += OnSuggestionPromptsCollectionChanged;
-
-        // XAML child items (SuggestionPrompts) may be added after OnApplyTemplate
-        // due to DynamicResource-based template resolution timing. Re-evaluate once loaded.
-        Loaded += (_, _) =>
-        {
-            // The Loaded event fires after the visual tree is fully constructed
-            // and rendered — guaranteed that template parts are resolved and
-            // all XAML-set collection items have been added.
-            UpdateWelcomeVisibility();
-        };
-    }
-
-    private void OnSuggestionPromptsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
-    {
-        // Items may be added before the template is applied; defer to ensure parts are resolved.
-        if (_suggestionsPart is null)
-            Dispatcher.Dispatch(UpdateSuggestionsVisibility);
-        else
-            UpdateSuggestionsVisibility();
-    }
-
-    protected override void OnParentSet()
-    {
-        base.OnParentSet();
-
-        // Deferred theme loading: ensure the ChatTheme resources are merged
-        // into the app-level dictionary when the control joins the visual tree.
-        // We cannot do this in the constructor because modifying
-        // Application.Resources.MergedDictionaries during XAML parsing
-        // triggers resource re-evaluation on partially-constructed pages.
-        if (Parent is not null && Application.Current is { } app)
-            ChatThemeLoader.EnsureLoaded(app.Resources);
-    }
-
-    // ── Template application ──
-
-    protected override void OnApplyTemplate()
-    {
-        base.OnApplyTemplate();
-
-        // Resolve named parts
-        _headerPart = GetTemplateChild("PART_Header") as ContentView;
-        _welcomePanelPart = GetTemplateChild("PART_WelcomePanel") as View;
-        _welcomeIconPart = GetTemplateChild("PART_WelcomeIcon") as Label;
-        _welcomeMessagePart = GetTemplateChild("PART_WelcomeMessage") as Label;
-        _emptyViewHostPart = GetTemplateChild("PART_EmptyView") as ContentView;
-        _busyIndicatorPart = GetTemplateChild("PART_BusyIndicator") as ActivityIndicator;
-        AttachSuggestionsPart(GetTemplateChild("PART_Suggestions") as Layout);
-        _footerPart = GetTemplateChild("PART_Footer") as ContentView;
-        AttachInputParts(
-            GetTemplateChild("PART_InputEntry") as Entry,
-            GetTemplateChild("PART_SendButton") as Button,
-            GetTemplateChild("PART_AttachButton") as Button,
-            GetTemplateChild("PART_Attachments") as Layout);
-
-        AttachMessageListPart(GetTemplateChild("PART_MessageList") as MessageListView);
-
-        // Apply state
-        ApplyHeaderTemplate();
-        ApplyFooterTemplate();
-        ApplyEmptyViewTemplate();
-        UpdateWelcomeVisibility();
-        OnIsBusyChanged();
-    }
-
-    // ── Content templates ──
-
-    private void OnContentTemplatesChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) =>
-        SyncContentTemplates();
-
-    private void SyncContentTemplates()
-    {
-        if (_messageListPart is null)
-            return;
-
-        _messageListPart.ContentTemplates.Clear();
-        foreach (var t in ContentTemplates)
-            _messageListPart.ContentTemplates.Add(t);
-
-        _messageListPart.UseDefaultContentTemplates = UseDefaultContentTemplates;
-        SyncMessageAppearance();
-    }
-
-    private void SyncMessageAppearance()
-    {
-        if (_messageListPart is null)
-            return;
-
-        _messageListPart.ShowAvatars = ShowAvatars;
-        _messageListPart.AvatarSize = AvatarSize;
-        _messageListPart.UserDisplayName = UserDisplayName;
-        _messageListPart.AssistantDisplayName = AssistantDisplayName;
-        _messageListPart.ShowTimestamps = ShowTimestamps;
-        _messageListPart.BubbleCornerRadius = BubbleCornerRadius;
-        _messageListPart.BubbleStrokeThickness = BubbleStrokeThickness;
-        _messageListPart.BubbleStrokeColor = BubbleStrokeColor;
-        _messageListPart.MaxBubbleWidth = MaxBubbleWidth;
-    }
-
-    private static void OnMessageAppearanceChanged(BindableObject bindable, object? oldValue, object? newValue) =>
-        ((CopilotChatView)bindable).SyncMessageAppearance();
-
-    private void OnMessageItemsChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) =>
-        UpdateWelcomeVisibility();
-
-    internal void AttachMessageListPart(MessageListView? messageList)
-    {
-        if (_messageListPart is not null)
-        {
-            ((System.Collections.Specialized.INotifyCollectionChanged)_messageListPart.Items)
-                .CollectionChanged -= OnMessageItemsChanged;
-            _messageListPart.Session = null;
-        }
-
-        _messageListPart = messageList;
-
-        if (_messageListPart is null)
-            return;
-
-        ((System.Collections.Specialized.INotifyCollectionChanged)_messageListPart.Items)
-            .CollectionChanged += OnMessageItemsChanged;
-        _messageListPart.Session = Session;
-        SyncContentTemplates();
-    }
-
-    // ── Session management ──
-    // Message rendering lives in the nested MessageListView. Here we only
-    // track status to drive IsBusy and forward the session to the list.
-
-    private static void OnSessionChanged(BindableObject bindable, object oldValue, object newValue)
-    {
-        var control = (CopilotChatView)bindable;
-        control.UnsubscribeFromSession();
-
-        if (newValue is AgentContext ctx)
-            control.SubscribeToSession(ctx);
-
-        if (control._messageListPart is not null)
-            control._messageListPart.Session = newValue as AgentContext;
-
-        control.UpdateWelcomeVisibility();
-    }
-
-    private void SubscribeToSession(AgentContext ctx)
-    {
-        _statusChangedReg = ctx.RegisterOnStatusChanged(status =>
-            Dispatcher.Dispatch(() => OnStatusChanged(status)));
-    }
-
-    private void UnsubscribeFromSession()
-    {
-        _statusChangedReg?.Dispose();
-        _statusChangedReg = null;
-    }
-
-    private void OnStatusChanged(ConversationStatus status)
-    {
-        IsBusy = status is ConversationStatus.Streaming or ConversationStatus.AwaitingInput;
-
-        if (status == ConversationStatus.Error && Session?.Error is Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[CopilotChatView] Error: {ex}");
-        }
-
-        // When the session is cleared, refresh welcome/suggestions visibility.
-        if (status == ConversationStatus.Idle && Session?.Turns.Count == 0)
-            UpdateWelcomeVisibility();
-    }
-
-    // ── Welcome ──
-
-    internal void UpdateWelcomeVisibility()
-    {
-        var itemCount = _messageListPart?.Items.Count ?? 0;
-        var isEmpty = itemCount == 0;
-
-        // A custom EmptyViewTemplate (when supplied and hostable) takes precedence
-        // over the default welcome icon/message labels.
-        var hasCustomEmpty = EmptyViewTemplate is not null && _emptyViewHostPart is not null;
-        var showCustomEmpty = hasCustomEmpty && isEmpty;
-        var showWelcome = !hasCustomEmpty && !string.IsNullOrEmpty(WelcomeMessage) && isEmpty;
-
-        if (_emptyViewHostPart is not null)
-            _emptyViewHostPart.IsVisible = showCustomEmpty;
-        if (_welcomePanelPart is not null)
-            _welcomePanelPart.IsVisible = showWelcome;
-        if (_welcomeIconPart is not null)
-            _welcomeIconPart.Text = WelcomeIcon;
-        if (_welcomeMessagePart is not null)
-            _welcomeMessagePart.Text = WelcomeMessage;
-        if (_messageListPart is not null)
-            _messageListPart.IsVisible = !(showWelcome || showCustomEmpty);
-
-        UpdateSuggestionsVisibility();
-    }
-
-    private void ApplyEmptyViewTemplate()
-    {
-        if (_emptyViewHostPart is null)
-            return;
-
-        _emptyViewHostPart.Content = CreateTemplatedContent(EmptyViewTemplate);
-        UpdateWelcomeVisibility();
-    }
-
-    // Consumer-supplied DataTemplates (empty view, header, footer) should bind against the
-    // control's data context (e.g. the host ViewModel), NOT the templated parent. Inside a
-    // ControlTemplate the BindingContext of parts is the control itself, so created content
-    // would otherwise inherit the control as its context and bindings like "{Binding MyProp}"
-    // would silently resolve to nothing. We set the content's BindingContext explicitly and
-    // keep it in sync via OnBindingContextChanged.
-    private View? CreateTemplatedContent(DataTemplate? template)
-    {
-        if (template?.CreateContent() is not View view)
-            return null;
-
-        view.BindingContext = BindingContext;
-        return view;
-    }
-
-    protected override void OnBindingContextChanged()
-    {
-        base.OnBindingContextChanged();
-
-        var ctx = BindingContext;
-        if (_emptyViewHostPart?.Content is View emptyContent)
-            emptyContent.BindingContext = ctx;
-        if (_headerPart?.Content is View headerContent)
-            headerContent.BindingContext = ctx;
-        if (_footerPart?.Content is View footerContent)
-            footerContent.BindingContext = ctx;
-    }
-
-    private void UpdateSuggestionsVisibility()
-    {
-        var itemCount = _messageListPart?.Items.Count ?? 0;
-        var showSuggestions =
-            (SuggestionPrompts is { Count: > 0 } || Suggestions is { Count: > 0 })
-            && itemCount == 0;
-
-        if (_suggestionsPart is not null)
-        {
-            _suggestionsPart.IsVisible = showSuggestions;
-            if (showSuggestions)
-                BuildSuggestionChips();
-        }
-    }
-
-    private void BuildSuggestionChips()
-    {
-        if (_suggestionsPart is null)
-            return;
-
-        _suggestionsPart.Children.Clear();
-
-        if (Suggestions is not null)
-        {
-            foreach (var suggestion in Suggestions)
-            {
-                if (suggestion is not null)
-                    _suggestionsPart.Children.Add(CreateSuggestionView(suggestion));
-            }
-        }
-
-        if (SuggestionPrompts is not null)
-        {
-            foreach (var prompt in SuggestionPrompts)
-            {
-                if (!string.IsNullOrWhiteSpace(prompt))
-                    _suggestionsPart.Children.Add(CreateSuggestionView(new(prompt, prompt)));
-            }
-        }
-    }
-
-    private View CreateSuggestionView(ChatSuggestion suggestion)
-    {
-        View view;
-        if (SuggestionTemplate?.CreateContent() is View custom)
-        {
-            custom.BindingContext = suggestion;
-            view = custom;
-        }
-        else
-        {
-            view = new Button
-            {
-                Text = string.IsNullOrEmpty(suggestion.Icon)
-                    ? suggestion.Label
-                    : $"{suggestion.Icon} {suggestion.Label}",
-                FontSize = 12,
-                Padding = new Thickness(12, 6),
-                CornerRadius = 16,
-                Margin = new Thickness(4, 2),
-                BackgroundColor = Color.FromArgb("#EEF2FF"),
-                TextColor = Color.FromArgb("#4338CA"),
-            };
-            view.SetDynamicResource(
-                Button.BackgroundColorProperty,
-                Themes.ChatThemeKeys.SuggestionBackground);
-            view.SetDynamicResource(
-                Button.TextColorProperty,
-                Themes.ChatThemeKeys.SuggestionTextColor);
-        }
-
-        SemanticProperties.SetDescription(
-            view,
-            $"Suggested prompt: {suggestion.Label}");
-        if (view is Button button)
-        {
-            button.Clicked += async (_, _) =>
-            {
-                await SendSuggestionAsync(suggestion.Prompt);
-            };
-        }
-        else
-        {
-            view.GestureRecognizers.Add(new TapGestureRecognizer
-            {
-                Command = new Command(async () =>
-                    await SendSuggestionAsync(suggestion.Prompt)),
-            });
-        }
-        return view;
-    }
-
-    private async Task SendSuggestionAsync(string prompt)
-    {
-        if (Session is not null && !IsBusy)
-            await Session.SendMessageAsync(prompt);
-    }
-
-    // ── Header / Footer ──
-
-    private void ApplyHeaderTemplate()
-    {
-        if (_headerPart is null)
-            return;
-
-        if (HeaderTemplate is not null)
-        {
-            _headerPart.Content = CreateTemplatedContent(HeaderTemplate);
-            _headerPart.IsVisible = true;
-        }
-        else
-        {
-            _headerPart.Content = null;
-            _headerPart.IsVisible = false;
-        }
-    }
-
-    private void ApplyFooterTemplate()
-    {
-        if (_footerPart is null)
-            return;
-
-        if (FooterTemplate is not null)
-        {
-            _footerPart.Content = CreateTemplatedContent(FooterTemplate);
-            _footerPart.IsVisible = true;
-        }
-        else
-        {
-            _footerPart.Content = null;
-            _footerPart.IsVisible = false;
-        }
-    }
-
-    internal void AttachInputParts(
-        Entry? inputEntry,
-        Button? sendButton,
-        Button? attachButton = null,
-        Layout? attachments = null)
-    {
-        if (_inputEntryPart is not null)
-            _inputEntryPart.Completed -= OnInputCompleted;
-        if (_sendButtonPart is not null)
-            _sendButtonPart.Clicked -= OnSendButtonClicked;
-        if (_attachButtonPart is not null)
-            _attachButtonPart.Clicked -= OnAttachButtonClicked;
-
-        _inputEntryPart = inputEntry;
-        _sendButtonPart = sendButton;
-        _attachButtonPart = attachButton;
-        _attachmentsPart = attachments;
-
-        if (_inputEntryPart is not null)
-            _inputEntryPart.Completed += OnInputCompleted;
-        if (_sendButtonPart is not null)
-            _sendButtonPart.Clicked += OnSendButtonClicked;
-        if (_attachButtonPart is not null)
-            _attachButtonPart.Clicked += OnAttachButtonClicked;
-
-        UpdateAttachmentsView();
-    }
-
-    // ── Busy ──
-
-    private void OnIsBusyChanged()
-    {
-        if (_busyIndicatorPart is not null)
-        {
-            _busyIndicatorPart.IsRunning = IsBusy;
-            _busyIndicatorPart.IsVisible = IsBusy;
-        }
-    }
-
-    // ── Send ──
-
-    private async void OnSendButtonClicked(object? sender, EventArgs e)
-    {
-        await SendCurrentTextAsync();
-    }
-
-    private async void OnInputCompleted(object? sender, EventArgs e)
-    {
-        await SendCurrentTextAsync();
-    }
-
-    private async void OnAttachButtonClicked(object? sender, EventArgs e)
-    {
-        await PickAttachmentsFromButtonAsync();
-    }
-
-    internal async Task PickAttachmentsFromButtonAsync()
-    {
-        try
-        {
-            await PickAttachmentsAsync();
-        }
-        catch (Exception ex) when (ex is InvalidOperationException
-            or ArgumentOutOfRangeException
-            or IOException
-            or UnauthorizedAccessException
-            or NotSupportedException
-            or PermissionException)
-        {
-            SetValue(AttachmentErrorPropertyKey, ex.Message);
-        }
-    }
-
-    internal async Task PickAttachmentsAsync(
-        CancellationToken cancellationToken = default)
-    {
-        SetValue(AttachmentErrorPropertyKey, null);
-        var picker = AttachmentPicker ?? MauiChatAttachmentPicker.Default;
-        var attachments = await picker.PickAsync(
-            AttachmentFileTypes,
-            MaxAttachmentBytes,
-            cancellationToken);
-        foreach (var attachment in attachments)
-            AddAttachment(attachment);
-    }
-
-    internal async Task SendCurrentTextAsync()
-    {
-        if (Session is null || IsBusy)
-            return;
-
-        var message = TakePendingMessage();
-        if (message is null)
-            return;
-
-        await Session.SendMessageAsync(message);
-    }
-
-    internal ChatMessage? TakePendingMessage()
-    {
-        var hasText = !string.IsNullOrWhiteSpace(Text);
-        if (!hasText && _attachments.Count == 0)
-            return null;
-
-        var contents = new List<AIContent>();
-        if (hasText)
-            contents.Add(new TextContent(Text!.Trim()));
-        contents.AddRange(_attachments.Select(attachment => attachment.Content));
-
-        Text = string.Empty;
-        _attachments.Clear();
-        return new ChatMessage(ChatRole.User, contents);
-    }
-
-    public void AddAttachment(ChatAttachment attachment)
-    {
-        ArgumentNullException.ThrowIfNull(attachment);
-        _attachments.Add(attachment);
-    }
-
-    public bool RemoveAttachment(ChatAttachment attachment)
-    {
-        ArgumentNullException.ThrowIfNull(attachment);
-        return _attachments.Remove(attachment);
-    }
-
-    public void ClearAttachments() => _attachments.Clear();
-
-    private void UpdateAttachmentsView()
-    {
-        if (_attachmentsPart is null)
-            return;
-
-        _attachmentsPart.Children.Clear();
-        _attachmentsPart.IsVisible = _attachments.Count > 0;
-        foreach (var attachment in _attachments)
-        {
-            var remove = new Button
-            {
-                Text = "×",
-                Padding = new Thickness(6, 0),
-                BackgroundColor = Colors.Transparent,
-                Command = new Command(() => RemoveAttachment(attachment)),
-            };
-            SemanticProperties.SetDescription(
-                remove,
-                $"Remove attachment {attachment.FileName}");
-            _attachmentsPart.Children.Add(new Border
-            {
-                Padding = new Thickness(8, 4),
-                Margin = new Thickness(2),
-                StrokeThickness = 0,
-                StrokeShape = new Microsoft.Maui.Controls.Shapes.RoundRectangle
-                {
-                    CornerRadius = 10,
-                },
-                BackgroundColor = Color.FromArgb("#EEF2FF"),
-                Content = new HorizontalStackLayout
-                {
-                    Spacing = 4,
-                    Children =
-                    {
-                        new Label
-                        {
-                            Text = attachment.FileName,
-                            FontSize = 11,
-                            VerticalOptions = LayoutOptions.Center,
-                        },
-                        remove,
-                    },
-                },
-            });
-        }
-    }
-
-    internal void AttachSuggestionsPart(Layout? suggestions)
-    {
-        _suggestionsPart = suggestions;
-        UpdateSuggestionsVisibility();
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    //  BINDABLE CUSTOMIZATION PROPERTIES
-    // ═══════════════════════════════════════════════════════════════
-
-    // ═══════════════════════════════════════════════════════════════
-    //  INPUT AREA
-    // ═══════════════════════════════════════════════════════════════
-
-    public static readonly BindableProperty PlaceholderProperty =
-        BindableProperty.Create(nameof(Placeholder), typeof(string), typeof(CopilotChatView), "Type a message...");
-
-    public string Placeholder
-    {
-        get => (string)GetValue(PlaceholderProperty);
-        set => SetValue(PlaceholderProperty, value);
-    }
-
-    public static readonly BindableProperty SendButtonTextProperty =
-        BindableProperty.Create(nameof(SendButtonText), typeof(string), typeof(CopilotChatView), "\u27A4");
-
-    public string SendButtonText
-    {
-        get => (string)GetValue(SendButtonTextProperty);
-        set => SetValue(SendButtonTextProperty, value);
-    }
-
-    public static readonly BindableProperty AllowAttachmentsProperty =
-        BindableProperty.Create(
-            nameof(AllowAttachments),
-            typeof(bool),
-            typeof(CopilotChatView),
-            false);
-
-    public bool AllowAttachments
-    {
-        get => (bool)GetValue(AllowAttachmentsProperty);
-        set => SetValue(AllowAttachmentsProperty, value);
-    }
-
-    public static readonly BindableProperty AttachmentPickerProperty =
-        BindableProperty.Create(
-            nameof(AttachmentPicker),
-            typeof(IChatAttachmentPicker),
-            typeof(CopilotChatView));
-
-    public IChatAttachmentPicker? AttachmentPicker
-    {
-        get => (IChatAttachmentPicker?)GetValue(AttachmentPickerProperty);
-        set => SetValue(AttachmentPickerProperty, value);
-    }
-
-    public static readonly BindableProperty AttachmentFileTypesProperty =
-        BindableProperty.Create(
-            nameof(AttachmentFileTypes),
-            typeof(FilePickerFileType),
-            typeof(CopilotChatView));
-
-    public FilePickerFileType? AttachmentFileTypes
-    {
-        get => (FilePickerFileType?)GetValue(AttachmentFileTypesProperty);
-        set => SetValue(AttachmentFileTypesProperty, value);
-    }
-
-    public static readonly BindableProperty MaxAttachmentBytesProperty =
-        BindableProperty.Create(
-            nameof(MaxAttachmentBytes),
-            typeof(long),
-            typeof(CopilotChatView),
-            10L * 1024 * 1024);
-
-    public long MaxAttachmentBytes
-    {
-        get => (long)GetValue(MaxAttachmentBytesProperty);
-        set => SetValue(MaxAttachmentBytesProperty, value);
-    }
-
-    public ReadOnlyObservableCollection<ChatAttachment> Attachments =>
-        _readOnlyAttachments;
-
     public static readonly BindableProperty SendButtonBackgroundColorProperty =
         BindableProperty.Create(
             nameof(SendButtonBackgroundColor),
             typeof(Color),
             typeof(CopilotChatView),
-            propertyChanged: (b, _, value) => ((CopilotChatView)b).UpdateEffectiveInputColor(
-                EffectiveSendButtonBackgroundColorProperty,
-                (Color?)value,
-                Themes.ChatThemeKeys.SendBackground));
+            propertyChanged: static (bindable, _, value) =>
+                ((CopilotChatView)bindable).UpdateEffectiveInputColor(
+                    EffectiveSendButtonBackgroundColorProperty,
+                    (Color?)value,
+                    ChatThemeKeys.SendBackground));
 
-    public Color? SendButtonBackgroundColor
-    {
-        get => (Color?)GetValue(SendButtonBackgroundColorProperty);
-        set => SetValue(SendButtonBackgroundColorProperty, value);
-    }
-
+    /// <summary>Backing property for <see cref="InputAreaBackgroundColor"/>.</summary>
     public static readonly BindableProperty InputAreaBackgroundColorProperty =
         BindableProperty.Create(
             nameof(InputAreaBackgroundColor),
             typeof(Color),
             typeof(CopilotChatView),
-            propertyChanged: (b, _, value) => ((CopilotChatView)b).UpdateEffectiveInputColor(
-                EffectiveInputAreaBackgroundColorProperty,
-                (Color?)value,
-                Themes.ChatThemeKeys.InputBackground));
+            propertyChanged: static (bindable, _, value) =>
+                ((CopilotChatView)bindable).UpdateEffectiveInputColor(
+                    EffectiveInputAreaBackgroundColorProperty,
+                    (Color?)value,
+                    ChatThemeKeys.InputBackground));
 
-    public Color? InputAreaBackgroundColor
-    {
-        get => (Color?)GetValue(InputAreaBackgroundColorProperty);
-        set => SetValue(InputAreaBackgroundColorProperty, value);
-    }
-
+    /// <summary>Backing property for <see cref="InputAreaCornerRadius"/>.</summary>
     public static readonly BindableProperty InputAreaCornerRadiusProperty =
         BindableProperty.Create(
             nameof(InputAreaCornerRadius),
@@ -862,10 +178,332 @@ public partial class CopilotChatView : TemplatedView
             typeof(CopilotChatView),
             14.0);
 
+    private AgentChatConversation? _agentConversation;
+    private MessageListView? _messageList;
+
+    /// <summary>Initializes a new AI chat view.</summary>
+    public CopilotChatView()
+    {
+        if (ContentTemplates is INotifyCollectionChanged templates)
+            templates.CollectionChanged += OnContentTemplatesCollectionChanged;
+
+        SyncContentTemplates();
+        base.UseDefaultContentTemplates = UseDefaultContentTemplates;
+        UpdateAppearanceAliases();
+        RestoreEffectiveInputColor(
+            EffectiveSendButtonBackgroundColorProperty,
+            ChatThemeKeys.SendBackground);
+        RestoreEffectiveInputColor(
+            EffectiveInputAreaBackgroundColorProperty,
+            ChatThemeKeys.InputBackground);
+        SetDynamicResource(ControlTemplateProperty, ChatThemeKeys.CopilotChatViewTemplate);
+    }
+
+    /// <summary>Gets or sets the AI session displayed and driven by the control.</summary>
+    public AgentContext? Session
+    {
+        get => (AgentContext?)GetValue(SessionProperty);
+        set => SetValue(SessionProperty, value);
+    }
+
+    /// <summary>Gets or sets the AI-specific block templates.</summary>
+    public new IList<ContentTemplate> ContentTemplates
+    {
+        get => (IList<ContentTemplate>)GetValue(ContentTemplatesProperty);
+        set => SetValue(ContentTemplatesProperty, value);
+    }
+
+    /// <summary>Gets or sets whether built-in AI templates are used as fallbacks.</summary>
+    public new bool UseDefaultContentTemplates
+    {
+        get => (bool)GetValue(UseDefaultContentTemplatesProperty);
+        set => SetValue(UseDefaultContentTemplatesProperty, value);
+    }
+
+    /// <summary>Gets or sets whether participant avatars are shown.</summary>
+    public bool ShowAvatars
+    {
+        get => (bool)GetValue(ShowAvatarsProperty);
+        set => SetValue(ShowAvatarsProperty, value);
+    }
+
+    /// <summary>Gets or sets the participant avatar size.</summary>
+    public double AvatarSize
+    {
+        get => (double)GetValue(AvatarSizeProperty);
+        set => SetValue(AvatarSizeProperty, value);
+    }
+
+    /// <summary>Gets or sets the local user display name.</summary>
+    public string UserDisplayName
+    {
+        get => (string)GetValue(UserDisplayNameProperty);
+        set => SetValue(UserDisplayNameProperty, value);
+    }
+
+    /// <summary>Gets or sets the assistant display name.</summary>
+    public string AssistantDisplayName
+    {
+        get => (string)GetValue(AssistantDisplayNameProperty);
+        set => SetValue(AssistantDisplayNameProperty, value);
+    }
+
+    /// <summary>Gets or sets whether message timestamps are shown.</summary>
+    public bool ShowTimestamps
+    {
+        get => (bool)GetValue(ShowTimestampsProperty);
+        set => SetValue(ShowTimestampsProperty, value);
+    }
+
+    /// <summary>Gets or sets the message bubble corner radius.</summary>
+    public double BubbleCornerRadius
+    {
+        get => (double)GetValue(BubbleCornerRadiusProperty);
+        set => SetValue(BubbleCornerRadiusProperty, value);
+    }
+
+    /// <summary>Gets or sets the message bubble stroke thickness.</summary>
+    public double BubbleStrokeThickness
+    {
+        get => (double)GetValue(BubbleStrokeThicknessProperty);
+        set => SetValue(BubbleStrokeThicknessProperty, value);
+    }
+
+    /// <summary>Gets or sets the message bubble stroke color.</summary>
+    public Color? BubbleStrokeColor
+    {
+        get => (Color?)GetValue(BubbleStrokeColorProperty);
+        set => SetValue(BubbleStrokeColorProperty, value);
+    }
+
+    /// <summary>Gets or sets the maximum message bubble width.</summary>
+    public double MaxBubbleWidth
+    {
+        get => (double)GetValue(MaxBubbleWidthProperty);
+        set => SetValue(MaxBubbleWidthProperty, value);
+    }
+
+    /// <summary>Gets or sets an optional send-button color override.</summary>
+    public Color? SendButtonBackgroundColor
+    {
+        get => (Color?)GetValue(SendButtonBackgroundColorProperty);
+        set => SetValue(SendButtonBackgroundColorProperty, value);
+    }
+
+    /// <summary>Gets or sets an optional composer background color override.</summary>
+    public Color? InputAreaBackgroundColor
+    {
+        get => (Color?)GetValue(InputAreaBackgroundColorProperty);
+        set => SetValue(InputAreaBackgroundColorProperty, value);
+    }
+
+    /// <summary>Gets or sets the composer corner radius.</summary>
     public double InputAreaCornerRadius
     {
         get => (double)GetValue(InputAreaCornerRadiusProperty);
         set => SetValue(InputAreaCornerRadiusProperty, value);
+    }
+
+    /// <summary>Gets the resolved send-button color.</summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public Color? EffectiveSendButtonBackgroundColor =>
+        (Color?)GetValue(EffectiveSendButtonBackgroundColorProperty);
+
+    /// <summary>Gets the resolved composer background color.</summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public Color? EffectiveInputAreaBackgroundColor =>
+        (Color?)GetValue(EffectiveInputAreaBackgroundColorProperty);
+
+    /// <inheritdoc />
+    protected override void OnParentSet()
+    {
+        base.OnParentSet();
+        if (Parent is not null && Application.Current is { } application)
+            ChatThemeLoader.EnsureLoaded(application.Resources);
+    }
+
+    /// <inheritdoc />
+    protected override void OnApplyTemplate()
+    {
+        base.OnApplyTemplate();
+        AttachMessageListPart(FindPart<MessageListView>(MessageListPartName));
+    }
+
+    internal void AttachMessageListPart(MessageListView? messageList)
+    {
+        _messageList = messageList;
+        if (_messageList is null)
+            return;
+
+        _messageList.Conversation = Conversation;
+        ((ChatMessagesView)_messageList).ContentTemplates =
+            new ObservableCollection<ChatContentTemplate>(base.ContentTemplates);
+        _messageList.UseDefaultContentTemplates = UseDefaultContentTemplates;
+        _messageList.Appearance = Appearance;
+        _messageList.AutoScrollToLatest = AutoScrollToLatest;
+        SyncMessageListAliases();
+    }
+
+    internal new void AttachSuggestionsPart(Layout? suggestionsPart) =>
+        base.AttachSuggestionsPart(suggestionsPart);
+
+    internal void UpdateWelcomeVisibility()
+    {
+        // State is maintained by ChatView's conversation and suggestion subscriptions.
+    }
+
+    internal Task SendCurrentTextAsync() =>
+        SendAsync();
+
+    internal Task PickAttachmentsFromButtonAsync() =>
+        PickAttachmentsAsync();
+
+    internal ChatMessage? TakePendingMessage()
+    {
+        var draft = CreateDraft();
+        if (draft.IsEmpty)
+            return null;
+
+        var contents = new List<AIContent>();
+        if (draft.HasText)
+            contents.Add(new TextContent(draft.Text));
+
+        foreach (var attachment in draft.Attachments)
+        {
+            if (attachment is ChatAttachment agentAttachment)
+            {
+                contents.Add(agentAttachment.Content);
+            }
+            else if (attachment.Uri is { } uri)
+            {
+                contents.Add(new UriContent(uri, attachment.MediaType));
+            }
+            else
+            {
+                contents.Add(new DataContent(
+                    attachment.Data,
+                    attachment.MediaType)
+                {
+                    Name = attachment.FileName
+                });
+            }
+        }
+
+        Text = string.Empty;
+        ClearAttachments();
+        return new ChatMessage(ChatRole.User, contents);
+    }
+
+    private void OnSessionChanged(
+        AgentContext? oldSession,
+        AgentContext? newSession)
+    {
+        _ = oldSession;
+        _agentConversation?.Dispose();
+        _agentConversation = newSession is null
+            ? null
+            : new AgentChatConversation(newSession);
+        _agentConversation?.UpdateParticipantNames(
+            UserDisplayName,
+            AssistantDisplayName);
+        Conversation = _agentConversation;
+        if (_messageList is not null)
+            _messageList.Conversation = _agentConversation;
+    }
+
+    private void OnContentTemplatesChanged(
+        IList<ContentTemplate>? oldTemplates,
+        IList<ContentTemplate>? newTemplates)
+    {
+        if (oldTemplates is INotifyCollectionChanged oldCollection)
+            oldCollection.CollectionChanged -= OnContentTemplatesCollectionChanged;
+        if (newTemplates is INotifyCollectionChanged newCollection)
+            newCollection.CollectionChanged += OnContentTemplatesCollectionChanged;
+        SyncContentTemplates();
+    }
+
+    private void OnContentTemplatesCollectionChanged(
+        object? sender,
+        NotifyCollectionChangedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        SyncContentTemplates();
+    }
+
+    private void SyncContentTemplates()
+    {
+        base.ContentTemplates.Clear();
+        foreach (var template in ContentTemplates)
+            base.ContentTemplates.Add(template);
+
+        if (_messageList is null)
+            return;
+
+        var nestedTemplates =
+            ((ChatMessagesView)_messageList).ContentTemplates;
+        nestedTemplates.Clear();
+        foreach (var template in base.ContentTemplates)
+            nestedTemplates.Add(template);
+    }
+
+    private void OnUseDefaultContentTemplatesChanged(bool useDefaults)
+    {
+        base.UseDefaultContentTemplates = useDefaults;
+        if (_messageList is not null)
+            _messageList.UseDefaultContentTemplates = useDefaults;
+    }
+
+    private static void OnAppearanceAliasChanged(
+        BindableObject bindable,
+        object oldValue,
+        object newValue)
+    {
+        _ = oldValue;
+        _ = newValue;
+        ((CopilotChatView)bindable).UpdateAppearanceAliases();
+    }
+
+    private static void OnParticipantAliasChanged(
+        BindableObject bindable,
+        object oldValue,
+        object newValue)
+    {
+        _ = oldValue;
+        _ = newValue;
+        var view = (CopilotChatView)bindable;
+        view.UpdateAppearanceAliases();
+        view._agentConversation?.UpdateParticipantNames(
+            view.UserDisplayName,
+            view.AssistantDisplayName);
+    }
+
+    private void UpdateAppearanceAliases()
+    {
+        Appearance.ShowAvatars = ShowAvatars;
+        Appearance.AvatarSize = AvatarSize;
+        Appearance.ShowTimestamps = ShowTimestamps;
+        Appearance.BubbleCornerRadius = BubbleCornerRadius;
+        Appearance.BubbleStrokeThickness = BubbleStrokeThickness;
+        Appearance.BubbleStrokeColor = BubbleStrokeColor;
+        Appearance.MaxBubbleWidth = MaxBubbleWidth;
+        SyncMessageListAliases();
+    }
+
+    private void SyncMessageListAliases()
+    {
+        if (_messageList is null)
+            return;
+
+        _messageList.ShowAvatars = ShowAvatars;
+        _messageList.AvatarSize = AvatarSize;
+        _messageList.UserDisplayName = UserDisplayName;
+        _messageList.AssistantDisplayName = AssistantDisplayName;
+        _messageList.ShowTimestamps = ShowTimestamps;
+        _messageList.BubbleCornerRadius = BubbleCornerRadius;
+        _messageList.BubbleStrokeThickness = BubbleStrokeThickness;
+        _messageList.BubbleStrokeColor = BubbleStrokeColor;
+        _messageList.MaxBubbleWidth = MaxBubbleWidth;
     }
 
     private void UpdateEffectiveInputColor(
@@ -888,265 +526,5 @@ public partial class CopilotChatView : TemplatedView
     {
         ClearValue(effectiveProperty);
         SetDynamicResource(effectiveProperty, fallbackResourceKey);
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    //  WELCOME MESSAGE
-    // ═══════════════════════════════════════════════════════════════
-
-    public static readonly BindableProperty WelcomeMessageProperty =
-        BindableProperty.Create(nameof(WelcomeMessage), typeof(string), typeof(CopilotChatView),
-            propertyChanged: (b, _, _) => ((CopilotChatView)b).UpdateWelcomeVisibility());
-
-    public string? WelcomeMessage
-    {
-        get => (string?)GetValue(WelcomeMessageProperty);
-        set => SetValue(WelcomeMessageProperty, value);
-    }
-
-    public static readonly BindableProperty WelcomeIconProperty =
-        BindableProperty.Create(nameof(WelcomeIcon), typeof(string), typeof(CopilotChatView), "💬",
-            propertyChanged: (b, _, _) => ((CopilotChatView)b).UpdateWelcomeVisibility());
-
-    public string WelcomeIcon
-    {
-        get => (string)GetValue(WelcomeIconProperty);
-        set => SetValue(WelcomeIconProperty, value);
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    //  AVATARS
-    // ═══════════════════════════════════════════════════════════════
-
-    public static readonly BindableProperty ShowAvatarsProperty =
-        BindableProperty.Create(
-            nameof(ShowAvatars),
-            typeof(bool),
-            typeof(CopilotChatView),
-            false,
-            propertyChanged: OnMessageAppearanceChanged);
-
-    public bool ShowAvatars
-    {
-        get => (bool)GetValue(ShowAvatarsProperty);
-        set => SetValue(ShowAvatarsProperty, value);
-    }
-
-    public static readonly BindableProperty AvatarSizeProperty =
-        BindableProperty.Create(
-            nameof(AvatarSize),
-            typeof(double),
-            typeof(CopilotChatView),
-            28.0,
-            propertyChanged: OnMessageAppearanceChanged);
-
-    public double AvatarSize
-    {
-        get => (double)GetValue(AvatarSizeProperty);
-        set => SetValue(AvatarSizeProperty, value);
-    }
-
-    public static readonly BindableProperty UserDisplayNameProperty =
-        BindableProperty.Create(
-            nameof(UserDisplayName),
-            typeof(string),
-            typeof(CopilotChatView),
-            "You",
-            propertyChanged: OnMessageAppearanceChanged);
-
-    public string UserDisplayName
-    {
-        get => (string)GetValue(UserDisplayNameProperty);
-        set => SetValue(UserDisplayNameProperty, value);
-    }
-
-    public static readonly BindableProperty AssistantDisplayNameProperty =
-        BindableProperty.Create(
-            nameof(AssistantDisplayName),
-            typeof(string),
-            typeof(CopilotChatView),
-            "Assistant",
-            propertyChanged: OnMessageAppearanceChanged);
-
-    public string AssistantDisplayName
-    {
-        get => (string)GetValue(AssistantDisplayNameProperty);
-        set => SetValue(AssistantDisplayNameProperty, value);
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    //  TIMESTAMPS & TOOL VISIBILITY
-    // ═══════════════════════════════════════════════════════════════
-
-    public static readonly BindableProperty ShowTimestampsProperty =
-        BindableProperty.Create(
-            nameof(ShowTimestamps),
-            typeof(bool),
-            typeof(CopilotChatView),
-            false,
-            propertyChanged: OnMessageAppearanceChanged);
-
-    public bool ShowTimestamps
-    {
-        get => (bool)GetValue(ShowTimestampsProperty);
-        set => SetValue(ShowTimestampsProperty, value);
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    //  MESSAGE BUBBLE STYLING
-    // ═══════════════════════════════════════════════════════════════
-
-    public static readonly BindableProperty BubbleCornerRadiusProperty =
-        BindableProperty.Create(
-            nameof(BubbleCornerRadius),
-            typeof(double),
-            typeof(CopilotChatView),
-            16.0,
-            propertyChanged: OnMessageAppearanceChanged);
-
-    public double BubbleCornerRadius
-    {
-        get => (double)GetValue(BubbleCornerRadiusProperty);
-        set => SetValue(BubbleCornerRadiusProperty, value);
-    }
-
-    public static readonly BindableProperty BubbleStrokeThicknessProperty =
-        BindableProperty.Create(
-            nameof(BubbleStrokeThickness),
-            typeof(double),
-            typeof(CopilotChatView),
-            0.0,
-            propertyChanged: OnMessageAppearanceChanged);
-
-    public double BubbleStrokeThickness
-    {
-        get => (double)GetValue(BubbleStrokeThicknessProperty);
-        set => SetValue(BubbleStrokeThicknessProperty, value);
-    }
-
-    public static readonly BindableProperty BubbleStrokeColorProperty =
-        BindableProperty.Create(
-            nameof(BubbleStrokeColor),
-            typeof(Color),
-            typeof(CopilotChatView),
-            propertyChanged: OnMessageAppearanceChanged);
-
-    public Color? BubbleStrokeColor
-    {
-        get => (Color?)GetValue(BubbleStrokeColorProperty);
-        set => SetValue(BubbleStrokeColorProperty, value);
-    }
-
-    public static readonly BindableProperty MaxBubbleWidthProperty =
-        BindableProperty.Create(
-            nameof(MaxBubbleWidth),
-            typeof(double),
-            typeof(CopilotChatView),
-            340.0,
-            propertyChanged: OnMessageAppearanceChanged);
-
-    public double MaxBubbleWidth
-    {
-        get => (double)GetValue(MaxBubbleWidthProperty);
-        set => SetValue(MaxBubbleWidthProperty, value);
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    //  LAYOUT TEMPLATES
-    // ═══════════════════════════════════════════════════════════════
-
-    public static readonly BindableProperty HeaderTemplateProperty =
-        BindableProperty.Create(nameof(HeaderTemplate), typeof(DataTemplate), typeof(CopilotChatView),
-            propertyChanged: (b, _, _) => ((CopilotChatView)b).ApplyHeaderTemplate());
-
-    public DataTemplate? HeaderTemplate
-    {
-        get => (DataTemplate?)GetValue(HeaderTemplateProperty);
-        set => SetValue(HeaderTemplateProperty, value);
-    }
-
-    public static readonly BindableProperty FooterTemplateProperty =
-        BindableProperty.Create(nameof(FooterTemplate), typeof(DataTemplate), typeof(CopilotChatView),
-            propertyChanged: (b, _, _) => ((CopilotChatView)b).ApplyFooterTemplate());
-
-    public DataTemplate? FooterTemplate
-    {
-        get => (DataTemplate?)GetValue(FooterTemplateProperty);
-        set => SetValue(FooterTemplateProperty, value);
-    }
-
-    public static readonly BindableProperty EmptyViewTemplateProperty =
-        BindableProperty.Create(nameof(EmptyViewTemplate), typeof(DataTemplate), typeof(CopilotChatView),
-            propertyChanged: (b, _, _) => ((CopilotChatView)b).ApplyEmptyViewTemplate());
-
-    /// <summary>
-    /// A <see cref="DataTemplate"/> shown in the welcome slot while the conversation is empty.
-    /// When set (and the control template exposes a <c>PART_EmptyView</c> host), this content
-    /// replaces the default <see cref="WelcomeIcon"/>/<see cref="WelcomeMessage"/> labels. When
-    /// <see langword="null"/>, the default welcome labels are used instead.
-    /// </summary>
-    public DataTemplate? EmptyViewTemplate
-    {
-        get => (DataTemplate?)GetValue(EmptyViewTemplateProperty);
-        set => SetValue(EmptyViewTemplateProperty, value);
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    //  SUGGESTIONS
-    // ═══════════════════════════════════════════════════════════════
-
-    public static readonly BindableProperty SuggestionPromptsProperty =
-        BindableProperty.Create(nameof(SuggestionPrompts), typeof(IList<string>), typeof(CopilotChatView),
-            defaultValueCreator: _ => new System.Collections.ObjectModel.ObservableCollection<string>(),
-            propertyChanged: (b, o, n) =>
-            {
-                var self = (CopilotChatView)b;
-                if (o is System.Collections.Specialized.INotifyCollectionChanged oldNcc)
-                    oldNcc.CollectionChanged -= self.OnSuggestionPromptsCollectionChanged;
-                if (n is System.Collections.Specialized.INotifyCollectionChanged newNcc)
-                    newNcc.CollectionChanged += self.OnSuggestionPromptsCollectionChanged;
-                self.UpdateSuggestionsVisibility();
-            });
-
-    public IList<string> SuggestionPrompts
-    {
-        get => (IList<string>)GetValue(SuggestionPromptsProperty);
-        set => SetValue(SuggestionPromptsProperty, value);
-    }
-
-    public static readonly BindableProperty SuggestionsProperty =
-        BindableProperty.Create(
-            nameof(Suggestions),
-            typeof(IList<ChatSuggestion>),
-            typeof(CopilotChatView),
-            defaultValueCreator: _ => new ObservableCollection<ChatSuggestion>(),
-            propertyChanged: (b, oldValue, newValue) =>
-            {
-                var self = (CopilotChatView)b;
-                if (oldValue is System.Collections.Specialized.INotifyCollectionChanged oldCollection)
-                    oldCollection.CollectionChanged -= self.OnSuggestionPromptsCollectionChanged;
-                if (newValue is System.Collections.Specialized.INotifyCollectionChanged newCollection)
-                    newCollection.CollectionChanged += self.OnSuggestionPromptsCollectionChanged;
-                self.UpdateSuggestionsVisibility();
-            });
-
-    public IList<ChatSuggestion> Suggestions
-    {
-        get => (IList<ChatSuggestion>)GetValue(SuggestionsProperty);
-        set => SetValue(SuggestionsProperty, value);
-    }
-
-    public static readonly BindableProperty SuggestionTemplateProperty =
-        BindableProperty.Create(
-            nameof(SuggestionTemplate),
-            typeof(DataTemplate),
-            typeof(CopilotChatView),
-            propertyChanged: (b, _, _) =>
-                ((CopilotChatView)b).UpdateSuggestionsVisibility());
-
-    public DataTemplate? SuggestionTemplate
-    {
-        get => (DataTemplate?)GetValue(SuggestionTemplateProperty);
-        set => SetValue(SuggestionTemplateProperty, value);
     }
 }
