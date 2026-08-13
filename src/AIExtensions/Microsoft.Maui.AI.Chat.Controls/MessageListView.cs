@@ -2,578 +2,431 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.AI.Chat;
+using Microsoft.Maui.AI.Chat.Controls.Themes;
+using Microsoft.Maui.Chat.Controls;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
 
 /// <summary>
-/// A drop-in view that renders the messages of an <see cref="AgentContext"/> and nothing else — no
-/// header, welcome panel, suggestions, or input box. It is the message list extracted from
-/// <see cref="CopilotChatView"/>, which now hosts one internally.
+/// Displays the content blocks of an <see cref="AgentContext"/> using the neutral,
+/// virtualized chat-message projection.
 /// </summary>
-/// <remarks>
-/// Bind <see cref="Session"/> to an <see cref="AgentContext"/> for a zero-configuration chat surface with
-/// built-in text, approval, UI-action, reasoning, media, thinking, and error rendering. Add consumer <see cref="ContentTemplate"/>s
-/// to <see cref="ContentTemplates"/> to replace those fallbacks for matching blocks, or set
-/// <see cref="UseDefaultContentTemplates"/> to <see langword="false"/> for strict allow-list rendering.
-/// Because it is session-driven it updates live as blocks stream in. The single template part is
-/// <c>PART_Messages</c> (a <see cref="CollectionView"/>).
-/// </remarks>
-[ContentProperty(nameof(ContentTemplates))]
-public partial class MessageListView : TemplatedView
+public class MessageListView : ChatMessagesView
 {
+    /// <summary>AI-typed content templates retained for source-compatible XAML.</summary>
+    public new static readonly BindableProperty ContentTemplatesProperty =
+        BindableProperty.Create(
+            nameof(ContentTemplates),
+            typeof(IList<ContentTemplate>),
+            typeof(MessageListView),
+            defaultValueCreator: static _ => new ObservableCollection<ContentTemplate>(),
+            propertyChanged: static (bindable, oldValue, newValue) =>
+                ((MessageListView)bindable).OnContentTemplatesChanged(
+                    oldValue as IList<ContentTemplate>,
+                    newValue as IList<ContentTemplate>));
+
+    /// <summary>Backing property for <see cref="Session"/>.</summary>
     public static readonly BindableProperty SessionProperty =
         BindableProperty.Create(
             nameof(Session),
             typeof(AgentContext),
             typeof(MessageListView),
-            propertyChanged: OnSessionChanged);
+            default(AgentContext),
+            propertyChanged: static (bindable, oldValue, newValue) =>
+                ((MessageListView)bindable).OnSessionChanged(
+                    (AgentContext?)oldValue,
+                    (AgentContext?)newValue));
 
-    public static readonly BindableProperty ContentTemplatesProperty =
+    /// <summary>Backing property for <see cref="ShowAvatars"/>.</summary>
+    public static readonly BindableProperty ShowAvatarsProperty =
         BindableProperty.Create(
-            nameof(ContentTemplates),
-            typeof(IList<ContentTemplate>),
-            typeof(MessageListView),
-            defaultValueCreator: _ => new ObservableCollection<ContentTemplate>(),
-            propertyChanged: (b, o, n) =>
-            {
-                var self = (MessageListView)b;
-                if (o is INotifyCollectionChanged oldNcc)
-                    oldNcc.CollectionChanged -= self.OnContentTemplatesChanged;
-                if (n is INotifyCollectionChanged newNcc)
-                    newNcc.CollectionChanged += self.OnContentTemplatesChanged;
-                self.RebuildTemplateSelector();
-            });
-
-    public static readonly BindableProperty UseDefaultContentTemplatesProperty =
-        BindableProperty.Create(
-            nameof(UseDefaultContentTemplates),
+            nameof(ShowAvatars),
             typeof(bool),
             typeof(MessageListView),
-            true,
-            propertyChanged: (b, _, _) => ((MessageListView)b).RebuildTemplateSelector());
+            false,
+            propertyChanged: OnAppearanceAliasChanged);
 
-    public static readonly BindableProperty ShowAvatarsProperty =
-        BindableProperty.Create(nameof(ShowAvatars), typeof(bool), typeof(MessageListView), false);
-
+    /// <summary>Backing property for <see cref="AvatarSize"/>.</summary>
     public static readonly BindableProperty AvatarSizeProperty =
-        BindableProperty.Create(nameof(AvatarSize), typeof(double), typeof(MessageListView), 28.0);
+        BindableProperty.Create(
+            nameof(AvatarSize),
+            typeof(double),
+            typeof(MessageListView),
+            28.0,
+            propertyChanged: OnAppearanceAliasChanged);
 
+    /// <summary>Backing property for <see cref="UserDisplayName"/>.</summary>
     public static readonly BindableProperty UserDisplayNameProperty =
-        BindableProperty.Create(nameof(UserDisplayName), typeof(string), typeof(MessageListView), "You");
+        BindableProperty.Create(
+            nameof(UserDisplayName),
+            typeof(string),
+            typeof(MessageListView),
+            "You",
+            propertyChanged: OnParticipantAliasChanged);
 
+    /// <summary>Backing property for <see cref="AssistantDisplayName"/>.</summary>
     public static readonly BindableProperty AssistantDisplayNameProperty =
-        BindableProperty.Create(nameof(AssistantDisplayName), typeof(string), typeof(MessageListView), "Assistant");
+        BindableProperty.Create(
+            nameof(AssistantDisplayName),
+            typeof(string),
+            typeof(MessageListView),
+            "Assistant",
+            propertyChanged: OnParticipantAliasChanged);
 
+    /// <summary>Backing property for <see cref="ShowTimestamps"/>.</summary>
     public static readonly BindableProperty ShowTimestampsProperty =
-        BindableProperty.Create(nameof(ShowTimestamps), typeof(bool), typeof(MessageListView), false);
+        BindableProperty.Create(
+            nameof(ShowTimestamps),
+            typeof(bool),
+            typeof(MessageListView),
+            false,
+            propertyChanged: OnAppearanceAliasChanged);
 
+    /// <summary>Backing property for <see cref="BubbleCornerRadius"/>.</summary>
     public static readonly BindableProperty BubbleCornerRadiusProperty =
-        BindableProperty.Create(nameof(BubbleCornerRadius), typeof(double), typeof(MessageListView), 16.0);
+        BindableProperty.Create(
+            nameof(BubbleCornerRadius),
+            typeof(double),
+            typeof(MessageListView),
+            16.0,
+            propertyChanged: OnAppearanceAliasChanged);
 
+    /// <summary>Backing property for <see cref="BubbleStrokeThickness"/>.</summary>
     public static readonly BindableProperty BubbleStrokeThicknessProperty =
-        BindableProperty.Create(nameof(BubbleStrokeThickness), typeof(double), typeof(MessageListView), 0.0);
+        BindableProperty.Create(
+            nameof(BubbleStrokeThickness),
+            typeof(double),
+            typeof(MessageListView),
+            0.0,
+            propertyChanged: OnAppearanceAliasChanged);
 
+    /// <summary>Backing property for <see cref="BubbleStrokeColor"/>.</summary>
     public static readonly BindableProperty BubbleStrokeColorProperty =
-        BindableProperty.Create(nameof(BubbleStrokeColor), typeof(Color), typeof(MessageListView));
+        BindableProperty.Create(
+            nameof(BubbleStrokeColor),
+            typeof(Color),
+            typeof(MessageListView),
+            propertyChanged: OnAppearanceAliasChanged);
 
+    /// <summary>Backing property for <see cref="MaxBubbleWidth"/>.</summary>
     public static readonly BindableProperty MaxBubbleWidthProperty =
-        BindableProperty.Create(nameof(MaxBubbleWidth), typeof(double), typeof(MessageListView), 340.0);
+        BindableProperty.Create(
+            nameof(MaxBubbleWidth),
+            typeof(double),
+            typeof(MessageListView),
+            340.0,
+            propertyChanged: OnAppearanceAliasChanged);
 
     private static readonly BindablePropertyKey ItemsPropertyKey =
         BindableProperty.CreateReadOnly(
             nameof(Items),
             typeof(ReadOnlyObservableCollection<ContentContext>),
             typeof(MessageListView),
-            null);
+            default(ReadOnlyObservableCollection<ContentContext>));
 
-    public static readonly BindableProperty ItemsProperty = ItemsPropertyKey.BindableProperty;
+    /// <summary>Backing property for <see cref="Items"/>.</summary>
+    public new static readonly BindableProperty ItemsProperty =
+        ItemsPropertyKey.BindableProperty;
 
+    private AgentChatConversation? _agentConversation;
+    private readonly ObservableCollection<ContentContext> _typedItems = [];
+
+    /// <summary>Initializes a new message list.</summary>
+    public MessageListView()
+    {
+        SetValue(
+            ItemsPropertyKey,
+            new ReadOnlyObservableCollection<ContentContext>(_typedItems));
+        ((INotifyCollectionChanged)base.Items).CollectionChanged +=
+            OnProjectedItemsChanged;
+
+        if (ContentTemplates is INotifyCollectionChanged templates)
+            templates.CollectionChanged += OnContentTemplatesCollectionChanged;
+
+        SyncContentTemplates();
+        SetDynamicResource(ControlTemplateProperty, ChatThemeKeys.MessageListViewTemplate);
+        SetDynamicResource(MaxBubbleWidthProperty, ChatThemeKeys.BubbleMaxWidth);
+        UpdateAppearanceAliases();
+    }
+
+    /// <summary>Gets or sets the AI agent session to display.</summary>
     public AgentContext? Session
     {
         get => (AgentContext?)GetValue(SessionProperty);
         set => SetValue(SessionProperty, value);
     }
 
-    /// <summary>
-    /// Consumer content templates used to render blocks. Any matching consumer template outranks the built-in
-    /// fallback templates; numeric priority and declaration order resolve matches within this collection.
-    /// </summary>
-    public IList<ContentTemplate> ContentTemplates
+    /// <summary>Gets the AI-typed view of the neutral projected rows.</summary>
+    public new ReadOnlyObservableCollection<ContentContext> Items =>
+        (ReadOnlyObservableCollection<ContentContext>)GetValue(ItemsProperty);
+
+    /// <summary>Gets or sets the AI-specific block templates.</summary>
+    public new IList<ContentTemplate> ContentTemplates
     {
         get => (IList<ContentTemplate>)GetValue(ContentTemplatesProperty);
         set => SetValue(ContentTemplatesProperty, value);
     }
 
-    /// <summary>
-    /// Gets or sets whether the built-in text, approval, UI-action, reasoning, media, thinking, and error templates are used when no
-    /// consumer template matches. Set this to <see langword="false"/> to restore strict allow-list rendering.
-    /// </summary>
-    public bool UseDefaultContentTemplates
-    {
-        get => (bool)GetValue(UseDefaultContentTemplatesProperty);
-        set => SetValue(UseDefaultContentTemplatesProperty, value);
-    }
-
+    /// <summary>Gets or sets whether participant avatars are shown.</summary>
     public bool ShowAvatars
     {
         get => (bool)GetValue(ShowAvatarsProperty);
         set => SetValue(ShowAvatarsProperty, value);
     }
 
+    /// <summary>Gets or sets the participant avatar size.</summary>
     public double AvatarSize
     {
         get => (double)GetValue(AvatarSizeProperty);
         set => SetValue(AvatarSizeProperty, value);
     }
 
+    /// <summary>Gets or sets the user display name.</summary>
     public string UserDisplayName
     {
         get => (string)GetValue(UserDisplayNameProperty);
         set => SetValue(UserDisplayNameProperty, value);
     }
 
+    /// <summary>Gets or sets the assistant display name.</summary>
     public string AssistantDisplayName
     {
         get => (string)GetValue(AssistantDisplayNameProperty);
         set => SetValue(AssistantDisplayNameProperty, value);
     }
 
+    /// <summary>Gets or sets whether message timestamps are shown.</summary>
     public bool ShowTimestamps
     {
         get => (bool)GetValue(ShowTimestampsProperty);
         set => SetValue(ShowTimestampsProperty, value);
     }
 
+    /// <summary>Gets or sets the bubble corner radius.</summary>
     public double BubbleCornerRadius
     {
         get => (double)GetValue(BubbleCornerRadiusProperty);
         set => SetValue(BubbleCornerRadiusProperty, value);
     }
 
+    /// <summary>Gets or sets the bubble stroke thickness.</summary>
     public double BubbleStrokeThickness
     {
         get => (double)GetValue(BubbleStrokeThicknessProperty);
         set => SetValue(BubbleStrokeThicknessProperty, value);
     }
 
+    /// <summary>Gets or sets the bubble stroke color.</summary>
     public Color? BubbleStrokeColor
     {
         get => (Color?)GetValue(BubbleStrokeColorProperty);
         set => SetValue(BubbleStrokeColorProperty, value);
     }
 
+    /// <summary>Gets or sets the maximum bubble width.</summary>
     public double MaxBubbleWidth
     {
         get => (double)GetValue(MaxBubbleWidthProperty);
         set => SetValue(MaxBubbleWidthProperty, value);
     }
 
-    /// <summary>
-    /// The rendered items, in order (including any transient thinking/error items). This is an observable,
-    /// read-only collection — a container can bind its <c>ItemsSource</c> to it and track live changes.
-    /// </summary>
-    public ReadOnlyObservableCollection<ContentContext> Items =>
-        (ReadOnlyObservableCollection<ContentContext>)GetValue(ItemsProperty);
-
-    private readonly ObservableCollection<ContentContext> _items = [];
-    private readonly IReadOnlyList<ContentTemplate> _defaultContentTemplates =
-    [
-        new TextContentTemplate { Role = "User", Priority = -10_000 },
-        new TextContentTemplate { Role = "Assistant", Priority = -10_000 },
-        new ToolApprovalTemplate { Priority = -10_000 },
-        new UIActionContentTemplate { Priority = -10_000 },
-        new ReasoningContentTemplate { Priority = -10_000 },
-        new MediaContentTemplate { Priority = -10_000 },
-        new ThinkingContentTemplate { Priority = -10_000 },
-        new ErrorContentTemplate { Priority = -10_000 },
-    ];
-
-    private CollectionView? _messagesPart;
-
-    private IDisposable? _turnAddedReg;
-    private IDisposable? _statusChangedReg;
-    private IDisposable? _blockAddedReg;
-    private readonly Dictionary<ContentBlock, IDisposable> _blockSubscriptions =
-        new(ReferenceEqualityComparer.Instance);
-
-    // Streaming coalescing: a block can raise a change per token. Applying each one immediately
-    // replaces the CollectionView item (recreating the whole cell) and rebuilds custom views from
-    // scratch, which stalls the UI during a burst. Instead we mark the block dirty and flush the
-    // batch at most once per interval, so N token updates collapse into a few refreshes.
-    private static readonly TimeSpan FlushInterval = TimeSpan.FromMilliseconds(50);
-    private readonly List<ContentBlock> _dirtyBlocks = [];
-    private bool _flushScheduled;
-
-    // Purely visual, UI-only items — never part of the engine's turns or the message thread.
-    private ContentContext? _thinkingItem;   // transient tail while streaming
-    private Exception? _shownError;           // dedupe: the error currently rendered
-    private ContentContext? _errorItem;
-
-    public MessageListView()
+    /// <inheritdoc />
+    protected override ChatContentItem CreateItem(
+        ConversationMessage message,
+        MessageContent content,
+        ChatConversation? conversation,
+        ChatAppearance appearance)
     {
-        SetValue(ItemsPropertyKey, new ReadOnlyObservableCollection<ContentContext>(_items));
-
-        if (ContentTemplates is INotifyCollectionChanged ncc)
-            ncc.CollectionChanged += OnContentTemplatesChanged;
-
-        SetDynamicResource(MaxBubbleWidthProperty, Themes.ChatThemeKeys.BubbleMaxWidth);
-        SetDynamicResource(ControlTemplateProperty, Themes.ChatThemeKeys.MessageListViewTemplate);
-    }
-
-    private void OnContentTemplatesChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
-        RebuildTemplateSelector();
-
-    protected override void OnParentSet()
-    {
-        base.OnParentSet();
-
-        // Ensure the ChatTheme resources (which provide the default ControlTemplate
-        // and item templates) are merged when the control joins the visual tree.
-        if (Parent is not null && Application.Current is { } app)
-            ChatThemeLoader.EnsureLoaded(app.Resources);
-    }
-
-    protected override void OnApplyTemplate()
-    {
-        base.OnApplyTemplate();
-
-        _messagesPart = GetTemplateChild("PART_Messages") as CollectionView;
-
-        if (_messagesPart is not null)
+        var agentConversation = _agentConversation ?? conversation as AgentChatConversation;
+        if (agentConversation is not null &&
+            content is AgentBlockContent blockContent)
         {
-            _messagesPart.ItemsSource = _items;
-            RebuildTemplateSelector();
+            return new ContentContext(
+                agentConversation.Session,
+                message,
+                blockContent,
+                agentConversation,
+                appearance,
+                this);
         }
 
-        RebuildFromSession();
+        return base.CreateItem(message, content, conversation, appearance);
     }
 
-    private void RebuildTemplateSelector()
+    /// <inheritdoc />
+    protected override ChatContentTemplateSelector CreateTemplateSelector()
     {
-        if (_messagesPart is null)
-            return;
+        var fallbacks = new ContentTemplate[]
+        {
+            new RichTextContentTemplate(),
+            new TextContentTemplate
+            {
+                Role = ChatRole.User.Value
+            },
+            new TextContentTemplate
+            {
+                Role = ChatRole.Assistant.Value
+            },
+            new ToolApprovalTemplate(),
+            new UIActionContentTemplate(),
+            new ReasoningContentTemplate(),
+            new MediaContentTemplate(),
+            new ThinkingContentTemplate(),
+            new ErrorContentTemplate()
+        };
 
-        _messagesPart.ItemTemplate = CreateTemplateSelector();
-    }
-
-    internal ContentTemplateSelector CreateTemplateSelector()
-    {
-        var selector = new ContentTemplateSelector();
-        foreach (var t in ContentTemplates)
-            selector.Templates.Add(t);
-
+        var selector = new ChatContentTemplateSelector();
+        foreach (var template in base.ContentTemplates)
+            selector.Templates.Add(template);
         if (UseDefaultContentTemplates)
         {
-            foreach (var t in _defaultContentTemplates)
-                selector.FallbackTemplates.Add(t);
+            foreach (var fallback in fallbacks)
+                selector.FallbackTemplates.Add(fallback);
         }
-
         return selector;
     }
 
-    // ── Session management ──
+    internal ChatContentTemplateSelector CreateAiTemplateSelector() =>
+        CreateTemplateSelector();
 
-    private static void OnSessionChanged(BindableObject bindable, object oldValue, object newValue)
+    private void OnSessionChanged(
+        AgentContext? oldSession,
+        AgentContext? newSession)
     {
-        var control = (MessageListView)bindable;
-        control.UnsubscribeFromSession();
-
-        if (newValue is AgentContext ctx)
-            control.SubscribeToSession(ctx);
-
-        control.RebuildFromSession();
+        _ = oldSession;
+        _agentConversation?.Dispose();
+        _agentConversation = newSession is null
+            ? null
+            : new AgentChatConversation(newSession);
+        _agentConversation?.UpdateParticipantNames(
+            UserDisplayName,
+            AssistantDisplayName);
+        Conversation = _agentConversation;
     }
 
-    private void SubscribeToSession(AgentContext ctx)
+    private static void OnAppearanceAliasChanged(
+        BindableObject bindable,
+        object oldValue,
+        object newValue)
     {
-        _turnAddedReg = ctx.RegisterOnTurnAdded(_ => { });
-
-        _statusChangedReg = ctx.RegisterOnStatusChanged(status =>
-            Dispatcher.Dispatch(() => OnStatusChanged(status)));
-
-        _blockAddedReg = ctx.RegisterOnBlockAdded((turn, block) =>
-            Dispatcher.Dispatch(() => OnBlockAdded(turn, block)));
+        _ = oldValue;
+        _ = newValue;
+        ((MessageListView)bindable).UpdateAppearanceAliases();
     }
 
-    private void UnsubscribeFromSession()
+    private static void OnParticipantAliasChanged(
+        BindableObject bindable,
+        object oldValue,
+        object newValue)
     {
-        _turnAddedReg?.Dispose();
-        _statusChangedReg?.Dispose();
-        _blockAddedReg?.Dispose();
-        _turnAddedReg = null;
-        _statusChangedReg = null;
-        _blockAddedReg = null;
-
-        foreach (var sub in _blockSubscriptions.Values)
-            sub.Dispose();
-        _blockSubscriptions.Clear();
-        _dirtyBlocks.Clear();
+        _ = oldValue;
+        _ = newValue;
+        var list = (MessageListView)bindable;
+        list.UpdateAppearanceAliases();
+        list._agentConversation?.UpdateParticipantNames(
+            list.UserDisplayName,
+            list.AssistantDisplayName);
     }
 
-    internal void OnStatusChanged(ConversationStatus status)
+    private void UpdateAppearanceAliases()
     {
-        if (status == ConversationStatus.Streaming)
+        Appearance.ShowAvatars = ShowAvatars;
+        Appearance.AvatarSize = AvatarSize;
+        Appearance.ShowTimestamps = ShowTimestamps;
+        Appearance.BubbleCornerRadius = BubbleCornerRadius;
+        Appearance.BubbleStrokeThickness = BubbleStrokeThickness;
+        Appearance.BubbleStrokeColor = BubbleStrokeColor;
+        Appearance.MaxBubbleWidth = MaxBubbleWidth;
+    }
+
+    private void OnContentTemplatesChanged(
+        IList<ContentTemplate>? oldTemplates,
+        IList<ContentTemplate>? newTemplates)
+    {
+        if (oldTemplates is INotifyCollectionChanged oldCollection)
+            oldCollection.CollectionChanged -= OnContentTemplatesCollectionChanged;
+        if (newTemplates is INotifyCollectionChanged newCollection)
+            newCollection.CollectionChanged += OnContentTemplatesCollectionChanged;
+        SyncContentTemplates();
+    }
+
+    private void OnContentTemplatesCollectionChanged(
+        object? sender,
+        NotifyCollectionChangedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        SyncContentTemplates();
+    }
+
+    private void SyncContentTemplates()
+    {
+        base.ContentTemplates.Clear();
+        foreach (var template in ContentTemplates)
+            base.ContentTemplates.Add(template);
+    }
+
+    private void OnProjectedItemsChanged(
+        object? sender,
+        NotifyCollectionChangedEventArgs e)
+    {
+        _ = sender;
+
+        switch (e.Action)
         {
-            var wasRetrying = _errorItem is not null || _shownError is not null;
-            RemoveErrorItem();
-            if (wasRetrying && !ProjectionMatchesSession())
-                ReconcileItemsWithSession();
-        }
+            case NotifyCollectionChangedAction.Add:
+                for (var i = 0; i < e.NewItems!.Count; i++)
+                {
+                    if (e.NewItems[i] is not ContentContext context)
+                        continue;
 
-        // Cancellation removes partial response blocks from the engine turn. Re-project only
-        // when that makes the UI projection differ, avoiding a full rebuild after normal turns.
-        if (status == ConversationStatus.Idle && Session?.Turns.Count == 0)
-        {
-            RebuildFromSession();
-            return;
-        }
+                    var baseIndex = e.NewStartingIndex + i;
+                    var typedIndex = 0;
+                    for (var itemIndex = 0; itemIndex < baseIndex; itemIndex++)
+                    {
+                        if (base.Items[itemIndex] is ContentContext)
+                            typedIndex++;
+                    }
+                    _typedItems.Insert(typedIndex, context);
+                }
+                break;
 
-        if (status == ConversationStatus.Idle && !ProjectionMatchesSession())
-            ReconcileItemsWithSession();
+            case NotifyCollectionChangedAction.Remove:
+            case NotifyCollectionChangedAction.Replace:
+                if (e.OldItems is not null)
+                {
+                    foreach (var item in e.OldItems)
+                    {
+                        if (item is ContentContext context)
+                        {
+                            context.Dispose();
+                            _typedItems.Remove(context);
+                        }
+                    }
+                }
+                if (e.Action == NotifyCollectionChangedAction.Replace)
+                    RebuildTypedItems();
+                break;
 
-        // A failure surfaces via status/Error only — render a sticky error item (once).
-        if (status == ConversationStatus.Error && Session?.Error is { } ex && !ReferenceEquals(ex, _shownError))
-        {
-            RemoveThinkingItem();
-            _shownError = ex;
-            _errorItem = CreateContentContext(
-                new ErrorContentBlock(ErrorContentBlock.DefaultUserMessage));
-            _items.Add(_errorItem);
-            ScrollToLatestMessage();
-            return;
-        }
+            case NotifyCollectionChangedAction.Move:
+                RebuildTypedItems();
+                break;
 
-        UpdateThinkingItem();
-    }
-
-    private bool ProjectionMatchesSession()
-    {
-        if (Session is null)
-            return _items.Count == 0;
-
-        var projectedBlocks = _items
-            .Where(item => item.Block is not ThinkingContentBlock and not ErrorContentBlock)
-            .Select(item => item.Block);
-        var sessionBlocks = Session.Turns.SelectMany(turn =>
-            turn.RequestBlocks.Concat(turn.ResponseBlocks));
-
-        return projectedBlocks.SequenceEqual(sessionBlocks, ReferenceEqualityComparer.Instance);
-    }
-
-    internal void ReconcileItemsWithSession()
-    {
-        if (Session is null)
-            return;
-
-        var sessionBlocks = Session.Turns
-            .SelectMany(turn => turn.RequestBlocks.Concat(turn.ResponseBlocks))
-            .ToHashSet(ReferenceEqualityComparer.Instance);
-
-        for (int i = _items.Count - 1; i >= 0; i--)
-        {
-            var block = _items[i].Block;
-            if (block is ThinkingContentBlock or ErrorContentBlock || sessionBlocks.Contains(block))
-                continue;
-
-            _items.RemoveAt(i);
-            if (_blockSubscriptions.Remove(block, out var subscription))
-                subscription.Dispose();
-            _dirtyBlocks.Remove(block);
-        }
-    }
-
-    private void OnBlockAdded(ConversationTurn turn, ContentBlock block)
-    {
-        if (Session is null)
-            return;
-
-        // Keep any transient thinking item as the very last row.
-        RemoveThinkingItem();
-
-        _items.Add(CreateContentContext(block, turn));
-        SubscribeToBlock(block);
-
-        UpdateThinkingItem();
-        ScrollToLatestMessage();
-    }
-
-    /// <summary>Marks a block as needing a UI refresh and schedules a single coalesced flush.</summary>
-    private void MarkBlockDirty(ContentBlock block)
-    {
-        if (!_dirtyBlocks.Contains(block))
-            _dirtyBlocks.Add(block);
-
-        if (_flushScheduled)
-            return;
-
-        _flushScheduled = true;
-        Dispatcher.DispatchDelayed(FlushInterval, FlushDirtyBlocks);
-    }
-
-    private void FlushDirtyBlocks()
-    {
-        _flushScheduled = false;
-
-        if (_dirtyBlocks.Count == 0)
-            return;
-
-        var dirty = _dirtyBlocks.ToArray();
-        _dirtyBlocks.Clear();
-
-        if (Session is null)
-            return;
-
-        foreach (var block in dirty)
-            ApplyBlockChanged(block);
-
-        // The tail may now be streaming assistant content, which hides the thinking item.
-        UpdateThinkingItem();
-        ScrollToLatestMessage();
-    }
-
-    private void ApplyBlockChanged(ContentBlock block)
-    {
-        for (int i = 0; i < _items.Count; i++)
-        {
-            if (ReferenceEquals(_items[i].Block, block))
-            {
-                _items[i] = CreateContentContext(block, _items[i].Turn);
-                return;
-            }
+            case NotifyCollectionChangedAction.Reset:
+                foreach (var context in _typedItems)
+                    context.Dispose();
+                RebuildTypedItems();
+                break;
         }
     }
 
-    private void RebuildFromSession()
+    private void RebuildTypedItems()
     {
-        foreach (var sub in _blockSubscriptions.Values)
-            sub.Dispose();
-        _blockSubscriptions.Clear();
-
-        _items.Clear();
-        _dirtyBlocks.Clear();
-        _thinkingItem = null;
-        _shownError = null;
-        _errorItem = null;
-
-        if (Session is null)
+        _typedItems.Clear();
+        foreach (var item in base.Items)
         {
-            return;
+            if (item is ContentContext context)
+                _typedItems.Add(context);
         }
-
-        foreach (var turn in Session.Turns)
-        {
-            foreach (var block in turn.RequestBlocks)
-            {
-                _items.Add(CreateContentContext(block, turn));
-                SubscribeToBlock(block);
-            }
-            foreach (var block in turn.ResponseBlocks)
-            {
-                _items.Add(CreateContentContext(block, turn));
-                SubscribeToBlock(block);
-            }
-        }
-
-        // Re-project the current transient state (the error is not stored in turns).
-        if (Session.Status == ConversationStatus.Error && Session.Error is { } ex)
-        {
-            _shownError = ex;
-            _errorItem = CreateContentContext(
-                new ErrorContentBlock(ErrorContentBlock.DefaultUserMessage));
-            _items.Add(_errorItem);
-        }
-
-        UpdateThinkingItem();
-        ScrollToLatestMessage();
-    }
-
-    // ── Transient (UI-only) items: thinking + error ──
-
-    /// <summary>Shows/hides the transient "Thinking…" item as the last row based on the session status.</summary>
-    private void UpdateThinkingItem()
-    {
-        var want = ShouldShowThinking();
-
-        if (want && _thinkingItem is null)
-        {
-            _thinkingItem = CreateContentContext(new ThinkingContentBlock());
-            _items.Add(_thinkingItem);
-            ScrollToLatestMessage();
-        }
-        else if (!want && _thinkingItem is not null)
-        {
-            RemoveThinkingItem();
-        }
-    }
-
-    private void RemoveThinkingItem()
-    {
-        if (_thinkingItem is null)
-            return;
-
-        _items.Remove(_thinkingItem);
-        _thinkingItem = null;
-    }
-
-    private void RemoveErrorItem()
-    {
-        if (_errorItem is not null)
-            _items.Remove(_errorItem);
-        _errorItem = null;
-        _shownError = null;
-    }
-
-    private bool ShouldShowThinking()
-    {
-        if (Session?.Status != ConversationStatus.Streaming)
-            return false;
-
-        // Find the last real (non-thinking) item.
-        ContentContext? lastReal = null;
-        for (int i = _items.Count - 1; i >= 0; i--)
-        {
-            if (ReferenceEquals(_items[i], _thinkingItem))
-                continue;
-            lastReal = _items[i];
-            break;
-        }
-
-        // Nothing yet — don't show "Thinking…" before the user's message appears.
-        if (lastReal is null)
-            return false;
-
-        // Hide while the assistant is actively streaming visible content (its own bubble is the indicator).
-        var block = lastReal.Block;
-        var isAssistantContent = block.Role == ChatRole.Assistant
-            && block is RichContentBlock or ReasoningContentBlock or MediaContentBlock;
-        return !isAssistantContent;
-    }
-
-    private void ScrollToLatestMessage()
-    {
-        if (_messagesPart is null || _items.Count == 0)
-            return;
-
-        Dispatcher.DispatchDelayed(TimeSpan.FromMilliseconds(50), () =>
-        {
-            if (_items.Count == 0 || _messagesPart is null)
-                return;
-
-            _messagesPart.ScrollTo(_items.Count - 1, position: ScrollToPosition.End, animate: false);
-        });
-    }
-
-    private ContentContext CreateContentContext(
-        ContentBlock block,
-        ConversationTurn? turn = null) =>
-        new(Session!, block, this, turn);
-
-    private void SubscribeToBlock(ContentBlock block)
-    {
-        if (_blockSubscriptions.Remove(block, out var existing))
-            existing.Dispose();
-
-        _blockSubscriptions[block] =
-            block.OnChanged(() => Dispatcher.Dispatch(() => MarkBlockDirty(block)));
     }
 }

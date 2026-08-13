@@ -116,46 +116,77 @@ public class UIAgent : IDisposable
     public IAsyncEnumerable<ContentBlock> SendMessageAsync(
         ChatMessage message,
         CancellationToken cancellationToken = default)
-        => SendMessageAsync(
-            message,
+        => SendMessagesAsync(
+            [message],
             startsThreadTurn: true,
             completesThreadTurn: true,
             cancellationToken);
 
-    internal async IAsyncEnumerable<ContentBlock> SendMessageAsync(
+    internal IAsyncEnumerable<ContentBlock> SendMessageAsync(
         ChatMessage message,
+        bool startsThreadTurn,
+        bool completesThreadTurn,
+        CancellationToken cancellationToken = default) =>
+        SendMessagesAsync(
+            [message],
+            startsThreadTurn,
+            completesThreadTurn,
+            cancellationToken);
+
+    internal async IAsyncEnumerable<ContentBlock> SendMessagesAsync(
+        IReadOnlyList<ChatMessage> messages,
         bool startsThreadTurn,
         bool completesThreadTurn,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(messages);
+        if (messages.Count == 0)
+            throw new ArgumentException("At least one message is required.", nameof(messages));
+        foreach (var message in messages)
+            ArgumentNullException.ThrowIfNull(message);
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var requestMessage = EnsureMessageId(message);
+        var requestMessages = messages
+            .Select(EnsureMessageId)
+            .ToArray();
         var thread = _options.Thread;
 
-        if (startsThreadTurn)
+        for (var index = 0; index < requestMessages.Length; index++)
         {
-            thread?.AppendUserMessage(requestMessage);
-            RefreshHistoryFromThread(thread);
-        }
-        else
-        {
-            thread?.AppendUpdate(CreateMessageUpdate(requestMessage, isContinuation: true));
+            var requestMessage = requestMessages[index];
+            if (startsThreadTurn && index == 0)
+            {
+                thread?.AppendUserMessage(requestMessage);
+                RefreshHistoryFromThread(thread);
+            }
+            else
+            {
+                thread?.AppendUpdate(CreateMessageUpdate(
+                    requestMessage,
+                    isContinuation: true));
+            }
+
+            _history.Add(requestMessage);
         }
 
-        _history.Add(requestMessage);
         ChatMessage[] historySnapshot = thread is { IsStateful: true }
-            ? [requestMessage]
+            ? requestMessages
             : [.. _history];
 
         var pipeline = new BlockMappingPipeline(_options, _logger);
-        var userUpdate = CreateMessageUpdate(requestMessage, isContinuation: false);
-        await foreach (var block in pipeline.Process(userUpdate, cancellationToken))
+        foreach (var requestMessage in requestMessages)
         {
-            yield return block;
+            var userUpdate = CreateMessageUpdate(
+                requestMessage,
+                isContinuation: false);
+            await foreach (var block in pipeline.Process(
+                userUpdate,
+                cancellationToken))
+            {
+                yield return block;
+            }
         }
         foreach (var block in pipeline.Finalize())
         {
@@ -314,11 +345,15 @@ public class UIAgent : IDisposable
     internal virtual ChatResponseUpdate ApplyStateMapper(ChatResponseUpdate update)
         => ApplyStateMapper(update, out _);
 
+    internal virtual void RejectPendingPredictiveState()
+    {
+    }
+
     internal ChatResponseUpdate ApplyStateMapper(
         ChatResponseUpdate update,
-        out object? stateValue)
+        out StateMapperContext? stateContext)
     {
-        stateValue = null;
+        stateContext = null;
         if (_options.StateMapper is null)
             return update;
 
@@ -326,7 +361,7 @@ public class UIAgent : IDisposable
         if (!_options.StateMapper(context))
             return update;
 
-        stateValue = context.StateValue;
+        stateContext = context;
         return context.HasHandledContent ? context.GetFilteredUpdate() : update;
     }
 
@@ -390,6 +425,17 @@ public class UIAgent : IDisposable
         }
 
         return chatOptions;
+    }
+
+    internal void ApplyFunctionResult(
+        FunctionInvocationContentBlock block,
+        FunctionResultContent result)
+    {
+        foreach (var registration in _options.HandlerRegistrations)
+        {
+            if (registration.TryApplyFunctionResult(block, result))
+                return;
+        }
     }
 
     private AIFunction? FindBackendFunction(string name)

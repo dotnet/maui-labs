@@ -27,7 +27,11 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
 
     public bool IsComplete => Result is not null;
 
-    /// <summary>Executes the registered action once and returns its function result.</summary>
+    /// <summary>
+    /// Executes the registered action once and returns its function result. The cancellation token
+    /// controls the initial invocation; later callers can cancel their wait through
+    /// <see cref="GetResultAsync"/>.
+    /// </summary>
     public Task<AIContent> InvokeAsync(CancellationToken cancellationToken = default)
     {
         _invocation ??= InvokeCoreAsync(cancellationToken);

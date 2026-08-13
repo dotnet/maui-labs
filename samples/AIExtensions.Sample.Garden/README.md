@@ -24,6 +24,11 @@ past purchases using source-generated tools.
   animated modal overlays.
 - **Approval flow** — checkout and destructive actions pause the chat and show an
   inline approve/reject banner.
+- **Provider-neutral crew chat** — the compose button in the header opens a three-person
+  `Microsoft.Maui.Chat.Controls.ChatView` with text, local media, delivery states, typing,
+  attachments, and a custom task-card content template. The page and view model use no AI types.
+- **Provider choice** — desktop builds use the GitHub Copilot SDK by default;
+  Azure OpenAI remains available through configuration and is the mobile default.
 
 ## Tool sources and lifetimes
 
@@ -70,6 +75,7 @@ participate in a shared tool context while still writing through to singleton st
 | Transient tool host | `ViewModels/Catalog/CatalogViewModel.cs` → `recommend_bundle` |
 | Shell modal navigation tools | `ViewModels/MainViewModel.cs` + `AppShell.xaml.cs` |
 | Responsive welcome cards and centered chat layout | `Views/ChatView.xaml` + `Pages/MainPage.xaml` |
+| Provider-neutral group chat and custom content | `Pages/TeamChatPage.xaml` + `TeamChat/` |
 
 ## Approval flow
 
@@ -84,10 +90,24 @@ or reject it.
 dotnet build samples/AIExtensions.Sample.Garden -f net10.0-maccatalyst
 ```
 
-Configure user secrets (shared across AI Extensions samples):
+On Mac Catalyst and Windows, sign in to the Copilot CLI (`copilot`) and run the
+sample. Optionally select a model or explicit CLI path:
 
 ```bash
+dotnet user-secrets --id ai-attributes-secrets set "AI:Provider" "Copilot"
+dotnet user-secrets --id ai-attributes-secrets set "AI:Model" "<optional-model>"
+dotnet user-secrets --id ai-attributes-secrets set "AI:CopilotCliPath" "<optional-path>"
+```
+
+To use Azure OpenAI instead (and for Android/iOS), configure:
+
+```bash
+dotnet user-secrets --id ai-attributes-secrets set "AI:Provider" "AzureOpenAI"
 dotnet user-secrets --id ai-attributes-secrets set "AI:Endpoint" "<your-endpoint>"
 dotnet user-secrets --id ai-attributes-secrets set "AI:ApiKey" "<your-key>"
 dotnet user-secrets --id ai-attributes-secrets set "AI:DeploymentName" "<your-deployment>"
 ```
+
+`AI:ImageDeploymentName` is optional with either chat provider. When configured
+alongside the Azure endpoint/key, the image-generation tool is added to Sage;
+otherwise image prompts are omitted from the system instructions.

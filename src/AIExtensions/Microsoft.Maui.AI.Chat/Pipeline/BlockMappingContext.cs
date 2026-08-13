@@ -70,7 +70,7 @@ public class BlockMappingContext
         }
 
         var tempUpdate = new ChatResponseUpdate { Contents = [content] };
-        var tempContext = new BlockMappingContext(tempUpdate);
+        var tempContext = new BlockMappingContext(tempUpdate, _inactiveHandlers);
 
         for (var i = 0; i < _inactiveHandlers.Count; i++)
         {

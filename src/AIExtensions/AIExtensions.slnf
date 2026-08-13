@@ -7,11 +7,15 @@
       "src\\AIExtensions\\Microsoft.Maui.AI.Chat\\Microsoft.Maui.AI.Chat.csproj",
       "src\\AIExtensions\\Microsoft.Maui.AI.Chat.Generators\\Microsoft.Maui.AI.Chat.Generators.csproj",
       "src\\AIExtensions\\Microsoft.Maui.AI.Chat.Controls\\Microsoft.Maui.AI.Chat.Controls.csproj",
+      "src\\AIExtensions\\Microsoft.Maui.Chat.Controls\\Microsoft.Maui.Chat.Controls.csproj",
+      "src\\AIExtensions\\Microsoft.Maui.CopilotSdk\\Microsoft.Maui.CopilotSdk.csproj",
       "tests\\AIExtensions\\Microsoft.Maui.AI.Attributes.Tests\\Microsoft.Maui.AI.Attributes.Tests.csproj",
       "tests\\AIExtensions\\Microsoft.Maui.AI.Attributes.Generators.Tests\\Microsoft.Maui.AI.Attributes.Generators.Tests.csproj",
       "tests\\AIExtensions\\Microsoft.Maui.AI.Chat.Tests\\Microsoft.Maui.AI.Chat.Tests.csproj",
       "tests\\AIExtensions\\Microsoft.Maui.AI.Chat.Generators.Tests\\Microsoft.Maui.AI.Chat.Generators.Tests.csproj",
       "tests\\AIExtensions\\Microsoft.Maui.AI.Chat.Controls.Tests\\Microsoft.Maui.AI.Chat.Controls.Tests.csproj",
+      "tests\\AIExtensions\\Microsoft.Maui.Chat.Controls.Tests\\Microsoft.Maui.Chat.Controls.Tests.csproj",
+      "tests\\AIExtensions\\Microsoft.Maui.CopilotSdk.Tests\\Microsoft.Maui.CopilotSdk.Tests.csproj",
       "samples\\AIExtensions.Sample.Garden\\AIExtensions.Sample.Garden.csproj"
     ]
   }

@@ -3,17 +3,17 @@ using Microsoft.Extensions.AI;
 namespace Microsoft.Maui.AI.Chat.Controls;
 
 /// <summary>A named multimodal attachment ready to be sent as <see cref="DataContent"/>.</summary>
-public sealed class ChatAttachment
+public sealed class ChatAttachment : Microsoft.Maui.Chat.Controls.ChatAttachment
 {
     public ChatAttachment(string fileName, DataContent content)
+        : base(
+            fileName,
+            content?.MediaType ?? throw new ArgumentNullException(nameof(content)),
+            content.Data)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
-        FileName = fileName;
-        Content = content ?? throw new ArgumentNullException(nameof(content));
+        Content = content;
         Content.Name ??= fileName;
     }
-
-    public string FileName { get; }
 
     public DataContent Content { get; }
 }

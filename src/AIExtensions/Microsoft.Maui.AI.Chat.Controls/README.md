@@ -32,6 +32,11 @@ builder.UseMauiApp<App>()
 automatic UI actions, reasoning, media, thinking, and generic errors. Raw function calls and
 unknown custom blocks stay hidden until explicitly templated.
 
+`CopilotChatView` derives from the provider-neutral `Microsoft.Maui.Chat.Controls.ChatView`.
+The AI package only adapts `AgentContext` blocks into neutral conversation messages and layers the
+AI-specific template types on top, so the composer, attachments, suggestions, appearance, and
+virtualized projection have one implementation.
+
 ## Custom block views
 
 ```xml
@@ -106,4 +111,3 @@ Mac Catalyst, and Windows project targets; CI validates macOS and Windows hosts.
 
 `Microsoft.Maui.AI.Chat` contains the headless engine and can be used without this controls
 package.
-

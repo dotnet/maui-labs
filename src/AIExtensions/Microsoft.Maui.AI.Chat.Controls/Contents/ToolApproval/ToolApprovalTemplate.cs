@@ -26,13 +26,12 @@ public class ToolApprovalTemplate : ContentTemplate
         return true;
     }
 
-    internal override DataTemplate GetTemplate()
+    protected override DataTemplate CreateTemplate()
     {
-        var innerType = ViewType;
-        return _cachedTemplate ??= new DataTemplate(() =>
+        return new DataTemplate(() =>
         {
             var wrapper = new ToolApprovalView();
-            wrapper.InnerContentType = innerType;
+            wrapper.InnerContentType = ViewType;
             // Explicit template lookup — implicit styles may not resolve inside CollectionView
             wrapper.SetDynamicResource(ContentView.ControlTemplateProperty, ChatThemeKeys.ToolApprovalTemplate);
             return PrepareDataTemplateView(wrapper);
@@ -41,6 +40,4 @@ public class ToolApprovalTemplate : ContentTemplate
 
     internal override int GetPriority(ContentContext context) =>
         base.GetPriority(context) + (ToolName is null ? -100 : 100);
-
-    private DataTemplate? _cachedTemplate;
 }

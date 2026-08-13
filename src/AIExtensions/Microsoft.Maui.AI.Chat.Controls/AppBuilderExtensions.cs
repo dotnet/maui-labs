@@ -14,6 +14,7 @@ public static class AppBuilderExtensions
     /// </summary>
     public static MauiAppBuilder UseChatControls(this MauiAppBuilder builder)
     {
+        Microsoft.Maui.Chat.Controls.AppBuilderExtensions.UseChatControls(builder);
         builder.ConfigureMauiHandlers(_ => { });
 
         // Merge the default ChatTheme into the app-level resources so that

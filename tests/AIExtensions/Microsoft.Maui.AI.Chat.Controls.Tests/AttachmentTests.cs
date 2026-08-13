@@ -92,7 +92,7 @@ public class AttachmentTests
 
         await control.PickAttachmentsFromButtonAsync();
 
-        Assert.Equal("File is too large.", control.AttachmentError);
+        Assert.Equal("That attachment could not be added.", control.AttachmentError);
         Assert.Empty(control.Attachments);
     }
 
