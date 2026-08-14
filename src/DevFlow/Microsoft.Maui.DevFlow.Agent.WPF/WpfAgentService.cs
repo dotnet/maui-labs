@@ -25,6 +25,45 @@ public class WpfAgentService : DevFlowAgentService
     protected override string DeviceTypeName => "Virtual";
     protected override string IdiomName => "Desktop";
 
+    protected override IReadOnlyCollection<string>? EnumerateNativePreferenceKeys(string? sharedName)
+    {
+        try
+        {
+            // Guard against path traversal: sharedName becomes part of a file name.
+            if (!string.IsNullOrEmpty(sharedName) &&
+                (sharedName.Contains('/') || sharedName.Contains('\\') || sharedName.Contains("..")))
+                return null;
+
+            // Mirror WPFPreferences' on-disk layout:
+            // LocalApplicationData / {FriendlyName} / preferences / {shared|default}.json
+            var prefsDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                AppDomain.CurrentDomain.FriendlyName, "preferences");
+            var path = Path.Combine(prefsDir, (sharedName ?? "default") + ".json");
+
+            if (!File.Exists(path))
+                return new List<string>();
+
+            // Best-effort read; parse failures degrade to complete=false.
+            var json = File.ReadAllText(path);
+            if (string.IsNullOrWhiteSpace(json))
+                return new List<string>();
+
+            using var doc = global::System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != global::System.Text.Json.JsonValueKind.Object)
+                return new List<string>();
+
+            var keys = new List<string>();
+            foreach (var prop in doc.RootElement.EnumerateObject())
+                keys.Add(prop.Name);
+            return keys;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     protected override double GetWindowDisplayDensity(IWindow? window)
     {
         try

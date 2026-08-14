@@ -918,7 +918,7 @@ public class DevFlowCommands
 
         var prefsSharedNameOption = new Option<string?>("--sharedName") { Description = "Shared preferences container name" };
 
-        var prefsListCmd = new Command("list", "List all known preference keys") { prefsSharedNameOption };
+        var prefsListCmd = new Command("list", "List preference keys (enumerates the native store where supported; response includes source and complete fields)") { prefsSharedNameOption };
         prefsListCmd.SetAction(async (ctx, ct) =>
         {
             var host = ctx.GetValue(agentHostOption)!;
@@ -2576,7 +2576,7 @@ public class DevFlowCommands
         new("network list", "List recent network requests", false),
         new("network detail", "Show full network request details", false),
         new("network clear", "Clear network request buffer", true),
-        new("storage preferences list", "List all known preference keys", false),
+        new("storage preferences list", "List preference keys (native enumeration where supported)", false),
         new("storage preferences get", "Get a preference value by key", false),
         new("storage preferences set", "Set a preference value", true),
         new("storage preferences delete", "Remove a preference", true),
