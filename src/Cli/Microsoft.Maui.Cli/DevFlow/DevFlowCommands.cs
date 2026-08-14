@@ -1343,6 +1343,55 @@ public class DevFlowCommands
 
         platformCommand.Add(sensorsCommand);
 
+        // MAUI menu (application menu bar inspection + invocation)
+        var mauiMenuCmd = new Command("menu", "Inspect and invoke the application menu bar");
+
+        var menuListCmd = new Command("list", "List application menus (MAUI MenuBarItems + native menu)") { windowOption };
+        menuListCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var window = ctx.GetValue(windowOption);
+            var isJson = output.ResolveJsonMode(ctx.GetValue(jsonOption), ctx.GetValue(noJsonOption));
+            await MauiMenuListAsync(host, port, isJson, window);
+        });
+        mauiMenuCmd.Add(menuListCmd);
+
+        var menuInvokeIdOption = new Option<string?>("--id") { Description = "Menu item id from 'menu list' (e.g. maui:w0/1/2 or native:1/3)" };
+        var menuInvokePathOption = new Option<string?>("--path") { Description = "Slash-joined title path, e.g. 'File/Save'" };
+        var menuInvokeTitleOption = new Option<string?>("--title") { Description = "Menu item title (first match)" };
+        var menuInvokeKeyOption = new Option<string?>("--key") { Description = "Key equivalent, e.g. 's' (combine with --modifiers)" };
+        var menuInvokeModifiersOption = new Option<string?>("--modifiers") { Description = "Comma/plus separated modifiers, e.g. 'cmd,shift'" };
+        var menuInvokeTargetOption = new Option<string?>("--target") { Description = "Menu layer: auto (default), maui, or native" };
+        var menuInvokeCmd = new Command("invoke", "Invoke an application menu item")
+        {
+            menuInvokeIdOption, menuInvokePathOption, menuInvokeTitleOption,
+            menuInvokeKeyOption, menuInvokeModifiersOption, menuInvokeTargetOption,
+            andScreenshotOption, andTreeOption, andTreeDepthOption,
+        };
+        menuInvokeCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var isJson = output.ResolveJsonMode(ctx.GetValue(jsonOption), ctx.GetValue(noJsonOption));
+            var id = ctx.GetValue(menuInvokeIdOption);
+            var path = ctx.GetValue(menuInvokePathOption);
+            var title = ctx.GetValue(menuInvokeTitleOption);
+            var key = ctx.GetValue(menuInvokeKeyOption);
+            var modifiers = ctx.GetValue(menuInvokeModifiersOption);
+            var target = ctx.GetValue(menuInvokeTargetOption);
+            var andScreenshot = ctx.GetValue(andScreenshotOption);
+            var hasAndScreenshot = ctx.GetResult(andScreenshotOption) != null;
+            var andTree = ctx.GetValue(andTreeOption);
+            var andTreeDepth = ctx.GetValue(andTreeDepthOption);
+            var invoked = await MauiMenuInvokeAsync(host, port, isJson, id, path, title, key, modifiers, target);
+            if (invoked)
+                await HandlePostActionFlags(host, port, isJson, hasAndScreenshot, andScreenshot, andTree, andTreeDepth);
+        });
+        mauiMenuCmd.Add(menuInvokeCmd);
+
+        mauiCommand.Add(mauiMenuCmd);
+
         devflowCommand.Add(mauiCommand);
 
         // ===== init / skills commands =====
@@ -2869,6 +2918,127 @@ public class DevFlowCommands
                 Console.WriteLine(result);
         }
         catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
+    }
+
+    private static async Task MauiMenuListAsync(string host, int port, bool json, int? window)
+    {
+        try
+        {
+            using var client = await CreateAgentClientAsync(host, port);
+            var menus = await client.GetMenusAsync(window);
+            if (menus.ValueKind == JsonValueKind.Undefined)
+            {
+                Output.WriteError("Failed to retrieve menus", json);
+                _errorOccurred = true;
+                return;
+            }
+
+            if (json)
+            {
+                Console.WriteLine(FormatJson(menus));
+                return;
+            }
+
+            PrintMenus(menus);
+        }
+        catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
+    }
+
+    private static async Task<bool> MauiMenuInvokeAsync(string host, int port, bool json, string? id, string? path, string? title, string? key, string? modifiers, string? target)
+    {
+        if (string.IsNullOrWhiteSpace(id) && string.IsNullOrWhiteSpace(path) &&
+            string.IsNullOrWhiteSpace(title) && string.IsNullOrWhiteSpace(key))
+        {
+            Output.WriteError("Provide one of: --id, --path, --title, or --key", json, "InvocationError");
+            _errorOccurred = true;
+            return false;
+        }
+
+        try
+        {
+            using var client = await CreateAgentClientAsync(host, port);
+            var result = await client.InvokeMenuAsync(id, path, title, key, modifiers, target);
+
+            var success = result.ValueKind == JsonValueKind.Object &&
+                          result.TryGetProperty("success", out var s) && s.ValueKind == JsonValueKind.True;
+
+            if (json)
+            {
+                Console.WriteLine(result.ValueKind == JsonValueKind.Undefined ? "{\"success\":false}" : FormatJson(result));
+            }
+            else
+            {
+                var label = id ?? path ?? title ?? key;
+                Console.WriteLine(success ? $"Invoked: {label}" : $"Failed to invoke menu item: {label}");
+            }
+
+            if (!success) _errorOccurred = true;
+            return success;
+        }
+        catch (Exception ex)
+        {
+            Output.WriteError(ex.Message, json, suggestions: new[] { "Run 'ui menu list' to see available menu items" });
+            _errorOccurred = true;
+            return false;
+        }
+    }
+
+    private static void PrintMenus(JsonElement menus)
+    {
+        if (menus.TryGetProperty("platform", out var platform))
+            Console.WriteLine($"Platform: {platform.GetString()}");
+
+        if (menus.TryGetProperty("menuBar", out var menuBar) && menuBar.ValueKind == JsonValueKind.Object &&
+            menuBar.TryGetProperty("items", out var mauiItems) && mauiItems.ValueKind == JsonValueKind.Array &&
+            mauiItems.GetArrayLength() > 0)
+        {
+            Console.WriteLine("MAUI menu bar:");
+            foreach (var item in mauiItems.EnumerateArray())
+                PrintMenuNode(item, 1);
+        }
+
+        if (menus.TryGetProperty("native", out var native) && native.ValueKind == JsonValueKind.Object &&
+            native.TryGetProperty("items", out var nativeItems) && nativeItems.ValueKind == JsonValueKind.Array)
+        {
+            var source = native.TryGetProperty("source", out var src) ? src.GetString() : "native";
+            Console.WriteLine($"Native menu ({source}):");
+            foreach (var item in nativeItems.EnumerateArray())
+                PrintMenuNode(item, 1);
+        }
+    }
+
+    private static void PrintMenuNode(JsonElement node, int depth)
+    {
+        var indent = new string(' ', depth * 2);
+
+        if (node.TryGetProperty("separator", out var sep) && sep.ValueKind == JsonValueKind.True)
+        {
+            Console.WriteLine($"{indent}--------");
+            return;
+        }
+
+        var title = node.TryGetProperty("title", out var t) ? t.GetString() : "";
+        var line = $"{indent}{title}";
+
+        if (node.TryGetProperty("key", out var key) && key.ValueKind == JsonValueKind.String)
+        {
+            var mods = "";
+            if (node.TryGetProperty("modifiers", out var m) && m.ValueKind == JsonValueKind.Array)
+                mods = string.Join("+", m.EnumerateArray().Select(x => x.GetString()));
+            line += string.IsNullOrEmpty(mods) ? $"  [{key.GetString()}]" : $"  [{mods}+{key.GetString()}]";
+        }
+
+        if (node.TryGetProperty("enabled", out var en) && en.ValueKind == JsonValueKind.False)
+            line += "  (disabled)";
+
+        if (node.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String)
+            line += $"  {id.GetString()}";
+
+        Console.WriteLine(line);
+
+        if (node.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array)
+            foreach (var child in items.EnumerateArray())
+                PrintMenuNode(child, depth + 1);
     }
 
     private static async Task MauiTapAsync(string host, int port, bool json, string elementId)

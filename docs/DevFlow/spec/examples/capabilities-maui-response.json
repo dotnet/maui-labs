@@ -18,6 +18,12 @@
       "version": 1,
       "features": ["element", "fullscreen", "selector"]
     },
+    "ui.menus": {
+      "version": 1,
+      "features": ["list", "invoke"],
+      "maui": true,
+      "native": true
+    },
     "webview": {
       "version": 1,
       "features": ["evaluate", "contexts", "source", "dom", "dom-query", "network", "console", "screenshot"]

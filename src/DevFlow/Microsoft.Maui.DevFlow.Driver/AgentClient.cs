@@ -1140,6 +1140,56 @@ public class AgentClient : IDisposable
         catch (Exception ex) when (IsExpectedClientException(ex)) { return default; }
     }
 
+    // ── Menus ──
+
+    /// <summary>
+    /// Lists the application menus: the cross-platform MAUI <c>MenuBarItems</c> tree plus,
+    /// where supported, the platform's native application menu (macOS NSMenu / Mac Catalyst
+    /// key commands).
+    /// </summary>
+    public async Task<JsonElement> GetMenusAsync(int? window = null)
+    {
+        var path = window.HasValue ? $"{UiApi}/menus?window={window.Value}" : $"{UiApi}/menus";
+        return await GetJsonAsync(path);
+    }
+
+    /// <summary>
+    /// Invokes an application menu item. Identify the item by <paramref name="id"/>,
+    /// <paramref name="path"/> (slash-joined titles), <paramref name="title"/>, or
+    /// <paramref name="key"/> + <paramref name="modifiers"/>. <paramref name="target"/>
+    /// selects the menu layer: <c>auto</c> (default), <c>maui</c>, or <c>native</c>.
+    /// </summary>
+    public async Task<JsonElement> InvokeMenuAsync(
+        string? id = null,
+        string? path = null,
+        string? title = null,
+        string? key = null,
+        string? modifiers = null,
+        string? target = null)
+    {
+        var payload = new JsonObject();
+        if (!string.IsNullOrWhiteSpace(id)) payload["id"] = id;
+        if (!string.IsNullOrWhiteSpace(path)) payload["path"] = path;
+        if (!string.IsNullOrWhiteSpace(title)) payload["title"] = title;
+        if (!string.IsNullOrWhiteSpace(key)) payload["key"] = key;
+        if (!string.IsNullOrWhiteSpace(modifiers)) payload["modifiers"] = modifiers;
+        if (!string.IsNullOrWhiteSpace(target)) payload["target"] = target;
+
+        try
+        {
+            using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
+            {
+                using var content = DriverJson.CreateJsonContent(payload);
+                return await _http.PostAsync($"{_baseUrl}{UiApi}/menus/invoke", content);
+            });
+            var responseBody = await response.Content.ReadAsStringAsync();
+            if (string.IsNullOrWhiteSpace(responseBody))
+                return default;
+            return DriverJson.ParseElement(responseBody);
+        }
+        catch (Exception ex) when (IsExpectedClientException(ex)) { return default; }
+    }
+
     // ── Files ──
 
     public async Task<JsonElement> ListStorageRootsAsync()
@@ -1348,6 +1398,8 @@ public class AgentCapabilities
     public bool Profiler { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("jobs")]
     public bool Jobs { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("menus")]
+    public bool Menus { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("theme")]
     public bool Theme { get; set; }
 }
