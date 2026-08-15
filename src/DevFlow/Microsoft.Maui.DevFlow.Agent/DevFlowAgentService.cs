@@ -309,6 +309,50 @@ public class PlatformAgentService : DevFlowAgentService
     /// for <c>androidx.work.WorkManager</c> even in an app that plainly uses WorkManager.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Re-wraps a Java object as a bound interface.
+    ///
+    /// <para>
+    /// <c>Java.Lang.Reflect.Method.Invoke</c> returns a plain <see cref="Java.Lang.Object"/>
+    /// wrapper regardless of the real runtime type, so <c>as Java.Util.IList</c> and
+    /// <c>is Java.Util.ICollection</c> always fail against it. Because those casts fail
+    /// quietly, the caller reads an empty collection instead of an error — which is exactly
+    /// how the jobs list came back empty while WorkManager plainly had work scheduled.
+    /// Re-wrapping by JNI handle produces the correctly typed proxy.
+    /// </para>
+    /// </summary>
+    private static T? AsJavaInterface<T>(Java.Lang.Object? value) where T : class, global::Android.Runtime.IJavaObject
+    {
+        if (value == null || value.Handle == IntPtr.Zero) return null;
+
+        if (value is T alreadyTyped) return alreadyTyped;
+
+        try
+        {
+            return Java.Lang.Object.GetObject<T>(value.Handle, global::Android.Runtime.JniHandleOwnership.DoNotTransfer);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[Microsoft.Maui.DevFlow] Could not re-wrap {value.Class?.Name} as {typeof(T).Name}: {ex.GetBaseException().Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// WorkManager is present but the query could not be completed. Reported as supported with
+    /// an explicit error, never as an empty job list — an empty list means "no work scheduled".
+    /// </summary>
+    private static object WorkManagerProblem(string error) => new
+    {
+        platform = "Android",
+        type = "WorkManager",
+        supported = true,
+        runSupported = false,
+        error,
+        jobs = Array.Empty<object>()
+    };
+
     private static Java.Lang.Class? FindAndroidClass(string className)
     {
         try
@@ -391,7 +435,8 @@ public class PlatformAgentService : DevFlowAgentService
             if (wm == null)
                 return new { platform = "Android", type = "WorkManager", supported = true, runSupported = false, error = "WorkManager not initialized", jobs = Array.Empty<object>() };
 
-            // Build WorkQuery for all states
+            // Query every terminal and non-terminal state — WorkQuery requires at least one
+            // filter, and the union of all states is the closest thing to "everything".
             var queryBuilderClass = FindAndroidClass("androidx.work.WorkQuery$Builder")!;
             var stateClass = FindAndroidClass("androidx.work.WorkInfo$State")!;
 
@@ -399,62 +444,91 @@ public class PlatformAgentService : DevFlowAgentService
             var stateList = new Java.Util.ArrayList();
             foreach (var fieldName in stateFields)
             {
-                var field = stateClass.GetField(fieldName);
-                var state = field?.Get(null);
+                var state = stateClass.GetField(fieldName)?.Get(null);
                 if (state != null)
                     stateList.Add(state);
             }
 
-            var fromStatesMethod = queryBuilderClass.GetMethod("fromStates", Java.Lang.Class.FromType(typeof(Java.Util.IList)));
+            if (stateList.Size() == 0)
+                return WorkManagerProblem("Could not read any androidx.work.WorkInfo$State enum values");
+
+            // The parameter type must be java.util.List. Class.FromType(typeof(Java.Util.IList))
+            // does not reliably resolve to it, so look the Java type up by name.
+            var listClass = FindAndroidClass("java.util.List");
+            if (listClass == null)
+                return WorkManagerProblem("Could not resolve java.util.List");
+
+            var fromStatesMethod = queryBuilderClass.GetMethod("fromStates", listClass);
             var builder = fromStatesMethod?.Invoke(null, stateList);
             if (builder == null)
-                return new { platform = "Android", type = "WorkManager", supported = true, runSupported = false, error = "Failed to create WorkQuery", jobs = Array.Empty<object>() };
+                return WorkManagerProblem("WorkQuery.Builder.fromStates returned null");
 
-            var buildMethod = builder.Class.GetMethod("build");
-            var query = buildMethod?.Invoke(builder);
+            var query = builder.Class.GetMethod("build")?.Invoke(builder);
+            if (query == null)
+                return WorkManagerProblem("WorkQuery.Builder.build returned null");
 
             var getWorkInfosMethod = wm.Class.GetMethod("getWorkInfos", FindAndroidClass("androidx.work.WorkQuery")!);
-            var future = getWorkInfosMethod?.Invoke(wm, query!) as Java.Lang.Object;
+            var future = getWorkInfosMethod?.Invoke(wm, query);
+            if (future == null)
+                return WorkManagerProblem("WorkManager.getWorkInfos returned null");
 
-            // ListenableFuture.get()
-            var getMethod = future?.Class.GetMethod("get");
-            var result = getMethod?.Invoke(future) as Java.Util.IList;
+            // ListenableFuture.get() blocks. Bound it here rather than via the
+            // get(long, TimeUnit) overload, whose primitive `long` parameter cannot be
+            // resolved with Class.FromType, and so a wedged future cannot hang the request.
+            var getMethod = future.Class.GetMethod("get");
+            if (getMethod == null)
+                return WorkManagerProblem("ListenableFuture has no get() method");
+
+            Java.Lang.Object? resultObject;
+            try
+            {
+                resultObject = await Task.Run(() => getMethod.Invoke(future))
+                    .WaitAsync(TimeSpan.FromSeconds(5));
+            }
+            catch (TimeoutException)
+            {
+                return WorkManagerProblem("Timed out after 5s waiting for WorkManager.getWorkInfos");
+            }
+
+            // Method.Invoke hands back a plain Java.Lang.Object wrapper, so `as Java.Util.IList`
+            // always fails and the list silently reads as empty. Re-wrap by handle instead.
+            var result = AsJavaInterface<Java.Util.IList>(resultObject);
+            if (result == null)
+                return WorkManagerProblem(
+                    $"Could not read the work-info list (got {resultObject?.Class?.Name ?? "null"})");
 
             var jobs = new List<object>();
-            if (result != null)
+            var iterator = result.Iterator();
+            while (iterator?.HasNext == true)
             {
-                var iterator = result.Iterator();
-                while (iterator.HasNext)
+                var info = iterator.Next();
+                if (info is not Java.Lang.Object infoObj) continue;
+                var infoClass = infoObj.Class;
+
+                var identifier = infoClass.GetMethod("getId")?.Invoke(infoObj)?.ToString() ?? "";
+                var state = infoClass.GetMethod("getState")?.Invoke(infoObj)?.ToString() ?? "";
+
+                var tags = new List<string>();
+                var tagSet = AsJavaInterface<Java.Util.ICollection>(infoClass.GetMethod("getTags")?.Invoke(infoObj));
+                if (tagSet != null)
                 {
-                    var info = iterator.Next()!;
-                    var infoClass = info.Class;
-
-                    var getId = infoClass.GetMethod("getId");
-                    var getTags = infoClass.GetMethod("getTags");
-                    var getState = infoClass.GetMethod("getState");
-                    var getRunAttemptCount = infoClass.GetMethod("getRunAttemptCount");
-
-                    var identifier = getId?.Invoke(info)?.ToString() ?? "";
-                    var tags = new List<string>();
-                    if (getTags?.Invoke(info) is Java.Util.ICollection tagSet)
-                    {
-                        var tagIter = tagSet.Iterator();
-                        while (tagIter.HasNext)
-                            tags.Add(tagIter.Next()?.ToString() ?? "");
-                    }
-                    var state = getState?.Invoke(info)?.ToString() ?? "";
-                    var runAttemptCount = 0;
-                    if (getRunAttemptCount?.Invoke(info) is Java.Lang.Integer countObj)
-                        runAttemptCount = countObj.IntValue();
-
-                    jobs.Add(new
-                    {
-                        identifier,
-                        tags = tags.ToArray(),
-                        state,
-                        runAttemptCount
-                    });
+                    var tagIter = tagSet.Iterator();
+                    while (tagIter?.HasNext == true)
+                        tags.Add(tagIter.Next()?.ToString() ?? "");
                 }
+
+                // Boxed primitives come back as opaque wrappers too, so parse the string form.
+                var runAttemptCount = 0;
+                var countValue = infoClass.GetMethod("getRunAttemptCount")?.Invoke(infoObj)?.ToString();
+                if (countValue != null) int.TryParse(countValue, out runAttemptCount);
+
+                jobs.Add(new
+                {
+                    identifier,
+                    tags = tags.ToArray(),
+                    state,
+                    runAttemptCount
+                });
             }
 
             return new { platform = "Android", type = "WorkManager", supported = true, runSupported = false, jobs };

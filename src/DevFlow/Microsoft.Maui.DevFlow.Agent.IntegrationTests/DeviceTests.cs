@@ -144,19 +144,44 @@ public class DeviceTests : IntegrationTestBase
         Assert.True(json.TryGetProperty("jobs", out var jobs));
         Assert.Equal(JsonValueKind.Array, jobs.ValueKind);
 
-        // BGTaskScheduler ships with the OS, so the capability is always present.
-        if (Platform is "ios" or "maccatalyst")
+        // BGTaskScheduler ships with the OS and the sample references WorkManager, so both
+        // platforms must report the capability as present.
+        if (Platform is "ios" or "maccatalyst" or "android")
             Assert.True(supported.GetBoolean());
 
-        // WorkManager is an opt-in AndroidX dependency. The sample app does not reference it,
-        // so Android must report the capability as absent — and say why. An empty job array
-        // with supported=true would be indistinguishable from a healthy, idle queue.
-        if (Platform == "android")
-        {
-            Assert.False(supported.GetBoolean());
-            Assert.True(json.TryGetProperty("reason", out var reason));
-            Assert.Contains("androidx.work", reason.GetString());
-        }
+        // An empty list must never be the result of a failed query — if the query could not
+        // complete, the payload has to say so rather than looking like an idle queue.
+        if (json.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.String)
+            Assert.Fail($"Jobs query reported an error: {error.GetString()}");
+    }
+
+    [Fact]
+    public async Task Jobs_Android_ListsTheSampleWorker()
+    {
+        if (Platform != "android")
+            return;
+
+        // The sample enqueues SampleSyncWorker on every launch, so a working WorkManager query
+        // must return it. This is the assertion that actually exercises the reflection path —
+        // shape-only checks passed for months while the query silently returned nothing.
+        var json = await Client.GetJobsAsync();
+        Output.WriteLine($"jobs payload: {json}");
+
+        var jobs = json.GetProperty("jobs").EnumerateArray().ToList();
+        Assert.NotEmpty(jobs);
+
+        var sampleJob = jobs.FirstOrDefault(j =>
+            j.TryGetProperty("tags", out var tags) &&
+            tags.EnumerateArray().Any(t => t.GetString() == "devflow-sample-sync"));
+
+        Assert.True(sampleJob.ValueKind == JsonValueKind.Object,
+            "No job tagged 'devflow-sample-sync' was returned by WorkManager.");
+
+        // A real WorkInfo carries a UUID and a state; empty strings mean the reflected
+        // accessors silently returned nothing.
+        Assert.False(string.IsNullOrWhiteSpace(sampleJob.GetProperty("identifier").GetString()));
+        Assert.Contains(sampleJob.GetProperty("state").GetString(),
+            new[] { "ENQUEUED", "RUNNING", "SUCCEEDED", "FAILED", "BLOCKED", "CANCELLED" });
     }
 
     [Fact]
