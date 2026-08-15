@@ -16,6 +16,10 @@
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MicrosoftAspNetCoreComponentsWebViewMauiVersion)" />
   </ItemGroup>
 
+  <ItemGroup Label="AndroidX">
+    <PackageVersion Include="Xamarin.AndroidX.Work.Runtime" Version="$(XamarinAndroidXWorkRuntimeVersion)" />
+  </ItemGroup>
+
   <!-- Microsoft Extensions (versions from eng/Versions.props, flowing via maestro) -->
   <ItemGroup Label="Extensions">
     <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="$(MicrosoftExtensionsConfigurationVersion)" />

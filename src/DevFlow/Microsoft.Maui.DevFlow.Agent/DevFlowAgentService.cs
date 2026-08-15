@@ -288,11 +288,102 @@ public class PlatformAgentService : DevFlowAgentService
 #endif
     }
 
+#if ANDROID
+    /// <summary>
+    /// Whether androidx.work is actually on the app's classpath. WorkManager is an opt-in
+    /// AndroidX dependency, not part of the platform, so an app that never referenced it has
+    /// no jobs capability at all — reporting "supported" for such an app would be a lie that
+    /// looks identical to "supported, but you have no jobs scheduled".
+    /// Probed once; the classpath cannot change while the process is alive.
+    /// </summary>
+    private static readonly Lazy<bool> s_workManagerAvailable = new(() => FindAndroidClass("androidx.work.WorkManager") != null);
+
+    /// <summary>
+    /// Resolves a Java class by name using the *application's* class loader.
+    ///
+    /// <para>
+    /// <c>Java.Lang.Class.ForName(string)</c> must not be used here. The single-argument
+    /// overload resolves against the calling class's loader, and when the call originates
+    /// from mono over JNI that is the boot class loader — which cannot see anything the app
+    /// or its AndroidX dependencies contribute. It therefore throws ClassNotFoundException
+    /// for <c>androidx.work.WorkManager</c> even in an app that plainly uses WorkManager.
+    /// </para>
+    /// </summary>
+    /// <summary>
+    /// Re-wraps a Java object as a bound interface.
+    ///
+    /// <para>
+    /// <c>Java.Lang.Reflect.Method.Invoke</c> returns a plain <see cref="Java.Lang.Object"/>
+    /// wrapper regardless of the real runtime type, so <c>as Java.Util.IList</c> and
+    /// <c>is Java.Util.ICollection</c> always fail against it. Because those casts fail
+    /// quietly, the caller reads an empty collection instead of an error — which is exactly
+    /// how the jobs list came back empty while WorkManager plainly had work scheduled.
+    /// Re-wrapping by JNI handle produces the correctly typed proxy.
+    /// </para>
+    /// </summary>
+    private static T? AsJavaInterface<T>(Java.Lang.Object? value) where T : class, global::Android.Runtime.IJavaObject
+    {
+        if (value == null || value.Handle == IntPtr.Zero) return null;
+
+        if (value is T alreadyTyped) return alreadyTyped;
+
+        try
+        {
+            return Java.Lang.Object.GetObject<T>(value.Handle, global::Android.Runtime.JniHandleOwnership.DoNotTransfer);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[Microsoft.Maui.DevFlow] Could not re-wrap {value.Class?.Name} as {typeof(T).Name}: {ex.GetBaseException().Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// WorkManager is present but the query could not be completed. Reported as supported with
+    /// an explicit error, never as an empty job list — an empty list means "no work scheduled".
+    /// </summary>
+    private static object WorkManagerProblem(string error) => new
+    {
+        platform = "Android",
+        type = "WorkManager",
+        supported = true,
+        runSupported = false,
+        error,
+        jobs = Array.Empty<object>()
+    };
+
+    private static Java.Lang.Class? FindAndroidClass(string className)
+    {
+        try
+        {
+            var loader = global::Android.App.Application.Context?.ClassLoader;
+            if (loader == null) return null;
+            return Java.Lang.Class.ForName(className, initialize: false, loader);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[Microsoft.Maui.DevFlow] Java class '{className}' not resolvable: {ex.GetBaseException().Message}");
+            return null;
+        }
+    }
+
+    private const string WorkManagerMissingReason =
+        "androidx.work.WorkManager is not on the app's classpath. Add the Xamarin.AndroidX.Work.Runtime " +
+        "package (or a library that depends on it) to enable background job inspection.";
+#endif
+
     protected override bool IsJobsSupported
     {
         get
         {
-#if ANDROID || IOS || MACCATALYST
+#if ANDROID
+            // Gate on the real dependency rather than on the platform.
+            return s_workManagerAvailable.Value;
+#elif IOS || MACCATALYST
+            // BGTaskScheduler is part of the OS, so the capability always exists —
+            // whether any identifiers are registered is a separate question.
             return true;
 #else
             return base.IsJobsSupported;
@@ -317,79 +408,127 @@ public class PlatformAgentService : DevFlowAgentService
     protected override async Task<object?> GetPlatformJobsAsync()
     {
 #if ANDROID
+        // Distinguish "the app has no WorkManager" from "WorkManager returned no jobs".
+        // Both produce an empty array, and conflating them hides a missing dependency
+        // behind what looks like a healthy, idle queue.
+        if (!s_workManagerAvailable.Value)
+        {
+            return new
+            {
+                platform = "Android",
+                type = "WorkManager",
+                supported = false,
+                runSupported = false,
+                reason = WorkManagerMissingReason,
+                jobs = Array.Empty<object>()
+            };
+        }
+
         try
         {
             var context = global::Android.App.Application.Context;
-            var wmClass = Java.Lang.Class.ForName("androidx.work.WorkManager");
+            var wmClass = FindAndroidClass("androidx.work.WorkManager")!;
             var getInstanceMethod = wmClass.GetMethod("getInstance", Java.Lang.Class.FromType(typeof(global::Android.Content.Context)));
             var wm = getInstanceMethod?.Invoke(null, context);
+            // Present but not initialized is a configuration problem, not a missing capability,
+            // so this stays "supported" — the distinction tells you which thing to go fix.
             if (wm == null)
                 return new { platform = "Android", type = "WorkManager", supported = true, runSupported = false, error = "WorkManager not initialized", jobs = Array.Empty<object>() };
 
-            // Build WorkQuery for all states
-            var queryBuilderClass = Java.Lang.Class.ForName("androidx.work.WorkQuery$Builder");
-            var stateClass = Java.Lang.Class.ForName("androidx.work.WorkInfo$State");
+            // Query every terminal and non-terminal state — WorkQuery requires at least one
+            // filter, and the union of all states is the closest thing to "everything".
+            var queryBuilderClass = FindAndroidClass("androidx.work.WorkQuery$Builder")!;
+            var stateClass = FindAndroidClass("androidx.work.WorkInfo$State")!;
 
             var stateFields = new[] { "ENQUEUED", "RUNNING", "SUCCEEDED", "FAILED", "BLOCKED", "CANCELLED" };
             var stateList = new Java.Util.ArrayList();
             foreach (var fieldName in stateFields)
             {
-                var field = stateClass.GetField(fieldName);
-                var state = field?.Get(null);
+                var state = stateClass.GetField(fieldName)?.Get(null);
                 if (state != null)
                     stateList.Add(state);
             }
 
-            var fromStatesMethod = queryBuilderClass.GetMethod("fromStates", Java.Lang.Class.FromType(typeof(Java.Util.IList)));
+            if (stateList.Size() == 0)
+                return WorkManagerProblem("Could not read any androidx.work.WorkInfo$State enum values");
+
+            // The parameter type must be java.util.List. Class.FromType(typeof(Java.Util.IList))
+            // does not reliably resolve to it, so look the Java type up by name.
+            var listClass = FindAndroidClass("java.util.List");
+            if (listClass == null)
+                return WorkManagerProblem("Could not resolve java.util.List");
+
+            var fromStatesMethod = queryBuilderClass.GetMethod("fromStates", listClass);
             var builder = fromStatesMethod?.Invoke(null, stateList);
             if (builder == null)
-                return new { platform = "Android", type = "WorkManager", supported = true, runSupported = false, error = "Failed to create WorkQuery", jobs = Array.Empty<object>() };
+                return WorkManagerProblem("WorkQuery.Builder.fromStates returned null");
 
-            var buildMethod = builder.Class.GetMethod("build");
-            var query = buildMethod?.Invoke(builder);
+            var query = builder.Class.GetMethod("build")?.Invoke(builder);
+            if (query == null)
+                return WorkManagerProblem("WorkQuery.Builder.build returned null");
 
-            var getWorkInfosMethod = wm.Class.GetMethod("getWorkInfos", Java.Lang.Class.ForName("androidx.work.WorkQuery"));
-            var future = getWorkInfosMethod?.Invoke(wm, query!) as Java.Lang.Object;
+            var getWorkInfosMethod = wm.Class.GetMethod("getWorkInfos", FindAndroidClass("androidx.work.WorkQuery")!);
+            var future = getWorkInfosMethod?.Invoke(wm, query);
+            if (future == null)
+                return WorkManagerProblem("WorkManager.getWorkInfos returned null");
 
-            // ListenableFuture.get()
-            var getMethod = future?.Class.GetMethod("get");
-            var result = getMethod?.Invoke(future) as Java.Util.IList;
+            // ListenableFuture.get() blocks. Bound it here rather than via the
+            // get(long, TimeUnit) overload, whose primitive `long` parameter cannot be
+            // resolved with Class.FromType, and so a wedged future cannot hang the request.
+            var getMethod = future.Class.GetMethod("get");
+            if (getMethod == null)
+                return WorkManagerProblem("ListenableFuture has no get() method");
+
+            Java.Lang.Object? resultObject;
+            try
+            {
+                resultObject = await Task.Run(() => getMethod.Invoke(future))
+                    .WaitAsync(TimeSpan.FromSeconds(5));
+            }
+            catch (TimeoutException)
+            {
+                return WorkManagerProblem("Timed out after 5s waiting for WorkManager.getWorkInfos");
+            }
+
+            // Method.Invoke hands back a plain Java.Lang.Object wrapper, so `as Java.Util.IList`
+            // always fails and the list silently reads as empty. Re-wrap by handle instead.
+            var result = AsJavaInterface<Java.Util.IList>(resultObject);
+            if (result == null)
+                return WorkManagerProblem(
+                    $"Could not read the work-info list (got {resultObject?.Class?.Name ?? "null"})");
 
             var jobs = new List<object>();
-            if (result != null)
+            var iterator = result.Iterator();
+            while (iterator?.HasNext == true)
             {
-                var iterator = result.Iterator();
-                while (iterator.HasNext)
+                var info = iterator.Next();
+                if (info is not Java.Lang.Object infoObj) continue;
+                var infoClass = infoObj.Class;
+
+                var identifier = infoClass.GetMethod("getId")?.Invoke(infoObj)?.ToString() ?? "";
+                var state = infoClass.GetMethod("getState")?.Invoke(infoObj)?.ToString() ?? "";
+
+                var tags = new List<string>();
+                var tagSet = AsJavaInterface<Java.Util.ICollection>(infoClass.GetMethod("getTags")?.Invoke(infoObj));
+                if (tagSet != null)
                 {
-                    var info = iterator.Next()!;
-                    var infoClass = info.Class;
-
-                    var getId = infoClass.GetMethod("getId");
-                    var getTags = infoClass.GetMethod("getTags");
-                    var getState = infoClass.GetMethod("getState");
-                    var getRunAttemptCount = infoClass.GetMethod("getRunAttemptCount");
-
-                    var identifier = getId?.Invoke(info)?.ToString() ?? "";
-                    var tags = new List<string>();
-                    if (getTags?.Invoke(info) is Java.Util.ICollection tagSet)
-                    {
-                        var tagIter = tagSet.Iterator();
-                        while (tagIter.HasNext)
-                            tags.Add(tagIter.Next()?.ToString() ?? "");
-                    }
-                    var state = getState?.Invoke(info)?.ToString() ?? "";
-                    var runAttemptCount = 0;
-                    if (getRunAttemptCount?.Invoke(info) is Java.Lang.Integer countObj)
-                        runAttemptCount = countObj.IntValue();
-
-                    jobs.Add(new
-                    {
-                        identifier,
-                        tags = tags.ToArray(),
-                        state,
-                        runAttemptCount
-                    });
+                    var tagIter = tagSet.Iterator();
+                    while (tagIter?.HasNext == true)
+                        tags.Add(tagIter.Next()?.ToString() ?? "");
                 }
+
+                // Boxed primitives come back as opaque wrappers too, so parse the string form.
+                var runAttemptCount = 0;
+                var countValue = infoClass.GetMethod("getRunAttemptCount")?.Invoke(infoObj)?.ToString();
+                if (countValue != null) int.TryParse(countValue, out runAttemptCount);
+
+                jobs.Add(new
+                {
+                    identifier,
+                    tags = tags.ToArray(),
+                    state,
+                    runAttemptCount
+                });
             }
 
             return new { platform = "Android", type = "WorkManager", supported = true, runSupported = false, jobs };
@@ -436,29 +575,74 @@ public class PlatformAgentService : DevFlowAgentService
             success = false,
             supported = false,
             identifier,
-            error = $"Running job '{identifier}' is not supported on Android because the original WorkManager worker type and request parameters cannot be reconstructed safely from the listed identifier or tags."
+            error = s_workManagerAvailable.Value
+                ? $"Running job '{identifier}' is not supported on Android because the original WorkManager worker type and request parameters cannot be reconstructed safely from the listed identifier or tags."
+                : WorkManagerMissingReason
         });
 #elif IOS || MACCATALYST
         try
         {
             var taskType = await ResolveBgTaskRequestTypeAsync(identifier, type);
-            BGTaskRequest taskRequest = taskType.Equals("refresh", StringComparison.OrdinalIgnoreCase)
-                ? new BGAppRefreshTaskRequest(identifier)
-                : new BGProcessingTaskRequest(identifier);
 
-            taskRequest.EarliestBeginDate = null;
-
-            BGTaskScheduler.Shared.Submit(taskRequest, out var error);
-            if (error != null)
-                return new { success = false, error = error.LocalizedDescription, identifier };
-
-            return await Task.FromResult<object?>(new
+            // The request must be pending before it can be launched: iOS launches a *submitted*
+            // task, and simulating a launch for an unscheduled identifier is a no-op.
+            var wasPending = await IsBgTaskPendingAsync(identifier);
+            string? submitError = null;
+            if (!wasPending)
             {
-                success = true,
-                message = $"BGTask '{identifier}' submitted",
+                BGTaskRequest taskRequest = taskType.Equals("refresh", StringComparison.OrdinalIgnoreCase)
+                    ? new BGAppRefreshTaskRequest(identifier)
+                    : new BGProcessingTaskRequest(identifier);
+                taskRequest.EarliestBeginDate = null;
+
+                BGTaskScheduler.Shared.Submit(taskRequest, out var error);
+                if (error != null)
+                    submitError = $"{error.LocalizedDescription} {DescribeBgTaskSchedulerError(error, identifier)}".Trim();
+            }
+
+            if (submitError != null)
+            {
+                return new
+                {
+                    success = false,
+                    identifier,
+                    type = taskType,
+                    error = $"Could not schedule BGTask '{identifier}': {submitError}"
+                };
+            }
+
+            // Submitting only *schedules*; iOS decides when to launch, which organically may be
+            // never. Forcing the launch is the only way to actually run the handler on demand.
+            var launched = TrySimulateBgTaskLaunch(identifier, out var launchError);
+            if (!launched)
+            {
+                return new
+                {
+                    success = false,
+                    identifier,
+                    type = taskType,
+                    scheduled = true,
+                    error = launchError
+                };
+            }
+
+            // The scheduler consumes the pending request when it launches it, so the request
+            // disappearing is the observable evidence that a launch really happened.
+            await Task.Delay(1500);
+            var stillPending = await IsBgTaskPendingAsync(identifier);
+
+            return new
+            {
+                success = !stillPending,
                 identifier,
-                type = taskType
-            });
+                type = taskType,
+                launched = true,
+                consumedPendingRequest = !stillPending,
+                message = stillPending
+                    ? $"BGTask '{identifier}' launch was requested but the request is still pending; the handler may not be registered."
+                    : $"BGTask '{identifier}' was launched and its pending request was consumed.",
+                note = "iOS does not expose a task's result; assert on what the handler itself records."
+            };
         }
         catch (Exception ex)
         {
@@ -470,6 +654,84 @@ public class PlatformAgentService : DevFlowAgentService
     }
 
 #if IOS || MACCATALYST
+    /// <summary>
+    /// Turns a BGTaskSchedulerErrorDomain code into the thing you actually need to go fix.
+    /// The three codes have completely different causes and conflating them sends people
+    /// looking in the wrong place.
+    /// </summary>
+    private static string DescribeBgTaskSchedulerError(NSError error, string identifier)
+    {
+        if (error.Domain != "BGTaskSchedulerErrorDomain")
+            return string.Empty;
+
+        return error.Code switch
+        {
+            // BGTaskSchedulerErrorCodeUnavailable
+            1 => "Background task scheduling is unavailable. BGTaskScheduler does not work on the " +
+                 "iOS Simulator — use a physical device — and Background App Refresh must be enabled.",
+            // BGTaskSchedulerErrorCodeTooManyPendingTaskRequests
+            2 => "Too many pending task requests; cancel some before submitting another.",
+            // BGTaskSchedulerErrorCodeNotPermitted
+            3 => $"'{identifier}' is not permitted. Add it to BGTaskSchedulerPermittedIdentifiers " +
+                 "in Info.plist and register a launch handler for it before the app finishes launching.",
+            _ => string.Empty
+        };
+    }
+
+    private static async Task<bool> IsBgTaskPendingAsync(string identifier)
+    {
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        BGTaskScheduler.Shared.GetPending(requests =>
+            tcs.TrySetResult(requests.Any(r => string.Equals(r.Identifier, identifier, StringComparison.Ordinal))));
+        return await tcs.Task;
+    }
+
+#if DEBUG
+    [System.Runtime.InteropServices.DllImport("/usr/lib/libobjc.dylib", EntryPoint = "objc_msgSend")]
+    private static extern void SendSimulateLaunch(IntPtr receiver, IntPtr selector, IntPtr identifier);
+#endif
+
+    /// <summary>
+    /// Forces a submitted BGTask to run via <c>_simulateLaunchForTaskWithIdentifier:</c> — the
+    /// selector Apple documents for triggering background tasks from LLDB, invoked here in-process.
+    ///
+    /// <para>
+    /// <b>Debug builds only.</b> This is a private selector, and the agent compiles into the host
+    /// app; shipping it would expose consumers to App Store review rejection. There is no public
+    /// API that runs a BGTask on demand, so release builds can schedule but not trigger.
+    /// </para>
+    /// </summary>
+    private static bool TrySimulateBgTaskLaunch(string identifier, out string? error)
+    {
+#if DEBUG
+        try
+        {
+            var selector = new ObjCRuntime.Selector("_simulateLaunchForTaskWithIdentifier:");
+            var scheduler = BGTaskScheduler.Shared;
+
+            if (!scheduler.RespondsToSelector(selector))
+            {
+                error = "BGTaskScheduler does not respond to _simulateLaunchForTaskWithIdentifier: on this OS version.";
+                return false;
+            }
+
+            using var nsIdentifier = new NSString(identifier);
+            SendSimulateLaunch(scheduler.Handle, selector.Handle, nsIdentifier.Handle);
+            error = null;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to launch BGTask: {ex.GetBaseException().Message}";
+            return false;
+        }
+#else
+        error = "Triggering a BGTask requires a private API and is only available in Debug builds of the DevFlow agent. " +
+                "The request has been scheduled; iOS will launch it at its own discretion.";
+        return false;
+#endif
+    }
+
     private static async Task<string> ResolveBgTaskRequestTypeAsync(string identifier, string? requestedType)
     {
         if (!string.IsNullOrWhiteSpace(requestedType))

@@ -136,6 +136,7 @@ public class DeviceTests : IntegrationTestBase
     public async Task Jobs_ReturnsSupportedFlagAndJobArray()
     {
         var json = await Client.GetJobsAsync();
+        Output.WriteLine($"jobs payload: {json}");
 
         Assert.Equal(JsonValueKind.Object, json.ValueKind);
         Assert.True(json.TryGetProperty("supported", out var supported));
@@ -143,7 +144,58 @@ public class DeviceTests : IntegrationTestBase
         Assert.True(json.TryGetProperty("jobs", out var jobs));
         Assert.Equal(JsonValueKind.Array, jobs.ValueKind);
 
-        if (Platform is "android" or "ios" or "maccatalyst")
+        // BGTaskScheduler ships with the OS and the sample references WorkManager, so both
+        // platforms must report the capability as present.
+        if (Platform is "ios" or "maccatalyst" or "android")
             Assert.True(supported.GetBoolean());
+
+        // An empty list must never be the result of a failed query — if the query could not
+        // complete, the payload has to say so rather than looking like an idle queue.
+        if (json.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.String)
+            Assert.Fail($"Jobs query reported an error: {error.GetString()}");
+    }
+
+    [Fact]
+    public async Task Jobs_Android_ListsTheSampleWorker()
+    {
+        if (Platform != "android")
+            return;
+
+        // The sample enqueues SampleSyncWorker on every launch, so a working WorkManager query
+        // must return it. This is the assertion that actually exercises the reflection path —
+        // shape-only checks passed for months while the query silently returned nothing.
+        var json = await Client.GetJobsAsync();
+        Output.WriteLine($"jobs payload: {json}");
+
+        var jobs = json.GetProperty("jobs").EnumerateArray().ToList();
+        Assert.NotEmpty(jobs);
+
+        var sampleJob = jobs.FirstOrDefault(j =>
+            j.TryGetProperty("tags", out var tags) &&
+            tags.EnumerateArray().Any(t => t.GetString() == "devflow-sample-sync"));
+
+        Assert.True(sampleJob.ValueKind == JsonValueKind.Object,
+            "No job tagged 'devflow-sample-sync' was returned by WorkManager.");
+
+        // A real WorkInfo carries a UUID and a state; empty strings mean the reflected
+        // accessors silently returned nothing.
+        Assert.False(string.IsNullOrWhiteSpace(sampleJob.GetProperty("identifier").GetString()));
+        Assert.Contains(sampleJob.GetProperty("state").GetString(),
+            new[] { "ENQUEUED", "RUNNING", "SUCCEEDED", "FAILED", "BLOCKED", "CANCELLED" });
+    }
+
+    [Fact]
+    public async Task Jobs_UnsupportedCapability_IsReportedConsistently()
+    {
+        // The jobs list and the capabilities document must not disagree about whether
+        // background jobs are available, or a caller feature-detecting via capabilities
+        // gets a different answer than one reading the list.
+        var jobs = await Client.GetJobsAsync();
+        var caps = await GetJsonAsync("/api/v1/agent/capabilities");
+
+        var listSupported = jobs.GetProperty("supported").GetBoolean();
+        var capsSupported = caps.GetProperty("jobs").GetProperty("supported").GetBoolean();
+
+        Assert.Equal(listSupported, capsSupported);
     }
 }
