@@ -35,6 +35,11 @@
         <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
     </ItemGroup>
 
+    <!-- WorkManager gives DevFlow a real background job to list, force-run via adb, and assert on. -->
+    <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+        <PackageReference Include="Xamarin.AndroidX.Work.Runtime" />
+    </ItemGroup>
+
     <ItemGroup>
         <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj" />
         <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Blazor\Microsoft.Maui.DevFlow.Blazor.csproj" />

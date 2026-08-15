@@ -23,6 +23,15 @@
     <MicrosoftMauiControlsMapsVersion>$(MicrosoftMauiControlsVersion)</MicrosoftMauiControlsMapsVersion>
     <MicrosoftAspNetCoreComponentsWebViewMauiVersion>$(MicrosoftMauiControlsVersion)</MicrosoftAspNetCoreComponentsWebViewMauiVersion>
   </PropertyGroup>
+  <PropertyGroup Label="AndroidX">
+    <!-- WorkManager: used by DevFlow.Sample to exercise background job inspection/triggering.
+         Held at 2.11.1.1 deliberately. 2.11.2.1 requires Xamarin.AndroidX.Core 1.19.0.1, which
+         absorbed the core-ktx classes; that collides with the Core.Core.Ktx 1.16.0.3 the MAUI
+         baseline pulls in and fails dexing with "androidx.core.animation.AnimatorKt is defined
+         multiple times". 2.11.1.1 requires Core 1.17.0.2, which predates the merge.
+         Revisit when the MAUI AndroidX baseline moves to Core 1.19+. -->
+    <XamarinAndroidXWorkRuntimeVersion>2.11.1.1</XamarinAndroidXWorkRuntimeVersion>
+  </PropertyGroup>
   <PropertyGroup Label="Dotnet Runtime / Extensions">
     <MicrosoftExtensionsDependencyInjectionVersion>10.0.5</MicrosoftExtensionsDependencyInjectionVersion>
     <MicrosoftExtensionsConfigurationVersion>10.0.5</MicrosoftExtensionsConfigurationVersion>

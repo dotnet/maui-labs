@@ -136,6 +136,7 @@ public class DeviceTests : IntegrationTestBase
     public async Task Jobs_ReturnsSupportedFlagAndJobArray()
     {
         var json = await Client.GetJobsAsync();
+        Output.WriteLine($"jobs payload: {json}");
 
         Assert.Equal(JsonValueKind.Object, json.ValueKind);
         Assert.True(json.TryGetProperty("supported", out var supported));
@@ -143,7 +144,33 @@ public class DeviceTests : IntegrationTestBase
         Assert.True(json.TryGetProperty("jobs", out var jobs));
         Assert.Equal(JsonValueKind.Array, jobs.ValueKind);
 
-        if (Platform is "android" or "ios" or "maccatalyst")
+        // BGTaskScheduler ships with the OS, so the capability is always present.
+        if (Platform is "ios" or "maccatalyst")
             Assert.True(supported.GetBoolean());
+
+        // WorkManager is an opt-in AndroidX dependency. The sample app does not reference it,
+        // so Android must report the capability as absent — and say why. An empty job array
+        // with supported=true would be indistinguishable from a healthy, idle queue.
+        if (Platform == "android")
+        {
+            Assert.False(supported.GetBoolean());
+            Assert.True(json.TryGetProperty("reason", out var reason));
+            Assert.Contains("androidx.work", reason.GetString());
+        }
+    }
+
+    [Fact]
+    public async Task Jobs_UnsupportedCapability_IsReportedConsistently()
+    {
+        // The jobs list and the capabilities document must not disagree about whether
+        // background jobs are available, or a caller feature-detecting via capabilities
+        // gets a different answer than one reading the list.
+        var jobs = await Client.GetJobsAsync();
+        var caps = await GetJsonAsync("/api/v1/agent/capabilities");
+
+        var listSupported = jobs.GetProperty("supported").GetBoolean();
+        var capsSupported = caps.GetProperty("jobs").GetProperty("supported").GetBoolean();
+
+        Assert.Equal(listSupported, capsSupported);
     }
 }

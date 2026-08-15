@@ -288,11 +288,58 @@ public class PlatformAgentService : DevFlowAgentService
 #endif
     }
 
+#if ANDROID
+    /// <summary>
+    /// Whether androidx.work is actually on the app's classpath. WorkManager is an opt-in
+    /// AndroidX dependency, not part of the platform, so an app that never referenced it has
+    /// no jobs capability at all — reporting "supported" for such an app would be a lie that
+    /// looks identical to "supported, but you have no jobs scheduled".
+    /// Probed once; the classpath cannot change while the process is alive.
+    /// </summary>
+    private static readonly Lazy<bool> s_workManagerAvailable = new(() => FindAndroidClass("androidx.work.WorkManager") != null);
+
+    /// <summary>
+    /// Resolves a Java class by name using the *application's* class loader.
+    ///
+    /// <para>
+    /// <c>Java.Lang.Class.ForName(string)</c> must not be used here. The single-argument
+    /// overload resolves against the calling class's loader, and when the call originates
+    /// from mono over JNI that is the boot class loader — which cannot see anything the app
+    /// or its AndroidX dependencies contribute. It therefore throws ClassNotFoundException
+    /// for <c>androidx.work.WorkManager</c> even in an app that plainly uses WorkManager.
+    /// </para>
+    /// </summary>
+    private static Java.Lang.Class? FindAndroidClass(string className)
+    {
+        try
+        {
+            var loader = global::Android.App.Application.Context?.ClassLoader;
+            if (loader == null) return null;
+            return Java.Lang.Class.ForName(className, initialize: false, loader);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[Microsoft.Maui.DevFlow] Java class '{className}' not resolvable: {ex.GetBaseException().Message}");
+            return null;
+        }
+    }
+
+    private const string WorkManagerMissingReason =
+        "androidx.work.WorkManager is not on the app's classpath. Add the Xamarin.AndroidX.Work.Runtime " +
+        "package (or a library that depends on it) to enable background job inspection.";
+#endif
+
     protected override bool IsJobsSupported
     {
         get
         {
-#if ANDROID || IOS || MACCATALYST
+#if ANDROID
+            // Gate on the real dependency rather than on the platform.
+            return s_workManagerAvailable.Value;
+#elif IOS || MACCATALYST
+            // BGTaskScheduler is part of the OS, so the capability always exists —
+            // whether any identifiers are registered is a separate question.
             return true;
 #else
             return base.IsJobsSupported;
@@ -317,18 +364,36 @@ public class PlatformAgentService : DevFlowAgentService
     protected override async Task<object?> GetPlatformJobsAsync()
     {
 #if ANDROID
+        // Distinguish "the app has no WorkManager" from "WorkManager returned no jobs".
+        // Both produce an empty array, and conflating them hides a missing dependency
+        // behind what looks like a healthy, idle queue.
+        if (!s_workManagerAvailable.Value)
+        {
+            return new
+            {
+                platform = "Android",
+                type = "WorkManager",
+                supported = false,
+                runSupported = false,
+                reason = WorkManagerMissingReason,
+                jobs = Array.Empty<object>()
+            };
+        }
+
         try
         {
             var context = global::Android.App.Application.Context;
-            var wmClass = Java.Lang.Class.ForName("androidx.work.WorkManager");
+            var wmClass = FindAndroidClass("androidx.work.WorkManager")!;
             var getInstanceMethod = wmClass.GetMethod("getInstance", Java.Lang.Class.FromType(typeof(global::Android.Content.Context)));
             var wm = getInstanceMethod?.Invoke(null, context);
+            // Present but not initialized is a configuration problem, not a missing capability,
+            // so this stays "supported" — the distinction tells you which thing to go fix.
             if (wm == null)
                 return new { platform = "Android", type = "WorkManager", supported = true, runSupported = false, error = "WorkManager not initialized", jobs = Array.Empty<object>() };
 
             // Build WorkQuery for all states
-            var queryBuilderClass = Java.Lang.Class.ForName("androidx.work.WorkQuery$Builder");
-            var stateClass = Java.Lang.Class.ForName("androidx.work.WorkInfo$State");
+            var queryBuilderClass = FindAndroidClass("androidx.work.WorkQuery$Builder")!;
+            var stateClass = FindAndroidClass("androidx.work.WorkInfo$State")!;
 
             var stateFields = new[] { "ENQUEUED", "RUNNING", "SUCCEEDED", "FAILED", "BLOCKED", "CANCELLED" };
             var stateList = new Java.Util.ArrayList();
@@ -348,7 +413,7 @@ public class PlatformAgentService : DevFlowAgentService
             var buildMethod = builder.Class.GetMethod("build");
             var query = buildMethod?.Invoke(builder);
 
-            var getWorkInfosMethod = wm.Class.GetMethod("getWorkInfos", Java.Lang.Class.ForName("androidx.work.WorkQuery"));
+            var getWorkInfosMethod = wm.Class.GetMethod("getWorkInfos", FindAndroidClass("androidx.work.WorkQuery")!);
             var future = getWorkInfosMethod?.Invoke(wm, query!) as Java.Lang.Object;
 
             // ListenableFuture.get()
@@ -436,7 +501,9 @@ public class PlatformAgentService : DevFlowAgentService
             success = false,
             supported = false,
             identifier,
-            error = $"Running job '{identifier}' is not supported on Android because the original WorkManager worker type and request parameters cannot be reconstructed safely from the listed identifier or tags."
+            error = s_workManagerAvailable.Value
+                ? $"Running job '{identifier}' is not supported on Android because the original WorkManager worker type and request parameters cannot be reconstructed safely from the listed identifier or tags."
+                : WorkManagerMissingReason
         });
 #elif IOS || MACCATALYST
         try
