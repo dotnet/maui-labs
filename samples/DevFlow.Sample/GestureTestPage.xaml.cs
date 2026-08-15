@@ -13,6 +13,10 @@ public partial class GestureTestPage : ContentPage
     // scale 2.0 ends up reported as 2.00 regardless of how many steps it arrived in.
     private double _pinchScale = 1;
 
+    // Last Running pan totals; see OnPanUpdated for why Completed cannot be used.
+    private double _panX;
+    private double _panY;
+
     public GestureTestPage()
     {
         InitializeComponent();
@@ -43,8 +47,21 @@ public partial class GestureTestPage : ContentPage
 
     private void OnPanUpdated(object? sender, PanUpdatedEventArgs e)
     {
+        // MAUI raises Completed with TotalX/TotalY reset to 0, so keep the last Running
+        // totals — those are the values an app would actually have applied.
+        switch (e.StatusType)
+        {
+            case GestureStatus.Started:
+                _panX = _panY = 0;
+                break;
+            case GestureStatus.Running:
+                _panX = e.TotalX;
+                _panY = e.TotalY;
+                break;
+        }
+
         PanStatusLabel.Text = string.Create(CultureInfo.InvariantCulture,
-            $"pan: {e.StatusType.ToString().ToLowerInvariant()} dx={e.TotalX:0} dy={e.TotalY:0}");
+            $"pan: {e.StatusType.ToString().ToLowerInvariant()} dx={_panX:0} dy={_panY:0}");
     }
 
     private void OnSwiped(object? sender, SwipedEventArgs e)

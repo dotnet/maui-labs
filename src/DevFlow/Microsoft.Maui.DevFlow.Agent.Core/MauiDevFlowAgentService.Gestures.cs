@@ -301,9 +301,13 @@ public partial class MauiDevFlowAgentService
                 recognizer => recognizer.Direction.HasFlag(direction));
             if (found is { } hit
                 && hit.Recognizer is ISwipeGestureController controller
-                && controller.DetectSwipe(hit.Owner, direction))
             {
-                return GestureOutcome.Recognizer($"SwipeGestureRecognizer on {hit.Owner.GetType().Name}");
+                controller.SendSwipe(
+                    hit.Owner,
+                    SwipeDeltaX(body.Direction, body.Distance),
+                    SwipeDeltaY(body.Direction, body.Distance));
+                if (controller.DetectSwipe(hit.Owner, direction))
+                    return GestureOutcome.Recognizer($"SwipeGestureRecognizer on {hit.Owner.GetType().Name}");
             }
 
             var native = await TryNativeSwipe(

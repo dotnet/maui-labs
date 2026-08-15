@@ -430,14 +430,28 @@ public class UiActionTests : IntegrationTestBase
         var target = await FindElementAsync("NativeScrollTarget");
 
         var result = await Client.PinchAsync(target.Id, scale: 2.0);
+        Output.WriteLine($"pinch on NativeScrollTarget: handledBy={result.HandledBy} detail={result.Detail} error={result.Error}");
 
         // A plain ScrollView has no PinchGestureRecognizer, so this must never claim
         // the app's own recognizer handled it — either native injection ran, or nothing did.
         Assert.NotEqual("recognizer", result.HandledBy);
-        if (result.Success)
+
+        // Android synthesises real multi-pointer MotionEvents, so it must always reach
+        // the native tier. Other platforms only zoom surfaces that opt in, so they may decline.
+        if (Platform == "android")
+        {
+            Assert.True(result.Success, result.Error);
             Assert.Equal("native", result.HandledBy);
+            Assert.Contains("MotionEvent", result.Detail);
+        }
+        else if (result.Success)
+        {
+            Assert.Equal("native", result.HandledBy);
+        }
         else
+        {
             Assert.False(string.IsNullOrWhiteSpace(result.Error), "A failed gesture must explain why.");
+        }
     }
 
     [Fact]
@@ -447,10 +461,20 @@ public class UiActionTests : IntegrationTestBase
         var target = await FindElementAsync("NativeScrollTarget");
 
         var result = await Client.PanAsync(target.Id, deltaX: 0, deltaY: -120);
+        Output.WriteLine($"pan on NativeScrollTarget: handledBy={result.HandledBy} detail={result.Detail} error={result.Error}");
 
         Assert.NotEqual("recognizer", result.HandledBy);
-        if (!result.Success)
+
+        if (Platform == "android")
+        {
+            Assert.True(result.Success, result.Error);
+            Assert.Equal("native", result.HandledBy);
+            Assert.Contains("MotionEvent", result.Detail);
+        }
+        else if (!result.Success)
+        {
             Assert.False(string.IsNullOrWhiteSpace(result.Error), "A failed gesture must explain why.");
+        }
     }
 
     [Fact]
