@@ -653,17 +653,20 @@ public class DevFlowCommands
         {
             jobRunIdArg, jobRunTypeOption, jobRunSerialOption, jobRunPackageOption, jobRunTimeoutOption
         };
+        // Returns a non-zero exit code when the job fails. This command is a pass/fail
+        // assertion, so a failing job has to fail the process for CI to be able to use it.
         jobsRunCmd.SetAction(async (ctx, ct) =>
         {
             var host = ctx.GetValue(agentHostOption)!;
             var port = ctx.GetValue(agentPortOption);
             var isJson = output.ResolveJsonMode(ctx.GetValue(jsonOption), ctx.GetValue(noJsonOption));
-            await MauiJobsRunAsync(host, port, isJson,
+            var succeeded = await MauiJobsRunAsync(host, port, isJson,
                 ctx.GetValue(jobRunIdArg)!,
                 ctx.GetValue(jobRunTypeOption),
                 ctx.GetValue(jobRunSerialOption),
                 ctx.GetValue(jobRunPackageOption),
                 ctx.GetValue(jobRunTimeoutOption));
+            return succeeded ? 0 : 1;
         });
         jobsCommand.Add(jobsRunCmd);
         mauiCommand.Add(jobsCommand);
@@ -2947,7 +2950,7 @@ public class DevFlowCommands
         catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
     }
 
-    private static async Task MauiJobsRunAsync(
+    private static async Task<bool> MauiJobsRunAsync(
         string host, int port, bool json, string identifier,
         string? type, string? serial, string? package, int timeoutSeconds)
     {
@@ -2958,10 +2961,7 @@ public class DevFlowCommands
             var platform = jobs.TryGetProperty("platform", out var p) ? p.GetString() ?? "" : "";
 
             if (platform.Equals("Android", StringComparison.OrdinalIgnoreCase))
-            {
-                await RunAndroidJobAsync(client, json, identifier, serial, package, timeoutSeconds);
-                return;
-            }
+                return await RunAndroidJobAsync(client, json, identifier, serial, package, timeoutSeconds);
 
             // iOS / Mac Catalyst: the agent schedules the request and forces the launch in-process.
             var result = await client.RunJobAsync(identifier, type);
@@ -2977,8 +2977,9 @@ public class DevFlowCommands
             }
 
             if (!ok) _errorOccurred = true;
+            return ok;
         }
-        catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
+        catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; return false; }
     }
 
     /// <summary>
@@ -2987,7 +2988,7 @@ public class DevFlowCommands
     /// host-side and then reads the outcome back from the in-app WorkManager query, which is the
     /// only place the real SUCCEEDED/FAILED result lives.
     /// </summary>
-    private static async Task RunAndroidJobAsync(
+    private static async Task<bool> RunAndroidJobAsync(
         Microsoft.Maui.DevFlow.Driver.AgentClient client, bool json,
         string identifier, string? serial, string? package, int timeoutSeconds)
     {
@@ -3001,7 +3002,7 @@ public class DevFlowCommands
         {
             Output.WriteError("Could not determine the Android package name; pass --package.", json);
             _errorOccurred = true;
-            return;
+            return false;
         }
 
         using var driver = new Microsoft.Maui.DevFlow.Driver.AndroidAppDriver { Serial = serial };
@@ -3019,7 +3020,7 @@ public class DevFlowCommands
             var known = scheduled.Count == 0 ? "none" : string.Join(", ", scheduled.Select(x => x.ToString()));
             Output.WriteError($"No scheduled JobScheduler job matched '{identifier}'. Scheduled: {known}", json);
             _errorOccurred = true;
-            return;
+            return false;
         }
 
         var (before, _) = await ReadWorkStateAsync(client, identifier, target.Worker);
@@ -3065,6 +3066,7 @@ public class DevFlowCommands
         }
 
         if (!succeeded) _errorOccurred = true;
+        return succeeded;
     }
 
     private static async Task<(string? State, int Attempts)> ReadWorkStateAsync(

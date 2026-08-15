@@ -596,7 +596,8 @@ public class PlatformAgentService : DevFlowAgentService
                 taskRequest.EarliestBeginDate = null;
 
                 BGTaskScheduler.Shared.Submit(taskRequest, out var error);
-                submitError = error?.LocalizedDescription;
+                if (error != null)
+                    submitError = $"{error.LocalizedDescription} {DescribeBgTaskSchedulerError(error, identifier)}".Trim();
             }
 
             if (submitError != null)
@@ -606,8 +607,7 @@ public class PlatformAgentService : DevFlowAgentService
                     success = false,
                     identifier,
                     type = taskType,
-                    error = $"Could not schedule BGTask '{identifier}': {submitError}. " +
-                            "BGTaskScheduler is unavailable on the iOS Simulator — background jobs require a physical device."
+                    error = $"Could not schedule BGTask '{identifier}': {submitError}"
                 };
             }
 
@@ -654,6 +654,30 @@ public class PlatformAgentService : DevFlowAgentService
     }
 
 #if IOS || MACCATALYST
+    /// <summary>
+    /// Turns a BGTaskSchedulerErrorDomain code into the thing you actually need to go fix.
+    /// The three codes have completely different causes and conflating them sends people
+    /// looking in the wrong place.
+    /// </summary>
+    private static string DescribeBgTaskSchedulerError(NSError error, string identifier)
+    {
+        if (error.Domain != "BGTaskSchedulerErrorDomain")
+            return string.Empty;
+
+        return error.Code switch
+        {
+            // BGTaskSchedulerErrorCodeUnavailable
+            1 => "Background task scheduling is unavailable. BGTaskScheduler does not work on the " +
+                 "iOS Simulator — use a physical device — and Background App Refresh must be enabled.",
+            // BGTaskSchedulerErrorCodeTooManyPendingTaskRequests
+            2 => "Too many pending task requests; cancel some before submitting another.",
+            // BGTaskSchedulerErrorCodeNotPermitted
+            3 => $"'{identifier}' is not permitted. Add it to BGTaskSchedulerPermittedIdentifiers " +
+                 "in Info.plist and register a launch handler for it before the app finishes launching.",
+            _ => string.Empty
+        };
+    }
+
     private static async Task<bool> IsBgTaskPendingAsync(string identifier)
     {
         var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
