@@ -64,4 +64,17 @@ public class SampleSyncWorker : Worker
         WorkManager.GetInstance(context)
             .EnqueueUniqueWork(WorkName, ExistingWorkPolicy.Replace, request);
     }
+
+    /// <summary>
+    /// Re-enqueues the sample job, optionally in a mode that reports failure, so both the
+    /// success and failure outcomes of `devflow ui jobs run` can be exercised.
+    /// </summary>
+    [Microsoft.Maui.DevFlow.Agent.Core.DevFlowAction("workmanager-enqueue",
+        Description = "Re-enqueue the sample WorkManager job, optionally set to fail")]
+    public static string EnqueueAction(
+        [System.ComponentModel.Description("true to make the worker report failure")] bool shouldFail = false)
+    {
+        Enqueue(global::Android.App.Application.Context!, shouldFail);
+        return $"enqueued '{WorkName}' (shouldFail={shouldFail})";
+    }
 }

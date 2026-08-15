@@ -583,23 +583,66 @@ public class PlatformAgentService : DevFlowAgentService
         try
         {
             var taskType = await ResolveBgTaskRequestTypeAsync(identifier, type);
-            BGTaskRequest taskRequest = taskType.Equals("refresh", StringComparison.OrdinalIgnoreCase)
-                ? new BGAppRefreshTaskRequest(identifier)
-                : new BGProcessingTaskRequest(identifier);
 
-            taskRequest.EarliestBeginDate = null;
-
-            BGTaskScheduler.Shared.Submit(taskRequest, out var error);
-            if (error != null)
-                return new { success = false, error = error.LocalizedDescription, identifier };
-
-            return await Task.FromResult<object?>(new
+            // The request must be pending before it can be launched: iOS launches a *submitted*
+            // task, and simulating a launch for an unscheduled identifier is a no-op.
+            var wasPending = await IsBgTaskPendingAsync(identifier);
+            string? submitError = null;
+            if (!wasPending)
             {
-                success = true,
-                message = $"BGTask '{identifier}' submitted",
+                BGTaskRequest taskRequest = taskType.Equals("refresh", StringComparison.OrdinalIgnoreCase)
+                    ? new BGAppRefreshTaskRequest(identifier)
+                    : new BGProcessingTaskRequest(identifier);
+                taskRequest.EarliestBeginDate = null;
+
+                BGTaskScheduler.Shared.Submit(taskRequest, out var error);
+                submitError = error?.LocalizedDescription;
+            }
+
+            if (submitError != null)
+            {
+                return new
+                {
+                    success = false,
+                    identifier,
+                    type = taskType,
+                    error = $"Could not schedule BGTask '{identifier}': {submitError}. " +
+                            "BGTaskScheduler is unavailable on the iOS Simulator — background jobs require a physical device."
+                };
+            }
+
+            // Submitting only *schedules*; iOS decides when to launch, which organically may be
+            // never. Forcing the launch is the only way to actually run the handler on demand.
+            var launched = TrySimulateBgTaskLaunch(identifier, out var launchError);
+            if (!launched)
+            {
+                return new
+                {
+                    success = false,
+                    identifier,
+                    type = taskType,
+                    scheduled = true,
+                    error = launchError
+                };
+            }
+
+            // The scheduler consumes the pending request when it launches it, so the request
+            // disappearing is the observable evidence that a launch really happened.
+            await Task.Delay(1500);
+            var stillPending = await IsBgTaskPendingAsync(identifier);
+
+            return new
+            {
+                success = !stillPending,
                 identifier,
-                type = taskType
-            });
+                type = taskType,
+                launched = true,
+                consumedPendingRequest = !stillPending,
+                message = stillPending
+                    ? $"BGTask '{identifier}' launch was requested but the request is still pending; the handler may not be registered."
+                    : $"BGTask '{identifier}' was launched and its pending request was consumed.",
+                note = "iOS does not expose a task's result; assert on what the handler itself records."
+            };
         }
         catch (Exception ex)
         {
@@ -611,6 +654,60 @@ public class PlatformAgentService : DevFlowAgentService
     }
 
 #if IOS || MACCATALYST
+    private static async Task<bool> IsBgTaskPendingAsync(string identifier)
+    {
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        BGTaskScheduler.Shared.GetPending(requests =>
+            tcs.TrySetResult(requests.Any(r => string.Equals(r.Identifier, identifier, StringComparison.Ordinal))));
+        return await tcs.Task;
+    }
+
+#if DEBUG
+    [System.Runtime.InteropServices.DllImport("/usr/lib/libobjc.dylib", EntryPoint = "objc_msgSend")]
+    private static extern void SendSimulateLaunch(IntPtr receiver, IntPtr selector, IntPtr identifier);
+#endif
+
+    /// <summary>
+    /// Forces a submitted BGTask to run via <c>_simulateLaunchForTaskWithIdentifier:</c> — the
+    /// selector Apple documents for triggering background tasks from LLDB, invoked here in-process.
+    ///
+    /// <para>
+    /// <b>Debug builds only.</b> This is a private selector, and the agent compiles into the host
+    /// app; shipping it would expose consumers to App Store review rejection. There is no public
+    /// API that runs a BGTask on demand, so release builds can schedule but not trigger.
+    /// </para>
+    /// </summary>
+    private static bool TrySimulateBgTaskLaunch(string identifier, out string? error)
+    {
+#if DEBUG
+        try
+        {
+            var selector = new ObjCRuntime.Selector("_simulateLaunchForTaskWithIdentifier:");
+            var scheduler = BGTaskScheduler.Shared;
+
+            if (!scheduler.RespondsToSelector(selector))
+            {
+                error = "BGTaskScheduler does not respond to _simulateLaunchForTaskWithIdentifier: on this OS version.";
+                return false;
+            }
+
+            using var nsIdentifier = new NSString(identifier);
+            SendSimulateLaunch(scheduler.Handle, selector.Handle, nsIdentifier.Handle);
+            error = null;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to launch BGTask: {ex.GetBaseException().Message}";
+            return false;
+        }
+#else
+        error = "Triggering a BGTask requires a private API and is only available in Debug builds of the DevFlow agent. " +
+                "The request has been scheduled; iOS will launch it at its own discretion.";
+        return false;
+#endif
+    }
+
     private static async Task<string> ResolveBgTaskRequestTypeAsync(string identifier, string? requestedType)
     {
         if (!string.IsNullOrWhiteSpace(requestedType))

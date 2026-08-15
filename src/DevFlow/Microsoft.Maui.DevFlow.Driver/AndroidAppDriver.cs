@@ -342,6 +342,135 @@ public class AndroidAppDriver : AppDriverBase
     }
 
     // ──────────────────────────────────────────────
+    // ──────────────────────────────────────────────
+    // Background jobs (WorkManager via JobScheduler)
+    // ──────────────────────────────────────────────
+
+    /// <summary>
+    /// The JobScheduler namespace WorkManager schedules into. Job lookups and the run command
+    /// both need it — without <c>-n</c> the job simply is not found.
+    /// </summary>
+    public const string WorkManagerNamespace = "androidx.work.systemjobscheduler";
+
+    /// <summary>
+    /// Lists the app's scheduled JobScheduler jobs by parsing <c>dumpsys jobscheduler</c>.
+    ///
+    /// <para>
+    /// This is the host-side counterpart to the in-app WorkManager query. It sees what the
+    /// system actually has scheduled rather than what the app's WorkManager database believes,
+    /// and it needs no cooperation from the app — but it reports JobScheduler's view, so the
+    /// identifier is a numeric job id rather than a WorkSpec UUID.
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyList<AndroidScheduledJob>> ListScheduledJobsAsync(string packageName)
+    {
+        var dump = await RunAdbWithOutputAsync("shell dumpsys jobscheduler");
+        return ParseScheduledJobs(dump, packageName);
+    }
+
+    /// <summary>
+    /// Parses <c>dumpsys jobscheduler</c> output. Entries look like:
+    /// <code>
+    /// JOB androidx.work.systemjobscheduler:u0a233/1: 258ed68 #SampleSyncWorker#@androidx.work.systemjobscheduler@com.pkg/androidx.work.impl.background.systemjob.SystemJobService
+    /// JOB #1000/808: cb8ff9f android/com.android.server.MountServiceIdler
+    /// </code>
+    /// The namespaced form carries the WorkManager worker name in <c>#…#</c>.
+    /// </summary>
+    internal static IReadOnlyList<AndroidScheduledJob> ParseScheduledJobs(string dumpsysOutput, string packageName)
+    {
+        var jobs = new List<AndroidScheduledJob>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        // Two shapes occur, and both must parse:
+        //   JOB <namespace>:<uid>/<jobId>: <hash> #<worker>#@<namespace>@<package>/<service>
+        //   JOB #<uid>/<jobId>: <hash> <package>/<service>          (no namespace)
+        var pattern = new System.Text.RegularExpressions.Regex(
+            @"JOB\s+(?:(?<ns>[A-Za-z0-9_.\-]+):)?#?u?(?<uid>[0-9a-z]+)/(?<jobId>-?\d+):\s+\S+\s+(?<detail>.*)",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        foreach (var rawLine in dumpsysOutput.Split('\n'))
+        {
+            var line = rawLine.Trim();
+            if (!line.StartsWith("JOB ", StringComparison.Ordinal)) continue;
+            if (!line.Contains(packageName, StringComparison.Ordinal)) continue;
+
+            var match = pattern.Match(line);
+            if (!match.Success) continue;
+
+            var detail = match.Groups["detail"].Value;
+            var jobId = match.Groups["jobId"].Value;
+
+            // A namespace appears as a "<ns>:" prefix, and again as "@<ns>@" inside the detail.
+            // The plain "JOB #<uid>/<id>" form has neither.
+            string? ns = match.Groups["ns"].Success && match.Groups["ns"].Value.Length > 0
+                ? match.Groups["ns"].Value
+                : null;
+            if (ns == null)
+            {
+                var atMatch = System.Text.RegularExpressions.Regex.Match(detail, @"@(?<ns>[^@]+)@");
+                if (atMatch.Success) ns = atMatch.Groups["ns"].Value;
+            }
+
+            var workerMatch = System.Text.RegularExpressions.Regex.Match(detail, @"#(?<worker>[^#]+)#");
+            var worker = workerMatch.Success ? workerMatch.Groups["worker"].Value : null;
+
+            var serviceMatch = System.Text.RegularExpressions.Regex.Match(
+                detail, System.Text.RegularExpressions.Regex.Escape(packageName) + @"/(?<service>\S+)");
+            var service = serviceMatch.Success ? serviceMatch.Groups["service"].Value : null;
+
+            var key = $"{ns}|{jobId}";
+            if (!seen.Add(key)) continue;
+
+            jobs.Add(new AndroidScheduledJob
+            {
+                JobId = jobId,
+                Namespace = ns,
+                Worker = worker,
+                Service = service,
+                IsWorkManager = ns == WorkManagerNamespace
+                    || service?.Contains("androidx.work", StringComparison.Ordinal) == true
+            });
+        }
+
+        return jobs;
+    }
+
+    /// <summary>
+    /// Returns JobScheduler's view of a job: pending / active / ready / waiting, etc.
+    /// </summary>
+    public async Task<string> GetJobStateAsync(string packageName, string jobId, string? jobNamespace = WorkManagerNamespace)
+    {
+        var ns = string.IsNullOrWhiteSpace(jobNamespace) ? "" : $"-n {jobNamespace} ";
+        var output = await RunAdbWithOutputAsync($"shell cmd jobscheduler get-job-state {ns}{packageName} {jobId}");
+        return output.Trim();
+    }
+
+    /// <summary>
+    /// Forces a scheduled job to run now.
+    /// </summary>
+    /// <param name="force">
+    /// Ignore unmet constraints. Required for anything with a delay or a network/charging
+    /// requirement, which is most real work; without it JobScheduler declines.
+    /// </param>
+    public async Task<string> RunScheduledJobAsync(string packageName, string jobId, string? jobNamespace = WorkManagerNamespace, bool force = true)
+    {
+        var ns = string.IsNullOrWhiteSpace(jobNamespace) ? "" : $"-n {jobNamespace} ";
+        var flag = force ? "-f " : "";
+        var output = await RunAdbWithOutputAsync($"shell cmd jobscheduler run {flag}{ns}{packageName} {jobId}");
+        return output.Trim();
+    }
+
+    /// <summary>
+    /// Stops a running job, delivering the given stop reason so <c>onStopped</c> paths are testable.
+    /// </summary>
+    public async Task<string> StopScheduledJobAsync(string packageName, string jobId, string? jobNamespace = WorkManagerNamespace)
+    {
+        var ns = string.IsNullOrWhiteSpace(jobNamespace) ? "" : $"-n {jobNamespace} ";
+        var output = await RunAdbWithOutputAsync($"shell cmd jobscheduler stop {ns}{packageName} {jobId}");
+        return output.Trim();
+    }
+
+    // ──────────────────────────────────────────────
     // adb helpers
     // ──────────────────────────────────────────────
 

@@ -628,6 +628,46 @@ public class DevFlowCommands
         mauiCommand.Add(mauiResizeCmd);
 
         // MAUI alert subcommands — supports iOS simulator (apple CLI) and Mac Catalyst (macOS AX API)
+        // MAUI background jobs — Android WorkManager, iOS BGTaskScheduler
+        var jobsCommand = new Command("jobs", "List and run background jobs (Android WorkManager, iOS BGTask)");
+
+        var jobsListCmd = new Command("list", "List registered background jobs");
+        jobsListCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var isJson = output.ResolveJsonMode(ctx.GetValue(jsonOption), ctx.GetValue(noJsonOption));
+            await MauiJobsListAsync(host, port, isJson);
+        });
+        jobsCommand.Add(jobsListCmd);
+
+        var jobRunIdArg = new Argument<string>("identifier")
+        {
+            Description = "Job identifier from 'jobs list' (Android WorkManager UUID or worker name, iOS BGTask identifier)"
+        };
+        var jobRunTypeOption = new Option<string?>("--type") { Description = "iOS BGTask type: processing or refresh" };
+        var jobRunSerialOption = new Option<string?>("--serial") { Description = "Android device/emulator serial (adb -s)" };
+        var jobRunPackageOption = new Option<string?>("--package") { Description = "Android package name (auto-detected from the agent if omitted)" };
+        var jobRunTimeoutOption = new Option<int>("--timeout") { Description = "Seconds to wait for the job to reach a terminal state", DefaultValueFactory = _ => 30 };
+        var jobsRunCmd = new Command("run", "Run a background job now and report whether it succeeded or failed")
+        {
+            jobRunIdArg, jobRunTypeOption, jobRunSerialOption, jobRunPackageOption, jobRunTimeoutOption
+        };
+        jobsRunCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var isJson = output.ResolveJsonMode(ctx.GetValue(jsonOption), ctx.GetValue(noJsonOption));
+            await MauiJobsRunAsync(host, port, isJson,
+                ctx.GetValue(jobRunIdArg)!,
+                ctx.GetValue(jobRunTypeOption),
+                ctx.GetValue(jobRunSerialOption),
+                ctx.GetValue(jobRunPackageOption),
+                ctx.GetValue(jobRunTimeoutOption));
+        });
+        jobsCommand.Add(jobsRunCmd);
+        mauiCommand.Add(jobsCommand);
+
         var alertCommand = new Command("alert", "Detect and dismiss system/app dialogs");
 
         // detect
@@ -2845,6 +2885,235 @@ public class DevFlowCommands
             if (!success) _errorOccurred = true;
         }
         catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
+    }
+
+    private static readonly string[] TerminalJobStates = ["SUCCEEDED", "FAILED", "CANCELLED"];
+
+    private static async Task MauiJobsListAsync(string host, int port, bool json)
+    {
+        try
+        {
+            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            var result = await client.GetJobsAsync();
+
+            if (json) { Output.WriteJsonElement(result, json); return; }
+
+            var platform = result.TryGetProperty("platform", out var p) ? p.GetString() : "unknown";
+            var kind = result.TryGetProperty("type", out var t) ? t.GetString() : "";
+            var supported = result.TryGetProperty("supported", out var s) && s.GetBoolean();
+
+            if (!supported)
+            {
+                Console.WriteLine($"Background jobs are not available on {platform}.");
+                if (result.TryGetProperty("reason", out var reason))
+                    Console.WriteLine(reason.GetString());
+                return;
+            }
+
+            // An error means the query failed — never render that as "no jobs scheduled".
+            if (result.TryGetProperty("error", out var err) && err.ValueKind == JsonValueKind.String)
+            {
+                Output.WriteError($"Could not read {kind} jobs: {err.GetString()}", json);
+                _errorOccurred = true;
+                return;
+            }
+
+            var jobs = result.TryGetProperty("jobs", out var j) && j.ValueKind == JsonValueKind.Array
+                ? j.EnumerateArray().ToList()
+                : [];
+
+            if (jobs.Count == 0)
+            {
+                Console.WriteLine($"{platform} / {kind}: no jobs scheduled.");
+                return;
+            }
+
+            Console.WriteLine($"{platform} / {kind}: {jobs.Count} job(s)");
+            foreach (var job in jobs)
+            {
+                Console.WriteLine($"  {(job.TryGetProperty("identifier", out var i) ? i.GetString() : "?")}");
+                if (job.TryGetProperty("state", out var st))
+                    Console.WriteLine($"    state:    {st.GetString()}");
+                if (job.TryGetProperty("runAttemptCount", out var rc))
+                    Console.WriteLine($"    attempts: {rc}");
+                if (job.TryGetProperty("type", out var ty))
+                    Console.WriteLine($"    type:     {ty.GetString()}");
+                if (job.TryGetProperty("earliestBeginDate", out var eb) && !string.IsNullOrWhiteSpace(eb.GetString()))
+                    Console.WriteLine($"    earliest: {eb.GetString()}");
+                if (job.TryGetProperty("tags", out var tg) && tg.ValueKind == JsonValueKind.Array)
+                    Console.WriteLine($"    tags:     {string.Join(", ", tg.EnumerateArray().Select(x => x.GetString()))}");
+            }
+        }
+        catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
+    }
+
+    private static async Task MauiJobsRunAsync(
+        string host, int port, bool json, string identifier,
+        string? type, string? serial, string? package, int timeoutSeconds)
+    {
+        try
+        {
+            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            var jobs = await client.GetJobsAsync();
+            var platform = jobs.TryGetProperty("platform", out var p) ? p.GetString() ?? "" : "";
+
+            if (platform.Equals("Android", StringComparison.OrdinalIgnoreCase))
+            {
+                await RunAndroidJobAsync(client, json, identifier, serial, package, timeoutSeconds);
+                return;
+            }
+
+            // iOS / Mac Catalyst: the agent schedules the request and forces the launch in-process.
+            var result = await client.RunJobAsync(identifier, type);
+            var ok = result.TryGetProperty("success", out var okFlag) && okFlag.GetBoolean();
+
+            if (json) Output.WriteJsonElement(result, json);
+            else
+            {
+                var msg = result.TryGetProperty("message", out var m) ? m.GetString() : null;
+                var error = result.TryGetProperty("error", out var e) ? e.GetString() : null;
+                Console.WriteLine(ok ? $"SUCCESS: {msg ?? identifier}" : $"FAILED: {error ?? "unknown error"}");
+                if (ok && result.TryGetProperty("note", out var note)) Console.WriteLine($"  note: {note.GetString()}");
+            }
+
+            if (!ok) _errorOccurred = true;
+        }
+        catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
+    }
+
+    /// <summary>
+    /// Android jobs cannot be forced from inside the app — the original WorkRequest cannot be
+    /// reconstructed from a WorkInfo. adb can force them through JobScheduler, so this triggers
+    /// host-side and then reads the outcome back from the in-app WorkManager query, which is the
+    /// only place the real SUCCEEDED/FAILED result lives.
+    /// </summary>
+    private static async Task RunAndroidJobAsync(
+        Microsoft.Maui.DevFlow.Driver.AgentClient client, bool json,
+        string identifier, string? serial, string? package, int timeoutSeconds)
+    {
+        if (string.IsNullOrWhiteSpace(package))
+        {
+            var status = await client.GetStatusAsync();
+            package = status?.App?.PackageId;
+        }
+
+        if (string.IsNullOrWhiteSpace(package))
+        {
+            Output.WriteError("Could not determine the Android package name; pass --package.", json);
+            _errorOccurred = true;
+            return;
+        }
+
+        using var driver = new Microsoft.Maui.DevFlow.Driver.AndroidAppDriver { Serial = serial };
+        var scheduled = await driver.ListScheduledJobsAsync(package);
+
+        // WorkManager UUIDs are invisible to JobScheduler, so match by numeric job id or by the
+        // worker name carried in the job's debug tag, resolving a UUID via the in-app listing.
+        var worker = await ResolveWorkerNameAsync(client, identifier);
+        var target = scheduled.FirstOrDefault(x => x.JobId == identifier)
+            ?? scheduled.FirstOrDefault(x => x.Worker != null && x.Worker.EndsWith(identifier, StringComparison.OrdinalIgnoreCase))
+            ?? (worker == null ? null : scheduled.FirstOrDefault(x => x.Worker != null && worker.EndsWith(x.Worker, StringComparison.OrdinalIgnoreCase)));
+
+        if (target == null)
+        {
+            var known = scheduled.Count == 0 ? "none" : string.Join(", ", scheduled.Select(x => x.ToString()));
+            Output.WriteError($"No scheduled JobScheduler job matched '{identifier}'. Scheduled: {known}", json);
+            _errorOccurred = true;
+            return;
+        }
+
+        var (before, _) = await ReadWorkStateAsync(client, identifier, target.Worker);
+        var runOutput = await driver.RunScheduledJobAsync(package, target.JobId, target.Namespace);
+
+        // Poll the in-app WorkManager view until the work reaches a terminal state.
+        string? state = null;
+        var attemptCount = 0;
+        var deadline = DateTime.UtcNow.AddSeconds(Math.Max(1, timeoutSeconds));
+        while (DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(750);
+            var (s, count) = await ReadWorkStateAsync(client, identifier, target.Worker);
+            if (s != null) { state = s; attemptCount = count; }
+            if (state != null && TerminalJobStates.Contains(state, StringComparer.OrdinalIgnoreCase)) break;
+        }
+
+        var succeeded = string.Equals(state, "SUCCEEDED", StringComparison.OrdinalIgnoreCase);
+
+        if (json)
+        {
+            Output.WriteRawJson(CliJson.SerializeUntyped(new JsonObject
+            {
+                ["success"] = succeeded,
+                ["identifier"] = identifier,
+                ["jobId"] = target.JobId,
+                ["worker"] = target.Worker,
+                ["namespace"] = target.Namespace,
+                ["stateBefore"] = before,
+                ["state"] = state,
+                ["runAttemptCount"] = attemptCount,
+                ["triggeredVia"] = "adb cmd jobscheduler run -f",
+                ["adbOutput"] = runOutput
+            }, indented: false));
+        }
+        else
+        {
+            Console.WriteLine($"Forced job {target.JobId} ({target.Worker ?? identifier}) via adb — {runOutput}");
+            if (state == null)
+                Console.WriteLine($"FAILED: no state reported within {timeoutSeconds}s (was {before ?? "unknown"})");
+            else
+                Console.WriteLine($"{(succeeded ? "SUCCESS" : "FAILED")}: {state} after {attemptCount} attempt(s)");
+        }
+
+        if (!succeeded) _errorOccurred = true;
+    }
+
+    private static async Task<(string? State, int Attempts)> ReadWorkStateAsync(
+        Microsoft.Maui.DevFlow.Driver.AgentClient client, string identifier, string? worker)
+    {
+        try
+        {
+            var jobs = await client.GetJobsAsync();
+            if (!jobs.TryGetProperty("jobs", out var arr) || arr.ValueKind != JsonValueKind.Array)
+                return (null, 0);
+
+            foreach (var job in arr.EnumerateArray())
+            {
+                var id = job.TryGetProperty("identifier", out var i) ? i.GetString() : null;
+                var tags = job.TryGetProperty("tags", out var tg) && tg.ValueKind == JsonValueKind.Array
+                    ? tg.EnumerateArray().Select(x => x.GetString()).ToList()
+                    : [];
+
+                var matches = id == identifier
+                    || tags.Any(t => t == identifier)
+                    || (worker != null && tags.Any(t => t != null && t.EndsWith(worker, StringComparison.OrdinalIgnoreCase)));
+                if (!matches) continue;
+
+                var state = job.TryGetProperty("state", out var st) ? st.GetString() : null;
+                var count = job.TryGetProperty("runAttemptCount", out var rc) && rc.TryGetInt32(out var c) ? c : 0;
+                return (state, count);
+            }
+        }
+        catch { }
+        return (null, 0);
+    }
+
+    /// <summary>WorkManager auto-tags every request with its worker class name.</summary>
+    private static async Task<string?> ResolveWorkerNameAsync(Microsoft.Maui.DevFlow.Driver.AgentClient client, string identifier)
+    {
+        try
+        {
+            var jobs = await client.GetJobsAsync();
+            if (!jobs.TryGetProperty("jobs", out var arr) || arr.ValueKind != JsonValueKind.Array) return null;
+
+            foreach (var job in arr.EnumerateArray())
+            {
+                if ((job.TryGetProperty("identifier", out var i) ? i.GetString() : null) != identifier) continue;
+                if (!job.TryGetProperty("tags", out var tg) || tg.ValueKind != JsonValueKind.Array) return null;
+                return tg.EnumerateArray().Select(x => x.GetString()).FirstOrDefault(t => t != null && t.Contains('.'));
+            }
+        }
+        catch { }
+        return null;
     }
 
     private static async Task MauiFocusAsync(string host, int port, bool json, string elementId)
