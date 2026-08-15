@@ -315,6 +315,145 @@ public class UiActionTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Gesture_UnknownType_IsRejected()
+    {
+        var response = await PostRawAsync("/api/v1/ui/actions/gesture", new { type = "wiggle" });
+        Assert.False(response.IsSuccessStatusCode);
+    }
+
+    [Fact]
+    public async Task Capabilities_AdvertisesSupportedGestures()
+    {
+        var caps = await GetJsonAsync("/api/v1/agent/capabilities");
+        var gestures = caps.GetProperty("ui").GetProperty("gestures")
+            .EnumerateArray().Select(g => g.GetString()).ToArray();
+
+        Assert.Contains("pinch", gestures);
+        Assert.Contains("pan", gestures);
+        Assert.Contains("rotate", gestures);
+    }
+
+    // ========== gestures against GestureTestPage ==========
+    // These assert the status label changed, not just that the call returned 200 — the
+    // point is that the gesture genuinely reached the app's own recognizer.
+
+    private Task NavigateToGesturePageAsync() => NavigateToPageAsync("//gestures", "PinchTarget");
+
+    [Fact]
+    public async Task Pinch_FiresPinchGestureRecognizer()
+    {
+        await NavigateToGesturePageAsync();
+        var target = await FindElementAsync("PinchTarget");
+
+        var result = await Client.PinchAsync(target.Id, scale: 2.0);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("recognizer", result.HandledBy);
+
+        await SettleAsync();
+        var status = await FindElementAsync("PinchStatusLabel");
+        // The page accumulates e.Scale, so a 2x request lands at 2.00 however many steps it took.
+        Assert.Contains("scale=2.00", status.Text);
+    }
+
+    [Fact]
+    public async Task Pinch_ZoomOut_ReportsScaleBelowOne()
+    {
+        await NavigateToGesturePageAsync();
+        var target = await FindElementAsync("PinchTarget");
+
+        var result = await Client.PinchAsync(target.Id, scale: 0.5);
+
+        Assert.True(result.Success, result.Error);
+
+        await SettleAsync();
+        var status = await FindElementAsync("PinchStatusLabel");
+        Assert.Contains("scale=0.50", status.Text);
+    }
+
+    [Fact]
+    public async Task Pan_FiresPanGestureRecognizerWithCumulativeTotals()
+    {
+        await NavigateToGesturePageAsync();
+        var target = await FindElementAsync("PanTarget");
+
+        var result = await Client.PanAsync(target.Id, deltaX: 0, deltaY: -150);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("recognizer", result.HandledBy);
+
+        await SettleAsync();
+        var status = await FindElementAsync("PanStatusLabel");
+        Assert.Contains("dy=-150", status.Text);
+    }
+
+    [Theory]
+    [InlineData("up")]
+    [InlineData("down")]
+    [InlineData("left")]
+    [InlineData("right")]
+    public async Task Swipe_FiresSwipeGestureRecognizer(string direction)
+    {
+        await NavigateToGesturePageAsync();
+        var target = await FindElementAsync("SwipeTarget");
+
+        var result = await Client.GestureDetailedAsync("swipe", target.Id, direction);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("recognizer", result.HandledBy);
+
+        await SettleAsync();
+        var status = await FindElementAsync("SwipeStatusLabel");
+        Assert.Equal($"swipe: {direction}", status.Text);
+    }
+
+    [Fact]
+    public async Task DoubleTap_FiresTwoTapRecognizerNotTheSingleTapOne()
+    {
+        await NavigateToGesturePageAsync();
+        var target = await FindElementAsync("DoubleTapTarget");
+
+        var result = await Client.GestureDetailedAsync("doubletap", target.Id);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("recognizer", result.HandledBy);
+
+        await SettleAsync();
+        var status = await FindElementAsync("TapStatusLabel");
+        Assert.Equal("tap: double", status.Text);
+    }
+
+    [Fact]
+    public async Task Pinch_OnElementWithoutRecognizer_ReportsWhichTierRan()
+    {
+        await NavigateToGesturePageAsync();
+        var target = await FindElementAsync("NativeScrollTarget");
+
+        var result = await Client.PinchAsync(target.Id, scale: 2.0);
+
+        // A plain ScrollView has no PinchGestureRecognizer, so this must never claim
+        // the app's own recognizer handled it — either native injection ran, or nothing did.
+        Assert.NotEqual("recognizer", result.HandledBy);
+        if (result.Success)
+            Assert.Equal("native", result.HandledBy);
+        else
+            Assert.False(string.IsNullOrWhiteSpace(result.Error), "A failed gesture must explain why.");
+    }
+
+    [Fact]
+    public async Task Pan_OnElementWithoutRecognizer_FallsThroughToNative()
+    {
+        await NavigateToGesturePageAsync();
+        var target = await FindElementAsync("NativeScrollTarget");
+
+        var result = await Client.PanAsync(target.Id, deltaX: 0, deltaY: -120);
+
+        Assert.NotEqual("recognizer", result.HandledBy);
+        if (!result.Success)
+            Assert.False(string.IsNullOrWhiteSpace(result.Error), "A failed gesture must explain why.");
+    }
+
+    [Fact]
     public async Task Fill_MultipleEntries_SetsAllText()
     {
         await NavigateToMainPageAsync();

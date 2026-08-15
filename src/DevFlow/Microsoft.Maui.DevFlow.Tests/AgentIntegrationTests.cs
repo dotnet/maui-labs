@@ -158,6 +158,70 @@ public class AgentHttpServerTests : IDisposable
     }
 
     [Fact]
+    public async Task PinchEndpoint_SendsScaleAndReportsHandlingTier()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, _port);
+        listener.Start();
+
+        var acceptTask = Task.Run(async () =>
+        {
+            var client = await listener.AcceptTcpClientAsync();
+            var stream = client.GetStream();
+            var buffer = new byte[4096];
+            var read = await stream.ReadAsync(buffer);
+            var request = Encoding.UTF8.GetString(buffer, 0, read);
+
+            Assert.Contains("POST /api/v1/ui/actions/gesture", request);
+            Assert.Contains("\"type\":\"pinch\"", request);
+            Assert.Contains("\"scale\":2", request);
+
+            var body = """{"success":true,"type":"pinch","elementId":"map1","handledBy":"native","platform":"iOS","detail":"MKMapView.Camera.CenterCoordinateDistance /2"}""";
+            var response = $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n{body}";
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
+            client.Close();
+        });
+
+        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        var result = await agentClient.PinchAsync("map1", scale: 2.0);
+
+        Assert.True(result.Success);
+        Assert.Equal("native", result.HandledBy);
+        Assert.Equal("MKMapView.Camera.CenterCoordinateDistance /2", result.Detail);
+
+        listener.Stop();
+    }
+
+    [Fact]
+    public async Task GestureEndpoint_UnhandledGesture_SurfacesTheReason()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, _port);
+        listener.Start();
+
+        var acceptTask = Task.Run(async () =>
+        {
+            var client = await listener.AcceptTcpClientAsync();
+            var stream = client.GetStream();
+            var buffer = new byte[4096];
+            var read = await stream.ReadAsync(buffer);
+            Assert.Contains("POST /api/v1/ui/actions/gesture", Encoding.UTF8.GetString(buffer, 0, read));
+
+            var body = """{"success":false,"type":"rotate","handledBy":"none","error":"rotate is not available for Grid on Android"}""";
+            var response = $"HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n{body}";
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
+            client.Close();
+        });
+
+        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        var result = await agentClient.RotateAsync("grid1", 90);
+
+        Assert.False(result.Success);
+        Assert.Equal("none", result.HandledBy);
+        Assert.Contains("not available", result.Error);
+
+        listener.Stop();
+    }
+
+    [Fact]
     public async Task FillEndpoint_SendsPostWithText()
     {
         using var listener = new TcpListener(IPAddress.Loopback, _port);

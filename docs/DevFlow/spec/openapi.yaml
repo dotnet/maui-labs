@@ -628,10 +628,14 @@ paths:
     post:
       operationId: performGesture
       tags: [ui-actions]
-      summary: Perform complex gesture
+      summary: Perform a gesture
       description: >
-        Executes a sequence of pointer actions (move, down, up, pause) to
-        perform complex gestures like swipe, pinch, or drag.
+        Performs a named gesture — pinch, rotate, pan, swipe, doubletap, longpress or tap.
+        The gesture is first offered to a matching MAUI gesture recognizer on the target
+        element or its ancestors. If there is none, it is injected natively at the platform
+        view, which is how pinch-to-zoom reaches controls that handle gestures internally
+        such as Map, WebView and native scroll views. The response reports which tier
+        serviced the gesture so callers can tell a real recognizer hit from a native fallback.
       requestBody:
         required: true
         content:
@@ -640,7 +644,11 @@ paths:
               $ref: "./schemas/actions.json#/$defs/GestureRequest"
       responses:
         "200":
-          $ref: "#/components/responses/ActionSuccess"
+          description: Gesture performed.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/actions.json#/$defs/GestureResponse"
         "408":
           $ref: "#/components/responses/Timeout"
         "409":

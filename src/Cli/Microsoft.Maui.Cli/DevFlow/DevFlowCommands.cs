@@ -696,6 +696,65 @@ public class DevFlowCommands
         });
         mauiCommand.Add(mauiScrollCmd);
 
+        // MAUI gesture — the gesture kind is a positional argument because --type is
+        // already taken by element resolution.
+        var gestureTypeArg = new Argument<string>("gestureType")
+        {
+            Description = "Gesture: pinch, rotate, pan, swipe, doubletap, longpress, or tap"
+        };
+        var gestureElementOption = new Option<string?>("--element") { Description = "Target element ID (defaults to the current page)" };
+        var gestureDirectionOption = new Option<string?>("--direction") { Description = "Direction for swipe/pan: up, down, left, right" };
+        var gestureDistanceOption = new Option<double?>("--distance") { Description = "Swipe/pan distance in device-independent pixels (default: 120)" };
+        var gestureScaleOption = new Option<double?>("--scale") { Description = "Pinch factor: 2.0 zooms in 2x, 0.5 zooms out (default: 1.5)" };
+        var gestureRotationOption = new Option<double?>("--rotation") { Description = "Rotation in degrees, positive = clockwise (default: 90)" };
+        var gestureDxOption = new Option<double?>("--dx") { Description = "Explicit horizontal pan distance; overrides --direction" };
+        var gestureDyOption = new Option<double?>("--dy") { Description = "Explicit vertical pan distance; overrides --direction" };
+        var gestureOriginXOption = new Option<double?>("--origin-x") { Description = "Focal point X, element-relative 0..1 (default: 0.5)" };
+        var gestureOriginYOption = new Option<double?>("--origin-y") { Description = "Focal point Y, element-relative 0..1 (default: 0.5)" };
+        var gestureDurationOption = new Option<int?>("--duration") { Description = "Gesture duration in milliseconds (default: 200)" };
+        var gestureStepsOption = new Option<int?>("--steps") { Description = "Interpolation steps between start and end (default: 10)" };
+        var mauiGestureCmd = new Command("gesture", "Perform a gesture: pinch, rotate, pan, swipe, doubletap, longpress, tap")
+        {
+            gestureTypeArg, gestureElementOption, resolveAutoIdOption, resolveTextOption, resolveIndexOption,
+            gestureDirectionOption, gestureDistanceOption, gestureScaleOption, gestureRotationOption,
+            gestureDxOption, gestureDyOption, gestureOriginXOption, gestureOriginYOption,
+            gestureDurationOption, gestureStepsOption
+        };
+        mauiGestureCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var isJson = output.ResolveJsonMode(ctx.GetValue(jsonOption), ctx.GetValue(noJsonOption));
+
+            var elementId = ctx.GetValue(gestureElementOption);
+            var autoId = ctx.GetValue(resolveAutoIdOption);
+            var text = ctx.GetValue(resolveTextOption);
+            var index = ctx.GetValue(resolveIndexOption);
+
+            // Only resolve when a selector was actually supplied — a gesture with no target
+            // is legitimate and aims at the current page.
+            if (elementId == null && (autoId != null || text != null))
+            {
+                elementId = await ResolveElementIdAsync(host, port, isJson, null, autoId, null, text, index);
+                if (elementId == null) return;
+            }
+
+            await MauiGestureAsync(host, port, isJson,
+                ctx.GetValue(gestureTypeArg)!,
+                elementId,
+                ctx.GetValue(gestureDirectionOption),
+                ctx.GetValue(gestureDistanceOption),
+                ctx.GetValue(gestureDurationOption),
+                ctx.GetValue(gestureScaleOption),
+                ctx.GetValue(gestureRotationOption),
+                ctx.GetValue(gestureDxOption),
+                ctx.GetValue(gestureDyOption),
+                ctx.GetValue(gestureOriginXOption),
+                ctx.GetValue(gestureOriginYOption),
+                ctx.GetValue(gestureStepsOption));
+        });
+        mauiCommand.Add(mauiGestureCmd);
+
         // MAUI focus
         var focusIdArg = new Argument<string?>("elementId") { Description = "Element ID to focus (optional if --automationId, --type, or --text is used)", DefaultValueFactory = _ => null };
         var mauiFocusCmd = new Command("focus", "Set focus to element") { focusIdArg, resolveAutoIdOption, resolveTypeOption, resolveTextOption, resolveIndexOption };
@@ -3454,6 +3513,88 @@ public class DevFlowCommands
                     Console.WriteLine(success ? $"Scrolled by dx={dx}, dy={dy}" : "Failed to scroll");
             }
             if (!success) _errorOccurred = true;
+        }
+        catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
+    }
+
+    private static readonly string[] GestureTypes = ["tap", "doubletap", "longpress", "swipe", "pan", "pinch", "rotate"];
+
+    private static async Task MauiGestureAsync(
+        string host, int port, bool json, string gestureType, string? elementId,
+        string? direction, double? distance, int? durationMs, double? scale, double? rotation,
+        double? deltaX, double? deltaY, double? originX, double? originY, int? steps)
+    {
+        var normalizedType = gestureType.Trim().ToLowerInvariant().Replace("-", "").Replace("_", "");
+        if (normalizedType == "zoom") normalizedType = "pinch";
+        if (normalizedType == "drag") normalizedType = "pan";
+
+        if (Array.IndexOf(GestureTypes, normalizedType) < 0)
+        {
+            Output.WriteError(
+                $"Unsupported gesture type '{gestureType}'. Supported: {string.Join(", ", GestureTypes)}.",
+                json, "ValidationError");
+            _errorOccurred = true;
+            return;
+        }
+
+        if (normalizedType == "swipe" && string.IsNullOrWhiteSpace(direction))
+        {
+            Output.WriteError("Swipe requires --direction (up, down, left, right).", json, "ValidationError");
+            _errorOccurred = true;
+            return;
+        }
+
+        if (normalizedType == "pan" && string.IsNullOrWhiteSpace(direction) && deltaX is null && deltaY is null)
+        {
+            Output.WriteError("Pan requires --direction, or an explicit --dx/--dy vector.", json, "ValidationError");
+            _errorOccurred = true;
+            return;
+        }
+
+        try
+        {
+            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            var result = await client.GestureDetailedAsync(
+                normalizedType, elementId, direction, distance, durationMs,
+                scale, rotation, deltaX, deltaY, originX, originY, steps);
+
+            if (json)
+            {
+                Output.WriteRawJson(CliJson.SerializeUntyped(new JsonObject
+                {
+                    ["success"] = result.Success,
+                    ["action"] = "gesture",
+                    ["type"] = result.Type ?? normalizedType,
+                    ["elementId"] = elementId,
+                    ["handledBy"] = result.HandledBy,
+                    ["platform"] = result.Platform,
+                    ["detail"] = result.Detail,
+                    ["error"] = result.Error
+                }, indented: false));
+            }
+            else
+            {
+                var target = elementId != null ? $" on {elementId}" : "";
+                if (result.Success)
+                {
+                    // Say which tier ran: a recognizer hit proves the app's own handler fired,
+                    // native means the platform control absorbed the gesture instead.
+                    var how = result.HandledBy switch
+                    {
+                        "recognizer" => $"MAUI recognizer — {result.Detail}",
+                        "native" => $"native {result.Platform} — {result.Detail}",
+                        "scroll" => $"scroll fallback — {result.Detail}",
+                        _ => result.Detail ?? "ok"
+                    };
+                    Console.WriteLine($"Performed {normalizedType}{target} ({how})");
+                }
+                else
+                {
+                    Console.WriteLine($"Failed to perform {normalizedType}{target}: {result.Error}");
+                }
+            }
+
+            if (!result.Success) _errorOccurred = true;
         }
         catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
     }

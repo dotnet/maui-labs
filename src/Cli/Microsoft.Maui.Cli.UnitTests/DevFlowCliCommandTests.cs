@@ -235,6 +235,91 @@ public class DevFlowCliCommandTests
         Assert.Contains("-100", req.Body);
     }
 
+    // ========== ui gesture ==========
+
+    [Fact]
+    public async Task UiGesture_Pinch_SendsScaleToGestureRoute()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync("devflow", "ui", "gesture", "pinch", "--element", "el-1", "--scale", "2.0", "--json");
+
+        Assert.Equal(0, result.ExitCode);
+        var req = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/ui/actions/gesture");
+        Assert.Equal("POST", req.Method);
+        Assert.Contains("\"type\":\"pinch\"", req.Body);
+        Assert.Contains("\"scale\":2", req.Body);
+        Assert.Contains("\"elementId\":\"el-1\"", req.Body);
+    }
+
+    [Fact]
+    public async Task UiGesture_Pan_SendsExplicitVector()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync("devflow", "ui", "gesture", "pan", "--element", "el-1", "--dx", "0", "--dy", "-150", "--json");
+
+        Assert.Equal(0, result.ExitCode);
+        var req = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/ui/actions/gesture");
+        Assert.Contains("\"type\":\"pan\"", req.Body);
+        Assert.Contains("-150", req.Body);
+    }
+
+    [Fact]
+    public async Task UiGesture_Rotate_SendsDegrees()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync("devflow", "ui", "gesture", "rotate", "--rotation", "45", "--json");
+
+        Assert.Equal(0, result.ExitCode);
+        var req = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/ui/actions/gesture");
+        Assert.Contains("\"type\":\"rotate\"", req.Body);
+        Assert.Contains("\"rotation\":45", req.Body);
+    }
+
+    [Fact]
+    public async Task UiGesture_ReportsWhichTierHandledIt()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync("devflow", "ui", "gesture", "pinch", "--element", "el-1", "--scale", "2.0", "--json");
+
+        Assert.Equal(0, result.ExitCode);
+        var payload = result.ParseJsonOutput();
+        Assert.True(payload.GetProperty("success").GetBoolean());
+        Assert.Equal("recognizer", payload.GetProperty("handledBy").GetString());
+        Assert.Equal("PinchGestureRecognizer on Grid", payload.GetProperty("detail").GetString());
+    }
+
+    [Fact]
+    public async Task UiGesture_UnknownType_FailsWithoutCallingAgent()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync("devflow", "ui", "gesture", "wiggle", "--json");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/ui/actions/gesture");
+    }
+
+    [Fact]
+    public async Task UiGesture_SwipeWithoutDirection_FailsWithoutCallingAgent()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync("devflow", "ui", "gesture", "swipe", "--json");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/ui/actions/gesture");
+    }
+
     [Fact]
     public async Task UiResize_SendsResizeAction()
     {

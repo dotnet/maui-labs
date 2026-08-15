@@ -518,29 +518,36 @@ public class AgentClient : IDisposable
         return PostActionResultAsync($"{UiApi}/actions/key", payload);
     }
 
-    public Task<bool> GestureAsync(
+    /// <summary>
+    /// Performs a gesture. Supported types: tap, doubletap, longpress, swipe, pan, pinch, rotate.
+    /// </summary>
+    public async Task<bool> GestureAsync(
         string type,
         string? elementId = null,
         string? direction = null,
         double? distance = null,
         int? durationMs = null)
-        => GestureAsync(
-            type,
-            elementId,
-            direction,
-            distance,
-            durationMs,
-            captureEpoch: null,
-            registryGeneration: null);
+        => (await GestureDetailedAsync(type, elementId, direction, distance, durationMs)).Success;
 
-    public async Task<bool> GestureAsync(
+    /// <summary>
+    /// Performs a gesture and reports which tier serviced it — a managed MAUI gesture
+    /// recognizer, native platform injection, or nothing at all.
+    /// </summary>
+    public async Task<GestureResult> GestureDetailedAsync(
         string type,
-        string? elementId,
-        string? direction,
-        double? distance,
-        int? durationMs,
-        long? captureEpoch,
-        long? registryGeneration)
+        string? elementId = null,
+        string? direction = null,
+        double? distance = null,
+        int? durationMs = null,
+        double? scale = null,
+        double? rotation = null,
+        double? deltaX = null,
+        double? deltaY = null,
+        double? originX = null,
+        double? originY = null,
+        int? steps = null,
+        long? captureEpoch = null,
+        long? registryGeneration = null)
     {
         var payload = new JsonObject
         {
@@ -551,9 +558,35 @@ public class AgentClient : IDisposable
         if (direction is not null) payload["direction"] = direction;
         if (distance.HasValue) payload["distance"] = distance.Value;
         if (durationMs.HasValue) payload["durationMs"] = durationMs.Value;
+        if (scale.HasValue) payload["scale"] = scale.Value;
+        if (rotation.HasValue) payload["rotation"] = rotation.Value;
+        if (deltaX.HasValue) payload["deltaX"] = deltaX.Value;
+        if (deltaY.HasValue) payload["deltaY"] = deltaY.Value;
+        if (originX.HasValue) payload["originX"] = originX.Value;
+        if (originY.HasValue) payload["originY"] = originY.Value;
+        if (steps.HasValue) payload["steps"] = steps.Value;
         AddCaptureMetadata(payload, captureEpoch, registryGeneration);
 
-        return await PostActionAsync($"{UiApi}/actions/gesture", payload);
+        try
+        {
+            using var content = DriverJson.CreateJsonContent(payload);
+            var response = await _http.PostAsync($"{_baseUrl}{UiApi}/actions/gesture", content);
+            var responseBody = await response.Content.ReadAsStringAsync();
+            var result = DriverJson.Deserialize<GestureResult>(responseBody);
+
+            if (result == null)
+                return new GestureResult { Success = false, Type = type, Error = "Agent returned an unreadable response" };
+
+            // A non-2xx response is a failure even if the body says otherwise.
+            if (!response.IsSuccessStatusCode)
+                result.Success = false;
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            return new GestureResult { Success = false, Type = type, Error = ex.Message };
+        }
     }
 
     public Task<ActionResult> GestureResultAsync(
@@ -578,6 +611,47 @@ public class AgentClient : IDisposable
 
         return PostActionResultAsync($"{UiApi}/actions/gesture", payload);
     }
+
+    /// <summary>Pinch to zoom. <paramref name="scale"/> of 2.0 zooms in 2x, 0.5 zooms out.</summary>
+    public Task<GestureResult> PinchAsync(
+        string? elementId,
+        double scale,
+        double? originX = null,
+        double? originY = null,
+        int? durationMs = null,
+        int? steps = null,
+        long? captureEpoch = null,
+        long? registryGeneration = null)
+        => GestureDetailedAsync(
+            "pinch", elementId, scale: scale, originX: originX, originY: originY,
+            durationMs: durationMs, steps: steps,
+            captureEpoch: captureEpoch, registryGeneration: registryGeneration);
+
+    /// <summary>Rotate by <paramref name="degrees"/>, positive = clockwise.</summary>
+    public Task<GestureResult> RotateAsync(
+        string? elementId,
+        double degrees,
+        int? durationMs = null,
+        int? steps = null,
+        long? captureEpoch = null,
+        long? registryGeneration = null)
+        => GestureDetailedAsync(
+            "rotate", elementId, rotation: degrees, durationMs: durationMs, steps: steps,
+            captureEpoch: captureEpoch, registryGeneration: registryGeneration);
+
+    /// <summary>Drag by a vector in device-independent pixels.</summary>
+    public Task<GestureResult> PanAsync(
+        string? elementId,
+        double deltaX,
+        double deltaY,
+        int? durationMs = null,
+        int? steps = null,
+        long? captureEpoch = null,
+        long? registryGeneration = null)
+        => GestureDetailedAsync(
+            "pan", elementId, deltaX: deltaX, deltaY: deltaY,
+            durationMs: durationMs, steps: steps,
+            captureEpoch: captureEpoch, registryGeneration: registryGeneration);
 
     public Task<JsonElement> BatchAsync(
         IEnumerable<JsonObject> actions,
@@ -2097,6 +2171,37 @@ public readonly record struct UiReadResult(
     string? Reason,
     bool Retryable,
     bool TransportFailure);
+
+/// <summary>
+/// Outcome of a gesture, including which tier serviced it. Gestures can be satisfied by a
+/// managed MAUI gesture recognizer or by native platform injection, and the two behave
+/// differently enough that it is worth knowing which one ran.
+/// </summary>
+public class GestureResult
+{
+    [System.Text.Json.Serialization.JsonPropertyName("success")]
+    public bool Success { get; set; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("type")]
+    public string? Type { get; set; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("elementId")]
+    public string? ElementId { get; set; }
+
+    /// <summary>"recognizer", "native", "scroll" (legacy swipe fallback), or "none".</summary>
+    [System.Text.Json.Serialization.JsonPropertyName("handledBy")]
+    public string? HandledBy { get; set; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("platform")]
+    public string? Platform { get; set; }
+
+    /// <summary>What actually serviced the gesture, e.g. "MKMapView.Camera.CenterCoordinateDistance /2".</summary>
+    [System.Text.Json.Serialization.JsonPropertyName("detail")]
+    public string? Detail { get; set; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("error")]
+    public string? Error { get; set; }
+}
 
 public class AgentStatus
 {

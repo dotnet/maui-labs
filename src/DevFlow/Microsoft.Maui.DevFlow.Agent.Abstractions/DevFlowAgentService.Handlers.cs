@@ -585,6 +585,13 @@ public partial class DevFlowAgentService
         public string? Direction { get; set; }
         public double Distance { get; set; } = 120;
         public int DurationMs { get; set; } = 200;
+        public double? Scale { get; set; }
+        public double? Rotation { get; set; }
+        public double? DeltaX { get; set; }
+        public double? DeltaY { get; set; }
+        public double? OriginX { get; set; }
+        public double? OriginY { get; set; }
+        public int? Steps { get; set; }
     }
 
     protected sealed class BatchRequest : CaptureBoundRequest
@@ -614,6 +621,11 @@ public partial class DevFlowAgentService
         public string? Direction { get; set; }
         public double Distance { get; set; } = 120;
         public int DurationMs { get; set; } = 200;
+        public double? Scale { get; set; }
+        public double? Rotation { get; set; }
+        public double? OriginX { get; set; }
+        public double? OriginY { get; set; }
+        public int? Steps { get; set; }
         public JsonElement[]? Args { get; set; }
         public string? Name { get; set; }
     }
