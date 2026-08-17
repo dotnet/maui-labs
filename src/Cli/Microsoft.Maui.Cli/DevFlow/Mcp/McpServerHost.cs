@@ -65,6 +65,7 @@ public static class McpServerHost
 			.WithTools<FileTools>()
 			.WithTools<BatchTools>()
 			.WithTools<InvokeTools>()
+			.WithTools<NativeDialogTools>()
 			.WithTools<ExtensionTools>();
 
 		await builder.Build().RunAsync();

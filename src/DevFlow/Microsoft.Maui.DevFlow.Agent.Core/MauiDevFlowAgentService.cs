@@ -2168,9 +2168,9 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
 
     /// <summary>
     /// Describes why a screenshot capture returned null, when the platform can determine an
-    /// actionable, often-retryable cause (e.g. the app window is not the frontmost application
-    /// on macOS). Returns <c>null</c> when no specific cause is known, in which case the caller
-    /// falls back to a generic error.
+    /// actionable, often-retryable cause (e.g. the app window is minimized). Returns
+    /// <c>null</c> when no specific cause is known, in which case the caller falls back to a
+    /// generic error.
     /// <para>
     /// Invoked on the UI thread within the same dispatch as the failed capture (see
     /// <see cref="ScreenshotCaptureOutcome"/>), so the probed window/app state reflects the

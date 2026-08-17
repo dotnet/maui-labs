@@ -70,7 +70,7 @@ public class ScreenshotAgentClientTests
     }
 
     [Fact]
-    public async Task ScreenshotResultAsync_WindowNotFrontmost_ReturnsRetryableFailureWithSuggestions()
+    public async Task ScreenshotResultAsync_WindowNotVisible_ReturnsRetryableFailureWithSuggestions()
     {
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
@@ -79,13 +79,13 @@ public class ScreenshotAgentClientTests
         const string body = """
         {
           "success": false,
-          "error": "Failed to capture screenshot because the app window is not frontmost (the app is not the active application). Bring the app to the foreground and retry.",
-          "reason": "window-not-frontmost",
+          "error": "Failed to capture the app window because it is hidden or minimized.",
+          "reason": "window-not-visible",
           "details": {
             "retryable": true,
             "suggestions": [
-              "Bring the MAUI app window to the foreground (click it or use the app switcher / Cmd+Tab), then retry.",
-              "Ensure the app window is visible and not minimized."
+              "Restore the app window without activating it, then retry.",
+              "Ensure Screen & System Audio Recording permission is granted if native window capture is required."
             ]
           }
         }
@@ -105,13 +105,13 @@ public class ScreenshotAgentClientTests
 
         Assert.False(result.Success);
         Assert.Null(result.Data);
-        Assert.Equal("window-not-frontmost", result.Reason);
+        Assert.Equal("window-not-visible", result.Reason);
         Assert.True(result.Retryable);
         Assert.NotNull(result.Error);
-        Assert.Contains("not frontmost", result.Error!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("hidden or minimized", result.Error!, StringComparison.OrdinalIgnoreCase);
         Assert.NotNull(result.Suggestions);
         Assert.Equal(2, result.Suggestions!.Count);
-        Assert.Contains(result.Suggestions, s => s.Contains("foreground", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Suggestions, s => s.Contains("without activating", StringComparison.OrdinalIgnoreCase));
 
         await serverTask;
     }
@@ -170,7 +170,7 @@ public class ScreenshotAgentClientTests
         var port = ((IPEndPoint)listener.LocalEndpoint).Port;
 
         const string body = """
-        { "success": false, "error": "Failed to capture screenshot", "reason": "window-not-frontmost", "details": { "retryable": true } }
+        { "success": false, "error": "Failed to capture screenshot", "reason": "window-not-visible", "details": { "retryable": true } }
         """;
 
         var serverTask = Task.Run(async () =>

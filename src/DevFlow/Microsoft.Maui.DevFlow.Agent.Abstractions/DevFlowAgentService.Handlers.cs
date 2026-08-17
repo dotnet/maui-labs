@@ -517,7 +517,7 @@ public partial class DevFlowAgentService
 
         var message = string.IsNullOrWhiteSpace(failure.Message) ? defaultMessage : failure.Message;
 
-        // 409 Conflict signals a transient, retryable precondition (window focus/visibility);
+        // 409 Conflict signals a transient, retryable precondition (such as window visibility);
         // the structured body carries the authoritative retryable flag for clients.
         return HttpResponse.Error(
             message,
@@ -2721,10 +2721,10 @@ public sealed class ScreenshotCaptureFailure
     /// <summary>Human-readable, actionable error message.</summary>
     public string Message { get; }
 
-    /// <summary>Machine-readable cause identifier (e.g. <c>window-not-frontmost</c>).</summary>
+    /// <summary>Machine-readable cause identifier (e.g. <c>window-not-visible</c>).</summary>
     public string Reason { get; }
 
-    /// <summary>Whether retrying (e.g. after foregrounding the app) may succeed.</summary>
+    /// <summary>Whether retrying after correcting the reported precondition may succeed.</summary>
     public bool Retryable { get; }
 
     /// <summary>Optional actionable suggestions for the caller.</summary>

@@ -221,7 +221,7 @@ Each product requires source setup **and** CI/CD configuration across two system
 
 ## DevFlow MCP Tools
 
-DevFlow exposes 67 MCP tools for AI agent integration (in `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/`):
+DevFlow exposes 69 MCP tools for AI agent integration (in `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/`):
 
 | Tool | Purpose |
 |------|---------|
@@ -261,6 +261,8 @@ DevFlow exposes 67 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_list_agents` | List connected MAUI DevFlow agents (running apps) |
 | `maui_logs` | Retrieve app logs (ILogger + WebView console) |
 | `maui_navigate` | Shell navigation to a route |
+| `maui_native_dialog_detect` | Detect app or macOS permission dialogs without changing focus |
+| `maui_native_dialog_respond` | Invoke an exact confirmed dialog button using AXPress |
 | `maui_network` | List captured HTTP requests |
 | `maui_network_clear` | Clear captured request buffer |
 | `maui_network_detail` | Full request/response details |

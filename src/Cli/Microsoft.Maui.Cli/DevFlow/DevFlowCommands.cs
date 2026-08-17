@@ -764,7 +764,7 @@ public class DevFlowCommands
         // dismiss
         var dismissUdid = new Option<string?>("--udid") { Description = "Simulator UDID (auto-detects booted simulator if omitted)" };
         var dismissPid = new Option<int?>("--pid") { Description = "Mac Catalyst app PID (auto-detects if omitted)" };
-        var dismissButtonArg = new Argument<string?>("button") { Description = "Button label to tap (default: first accept-style button)", DefaultValueFactory = _ => null };
+        var dismissButtonArg = new Argument<string?>("button") { Description = "Exact visible button label to invoke (required on macOS)", DefaultValueFactory = _ => null };
         var alertDismissCmd = new Command("dismiss", "Dismiss the current alert/dialog") { dismissButtonArg, dismissUdid, dismissPid };
         alertDismissCmd.SetAction(async (ctx, ct) =>
         {
@@ -4170,14 +4170,30 @@ public class DevFlowCommands
         {
             using var client = await CreateAgentClientAsync(host, port);
             var status = await client.GetStatusAsync();
+            if (status?.App?.ProcessId is int processId)
+                return processId;
+
             var appName = status?.App?.Name ?? status?.AppName;
             if (!string.IsNullOrWhiteSpace(appName))
             {
-                // Find process by app name
-                var pgrepResult = await ProcessRunner.RunAsync("pgrep", new[] { "-f", appName });
-                var lines = pgrepResult.StandardOutput.Trim().Split('\n', StringSplitOptions.RemoveEmptyEntries);
-                if (lines.Length > 0 && int.TryParse(lines[0].Trim(), out var resolved))
-                    return resolved;
+                foreach (var process in System.Diagnostics.Process.GetProcesses())
+                {
+                    using (process)
+                    {
+                        try
+                        {
+                            if (process.ProcessName.Equals(appName, StringComparison.OrdinalIgnoreCase) ||
+                                process.ProcessName.Contains(appName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                return process.Id;
+                            }
+                        }
+                        catch
+                        {
+                            // A process may exit or deny metadata access while enumerating.
+                        }
+                    }
+                }
             }
         }
         catch { }
@@ -4269,11 +4285,20 @@ public class DevFlowCommands
             Output.WriteResult(new JsonObject
             {
                 ["detected"] = true,
+                ["promptId"] = alert.PromptId,
                 ["title"] = alert.Title,
-                ["buttons"] = buttons
+                ["text"] = new JsonArray(alert.Text.Select(text => (JsonNode)text).ToArray()),
+                ["buttons"] = buttons,
+                ["sourceProcessId"] = alert.SourceProcessId,
+                ["sourceProcessName"] = alert.SourceProcessName,
+                ["isSystemDialog"] = alert.IsSystemDialog,
+                ["requiresUserConfirmation"] = alert.RequiresUserConfirmation,
+                ["canRespond"] = alert.CanRespond
             }, json, _ =>
             {
                 Console.WriteLine($"Alert: {alert.Title ?? "(no title)"}");
+                if (!string.IsNullOrEmpty(alert.SourceProcessName))
+                    Console.WriteLine($"  Source: {alert.SourceProcessName} ({alert.SourceProcessId})");
                 foreach (var btn in alert.Buttons)
                     Console.WriteLine($"  Button: \"{btn.Label}\"");
             });

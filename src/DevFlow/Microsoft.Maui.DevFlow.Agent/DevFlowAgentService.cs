@@ -1114,25 +1114,30 @@ public class PlatformAgentService : MauiDevFlowAgentService
             var attachedSheet = parentWindow?.AttachedSheet
                 ?? parentWindow?.Sheets.LastOrDefault()
                 ?? FindRegisteredDialogWindow(parentWindow);
-            if (parentWindow != null && attachedSheet != null)
-            {
-                var composited = CaptureWindowsViaCG(parentWindow, attachedSheet);
-                if (composited != null)
-                    return composited;
-
-                window = attachedSheet;
-            }
-            else
-            {
-                window = parentWindow;
-            }
-
+            window = parentWindow;
             if (window != null)
             {
+                // ScreenCaptureKit captures the complete AppKit window, including native
+                // chrome and attached child windows, without activating or ordering it.
+                var screenCaptureKitBytes = await CaptureWindowViaScreenCaptureKitAsync(window);
+                if (screenCaptureKitBytes != null)
+                    return screenCaptureKitBytes;
+
+                if (attachedSheet != null)
+                {
+                    var composited = CaptureWindowsViaCG(window, attachedSheet);
+                    if (composited != null)
+                        return composited;
+
+                    // Quartz can only capture one window ID. Prefer the sheet when
+                    // compositing is unavailable so modal UI remains visible.
+                    window = attachedSheet;
+                }
+
                 // Primary: CGWindowListCreateImage gives a composited capture including
                 // layer-backed controls and WebView content. This can return null when the
-                // window is not frontmost / fully occluded (the window server may have purged
-                // its backing store), so we fall through to occlusion-independent paths below.
+                // window is fully occluded (the window server may have purged its backing
+                // store), so we fall through to occlusion-independent paths below.
                 var pngBytes = CaptureWindowViaCG(window);
                 if (pngBytes != null)
                     return pngBytes;
@@ -1142,7 +1147,9 @@ public class PlatformAgentService : MauiDevFlowAgentService
                 {
                     // Occlusion-independent fallback: CacheDisplay re-renders the view
                     // hierarchy directly, so it works even when the window is not frontmost.
-                    var cached = CaptureNSView(contentView);
+                    // Capture the theme frame when possible so native title-bar chrome is
+                    // included instead of limiting the result to the content view.
+                    var cached = CaptureNSView(contentView.Superview ?? contentView);
                     if (cached != null)
                         return cached;
 
@@ -1275,10 +1282,6 @@ public class PlatformAgentService : MauiDevFlowAgentService
         _ => null
     };
 
-    /// <summary>
-    /// On macOS, reports an actionable cause when a screenshot fails because the app window
-    /// is not the frontmost application (a common reason CGWindowListCreateImage returns null).
-    /// </summary>
     protected override ScreenshotCaptureFailure? DescribeScreenshotFailure()
     {
         try
@@ -1289,20 +1292,16 @@ public class PlatformAgentService : MauiDevFlowAgentService
             var nsWindow = NSWindowFromPlatformView(mauiWindow?.Handler?.PlatformView)
                 ?? app.KeyWindow ?? app.MainWindow;
 
-            var appActive = app.Active;
-            var windowVisible = nsWindow == null || nsWindow.IsVisible;
-
-            if (!appActive || !windowVisible)
+            if (nsWindow != null && (!nsWindow.IsVisible || nsWindow.IsMiniaturized))
             {
                 return new ScreenshotCaptureFailure(
-                    "Failed to capture screenshot because the app window is not frontmost (the app is not the active application). " +
-                    "Bring the app to the foreground and retry.",
-                    "window-not-frontmost",
+                    "Failed to capture the app window because it is hidden or minimized.",
+                    "window-not-visible",
                     retryable: true,
                     suggestions: new[]
                     {
-                        "Bring the MAUI app window to the foreground (click it or use the app switcher / Cmd+Tab), then retry.",
-                        "Ensure the app window is visible and not minimized."
+                        "Restore the app window without activating it, then retry.",
+                        "Ensure Screen & System Audio Recording permission is granted if native window capture is required."
                     });
             }
         }
@@ -1394,6 +1393,105 @@ public class PlatformAgentService : MauiDevFlowAgentService
             NSBitmapImageFileType.Png, new NSDictionary());
         return pngData?.ToArray();
     }
+
+    private static async Task<byte[]?> CaptureWindowViaScreenCaptureKitAsync(NSWindow window)
+    {
+        // Never trigger the system screen-recording prompt from automation. Preflight is
+        // non-interactive; when access is absent we use the in-process rendering fallbacks.
+        if (!OperatingSystem.IsMacOSVersionAtLeast(14) ||
+            (!OperatingSystem.IsMacOSVersionAtLeast(14, 4) && !CGPreflightScreenCaptureAccess()))
+            return null;
+
+        try
+        {
+            using var content = await GetShareableContentAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            var windowId = (uint)window.WindowNumber;
+            var shareableWindow = content.Windows.FirstOrDefault(candidate => candidate.WindowId == windowId);
+            if (shareableWindow == null)
+                return null;
+
+            using var filter = new ScreenCaptureKit.SCContentFilter(shareableWindow);
+            using var configuration = new ScreenCaptureKit.SCStreamConfiguration
+            {
+                Width = (nuint)Math.Max(1, Math.Ceiling(shareableWindow.Frame.Width * window.BackingScaleFactor)),
+                Height = (nuint)Math.Max(1, Math.Ceiling(shareableWindow.Frame.Height * window.BackingScaleFactor)),
+                ShowsCursor = false,
+                PreservesAspectRatio = true,
+                IgnoreShadowsSingleWindow = true,
+                IgnoreGlobalClipSingleWindow = true,
+                CaptureResolution = ScreenCaptureKit.SCCaptureResolutionType.Best
+            };
+
+            if (OperatingSystem.IsMacOSVersionAtLeast(14, 2))
+                configuration.IncludeChildWindows = true;
+
+            var completion = new TaskCompletionSource<byte[]?>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+
+            ScreenCaptureKit.SCScreenshotManager.CaptureImage(
+                filter,
+                configuration,
+                (image, error) =>
+                {
+                    if (error != null || image == null)
+                    {
+                        completion.TrySetResult(null);
+                        return;
+                    }
+
+                    try
+                    {
+                        using var bitmapRep = new NSBitmapImageRep(image);
+                        using var properties = new NSDictionary();
+                        using var pngData = bitmapRep.RepresentationUsingTypeProperties(
+                            NSBitmapImageFileType.Png, properties);
+                        completion.TrySetResult(pngData?.ToArray());
+                    }
+                    catch
+                    {
+                        completion.TrySetResult(null);
+                    }
+                });
+
+            return await completion.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static Task<ScreenCaptureKit.SCShareableContent> GetShareableContentAsync()
+    {
+        var completion = new TaskCompletionSource<ScreenCaptureKit.SCShareableContent>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        void Complete(
+            ScreenCaptureKit.SCShareableContent content,
+            Foundation.NSError error)
+        {
+            if (error != null)
+                completion.TrySetException(new InvalidOperationException(error.LocalizedDescription));
+            else if (content == null)
+                completion.TrySetException(new InvalidOperationException("ScreenCaptureKit returned no shareable content."));
+            else
+                completion.TrySetResult(content);
+        }
+
+        if (OperatingSystem.IsMacOSVersionAtLeast(14, 4))
+            ScreenCaptureKit.SCShareableContent.GetCurrentProcessShareableContent(Complete);
+        else
+            ScreenCaptureKit.SCShareableContent.GetShareableContent(
+                excludeDesktopWindows: true,
+                onScreenWindowsOnly: false,
+                Complete);
+
+        return completion.Task;
+    }
+
+    [System.Runtime.InteropServices.DllImport("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.U1)]
+    static extern bool CGPreflightScreenCaptureAccess();
 
     [System.Runtime.InteropServices.DllImport("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")]
     static extern IntPtr CGWindowListCreateImage(

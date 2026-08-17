@@ -224,6 +224,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                     packageId = packageId,
                     version = appVersion,
                     build = appBuild,
+                    processId = Environment.ProcessId,
                 },
                 capabilities = new
                 {
