@@ -113,6 +113,23 @@
                 </VerticalStackLayout>
             </Border>
 
+            <Border StrokeShape="RoundRectangle 8" Padding="16">
+                <Border.BackgroundColor>
+                    <AppThemeBinding Light="#E6E0E9" Dark="#49454F" />
+                </Border.BackgroundColor>
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Long-press target" FontAttributes="Bold" FontSize="16" />
+                    <Button AutomationId="LongPressTarget"
+                            Text="Press and hold"
+                            Pressed="OnLongPressStarted"
+                            Released="OnLongPressEnded" />
+                    <Label x:Name="LongPressStatusLabel"
+                           Text="longpress: none"
+                           FontSize="14"
+                           AutomationId="LongPressStatusLabel" />
+                </VerticalStackLayout>
+            </Border>
+
             <!-- No managed recognizer at all: proves the native injection tier fires -->
             <Border StrokeShape="RoundRectangle 8" Padding="16">
                 <Border.BackgroundColor>

@@ -486,8 +486,8 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                         Body = JsonSerializer.Serialize(new ScrollRequest
                         {
                             ElementId = action.ElementId,
-                            DeltaX = action.DeltaX,
-                            DeltaY = action.DeltaY,
+                            DeltaX = action.DeltaX ?? 0,
+                            DeltaY = action.DeltaY ?? 0,
                             ItemIndex = action.ItemIndex,
                             GroupIndex = action.GroupIndex,
                             ScrollToPosition = action.ScrollToPosition,
@@ -515,7 +515,14 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                             Type = action.Type ?? action.Action,
                             Direction = action.Direction,
                             Distance = action.Distance,
-                            DurationMs = action.DurationMs
+                            DurationMs = action.DurationMs,
+                            Scale = action.Scale,
+                            Rotation = action.Rotation,
+                            DeltaX = action.DeltaX,
+                            DeltaY = action.DeltaY,
+                            OriginX = action.OriginX,
+                            OriginY = action.OriginY,
+                            Steps = action.Steps
                         })
                     });
                     break;

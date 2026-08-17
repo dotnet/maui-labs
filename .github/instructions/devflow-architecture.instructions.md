@@ -153,7 +153,7 @@ Override virtual methods from `Agent.Abstractions/DevFlowAgentService.cs`:
 
 `POST /api/v1/ui/actions/gesture` supports `tap`, `doubletap`, `longpress`, `swipe`, `pan`,
 `pinch` and `rotate`. Resolution is two-tier, and the response reports which tier ran via
-`handledBy` (`recognizer` | `native` | `scroll` | `none`) plus a `detail` string:
+`handledBy` (`recognizer` | `native` | `action` | `scroll` | `none`) plus a `detail` string:
 
 1. **Managed recognizer** (`Agent.Core`, all platforms) — walks the target element and its
    ancestors for a matching MAUI gesture recognizer and drives it through MAUI's public
@@ -174,6 +174,12 @@ Override virtual methods from `Agent.Abstractions/DevFlowAgentService.cs`:
      `inputInjectionBrokered` capability and is unusable from a normal app package.
    - **macOS AppKit** — `NSScrollView` magnification and content offset.
    - **GTK** — tier 1 only.
+
+Gesture directions describe finger travel, not content travel. An `up` swipe moves the pointer
+upward; a scroll fallback inverts that vector so scrollable content moves downward consistently
+with native touch injection. Named gestures target MAUI `VisualElement` IDs (or the current page);
+registered native-only element IDs remain supported by the dedicated tap action, but are not
+targets for multi-pointer gesture synthesis.
 
 Gestures against `samples/DevFlow.Sample` → `GestureTestPage` (`//gestures`) write what they
 received to `AutomationId`'d status labels, so tests assert the gesture actually reached the app.

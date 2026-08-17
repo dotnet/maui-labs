@@ -25,34 +25,44 @@ public partial class MauiDevFlowAgentService
         if (await PrepareUiMutationAsync(request, body, body.ElementId) is { } staleCapture)
             return staleCapture;
 
+        var startedAtUtc = DateTime.UtcNow;
         var gestureType = NormalizeGestureType(body.Type);
+        var reservedCapture = GetReservedCapture(request);
+        var failureStatusCode = 400;
+        GestureOutcome outcome;
 
         if (gestureType == "tap")
         {
-            return await HandleTap(new HttpRequest
+            var tapResponse = await HandleTap(new HttpRequest
             {
                 Method = "POST",
                 MutationState = request.MutationState,
                 Body = JsonSerializer.Serialize(new ActionRequest { ElementId = body.ElementId })
             });
+            failureStatusCode = tapResponse.StatusCode;
+            outcome = tapResponse.StatusCode < 400
+                ? GestureOutcome.Handled("action", "DevFlow tap action")
+                : GestureOutcome.NotHandled(ExtractResponseError(tapResponse) ?? "Tap failed");
         }
-
-        var windowIndex = ParseWindowIndex(request);
-        var startedAtUtc = DateTime.UtcNow;
-        var outcome = gestureType switch
+        else
         {
-            "pinch" => await PerformPinchAsync(body, windowIndex),
-            "rotate" => await PerformRotateAsync(body, windowIndex),
-            "pan" => await PerformPanAsync(body, windowIndex),
-            "swipe" => await PerformSwipeAsync(body, windowIndex),
-            "doubletap" => await PerformDoubleTapAsync(body, windowIndex),
-            "longpress" => await PerformLongPressAsync(body, windowIndex),
-            _ => GestureOutcome.NotHandled(
-                $"Gesture '{body.Type}' is not supported. Supported types: {string.Join(", ", SupportedGestures)}")
-        };
+            var windowIndex = ParseWindowIndex(request);
+            outcome = gestureType switch
+            {
+                "pinch" => await PerformPinchAsync(body, windowIndex, reservedCapture),
+                "rotate" => await PerformRotateAsync(body, windowIndex, reservedCapture),
+                "pan" => await PerformPanAsync(body, windowIndex, reservedCapture),
+                "swipe" => await PerformSwipeAsync(body, windowIndex, reservedCapture),
+                "doubletap" => await PerformDoubleTapAsync(body, windowIndex, reservedCapture),
+                "longpress" => await PerformLongPressAsync(body, windowIndex, reservedCapture),
+                _ => GestureOutcome.NotHandled(
+                    $"Gesture '{body.Type}' is not supported. Supported types: {string.Join(", ", SupportedGestures)}")
+            };
+        }
 
         if (!outcome.Success && gestureType == "swipe")
         {
+            var durationMs = GestureDurationMs(body);
             var scrolled = await HandleScroll(new HttpRequest
             {
                 Method = "POST",
@@ -60,9 +70,9 @@ public partial class MauiDevFlowAgentService
                 Body = JsonSerializer.Serialize(new ScrollRequest
                 {
                     ElementId = body.ElementId,
-                    DeltaX = SwipeDeltaX(body.Direction, body.Distance),
-                    DeltaY = SwipeDeltaY(body.Direction, body.Distance),
-                    Animated = body.DurationMs <= 0 || body.DurationMs < 400
+                    DeltaX = -SwipeDeltaX(body.Direction, body.Distance),
+                    DeltaY = -SwipeDeltaY(body.Direction, body.Distance),
+                    Animated = durationMs <= 0 || durationMs < 400
                 })
             });
 
@@ -91,8 +101,8 @@ public partial class MauiDevFlowAgentService
 
         if (!outcome.Success)
         {
-            response.StatusCode = 400;
-            response.StatusText = "Bad Request";
+            response.StatusCode = failureStatusCode;
+            response.StatusText = HttpResponse.StatusTextFor(failureStatusCode);
         }
 
         return response;
@@ -128,13 +138,19 @@ public partial class MauiDevFlowAgentService
 
     private static int NormalizeSteps(int? steps) => Math.Clamp(steps ?? DefaultGestureSteps, 1, 120);
 
+    private static int GestureDurationMs(GestureActionRequest body) => body.DurationMs ?? 200;
+
     private static int StepDelayMs(int durationMs, int steps) =>
         durationMs <= 0 ? 0 : Math.Clamp(durationMs / Math.Max(1, steps), 0, 1000);
 
     private static Point GestureOrigin(GestureActionRequest body) =>
         new(Math.Clamp(body.OriginX ?? 0.5, 0, 1), Math.Clamp(body.OriginY ?? 0.5, 0, 1));
 
-    private VisualElement? ResolveGestureTarget(string? elementId, int? windowIndex, out string? error)
+    private VisualElement? ResolveGestureTarget(
+        string? elementId,
+        int? windowIndex,
+        UiCaptureContext capture,
+        out string? error)
     {
         error = null;
 
@@ -146,7 +162,10 @@ public partial class MauiDevFlowAgentService
             return page;
         }
 
-        var resolved = _treeWalker.GetElementById(elementId, _app);
+        var resolved = ResolveCapturedElement(
+            capture,
+            elementId,
+            id => _treeWalker.GetElementById(id, _app));
         if (resolved == null)
         {
             error = "Element not found";
@@ -183,7 +202,10 @@ public partial class MauiDevFlowAgentService
         return null;
     }
 
-    private async Task<GestureOutcome> PerformPinchAsync(GestureActionRequest body, int? windowIndex)
+    private async Task<GestureOutcome> PerformPinchAsync(
+        GestureActionRequest body,
+        int? windowIndex,
+        UiCaptureContext capture)
     {
         var scale = body.Scale ?? 1.5;
         if (scale <= 0)
@@ -191,10 +213,11 @@ public partial class MauiDevFlowAgentService
 
         var steps = NormalizeSteps(body.Steps);
         var origin = GestureOrigin(body);
-        var delay = StepDelayMs(body.DurationMs, steps);
+        var durationMs = GestureDurationMs(body);
+        var delay = StepDelayMs(durationMs, steps);
         var outcome = await DispatchAsync(async () =>
         {
-            var target = ResolveGestureTarget(body.ElementId, windowIndex, out var error);
+            var target = ResolveGestureTarget(body.ElementId, windowIndex, capture, out var error);
             if (target == null)
                 return GestureOutcome.NotHandled(error!);
 
@@ -214,7 +237,7 @@ public partial class MauiDevFlowAgentService
                 return GestureOutcome.Recognizer($"PinchGestureRecognizer on {hit.Owner.GetType().Name}");
             }
 
-            var native = await TryNativePinch(target, scale, origin, body.DurationMs, steps);
+            var native = await TryNativePinch(target, scale, origin, durationMs, steps);
             return native != null
                 ? GestureOutcome.Native(native)
                 : GestureOutcome.NotHandled(NoHandlerMessage("pinch", target, "PinchGestureRecognizer"));
@@ -223,18 +246,22 @@ public partial class MauiDevFlowAgentService
         return outcome ?? GestureOutcome.NotHandled("Pinch dispatch failed");
     }
 
-    private async Task<GestureOutcome> PerformRotateAsync(GestureActionRequest body, int? windowIndex)
+    private async Task<GestureOutcome> PerformRotateAsync(
+        GestureActionRequest body,
+        int? windowIndex,
+        UiCaptureContext capture)
     {
         var degrees = body.Rotation ?? 90;
         var steps = NormalizeSteps(body.Steps);
         var origin = GestureOrigin(body);
+        var durationMs = GestureDurationMs(body);
         var outcome = await DispatchAsync(async () =>
         {
-            var target = ResolveGestureTarget(body.ElementId, windowIndex, out var error);
+            var target = ResolveGestureTarget(body.ElementId, windowIndex, capture, out var error);
             if (target == null)
                 return GestureOutcome.NotHandled(error!);
 
-            var native = await TryNativeRotate(target, degrees, origin, body.DurationMs, steps);
+            var native = await TryNativeRotate(target, degrees, origin, durationMs, steps);
             return native != null
                 ? GestureOutcome.Native(native)
                 : GestureOutcome.NotHandled(
@@ -245,7 +272,10 @@ public partial class MauiDevFlowAgentService
         return outcome ?? GestureOutcome.NotHandled("Rotate dispatch failed");
     }
 
-    private async Task<GestureOutcome> PerformPanAsync(GestureActionRequest body, int? windowIndex)
+    private async Task<GestureOutcome> PerformPanAsync(
+        GestureActionRequest body,
+        int? windowIndex,
+        UiCaptureContext capture)
     {
         var totalX = body.DeltaX ?? SwipeDeltaX(body.Direction, body.Distance);
         var totalY = body.DeltaY ?? SwipeDeltaY(body.Direction, body.Distance);
@@ -253,10 +283,11 @@ public partial class MauiDevFlowAgentService
             return GestureOutcome.NotHandled("pan requires a non-zero deltaX/deltaY, or a direction with a distance");
 
         var steps = NormalizeSteps(body.Steps);
-        var delay = StepDelayMs(body.DurationMs, steps);
+        var durationMs = GestureDurationMs(body);
+        var delay = StepDelayMs(durationMs, steps);
         var outcome = await DispatchAsync(async () =>
         {
-            var target = ResolveGestureTarget(body.ElementId, windowIndex, out var error);
+            var target = ResolveGestureTarget(body.ElementId, windowIndex, capture, out var error);
             if (target == null)
                 return GestureOutcome.NotHandled(error!);
 
@@ -276,7 +307,7 @@ public partial class MauiDevFlowAgentService
                 return GestureOutcome.Recognizer($"PanGestureRecognizer on {hit.Owner.GetType().Name}");
             }
 
-            var native = await TryNativePan(target, totalX, totalY, body.DurationMs, steps);
+            var native = await TryNativePan(target, totalX, totalY, durationMs, steps);
             return native != null
                 ? GestureOutcome.Native(native)
                 : GestureOutcome.NotHandled(NoHandlerMessage("pan", target, "PanGestureRecognizer"));
@@ -285,14 +316,17 @@ public partial class MauiDevFlowAgentService
         return outcome ?? GestureOutcome.NotHandled("Pan dispatch failed");
     }
 
-    private async Task<GestureOutcome> PerformSwipeAsync(GestureActionRequest body, int? windowIndex)
+    private async Task<GestureOutcome> PerformSwipeAsync(
+        GestureActionRequest body,
+        int? windowIndex,
+        UiCaptureContext capture)
     {
         if (!TryParseSwipeDirection(body.Direction, out var direction))
             return GestureOutcome.NotHandled("swipe requires a direction of 'up', 'down', 'left' or 'right'");
 
         var outcome = await DispatchAsync(async () =>
         {
-            var target = ResolveGestureTarget(body.ElementId, windowIndex, out var error);
+            var target = ResolveGestureTarget(body.ElementId, windowIndex, capture, out var error);
             if (target == null)
                 return GestureOutcome.NotHandled(error!);
 
@@ -300,7 +334,7 @@ public partial class MauiDevFlowAgentService
                 target,
                 recognizer => recognizer.Direction.HasFlag(direction));
             if (found is { } hit
-                && hit.Recognizer is ISwipeGestureController controller
+                && hit.Recognizer is ISwipeGestureController controller)
             {
                 controller.SendSwipe(
                     hit.Owner,
@@ -314,7 +348,7 @@ public partial class MauiDevFlowAgentService
                 target,
                 direction.ToString().ToLowerInvariant(),
                 body.Distance,
-                body.DurationMs);
+                GestureDurationMs(body));
             return native != null
                 ? GestureOutcome.Native(native)
                 : GestureOutcome.NotHandled(NoHandlerMessage("swipe", target, "SwipeGestureRecognizer"));
@@ -323,11 +357,14 @@ public partial class MauiDevFlowAgentService
         return outcome ?? GestureOutcome.NotHandled("Swipe dispatch failed");
     }
 
-    private async Task<GestureOutcome> PerformDoubleTapAsync(GestureActionRequest body, int? windowIndex)
+    private async Task<GestureOutcome> PerformDoubleTapAsync(
+        GestureActionRequest body,
+        int? windowIndex,
+        UiCaptureContext capture)
     {
         var outcome = await DispatchAsync(async () =>
         {
-            var target = ResolveGestureTarget(body.ElementId, windowIndex, out var error);
+            var target = ResolveGestureTarget(body.ElementId, windowIndex, capture, out var error);
             if (target == null)
                 return GestureOutcome.NotHandled(error!);
 
@@ -360,12 +397,15 @@ public partial class MauiDevFlowAgentService
         return outcome ?? GestureOutcome.NotHandled("Double-tap dispatch failed");
     }
 
-    private async Task<GestureOutcome> PerformLongPressAsync(GestureActionRequest body, int? windowIndex)
+    private async Task<GestureOutcome> PerformLongPressAsync(
+        GestureActionRequest body,
+        int? windowIndex,
+        UiCaptureContext capture)
     {
-        var durationMs = body.DurationMs > 0 ? body.DurationMs : 600;
+        var durationMs = Math.Max(body.DurationMs ?? 600, 500);
         var outcome = await DispatchAsync(async () =>
         {
-            var target = ResolveGestureTarget(body.ElementId, windowIndex, out var error);
+            var target = ResolveGestureTarget(body.ElementId, windowIndex, capture, out var error);
             if (target == null)
                 return GestureOutcome.NotHandled(error!);
 
@@ -384,6 +424,24 @@ public partial class MauiDevFlowAgentService
     private static string NoHandlerMessage(string gesture, VisualElement target, string recognizerName) =>
         $"No {gesture} handler for {target.GetType().Name}: no {recognizerName} on the element or its " +
         $"ancestors, and native {gesture} injection is not available on {DeviceInfo.Platform}.";
+
+    private static string? ExtractResponseError(HttpResponse response)
+    {
+        if (string.IsNullOrWhiteSpace(response.Body))
+            return null;
+
+        try
+        {
+            using var document = JsonDocument.Parse(response.Body);
+            return document.RootElement.TryGetProperty("error", out var error)
+                ? error.GetString()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 
     private static bool TryParseSwipeDirection(string? direction, out SwipeDirection parsed)
     {

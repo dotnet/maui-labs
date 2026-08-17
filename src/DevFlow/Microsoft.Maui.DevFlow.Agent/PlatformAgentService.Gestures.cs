@@ -16,7 +16,7 @@ namespace Microsoft.Maui.DevFlow.Agent;
 
 /// <summary>
 /// Native gesture injection — the second tier behind the managed MAUI gesture recognizers
-/// in <see cref="Core.DevFlowAgentService"/>. This is what makes pinch-to-zoom work on
+/// in <see cref="Core.MauiDevFlowAgentService"/>. This is what makes pinch-to-zoom work on
 /// controls that own their gestures internally (Map, WebView, SKCanvasView, native scroll views)
 /// and therefore expose no <c>PinchGestureRecognizer</c> to walk.
 ///
@@ -157,6 +157,7 @@ public partial class PlatformAgentService
     /// is sampled with t in 0..1 and must return one point per pointer, in window pixels.
     /// </summary>
     private static async Task<bool> InjectAndroidTouchAsync(
+        global::Android.Views.View targetView,
         int pointerCount,
         Func<double, PointF[]> positionsAt,
         int durationMs,
@@ -164,7 +165,8 @@ public partial class PlatformAgentService
         int holdMs = 0)
     {
         var activity = global::Microsoft.Maui.ApplicationModel.Platform.CurrentActivity;
-        if (activity == null) return false;
+        var targetLocation = new int[2];
+        targetView.GetLocationInWindow(targetLocation);
 
         var properties = new MotionEvent.PointerProperties[pointerCount];
         var coords = new MotionEvent.PointerCoords[pointerCount];
@@ -189,23 +191,72 @@ public partial class PlatformAgentService
 
         bool Send(MotionEventActions action, int activePointers)
         {
-            var ev = MotionEvent.Obtain(
-                downTime, eventTime, action, activePointers,
-                properties[..activePointers], coords[..activePointers],
-                0, (MotionEventButtonState)0, 1f, 1f, 0, (Edge)0,
-                InputSourceType.Touchscreen, (MotionEventFlags)0);
-            if (ev == null) return false;
-            try { return activity.DispatchTouchEvent(ev); }
-            finally { ev.Recycle(); }
+            static MotionEvent? CreateEvent(
+                long downTime,
+                long eventTime,
+                MotionEventActions action,
+                int activePointers,
+                MotionEvent.PointerProperties[] properties,
+                MotionEvent.PointerCoords[] coords)
+                => MotionEvent.Obtain(
+                    downTime, eventTime, action, activePointers,
+                    properties[..activePointers], coords[..activePointers],
+                    0, (MotionEventButtonState)0, 1f, 1f, 0, (Edge)0,
+                    InputSourceType.Touchscreen, (MotionEventFlags)0);
+
+            if (activity != null)
+            {
+                var windowEvent = CreateEvent(
+                    downTime, eventTime, action, activePointers, properties, coords);
+                if (windowEvent != null)
+                {
+                    try
+                    {
+                        if (activity.DispatchTouchEvent(windowEvent))
+                            return true;
+                    }
+                    finally
+                    {
+                        windowEvent.Recycle();
+                    }
+                }
+            }
+
+            var localCoords = new MotionEvent.PointerCoords[activePointers];
+            for (var i = 0; i < activePointers; i++)
+            {
+                localCoords[i] = new MotionEvent.PointerCoords
+                {
+                    X = coords[i].X - targetLocation[0],
+                    Y = coords[i].Y - targetLocation[1],
+                    Pressure = coords[i].Pressure,
+                    Size = coords[i].Size
+                };
+            }
+
+            var localEvent = CreateEvent(
+                downTime, eventTime, action, activePointers, properties, localCoords);
+            if (localEvent == null)
+                return false;
+            try
+            {
+                return targetView.DispatchTouchEvent(localEvent);
+            }
+            finally
+            {
+                localEvent.Recycle();
+            }
         }
 
         try
         {
             Apply(positionsAt(0));
 
-            Send(MotionEventActions.Down, 1);
+            var handled = Send(MotionEventActions.Down, 1);
             for (var i = 1; i < pointerCount; i++)
-                Send((MotionEventActions)((int)MotionEventActions.PointerDown | (i << PointerIndexShift)), i + 1);
+                handled |= Send(
+                    (MotionEventActions)((int)MotionEventActions.PointerDown | (i << PointerIndexShift)),
+                    i + 1);
 
             if (holdMs > 0)
             {
@@ -217,7 +268,7 @@ public partial class PlatformAgentService
             {
                 eventTime += Math.Max(1, stepDelay);
                 Apply(positionsAt((double)step / steps));
-                Send(MotionEventActions.Move, pointerCount);
+                handled |= Send(MotionEventActions.Move, pointerCount);
                 if (stepDelay > 0) await Task.Delay(stepDelay);
             }
 
@@ -225,7 +276,7 @@ public partial class PlatformAgentService
             for (var i = pointerCount - 1; i >= 1; i--)
                 Send((MotionEventActions)((int)MotionEventActions.PointerUp | (i << PointerIndexShift)), i + 1);
             Send(MotionEventActions.Up, 1);
-            return true;
+            return handled;
         }
         catch (Exception ex)
         {
@@ -249,6 +300,7 @@ public partial class PlatformAgentService
             : (maxRadius, (float)(maxRadius * scale));
 
         var handled = await InjectAndroidTouchAsync(
+            view,
             pointerCount: 2,
             positionsAt: t =>
             {
@@ -275,6 +327,7 @@ public partial class PlatformAgentService
         var totalRadians = degrees * Math.PI / 180.0;
 
         var handled = await InjectAndroidTouchAsync(
+            view,
             pointerCount: 2,
             positionsAt: t =>
             {
@@ -308,6 +361,7 @@ public partial class PlatformAgentService
         var start = new PointF(center.X - pixelX / 2f, center.Y - pixelY / 2f);
 
         var handled = await InjectAndroidTouchAsync(
+            view,
             pointerCount: 1,
             positionsAt: t => [new PointF(start.X + pixelX * (float)t, start.Y + pixelY * (float)t)],
             durationMs: durationMs > 0 ? durationMs : 200,
@@ -324,6 +378,7 @@ public partial class PlatformAgentService
 
         var center = geometry.Center;
         var handled = await InjectAndroidTouchAsync(
+            view,
             pointerCount: 1,
             positionsAt: _ => [center],
             durationMs: 0,
@@ -342,10 +397,10 @@ public partial class PlatformAgentService
         var center = geometry.Center;
         Func<double, PointF[]> at = _ => [center];
 
-        if (!await InjectAndroidTouchAsync(1, at, 0, 0)) return null;
+        if (!await InjectAndroidTouchAsync(view, 1, at, 0, 0)) return null;
         // Comfortably inside Android's ~300ms double-tap timeout.
         await Task.Delay(80);
-        if (!await InjectAndroidTouchAsync(1, at, 0, 0)) return null;
+        if (!await InjectAndroidTouchAsync(view, 1, at, 0, 0)) return null;
 
         return "MotionEvent double tap";
     }
@@ -498,6 +553,8 @@ public partial class PlatformAgentService
                 (double)scrollView.ZoomScale * scale,
                 (double)scrollView.MinimumZoomScale,
                 (double)scrollView.MaximumZoomScale);
+            if (Math.Abs(target - scrollView.ZoomScale) < 0.001)
+                return null;
             scrollView.SetZoomScale(target, animated: true);
             return $"UIScrollView.ZoomScale → {target:0.##}";
         }
@@ -633,7 +690,9 @@ public partial class PlatformAgentService
             scrollView.Magnification * scale,
             scrollView.MinMagnification,
             scrollView.MaxMagnification);
-        scrollView.Magnification = target;
+        if (Math.Abs(target - scrollView.Magnification) < 0.001)
+            return null;
+        scrollView.Magnification = (nfloat)target;
         return $"NSScrollView.Magnification → {target:0.##}";
     }
 

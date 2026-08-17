@@ -332,7 +332,7 @@
             "right",
             null
           ],
-          "description": "Travel direction for swipe and pan. Required for swipe."
+          "description": "Finger travel direction for swipe and pan. Required for swipe. For example, 'up' moves the pointer upward and scrollable content downward."
         },
         "distance": {
           "type": "number",
@@ -341,7 +341,7 @@
         },
         "durationMs": {
           "type": "integer",
-          "description": "Total gesture duration in milliseconds. Longer durations read as drags, shorter ones as flicks.",
+          "description": "Total gesture duration in milliseconds. Longer durations read as drags, shorter ones as flicks. Long press defaults to 600 ms and clamps values below 500 ms.",
           "default": 200,
           "minimum": 0
         },
@@ -442,10 +442,11 @@
           "enum": [
             "recognizer",
             "native",
+            "action",
             "scroll",
             "none"
           ],
-          "description": "'recognizer' — a MAUI gesture recognizer on the element or an ancestor handled it. 'native' — injected at the platform view. 'scroll' — the legacy swipe-to-scroll fallback ran. 'none' — nothing handled the gesture."
+          "description": "'recognizer' — a MAUI gesture recognizer on the element or an ancestor handled it. 'native' — injected at the platform view. 'action' — the dedicated DevFlow tap action handled it. 'scroll' — the legacy swipe-to-scroll fallback ran. 'none' — nothing handled the gesture."
         },
         "platform": {
           "type": [
@@ -467,6 +468,61 @@
             "null"
           ],
           "description": "Why the gesture could not be performed, when success is false."
+        }
+      }
+    },
+    "GestureErrorResponse": {
+      "type": "object",
+      "description": "A rejected or unhandled gesture request. Validation failures may not have a normalized gesture type; attempted gestures also report the tier outcome.",
+      "required": [
+        "success",
+        "error"
+      ],
+      "properties": {
+        "success": {
+          "const": false
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Normalized gesture type when one could be determined, otherwise the rejected caller value or null."
+        },
+        "elementId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "handledBy": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "recognizer",
+            "native",
+            "action",
+            "scroll",
+            "none",
+            null
+          ]
+        },
+        "platform": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "detail": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "error": {
+          "type": "string"
         }
       }
     },
@@ -526,14 +582,14 @@
             "number",
             "null"
           ],
-          "description": "Horizontal scroll delta (for scroll action)."
+          "description": "Horizontal delta for scroll, or explicit horizontal pointer travel for gesture pan."
         },
         "deltaY": {
           "type": [
             "number",
             "null"
           ],
-          "description": "Vertical scroll delta (for scroll action)."
+          "description": "Vertical delta for scroll, or explicit vertical pointer travel for gesture pan."
         },
         "animated": {
           "type": [
@@ -618,7 +674,7 @@
             "right",
             null
           ],
-          "description": "Travel direction (for gesture swipe/pan)."
+          "description": "Finger travel direction (for gesture swipe/pan)."
         },
         "distance": {
           "type": "number",

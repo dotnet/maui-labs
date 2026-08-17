@@ -730,18 +730,28 @@ public class DevFlowCommands
             var autoId = ctx.GetValue(resolveAutoIdOption);
             var text = ctx.GetValue(resolveTextOption);
             var index = ctx.GetValue(resolveIndexOption);
+            ElementInfo? target = null;
 
-            // Only resolve when a selector was actually supplied — a gesture with no target
-            // is legitimate and aims at the current page.
-            if (elementId == null && (autoId != null || text != null))
+            // A gesture with no target is legitimate and aims at the current page.
+            if (elementId != null || autoId != null || text != null)
             {
-                elementId = await ResolveElementIdAsync(host, port, isJson, null, autoId, null, text, index);
-                if (elementId == null) return;
+                target = await ResolveElementTargetAsync(
+                    host,
+                    port,
+                    isJson,
+                    elementId,
+                    autoId,
+                    type: null,
+                    text,
+                    index,
+                    ElementActionKind.Gesture,
+                    preferActionable: ctx.GetResult(resolveIndexOption)?.Tokens.Count == 0);
+                if (target == null) return;
             }
 
             await MauiGestureAsync(host, port, isJson,
                 ctx.GetValue(gestureTypeArg)!,
-                elementId,
+                target,
                 ctx.GetValue(gestureDirectionOption),
                 ctx.GetValue(gestureDistanceOption),
                 ctx.GetValue(gestureDurationOption),
@@ -2526,7 +2536,8 @@ public class DevFlowCommands
     {
         Tap,
         TextInput,
-        Focus
+        Focus,
+        Gesture
     }
 
     /// <summary>
@@ -2677,6 +2688,13 @@ public class DevFlowCommands
                 {
                     score += 50;
                 }
+                break;
+
+            case ElementActionKind.Gesture:
+                if (gestures.Count > 0)
+                    score += 100;
+                if (traits.Any(trait => trait.Equals("scrollable", StringComparison.OrdinalIgnoreCase)))
+                    score += 40;
                 break;
         }
 
@@ -3520,7 +3538,7 @@ public class DevFlowCommands
     private static readonly string[] GestureTypes = ["tap", "doubletap", "longpress", "swipe", "pan", "pinch", "rotate"];
 
     private static async Task MauiGestureAsync(
-        string host, int port, bool json, string gestureType, string? elementId,
+        string host, int port, bool json, string gestureType, ElementInfo? element,
         string? direction, double? distance, int? durationMs, double? scale, double? rotation,
         double? deltaX, double? deltaY, double? originX, double? originY, int? steps)
     {
@@ -3553,10 +3571,14 @@ public class DevFlowCommands
 
         try
         {
-            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+            using var client = await CreateAgentClientAsync(host, port);
+            var (captureEpoch, registryGeneration) = element is null
+                ? (null, null)
+                : GetCaptureMetadata(element);
             var result = await client.GestureDetailedAsync(
-                normalizedType, elementId, direction, distance, durationMs,
-                scale, rotation, deltaX, deltaY, originX, originY, steps);
+                normalizedType, element?.Id, direction, distance, durationMs,
+                scale, rotation, deltaX, deltaY, originX, originY, steps,
+                captureEpoch, registryGeneration);
 
             if (json)
             {
@@ -3565,7 +3587,7 @@ public class DevFlowCommands
                     ["success"] = result.Success,
                     ["action"] = "gesture",
                     ["type"] = result.Type ?? normalizedType,
-                    ["elementId"] = elementId,
+                    ["elementId"] = element?.Id,
                     ["handledBy"] = result.HandledBy,
                     ["platform"] = result.Platform,
                     ["detail"] = result.Detail,
@@ -3574,7 +3596,7 @@ public class DevFlowCommands
             }
             else
             {
-                var target = elementId != null ? $" on {elementId}" : "";
+                var target = element != null ? $" on {element.Id}" : "";
                 if (result.Success)
                 {
                     // Say which tier ran: a recognizer hit proves the app's own handler fired,

@@ -174,6 +174,8 @@ public class AgentHttpServerTests : IDisposable
             Assert.Contains("POST /api/v1/ui/actions/gesture", request);
             Assert.Contains("\"type\":\"pinch\"", request);
             Assert.Contains("\"scale\":2", request);
+            Assert.Contains("\"captureEpoch\":42", request);
+            Assert.Contains("\"registryGeneration\":7", request);
 
             var body = """{"success":true,"type":"pinch","elementId":"map1","handledBy":"native","platform":"iOS","detail":"MKMapView.Camera.CenterCoordinateDistance /2"}""";
             var response = $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n{body}";
@@ -182,7 +184,11 @@ public class AgentHttpServerTests : IDisposable
         });
 
         using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
-        var result = await agentClient.PinchAsync("map1", scale: 2.0);
+        var result = await agentClient.PinchAsync(
+            "map1",
+            scale: 2.0,
+            captureEpoch: 42,
+            registryGeneration: 7);
 
         Assert.True(result.Success);
         Assert.Equal("native", result.HandledBy);

@@ -16,6 +16,7 @@ public partial class GestureTestPage : ContentPage
     // Last Running pan totals; see OnPanUpdated for why Completed cannot be used.
     private double _panX;
     private double _panY;
+    private DateTime _longPressStartedAtUtc;
 
     public GestureTestPage()
     {
@@ -72,4 +73,15 @@ public partial class GestureTestPage : ContentPage
 
     private void OnDoubleTapped(object? sender, TappedEventArgs e)
         => TapStatusLabel.Text = "tap: double";
+
+    private void OnLongPressStarted(object? sender, EventArgs e)
+        => _longPressStartedAtUtc = DateTime.UtcNow;
+
+    private void OnLongPressEnded(object? sender, EventArgs e)
+    {
+        var elapsedMs = (DateTime.UtcNow - _longPressStartedAtUtc).TotalMilliseconds;
+        LongPressStatusLabel.Text = string.Create(
+            CultureInfo.InvariantCulture,
+            $"longpress: {elapsedMs:0}ms");
+    }
 }

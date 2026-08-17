@@ -649,6 +649,12 @@ paths:
             application/json:
               schema:
                 $ref: "./schemas/actions.json#/$defs/GestureResponse"
+        "400":
+          description: The gesture request was invalid or no recognizer/native surface handled it.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/actions.json#/$defs/GestureErrorResponse"
         "408":
           $ref: "#/components/responses/Timeout"
         "409":

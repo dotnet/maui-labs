@@ -529,6 +529,23 @@ public class AgentClient : IDisposable
         int? durationMs = null)
         => (await GestureDetailedAsync(type, elementId, direction, distance, durationMs)).Success;
 
+    public async Task<bool> GestureAsync(
+        string type,
+        string? elementId,
+        string? direction,
+        double? distance,
+        int? durationMs,
+        long? captureEpoch,
+        long? registryGeneration)
+        => (await GestureDetailedAsync(
+            type,
+            elementId,
+            direction,
+            distance,
+            durationMs,
+            captureEpoch: captureEpoch,
+            registryGeneration: registryGeneration)).Success;
+
     /// <summary>
     /// Performs a gesture and reports which tier serviced it — a managed MAUI gesture
     /// recognizer, native platform injection, or nothing at all.
@@ -569,8 +586,11 @@ public class AgentClient : IDisposable
 
         try
         {
-            using var content = DriverJson.CreateJsonContent(payload);
-            var response = await _http.PostAsync($"{_baseUrl}{UiApi}/actions/gesture", content);
+            using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
+            {
+                using var content = DriverJson.CreateJsonContent(payload);
+                return await _http.PostAsync($"{_baseUrl}{UiApi}/actions/gesture", content);
+            });
             var responseBody = await response.Content.ReadAsStringAsync();
             var result = DriverJson.Deserialize<GestureResult>(responseBody);
 
@@ -583,7 +603,17 @@ public class AgentClient : IDisposable
 
             return result;
         }
-        catch (Exception ex)
+        catch (NotSupportedByAgentException ex)
+        {
+            return new GestureResult
+            {
+                Success = false,
+                Type = type,
+                HandledBy = "none",
+                Error = ex.Message
+            };
+        }
+        catch (Exception ex) when (IsExpectedClientException(ex))
         {
             return new GestureResult { Success = false, Type = type, Error = ex.Message };
         }
@@ -2188,7 +2218,7 @@ public class GestureResult
     [System.Text.Json.Serialization.JsonPropertyName("elementId")]
     public string? ElementId { get; set; }
 
-    /// <summary>"recognizer", "native", "scroll" (legacy swipe fallback), or "none".</summary>
+    /// <summary>"recognizer", "native", "action", "scroll" (legacy swipe fallback), or "none".</summary>
     [System.Text.Json.Serialization.JsonPropertyName("handledBy")]
     public string? HandledBy { get; set; }
 

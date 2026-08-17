@@ -584,7 +584,7 @@ public partial class DevFlowAgentService
         public string? Type { get; set; }
         public string? Direction { get; set; }
         public double Distance { get; set; } = 120;
-        public int DurationMs { get; set; } = 200;
+        public int? DurationMs { get; set; }
         public double? Scale { get; set; }
         public double? Rotation { get; set; }
         public double? DeltaX { get; set; }
@@ -611,8 +611,8 @@ public partial class DevFlowAgentService
         public string? Value { get; set; }
         public int Width { get; set; }
         public int Height { get; set; }
-        public double DeltaX { get; set; }
-        public double DeltaY { get; set; }
+        public double? DeltaX { get; set; }
+        public double? DeltaY { get; set; }
         public int? ItemIndex { get; set; }
         public int? GroupIndex { get; set; }
         public string? ScrollToPosition { get; set; }
@@ -620,7 +620,7 @@ public partial class DevFlowAgentService
         public string? Key { get; set; }
         public string? Direction { get; set; }
         public double Distance { get; set; } = 120;
-        public int DurationMs { get; set; } = 200;
+        public int? DurationMs { get; set; }
         public double? Scale { get; set; }
         public double? Rotation { get; set; }
         public double? OriginX { get; set; }

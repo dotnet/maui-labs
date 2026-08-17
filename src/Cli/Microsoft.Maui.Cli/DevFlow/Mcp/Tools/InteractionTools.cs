@@ -151,12 +151,12 @@ public sealed class InteractionTools
 		// "native" means the platform control absorbed it — different things to assert against.
 		var how = result.HandledBy switch
 		{
+			"action" => result.Detail ?? "handled by the DevFlow action pipeline",
 			"recognizer" => $"handled by the app's MAUI gesture recognizer ({result.Detail})",
 			"native" => $"injected natively on {result.Platform} ({result.Detail})",
 			"scroll" => $"fell back to a scroll ({result.Detail})",
-			_ => result.Detail
+			_ => result.Detail ?? result.HandledBy ?? "handled"
 		};
-		return $"Performed {normalizedType} gesture{target} — {how}.";
 		return $"Performed {normalizedType} gesture{target} — {how}.";
 	}
 
