@@ -1169,6 +1169,90 @@ public class AgentClient : IDisposable
         return await PostActionAsync($"{WebViewApi}/input/text", payload);
     }
 
+    /// <summary>
+    /// Get WebView console logs (filtered by source=webview).
+    /// </summary>
+    public async Task<string> GetWebViewConsoleAsync(int limit = 100, string? contextId = null)
+    {
+        var path = $"{WebViewApi}/console?limit={limit}";
+        if (!string.IsNullOrWhiteSpace(contextId))
+            path += $"&contextId={Uri.EscapeDataString(contextId)}";
+        try
+        {
+            return await _http.GetStringAsync($"{_baseUrl}{path}");
+        }
+        catch { return "[]"; }
+    }
+
+    /// <summary>
+    /// Get the WebView DOM tree (HTML source).
+    /// </summary>
+    public async Task<string> GetWebViewDomAsync(string? contextId = null)
+    {
+        var path = $"{WebViewApi}/dom";
+        if (!string.IsNullOrWhiteSpace(contextId))
+            path += $"?contextId={Uri.EscapeDataString(contextId)}";
+        try
+        {
+            return await _http.GetStringAsync($"{_baseUrl}{path}");
+        }
+        catch { return string.Empty; }
+    }
+
+    /// <summary>
+    /// Query the WebView DOM by CSS selector.
+    /// </summary>
+    public async Task<string> QueryWebViewDomAsync(string selector, string? contextId = null)
+    {
+        var payload = new JsonObject
+        {
+            ["selector"] = selector
+        };
+
+        if (!string.IsNullOrWhiteSpace(contextId))
+            payload["contextId"] = contextId;
+
+        try
+        {
+            using var content = DriverJson.CreateJsonContent(payload);
+            var response = await _http.PostAsync($"{_baseUrl}{WebViewApi}/dom/query", content);
+            return await response.Content.ReadAsStringAsync();
+        }
+        catch { return "[]"; }
+    }
+
+    /// <summary>
+    /// Get WebView network requests.
+    /// </summary>
+    public async Task<string> GetWebViewNetworkAsync(string? contextId = null)
+    {
+        var path = $"{WebViewApi}/network";
+        if (!string.IsNullOrWhiteSpace(contextId))
+            path += $"?contextId={Uri.EscapeDataString(contextId)}";
+        try
+        {
+            return await _http.GetStringAsync($"{_baseUrl}{path}");
+        }
+        catch { return "[]"; }
+    }
+
+    /// <summary>
+    /// Capture a WebView-specific screenshot. Returns PNG bytes.
+    /// </summary>
+    public async Task<byte[]?> GetWebViewScreenshotAsync(string? contextId = null)
+    {
+        var path = $"{WebViewApi}/screenshot";
+        if (!string.IsNullOrWhiteSpace(contextId))
+            path += $"?contextId={Uri.EscapeDataString(contextId)}";
+        try
+        {
+            var response = await _http.GetAsync($"{_baseUrl}{path}");
+            if (!response.IsSuccessStatusCode) return null;
+            return await response.Content.ReadAsByteArrayAsync();
+        }
+        catch { return null; }
+    }
+
     public async Task<string> HitTestAsync(double x, double y, int? window = null)
     {
         var result = await HitTestResultAsync(x, y, window);

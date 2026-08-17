@@ -160,6 +160,78 @@ public class AgentClientTests
         var result = await client.FocusAsync("test-id");
         Assert.False(result);
     }
+
+    [Fact]
+    public async Task NavigateWebView_WhenAgentNotRunning_ReturnsFalse()
+    {
+        using var client = new AgentClient("localhost", 19999);
+        var result = await client.NavigateWebViewAsync("https://example.com");
+        Assert.False(result);
+    }
+
+    [Fact]
+    public async Task ClickWebView_WhenAgentNotRunning_ReturnsFalse()
+    {
+        using var client = new AgentClient("localhost", 19999);
+        var result = await client.ClickWebViewAsync("button");
+        Assert.False(result);
+    }
+
+    [Fact]
+    public async Task FillWebView_WhenAgentNotRunning_ReturnsFalse()
+    {
+        using var client = new AgentClient("localhost", 19999);
+        var result = await client.FillWebViewAsync("input", "test text");
+        Assert.False(result);
+    }
+
+    [Fact]
+    public async Task InsertWebViewText_WhenAgentNotRunning_ReturnsFalse()
+    {
+        using var client = new AgentClient("localhost", 19999);
+        var result = await client.InsertWebViewTextAsync("hello");
+        Assert.False(result);
+    }
+
+    [Fact]
+    public async Task GetWebViewConsole_WhenAgentNotRunning_ReturnsEmptyArray()
+    {
+        using var client = new AgentClient("localhost", 19999);
+        var result = await client.GetWebViewConsoleAsync();
+        Assert.Equal("[]", result);
+    }
+
+    [Fact]
+    public async Task GetWebViewDom_WhenAgentNotRunning_ReturnsEmpty()
+    {
+        using var client = new AgentClient("localhost", 19999);
+        var result = await client.GetWebViewDomAsync();
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task QueryWebViewDom_WhenAgentNotRunning_ReturnsEmptyArray()
+    {
+        using var client = new AgentClient("localhost", 19999);
+        var result = await client.QueryWebViewDomAsync("button");
+        Assert.Equal("[]", result);
+    }
+
+    [Fact]
+    public async Task GetWebViewNetwork_WhenAgentNotRunning_ReturnsEmptyArray()
+    {
+        using var client = new AgentClient("localhost", 19999);
+        var result = await client.GetWebViewNetworkAsync();
+        Assert.Equal("[]", result);
+    }
+
+    [Fact]
+    public async Task GetWebViewScreenshot_WhenAgentNotRunning_ReturnsNull()
+    {
+        using var client = new AgentClient("localhost", 19999);
+        var result = await client.GetWebViewScreenshotAsync();
+        Assert.Null(result);
+    }
 }
 
 public class AppDriverFactoryTests
