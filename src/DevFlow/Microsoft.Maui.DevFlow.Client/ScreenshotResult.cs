@@ -20,7 +20,7 @@ public sealed class ScreenshotResult
     /// <summary>Human-readable, actionable error message when the capture failed.</summary>
     public string? Error { get; init; }
 
-    /// <summary>Machine-readable cause identifier (e.g. <c>window-not-frontmost</c>) when available.</summary>
+    /// <summary>Machine-readable cause identifier (e.g. <c>window-not-visible</c>) when available.</summary>
     public string? Reason { get; init; }
 
     /// <summary>Whether retrying (e.g. after foregrounding the app) may succeed.</summary>

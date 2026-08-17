@@ -882,7 +882,7 @@ public class DevFlowCommands
         // dismiss
         var dismissUdid = new Option<string?>("--udid") { Description = "iOS simulator UDID or Android serial (also accepts global --device)" };
         var dismissPid = new Option<int?>("--pid") { Description = "Mac Catalyst app PID (auto-detects if omitted)" };
-        var dismissButtonArg = new Argument<string?>("button") { Description = "Button label to tap (default: first accept-style button)", DefaultValueFactory = _ => null };
+        var dismissButtonArg = new Argument<string?>("button") { Description = "Exact visible button label to invoke (required on macOS)", DefaultValueFactory = _ => null };
         var alertDismissCmd = new Command("dismiss", "Dismiss the current alert/dialog") { dismissButtonArg, dismissUdid, dismissPid };
         alertDismissCmd.SetAction(async (ctx, ct) =>
         {
@@ -3934,6 +3934,176 @@ public class DevFlowCommands
 
     // ===== Alert & Permission Commands (iOS Simulator) =====
 
+    private static async Task<string> ResolveUdidAsync(string? udid)
+    {
+        if (!string.IsNullOrEmpty(udid)) return udid;
+
+        // Auto-detect booted simulator
+        var result = await ProcessRunner.RunAsync("xcrun", new[] { "simctl", "list", "devices", "booted", "-j" });
+
+        if (!result.Success || result.ExitCode != 0)
+        {
+            var baseMessage = $"Failed to resolve simulator UDID. 'xcrun simctl list devices booted -j' exited with code {result.ExitCode}.";
+            var error = result.StandardError;
+            throw new InvalidOperationException(string.IsNullOrWhiteSpace(error) ? baseMessage : baseMessage + " Error: " + error.Trim());
+        }
+
+        var simOutput = result.StandardOutput;
+        if (string.IsNullOrWhiteSpace(simOutput))
+            throw new InvalidOperationException("Failed to resolve simulator UDID: no output received from 'xcrun simctl list devices booted -j'.");
+
+        using var doc = JsonDocument.Parse(simOutput);
+        if (doc.RootElement.TryGetProperty("devices", out var devices))
+        {
+            foreach (var runtime in devices.EnumerateObject())
+            {
+                foreach (var device in runtime.Value.EnumerateArray())
+                {
+                    var state = device.TryGetProperty("state", out var s) ? s.GetString() : null;
+                    if (state == "Booted")
+                    {
+                        var resolved = device.GetProperty("udid").GetString()!;
+                        return resolved;
+                    }
+                }
+            }
+        }
+        throw new InvalidOperationException("No booted simulator found. Specify --udid or boot a simulator.");
+    }
+
+    private static async Task<string> ResolveAlertPlatformAsync(string? udid, int? pid, string host, int port)
+    {
+        // If a UDID was explicitly provided, it's an iOS simulator
+        if (!string.IsNullOrEmpty(udid))
+            return "ios-simulator";
+
+        // If a PID was explicitly provided, it's Mac Catalyst or Windows
+        if (pid.HasValue)
+            return OperatingSystem.IsWindows() ? "windows" : "maccatalyst";
+
+        // Auto-detect from connected agent
+        try
+        {
+            using var client = await CreateAgentClientAsync(host, port);
+            var status = await client.GetStatusAsync();
+            if (status?.Platform != null)
+            {
+                var sp = status.Platform.ToLowerInvariant();
+                if (sp.Contains("ios")) return "ios-simulator";
+                if (sp.Contains("android")) return "android";
+                if (sp.Contains("windows")) return "windows";
+                if (sp.Contains("linux") || sp.Contains("gtk")) return "linux";
+                // For MacCatalyst, don't return immediately — check if there's a
+                // booted iOS simulator first, since it's more likely the user wants
+                // iOS dialog detection (Mac Catalyst dialogs are less common)
+            }
+        }
+        catch { }
+
+        // Check if a booted iOS simulator exists
+        if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
+        {
+            try
+            {
+                var simResult = await ProcessRunner.RunAsync("xcrun", new[] { "simctl", "list", "devices", "booted", "-j" });
+
+                if (!simResult.Success || simResult.ExitCode != 0)
+                    throw new InvalidOperationException($"xcrun simctl failed with exit code {simResult.ExitCode}: {simResult.StandardError}");
+
+                if (string.IsNullOrWhiteSpace(simResult.StandardOutput))
+                    throw new InvalidOperationException("xcrun simctl returned no output.");
+
+                using var doc = JsonDocument.Parse(simResult.StandardOutput);
+                if (doc.RootElement.TryGetProperty("devices", out var devices))
+                {
+                    foreach (var runtime in devices.EnumerateObject())
+                    {
+                        foreach (var device in runtime.Value.EnumerateArray())
+                        {
+                            var state = device.TryGetProperty("state", out var s) ? s.GetString() : null;
+                            if (state == "Booted") return "ios-simulator";
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        if (OperatingSystem.IsWindows()) return "windows";
+        if (OperatingSystem.IsLinux()) return "linux";
+        return "maccatalyst";
+    }
+
+    private static async Task<int> ResolveMacCatalystPidAsync(int? pid, string host, int port)
+    {
+        if (pid.HasValue) return pid.Value;
+
+        // Try to find the PID by checking what's listening on the agent port
+        try
+        {
+            using var client = await CreateAgentClientAsync(host, port);
+            var status = await client.GetStatusAsync();
+            if (status?.App?.ProcessId is int processId)
+                return processId;
+
+            var appName = status?.App?.Name ?? status?.AppName;
+            if (!string.IsNullOrWhiteSpace(appName))
+            {
+                foreach (var process in System.Diagnostics.Process.GetProcesses())
+                {
+                    using (process)
+                    {
+                        try
+                        {
+                            if (process.ProcessName.Equals(appName, StringComparison.OrdinalIgnoreCase) ||
+                                process.ProcessName.Contains(appName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                return process.Id;
+                            }
+                        }
+                        catch
+                        {
+                            // A process may exit or deny metadata access while enumerating.
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+
+        throw new InvalidOperationException("Cannot determine Mac Catalyst app PID. Specify --pid.");
+    }
+
+    private static async Task<int> ResolveWindowsPidAsync(int? pid, string host, int port)
+    {
+        if (pid.HasValue) return pid.Value;
+
+        try
+        {
+            using var client = await CreateAgentClientAsync(host, port);
+            var status = await client.GetStatusAsync();
+            var appName = status?.App?.Name ?? status?.AppName;
+            if (!string.IsNullOrWhiteSpace(appName))
+            {
+                var processes = System.Diagnostics.Process.GetProcessesByName(appName);
+                if (processes.Length > 0)
+                    return processes[0].Id;
+
+                var match = System.Diagnostics.Process.GetProcesses()
+                    .FirstOrDefault(p =>
+                    {
+                        try { return p.ProcessName.Contains(appName, StringComparison.OrdinalIgnoreCase); }
+                        catch { return false; }
+                    });
+                if (match != null)
+                    return match.Id;
+            }
+        }
+        catch { }
+
+        throw new InvalidOperationException("Cannot determine Windows app PID. Specify --pid.");
+    }
+
     private static async Task AlertDetectAsync(string? udid, int? pid, string host, int port, bool json)
     {
         try
@@ -3963,11 +4133,20 @@ public class DevFlowCommands
             Output.WriteResult(new JsonObject
             {
                 ["detected"] = true,
+                ["promptId"] = alert.PromptId,
                 ["title"] = alert.Title,
-                ["buttons"] = buttons
+                ["text"] = new JsonArray(alert.Text.Select(text => (JsonNode)text).ToArray()),
+                ["buttons"] = buttons,
+                ["sourceProcessId"] = alert.SourceProcessId,
+                ["sourceProcessName"] = alert.SourceProcessName,
+                ["isSystemDialog"] = alert.IsSystemDialog,
+                ["requiresUserConfirmation"] = alert.RequiresUserConfirmation,
+                ["canRespond"] = alert.CanRespond
             }, json, _ =>
             {
                 Console.WriteLine($"Alert: {alert.Title ?? "(no title)"}");
+                if (!string.IsNullOrEmpty(alert.SourceProcessName))
+                    Console.WriteLine($"  Source: {alert.SourceProcessName} ({alert.SourceProcessId})");
                 foreach (var btn in alert.Buttons)
                     Console.WriteLine($"  Button: \"{btn.Label}\"");
             });

@@ -61,6 +61,13 @@ internal static class MacAccessibility
     internal static extern nint CFArrayGetValueAtIndex(nint theArray, long idx);
 
     [DllImport(CoreFoundationLib)]
+    internal static extern nint CFDictionaryGetValue(nint theDictionary, nint key);
+
+    [DllImport(CoreFoundationLib)]
+    [return: MarshalAs(UnmanagedType.U1)]
+    internal static extern bool CFNumberGetValue(nint number, int numberType, out int value);
+
+    [DllImport(CoreFoundationLib)]
     internal static extern void CFRelease(nint cf);
 
     [DllImport(CoreFoundationLib)]

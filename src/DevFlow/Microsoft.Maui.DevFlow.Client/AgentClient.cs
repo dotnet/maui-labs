@@ -3069,6 +3069,8 @@ public class AppDescriptor
     public string? Version { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("build")]
     public string? Build { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("processId")]
+    public int? ProcessId { get; set; }
 }
 
 public class AgentCapabilities
