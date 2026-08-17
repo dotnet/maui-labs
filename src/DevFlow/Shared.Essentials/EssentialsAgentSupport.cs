@@ -379,24 +379,29 @@ internal sealed class EssentialsAgentSupport
         => FileSystem.AppDataDirectory;
 
 
-    public Task<HttpResponse> HandlePlatformAppInfo(HttpRequest request)
+    public async Task<HttpResponse> HandlePlatformAppInfo(HttpRequest request)
     {
         try
         {
-            var info = AppInfo.Current;
-            return Task.FromResult(HttpResponse.Json(new
+            // RequestedTheme/RequestedLayoutDirection are UIKit-backed on iOS/Mac Catalyst and must
+            // be read on the main thread, same as HandlePlatformDeviceDisplay below.
+            return await MainThread.InvokeOnMainThreadAsync(() =>
             {
-                name = info.Name,
-                packageName = info.PackageName,
-                version = info.VersionString,
-                buildNumber = info.BuildString,
-                requestedTheme = info.RequestedTheme.ToString(),
-                requestedLayoutDirection = info.RequestedLayoutDirection.ToString(),
-            }));
+                var info = AppInfo.Current;
+                return HttpResponse.Json(new
+                {
+                    name = info.Name,
+                    packageName = info.PackageName,
+                    version = info.VersionString,
+                    buildNumber = info.BuildString,
+                    requestedTheme = info.RequestedTheme.ToString(),
+                    requestedLayoutDirection = info.RequestedLayoutDirection.ToString(),
+                });
+            });
         }
         catch (Exception ex)
         {
-            return Task.FromResult(CreatePlatformError($"Failed to get app info: {ex.Message}", ex));
+            return CreatePlatformError($"Failed to get app info: {ex.Message}", ex);
         }
     }
 
