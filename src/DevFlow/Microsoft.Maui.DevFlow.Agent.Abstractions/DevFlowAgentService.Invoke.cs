@@ -69,8 +69,12 @@ public partial class DevFlowAgentService
 			{
 				foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static))
 				{
+					if (method.ContainsGenericParameters)
+						continue;
+
 					var attr = method.GetCustomAttribute<DevFlowActionAttribute>();
-					if (attr == null) continue;
+					if (attr == null)
+						continue;
 
 					actions.Add(new InvokeActionEntry
 					{
@@ -137,19 +141,19 @@ public partial class DevFlowAgentService
 		if (string.IsNullOrEmpty(assemblyLocation) || string.IsNullOrEmpty(appBaseDirectory))
 			return false;
 
-		// Empty, not null, when the location carries no directory component.
-		var directory = Path.GetDirectoryName(assemblyLocation);
-		if (string.IsNullOrEmpty(directory))
-			return false;
-
 		try
 		{
+			// Empty, not null, when the location carries no directory component.
+			var directory = Path.GetDirectoryName(assemblyLocation);
+			if (string.IsNullOrEmpty(directory))
+				return false;
+
 			return string.Equals(
 				Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar),
 				Path.GetFullPath(appBaseDirectory).TrimEnd(Path.DirectorySeparatorChar),
 				StringComparison.OrdinalIgnoreCase);
 		}
-		catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+		catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException or System.Security.SecurityException)
 		{
 			// Malformed or non-filesystem paths are not worth failing action discovery over.
 			return false;
