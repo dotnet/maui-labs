@@ -18,11 +18,22 @@ namespace Microsoft.Maui.DevFlow.Agent;
 /// Platform-specific agent service that provides native tap and screenshot
 /// implementations for Android, iOS, Mac Catalyst, Windows, and macOS AppKit.
 /// </summary>
-public class PlatformAgentService : DevFlowAgentService
+public class PlatformAgentService : MauiDevFlowAgentService
 {
     public PlatformAgentService(AgentOptions? options = null) : base(options) { }
 
-    protected override VisualTreeWalker CreateTreeWalker() => new PlatformVisualTreeWalker();
+    internal PlatformAgentService(
+        AgentOptions? options,
+        RegisteredNativeElementRegistry nativeElementRegistry,
+        IDisposable nativeElementSubscription)
+        : base(options, nativeElementRegistry, nativeElementSubscription)
+    {
+    }
+
+    protected override VisualTreeWalker CreateTreeWalker()
+        => NativeElementRegistry is null
+            ? new PlatformVisualTreeWalker()
+            : new PlatformVisualTreeWalker(NativeElementRegistry);
 
     protected override double GetWindowDisplayDensity(IWindow? window)
     {
@@ -277,6 +288,92 @@ public class PlatformAgentService : DevFlowAgentService
         }
         return null;
     }
+
+    private static void FindWinUIElementsByAutomationId(
+        Microsoft.UI.Xaml.DependencyObject? parent,
+        string automationId,
+        ICollection<Microsoft.UI.Xaml.FrameworkElement> matches)
+    {
+        if (parent is null)
+            return;
+
+        if (parent is Microsoft.UI.Xaml.FrameworkElement element
+            && string.Equals(
+                Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(element),
+                automationId,
+                StringComparison.Ordinal))
+        {
+            matches.Add(element);
+        }
+
+        var count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(parent);
+        for (var i = 0; i < count; i++)
+        {
+            FindWinUIElementsByAutomationId(
+                Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(parent, i),
+                automationId,
+                matches);
+        }
+    }
+
+    private static Microsoft.UI.Xaml.FrameworkElement? FindWinUIRoot(IntPtr targetHwnd)
+    {
+        var app = Application.Current;
+        if (app is null)
+            return null;
+
+        foreach (var window in app.Windows)
+        {
+            if (window.Handler?.PlatformView is not Microsoft.UI.Xaml.Window nativeWindow
+                || nativeWindow.Content is not Microsoft.UI.Xaml.FrameworkElement root
+                || WinRT.Interop.WindowNative.GetWindowHandle(nativeWindow) != targetHwnd)
+            {
+                continue;
+            }
+
+            return root;
+        }
+
+        return null;
+    }
+
+    private static bool TryInvokeWinUIElement(
+        Microsoft.UI.Xaml.FrameworkElement root,
+        string automationId)
+    {
+        var matches = new List<Microsoft.UI.Xaml.FrameworkElement>();
+        if (root.XamlRoot is not null)
+        {
+            foreach (var popup in Microsoft.UI.Xaml.Media.VisualTreeHelper
+                .GetOpenPopupsForXamlRoot(root.XamlRoot))
+            {
+                FindWinUIElementsByAutomationId(popup.Child, automationId, matches);
+            }
+        }
+
+        FindWinUIElementsByAutomationId(root, automationId, matches);
+        var uniqueMatches = new List<Microsoft.UI.Xaml.FrameworkElement>();
+        foreach (var match in matches)
+        {
+            if (!uniqueMatches.Any(existing => ReferenceEquals(existing, match)))
+                uniqueMatches.Add(match);
+        }
+        if (uniqueMatches.Count != 1)
+            return false;
+
+        var target = uniqueMatches[0];
+        var peer =
+            Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(target)
+            ?? Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(target);
+        if (peer?.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)
+            is not Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider invokeProvider)
+        {
+            return false;
+        }
+
+        invokeProvider.Invoke();
+        return true;
+    }
 #endif
 
     protected override IProfilerCollector CreateProfilerCollector()
@@ -530,8 +627,9 @@ public class PlatformAgentService : DevFlowAgentService
         return false;
     }
 
-    protected override bool TryScheduleNativeTapFirst(VisualElement ve)
+    protected override async Task<bool> TryNativeTapFirstAsync(VisualElement ve)
     {
+        await Task.CompletedTask;
         try
         {
 #if WINDOWS
@@ -542,20 +640,45 @@ public class PlatformAgentService : DevFlowAgentService
                     Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(buttonBase);
                 if (peer?.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke) is Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider invokeProvider)
                 {
-                    // Wrap the dispatched lambda so a stale/disabled element doesn't
-                    // surface as CoreApplication.UnhandledErrorDetected and crash the
-                    // host app. The TryEnqueue bool only reports whether the work
-                    // item was queued, not whether the invoke itself succeeded.
-                    return buttonBase.DispatcherQueue.TryEnqueue(() =>
+                    var completion = new TaskCompletionSource<bool>(
+                        TaskCreationOptions.RunContinuationsAsynchronously);
+                    var invocationState = 0;
+                    if (!buttonBase.DispatcherQueue.TryEnqueue(() =>
                     {
-                        try { invokeProvider.Invoke(); }
-                        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException
-                                                      or InvalidOperationException
-                                                      or UnauthorizedAccessException)
+                        if (Interlocked.CompareExchange(ref invocationState, 1, 0) != 0)
+                        {
+                            completion.TrySetResult(false);
+                            return;
+                        }
+
+                        try
+                        {
+                            invokeProvider.Invoke();
+                            completion.TrySetResult(true);
+                        }
+                        catch (Exception ex)
                         {
                             System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] WinUI native invoke skipped: {ex.GetBaseException().Message}");
+                            completion.TrySetResult(false);
                         }
-                    });
+                    }))
+                    {
+                        return false;
+                    }
+
+                    var winner = await Task.WhenAny(
+                        completion.Task,
+                        Task.Delay(TimeSpan.FromSeconds(5)));
+                    if (winner == completion.Task)
+                        return await completion.Task;
+
+                    if (Interlocked.CompareExchange(ref invocationState, 2, 0) == 0)
+                        return false;
+
+                    // Invocation already started. Treat it as handled so a modal or
+                    // long-running click handler does not block the automation request
+                    // or trigger the managed fallback a second time.
+                    return true;
                 }
             }
 #endif
@@ -565,7 +688,410 @@ public class PlatformAgentService : DevFlowAgentService
         return false;
     }
 
+    protected override async Task<string?> TryNativeElementTapAsync(string elementId, object nativeElement)
+    {
+#if WINDOWS
+        if (nativeElement is System.Windows.Automation.AutomationElement automationElement)
+        {
+            try
+            {
+                var automationId = automationElement.Current.AutomationId;
+                var targetHwnd = Windows.NativeWindowProbe.TryGetTopLevelWindowHandle(
+                    automationElement);
+                if (!string.IsNullOrEmpty(automationId) && targetHwnd is { } hwnd)
+                {
+                    var root = await DispatchAsync(() => FindWinUIRoot(hwnd));
+                    if (root is not null)
+                    {
+                        var completion = new TaskCompletionSource<bool>(
+                            TaskCreationOptions.RunContinuationsAsynchronously);
+                        var invocationState = 0;
+                        if (root.DispatcherQueue.TryEnqueue(() =>
+                        {
+                            if (Interlocked.CompareExchange(ref invocationState, 1, 0) != 0)
+                            {
+                                completion.TrySetResult(false);
+                                return;
+                            }
+
+                            try
+                            {
+                                completion.TrySetResult(
+                                    TryInvokeWinUIElement(root, automationId));
+                            }
+                            catch (Exception ex) when (ex is
+                                InvalidOperationException
+                                or System.Runtime.InteropServices.COMException)
+                            {
+                                System.Diagnostics.Debug.WriteLine(
+                                    $"[Microsoft.Maui.DevFlow] WinUI native element invocation skipped: {ex.Message}");
+                                completion.TrySetResult(false);
+                            }
+                            catch (Exception ex)
+                            {
+                                completion.TrySetException(ex);
+                            }
+                        }))
+                        {
+                            var winner = await Task.WhenAny(
+                                completion.Task,
+                                Task.Delay(TimeSpan.FromSeconds(5)));
+                            if (winner == completion.Task)
+                            {
+                                if (await completion.Task)
+                                    return "ok";
+                            }
+                            else if (Interlocked.CompareExchange(ref invocationState, 2, 0) != 0)
+                            {
+                                return "ok";
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is
+                System.Windows.Automation.ElementNotAvailableException
+                or InvalidOperationException
+                or System.Runtime.InteropServices.COMException)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[Microsoft.Maui.DevFlow] WinUI native element lookup skipped: {ex.Message}");
+            }
+        }
+#endif
+
+        return await base.TryNativeElementTapAsync(elementId, nativeElement);
+    }
+
+#if ANDROID || IOS || MACCATALYST
+    private const long MaxNativeElementScreenshotPixels = 16_777_216;
+
+#if ANDROID
+    protected override Task<byte[]?> CaptureFullScreenAsync(int? windowIndex = null)
+        => DispatchAsync(() => CaptureAndroidFullScreen(windowIndex));
+#endif
+
+    protected override bool SupportsNativeElementScreenshots => true;
+
+    protected override Task<byte[]?> CaptureNativeElementScreenshotAsync(
+        object nativeElement,
+        ElementInfo? elementInfo)
+    {
+        try
+        {
+#if ANDROID
+            var view = nativeElement switch
+            {
+                global::Android.Views.View androidView => androidView,
+                global::Android.Views.IMenuItem menuItem => menuItem.ActionView,
+                _ => null
+            };
+            return Task.FromResult(CaptureAndroidView(view));
+#elif IOS || MACCATALYST
+            if (nativeElement is UIKit.UIView uiView)
+                return Task.FromResult(CaptureAppleView(uiView));
+
+            if (nativeElement is UIKit.UIViewController viewController)
+                return Task.FromResult(CaptureAppleView(viewController.View));
+
+            if (nativeElement is UIKit.UIBarButtonItem { CustomView: { } customView })
+                return Task.FromResult(CaptureAppleView(customView));
+
+            if (nativeElement is UIKit.UIBarItem barItem && !barItem.AccessibilityFrame.IsEmpty)
+            {
+                UIKit.UIWindow? ownerWindow = null;
+                if (elementInfo?.WindowId is int windowId
+                    && _app is not null
+                    && windowId >= 0
+                    && windowId < _app.Windows.Count
+                    && _app.Windows[windowId].Handler?.PlatformView is UIKit.UIWindow uiWindow)
+                {
+                    ownerWindow = uiWindow;
+                }
+
+                return Task.FromResult(CaptureAppleScreenRect(
+                    barItem.AccessibilityFrame,
+                    ownerWindow));
+            }
+
+            return Task.FromResult<byte[]?>(null);
+#endif
+        }
+        catch
+        {
+            return Task.FromResult<byte[]?>(null);
+        }
+    }
+
+#if ANDROID
+    private byte[]? CaptureAndroidFullScreen(int? windowIndex)
+    {
+        var window = _app is null || _app.Windows.Count == 0
+            ? null
+            : windowIndex is int index && index >= 0 && index < _app.Windows.Count
+                ? _app.Windows[index]
+                : _app.Windows[0];
+        var activity = window?.Handler?.PlatformView as global::Android.App.Activity
+            ?? Microsoft.Maui.ApplicationModel.Platform.CurrentActivity;
+        var rootView = activity?.Window?.DecorView?.RootView;
+        if (rootView is null
+            || !rootView.IsAttachedToWindow
+            || rootView.Width <= 0
+            || rootView.Height <= 0
+            || (long)rootView.Width * rootView.Height > MaxNativeElementScreenshotPixels)
+        {
+            return null;
+        }
+
+        using var bitmap = global::Android.Graphics.Bitmap.CreateBitmap(
+            rootView.Width,
+            rootView.Height,
+            global::Android.Graphics.Bitmap.Config.Argb8888!);
+        using var canvas = new global::Android.Graphics.Canvas(bitmap);
+        rootView.Draw(canvas);
+
+        var rootLocation = new int[2];
+        rootView.GetLocationOnScreen(rootLocation);
+        var overlayRoots = new List<global::Android.Views.View>();
+        foreach (var registration in NativeElementRegistry?.GetSnapshot()
+            ?? Array.Empty<NativeElementRegistrationSnapshot>())
+        {
+            if (!registration.Role.Equals("Dialog", StringComparison.Ordinal)
+                && !registration.Role.Equals("ShellTabOverflow", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (registration.NativeElement is not global::Android.Views.View registeredView)
+                continue;
+            if (!ReferenceEquals(FindAndroidActivity(registeredView.Context), activity))
+                continue;
+
+            var overlayRoot = registeredView.RootView;
+            if (overlayRoot is null
+                || ReferenceEquals(overlayRoot, rootView)
+                || !overlayRoot.IsAttachedToWindow
+                || !overlayRoot.IsShown
+                || overlayRoot.Width <= 0
+                || overlayRoot.Height <= 0
+                || overlayRoots.Any(existing => ReferenceEquals(existing, overlayRoot)))
+            {
+                continue;
+            }
+
+            overlayRoots.Add(overlayRoot);
+        }
+
+        if (overlayRoots.Count > 0)
+        {
+            canvas.DrawColor(global::Android.Graphics.Color.Argb(80, 0, 0, 0));
+            foreach (var overlayRoot in overlayRoots)
+            {
+                var location = new int[2];
+                overlayRoot.GetLocationOnScreen(location);
+                var saveCount = canvas.Save();
+                canvas.Translate(
+                    location[0] - rootLocation[0],
+                    location[1] - rootLocation[1]);
+                overlayRoot.Draw(canvas);
+                canvas.RestoreToCount(saveCount);
+            }
+        }
+
+        return EncodeAndroidBitmap(bitmap);
+    }
+
+    private static global::Android.App.Activity? FindAndroidActivity(
+        global::Android.Content.Context? context)
+    {
+        while (context is global::Android.Content.ContextWrapper wrapper)
+        {
+            if (context is global::Android.App.Activity activity)
+                return activity;
+
+            var baseContext = wrapper.BaseContext;
+            if (ReferenceEquals(baseContext, context))
+                break;
+            context = baseContext;
+        }
+
+        return context as global::Android.App.Activity;
+    }
+
+    private static byte[]? CaptureAndroidView(global::Android.Views.View? view)
+    {
+        if (view is null
+            || !view.IsAttachedToWindow
+            || view.Width <= 0
+            || view.Height <= 0
+            || (long)view.Width * view.Height > MaxNativeElementScreenshotPixels)
+        {
+            return null;
+        }
+
+        using var bitmap = global::Android.Graphics.Bitmap.CreateBitmap(
+            view.Width,
+            view.Height,
+            global::Android.Graphics.Bitmap.Config.Argb8888!);
+        using var canvas = new global::Android.Graphics.Canvas(bitmap);
+        view.Draw(canvas);
+        return EncodeAndroidBitmap(bitmap);
+    }
+
+    private static byte[]? EncodeAndroidBitmap(global::Android.Graphics.Bitmap bitmap)
+    {
+        using var stream = new MemoryStream();
+        return bitmap.Compress(
+            global::Android.Graphics.Bitmap.CompressFormat.Png!,
+            quality: 100,
+            stream)
+                ? stream.ToArray()
+                : null;
+    }
+#elif IOS || MACCATALYST
+    private static byte[]? CaptureAppleView(UIKit.UIView? view)
+    {
+        if (view?.Window is not { } window
+            || view.Hidden
+            || view.Alpha <= 0
+            || view.Bounds.Width <= 0
+            || view.Bounds.Height <= 0
+            || !IsAppleCaptureSizeSupported(view.Bounds.Size, window.Screen.Scale))
+        {
+            return null;
+        }
+
+        using var format = new UIKit.UIGraphicsImageRendererFormat
+        {
+            Scale = window.Screen.Scale,
+            Opaque = view.Opaque
+        };
+        using var renderer = new UIKit.UIGraphicsImageRenderer(
+            new CoreGraphics.CGRect(0, 0, view.Bounds.Width, view.Bounds.Height),
+            format);
+        using var image = renderer.CreateImage(context =>
+        {
+            context.CGContext.TranslateCTM(-view.Bounds.X, -view.Bounds.Y);
+            if (!view.DrawViewHierarchy(view.Bounds, afterScreenUpdates: false))
+                view.Layer.RenderInContext(context.CGContext);
+        });
+        using var pngData = image.AsPNG();
+        return pngData?.ToArray();
+    }
+
+    private static byte[]? CaptureAppleScreenRect(
+        CoreGraphics.CGRect screenFrame,
+        UIKit.UIWindow? ownerWindow)
+    {
+        ownerWindow ??= FindAppleWindow(screenFrame);
+        var windowScene = ownerWindow?.WindowScene;
+        if (ownerWindow is null
+            || screenFrame.IsEmpty
+            || !IsAppleCaptureSizeSupported(screenFrame.Size, ownerWindow.Screen.Scale))
+        {
+            return null;
+        }
+
+        var ownerFrame = ownerWindow.ConvertRectFromCoordinateSpace(
+            screenFrame,
+            ownerWindow.Screen.CoordinateSpace);
+        if (!ownerWindow.Bounds.IntersectsWith(ownerFrame))
+            return null;
+
+        var windows = windowScene?.Windows;
+        if (windows is null)
+        {
+#pragma warning disable CA1422 // Legacy AppDelegate apps can have no UIWindowScene on current iOS versions.
+            windows = UIKit.UIApplication.SharedApplication.Windows;
+#pragma warning restore CA1422
+        }
+
+        var visibleWindows = windows
+            .Where(window => !window.Hidden && window.Alpha > 0)
+            .Where(window => ReferenceEquals(window.Screen, ownerWindow.Screen))
+            .OrderBy(window => (double)window.WindowLevel)
+            .ToList();
+        if (visibleWindows.Count == 0)
+            return null;
+
+        using var format = new UIKit.UIGraphicsImageRendererFormat
+        {
+            Scale = ownerWindow.Screen.Scale
+        };
+        using var renderer = new UIKit.UIGraphicsImageRenderer(
+            new CoreGraphics.CGRect(0, 0, screenFrame.Width, screenFrame.Height),
+            format);
+        using var image = renderer.CreateImage(context =>
+        {
+            context.CGContext.SaveState();
+            context.CGContext.TranslateCTM(-screenFrame.X, -screenFrame.Y);
+            foreach (var window in visibleWindows)
+            {
+                context.CGContext.SaveState();
+                context.CGContext.TranslateCTM(window.Frame.X, window.Frame.Y);
+                window.DrawViewHierarchy(window.Bounds, afterScreenUpdates: false);
+                context.CGContext.RestoreState();
+            }
+            context.CGContext.RestoreState();
+        });
+        using var pngData = image.AsPNG();
+        return pngData?.ToArray();
+    }
+
+    private static UIKit.UIWindow? FindAppleWindow(CoreGraphics.CGRect screenFrame)
+    {
+        UIKit.UIWindow? fallback = null;
+        foreach (var scene in UIKit.UIApplication.SharedApplication.ConnectedScenes)
+        {
+            if (scene is not UIKit.UIWindowScene windowScene)
+                continue;
+
+            foreach (var window in windowScene.Windows)
+            {
+                if (window.Hidden || window.Alpha <= 0)
+                    continue;
+
+                fallback ??= window;
+                var windowFrame = window.ConvertRectFromCoordinateSpace(
+                    screenFrame,
+                    window.Screen.CoordinateSpace);
+                if (window.Bounds.IntersectsWith(windowFrame))
+                    return window;
+            }
+        }
+
+#pragma warning disable CA1422 // Legacy AppDelegate apps can have no UIWindowScene on current iOS versions.
+        foreach (var window in UIKit.UIApplication.SharedApplication.Windows)
+#pragma warning restore CA1422
+        {
+            if (window.Hidden || window.Alpha <= 0)
+                continue;
+
+            fallback ??= window;
+            var windowFrame = window.ConvertRectFromCoordinateSpace(
+                screenFrame,
+                window.Screen.CoordinateSpace);
+            if (window.Bounds.IntersectsWith(windowFrame))
+                return window;
+        }
+
+        return fallback;
+    }
+
+    private static bool IsAppleCaptureSizeSupported(
+        CoreGraphics.CGSize logicalSize,
+        double scale)
+        => logicalSize.Width > 0
+            && logicalSize.Height > 0
+            && scale > 0
+            && logicalSize.Width * scale * logicalSize.Height * scale
+                <= MaxNativeElementScreenshotPixels;
+#endif
+#endif
+
 #if MACOS
+    protected override bool SupportsNativeElementScreenshots => true;
+
     protected override async Task<byte[]?> CaptureScreenshotAsync(VisualElement rootElement)
     {
         try
@@ -574,10 +1100,32 @@ public class PlatformAgentService : DevFlowAgentService
             // NSApplication.KeyWindow is null when the app is not the active application,
             // so prefer the NSWindow that actually owns the element being captured.
             var window = ResolveCaptureWindow(rootElement);
+            var mauiWindow = rootElement.Window
+                ?? Microsoft.Maui.Controls.Application.Current?.Windows
+                    .FirstOrDefault(candidate => ReferenceEquals(candidate.Page, rootElement));
+            var ownerWindow = NSWindowFromPlatformView(mauiWindow?.Handler?.PlatformView);
+            var parentWindow = window is { IsSheet: true, SheetParent: { } sheetParent }
+                ? sheetParent
+                : ownerWindow ?? window;
 
-            // If a modal sheet is attached, capture it instead of the main window
-            if (window?.AttachedSheet is NSWindow sheet)
-                window = sheet;
+            // Capture the parent and its attached sheet as one WindowServer image.
+            // The private alert content may be layer-backed and cannot be reproduced
+            // reliably by rendering either NSView hierarchy in isolation.
+            var attachedSheet = parentWindow?.AttachedSheet
+                ?? parentWindow?.Sheets.LastOrDefault()
+                ?? FindRegisteredDialogWindow(parentWindow);
+            if (parentWindow != null && attachedSheet != null)
+            {
+                var composited = CaptureWindowsViaCG(parentWindow, attachedSheet);
+                if (composited != null)
+                    return composited;
+
+                window = attachedSheet;
+            }
+            else
+            {
+                window = parentWindow;
+            }
 
             if (window != null)
             {
@@ -623,6 +1171,51 @@ public class PlatformAgentService : DevFlowAgentService
         catch { }
 
         return await base.CaptureScreenshotAsync(rootElement);
+    }
+
+    NSWindow? FindRegisteredDialogWindow(NSWindow? parentWindow)
+    {
+        if (NativeElementRegistry == null)
+            return null;
+
+        foreach (var registration in NativeElementRegistry.GetSnapshot().Reverse())
+        {
+            if (!registration.Role.Equals("Dialog", StringComparison.Ordinal))
+                continue;
+
+            var candidate = registration.NativeElement switch
+            {
+                NSWindow nativeWindow => nativeWindow,
+                NSView nativeView => nativeView.Window,
+                _ => null
+            };
+            var registrationOwnerWindow = FindAppKitRegistrationOwnerWindow(
+                registration.Owner);
+            if (candidate != null
+                && candidate.WindowNumber > 0
+                && candidate.IsVisible
+                && candidate.Handle != parentWindow?.Handle
+                && (parentWindow == null
+                    || registrationOwnerWindow?.Handle == parentWindow.Handle)
+                && (candidate.SheetParent == null
+                    || candidate.SheetParent.Handle == parentWindow?.Handle))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private static NSWindow? FindAppKitRegistrationOwnerWindow(object owner)
+    {
+        for (var element = owner as Element; element is not null; element = element.Parent)
+        {
+            if (element is Page page)
+                return NSWindowFromPlatformView(page.Window?.Handler?.PlatformView);
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -734,6 +1327,27 @@ public class PlatformAgentService : DevFlowAgentService
         return base.CaptureElementScreenshotAsync(element);
     }
 
+    protected override Task<byte[]?> CaptureNativeElementScreenshotAsync(
+        object nativeElement,
+        ElementInfo? elementInfo)
+    {
+        try
+        {
+            var view = nativeElement switch
+            {
+                NSView nsView => nsView,
+                NSSearchToolbarItem searchItem => searchItem.SearchField,
+                NSToolbarItem toolbarItem => toolbarItem.View,
+                _ => null
+            };
+            if (view is not null)
+                return Task.FromResult<byte[]?>(CaptureNSView(view));
+        }
+        catch { }
+
+        return Task.FromResult<byte[]?>(null);
+    }
+
     private static byte[]? CaptureNSView(NSView view)
     {
         var bounds = view.Bounds;
@@ -788,31 +1402,164 @@ public class PlatformAgentService : DevFlowAgentService
         uint windowID,
         uint imageOption);
 
+    [System.Runtime.InteropServices.DllImport("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")]
+    static extern IntPtr CGWindowListCreateImageFromArray(
+        CoreGraphics.CGRect screenBounds,
+        IntPtr windowArray,
+        uint imageOption);
+
     private static byte[]? CaptureWindowViaCG(NSWindow window)
     {
         try
         {
-            // kCGWindowListOptionIncludingWindow = 0x08, kCGWindowImageBoundsIgnoreFraming = 0x01
-            var cgImagePtr = CGWindowListCreateImage(
-                CoreGraphics.CGRect.Null, 0x08, (uint)window.WindowNumber, 0x01);
-
-            if (cgImagePtr == IntPtr.Zero)
-                return null;
-
-            var cgImage = ObjCRuntime.Runtime.GetINativeObject<CoreGraphics.CGImage>(
-                cgImagePtr, owns: true);
-            if (cgImage == null)
-                return null;
-
-            var bitmapRep = new NSBitmapImageRep(cgImage);
-            var pngData = bitmapRep.RepresentationUsingTypeProperties(
-                NSBitmapImageFileType.Png, new NSDictionary());
-            return pngData?.ToArray();
+            using var bitmapRep = CaptureWindowBitmapViaCG(window);
+            return EncodeBitmapRepresentation(bitmapRep);
         }
         catch
         {
             return null;
         }
+    }
+
+    private static byte[]? CaptureWindowsViaCG(
+        NSWindow parentWindow,
+        NSWindow sheetWindow)
+    {
+        try
+        {
+            var windows = new[] { sheetWindow, parentWindow };
+            var windowNumbers = windows
+                .Where(window => window.WindowNumber > 0)
+                .Select(window => new NSNumber((uint)window.WindowNumber))
+                .ToArray();
+            if (windowNumbers.Length == 0)
+                return null;
+
+            using var windowArray = NSArray.FromNSObjects(windowNumbers);
+            foreach (var windowNumber in windowNumbers)
+                windowNumber.Dispose();
+
+            // kCGWindowImageBoundsIgnoreFraming = 0x01,
+            // kCGWindowImageBestResolution = 0x08.
+            var cgImagePtr = CGWindowListCreateImageFromArray(
+                CoreGraphics.CGRect.Null,
+                windowArray.Handle,
+                0x09);
+            if (cgImagePtr != IntPtr.Zero)
+            {
+                using var cgImage = ObjCRuntime.Runtime.GetINativeObject<CoreGraphics.CGImage>(
+                    cgImagePtr,
+                    owns: true);
+                if (cgImage != null)
+                {
+                    using var bitmapRep = new NSBitmapImageRep(cgImage);
+                    return EncodeBitmapRepresentation(bitmapRep);
+                }
+            }
+
+            return CaptureWindowPairViaCG(parentWindow, sheetWindow);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static NSBitmapImageRep? CaptureWindowBitmapViaCG(NSWindow window)
+    {
+        // kCGWindowListOptionIncludingWindow = 0x08,
+        // kCGWindowImageBoundsIgnoreFraming = 0x01,
+        // kCGWindowImageBestResolution = 0x08.
+        var cgImagePtr = CGWindowListCreateImage(
+            CoreGraphics.CGRect.Null,
+            0x08,
+            (uint)window.WindowNumber,
+            0x09);
+        if (cgImagePtr == IntPtr.Zero)
+            return null;
+
+        using var cgImage = ObjCRuntime.Runtime.GetINativeObject<CoreGraphics.CGImage>(
+            cgImagePtr,
+            owns: true);
+        return cgImage == null
+            ? null
+            : new NSBitmapImageRep(cgImage);
+    }
+
+    private static byte[]? CaptureWindowPairViaCG(
+        NSWindow parentWindow,
+        NSWindow sheetWindow)
+    {
+        using var parentRep = CaptureWindowBitmapViaCG(parentWindow);
+        using var sheetRep = CaptureWindowBitmapViaCG(sheetWindow);
+        if (parentRep == null || sheetRep == null)
+            return null;
+
+        var logicalSize = parentWindow.Frame.Size;
+        using var compositedRep = new NSBitmapImageRep(
+            IntPtr.Zero,
+            (int)parentRep.PixelsWide,
+            (int)parentRep.PixelsHigh,
+            8,
+            4,
+            true,
+            false,
+            NSColorSpace.DeviceRGB,
+            0,
+            0);
+        compositedRep.Size = logicalSize;
+
+        using var parentImage = new NSImage(logicalSize);
+        parentImage.AddRepresentation(parentRep);
+        using var sheetImage = new NSImage(sheetWindow.Frame.Size);
+        sheetImage.AddRepresentation(sheetRep);
+
+        NSGraphicsContext.GlobalSaveGraphicsState();
+        try
+        {
+            var context = NSGraphicsContext.FromBitmap(compositedRep);
+            if (context == null)
+                return null;
+
+            NSGraphicsContext.CurrentContext = context;
+            parentImage.Draw(
+                new CoreGraphics.CGRect(CoreGraphics.CGPoint.Empty, logicalSize),
+                new CoreGraphics.CGRect(CoreGraphics.CGPoint.Empty, parentImage.Size),
+                NSCompositingOperation.SourceOver,
+                1,
+                respectContextIsFlipped: false,
+                hints: null);
+
+            var sheetDestination = new CoreGraphics.CGRect(
+                sheetWindow.Frame.X - parentWindow.Frame.X,
+                sheetWindow.Frame.Y - parentWindow.Frame.Y,
+                sheetWindow.Frame.Width,
+                sheetWindow.Frame.Height);
+            sheetImage.Draw(
+                sheetDestination,
+                new CoreGraphics.CGRect(CoreGraphics.CGPoint.Empty, sheetImage.Size),
+                NSCompositingOperation.SourceOver,
+                1,
+                respectContextIsFlipped: false,
+                hints: null);
+        }
+        finally
+        {
+            NSGraphicsContext.GlobalRestoreGraphicsState();
+        }
+
+        return EncodeBitmapRepresentation(compositedRep);
+    }
+
+    private static byte[]? EncodeBitmapRepresentation(NSBitmapImageRep? bitmapRep)
+    {
+        if (bitmapRep == null)
+            return null;
+
+        var pngData = bitmapRep.RepresentationUsingTypeProperties(
+            NSBitmapImageFileType.Png,
+            new NSDictionary());
+        return pngData?.ToArray();
     }
 #elif IOS || MACCATALYST
     protected override async Task<byte[]?> CaptureScreenshotAsync(VisualElement rootElement)
@@ -823,7 +1570,7 @@ public class PlatformAgentService : DevFlowAgentService
         return await base.CaptureScreenshotAsync(rootElement);
     }
 
-    protected override Task<byte[]?> CaptureFullScreenAsync()
+    protected override Task<byte[]?> CaptureFullScreenAsync(int? windowIndex = null)
         => DispatchAsync(() => CaptureAllWindowsComposited());
 
     /// <summary>
@@ -898,6 +1645,200 @@ public class PlatformAgentService : DevFlowAgentService
         return pngData?.ToArray();
     }
 #elif WINDOWS
+    protected override bool SupportsNativeElementScreenshots => true;
+
+    protected override async Task<byte[]?> CaptureNativeElementScreenshotAsync(
+        object nativeElement,
+        ElementInfo? elementInfo)
+    {
+        if (nativeElement is System.Windows.Automation.AutomationElement automationElement)
+            return await Task.Run(() => Windows.NativeWindowProbe.CaptureElementScreenshot(automationElement));
+
+        if (nativeElement is not Microsoft.UI.Xaml.UIElement uiElement)
+            return null;
+
+        try
+        {
+            var renderTarget = new Microsoft.UI.Xaml.Media.Imaging.RenderTargetBitmap();
+            await renderTarget.RenderAsync(uiElement);
+            if (renderTarget.PixelWidth <= 0 || renderTarget.PixelHeight <= 0)
+                return null;
+
+            var pixelBuffer = await renderTarget.GetPixelsAsync();
+            var pixels = new byte[checked((int)pixelBuffer.Length)];
+            using (var reader = global::Windows.Storage.Streams.DataReader.FromBuffer(pixelBuffer))
+                reader.ReadBytes(pixels);
+
+            using var bitmap = new SkiaSharp.SKBitmap(
+                renderTarget.PixelWidth,
+                renderTarget.PixelHeight,
+                SkiaSharp.SKColorType.Bgra8888,
+                SkiaSharp.SKAlphaType.Premul);
+            System.Runtime.InteropServices.Marshal.Copy(
+                pixels,
+                0,
+                bitmap.GetPixels(),
+                pixels.Length);
+            using var image = SkiaSharp.SKImage.FromBitmap(bitmap);
+            using var png = image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
+            return png.ToArray();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    protected override async Task<byte[]?> CaptureFullScreenAsync(int? windowIndex = null)
+    {
+        var target = await DispatchAsync(() =>
+        {
+            var index = windowIndex ?? 0;
+            var platformWindow = Application.Current?.Windows.ElementAtOrDefault(index)?
+                .Handler?.PlatformView as Microsoft.UI.Xaml.Window;
+            return (
+                Hwnd: platformWindow is null
+                    ? IntPtr.Zero
+                    : WinRT.Interop.WindowNative.GetWindowHandle(platformWindow),
+                Root: platformWindow?.Content);
+        });
+        if (target.Hwnd == IntPtr.Zero || target.Root is null)
+            return null;
+
+        var baseScreenshot = await Task.Run(
+            () => Windows.NativeWindowProbe.CaptureCompositedWindowScreenshot(target.Hwnd));
+        if (baseScreenshot is null)
+            return null;
+
+        try
+        {
+            return await DispatchAsync<byte[]>(
+                () => CompositeWinUiPopupsAsync(baseScreenshot, target.Root))
+                ?? baseScreenshot;
+        }
+        catch
+        {
+            return baseScreenshot;
+        }
+    }
+
+    private static async Task<byte[]?> CompositeWinUiPopupsAsync(
+        byte[] baseScreenshot,
+        Microsoft.UI.Xaml.UIElement root)
+    {
+        if (root.XamlRoot is null)
+            return baseScreenshot;
+
+        using var rootBitmap = SkiaSharp.SKBitmap.Decode(baseScreenshot);
+        if (rootBitmap is null)
+            return baseScreenshot;
+
+        using var canvas = new SkiaSharp.SKCanvas(rootBitmap);
+        var rootScaleX = root is Microsoft.UI.Xaml.FrameworkElement rootElement
+            && rootElement.ActualWidth > 0
+                ? rootBitmap.Width / rootElement.ActualWidth
+                : 1d;
+        var rootScaleY = root is Microsoft.UI.Xaml.FrameworkElement rootElementForHeight
+            && rootElementForHeight.ActualHeight > 0
+                ? rootBitmap.Height / rootElementForHeight.ActualHeight
+                : 1d;
+
+        using var popupCaptureCts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        var popupCount = 0;
+        foreach (var popup in Microsoft.UI.Xaml.Media.VisualTreeHelper
+            .GetOpenPopupsForXamlRoot(root.XamlRoot))
+        {
+            if (popupCaptureCts.IsCancellationRequested || popupCount >= 8)
+                break;
+            if (!popup.IsOpen || popup.Child is not Microsoft.UI.Xaml.UIElement popupChild)
+                continue;
+            popupCount++;
+
+            SkiaSharp.SKBitmap? renderedPopup;
+            try
+            {
+                renderedPopup = await RenderWinUiBitmapAsync(
+                    popupChild,
+                    popupCaptureCts.Token);
+            }
+            catch
+            {
+                continue;
+            }
+
+            using var popupBitmap = renderedPopup;
+            if (popupBitmap is null)
+                continue;
+
+            global::Windows.Foundation.Point origin;
+            try
+            {
+                origin = popupChild.TransformToVisual(root)
+                    .TransformPoint(new global::Windows.Foundation.Point(0, 0));
+            }
+            catch
+            {
+                origin = new global::Windows.Foundation.Point(
+                    popup.HorizontalOffset,
+                    popup.VerticalOffset);
+            }
+
+            canvas.DrawBitmap(
+                popupBitmap,
+                (float)(origin.X * rootScaleX),
+                (float)(origin.Y * rootScaleY));
+        }
+
+        canvas.Flush();
+        using var image = SkiaSharp.SKImage.FromBitmap(rootBitmap);
+        using var png = image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
+        return png.ToArray();
+    }
+
+    private static async Task<SkiaSharp.SKBitmap?> RenderWinUiBitmapAsync(
+        Microsoft.UI.Xaml.UIElement element,
+        CancellationToken cancellationToken)
+    {
+        using var captureCts = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken);
+        captureCts.CancelAfter(TimeSpan.FromSeconds(2));
+
+        var renderTarget = new Microsoft.UI.Xaml.Media.Imaging.RenderTargetBitmap();
+        await renderTarget.RenderAsync(element)
+            .AsTask(captureCts.Token);
+        if (renderTarget.PixelWidth <= 0 || renderTarget.PixelHeight <= 0)
+            return null;
+
+        const long MaxCapturePixels = 16_777_216;
+        var pixelCount = (long)renderTarget.PixelWidth * renderTarget.PixelHeight;
+        if (pixelCount > MaxCapturePixels)
+            return null;
+
+        var pixelBuffer = await renderTarget.GetPixelsAsync()
+            .AsTask(captureCts.Token);
+        if (pixelBuffer.Length > int.MaxValue
+            || pixelBuffer.Length > MaxCapturePixels * 4)
+        {
+            return null;
+        }
+
+        var pixels = new byte[(int)pixelBuffer.Length];
+        using (var reader = global::Windows.Storage.Streams.DataReader.FromBuffer(pixelBuffer))
+            reader.ReadBytes(pixels);
+
+        var bitmap = new SkiaSharp.SKBitmap(
+            renderTarget.PixelWidth,
+            renderTarget.PixelHeight,
+            SkiaSharp.SKColorType.Bgra8888,
+            SkiaSharp.SKAlphaType.Premul);
+        System.Runtime.InteropServices.Marshal.Copy(
+            pixels,
+            0,
+            bitmap.GetPixels(),
+            pixels.Length);
+        return bitmap;
+    }
+
     protected override async Task<byte[]?> CaptureScreenshotAsync(VisualElement rootElement)
     {
         // MAUI's VisualDiagnostics doesn't capture WebView2 GPU-rendered content on Windows.

@@ -25,6 +25,20 @@ public record AgentRegistration
     [JsonPropertyName("appName")]
     public string AppName { get; init; } = "";
 
+    /// <summary>
+    /// The app framework hosting the agent: <c>"maui"</c> or <c>"native"</c>.
+    /// Null for agents built before the field was introduced.
+    /// </summary>
+    [JsonPropertyName("framework")]
+    public string? Framework { get; init; }
+
+    /// <summary>
+    /// The UI framework the agent walks: <c>"maui-controls"</c>, <c>"android-views"</c>,
+    /// <c>"uikit"</c>, <c>"appkit"</c>, <c>"gtk"</c> or <c>"wpf"</c>.
+    /// </summary>
+    [JsonPropertyName("uiFramework")]
+    public string? UiFramework { get; init; }
+
     [JsonPropertyName("port")]
     public int Port { get; init; }
 
@@ -79,6 +93,12 @@ internal record RegistrationMessage
 
     [JsonPropertyName("appName")]
     public string AppName { get; init; } = "";
+
+    [JsonPropertyName("framework")]
+    public string? Framework { get; init; }
+
+    [JsonPropertyName("uiFramework")]
+    public string? UiFramework { get; init; }
 
     [JsonPropertyName("currentPort")]
     public int? CurrentPort { get; init; }

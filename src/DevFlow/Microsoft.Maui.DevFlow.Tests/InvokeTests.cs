@@ -333,10 +333,10 @@ public class InvokeTests
 
 	private sealed class InvokeTestHarness : IDisposable
 	{
-		private readonly DevFlowAgentService _service;
+		private readonly MauiDevFlowAgentService _service;
 		public AgentClient Client { get; }
 
-		private InvokeTestHarness(DevFlowAgentService service, AgentClient client)
+		private InvokeTestHarness(MauiDevFlowAgentService service, AgentClient client)
 		{
 			_service = service;
 			Client = client;
@@ -348,7 +348,7 @@ public class InvokeTests
 		public static async Task<InvokeTestHarness> CreateWithDispatcherAsync(IDispatcher dispatcher)
 		{
 			var app = new TestApplication();
-			var service = new DevFlowAgentService(new AgentOptions { Port = GetFreePort() });
+			var service = new MauiDevFlowAgentService(new AgentOptions { Port = GetFreePort() });
 			var client = new AgentClient("localhost", service.Port);
 
 			service.StartServerOnly(dispatcher);

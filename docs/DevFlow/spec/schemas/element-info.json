@@ -43,6 +43,59 @@
         "windows"
       ]
     },
+    "origin": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Origin of the node, such as native for platform-discovered controls."
+    },
+    "ownerId": {
+      "oneOf": [
+        { "$ref": "common.json#/$defs/ElementId" },
+        { "type": "null" }
+      ],
+      "description": "Framework element that owns a registered native control."
+    },
+    "discriminator": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Optional platform registration discriminator."
+    },
+    "boundsQuality": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Quality of the reported bounds, such as exact or unknown."
+    },
+    "captureEpoch": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Capture epoch that produced this element ID."
+    },
+    "registryGeneration": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Native registration generation associated with captureEpoch."
+    },
+    "windowId": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "description": "Zero-based application window containing this element."
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Operations supported by this element, such as invoke, focus, set-value, or scroll."
+    },
     "automationId": {
       "type": [
         "string",
@@ -132,8 +185,18 @@
       }
     },
     "bounds": {
-      "$ref": "bounds-info.json",
+      "oneOf": [
+        { "$ref": "bounds-info.json" },
+        { "type": "null" }
+      ],
       "description": "Bounding rectangle of the element."
+    },
+    "windowBounds": {
+      "oneOf": [
+        { "$ref": "bounds-info.json" },
+        { "type": "null" }
+      ],
+      "description": "Element bounds in window-logical coordinates."
     },
     "gestures": {
       "type": "array",

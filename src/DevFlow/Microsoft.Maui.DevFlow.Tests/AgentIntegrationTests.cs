@@ -93,6 +93,41 @@ public class AgentHttpServerTests : IDisposable
     }
 
     [Fact]
+    public async Task GetTreeAsync_CaptureChangedDuringRead_Retries()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, _port);
+        listener.Start();
+
+        var acceptTask = Task.Run(async () =>
+        {
+            for (var attempt = 0; attempt < 5; attempt++)
+            {
+                using var client = await listener.AcceptTcpClientAsync();
+                using var stream = client.GetStream();
+                var buffer = new byte[4096];
+                var read = await stream.ReadAsync(buffer);
+                var request = Encoding.UTF8.GetString(buffer, 0, read);
+                Assert.Contains("GET /api/v1/ui/tree", request);
+
+                var status = attempt < 4 ? "409 Conflict" : "200 OK";
+                var body = attempt < 4
+                    ? """{"success":false,"error":"UI changed","reason":"capture-changed-during-read"}"""
+                    : """[{"id":"root","type":"Page","fullType":"Page","isVisible":true,"isEnabled":true,"opacity":1,"children":[]}]""";
+                var response = $"HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{body}";
+                await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
+            }
+        });
+
+        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        var tree = await agentClient.GetTreeAsync();
+
+        var root = Assert.Single(tree);
+        Assert.Equal("root", root.Id);
+        await acceptTask;
+        listener.Stop();
+    }
+
+    [Fact]
     public async Task TapEndpoint_SendsPost()
     {
         using var listener = new TcpListener(IPAddress.Loopback, _port);

@@ -5,7 +5,9 @@ namespace Microsoft.Maui.DevFlow.Driver;
 /// On success, <see cref="Data"/> holds the captured PNG bytes. On failure, <see cref="Error"/>,
 /// <see cref="Reason"/>, <see cref="Retryable"/>, and <see cref="Suggestions"/> describe an
 /// actionable cause when the agent could provide one (for example, the macOS app window not
-/// being the frontmost application).
+/// being the frontmost application). A backend that does not support screenshots is also
+/// reported this way, with <see cref="Reason"/> set to <c>"not_supported"</c>, instead of
+/// throwing <see cref="NotSupportedByAgentException"/>.
 /// </summary>
 public sealed class ScreenshotResult
 {
@@ -27,8 +29,31 @@ public sealed class ScreenshotResult
     /// <summary>Optional actionable suggestions surfaced by the agent.</summary>
     public IReadOnlyList<string>? Suggestions { get; init; }
 
+    /// <summary>Capture epoch associated with the screenshot.</summary>
+    public long? CaptureEpoch { get; init; }
+
+    /// <summary>Native registration generation associated with the screenshot.</summary>
+    public long? RegistryGeneration { get; init; }
+
+    /// <summary>Window index associated with the screenshot.</summary>
+    public int? WindowId { get; init; }
+
     public static ScreenshotResult Ok(byte[] data) =>
-        new() { Success = true, Data = data };
+        Ok(data, captureEpoch: null, registryGeneration: null, windowId: null);
+
+    public static ScreenshotResult Ok(
+        byte[] data,
+        long? captureEpoch,
+        long? registryGeneration,
+        int? windowId) =>
+        new()
+        {
+            Success = true,
+            Data = data,
+            CaptureEpoch = captureEpoch,
+            RegistryGeneration = registryGeneration,
+            WindowId = windowId
+        };
 
     public static ScreenshotResult Failure(
         string? error,

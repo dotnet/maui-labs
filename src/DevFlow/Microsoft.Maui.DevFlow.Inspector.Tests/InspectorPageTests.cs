@@ -194,20 +194,145 @@ public class InspectorPageTests : IAsyncLifetime
     {
         await _page.GotoAsync(BaseUrl);
 
-        // Get the viewport bounding box
         var viewport = _page.Locator("#app-viewport");
-        var box = await viewport.BoundingBoxAsync();
-        Assert.NotNull(box);
+        var initialScreenshot = await _page.Locator("#screenshot").GetAttributeAsync("src");
+        var tapStatuses = new List<int>();
+        _page.Response += (_, response) =>
+        {
+            if (response.Url.EndsWith("/api/tap", StringComparison.Ordinal))
+                tapStatuses.Add(response.Status);
+        };
 
-        // Click in the middle of the viewport
-        await viewport.ClickAsync(new() { Position = new() { X = (float)box.Width / 2, Y = (float)box.Height / 2 } });
+        await viewport.ClickAsync(new()
+        {
+            Position = new() { X = 5, Y = 5 }
+        });
 
-        // Wait for AJAX refresh (devflow.js refreshes after tap via /api/state)
-        await _page.WaitForTimeoutAsync(1000);
+        string? refreshedScreenshot = initialScreenshot;
+        var deadline = DateTime.UtcNow.AddSeconds(7);
+        while (DateTime.UtcNow < deadline
+            && (tapStatuses.Count == 0
+                || string.Equals(
+                    initialScreenshot,
+                    refreshedScreenshot,
+                    StringComparison.Ordinal)))
+        {
+            await _page.WaitForTimeoutAsync(100);
+            refreshedScreenshot = await _page.Locator("#screenshot").GetAttributeAsync("src");
+        }
 
-        // The screenshot src should have a cache-busting timestamp
-        var screenshotAfter = await _page.Locator("#screenshot").GetAttributeAsync("src");
-        Assert.Contains("?t=", screenshotAfter);
+        Assert.Contains(200, tapStatuses);
+        Assert.NotEqual(initialScreenshot, refreshedScreenshot);
+    }
+
+    [LiveInspectorFact]
+    public async Task StaleFillRefreshesCaptureAndRetries()
+    {
+        await _page.GotoAsync(BaseUrl);
+
+        const string fixtureId = "inspector-stale-fill-fixture";
+        const string refreshedElements = """
+            <div class="devflow-element"
+                 data-id="inspector-stale-fill-fixture"
+                 data-type="Entry"
+                 data-captureEpoch="2"
+                 data-registryGeneration="7"
+                 data-capabilities="set-value"
+                 data-isVisible="true"
+                 data-isEnabled="true"
+                 style="position:absolute;left:10px;top:10px;width:180px;height:40px;z-index:9999;"></div>
+            """;
+        var viewport = _page.Locator("#app-viewport");
+        const string screenshotUrl = "screenshot.png";
+        var viewportWidth = double.Parse(
+            (await viewport.GetAttributeAsync("data-width"))!,
+            CultureInfo.InvariantCulture);
+        var viewportHeight = double.Parse(
+            (await viewport.GetAttributeAsync("data-height"))!,
+            CultureInfo.InvariantCulture);
+
+        await _page.RouteAsync("**/api/state", async route =>
+        {
+            await route.FulfillAsync(new()
+            {
+                Status = 200,
+                ContentType = "application/json",
+                Body = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    screenshotUrl,
+                    elements = refreshedElements,
+                    viewportWidth,
+                    viewportHeight,
+                    captureEpoch = 2,
+                    registryGeneration = 7,
+                    windowId = 0
+                })
+            });
+        });
+
+        var fillBodies = new List<string>();
+        await _page.RouteAsync("**/api/fill", async route =>
+        {
+            fillBodies.Add(route.Request.PostData ?? "");
+            if (fillBodies.Count == 1)
+            {
+                await route.FulfillAsync(new()
+                {
+                    Status = 409,
+                    ContentType = "application/json",
+                    Body = """{"ok":false,"reason":"stale-capture-epoch","retryable":true}"""
+                });
+                return;
+            }
+
+            await route.FulfillAsync(new()
+            {
+                Status = 200,
+                ContentType = "application/json",
+                Body = """{"ok":true}"""
+            });
+        });
+
+        await _page.EvaluateAsync(
+            """
+            () => {
+                const fixture = document.createElement('div');
+                fixture.className = 'devflow-element';
+                fixture.setAttribute('data-id', 'inspector-stale-fill-fixture');
+                fixture.setAttribute('data-type', 'Entry');
+                fixture.setAttribute('data-captureEpoch', '1');
+                fixture.setAttribute('data-registryGeneration', '7');
+                fixture.setAttribute('data-capabilities', 'set-value');
+                fixture.setAttribute('data-isVisible', 'true');
+                fixture.setAttribute('data-isEnabled', 'true');
+                fixture.setAttribute(
+                    'style',
+                    'position:absolute;left:10px;top:10px;width:180px;height:40px;z-index:9999;');
+                document.getElementById('app-viewport').appendChild(fixture);
+            }
+            """);
+
+        var target = _page.Locator($".devflow-element[data-id='{fixtureId}']").First;
+        await target.ClickAsync(new() { Force = true });
+        var editor = _page.Locator("#app-viewport > input, #app-viewport > textarea").First;
+        await Expect(editor).ToBeVisibleAsync();
+        await editor.FillAsync("DevFlow stale retry");
+        await editor.PressAsync("Enter");
+
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (fillBodies.Count < 2 && DateTime.UtcNow < deadline)
+            await _page.WaitForTimeoutAsync(100);
+
+        Assert.Equal(2, fillBodies.Count);
+        using var firstRequest = System.Text.Json.JsonDocument.Parse(fillBodies[0]);
+        using var retryRequest = System.Text.Json.JsonDocument.Parse(fillBodies[1]);
+        Assert.Equal(1, firstRequest.RootElement.GetProperty("captureEpoch").GetInt64());
+        Assert.Equal(2, retryRequest.RootElement.GetProperty("captureEpoch").GetInt64());
+        Assert.Equal(
+            "DevFlow stale retry",
+            retryRequest.RootElement.GetProperty("text").GetString());
+        await Expect(_page.Locator("#app-viewport > input, #app-viewport > textarea"))
+            .ToHaveCountAsync(0, new() { Timeout = 5000 });
     }
 
     [LiveInspectorFact]
@@ -299,6 +424,25 @@ public class InspectorPageTests : IAsyncLifetime
 
         Assert.True(json.RootElement.TryGetProperty("viewportHeight", out var vh));
         Assert.True(vh.GetDouble() > 0);
+    }
+
+    [LiveInspectorFact]
+    public async Task ConcurrentStateScreenshotUrlsRemainAvailable()
+    {
+        var requests = Enumerable.Range(0, 8).Select(async _ =>
+        {
+            var stateResponse = await _page.APIRequest.GetAsync(ResolveUrl("api/state"));
+            Assert.True(stateResponse.Ok);
+            using var state = System.Text.Json.JsonDocument.Parse(await stateResponse.TextAsync());
+            var screenshotUrl = state.RootElement.GetProperty("screenshotUrl").GetString();
+            Assert.NotNull(screenshotUrl);
+
+            var screenshotResponse = await _page.APIRequest.GetAsync(ResolveUrl(screenshotUrl));
+            Assert.True(screenshotResponse.Ok);
+            Assert.Equal("image/png", screenshotResponse.Headers["content-type"]);
+        });
+
+        await Task.WhenAll(requests);
     }
 
     [LiveInspectorFact]

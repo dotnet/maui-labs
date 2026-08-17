@@ -151,7 +151,7 @@ public static class BlazorDevFlowExtensions
                 }
 
                 // Try to get the agent service directly by its well-known type
-                var agentType = Type.GetType("Microsoft.Maui.DevFlow.Agent.Core.DevFlowAgentService, Microsoft.Maui.DevFlow.Agent.Core");
+                var agentType = Type.GetType("Microsoft.Maui.DevFlow.Agent.Core.DevFlowAgentService, Microsoft.Maui.DevFlow.Agent.Abstractions");
                 if (agentType == null)
                 {
                     // Try scanning loaded assemblies for the Core type

@@ -6,6 +6,8 @@ namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests;
 
 [Collection("AgentIntegration")]
 [Trait("Category", "SecureStorage")]
+// Requires the MAUI sample: SecureStorage is an Essentials API. Native runs filter this out.
+[Trait(TestFramework.Trait, TestFramework.Maui)]
 public class SecureStorageTests : IntegrationTestBase
 {
     const string TestKeyPrefix = "integration_test_secure_";
