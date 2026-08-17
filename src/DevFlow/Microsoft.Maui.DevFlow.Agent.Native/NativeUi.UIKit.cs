@@ -18,6 +18,18 @@ internal static partial class NativeUi
     public static string PlatformName => "iOS";
 #endif
 
+    public static string? DeviceIdentifier
+    {
+        get
+        {
+#if IOS
+            return Environment.GetEnvironmentVariable("SIMULATOR_UDID");
+#else
+            return null;
+#endif
+        }
+    }
+
     public static string UiFrameworkName => "uikit";
 
 #if MACCATALYST

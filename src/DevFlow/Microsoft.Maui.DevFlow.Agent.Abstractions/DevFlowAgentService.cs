@@ -101,6 +101,9 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     /// <summary>Device type ("Physical" / "Virtual") reported to clients.</summary>
     protected virtual string DeviceTypeName => "Unknown";
 
+    /// <summary>Platform-specific device identifier when the app can report one safely.</summary>
+    protected virtual string? DeviceIdentifier => null;
+
     /// <summary>Device idiom ("Phone" / "Tablet" / "Desktop") reported to clients.</summary>
     protected virtual string IdiomName => "Unknown";
 
@@ -217,6 +220,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                 },
                 ["device"] = new Dictionary<string, object?>
                 {
+                    ["id"] = DeviceIdentifier,
                     ["platform"] = PlatformName,
                     ["deviceType"] = DeviceTypeName,
                     ["idiom"] = IdiomName,

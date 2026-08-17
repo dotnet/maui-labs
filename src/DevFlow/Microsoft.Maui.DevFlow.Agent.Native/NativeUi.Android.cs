@@ -21,6 +21,8 @@ internal static partial class NativeUi
     public static string DeviceTypeName =>
         Build.Fingerprint?.Contains("generic", StringComparison.OrdinalIgnoreCase) == true ? "virtual" : "physical";
 
+    public static string? DeviceIdentifier => null;
+
     private static Activity? _currentActivity;
 
     /// <summary>

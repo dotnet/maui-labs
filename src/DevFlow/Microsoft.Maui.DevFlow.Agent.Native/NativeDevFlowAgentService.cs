@@ -47,6 +47,9 @@ public class NativeDevFlowAgentService : DevFlowAgentService
     protected override string DeviceTypeName => NativeUi.DeviceTypeName;
 
     /// <inheritdoc />
+    protected override string? DeviceIdentifier => NativeUi.DeviceIdentifier;
+
+    /// <inheritdoc />
     protected override bool IsUiSupported => true;
 
     /// <inheritdoc />

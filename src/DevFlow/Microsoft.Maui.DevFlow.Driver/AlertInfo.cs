@@ -19,13 +19,14 @@ public record AlertButton(string Label, double X, double Y, double Width, double
 public record AlertInfo(string? Title, IReadOnlyList<AlertButton> Buttons)
 {
     /// <summary>
-    /// Stable fingerprint for this exact visible prompt. Use it when responding so a stale
-    /// automation step cannot act on a different dialog that appeared later.
+    /// One-time response token for this reviewed prompt. Use it when responding so a stale
+    /// automation step cannot act on a different dialog.
     /// </summary>
     public string? PromptId { get; init; }
 
     public int? SourceProcessId { get; init; }
     public string? SourceProcessName { get; init; }
+    public string? InstanceId { get; init; }
     public IReadOnlyList<string> Text { get; init; } = Array.Empty<string>();
     public bool IsSystemDialog { get; init; }
     public bool RequiresUserConfirmation { get; init; }
@@ -38,29 +39,41 @@ public record AlertActionResult(
     string Message,
     AlertInfo? Dialog = null);
 
-internal static class NativeDialogSafety
+public static class NativeDialogIdentity
 {
-    internal static string CreateFingerprint(
-        int sourceProcessId,
-        string sourceProcessName,
+    public static string CreateFingerprint(
+        string platform,
+        string targetIdentity,
         AlertInfo dialog)
     {
         var identity = new StringBuilder()
-            .Append(sourceProcessId).Append('\n')
-            .Append(sourceProcessName).Append('\n')
+            .Append(platform).Append('\n')
+            .Append(targetIdentity).Append('\n')
+            .Append(dialog.InstanceId).Append('\n')
             .Append(dialog.Title).Append('\n');
 
         foreach (var text in dialog.Text)
             identity.Append(text).Append('\n');
 
         foreach (var button in dialog.Buttons)
-            identity.Append(button.Label).Append(':').Append(button.Identifier).Append('\n');
+        {
+            identity
+                .Append(button.Label).Append(':')
+                .Append(button.Identifier).Append(':')
+                .Append(button.X).Append(',')
+                .Append(button.Y).Append(',')
+                .Append(button.Width).Append(',')
+                .Append(button.Height).Append('\n');
+        }
 
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity.ToString())))
             [..16]
             .ToLowerInvariant();
     }
+}
 
+internal static class NativeDialogSafety
+{
     internal static bool IsSystemDialogForTarget(
         AlertInfo dialog,
         params string?[] targetNames)
@@ -80,7 +93,7 @@ internal static class NativeDialogSafety
         return false;
     }
 
-    private static bool ContainsWholeName(string promptText, string? targetName)
+    internal static bool ContainsWholeName(string promptText, string? targetName)
     {
         if (string.IsNullOrWhiteSpace(targetName))
             return false;
