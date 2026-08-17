@@ -81,6 +81,14 @@ public class MacCatalystAppDriver : AppDriverBase
         return MacAccessibility.AXIsProcessTrusted();
     }
 
+    public static void CancelAlertResponse(string promptId)
+    {
+        if (string.IsNullOrWhiteSpace(promptId))
+            return;
+        if (DialogLeases.TryRemove(promptId, out var lease))
+            lease.Dispose();
+    }
+
     /// <summary>
     /// Presses an exact button on the exact prompt previously returned by
     /// <see cref="DetectAlertAsync"/>. If the prompt changed, no action is performed.
@@ -124,9 +132,9 @@ public class MacCatalystAppDriver : AppDriverBase
             var (info, currentButtons) = match.Value;
             try
             {
-                var currentFingerprint = NativeDialogSafety.CreateFingerprint(
-                    info.SourceProcessId ?? 0,
-                    info.SourceProcessName ?? string.Empty,
+                var currentFingerprint = NativeDialogIdentity.CreateFingerprint(
+                    Platform,
+                    $"{info.SourceProcessId ?? 0}:{info.SourceProcessName}",
                     info);
                 if (!string.Equals(lease.Fingerprint, currentFingerprint, StringComparison.Ordinal))
                 {
@@ -418,9 +426,9 @@ public class MacCatalystAppDriver : AppDriverBase
 
         var promptId = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
         var leasedInfo = match.info with { PromptId = promptId };
-        var fingerprint = NativeDialogSafety.CreateFingerprint(
-            match.info.SourceProcessId ?? 0,
-            match.info.SourceProcessName ?? string.Empty,
+        var fingerprint = NativeDialogIdentity.CreateFingerprint(
+            Platform,
+            $"{match.info.SourceProcessId ?? 0}:{match.info.SourceProcessName}",
             match.info);
         var lease = new DialogLease(
             ResolveProcessId(),

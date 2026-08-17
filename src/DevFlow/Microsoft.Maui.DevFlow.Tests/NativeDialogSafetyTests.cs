@@ -10,8 +10,8 @@ public class NativeDialogSafetyTests
         var first = CreateDialog();
         var second = CreateDialog();
 
-        var firstId = NativeDialogSafety.CreateFingerprint(42, "CoreServicesUIAgent", first);
-        var secondId = NativeDialogSafety.CreateFingerprint(42, "CoreServicesUIAgent", second);
+        var firstId = NativeDialogIdentity.CreateFingerprint("macOS", "42:CoreServicesUIAgent", first);
+        var secondId = NativeDialogIdentity.CreateFingerprint("macOS", "42:CoreServicesUIAgent", second);
 
         Assert.Equal(firstId, secondId);
     }
@@ -25,8 +25,31 @@ public class NativeDialogSafetyTests
             Text = ["Other App would like to find devices on your local network."]
         };
 
-        var firstId = NativeDialogSafety.CreateFingerprint(42, "CoreServicesUIAgent", first);
-        var secondId = NativeDialogSafety.CreateFingerprint(42, "CoreServicesUIAgent", second);
+        var firstId = NativeDialogIdentity.CreateFingerprint("macOS", "42:CoreServicesUIAgent", first);
+        var secondId = NativeDialogIdentity.CreateFingerprint("macOS", "42:CoreServicesUIAgent", second);
+
+        Assert.NotEqual(firstId, secondId);
+    }
+
+    [Fact]
+    public void CreatePromptId_DifferentPlatform_ChangesFingerprint()
+    {
+        var dialog = CreateDialog();
+
+        var macId = NativeDialogIdentity.CreateFingerprint("macOS", "target", dialog);
+        var windowsId = NativeDialogIdentity.CreateFingerprint("Windows", "target", dialog);
+
+        Assert.NotEqual(macId, windowsId);
+    }
+
+    [Fact]
+    public void CreatePromptId_DifferentNativeInstance_ChangesFingerprint()
+    {
+        var first = CreateDialog() with { InstanceId = "window-a" };
+        var second = CreateDialog() with { InstanceId = "window-b" };
+
+        var firstId = NativeDialogIdentity.CreateFingerprint("Android", "target", first);
+        var secondId = NativeDialogIdentity.CreateFingerprint("Android", "target", second);
 
         Assert.NotEqual(firstId, secondId);
     }
@@ -53,6 +76,22 @@ public class NativeDialogSafetyTests
         };
 
         Assert.False(NativeDialogSafety.IsSystemDialogForTarget(dialog, "App"));
+    }
+
+    [Fact]
+    public void AndroidFocusedPackage_ExactComponent_ReturnsTrue()
+    {
+        const string state = "mFocusedApp=ActivityRecord{123 u0 com.example.app/.MainActivity t42}";
+
+        Assert.True(AndroidAppDriver.IsFocusedPackage(state, "com.example.app"));
+    }
+
+    [Fact]
+    public void AndroidFocusedPackage_PackagePrefix_ReturnsFalse()
+    {
+        const string state = "mFocusedApp=ActivityRecord{123 u0 com.example.app.beta/.MainActivity t42}";
+
+        Assert.False(AndroidAppDriver.IsFocusedPackage(state, "com.example.app"));
     }
 
     private static AlertInfo CreateDialog()

@@ -35,6 +35,8 @@ public class iOSSimulatorAppDriver : AppDriverBase
     /// </summary>
     public string? BundleId { get; set; }
 
+    public string? ExpectedAppName { get; set; }
+
     public override async Task<ThemeResult> SetThemeAsync(DevFlowTheme theme, ThemeSetScope scope = ThemeSetScope.Auto)
     {
         if (scope == ThemeSetScope.App || (scope == ThemeSetScope.Auto && theme == DevFlowTheme.System))
@@ -125,6 +127,12 @@ public class iOSSimulatorAppDriver : AppDriverBase
                 json = SanitizeJson(json);
                 using var doc = JsonDocument.Parse(json);
                 var elements = ParseElements(doc.RootElement);
+                if (!string.IsNullOrWhiteSpace(ExpectedAppName)
+                    && !ApplicationRootMatchesTarget(elements, ExpectedAppName))
+                {
+                    return null;
+                }
+
                 var alert = FindAlert(elements);
                 if (alert is not null)
                     return alert;
@@ -158,6 +166,33 @@ public class iOSSimulatorAppDriver : AppDriverBase
                 ?? alert.Buttons[0];
 
         await TapCoordinateAsync(button.CenterX, button.CenterY).ConfigureAwait(false);
+    }
+
+    public async Task<AlertActionResult> PressAlertButtonSafelyAsync(
+        AlertInfo reviewedDialog,
+        string buttonLabel)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(buttonLabel);
+        var matches = reviewedDialog.Buttons
+            .Where(button => button.Label.Equals(buttonLabel, StringComparison.Ordinal))
+            .ToArray();
+        if (matches.Length != 1)
+        {
+            return new AlertActionResult(
+                false,
+                true,
+                matches.Length == 0
+                    ? $"Button '{buttonLabel}' was not found by exact label."
+                    : $"More than one button has the exact label '{buttonLabel}'.",
+                reviewedDialog);
+        }
+
+        await TapCoordinateAsync(matches[0].CenterX, matches[0].CenterY).ConfigureAwait(false);
+        return new AlertActionResult(
+            true,
+            false,
+            $"Pressed '{buttonLabel}' using simulator HID input without moving the host pointer.",
+            reviewedDialog);
     }
 
     /// <summary>
@@ -454,7 +489,7 @@ public class iOSSimulatorAppDriver : AppDriverBase
 
     // --- Accessibility tree parsing ---
 
-    private record AccessibilityElement(string? Label, string? Value, string? Type, string? Description,
+    private record AccessibilityElement(string? Label, string? Value, string? Type, string? Description, string? Identifier,
         double X, double Y, double Width, double Height, IReadOnlyList<AccessibilityElement> Children);
 
     private static IReadOnlyList<AccessibilityElement> ParseElements(JsonElement element)
@@ -472,6 +507,9 @@ public class iOSSimulatorAppDriver : AppDriverBase
         var value = el.TryGetProperty("AXValue", out var v) ? v.GetString() : null;
         var type = el.TryGetProperty("type", out var t) ? t.GetString() : null;
         var description = el.TryGetProperty("AXDescription", out var d) ? d.GetString() : null;
+        var identifier = el.TryGetProperty("AXUniqueId", out var uniqueId)
+            ? uniqueId.GetString()
+            : el.TryGetProperty("AXIdentifier", out var id) ? id.GetString() : null;
 
         double x = 0, y = 0, w = 0, h = 0;
         if (el.TryGetProperty("frame", out var f) && f.ValueKind == JsonValueKind.Object)
@@ -486,7 +524,7 @@ public class iOSSimulatorAppDriver : AppDriverBase
         if (el.TryGetProperty("children", out var c) && c.ValueKind == JsonValueKind.Array)
             children = c.EnumerateArray().Select(ParseElement).ToList();
 
-        return new AccessibilityElement(label, value, type, description, x, y, w, h, children);
+        return new AccessibilityElement(label, value, type, description, identifier, x, y, w, h, children);
     }
 
     private static AlertInfo? FindAlert(IReadOnlyList<AccessibilityElement> elements)
@@ -501,7 +539,11 @@ public class iOSSimulatorAppDriver : AppDriverBase
                 if (buttons.Count > 0)
                 {
                     var title = FindFirstLabelOfType(el, "StaticText");
-                    return new AlertInfo(title, buttons);
+                    return new AlertInfo(title, buttons)
+                    {
+                        InstanceId = el.Identifier,
+                        Text = CollectText(el)
+                    };
                 }
             }
 
@@ -540,7 +582,11 @@ public class iOSSimulatorAppDriver : AppDriverBase
                 if (buttons.Count > 0)
                 {
                     var title = FindFirstLabelOfType(app, "StaticText");
-                    return new AlertInfo(title, buttons);
+                    return new AlertInfo(title, buttons)
+                    {
+                        InstanceId = app.Identifier,
+                        Text = CollectText(app)
+                    };
                 }
             }
         }
@@ -557,7 +603,10 @@ public class iOSSimulatorAppDriver : AppDriverBase
         if (el.Type is not null && el.Type.Contains("Button", StringComparison.OrdinalIgnoreCase)
             && el.Label is not null && el.Width > 0)
         {
-            buttons.Add(new AlertButton(el.Label, el.X, el.Y, el.Width, el.Height));
+            buttons.Add(new AlertButton(el.Label, el.X, el.Y, el.Width, el.Height)
+            {
+                Identifier = el.Identifier
+            });
         }
 
         foreach (var child in el.Children)
@@ -574,5 +623,40 @@ public class iOSSimulatorAppDriver : AppDriverBase
             if (found is not null) return found;
         }
         return null;
+    }
+
+    private static IReadOnlyList<string> CollectText(AccessibilityElement element)
+    {
+        var text = new List<string>();
+        CollectText(element, text);
+        return text.Distinct(StringComparer.Ordinal).ToArray();
+    }
+
+    private static void CollectText(AccessibilityElement element, List<string> text)
+    {
+        if (!string.IsNullOrWhiteSpace(element.Label))
+            text.Add(element.Label);
+        if (!string.IsNullOrWhiteSpace(element.Value))
+            text.Add(element.Value);
+        if (!string.IsNullOrWhiteSpace(element.Description))
+            text.Add(element.Description);
+        foreach (var child in element.Children)
+            CollectText(child, text);
+    }
+
+    private static bool ApplicationRootMatchesTarget(
+        IReadOnlyList<AccessibilityElement> elements,
+        string targetName)
+    {
+        var application = elements.FirstOrDefault(element =>
+            element.Type?.Equals("Application", StringComparison.OrdinalIgnoreCase) == true);
+        if (application is null)
+            return false;
+
+        var normalizedTarget = targetName.EndsWith(".app", StringComparison.OrdinalIgnoreCase)
+            ? targetName[..^4]
+            : targetName;
+        return new[] { application.Label, application.Value, application.Description }
+            .Any(value => value?.Equals(normalizedTarget, StringComparison.OrdinalIgnoreCase) == true);
     }
 }

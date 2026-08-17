@@ -35,6 +35,18 @@ public class PlatformAgentService : MauiDevFlowAgentService
             ? new PlatformVisualTreeWalker()
             : new PlatformVisualTreeWalker(NativeElementRegistry);
 
+    protected override string? DeviceIdentifier
+    {
+        get
+        {
+#if IOS
+            return Environment.GetEnvironmentVariable("SIMULATOR_UDID");
+#else
+            return null;
+#endif
+        }
+    }
+
     protected override double GetWindowDisplayDensity(IWindow? window)
     {
         try

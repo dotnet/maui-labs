@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Xml.Linq;
+using System.Text.RegularExpressions;
 
 namespace Microsoft.Maui.DevFlow.Driver;
 
@@ -116,7 +117,34 @@ public class AndroidAppDriver : AppDriverBase
     {
         var xml = await DumpUiHierarchyAsync().ConfigureAwait(false);
         if (xml is null) return null;
-        return ParseAlertFromHierarchy(xml);
+        var alert = ParseAlertFromHierarchy(xml);
+        if (alert is null) return null;
+        return alert with { InstanceId = await GetFocusedWindowInstanceIdAsync() };
+    }
+
+    public async Task<bool> IsTargetAppForegroundAsync(string packageId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+        var windowState = await RunAdbWithOutputAsync("shell dumpsys window windows");
+        if (string.IsNullOrWhiteSpace(windowState))
+            return false;
+
+        return IsFocusedPackage(windowState, packageId);
+    }
+
+    internal static bool IsFocusedPackage(string windowState, string packageId)
+    {
+        var focusedAppLine = windowState
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault(line => line.Contains("mFocusedApp", StringComparison.Ordinal));
+        if (focusedAppLine is null)
+            return false;
+        var component = Regex.Match(
+            focusedAppLine,
+            @"(?<package>[A-Za-z0-9._]+)/[A-Za-z0-9._$]+",
+            RegexOptions.CultureInvariant);
+        return component.Success
+            && component.Groups["package"].Value.Equals(packageId, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -130,6 +158,43 @@ public class AndroidAppDriver : AppDriverBase
 
         var btn = FindButtonToTap(alert, buttonLabel);
         await RunAdbAsync($"shell input tap {btn.CenterX} {btn.CenterY}");
+    }
+
+    public async Task<AlertActionResult> PressAlertButtonSafelyAsync(
+        AlertInfo reviewedDialog,
+        string buttonLabel,
+        string expectedPackageId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(buttonLabel);
+        var matches = reviewedDialog.Buttons
+            .Where(button => button.Label.Equals(buttonLabel, StringComparison.Ordinal))
+            .ToArray();
+        if (matches.Length != 1)
+        {
+            return new AlertActionResult(
+                false,
+                true,
+                matches.Length == 0
+                    ? $"Button '{buttonLabel}' was not found by exact label."
+                    : $"More than one button has the exact label '{buttonLabel}'.",
+                reviewedDialog);
+        }
+
+        if (!await IsTargetAppForegroundAsync(expectedPackageId))
+        {
+            return new AlertActionResult(
+                false,
+                true,
+                "The connected Android app is no longer focused. Detect the prompt again.",
+                reviewedDialog);
+        }
+
+        await RunAdbAsync($"shell input tap {matches[0].CenterX} {matches[0].CenterY}");
+        return new AlertActionResult(
+            true,
+            false,
+            $"Pressed '{buttonLabel}' using Android device input without moving the host pointer.",
+            reviewedDialog);
     }
 
     /// <summary>
@@ -167,6 +232,22 @@ public class AndroidAppDriver : AppDriverBase
 
         try { return XElement.Parse(content); }
         catch { return null; }
+    }
+
+    private async Task<string?> GetFocusedWindowInstanceIdAsync()
+    {
+        var windowState = await RunAdbWithOutputAsync("shell dumpsys window windows");
+        var focusedWindowLine = windowState
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault(line => line.Contains("mCurrentFocus", StringComparison.Ordinal));
+        if (focusedWindowLine is null)
+            return null;
+
+        var window = Regex.Match(
+            focusedWindowLine,
+            @"Window\{(?<token>[^\s}]+)",
+            RegexOptions.CultureInvariant);
+        return window.Success ? window.Groups["token"].Value : null;
     }
 
     /// <summary>
@@ -207,7 +288,10 @@ public class AndroidAppDriver : AppDriverBase
                 var label = btn.Attribute("text")?.Value;
                 if (string.IsNullOrEmpty(label)) continue;
                 if (TryParseBounds(btn.Attribute("bounds")?.Value, out var r))
-                    buttons.Add(new AlertButton(label, r.x, r.y, r.w, r.h));
+                    buttons.Add(new AlertButton(label, r.x, r.y, r.w, r.h)
+                    {
+                        Identifier = btn.Attribute("resource-id")?.Value
+                    });
             }
         }
 
@@ -221,11 +305,17 @@ public class AndroidAppDriver : AppDriverBase
                 var label = item.Attribute("text")?.Value;
                 if (string.IsNullOrEmpty(label)) continue;
                 if (TryParseBounds(item.Attribute("bounds")?.Value, out var r))
-                    buttons.Add(new AlertButton(label, r.x, r.y, r.w, r.h));
+                    buttons.Add(new AlertButton(label, r.x, r.y, r.w, r.h)
+                    {
+                        Identifier = item.Attribute("resource-id")?.Value
+                    });
             }
         }
 
-        return new AlertInfo(title, buttons);
+        return new AlertInfo(title, buttons)
+        {
+            Text = CollectVisibleText(parentPanel)
+        };
     }
 
     /// <summary>
@@ -260,12 +350,30 @@ public class AndroidAppDriver : AppDriverBase
             var label = btn.Attribute("text")?.Value ?? btn.Attribute("content-desc")?.Value ?? "";
             if (string.IsNullOrEmpty(label)) continue;
             if (TryParseBounds(btn.Attribute("bounds")?.Value, out var r))
-                buttons.Add(new AlertButton(label, r.x, r.y, r.w, r.h));
+                buttons.Add(new AlertButton(label, r.x, r.y, r.w, r.h)
+                {
+                    Identifier = btn.Attribute("resource-id")?.Value
+                });
         }
 
         if (buttons.Count == 0) return null;
-        return new AlertInfo(title ?? "Permission Request", buttons);
+        return new AlertInfo(title ?? "Permission Request", buttons)
+        {
+            Text = CollectVisibleText(root)
+        };
     }
+
+    private static IReadOnlyList<string> CollectVisibleText(XElement root)
+        => root.DescendantsAndSelf("node")
+            .SelectMany(node => new[]
+            {
+                node.Attribute("text")?.Value,
+                node.Attribute("content-desc")?.Value
+            })
+            .Where(text => !string.IsNullOrWhiteSpace(text))
+            .Select(text => text!)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
 
     private static XElement? FindByResourceId(XElement root, string shortId)
     {

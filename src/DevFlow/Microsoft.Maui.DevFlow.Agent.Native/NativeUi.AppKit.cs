@@ -20,6 +20,8 @@ internal static partial class NativeUi
 
     public static string DeviceTypeName => "physical";
 
+    public static string? DeviceIdentifier => null;
+
     public static IAgentDispatcher CreateDispatcher() => new DelegateAgentDispatcher(
         () => !NSThread.IsMain,
         action => NSApplication.SharedApplication.InvokeOnMainThread(action));

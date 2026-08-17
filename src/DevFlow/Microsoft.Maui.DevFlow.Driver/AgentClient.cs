@@ -2159,6 +2159,8 @@ public class AgentDescriptor
 
 public class DeviceDescriptor
 {
+    [System.Text.Json.Serialization.JsonPropertyName("id")]
+    public string? Id { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("platform")]
     public string? Platform { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("deviceType")]
