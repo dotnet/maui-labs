@@ -168,15 +168,7 @@ internal sealed class AXElement : IDisposable
             {
                 var found = child.FindFirstInternal(predicate, depth + 1, maxDepth);
                 if (found is not null)
-                {
-                    // Dispose remaining children
-                    foreach (var c in children)
-                        if (!ReferenceEquals(c, child)) c.Dispose();
-                    // Don't dispose the child that contains the match
-                    // (its subtree was already explored and the found element is independent)
-                    child.Dispose();
                     return found;
-                }
             }
         }
         finally
