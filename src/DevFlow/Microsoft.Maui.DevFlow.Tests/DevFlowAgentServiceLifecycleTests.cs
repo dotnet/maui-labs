@@ -860,22 +860,30 @@ public class DevFlowAgentServiceLifecycleTests
             nativeElementSubscription: subscriber);
         using var client = new AgentClient("localhost", port);
 
-        var owner = new ToolbarItem { Text = "Diagnostics" };
         var nativeElement = new object();
         var page = new ContentPage();
-        page.ToolbarItems.Add(owner);
         var app = new Application();
         var window = new Window(page);
+        var owner = window;
         typeof(Application)
             .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
             .Invoke(app, [window]);
+        Assert.Equal(0, VisualTreeWalker.GetWindowIdForElement(owner, app));
 
-        service.StartServerOnly(new ImmediateDispatcher());
+        var dispatcher = new AsyncDispatchRequiredDispatcher();
+        service.StartServerOnly(dispatcher);
         service.BindApp(app);
         Assert.NotNull(await WaitForStatusAsync(client));
 
-        NativeElementDiagnosticsBridge.Register(owner, nativeElement, "ToolbarItem", "RealizedView");
-        Assert.NotEmpty(registry.GetSnapshot());
+        NativeElementDiagnosticsBridge.Register(owner, nativeElement, "Dialog", "RealizedView");
+        var registration = Assert.Single(registry.GetSnapshot());
+
+        var resolved = await client.GetElementAsync(registration.Id);
+        Assert.NotNull(resolved);
+        Assert.Equal(registration.Id, resolved!.Id);
+        Assert.Equal("native", resolved.Framework);
+        Assert.Equal(0, resolved.WindowId);
+        Assert.True(service.WindowResolutionWasDispatched);
 
         var tree = await client.GetTreeAsync();
         var registered = Assert.Single(
@@ -883,11 +891,6 @@ public class DevFlowAgentServiceLifecycleTests
             element => element.Id.StartsWith("native:registered:", StringComparison.Ordinal));
         Assert.Equal("native", registered.Framework);
         Assert.NotNull(registered.OwnerId);
-
-        var resolved = await client.GetElementAsync(registered.Id);
-        Assert.NotNull(resolved);
-        Assert.Equal(registered.Id, resolved!.Id);
-        Assert.Equal("native", resolved.Framework);
 
         NativeElementDiagnosticsBridge.Unregister(nativeElement);
     }
@@ -1318,12 +1321,35 @@ public class DevFlowAgentServiceLifecycleTests
     /// because <see cref="VisualTreeWalker.SupportsNativeElements"/>'s registered-element merge
     /// requires the walker instance itself to hold the registry. This stands in for that wiring.
     /// </remarks>
-    private sealed class RegistryBackedAgentService(
-        AgentOptions options,
-        RegisteredNativeElementRegistry registry,
-        IDisposable? nativeElementSubscription) : MauiDevFlowAgentService(options, registry, nativeElementSubscription)
+    private sealed class RegistryBackedAgentService : MauiDevFlowAgentService
     {
-        protected override VisualTreeWalker CreateTreeWalker() => new(NativeElementRegistry!);
+        private AffinityTrackingVisualTreeWalker? _walker;
+
+        public RegistryBackedAgentService(
+            AgentOptions options,
+            RegisteredNativeElementRegistry registry,
+            IDisposable? nativeElementSubscription)
+            : base(options, registry, nativeElementSubscription)
+        {
+        }
+
+        public bool WindowResolutionWasDispatched
+            => _walker?.WindowResolutionWasDispatched == true;
+
+        protected override VisualTreeWalker CreateTreeWalker()
+            => _walker ??= new AffinityTrackingVisualTreeWalker(NativeElementRegistry!);
+    }
+
+    private sealed class AffinityTrackingVisualTreeWalker(
+        RegisteredNativeElementRegistry registry) : VisualTreeWalker(registry)
+    {
+        public bool WindowResolutionWasDispatched { get; private set; }
+
+        public override int? GetRegisteredNativeWindowId(string id, Application app)
+        {
+            WindowResolutionWasDispatched = AsyncDispatchRequiredDispatcher.IsExecutingDispatch;
+            return base.GetRegisteredNativeWindowId(id, app);
+        }
     }
 
     private sealed class DetachedNativeScreenshotAgentService : MauiDevFlowAgentService
@@ -1516,6 +1542,36 @@ public class DevFlowAgentServiceLifecycleTests
             action();
             return true;
         }
+
+        public IDispatcherTimer CreateTimer() => new ImmediateDispatcherTimer();
+    }
+
+    private sealed class AsyncDispatchRequiredDispatcher : IDispatcher
+    {
+        private static readonly AsyncLocal<bool> InsideDispatch = new();
+
+        public static bool IsExecutingDispatch => InsideDispatch.Value;
+
+        public bool IsDispatchRequired => true;
+
+        public bool Dispatch(Action action)
+        {
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                InsideDispatch.Value = true;
+                try
+                {
+                    action();
+                }
+                finally
+                {
+                    InsideDispatch.Value = false;
+                }
+            });
+            return true;
+        }
+
+        public bool DispatchDelayed(TimeSpan delay, Action action) => Dispatch(action);
 
         public IDispatcherTimer CreateTimer() => new ImmediateDispatcherTimer();
     }

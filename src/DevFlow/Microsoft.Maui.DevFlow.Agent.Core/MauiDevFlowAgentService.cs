@@ -480,11 +480,16 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         });
         if (IsRegisteredNativeElementId(id))
         {
-            var registeredElement = await DispatchAsync(() => _treeWalker.GetNativeElementInfoById(id));
+            var registeredElement = await DispatchAsync(() =>
+            {
+                var element = _treeWalker.GetNativeElementInfoById(id);
+                if (element != null)
+                    element.WindowId ??= _treeWalker.GetRegisteredNativeWindowId(id, _app);
+
+                return element;
+            });
             if (registeredElement != null)
             {
-                registeredElement.WindowId ??=
-                    _treeWalker.GetRegisteredNativeWindowId(id, _app);
                 StampCaptureMetadata(registeredElement, capture);
                 if (!CommitUiCapture(capture))
                     return BuildCaptureChangedResponse(capture);

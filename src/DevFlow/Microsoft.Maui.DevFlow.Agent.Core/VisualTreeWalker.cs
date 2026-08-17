@@ -505,7 +505,7 @@ public class VisualTreeWalker
             ? registration.Owner
             : null;
 
-    public int? GetRegisteredNativeWindowId(string id, Application app)
+    public virtual int? GetRegisteredNativeWindowId(string id, Application app)
         => _nativeElementRegistry?.TryGet(id, out var registration) == true
             ? GetWindowIdForElement(registration.Owner, app)
             : null;
@@ -515,7 +515,7 @@ public class VisualTreeWalker
         if (element is not Element current)
             return null;
 
-        while (current.Parent is Element parent)
+        while (current is not Window && current.Parent is Element parent)
             current = parent;
 
         for (var index = 0; index < app.Windows.Count; index++)
