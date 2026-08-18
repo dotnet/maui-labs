@@ -35,11 +35,16 @@ internal sealed class UIActionHandler
                     return BlockMappingResult<UIActionHandlerState>.Complete();
                 }
             }
+
+            // Let a fresh handler state claim any later call. Reusing this active state would replace
+            // the block and mark the new call handled without emitting it.
+            return BlockMappingResult<UIActionHandlerState>.Pass();
         }
 
         foreach (var content in context.UnhandledContents)
         {
             if (content is not FunctionCallContent call
+                || call.InformationalOnly
                 || !_actions.TryGetValue(call.Name, out var action))
             {
                 continue;
@@ -51,6 +56,16 @@ internal sealed class UIActionHandler
             {
                 Id = innerBlock.Id,
             };
+            foreach (var candidate in context.UnhandledContents)
+            {
+                if (candidate is FunctionResultContent result
+                    && result.CallId == call.CallId)
+                {
+                    context.MarkHandled(result);
+                    innerBlock.Result = result;
+                    break;
+                }
+            }
             state.Block = block;
             return BlockMappingResult<UIActionHandlerState>.Emit(block, state);
         }

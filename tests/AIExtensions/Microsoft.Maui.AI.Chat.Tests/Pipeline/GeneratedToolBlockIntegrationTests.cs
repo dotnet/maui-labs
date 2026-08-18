@@ -110,6 +110,61 @@ public class GeneratedToolBlockIntegrationTests
     }
 
     [Fact]
+    public async Task GeneratedHandler_InformationalCall_IsIgnored()
+    {
+        var pipeline = CreatePipeline();
+        var blocks = await ProcessAsync(
+            pipeline,
+            new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                Contents =
+                [
+                    new FunctionCallContent(
+                        "call-info",
+                        "find_order")
+                    {
+                        InformationalOnly = true,
+                    },
+                ],
+            });
+
+        Assert.Empty(blocks);
+    }
+
+    [Fact]
+    public async Task GeneratedHandler_BatchedCallAndResult_MapsCompletedBlock()
+    {
+        var pipeline = CreatePipeline();
+        var order = new GeneratedOrder("ORD-BATCH", 12.50m);
+        var block = Assert.IsType<GeneratedOrderBlock>(
+            Assert.Single(await ProcessAsync(
+                pipeline,
+                new ChatResponseUpdate
+                {
+                    Role = ChatRole.Assistant,
+                    Contents =
+                    [
+                        new FunctionCallContent(
+                            "call-batch",
+                            "find_order",
+                            new Dictionary<string, object?>
+                            {
+                                ["orderId"] = "ORD-BATCH",
+                                ["includeHistory"] = false,
+                            }),
+                        new FunctionResultContent(
+                            "call-batch",
+                            order),
+                    ],
+                })));
+
+        Assert.Same(order, block.Order);
+        Assert.True(block.HasResult);
+        Assert.Equal(BlockLifecycleState.Inactive, block.LifecycleState);
+    }
+
+    [Fact]
     public async Task GeneratedHandler_BackendInvocation_AppliesTypedResultProperties()
     {
         var function = AIFunctionFactory.Create(

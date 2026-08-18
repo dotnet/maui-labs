@@ -197,6 +197,103 @@ public class UIActionTests
     }
 
     [Fact]
+    public async Task UIAction_InformationalCall_DoesNotEmitOrInvoke()
+    {
+        var invocationCount = 0;
+        var action = AIFunctionFactory.Create(
+            () =>
+            {
+                invocationCount++;
+                return "done";
+            },
+            "ClientTool",
+            "Client tool");
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((messages, options, cancellationToken) =>
+            EmitUIActionCall(
+                "client-info",
+                "ClientTool",
+                cancellationToken,
+                informationalOnly: true));
+        var agent = new UIAgent(
+            client,
+            options => options.RegisterUIAction(action));
+
+        var blocks = new List<ContentBlock>();
+        await foreach (var block in agent.SendMessageAsync(
+            new ChatMessage(ChatRole.User, "Go")))
+        {
+            blocks.Add(block);
+        }
+
+        Assert.DoesNotContain(blocks, block => block is UIActionBlock);
+        Assert.Equal(0, invocationCount);
+    }
+
+    [Fact]
+    public async Task UIAction_CallsInSeparateUpdates_EmitSeparateBlocks()
+    {
+        var first = AIFunctionFactory.Create(
+            () => "first",
+            "FirstAction",
+            "First action");
+        var second = AIFunctionFactory.Create(
+            () => "second",
+            "SecondAction",
+            "Second action");
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((messages, options, cancellationToken) =>
+            EmitSequentialUIActionCalls(cancellationToken));
+        var agent = new UIAgent(client, options =>
+        {
+            options.RegisterUIAction(first);
+            options.RegisterUIAction(second);
+        });
+
+        var blocks = new List<ContentBlock>();
+        await foreach (var block in agent.SendMessageAsync(
+            new ChatMessage(ChatRole.User, "Go")))
+        {
+            blocks.Add(block);
+        }
+
+        Assert.Collection(
+            blocks.OfType<UIActionBlock>(),
+            block => Assert.Equal("FirstAction", block.ToolName),
+            block => Assert.Equal("SecondAction", block.ToolName));
+    }
+
+    [Fact]
+    public async Task UIAction_BatchedCallAndResult_DoesNotInvokeAgain()
+    {
+        var invocationCount = 0;
+        var action = AIFunctionFactory.Create(
+            () =>
+            {
+                invocationCount++;
+                return "new result";
+            },
+            "ClientTool",
+            "Client tool");
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((messages, options, cancellationToken) =>
+            EmitCompletedUIAction(cancellationToken));
+        var context = new AgentContext(new UIAgent(
+            client,
+            options => options.RegisterUIAction(action)));
+
+        await context.SendMessageAsync("Go");
+
+        var block = Assert.Single(
+            context.Turns[0].ResponseBlocks.OfType<UIActionBlock>());
+        Assert.True(block.IsComplete);
+        Assert.Equal(BlockLifecycleState.Inactive, block.LifecycleState);
+        Assert.Equal("existing result", block.Result?.Result);
+        Assert.Equal(0, invocationCount);
+        Assert.Equal(ConversationStatus.Idle, context.Status);
+    }
+
+    [Fact]
     public async Task MixedBackendAndUIActions_BothResultsResumeInOneToolMessage()
     {
         var backend = AIFunctionFactory.Create(
@@ -350,7 +447,8 @@ public class UIActionTests
         string callId,
         string name,
         [EnumeratorCancellation] CancellationToken cancellationToken = default,
-        IDictionary<string, object?>? arguments = null)
+        IDictionary<string, object?>? arguments = null,
+        bool informationalOnly = false)
     {
         cancellationToken.ThrowIfCancellationRequested();
         yield return new ChatResponseUpdate
@@ -358,7 +456,57 @@ public class UIActionTests
             Role = ChatRole.Assistant,
             MessageId = "assistant-action",
             FinishReason = ChatFinishReason.ToolCalls,
-            Contents = [new FunctionCallContent(callId, name, arguments)],
+            Contents =
+            [
+                new FunctionCallContent(callId, name, arguments)
+                {
+                    InformationalOnly = informationalOnly,
+                },
+            ],
+        };
+        await Task.CompletedTask;
+    }
+
+    private static async IAsyncEnumerable<ChatResponseUpdate>
+        EmitSequentialUIActionCalls(
+            [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        yield return new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            MessageId = "assistant-actions",
+            Contents =
+            [
+                new FunctionCallContent("first", "FirstAction"),
+            ],
+        };
+        yield return new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            MessageId = "assistant-actions",
+            Contents =
+            [
+                new FunctionCallContent("second", "SecondAction"),
+            ],
+        };
+        await Task.CompletedTask;
+    }
+
+    private static async IAsyncEnumerable<ChatResponseUpdate>
+        EmitCompletedUIAction(
+            [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        yield return new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            MessageId = "assistant-completed-action",
+            Contents =
+            [
+                new FunctionCallContent("completed", "ClientTool"),
+                new FunctionResultContent("completed", "existing result"),
+            ],
         };
         await Task.CompletedTask;
     }

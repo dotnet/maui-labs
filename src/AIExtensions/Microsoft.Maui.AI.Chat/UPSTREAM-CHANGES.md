@@ -8,14 +8,17 @@ The old monolithic PR #67673 is closed. The current reference is the incremental
 
 - PR: [dotnet/aspnetcore#68335](https://github.com/dotnet/aspnetcore/pull/68335)
 - Branch: `javiercn-components-ai-09-predictive-state`
-- Compared SHA: `6c0a11d222844fb83840b136ec0d2ef0cdab1b83`
-- Compared on: 2026-08-13
+- Compared SHA: `142ec3289c57f0d2e0efa0856771f71d4ae6157a`
+- ASP.NET main: `c349f7588f6619a62d370569acbb87234e8afd11`
+- Compared on: 2026-08-18
 
-The 01 streaming-chat layer is merged to ASP.NET `main`; layers 02 rich text
-through 09 predictive state remain stacked open PRs. All open layers require
-review and have no human approval yet. Completed Components E2E runs at the
-stack merge ref report no failures in the main CoreCLR/Mono legs; unrelated
-quarantine buckets make the aggregate run partially successful.
+The 01 streaming-chat and 02 rich-text layers are merged to ASP.NET `main`.
+Layer 03 client tools is retargeted to `main`; layers 04 through 09 remain
+stacked on it. All open layers still require review. Human inline reviews now
+exist across the stack, but there are no approvals or changes-requested
+decisions. Completed Components E2E runs at the stack merge ref report no
+failures in the main CoreCLR/Mono legs; unrelated quarantine/Helix aggregation
+keeps some top-level checks red.
 
 ## Portable engine status
 
@@ -39,6 +42,26 @@ quarantine buckets make the aggregate run partially successful.
 | Retry/cancellation | Converged with separate graceful cancel and observable caller cancellation |
 | `[ToolBlock]` generator | Converged in `Microsoft.Maui.AI.Chat.Generators` |
 | Activity blocks | Not added to defaults; ASP.NET still leaves activity handlers unregistered |
+
+## 2026-08-18 human-review hardening
+
+The current ASP.NET stack's first substantive human reviews exposed several
+correctness issues in the shared engine shape. ASP.NET still has them; MAUI
+audited and hardened the corresponding paths:
+
+- informational `FunctionCallContent` no longer creates duplicate UI-action,
+  function, or generated tool blocks;
+- call and result content arriving in one update produces one completed block;
+- later UI-action calls cannot be consumed by an already-active handler state;
+- a second send is rejected while the context awaits human input;
+- state-only content is filtered from local chat history while raw thread
+  updates remain available for durable replay;
+- a state mapper supplying the wrong state type fails explicitly instead of
+  silently hiding content;
+- restore is transactional for local history and typed state, starts from the
+  initial state, and rejects replayed predictive snapshots rather than reviving
+  stale predictions;
+- generated tool handlers cover informational calls and same-update results.
 
 ## Current ASP.NET changes deliberately interpreted, not copied
 
@@ -115,6 +138,11 @@ is added.
 - Media and reasoning remain supported despite their removal upstream.
 - `AgentContext.Clear()` resets local and persistent history coherently.
 - UI actions auto-run and do not stall in `AwaitingInput`.
+- Mixed approval and tool results continue as separate user/tool messages.
+- Informational calls and same-update call/results are handled without
+  duplicate execution.
+- Restore rolls back typed state/history on failure and cannot revive a rejected
+  predictive snapshot.
 - Default errors are generic; diagnostics remain on `AgentContext.Error`.
 - Native virtualization and streaming coalescing are retained.
 - Response-block removals are notified precisely rather than rediscovered with
@@ -130,6 +158,11 @@ is added.
 - The activity handler remains unregistered and `Pending` lifecycle remains
   unused.
 - Restore still rebuilds display history rather than resumable interactions.
+- Restore remains non-transactional upstream and can revive rejected predictive
+  state.
+- State-only mapper content remains in upstream local chat history.
+- Upstream handlers still claim informational calls and mishandle batched
+  call/result updates.
 - `RawRepresentation` is not a durable serialized discriminator.
 - No production conversation-thread provider ships.
 - Pipeline handler cancellation remains reserved rather than propagated.
