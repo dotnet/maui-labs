@@ -104,12 +104,15 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         capabilities["ui.hit-test"] = Capability(2, supported: true,
             ["native-first", "capture-epoch", "window-logical-coordinates"],
             reason: null);
+        var actionFeatures = SupportsNativePointerActions
+            ? new[] { "tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "capture-bound-batch", "properties", "stale-capture-rejection", "custom-pointer-actions" }
+            : new[] { "tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "capture-bound-batch", "properties", "stale-capture-rejection" };
         capabilities["ui.actions"] = new
         {
             version = 2,
             supported = true,
-            features = new[] { "tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "capture-bound-batch", "properties", "stale-capture-rejection" },
-            gestures = SupportedGestures,
+            features = actionFeatures,
+            gestures = AdvertisedGestures,
             reason = (string?)null
         };
         capabilities["ui.screenshot"] = Capability(2, supported: true,
@@ -3495,7 +3498,8 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                                     DeltaY = action.DeltaY,
                                     OriginX = action.OriginX,
                                     OriginY = action.OriginY,
-                                    Steps = action.Steps
+                                    Steps = action.Steps,
+                                    Sources = action.Sources
                                 })
                             });
                             break;

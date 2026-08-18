@@ -152,7 +152,7 @@ Override virtual methods from `Agent.Abstractions/DevFlowAgentService.cs`:
 ## Gesture Injection
 
 `POST /api/v1/ui/actions/gesture` supports `tap`, `doubletap`, `longpress`, `swipe`, `pan`,
-`pinch` and `rotate`. Resolution is two-tier, and the response reports which tier ran via
+`pinch`, `rotate` and capability-gated `actions`. Resolution is two-tier, and the response reports which tier ran via
 `handledBy` (`recognizer` | `native` | `action` | `scroll` | `none`) plus a `detail` string:
 
 1. **Managed recognizer** (`Agent.Core`, all platforms) — walks the target element and its
@@ -181,6 +181,14 @@ with native touch injection. Named gestures target MAUI `VisualElement` IDs (or 
 for non-tap gestures; tap requires an element ID);
 registered native-only element IDs remain supported by the dedicated tap action, but are not
 targets for multi-pointer gesture synthesis.
+
+The `actions` gesture is the low-level escape hatch. It uses W3C-style pointer sources: each
+source is an independent touch track, and actions at the same array index form a synchronized
+timeline tick. A tick can move one pointer while another pauses, so tracks overlap without a
+global sequential `pause` list. Coordinates are element-relative 0..1 values. Backends advertise
+this through the `custom-pointer-actions` feature; Android currently implements it with real
+multi-pointer `MotionEvent` sequences. Named gestures remain the portable API and may share this
+timeline engine in future implementations.
 
 Gestures against `samples/DevFlow.Sample` → `GestureTestPage` (`//gestures`) write what they
 received to `AutomationId`'d status labels, so tests assert the gesture actually reached the app.

@@ -592,6 +592,22 @@ public partial class DevFlowAgentService
         public double? OriginX { get; set; }
         public double? OriginY { get; set; }
         public int? Steps { get; set; }
+        public List<PointerActionSourceRequest?>? Sources { get; set; }
+    }
+
+    protected sealed class PointerActionSourceRequest
+    {
+        public string? Id { get; set; }
+        public string? PointerType { get; set; }
+        public List<PointerActionStepRequest?>? Actions { get; set; }
+    }
+
+    protected sealed class PointerActionStepRequest
+    {
+        public string? Type { get; set; }
+        public double? X { get; set; }
+        public double? Y { get; set; }
+        public int? DurationMs { get; set; }
     }
 
     protected sealed class BatchRequest : CaptureBoundRequest
@@ -626,6 +642,7 @@ public partial class DevFlowAgentService
         public double? OriginX { get; set; }
         public double? OriginY { get; set; }
         public int? Steps { get; set; }
+        public List<PointerActionSourceRequest?>? Sources { get; set; }
         public JsonElement[]? Args { get; set; }
         public string? Name { get; set; }
     }

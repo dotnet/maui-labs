@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net;
+using System.Text.Json.Nodes;
 using Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 using Microsoft.Maui.DevFlow.Driver;
 using Xunit.Abstractions;
@@ -334,6 +335,18 @@ public class UiActionTests : IntegrationTestBase
         Assert.Contains("pinch", gestures);
         Assert.Contains("pan", gestures);
         Assert.Contains("rotate", gestures);
+        var features = caps.GetProperty("capabilities").GetProperty("ui.actions").GetProperty("features")
+            .EnumerateArray().Select(feature => feature.GetString()).ToArray();
+        if (Platform.Equals("android", StringComparison.OrdinalIgnoreCase))
+        {
+            Assert.Contains("actions", gestures);
+            Assert.Contains("custom-pointer-actions", features);
+        }
+        else
+        {
+            Assert.DoesNotContain("actions", gestures);
+            Assert.DoesNotContain("custom-pointer-actions", features);
+        }
     }
 
     // ========== gestures against GestureTestPage ==========
@@ -341,6 +354,33 @@ public class UiActionTests : IntegrationTestBase
     // point is that the gesture genuinely reached the app's own recognizer.
 
     private Task NavigateToGesturePageAsync() => NavigateToPageAsync("//gestures", "PinchTarget");
+
+    private static JsonArray CreateIndependentPinchSources() => JsonNode.Parse("""
+        [
+          {
+            "id": "finger1",
+            "pointerType": "touch",
+            "actions": [
+              { "type": "pointerMove", "x": 0.45, "y": 0.5 },
+              { "type": "pointerDown" },
+              { "type": "pointerMove", "x": 0.2, "y": 0.5, "durationMs": 300 },
+              { "type": "pause", "durationMs": 150 },
+              { "type": "pointerUp" }
+            ]
+          },
+          {
+            "id": "finger2",
+            "pointerType": "touch",
+            "actions": [
+              { "type": "pointerMove", "x": 0.55, "y": 0.5 },
+              { "type": "pointerDown" },
+              { "type": "pause", "durationMs": 300 },
+              { "type": "pointerMove", "x": 0.8, "y": 0.5, "durationMs": 150 },
+              { "type": "pointerUp" }
+            ]
+          }
+        ]
+        """)!.AsArray();
 
     [Fact]
     public async Task Pinch_FiresPinchGestureRecognizer()
@@ -482,6 +522,116 @@ public class UiActionTests : IntegrationTestBase
             double.TryParse(elapsedText, NumberStyles.Number, CultureInfo.InvariantCulture, out var elapsedMs)
                 && elapsedMs >= 500,
             $"Expected a native long press of at least 500ms, got '{status.Text}'.");
+    }
+
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
+    [Fact]
+    public async Task PointerActions_OnAndroid_DriveARealTwoTouchPinchTimeline()
+    {
+        if (!Platform.Equals("android", StringComparison.OrdinalIgnoreCase))
+        {
+            Output.WriteLine("Custom pointer actions are capability-gated to Android.");
+            return;
+        }
+
+        await NavigateToGesturePageAsync();
+        var status = await FindElementAsync("PinchStatusLabel");
+        Assert.True(await Client.SetPropertyAsync(status.Id, "Text", "pinch: none"));
+        await SettleAsync();
+        var target = await FindElementAsync("PinchTarget");
+        var sources = CreateIndependentPinchSources();
+
+        var result = await Client.PointerActionsAsync(
+            sources,
+            target.Id,
+            target.CaptureEpoch,
+            target.RegistryGeneration);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("native", result.HandledBy);
+        Assert.Contains("2 touch sources", result.Detail);
+
+        await SettleAsync();
+        status = await FindElementAsync("PinchStatusLabel");
+        Assert.NotEqual("pinch: none", status.Text);
+        Assert.Contains("scale=", status.Text);
+    }
+
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
+    [Fact]
+    public async Task PointerActions_InBatch_PreserveTheMultiTouchSources()
+    {
+        if (!Platform.Equals("android", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        await NavigateToGesturePageAsync();
+        var status = await FindElementAsync("PinchStatusLabel");
+        Assert.True(await Client.SetPropertyAsync(status.Id, "Text", "pinch: none"));
+        await SettleAsync();
+        var target = await FindElementAsync("PinchTarget");
+        var result = await Client.BatchAsync(
+            [
+                new JsonObject
+                {
+                    ["action"] = "gesture",
+                    ["type"] = "actions",
+                    ["elementId"] = target.Id,
+                    ["sources"] = CreateIndependentPinchSources()
+                }
+            ],
+            continueOnError: false,
+            captureEpoch: target.CaptureEpoch,
+            registryGeneration: target.RegistryGeneration);
+
+        Assert.True(result.GetProperty("success").GetBoolean());
+        await SettleAsync();
+        status = await FindElementAsync("PinchStatusLabel");
+        Assert.NotEqual("pinch: none", status.Text);
+        Assert.Contains("scale=", status.Text);
+    }
+
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
+    [Fact]
+    public async Task PointerActions_OnAndroid_RejectInvalidPointerStateBeforeInjection()
+    {
+        if (!Platform.Equals("android", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        await NavigateToGesturePageAsync();
+        var target = await FindElementAsync("PinchTarget");
+        var sources = JsonNode.Parse("""
+            [
+              {
+                "id": "finger1",
+                "pointerType": "touch",
+                "actions": [
+                  { "type": "pointerUp" }
+                ]
+              }
+            ]
+            """)!.AsArray();
+
+        var result = await Client.PointerActionsAsync(sources, target.Id);
+
+        Assert.False(result.Success);
+        Assert.Equal("none", result.HandledBy);
+        Assert.Contains("cannot release before pointerDown", result.Error);
+    }
+
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
+    [Fact]
+    public async Task PointerActions_OnAndroid_RejectNullSourcesWithAResponse()
+    {
+        if (!Platform.Equals("android", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        using var response = await PostRawAsync(
+            "/api/v1/ui/actions/gesture",
+            new { type = "actions", sources = (object?)null });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("between 1 and 10 pointer sources", body);
     }
 
     [Fact]

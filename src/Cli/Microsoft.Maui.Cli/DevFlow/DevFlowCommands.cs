@@ -700,7 +700,7 @@ public class DevFlowCommands
         // already taken by element resolution.
         var gestureTypeArg = new Argument<string>("gestureType")
         {
-            Description = "Gesture: pinch, rotate, pan, swipe, doubletap, longpress, or tap"
+            Description = "Gesture: pinch, rotate, pan, swipe, doubletap, longpress, tap, or actions"
         };
         var gestureElementOption = new Option<string?>("--element") { Description = "Target element ID (required for tap; other gestures default to the current page)" };
         var gestureDirectionOption = new Option<string?>("--direction") { Description = "Direction for swipe/pan: up, down, left, right" };
@@ -713,12 +713,13 @@ public class DevFlowCommands
         var gestureOriginYOption = new Option<double?>("--origin-y") { Description = "Focal point Y, element-relative 0..1 (default: 0.5)" };
         var gestureDurationOption = new Option<int?>("--duration") { Description = "Gesture duration in milliseconds (default: 200)" };
         var gestureStepsOption = new Option<int?>("--steps") { Description = "Interpolation steps between start and end (default: 10)" };
-        var mauiGestureCmd = new Command("gesture", "Perform a gesture: pinch, rotate, pan, swipe, doubletap, longpress, tap")
+        var gestureSourcesOption = new Option<string?>("--sources-json") { Description = "JSON array of synchronized touch pointer sources (required for actions)" };
+        var mauiGestureCmd = new Command("gesture", "Perform a gesture: pinch, rotate, pan, swipe, doubletap, longpress, tap, actions")
         {
             gestureTypeArg, gestureElementOption, resolveAutoIdOption, resolveTextOption, resolveIndexOption,
             gestureDirectionOption, gestureDistanceOption, gestureScaleOption, gestureRotationOption,
             gestureDxOption, gestureDyOption, gestureOriginXOption, gestureOriginYOption,
-            gestureDurationOption, gestureStepsOption
+            gestureDurationOption, gestureStepsOption, gestureSourcesOption
         };
         mauiGestureCmd.SetAction(async (ctx, ct) =>
         {
@@ -761,7 +762,8 @@ public class DevFlowCommands
                 ctx.GetValue(gestureDyOption),
                 ctx.GetValue(gestureOriginXOption),
                 ctx.GetValue(gestureOriginYOption),
-                ctx.GetValue(gestureStepsOption));
+                ctx.GetValue(gestureStepsOption),
+                ctx.GetValue(gestureSourcesOption));
         });
         mauiCommand.Add(mauiGestureCmd);
 
@@ -3535,12 +3537,13 @@ public class DevFlowCommands
         catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
     }
 
-    private static readonly string[] GestureTypes = ["tap", "doubletap", "longpress", "swipe", "pan", "pinch", "rotate"];
+    private static readonly string[] GestureTypes = ["tap", "doubletap", "longpress", "swipe", "pan", "pinch", "rotate", "actions"];
 
     private static async Task MauiGestureAsync(
         string host, int port, bool json, string gestureType, ElementInfo? element,
         string? direction, double? distance, int? durationMs, double? scale, double? rotation,
-        double? deltaX, double? deltaY, double? originX, double? originY, int? steps)
+        double? deltaX, double? deltaY, double? originX, double? originY, int? steps,
+        string? sourcesJson)
     {
         var normalizedType = gestureType.Trim().ToLowerInvariant().Replace("-", "").Replace("_", "");
         if (normalizedType == "zoom") normalizedType = "pinch";
@@ -3579,16 +3582,49 @@ public class DevFlowCommands
             return;
         }
 
+        JsonArray? sources = null;
+        if (normalizedType == "actions")
+        {
+            if (string.IsNullOrWhiteSpace(sourcesJson))
+            {
+                Output.WriteError("Actions gesture requires --sources-json.", json, "ValidationError");
+                _errorOccurred = true;
+                return;
+            }
+
+            try
+            {
+                sources = JsonNode.Parse(sourcesJson) as JsonArray;
+                if (sources == null)
+                    throw new JsonException("--sources-json must contain a JSON array.");
+            }
+            catch (JsonException ex)
+            {
+                Output.WriteError($"Invalid --sources-json: {ex.Message}", json, "ValidationError");
+                _errorOccurred = true;
+                return;
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(sourcesJson))
+        {
+            Output.WriteError("--sources-json is only valid with the actions gesture.", json, "ValidationError");
+            _errorOccurred = true;
+            return;
+        }
+
         try
         {
             using var client = await CreateAgentClientAsync(host, port);
             var (captureEpoch, registryGeneration) = element is null
                 ? (null, null)
                 : GetCaptureMetadata(element);
-            var result = await client.GestureDetailedAsync(
-                normalizedType, element?.Id, direction, distance, durationMs,
-                scale, rotation, deltaX, deltaY, originX, originY, steps,
-                captureEpoch, registryGeneration);
+            var result = sources != null
+                ? await client.PointerActionsAsync(
+                    sources, element?.Id, captureEpoch, registryGeneration)
+                : await client.GestureDetailedAsync(
+                    normalizedType, element?.Id, direction, distance, durationMs,
+                    scale, rotation, deltaX, deltaY, originX, originY, steps,
+                    captureEpoch, registryGeneration);
 
             if (json)
             {

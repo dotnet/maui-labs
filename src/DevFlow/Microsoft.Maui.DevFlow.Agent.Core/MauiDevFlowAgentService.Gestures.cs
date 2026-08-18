@@ -9,7 +9,13 @@ namespace Microsoft.Maui.DevFlow.Agent.Core;
 public partial class MauiDevFlowAgentService
 {
     internal static readonly string[] SupportedGestures =
-        ["tap", "doubletap", "longpress", "swipe", "pan", "pinch", "rotate"];
+        ["tap", "doubletap", "longpress", "swipe", "pan", "pinch", "rotate", "actions"];
+
+    protected virtual bool SupportsNativePointerActions => false;
+
+    private string[] AdvertisedGestures => SupportsNativePointerActions
+        ? SupportedGestures
+        : SupportedGestures.Where(static gesture => gesture != "actions").ToArray();
 
     private const int DefaultGestureSteps = 10;
     private int _panGestureId;
@@ -60,6 +66,7 @@ public partial class MauiDevFlowAgentService
                 "swipe" => await PerformSwipeAsync(body, windowIndex, reservedCapture),
                 "doubletap" => await PerformDoubleTapAsync(body, windowIndex, reservedCapture),
                 "longpress" => await PerformLongPressAsync(body, windowIndex, reservedCapture),
+                "actions" => await PerformPointerActionsAsync(body, windowIndex, reservedCapture),
                 _ => GestureOutcome.NotHandled(
                     $"Gesture '{body.Type}' is not supported. Supported types: {string.Join(", ", SupportedGestures)}")
             };
@@ -426,6 +433,128 @@ public partial class MauiDevFlowAgentService
         return outcome ?? GestureOutcome.NotHandled("Long-press dispatch failed");
     }
 
+    private async Task<GestureOutcome> PerformPointerActionsAsync(
+        GestureActionRequest body,
+        int? windowIndex,
+        UiCaptureContext capture)
+    {
+        if (!SupportsNativePointerActions)
+        {
+            return GestureOutcome.NotHandled(
+                $"custom pointer actions are not available on {DeviceInfo.Platform}");
+        }
+
+        if (ValidatePointerActions(body.Sources) is { } validationError)
+            return GestureOutcome.NotHandled(validationError);
+        var sources = body.Sources!
+            .Select(static source => source!)
+            .ToArray();
+
+        var outcome = await DispatchAsync(async () =>
+        {
+            var target = ResolveGestureTarget(body.ElementId, windowIndex, capture, out var error);
+            if (target == null)
+                return GestureOutcome.NotHandled(error!);
+
+            var detail = await TryNativePointerActions(target, sources);
+            return detail != null
+                ? GestureOutcome.Native(detail)
+                : GestureOutcome.NotHandled(
+                    $"custom pointer actions were rejected by {target.GetType().Name} on {DeviceInfo.Platform}");
+        });
+
+        return outcome ?? GestureOutcome.NotHandled("Custom pointer action dispatch failed");
+    }
+
+    private static string? ValidatePointerActions(IReadOnlyList<PointerActionSourceRequest?>? sources)
+    {
+        if (sources == null || sources.Count is < 1 or > 10)
+            return "actions gesture requires between 1 and 10 pointer sources";
+
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        var hasPointerDown = false;
+        var maxTicks = 0;
+        foreach (var source in sources)
+        {
+            if (source == null)
+                return "pointer sources cannot contain null entries";
+            if (string.IsNullOrWhiteSpace(source.Id))
+                return "each pointer source requires a non-empty id";
+            if (!ids.Add(source.Id))
+                return $"pointer source id '{source.Id}' is duplicated";
+            if (!string.Equals(source.PointerType, "touch", StringComparison.Ordinal))
+                return $"pointer source '{source.Id}' has unsupported pointerType '{source.PointerType}'; only 'touch' is supported";
+            if (source.Actions == null || source.Actions.Count is < 1 or > 100)
+                return $"pointer source '{source.Id}' requires between 1 and 100 actions";
+
+            maxTicks = Math.Max(maxTicks, source.Actions.Count);
+            var pressed = false;
+            foreach (var action in source.Actions)
+            {
+                if (action == null)
+                    return $"pointer source '{source.Id}' actions cannot contain null entries";
+                var actionType = NormalizePointerActionType(action.Type);
+                if (actionType == null)
+                    return $"pointer source '{source.Id}' has unsupported action type '{action.Type}'";
+                if (action.DurationMs is < 0 or > 30_000)
+                    return $"pointer source '{source.Id}' action durationMs must be between 0 and 30000";
+                if (action.X is < 0 or > 1 || action.Y is < 0 or > 1)
+                    return $"pointer source '{source.Id}' coordinates must be element-relative values between 0 and 1";
+                if (actionType != "pointerMove" && (action.X.HasValue || action.Y.HasValue))
+                    return $"pointer source '{source.Id}' action '{actionType}' cannot specify coordinates";
+                if (actionType is "pointerDown" or "pointerUp" && action.DurationMs.HasValue)
+                    return $"pointer source '{source.Id}' action '{actionType}' cannot specify durationMs; use a pause tick";
+
+                switch (actionType)
+                {
+                    case "pointerDown" when pressed:
+                        return $"pointer source '{source.Id}' cannot press down while already down";
+                    case "pointerDown":
+                        pressed = true;
+                        hasPointerDown = true;
+                        break;
+                    case "pointerUp" when !pressed:
+                        return $"pointer source '{source.Id}' cannot release before pointerDown";
+                    case "pointerUp":
+                        pressed = false;
+                        break;
+                }
+            }
+
+            if (pressed)
+                return $"pointer source '{source.Id}' must end with pointerUp";
+        }
+
+        if (!hasPointerDown)
+            return "actions gesture must contain at least one pointerDown";
+        if (maxTicks > 100)
+            return "actions gesture cannot exceed 100 synchronized ticks";
+
+        long totalDurationMs = 0;
+        for (var tick = 0; tick < maxTicks; tick++)
+        {
+            totalDurationMs += sources.Max(source =>
+                tick < source!.Actions!.Count ? source.Actions[tick]!.DurationMs ?? 0 : 0);
+        }
+        if (totalDurationMs > 15_000)
+            return "actions gesture timeline cannot exceed 15000ms";
+
+        return null;
+    }
+
+    protected static string? NormalizePointerActionType(string? type)
+    {
+        var normalized = type?.Trim().ToLowerInvariant().Replace("-", "").Replace("_", "");
+        return normalized switch
+        {
+            "pointermove" or "move" => "pointerMove",
+            "pointerdown" or "down" => "pointerDown",
+            "pointerup" or "up" => "pointerUp",
+            "pause" => "pause",
+            _ => null
+        };
+    }
+
     private static string NoHandlerMessage(string gesture, VisualElement target, string recognizerName) =>
         $"No {gesture} handler for {target.GetType().Name}: no {recognizerName} on the element or its " +
         $"ancestors, and native {gesture} injection is not available on {DeviceInfo.Platform}.";
@@ -505,5 +634,10 @@ public partial class MauiDevFlowAgentService
         => Task.FromResult<string?>(null);
 
     protected virtual Task<string?> TryNativeDoubleTap(VisualElement element)
+        => Task.FromResult<string?>(null);
+
+    protected virtual Task<string?> TryNativePointerActions(
+        VisualElement element,
+        IReadOnlyList<PointerActionSourceRequest> sources)
         => Task.FromResult<string?>(null);
 }

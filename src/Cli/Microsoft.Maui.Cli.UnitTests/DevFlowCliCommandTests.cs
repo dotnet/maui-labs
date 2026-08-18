@@ -333,6 +333,30 @@ public class DevFlowCliCommandTests
     }
 
     [Fact]
+    public async Task UiGesture_Actions_SendsPointerSources()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+        var sources = """
+            [{"id":"finger1","pointerType":"touch","actions":[{"type":"pointerMove","x":0.5,"y":0.5},{"type":"pointerDown"},{"type":"pause","durationMs":100},{"type":"pointerUp"}]}]
+            """;
+
+        var result = await cli.InvokeAsync(
+            "devflow", "ui", "gesture", "actions",
+            "--element", "el-1",
+            "--sources-json", sources,
+            "--json");
+
+        Assert.Equal(0, result.ExitCode);
+        var request = Assert.Single(
+            server.RecordedRequests,
+            recorded => recorded.Path == "/api/v1/ui/actions/gesture");
+        Assert.Contains("\"type\":\"actions\"", request.Body);
+        Assert.Contains("\"id\":\"finger1\"", request.Body);
+        Assert.Contains("\"type\":\"pause\"", request.Body);
+    }
+
+    [Fact]
     public async Task UiResize_SendsResizeAction()
     {
         var (server, cli) = await CreateFixturesAsync();

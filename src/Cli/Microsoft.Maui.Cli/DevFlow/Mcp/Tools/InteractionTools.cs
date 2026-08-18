@@ -1,4 +1,6 @@
 using System.ComponentModel;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using ModelContextProtocol.Server;
 using Microsoft.Maui.Cli.DevFlow.Mcp;
 
@@ -86,13 +88,14 @@ public sealed class InteractionTools
 			$"Failed to send key '{key}'. The target element may not support keyboard input, or no target element was provided.");
 	}
 
-	private static readonly string[] ValidGestureTypes = ["tap", "doubletap", "longpress", "swipe", "pan", "pinch", "rotate"];
+	private static readonly string[] ValidGestureTypes = ["tap", "doubletap", "longpress", "swipe", "pan", "pinch", "rotate", "actions"];
 	private static readonly string[] ValidGestureDirections = ["up", "down", "left", "right"];
 
 	[McpServerTool(Name = "maui_gesture"), Description(
 		"Perform a touch gesture on the app. Types: 'pinch' (zoom — use 'scale', e.g. 2.0 to zoom in, 0.5 to zoom out), " +
 		"'rotate' (use 'rotation' in degrees), 'pan' (drag — use deltaX/deltaY, or direction + distance), " +
-		"'swipe' (flick — requires direction), 'doubletap', 'longpress', and 'tap'. " +
+		"'swipe' (flick — requires direction), 'doubletap', 'longpress', 'tap', and 'actions'. " +
+		"Actions uses 'sourcesJson', a JSON array of synchronized W3C-style touch pointer tracks. " +
 		"Use maui_tap for simple taps and maui_scroll for scrolling a list; this tool is for real gestures. " +
 		"Each gesture is first sent to a matching MAUI gesture recognizer on the element or its ancestors, and if there is " +
 		"none it is injected natively at the platform view — which is how pinch-to-zoom works on Maps, WebViews and other " +
@@ -100,7 +103,7 @@ public sealed class InteractionTools
 		"element lists the recognizers it has. Omitting elementId aims non-tap gestures at the current page; tap requires an element ID.")]
 	public static async Task<string> Gesture(
 		McpAgentSession session,
-		[Description("Gesture type: 'pinch', 'rotate', 'pan', 'swipe', 'doubletap', 'longpress', or 'tap'")] string type,
+		[Description("Gesture type: 'pinch', 'rotate', 'pan', 'swipe', 'doubletap', 'longpress', 'tap', or 'actions'")] string type,
 		[Description("Target element ID from maui_tree. Required for tap; other gestures target the current page when omitted.")] string? elementId = null,
 		[Description("Direction for swipe/pan: 'up', 'down', 'left', or 'right'. Required for swipe.")] string? direction = null,
 		[Description("Travel distance in device-independent pixels for swipe/pan when using 'direction'. Defaults to 120.")] double? distance = null,
@@ -112,6 +115,7 @@ public sealed class InteractionTools
 		[Description("Gesture focal point X, element-relative from 0 (left) to 1 (right). Defaults to 0.5 (centre).")] double? originX = null,
 		[Description("Gesture focal point Y, element-relative from 0 (top) to 1 (bottom). Defaults to 0.5 (centre).")] double? originY = null,
 		[Description("Number of interpolation steps between gesture start and end. More steps are smoother. Defaults to 10.")] int? steps = null,
+		[Description("For actions: JSON array of synchronized touch sources. Each source has id, pointerType='touch', and actions containing pointerMove, pointerDown, pointerUp, or pause.")] string? sourcesJson = null,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null,
 		[Description("Capture epoch from maui_tree or maui_hittest; stale epochs are rejected")] long? captureEpoch = null,
 		[Description("Native registry generation from maui_tree or maui_hittest")] long? registryGeneration = null)
@@ -139,11 +143,35 @@ public sealed class InteractionTools
 		if (normalizedType == "pinch" && scale is <= 0)
 			return "Pinch 'scale' must be greater than 0 — use 2.0 to zoom in or 0.5 to zoom out.";
 
+		JsonArray? sources = null;
+		if (normalizedType == "actions")
+		{
+			if (string.IsNullOrWhiteSpace(sourcesJson))
+				return "Actions gesture requires 'sourcesJson'.";
+			try
+			{
+				sources = JsonNode.Parse(sourcesJson) as JsonArray;
+				if (sources == null)
+					return "Invalid sourcesJson: expected a JSON array.";
+			}
+			catch (JsonException ex)
+			{
+				return $"Invalid sourcesJson: {ex.Message}";
+			}
+		}
+		else if (!string.IsNullOrWhiteSpace(sourcesJson))
+		{
+			return "sourcesJson is only valid for the actions gesture.";
+		}
+
 		var agent = await session.GetAgentClientAsync(agentPort);
-		var result = await agent.GestureDetailedAsync(
-			normalizedType, elementId, normalizedDirection, distance, durationMs,
-			scale, rotation, deltaX, deltaY, originX, originY, steps,
-			captureEpoch, registryGeneration);
+		var result = sources != null
+			? await agent.PointerActionsAsync(
+				sources, elementId, captureEpoch, registryGeneration)
+			: await agent.GestureDetailedAsync(
+				normalizedType, elementId, normalizedDirection, distance, durationMs,
+				scale, rotation, deltaX, deltaY, originX, originY, steps,
+				captureEpoch, registryGeneration);
 
 		var target = elementId is not null ? $" on element '{elementId}'" : " on the current page";
 

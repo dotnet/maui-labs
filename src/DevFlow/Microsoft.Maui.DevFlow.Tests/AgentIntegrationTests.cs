@@ -231,6 +231,69 @@ public class AgentHttpServerTests : IDisposable
     }
 
     [Fact]
+    public async Task PointerActionsEndpoint_SendsSynchronizedSources()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, _port);
+        listener.Start();
+
+        var acceptTask = Task.Run(async () =>
+        {
+            using var client = await listener.AcceptTcpClientAsync();
+            using var stream = client.GetStream();
+            var buffer = new byte[8192];
+            var read = await stream.ReadAsync(buffer);
+            var request = Encoding.UTF8.GetString(buffer, 0, read);
+
+            Assert.Contains("POST /api/v1/ui/actions/gesture", request);
+            Assert.Contains("\"type\":\"actions\"", request);
+            Assert.Contains("\"id\":\"finger1\"", request);
+            Assert.Contains("\"id\":\"finger2\"", request);
+            Assert.Contains("\"type\":\"pointerMove\"", request);
+            Assert.Contains("\"durationMs\":300", request);
+
+            var body = """{"success":true,"type":"actions","elementId":"canvas1","handledBy":"native","platform":"Android","detail":"MotionEvent actions (2 touch sources, 5 synchronized ticks)"}""";
+            var response = $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n{body}";
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
+        });
+
+        var sources = JsonNode.Parse("""
+            [
+              {
+                "id": "finger1",
+                "pointerType": "touch",
+                "actions": [
+                  { "type": "pointerMove", "x": 0.45, "y": 0.5 },
+                  { "type": "pointerDown" },
+                  { "type": "pointerMove", "x": 0.2, "y": 0.5, "durationMs": 300 },
+                  { "type": "pause", "durationMs": 150 },
+                  { "type": "pointerUp" }
+                ]
+              },
+              {
+                "id": "finger2",
+                "pointerType": "touch",
+                "actions": [
+                  { "type": "pointerMove", "x": 0.55, "y": 0.5 },
+                  { "type": "pointerDown" },
+                  { "type": "pause", "durationMs": 300 },
+                  { "type": "pointerMove", "x": 0.8, "y": 0.5, "durationMs": 150 },
+                  { "type": "pointerUp" }
+                ]
+              }
+            ]
+            """)!.AsArray();
+
+        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        var result = await agentClient.PointerActionsAsync(sources, "canvas1");
+
+        Assert.True(result.Success);
+        Assert.Equal("actions", result.Type);
+        Assert.Equal("native", result.HandledBy);
+        await acceptTask;
+        listener.Stop();
+    }
+
+    [Fact]
     public async Task FillEndpoint_SendsPostWithText()
     {
         using var listener = new TcpListener(IPAddress.Loopback, _port);
