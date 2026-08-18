@@ -145,6 +145,38 @@ public class NativeDialogSafetyTests
         Assert.Null(processId);
     }
 
+    [Theory]
+    [InlineData("Allow \u201cMauiTodo\u201d to access your contacts?", "MauiTodo")]
+    [InlineData("\"MauiTodo\" Would Like to Access the Microphone", "MauiTodo")]
+    public void IosPermissionPrompt_ExactAppName_ReturnsTrue(string prompt, string appName)
+    {
+        Assert.True(iOSSimulatorAppDriver.PermissionPromptNamesTarget(prompt, appName));
+    }
+
+    [Fact]
+    public void IosPermissionPrompt_AppNamePrefix_ReturnsFalse()
+    {
+        Assert.False(iOSSimulatorAppDriver.PermissionPromptNamesTarget(
+            "Allow \u201cMauiTodo Beta\u201d to access your contacts?",
+            "MauiTodo"));
+    }
+
+    [Fact]
+    public void AndroidPermissionPrompt_ExactAppName_ReturnsTrue()
+    {
+        Assert.True(AndroidAppDriver.PermissionPromptNamesTarget(
+            "Allow MauiTodo to access your contacts?",
+            "MauiTodo"));
+    }
+
+    [Fact]
+    public void AndroidPermissionPrompt_AppNamePrefix_ReturnsFalse()
+    {
+        Assert.False(AndroidAppDriver.PermissionPromptNamesTarget(
+            "Allow MauiTodo Beta to access your contacts?",
+            "MauiTodo"));
+    }
+
     private static AlertInfo CreateDialog()
         => new(
             "\"Sample App\" Would Like to Find Devices",

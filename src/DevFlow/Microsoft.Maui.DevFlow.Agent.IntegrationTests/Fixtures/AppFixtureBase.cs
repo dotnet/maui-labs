@@ -19,6 +19,8 @@ public abstract class AppFixtureBase : IAppFixture
     public int AgentPort { get; private set; }
     public string AgentBaseUrl => $"http://localhost:{AgentPort}";
     public abstract string Platform { get; }
+    public virtual string? DeviceId => null;
+    public virtual string? AppIdentifier => null;
 
     protected AppFixtureBase()
     {
@@ -60,6 +62,9 @@ public abstract class AppFixtureBase : IAppFixture
 
     protected abstract Task InitializePlatformAsync();
     protected abstract Task DisposePlatformAsync();
+
+    public virtual Task ResetPermissionAsync(PermissionService permission)
+        => throw new NotSupportedException($"Permission reset is not supported by the {Platform} integration fixture.");
 
     void SetupClients()
     {
