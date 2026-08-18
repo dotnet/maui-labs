@@ -18,7 +18,10 @@ internal sealed class FunctionInvocationHandler : ContentBlockHandler<FunctionIn
             FunctionCallContent? callContent = null;
             foreach (var content in context.UnhandledContents)
             {
-                if (content is FunctionCallContent fc)
+                if (content is FunctionCallContent
+                    {
+                        InformationalOnly: false,
+                    } fc)
                 {
                     callContent = fc;
                     break;
@@ -29,6 +32,16 @@ internal sealed class FunctionInvocationHandler : ContentBlockHandler<FunctionIn
             {
                 context.MarkHandled(callContent);
                 state.Call = callContent;
+                foreach (var content in context.UnhandledContents)
+                {
+                    if (content is FunctionResultContent result
+                        && result.CallId == callContent.CallId)
+                    {
+                        context.MarkHandled(result);
+                        state.Result = result;
+                        break;
+                    }
+                }
                 return BlockMappingResult<FunctionInvocationContentBlock>.Emit(state, state);
             }
         }

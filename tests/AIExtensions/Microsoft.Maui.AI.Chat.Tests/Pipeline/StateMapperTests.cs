@@ -79,7 +79,7 @@ public class StateMapperTests
     }
 
     [Fact]
-    public async Task StateMapper_WrongStateType_FiltersContentWithoutReplacingTypedState()
+    public async Task StateMapper_WrongStateType_ThrowsInsteadOfDroppingContent()
     {
         var client = CreateClient(EmitStateOnly());
         var initial = new RecipeState { Title = "initial" };
@@ -94,11 +94,49 @@ public class StateMapperTests
             };
         }, initial);
 
-        var blocks = await EnumerateAsync(agent.SendMessageAsync(
-            new ChatMessage(ChatRole.User, "Recipe?")));
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => EnumerateAsync(agent.SendMessageAsync(
+                new ChatMessage(ChatRole.User, "Recipe?"))));
 
+        Assert.Contains(typeof(RecipeState).FullName!, exception.Message);
         Assert.Same(initial, agent.State.Value);
-        Assert.DoesNotContain(blocks, block => block.Role == ChatRole.Assistant);
+    }
+
+    [Fact]
+    public async Task StateMapper_ConsumedContent_IsExcludedFromLocalChatHistory()
+    {
+        IReadOnlyList<ChatMessage>? secondRequest = null;
+        var callCount = 0;
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((messages, options, cancellationToken) =>
+        {
+            callCount++;
+            if (callCount == 1)
+                return EmitStateAndText(cancellationToken);
+
+            secondRequest = messages.ToArray();
+            return ResponseEmitters.EmitTextResponse(
+                "Second response",
+                cancellationToken);
+        });
+        var agent = CreateRecipeAgent(client);
+
+        await EnumerateAsync(agent.SendMessageAsync(
+            new ChatMessage(ChatRole.User, "First")));
+        await EnumerateAsync(agent.SendMessageAsync(
+            new ChatMessage(ChatRole.User, "Second")));
+
+        Assert.NotNull(secondRequest);
+        Assert.DoesNotContain(
+            secondRequest!
+                .SelectMany(message => message.Contents)
+                .OfType<TextContent>(),
+            content => content.Text?.StartsWith('{') == true);
+        Assert.Contains(
+            secondRequest!
+                .SelectMany(message => message.Contents)
+                .OfType<TextContent>(),
+            content => content.Text == "Enjoy this recipe!");
     }
 
     [Fact]
@@ -252,6 +290,76 @@ public class StateMapperTests
     }
 
     [Fact]
+    public async Task RestoreAsync_PredictiveSnapshot_IsRejectedAfterReplay()
+    {
+        var thread = new InMemoryConversationThread("thread-predictive");
+        thread.AppendUserMessage(new ChatMessage(ChatRole.User, "Recipe?"));
+        await foreach (var update in EmitStateOnly())
+            thread.AppendUpdate(update);
+        thread.CompleteTurn();
+        var initial = new RecipeState { Title = "Initial" };
+        var agent = CreatePredictiveAgent(
+            CreateClient(ResponseEmitters.EmitTextResponse("unused")),
+            initial);
+        agent.Options.Thread = thread;
+        var context = new AgentContext(agent);
+
+        await context.RestoreAsync();
+
+        Assert.Same(initial, agent.State.Value);
+        Assert.False(agent.State.HasPendingPredictiveState);
+    }
+
+    [Fact]
+    public async Task RestoreAsync_StateMapperFailure_RestoresPreviousState()
+    {
+        var thread = new InMemoryConversationThread("thread-failure");
+        thread.AppendUserMessage(new ChatMessage(ChatRole.User, "Recipe?"));
+        thread.AppendUpdate(new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            Contents =
+            [
+                new TextContent("""{"Title":"Restored"}"""),
+            ],
+        });
+        thread.AppendUpdate(new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            Contents = [new TextContent("throw")],
+        });
+        thread.CompleteTurn();
+        var initial = new RecipeState { Title = "Initial" };
+        var previous = new RecipeState { Title = "Previous" };
+        var agent = new UIAgent<RecipeState>(
+            CreateClient(ResponseEmitters.EmitTextResponse("unused")),
+            options =>
+            {
+                options.Thread = thread;
+                options.StateMapper = context =>
+                {
+                    var content = GetFirstUnhandled(context);
+                    if (content is TextContent { Text: "throw" })
+                        throw new InvalidOperationException("mapper failed");
+
+                    context.MarkHandled(content);
+                    context.SetState(new RecipeState { Title = "Restored" });
+                    return true;
+                };
+            },
+            previous);
+        var context = new AgentContext(agent);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => context.RestoreAsync());
+
+        Assert.Equal("mapper failed", exception.Message);
+        Assert.Same(previous, agent.State.Value);
+        Assert.Empty(context.Turns);
+        Assert.False(agent.State.HasPendingPredictiveState);
+    }
+
+    [Fact]
     public void PredictiveState_ClearAndDispose_RollBack()
     {
         var initial = new RecipeState { Title = "Initial" };
@@ -261,6 +369,10 @@ public class StateMapperTests
         var context = new AgentContext(agent);
 
         agent.State.SetPredictiveValue(new RecipeState { Title = "Clear" });
+        context.Clear();
+        Assert.Same(initial, agent.State.Value);
+
+        agent.State.Value = new RecipeState { Title = "Committed" };
         context.Clear();
         Assert.Same(initial, agent.State.Value);
 

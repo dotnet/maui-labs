@@ -49,6 +49,7 @@ public class AgentContext(UIAgent agent) : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         CancelAndDisposeStreaming();
         agent.RejectPendingPredictiveState();
+        agent.ResetState();
         _turns.Clear();
         agent.ClearHistory();
         _retryMessage = null;
@@ -70,7 +71,7 @@ public class AgentContext(UIAgent agent) : IDisposable
         cancellationToken.ThrowIfCancellationRequested();
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        if (Status == ConversationStatus.Streaming)
+        if (Status is ConversationStatus.Streaming or ConversationStatus.AwaitingInput)
             throw new InvalidOperationException("A message is already being processed.");
 
         var requestMessage = EnsureMessageId(message);
@@ -236,7 +237,8 @@ public class AgentContext(UIAgent agent) : IDisposable
 
                     if (block is UIActionBlock uiAction)
                     {
-                        uiActionBlocks.Add(uiAction);
+                        if (!uiAction.IsComplete)
+                            uiActionBlocks.Add(uiAction);
                     }
                     else if (block is IInteractiveBlock interactive)
                     {

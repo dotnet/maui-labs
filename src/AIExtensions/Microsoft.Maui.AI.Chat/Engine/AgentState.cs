@@ -11,13 +11,15 @@ namespace Microsoft.Maui.AI.Chat;
 /// </remarks>
 public sealed class AgentState<T> where T : class, new()
 {
+    private readonly T _initialValue;
     private T _value;
     private T? _valueBeforePrediction;
     private readonly List<Action> _callbacks = new();
 
     internal AgentState(T? initialValue = null)
     {
-        _value = initialValue ?? new T();
+        _initialValue = initialValue ?? new T();
+        _value = _initialValue;
     }
 
     /// <summary>Gets or replaces the current state value.</summary>
@@ -65,6 +67,31 @@ public sealed class AgentState<T> where T : class, new()
         NotifyChanged();
     }
 
+    internal StateCheckpoint CaptureCheckpoint() =>
+        new(_value, _valueBeforePrediction);
+
+    internal void RestoreCheckpoint(StateCheckpoint checkpoint)
+    {
+        var changed = !ReferenceEquals(_value, checkpoint.Value)
+            || !ReferenceEquals(
+                _valueBeforePrediction,
+                checkpoint.ValueBeforePrediction);
+        _value = checkpoint.Value;
+        _valueBeforePrediction = checkpoint.ValueBeforePrediction;
+        if (changed)
+            NotifyChanged();
+    }
+
+    internal void ResetToInitialValue()
+    {
+        var changed = !ReferenceEquals(_value, _initialValue)
+            || _valueBeforePrediction is not null;
+        _value = _initialValue;
+        _valueBeforePrediction = null;
+        if (changed)
+            NotifyChanged();
+    }
+
     /// <summary>Registers a callback invoked whenever <see cref="Value"/> is replaced.</summary>
     public IDisposable OnChanged(Action callback)
     {
@@ -79,6 +106,10 @@ public sealed class AgentState<T> where T : class, new()
         foreach (var callback in snapshot)
             callback();
     }
+
+    internal readonly record struct StateCheckpoint(
+        T Value,
+        T? ValueBeforePrediction);
 
     private sealed class CallbackRegistration : IDisposable
     {

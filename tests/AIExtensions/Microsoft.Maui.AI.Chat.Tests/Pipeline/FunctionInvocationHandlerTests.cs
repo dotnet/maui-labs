@@ -64,6 +64,55 @@ public class FunctionInvocationHandlerTests
     }
 
     [Fact]
+    public async Task InformationalFunctionCall_DoesNotEmitAnotherBlock()
+    {
+        var pipeline = CreatePipeline();
+        var update = new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            Contents =
+            [
+                new FunctionCallContent(
+                    "call-info",
+                    "GetWeather")
+                {
+                    InformationalOnly = true,
+                },
+            ],
+        };
+
+        var blocks = await CollectBlocks(pipeline, update);
+
+        Assert.Empty(blocks);
+    }
+
+    [Fact]
+    public async Task FunctionCallAndResultInSameUpdate_ProducesCompletedBlock()
+    {
+        var pipeline = CreatePipeline();
+        var update = new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            Contents =
+            [
+                new FunctionCallContent(
+                    "call-batched",
+                    "GetWeather"),
+                new FunctionResultContent(
+                    "call-batched",
+                    "sunny"),
+            ],
+        };
+
+        var block = Assert.IsType<FunctionInvocationContentBlock>(
+            Assert.Single(await CollectBlocks(pipeline, update)));
+
+        Assert.True(block.HasResult);
+        Assert.Equal("sunny", block.Result?.Result);
+        Assert.Equal(BlockLifecycleState.Inactive, block.LifecycleState);
+    }
+
+    [Fact]
     public async Task FunctionResultContent_MatchingCallId_CompletesBlock()
     {
         var pipeline = CreatePipeline();

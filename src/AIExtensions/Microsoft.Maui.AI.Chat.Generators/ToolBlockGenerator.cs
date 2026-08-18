@@ -258,6 +258,7 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
         builder.AppendLine("            {");
         builder.AppendLine(
             "                if (content is global::Microsoft.Extensions.AI.FunctionCallContent candidate");
+        builder.AppendLine("                    && !candidate.InformationalOnly");
         builder.Append("                    && candidate.Name == \"")
             .Append(EscapeString(model.ToolName)).AppendLine("\")");
         builder.AppendLine("                {");
@@ -271,6 +272,17 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
         builder.AppendLine("                context.MarkHandled(call);");
         builder.AppendLine("                state.Call = call;");
         EmitCallProperties(builder, model.Parameters);
+        builder.AppendLine("                foreach (var content in context.UnhandledContents)");
+        builder.AppendLine("                {");
+        builder.AppendLine(
+            "                    if (content is global::Microsoft.Extensions.AI.FunctionResultContent result");
+        builder.AppendLine("                        && result.CallId == call.CallId)");
+        builder.AppendLine("                    {");
+        builder.AppendLine("                        context.MarkHandled(result);");
+        builder.AppendLine("                        ApplyFunctionResult(state, result);");
+        builder.AppendLine("                        break;");
+        builder.AppendLine("                    }");
+        builder.AppendLine("                }");
         builder.Append("                return global::Microsoft.Maui.AI.Chat.BlockMappingResult<")
             .Append(model.FullyQualifiedType).AppendLine(">.Emit(state, state);");
         builder.AppendLine("            }");
