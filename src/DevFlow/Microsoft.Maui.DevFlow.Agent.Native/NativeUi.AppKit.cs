@@ -331,7 +331,7 @@ internal static partial class NativeUi
         return CaptureViewViaCacheDisplay(view) ?? CaptureViewViaPdf(view);
     }
 
-    public static byte[]? CaptureScreen()
+    public static async Task<byte[]?> CaptureScreen()
     {
         var window = GetWindows().FirstOrDefault(candidate =>
                 candidate.IsVisible && candidate.WindowNumber > 0)
@@ -339,9 +339,7 @@ internal static partial class NativeUi
 
         if (window != null)
         {
-            var screenCaptureKitBytes = CaptureWindowViaScreenCaptureKitAsync(window)
-                .GetAwaiter()
-                .GetResult();
+            var screenCaptureKitBytes = await CaptureWindowViaScreenCaptureKitAsync(window);
             if (screenCaptureKitBytes != null)
                 return screenCaptureKitBytes;
 

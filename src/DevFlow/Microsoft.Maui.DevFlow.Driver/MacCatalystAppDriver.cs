@@ -157,7 +157,7 @@ public class MacCatalystAppDriver : AppDriverBase
                 AXElement target;
                 try
                 {
-                    target = PickExactButton(lease.Buttons, buttonLabel);
+                    target = PickExactButton(currentButtons, buttonLabel);
                 }
                 catch (InvalidOperationException ex)
                 {
@@ -181,7 +181,7 @@ public class MacCatalystAppDriver : AppDriverBase
                     true,
                     false,
                     $"Pressed '{buttonLabel}' using AXPress without synthesizing mouse or keyboard input.",
-                    lease.Info));
+                    info));
             }
             finally
             {
@@ -193,7 +193,8 @@ public class MacCatalystAppDriver : AppDriverBase
     /// <summary>
     /// Dismiss the current alert by pressing an exact button label via AXPress.
     /// </summary>
-    public Task DismissAlertAsync(string? buttonLabel = null)
+    /// <param name="buttonLabel">The exact visible button label. A label is always required on macOS.</param>
+    public Task DismissAlertAsync(string buttonLabel)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(buttonLabel);
         EnsureMacOS();
@@ -222,7 +223,8 @@ public class MacCatalystAppDriver : AppDriverBase
     /// Convenience: detect and dismiss an alert if present, no-op if not.
     /// Single AX tree walk — detects and dismisses in one pass to avoid stale coordinates.
     /// </summary>
-    public Task<AlertInfo?> HandleAlertIfPresentAsync(string? buttonLabel = null)
+    /// <param name="buttonLabel">The exact visible button label. A label is always required on macOS.</param>
+    public Task<AlertInfo?> HandleAlertIfPresentAsync(string buttonLabel)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(buttonLabel);
         EnsureMacOS();
@@ -725,7 +727,7 @@ public class MacCatalystAppDriver : AppDriverBase
             throw new InvalidOperationException("No buttons found in dialog.");
 
         var matches = buttons
-            .Where(button => GetBestLabel(button).Equals(buttonLabel, StringComparison.Ordinal))
+            .Where(button => ButtonLabelsMatch(GetBestLabel(button), buttonLabel))
             .ToList();
         if (matches.Count == 1)
             return matches[0];
@@ -740,6 +742,13 @@ public class MacCatalystAppDriver : AppDriverBase
         throw new InvalidOperationException(
             $"More than one button has the exact label '{buttonLabel}'. No action was performed.");
     }
+
+    internal static bool ButtonLabelsMatch(string visibleLabel, string requestedLabel)
+        => NormalizeQuotes(visibleLabel).Equals(NormalizeQuotes(requestedLabel), StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeQuotes(string value)
+        => value.Replace('\u2018', '\'').Replace('\u2019', '\'')
+            .Replace('\u201C', '"').Replace('\u201D', '"');
 
     private static List<AlertButton> ToAlertButtons(List<AXElement> elements)
         => elements.Select(button => new AlertButton(GetBestLabel(button), 0, 0, 0, 0)
@@ -764,28 +773,16 @@ public class MacCatalystAppDriver : AppDriverBase
 
         if (!string.IsNullOrEmpty(AppName))
         {
-            foreach (var process in Process.GetProcesses())
+            var processId = ProcessNameResolver.FindUniqueProcessId(AppName);
+            if (processId.HasValue)
             {
-                using (process)
-                {
-                    try
-                    {
-                        if (process.ProcessName.Equals(AppName, StringComparison.OrdinalIgnoreCase) ||
-                            process.ProcessName.Contains(AppName, StringComparison.OrdinalIgnoreCase))
-                        {
-                            ProcessId = process.Id;
-                            return process.Id;
-                        }
-                    }
-                    catch
-                    {
-                        // A process may exit or deny metadata access while enumerating.
-                    }
-                }
+                ProcessId = processId.Value;
+                return processId.Value;
             }
         }
 
-        throw new InvalidOperationException("ProcessId or AppName must be set for Mac Catalyst operations.");
+        throw new InvalidOperationException(
+            "Unable to uniquely resolve the Mac Catalyst process. Set ProcessId explicitly.");
     }
 
     private static IReadOnlyList<DialogProcess> GetDialogProcesses(

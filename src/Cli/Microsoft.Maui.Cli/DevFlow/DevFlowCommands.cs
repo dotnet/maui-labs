@@ -4176,24 +4176,9 @@ public class DevFlowCommands
             var appName = status?.App?.Name ?? status?.AppName;
             if (!string.IsNullOrWhiteSpace(appName))
             {
-                foreach (var process in System.Diagnostics.Process.GetProcesses())
-                {
-                    using (process)
-                    {
-                        try
-                        {
-                            if (process.ProcessName.Equals(appName, StringComparison.OrdinalIgnoreCase) ||
-                                process.ProcessName.Contains(appName, StringComparison.OrdinalIgnoreCase))
-                            {
-                                return process.Id;
-                            }
-                        }
-                        catch
-                        {
-                            // A process may exit or deny metadata access while enumerating.
-                        }
-                    }
-                }
+                var matchedProcessId = Microsoft.Maui.DevFlow.Driver.ProcessNameResolver.FindUniqueProcessId(appName);
+                if (matchedProcessId.HasValue)
+                    return matchedProcessId.Value;
             }
         }
         catch { }
@@ -4315,6 +4300,13 @@ public class DevFlowCommands
 
             if (plat == "maccatalyst")
             {
+                if (string.IsNullOrWhiteSpace(buttonLabel))
+                {
+                    throw new ArgumentException(
+                        "An exact button label is required when dismissing a macOS alert. Run 'maui devflow ui alert detect' and pass one of its visible button labels.",
+                        nameof(buttonLabel));
+                }
+
                 var resolvedPid = await ResolveMacCatalystPidAsync(pid, host, port);
                 var driver = new Microsoft.Maui.DevFlow.Driver.MacCatalystAppDriver { ProcessId = resolvedPid };
                 alert = await driver.HandleAlertIfPresentAsync(buttonLabel);

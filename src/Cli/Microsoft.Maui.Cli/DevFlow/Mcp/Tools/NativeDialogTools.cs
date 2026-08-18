@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using Microsoft.Maui.DevFlow.Driver;
@@ -274,7 +273,7 @@ public sealed class NativeDialogTools
         var identity = CreateTargetIdentity(agent.BaseUrl, status);
         if (platform.Contains("mac", StringComparison.OrdinalIgnoreCase))
         {
-            var processId = status.App?.ProcessId ?? FindProcessId(status.AppName);
+            var processId = status.App?.ProcessId ?? ProcessNameResolver.FindUniqueProcessId(status.AppName);
             return processId.HasValue
                 ? new DialogTarget(DialogPlatformKind.MacOS, platform, identity, "ax-press", processId, status.AppName, status.App?.PackageId, null, null, agent.BaseUrl)
                 : DialogTarget.Unsupported(platform, identity, "Unable to determine the connected macOS app process.");
@@ -314,7 +313,7 @@ public sealed class NativeDialogTools
         if (platform.Contains("windows", StringComparison.OrdinalIgnoreCase)
             || platform.Contains("winui", StringComparison.OrdinalIgnoreCase))
         {
-            var processId = status.App?.ProcessId ?? FindProcessId(status.AppName);
+            var processId = status.App?.ProcessId ?? ProcessNameResolver.FindUniqueProcessId(status.AppName);
             return processId.HasValue
                 ? new DialogTarget(DialogPlatformKind.Windows, platform, identity, "uia-invoke", processId, status.AppName, status.App?.PackageId, null, null, agent.BaseUrl)
                 : DialogTarget.Unsupported(platform, identity, "Unable to determine the connected Windows app process.");
@@ -523,40 +522,6 @@ public sealed class NativeDialogTools
                     sibling.Dispose();
             }
         }
-    }
-
-    private static int? FindProcessId(string? appName)
-    {
-        if (string.IsNullOrWhiteSpace(appName))
-            return null;
-
-        var candidates = new List<(int ProcessId, string ProcessName)>();
-        foreach (var process in Process.GetProcesses())
-        {
-            using (process)
-            {
-                try
-                {
-                    if (process.ProcessName.Equals(appName, StringComparison.OrdinalIgnoreCase)
-                        || process.ProcessName.Contains(appName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        candidates.Add((process.Id, process.ProcessName));
-                    }
-                }
-                catch
-                {
-                    // A process may exit or deny metadata access while enumerating.
-                }
-            }
-        }
-
-        var exactMatches = candidates
-            .Where(candidate => candidate.ProcessName.Equals(appName, StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        if (exactMatches.Length == 1)
-            return exactMatches[0].ProcessId;
-
-        return candidates.Count == 1 ? candidates[0].ProcessId : null;
     }
 
     private enum DialogPlatformKind
