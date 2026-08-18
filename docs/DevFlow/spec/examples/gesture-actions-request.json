@@ -1,0 +1,28 @@
+{
+  "type": "actions",
+  "elementId": "pinch-target",
+  "sources": [
+    {
+      "id": "finger1",
+      "pointerType": "touch",
+      "actions": [
+        { "type": "pointerMove", "x": 0.45, "y": 0.5 },
+        { "type": "pointerDown" },
+        { "type": "pointerMove", "x": 0.2, "y": 0.5, "durationMs": 300 },
+        { "type": "pause", "durationMs": 150 },
+        { "type": "pointerUp" }
+      ]
+    },
+    {
+      "id": "finger2",
+      "pointerType": "touch",
+      "actions": [
+        { "type": "pointerMove", "x": 0.55, "y": 0.5 },
+        { "type": "pointerDown" },
+        { "type": "pause", "durationMs": 300 },
+        { "type": "pointerMove", "x": 0.8, "y": 0.5, "durationMs": 150 },
+        { "type": "pointerUp" }
+      ]
+    }
+  ]
+}

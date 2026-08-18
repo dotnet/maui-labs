@@ -25,12 +25,13 @@ public sealed class BatchTools
 		- {"action":"gesture", "type":"swipe", "elementId":"<id>", "direction":"up"}
 		- {"action":"gesture", "type":"pinch", "elementId":"<id>", "scale":2.0}
 		- {"action":"gesture", "type":"pan", "elementId":"<id>", "deltaX":0, "deltaY":-150}
+		- {"action":"gesture", "type":"actions", "elementId":"<id>", "sources":[{"id":"finger1","pointerType":"touch","actions":[...]}]}
 		- {"action":"navigate", "route":"//page"}
 		- {"action":"back"}
 
 		Note: The backend accepts both "action" and "type" fields. For gesture actions,
 		use "action":"gesture" with a separate "type" field for the gesture kind
-		(tap, doubletap, longpress, swipe, pan, pinch, rotate).
+		(tap, doubletap, longpress, swipe, pan, pinch, rotate, actions).
 
 		Example: [{"action":"fill","elementId":"entry1","text":"hello"},{"action":"tap","elementId":"btn1"}]
 		""")]

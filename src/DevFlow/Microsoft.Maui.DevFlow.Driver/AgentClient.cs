@@ -519,7 +519,7 @@ public class AgentClient : IDisposable
     }
 
     /// <summary>
-    /// Performs a gesture. Supported types: tap, doubletap, longpress, swipe, pan, pinch, rotate.
+    /// Performs a named gesture. Supported types: tap, doubletap, longpress, swipe, pan, pinch, rotate.
     /// </summary>
     public async Task<bool> GestureAsync(
         string type,
@@ -584,6 +584,33 @@ public class AgentClient : IDisposable
         if (steps.HasValue) payload["steps"] = steps.Value;
         AddCaptureMetadata(payload, captureEpoch, registryGeneration);
 
+        return await SendGesturePayloadAsync(payload, type);
+    }
+
+    /// <summary>
+    /// Performs synchronized low-level touch actions. Each source is a touch pointer track whose
+    /// action at a given array index runs in the same timeline tick as the other sources.
+    /// </summary>
+    public Task<GestureResult> PointerActionsAsync(
+        JsonArray sources,
+        string? elementId = null,
+        long? captureEpoch = null,
+        long? registryGeneration = null)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+        var payload = new JsonObject
+        {
+            ["type"] = "actions",
+            ["sources"] = sources.DeepClone()
+        };
+        if (elementId is not null)
+            payload["elementId"] = elementId;
+        AddCaptureMetadata(payload, captureEpoch, registryGeneration);
+        return SendGesturePayloadAsync(payload, "actions");
+    }
+
+    private async Task<GestureResult> SendGesturePayloadAsync(JsonObject payload, string type)
+    {
         try
         {
             using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>

@@ -299,13 +299,130 @@
         "swipe",
         "pan",
         "pinch",
-        "rotate"
+        "rotate",
+        "actions"
       ],
-      "description": "The kind of gesture to perform."
+      "description": "The kind of gesture to perform. 'actions' executes synchronized low-level touch pointer sources when advertised by the backend."
+    },
+    "PointerAction": {
+      "type": "object",
+      "description": "One action in a synchronized pointer-source tick, following the W3C WebDriver pointer action model.",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "pointerMove",
+            "pointerDown",
+            "pointerUp",
+            "pause"
+          ]
+        },
+        "x": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Element-relative X coordinate from 0 (left) to 1 (right). Omitted coordinates retain the pointer's current axis.",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "y": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Element-relative Y coordinate from 0 (top) to 1 (bottom). Omitted coordinates retain the pointer's current axis.",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "durationMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Duration of pointerMove interpolation or a pause in milliseconds.",
+          "minimum": 0,
+          "maximum": 15000
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "pointerDown",
+                  "pointerUp",
+                  "pause"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "x": {
+                "type": "null"
+              },
+              "y": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "pointerDown",
+                  "pointerUp"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "durationMs": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "PointerActionSource": {
+      "type": "object",
+      "description": "An independent touch pointer track. Actions at the same array index across all sources execute in the same synchronized tick.",
+      "required": [
+        "id",
+        "pointerType",
+        "actions"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique pointer identifier within the request."
+        },
+        "pointerType": {
+          "const": "touch"
+        },
+        "actions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/PointerAction"
+          }
+        }
+      }
     },
     "GestureRequest": {
       "type": "object",
-      "description": "Request to perform a named gesture. The gesture is first offered to a matching MAUI gesture recognizer on the target element or its ancestors; if none exists it is injected natively at the platform view, which is how pinch-to-zoom reaches controls that own their gestures internally (Map, WebView, native scroll views).",
+      "description": "Request to perform a named gesture or a capability-gated synchronized pointer timeline. Named gestures are first offered to a matching MAUI gesture recognizer; actions gestures are injected natively.",
       "required": [
         "type"
       ],
@@ -404,6 +521,15 @@
           "minimum": 1,
           "maximum": 120
         },
+        "sources": {
+          "type": "array",
+          "description": "Synchronized touch pointer sources. Required when type is 'actions'. The first action from every source forms tick 0, the second forms tick 1, and so on; shorter tracks implicitly pause. The sum of tick durations cannot exceed 15000 ms.",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": {
+            "$ref": "#/$defs/PointerActionSource"
+          }
+        },
         "captureEpoch": {
           "$ref": "#/$defs/CaptureEpoch"
         },
@@ -414,7 +540,23 @@
           "$ref": "#/$defs/IncludeOption",
           "description": "Optional data to include in the response."
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "actions"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "sources"
+            ]
+          }
+        }
+      ]
     },
     "GestureResponse": {
       "type": "object",
@@ -728,8 +870,33 @@
           "description": "Interpolation steps between gesture start and end.",
           "minimum": 1,
           "maximum": 120
+        },
+        "sources": {
+          "type": "array",
+          "description": "Synchronized pointer sources for a gesture batch item whose type is 'actions'.",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": {
+            "$ref": "#/$defs/PointerActionSource"
+          }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "actions"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "sources"
+            ]
+          }
+        }
+      ]
     },
     "BatchRequest": {
       "type": "object",

@@ -70,7 +70,8 @@
                 "swipe",
                 "pan",
                 "pinch",
-                "rotate"
+                "rotate",
+                "actions"
               ]
             },
             "description": "Named gestures accepted by ui.actions/gesture when the backend exposes gesture automation."

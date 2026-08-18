@@ -35,6 +35,18 @@ namespace Microsoft.Maui.DevFlow.Agent;
 /// </summary>
 public partial class PlatformAgentService
 {
+    protected override bool SupportsNativePointerActions
+    {
+        get
+        {
+#if ANDROID
+            return true;
+#else
+            return false;
+#endif
+        }
+    }
+
     protected override async Task<string?> TryNativePinch(VisualElement element, double scale, Point origin, int durationMs, int steps)
     {
 #if ANDROID
@@ -112,6 +124,18 @@ public partial class PlatformAgentService
 #endif
     }
 
+    protected override async Task<string?> TryNativePointerActions(
+        VisualElement element,
+        IReadOnlyList<PointerActionSourceRequest> sources)
+    {
+#if ANDROID
+        var view = GetAndroidView(element);
+        return view == null ? null : await AndroidPointerActionsAsync(view, sources);
+#else
+        return await base.TryNativePointerActions(element, sources);
+#endif
+    }
+
 #if ANDROID
     // MotionEvent.ACTION_POINTER_INDEX_SHIFT — the pointer index is packed into the
     // high bits of the action for ACTION_POINTER_DOWN/UP.
@@ -151,6 +175,92 @@ public partial class PlatformAgentService
         return (center, radius, density);
     }
 
+    private sealed class AndroidPointerState(int id, PointF position)
+    {
+        public int Id { get; } = id;
+        public PointF Position { get; set; } = position;
+        public bool Pressed { get; set; }
+    }
+
+    private static bool DispatchAndroidMotionEvent(
+        global::Android.Views.View targetView,
+        long downTime,
+        long eventTime,
+        MotionEventActions action,
+        IReadOnlyList<AndroidPointerState> pointers)
+    {
+        var activity = global::Microsoft.Maui.ApplicationModel.Platform.CurrentActivity;
+        var targetLocation = new int[2];
+        targetView.GetLocationInWindow(targetLocation);
+
+        var properties = new MotionEvent.PointerProperties[pointers.Count];
+        var windowCoords = new MotionEvent.PointerCoords[pointers.Count];
+        var localCoords = new MotionEvent.PointerCoords[pointers.Count];
+        for (var i = 0; i < pointers.Count; i++)
+        {
+            properties[i] = new MotionEvent.PointerProperties
+            {
+                Id = pointers[i].Id,
+                ToolType = MotionEventToolType.Finger
+            };
+            windowCoords[i] = new MotionEvent.PointerCoords
+            {
+                X = pointers[i].Position.X,
+                Y = pointers[i].Position.Y,
+                Pressure = 1f,
+                Size = 1f
+            };
+            localCoords[i] = new MotionEvent.PointerCoords
+            {
+                X = pointers[i].Position.X - targetLocation[0],
+                Y = pointers[i].Position.Y - targetLocation[1],
+                Pressure = 1f,
+                Size = 1f
+            };
+        }
+
+        static MotionEvent? CreateEvent(
+            long downTime,
+            long eventTime,
+            MotionEventActions action,
+            MotionEvent.PointerProperties[] properties,
+            MotionEvent.PointerCoords[] coords)
+            => MotionEvent.Obtain(
+                downTime, eventTime, action, properties.Length,
+                properties, coords,
+                0, (MotionEventButtonState)0, 1f, 1f, 0, (Edge)0,
+                InputSourceType.Touchscreen, (MotionEventFlags)0);
+
+        if (activity != null)
+        {
+            var windowEvent = CreateEvent(downTime, eventTime, action, properties, windowCoords);
+            if (windowEvent != null)
+            {
+                try
+                {
+                    if (activity.DispatchTouchEvent(windowEvent))
+                        return true;
+                }
+                finally
+                {
+                    windowEvent.Recycle();
+                }
+            }
+        }
+
+        var localEvent = CreateEvent(downTime, eventTime, action, properties, localCoords);
+        if (localEvent == null)
+            return false;
+        try
+        {
+            return targetView.DispatchTouchEvent(localEvent);
+        }
+        finally
+        {
+            localEvent.Recycle();
+        }
+    }
+
     /// <summary>
     /// Dispatches a full touch sequence (down → moves → up) through the activity so the
     /// real hit-test and gesture-detection pipeline runs. <paramref name="positionsAt"/>
@@ -164,17 +274,10 @@ public partial class PlatformAgentService
         int steps,
         int holdMs = 0)
     {
-        var activity = global::Microsoft.Maui.ApplicationModel.Platform.CurrentActivity;
-        var targetLocation = new int[2];
-        targetView.GetLocationInWindow(targetLocation);
-
-        var properties = new MotionEvent.PointerProperties[pointerCount];
-        var coords = new MotionEvent.PointerCoords[pointerCount];
+        var initial = positionsAt(0);
+        var states = new AndroidPointerState[pointerCount];
         for (var i = 0; i < pointerCount; i++)
-        {
-            properties[i] = new MotionEvent.PointerProperties { Id = i, ToolType = MotionEventToolType.Finger };
-            coords[i] = new MotionEvent.PointerCoords { Pressure = 1f, Size = 1f };
-        }
+            states[i] = new AndroidPointerState(i, initial[i]);
 
         var downTime = global::Android.OS.SystemClock.UptimeMillis();
         var stepDelay = steps > 0 && durationMs > 0 ? Math.Max(1, durationMs / steps) : 0;
@@ -183,75 +286,19 @@ public partial class PlatformAgentService
         void Apply(PointF[] points)
         {
             for (var i = 0; i < pointerCount; i++)
-            {
-                coords[i].X = points[i].X;
-                coords[i].Y = points[i].Y;
-            }
+                states[i].Position = points[i];
         }
 
         bool Send(MotionEventActions action, int activePointers)
-        {
-            static MotionEvent? CreateEvent(
-                long downTime,
-                long eventTime,
-                MotionEventActions action,
-                int activePointers,
-                MotionEvent.PointerProperties[] properties,
-                MotionEvent.PointerCoords[] coords)
-                => MotionEvent.Obtain(
-                    downTime, eventTime, action, activePointers,
-                    properties[..activePointers], coords[..activePointers],
-                    0, (MotionEventButtonState)0, 1f, 1f, 0, (Edge)0,
-                    InputSourceType.Touchscreen, (MotionEventFlags)0);
-
-            if (activity != null)
-            {
-                var windowEvent = CreateEvent(
-                    downTime, eventTime, action, activePointers, properties, coords);
-                if (windowEvent != null)
-                {
-                    try
-                    {
-                        if (activity.DispatchTouchEvent(windowEvent))
-                            return true;
-                    }
-                    finally
-                    {
-                        windowEvent.Recycle();
-                    }
-                }
-            }
-
-            var localCoords = new MotionEvent.PointerCoords[activePointers];
-            for (var i = 0; i < activePointers; i++)
-            {
-                localCoords[i] = new MotionEvent.PointerCoords
-                {
-                    X = coords[i].X - targetLocation[0],
-                    Y = coords[i].Y - targetLocation[1],
-                    Pressure = coords[i].Pressure,
-                    Size = coords[i].Size
-                };
-            }
-
-            var localEvent = CreateEvent(
-                downTime, eventTime, action, activePointers, properties, localCoords);
-            if (localEvent == null)
-                return false;
-            try
-            {
-                return targetView.DispatchTouchEvent(localEvent);
-            }
-            finally
-            {
-                localEvent.Recycle();
-            }
-        }
+            => DispatchAndroidMotionEvent(
+                targetView,
+                downTime,
+                eventTime,
+                action,
+                states[..activePointers]);
 
         try
         {
-            Apply(positionsAt(0));
-
             var handled = Send(MotionEventActions.Down, 1);
             for (var i = 1; i < pointerCount; i++)
                 handled |= Send(
@@ -274,7 +321,9 @@ public partial class PlatformAgentService
 
             eventTime += 1;
             for (var i = pointerCount - 1; i >= 1; i--)
-                Send((MotionEventActions)((int)MotionEventActions.PointerUp | (i << PointerIndexShift)), i + 1);
+                Send(
+                    (MotionEventActions)((int)MotionEventActions.PointerUp | (i << PointerIndexShift)),
+                    i + 1);
             Send(MotionEventActions.Up, 1);
             return handled;
         }
@@ -282,6 +331,191 @@ public partial class PlatformAgentService
         {
             System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] Android touch injection failed: {ex.GetBaseException().Message}");
             return false;
+        }
+    }
+
+    private static async Task<string?> AndroidPointerActionsAsync(
+        global::Android.Views.View view,
+        IReadOnlyList<PointerActionSourceRequest> sources)
+    {
+        if (view.Width <= 0 || view.Height <= 0)
+            return null;
+
+        var location = new int[2];
+        view.GetLocationInWindow(location);
+        var center = new PointF(location[0] + view.Width / 2f, location[1] + view.Height / 2f);
+        var states = sources
+            .Select((_, index) => new AndroidPointerState(index, center))
+            .ToArray();
+        var maxTicks = sources.Max(static source => source.Actions!.Count);
+        var downTime = 0L;
+        var downAccepted = true;
+        var rejectedEvents = 0;
+
+        List<AndroidPointerState> ActivePointers()
+            => states.Where(static state => state.Pressed).ToList();
+
+        PointF ToWindowPoint(PointerActionStepRequest action, PointF current)
+            => new(
+                action.X.HasValue ? location[0] + (float)(view.Width * action.X.Value) : current.X,
+                action.Y.HasValue ? location[1] + (float)(view.Height * action.Y.Value) : current.Y);
+
+        void RecordDispatch(bool accepted, bool requiredDown = false)
+        {
+            if (accepted)
+                return;
+            rejectedEvents++;
+            if (requiredDown)
+                downAccepted = false;
+        }
+
+        try
+        {
+            for (var tick = 0; tick < maxTicks; tick++)
+            {
+                var tickActions = sources
+                    .Select(source => tick < source.Actions!.Count ? source.Actions[tick] : null)
+                    .ToArray();
+                var tickDuration = tickActions.Max(static action => action?.DurationMs ?? 0);
+
+                for (var sourceIndex = 0; sourceIndex < sources.Count; sourceIndex++)
+                {
+                    var action = tickActions[sourceIndex];
+                    if (NormalizePointerActionType(action?.Type) != "pointerDown")
+                        continue;
+
+                    var state = states[sourceIndex];
+                    state.Pressed = true;
+                    var active = ActivePointers();
+                    if (active.Count == 1)
+                    {
+                        downTime = global::Android.OS.SystemClock.UptimeMillis();
+                        RecordDispatch(
+                            DispatchAndroidMotionEvent(
+                                view, downTime, downTime, MotionEventActions.Down, active),
+                            requiredDown: true);
+                    }
+                    else
+                    {
+                        var pointerIndex = active.IndexOf(state);
+                        var pointerDown = (MotionEventActions)(
+                            (int)MotionEventActions.PointerDown | (pointerIndex << PointerIndexShift));
+                        RecordDispatch(
+                            DispatchAndroidMotionEvent(
+                                view,
+                                downTime,
+                                global::Android.OS.SystemClock.UptimeMillis(),
+                                pointerDown,
+                                active),
+                            requiredDown: true);
+                    }
+                }
+
+                for (var sourceIndex = sources.Count - 1; sourceIndex >= 0; sourceIndex--)
+                {
+                    var action = tickActions[sourceIndex];
+                    if (NormalizePointerActionType(action?.Type) != "pointerUp")
+                        continue;
+
+                    var state = states[sourceIndex];
+                    var active = ActivePointers();
+                    var pointerIndex = active.IndexOf(state);
+                    var eventAction = active.Count == 1
+                        ? MotionEventActions.Up
+                        : (MotionEventActions)(
+                            (int)MotionEventActions.PointerUp | (pointerIndex << PointerIndexShift));
+                    RecordDispatch(DispatchAndroidMotionEvent(
+                        view,
+                        downTime,
+                        global::Android.OS.SystemClock.UptimeMillis(),
+                        eventAction,
+                        active));
+                    state.Pressed = false;
+                }
+
+                var moveSources = Enumerable.Range(0, sources.Count)
+                    .Where(index => NormalizePointerActionType(tickActions[index]?.Type) == "pointerMove")
+                    .ToArray();
+                if (moveSources.Length > 0)
+                {
+                    var starts = states.Select(static state => state.Position).ToArray();
+                    var ends = states.Select(static state => state.Position).ToArray();
+                    foreach (var sourceIndex in moveSources)
+                        ends[sourceIndex] = ToWindowPoint(tickActions[sourceIndex]!, starts[sourceIndex]);
+
+                    var hasPressedMove = moveSources.Any(index =>
+                        states[index].Pressed
+                        && (Math.Abs(ends[index].X - starts[index].X) > 0.01f
+                            || Math.Abs(ends[index].Y - starts[index].Y) > 0.01f));
+                    var steps = tickDuration <= 0 ? 1 : Math.Clamp((int)Math.Ceiling(tickDuration / 16d), 1, 120);
+                    var previousElapsed = 0;
+                    for (var step = 1; step <= steps; step++)
+                    {
+                        var elapsed = tickDuration <= 0
+                            ? 0
+                            : (int)Math.Round(tickDuration * step / (double)steps);
+                        var delay = elapsed - previousElapsed;
+                        if (delay > 0)
+                            await Task.Delay(delay);
+                        previousElapsed = elapsed;
+
+                        foreach (var sourceIndex in moveSources)
+                        {
+                            var actionDuration = tickActions[sourceIndex]!.DurationMs ?? 0;
+                            var progress = actionDuration <= 0
+                                ? 1d
+                                : Math.Min(1d, (double)elapsed / actionDuration);
+                            states[sourceIndex].Position = new PointF(
+                                starts[sourceIndex].X + (ends[sourceIndex].X - starts[sourceIndex].X) * (float)progress,
+                                starts[sourceIndex].Y + (ends[sourceIndex].Y - starts[sourceIndex].Y) * (float)progress);
+                        }
+
+                        var active = ActivePointers();
+                        if (hasPressedMove && active.Count > 0)
+                        {
+                            RecordDispatch(DispatchAndroidMotionEvent(
+                                view,
+                                downTime,
+                                global::Android.OS.SystemClock.UptimeMillis(),
+                                MotionEventActions.Move,
+                                active));
+                        }
+                    }
+                }
+                else if (tickDuration > 0)
+                {
+                    await Task.Delay(tickDuration);
+                }
+            }
+
+            return downAccepted
+                ? $"MotionEvent actions ({sources.Count} touch sources, {maxTicks} synchronized ticks, {rejectedEvents} unconsumed events)"
+                : null;
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                var active = ActivePointers();
+                if (active.Count > 0 && downTime > 0)
+                {
+                    DispatchAndroidMotionEvent(
+                        view,
+                        downTime,
+                        global::Android.OS.SystemClock.UptimeMillis(),
+                        MotionEventActions.Cancel,
+                        active);
+                }
+            }
+            catch (Exception cancelException)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[Microsoft.Maui.DevFlow] Android pointer cancel failed: {cancelException.GetBaseException().Message}");
+            }
+
+            System.Diagnostics.Debug.WriteLine(
+                $"[Microsoft.Maui.DevFlow] Android pointer actions failed: {ex.GetBaseException().Message}");
+            return null;
         }
     }
 
