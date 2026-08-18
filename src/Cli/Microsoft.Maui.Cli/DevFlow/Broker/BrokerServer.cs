@@ -310,6 +310,8 @@ public class BrokerServer : IDisposable
                 Tfm = registration.Tfm,
                 Platform = registration.Platform,
                 AppName = registration.AppName,
+                Framework = registration.Framework,
+                UiFramework = registration.UiFramework,
                 Port = assignedPort,
                 Version = registration.Version,
                 SessionId = registration.SessionId,

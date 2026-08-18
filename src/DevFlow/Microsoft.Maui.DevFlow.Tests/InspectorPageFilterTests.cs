@@ -145,4 +145,70 @@ public class InspectorPageFilterTests
         Assert.Contains("data-id=\"sheet\"", html);
         Assert.DoesNotContain("top:-", html);
     }
+
+    // Registered native elements (upstream #406) are appended beneath their owner, so a
+    // window-owned registration lands as the window's last child. Frame selection must not
+    // mistake it for the topmost page, and must not drop native overlays it cannot render.
+    private static ElementInfo NativeEl(string id, double x, double y, double w, double h) => new()
+    {
+        Id = id,
+        Type = "NSAlert",
+        Origin = "native",
+        IsVisible = true,
+        WindowBounds = new BoundsInfo { X = x, Y = y, Width = w, Height = h },
+    };
+
+    [Fact]
+    public void FindRootPageId_SkipsWindowOwnedRegisteredNativeElements()
+    {
+        var tree = new List<ElementInfo>
+        {
+            El("window", "Window", 0, 0, 400, 900,
+                children: [El("page", "ContentPage", 0, 0, 400, 900), NativeEl("alert", 40, 300, 320, 200)]),
+        };
+
+        var rootPageId = InspectorServer.FindRootPageId(tree);
+
+        Assert.Equal("page", rootPageId);
+        Assert.Equal("page", Assert.Single(InspectorServer.SelectFrameTree(tree, rootPageId)).Id);
+    }
+
+    [Fact]
+    public void RequiresFullscreenCapture_WhenNativeOverlayWouldBeDroppedFromTheFrame()
+    {
+        var tree = new List<ElementInfo>
+        {
+            El("window", "Window", 0, 0, 400, 900,
+                children: [El("page", "ContentPage", 0, 0, 400, 900), NativeEl("alert", 40, 300, 320, 200)]),
+        };
+
+        // The alert is a sibling of the page, so a page-scoped frame would lose it.
+        Assert.True(InspectorServer.RequiresFullscreenCapture(tree, "page"));
+    }
+
+    [Fact]
+    public void RequiresFullscreenCapture_IsFalseWhenNativeElementIsInsideTheCapturedPage()
+    {
+        var tree = new List<ElementInfo>
+        {
+            El("window", "Window", 0, 0, 400, 900,
+                children: El("page", "ContentPage", 0, 0, 400, 900,
+                    children: NativeEl("toolbar-native", 300, 10, 80, 40))),
+        };
+
+        // Nested inside the captured subtree — page-scoped capture still renders it.
+        Assert.False(InspectorServer.RequiresFullscreenCapture(tree, "page"));
+    }
+
+    [Fact]
+    public void RequiresFullscreenCapture_StillDetectsDetachedNativeRoots()
+    {
+        var tree = new List<ElementInfo>
+        {
+            El("window", "Window", 0, 0, 400, 900, children: El("page", "ContentPage", 0, 0, 400, 900)),
+            NativeEl("detached-dialog", 40, 300, 320, 200),
+        };
+
+        Assert.True(InspectorServer.RequiresFullscreenCapture(tree, "page"));
+    }
 }

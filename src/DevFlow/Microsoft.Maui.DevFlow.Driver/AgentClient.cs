@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -329,37 +330,30 @@ public class AgentClient : IDisposable
         var candidates = await ResolveLoopbackCandidatesAsync(context.DnsEndPoint.Host, cancellationToken)
             .ConfigureAwait(false);
 
+        using var raceCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var attempts = candidates
+            .Select(address => ConnectLoopbackAddressAsync(address, port, raceCts.Token))
+            .ToList();
         List<Exception>? failures = null;
-        foreach (var address in candidates)
+        while (attempts.Count > 0)
         {
-            var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp)
-            {
-                NoDelay = true
-            };
+            var completed = await Task.WhenAny(attempts).ConfigureAwait(false);
+            attempts.Remove(completed);
             try
             {
-                using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                attemptCts.CancelAfter(LoopbackConnectAttemptTimeout);
-                await socket.ConnectAsync(address, port, attemptCts.Token).ConfigureAwait(false);
+                var socket = await completed.ConfigureAwait(false);
+                raceCts.Cancel();
+                await DisposeSuccessfulConnectionsAsync(attempts).ConfigureAwait(false);
                 return new NetworkStream(socket, ownsSocket: true);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                socket.Dispose();
+                raceCts.Cancel();
+                await DisposeSuccessfulConnectionsAsync(attempts).ConfigureAwait(false);
                 throw;
-            }
-            catch (OperationCanceledException)
-            {
-                // The per-attempt timeout fired while the caller's token is still valid. Record a
-                // descriptive reason (rather than a bare "operation canceled", which reads like a
-                // user-initiated cancellation) before falling through to the next loopback family.
-                socket.Dispose();
-                (failures ??= new List<Exception>()).Add(new TimeoutException(
-                    $"Connect to [{address}]:{port} timed out after {LoopbackConnectAttemptTimeout.TotalSeconds:0}s."));
             }
             catch (Exception ex)
             {
-                socket.Dispose();
                 (failures ??= new List<Exception>()).Add(ex);
             }
         }
@@ -367,6 +361,53 @@ public class AgentClient : IDisposable
         throw failures is { Count: > 0 }
             ? new SocketException((int)SocketError.ConnectionRefused, BuildLoopbackFailureMessage(failures))
             : new SocketException((int)SocketError.ConnectionRefused);
+    }
+
+    private static async Task<Socket> ConnectLoopbackAddressAsync(
+        IPAddress address, int port, CancellationToken cancellationToken)
+    {
+        var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp)
+        {
+            NoDelay = true
+        };
+        try
+        {
+            using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            attemptCts.CancelAfter(LoopbackConnectAttemptTimeout);
+            await socket.ConnectAsync(address, port, attemptCts.Token).ConfigureAwait(false);
+            return socket;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            socket.Dispose();
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            socket.Dispose();
+            throw new TimeoutException(
+                $"Connect to [{address}]:{port} timed out after {LoopbackConnectAttemptTimeout.TotalSeconds:0}s.");
+        }
+        catch
+        {
+            socket.Dispose();
+            throw;
+        }
+    }
+
+    private static async Task DisposeSuccessfulConnectionsAsync(List<Task<Socket>> attempts)
+    {
+        foreach (var attempt in attempts)
+        {
+            try
+            {
+                (await attempt.ConfigureAwait(false)).Dispose();
+            }
+            catch
+            {
+                // Losing connection attempts are expected to fail or be canceled.
+            }
+        }
     }
 
     private static async Task<List<IPAddress>> ResolveLoopbackCandidatesAsync(string host, CancellationToken cancellationToken)
@@ -503,8 +544,7 @@ public class AgentClient : IDisposable
     public async Task<List<ElementInfo>> QueryCssAsync(string selector)
     {
         var url = $"{_baseUrl}{UiApi}/elements?selector={Uri.EscapeDataString(selector)}";
-        using var response = await SendWithTransientRetriesAsync(() => _http.GetAsync(url));
-        var body = await response.Content.ReadAsStringAsync();
+        var body = await GetStringWithRetryableUiReadAsync(url, returnErrorBody: true);
         var json = DriverJson.ParseElement(body);
         if (json.ValueKind == JsonValueKind.Object &&
             json.TryGetProperty("success", out var s) && !s.GetBoolean())
@@ -518,46 +558,124 @@ public class AgentClient : IDisposable
     /// <summary>
     /// Tap an element.
     /// </summary>
-    public async Task<bool> TapAsync(string elementId)
+    public Task<bool> TapAsync(string elementId)
+        => TapAsync(elementId, captureEpoch: null, registryGeneration: null);
+
+    public async Task<bool> TapAsync(string elementId, long? captureEpoch, long? registryGeneration)
     {
-        return await PostActionAsync($"{UiApi}/actions/tap", new JsonObject
+        var payload = new JsonObject
         {
             ["elementId"] = elementId
-        });
+        };
+        AddCaptureMetadata(payload, captureEpoch, registryGeneration);
+        return await PostActionAsync($"{UiApi}/actions/tap", payload);
+    }
+
+    public Task<ActionResult> TapResultAsync(
+        string elementId,
+        long? captureEpoch,
+        long? registryGeneration)
+    {
+        var payload = new JsonObject
+        {
+            ["elementId"] = elementId
+        };
+        AddCaptureMetadata(payload, captureEpoch, registryGeneration);
+        return PostActionResultAsync($"{UiApi}/actions/tap", payload);
     }
 
     /// <summary>
     /// Fill text into an element.
     /// </summary>
-    public async Task<bool> FillAsync(string elementId, string text)
+    public Task<bool> FillAsync(string elementId, string text)
+        => FillAsync(elementId, text, captureEpoch: null, registryGeneration: null);
+
+    public async Task<bool> FillAsync(
+        string elementId,
+        string text,
+        long? captureEpoch,
+        long? registryGeneration)
     {
-        return await PostActionAsync($"{UiApi}/actions/fill", new JsonObject
+        var payload = new JsonObject
         {
             ["elementId"] = elementId,
             ["text"] = text
-        });
+        };
+        AddCaptureMetadata(payload, captureEpoch, registryGeneration);
+        return await PostActionAsync($"{UiApi}/actions/fill", payload);
+    }
+
+    public Task<ActionResult> FillResultAsync(
+        string elementId,
+        string text,
+        long? captureEpoch,
+        long? registryGeneration)
+    {
+        var payload = new JsonObject
+        {
+            ["elementId"] = elementId,
+            ["text"] = text
+        };
+        AddCaptureMetadata(payload, captureEpoch, registryGeneration);
+        return PostActionResultAsync($"{UiApi}/actions/fill", payload);
     }
 
     /// <summary>
     /// Clear text from an element.
     /// </summary>
-    public async Task<bool> ClearAsync(string elementId)
+    public Task<bool> ClearAsync(string elementId)
+        => ClearAsync(elementId, captureEpoch: null, registryGeneration: null);
+
+    public async Task<bool> ClearAsync(string elementId, long? captureEpoch, long? registryGeneration)
     {
-        return await PostActionAsync($"{UiApi}/actions/clear", new JsonObject
+        var payload = new JsonObject
         {
             ["elementId"] = elementId
-        });
+        };
+        AddCaptureMetadata(payload, captureEpoch, registryGeneration);
+        return await PostActionAsync($"{UiApi}/actions/clear", payload);
+    }
+
+    public Task<ActionResult> ClearResultAsync(
+        string elementId,
+        long? captureEpoch,
+        long? registryGeneration)
+    {
+        var payload = new JsonObject
+        {
+            ["elementId"] = elementId
+        };
+        AddCaptureMetadata(payload, captureEpoch, registryGeneration);
+        return PostActionResultAsync($"{UiApi}/actions/clear", payload);
     }
 
     /// <summary>
     /// Focus an element.
     /// </summary>
-    public async Task<bool> FocusAsync(string elementId)
+    public Task<bool> FocusAsync(string elementId)
+        => FocusAsync(elementId, captureEpoch: null, registryGeneration: null);
+
+    public async Task<bool> FocusAsync(string elementId, long? captureEpoch, long? registryGeneration)
     {
-        return await PostActionAsync($"{UiApi}/actions/focus", new JsonObject
+        var payload = new JsonObject
         {
             ["elementId"] = elementId
-        });
+        };
+        AddCaptureMetadata(payload, captureEpoch, registryGeneration);
+        return await PostActionAsync($"{UiApi}/actions/focus", payload);
+    }
+
+    public Task<ActionResult> FocusResultAsync(
+        string elementId,
+        long? captureEpoch,
+        long? registryGeneration)
+    {
+        var payload = new JsonObject
+        {
+            ["elementId"] = elementId
+        };
+        AddCaptureMetadata(payload, captureEpoch, registryGeneration);
+        return PostActionResultAsync($"{UiApi}/actions/focus", payload);
     }
 
     /// <summary>
@@ -576,17 +694,71 @@ public class AgentClient : IDisposable
         return await PostActionAsync($"{UiApi}/actions/back", new JsonObject());
     }
 
-    public async Task<bool> KeyAsync(string key, string? elementId = null, string? text = null)
+    public Task<bool> KeyAsync(string key, string? elementId = null, string? text = null)
+        => KeyAsync(
+            key,
+            elementId,
+            text,
+            captureEpoch: null,
+            registryGeneration: null);
+
+    public async Task<bool> KeyAsync(
+        string key,
+        string? elementId,
+        string? text,
+        long? captureEpoch,
+        long? registryGeneration)
     {
-        return await PostActionAsync($"{UiApi}/actions/key", new JsonObject
+        var payload = new JsonObject
         {
             ["elementId"] = elementId,
             ["key"] = key,
             ["text"] = text
-        });
+        };
+        AddCaptureMetadata(payload, captureEpoch, registryGeneration);
+        return await PostActionAsync($"{UiApi}/actions/key", payload);
     }
 
-    public async Task<bool> GestureAsync(string type, string? elementId = null, string? direction = null, double? distance = null, int? durationMs = null)
+    public Task<ActionResult> KeyResultAsync(
+        string key,
+        string? elementId,
+        string? text,
+        long? captureEpoch,
+        long? registryGeneration)
+    {
+        var payload = new JsonObject
+        {
+            ["elementId"] = elementId,
+            ["key"] = key,
+            ["text"] = text
+        };
+        AddCaptureMetadata(payload, captureEpoch, registryGeneration);
+        return PostActionResultAsync($"{UiApi}/actions/key", payload);
+    }
+
+    public Task<bool> GestureAsync(
+        string type,
+        string? elementId = null,
+        string? direction = null,
+        double? distance = null,
+        int? durationMs = null)
+        => GestureAsync(
+            type,
+            elementId,
+            direction,
+            distance,
+            durationMs,
+            captureEpoch: null,
+            registryGeneration: null);
+
+    public async Task<bool> GestureAsync(
+        string type,
+        string? elementId,
+        string? direction,
+        double? distance,
+        int? durationMs,
+        long? captureEpoch,
+        long? registryGeneration)
     {
         var payload = new JsonObject
         {
@@ -597,11 +769,48 @@ public class AgentClient : IDisposable
         if (direction is not null) payload["direction"] = direction;
         if (distance.HasValue) payload["distance"] = distance.Value;
         if (durationMs.HasValue) payload["durationMs"] = durationMs.Value;
+        AddCaptureMetadata(payload, captureEpoch, registryGeneration);
 
         return await PostActionAsync($"{UiApi}/actions/gesture", payload);
     }
 
-    public async Task<JsonElement> BatchAsync(IEnumerable<JsonObject> actions, bool continueOnError = false)
+    public Task<ActionResult> GestureResultAsync(
+        string type,
+        string? elementId,
+        string? direction,
+        double? distance,
+        int? durationMs,
+        long? captureEpoch,
+        long? registryGeneration)
+    {
+        var payload = new JsonObject
+        {
+            ["type"] = type
+        };
+
+        if (elementId is not null) payload["elementId"] = elementId;
+        if (direction is not null) payload["direction"] = direction;
+        if (distance.HasValue) payload["distance"] = distance.Value;
+        if (durationMs.HasValue) payload["durationMs"] = durationMs.Value;
+        AddCaptureMetadata(payload, captureEpoch, registryGeneration);
+
+        return PostActionResultAsync($"{UiApi}/actions/gesture", payload);
+    }
+
+    public Task<JsonElement> BatchAsync(
+        IEnumerable<JsonObject> actions,
+        bool continueOnError = false)
+        => BatchAsync(
+            actions,
+            continueOnError,
+            captureEpoch: null,
+            registryGeneration: null);
+
+    public async Task<JsonElement> BatchAsync(
+        IEnumerable<JsonObject> actions,
+        bool continueOnError,
+        long? captureEpoch,
+        long? registryGeneration)
     {
         var items = new JsonArray();
         foreach (var action in actions)
@@ -612,6 +821,7 @@ public class AgentClient : IDisposable
             ["continueOnError"] = continueOnError,
             ["actions"] = items
         };
+        AddCaptureMetadata(body, captureEpoch, registryGeneration);
 
         using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
         {
@@ -625,7 +835,38 @@ public class AgentClient : IDisposable
     /// <summary>
     /// Scroll by delta, item index, or scroll element into view.
     /// </summary>
-    public async Task<bool> ScrollAsync(string? elementId = null, double deltaX = 0, double deltaY = 0, bool animated = true, int? window = null, int? itemIndex = null, int? groupIndex = null, string? scrollToPosition = null)
+    public Task<bool> ScrollAsync(
+        string? elementId = null,
+        double deltaX = 0,
+        double deltaY = 0,
+        bool animated = true,
+        int? window = null,
+        int? itemIndex = null,
+        int? groupIndex = null,
+        string? scrollToPosition = null)
+        => ScrollAsync(
+            elementId,
+            deltaX,
+            deltaY,
+            animated,
+            window,
+            itemIndex,
+            groupIndex,
+            scrollToPosition,
+            captureEpoch: null,
+            registryGeneration: null);
+
+    public async Task<bool> ScrollAsync(
+        string? elementId,
+        double deltaX,
+        double deltaY,
+        bool animated,
+        int? window,
+        int? itemIndex,
+        int? groupIndex,
+        string? scrollToPosition,
+        long? captureEpoch,
+        long? registryGeneration)
     {
         var url = $"{UiApi}/actions/scroll";
         if (window != null) url += $"?window={window}";
@@ -641,8 +882,37 @@ public class AgentClient : IDisposable
         if (itemIndex.HasValue) payload["itemIndex"] = itemIndex.Value;
         if (groupIndex.HasValue) payload["groupIndex"] = groupIndex.Value;
         if (scrollToPosition is not null) payload["scrollToPosition"] = scrollToPosition;
+        AddCaptureMetadata(payload, captureEpoch, registryGeneration);
 
         return await PostActionAsync(url, payload);
+    }
+
+    public Task<ActionResult> ScrollResultAsync(
+        string? elementId,
+        double deltaX,
+        double deltaY,
+        bool animated,
+        int? window,
+        int? itemIndex,
+        int? groupIndex,
+        string? scrollToPosition,
+        long? captureEpoch,
+        long? registryGeneration)
+    {
+        var url = $"{UiApi}/actions/scroll";
+        if (window != null) url += $"?window={window}";
+        var payload = new JsonObject
+        {
+            ["deltaX"] = deltaX,
+            ["deltaY"] = deltaY,
+            ["animated"] = animated
+        };
+        if (elementId is not null) payload["elementId"] = elementId;
+        if (itemIndex.HasValue) payload["itemIndex"] = itemIndex.Value;
+        if (groupIndex.HasValue) payload["groupIndex"] = groupIndex.Value;
+        if (scrollToPosition is not null) payload["scrollToPosition"] = scrollToPosition;
+        AddCaptureMetadata(payload, captureEpoch, registryGeneration);
+        return PostActionResultAsync(url, payload);
     }
 
     /// <summary>
@@ -663,9 +933,34 @@ public class AgentClient : IDisposable
     /// Take a screenshot (returns PNG bytes).
     /// Optionally target a specific element by ID or CSS selector.
     /// </summary>
-    public async Task<byte[]?> ScreenshotAsync(int? window = null, string? elementId = null, string? selector = null, int? maxWidth = null, string? scale = null)
+    public async Task<byte[]?> ScreenshotAsync(
+        int? window = null,
+        string? elementId = null,
+        string? selector = null,
+        int? maxWidth = null,
+        string? scale = null)
     {
         var result = await ScreenshotResultAsync(window, elementId, selector, maxWidth, scale);
+        return result.Success ? result.Data : null;
+    }
+
+    public async Task<byte[]?> ScreenshotAsync(
+        int? window,
+        string? elementId,
+        string? selector,
+        int? maxWidth,
+        string? scale,
+        long? captureEpoch,
+        long? registryGeneration)
+    {
+        var result = await ScreenshotResultAsync(
+            window,
+            elementId,
+            selector,
+            maxWidth,
+            scale,
+            captureEpoch,
+            registryGeneration);
         return result.Success ? result.Data : null;
     }
 
@@ -674,28 +969,119 @@ public class AgentClient : IDisposable
     /// the result carries the agent-provided error message, machine-readable reason, retryable
     /// flag, and any actionable suggestions (e.g. the macOS app window not being frontmost),
     /// instead of collapsing every failure into <c>null</c> as <see cref="ScreenshotAsync"/> does.
+    /// This never throws <see cref="NotSupportedByAgentException"/>: a backend that does not
+    /// implement screenshots is reported as a failure result with <c>Reason</c> set to
+    /// <c>"not_supported"</c>, same as any other structured failure.
     /// </summary>
-    public async Task<ScreenshotResult> ScreenshotResultAsync(int? window = null, string? elementId = null, string? selector = null, int? maxWidth = null, string? scale = null)
+    public Task<ScreenshotResult> ScreenshotResultAsync(
+        int? window = null,
+        string? elementId = null,
+        string? selector = null,
+        int? maxWidth = null,
+        string? scale = null)
+        => ScreenshotResultAsync(
+            window,
+            elementId,
+            selector,
+            maxWidth,
+            scale,
+            captureEpoch: null,
+            registryGeneration: null);
+
+    public Task<ScreenshotResult> ScreenshotResultAsync(
+        int? window,
+        string? elementId,
+        string? selector,
+        int? maxWidth,
+        string? scale,
+        long? captureEpoch,
+        long? registryGeneration)
+        => ScreenshotResultCoreAsync(
+            window,
+            elementId,
+            selector,
+            maxWidth,
+            scale,
+            captureEpoch,
+            registryGeneration,
+            fullscreen: false);
+
+    public async Task<byte[]?> FullscreenScreenshotAsync(
+        int? window = null,
+        int? maxWidth = null,
+        string? scale = null,
+        long? captureEpoch = null,
+        long? registryGeneration = null)
+    {
+        var result = await ScreenshotResultCoreAsync(
+            window,
+            elementId: null,
+            selector: null,
+            maxWidth,
+            scale,
+            captureEpoch,
+            registryGeneration,
+            fullscreen: true);
+        return result.Success ? result.Data : null;
+    }
+
+    private async Task<ScreenshotResult> ScreenshotResultCoreAsync(
+        int? window,
+        string? elementId,
+        string? selector,
+        int? maxWidth,
+        string? scale,
+        long? captureEpoch,
+        long? registryGeneration,
+        bool fullscreen)
     {
         try
         {
             var queryParams = new List<string>();
+            if (fullscreen) queryParams.Add("fullscreen=true");
             if (window != null) queryParams.Add($"window={window}");
             if (elementId != null) queryParams.Add($"elementId={Uri.EscapeDataString(elementId)}");
             if (selector != null) queryParams.Add($"selector={Uri.EscapeDataString(selector)}");
             if (maxWidth != null) queryParams.Add($"maxWidth={maxWidth}");
             if (scale != null) queryParams.Add($"scale={Uri.EscapeDataString(scale)}");
+            if (captureEpoch != null) queryParams.Add($"captureEpoch={captureEpoch}");
+            if (registryGeneration != null) queryParams.Add($"registryGeneration={registryGeneration}");
 
             var url = queryParams.Count > 0
                 ? $"{_baseUrl}{UiApi}/screenshot?{string.Join("&", queryParams)}"
                 : $"{_baseUrl}{UiApi}/screenshot";
 
-            using var response = await SendWithTransientRetriesAsync(() => _http.GetAsync(url));
-            if (response.IsSuccessStatusCode)
-                return ScreenshotResult.Ok(await response.Content.ReadAsByteArrayAsync());
+            const int captureRetryCount = 2;
+            for (var attempt = 0; ; attempt++)
+            {
+                using var response = await SendWithTransientRetriesAsync(() => _http.GetAsync(url));
+                if (response.IsSuccessStatusCode)
+                {
+                    return ScreenshotResult.Ok(
+                        await response.Content.ReadAsByteArrayAsync(),
+                        GetHeaderInt64(response, "X-DevFlow-Capture-Epoch"),
+                        GetHeaderInt64(response, "X-DevFlow-Registry-Generation"),
+                        GetHeaderInt32(response, "X-DevFlow-Window-Id"));
+                }
 
-            var body = await response.Content.ReadAsStringAsync();
-            return ParseScreenshotError(body);
+                var body = await response.Content.ReadAsStringAsync();
+                if (response.StatusCode == HttpStatusCode.Conflict
+                    && IsCaptureChangedDuringRead(body)
+                    && attempt < captureRetryCount)
+                {
+                    await Task.Delay(TimeSpan.FromMilliseconds(10 * (attempt + 1)));
+                    continue;
+                }
+
+                return ParseScreenshotError(body);
+            }
+        }
+        // The shared retry path turns a uniform 501 not_supported envelope into this typed
+        // exception. ScreenshotResultAsync's documented contract is to report failures through
+        // the returned ScreenshotResult rather than throwing, so translate it back into one here.
+        catch (NotSupportedByAgentException ex)
+        {
+            return ScreenshotResult.Failure(ex.Message, "not_supported");
         }
         catch (Exception ex) when (IsExpectedClientException(ex)) { return ScreenshotResult.Failure(null); }
     }
@@ -748,11 +1134,55 @@ public class AgentClient : IDisposable
     /// <summary>
     /// Get a specific property value from an element.
     /// </summary>
+    /// <remarks>
+    /// Surfaces explicit server rejections (a response body with <c>"success": false</c>, such
+    /// as <c>native-property-not-supported</c> for native elements or "Agent not bound to app")
+    /// as a thrown exception instead of silently returning <c>null</c>, so callers see the
+    /// server's real error/reason rather than a success-shaped null. Transport failures and
+    /// unparsable responses are also surfaced rather than collapsed to a success-shaped
+    /// <c>null</c>. The one exception is a genuine "property not found", which the server
+    /// reports via HTTP 404 with no other structured reason: that case still returns
+    /// <c>null</c>, preserving the documented not-found contract relied on by MCP tools like
+    /// <c>maui_get_property</c> and <c>maui_assert</c>.
+    /// </remarks>
     public async Task<string?> GetPropertyAsync(string elementId, string propertyName)
     {
-        var result = await GetJsonAsync($"{UiApi}/elements/{elementId}/properties/{propertyName}");
-        if (result.ValueKind == JsonValueKind.Object && result.TryGetProperty("value", out var val))
-            return val.GetString();
+        var (result, statusCode) = await GetJsonWithStatusAsync($"{UiApi}/elements/{elementId}/properties/{propertyName}");
+
+        if (result.ValueKind == JsonValueKind.Undefined)
+        {
+            throw new InvalidOperationException(
+                $"Failed to get property '{propertyName}' on element '{elementId}': the DevFlow agent could not be reached or returned an unreadable response.");
+        }
+
+        if (result.ValueKind == JsonValueKind.Object)
+        {
+            if (result.TryGetProperty("success", out var successProperty)
+                && successProperty.ValueKind == JsonValueKind.False)
+            {
+                var hasReason = result.TryGetProperty("reason", out var reasonProperty)
+                    && reasonProperty.ValueKind == JsonValueKind.String;
+
+                // A plain "property not found" is reported via HTTP 404 without any other
+                // structured reason. Keep that as a null return rather than an exception.
+                if (statusCode == 404 && !hasReason)
+                    return null;
+
+                var error = result.TryGetProperty("error", out var errorProperty)
+                    && errorProperty.ValueKind == JsonValueKind.String
+                        ? errorProperty.GetString()
+                        : $"Failed to get property '{propertyName}' on element '{elementId}'.";
+
+                if (hasReason)
+                    error = $"{error} (reason: {reasonProperty.GetString()})";
+
+                throw new InvalidOperationException(error);
+            }
+
+            if (result.TryGetProperty("value", out var val))
+                return val.GetString();
+        }
+
         return null;
     }
 
@@ -763,21 +1193,53 @@ public class AgentClient : IDisposable
     /// <summary>
     /// Set a property value on an element.
     /// </summary>
-    public async Task<bool> SetPropertyAsync(string elementId, string propertyName, string value)
+    public Task<bool> SetPropertyAsync(string elementId, string propertyName, string value)
+        => SetPropertyAsync(
+            elementId,
+            propertyName,
+            value,
+            captureEpoch: null,
+            registryGeneration: null);
+
+    public async Task<bool> SetPropertyAsync(
+        string elementId,
+        string propertyName,
+        string value,
+        long? captureEpoch,
+        long? registryGeneration)
     {
         try
         {
             using var response = await SendWithTransientRetriesAsync(HttpMethod.Put, async () =>
             {
-                using var content = DriverJson.CreateJsonContent(new JsonObject
+                var payload = new JsonObject
                 {
                     ["value"] = value
-                });
+                };
+                AddCaptureMetadata(payload, captureEpoch, registryGeneration);
+                using var content = DriverJson.CreateJsonContent(payload);
                 return await _http.PutAsync($"{_baseUrl}{UiApi}/elements/{elementId}/properties/{propertyName}", content);
             });
             return response.IsSuccessStatusCode;
         }
         catch (Exception ex) when (IsExpectedClientException(ex)) { return false; }
+    }
+
+    public Task<ActionResult> SetPropertyResultAsync(
+        string elementId,
+        string propertyName,
+        string value,
+        long? captureEpoch,
+        long? registryGeneration)
+    {
+        var payload = new JsonObject
+        {
+            ["value"] = value
+        };
+        AddCaptureMetadata(payload, captureEpoch, registryGeneration);
+        return PutActionResultAsync(
+            $"{UiApi}/elements/{elementId}/properties/{propertyName}",
+            payload);
     }
 
     /// <summary>
@@ -931,10 +1393,104 @@ public class AgentClient : IDisposable
 
     public async Task<string> HitTestAsync(double x, double y, int? window = null)
     {
-        var path = $"{UiApi}/hit-test?x={x}&y={y}";
+        var result = await HitTestResultAsync(x, y, window);
+        if (result.Success)
+            return result.Body;
+
+        throw new HttpRequestException(
+            result.Reason ?? "DevFlow hit testing failed.",
+            inner: null,
+            statusCode: result.StatusCode.HasValue
+                ? (HttpStatusCode)result.StatusCode.Value
+                : null);
+    }
+
+    /// <summary>
+    /// Hit-tests a point and returns a structured <see cref="UiReadResult"/> rather than
+    /// throwing. This never throws <see cref="NotSupportedByAgentException"/>: a backend that
+    /// does not implement hit testing is reported as a failure result with <c>Reason</c> set to
+    /// <c>"not_supported"</c>, same as any other structured failure.
+    /// </summary>
+    public async Task<UiReadResult> HitTestResultAsync(
+        double x,
+        double y,
+        int? window = null)
+    {
+        // Format with invariant culture so the outgoing request always uses '.' as the
+        // decimal separator, regardless of the CLI/driver process's current culture.
+        var path = $"{UiApi}/hit-test?x={x.ToString(CultureInfo.InvariantCulture)}&y={y.ToString(CultureInfo.InvariantCulture)}";
         if (window.HasValue)
             path += $"&window={window.Value}";
-        return await GetStringWithTransientRetriesAsync($"{_baseUrl}{path}");
+
+        try
+        {
+            var retryWindow = TimeSpan.FromSeconds(2);
+            var startedAt = System.Diagnostics.Stopwatch.StartNew();
+            for (var attempt = 0; ; attempt++)
+            {
+                using var response = await SendWithTransientRetriesAsync(
+                    () => _http.GetAsync($"{_baseUrl}{path}"));
+                var body = await response.Content.ReadAsStringAsync();
+                string? reason = null;
+                try
+                {
+                    var json = DriverJson.ParseElement(body);
+                    if (json.ValueKind == JsonValueKind.Object
+                        && json.TryGetProperty("reason", out var reasonProperty))
+                    {
+                        reason = reasonProperty.GetString();
+                    }
+                }
+                catch (JsonException)
+                {
+                }
+
+                var statusCode = (int)response.StatusCode;
+                var retryable = response.StatusCode == HttpStatusCode.Conflict
+                    && reason is "capture-changed-during-read" or "native-probe-busy";
+                if (retryable)
+                {
+                    var delay = TimeSpan.FromMilliseconds(
+                        Math.Min(25 * (1 << Math.Min(attempt, 4)), 250));
+                    if (startedAt.Elapsed + delay < retryWindow)
+                    {
+                        await Task.Delay(delay);
+                        continue;
+                    }
+                }
+
+                return new UiReadResult(
+                    response.IsSuccessStatusCode,
+                    statusCode,
+                    body,
+                    reason,
+                    retryable,
+                    TransportFailure: false);
+            }
+        }
+        // The shared retry path turns a uniform 501 not_supported envelope into this typed
+        // exception. HitTestResultAsync's documented contract is to report failures through the
+        // returned UiReadResult rather than throwing, so translate it back into one here.
+        catch (NotSupportedByAgentException ex)
+        {
+            return new UiReadResult(
+                Success: false,
+                StatusCode: (int)HttpStatusCode.NotImplemented,
+                Body: ex.Message,
+                Reason: "not_supported",
+                Retryable: false,
+                TransportFailure: false);
+        }
+        catch (Exception ex) when (IsExpectedClientException(ex))
+        {
+            return new UiReadResult(
+                Success: false,
+                StatusCode: null,
+                Body: string.Empty,
+                Reason: null,
+                Retryable: false,
+                TransportFailure: true);
+        }
     }
 
     public async Task<ProfilerCapabilities?> GetProfilerCapabilitiesAsync()
@@ -1008,7 +1564,7 @@ public class AgentClient : IDisposable
     {
         try
         {
-            var response = await GetStringWithTransientRetriesAsync($"{_baseUrl}{path}");
+            var response = await GetStringWithRetryableUiReadAsync($"{_baseUrl}{path}");
             return DriverJson.Deserialize<T>(response);
         }
         catch (Exception ex) when (IsExpectedClientException(ex)) { return null; }
@@ -1018,8 +1574,9 @@ public class AgentClient : IDisposable
     {
         try
         {
-            using var response = await SendWithTransientRetriesAsync(() => _http.GetAsync($"{_baseUrl}{path}"));
-            var body = await response.Content.ReadAsStringAsync();
+            var body = await GetStringWithRetryableUiReadAsync(
+                $"{_baseUrl}{path}",
+                returnErrorBody: true);
             if (string.IsNullOrWhiteSpace(body))
                 return default;
 
@@ -1027,6 +1584,51 @@ public class AgentClient : IDisposable
         }
         catch (Exception ex) when (IsExpectedClientException(ex)) { return default; }
     }
+
+    /// <summary>
+    /// Like <see cref="GetJsonAsync(string)"/>, but also retains the HTTP status code so
+    /// callers can distinguish a genuine "not found" (404) from other structured failures
+    /// without relying on message text matching.
+    /// </summary>
+    private async Task<(JsonElement Json, int? StatusCode)> GetJsonWithStatusAsync(string path)
+    {
+        int? statusCode = null;
+        try
+        {
+            var body = await GetStringWithRetryableUiReadAsync(
+                $"{_baseUrl}{path}",
+                returnErrorBody: true,
+                onStatusCode: code => statusCode = code);
+            if (string.IsNullOrWhiteSpace(body))
+                return (default, statusCode);
+
+            return (DriverJson.ParseElement(body), statusCode);
+        }
+        catch (Exception ex) when (IsExpectedClientException(ex)) { return (default, statusCode); }
+    }
+
+    private static void AddCaptureMetadata(
+        JsonObject payload,
+        long? captureEpoch,
+        long? registryGeneration)
+    {
+        if (captureEpoch.HasValue)
+            payload["captureEpoch"] = captureEpoch.Value;
+        if (registryGeneration.HasValue)
+            payload["registryGeneration"] = registryGeneration.Value;
+    }
+
+    private static long? GetHeaderInt64(HttpResponseMessage response, string name)
+        => response.Headers.TryGetValues(name, out var values)
+            && long.TryParse(values.FirstOrDefault(), out var value)
+                ? value
+                : null;
+
+    private static int? GetHeaderInt32(HttpResponseMessage response, string name)
+        => response.Headers.TryGetValues(name, out var values)
+            && int.TryParse(values.FirstOrDefault(), out var value)
+                ? value
+                : null;
 
     private async Task<bool> PostActionAsync(string path, JsonNode body)
     {
@@ -1044,6 +1646,102 @@ public class AgentClient : IDisposable
             return result?.Success == true;
         }
         catch (Exception ex) when (IsExpectedClientException(ex)) { return false; }
+    }
+
+    private Task<ActionResult> PostActionResultAsync(string path, JsonNode body)
+        => SendActionResultAsync(HttpMethod.Post, path, body);
+
+    private Task<ActionResult> PutActionResultAsync(string path, JsonNode body)
+        => SendActionResultAsync(HttpMethod.Put, path, body);
+
+    private async Task<ActionResult> SendActionResultAsync(
+        HttpMethod method,
+        string path,
+        JsonNode body)
+    {
+        try
+        {
+            using var response = await SendWithTransientRetriesAsync(method, async () =>
+            {
+                using var content = DriverJson.CreateJsonContent(body);
+                using var request = new HttpRequestMessage(method, $"{_baseUrl}{path}")
+                {
+                    Content = content
+                };
+                return await _http.SendAsync(request);
+            });
+            var responseBody = await response.Content.ReadAsStringAsync();
+            string? reason = null;
+            string? error = null;
+            var actionSucceeded = response.IsSuccessStatusCode;
+            var explicitlyRetryable = false;
+            try
+            {
+                var result = DriverJson.ParseElement(responseBody);
+                if (result.ValueKind == JsonValueKind.Object)
+                {
+                    if (result.TryGetProperty("success", out var successProperty)
+                        && successProperty.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                    {
+                        actionSucceeded &= successProperty.GetBoolean();
+                    }
+                    if (result.TryGetProperty("reason", out var reasonProperty))
+                        reason = reasonProperty.GetString();
+                    if (result.TryGetProperty("error", out var errorProperty)
+                        && errorProperty.ValueKind == JsonValueKind.String)
+                    {
+                        error = errorProperty.GetString();
+                    }
+                    if (result.TryGetProperty("details", out var details)
+                        && details.ValueKind == JsonValueKind.Object
+                        && details.TryGetProperty("retryable", out var retryableProperty)
+                        && retryableProperty.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                    {
+                        explicitlyRetryable = retryableProperty.GetBoolean();
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+            }
+
+            var statusCode = (int)response.StatusCode;
+            return new ActionResult(
+                actionSucceeded,
+                statusCode,
+                reason,
+                Retryable: explicitlyRetryable
+                    || reason is "stale-capture-epoch" or "ui-mutation-busy",
+                TransportFailure: false)
+            {
+                Error = error
+            };
+        }
+        // The shared retry path turns a uniform 501 not_supported envelope into this typed
+        // exception. The *ResultAsync action APIs (Tap, Fill, Clear, Focus, Key, Gesture, Scroll,
+        // SetProperty) document reporting failures through the returned ActionResult rather than
+        // throwing, so translate it back into one here.
+        catch (NotSupportedByAgentException ex)
+        {
+            return new ActionResult(
+                Success: false,
+                StatusCode: (int)HttpStatusCode.NotImplemented,
+                Reason: "not_supported",
+                Retryable: false,
+                TransportFailure: false)
+            {
+                Error = ex.Message
+            };
+        }
+        catch (Exception ex) when (IsExpectedClientException(ex))
+        {
+            return new ActionResult(
+                Success: false,
+                StatusCode: null,
+                Reason: null,
+                Retryable: true,
+                TransportFailure: true);
+        }
     }
 
     private async Task<T?> PostJsonAsync<T>(string path, JsonNode body) where T : class
@@ -1123,8 +1821,70 @@ public class AgentClient : IDisposable
         }
     }
 
-    private Task<string> GetStringWithTransientRetriesAsync(string url)
-        => SendWithTransientRetriesAsync(() => _http.GetStringAsync(url));
+    private async Task<string> GetStringWithTransientRetriesAsync(string url)
+    {
+        using var response = await SendWithTransientRetriesAsync(() => _http.GetAsync(url));
+        var body = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+            throw new HttpRequestException($"GET {url} failed with {(int)response.StatusCode}.", null, response.StatusCode);
+
+        return body;
+    }
+
+    private async Task<string> GetStringWithRetryableUiReadAsync(
+        string url,
+        bool returnErrorBody = false,
+        Action<int>? onStatusCode = null)
+    {
+        var retryWindow = TimeSpan.FromSeconds(1);
+        var startedAt = System.Diagnostics.Stopwatch.StartNew();
+        for (var attempt = 0; ; attempt++)
+        {
+            using var response = await SendWithTransientRetriesAsync(() => _http.GetAsync(url));
+            var body = await response.Content.ReadAsStringAsync();
+            onStatusCode?.Invoke((int)response.StatusCode);
+            if (response.IsSuccessStatusCode)
+                return body;
+
+            if (response.StatusCode == HttpStatusCode.Conflict
+                && IsCaptureChangedDuringRead(body))
+            {
+                var delay = TimeSpan.FromMilliseconds(Math.Min(25 * (1 << Math.Min(attempt, 4)), 250));
+                if (startedAt.Elapsed + delay < retryWindow)
+                {
+                    await Task.Delay(delay);
+                    continue;
+                }
+
+                throw new InvalidOperationException(
+                    "The UI kept changing while DevFlow was reading it. Retry the operation after the current UI update completes.");
+            }
+
+            if (returnErrorBody)
+                return body;
+
+            response.EnsureSuccessStatusCode();
+        }
+    }
+
+    private static bool IsCaptureChangedDuringRead(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+            return false;
+
+        try
+        {
+            var json = DriverJson.ParseElement(body);
+            return json.ValueKind == JsonValueKind.Object
+                && json.TryGetProperty("reason", out var reason)
+                && reason.GetString() == "capture-changed-during-read";
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
 
     private Task<T> SendWithTransientRetriesAsync<T>(Func<Task<T>> send)
         => SendWithTransientRetriesAsync(HttpMethod.Get, send);
@@ -1142,7 +1902,15 @@ public class AgentClient : IDisposable
         {
             try
             {
-                return await send();
+                var result = await send();
+
+                // A backend that cannot serve an endpoint answers 501 with a not_supported
+                // envelope. Surface that as a typed exception instead of letting it decay into a
+                // null/false that looks identical to a genuine failure.
+                if (result is HttpResponseMessage message)
+                    await ThrowIfNotSupportedAsync(message);
+
+                return result;
             }
             catch (Exception ex) when (IsTransientTransportException(ex) && attempt < retryCount)
             {
@@ -1151,6 +1919,47 @@ public class AgentClient : IDisposable
                     await Task.Delay(delay);
             }
         }
+    }
+
+    private static async Task ThrowIfNotSupportedAsync(HttpResponseMessage response)
+    {
+        if (response.StatusCode != HttpStatusCode.NotImplemented)
+            return;
+
+        var body = await response.Content.ReadAsStringAsync();
+        string capability;
+        string? reason = null;
+
+        try
+        {
+            var json = DriverJson.ParseElement(body);
+
+            // Only the uniform not_supported envelope maps to the typed exception. Endpoints that
+            // answer 501 with their own success/error shape keep their existing contract.
+            if (json.ValueKind != JsonValueKind.Object ||
+                !json.TryGetProperty("error", out var kind) ||
+                kind.ValueKind != JsonValueKind.String ||
+                kind.GetString() != "not_supported")
+            {
+                return;
+            }
+
+            capability = json.TryGetProperty("capability", out var c) && c.ValueKind == JsonValueKind.String
+                ? c.GetString() ?? "unknown"
+                : "unknown";
+
+            if (json.TryGetProperty("reason", out var r) && r.ValueKind == JsonValueKind.String)
+                reason = r.GetString();
+        }
+        catch (JsonException)
+        {
+            // Non-JSON 501 — leave it to the caller's existing error handling.
+            return;
+        }
+
+        // The caller never receives the message, so release it here.
+        response.Dispose();
+        throw new NotSupportedByAgentException(capability, reason);
     }
 
     private TimeSpan GetTransientFailureRetryDelay(int attempt)
@@ -1544,6 +2353,38 @@ public class AgentClient : IDisposable
     }
 }
 
+/// <summary>
+/// Result of an action request made through one of the <c>*ResultAsync</c> action APIs
+/// (e.g. <see cref="AgentClient.TapResultAsync"/>, <see cref="AgentClient.FillResultAsync"/>).
+/// Reports failures — including a backend not supporting the action's capability, surfaced with
+/// <see cref="Reason"/> set to <c>"not_supported"</c> — through this structure instead of
+/// throwing <see cref="NotSupportedByAgentException"/>.
+/// </summary>
+public readonly record struct ActionResult(
+    bool Success,
+    int? StatusCode,
+    string? Reason,
+    bool Retryable,
+    bool TransportFailure)
+{
+    /// <summary>Human-readable server error message (e.g. from the response's "error" field), when available.</summary>
+    public string? Error { get; init; }
+}
+
+/// <summary>
+/// Result of a UI read request made through <see cref="AgentClient.HitTestResultAsync"/>.
+/// Reports failures — including a backend not supporting the capability, surfaced with
+/// <see cref="Reason"/> set to <c>"not_supported"</c> — through this structure instead of
+/// throwing <see cref="NotSupportedByAgentException"/>.
+/// </summary>
+public readonly record struct UiReadResult(
+    bool Success,
+    int? StatusCode,
+    string Body,
+    string? Reason,
+    bool Retryable,
+    bool TransportFailure);
+
 public class AgentStatus
 {
     [System.Text.Json.Serialization.JsonPropertyName("agent")]
@@ -1582,10 +2423,28 @@ public class AgentDescriptor
     public string? Name { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("version")]
     public string? Version { get; set; }
+    /// <summary>
+    /// Human-readable app framework, e.g. <c>".NET MAUI"</c> or <c>".NET"</c>.
+    /// </summary>
     [System.Text.Json.Serialization.JsonPropertyName("framework")]
     public string? Framework { get; set; }
+
+    /// <summary>
+    /// Machine-readable app framework: <c>"maui"</c> or <c>"native"</c>.
+    /// Null when talking to an agent built before the field was introduced.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonPropertyName("frameworkId")]
+    public string? FrameworkId { get; set; }
+
     [System.Text.Json.Serialization.JsonPropertyName("frameworkVersion")]
     public string? FrameworkVersion { get; set; }
+
+    /// <summary>
+    /// The UI framework the agent walks: <c>"maui-controls"</c>, <c>"android-views"</c>,
+    /// <c>"uikit"</c>, <c>"appkit"</c>, <c>"gtk"</c> or <c>"wpf"</c>.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonPropertyName("uiFramework")]
+    public string? UiFramework { get; set; }
 }
 
 public class DeviceDescriptor

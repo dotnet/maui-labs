@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <RootNamespace>DevFlow.Sample.Native.Android</RootNamespace>
+    <ApplicationId>com.microsoft.maui.devflow.samplenative</ApplicationId>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+
+    <!-- Deliberately a plain .NET for Android app: no MAUI, no SingleProject. -->
+    <UseMaui>false</UseMaui>
+    <SingleProject>false</SingleProject>
+    <AndroidUseAssemblyStore>false</AndroidUseAssemblyStore>
+    <AndroidStoreUncompressedFileExtensions>$(AndroidStoreUncompressedFileExtensions);.so</AndroidStoreUncompressedFileExtensions>
+
+    <IsPackable>false</IsPackable>
+    <IsShipping>false</IsShipping>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Native\Microsoft.Maui.DevFlow.Agent.Native.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\**\*.cs" LinkBase="Shared" />
+  </ItemGroup>
+
+</Project>

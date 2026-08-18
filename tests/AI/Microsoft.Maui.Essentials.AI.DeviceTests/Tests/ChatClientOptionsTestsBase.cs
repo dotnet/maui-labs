@@ -12,6 +12,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 	where T : class, IChatClient, new()
 {
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_AcceptsNullOptions()
 	{
 		var client = new T();
@@ -24,6 +25,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithChatOptions_AcceptsValidOptions()
 	{
 		var client = new T();
@@ -59,6 +61,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithExtremeTemperature_HandlesGracefully()
 	{
 		var client = new T();
@@ -92,6 +95,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_AcceptsNullOptions()
 	{
 		var client = new T();
@@ -107,6 +111,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_WithChatOptions_AcceptsValidOptions()
 	{
 		var client = new T();

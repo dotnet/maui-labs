@@ -9,6 +9,7 @@ on:
       - 'src/Cli/Microsoft.Maui.Cli/DevFlow/**'
       - '.github/extensions/maui-devflow-canvas/**'
       - '.github/workflows/ci-devflow.yml'
+      - 'samples/DevFlow.Sample.Native/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -23,6 +24,7 @@ on:
       - 'src/Cli/Microsoft.Maui.Cli/DevFlow/**'
       - '.github/extensions/maui-devflow-canvas/**'
       - '.github/workflows/ci-devflow.yml'
+      - 'samples/DevFlow.Sample.Native/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -69,3 +71,20 @@ jobs:
           npm ci
           npm test
           npm run selftest:recorder
+
+  # The native samples are the executable proof that a plain .NET app can host the agent, so they
+  # are built even though samples are otherwise out of the product solution filter. They need a Mac:
+  # .NET for macOS and iOS app heads cannot be bundled on Windows.
+  native-samples:
+    uses: ./.github/workflows/_build.yml
+    with:
+      project-path: src/DevFlow/DevFlow.Samples.Native.slnf
+      project-name: devflow-samples-native
+      run-tests: false
+      pack: false
+      os: '["macos-latest"]'
+      # App heads enforce the Apple SDK's Xcode requirement, which libraries do not, so this job
+      # has to pin Xcode even though the library job above gets away without it. Keep in step with
+      # the version the pinned .NET for iOS/macOS asks for — see https://aka.ms/xcode-requirement.
+      xcode-version: '26.3'
+      android-project: samples/DevFlow.Sample.Native/Android/DevFlow.Sample.Native.Android.csproj

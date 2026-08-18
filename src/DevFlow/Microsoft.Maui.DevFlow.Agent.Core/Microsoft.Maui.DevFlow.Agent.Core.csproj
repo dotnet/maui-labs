@@ -6,7 +6,7 @@
     <IsShipping>true</IsShipping>
 
     <PackageId>Microsoft.Maui.DevFlow.Agent.Core</PackageId>
-    <Description>Core agent infrastructure for Microsoft.Maui.DevFlow. HTTP server, visual tree walking, logging, and element interaction — platform-agnostic.</Description>
+    <Description>The .NET MAUI backend for Microsoft.Maui.DevFlow. Implements visual tree walking, element interaction, screenshots, storage and device endpoints on top of Microsoft.Maui.DevFlow.Agent.Abstractions.</Description>
     <PackageTags>maui;automation;testing;agent;core</PackageTags>
   </PropertyGroup>
 
@@ -17,7 +17,13 @@
     <PackageReference Include="SkiaSharp" />
   </ItemGroup>
 
+  <!-- Essentials endpoint implementations, shared with the optional add-on for plain .NET apps. -->
   <ItemGroup>
+    <Compile Include="..\Shared.Essentials\**\*.cs" LinkBase="Essentials" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Microsoft.Maui.DevFlow.Agent.Abstractions\Microsoft.Maui.DevFlow.Agent.Abstractions.csproj" />
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Logging\Microsoft.Maui.DevFlow.Logging.csproj" />
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Analyzers\Microsoft.Maui.DevFlow.Analyzers.csproj"
                       ReferenceOutputAssembly="false"

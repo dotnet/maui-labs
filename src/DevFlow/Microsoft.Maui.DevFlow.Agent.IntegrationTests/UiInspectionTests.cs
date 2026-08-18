@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.Json;
 using Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 using Microsoft.Maui.DevFlow.Driver;
 using Xunit.Abstractions;
@@ -79,10 +81,10 @@ public class UiInspectionTests : IntegrationTestBase
     public async Task Query_ByType_ReturnsElements()
     {
         await NavigateToMainPageAsync();
-        var buttons = await Client.QueryAsync(type: "Button");
+        var buttons = await Client.QueryAsync(type: ButtonTypeName);
 
         Assert.NotEmpty(buttons);
-        Assert.All(buttons, button => Assert.Equal("Button", button.Type));
+        Assert.All(buttons, button => Assert.Equal(ButtonTypeName, button.Type));
     }
 
     [Fact]
@@ -120,7 +122,7 @@ public class UiInspectionTests : IntegrationTestBase
     public async Task Query_ByCssSelector_ReturnsElements()
     {
         await NavigateToMainPageAsync();
-        var elements = await Client.QueryCssAsync("Button#AddButton");
+        var elements = await Client.QueryCssAsync($"{ButtonTypeName}#AddButton");
 
         Assert.NotEmpty(elements);
         Assert.Contains(elements, element => element.AutomationId == "AddButton");
@@ -133,7 +135,10 @@ public class UiInspectionTests : IntegrationTestBase
         Assert.Empty(elements);
     }
 
+    // AppKit renders both labels and text fields as NSTextField, so the Label/Entry
+    // split this asserts on is specific to MAUI's normalised control names.
     [Fact]
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
     public async Task Query_MultipleTypes_ReturnsAppropriateResults()
     {
         await NavigateToMainPageAsync();
@@ -178,6 +183,46 @@ public class UiInspectionTests : IntegrationTestBase
         Assert.NotEmpty(elementId);
     }
 
+    // Guards the documented hit-test envelope (openapi.yaml requires x/y/window/captureEpoch/
+    // registryGeneration/elements) that InspectorServer's click-to-select path depends on: it looks
+    // for a root-level "elements" property and silently treats a bare array — or any other missing
+    // field — as "no element here". This is a plain JsonElement parse (not AgentClient.HitTestAsync,
+    // which just hands back the raw body) so a regression to the old bare-array shape fails here
+    // across every platform, native included, rather than only being caught by Inspector consumers.
+    [Fact]
+    public async Task HitTest_Response_MatchesDocumentedEnvelope()
+    {
+        await NavigateToMainPageAsync();
+        var addButton = await FindElementAsync("AddButton");
+        Assert.NotNull(addButton.Bounds);
+
+        var centerX = addButton.Bounds!.X + (addButton.Bounds.Width / 2);
+        var centerY = addButton.Bounds.Y + (addButton.Bounds.Height / 2);
+
+        var json = await GetJsonAsync(
+            $"/api/v1/ui/hit-test?x={centerX.ToString(CultureInfo.InvariantCulture)}&y={centerY.ToString(CultureInfo.InvariantCulture)}");
+
+        Assert.Equal(JsonValueKind.Object, json.ValueKind);
+
+        Assert.True(json.TryGetProperty("x", out _), "Response is missing 'x'.");
+        Assert.True(json.TryGetProperty("y", out _), "Response is missing 'y'.");
+
+        Assert.True(json.TryGetProperty("window", out var windowProperty), "Response is missing 'window'.");
+        Assert.Equal(0, windowProperty.GetInt32());
+
+        Assert.True(json.TryGetProperty("captureEpoch", out var epochProperty), "Response is missing 'captureEpoch'.");
+        Assert.True(epochProperty.GetInt64() >= 1, "captureEpoch must be a positive integer per the OpenAPI contract.");
+
+        Assert.True(json.TryGetProperty("registryGeneration", out var generationProperty), "Response is missing 'registryGeneration'.");
+        Assert.True(generationProperty.GetInt64() >= 0, "registryGeneration must be non-negative per the OpenAPI contract.");
+
+        Assert.True(json.TryGetProperty("elements", out var elementsProperty), "Response is missing root-level 'elements' — InspectorServer's click-to-select would silently find no candidate.");
+        Assert.Equal(JsonValueKind.Array, elementsProperty.ValueKind);
+        var elements = elementsProperty.EnumerateArray().ToList();
+        Assert.NotEmpty(elements);
+        Assert.Contains(elements, element => element.GetProperty("id").GetString() == addButton.Id);
+    }
+
     [Fact]
     public async Task Screenshot_ReturnsValidPng()
     {
@@ -215,6 +260,7 @@ public class UiInspectionTests : IntegrationTestBase
         Assert.True(bytes.Length > 0);
     }
 
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
     [Fact]
     public async Task Tree_WindowsNativeDialog_IncludesNativeElements()
     {
@@ -239,12 +285,40 @@ public class UiInspectionTests : IntegrationTestBase
         Assert.True(await Client.TapAsync(okButton.Id));
     }
 
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
+    [Fact]
+    public async Task Tree_CustomMauiBackend_IncludesRegisteredNativeElement()
+    {
+        if (Platform is not ("macos" or "gtk" or "wpf"))
+        {
+            Output.WriteLine("Registered toolbar bridge test only applies to custom MAUI desktop backends.");
+            return;
+        }
+
+        await NavigateToMainPageAsync();
+
+        var expectedRole = Platform == "macos" ? "toolbar-item" : "shell-flyout";
+        ElementInfo? registeredNativeElement = null;
+        await WaitForAsync(async () =>
+        {
+            var tree = await Client.GetTreeAsync(maxDepth: 12);
+            registeredNativeElement = Flatten(tree).FirstOrDefault(element =>
+                element.Id.StartsWith("native:registered:", StringComparison.Ordinal)
+                && element.Role == expectedRole);
+            return registeredNativeElement is not null;
+        }, timeoutMs: 10000);
+
+        Assert.NotNull(registeredNativeElement!.OwnerId);
+        Assert.Equal("native", registeredNativeElement.Origin);
+        Assert.NotEmpty(registeredNativeElement.Capabilities ?? []);
+    }
+
     async Task<ElementInfo> WaitForNativeButtonAsync(string text)
     {
         ElementInfo? match = null;
         await WaitForAsync(async () =>
         {
-            var buttons = await Client.QueryAsync(type: "Button", text: text);
+            var buttons = await Client.QueryAsync(type: ButtonTypeName, text: text);
             match = buttons.FirstOrDefault(e =>
                 e.Id.StartsWith("native:", StringComparison.Ordinal) &&
                 string.Equals(e.Text, text, StringComparison.OrdinalIgnoreCase));

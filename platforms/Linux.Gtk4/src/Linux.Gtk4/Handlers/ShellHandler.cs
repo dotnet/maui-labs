@@ -5,6 +5,7 @@ using Microsoft.Maui.Controls.Handlers;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Handlers;
 using Microsoft.Maui.Platform;
+using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Handlers;
 
@@ -26,6 +27,8 @@ public partial class ShellHandler : GtkViewHandler<Shell, Gtk.Box>
 	Gtk.Label? _flyoutFooterLabel;
 	int _flyoutWidth = 250;
 	bool _updatingSelection;
+	readonly List<Gtk.Widget> _registeredFlyoutElements = new();
+	readonly List<Gtk.Widget> _registeredTabElements = new();
 
 	public static IPropertyMapper<Shell, ShellHandler> Mapper =
 		new PropertyMapper<Shell, ShellHandler>(ViewMapper)
@@ -135,6 +138,8 @@ public partial class ShellHandler : GtkViewHandler<Shell, Gtk.Box>
 
 	protected override void DisconnectHandler(Gtk.Box platformView)
 	{
+		UnregisterNativeElements(_registeredFlyoutElements);
+		UnregisterNativeElements(_registeredTabElements);
 		if (_flyoutListBox != null)
 			_flyoutListBox.OnRowSelected -= OnFlyoutRowSelected;
 		if (_notebook != null)
@@ -196,6 +201,7 @@ public partial class ShellHandler : GtkViewHandler<Shell, Gtk.Box>
 	{
 		if (_flyoutListBox == null || VirtualView == null) return;
 
+		UnregisterNativeElements(_registeredFlyoutElements);
 		// Clear existing rows
 		while (_flyoutListBox.GetFirstChild() is Gtk.Widget child)
 			_flyoutListBox.Remove(child);
@@ -212,6 +218,9 @@ public partial class ShellHandler : GtkViewHandler<Shell, Gtk.Box>
 			label.SetMarginBottom(8);
 
 			_flyoutListBox.Append(label);
+			var row = _flyoutListBox.GetRowAtIndex(idx);
+			if (row != null)
+				RegisterNativeElement(item, row, "ShellFlyout", _registeredFlyoutElements);
 
 			if (item == VirtualView.CurrentItem)
 				selectedIdx = idx;
@@ -234,14 +243,18 @@ public partial class ShellHandler : GtkViewHandler<Shell, Gtk.Box>
 
 	void RebuildTabs()
 	{
-		if (_notebook == null || VirtualView?.CurrentItem == null || MauiContext == null)
+		if (_notebook == null || MauiContext == null)
 			return;
 
+		UnregisterNativeElements(_registeredTabElements);
 		// Clear existing tabs
 		while (_notebook.GetNPages() > 0)
 			_notebook.RemovePage(0);
 
-		var shellItem = VirtualView.CurrentItem;
+		var shellItem = VirtualView?.CurrentItem;
+		if (shellItem == null)
+			return;
+
 		bool singleSection = shellItem.Items.Count <= 1;
 
 		foreach (var section in shellItem.Items)
@@ -255,6 +268,7 @@ public partial class ShellHandler : GtkViewHandler<Shell, Gtk.Box>
 
 			var tabLabel = Gtk.Label.New(section.Title ?? page.Title ?? "Tab");
 			_notebook.AppendPage(platformPage, tabLabel);
+			RegisterNativeElement(section, tabLabel, "ShellTab", _registeredTabElements);
 		}
 
 		// Hide tab strip if only one section
@@ -271,6 +285,24 @@ public partial class ShellHandler : GtkViewHandler<Shell, Gtk.Box>
 				_updatingSelection = false;
 			}
 		}
+
+	}
+
+	void RegisterNativeElement(
+		object owner,
+		Gtk.Widget nativeElement,
+		string role,
+		List<Gtk.Widget> registrations)
+	{
+		NativeElementDiagnosticsBridge.Register(owner, nativeElement, role);
+		registrations.Add(nativeElement);
+	}
+
+	static void UnregisterNativeElements(List<Gtk.Widget> registrations)
+	{
+		foreach (var nativeElement in registrations)
+			NativeElementDiagnosticsBridge.Unregister(nativeElement);
+		registrations.Clear();
 	}
 
 	static Page? GetCurrentPage(ShellSection section)

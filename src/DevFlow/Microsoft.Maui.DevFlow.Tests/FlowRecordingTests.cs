@@ -119,7 +119,7 @@ public class FlowRecordingTests : System.IDisposable
     public void CaptureMutationTarget_PreservesAutomationIdAfterTargetDisappears()
     {
         var request = new HttpRequest();
-        DevFlowAgentService.CaptureMutationTarget(
+        MauiDevFlowAgentService.CaptureMutationTarget(
             request,
             new Button { AutomationId = "CloseModalButton" });
 

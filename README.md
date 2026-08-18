@@ -13,7 +13,7 @@ At a glance:
 | [Cli](#cli) | `maui` global tool for environment diagnostics, device management, Apple/Android setup, app automation, and rapid prototyping. |
 | [Comet](#comet) | Experimental MVU UI framework for .NET MAUI with C# fluent UI, signals, and reactive state. |
 | [Go](#go) | Single-file Comet app server and companion app for rapid prototyping. |
-| [DevFlow](#devflow) | Runtime app automation, inspection, debugging, and MCP tooling for .NET MAUI apps. |
+| [DevFlow](#devflow) | Runtime app automation, inspection, debugging, and MCP tooling for .NET MAUI apps — and for plain .NET Android, iOS, Mac Catalyst and macOS apps. |
 | [AI Extensions](#ai-extensions) | Source-generated `Microsoft.Extensions.AI` tool bindings for MAUI and .NET apps. |
 | [macOS AppKit Backend](#macos-appkit-backend) | Native AppKit backend for running MAUI apps as macOS apps without Mac Catalyst. |
 | [WPF Backend](#wpf-backend) | WPF-based Windows desktop backend for .NET MAUI apps. |
@@ -64,9 +64,10 @@ Single-file Comet apps server + companion app for rapid prototyping (alpha; sist
 
 ### DevFlow
 
-A comprehensive MAUI testing, automation, and debugging toolkit. The DevFlow CLI is integrated into the `maui` CLI as `maui devflow` — see [Cli](#cli) above.
+A comprehensive testing, automation, and debugging toolkit for .NET MAUI apps — and for plain .NET Android, iOS, Mac Catalyst and macOS apps with no MAUI reference at all. The DevFlow CLI is integrated into the `maui` CLI as `maui devflow` — see [Cli](#cli) above.
 
 - **In-app HTTP agent** for visual tree inspection, element interaction, and screenshots
+- **Works without MAUI** — the same agent, CLI, and MCP tools drive plain .NET apps via Android views, UIKit, and AppKit backends
 - **Blazor CDP bridge** for Chrome DevTools Protocol on Blazor WebViews
 - **MCP server** for AI agent integration (via `maui devflow mcp`)
 - **Platform drivers** for iOS, Android, Mac Catalyst, Windows, and Linux/GTK
@@ -78,7 +79,10 @@ A comprehensive MAUI testing, automation, and debugging toolkit. The DevFlow CLI
 | Package | Description |
 |---------|-------------|
 | [![NuGet: Microsoft.Maui.DevFlow.Agent](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Agent.svg?label=Microsoft.Maui.DevFlow.Agent)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Agent/) | In-app agent for MAUI automation |
-| [![NuGet: Microsoft.Maui.DevFlow.Agent.Core](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Agent.Core.svg?label=Microsoft.Maui.DevFlow.Agent.Core)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Agent.Core/) | Platform-agnostic agent core |
+| [![NuGet: Microsoft.Maui.DevFlow.Agent.Abstractions](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Agent.Abstractions.svg?label=Microsoft.Maui.DevFlow.Agent.Abstractions)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Agent.Abstractions/) | Framework-neutral agent protocol and HTTP server |
+| [![NuGet: Microsoft.Maui.DevFlow.Agent.Core](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Agent.Core.svg?label=Microsoft.Maui.DevFlow.Agent.Core)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Agent.Core/) | MAUI UI backend for the agent |
+| [![NuGet: Microsoft.Maui.DevFlow.Agent.Native](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Agent.Native.svg?label=Microsoft.Maui.DevFlow.Agent.Native)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Agent.Native/) | In-app agent for plain .NET Android, iOS, Mac Catalyst, and macOS apps |
+| [![NuGet: Microsoft.Maui.DevFlow.Agent.Native.Essentials](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Agent.Native.Essentials.svg?label=Microsoft.Maui.DevFlow.Agent.Native.Essentials)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Agent.Native.Essentials/) | Optional device, storage, and sensor endpoints for native apps |
 | [![NuGet: Microsoft.Maui.DevFlow.Agent.Gtk](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Agent.Gtk.svg?label=Microsoft.Maui.DevFlow.Agent.Gtk)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Agent.Gtk/) | GTK/Linux agent |
 | [![NuGet: Microsoft.Maui.DevFlow.Blazor](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Blazor.svg?label=Microsoft.Maui.DevFlow.Blazor)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Blazor/) | Blazor WebView CDP bridge |
 | [![NuGet: Microsoft.Maui.DevFlow.Blazor.Gtk](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Blazor.Gtk.svg?label=Microsoft.Maui.DevFlow.Blazor.Gtk)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Blazor.Gtk/) | WebKitGTK CDP bridge |

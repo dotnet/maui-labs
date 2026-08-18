@@ -297,7 +297,7 @@ public static class BlazorDevFlowExtensions
     private static Type? FindAgentType()
     {
         var agentType = Type.GetType(
-            "Microsoft.Maui.DevFlow.Agent.Core.DevFlowAgentService, Microsoft.Maui.DevFlow.Agent.Core");
+            "Microsoft.Maui.DevFlow.Agent.Core.DevFlowAgentService, Microsoft.Maui.DevFlow.Agent.Abstractions");
         if (agentType is not null)
             return agentType;
 

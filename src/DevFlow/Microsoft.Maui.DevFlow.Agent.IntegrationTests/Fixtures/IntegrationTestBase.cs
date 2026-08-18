@@ -145,13 +145,31 @@ public abstract class IntegrationTestBase
         return results.Count > 0 ? results[0] : null;
     }
 
+    /// <summary>
+    /// The control type name a "button" reports on the framework and platform under test.
+    /// MAUI normalises every platform to <c>Button</c>; the native backends report the real
+    /// platform type, which differs per OS.
+    /// </summary>
+    protected string ButtonTypeName => TestFramework.IsNative
+        ? App.Platform switch
+        {
+            "android" => "Button",
+            "ios" or "maccatalyst" => "UIButton",
+            "macos" => "NSButton",
+            var other => throw new InvalidOperationException($"No native button type for '{other}'."),
+        }
+        : "Button";
+
     protected async Task NavigateToPageAsync(string route, string? expectedAutomationId = null, int timeoutMs = 5000)
     {
-        await Client.NavigateAsync(route);
+        // Routes are Shell navigation, which only the MAUI sample has. The native samples are a
+        // single screen carrying the same ids, so a route request degrades to "wait for the anchor".
+        if (!TestFramework.IsNative)
+            await Client.NavigateAsync(route);
 
         if (expectedAutomationId != null)
             await FindElementAsync(expectedAutomationId, timeoutMs);
-        else
+        else if (!TestFramework.IsNative)
             await Task.Delay(500);
     }
 
