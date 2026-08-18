@@ -24,11 +24,23 @@ public sealed class StandardErrorToolsLogger : ICustomLogger
 	readonly TextWriter _writer;
 	readonly bool? _verbose;
 
+	static volatile bool s_defaultVerbose;
+
 	/// <summary>
 	/// Verbosity applied to loggers created without an explicit value. Set once from the global
 	/// <c>--verbose</c> flag, because providers are resolved from DI and cannot see the parse result.
 	/// </summary>
-	public static bool DefaultVerbose { get; set; }
+	/// <remarks>
+	/// Process-global mutable state, so the backing field is <c>volatile</c>: it is written on the
+	/// main thread in <c>Program.Main</c> and read from whatever thread a command's async
+	/// continuation lands on. Tests that mutate it must join the
+	/// <c>StandardErrorToolsLogger static state</c> collection so they stay serialized.
+	/// </remarks>
+	public static bool DefaultVerbose
+	{
+		get => s_defaultVerbose;
+		set => s_defaultVerbose = value;
+	}
 
 	public StandardErrorToolsLogger(TextWriter? writer = null, bool? verbose = null)
 	{

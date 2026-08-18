@@ -28,18 +28,6 @@ public class DeviceManager : IDeviceManager
 		=> await GetDevicesForPlatformAsync(Platforms.All, cancellationToken);
 
 	/// <summary>
-	/// The platforms each provider can currently produce devices for, keyed by provider.
-	/// </summary>
-	/// <remarks>
-	/// These lists are what make <c>--platform &lt;p&gt;</c> query a provider at all, so they must
-	/// stay in lockstep with the platforms each provider actually tags its devices with. Adding
-	/// Mac host support to <c>AppleProvider.GetDevices</c>, for example, means adding
-	/// <see cref="Platforms.MacCatalyst"/> here, otherwise those devices are silently dropped.
-	/// </remarks>
-	static readonly string[] s_androidProviderPlatforms = [Platforms.Android];
-	static readonly string[] s_appleProviderPlatforms = [Platforms.iOS];
-
-	/// <summary>
 	/// Collects devices, querying only the providers that can produce devices for
 	/// <paramref name="normalizedPlatform"/>.
 	/// </summary>
@@ -57,10 +45,10 @@ public class DeviceManager : IDeviceManager
 	{
 		var devices = new List<Device>();
 
-		if (QueriesAndroid(normalizedPlatform))
+		if (Queries(_androidProvider?.SupportedPlatforms, normalizedPlatform))
 			await AddAndroidDevicesAsync(devices, cancellationToken);
 
-		if (QueriesApple(normalizedPlatform))
+		if (Queries(_appleProvider?.SupportedPlatforms, normalizedPlatform))
 			AddAppleDevices(devices);
 
 		// TODO: Get Windows devices when WindowsProvider is implemented
@@ -69,33 +57,45 @@ public class DeviceManager : IDeviceManager
 	}
 
 	/// <summary>
-	/// Whether any provider can currently produce devices for <paramref name="platform"/>.
+	/// Whether any registered provider can currently produce devices for
+	/// <paramref name="platform"/>.
 	/// </summary>
 	/// <remarks>
+	/// Answered from the providers' own <c>SupportedPlatforms</c>, so it cannot disagree with
+	/// which providers <see cref="GetDevicesByPlatformAsync"/> actually queries.
+	/// <para>
 	/// Mac Catalyst and Windows are valid platforms with no backing provider, so they always
 	/// yield zero devices. Callers can use this to tell "not supported yet" apart from
 	/// "the provider ran and found nothing".
+	/// </para>
 	/// </remarks>
-	public static bool HasProviderFor(string? platform)
+	public bool HasProviderFor(string? platform)
 	{
 		var normalized = Platforms.Normalize(platform);
-		return QueriesAndroid(normalized) || QueriesApple(normalized);
+		return Queries(_androidProvider?.SupportedPlatforms, normalized)
+			|| Queries(_appleProvider?.SupportedPlatforms, normalized);
 	}
 
 	/// <summary>
-	/// Whether the Android provider can produce devices for the given normalized platform.
+	/// Whether a provider declaring <paramref name="providerPlatforms"/> should be queried for
+	/// the given normalized platform. An absent provider is never queried.
 	/// </summary>
-	internal static bool QueriesAndroid(string normalizedPlatform)
-		=> Queries(s_androidProviderPlatforms, normalizedPlatform);
+	static bool Queries(IReadOnlyList<string>? providerPlatforms, string normalizedPlatform)
+	{
+		if (providerPlatforms is null)
+			return false;
 
-	/// <summary>
-	/// Whether the Apple provider can produce devices for the given normalized platform.
-	/// </summary>
-	internal static bool QueriesApple(string normalizedPlatform)
-		=> Queries(s_appleProviderPlatforms, normalizedPlatform);
+		if (normalizedPlatform == Platforms.All)
+			return true;
 
-	static bool Queries(string[] providerPlatforms, string normalizedPlatform)
-		=> normalizedPlatform == Platforms.All || Array.IndexOf(providerPlatforms, normalizedPlatform) >= 0;
+		for (var i = 0; i < providerPlatforms.Count; i++)
+		{
+			if (providerPlatforms[i] == normalizedPlatform)
+				return true;
+		}
+
+		return false;
+	}
 
 	async Task AddAndroidDevicesAsync(List<Device> devices, CancellationToken cancellationToken)
 	{

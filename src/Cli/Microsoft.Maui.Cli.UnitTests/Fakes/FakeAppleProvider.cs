@@ -23,6 +23,12 @@ public class FakeAppleProvider : IAppleProvider
 	public List<SimulatorInfo> Simulators { get; set; } = new();
 	public List<HealthCheck> HealthChecks { get; set; } = new();
 	public List<Device> Devices { get; set; } = new();
+
+	/// <summary>
+	/// Platforms this fake claims to serve. Settable so tests can simulate a provider that has
+	/// been extended to a new platform and assert the device manager follows it.
+	/// </summary>
+	public IReadOnlyList<string> SupportedPlatforms { get; set; } = [Platforms.iOS];
 	public AppleInstallResult InstallResult { get; set; } = new() { Status = "ok" };
 
 	public bool SelectXcodeResult { get; set; } = true;

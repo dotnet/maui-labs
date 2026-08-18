@@ -23,6 +23,12 @@ public class FakeAndroidProvider : IAndroidProvider
 
 	public List<HealthCheck> HealthChecks { get; set; } = new();
 	public List<Device> Devices { get; set; } = new();
+
+	/// <summary>
+	/// Platforms this fake claims to serve. Settable so tests can simulate a provider that has
+	/// been extended to a new platform and assert the device manager follows it.
+	/// </summary>
+	public IReadOnlyList<string> SupportedPlatforms { get; set; } = [Platforms.Android];
 	public List<AvdInfo> Avds { get; set; } = new();
 	public List<string> DeviceProfiles { get; set; } = new();
 	public List<SdkPackage> InstalledPackages { get; set; } = new();

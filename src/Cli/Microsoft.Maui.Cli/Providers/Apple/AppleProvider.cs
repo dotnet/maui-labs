@@ -505,6 +505,15 @@ public class AppleProvider : IAppleProvider
 		}, cancellationToken);
 	}
 
+	/// <inheritdoc />
+	/// <remarks>
+	/// Scoped to iOS because <see cref="GetDevices"/> tags every simulator with
+	/// <see cref="Platforms.iOS"/>. tvOS/watchOS/visionOS simulators are returned by
+	/// <c>simctl</c> but are not yet recognized in the shared Platforms model; when they are,
+	/// add them both here and to the tagging below.
+	/// </remarks>
+	public IReadOnlyList<string> SupportedPlatforms { get; } = [Platforms.iOS];
+
 	public List<Device> GetDevices()
 	{
 		if (_simulatorService is null)

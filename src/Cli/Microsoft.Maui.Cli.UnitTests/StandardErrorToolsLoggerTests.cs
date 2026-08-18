@@ -11,6 +11,7 @@ namespace Microsoft.Maui.Cli.UnitTests;
 /// stdout. That corrupts <c>--json</c> output, so the CLI substitutes this logger. These
 /// tests pin the behaviour that keeps stdout clean.
 /// </summary>
+[Collection("StandardErrorToolsLogger static state")]
 public class StandardErrorToolsLoggerTests
 {
 	[Fact]

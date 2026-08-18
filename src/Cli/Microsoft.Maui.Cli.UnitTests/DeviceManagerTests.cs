@@ -777,26 +777,10 @@ public class DeviceManagerTests
 		Assert.Equal(1, fakeAndroid.GetAvdsCallCount);
 	}
 
-	// Queries* take an already-normalized platform; alias handling ("apple", "iphone", ...) is
-	// covered end-to-end by GetDevicesByPlatformAsync above.
-	[Theory]
-	[InlineData(Platforms.All, true)]
-	[InlineData(Platforms.Android, true)]
-	[InlineData(Platforms.iOS, false)]
-	[InlineData(Platforms.MacCatalyst, false)]
-	[InlineData(Platforms.Windows, false)]
-	public void QueriesAndroid_ReturnsExpected(string platform, bool expected)
-		=> Assert.Equal(expected, DeviceManager.QueriesAndroid(platform));
-
-	[Theory]
-	[InlineData(Platforms.All, true)]
-	[InlineData(Platforms.iOS, true)]
-	[InlineData(Platforms.Android, false)]
-	[InlineData(Platforms.MacCatalyst, false)]
-	[InlineData(Platforms.Windows, false)]
-	public void QueriesApple_ReturnsExpected(string platform, bool expected)
-		=> Assert.Equal(expected, DeviceManager.QueriesApple(platform));
-
+	// Provider gating is observable through HasProviderFor, which reads the providers' own
+	// SupportedPlatforms. The fakes default to the same platforms the real providers declare
+	// (android / ios), so this pins the shipped behaviour. Alias handling ("apple", "iphone",
+	// ...) is covered end-to-end by GetDevicesByPlatformAsync above.
 	[Theory]
 	[InlineData(Platforms.All, true)]
 	[InlineData(Platforms.Android, true)]
@@ -806,17 +790,88 @@ public class DeviceManagerTests
 	[InlineData(Platforms.MacCatalyst, false)]
 	[InlineData(Platforms.Windows, false)]
 	public void HasProviderFor_ReturnsExpected(string? platform, bool expected)
-		=> Assert.Equal(expected, DeviceManager.HasProviderFor(platform));
+	{
+		var manager = new DeviceManager(CreateAndroidProvider(), CreateAppleProvider());
+
+		Assert.Equal(expected, manager.HasProviderFor(platform));
+	}
+
+	// A provider that starts serving a new platform must be followed by the device manager
+	// without any change to DeviceManager itself. Before providers declared their own
+	// platforms, this required editing a second list by hand and silently returned nothing
+	// when that was forgotten. Mac Catalyst stands in for any not-yet-served platform.
+	[Fact]
+	public async Task GetDevicesByPlatformAsync_FollowsAppleProviderIntoANewPlatform()
+	{
+		var fakeApple = CreateAppleProvider();
+		fakeApple.SupportedPlatforms = [Platforms.iOS, Platforms.MacCatalyst];
+		fakeApple.Devices = new List<Device>
+		{
+			new Device { Id = "mac-1", Name = "My Mac", Platforms = new[] { Platforms.MacCatalyst }, Type = DeviceType.Physical }
+		};
+		var manager = new DeviceManager(CreateAndroidProvider(), fakeApple);
+
+		var devices = await manager.GetDevicesByPlatformAsync(Platforms.MacCatalyst);
+
+		Assert.Equal(1, fakeApple.GetDevicesCallCount);
+		Assert.Equal("mac-1", Assert.Single(devices).Id);
+	}
 
 	[Fact]
-	public void HasProviderFor_CoversEveryPlatformThatQueriesAProvider()
+	public async Task GetDevicesByPlatformAsync_FollowsAndroidProviderIntoANewPlatform()
 	{
-		// Guards the mapping from drifting: a platform that reaches a provider must report as
-		// supported, and one that reaches none must not.
+		var fakeAndroid = CreateAndroidProvider();
+		fakeAndroid.SupportedPlatforms = [Platforms.Android, Platforms.Windows];
+		fakeAndroid.Devices = new List<Device>
+		{
+			new Device { Id = "win-1", Name = "Windows Device", Platforms = new[] { Platforms.Windows }, Type = DeviceType.Physical }
+		};
+		fakeAndroid.Avds = new List<AvdInfo>();
+		var manager = new DeviceManager(fakeAndroid, CreateAppleProvider());
+
+		var devices = await manager.GetDevicesByPlatformAsync(Platforms.Windows);
+
+		Assert.Equal(1, fakeAndroid.GetDevicesCallCount);
+		Assert.Equal("win-1", Assert.Single(devices).Id);
+	}
+
+	[Fact]
+	public void HasProviderFor_FollowsProviderDeclaredPlatforms()
+	{
+		var fakeApple = CreateAppleProvider();
+		fakeApple.SupportedPlatforms = [Platforms.iOS, Platforms.MacCatalyst];
+		var manager = new DeviceManager(CreateAndroidProvider(), fakeApple);
+
+		Assert.True(manager.HasProviderFor(Platforms.MacCatalyst));
+		// Still unbacked: neither provider declares it.
+		Assert.False(manager.HasProviderFor(Platforms.Windows));
+	}
+
+	[Fact]
+	public void HasProviderFor_WithoutProviders_IsFalseForEveryPlatform()
+	{
+		var manager = new DeviceManager();
+
+		foreach (var platform in Platforms.Supported)
+			Assert.False(manager.HasProviderFor(platform), $"'{platform}' reported as backed with no providers registered.");
+	}
+
+	// The real invariant: HasProviderFor must predict whether GetDevicesByPlatformAsync
+	// actually reaches a provider. Asserting against observed invocations rather than against
+	// the gating logic keeps this from restating the implementation.
+	[Fact]
+	public async Task HasProviderFor_AgreesWithWhichProvidersAreActuallyQueried()
+	{
 		foreach (var platform in Platforms.Supported)
 		{
-			var reachesProvider = DeviceManager.QueriesAndroid(platform) || DeviceManager.QueriesApple(platform);
-			Assert.Equal(reachesProvider, DeviceManager.HasProviderFor(platform));
+			var fakeAndroid = CreateAndroidProvider();
+			var fakeApple = CreateAppleProvider();
+			var manager = new DeviceManager(fakeAndroid, fakeApple);
+
+			await manager.GetDevicesByPlatformAsync(platform);
+
+			var queriedAProvider = fakeAndroid.GetDevicesCallCount > 0 || fakeApple.GetDevicesCallCount > 0;
+			Assert.Equal(queriedAProvider, manager.HasProviderFor(platform));
 		}
 	}
 }

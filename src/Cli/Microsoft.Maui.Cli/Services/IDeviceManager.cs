@@ -25,10 +25,23 @@ public interface IDeviceManager
 	/// Valid platforms may have no backing provider (Mac Catalyst and Windows do not today), in
 	/// which case this returns an empty list rather than failing. Callers that want to report
 	/// "not supported yet" separately from "none found" can check
-	/// <see cref="DeviceManager.HasProviderFor"/>.
+	/// <see cref="HasProviderFor"/>.
 	/// </para>
 	/// </remarks>
 	Task<IReadOnlyList<Device>> GetDevicesByPlatformAsync(string platform, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Whether any registered provider can currently produce devices for
+	/// <paramref name="platform"/>. Accepts any value handled by
+	/// <see cref="Platforms.Normalize"/>.
+	/// </summary>
+	/// <remarks>
+	/// Lets callers distinguish "this platform has no backing provider yet" from "the provider
+	/// ran and found nothing", which are both an empty result from
+	/// <see cref="GetDevicesByPlatformAsync"/>.
+	/// </remarks>
+	bool HasProviderFor(string? platform);
+
 	Task<Device?> GetDeviceByIdAsync(string deviceId, CancellationToken cancellationToken = default);
 	Task<Device> GetRunningDeviceOrThrowAsync(CancellationToken cancellationToken = default);
 }
