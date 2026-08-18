@@ -423,8 +423,8 @@ internal static partial class NativeUi
         return data?.ToArray();
     }
 
-    public static byte[]? CaptureScreen()
-        => GetRoots().FirstOrDefault() is { } window ? CaptureView(window) : null;
+    public static Task<byte[]?> CaptureScreen()
+        => Task.FromResult(GetRoots().FirstOrDefault() is { } window ? CaptureView(window) : null);
 
     public static IReadOnlyDictionary<string, string?> GetProperties(object viewObject)
     {
