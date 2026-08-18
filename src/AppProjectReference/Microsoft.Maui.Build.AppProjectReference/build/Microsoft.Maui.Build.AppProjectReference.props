@@ -1,0 +1,6 @@
+<Project>
+
+  <Import Project="$(MSBuildThisFileDirectory)Microsoft.Maui.Build.AppProjectReference.Legacy.props"
+          Condition="Exists('$(MSBuildThisFileDirectory)Microsoft.Maui.Build.AppProjectReference.Legacy.props')" />
+
+</Project>

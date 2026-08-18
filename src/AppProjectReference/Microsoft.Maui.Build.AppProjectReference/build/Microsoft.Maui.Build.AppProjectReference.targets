@@ -1,0 +1,119 @@
+<Project>
+
+  <PropertyGroup>
+    <_MauiAppRefTargetFrameworkVersion>$([System.Text.RegularExpressions.Regex]::Replace('$(TargetFrameworkVersion)', '^v', ''))</_MauiAppRefTargetFrameworkVersion>
+    <MauiAppRefUseProjectReferenceArtifacts
+        Condition="'$(MauiAppRefUseProjectReferenceArtifacts)' == '' and '$(BuildingInsideVisualStudio)' != 'true' and '$(_MauiAppRefTargetFrameworkVersion)' != '' and $([MSBuild]::VersionGreaterThanOrEquals('$(_MauiAppRefTargetFrameworkVersion)', '11.0'))">true</MauiAppRefUseProjectReferenceArtifacts>
+    <MauiAppRefUseProjectReferenceArtifacts Condition="'$(MauiAppRefUseProjectReferenceArtifacts)' == ''">false</MauiAppRefUseProjectReferenceArtifacts>
+  </PropertyGroup>
+
+  <!--
+    Application SDKs return authoritative @(ApplicationArtifact) items from
+    GetApplicationArtifacts. ProjectReference routes those target outputs
+    directly into @(MauiAppArtifact), without a second build or output scanning.
+  -->
+  <ItemDefinitionGroup Condition="'$(MauiAppRefUseProjectReferenceArtifacts)' == 'true'">
+    <_MauiAppProjectReference>
+      <MauiAppProjectReference>true</MauiAppProjectReference>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <BuildReference>true</BuildReference>
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>none</IncludeAssets>
+      <SkipGetTargetFrameworkProperties>true</SkipGetTargetFrameworkProperties>
+      <Targets>GetApplicationArtifacts</Targets>
+      <OutputItemType>MauiAppArtifact</OutputItemType>
+    </_MauiAppProjectReference>
+  </ItemDefinitionGroup>
+
+  <ItemGroup Condition="'$(MauiAppRefUseProjectReferenceArtifacts)' == 'true'">
+    <_MauiAppProjectReference Include="@(MauiAppProjectReference)">
+      <OutputItemType>MauiAppArtifact</OutputItemType>
+    </_MauiAppProjectReference>
+
+    <ProjectReference Include="@(_MauiAppProjectReference)" />
+    <_DeclaredMauiAppProjectReference Include="@(_MauiAppProjectReference)" />
+
+    <MauiAppProjectReference Remove="@(MauiAppProjectReference)" />
+    <_MauiAppProjectReference Remove="@(_MauiAppProjectReference)" />
+  </ItemGroup>
+
+  <!--
+    Package build assets are unavailable while the host's first restore graph is
+    evaluated. Restore each distinct app project once before project-reference
+    resolution so a clean package-consumer build has child assets available.
+  -->
+  <Target Name="_RestoreMauiAppProjectReferences"
+          BeforeTargets="AssignProjectConfiguration"
+          Condition="'$(MauiAppRefUseProjectReferenceArtifacts)' == 'true'">
+    <ItemGroup>
+      <_MauiAppProjectToRestore Include="@(_DeclaredMauiAppProjectReference->'%(FullPath)')" />
+    </ItemGroup>
+
+    <RemoveDuplicates Inputs="@(_MauiAppProjectToRestore)">
+      <Output TaskParameter="Filtered" ItemName="_DistinctMauiAppProjectToRestore" />
+    </RemoveDuplicates>
+
+    <MSBuild Projects="@(_DistinctMauiAppProjectToRestore)"
+             Targets="Restore"
+             BuildInParallel="$(BuildInParallel)"
+             RemoveProperties="TargetFramework;TargetFrameworks;RuntimeIdentifier;RuntimeIdentifiers;SelfContained;PlatformTarget"
+             SkipNonexistentProjects="false"
+             SkipNonexistentTargets="false"
+             Condition="'@(_DistinctMauiAppProjectToRestore)' != ''" />
+  </Target>
+
+  <Target Name="_MauiAppRefCollectOnBuild"
+          BeforeTargets="$(MauiAppRefBuildBeforeTargets)"
+          DependsOnTargets="BuildAppProjectReferences"
+          Condition="'$(MauiAppRefUseProjectReferenceArtifacts)' == 'true'" />
+
+  <Target Name="ResolveAppProjectReferences"
+          DependsOnTargets="ResolveProjectReferences"
+          Condition="'$(MauiAppRefUseProjectReferenceArtifacts)' == 'true'" />
+
+  <Target Name="BuildAppProjectReferences"
+          DependsOnTargets="ResolveProjectReferences"
+          Returns="@(MauiAppArtifact)"
+          Condition="'$(MauiAppRefUseProjectReferenceArtifacts)' == 'true'">
+    <ItemGroup>
+      <MauiAppArtifact Update="@(MauiAppArtifact)">
+        <ProjectPath Condition="'%(MauiAppArtifact.ProjectPath)' == ''">%(MauiAppArtifact.MSBuildSourceProjectFile)</ProjectPath>
+        <ReferenceName Condition="'%(MauiAppArtifact.ReferenceName)' == '' and '%(MauiAppArtifact.MSBuildSourceProjectFile)' != ''">$([System.IO.Path]::GetFileNameWithoutExtension('%(MauiAppArtifact.MSBuildSourceProjectFile)'))</ReferenceName>
+        <ArtifactType Condition="'%(MauiAppArtifact.ArtifactType)' == ''">%(MauiAppArtifact.PackageFormat)</ArtifactType>
+        <PackageName Condition="'%(MauiAppArtifact.PackageName)' == '' and '%(MauiAppArtifact.PackageId)' != ''">%(MauiAppArtifact.PackageId)</PackageName>
+        <PackageName Condition="'%(MauiAppArtifact.PackageName)' == ''">%(MauiAppArtifact.ApplicationId)</PackageName>
+        <BundleIdentifier Condition="'%(MauiAppArtifact.BundleIdentifier)' == ''">%(MauiAppArtifact.ApplicationId)</BundleIdentifier>
+        <Installable Condition="'%(MauiAppArtifact.Installable)' == ''">false</Installable>
+        <Installable Condition="'%(MauiAppArtifact.PackageFormat)' == 'apk' or '%(MauiAppArtifact.PackageFormat)' == 'aab' or '%(MauiAppArtifact.PackageFormat)' == 'app' or '%(MauiAppArtifact.PackageFormat)' == 'ipa'">true</Installable>
+        <Launchable Condition="'%(MauiAppArtifact.Launchable)' == ''">false</Launchable>
+        <Launchable Condition="'%(MauiAppArtifact.PackageFormat)' == 'apk' or '%(MauiAppArtifact.PackageFormat)' == 'app'">true</Launchable>
+      </MauiAppArtifact>
+    </ItemGroup>
+
+    <RemoveDuplicates Inputs="@(MauiAppArtifact)"
+                      Condition="'@(MauiAppArtifact)' != ''">
+      <Output TaskParameter="Filtered" ItemName="_MauiAppDistinctBuiltArtifact" />
+    </RemoveDuplicates>
+
+    <ItemGroup Condition="'@(_MauiAppDistinctBuiltArtifact)' != ''">
+      <MauiAppArtifact Remove="@(MauiAppArtifact)" />
+      <MauiAppArtifact Include="@(_MauiAppDistinctBuiltArtifact)" />
+    </ItemGroup>
+
+    <PropertyGroup>
+      <MauiAppArtifacts>@(MauiAppArtifact)</MauiAppArtifacts>
+      <MauiAppArtifactPaths>@(MauiAppArtifact->'%(FullPath)')</MauiAppArtifactPaths>
+    </PropertyGroup>
+
+    <Message Importance="High"
+             Condition="'@(MauiAppArtifact)' != ''"
+             Text="Resolved MAUI app artifact: %(MauiAppArtifact.Identity)" />
+
+    <Error Condition="'@(_DeclaredMauiAppProjectReference)' != '' and '$(MauiAppRefFailIfNoArtifacts)' == 'true' and '@(MauiAppArtifact)' == ''"
+           Text="No MAUI app artifacts were produced. Ensure the referenced application SDK implements GetApplicationArtifacts and check the project reference metadata." />
+  </Target>
+
+  <Import Project="$(MSBuildThisFileDirectory)Microsoft.Maui.Build.AppProjectReference.Legacy.targets"
+          Condition="'$(MauiAppRefUseProjectReferenceArtifacts)' != 'true'" />
+
+</Project>
