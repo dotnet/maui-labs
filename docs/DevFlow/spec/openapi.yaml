@@ -636,6 +636,7 @@ paths:
         view, which is how pinch-to-zoom reaches controls that handle gestures internally
         such as Map, WebView and native scroll views. The response reports which tier
         serviced the gesture so callers can tell a real recognizer hit from a native fallback.
+        Tap requires elementId; other gesture types target the current page when it is omitted.
       requestBody:
         required: true
         content:

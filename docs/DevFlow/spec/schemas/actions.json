@@ -318,7 +318,7 @@
             "string",
             "null"
           ],
-          "description": "Target element identifier. When omitted the gesture targets the window's current page."
+          "description": "Target element identifier. Required for tap. Other gestures target the window's current page when omitted."
         },
         "direction": {
           "type": [

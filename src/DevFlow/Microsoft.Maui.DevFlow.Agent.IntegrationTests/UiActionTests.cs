@@ -447,6 +447,16 @@ public class UiActionTests : IntegrationTestBase
         Assert.Contains("button", status.Text!, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task Tap_Gesture_WithoutTarget_IsRejectedConsistently()
+    {
+        using var response = await PostRawAsync("/api/v1/ui/actions/gesture", new { type = "tap" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("tap requires elementId", body);
+    }
+
     [Trait(TestFramework.Trait, TestFramework.Maui)]
     [Fact]
     public async Task LongPress_OnAndroid_HoldsTheNativeTouchForAtLeastThePlatformThreshold()

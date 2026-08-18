@@ -702,7 +702,7 @@ public class DevFlowCommands
         {
             Description = "Gesture: pinch, rotate, pan, swipe, doubletap, longpress, or tap"
         };
-        var gestureElementOption = new Option<string?>("--element") { Description = "Target element ID (defaults to the current page)" };
+        var gestureElementOption = new Option<string?>("--element") { Description = "Target element ID (required for tap; other gestures default to the current page)" };
         var gestureDirectionOption = new Option<string?>("--direction") { Description = "Direction for swipe/pan: up, down, left, right" };
         var gestureDistanceOption = new Option<double?>("--distance") { Description = "Swipe/pan distance in device-independent pixels (default: 120)" };
         var gestureScaleOption = new Option<double?>("--scale") { Description = "Pinch factor: 2.0 zooms in 2x, 0.5 zooms out (default: 1.5)" };
@@ -732,7 +732,7 @@ public class DevFlowCommands
             var index = ctx.GetValue(resolveIndexOption);
             ElementInfo? target = null;
 
-            // A gesture with no target is legitimate and aims at the current page.
+            // Non-tap gestures may omit a target and aim at the current page.
             if (elementId != null || autoId != null || text != null)
             {
                 target = await ResolveElementTargetAsync(
@@ -3558,6 +3558,16 @@ public class DevFlowCommands
         if (normalizedType == "swipe" && string.IsNullOrWhiteSpace(direction))
         {
             Output.WriteError("Swipe requires --direction (up, down, left, right).", json, "ValidationError");
+            _errorOccurred = true;
+            return;
+        }
+
+        if (normalizedType == "tap" && element is null)
+        {
+            Output.WriteError(
+                "Tap requires --element, --automationId, or --text to resolve a target.",
+                json,
+                "ValidationError");
             _errorOccurred = true;
             return;
         }

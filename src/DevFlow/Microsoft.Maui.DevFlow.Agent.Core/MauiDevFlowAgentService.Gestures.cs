@@ -31,7 +31,12 @@ public partial class MauiDevFlowAgentService
         var failureStatusCode = 400;
         GestureOutcome outcome;
 
-        if (gestureType == "tap")
+        if (gestureType == "tap" && string.IsNullOrWhiteSpace(body.ElementId))
+        {
+            outcome = GestureOutcome.NotHandled(
+                "tap requires elementId; use the dedicated tap action after resolving a target element");
+        }
+        else if (gestureType == "tap")
         {
             var tapResponse = await HandleTap(new HttpRequest
             {

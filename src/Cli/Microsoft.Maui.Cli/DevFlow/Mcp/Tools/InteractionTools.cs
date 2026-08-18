@@ -97,11 +97,11 @@ public sealed class InteractionTools
 		"Each gesture is first sent to a matching MAUI gesture recognizer on the element or its ancestors, and if there is " +
 		"none it is injected natively at the platform view — which is how pinch-to-zoom works on Maps, WebViews and other " +
 		"controls that handle gestures internally. Use maui_tree first to find the element ID; the 'gestures' field on each " +
-		"element lists the recognizers it has. Omitting elementId aims the gesture at the current page.")]
+		"element lists the recognizers it has. Omitting elementId aims non-tap gestures at the current page; tap requires an element ID.")]
 	public static async Task<string> Gesture(
 		McpAgentSession session,
 		[Description("Gesture type: 'pinch', 'rotate', 'pan', 'swipe', 'doubletap', 'longpress', or 'tap'")] string type,
-		[Description("Target element ID from maui_tree. If omitted, the gesture targets the current page.")] string? elementId = null,
+		[Description("Target element ID from maui_tree. Required for tap; other gestures target the current page when omitted.")] string? elementId = null,
 		[Description("Direction for swipe/pan: 'up', 'down', 'left', or 'right'. Required for swipe.")] string? direction = null,
 		[Description("Travel distance in device-independent pixels for swipe/pan when using 'direction'. Defaults to 120.")] double? distance = null,
 		[Description("Gesture duration in milliseconds. Longer durations read as drags, shorter ones as flicks. Defaults to 200.")] int? durationMs = null,
@@ -129,6 +129,9 @@ public sealed class InteractionTools
 
 		if (normalizedType == "swipe" && string.IsNullOrEmpty(normalizedDirection))
 			return "Swipe gesture requires a 'direction' parameter ('up', 'down', 'left', 'right').";
+
+		if (normalizedType == "tap" && string.IsNullOrWhiteSpace(elementId))
+			return "Tap gesture requires an 'elementId'. Use maui_tree or maui_query to resolve the target first.";
 
 		if (normalizedType == "pan" && string.IsNullOrEmpty(normalizedDirection) && deltaX is null && deltaY is null)
 			return "Pan gesture requires either a 'direction' or an explicit 'deltaX'/'deltaY' vector.";

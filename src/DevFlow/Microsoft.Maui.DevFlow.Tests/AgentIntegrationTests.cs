@@ -154,6 +154,7 @@ public class AgentHttpServerTests : IDisposable
         var result = await agentClient.TapAsync("btn1");
         Assert.True(result);
 
+        await acceptTask;
         listener.Stop();
     }
 
@@ -194,6 +195,7 @@ public class AgentHttpServerTests : IDisposable
         Assert.Equal("native", result.HandledBy);
         Assert.Equal("MKMapView.Camera.CenterCoordinateDistance /2", result.Detail);
 
+        await acceptTask;
         listener.Stop();
     }
 
@@ -224,6 +226,7 @@ public class AgentHttpServerTests : IDisposable
         Assert.Equal("none", result.HandledBy);
         Assert.Contains("not available", result.Error);
 
+        await acceptTask;
         listener.Stop();
     }
 

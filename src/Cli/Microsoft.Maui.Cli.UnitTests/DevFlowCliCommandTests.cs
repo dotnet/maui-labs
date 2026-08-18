@@ -321,6 +321,18 @@ public class DevFlowCliCommandTests
     }
 
     [Fact]
+    public async Task UiGesture_TapWithoutTarget_FailsWithoutCallingAgent()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync("devflow", "ui", "gesture", "tap", "--json");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/ui/actions/gesture");
+    }
+
+    [Fact]
     public async Task UiResize_SendsResizeAction()
     {
         var (server, cli) = await CreateFixturesAsync();

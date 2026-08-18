@@ -177,7 +177,8 @@ Override virtual methods from `Agent.Abstractions/DevFlowAgentService.cs`:
 
 Gesture directions describe finger travel, not content travel. An `up` swipe moves the pointer
 upward; a scroll fallback inverts that vector so scrollable content moves downward consistently
-with native touch injection. Named gestures target MAUI `VisualElement` IDs (or the current page);
+with native touch injection. Named gestures target MAUI `VisualElement` IDs (or the current page
+for non-tap gestures; tap requires an element ID);
 registered native-only element IDs remain supported by the dedicated tap action, but are not
 targets for multi-pointer gesture synthesis.
 
