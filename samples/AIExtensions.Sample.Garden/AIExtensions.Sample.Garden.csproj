@@ -56,7 +56,6 @@
 		                  ReferenceOutputAssembly="false" />
 		<ProjectReference Include="..\..\src\AIExtensions\Microsoft.Maui.AI.Chat.Controls\Microsoft.Maui.AI.Chat.Controls.csproj" />
 		<ProjectReference Include="..\..\src\AIExtensions\Microsoft.Maui.Chat.Controls\Microsoft.Maui.Chat.Controls.csproj" />
-		<ProjectReference Include="..\..\src\AIExtensions\Microsoft.Maui.CopilotSdk\Microsoft.Maui.CopilotSdk.csproj" />
 		<ProjectReference Include="..\..\src\AIExtensions\Microsoft.Maui.AI.Chat.Generators\Microsoft.Maui.AI.Chat.Generators.csproj"
 		                  OutputItemType="Analyzer"
 		                  ReferenceOutputAssembly="false" />

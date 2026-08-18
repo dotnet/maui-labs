@@ -668,7 +668,6 @@ extends:
               New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/AIPackages'
               Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.AI.*.nupkg' '$(Pipeline.Workspace)/AIPackages/' -Verbose
               Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.Chat.*.nupkg' '$(Pipeline.Workspace)/AIPackages/' -Verbose
-              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.CopilotSdk.*.nupkg' '$(Pipeline.Workspace)/AIPackages/' -Verbose
             displayName: Filter AI packages
 
         - job: PublishNuGet

@@ -36,7 +36,6 @@
     <PackageVersion Include="Azure.AI.OpenAI" Version="$(AzureAIOpenAIVersion)" />
     <PackageVersion Include="Azure.Identity" Version="$(AzureIdentityVersion)" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="$(CommunityToolkitMvvmVersion)" />
-    <PackageVersion Include="GitHub.Copilot.SDK" Version="$(GitHubCopilotSDKVersion)" />
   </ItemGroup>
 
   <!-- Roslyn (for source generators) -->
