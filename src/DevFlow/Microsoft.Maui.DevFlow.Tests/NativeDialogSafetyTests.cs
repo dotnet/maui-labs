@@ -78,6 +78,17 @@ public class NativeDialogSafetyTests
         Assert.False(NativeDialogSafety.IsSystemDialogForTarget(dialog, "App"));
     }
 
+    [Theory]
+    [InlineData("Don\u2019t Allow", "Don't Allow")]
+    [InlineData("\u201cSample App\u201d", "\"Sample App\"")]
+    [InlineData("ALLOW", "Allow")]
+    public void MacButtonLabelsMatch_EquivalentQuotesAndCase_ReturnsTrue(
+        string visibleLabel,
+        string requestedLabel)
+    {
+        Assert.True(MacCatalystAppDriver.ButtonLabelsMatch(visibleLabel, requestedLabel));
+    }
+
     [Fact]
     public void AndroidFocusedPackage_ExactComponent_ReturnsTrue()
     {
@@ -92,6 +103,46 @@ public class NativeDialogSafetyTests
         const string state = "mFocusedApp=ActivityRecord{123 u0 com.example.app.beta/.MainActivity t42}";
 
         Assert.False(AndroidAppDriver.IsFocusedPackage(state, "com.example.app"));
+    }
+
+    [Fact]
+    public void FindUniqueProcessId_UniqueExactMatch_PrefersExactMatch()
+    {
+        var processId = ProcessNameResolver.FindUniqueProcessId(
+            "SampleApp",
+            [(1, "SampleApp.Helper"), (2, "sampleapp")]);
+
+        Assert.Equal(2, processId);
+    }
+
+    [Fact]
+    public void FindUniqueProcessId_DuplicateExactMatches_ReturnsNull()
+    {
+        var processId = ProcessNameResolver.FindUniqueProcessId(
+            "SampleApp",
+            [(1, "SampleApp"), (2, "sampleapp")]);
+
+        Assert.Null(processId);
+    }
+
+    [Fact]
+    public void FindUniqueProcessId_UniqueSubstringMatch_ReturnsProcessId()
+    {
+        var processId = ProcessNameResolver.FindUniqueProcessId(
+            "SampleApp",
+            [(1, "SampleApp.Helper"), (2, "OtherApp")]);
+
+        Assert.Equal(1, processId);
+    }
+
+    [Fact]
+    public void FindUniqueProcessId_AmbiguousSubstringMatches_ReturnsNull()
+    {
+        var processId = ProcessNameResolver.FindUniqueProcessId(
+            "SampleApp",
+            [(1, "SampleApp.Helper"), (2, "SampleApp.Worker")]);
+
+        Assert.Null(processId);
     }
 
     private static AlertInfo CreateDialog()

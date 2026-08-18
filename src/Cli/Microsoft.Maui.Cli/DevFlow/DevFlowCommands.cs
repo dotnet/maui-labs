@@ -4049,24 +4049,9 @@ public class DevFlowCommands
             var appName = status?.App?.Name ?? status?.AppName;
             if (!string.IsNullOrWhiteSpace(appName))
             {
-                foreach (var process in System.Diagnostics.Process.GetProcesses())
-                {
-                    using (process)
-                    {
-                        try
-                        {
-                            if (process.ProcessName.Equals(appName, StringComparison.OrdinalIgnoreCase) ||
-                                process.ProcessName.Contains(appName, StringComparison.OrdinalIgnoreCase))
-                            {
-                                return process.Id;
-                            }
-                        }
-                        catch
-                        {
-                            // A process may exit or deny metadata access while enumerating.
-                        }
-                    }
-                }
+                var matchedProcessId = Microsoft.Maui.DevFlow.Driver.ProcessNameResolver.FindUniqueProcessId(appName);
+                if (matchedProcessId.HasValue)
+                    return matchedProcessId.Value;
             }
         }
         catch { }
