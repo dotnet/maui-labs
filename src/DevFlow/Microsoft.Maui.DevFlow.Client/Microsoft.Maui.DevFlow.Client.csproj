@@ -3,8 +3,11 @@
   <PropertyGroup>
     <!-- netstandard2.0 is what lets .NET Framework consumers (e.g. net472 Visual Studio Apex
          tests) speak the DevFlow wire protocol. The modern target is kept so .NET consumers get
-         the SocketsHttpHandler loopback dial and trimming/AOT annotations. -->
-    <TargetFrameworks>netstandard2.0;net9.0</TargetFrameworks>
+         the SocketsHttpHandler loopback dial and trimming/AOT annotations, and is deliberately
+         net8.0 rather than net9.0: NuGet would otherwise hand .NET 8 (LTS) consumers the portable
+         asset, which cannot carry those annotations and so would silently weaken their NativeAOT
+         and trimming builds. Nothing here needs a post-net8.0 API. -->
+    <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
     <!-- Only pack from the DevFlow pipeline job; the Cli job includes this project
          transitively as a ProjectReference but the DevFlow job owns the package. -->
     <IsPackable>false</IsPackable>
