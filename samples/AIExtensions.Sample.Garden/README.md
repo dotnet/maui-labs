@@ -27,8 +27,8 @@ past purchases using source-generated tools.
 - **Provider-neutral crew chat** — the compose button in the header opens a three-person
   `Microsoft.Maui.Chat.Controls.ChatView` with text, local media, delivery states, typing,
   attachments, and a custom task-card content template. The page and view model use no AI types.
-- **Provider choice** — desktop builds use the GitHub Copilot SDK by default;
-  Azure OpenAI remains available through configuration and is the mobile default.
+- **Azure OpenAI backend** — chat and image generation use the shared `AI:*`
+  user-secret configuration.
 
 ## Tool sources and lifetimes
 
@@ -90,24 +90,11 @@ or reject it.
 dotnet build samples/AIExtensions.Sample.Garden -f net10.0-maccatalyst
 ```
 
-On Mac Catalyst and Windows, sign in to the Copilot CLI (`copilot`) and run the
-sample. Optionally select a model or explicit CLI path:
+Configure the shared Azure OpenAI user secrets:
 
 ```bash
-dotnet user-secrets --id ai-attributes-secrets set "AI:Provider" "Copilot"
-dotnet user-secrets --id ai-attributes-secrets set "AI:Model" "<optional-model>"
-dotnet user-secrets --id ai-attributes-secrets set "AI:CopilotCliPath" "<optional-path>"
-```
-
-To use Azure OpenAI instead (and for Android/iOS), configure:
-
-```bash
-dotnet user-secrets --id ai-attributes-secrets set "AI:Provider" "AzureOpenAI"
 dotnet user-secrets --id ai-attributes-secrets set "AI:Endpoint" "<your-endpoint>"
 dotnet user-secrets --id ai-attributes-secrets set "AI:ApiKey" "<your-key>"
 dotnet user-secrets --id ai-attributes-secrets set "AI:DeploymentName" "<your-deployment>"
+dotnet user-secrets --id ai-attributes-secrets set "AI:ImageDeploymentName" "<your-image-deployment>"
 ```
-
-`AI:ImageDeploymentName` is optional with either chat provider. When configured
-alongside the Azure endpoint/key, the image-generation tool is added to Sage;
-otherwise image prompts are omitted from the system instructions.
