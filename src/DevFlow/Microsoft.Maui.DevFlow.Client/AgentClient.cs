@@ -1902,7 +1902,13 @@ public class AgentClient : IDisposable
     {
         switch (ex)
         {
-            case HttpRequestException httpEx when httpEx.InnerException is SocketException:
+            // A socket failure anywhere in the chain is a transport failure by definition — most
+            // often the connection refusal seen while racing agent or port-forward startup. It is
+            // matched on its own rather than only as HttpRequestException's direct inner exception
+            // because the two target families report it at different depths: modern .NET raises
+            // HttpRequestException -> SocketException, while .NET Framework's HttpClientHandler
+            // buries it one level deeper, as HttpRequestException -> WebException -> SocketException.
+            case SocketException:
                 return true;
             case IOException:
                 return true;

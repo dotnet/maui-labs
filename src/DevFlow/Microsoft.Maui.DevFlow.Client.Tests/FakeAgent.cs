@@ -40,10 +40,27 @@ internal sealed class FakeAgent : IDisposable
         => Start(IPAddress.Loopback, handler);
 
     public static FakeAgent Start(IPAddress address, Func<RecordedRequest, Response> handler)
+        => Start(address, port: 0, handler);
+
+    public static FakeAgent Start(IPAddress address, int port, Func<RecordedRequest, Response> handler)
     {
-        var listener = new TcpListener(address, 0);
+        var listener = new TcpListener(address, port);
+        listener.ExclusiveAddressUse = false;
         listener.Start();
         return new FakeAgent(listener, handler);
+    }
+
+    /// <summary>
+    /// Reserves and releases an ephemeral port, so a caller can bind it later. Used to simulate an
+    /// agent that is not listening yet when the client's first request goes out.
+    /// </summary>
+    public static int ReserveFreePort()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        return port;
     }
 
     /// <summary>Always answers with the same JSON body and a 200 status.</summary>
