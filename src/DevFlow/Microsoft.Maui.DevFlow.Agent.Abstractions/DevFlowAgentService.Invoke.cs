@@ -69,8 +69,12 @@ public partial class DevFlowAgentService
 			{
 				foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static))
 				{
+					if (method.ContainsGenericParameters)
+						continue;
+
 					var attr = method.GetCustomAttribute<DevFlowActionAttribute>();
-					if (attr == null) continue;
+					if (attr == null)
+						continue;
 
 					actions.Add(new InvokeActionEntry
 					{
@@ -116,15 +120,44 @@ public partial class DevFlowAgentService
 			.First();
 
 	private static bool IsAssemblyInAppBaseDirectory(Assembly assembly)
+		=> IsInAppBaseDirectory(assembly.Location, AppContext.BaseDirectory);
+
+	/// <summary>
+	/// Whether an assembly location sits in the app base directory. This is only a tie-breaker
+	/// for ranking duplicate action names, so anything it cannot determine is simply "no".
+	///
+	/// <para>
+	/// It must never throw. Every DevFlow action is ranked through here, so an exception takes
+	/// down <c>GET /api/v1/invoke/actions</c> and every <c>POST …/actions/{name}</c> with it.
+	/// On Android, assemblies loaded from the APK report a bare file name with no directory
+	/// component, and <see cref="Path.GetDirectoryName(string)"/> returns an empty string rather
+	/// than null for those — which the previous <c>?? string.Empty</c> could not catch, so
+	/// <see cref="Path.GetFullPath(string)"/> threw
+	/// <c>ArgumentException: The value cannot be an empty string. (Parameter 'path')</c>.
+	/// </para>
+	/// </summary>
+	internal static bool IsInAppBaseDirectory(string? assemblyLocation, string? appBaseDirectory)
 	{
-		var location = assembly.Location;
-		if (string.IsNullOrEmpty(location))
+		if (string.IsNullOrEmpty(assemblyLocation) || string.IsNullOrEmpty(appBaseDirectory))
 			return false;
 
-		return string.Equals(
-			Path.GetFullPath(Path.GetDirectoryName(location) ?? string.Empty).TrimEnd(Path.DirectorySeparatorChar),
-			Path.GetFullPath(AppContext.BaseDirectory).TrimEnd(Path.DirectorySeparatorChar),
-			StringComparison.OrdinalIgnoreCase);
+		try
+		{
+			// Empty, not null, when the location carries no directory component.
+			var directory = Path.GetDirectoryName(assemblyLocation);
+			if (string.IsNullOrEmpty(directory))
+				return false;
+
+			return string.Equals(
+				Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar),
+				Path.GetFullPath(appBaseDirectory).TrimEnd(Path.DirectorySeparatorChar),
+				StringComparison.OrdinalIgnoreCase);
+		}
+		catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException or System.Security.SecurityException)
+		{
+			// Malformed or non-filesystem paths are not worth failing action discovery over.
+			return false;
+		}
 	}
 
 	private static InvokeParameterInfo[] BuildParameterInfoList(MethodInfo method)
