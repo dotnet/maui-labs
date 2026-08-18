@@ -123,9 +123,13 @@ internal class BlockMappingPipeline
                         emitBlock.Role = update.Role;
                         emitBlock.AuthorName = update.AuthorName;
                         emitBlock.CreatedAt = update.CreatedAt;
-                        emitBlock.LifecycleState = BlockLifecycleState.Active;
+                        var alreadyComplete = IsAlreadyComplete(emitBlock);
+                        emitBlock.LifecycleState = alreadyComplete
+                            ? BlockLifecycleState.Inactive
+                            : BlockLifecycleState.Active;
                         ThrowIfIdMissing(emitBlock);
-                        _activeStack.Add(activeEntry);
+                        if (!alreadyComplete)
+                            _activeStack.Add(activeEntry);
 
                         BlockMappingPipelineLog.EmittingBlock(_logger, emitBlock.GetType().Name, emitBlock.Id, emitBlock.Role?.Value);
 
@@ -175,4 +179,8 @@ internal class BlockMappingPipeline
                 $"Block handler emitted a {block.GetType().Name} without assigning an Id.");
         }
     }
+
+    private static bool IsAlreadyComplete(ContentBlock block) =>
+        block is FunctionInvocationContentBlock { HasResult: true }
+            or InteractiveFunctionBlock { HasResult: true };
 }

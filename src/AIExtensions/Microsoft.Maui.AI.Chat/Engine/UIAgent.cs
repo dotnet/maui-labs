@@ -208,10 +208,9 @@ public class UIAgent : IDisposable
             var contentTypes = string.Join(", ", update.Contents.Select(c => c.GetType().Name));
             UIAgentLog.ReceivedUpdate(_logger, updateIndex++, update.Role?.Value, contentTypes);
 
-            assistantUpdates.Add(update);
-            thread?.AppendUpdate(update);
-
             var processUpdate = ApplyStateMapper(update);
+            assistantUpdates.Add(processUpdate);
+            thread?.AppendUpdate(update);
             if (processUpdate.Contents.Count == 0 && update.Contents.Count > 0)
                 continue;
 
@@ -262,78 +261,106 @@ public class UIAgent : IDisposable
         if (thread is null)
             return Array.Empty<ContentBlock>();
 
-        var updates = thread.GetUpdates();
-        if (updates.Count == 0)
+        var previousHistory = _history.ToArray();
+        var stateCheckpoint = CaptureStateCheckpoint();
+        try
+        {
+            BeginStateRestore();
+            var updates = thread.GetUpdates();
+            if (updates.Count == 0)
+            {
+                _history.Clear();
+                CompleteStateRestore();
+                return Array.Empty<ContentBlock>();
+            }
+
+            var restoredHistory = thread.IsStateful
+                ? Array.Empty<ChatMessage>()
+                : thread.GetMessageHistory();
+            var blocks = new List<ContentBlock>();
+            BlockMappingPipeline? responsePipeline = null;
+            string? currentTurnId = null;
+            var nextBlockStartsTurn = false;
+
+            foreach (var update in updates)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var startsTurn = update.Role == ChatRole.User
+                    && !IsContinuation(update);
+                if (startsTurn)
+                {
+                    responsePipeline?.Finalize();
+                    currentTurnId = update.MessageId
+                        ?? update.ResponseId
+                        ?? Guid.NewGuid().ToString("N");
+                    nextBlockStartsTurn = true;
+
+                    var requestPipeline = new BlockMappingPipeline(
+                        _options,
+                        _logger);
+                    await foreach (var block in requestPipeline.Process(
+                        update,
+                        cancellationToken))
+                    {
+                        AddRestoredBlock(
+                            blocks,
+                            block,
+                            currentTurnId,
+                            isRequest: true,
+                            ref nextBlockStartsTurn);
+                    }
+                    requestPipeline.Finalize();
+                    responsePipeline = new BlockMappingPipeline(
+                        _options,
+                        _logger);
+                    continue;
+                }
+
+                if (responsePipeline is null)
+                {
+                    currentTurnId = update.MessageId
+                        ?? update.ResponseId
+                        ?? Guid.NewGuid().ToString("N");
+                    nextBlockStartsTurn = true;
+                    responsePipeline = new BlockMappingPipeline(
+                        _options,
+                        _logger);
+                }
+
+                var processUpdate = ApplyStateMapper(update);
+                if (processUpdate.Contents.Count > 0
+                    || update.Contents.Count == 0)
+                {
+                    await foreach (var block in responsePipeline.Process(
+                        processUpdate,
+                        cancellationToken))
+                    {
+                        AddRestoredBlock(
+                            blocks,
+                            block,
+                            currentTurnId!,
+                            isRequest: false,
+                            ref nextBlockStartsTurn);
+                    }
+                }
+
+                RestoreApprovalResponses(update, blocks, currentTurnId!);
+            }
+
+            responsePipeline?.Finalize();
+            _history.Clear();
+            _history.AddRange(restoredHistory);
+            CompleteStateRestore();
+            return blocks;
+        }
+        catch
         {
             _history.Clear();
-            return Array.Empty<ContentBlock>();
+            _history.AddRange(previousHistory);
+            RestoreStateCheckpoint(stateCheckpoint);
+            throw;
         }
-
-        _history.Clear();
-        if (!thread.IsStateful)
-            _history.AddRange(thread.GetMessageHistory());
-
-        var blocks = new List<ContentBlock>();
-        BlockMappingPipeline? responsePipeline = null;
-        string? currentTurnId = null;
-        var nextBlockStartsTurn = false;
-
-        foreach (var update in updates)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var startsTurn = update.Role == ChatRole.User && !IsContinuation(update);
-            if (startsTurn)
-            {
-                responsePipeline?.Finalize();
-                currentTurnId = update.MessageId
-                    ?? update.ResponseId
-                    ?? Guid.NewGuid().ToString("N");
-                nextBlockStartsTurn = true;
-
-                var requestPipeline = new BlockMappingPipeline(_options, _logger);
-                await foreach (var block in requestPipeline.Process(update, cancellationToken))
-                {
-                    AddRestoredBlock(
-                        blocks,
-                        block,
-                        currentTurnId,
-                        isRequest: true,
-                        ref nextBlockStartsTurn);
-                }
-                requestPipeline.Finalize();
-                responsePipeline = new BlockMappingPipeline(_options, _logger);
-                continue;
-            }
-
-            if (responsePipeline is null)
-            {
-                currentTurnId = update.MessageId
-                    ?? update.ResponseId
-                    ?? Guid.NewGuid().ToString("N");
-                nextBlockStartsTurn = true;
-                responsePipeline = new BlockMappingPipeline(_options, _logger);
-            }
-
-            var processUpdate = ApplyStateMapper(update);
-            if (processUpdate.Contents.Count > 0 || update.Contents.Count == 0)
-            {
-                await foreach (var block in responsePipeline.Process(processUpdate, cancellationToken))
-                {
-                    AddRestoredBlock(
-                        blocks,
-                        block,
-                        currentTurnId!,
-                        isRequest: false,
-                        ref nextBlockStartsTurn);
-                }
-            }
-
-            RestoreApprovalResponses(update, blocks, currentTurnId!);
-        }
-
-        responsePipeline?.Finalize();
-        return blocks;
     }
 
     internal void CompleteThreadTurn()
@@ -346,6 +373,24 @@ public class UIAgent : IDisposable
         => ApplyStateMapper(update, out _);
 
     internal virtual void RejectPendingPredictiveState()
+    {
+    }
+
+    internal virtual object? CaptureStateCheckpoint() => null;
+
+    internal virtual void BeginStateRestore()
+    {
+    }
+
+    internal virtual void CompleteStateRestore()
+    {
+    }
+
+    internal virtual void RestoreStateCheckpoint(object? checkpoint)
+    {
+    }
+
+    internal virtual void ResetState()
     {
     }
 

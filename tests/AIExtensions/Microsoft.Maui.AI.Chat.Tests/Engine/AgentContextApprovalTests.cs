@@ -185,6 +185,50 @@ public class AgentContextApprovalTests
     }
 
     [Fact]
+    public async Task SendMessageAsync_WhileAwaitingApproval_IsRejected()
+    {
+        var (agent, client) = CreateAgent();
+        var callCount = 0;
+        client.SetHandler((messages, options, cancellationToken) =>
+        {
+            callCount++;
+            return callCount == 1
+                ? ResponseEmitters.EmitApprovalRequest(
+                    "call-1",
+                    "DeleteFile",
+                    ct: cancellationToken)
+                : ResponseEmitters.EmitTextResponse(
+                    "Done",
+                    cancellationToken);
+        });
+        var context = new AgentContext(agent);
+        var awaiting = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        context.RegisterOnStatusChanged(status =>
+        {
+            if (status == ConversationStatus.AwaitingInput)
+                awaiting.TrySetResult();
+        });
+
+        var firstSend = context.SendMessageAsync("Delete the file");
+        await awaiting.Task;
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => context.SendMessageAsync("Start another turn"));
+        Assert.Contains("already being processed", exception.Message);
+
+        context.Turns[^1]
+            .ResponseBlocks
+            .OfType<ToolApprovalBlock>()
+            .Single()
+            .Approve();
+        await firstSend;
+
+        Assert.Single(context.Turns);
+        Assert.Equal(ConversationStatus.Idle, context.Status);
+    }
+
+    [Fact]
     public async Task StatusTransitions_NoApproval_RemainsStreamingToIdle()
     {
         var (agent, client) = CreateAgent();
