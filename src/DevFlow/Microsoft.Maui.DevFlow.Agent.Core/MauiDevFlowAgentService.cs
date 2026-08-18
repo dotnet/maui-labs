@@ -104,9 +104,14 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         capabilities["ui.hit-test"] = Capability(2, supported: true,
             ["native-first", "capture-epoch", "window-logical-coordinates"],
             reason: null);
-        capabilities["ui.actions"] = Capability(2, supported: true,
-            ["tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "capture-bound-batch", "properties", "stale-capture-rejection"],
-            reason: null);
+        capabilities["ui.actions"] = new
+        {
+            version = 2,
+            supported = true,
+            features = new[] { "tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "capture-bound-batch", "properties", "stale-capture-rejection" },
+            gestures = SupportedGestures,
+            reason = (string?)null
+        };
         capabilities["ui.screenshot"] = Capability(2, supported: true,
             SupportsNativeElementScreenshots
                 ? ["element", "native-element", "fullscreen", "selector", "capture-epoch"]
@@ -3344,56 +3349,6 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             : HttpResponse.Error(result ?? "Key action failed");
     }
 
-    protected override async Task<HttpResponse> HandleGesture(HttpRequest request)
-    {
-        if (_app == null) return HttpResponse.Error("Agent not bound to app");
-
-        var body = request.BodyAs<GestureActionRequest>();
-        if (body == null || string.IsNullOrWhiteSpace(body.Type))
-            return HttpResponse.Error("type is required");
-        if (await PrepareUiMutationAsync(request, body, body.ElementId) is { } staleCapture)
-            return staleCapture;
-
-        var gestureType = body.Type.Trim().ToLowerInvariant();
-
-        return gestureType switch
-        {
-            "tap" => await HandleTap(new HttpRequest
-            {
-                Method = "POST",
-                MutationState = request.MutationState,
-                Body = JsonSerializer.Serialize(new ActionRequest
-                {
-                    ElementId = body.ElementId
-                })
-            }),
-            "longpress" or "long-press" => await HandleTap(new HttpRequest
-            {
-                Method = "POST",
-                MutationState = request.MutationState,
-                Body = JsonSerializer.Serialize(new ActionRequest
-                {
-                    ElementId = body.ElementId
-                })
-            }),
-            "swipe" => await HandleScroll(new HttpRequest
-            {
-                Method = "POST",
-                MutationState = request.MutationState,
-                Body = JsonSerializer.Serialize(new ScrollRequest
-                {
-                    ElementId = body.ElementId,
-                    DeltaX = body.Direction?.Equals("left", StringComparison.OrdinalIgnoreCase) == true ? -body.Distance :
-                        body.Direction?.Equals("right", StringComparison.OrdinalIgnoreCase) == true ? body.Distance : 0,
-                    DeltaY = body.Direction?.Equals("up", StringComparison.OrdinalIgnoreCase) == true ? -body.Distance :
-                        body.Direction?.Equals("down", StringComparison.OrdinalIgnoreCase) == true ? body.Distance : 0,
-                    Animated = body.DurationMs <= 0 || body.DurationMs < 400
-                })
-            }),
-            _ => HttpResponse.Error($"Gesture '{body.Type}' is not supported")
-        };
-    }
-
     protected override async Task<HttpResponse> HandleBatch(HttpRequest request)
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
@@ -3497,8 +3452,8 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                                 Body = JsonSerializer.Serialize(new ScrollRequest
                                 {
                                     ElementId = action.ElementId,
-                                    DeltaX = action.DeltaX,
-                                    DeltaY = action.DeltaY,
+                                    DeltaX = action.DeltaX ?? 0,
+                                    DeltaY = action.DeltaY ?? 0,
                                     ItemIndex = action.ItemIndex,
                                     GroupIndex = action.GroupIndex,
                                     ScrollToPosition = action.ScrollToPosition,
@@ -3533,7 +3488,14 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                                     Type = action.Type ?? action.Action,
                                     Direction = action.Direction,
                                     Distance = action.Distance,
-                                    DurationMs = action.DurationMs
+                                    DurationMs = action.DurationMs,
+                                    Scale = action.Scale,
+                                    Rotation = action.Rotation,
+                                    DeltaX = action.DeltaX,
+                                    DeltaY = action.DeltaY,
+                                    OriginX = action.OriginX,
+                                    OriginY = action.OriginY,
+                                    Steps = action.Steps
                                 })
                             });
                             break;

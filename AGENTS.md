@@ -255,7 +255,7 @@ DevFlow exposes 67 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_fill` | Fill text into Entry/Editor |
 | `maui_focus` | Set focus to an element |
 | `maui_geolocation` | GPS coordinates |
-| `maui_gesture` | Perform a touch gesture on the app |
+| `maui_gesture` | Pinch/zoom, rotate, pan, swipe, double-tap, long-press |
 | `maui_get_property` | Read any element property |
 | `maui_get_theme` | Get the current app-scoped light/dark theme |
 | `maui_hittest` | Find elements at screen coordinates |
