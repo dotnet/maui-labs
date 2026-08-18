@@ -52,7 +52,7 @@ public static class RecordingStateManager
     public static void Save(RecordingState state)
     {
         Directory.CreateDirectory(StateDir);
-        var json = DriverJson.SerializeUntyped(state, indented: true);
+        var json = ProtocolJson.SerializeUntyped(state, indented: true);
         File.WriteAllText(StateFile, json);
     }
 
@@ -62,7 +62,7 @@ public static class RecordingStateManager
         try
         {
             var json = File.ReadAllText(StateFile);
-            return DriverJson.Deserialize<RecordingState>(json);
+            return ProtocolJson.Deserialize<RecordingState>(json);
         }
         catch
         {

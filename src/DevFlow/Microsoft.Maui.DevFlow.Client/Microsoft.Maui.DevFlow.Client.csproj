@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- netstandard2.0 is what lets .NET Framework consumers (e.g. net472 Visual Studio Apex
+         tests) speak the DevFlow wire protocol. The modern target is kept so .NET consumers get
+         the SocketsHttpHandler loopback dial and trimming/AOT annotations. -->
+    <TargetFrameworks>netstandard2.0;net9.0</TargetFrameworks>
+    <!-- Only pack from the DevFlow pipeline job; the Cli job includes this project
+         transitively as a ProjectReference but the DevFlow job owns the package. -->
+    <IsPackable>false</IsPackable>
+    <IsPackable Condition="'$(PackDriverNuGet)' == 'true'">true</IsPackable>
+    <IsAotCompatible Condition="'$(TargetFramework)' != 'netstandard2.0'">true</IsAotCompatible>
+
+    <PackageId>Microsoft.Maui.DevFlow.Client</PackageId>
+    <IsShipping>true</IsShipping>
+    <Description>Portable client for the Microsoft.Maui.DevFlow Agent wire protocol: AgentClient, element and protocol DTOs, and their serialization. Targets netstandard2.0 so .NET Framework test harnesses share the exact protocol behavior used by modern .NET consumers.</Description>
+    <PackageTags>maui;automation;testing;devflow;client</PackageTags>
+    <PackRepoRootReadme>false</PackRepoRootReadme>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <DefineConstants>$(DefineConstants);DEVFLOW_NETSTANDARD</DefineConstants>
+    <!-- The netstandard2.0 build compiles polyfills for init-only setters and required members,
+         which the reference assembly does not declare. -->
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" />
+  </ItemGroup>
+
+</Project>

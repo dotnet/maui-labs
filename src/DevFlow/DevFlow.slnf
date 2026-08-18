@@ -13,6 +13,8 @@
       "src\\DevFlow\\Microsoft.Maui.DevFlow.Agent.IntegrationTests\\Microsoft.Maui.DevFlow.Agent.IntegrationTests.csproj",
       "src\\DevFlow\\Microsoft.Maui.DevFlow.Blazor\\Microsoft.Maui.DevFlow.Blazor.csproj",
       "src\\DevFlow\\Microsoft.Maui.DevFlow.Blazor.Gtk\\Microsoft.Maui.DevFlow.Blazor.Gtk.csproj",
+      "src\\DevFlow\\Microsoft.Maui.DevFlow.Client\\Microsoft.Maui.DevFlow.Client.csproj",
+      "src\\DevFlow\\Microsoft.Maui.DevFlow.Client.Tests\\Microsoft.Maui.DevFlow.Client.Tests.csproj",
       "src\\DevFlow\\Microsoft.Maui.DevFlow.Driver\\Microsoft.Maui.DevFlow.Driver.csproj",
       "src\\DevFlow\\Microsoft.Maui.DevFlow.Logging\\Microsoft.Maui.DevFlow.Logging.csproj",
       "src\\DevFlow\\Microsoft.Maui.DevFlow.Tests\\Microsoft.Maui.DevFlow.Tests.csproj",

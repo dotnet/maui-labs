@@ -35,11 +35,21 @@ DevFlow uses a three-tier architecture:
 
 ```
 Microsoft.Maui.DevFlow.CLI (global tool)
-├── Microsoft.Maui.DevFlow.Driver (AgentClient — public API)
+├── Microsoft.Maui.DevFlow.Driver (platform drivers)
+│   └── Microsoft.Maui.DevFlow.Client (AgentClient — public protocol API)
 ├── ModelContextProtocol (MCP server)
 ├── System.CommandLine (CLI framework)
 ├── Spectre.Console (terminal UI)
 └── Websocket.Client (broker transport)
+
+Microsoft.Maui.DevFlow.Client (netstandard2.0 + modern .NET)
+├── AgentClient, ElementInfo, protocol DTOs, HTTP/JSON operations
+└── System.Text.Json
+
+Microsoft.Maui.DevFlow.Driver (modern .NET, platform-specific)
+├── Microsoft.Maui.DevFlow.Client
+├── App process management, UI Automation, Mac accessibility
+└── SkiaSharp (screenshot processing)
 
 Microsoft.Maui.DevFlow.Agent.Abstractions (no MAUI dependency)
 ├── AgentHttpServer, AgentOptions, routing, DevFlowAgentService
@@ -118,7 +128,7 @@ so source stays compatible. Label such PRs `breaking-change` and say so in the d
    protected virtual async Task<HttpResponse> HandleMyFeature(HttpRequest request) { ... }
    ```
 3. Add DTO class at bottom of the owning file if needed
-4. Add client method in `Driver/AgentClient.cs`
+4. Add client method in `Client/AgentClient.cs`
 5. Optionally expose as MCP tool and/or CLI command
 
 ### Adding a New MCP Tool
