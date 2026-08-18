@@ -278,6 +278,10 @@ jobs:
         # rotate out of the feeds -- which is exactly how tvos broke the Windows job.
         run: dotnet workload install maui ios macos maccatalyst android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
 
+      - name: Install Apple simulator automation tool
+        if: matrix.framework == 'maui'
+        run: dotnet tool install --global AppleDev.Tools --version 0.8.10
+
       - name: List available iOS simulators
         run: xcrun simctl list devices available
 

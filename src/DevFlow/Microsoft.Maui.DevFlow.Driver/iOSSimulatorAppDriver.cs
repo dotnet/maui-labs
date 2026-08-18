@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace Microsoft.Maui.DevFlow.Driver;
 
@@ -563,10 +564,13 @@ public class iOSSimulatorAppDriver : AppDriverBase
         // versions don't break detection.
         var app = elements.FirstOrDefault(e =>
             string.Equals(e.Type, "Application", StringComparison.OrdinalIgnoreCase));
-        if (app is not null && app.Children.Count >= 2)
+        if (app is not null && app.Children.Count is >= 2 and <= 8)
         {
             var childTypes = app.Children.Select(c => c.Type).ToList();
-            bool hasButtons = childTypes.Any(t => string.Equals(t, "Button", StringComparison.OrdinalIgnoreCase));
+            var buttonCount = childTypes.Count(t =>
+                string.Equals(t, "Button", StringComparison.OrdinalIgnoreCase));
+            var hasPromptText = childTypes.Any(t =>
+                string.Equals(t, "StaticText", StringComparison.OrdinalIgnoreCase));
             bool hasAppContainer = childTypes.Any(t =>
                 string.Equals(t, "Window", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(t, "NavigationBar", StringComparison.OrdinalIgnoreCase)
@@ -575,7 +579,7 @@ public class iOSSimulatorAppDriver : AppDriverBase
                 || string.Equals(t, "ScrollView", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(t, "ScrollArea", StringComparison.OrdinalIgnoreCase));
 
-            if (hasButtons && !hasAppContainer)
+            if (buttonCount is >= 1 and <= 4 && hasPromptText && !hasAppContainer)
             {
                 var buttons = new List<AlertButton>();
                 CollectButtons(app, buttons);
@@ -656,7 +660,27 @@ public class iOSSimulatorAppDriver : AppDriverBase
         var normalizedTarget = targetName.EndsWith(".app", StringComparison.OrdinalIgnoreCase)
             ? targetName[..^4]
             : targetName;
-        return new[] { application.Label, application.Value, application.Description }
-            .Any(value => value?.Equals(normalizedTarget, StringComparison.OrdinalIgnoreCase) == true);
+        if (new[] { application.Label, application.Value, application.Description }
+            .Any(value => value?.Equals(normalizedTarget, StringComparison.OrdinalIgnoreCase) == true))
+        {
+            return true;
+        }
+
+        return application.Children.Any(child =>
+            child.Type?.Contains("StaticText", StringComparison.OrdinalIgnoreCase) == true
+            && PermissionPromptNamesTarget(child.Label, normalizedTarget));
+    }
+
+    internal static bool PermissionPromptNamesTarget(string? promptText, string targetName)
+    {
+        if (string.IsNullOrWhiteSpace(promptText) || string.IsNullOrWhiteSpace(targetName))
+            return false;
+
+        var match = Regex.Match(
+            promptText,
+            "^(?:Allow\\s+[\\u201c\"](?<app>.+?)[\\u201d\"]\\s+to\\b|[\\u201c\"](?<app>.+?)[\\u201d\"]\\s+Would Like to\\b)",
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        return match.Success
+            && match.Groups["app"].Value.Equals(targetName, StringComparison.OrdinalIgnoreCase);
     }
 }

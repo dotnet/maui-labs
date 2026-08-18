@@ -71,6 +71,22 @@ public sealed class NativeDialogTools
                 ["platform"] = target.Platform
             });
         }
+        if (target.Kind == DialogPlatformKind.Android)
+        {
+            using var androidDriver = new AndroidAppDriver { Serial = target.AndroidDevice };
+            var attributedToTarget = dialog.IsSystemDialog
+                ? AndroidAppDriver.PermissionPromptNamesTarget(
+                    dialog.Title,
+                    target.AppName ?? string.Empty)
+                : !string.IsNullOrWhiteSpace(target.PackageId)
+                    && await androidDriver.IsTargetAppForegroundAsync(target.PackageId);
+            if (!attributedToTarget)
+            {
+                return SerializeManualAction(
+                    "The visible Android dialog could not be safely attributed to the connected app.",
+                    "dialog-attribution-failed");
+            }
+        }
 
         var platformPromptId = dialog.PromptId;
         var canRespond = dialog.CanRespond || target.Kind != DialogPlatformKind.MacOS;
@@ -201,18 +217,6 @@ public sealed class NativeDialogTools
                 }
                 else
                 {
-                    if (lease.Target.Kind == DialogPlatformKind.Android)
-                    {
-                        using var androidDriver = new AndroidAppDriver { Serial = lease.Target.AndroidDevice };
-                        if (string.IsNullOrWhiteSpace(lease.Target.PackageId)
-                            || !await androidDriver.IsTargetAppForegroundAsync(lease.Target.PackageId))
-                        {
-                            return SerializeResponseManualAction(
-                                "The connected Android app is no longer focused. Detect the prompt again after returning to that app.",
-                                "target-app-not-focused");
-                        }
-                    }
-
                     var currentDialog = await DetectDialogAsync(lease.Target);
                     if (currentDialog is null)
                     {
@@ -292,10 +296,6 @@ public sealed class NativeDialogTools
             }
             if (string.IsNullOrWhiteSpace(status.App?.PackageId))
                 return DialogTarget.Unsupported(platform, identity, "The connected Android agent did not report its package identifier.");
-
-            using var driver = new AndroidAppDriver { Serial = selectedDevice };
-            if (!await driver.IsTargetAppForegroundAsync(status.App.PackageId))
-                return DialogTarget.Unsupported(platform, identity, "The connected Android app is not the focused app behind the visible system UI.");
 
             return new DialogTarget(
                 DialogPlatformKind.Android,
@@ -399,7 +399,9 @@ public sealed class NativeDialogTools
                         dialog,
                         buttonLabel,
                         target.PackageId
-                            ?? throw new McpException("The Android dialog target has no package identifier."));
+                            ?? throw new McpException("The Android dialog target has no package identifier."),
+                        target.AppName
+                            ?? throw new McpException("The Android dialog target has no app name."));
             case DialogPlatformKind.IosSimulator:
                 using (var driver = new iOSSimulatorAppDriver
                 {

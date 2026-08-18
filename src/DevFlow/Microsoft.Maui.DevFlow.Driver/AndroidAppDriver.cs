@@ -163,7 +163,8 @@ public class AndroidAppDriver : AppDriverBase
     public async Task<AlertActionResult> PressAlertButtonSafelyAsync(
         AlertInfo reviewedDialog,
         string buttonLabel,
-        string expectedPackageId)
+        string expectedPackageId,
+        string expectedAppName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(buttonLabel);
         var matches = reviewedDialog.Buttons
@@ -180,12 +181,15 @@ public class AndroidAppDriver : AppDriverBase
                 reviewedDialog);
         }
 
-        if (!await IsTargetAppForegroundAsync(expectedPackageId))
+        var attributedToTarget = reviewedDialog.IsSystemDialog
+            ? PermissionPromptNamesTarget(reviewedDialog.Title, expectedAppName)
+            : await IsTargetAppForegroundAsync(expectedPackageId);
+        if (!attributedToTarget)
         {
             return new AlertActionResult(
                 false,
                 true,
-                "The connected Android app is no longer focused. Detect the prompt again.",
+                "The visible Android dialog cannot be safely attributed to the connected app. Detect the prompt again.",
                 reviewedDialog);
         }
 
@@ -359,8 +363,23 @@ public class AndroidAppDriver : AppDriverBase
         if (buttons.Count == 0) return null;
         return new AlertInfo(title ?? "Permission Request", buttons)
         {
-            Text = CollectVisibleText(root)
+            Text = CollectVisibleText(root),
+            IsSystemDialog = true,
+            SourceProcessName = "com.google.android.permissioncontroller"
         };
+    }
+
+    internal static bool PermissionPromptNamesTarget(string? promptText, string targetName)
+    {
+        if (string.IsNullOrWhiteSpace(promptText) || string.IsNullOrWhiteSpace(targetName))
+            return false;
+
+        var match = Regex.Match(
+            promptText,
+            @"^Allow\s+(?<app>.+?)\s+to\b",
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        return match.Success
+            && match.Groups["app"].Value.Equals(targetName, StringComparison.OrdinalIgnoreCase);
     }
 
     private static IReadOnlyList<string> CollectVisibleText(XElement root)
