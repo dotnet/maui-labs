@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk" TreatAsLocalProperty="PublishAot;PublishTrimmed;IsAotCompatible;IsTrimmable">
 
   <PropertyGroup>
     <!-- netstandard2.0 is what lets .NET Framework consumers (e.g. net472 Visual Studio Apex
@@ -9,7 +9,7 @@
          transitively as a ProjectReference but the DevFlow job owns the package. -->
     <IsPackable>false</IsPackable>
     <IsPackable Condition="'$(PackDriverNuGet)' == 'true'">true</IsPackable>
-    <IsAotCompatible Condition="'$(TargetFramework)' != 'netstandard2.0'">true</IsAotCompatible>
+    <IsAotCompatible>true</IsAotCompatible>
 
     <PackageId>Microsoft.Maui.DevFlow.Client</PackageId>
     <IsShipping>true</IsShipping>
@@ -27,6 +27,15 @@
     <!-- The netstandard2.0 build compiles polyfills for init-only setters and required members,
          which the reference assembly does not declare. -->
     <LangVersion>latest</LangVersion>
+    <!-- The CLI's NativeAOT publish smoke test runs with -p:PublishAot=true -p:PublishTrimmed=true.
+         MSBuild propagates those as global properties to every project in the graph, and NuGet's
+         restore-graph walk evaluates every target framework of each one — including this project's
+         portable target, where the SDK rejects them (NETSDK1207). Global properties cannot normally
+         be reassigned, hence TreatAsLocalProperty on the Project element above. -->
+    <PublishAot>false</PublishAot>
+    <PublishTrimmed>false</PublishTrimmed>
+    <IsAotCompatible>false</IsAotCompatible>
+    <IsTrimmable>false</IsTrimmable>
   </PropertyGroup>
 
   <ItemGroup>
