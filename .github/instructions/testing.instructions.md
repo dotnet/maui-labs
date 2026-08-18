@@ -20,7 +20,6 @@ applyTo: "**/*Tests*/**,**/*.Tests.*"
 | AIExtensions | `tests/AIExtensions/Microsoft.Maui.AI.Chat.Generators.Tests/` | `net10.0` |
 | AIExtensions | `tests/AIExtensions/Microsoft.Maui.AI.Chat.Controls.Tests/` | `net10.0` |
 | AIExtensions | `tests/AIExtensions/Microsoft.Maui.Chat.Controls.Tests/` | `net10.0` |
-| AIExtensions | `tests/AIExtensions/Microsoft.Maui.CopilotSdk.Tests/` | `net10.0` |
 | AppProjectReference | `src/AppProjectReference/Microsoft.Maui.Build.AppProjectReference.Tests/` | `net10.0` |
 | Essentials.AI | `tests/AI/Microsoft.Maui.Essentials.AI.UnitTests/` | `net10.0` |
 | Essentials.AI | `tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/` | multi-TFM |
