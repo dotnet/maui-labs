@@ -69,9 +69,33 @@ public class UIAgent<TState> : UIAgent where TState : class, new()
             else
                 State.Value = typedState;
         }
+        else if (stateContext?.StateValue is not null)
+        {
+            throw new InvalidOperationException(
+                $"The state mapper supplied '{stateContext.StateValue.GetType().FullName}', " +
+                $"but this agent requires '{typeof(TState).FullName}'.");
+        }
         return mapped;
     }
 
     internal override void RejectPendingPredictiveState() =>
         State.RejectPredictiveState();
+
+    internal override object CaptureStateCheckpoint() =>
+        State.CaptureCheckpoint();
+
+    internal override void BeginStateRestore() =>
+        State.ResetToInitialValue();
+
+    internal override void CompleteStateRestore() =>
+        State.RejectPredictiveState();
+
+    internal override void RestoreStateCheckpoint(object? checkpoint)
+    {
+        if (checkpoint is AgentState<TState>.StateCheckpoint typedCheckpoint)
+            State.RestoreCheckpoint(typedCheckpoint);
+    }
+
+    internal override void ResetState() =>
+        State.ResetToInitialValue();
 }
