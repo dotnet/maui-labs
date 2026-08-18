@@ -27,7 +27,8 @@ DevFlow Inspector in GitHub Copilot Canvas.
 - screenshot and visual-tree inspection with hover, selection, and searchable hierarchy;
 - a prominent disconnected-state overlay that preserves and clearly labels the last captured frame
   while DevFlow waits for the app to reconnect;
-- tap, fill, scroll, gesture, navigation, theme, and live property mutation, with explicit
+- tap, fill, scroll, named gestures (pinch, rotate, pan, swipe, double-tap, long-press, tap),
+  navigation, theme, and live property mutation, with explicit
   **Apply to XAML** persistence for existing direct-literal attributes and runtime-owned property
   editor metadata;
 - logs, live-updating network, preferences, device, sensor, native Alerts, read-only file browsing,

@@ -39,7 +39,8 @@ namespace Microsoft.Maui.DevFlow.Agent.Core;
 /// </list>
 ///
 /// <para>
-/// Methods must be <c>public static</c>. Return type should be <c>void</c>,
+/// Methods must be <c>public static</c> and must not contain generic parameters; this excludes
+/// generic methods and methods declared on generic types. Return type should be <c>void</c>,
 /// <c>Task</c>, or <c>Task&lt;T&gt;</c> where T is a supported type or any
 /// type whose <c>ToString()</c> produces a meaningful result.
 /// </para>

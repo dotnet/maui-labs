@@ -290,69 +290,119 @@
         }
       }
     },
-    "GestureAction": {
+    "GestureType": {
+      "type": "string",
+      "enum": [
+        "tap",
+        "doubletap",
+        "longpress",
+        "swipe",
+        "pan",
+        "pinch",
+        "rotate"
+      ],
+      "description": "The kind of gesture to perform."
+    },
+    "GestureRequest": {
       "type": "object",
-      "description": "A single action within a gesture sequence.",
+      "description": "Request to perform a named gesture. The gesture is first offered to a matching MAUI gesture recognizer on the target element or its ancestors; if none exists it is injected natively at the platform view, which is how pinch-to-zoom reaches controls that own their gestures internally (Map, WebView, native scroll views).",
       "required": [
         "type"
       ],
       "properties": {
         "type": {
-          "type": "string",
-          "enum": [
-            "pointerMove",
-            "pointerDown",
-            "pointerUp",
-            "pause"
-          ],
-          "description": "The type of gesture action to perform."
+          "$ref": "#/$defs/GestureType"
         },
-        "x": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "description": "X coordinate for the action."
-        },
-        "y": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "description": "Y coordinate for the action."
-        },
-        "duration": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Duration of this action in milliseconds.",
-          "minimum": 0
-        },
-        "button": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Pointer button index (0 = primary, 1 = middle, 2 = secondary).",
-          "default": 0,
-          "minimum": 0
-        }
-      }
-    },
-    "GestureRequest": {
-      "type": "object",
-      "description": "Request to perform a complex gesture as a sequence of pointer actions.",
-      "required": [
-        "actions"
-      ],
-      "properties": {
         "elementId": {
           "type": [
             "string",
             "null"
           ],
-          "description": "Optional target element identifier."
+          "description": "Target element identifier. Required for tap. Other gestures target the window's current page when omitted."
+        },
+        "direction": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "up",
+            "down",
+            "left",
+            "right",
+            null
+          ],
+          "description": "Finger travel direction for swipe and pan. Required for swipe. For example, 'up' moves the pointer upward and scrollable content downward."
+        },
+        "distance": {
+          "type": "number",
+          "description": "Travel distance in device-independent pixels for swipe and pan when using 'direction'.",
+          "default": 120
+        },
+        "durationMs": {
+          "type": "integer",
+          "description": "Total gesture duration in milliseconds. Longer durations read as drags, shorter ones as flicks. Long press defaults to 600 ms and clamps values below 500 ms.",
+          "default": 200,
+          "minimum": 0
+        },
+        "scale": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Pinch factor: 2.0 zooms in 2x, 0.5 zooms out by half. Used by 'pinch'; defaults to 1.5.",
+          "exclusiveMinimum": 0
+        },
+        "rotation": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Rotation in degrees, positive is clockwise. Used by 'rotate'; defaults to 90."
+        },
+        "deltaX": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Explicit horizontal pan distance in device-independent pixels. Overrides direction/distance."
+        },
+        "deltaY": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Explicit vertical pan distance in device-independent pixels. Overrides direction/distance."
+        },
+        "originX": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Gesture focal point X, element-relative from 0 (left) to 1 (right).",
+          "default": 0.5,
+          "minimum": 0,
+          "maximum": 1
+        },
+        "originY": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Gesture focal point Y, element-relative from 0 (top) to 1 (bottom).",
+          "default": 0.5,
+          "minimum": 0,
+          "maximum": 1
+        },
+        "steps": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Number of interpolation steps emitted between the gesture's start and end.",
+          "default": 10,
+          "minimum": 1,
+          "maximum": 120
         },
         "captureEpoch": {
           "$ref": "#/$defs/CaptureEpoch"
@@ -360,16 +410,119 @@
         "registryGeneration": {
           "$ref": "#/$defs/RegistryGeneration"
         },
-        "actions": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/GestureAction"
-          },
-          "description": "Ordered sequence of gesture actions to perform."
-        },
         "include": {
           "$ref": "#/$defs/IncludeOption",
           "description": "Optional data to include in the response."
+        }
+      }
+    },
+    "GestureResponse": {
+      "type": "object",
+      "description": "Result of a gesture, naming the tier that serviced it.",
+      "required": [
+        "success",
+        "type",
+        "handledBy"
+      ],
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "type": {
+          "$ref": "#/$defs/GestureType"
+        },
+        "elementId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "handledBy": {
+          "type": "string",
+          "enum": [
+            "recognizer",
+            "native",
+            "action",
+            "scroll",
+            "none"
+          ],
+          "description": "'recognizer' — a MAUI gesture recognizer on the element or an ancestor handled it. 'native' — injected at the platform view. 'action' — the dedicated DevFlow tap action handled it. 'scroll' — the legacy swipe-to-scroll fallback ran. 'none' — nothing handled the gesture."
+        },
+        "platform": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Device platform that ran the gesture."
+        },
+        "detail": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "What actually serviced the gesture, e.g. 'PinchGestureRecognizer on Grid' or 'MKMapView.Camera.CenterCoordinateDistance /2'."
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Why the gesture could not be performed, when success is false."
+        }
+      }
+    },
+    "GestureErrorResponse": {
+      "type": "object",
+      "description": "A rejected or unhandled gesture request. Validation failures may not have a normalized gesture type; attempted gestures also report the tier outcome.",
+      "required": [
+        "success",
+        "error"
+      ],
+      "properties": {
+        "success": {
+          "const": false
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Normalized gesture type when one could be determined, otherwise the rejected caller value or null."
+        },
+        "elementId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "handledBy": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "recognizer",
+            "native",
+            "action",
+            "scroll",
+            "none",
+            null
+          ]
+        },
+        "platform": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "detail": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "error": {
+          "type": "string"
         }
       }
     },
@@ -429,14 +582,14 @@
             "number",
             "null"
           ],
-          "description": "Horizontal scroll delta (for scroll action)."
+          "description": "Horizontal delta for scroll, or explicit horizontal pointer travel for gesture pan."
         },
         "deltaY": {
           "type": [
             "number",
             "null"
           ],
-          "description": "Vertical scroll delta (for scroll action)."
+          "description": "Vertical delta for scroll, or explicit vertical pointer travel for gesture pan."
         },
         "animated": {
           "type": [
@@ -505,15 +658,76 @@
           ],
           "description": "Key to press (for key action)."
         },
-        "actions": {
+        "type": {
+          "$ref": "#/$defs/GestureType",
+          "description": "Gesture kind (for gesture action)."
+        },
+        "direction": {
           "type": [
-            "array",
+            "string",
             "null"
           ],
-          "items": {
-            "$ref": "#/$defs/GestureAction"
-          },
-          "description": "Gesture action sequence (for gesture action)."
+          "enum": [
+            "up",
+            "down",
+            "left",
+            "right",
+            null
+          ],
+          "description": "Finger travel direction (for gesture swipe/pan)."
+        },
+        "distance": {
+          "type": "number",
+          "description": "Travel distance in device-independent pixels (for gesture swipe/pan).",
+          "default": 120
+        },
+        "durationMs": {
+          "type": "integer",
+          "description": "Gesture duration in milliseconds (for gesture action).",
+          "default": 200,
+          "minimum": 0
+        },
+        "scale": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Pinch factor (for gesture pinch): 2.0 zooms in, 0.5 zooms out.",
+          "exclusiveMinimum": 0
+        },
+        "rotation": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Rotation in degrees (for gesture rotate)."
+        },
+        "originX": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Gesture focal point X, element-relative 0..1.",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "originY": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Gesture focal point Y, element-relative 0..1.",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "steps": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Interpolation steps between gesture start and end.",
+          "minimum": 1,
+          "maximum": 120
         }
       }
     },
