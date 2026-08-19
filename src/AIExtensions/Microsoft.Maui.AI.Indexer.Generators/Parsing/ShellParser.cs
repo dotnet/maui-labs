@@ -33,6 +33,9 @@ internal static class ShellParser
 
     private static void ParseShellNavigationElement(XElement element, List<SemanticNode> elements)
     {
+        if (IsExcludedWithChildren(element))
+            return;
+
         var name = element.Name.LocalName;
         var title = element.Attribute("Title")?.Value;
 
@@ -71,6 +74,9 @@ internal static class ShellParser
             {
                 if (child.Name.LocalName == "ShellContent")
                 {
+                    if (IsExcludedWithChildren(child))
+                        continue;
+
                     var shellContentTitle = child.Attribute("Title")?.Value;
                     ui.Children.Add(new SemanticNode
                     {
@@ -83,6 +89,19 @@ internal static class ShellParser
 
             elements.Add(ui);
         }
+    }
+
+    private static bool IsExcludedWithChildren(XElement element)
+    {
+        var value = element.Attributes()
+            .FirstOrDefault(static attribute =>
+                string.Equals(
+                    attribute.Name.LocalName,
+                    "IndexingProperties.ExcludeWithChildren",
+                    StringComparison.OrdinalIgnoreCase))
+            ?.Value;
+
+        return bool.TryParse(value, out var excluded) && excluded;
     }
 
     /// <summary>

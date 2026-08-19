@@ -1,11 +1,11 @@
 # XAML → Markdown UI Indexer — Specification
 
 > **Status:** Experimental. This document is the authoritative, implementation‑independent
-> specification for the compile‑time XAML → Markdown UI indexer. It describes **what** the
-> system produces and **the exact rules** it follows, not how any particular implementation is
-> written. Someone reading this document should be able to predict the Markdown produced for any
-> XAML page, and — in principle — reimplement the system from scratch and reproduce identical
-> output.
+> specification for the XAML → Markdown UI indexer and its optional runtime current-page
+> augmentation. It describes **what** the system produces and **the exact rules** it follows, not
+> how any particular implementation is written. Someone reading this document should be able to
+> predict the compile-time Markdown produced for any XAML page and the state represented by a
+> runtime snapshot.
 
 ---
 
@@ -43,8 +43,13 @@
 
 The XAML → Markdown UI indexer analyzes a .NET MAUI application's XAML at **build time** and
 produces a structured, deterministic, AI‑friendly **Markdown** description of every page, view,
-template, and navigation path. It does this **without running the app** and **without any runtime
-visual‑tree inspection**.
+template, and navigation path. The whole-app catalog is produced **without running the app** and
+**without runtime visual-tree inspection**.
+
+An optional, complementary **runtime current-page snapshot** can augment that catalog with the
+controls actually materialized and visible on the presented page, including resolved labels and
+live state. The runtime snapshot is not part of the deterministic corpus and never replaces or
+modifies it.
 
 The output makes the entire UI discoverable to AI agents and tooling, enabling:
 
@@ -56,10 +61,10 @@ The output makes the entire UI discoverable to AI agents and tooling, enabling:
 - **Accessibility review** — the output reflects what a screen reader would announce.
 - **Test scaffolding** — a machine‑readable map of controls, bindings, and actions.
 
-The system runs entirely at compile time. For every XAML page it emits a Markdown string embedded
-in generated code, plus a per‑assembly aggregate index that enumerates all pages. The app decides
-how to consume the index (e.g. exposing search/lookup tools to an AI agent); **producing** the
-index is the only responsibility of this system.
+The whole-app indexing pipeline runs entirely at compile time. For every XAML page it emits a
+Markdown string embedded in generated code, plus a per-assembly aggregate index that enumerates all
+pages. An app may additionally request a runtime current-page snapshot when it needs present-state
+context. The app decides how to expose and search either source (for example as AI tools).
 
 ---
 
@@ -92,14 +97,17 @@ announce, **not** visual layout. This principle drives every rule in this docume
 - Following references from one XAML document to another (user controls, hosted pages).
 - Emitting one Markdown representation per page plus a per‑assembly aggregate index.
 - Extracting the app's home/entry screen from the Shell (which screen the app opens to).
+- Optionally capturing the currently presented, materialized page at runtime as a separate
+  current-state snapshot.
 
 ### Non‑goals
 
 The system must **not**:
 
 - Generate or modify any UI code or XAML.
-- Depend on the app running, or on any runtime visual tree.
-- Infer business logic, dynamic data, or values only known at runtime.
+- Make the deterministic whole-app catalog depend on the app running or a runtime visual tree.
+- Infer business logic or dynamic data in the compile-time catalog. The optional runtime snapshot
+  reads only values already exposed by the presented controls.
 - Resolve styling, theming, colors, or exact geometry.
 - Produce embeddings (that is a downstream, optional step).
 - Perform searching or ranking (that is the consuming app's responsibility).
@@ -134,7 +142,7 @@ pages at once. Stage 2 is per‑document and order‑independent.
 ### 5.1 Which files are indexed
 
 Every file with a `.xaml` extension that participates in the build is a candidate. No other file
-types are considered.
+types are considered. A document explicitly excluded as auxiliary chrome (see §5.4) is not indexed.
 
 ### 5.2 Page identity requirement
 
@@ -162,6 +170,25 @@ Each page records a **relative file path** derived from its source location:
 - If no marker is present, the file name alone is used (e.g. `AppShell.xaml`).
 
 This produces a stable, machine‑independent path that does not leak absolute build directories.
+
+### 5.4 Explicit auxiliary-subtree exclusion
+
+An app may host out-of-band assistant, debugger, or inspector chrome beside its domain UI. Indexing
+that subtree would make an AI describe its own interface and can overwhelm the useful page context.
+The public attached property `IndexingProperties.ExcludeWithChildren="True"` therefore defines an
+explicit exclusion boundary:
+
+- The marked element and every descendant are omitted from the compile-time page Markdown.
+- Runtime current-page snapshots apply the same boundary.
+- If the property is set on a XAML document's root, that document produces no per-page artifact and
+  is absent from the aggregate catalog.
+- A reference to an excluded document must also mark its use site when the placeholder itself
+  should disappear. Otherwise it remains an unresolved custom-control placeholder under §15.5.
+- The value is recognized case-insensitively as a Boolean. Missing, malformed, or false values do
+  not exclude anything.
+
+This property is reserved for **auxiliary chrome outside the UI being explained**. It must not be
+used to conceal ordinary controls, conditional states, or templates from accessibility/AI help.
 
 ---
 
@@ -837,7 +864,8 @@ Exactly one aggregate index is emitted per assembly:
 
 ### 17.3 Runtime consumption types
 
-Consumers interact with two runtime types (provided by the runtime library, not generated):
+Consumers interact with two compile-time-catalog support types (provided by the runtime library,
+not generated):
 
 - **`IndexedPage`** — an indexed page: `Name`, `FilePath` (nullable), `Markdown`.
 - **`IndexedPageCatalog`** — the base of every aggregate:
@@ -849,7 +877,116 @@ Consumers interact with two runtime types (provided by the runtime library, not 
 Multiple assemblies each get their own aggregate; there is no global registry by design. An app
 that spans assemblies merges each assembly's `Pages` itself.
 
-### 17.4 Embedding Markdown safely
+### 17.4 Optional runtime current-page augmentation
+
+The compile-time catalog describes every possible page, template, and conditional branch. It
+cannot know which page the user is viewing, which branches are currently visible, or what values
+bindings resolved to. A consumer may therefore request a separate runtime snapshot for questions
+about **the screen visible now**.
+
+The runtime public contract consists of:
+
+- **`RuntimePageIndexer`** — captures the current application page asynchronously, or a specified
+  `Window`/`Page` when the caller already has one.
+- **`CurrentPageSnapshot`** — the presented page's `PageName` and runtime `Markdown`.
+- **`CurrentPageSnapshotOptions`** — privacy/rendering options, including whether ordinary input
+  text is included and the maximum length of one text value.
+
+#### 17.4.1 Relationship to the compile-time catalog
+
+The two sources answer different questions:
+
+| Question | Authoritative source |
+|---|---|
+| What screens and controls can exist? | Compile-time `IndexedPageCatalog` |
+| How does a user reach a destination? | Compile-time catalog, starting from `Home` |
+| Which page and controls are presented now? | Runtime `CurrentPageSnapshot` |
+| Which dynamic branch/value/state is visible now? | Runtime snapshot |
+
+Runtime data is **additional context**, not a merged or rewritten compile-time page. A consumer
+that needs both passes both documents to the AI and labels their roles clearly.
+
+#### 17.4.2 Presented-page resolution
+
+The snapshot resolves the user-facing page in this order:
+
+1. The top modal page, when one is presented.
+2. An open Shell flyout, represented by MAUI's effective flyout collection (including
+   `AsMultipleItems` children and current-content menu commands), materialized custom
+   flyout/header/footer content, and the current page only.
+3. The current page inside a Shell.
+4. The current page inside navigation, tabbed, or flyout containers.
+5. Otherwise, the window's root page.
+
+This resolution follows presentation state only. Routes and navigation implementation details
+remain excluded.
+
+#### 17.4.3 Runtime Markdown format
+
+```
+# Current UI: {RuntimePageTypeName}
+
+Runtime snapshot: currently visible, materialized controls and live state.
+
+{body — one line per currently visible semantic element}
+```
+
+The body uses the compile-time index's control names, two-space nesting, semantic descriptions,
+hints, heading levels, placeholders, and accessibility-first priority rules where those concepts
+exist at runtime. In addition:
+
+- Controls with `IsVisible = false`, zero opacity, or a hidden ancestor are omitted with their
+  descendants.
+- An `IndexingProperties.ExcludeWithChildren` boundary is omitted even when it is visible. This
+  supports persistent assistant/debug sidebars without recursively indexing the auxiliary UI.
+- Structural MAUI containers are flattened. Materialized custom controls are shown as
+  `[TypeName]:` groups.
+- A framework or custom container with a non-empty semantic description is promoted as an
+  accessible group and retains its visible children.
+- Resolved label/button text is emitted instead of binding expressions.
+- Live state is emitted as bracket annotations: values/ranges, selected/checked/toggled state,
+  running/progress state, focus, read-only state, and disabled state.
+- Only materialized collection/template children can appear. Unmaterialized items and templates
+  remain available only in the compile-time catalog.
+- Newlines in one runtime text value are normalized to spaces so each control remains one line.
+  Overlong values are truncated according to the snapshot options.
+- Runtime image and WebView sources emit only generic source kinds (for example `remote image`,
+  `local image`, or `web content`), never file paths or URI payloads. This prevents signed URLs,
+  access tokens, local user paths, and embedded credentials from entering AI context.
+
+Example:
+
+```markdown
+# Current UI: ProductReviewPage
+
+Runtime snapshot: currently visible, materialized controls and live state.
+
+- Heading (level 1): "Write Review"
+- Label: "Heirloom Tomato Seeds"
+- Slider: "Rating" [hint: Slide to select 1 to 5 stars, value: 5, range: 1–5]
+- Heading (level 2): "Comment (optional)"
+- Editor: [placeholder: "Share your experience..."]
+- Button: "Submit Review" [hint: Submits your review for this product]
+```
+
+#### 17.4.4 Privacy and failure behavior
+
+- User-entered text from `Entry`, `Editor`, and `SearchBar` is omitted by default.
+- An omitted input reports `empty` or `has text; value omitted`, so consumers never confuse
+  redaction with an empty field.
+- While input text is omitted, exact occurrences of its current value in the control's semantic
+  description, hint, or placeholder are redacted as well.
+- An app may explicitly include ordinary input text. Password input is **never** included.
+- Capturing without a running application/window/page returns no snapshot rather than inventing
+  state.
+- Invalid rendering options fail explicitly.
+- Snapshot capture runs on the MAUI dispatcher and uses public MAUI control/visual-tree APIs. It
+  does not require reflection, platform handlers, DevFlow, or native tree inspection.
+
+Unlike the compile-time corpus, runtime output is intentionally **stateful and non-deterministic**:
+it describes one moment in the running app.
+
+### 17.5 Embedding compile-time Markdown safely
 
 Because the Markdown may contain arbitrary characters (including sequences of double quotes), the
 embedded literal uses a delimiter guaranteed not to collide with the content. The embedded text is
@@ -1027,8 +1164,10 @@ shape without breaking it:
 - **Deeper accessibility analysis** — flagging missing labels, unreachable actions, etc.
 - **RAG embedding generation** — producing embeddings from the stable Markdown corpus.
 
-Any such extension must preserve the guarantees in [§18](#18-determinism-and-formatting-guarantees):
-determinism, stable ordering, verbatim text, and accessibility‑first content.
+Any extension to the compile-time corpus must preserve the guarantees in
+[§18](#18-determinism-and-formatting-guarantees): determinism, stable ordering, verbatim text, and
+accessibility-first content. Runtime enrichments must preserve the accessibility and privacy rules
+in [§17.4](#174-optional-runtime-current-page-augmentation), but are stateful by definition.
 
 ---
 

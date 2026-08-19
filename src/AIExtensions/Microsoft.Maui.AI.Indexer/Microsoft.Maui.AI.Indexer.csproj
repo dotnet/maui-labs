@@ -5,10 +5,17 @@
     <IsPackable>true</IsPackable>
     <IsShipping>true</IsShipping>
     <PackageId>Microsoft.Maui.AI.Indexer</PackageId>
-    <Description>Compile-time XAML UI indexer for .NET MAUI — generates AI-friendly semantic Markdown from XAML pages</Description>
+    <Description>.NET MAUI UI indexer — generates compile-time semantic Markdown for every XAML page and runtime snapshots of the current page</Description>
     <RootNamespace>Microsoft.Maui.AI.Indexer</RootNamespace>
     <PackRepoRootReadme>false</PackRepoRootReadme>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Microsoft.Maui.AI.Indexer.Generators\Microsoft.Maui.AI.Indexer.Generators.csproj"

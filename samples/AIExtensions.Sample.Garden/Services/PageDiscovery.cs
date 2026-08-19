@@ -16,6 +16,22 @@ public sealed class PageDiscovery
     // For AIExtensions.Sample.Garden → AIExtensions_Sample_GardenIndexedPageCatalog
     private static IndexedPageCatalog Index => AIExtensions_Sample_GardenIndexedPageCatalog.Default;
 
+    [ExportAIFunction("get_current_ui")]
+    [Description(
+        "ALWAYS use this for questions about the screen the user is looking at now, what is " +
+        "currently visible, or a control referred to as 'this' (for example 'what is this text " +
+        "box for?', 'what can I do on this screen?', or 'which buttons are visible?'). Returns " +
+        "only the currently presented page's materialized, visible controls with resolved runtime " +
+        "text and live state. User-entered input values are private: the result reports whether an " +
+        "input has text but omits that text. It does not move the user or change the app. Use search_ui and " +
+        "get_page_ui instead for screens that are not currently open or for full-app walkthroughs.")]
+    public static async Task<string> GetCurrentUi()
+    {
+        var snapshot = await RuntimePageIndexer.CaptureCurrentAsync();
+        return snapshot?.Markdown
+            ?? "No currently presented app page is available.";
+    }
+
     [ExportAIFunction("search_ui")]
     [Description(
         "ALWAYS use this first to answer any question about how to use the app, how to do a " +

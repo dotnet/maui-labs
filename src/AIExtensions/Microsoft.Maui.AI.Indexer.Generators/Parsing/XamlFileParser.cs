@@ -66,6 +66,9 @@ internal static class XamlFileParser
             return null;
 
         var root = doc.Root;
+        if (IsExcludedWithChildren(root))
+            return null;
+
         var xClass = root.Attribute(X + "Class")?.Value;
         if (string.IsNullOrWhiteSpace(xClass))
             return null;
@@ -106,6 +109,9 @@ internal static class XamlFileParser
     private static List<SemanticNode> WalkElement(XElement element)
     {
         var results = new List<SemanticNode>();
+        if (IsExcludedWithChildren(element))
+            return results;
+
         var localName = element.Name.LocalName;
 
         // Skip property elements (e.g., Grid.RowDefinitions, CollectionView.ItemTemplate)
@@ -222,6 +228,19 @@ internal static class XamlFileParser
             results.AddRange(WalkElement(child));
         }
         return results;
+    }
+
+    private static bool IsExcludedWithChildren(XElement element)
+    {
+        var value = element.Attributes()
+            .FirstOrDefault(static attribute =>
+                string.Equals(
+                    attribute.Name.LocalName,
+                    "IndexingProperties.ExcludeWithChildren",
+                    StringComparison.OrdinalIgnoreCase))
+            ?.Value;
+
+        return bool.TryParse(value, out var excluded) && excluded;
     }
 
     private static SemanticNode? ExtractSemanticElement(XElement element, string typeName)
