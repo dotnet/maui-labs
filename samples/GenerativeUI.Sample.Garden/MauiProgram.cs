@@ -2,6 +2,7 @@ using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Reflection;
 using Azure.AI.OpenAI;
+using GenerativeUI.Sample.Garden.Components;
 using GenerativeUI.Sample.Garden.ViewModels;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
@@ -35,7 +36,9 @@ public static class MauiProgram
         builder.Services.AddGenerativeUi(options =>
         {
             options.BaseAddress = new Uri(baseAddress);
+            options.Ui.AddGardenProductCatalog();
         });
+        builder.Services.AddGardenProductComponents();
 
         builder.AddOpenAIServices();
 

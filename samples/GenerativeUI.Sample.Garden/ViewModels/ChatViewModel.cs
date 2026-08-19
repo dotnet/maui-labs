@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GenerativeUI.Sample.Garden.Tools;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.AI.Attributes;
 using Microsoft.Maui.AI.GenerativeUI;
@@ -26,6 +27,7 @@ public sealed partial class ChatViewModel : ObservableObject, IChatBridge
     /// </summary>
     [AIToolSource(typeof(OpenApiExplorerTools))]
     [AIToolSource(typeof(GenerativeUiTools))]
+    [AIToolSource(typeof(GardenCompositionTools))]
     private partial class GardenApiTools : AIToolContext { }
 
     private const string SystemPrompt =

@@ -49,6 +49,10 @@ public static class AddGenerativeUiServiceCollectionExtensions
         services.AddSingleton<CanvasState>();
         services.AddSingleton<ComponentCandidateResolver>();
         services.AddSingleton<CompositionPlanValidator>();
+        services.AddSingleton<CompositionSessionState>();
+        services.AddSingleton<IComponentPlanGenerator, ComponentPlanGenerator>();
+        services.AddSingleton<ComponentComposer>();
+        services.AddSingleton<CompositionPlanRenderer>();
         services.AddSingleton(sp => new GenUiInflator(sp.GetRequiredService<GenerativeUiRegistry>(), sp));
         services.AddSingleton<GenerativeUiTools>();
 

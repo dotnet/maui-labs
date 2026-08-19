@@ -17,7 +17,9 @@ public sealed class CompositionPlanValidator(GenerativeUiRegistry registry)
         CompositionPlan plan,
         string expectedScaffold,
         IReadOnlyList<ResolvedComponentCandidate> candidates,
-        CompositionPlan? currentPlan = null)
+        CompositionPlan? currentPlan = null,
+        string? expectedPlanId = null,
+        int? expectedRevision = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentException.ThrowIfNullOrWhiteSpace(expectedScaffold);
@@ -25,6 +27,21 @@ public sealed class CompositionPlanValidator(GenerativeUiRegistry registry)
 
         var errors = new List<CompositionValidationError>();
         AddPlanErrors(plan, expectedScaffold, currentPlan, errors);
+        if (expectedPlanId is not null &&
+            !string.Equals(plan.PlanId, expectedPlanId, StringComparison.Ordinal))
+        {
+            errors.Add(new(
+                "unexpected_plan_id",
+                "$.planId",
+                $"Expected planId '{expectedPlanId}'."));
+        }
+        if (expectedRevision is not null && plan.Revision != expectedRevision)
+        {
+            errors.Add(new(
+                "unexpected_revision",
+                "$.revision",
+                $"Expected revision {expectedRevision}."));
+        }
 
         var scaffold = registry.GetScaffold(plan.Scaffold);
         if (scaffold is null)
@@ -253,7 +270,8 @@ public sealed record CompositionFallbackContext(
     string DataPath,
     string Title,
     string PlanId,
-    int Revision);
+    int Revision,
+    CompositionPlan? CurrentPlan = null);
 
 public interface ICompositionFallbackPlanFactory
 {

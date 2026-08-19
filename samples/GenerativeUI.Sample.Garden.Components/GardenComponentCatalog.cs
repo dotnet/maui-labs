@@ -120,6 +120,9 @@ public sealed class ProductDetailFallbackPlanFactory : ICompositionFallbackPlanF
         if (!string.Equals(context.Scaffold, Scaffold, StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException($"Unsupported scaffold '{context.Scaffold}'.", nameof(context));
 
+        var heroId = ExistingId(context.CurrentPlan, GardenComponentCatalog.ProductHeroAlias) ?? "product-hero";
+        var coreId = ExistingId(context.CurrentPlan, GardenComponentCatalog.ProductCoreInfoAlias) ?? "product-core";
+
         return new CompositionPlan
         {
             PlanId = context.PlanId,
@@ -130,7 +133,7 @@ public sealed class ProductDetailFallbackPlanFactory : ICompositionFallbackPlanF
             [
                 new()
                 {
-                    Id = "product-hero",
+                    Id = heroId,
                     Slot = CompositionSlot.Hero,
                     Component = GardenComponentCatalog.ProductHeroAlias,
                     DataPath = context.DataPath,
@@ -140,7 +143,7 @@ public sealed class ProductDetailFallbackPlanFactory : ICompositionFallbackPlanF
                 },
                 new()
                 {
-                    Id = "product-core",
+                    Id = coreId,
                     Slot = CompositionSlot.Primary,
                     Component = GardenComponentCatalog.ProductCoreInfoAlias,
                     DataPath = context.DataPath,
@@ -151,4 +154,8 @@ public sealed class ProductDetailFallbackPlanFactory : ICompositionFallbackPlanF
             ],
         };
     }
+
+    private static string? ExistingId(CompositionPlan? plan, string component)
+        => plan?.Sections.FirstOrDefault(section =>
+            string.Equals(section.Component, component, StringComparison.OrdinalIgnoreCase))?.Id;
 }

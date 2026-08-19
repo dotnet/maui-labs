@@ -75,6 +75,18 @@ public static class UiObjectBuilder
         }
     }
 
+    /// <summary>Clears a subtree and replaces it with the supplied JSON value.</summary>
+    public static void Replace(UiObject node, JsonElement element)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+
+        foreach (var (key, _) in node.Members.ToList())
+            node.RemoveMember(key);
+        node.Children.Clear();
+        node.Value = null;
+        Populate(node, element);
+    }
+
     /// <summary>Serializes a node's members/children/value back into a JSON object for <c>get_state</c>.</summary>
     public static JsonNode? ToJson(UiObject node)
     {
