@@ -11,126 +11,6 @@
     <!-- ═══════════════════════════════════════════════════════════════ -->
 
     <!-- ═══════════════════════════════════════════════════════════════ -->
-    <!-- ControlTemplate: ChatMessageView (User + Assistant)           -->
-    <!-- ═══════════════════════════════════════════════════════════════ -->
-    <ControlTemplate x:Key="MauiAIChat.ChatMessageTemplate">
-        <Grid x:Name="PART_Root"
-              Padding="0,4"
-              ColumnDefinitions="Auto,*,Auto"
-              ColumnSpacing="8"
-              SemanticProperties.Description="{TemplateBinding SemanticDescription}">
-            <VisualStateManager.VisualStateGroups>
-                <VisualStateGroup x:Name="RoleStates">
-                    <VisualState x:Name="User">
-                        <VisualState.Setters>
-                            <Setter TargetName="AssistantAvatar" Property="IsVisible" Value="False" />
-                            <Setter TargetName="MessageContent" Property="VerticalStackLayout.HorizontalOptions"
-                                    Value="End" />
-                            <Setter TargetName="DisplayNameLabel" Property="Label.HorizontalTextAlignment"
-                                    Value="End" />
-                            <Setter TargetName="MessageBorder" Property="Border.BackgroundColor"
-                                    Value="{DynamicResource MauiAIChat.User.Background}" />
-                            <Setter TargetName="MessageBorder" Property="Border.HorizontalOptions"
-                                    Value="End" />
-                            <Setter TargetName="MessageLabel" Property="Label.TextColor"
-                                    Value="{DynamicResource MauiAIChat.User.TextColor}" />
-                            <Setter TargetName="TimestampLabel" Property="Label.HorizontalTextAlignment"
-                                    Value="End" />
-                        </VisualState.Setters>
-                    </VisualState>
-                    <VisualState x:Name="Assistant">
-                        <VisualState.Setters>
-                            <Setter TargetName="UserAvatar" Property="IsVisible" Value="False" />
-                            <Setter TargetName="MessageContent" Property="VerticalStackLayout.HorizontalOptions"
-                                    Value="Start" />
-                            <Setter TargetName="DisplayNameLabel" Property="Label.HorizontalTextAlignment"
-                                    Value="Start" />
-                            <Setter TargetName="MessageBorder" Property="Border.BackgroundColor"
-                                    Value="{DynamicResource MauiAIChat.Assistant.Background}" />
-                            <Setter TargetName="MessageBorder" Property="Border.HorizontalOptions"
-                                    Value="Start" />
-                            <Setter TargetName="MessageLabel" Property="Label.TextColor"
-                                    Value="{DynamicResource MauiAIChat.Assistant.TextColor}" />
-                            <Setter TargetName="TimestampLabel" Property="Label.HorizontalTextAlignment"
-                                    Value="Start" />
-                        </VisualState.Setters>
-                    </VisualState>
-                </VisualStateGroup>
-            </VisualStateManager.VisualStateGroups>
-
-            <Border x:Name="AssistantAvatar"
-                    Grid.Column="0"
-                    IsVisible="{TemplateBinding ShowAvatars}"
-                    WidthRequest="{TemplateBinding AvatarSize}"
-                    HeightRequest="{TemplateBinding AvatarSize}"
-                    Padding="0"
-                    VerticalOptions="End"
-                    BackgroundColor="{DynamicResource MauiAIChat.Assistant.Background}"
-                    StrokeThickness="0"
-                    SemanticProperties.Description="{TemplateBinding DisplayName}">
-                <Border.StrokeShape>
-                    <RoundRectangle CornerRadius="100" />
-                </Border.StrokeShape>
-                <Label Text="{TemplateBinding AvatarText}"
-                       HorizontalTextAlignment="Center"
-                       VerticalTextAlignment="Center"
-                       TextColor="{DynamicResource MauiAIChat.Assistant.TextColor}"
-                       FontAttributes="Bold" />
-            </Border>
-
-            <VerticalStackLayout x:Name="MessageContent" Grid.Column="1" Spacing="2">
-                <Label x:Name="DisplayNameLabel"
-                       Text="{TemplateBinding DisplayName}"
-                       IsVisible="{TemplateBinding ShowAvatars}"
-                       FontSize="11"
-                       FontAttributes="Bold"
-                       TextColor="{DynamicResource MauiAIChat.Default.TextColor}"
-                       Margin="4,0" />
-                <Border x:Name="MessageBorder" Padding="12,10"
-                        MaximumWidthRequest="{TemplateBinding MaxBubbleWidth}"
-                        HorizontalOptions="Start"
-                        BackgroundColor="{DynamicResource MauiAIChat.Assistant.Background}"
-                        Stroke="{TemplateBinding BubbleStrokeColor}"
-                        StrokeThickness="{TemplateBinding BubbleStrokeThickness}">
-                    <Border.StrokeShape>
-                        <RoundRectangle x:Name="MessageShape"
-                                        CornerRadius="{TemplateBinding BubbleCornerRadii}" />
-                    </Border.StrokeShape>
-                    <Label x:Name="MessageLabel"
-                           Text="{TemplateBinding Text}" FontSize="14"
-                           TextColor="{DynamicResource MauiAIChat.Assistant.TextColor}" />
-                </Border>
-                <Label x:Name="TimestampLabel"
-                       Text="{TemplateBinding TimestampText}"
-                       IsVisible="{TemplateBinding ShowTimestamp}"
-                       FontSize="{DynamicResource MauiAIChat.Timestamp.FontSize}"
-                       TextColor="{DynamicResource MauiAIChat.Timestamp.TextColor}"
-                       Margin="4,0" />
-            </VerticalStackLayout>
-
-            <Border x:Name="UserAvatar"
-                    Grid.Column="2"
-                    IsVisible="{TemplateBinding ShowAvatars}"
-                    WidthRequest="{TemplateBinding AvatarSize}"
-                    HeightRequest="{TemplateBinding AvatarSize}"
-                    Padding="0"
-                    VerticalOptions="End"
-                    BackgroundColor="{DynamicResource MauiAIChat.User.Background}"
-                    StrokeThickness="0"
-                    SemanticProperties.Description="{TemplateBinding DisplayName}">
-                <Border.StrokeShape>
-                    <RoundRectangle CornerRadius="100" />
-                </Border.StrokeShape>
-                <Label Text="{TemplateBinding AvatarText}"
-                       HorizontalTextAlignment="Center"
-                       VerticalTextAlignment="Center"
-                       TextColor="{DynamicResource MauiAIChat.User.TextColor}"
-                       FontAttributes="Bold" />
-            </Border>
-        </Grid>
-    </ControlTemplate>
-
-    <!-- ═══════════════════════════════════════════════════════════════ -->
     <!-- ControlTemplate: FunctionInvocationView                        -->
     <!-- Starts as the pending call, then swaps to the result in place. -->
     <!-- ═══════════════════════════════════════════════════════════════ -->
@@ -219,7 +99,7 @@
                        Text="{TemplateBinding ToolName}"
                        FontSize="14"
                        FontAttributes="Bold"
-                       TextColor="{DynamicResource MauiAIChat.Assistant.TextColor}" />
+                       TextColor="{DynamicResource MauiAIChat.Default.TextColor}" />
 
                 <ContentPresenter Grid.Row="2" />
 
@@ -286,25 +166,17 @@
 
     <Style x:Key="MauiAIChat.ToolApproval.ArgValueLabelStyle" TargetType="Label">
         <Setter Property="FontSize" Value="12" />
-        <Setter Property="TextColor" Value="{DynamicResource MauiAIChat.Assistant.TextColor}" />
+        <Setter Property="TextColor" Value="{DynamicResource MauiAIChat.Default.TextColor}" />
     </Style>
 
-    <!-- ═══════════════════════════════════════════════════════════════ -->
-    <!-- ControlTemplate: MessageListView — just the messages, no chrome  -->
-    <!-- ═══════════════════════════════════════════════════════════════ -->
-    <ControlTemplate x:Key="MauiAIChat.MessageListViewTemplate">
-        <CollectionView x:Name="PART_Messages"
-                        AutomationId="ChatMessages"
-                        ItemsUpdatingScrollMode="KeepLastItemInView" />
-    </ControlTemplate>
+    <!-- CopilotChatView replaces only the list projection inside the shared neutral shell. -->
+    <DataTemplate x:Key="MauiAIChat.MessageListTemplate">
+        <chat:MessageListView />
+    </DataTemplate>
 
     <!-- ═══════════════════════════════════════════════════════════════ -->
     <!-- Implicit Styles — wire ControlTemplate via DynamicResource     -->
     <!-- ═══════════════════════════════════════════════════════════════ -->
-    <Style TargetType="chat:ChatMessageView">
-        <Setter Property="ControlTemplate" Value="{DynamicResource MauiAIChat.ChatMessageTemplate}" />
-    </Style>
-
     <Style TargetType="chat:FunctionInvocationView">
         <Setter Property="ControlTemplate" Value="{DynamicResource MauiAIChat.FunctionInvocationTemplate}" />
     </Style>
@@ -315,10 +187,6 @@
 
     <Style TargetType="chat:ToolApprovalView">
         <Setter Property="ControlTemplate" Value="{DynamicResource MauiAIChat.ToolApprovalTemplate}" />
-    </Style>
-
-    <Style TargetType="chat:MessageListView">
-        <Setter Property="ControlTemplate" Value="{DynamicResource MauiAIChat.MessageListViewTemplate}" />
     </Style>
 
 </ResourceDictionary>

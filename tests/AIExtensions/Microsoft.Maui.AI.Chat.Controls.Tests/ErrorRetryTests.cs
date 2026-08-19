@@ -43,18 +43,21 @@ public class ErrorRetryTests
         var session = new AgentContext(new UIAgent(new PartialFailureClient()));
         await session.SendMessageAsync("Try");
         var list = new MessageListView { Session = session };
+        var contexts = list.Items.OfType<ContentContext>().ToArray();
 
         Assert.Equal(3, list.Items.Count);
-        Assert.Contains(list.Items, item =>
+        Assert.Contains(contexts, item =>
             item.Block is TextContentBlock { RawText: "partial" });
-        Assert.Contains(list.Items, item => item.Block is ErrorContentBlock);
+        Assert.Contains(contexts, item => item.Block is ErrorContentBlock);
         ContentContext[]? itemsWhenRetryStarted = null;
         session.RegisterOnStatusChanged(status =>
         {
             if (status == ConversationStatus.Streaming
                 && itemsWhenRetryStarted is null)
             {
-                itemsWhenRetryStarted = list.Items.ToArray();
+                itemsWhenRetryStarted = list.Items
+                    .OfType<ContentContext>()
+                    .ToArray();
             }
         });
 

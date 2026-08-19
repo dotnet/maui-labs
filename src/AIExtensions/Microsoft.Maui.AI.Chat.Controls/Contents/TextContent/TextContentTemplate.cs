@@ -1,10 +1,10 @@
 using Microsoft.Maui.AI.Chat;
-using Microsoft.Maui.AI.Chat.Controls.Themes;
 using Microsoft.Extensions.AI;
+using Microsoft.Maui.Chat.Controls;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
 
-/// <summary>Matches a <see cref="RichContentBlock"/> (optionally filtered by role) and renders a <see cref="ChatMessageView"/> bubble.</summary>
+/// <summary>Maps a <see cref="RichContentBlock"/> to the provider-neutral text message view.</summary>
 public class TextContentTemplate : ContentTemplate
 {
     /// <summary>
@@ -34,12 +34,7 @@ public class TextContentTemplate : ContentTemplate
         if (ViewType is not null)
             return base.CreateTemplate();
 
-        return new DataTemplate(() =>
-        {
-            var view = new ChatMessageView();
-            view.SetDynamicResource(ContentView.ControlTemplateProperty, ChatThemeKeys.ChatMessageTemplate);
-            return PrepareDataTemplateView(view);
-        });
+        return CreateMessageTemplate(() => new ChatTextContentView());
     }
 
     internal override int GetPriority(ContentContext context) =>

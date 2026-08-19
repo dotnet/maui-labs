@@ -10,10 +10,11 @@ public class TurnContextTests
         var session = SessionFactory.Create("Assistant response");
         await session.SendMessageAsync("User request");
         var list = new MessageListView { Session = session };
+        var contexts = list.Items.OfType<ContentContext>().ToArray();
 
-        Assert.Equal(2, list.Items.Count);
-        var request = list.Items[0];
-        var response = list.Items[1];
+        Assert.Equal(2, contexts.Length);
+        var request = contexts[0];
+        var response = contexts[1];
         var turn = Assert.Single(session.Turns);
 
         Assert.Same(turn, request.Turn);

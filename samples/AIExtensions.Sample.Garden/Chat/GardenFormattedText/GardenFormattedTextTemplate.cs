@@ -4,12 +4,16 @@ namespace AIExtensions.Sample.Garden.Chat;
 
 /// <summary>
 /// Renders a <see cref="GardenFormattedTextBlock"/> with <see cref="GardenFormattedTextView"/>.
-/// A tiny typed <see cref="ContentTemplate"/> subclass — the idiomatic first-party pattern
-/// (like the built-in <c>MediaContentTemplate</c>) instead of a <c>GenericContentTemplate</c>.
+/// A tiny typed <see cref="ContentTemplate"/> subclass instead of a
+/// <c>GenericContentTemplate</c>.
 /// </summary>
 public sealed class GardenFormattedTextTemplate : ContentTemplate
 {
-    public GardenFormattedTextTemplate() => ViewType = typeof(GardenFormattedTextView);
+    public GardenFormattedTextTemplate()
+    {
+        ViewType = typeof(GardenFormattedTextView);
+        Presentation = Microsoft.Maui.Chat.Controls.ChatContentPresentation.Bubble;
+    }
 
     public override bool When(ContentContext context) => context.Block is GardenFormattedTextBlock;
 }

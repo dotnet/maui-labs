@@ -9,15 +9,29 @@
                 <ResourceDictionary Source="Resources/Styles/Styles.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
-            <!-- Chat control theme overrides. Direct keys here win over the ChatTheme dictionary that
-                 UseChatControls merges, so the drop-in CopilotChatView adopts Garden's brand. -->
-            <Color x:Key="MauiAIChat.Suggestion.Background">#E8F2E6</Color>
-            <Color x:Key="MauiAIChat.Suggestion.TextColor">#3A5A3A</Color>
-            <Color x:Key="MauiAIChat.Assistant.Background">#FFFFFF</Color>
-            <Color x:Key="MauiAIChat.Assistant.TextColor">#2C2416</Color>
-            <Color x:Key="MauiAIChat.User.Background">#5B8C5A</Color>
-            <Color x:Key="MauiAIChat.User.TextColor">#FFFFFF</Color>
-            <x:Double x:Key="MauiAIChat.Bubble.MaxWidth">560</x:Double>
+            <!-- AI block colours remain AI-specific. The outer CopilotChatView shell now comes directly
+                 from Microsoft.Maui.Chat.Controls, so ordinary MauiChat.* styles customize its chrome. -->
+            <Style x:Key="MauiChat.Bubble.Incoming" TargetType="Border">
+                <Setter Property="BackgroundColor" Value="#FFFFFF" />
+            </Style>
+            <Style x:Key="MauiChat.Bubble.Outgoing" TargetType="Border">
+                <Setter Property="BackgroundColor" Value="#5B8C5A" />
+            </Style>
+            <Style x:Key="MauiChat.Text.Incoming" TargetType="Label">
+                <Setter Property="FontSize" Value="14" />
+                <Setter Property="TextColor" Value="#2C2416" />
+            </Style>
+            <Style x:Key="MauiChat.Text.Outgoing" TargetType="Label">
+                <Setter Property="FontSize" Value="14" />
+                <Setter Property="TextColor" Value="#FFFFFF" />
+            </Style>
+            <Style x:Key="MauiChat.Suggestion" TargetType="Button">
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="Padding" Value="12,6" />
+                <Setter Property="CornerRadius" Value="16" />
+                <Setter Property="BackgroundColor" Value="#E8F2E6" />
+                <Setter Property="TextColor" Value="#3A5A3A" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

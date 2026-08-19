@@ -13,6 +13,20 @@ public class MessageContentTests
         Assert.Equal(string.Empty, content.Text);
         Assert.True(content.IsEmpty);
         Assert.False(string.IsNullOrWhiteSpace(content.Id));
+        Assert.Equal(ChatContentPresentation.Bubble, content.Presentation);
+    }
+
+    [Fact]
+    public void Presentation_ChangeRaisesContentChanged()
+    {
+        var content = new TextMessageContent("hello");
+        var changes = 0;
+        content.ContentChanged += (_, _) => changes++;
+
+        content.Presentation = ChatContentPresentation.Bare;
+
+        Assert.Equal(ChatContentPresentation.Bare, content.Presentation);
+        Assert.Equal(1, changes);
     }
 
     [Fact]
@@ -96,6 +110,27 @@ public class MessageContentTests
 
         Assert.Equal("Hi", content.Text);
         Assert.Equal(0, contentChanges);
+    }
+
+    [Fact]
+    public void StructuredText_ReplacesFallbackAndDocumentWithOneContentSignal()
+    {
+        var first = new object();
+        var second = new object();
+        var content = new StructuredTextMessageContent<object>(
+            "first",
+            first);
+        using var properties = new PropertyRecorder(content);
+        var contentChanges = 0;
+        content.ContentChanged += (_, _) => contentChanges++;
+
+        content.Replace("second", second);
+
+        Assert.Equal("second", content.Text);
+        Assert.Same(second, content.Document);
+        Assert.Equal(1, contentChanges);
+        Assert.Contains(nameof(content.Document), properties.Names);
+        Assert.Contains(nameof(content.Text), properties.Names);
     }
 
     [Fact]

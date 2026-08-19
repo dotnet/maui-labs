@@ -112,7 +112,7 @@ public sealed partial class ChatViewModel : ObservableObject,
     {
         // Image generation is always available: the hosted tool lets the model produce images inline,
         // and MauiProgram wires the matching UseImageGeneration middleware beneath function invocation
-        // so the image streams back as DataContent and renders through the built-in MediaContentTemplate.
+        // so the image streams back as DataContent and maps to the neutral MediaMessageContent renderer.
         var tools = new List<AITool>(GardenShopTools.Default.Tools)
         {
             new HostedImageGenerationTool(),

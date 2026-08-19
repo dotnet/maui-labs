@@ -81,10 +81,11 @@ public class MessageListViewTests
         await session.SendMessageAsync("Hi");
 
         var view = new MessageListView { Session = session };
+        var contexts = Contexts(view);
 
         // After a successful turn, only real content is rendered — no transient status items.
-        Assert.DoesNotContain(view.Items, c => c.Block is ThinkingContentBlock);
-        Assert.DoesNotContain(view.Items, c => c.Block is ErrorContentBlock);
+        Assert.DoesNotContain(contexts, c => c.Block is ThinkingContentBlock);
+        Assert.DoesNotContain(contexts, c => c.Block is ErrorContentBlock);
     }
 
     [Fact]
@@ -101,7 +102,7 @@ public class MessageListViewTests
         // A view bound to the failed session re-projects the error as a UI-only item.
         var view = new MessageListView { Session = session };
 
-        var error = Assert.Single(view.Items.Select(c => c.Block).OfType<ErrorContentBlock>());
+        var error = Assert.Single(Contexts(view).Select(c => c.Block).OfType<ErrorContentBlock>());
         Assert.Equal(ErrorContentBlock.DefaultUserMessage, error.Message);
         Assert.DoesNotContain("boom", error.Message, StringComparison.Ordinal);
         Assert.Equal("boom", session.Error!.Message);
@@ -118,14 +119,14 @@ public class MessageListViewTests
         var session = SessionFactory.Create(client);
         await session.SendMessageAsync("Hi");
         var view = new MessageListView { Session = session };
-        var error = Assert.Single(view.Items, item => item.Block is ErrorContentBlock);
+        var error = Assert.Single(Contexts(view), item => item.Block is ErrorContentBlock);
         var observedClear = false;
         session.RegisterOnResponseBlocksCleared(_ =>
         {
             observedClear = true;
-            Assert.Contains(error, view.Items);
+            Assert.Contains(error, Contexts(view));
             Assert.DoesNotContain(
-                view.Items,
+                Contexts(view),
                 item => item.Block.Role == Microsoft.Extensions.AI.ChatRole.Assistant
                     && item.Block is not ErrorContentBlock);
         });
@@ -153,7 +154,7 @@ public class MessageListViewTests
         await session.SendMessageAsync("Hi");
 
         var response = Assert.Single(
-            view.Items,
+            Contexts(view),
             item => item.Block is TextContentBlock
                 && item.Block.Role == Microsoft.Extensions.AI.ChatRole.Assistant);
         Assert.Equal(
@@ -163,7 +164,27 @@ public class MessageListViewTests
     }
 
     [Fact]
-    public void NeutralConversation_DoesNotCrashTypedCompatibilityProjection()
+    public async Task DisposingARowContext_DoesNotDisposeConversationOwnedBlockBinding()
+    {
+        var session = SessionFactory.Create("Hello");
+        await session.SendMessageAsync("Hi");
+        var view = new MessageListView { Session = session };
+        var context = Assert.Single(
+            Contexts(view),
+            item => item.Block is TextContentBlock
+                && item.Block.Role == Microsoft.Extensions.AI.ChatRole.Assistant);
+        var content = Assert.IsAssignableFrom<TextMessageContent>(context.Content);
+        var block = Assert.IsType<TextContentBlock>(context.Block);
+
+        context.Dispose();
+        block.AppendText(" again");
+        context.NotifyBlockChanged();
+
+        Assert.Equal("Hello again", content.Text);
+    }
+
+    [Fact]
+    public void NeutralConversation_UsesTheInheritedNeutralProjection()
     {
         var participant = new ChatParticipant(
             "local",
@@ -176,7 +197,10 @@ public class MessageListViewTests
             Conversation = conversation,
         };
 
-        Assert.Empty(view.Items);
-        Assert.Single(((ChatMessagesView)view).Items);
+        Assert.Single(view.Items);
+        Assert.IsNotType<ContentContext>(view.Items[0]);
     }
+
+    private static ContentContext[] Contexts(MessageListView view) =>
+        view.Items.OfType<ContentContext>().ToArray();
 }

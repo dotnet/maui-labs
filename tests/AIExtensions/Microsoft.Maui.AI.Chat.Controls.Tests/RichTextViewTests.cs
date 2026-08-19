@@ -1,7 +1,7 @@
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.AI.Chat;
 using Microsoft.Maui.AI.Chat.Controls.Tests.TestHelpers;
-using Microsoft.Maui.AI.Chat.Controls.Themes;
+using Microsoft.Maui.Chat.Controls;
 
 namespace Microsoft.Maui.AI.Chat.Controls.Tests;
 
@@ -14,25 +14,23 @@ public class RichTextViewTests
         var session = SessionFactory.Create("unused");
         var rich = new RichContentBlock { Id = "rich", Role = ChatRole.Assistant };
         var text = new TextContentBlock { Id = "text", Role = ChatRole.Assistant };
+        rich.ReplaceContent("rich", [CreateParagraph("rich")]);
+        var richContext = new ContentContext(session, rich);
 
-        Assert.True(template.When(new ContentContext(session, rich)));
+        Assert.IsAssignableFrom<
+            StructuredTextMessageContent<IReadOnlyList<RichTextNode>>>(
+            richContext.Content);
+        Assert.True(template.When(richContext));
         Assert.False(template.When(new ContentContext(session, text)));
     }
 
     [Fact]
-    public void DefaultTemplate_AppliesTheChatMessageControlTemplate()
+    public void DefaultTemplate_UsesTheProviderNeutralMessageChrome()
     {
-        var host = new ContentView();
-        host.Resources.MergedDictionaries.Add(new ChatTheme());
         var template = new RichTextContentTemplate();
-        var view = Assert.IsType<RichTextView>(
-            template.GetTemplate().CreateContent());
+        var view = template.GetTemplate().CreateContent();
 
-        host.Content = view;
-
-        Assert.Same(
-            host.Resources[ChatThemeKeys.ChatMessageTemplate],
-            view.ControlTemplate);
+        Assert.IsAssignableFrom<ChatBubbleView>(view);
     }
 
     [Theory]

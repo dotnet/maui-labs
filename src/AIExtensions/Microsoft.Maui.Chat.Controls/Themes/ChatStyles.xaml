@@ -73,6 +73,18 @@
                                         Dark={StaticResource MauiChat.Dark.OutgoingText}}" />
     </Style>
 
+    <Style x:Key="MauiChat.Span.Incoming" TargetType="Span">
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource MauiChat.Light.IncomingText},
+                                        Dark={StaticResource MauiChat.Dark.IncomingText}}" />
+    </Style>
+
+    <Style x:Key="MauiChat.Span.Outgoing" TargetType="Span">
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource MauiChat.Light.OutgoingText},
+                                        Dark={StaticResource MauiChat.Dark.OutgoingText}}" />
+    </Style>
+
     <!-- Message chrome -->
     <Style x:Key="MauiChat.ParticipantName" TargetType="Label">
         <Setter Property="FontSize" Value="12" />
@@ -143,6 +155,8 @@
 
     <!-- Composer -->
     <Style x:Key="MauiChat.InputArea" TargetType="Border">
+        <Setter Property="Padding" Value="6" />
+        <Setter Property="StrokeThickness" Value="0" />
         <Setter Property="BackgroundColor"
                 Value="{AppThemeBinding Light={StaticResource MauiChat.Light.Surface},
                                         Dark={StaticResource MauiChat.Dark.Surface}}" />
@@ -186,6 +200,14 @@
         <Setter Property="TextColor"
                 Value="{AppThemeBinding Light={StaticResource MauiChat.Light.Error},
                                         Dark={StaticResource MauiChat.Dark.Error}}" />
+    </Style>
+
+    <Style x:Key="MauiChat.TypingIndicator" TargetType="Label">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontAttributes" Value="Italic" />
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource MauiChat.Light.Metadata},
+                                        Dark={StaticResource MauiChat.Dark.Metadata}}" />
     </Style>
 
     <!-- Welcome panel -->

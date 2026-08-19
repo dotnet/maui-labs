@@ -254,7 +254,8 @@ For live app inspection and host setup, see the
 
 For AI Extensions usage and samples, see [`src/AIExtensions/README.md`](src/AIExtensions/README.md),
 the [`IChatClient` playground](samples/AIExtensions.Sample.ChatPlayground/README.md) for live
-requests, portable recording/replay, and archived-chat search, and the
+requests, portable recording/replay, and archived-chat search, the provider-neutral
+[`ChatControls.Sample`](samples/ChatControls.Sample/README.md), and the Azure OpenAI
 [`Garden` sample](samples/AIExtensions.Sample.Garden/README.md).
 
 ## Support

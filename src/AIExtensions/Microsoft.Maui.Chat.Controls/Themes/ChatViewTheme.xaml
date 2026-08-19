@@ -13,20 +13,18 @@
     <!-- ChatStyles.xaml, which carry their own light and dark values.    -->
     <!-- ═══════════════════════════════════════════════════════════════ -->
     <ControlTemplate x:Key="MauiChat.ChatViewTemplate">
-        <Grid x:DataType="chat:ChatView" RowDefinitions="Auto,*,Auto,Auto,Auto,Auto" RowSpacing="0">
+        <Grid x:DataType="chat:ChatView" RowDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto" RowSpacing="0">
 
             <!-- Header -->
             <ContentView x:Name="PART_Header" Grid.Row="0" IsVisible="False" />
 
             <!-- Messages, welcome, empty state, and busy indicator share one cell -->
             <Grid Grid.Row="1">
-                <chat:ChatMessagesView x:Name="PART_MessageList"
-                                       Margin="12,8,12,0"
-                                       Conversation="{TemplateBinding Conversation}"
-                                       ContentTemplates="{TemplateBinding ContentTemplates}"
-                                       UseDefaultContentTemplates="{TemplateBinding UseDefaultContentTemplates}"
-                                       Appearance="{TemplateBinding Appearance}"
-                                       AutoScrollToLatest="{TemplateBinding AutoScrollToLatest}" />
+                <!-- ChatView creates the list and inserts it here. Derived controls can override
+                     CreateMessageListView while retaining this entire shell. A replacement template
+                     may still supply a ChatMessagesView directly under the same part name. -->
+                <ContentView x:Name="PART_MessageList"
+                             Margin="12,8,12,0" />
 
                 <VerticalStackLayout x:Name="PART_WelcomePanel"
                                      Padding="24"
@@ -53,8 +51,8 @@
                                    VerticalOptions="End"
                                    AutomationId="ChatBusyIndicator"
                                    SemanticProperties.Description="Waiting for a response"
-                                   IsRunning="{TemplateBinding IsBusy}"
-                                   IsVisible="{TemplateBinding IsBusy}" />
+                                   IsRunning="{TemplateBinding IsBusyIndicatorVisible}"
+                                   IsVisible="{TemplateBinding IsBusyIndicatorVisible}" />
             </Grid>
 
             <!-- Suggestions -->
@@ -69,8 +67,18 @@
             <!-- Footer -->
             <ContentView x:Name="PART_Footer" Grid.Row="3" IsVisible="False" />
 
+            <!-- Typing participants -->
+            <Label x:Name="PART_TypingIndicator"
+                   Grid.Row="4"
+                   Margin="16,2"
+                   Style="{DynamicResource MauiChat.TypingIndicator}"
+                   AutomationId="ChatTypingIndicator"
+                   SemanticProperties.Description="{TemplateBinding TypingText}"
+                   Text="{TemplateBinding TypingText}"
+                   IsVisible="{TemplateBinding HasTypingParticipants}" />
+
             <!-- Send error -->
-            <Label Grid.Row="4"
+            <Label Grid.Row="5"
                    Margin="16,0"
                    Style="{DynamicResource MauiChat.ErrorText}"
                    AutomationId="ChatSendError"
@@ -79,13 +87,11 @@
 
             <!-- Composer -->
             <Border x:Name="PART_InputArea"
-                    Grid.Row="5"
+                    Grid.Row="6"
                     Margin="12,8,12,12"
-                    Padding="6"
-                    StrokeThickness="0"
-                    Style="{DynamicResource MauiChat.InputArea}">
+                    Style="{TemplateBinding InputAreaStyle}">
                 <Border.StrokeShape>
-                    <RoundRectangle CornerRadius="22" />
+                    <RoundRectangle CornerRadius="{TemplateBinding InputAreaCornerRadius}" />
                 </Border.StrokeShape>
                 <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="Auto,*,Auto"
                       ColumnSpacing="6" RowSpacing="4">
@@ -108,7 +114,7 @@
                     <Button x:Name="PART_AttachButton"
                             Grid.Row="2"
                             Grid.Column="0"
-                            Style="{DynamicResource MauiChat.AttachButton}"
+                            Style="{TemplateBinding AttachButtonStyle}"
                             Text="{TemplateBinding AttachButtonText}"
                             AutomationId="ChatAttachButton"
                             SemanticProperties.Description="Add attachment"
@@ -117,7 +123,7 @@
                     <Entry x:Name="PART_InputEntry"
                            Grid.Row="2"
                            Grid.Column="1"
-                           Style="{DynamicResource MauiChat.InputEntry}"
+                           Style="{TemplateBinding InputEntryStyle}"
                            Text="{TemplateBinding Text, Mode=TwoWay}"
                            Placeholder="{TemplateBinding Placeholder}"
                            AutomationId="ChatInput"
@@ -126,7 +132,7 @@
                     <Button x:Name="PART_SendButton"
                             Grid.Row="2"
                             Grid.Column="2"
-                            Style="{DynamicResource MauiChat.SendButton}"
+                            Style="{TemplateBinding SendButtonStyle}"
                             Text="{TemplateBinding SendButtonText}"
                             AutomationId="ChatSendButton"
                             SemanticProperties.Description="Send message"

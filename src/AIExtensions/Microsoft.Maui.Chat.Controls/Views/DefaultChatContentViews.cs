@@ -7,6 +7,7 @@ namespace Microsoft.Maui.Chat.Controls;
 public class ChatTextContentView : ChatBubbleView
 {
     private readonly Label _label;
+    private ChatContentPresentation _presentation;
 
     /// <summary>Creates the view.</summary>
     public ChatTextContentView()
@@ -20,12 +21,23 @@ public class ChatTextContentView : ChatBubbleView
     {
         base.RefreshContent();
 
+        _presentation = Item?.Content.Presentation ?? ChatContentPresentation.Bubble;
         ApplyBubbleTextStyle(_label);
         _label.Text = GetText();
     }
 
-    /// <summary>Updates only the text, so streaming does not rebuild the bubble.</summary>
-    protected override void OnContentUpdated() => _label.Text = GetText();
+    /// <summary>Updates streamed text cheaply, refreshing chrome only when presentation changed.</summary>
+    protected override void OnContentUpdated()
+    {
+        var presentation = Item?.Content.Presentation ?? ChatContentPresentation.Bubble;
+        if (presentation != _presentation)
+        {
+            RefreshContent();
+            return;
+        }
+
+        _label.Text = GetText();
+    }
 
     /// <inheritdoc />
     protected override string GetContentDescription() => GetText();

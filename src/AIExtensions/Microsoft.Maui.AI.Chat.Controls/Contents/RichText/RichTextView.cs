@@ -1,13 +1,13 @@
 using Microsoft.Maui.AI.Chat;
-using Microsoft.Maui.AI.Chat.Controls.Themes;
+using Microsoft.Maui.Chat.Controls;
 using Microsoft.Maui.Controls.Shapes;
+using NeutralThemeKeys = Microsoft.Maui.Chat.Controls.Themes.ChatThemeKeys;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
 
-/// <summary>Renders the structured node tree of a <see cref="RichContentBlock"/> inside a chat bubble.</summary>
-public class RichTextView : ChatMessageView
+/// <summary>Renders the structured node tree of a <see cref="RichContentBlock"/> as a message body.</summary>
+public class RichTextView : ContentContextView
 {
-    private Border? _messageBorder;
     private View? _renderedContent;
     private Dictionary<string, DefinitionNode> _definitions =
         new(StringComparer.OrdinalIgnoreCase);
@@ -16,22 +16,17 @@ public class RichTextView : ChatMessageView
 
     protected override void RefreshFromContentContext()
     {
-        base.RefreshFromContentContext();
-
-        if (ContentContext?.Block is not RichContentBlock rich)
+        if (ContentContext?.Content is not
+            StructuredTextMessageContent<IReadOnlyList<RichTextNode>> rich)
+        {
+            Content = null;
             return;
+        }
 
         _definitions = [];
-        CollectDefinitions(rich.Content);
+        CollectDefinitions(rich.Document);
         _renderedContent = RenderDocument(rich);
-        ApplyRenderedContent();
-    }
-
-    protected override void OnApplyTemplate()
-    {
-        base.OnApplyTemplate();
-        _messageBorder = GetTemplateChild("MessageBorder") as Border;
-        ApplyRenderedContent();
+        Content = _renderedContent;
     }
 
     internal static bool IsSafeUri(string? value)
@@ -40,23 +35,18 @@ public class RichTextView : ChatMessageView
             && uri.Scheme is "http" or "https" or "mailto";
     }
 
-    private void ApplyRenderedContent()
+    private View RenderDocument(
+        StructuredTextMessageContent<IReadOnlyList<RichTextNode>> rich)
     {
-        if (_messageBorder is not null && _renderedContent is not null)
-            _messageBorder.Content = _renderedContent;
-    }
-
-    private View RenderDocument(RichContentBlock rich)
-    {
-        if (rich.Content.Count == 0)
-            return CreateTextLabel(rich.RawText);
+        if (rich.Document.Count == 0)
+            return CreateTextLabel(rich.Text);
 
         var layout = new VerticalStackLayout
         {
             Spacing = 8,
         };
 
-        foreach (var node in rich.Content)
+        foreach (var node in rich.Document)
         {
             if (node is DefinitionNode)
                 continue;
@@ -407,10 +397,13 @@ public class RichTextView : ChatMessageView
             TextDecorations = decorations,
         };
         span.SetDynamicResource(
-            Span.TextColorProperty,
-            ContentContext?.IsUser == true
-                ? ChatThemeKeys.UserTextColor
-                : ChatThemeKeys.AssistantTextColor);
+            Span.StyleProperty,
+            ContentContext?.IsOutgoing == true
+                ? NeutralThemeKeys.OutgoingSpanStyle
+                : NeutralThemeKeys.IncomingSpanStyle);
+        var color = GetTextColorOverride();
+        if (color is not null)
+            span.TextColor = color;
         return span;
     }
 
@@ -437,10 +430,24 @@ public class RichTextView : ChatMessageView
     private void ApplyTextColor(Label label)
     {
         label.SetDynamicResource(
-            Label.TextColorProperty,
-            ContentContext?.IsUser == true
-                ? ChatThemeKeys.UserTextColor
-                : ChatThemeKeys.AssistantTextColor);
+            StyleProperty,
+            ContentContext?.IsOutgoing == true
+                ? NeutralThemeKeys.OutgoingTextStyle
+                : NeutralThemeKeys.IncomingTextStyle);
+        var color = GetTextColorOverride();
+        if (color is not null)
+            label.TextColor = color;
+    }
+
+    private Color? GetTextColorOverride()
+    {
+        var context = ContentContext;
+        if (context is null)
+            return null;
+
+        return context.IsOutgoing
+            ? context.Appearance.OutgoingTextColor
+            : context.Appearance.IncomingTextColor;
     }
 
     private static bool IsInlineNode(RichTextNode node)
