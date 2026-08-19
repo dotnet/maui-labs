@@ -33,6 +33,11 @@ public sealed class InspectorServer : IDisposable
     private readonly CancellationTokenSource _lifetimeCts = new();
     private byte[]? _cachedScreenshot;
     private string? _cachedScreenshotElementId;
+    private long? _cachedScreenshotCaptureEpoch;
+    private bool _cachedScreenshotFullscreen;
+    private readonly Dictionary<long, byte[]> _screenshotSnapshots = [];
+    private readonly Queue<long> _screenshotSnapshotOrder = [];
+    private long _nextScreenshotSnapshotId;
     private DateTime _screenshotCacheTime;
     private readonly Dictionary<string, (byte[] Bytes, DateTime CreatedAt)>
         _screenshotFrames = new(StringComparer.Ordinal);
@@ -42,9 +47,15 @@ public sealed class InspectorServer : IDisposable
     // and window coordinates (used by the agent's hit-test/tap/scroll APIs).
     private double _rootOffsetX;
     private double _rootOffsetY;
+    private long? _captureEpoch;
+    private long? _registryGeneration;
+    private int? _windowId;
+    private bool _fullscreenScreenshot;
+    private Task<bool?>? _requiresCaptureEpochTask;
     private static readonly TimeSpan ScreenshotCacheDuration = TimeSpan.FromMilliseconds(200);
     private static readonly TimeSpan LayoutDiagnosticsCacheDuration =
         TimeSpan.FromMilliseconds(250);
+    private const int MaxScreenshotSnapshots = 16;
 
     // Cap request bodies to avoid local DoS via huge POST payloads.
     private const long MaxRequestBodyBytes = 1_048_576; // 1 MB
@@ -79,7 +90,45 @@ public sealed class InspectorServer : IDisposable
         lock (_cacheLock)
         {
             _cachedScreenshot = null;
+            _cachedScreenshotCaptureEpoch = null;
         }
+    }
+
+    private long? RememberScreenshot(byte[]? screenshot)
+    {
+        if (screenshot is not { Length: > 0 })
+            return null;
+
+        var snapshotId = Interlocked.Increment(ref _nextScreenshotSnapshotId);
+        lock (_cacheLock)
+        {
+            _screenshotSnapshots[snapshotId] = screenshot;
+            _screenshotSnapshotOrder.Enqueue(snapshotId);
+            while (_screenshotSnapshotOrder.Count > MaxScreenshotSnapshots)
+            {
+                var expiredId = _screenshotSnapshotOrder.Dequeue();
+                _screenshotSnapshots.Remove(expiredId);
+            }
+        }
+
+        return snapshotId;
+    }
+
+    private byte[]? GetRememberedScreenshot(string queryString)
+    {
+        foreach (var pair in queryString.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = pair.Split('=', 2);
+            if (parts.Length == 2
+                && parts[0].Equals("t", StringComparison.Ordinal)
+                && long.TryParse(Uri.UnescapeDataString(parts[1]), out var parsedId))
+            {
+                lock (_cacheLock)
+                    return _screenshotSnapshots.GetValueOrDefault(parsedId);
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -88,10 +137,17 @@ public sealed class InspectorServer : IDisposable
     /// case the inspector should fall back to a "no element here" path instead of crashing
     /// and leaking the exception text to the browser.
     /// </summary>
-    private static bool TryParseHitTestElements(string? hitResult, out JsonDocument? doc, out JsonElement elements)
+    private static bool TryParseHitTestElements(
+        string? hitResult,
+        out JsonDocument? doc,
+        out JsonElement elements,
+        out long? captureEpoch,
+        out long? registryGeneration)
     {
         doc = null;
         elements = default;
+        captureEpoch = null;
+        registryGeneration = null;
         if (string.IsNullOrEmpty(hitResult)) return false;
         try
         {
@@ -102,6 +158,17 @@ public sealed class InspectorServer : IDisposable
                 doc = null;
                 return false;
             }
+
+            if (doc.RootElement.TryGetProperty("captureEpoch", out var epochProperty)
+                && epochProperty.TryGetInt64(out var parsedEpoch))
+            {
+                captureEpoch = parsedEpoch;
+            }
+            if (doc.RootElement.TryGetProperty("registryGeneration", out var generationProperty)
+                && generationProperty.TryGetInt64(out var parsedGeneration))
+            {
+                registryGeneration = parsedGeneration;
+            }
             return true;
         }
         catch (JsonException)
@@ -110,6 +177,231 @@ public sealed class InspectorServer : IDisposable
             doc = null;
             return false;
         }
+    }
+
+    private static bool TryGetNextHitTestCandidate(
+        string? hitResult,
+        HashSet<string> attemptedIds,
+        bool preferScrollable,
+        out string? elementId,
+        out long? captureEpoch,
+        out long? registryGeneration)
+    {
+        elementId = null;
+        if (!TryParseHitTestElements(
+            hitResult,
+            out var document,
+            out var elements,
+            out captureEpoch,
+            out registryGeneration))
+        {
+            return false;
+        }
+
+        using (document)
+        {
+            JsonElement? bestCandidate = null;
+            var bestScore = int.MinValue;
+            foreach (var element in elements.EnumerateArray())
+            {
+                if (!element.TryGetProperty("id", out var idProperty))
+                    continue;
+
+                var candidateId = idProperty.GetString();
+                if (string.IsNullOrEmpty(candidateId) || attemptedIds.Contains(candidateId))
+                    continue;
+
+                if (!preferScrollable)
+                {
+                    attemptedIds.Add(candidateId);
+                    elementId = candidateId;
+                    return true;
+                }
+
+                var score = GetScrollableCandidateScore(element);
+                if (score > bestScore)
+                {
+                    bestCandidate = element;
+                    bestScore = score;
+                }
+            }
+
+            if (bestCandidate is { } candidate
+                && candidate.TryGetProperty("id", out var bestIdProperty))
+            {
+                var candidateId = bestIdProperty.GetString();
+                if (!string.IsNullOrEmpty(candidateId))
+                {
+                    attemptedIds.Add(candidateId);
+                    elementId = candidateId;
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static int GetScrollableCandidateScore(JsonElement element)
+    {
+        if (element.TryGetProperty("type", out var typeProperty))
+        {
+            var type = typeProperty.GetString();
+            if (type is "ScrollView" or "CollectionView" or "ListView"
+                or "RecyclerView" or "ItemsView" or "ScrollViewer" or "UIScrollView")
+            {
+                return 2;
+            }
+        }
+
+        if (element.TryGetProperty("capabilities", out var capabilities)
+            && capabilities.ValueKind == JsonValueKind.Array
+            && capabilities.EnumerateArray().Any(capability =>
+                capability.ValueKind == JsonValueKind.String
+                && capability.GetString() == "scroll"))
+        {
+            return 1;
+        }
+
+        return 0;
+    }
+
+    private static bool TryGetActionCaptureMetadata(
+        JsonElement root,
+        bool required,
+        out long? captureEpoch,
+        out long? registryGeneration,
+        out string? error)
+    {
+        captureEpoch = null;
+        registryGeneration = null;
+        error = null;
+
+        if (root.TryGetProperty("captureEpoch", out var epochProperty))
+        {
+            if (!epochProperty.TryGetInt64(out var parsedEpoch) || parsedEpoch <= 0)
+            {
+                error = "captureEpoch must be a positive integer";
+                return false;
+            }
+
+            captureEpoch = parsedEpoch;
+        }
+
+        if (root.TryGetProperty("registryGeneration", out var generationProperty))
+        {
+            if (!generationProperty.TryGetInt64(out var parsedGeneration) || parsedGeneration < 0)
+            {
+                error = "registryGeneration must be a non-negative integer";
+                return false;
+            }
+
+            registryGeneration = parsedGeneration;
+        }
+
+        if (required && captureEpoch is null)
+        {
+            error = "captureEpoch is required for elementId actions";
+            return false;
+        }
+
+        if (registryGeneration is not null && captureEpoch is null)
+        {
+            error = "captureEpoch is required when registryGeneration is supplied";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static (int, string, byte[]) CaptureMetadataError(string error)
+        => (400, "application/json", JsonSerializer.SerializeToUtf8Bytes(new { error }));
+
+    private static (int, string, byte[]) ActionOutcomeResponse(ActionResult outcome)
+    {
+        if (outcome.Success)
+            return (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"));
+
+        var statusCode = outcome.StatusCode is >= 400 and <= 599
+            ? outcome.StatusCode.Value
+            : 502;
+        return (
+            statusCode,
+            "application/json",
+            JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                ok = false,
+                reason = outcome.Reason,
+                retryable = outcome.Retryable
+            }));
+    }
+
+    private static (int, string, byte[]) UiReadOutcomeResponse(UiReadResult outcome)
+    {
+        var statusCode = outcome.StatusCode is >= 400 and <= 599
+            ? outcome.StatusCode.Value
+            : 502;
+        return (
+            statusCode,
+            "application/json",
+            JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                ok = false,
+                reason = outcome.Reason,
+                retryable = outcome.Retryable
+            }));
+    }
+
+    private async Task<bool> RequiresCaptureEpochAsync()
+    {
+        Task<bool?> detectionTask;
+        lock (_cacheLock)
+            detectionTask = _requiresCaptureEpochTask ??= DetectCaptureEpochRequirementAsync();
+
+        try
+        {
+            var detected = await detectionTask;
+            if (detected.HasValue)
+                return detected.Value;
+        }
+        catch
+        {
+        }
+
+        // A transport failure or non-capabilities JSON response must not permanently downgrade
+        // this connection. Share one in-flight request, then let the next interaction retry.
+        lock (_cacheLock)
+        {
+            if (ReferenceEquals(_requiresCaptureEpochTask, detectionTask))
+                _requiresCaptureEpochTask = null;
+
+            return _captureEpoch.HasValue;
+        }
+    }
+
+    private async Task<bool?> DetectCaptureEpochRequirementAsync()
+    {
+        var response = await _client.GetCapabilitiesAsync();
+        if (response.ValueKind != JsonValueKind.Object
+            || !response.TryGetProperty("capabilities", out var capabilities)
+            || capabilities.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        if (!capabilities.TryGetProperty("ui.actions", out var uiActions)
+            || uiActions.ValueKind != JsonValueKind.Object
+            || !uiActions.TryGetProperty("features", out var features))
+        {
+            return false;
+        }
+
+        if (features.ValueKind != JsonValueKind.Array)
+            return null;
+
+        return features.EnumerateArray().Any(feature =>
+            feature.ValueKind == JsonValueKind.String
+            && feature.GetString() == "stale-capture-rejection");
     }
 
     /// <summary>
@@ -182,7 +474,13 @@ public sealed class InspectorServer : IDisposable
                 }
             }
 
-            var request = new HttpRequestInfo { Method = method, Path = path, Body = body };
+            var request = new HttpRequestInfo
+            {
+                Method = method,
+                Path = path,
+                QueryString = context.Request.Url?.Query ?? string.Empty,
+                Body = body
+            };
             var (statusCode, contentType, responseBody) = await RouteAsync(request);
 
             context.Response.StatusCode = statusCode;
@@ -515,7 +813,7 @@ public sealed class InspectorServer : IDisposable
                 {
                     "/" or "" => await HandleRootAsync(),
                     "/api/state" => await HandleStateAsync(),
-                    "/screenshot.png" => await HandleScreenshotAsync(),
+                    "/screenshot.png" => await HandleScreenshotAsync(request),
                     var framePath when framePath.StartsWith(
                         "/screenshot/",
                         StringComparison.Ordinal) =>
@@ -553,24 +851,41 @@ public sealed class InspectorServer : IDisposable
 
     private async Task<(int, string, byte[])> HandleRootAsync()
     {
-        var tree = await _client.GetTreeAsync(
-            maxDepth: 0,
-            window: null,
-            includeNative: false);
+        var tree = await GetTreeWithRetriesAsync();
+        if (tree.Count == 0)
+        {
+            return (
+                503,
+                "text/plain",
+                Encoding.UTF8.GetBytes("Unable to capture the current app tree"));
+        }
 
         // Find the root page element (first child of Window with content).
         // On Mac Catalyst, the default screenshot captures the full screen but element
         // bounds are relative to the page content. By screenshotting the page element
         // directly we get a 1:1 match between pixel coordinates and element bounds.
         var rootPageId = FindRootPageId(tree);
-        var (rootOffsetX, rootOffsetY) = GetRootPageOffset(tree, rootPageId);
+        var fullscreen = HasDetachedNativeRoots(tree);
+        var (rootOffsetX, rootOffsetY) = fullscreen
+            ? (0d, 0d)
+            : GetRootPageOffset(tree, rootPageId);
+        var (captureEpoch, registryGeneration, windowId) = GetCaptureMetadata(tree);
         lock (_cacheLock)
         {
-            _rootPageId = rootPageId;
+            _rootPageId = fullscreen ? null : rootPageId;
             _rootOffsetX = rootOffsetX;
             _rootOffsetY = rootOffsetY;
+            _captureEpoch = captureEpoch;
+            _registryGeneration = registryGeneration;
+            _windowId = windowId;
+            _fullscreenScreenshot = fullscreen;
         }
-        var screenshot = await GetCachedScreenshotAsync(rootPageId);
+        var screenshot = await GetCachedScreenshotAsync(
+            fullscreen ? null : rootPageId,
+            captureEpoch,
+            registryGeneration,
+            fullscreen);
+        var screenshotSnapshotId = RememberScreenshot(screenshot);
         var hasScreenshot = screenshot?.Length > 0;
 
         double viewportWidth = 800, viewportHeight = 600;
@@ -581,7 +896,18 @@ public sealed class InspectorServer : IDisposable
             viewportHeight = ph;
         }
 
-        var html = HtmlRenderer.Render(tree, hasScreenshot, (int)viewportWidth, (int)viewportHeight, 1, 1, rootOffsetX, rootOffsetY);
+        var html = HtmlRenderer.Render(
+            tree,
+            hasScreenshot,
+            (int)viewportWidth,
+            (int)viewportHeight,
+            1,
+            1,
+            rootOffsetX,
+            rootOffsetY,
+            screenshotSnapshotId.HasValue
+                ? $"screenshot.png?t={screenshotSnapshotId.Value}"
+                : null);
         return (200, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(html));
     }
 
@@ -598,14 +924,22 @@ public sealed class InspectorServer : IDisposable
         var rootOffsetX = 0d;
         var rootOffsetY = 0d;
         byte[]? screenshot = null;
+        var fullscreen = false;
+        long? captureEpoch = null;
+        long? registryGeneration = null;
+        int? windowId = null;
         var coherentFrame = false;
 
         for (var attempt = 0; attempt < 3; attempt++)
         {
-            var treeSnapshot = await _client.GetTreeSnapshotAsync(
-                includeNative: false);
+            // Native elements stay in the tree: the inspector needs them to detect detached
+            // native roots (dialogs, platform overlays) and fall back to a full-screen capture.
+            var treeSnapshot = await _client.GetTreeSnapshotAsync(includeNative: true);
             tree = treeSnapshot?.Elements ?? [];
             treeRevision = treeSnapshot?.Revision ?? string.Empty;
+            if (tree.Count == 0)
+                continue;
+
             lock (_cacheLock)
             {
                 diagnostics =
@@ -628,17 +962,28 @@ public sealed class InspectorServer : IDisposable
             }
 
             rootPageId = FindRootPageId(tree);
-            (rootOffsetX, rootOffsetY) =
-                GetRootPageOffset(tree, rootPageId);
+            fullscreen = HasDetachedNativeRoots(tree);
+            (rootOffsetX, rootOffsetY) = fullscreen
+                ? (0d, 0d)
+                : GetRootPageOffset(tree, rootPageId);
+            (captureEpoch, registryGeneration, windowId) = GetCaptureMetadata(tree);
             lock (_cacheLock)
             {
-                _rootPageId = rootPageId;
+                _rootPageId = fullscreen ? null : rootPageId;
                 _rootOffsetX = rootOffsetX;
                 _rootOffsetY = rootOffsetY;
+                _captureEpoch = captureEpoch;
+                _registryGeneration = registryGeneration;
+                _windowId = windowId;
+                _fullscreenScreenshot = fullscreen;
             }
 
             InvalidateScreenshotCache();
-            screenshot = await GetCachedScreenshotAsync(rootPageId);
+            screenshot = await GetCachedScreenshotAsync(
+                fullscreen ? null : rootPageId,
+                captureEpoch,
+                registryGeneration,
+                fullscreen);
             if (string.IsNullOrEmpty(treeRevision))
             {
                 coherentFrame = true;
@@ -646,7 +991,7 @@ public sealed class InspectorServer : IDisposable
             }
 
             var postScreenshotTree =
-                await _client.GetTreeSnapshotAsync(includeNative: false);
+                await _client.GetTreeSnapshotAsync(includeNative: true);
             if (string.Equals(
                 treeRevision,
                 postScreenshotTree?.Revision,
@@ -657,9 +1002,36 @@ public sealed class InspectorServer : IDisposable
             }
         }
 
+        if (tree.Count == 0)
+        {
+            return (
+                503,
+                "application/json",
+                JsonSerializer.SerializeToUtf8Bytes(new
+                {
+                    error = "Unable to capture the current app tree.",
+                    retryable = true
+                }));
+        }
+
+        // A frame whose tree moved under the screenshot cannot be paired with findings.
         if (!coherentFrame)
             diagnostics = null;
+
         var hasScreenshot = screenshot?.Length > 0;
+        if (!hasScreenshot)
+        {
+            return (
+                503,
+                "application/json",
+                JsonSerializer.SerializeToUtf8Bytes(new
+                {
+                    error = "Unable to capture the current app state.",
+                    retryable = true
+                }));
+        }
+
+        var screenshotSnapshotId = RememberScreenshot(screenshot);
 
         double viewportWidth = 800, viewportHeight = 600;
         if (hasScreenshot)
@@ -707,7 +1079,10 @@ public sealed class InspectorServer : IDisposable
             viewportHeight,
             rootOffsetX,
             rootOffsetY,
-            diagnostics
+            diagnostics,
+            captureEpoch,
+            registryGeneration,
+            windowId
         });
 
         return (200, "application/json", Encoding.UTF8.GetBytes(json));
@@ -1005,6 +1380,21 @@ public sealed class InspectorServer : IDisposable
         return (200, "application/json", Encoding.UTF8.GetBytes(json));
     }
 
+    private async Task<List<ElementInfo>> GetTreeWithRetriesAsync()
+    {
+        const int maxAttempts = 3;
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            var tree = await _client.GetTreeAsync();
+            if (tree.Count > 0)
+                return tree;
+            if (attempt + 1 < maxAttempts)
+                await Task.Delay(TimeSpan.FromMilliseconds(25 * (attempt + 1)));
+        }
+
+        return [];
+    }
+
     /// <summary>
     /// Finds the ID of the topmost page element in the tree.
     /// When a modal page is showing, it appears as a later child of the Window,
@@ -1017,6 +1407,22 @@ public sealed class InspectorServer : IDisposable
         if (window.Children is not { Count: > 0 }) return null;
         // Last child is the topmost (modal pages are added after the shell)
         return window.Children[^1].Id;
+    }
+
+    private static bool HasDetachedNativeRoots(List<ElementInfo> tree)
+        => tree.Skip(1).Any(HasVisibleNativeBounds);
+
+    private static bool HasVisibleNativeBounds(ElementInfo element)
+    {
+        var bounds = element.WindowBounds ?? element.Bounds;
+        if (element.Origin == "native"
+            && element.IsVisible
+            && bounds is { Width: > 0, Height: > 0 })
+        {
+            return true;
+        }
+
+        return element.Children?.Any(HasVisibleNativeBounds) == true;
     }
 
     /// <summary>
@@ -1034,6 +1440,19 @@ public sealed class InspectorServer : IDisposable
         if (rootPage == null) return (0, 0);
         var bounds = rootPage.WindowBounds ?? rootPage.Bounds;
         return (bounds?.X ?? 0, bounds?.Y ?? 0);
+    }
+
+    private static (long? captureEpoch, long? registryGeneration, int? windowId) GetCaptureMetadata(
+        List<ElementInfo> tree)
+    {
+        var root = tree.FirstOrDefault();
+        if (root == null || root.CaptureEpoch <= 0)
+            return (null, null, null);
+
+        return (
+            root.CaptureEpoch,
+            root.RegistryGeneration,
+            root.WindowId);
     }
 
     /// <summary>Reads width/height from PNG IHDR chunk (bytes 16-23) after validating PNG signature.</summary>
@@ -1056,11 +1475,32 @@ public sealed class InspectorServer : IDisposable
         return (w, h);
     }
 
-    private async Task<(int, string, byte[])> HandleScreenshotAsync()
+    private async Task<(int, string, byte[])> HandleScreenshotAsync(HttpRequestInfo request)
     {
+        if (!string.IsNullOrEmpty(request.QueryString))
+        {
+            var remembered = GetRememberedScreenshot(request.QueryString);
+            return remembered is { Length: > 0 }
+                ? (200, "image/png", remembered)
+                : (404, "text/plain", Encoding.UTF8.GetBytes("Screenshot snapshot expired"));
+        }
+
         string? rootPageId;
-        lock (_cacheLock) { rootPageId = _rootPageId; }
-        var png = await GetCachedScreenshotAsync(rootPageId);
+        long? captureEpoch;
+        long? registryGeneration;
+        bool fullscreen;
+        lock (_cacheLock)
+        {
+            rootPageId = _rootPageId;
+            captureEpoch = _captureEpoch;
+            registryGeneration = _registryGeneration;
+            fullscreen = _fullscreenScreenshot;
+        }
+        var png = await GetCachedScreenshotAsync(
+            rootPageId,
+            captureEpoch,
+            registryGeneration,
+            fullscreen);
         if (png == null || png.Length == 0)
             return (404, "text/plain", Encoding.UTF8.GetBytes("No screenshot available"));
         return (200, "image/png", png);
@@ -1093,7 +1533,11 @@ public sealed class InspectorServer : IDisposable
         return (200, contentType, ms.ToArray());
     }
 
-    private async Task<byte[]?> GetCachedScreenshotAsync(string? elementId = null)
+    private async Task<byte[]?> GetCachedScreenshotAsync(
+        string? elementId = null,
+        long? captureEpoch = null,
+        long? registryGeneration = null,
+        bool fullscreen = false)
     {
         lock (_cacheLock)
         {
@@ -1103,15 +1547,33 @@ public sealed class InspectorServer : IDisposable
             // whichever shot happened to be cached first within the 200ms window.
             if (_cachedScreenshot != null
                 && string.Equals(_cachedScreenshotElementId, elementId, StringComparison.Ordinal)
+                && _cachedScreenshotCaptureEpoch == captureEpoch
+                && _cachedScreenshotFullscreen == fullscreen
                 && DateTime.UtcNow - _screenshotCacheTime < ScreenshotCacheDuration)
                 return _cachedScreenshot;
         }
 
-        var fresh = await _client.ScreenshotAsync(elementId: elementId);
+        var fresh = fullscreen
+            ? await _client.FullscreenScreenshotAsync(
+                window: null,
+                maxWidth: null,
+                scale: null,
+                captureEpoch: captureEpoch,
+                registryGeneration: registryGeneration)
+            : await _client.ScreenshotAsync(
+                window: null,
+                elementId: elementId,
+                selector: null,
+                maxWidth: null,
+                scale: null,
+                captureEpoch: captureEpoch,
+                registryGeneration: registryGeneration);
         lock (_cacheLock)
         {
             _cachedScreenshot = fresh;
             _cachedScreenshotElementId = elementId;
+            _cachedScreenshotCaptureEpoch = captureEpoch;
+            _cachedScreenshotFullscreen = fullscreen;
             _screenshotCacheTime = DateTime.UtcNow;
         }
         return fresh;
@@ -1136,36 +1598,67 @@ public sealed class InspectorServer : IDisposable
             var x = xProp.GetDouble() + offsetX;
             var y = yProp.GetDouble() + offsetY;
 
-            var hitResult = await _client.HitTestAsync(x, y);
-
-            // Parse hit-test result — response is { elements: [{ id, ... }, ...] }
-            // The agent may return malformed JSON or omit "elements" if it
-            // encountered an internal error; treat that as "no element here"
-            // rather than leaking the JsonException text to the browser.
-            if (TryParseHitTestElements(hitResult, out var hitDoc, out var elements))
+            var attemptedIds = new HashSet<string>(StringComparer.Ordinal);
+            var retryCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+            ActionResult? terminalOutcome = null;
+            var hitOutcome = await _client.HitTestResultAsync(x, y);
+            if (!hitOutcome.Success)
+                return UiReadOutcomeResponse(hitOutcome);
+            var hitResult = hitOutcome.Body;
+            for (var attempt = 0; attempt < 32; attempt++)
             {
-                using (hitDoc)
+                if (!TryGetNextHitTestCandidate(
+                    hitResult,
+                    attemptedIds,
+                    preferScrollable: false,
+                    out var elementId,
+                    out var captureEpoch,
+                    out var registryGeneration))
+                    break;
+
+                var outcome = await _client.TapResultAsync(
+                    elementId!,
+                    captureEpoch,
+                    registryGeneration);
+                if (outcome.Success)
                 {
-                    if (elements.GetArrayLength() > 0)
-                    {
-                        // Try elements from most specific to most general until one accepts tap
-                        for (int i = 0; i < elements.GetArrayLength(); i++)
-                        {
-                            if (!elements[i].TryGetProperty("id", out var idProp)) continue;
-                            var elementId = idProp.GetString();
-                            if (!string.IsNullOrEmpty(elementId))
-                            {
-                                var success = await _client.TapAsync(elementId);
-                                if (success)
-                                {
-                                    InvalidateScreenshotCache();
-                                    return (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"));
-                                }
-                            }
-                        }
-                    }
+                    InvalidateScreenshotCache();
+                    return (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"));
                 }
+
+                if (outcome.TransportFailure)
+                {
+                    terminalOutcome = outcome;
+                    break;
+                }
+
+                if (outcome.Retryable)
+                {
+                    var retryCount = retryCounts.GetValueOrDefault(elementId!);
+                    if (retryCount >= 1)
+                    {
+                        terminalOutcome = outcome;
+                        break;
+                    }
+
+                    retryCounts[elementId!] = retryCount + 1;
+                    attemptedIds.Remove(elementId!);
+                    await Task.Delay(25);
+                }
+                else if (outcome.StatusCode is 408 or 409 or 429
+                    || outcome.StatusCode >= 500)
+                {
+                    terminalOutcome = outcome;
+                    break;
+                }
+
+                hitOutcome = await _client.HitTestResultAsync(x, y);
+                if (!hitOutcome.Success)
+                    return UiReadOutcomeResponse(hitOutcome);
+                hitResult = hitOutcome.Body;
             }
+            if (terminalOutcome.HasValue)
+                return ActionOutcomeResponse(terminalOutcome.Value);
             return (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":false,\"reason\":\"No tappable element at coordinates\"}"));
         }
 
@@ -1175,11 +1668,22 @@ public sealed class InspectorServer : IDisposable
             var elementId = elIdProp.GetString();
             if (!string.IsNullOrEmpty(elementId))
             {
-                var success = await _client.TapAsync(elementId);
+                if (!TryGetActionCaptureMetadata(
+                    root,
+                    required: await RequiresCaptureEpochAsync(),
+                    out var captureEpoch,
+                    out var registryGeneration,
+                    out var metadataError))
+                {
+                    return CaptureMetadataError(metadataError!);
+                }
+
+                var outcome = await _client.TapResultAsync(
+                    elementId,
+                    captureEpoch,
+                    registryGeneration);
                 InvalidateScreenshotCache();
-                return success
-                    ? (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"))
-                    : (500, "application/json", Encoding.UTF8.GetBytes("{\"ok\":false}"));
+                return ActionOutcomeResponse(outcome);
             }
         }
 
@@ -1203,37 +1707,93 @@ public sealed class InspectorServer : IDisposable
         {
             double offsetX, offsetY;
             lock (_cacheLock) { offsetX = _rootOffsetX; offsetY = _rootOffsetY; }
-            var hitResult = await _client.HitTestAsync(xProp.GetDouble() + offsetX, yProp.GetDouble() + offsetY);
-            if (TryParseHitTestElements(hitResult, out var hitDoc, out var elements))
+            var x = xProp.GetDouble() + offsetX;
+            var y = yProp.GetDouble() + offsetY;
+            var attemptedIds = new HashSet<string>(StringComparer.Ordinal);
+            var retryCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+            ActionResult? terminalOutcome = null;
+            var hitOutcome = await _client.HitTestResultAsync(x, y);
+            if (!hitOutcome.Success)
+                return UiReadOutcomeResponse(hitOutcome);
+            var hitResult = hitOutcome.Body;
+            for (var attempt = 0; attempt < 32; attempt++)
             {
-                using (hitDoc)
+                if (!TryGetNextHitTestCandidate(
+                    hitResult,
+                    attemptedIds,
+                    preferScrollable: true,
+                    out var elementId,
+                    out var captureEpoch,
+                    out var registryGeneration))
+                    break;
+
+                var outcome = await _client.ScrollResultAsync(
+                    elementId: elementId,
+                    deltaX: deltaX,
+                    deltaY: deltaY,
+                    animated: true,
+                    window: null,
+                    itemIndex: null,
+                    groupIndex: null,
+                    scrollToPosition: null,
+                    captureEpoch: captureEpoch,
+                    registryGeneration: registryGeneration);
+                if (outcome.Success)
                 {
-                    // Try each element from most specific to general until one accepts scroll
-                    for (int i = 0; i < elements.GetArrayLength(); i++)
-                    {
-                        if (!elements[i].TryGetProperty("id", out var idProp)) continue;
-                        var elementId = idProp.GetString();
-                        if (!string.IsNullOrEmpty(elementId))
-                        {
-                            var success = await _client.ScrollAsync(elementId: elementId, deltaX: deltaX, deltaY: deltaY);
-                            if (success)
-                            {
-                                InvalidateScreenshotCache();
-                                return (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"));
-                            }
-                        }
-                    }
+                    InvalidateScreenshotCache();
+                    return (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"));
                 }
+
+                if (outcome.TransportFailure)
+                {
+                    terminalOutcome = outcome;
+                    break;
+                }
+
+                if (outcome.Retryable)
+                {
+                    var retryCount = retryCounts.GetValueOrDefault(elementId!);
+                    if (retryCount >= 1)
+                    {
+                        terminalOutcome = outcome;
+                        break;
+                    }
+
+                    retryCounts[elementId!] = retryCount + 1;
+                    attemptedIds.Remove(elementId!);
+                    await Task.Delay(25);
+                }
+                else if (outcome.StatusCode is 408 or 409 or 429
+                    || outcome.StatusCode >= 500)
+                {
+                    terminalOutcome = outcome;
+                    break;
+                }
+
+                hitOutcome = await _client.HitTestResultAsync(x, y);
+                if (!hitOutcome.Success)
+                    return UiReadOutcomeResponse(hitOutcome);
+                hitResult = hitOutcome.Body;
             }
+            if (terminalOutcome.HasValue)
+                return ActionOutcomeResponse(terminalOutcome.Value);
         }
 
         // Fallback: scroll without element target
         {
-            var success = await _client.ScrollAsync(deltaX: deltaX, deltaY: deltaY);
+            var outcome = await _client.ScrollResultAsync(
+                elementId: null,
+                deltaX: deltaX,
+                deltaY: deltaY,
+                animated: true,
+                window: null,
+                itemIndex: null,
+                groupIndex: null,
+                scrollToPosition: null,
+                captureEpoch: null,
+                registryGeneration: null);
             InvalidateScreenshotCache();
-            return success
-                ? (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"))
-                : (500, "application/json", Encoding.UTF8.GetBytes("{\"ok\":false}"));
+            return ActionOutcomeResponse(outcome);
         }
     }
 
@@ -1300,11 +1860,23 @@ public sealed class InspectorServer : IDisposable
         if (string.IsNullOrEmpty(elementId) || text == null)
             return (400, "application/json", Encoding.UTF8.GetBytes("{\"error\":\"elementId and text required\"}"));
 
-        var success = await _client.FillAsync(elementId, text);
+        if (!TryGetActionCaptureMetadata(
+            root,
+            required: await RequiresCaptureEpochAsync(),
+            out var captureEpoch,
+            out var registryGeneration,
+            out var metadataError))
+        {
+            return CaptureMetadataError(metadataError!);
+        }
+
+        var outcome = await _client.FillResultAsync(
+            elementId,
+            text,
+            captureEpoch,
+            registryGeneration);
         InvalidateScreenshotCache();
-        return success
-            ? (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"))
-            : (500, "application/json", Encoding.UTF8.GetBytes("{\"ok\":false}"));
+        return ActionOutcomeResponse(outcome);
     }
 
     private async Task<(int, string, byte[])> HandleProxyKeyAsync(string? body)
@@ -1321,11 +1893,24 @@ public sealed class InspectorServer : IDisposable
         if (string.IsNullOrEmpty(key))
             return (400, "application/json", Encoding.UTF8.GetBytes("{\"error\":\"key required\"}"));
 
-        var success = await _client.KeyAsync(key, elementId);
+        if (!TryGetActionCaptureMetadata(
+            root,
+            required: !string.IsNullOrEmpty(elementId) && await RequiresCaptureEpochAsync(),
+            out var captureEpoch,
+            out var registryGeneration,
+            out var metadataError))
+        {
+            return CaptureMetadataError(metadataError!);
+        }
+
+        var outcome = await _client.KeyResultAsync(
+            key,
+            elementId,
+            text: null,
+            captureEpoch: captureEpoch,
+            registryGeneration: registryGeneration);
         InvalidateScreenshotCache();
-        return success
-            ? (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"))
-            : (500, "application/json", Encoding.UTF8.GetBytes("{\"ok\":false}"));
+        return ActionOutcomeResponse(outcome);
     }
 
     // ── WebSocket proxy (pass-through to agent /ws/v1/ui/events) ──
@@ -1561,7 +2146,10 @@ public sealed class InspectorServer : IDisposable
         if (requestLine.Length < 2) return (null, false);
 
         var method = requestLine[0].ToUpperInvariant();
-        var path = requestLine[1].Split('?')[0].TrimEnd('/');
+        var requestTarget = requestLine[1];
+        var queryIndex = requestTarget.IndexOf('?');
+        var queryString = queryIndex >= 0 ? requestTarget[queryIndex..] : string.Empty;
+        var path = (queryIndex >= 0 ? requestTarget[..queryIndex] : requestTarget).TrimEnd('/');
         if (string.IsNullOrEmpty(path)) path = "/";
 
         var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -1611,6 +2199,7 @@ public sealed class InspectorServer : IDisposable
         {
             Method = method,
             Path = path,
+            QueryString = queryString,
             Headers = headers,
             Body = body
         }, false);
@@ -1624,8 +2213,11 @@ public sealed class InspectorServer : IDisposable
             400 => "Bad Request",
             404 => "Not Found",
             405 => "Method Not Allowed",
+            409 => "Conflict",
             413 => "Payload Too Large",
             500 => "Internal Server Error",
+            502 => "Bad Gateway",
+            503 => "Service Unavailable",
             _ => "Unknown"
         };
 
@@ -1654,6 +2246,7 @@ public sealed class InspectorServer : IDisposable
     {
         public string Method { get; init; } = "";
         public string Path { get; init; } = "";
+        public string QueryString { get; init; } = "";
         public Dictionary<string, string> Headers { get; init; } = new();
         public string? Body { get; init; }
     }

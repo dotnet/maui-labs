@@ -85,7 +85,7 @@ public class BlazorLayoutDiagnosticsTests
             }
             """);
 
-        DevFlowAgentService.AppendBlazorLayoutNodes(
+        MauiDevFlowAgentService.AppendBlazorLayoutNodes(
             capture,
             new CdpWebViewInfo
             {

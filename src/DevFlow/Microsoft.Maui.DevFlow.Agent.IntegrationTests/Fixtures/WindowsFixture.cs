@@ -13,6 +13,14 @@ public sealed class WindowsFixture : AppFixtureBase
 
     protected override async Task InitializePlatformAsync()
     {
+        if (TestFramework.IsNative)
+        {
+            throw new InvalidOperationException(
+                "There is no plain .NET (native) sample head for Windows. " +
+                "Run the native suite on android, ios, maccatalyst or macos, " +
+                "or unset DEVFLOW_TEST_FRAMEWORK to test the MAUI sample.");
+        }
+
         await WithBuildLockAsync(async () =>
         {
             var projectPath = GetSampleProjectPath();

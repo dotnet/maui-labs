@@ -123,8 +123,12 @@ paths:
                 type: array
                 items:
                   $ref: "./schemas/element-info.json"
+        "409":
+          $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/elements/{id}:
     get:
@@ -144,8 +148,12 @@ paths:
                 $ref: "./schemas/element-info.json"
         "404":
           $ref: "#/components/responses/ElementNotFound"
+        "409":
+          $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/elements:
     get:
@@ -196,8 +204,12 @@ paths:
                   $ref: "./schemas/element-info.json"
         "400":
           $ref: "#/components/responses/InvalidSelector"
+        "409":
+          $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/hit-test:
     get:
@@ -205,8 +217,9 @@ paths:
       tags: [ui]
       summary: Find element at coordinates
       description: >
-        Returns the elements at the given screen coordinates, ordered deepest
-        first (innermost element first).
+        Returns the elements at the given window-logical coordinates, ordered
+        deepest first (innermost element first). Results are scoped to the
+        requested window and default to window 0.
       parameters:
         - name: x
           in: query
@@ -220,17 +233,78 @@ paths:
           description: Y coordinate.
           schema:
             type: number
+        - name: window
+          in: query
+          description: Zero-based application window index. Defaults to 0.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
       responses:
         "200":
           description: Elements at the given coordinates (deepest first).
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "./schemas/element-info.json"
+                type: object
+                required: [x, y, window, captureEpoch, registryGeneration, elements]
+                properties:
+                  x:
+                    type: number
+                  y:
+                    type: number
+                  window:
+                    type: integer
+                    minimum: 0
+                  captureEpoch:
+                    type: integer
+                    minimum: 1
+                  registryGeneration:
+                    type: integer
+                    minimum: 0
+                  elements:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, type]
+                      properties:
+                        id:
+                          $ref: "./schemas/common.json#/$defs/ElementId"
+                        type:
+                          type: string
+                        role:
+                          type: [string, "null"]
+                        text:
+                          type: [string, "null"]
+                        automationId:
+                          type: [string, "null"]
+                        bounds:
+                          oneOf:
+                            - $ref: "./schemas/bounds-info.json"
+                            - type: "null"
+                        windowBounds:
+                          oneOf:
+                            - $ref: "./schemas/bounds-info.json"
+                            - type: "null"
+                        native:
+                          type: boolean
+                        synthetic:
+                          type: boolean
+                        ownerId:
+                          oneOf:
+                            - $ref: "./schemas/common.json#/$defs/ElementId"
+                            - type: "null"
+                        origin:
+                          type: [string, "null"]
+                        capabilities:
+                          type: array
+                          items:
+                            type: string
+                      additionalProperties: true
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/screenshot:
     get:
@@ -239,6 +313,8 @@ paths:
       summary: Capture screenshot
       description: >
         Captures a screenshot of the entire screen or a specific element.
+        Element IDs may identify MAUI visual elements or native elements
+        advertised by the visual tree.
       parameters:
         - name: elementId
           in: query
@@ -267,9 +343,27 @@ paths:
             type: string
             enum: [png, jpeg]
             default: png
+        - $ref: "#/components/parameters/CaptureEpochQuery"
+        - $ref: "#/components/parameters/RegistryGenerationQuery"
       responses:
         "200":
           description: Screenshot image.
+          headers:
+            X-DevFlow-Capture-Epoch:
+              description: Capture epoch associated with this image.
+              schema:
+                type: integer
+                minimum: 1
+            X-DevFlow-Registry-Generation:
+              description: Native registration generation associated with the capture.
+              schema:
+                type: integer
+                minimum: 0
+            X-DevFlow-Window-Id:
+              description: Zero-based captured application window.
+              schema:
+                type: integer
+                minimum: 0
           content:
             image/png:
               schema:
@@ -281,8 +375,12 @@ paths:
                 format: binary
         "404":
           $ref: "#/components/responses/ElementNotFound"
+        "409":
+          $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   # ─────────────────────────── UI Actions ──────────────────────────────
   /api/v1/ui/actions/tap:
@@ -307,8 +405,12 @@ paths:
           $ref: "#/components/responses/ElementNotFound"
         "408":
           $ref: "#/components/responses/Timeout"
+        "409":
+          $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/actions/fill:
     post:
@@ -332,8 +434,12 @@ paths:
           $ref: "#/components/responses/ElementNotFound"
         "408":
           $ref: "#/components/responses/Timeout"
+        "409":
+          $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/actions/clear:
     post:
@@ -357,8 +463,12 @@ paths:
           $ref: "#/components/responses/ElementNotFound"
         "408":
           $ref: "#/components/responses/Timeout"
+        "409":
+          $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/actions/focus:
     post:
@@ -382,8 +492,12 @@ paths:
           $ref: "#/components/responses/ElementNotFound"
         "408":
           $ref: "#/components/responses/Timeout"
+        "409":
+          $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/actions/scroll:
     post:
@@ -407,8 +521,12 @@ paths:
           $ref: "#/components/responses/ElementNotFound"
         "408":
           $ref: "#/components/responses/Timeout"
+        "409":
+          $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/actions/navigate:
     post:
@@ -430,6 +548,8 @@ paths:
           $ref: "#/components/responses/Timeout"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/actions/resize:
     post:
@@ -453,6 +573,8 @@ paths:
           $ref: "#/components/responses/Timeout"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/actions/back:
     post:
@@ -474,6 +596,8 @@ paths:
           $ref: "#/components/responses/Timeout"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/actions/key:
     post:
@@ -493,17 +617,26 @@ paths:
           $ref: "#/components/responses/ActionSuccess"
         "408":
           $ref: "#/components/responses/Timeout"
+        "409":
+          $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/actions/gesture:
     post:
       operationId: performGesture
       tags: [ui-actions]
-      summary: Perform complex gesture
+      summary: Perform a gesture
       description: >
-        Executes a sequence of pointer actions (move, down, up, pause) to
-        perform complex gestures like swipe, pinch, or drag.
+        Performs a named gesture — pinch, rotate, pan, swipe, doubletap, longpress or tap.
+        The gesture is first offered to a matching MAUI gesture recognizer on the target
+        element or its ancestors. If there is none, it is injected natively at the platform
+        view, which is how pinch-to-zoom reaches controls that handle gestures internally
+        such as Map, WebView and native scroll views. The response reports which tier
+        serviced the gesture so callers can tell a real recognizer hit from a native fallback.
+        Tap requires elementId; other gesture types target the current page when it is omitted.
       requestBody:
         required: true
         content:
@@ -512,11 +645,25 @@ paths:
               $ref: "./schemas/actions.json#/$defs/GestureRequest"
       responses:
         "200":
-          $ref: "#/components/responses/ActionSuccess"
+          description: Gesture performed.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/actions.json#/$defs/GestureResponse"
+        "400":
+          description: The gesture request was invalid or no recognizer/native surface handled it.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/actions.json#/$defs/GestureErrorResponse"
         "408":
           $ref: "#/components/responses/Timeout"
+        "409":
+          $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/ui/actions/batch:
     post:
@@ -525,6 +672,9 @@ paths:
       summary: Execute batch actions
       description: >
         Executes multiple actions in sequence. Optionally continues on error.
+        A capture-bound batch reserves its epoch once, validates every referenced
+        target before the first mutation, and revalidates each target before its
+        action. Earlier successful actions remain applied when a later action fails.
       requestBody:
         required: true
         content:
@@ -536,8 +686,12 @@ paths:
           $ref: "#/components/responses/ActionSuccess"
         "408":
           $ref: "#/components/responses/Timeout"
+        "409":
+          $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   # ──────────────────────── UI Element Properties ──────────────────────
   /api/v1/ui/elements/{id}/properties/{name}:
@@ -569,6 +723,8 @@ paths:
           $ref: "#/components/responses/ElementNotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
     put:
       operationId: setElementProperty
@@ -595,6 +751,10 @@ paths:
               properties:
                 value:
                   description: The value to set.
+                captureEpoch:
+                  $ref: "./schemas/actions.json#/$defs/CaptureEpoch"
+                registryGeneration:
+                  $ref: "./schemas/actions.json#/$defs/RegistryGeneration"
       responses:
         "200":
           description: The new property value after setting.
@@ -607,8 +767,12 @@ paths:
                   value: {}
         "404":
           $ref: "#/components/responses/ElementNotFound"
+        "409":
+          $ref: "#/components/responses/CaptureConflict"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   # ──────────────────────────── WebView ────────────────────────────────
   /api/v1/webview/contexts:
@@ -1244,6 +1408,8 @@ paths:
                 $ref: "./schemas/device.json#/$defs/DeviceInfo"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/device/display:
     get:
@@ -1261,6 +1427,8 @@ paths:
                 $ref: "./schemas/device.json#/$defs/DisplayInfo"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/device/battery:
     get:
@@ -1278,6 +1446,8 @@ paths:
                 $ref: "./schemas/device.json#/$defs/BatteryInfo"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/device/connectivity:
     get:
@@ -1295,6 +1465,8 @@ paths:
                 $ref: "./schemas/device.json#/$defs/ConnectivityInfo"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/device/app:
     get:
@@ -1312,6 +1484,8 @@ paths:
                 $ref: "./schemas/device.json#/$defs/AppInfo"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/device/app/theme:
     get:
@@ -1331,6 +1505,8 @@ paths:
                 $ref: "./schemas/device.json#/$defs/ThemeInfo"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
     put:
       operationId: setAppTheme
@@ -1357,6 +1533,8 @@ paths:
           $ref: "#/components/responses/InvalidArgument"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/device/sensors:
     get:
@@ -1376,6 +1554,8 @@ paths:
                   $ref: "./schemas/device.json#/$defs/SensorInfo"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/device/sensors/{name}/start:
     post:
@@ -1409,7 +1589,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "501":
-          $ref: "#/components/responses/UnsupportedCapability"
+          $ref: "#/components/responses/BackendNotSupported"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1438,6 +1618,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/device/jobs:
     get:
@@ -1457,6 +1639,8 @@ paths:
                 $ref: "./schemas/device.json#/$defs/JobListResponse"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/device/jobs/{identifier}/run:
     post:
@@ -1490,7 +1674,7 @@ paths:
               schema:
                 $ref: "./schemas/device.json#/$defs/JobRunResponse"
         "501":
-          $ref: "#/components/responses/UnsupportedCapability"
+          $ref: "#/components/responses/BackendNotSupported"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1512,6 +1696,8 @@ paths:
                   $ref: "./schemas/device.json#/$defs/PermissionInfo"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/device/permissions/{name}:
     get:
@@ -1538,6 +1724,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/device/geolocation:
     get:
@@ -1568,7 +1756,7 @@ paths:
         "408":
           $ref: "#/components/responses/Timeout"
         "501":
-          $ref: "#/components/responses/UnsupportedCapability"
+          $ref: "#/components/responses/BackendNotSupported"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1597,6 +1785,8 @@ paths:
                   $ref: "./schemas/storage.json#/$defs/PreferenceEntry"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
     delete:
       operationId: clearPreferences
@@ -1615,6 +1805,8 @@ paths:
           description: Preferences cleared.
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/storage/preferences/{key}:
     get:
@@ -1651,6 +1843,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
     put:
       operationId: setPreference
@@ -1680,6 +1874,8 @@ paths:
                 $ref: "./schemas/storage.json#/$defs/PreferenceEntry"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
     delete:
       operationId: deletePreference
@@ -1706,6 +1902,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/storage/roots:
     get:
@@ -1882,6 +2080,8 @@ paths:
           description: Secure storage cleared.
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/storage/secure/{key}:
     get:
@@ -1912,6 +2112,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
     put:
       operationId: setSecureValue
@@ -1944,6 +2146,8 @@ paths:
                     type: boolean
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
     delete:
       operationId: deleteSecureValue
@@ -1965,6 +2169,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   # ─────────────────────────────── Extensions ───────────────────────────
   /api/v1/ext/{namespace}/{path}:
@@ -2129,6 +2335,42 @@ components:
       schema:
         $ref: "./schemas/common.json#/$defs/ElementId"
 
+    CaptureEpochQuery:
+      name: captureEpoch
+      in: query
+      description: Epoch returned by a prior tree, query, hit-test, element, or screenshot capture.
+      schema:
+        type: integer
+        minimum: 1
+
+    RegistryGenerationQuery:
+      name: registryGeneration
+      in: query
+      description: Native registration generation paired with captureEpoch.
+      schema:
+        type: integer
+        minimum: 0
+
+  schemas:
+    BackendNotSupported:
+      type: object
+      description: >
+        Uniform response returned when the connected DevFlow backend does not
+        implement the requested capability.
+      required: [error, capability, reason]
+      properties:
+        error:
+          type: string
+          const: not_supported
+        capability:
+          type: string
+          description: Capability group required by the endpoint.
+        reason:
+          type: string
+          minLength: 1
+          description: Backend-specific explanation of why the capability is unavailable.
+      additionalProperties: false
+
   responses:
     ActionSuccess:
       description: Action completed.
@@ -2136,6 +2378,28 @@ components:
         application/json:
           schema:
             $ref: "./schemas/actions.json#/$defs/ActionResponse"
+
+    CaptureConflict:
+      description: Capture is stale or a UI/native mutation or probe is temporarily busy. Retry after obtaining a fresh capture.
+      content:
+        application/json:
+          schema:
+            $ref: "./schemas/common.json#/$defs/ProblemDetails"
+          examples:
+            staleCapture:
+              value:
+                success: false
+                error: The UI snapshot is stale. Capture the tree or hit-test again before acting.
+                reason: stale-capture-epoch
+                details:
+                  retryable: true
+            busy:
+              value:
+                success: false
+                error: Another UI mutation or native probe is still running.
+                reason: ui-mutation-busy
+                details:
+                  retryable: true
 
     ElementNotFound:
       description: Element not found.
@@ -2209,17 +2473,16 @@ components:
             status: 408
             errorCode: timeout
 
-    UnsupportedCapability:
-      description: Capability not supported on this platform.
+    BackendNotSupported:
+      description: Capability not implemented by the connected backend.
       content:
         application/json:
           schema:
-            $ref: "./schemas/common.json#/$defs/ProblemDetails"
+            $ref: "#/components/schemas/BackendNotSupported"
           example:
-            type: "urn:devflow:error:unsupported-capability"
-            title: Unsupported capability
-            status: 501
-            errorCode: unsupported-capability
+            error: not_supported
+            capability: app.theme
+            reason: Not supported by the 'android-views' DevFlow backend.
 
     NotFound:
       description: Resource not found.

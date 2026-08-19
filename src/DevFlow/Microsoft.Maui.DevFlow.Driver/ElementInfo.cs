@@ -22,6 +22,30 @@ public class ElementInfo
     [JsonPropertyName("framework")]
     public string Framework { get; set; } = "maui";
 
+    [JsonPropertyName("origin")]
+    public string? Origin { get; set; }
+
+    [JsonPropertyName("ownerId")]
+    public string? OwnerId { get; set; }
+
+    [JsonPropertyName("discriminator")]
+    public string? Discriminator { get; set; }
+
+    [JsonPropertyName("boundsQuality")]
+    public string? BoundsQuality { get; set; }
+
+    [JsonPropertyName("captureEpoch")]
+    public long CaptureEpoch { get; set; }
+
+    [JsonPropertyName("registryGeneration")]
+    public long RegistryGeneration { get; set; }
+
+    [JsonPropertyName("windowId")]
+    public int? WindowId { get; set; }
+
+    [JsonPropertyName("capabilities")]
+    public List<string>? Capabilities { get; set; }
+
     [JsonPropertyName("automationId")]
     public string? AutomationId { get; set; }
 
@@ -169,18 +193,41 @@ public class ElementInfo
     {
         var traits = new List<string>();
         var role = Role;
+        var hasDeclaredCapabilities = Capabilities is { Count: > 0 };
 
-        if (role is "button" or "textbox" or "checkbox" or "radio" or "switch" or "link")
+        if (hasDeclaredCapabilities)
+        {
+            if (Capabilities!.Contains("invoke") || Capabilities.Contains("set-value"))
+                traits.Add("interactive");
+        }
+        else if (role is "button" or "textbox" or "checkbox" or "radio" or "switch" or "link" or "slider")
+        {
             traits.Add("interactive");
+        }
 
         if (Gestures is { Count: > 0 } && !traits.Contains("interactive"))
             traits.Add("interactive");
 
-        if (role is "button" or "textbox" or "checkbox" or "radio" or "switch" or "link" or "window" || IsFocused)
+        if (IsFocused
+            || hasDeclaredCapabilities && Capabilities!.Contains("focus")
+            || (!hasDeclaredCapabilities
+                && role is ("button" or "textbox" or "checkbox" or "radio" or "switch" or "link" or "slider" or "window")))
+        {
             traits.Add("focusable");
+        }
 
-        if (Type is "ScrollView" or "CollectionView" or "ListView" or "CarouselView")
+        if (hasDeclaredCapabilities)
+        {
+            if (Capabilities!.Contains("scroll"))
+                traits.Add("scrollable");
+        }
+        else if (Type is "ScrollView" or "CollectionView" or "ListView" or "CarouselView"
+                 or "HorizontalScrollView" or "NestedScrollView" or "RecyclerView" or "ViewPager2"
+                 or "UIScrollView" or "UITableView" or "UICollectionView"
+                 or "NSScrollView" or "NSTableView" or "NSOutlineView")
+        {
             traits.Add("scrollable");
+        }
 
         if (role == "heading")
             traits.Add("header");

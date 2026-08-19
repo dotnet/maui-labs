@@ -10,7 +10,7 @@ This repository hosts experimental .NET MAUI packages. It is a **multi-product m
 
 | Product | Package / Tool | Description |
 |---------|---------------|-------------|
-| **Cli** | `Microsoft.Maui.Cli` (global tool: `maui`) | Unified MAUI command-line tool: environment diagnostics (`maui doctor`), Android SDK/JDK/emulator management, Apple platform management, device listing, `maui go` for rapid prototyping, `maui profile startup` for performance tracing, `maui project version` for project version management, `maui port check` for TCP port diagnostics, and the `maui devflow` automation surface. |
+| **Cli** | `Microsoft.Maui.Cli` (global tool: `maui`), `Microsoft.Maui.ProfilingHelper` | Unified MAUI command-line tool: environment diagnostics (`maui doctor`), Android SDK/JDK/emulator management, Apple platform management, device listing, `maui go` for rapid prototyping, `maui profile startup` for performance tracing, `maui project version` for project version management, `maui port check` for TCP port diagnostics, and the `maui devflow` automation surface. `Microsoft.Maui.ProfilingHelper` is a lightweight helper library injected by the CLI to drive the startup profiling exit-control handshake; it can also be referenced directly to mark startup completion via `MauiProfilingMarker.Complete()`. |
 | **DevFlow** | `Microsoft.Maui.DevFlow.*` packages plus the unified `maui devflow` CLI surface | Runtime MAUI automation toolkit. In-app agent with HTTP API, visual tree inspection, CDP bridge for Blazor WebViews, MCP server for AI agents, cross-platform driver library. |
 | **Comet** | `Comet`, `Comet.SourceGenerator`, `Comet.Layout.Yoga` | Experimental MVU UI framework for .NET MAUI — C# fluent UI, signals/reactive state, Yoga layout. |
 | **Go** | `Microsoft.Maui.Go.Server` + Comet Go companion app | Single-file Comet apps server and companion app for rapid prototyping (alpha; sister to Comet). |
@@ -96,17 +96,23 @@ maui-labs/
 │   │   ├── Microsoft.Maui.Cli.UnitTests/ # CLI unit tests
 │   │   └── Cli.slnf                      # Solution filter
 │   ├── DevFlow/                          # DevFlow agent product
-│   │   ├── Microsoft.Maui.DevFlow.Agent.Core/   # Platform-agnostic agent (HTTP server, visual tree)
-│   │   ├── Microsoft.Maui.DevFlow.Agent/         # Platform-specific overrides (iOS/Android/macOS/Windows)
-│   │   ├── Microsoft.Maui.DevFlow.Agent.Gtk/     # GTK/Linux agent
-│   │   ├── Microsoft.Maui.DevFlow.Agent.WPF/     # WPF agent
-│   │   ├── Microsoft.Maui.DevFlow.Analyzers/     # Roslyn analyzers
-│   │   ├── Microsoft.Maui.DevFlow.Blazor/        # Blazor WebView CDP bridge
-│   │   ├── Microsoft.Maui.DevFlow.Blazor.Gtk/    # WebKitGTK CDP bridge
-│   │   ├── Microsoft.Maui.DevFlow.Driver/        # Cross-platform driver (AgentClient)
-│   │   ├── Microsoft.Maui.DevFlow.Logging/       # JSONL file logger
-│   │   ├── Microsoft.Maui.DevFlow.Tests/         # xUnit tests
-│   │   └── DevFlow.slnf                          # Solution filter
+│   │   ├── Microsoft.Maui.DevFlow.Agent.Abstractions/  # Platform-agnostic base (HTTP server, routing, DevFlowAgentService)
+│   │   ├── Microsoft.Maui.DevFlow.Agent.Core/          # MAUI UI backend (MauiDevFlowAgentService, VisualTreeWalker)
+│   │   ├── Microsoft.Maui.DevFlow.Agent/               # Platform-specific overrides (iOS/Android/macOS/Windows)
+│   │   ├── Microsoft.Maui.DevFlow.Agent.Gtk/           # GTK/Linux agent
+│   │   ├── Microsoft.Maui.DevFlow.Agent.WPF/           # WPF agent
+│   │   ├── Microsoft.Maui.DevFlow.Agent.Native/        # Plain .NET agent (no MAUI — Android/iOS/macOS)
+│   │   ├── Microsoft.Maui.DevFlow.Agent.Native.Essentials/  # Optional add-on with Essentials support
+│   │   ├── Microsoft.Maui.DevFlow.Analyzers/           # Roslyn analyzers
+│   │   ├── Microsoft.Maui.DevFlow.Blazor/              # Blazor WebView CDP bridge
+│   │   ├── Microsoft.Maui.DevFlow.Blazor.Gtk/          # WebKitGTK CDP bridge
+│   │   ├── Microsoft.Maui.DevFlow.Driver/              # Cross-platform driver (AgentClient)
+│   │   ├── Microsoft.Maui.DevFlow.Logging/             # JSONL file logger
+│   │   ├── Microsoft.Maui.DevFlow.Tests/               # xUnit tests
+│   │   ├── Microsoft.Maui.DevFlow.Agent.IntegrationTests/  # Integration tests
+│   │   ├── Microsoft.Maui.DevFlow.Inspector.Tests/     # Inspector tests
+│   │   ├── Shared.Essentials/                          # Shared Essentials code (compiled into Agent.Core and Agent.Native.Essentials)
+│   │   └── DevFlow.slnf                               # Solution filter
 │   ├── AI/                               # Essentials.AI product
 │   │   └── Microsoft.Maui.Essentials.AI/ # On-device AI package
 │   ├── AIExtensions/                     # AI Extensions product
@@ -215,7 +221,7 @@ Each product requires source setup **and** CI/CD configuration across two system
 ### CI/CD Setup
 
 7. **GitHub Actions**: Create `.github/workflows/ci-{newproduct}.yml` calling the reusable `_build.yml` workflow. Must include `pull_request.types: [opened, synchronize, reopened, edited]` and path filters scoped to the product source plus shared build files.
-8. **Azure DevOps**: Edit `eng/pipelines/devflow-official.yml` — add a publish parameter, a build job in the `build` stage, and a conditional publish stage for NuGet.org. For SDK provisioning, prefer the Arcade bootstrap pattern (`eng\common\dotnet.cmd --info` then `.dotnet\dotnet workload install ...`) which ensures workloads are installed against the same SDK that `cibuild.cmd` uses. If using `UseDotNet@2` instead, set an explicit `version:` matching `global.json` (not `useGlobalJson: true`). Pin workloads with `--version` matching `_build.yml`. Pure managed Apple products can build on Windows (workload provides reference assemblies). Products with native code (e.g. Swift) need a two-stage build: macOS compiles native + Windows packs/signs. See `EssentialsAI_macOS`/`EssentialsAI` for the native pattern, `MacOS` for the managed pattern.
+8. **Azure DevOps**: Edit `eng/pipelines/devflow-official.yml` — add a publish parameter, a build job in the `build` stage, and a conditional publish stage for NuGet.org. Run workload installation through Arcade's SDK wrapper (`eng\common\dotnet.cmd workload install ...`) so it uses the same SDK that `cibuild.cmd` selects without assuming a repo-local `.dotnet` directory exists. For commands with quoted arguments or paths containing spaces, invoke `eng/common/dotnet.ps1` from a `pwsh` step instead of the CMD shim. If using `UseDotNet@2` instead, set an explicit `version:` matching `global.json` (not `useGlobalJson: true`). Pin workloads with `--version` matching `_build.yml`. Pure managed Apple products can build on Windows (workload provides reference assemblies). Products with native code (e.g. Swift) need a two-stage build: macOS compiles native + Windows packs/signs. See `EssentialsAI_macOS`/`EssentialsAI` for the native pattern, `MacOS` for the managed pattern.
 
 > **Complete copy-paste templates** for both the GitHub Actions workflow and all three Azure DevOps blocks (parameter, build job, publish stage) are in `.github/copilot-instructions.md` under **"CI/CD — New Product Checklist"**.
 
@@ -249,7 +255,7 @@ DevFlow exposes 67 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_fill` | Fill text into Entry/Editor |
 | `maui_focus` | Set focus to an element |
 | `maui_geolocation` | GPS coordinates |
-| `maui_gesture` | Perform a touch gesture on the app |
+| `maui_gesture` | Pinch/zoom, rotate, pan, swipe, double-tap, long-press |
 | `maui_get_property` | Read any element property |
 | `maui_get_theme` | Get the current app-scoped light/dark theme |
 | `maui_hittest` | Find elements at screen coordinates |

@@ -11,13 +11,16 @@ public sealed class InteractionTools
 	public static async Task<string> Tap(
 		McpAgentSession session,
 		[Description("Element ID from the visual tree")] string elementId,
-		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
+		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null,
+		[Description("Capture epoch from maui_tree or maui_hittest; stale epochs are rejected")] long? captureEpoch = null,
+		[Description("Native registry generation from maui_tree or maui_hittest")] long? registryGeneration = null)
 	{
 		var agent = await session.GetAgentClientAsync(agentPort);
-		var success = await agent.TapAsync(elementId);
-		return success
-			? $"Tapped element '{elementId}' successfully."
-			: $"Failed to tap element '{elementId}'. Element may not exist or is not tappable.";
+		var result = await agent.TapResultAsync(elementId, captureEpoch, registryGeneration);
+		return McpActionResult.RequireSuccess(
+			result,
+			$"Tapped element '{elementId}' successfully.",
+			$"Failed to tap element '{elementId}'. Element may not exist or is not tappable.");
 	}
 
 	[McpServerTool(Name = "maui_fill"), Description("Fill text into an Entry, Editor, or SearchBar element. Replaces existing text.")]
@@ -25,26 +28,36 @@ public sealed class InteractionTools
 		McpAgentSession session,
 		[Description("Element ID from the visual tree")] string elementId,
 		[Description("Text to fill into the element")] string text,
-		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
+		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null,
+		[Description("Capture epoch from maui_tree or maui_hittest; stale epochs are rejected")] long? captureEpoch = null,
+		[Description("Native registry generation from maui_tree or maui_hittest")] long? registryGeneration = null)
 	{
 		var agent = await session.GetAgentClientAsync(agentPort);
-		var success = await agent.FillAsync(elementId, text);
-		return success
-			? $"Filled element '{elementId}' with text."
-			: $"Failed to fill element '{elementId}'. Element may not exist or is not a text input.";
+		var result = await agent.FillResultAsync(
+			elementId,
+			text,
+			captureEpoch,
+			registryGeneration);
+		return McpActionResult.RequireSuccess(
+			result,
+			$"Filled element '{elementId}' with text.",
+			$"Failed to fill element '{elementId}'. Element may not exist or is not a text input.");
 	}
 
 	[McpServerTool(Name = "maui_clear"), Description("Clear text from an Entry, Editor, or SearchBar element.")]
 	public static async Task<string> Clear(
 		McpAgentSession session,
 		[Description("Element ID from the visual tree")] string elementId,
-		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
+		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null,
+		[Description("Capture epoch from maui_tree or maui_hittest; stale epochs are rejected")] long? captureEpoch = null,
+		[Description("Native registry generation from maui_tree or maui_hittest")] long? registryGeneration = null)
 	{
 		var agent = await session.GetAgentClientAsync(agentPort);
-		var success = await agent.ClearAsync(elementId);
-		return success
-			? $"Cleared element '{elementId}' successfully."
-			: $"Failed to clear element '{elementId}'.";
+		var result = await agent.ClearResultAsync(elementId, captureEpoch, registryGeneration);
+		return McpActionResult.RequireSuccess(
+			result,
+			$"Cleared element '{elementId}' successfully.",
+			$"Failed to clear element '{elementId}'.");
 	}
 
 	[McpServerTool(Name = "maui_key"), Description("Send a key press to an element. Supported keys for Entry/Editor/SearchBar: 'enter' (submit or newline), 'backspace' (delete last character). Use 'text' parameter to type characters. For reliable behavior, provide an element ID; omitting it may have no effect depending on the agent/platform implementation.")]
@@ -53,53 +66,101 @@ public sealed class InteractionTools
 		[Description("Key to press: 'enter', 'return', 'backspace', 'delete'")] string key,
 		[Description("Target element ID. Optional, but omitting it may result in no action; provide an element ID for reliable behavior.")] string? elementId = null,
 		[Description("Text to type character by character into the element")] string? text = null,
-		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
+		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null,
+		[Description("Capture epoch from maui_tree or maui_hittest; stale epochs are rejected")] long? captureEpoch = null,
+		[Description("Native registry generation from maui_tree or maui_hittest")] long? registryGeneration = null)
 	{
 		var agent = await session.GetAgentClientAsync(agentPort);
-		var success = await agent.KeyAsync(key, elementId, text);
-		return success
-			? elementId is not null
-				? $"Sent key '{key}' to element '{elementId}'."
-				: $"Sent key '{key}' without a target element; it may have had no effect."
-			: $"Failed to send key '{key}'. The target element may not support keyboard input, or no target element was provided.";
+		var result = await agent.KeyResultAsync(
+			key,
+			elementId,
+			text,
+			captureEpoch,
+			registryGeneration);
+		var successMessage = elementId is not null
+			? $"Sent key '{key}' to element '{elementId}'."
+			: $"Sent key '{key}' without a target element; it may have had no effect.";
+		return McpActionResult.RequireSuccess(
+			result,
+			successMessage,
+			$"Failed to send key '{key}'. The target element may not support keyboard input, or no target element was provided.");
 	}
 
-	[McpServerTool(Name = "maui_gesture"), Description("Perform a touch gesture on the app. Supported gesture types: 'swipe' (requires direction), 'tap', 'longpress', and 'long-press'. Use maui_tap for simple taps — this tool is for advanced gestures like swiping.")]
+	private static readonly string[] ValidGestureTypes = ["tap", "doubletap", "longpress", "swipe", "pan", "pinch", "rotate"];
+	private static readonly string[] ValidGestureDirections = ["up", "down", "left", "right"];
+
+	[McpServerTool(Name = "maui_gesture"), Description(
+		"Perform a touch gesture on the app. Types: 'pinch' (zoom — use 'scale', e.g. 2.0 to zoom in, 0.5 to zoom out), " +
+		"'rotate' (use 'rotation' in degrees), 'pan' (drag — use deltaX/deltaY, or direction + distance), " +
+		"'swipe' (flick — requires direction), 'doubletap', 'longpress', and 'tap'. " +
+		"Use maui_tap for simple taps and maui_scroll for scrolling a list; this tool is for real gestures. " +
+		"Each gesture is first sent to a matching MAUI gesture recognizer on the element or its ancestors, and if there is " +
+		"none it is injected natively at the platform view — which is how pinch-to-zoom works on Maps, WebViews and other " +
+		"controls that handle gestures internally. Use maui_tree first to find the element ID; the 'gestures' field on each " +
+		"element lists the recognizers it has. Omitting elementId aims non-tap gestures at the current page; tap requires an element ID.")]
 	public static async Task<string> Gesture(
 		McpAgentSession session,
-		[Description("Gesture type: 'swipe', 'tap', 'longpress', or 'long-press'")] string type,
-		[Description("Target element ID (optional)")] string? elementId = null,
-		[Description("Swipe direction: 'up', 'down', 'left', or 'right' (required for swipe)")] string? direction = null,
-		[Description("Swipe distance in pixels (optional, uses default if omitted)")] double? distance = null,
-		[Description("Gesture duration in milliseconds (optional)")] int? durationMs = null,
-		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
+		[Description("Gesture type: 'pinch', 'rotate', 'pan', 'swipe', 'doubletap', 'longpress', or 'tap'")] string type,
+		[Description("Target element ID from maui_tree. Required for tap; other gestures target the current page when omitted.")] string? elementId = null,
+		[Description("Direction for swipe/pan: 'up', 'down', 'left', or 'right'. Required for swipe.")] string? direction = null,
+		[Description("Travel distance in device-independent pixels for swipe/pan when using 'direction'. Defaults to 120.")] double? distance = null,
+		[Description("Gesture duration in milliseconds. Longer durations read as drags, shorter ones as flicks. Defaults to 200.")] int? durationMs = null,
+		[Description("Pinch factor: 2.0 zooms in 2x, 0.5 zooms out by half. Required for pinch; defaults to 1.5.")] double? scale = null,
+		[Description("Rotation in degrees, positive is clockwise. Used by 'rotate'; defaults to 90.")] double? rotation = null,
+		[Description("Explicit horizontal pan distance in device-independent pixels. Overrides direction/distance.")] double? deltaX = null,
+		[Description("Explicit vertical pan distance in device-independent pixels. Overrides direction/distance.")] double? deltaY = null,
+		[Description("Gesture focal point X, element-relative from 0 (left) to 1 (right). Defaults to 0.5 (centre).")] double? originX = null,
+		[Description("Gesture focal point Y, element-relative from 0 (top) to 1 (bottom). Defaults to 0.5 (centre).")] double? originY = null,
+		[Description("Number of interpolation steps between gesture start and end. More steps are smoother. Defaults to 10.")] int? steps = null,
+		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null,
+		[Description("Capture epoch from maui_tree or maui_hittest; stale epochs are rejected")] long? captureEpoch = null,
+		[Description("Native registry generation from maui_tree or maui_hittest")] long? registryGeneration = null)
 	{
-		var normalizedType = (type ?? string.Empty).Trim().ToLowerInvariant();
-		if (normalizedType == "long-press")
-			normalizedType = "longpress";
+		var normalizedType = (type ?? string.Empty).Trim().ToLowerInvariant().Replace("-", "").Replace("_", "");
+		if (normalizedType == "zoom") normalizedType = "pinch";
+		if (normalizedType == "drag") normalizedType = "pan";
 
-		var validTypes = new[] { "swipe", "tap", "longpress" };
-		if (Array.IndexOf(validTypes, normalizedType) < 0)
-			return $"Unsupported gesture type '{type}'. Supported types: swipe, tap, longpress, long-press.";
+		if (Array.IndexOf(ValidGestureTypes, normalizedType) < 0)
+			return $"Unsupported gesture type '{type}'. Supported types: {string.Join(", ", ValidGestureTypes)}.";
 
-		string? normalizedDirection = null;
-		if (normalizedType == "swipe")
-		{
-			normalizedDirection = direction?.Trim().ToLowerInvariant();
-			var validDirections = new[] { "up", "down", "left", "right" };
+		var normalizedDirection = direction?.Trim().ToLowerInvariant();
+		if (normalizedDirection is not null && Array.IndexOf(ValidGestureDirections, normalizedDirection) < 0)
+			return $"Unsupported direction '{direction}'. Supported directions: {string.Join(", ", ValidGestureDirections)}.";
 
-			if (string.IsNullOrEmpty(normalizedDirection))
-				return "Swipe gesture requires a 'direction' parameter ('up', 'down', 'left', 'right').";
+		if (normalizedType == "swipe" && string.IsNullOrEmpty(normalizedDirection))
+			return "Swipe gesture requires a 'direction' parameter ('up', 'down', 'left', 'right').";
 
-			if (Array.IndexOf(validDirections, normalizedDirection) < 0)
-				return $"Unsupported swipe direction '{direction}'. Supported directions: up, down, left, right.";
-		}
+		if (normalizedType == "tap" && string.IsNullOrWhiteSpace(elementId))
+			return "Tap gesture requires an 'elementId'. Use maui_tree or maui_query to resolve the target first.";
+
+		if (normalizedType == "pan" && string.IsNullOrEmpty(normalizedDirection) && deltaX is null && deltaY is null)
+			return "Pan gesture requires either a 'direction' or an explicit 'deltaX'/'deltaY' vector.";
+
+		if (normalizedType == "pinch" && scale is <= 0)
+			return "Pinch 'scale' must be greater than 0 — use 2.0 to zoom in or 0.5 to zoom out.";
 
 		var agent = await session.GetAgentClientAsync(agentPort);
-		var success = await agent.GestureAsync(normalizedType, elementId, normalizedDirection, distance, durationMs);
-		return success
-			? elementId is not null ? $"Performed {normalizedType} gesture on element '{elementId}'." : $"Performed {normalizedType} gesture."
-			: $"Failed to perform {normalizedType} gesture.";
+		var result = await agent.GestureDetailedAsync(
+			normalizedType, elementId, normalizedDirection, distance, durationMs,
+			scale, rotation, deltaX, deltaY, originX, originY, steps,
+			captureEpoch, registryGeneration);
+
+		var target = elementId is not null ? $" on element '{elementId}'" : " on the current page";
+
+		if (!result.Success)
+			return $"Failed to perform {normalizedType} gesture{target}. {result.Error}".TrimEnd();
+
+		// Naming the tier matters: a "recognizer" hit proves the app's own handler ran, while
+		// "native" means the platform control absorbed it — different things to assert against.
+		var how = result.HandledBy switch
+		{
+			"action" => result.Detail ?? "handled by the DevFlow action pipeline",
+			"recognizer" => $"handled by the app's MAUI gesture recognizer ({result.Detail})",
+			"native" => $"injected natively on {result.Platform} ({result.Detail})",
+			"scroll" => $"fell back to a scroll ({result.Detail})",
+			_ => result.Detail ?? result.HandledBy ?? "handled"
+		};
+		return $"Performed {normalizedType} gesture{target} — {how}.";
 	}
 
 	[McpServerTool(Name = "maui_scroll"), Description("Scroll a ScrollView, CollectionView, or ListView. Supports delta-based scrolling, scrolling to an item index, or scrolling an element into view.")]
@@ -113,12 +174,28 @@ public sealed class InteractionTools
 		[Description("Item index to scroll to (for CollectionView/ListView)")] int? itemIndex = null,
 		[Description("Group index for grouped CollectionView")] int? groupIndex = null,
 		[Description("Scroll position: MakeVisible (default), Start, Center, End")] string? scrollToPosition = null,
-		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
+		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null,
+		[Description("Capture epoch from maui_tree or maui_hittest; stale epochs are rejected")] long? captureEpoch = null,
+		[Description("Native registry generation from maui_tree or maui_hittest")] long? registryGeneration = null)
 	{
 		var agent = await session.GetAgentClientAsync(agentPort);
-		var success = await agent.ScrollAsync(elementId, x ?? 0, y ?? 0, animated ?? true, window, itemIndex, groupIndex, scrollToPosition);
-		return success
-			? elementId is not null ? $"Scrolled element '{elementId}' successfully." : "Scrolled successfully."
-			: $"Failed to scroll element '{elementId}'. Element may not be a ScrollView.";
+		var result = await agent.ScrollResultAsync(
+			elementId,
+			x ?? 0,
+			y ?? 0,
+			animated ?? true,
+			window,
+			itemIndex,
+			groupIndex,
+			scrollToPosition,
+			captureEpoch,
+			registryGeneration);
+		var successMessage = elementId is not null
+			? $"Scrolled element '{elementId}' successfully."
+			: "Scrolled successfully.";
+		return McpActionResult.RequireSuccess(
+			result,
+			successMessage,
+			$"Failed to scroll element '{elementId}'. Element may not be a ScrollView.");
 	}
 }

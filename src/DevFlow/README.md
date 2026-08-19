@@ -1,6 +1,7 @@
 # Microsoft.Maui.DevFlow
 
-A comprehensive testing, automation, and debugging toolkit for .NET MAUI applications.
+A comprehensive testing, automation, and debugging toolkit for .NET MAUI applications — and, since
+the agent was split away from MAUI, for plain .NET Android, iOS, Mac Catalyst and macOS apps too.
 
 > ⚠️ **Experimental** — APIs may change between releases. Not covered by the Microsoft Support Policy.
 
@@ -9,8 +10,11 @@ A comprehensive testing, automation, and debugging toolkit for .NET MAUI applica
 | Package | Description |
 |---------|-------------|
 | **Microsoft.Maui.DevFlow.Agent** | In-app agent for .NET MAUI apps. Exposes visual tree, element interactions, screenshots, and profiling via HTTP/JSON API. |
-| **Microsoft.Maui.DevFlow.Agent.Core** | Platform-agnostic core: HTTP server, visual tree walker, CSS selector engine, network capture, profiling. |
+| **Microsoft.Maui.DevFlow.Agent.Abstractions** | The protocol itself: HTTP server, routing, element DTOs, CSS selector engine, network capture, profiling, extensions. No MAUI dependency. |
+| **Microsoft.Maui.DevFlow.Agent.Core** | The MAUI UI backend: visual tree walker, `VisualElement` interactions, `BindableProperty` access, Essentials endpoints. |
 | **Microsoft.Maui.DevFlow.Agent.Gtk** | GTK/Linux agent for Maui.Gtk apps. |
+| **Microsoft.Maui.DevFlow.Agent.Native** | In-app agent for plain .NET apps with no MAUI reference — Android views, UIKit, and AppKit backends. |
+| **Microsoft.Maui.DevFlow.Agent.Native.Essentials** | Optional add-on that lights up the device, storage and sensor endpoints for native apps using MAUI Essentials. |
 | **Microsoft.Maui.DevFlow.Blazor** | Blazor WebView CDP bridge. Enables Chrome DevTools Protocol access for Blazor Hybrid content via Chobitsu. |
 | **Microsoft.Maui.DevFlow.Blazor.Gtk** | Blazor CDP bridge for WebKitGTK on Linux. |
 | **Microsoft.Maui.DevFlow.CLI** | DevFlow command implementation used by the unified `maui devflow` CLI surface for automation, debugging, and MCP server support. |
@@ -53,6 +57,73 @@ builder.AddMauiDevFlowAgent(options =>
     options.EnableLayoutDiagnostics = true;
 });
 ```
+
+### 2b. Or, in a plain .NET app (no MAUI)
+
+The same agent, CLI and MCP tools work against apps that never reference MAUI. Reference
+`Microsoft.Maui.DevFlow.Agent.Native` and start it explicitly — there is no host builder to hook,
+so nothing starts by itself.
+
+```xml
+<PackageReference Include="Microsoft.Maui.DevFlow.Agent.Native" />
+```
+
+```csharp
+// Android — MainActivity.OnCreate
+using Microsoft.Maui.DevFlow.Agent.Native;
+
+protected override void OnCreate(Bundle? savedInstanceState)
+{
+    base.OnCreate(savedInstanceState);
+    SetContentView(Resource.Layout.activity_main);
+#if DEBUG
+    this.StartDevFlowAgent();   // binds the activity the tree is walked from
+#endif
+}
+```
+
+```csharp
+// iOS / Mac Catalyst — AppDelegate.FinishedLaunching
+// macOS — AppDelegate.DidFinishLaunching
+#if DEBUG
+DevFlowAgent.Start();
+#endif
+```
+
+Everything that does not need a UI framework behaves identically: visual tree, CSS queries,
+hit-testing, tap/fill/clear/focus/key/gesture/scroll/batch, property get/set, screenshots, logs,
+network capture, the profiler, actions and extensions.
+
+Endpoints that have no meaning outside MAUI answer `501` with
+`{ "error": "not_supported", "capability": …, "reason": … }` rather than failing opaquely, and
+`/api/v1/agent/capabilities` reports them as `supported: false` up front. Today that is app theme
+(MAUI reads `Application.RequestedTheme`) and Shell navigation. Preferences, secure storage, device
+info, display, battery, connectivity, permissions, geolocation and sensors also start unsupported —
+add `Microsoft.Maui.DevFlow.Agent.Native.Essentials` and swap the bootstrap to light them up:
+
+```xml
+<PackageReference Include="Microsoft.Maui.DevFlow.Agent.Native.Essentials" />
+```
+
+```csharp
+using Microsoft.Maui.DevFlow.Agent.Native.Essentials;
+
+// iOS / Mac Catalyst / macOS
+EssentialsDevFlowAgent.Start();
+
+// Android
+Microsoft.Maui.ApplicationModel.Platform.Init(this, savedInstanceState);
+this.StartDevFlowAgentWithEssentials();
+```
+
+That add-on pulls in `Microsoft.Maui.Essentials`, which needs the MAUI workload installed but does
+**not** make the app a MAUI app — no `Microsoft.Maui.Controls`, no `MauiApp` host. On Android it
+also requires the usual Essentials wiring: `Platform.Init` as above, plus forwarding
+`OnRequestPermissionsResult` to `Platform.OnRequestPermissionsResult`.
+
+Clients can tell the two apart without guessing: `/api/v1/agent/status` reports
+`framework` (`maui` | `native`) alongside `uiFramework`
+(`maui-controls` | `android-views` | `uikit` | `appkit` | `gtk` | `wpf`).
 
 ### 3. Install the unified CLI tool
 
@@ -283,6 +354,29 @@ DEVFLOW_TEST_PLATFORM=windows dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Age
 ```
 
 For local reliability, prefer running one platform suite at a time from a given repo worktree. Android fixture selection can be pinned with `DEVFLOW_TEST_ANDROID_AVD` and `DEVFLOW_TEST_ANDROID_SERIAL` when you want the harness to use a known emulator instance.
+
+#### Running the suite against a plain .NET app
+
+`DEVFLOW_TEST_FRAMEWORK` selects which sample app the fixtures deploy: `maui` (default) drives
+`samples/DevFlow.Sample`, `native` drives the matching head under `samples/DevFlow.Sample.Native`.
+Both samples expose the same automation ids, so the bulk of the suite is shared.
+
+Tests that assert on MAUI-specific behaviour (Shell routing, `AppTheme`, Essentials-backed
+preferences/secure-storage/sensors/device info, WebView CDP) are tagged
+`[Trait("framework", "maui")]` and must be filtered out of a native run:
+
+```bash
+# Native iOS Simulator
+DEVFLOW_TEST_FRAMEWORK=native DEVFLOW_TEST_PLATFORM=ios \
+  dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/ --filter "framework!=maui"
+
+# Native Mac Catalyst
+DEVFLOW_TEST_FRAMEWORK=native DEVFLOW_TEST_PLATFORM=maccatalyst \
+  dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/ --filter "framework!=maui"
+```
+
+`native` is supported for `android`, `ios` and `maccatalyst`. There is no plain-.NET Windows head,
+and the AppKit head under `samples/DevFlow.Sample.Native/MacOS` does not yet have a driving fixture.
 
 There is also a manual GitHub Actions workflow at `.github/workflows/devflow-integration.yml` for running the same suite in CI.
 

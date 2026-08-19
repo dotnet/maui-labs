@@ -17,10 +17,19 @@ public sealed class ScreenshotTool
 		[Description("Element ID to capture a specific element")] string? elementId = null,
 		[Description("CSS selector to capture (first match, Blazor WebViews only)")] string? selector = null,
 		[Description("Resize screenshot to this max width in pixels (overrides auto-scaling)")] int? maxWidth = null,
-		[Description("Scale mode: 'native' keeps full HiDPI resolution, default auto-scales to 1x logical pixels")] string? scale = null)
+		[Description("Scale mode: 'native' keeps full HiDPI resolution, default auto-scales to 1x logical pixels")] string? scale = null,
+		[Description("Capture epoch from maui_tree to require a matching screenshot snapshot")] long? captureEpoch = null,
+		[Description("Native registry generation from maui_tree")] long? registryGeneration = null)
 	{
 		var agent = await session.GetAgentClientAsync(agentPort);
-		var result = await agent.ScreenshotResultAsync(window, elementId, selector, maxWidth, scale);
+		var result = await agent.ScreenshotResultAsync(
+			window,
+			elementId,
+			selector,
+			maxWidth,
+			scale,
+			captureEpoch,
+			registryGeneration);
 		if (!result.Success || result.Data == null || result.Data.Length == 0)
 		{
 			var message = result.Error

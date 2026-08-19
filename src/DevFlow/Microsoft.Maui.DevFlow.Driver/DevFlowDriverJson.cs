@@ -21,6 +21,7 @@ namespace Microsoft.Maui.DevFlow.Driver;
 [JsonSerializable(typeof(string[]))]
 [JsonSerializable(typeof(AgentClient.ProfilerSessionEnvelope))]
 [JsonSerializable(typeof(AgentClient.ActionResponse))]
+[JsonSerializable(typeof(GestureResult))]
 [JsonSerializable(typeof(InvokeResult))]
 [JsonSerializable(typeof(AgentCapabilitiesResponse))]
 [JsonSerializable(typeof(ExtensionDescriptor))]

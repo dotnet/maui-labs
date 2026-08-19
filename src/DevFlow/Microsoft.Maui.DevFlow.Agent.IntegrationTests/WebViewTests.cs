@@ -8,6 +8,8 @@ namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests;
 
 [Collection("AgentIntegration")]
 [Trait("Category", "WebView")]
+// Requires the MAUI sample: BlazorWebView is a MAUI control. Native runs filter this out.
+[Trait(TestFramework.Trait, TestFramework.Maui)]
 public class WebViewTests : IntegrationTestBase
 {
     public WebViewTests(AppFixture app, ITestOutputHelper output)

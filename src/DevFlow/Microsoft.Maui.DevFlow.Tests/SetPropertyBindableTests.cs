@@ -70,11 +70,11 @@ public class SetPropertyBindableTests
 
     private sealed class SetPropertyTestHarness : IDisposable
     {
-        private readonly DevFlowAgentService _service;
+        private readonly MauiDevFlowAgentService _service;
 
         public AgentClient Client { get; }
 
-        private SetPropertyTestHarness(DevFlowAgentService service, AgentClient client)
+        private SetPropertyTestHarness(MauiDevFlowAgentService service, AgentClient client)
         {
             _service = service;
             Client = client;
@@ -84,7 +84,7 @@ public class SetPropertyBindableTests
         {
             var app = new TestApplication(views);
 
-            var service = new DevFlowAgentService(new AgentOptions { Port = GetFreePort() });
+            var service = new MauiDevFlowAgentService(new AgentOptions { Port = GetFreePort() });
             var client = new AgentClient("localhost", service.Port);
 
             service.StartServerOnly(new ImmediateDispatcher());
