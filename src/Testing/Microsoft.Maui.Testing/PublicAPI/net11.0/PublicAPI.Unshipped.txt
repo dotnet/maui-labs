@@ -1,0 +1,20 @@
+#nullable enable
+Microsoft.Maui.Testing.MauiTestApp
+Microsoft.Maui.Testing.MauiTestApp.Dispose() -> void
+Microsoft.Maui.Testing.MauiTestApp.MauiApp.get -> Microsoft.Maui.Hosting.MauiApp!
+Microsoft.Maui.Testing.MauiTestApp.Services.get -> System.IServiceProvider!
+Microsoft.Maui.Testing.MauiTestAppBuilder
+Microsoft.Maui.Testing.MauiTestAppBuilder.Build() -> Microsoft.Maui.Testing.MauiTestApp!
+Microsoft.Maui.Testing.MauiTestAppBuilder.ConfigureTestApplication(Microsoft.Maui.Testing.MauiTestApplicationRunner! runner) -> Microsoft.Maui.Testing.MauiTestAppBuilder!
+Microsoft.Maui.Testing.MauiTestAppBuilder.ConfigureTestApplication(System.Action<Microsoft.Testing.Platform.Builder.ITestApplicationBuilder!>! configure) -> Microsoft.Maui.Testing.MauiTestAppBuilder!
+Microsoft.Maui.Testing.MauiTestAppBuilder.Services.get -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Microsoft.Maui.Testing.MauiTestApplicationRunner
+Microsoft.Maui.Testing.MauiTestAppOptions
+Microsoft.Maui.Testing.MauiTestAppOptions.GenerateTrxReport.get -> bool
+Microsoft.Maui.Testing.MauiTestAppOptions.GenerateTrxReport.init -> void
+Microsoft.Maui.Testing.MauiTestAppOptions.MauiTestAppOptions() -> void
+Microsoft.Maui.Testing.MauiTestAppOptions.ResultsDirectoryName.get -> string!
+Microsoft.Maui.Testing.MauiTestAppOptions.ResultsDirectoryName.init -> void
+static Microsoft.Maui.Testing.MauiTestApp.CreateBuilder() -> Microsoft.Maui.Testing.MauiTestAppBuilder!
+static Microsoft.Maui.Testing.MauiTestApp.CreateBuilder(Microsoft.Maui.Testing.MauiTestAppOptions! options) -> Microsoft.Maui.Testing.MauiTestAppBuilder!
+virtual Microsoft.Maui.Testing.MauiTestApplicationRunner.Invoke(string![]! args, System.Action<Microsoft.Testing.Platform.Builder.ITestApplicationBuilder!, string![]!>! configure) -> System.Threading.Tasks.Task<int>!

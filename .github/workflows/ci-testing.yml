@@ -1,0 +1,83 @@
+name: CI - MAUI Testing
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/Testing/**'
+      - 'eng/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    branches: [main]
+    paths:
+      - 'src/Testing/**'
+      - 'eng/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+
+jobs:
+  build:
+    env:
+      Configuration: Release
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: src/Testing
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET 11 Preview
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Install MAUI workload
+        run: dotnet workload install maui
+
+      - name: Build runtime
+        run: dotnet build Microsoft.Maui.Testing/Microsoft.Maui.Testing.csproj
+
+      - name: Run tests
+        run: dotnet test Microsoft.Maui.Testing.Tests/Microsoft.Maui.Testing.Tests.csproj
+
+      - name: Pack
+        shell: pwsh
+        run: |
+          dotnet pack Microsoft.Maui.Testing/Microsoft.Maui.Testing.csproj -o artifacts/packages
+          dotnet pack templates/Microsoft.Maui.Testing.Templates.csproj -o artifacts/packages
+
+      - name: Validate packed template
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $validationRoot = Join-Path $env:RUNNER_TEMP 'maui-testing-template'
+          $hive = Join-Path $validationRoot 'hive'
+          $project = Join-Path $validationRoot 'MauiTestingSmoke'
+          $templatePackage = Resolve-Path 'artifacts/packages/Microsoft.Maui.Testing.Templates.*.nupkg'
+          $localPackages = (Resolve-Path 'artifacts/packages').Path
+
+          dotnet new install $templatePackage --debug:custom-hive $hive
+          dotnet new mauitest -n MauiTestingSmoke -o $project --debug:custom-hive $hive --no-restore
+          dotnet restore (Join-Path $project 'MauiTestingSmoke.csproj') `
+            --configfile ../../NuGet.config `
+            "-p:RestoreAdditionalProjectSources=$localPackages"
+          dotnet build (Join-Path $project 'MauiTestingSmoke.csproj') --no-restore
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: packages-testing-${{ matrix.os }}
+          path: src/Testing/artifacts/packages/*.nupkg
