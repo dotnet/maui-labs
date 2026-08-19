@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\GenerativeUI\Microsoft.Maui.AI.GenerativeUI\Microsoft.Maui.AI.GenerativeUI.csproj" />
+    <ProjectReference Include="..\..\..\samples\GenerativeUI.Sample.Garden.Components\GenerativeUI.Sample.Garden.Components.csproj" />
     <ProjectReference Include="..\..\..\samples\GenerativeUI.Sample.Garden.Shared\GenerativeUI.Sample.Garden.Shared.csproj" />
   </ItemGroup>
 
