@@ -13,6 +13,6 @@ public class ThinkingContentTemplate : ContentTemplate
         if (ViewType is not null)
             return base.CreateTemplate();
 
-        return new DataTemplate(() => PrepareDataTemplateView(new ThinkingView()));
+        return CreateMessageTemplate(() => new ThinkingView());
     }
 }

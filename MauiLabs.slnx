@@ -11,6 +11,7 @@
     <Project Path="samples/AIExtensions.Sample.Garden/AIExtensions.Sample.Garden.csproj" />
     <Project Path="samples/AIExtensions.Sample.Hello/AIExtensions.Sample.Hello.csproj" />
     <Project Path="samples/AIExtensions.Sample.DIParameters/AIExtensions.Sample.DIParameters.csproj" />
+    <Project Path="samples/ChatControls.Sample/ChatControls.Sample.csproj" />
     <Project Path="samples/DevFlow.Sample.Linux/DevFlow.Sample.Linux.csproj" />
     <Project Path="samples/DevFlow.Sample.MacOS/DevFlow.Sample.MacOS.csproj" />
     <Project Path="samples/DevFlow.Sample/DevFlow.Sample.csproj" />

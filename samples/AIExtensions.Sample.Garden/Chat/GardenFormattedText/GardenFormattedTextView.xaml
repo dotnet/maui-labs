@@ -10,26 +10,18 @@
         <local:FormattedLineToFormattedStringConverter x:Key="LineToFormattedString" />
     </chat:ContentContextView.Resources>
 
-    <!-- Assistant-styled speech bubble so formatted replies look like normal messages. Each parsed
-         line is one Label whose FormattedText is built by the converter (spans carry the bold/italic/
-         code/heading/bullet styling). -->
-    <Grid Padding="0,4" BindingContext="{x:Reference Root}" x:DataType="local:GardenFormattedTextView">
-        <Border Padding="12,10"
-                HorizontalOptions="Start"
-                StrokeThickness="0"
-                StrokeShape="RoundRectangle 16,16,16,4"
-                MaximumWidthRequest="{DynamicResource MauiAIChat.Bubble.MaxWidth}"
-                BackgroundColor="{DynamicResource MauiAIChat.Assistant.Background}">
-            <VerticalStackLayout Spacing="4" BindableLayout.ItemsSource="{Binding Lines}">
-                <BindableLayout.ItemTemplate>
-                    <DataTemplate x:DataType="local:FormattedLine">
-                        <Label FormattedText="{Binding ., Converter={StaticResource LineToFormattedString}}"
-                               LineBreakMode="WordWrap"
-                               TextColor="{DynamicResource MauiAIChat.Assistant.TextColor}" />
-                    </DataTemplate>
-                </BindableLayout.ItemTemplate>
-            </VerticalStackLayout>
-        </Border>
-    </Grid>
+    <!-- The neutral message chrome supplies the bubble, avatar, alignment, and metadata. -->
+    <VerticalStackLayout Spacing="4"
+                         BindingContext="{x:Reference Root}"
+                         x:DataType="local:GardenFormattedTextView"
+                         BindableLayout.ItemsSource="{Binding Lines}">
+        <BindableLayout.ItemTemplate>
+            <DataTemplate x:DataType="local:FormattedLine">
+                <Label FormattedText="{Binding ., Converter={StaticResource LineToFormattedString}}"
+                       LineBreakMode="WordWrap"
+                       Style="{DynamicResource MauiChat.Text.Incoming}" />
+            </DataTemplate>
+        </BindableLayout.ItemTemplate>
+    </VerticalStackLayout>
 
 </chat:ContentContextView>

@@ -203,7 +203,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions and development se
 
 For the formal DevFlow HTTP and WebSocket contract, see [`docs/DevFlow/spec`](docs/DevFlow/spec/README.md).
 
-For AI Extensions usage and samples, see [`src/AIExtensions/README.md`](src/AIExtensions/README.md) and [`samples/AIExtensions.Sample.Garden`](samples/AIExtensions.Sample.Garden/README.md).
+For AI Extensions usage and samples, see [`src/AIExtensions/README.md`](src/AIExtensions/README.md),
+the provider-neutral [`ChatControls.Sample`](samples/ChatControls.Sample/README.md), and the
+Azure OpenAI [`AIExtensions.Sample.Garden`](samples/AIExtensions.Sample.Garden/README.md).
 
 ## Support
 

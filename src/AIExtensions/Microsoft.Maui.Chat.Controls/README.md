@@ -97,7 +97,7 @@ Only the message list, without header, composer, or welcome panel:
 <chat:ChatMessagesView Conversation="{Binding Conversation}" />
 ```
 
-The [Garden crew page](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.Garden)
+The [Chat Controls sample](https://github.com/dotnet/maui-labs/tree/main/samples/ChatControls.Sample)
 is a complete three-person example with text, media, delivery states, typing, attachments, and a
 custom task-card content type. Its page and view model reference no AI APIs.
 
@@ -108,25 +108,32 @@ Add a content type, a view for it, and a template that matches it:
 ```csharp
 public sealed class PollContent : MessageContent
 {
+    public PollContent() => Presentation = ChatContentPresentation.Bare;
+
     public required string Question { get; init; }
 }
 
-public sealed class PollView : ChatBubbleView
+public sealed class PollView : ChatContentView
 {
     private readonly Label _label = new();
 
-    public PollView() => BubbleContent = _label;
+    public PollView() => Content = _label;
 
     protected override void RefreshContent()
     {
-        base.RefreshContent();
-        ApplyBubbleTextStyle(_label);
         _label.Text = (Item?.Content as PollContent)?.Question;
+        SemanticProperties.SetDescription(this, _label.Text ?? string.Empty);
     }
-
-    protected override string GetContentDescription() => _label.Text ?? string.Empty;
 }
 ```
+
+`GenericChatContentTemplate` wraps custom body views in the standard message chrome by default, so
+the poll keeps the participant avatar, name, direction, grouping, timestamp, and delivery status.
+`MessageContent.Presentation` decides whether the body is inside the themed `Bubble` or rendered
+`Bare` in that chrome (for cards, stickers, reactions, and similar content). A
+`GenericChatContentTemplate.Presentation` value can override the content for one surface. Set
+`UseMessageChrome="False"` only when a custom view intentionally owns the entire row. A custom view
+that derives from `ChatBubbleView` already owns that chrome and is never wrapped twice.
 
 ```xml
 <chat:ChatView Conversation="{Binding Conversation}">
@@ -138,6 +145,10 @@ public sealed class PollView : ChatBubbleView
 Content with no matching template renders as a hidden, zero-height row, so an unknown content type can
 never break a screen. Set `UseDefaultContentTemplates="False"` to render *only* what you templated.
 
+`StructuredTextMessageContent<TDocument>` carries a readable text fallback plus a provider-owned
+structured document. A specialized package can render `TDocument`; an app that does not register that
+renderer still gets the text through the built-in `ChatTextContentView`.
+
 ## Customising the look
 
 Three levels, from cheapest to deepest:
@@ -145,14 +156,18 @@ Three levels, from cheapest to deepest:
 1. **`Appearance`** — one `ChatAppearance` object drives avatars, participant names, timestamps, status,
    bubble radius, stroke, maximum width, and spacing. Its colour properties are `null` by default, which
    means "use the theme"; set one to override just that colour.
-2. **Resource keys** — redefine any `MauiChat.*` style (see `ChatThemeKeys`) in your application
-   resources. Every built-in style carries its own light and dark values.
-3. **Control templates** — replace `MauiChat.ChatViewTemplate` or `MauiChat.ChatMessagesViewTemplate`
+2. **Styles** — redefine any `MauiChat.*` style (see `ChatThemeKeys`) in application resources, or set
+   `InputAreaStyle`, `InputEntryStyle`, `AttachButtonStyle`, and `SendButtonStyle` on one `ChatView`.
+   The shared control template binds those style properties directly.
+3. **Message-list template** — set `MessageListTemplate` to swap the `ChatMessagesView` subclass while
+   keeping the complete shell and its styles.
+4. **Control templates** — replace `MauiChat.ChatViewTemplate` or `MauiChat.ChatMessagesViewTemplate`
    wholesale. Keep the `PART_*` names for the sections you want to keep working.
 
 `ChatView` parts: `PART_Header`, `PART_MessageList`, `PART_WelcomePanel`, `PART_WelcomeIcon`,
 `PART_WelcomeMessage`, `PART_EmptyView`, `PART_BusyIndicator`, `PART_Suggestions`, `PART_Footer`,
-`PART_InputArea`, `PART_Attachments`, `PART_AttachButton`, `PART_InputEntry`, `PART_SendButton`.
+`PART_TypingIndicator`, `PART_InputArea`, `PART_Attachments`, `PART_AttachButton`, `PART_InputEntry`,
+`PART_SendButton`.
 `ChatMessagesView` part: `PART_Messages`.
 
 ## Threading contract

@@ -36,6 +36,8 @@ public class ChatThemeTests
     [InlineData(ChatThemeKeys.OutgoingBubbleStyle)]
     [InlineData(ChatThemeKeys.IncomingTextStyle)]
     [InlineData(ChatThemeKeys.OutgoingTextStyle)]
+    [InlineData(ChatThemeKeys.IncomingSpanStyle)]
+    [InlineData(ChatThemeKeys.OutgoingSpanStyle)]
     [InlineData(ChatThemeKeys.ParticipantNameStyle)]
     [InlineData(ChatThemeKeys.MetadataStyle)]
     [InlineData(ChatThemeKeys.AvatarStyle)]
@@ -50,6 +52,7 @@ public class ChatThemeTests
     [InlineData(ChatThemeKeys.SendButtonStyle)]
     [InlineData(ChatThemeKeys.AttachButtonStyle)]
     [InlineData(ChatThemeKeys.ErrorTextStyle)]
+    [InlineData(ChatThemeKeys.TypingIndicatorStyle)]
     [InlineData(ChatThemeKeys.WelcomeIconStyle)]
     [InlineData(ChatThemeKeys.WelcomeMessageStyle)]
     public void Theme_DefinesEveryDocumentedStyle(string key)
@@ -134,6 +137,10 @@ public class ChatThemeTests
     }
 
     [Fact]
+    public void ChatView_DefaultMessageListFactoryCreatesNeutralList() =>
+        Assert.IsType<ChatMessagesView>(new FactoryChatView().CreateMessageList());
+
+    [Fact]
     public async Task ChatView_WithACodeTemplate_StillSends()
     {
         var conversation = TestHelpers.ChatFactory.Conversation();
@@ -147,5 +154,57 @@ public class ChatThemeTests
         await view.SendAsync();
 
         Assert.Single(conversation.Messages);
+    }
+
+    [Fact]
+    public void HeaderTemplate_InheritsTheChatBindingContext()
+    {
+        var context = new object();
+        var view = CreateTemplatedView(
+            context,
+            new DataTemplate(() => new Label()));
+
+        var label = Assert.IsType<Label>(view.HeaderPart?.Content);
+        Assert.Same(context, label.BindingContext);
+    }
+
+    [Fact]
+    public void HeaderTemplate_PreservesAnExplicitBindingContext()
+    {
+        var inheritedContext = new object();
+        var explicitContext = new object();
+        var view = CreateTemplatedView(
+            inheritedContext,
+            new DataTemplate(() => new Label
+            {
+                BindingContext = explicitContext,
+            }));
+
+        var label = Assert.IsType<Label>(view.HeaderPart?.Content);
+        Assert.Same(explicitContext, label.BindingContext);
+    }
+
+    private static PartChatView CreateTemplatedView(
+        object bindingContext,
+        DataTemplate headerTemplate)
+    {
+        var theme = new ChatControlsTheme();
+        return new PartChatView
+        {
+            BindingContext = bindingContext,
+            HeaderTemplate = headerTemplate,
+            ControlTemplate = Assert.IsType<ControlTemplate>(
+                theme[ChatThemeKeys.ChatViewTemplate]),
+        };
+    }
+
+    private sealed class FactoryChatView : ChatView
+    {
+        public ChatMessagesView CreateMessageList() => CreateMessageListView();
+    }
+
+    private sealed class PartChatView : ChatView
+    {
+        public ContentView? HeaderPart => FindPart<ContentView>(HeaderPartName);
     }
 }

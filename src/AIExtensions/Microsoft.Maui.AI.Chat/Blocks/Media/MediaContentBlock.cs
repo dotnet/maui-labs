@@ -9,6 +9,7 @@ namespace Microsoft.Maui.AI.Chat;
 /// <remarks>
 /// Emitted by <see cref="MediaContentHandler"/> from M.E.AI <see cref="DataContent"/>, including images
 /// produced by an image-generation tool (extracted from <see cref="ImageGenerationToolResultContent"/>).
+/// Items are append-only, and a published <see cref="DataContent"/> must not be mutated after it is added.
 /// </remarks>
 public class MediaContentBlock : ContentBlock
 {

@@ -12,7 +12,6 @@ public class UIActionContentTemplate : ContentTemplate
         if (ViewType is not null)
             return base.CreateTemplate();
 
-        return new DataTemplate(
-            () => PrepareDataTemplateView(new UIActionView()));
+        return CreateMessageTemplate(() => new UIActionView());
     }
 }

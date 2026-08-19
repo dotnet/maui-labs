@@ -59,18 +59,6 @@ public abstract class ContentContextView : ChatContentView, IContentContextAware
         RefreshFromContentContext();
 
     /// <inheritdoc />
-    protected sealed override void OnItemPropertyUpdated(string? propertyName)
-    {
-        // ContentContext relays its block-derived properties for XAML bindings. The underlying
-        // AgentBlockContent raises ContentChanged in the same call, which is the one refresh this
-        // imperative compatibility view needs.
-        if (string.IsNullOrEmpty(propertyName))
-            return;
-
-        base.OnItemPropertyUpdated(propertyName);
-    }
-
-    /// <inheritdoc />
     protected override void OnContentUpdated() =>
         RefreshFromContentContext();
 

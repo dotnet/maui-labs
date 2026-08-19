@@ -12,7 +12,6 @@ public class ReasoningContentTemplate : ContentTemplate
         if (ViewType is not null)
             return base.CreateTemplate();
 
-        return new DataTemplate(
-            () => PrepareDataTemplateView(new ReasoningView()));
+        return CreateMessageTemplate(() => new ReasoningView());
     }
 }

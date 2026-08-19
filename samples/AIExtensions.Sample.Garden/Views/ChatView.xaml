@@ -5,6 +5,7 @@
              xmlns:vm="clr-namespace:AIExtensions.Sample.Garden.ViewModels"
              xmlns:gchat="clr-namespace:AIExtensions.Sample.Garden.Chat"
              xmlns:chat="clr-namespace:Microsoft.Maui.AI.Chat.Controls;assembly=Microsoft.Maui.AI.Chat.Controls"
+             xmlns:basechat="clr-namespace:Microsoft.Maui.Chat.Controls;assembly=Microsoft.Maui.Chat.Controls"
              x:Class="AIExtensions.Sample.Garden.Views.ChatView"
              x:DataType="vm:ChatViewModel"
              local:ViewModelBinder.Type="{x:Type vm:ChatViewModel}">
@@ -22,12 +23,14 @@
                           SuggestionPrompts="{Binding SuggestionPrompts}"
                           Placeholder="Ask about products..."
                           AllowAttachments="True"
-                          MaxBubbleWidth="560"
                           HorizontalOptions="Fill">
+        <chat:CopilotChatView.Appearance>
+            <basechat:ChatAppearance MaxBubbleWidth="560" />
+        </chat:CopilotChatView.Appearance>
 
         <chat:CopilotChatView.Resources>
             <!-- Preview set — a single catch-all template that renders every block through the raw inspector. -->
-            <x:Array x:Key="PreviewTemplates" Type="{x:Type chat:ContentTemplate}">
+            <x:Array x:Key="PreviewTemplates" Type="{x:Type basechat:ChatContentTemplate}">
                 <gchat:BlockPreviewTemplate />
             </x:Array>
 
@@ -46,14 +49,7 @@
              card reuses the built-in FunctionInvocationTemplate with a custom ViewType. -->
         <chat:CopilotChatView.ContentTemplates>
             <chat:ThinkingContentTemplate />
-            <chat:TextContentTemplate Role="User" />
             <gchat:GardenFormattedTextTemplate />
-            <!-- Assistant text fallback: in built-in-handler mode there is no GardenFormattedTextHandler,
-                 so assistant replies are plain TextContentBlocks. Render them as a normal bubble. Declared
-                 after GardenFormattedTextTemplate so the custom formatted block (a TextContentBlock subclass)
-                 still wins at equal priority via declaration order. -->
-            <chat:TextContentTemplate />
-            <chat:MediaContentTemplate />
             <gchat:ProductResultsTemplate />
             <gchat:OrderSummaryTemplate />
             <chat:FunctionInvocationTemplate ViewType="{x:Type gchat:GardenToolView}" />

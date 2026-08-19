@@ -1,6 +1,6 @@
 using Microsoft.Maui.Chat.Controls;
 
-namespace AIExtensions.Sample.Garden;
+namespace ChatControls.Sample;
 
 public partial class GardenTaskView : ChatContentView
 {
@@ -21,6 +21,9 @@ public partial class GardenTaskView : ChatContentView
         AssigneeLabel.Text = task is null
             ? string.Empty
             : $"Assigned to {task.Assignee}";
+        PriorityLabel.Text = task?.Priority == GardenTaskPriority.High
+            ? "HIGH"
+            : string.Empty;
         DueLabel.Text = task is null
             ? string.Empty
             : $"Due {task.DueText}";

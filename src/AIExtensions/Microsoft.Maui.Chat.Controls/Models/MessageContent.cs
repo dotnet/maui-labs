@@ -22,6 +22,16 @@ namespace Microsoft.Maui.Chat.Controls;
 /// </remarks>
 public abstract class MessageContent : BindableObject
 {
+    /// <summary>Backing property for <see cref="Presentation"/>.</summary>
+    public static readonly BindableProperty PresentationProperty =
+        BindableProperty.Create(
+            nameof(Presentation),
+            typeof(ChatContentPresentation),
+            typeof(MessageContent),
+            ChatContentPresentation.Bubble,
+            propertyChanged: static (bindable, _, _) =>
+                ((MessageContent)bindable).RaiseContentChanged());
+
     /// <summary>Creates a content instance.</summary>
     /// <param name="id">A stable identifier. When <see langword="null"/> or whitespace, a new unique identifier is generated.</param>
     protected MessageContent(string? id = null) =>
@@ -29,6 +39,16 @@ public abstract class MessageContent : BindableObject
 
     /// <summary>Gets the stable identifier of this content. Never changes.</summary>
     public string Id { get; }
+
+    /// <summary>
+    /// Gets or sets whether this content uses the standard bubble or renders bare inside the standard
+    /// message chrome. Defaults to <see cref="ChatContentPresentation.Bubble"/>.
+    /// </summary>
+    public ChatContentPresentation Presentation
+    {
+        get => (ChatContentPresentation)GetValue(PresentationProperty);
+        set => SetValue(PresentationProperty, value);
+    }
 
     /// <summary>
     /// Raised after this content changed in place, for example when streamed text was appended.

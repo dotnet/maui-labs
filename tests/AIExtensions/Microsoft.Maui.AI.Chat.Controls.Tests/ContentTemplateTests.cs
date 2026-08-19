@@ -1,6 +1,7 @@
 using Microsoft.Maui.AI.Chat;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.AI.Chat.Controls;
+using Microsoft.Maui.Chat.Controls;
 
 namespace Microsoft.Maui.AI.Chat.Controls.Tests;
 
@@ -50,6 +51,9 @@ public class ContentTemplateTests
     {
         var block = new MediaContentBlock();
         block.Role = ChatRole.Assistant;
+        block.AddContent(new DataContent(
+            new byte[] { 1, 2, 3 },
+            "image/png"));
         var ctx = CreateAgentContext();
         return new ContentContext(ctx, block);
     }
@@ -152,14 +156,14 @@ public class ContentTemplateTests
     // ── DefaultContentTemplate ──
 
     [Fact]
-    public void DefaultContentTemplate_MatchesEverything()
+    public void DefaultContentTemplate_MatchesOnlyNonCanonicalContent()
     {
         var template = new DefaultContentTemplate();
 
-        Assert.True(template.When(MakeTextContext("User")));
+        Assert.False(template.When(MakeTextContext("User")));
         Assert.True(template.When(MakeFunctionCallContext()));
         Assert.True(template.When(MakeFunctionResultContext()));
-        Assert.True(template.When(MakeMediaContext()));
+        Assert.False(template.When(MakeMediaContext()));
     }
 
     [Fact]
@@ -173,22 +177,28 @@ public class ContentTemplateTests
         Assert.True(defaultTemplate.GetPriority(context) < textTemplate.GetPriority(context));
     }
 
-    // ── New Templates ──
-
     [Fact]
-    public void MediaContentTemplate_MatchesMediaContentBlock()
+    public void CustomAiBody_UsesNeutralMessageChromeByDefault()
     {
-        var template = new MediaContentTemplate();
-        var context = MakeMediaContext();
-        Assert.True(template.When(context));
+        var template = new TextContentTemplate
+        {
+            ViewType = typeof(Label),
+        };
+
+        Assert.IsAssignableFrom<ChatBubbleView>(
+            template.GetTemplate().CreateContent());
     }
 
     [Fact]
-    public void MediaContentTemplate_DoesNotMatchTextContent()
+    public void CustomAiBody_CanOwnTheEntireRow()
     {
-        var template = new MediaContentTemplate();
-        var context = MakeTextContext("User");
-        Assert.False(template.When(context));
+        var template = new TextContentTemplate
+        {
+            ViewType = typeof(Label),
+            UseMessageChrome = false,
+        };
+
+        Assert.IsType<Label>(template.GetTemplate().CreateContent());
     }
 
     // ── ContentContext ──

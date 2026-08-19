@@ -72,6 +72,58 @@ public class ChatContentTemplateTests
         view.BindingContext = item;
 
         Assert.Same(item, view.Item);
+        Assert.True(view.UsesStandardBubble);
+    }
+
+    [Fact]
+    public void BuiltInView_TracksContentPresentationChanges()
+    {
+        var content = new TextMessageContent("hello");
+        var item = ChatFactory.Item(ChatFactory.Remote(), content);
+        var view = Assert.IsType<ChatTextContentView>(
+            new ChatTextContentTemplate().GetTemplate().CreateContent());
+        view.BindingContext = item;
+
+        content.Presentation = ChatContentPresentation.Bare;
+
+        Assert.False(view.UsesStandardBubble);
+    }
+
+    [Fact]
+    public void Generic_CustomBodyHonorsContentPresentation()
+    {
+        var content = new CustomContent
+        {
+            Presentation = ChatContentPresentation.Bare,
+        };
+        var template = new GenericChatContentTemplate
+        {
+            ViewType = typeof(BareCustomView),
+        };
+        var item = ChatFactory.Item(ChatFactory.Remote(), content);
+
+        var view = Assert.IsAssignableFrom<ChatBubbleView>(
+            template.GetTemplate().CreateContent());
+        view.BindingContext = item;
+
+        Assert.False(view.UsesStandardBubble);
+    }
+
+    [Fact]
+    public void Generic_TemplateCanOverrideContentPresentation()
+    {
+        var template = new GenericChatContentTemplate
+        {
+            ViewType = typeof(BareCustomView),
+            Presentation = ChatContentPresentation.Bare,
+        };
+        var item = ChatFactory.Item(ChatFactory.Remote(), new CustomContent());
+
+        var view = Assert.IsAssignableFrom<ChatBubbleView>(
+            template.GetTemplate().CreateContent());
+        view.BindingContext = item;
+
+        Assert.False(view.UsesStandardBubble);
     }
 
     [Fact]
@@ -170,6 +222,65 @@ public class ChatContentTemplateTests
         };
 
         Assert.True(narrow.GetPriority(item) > broad.GetPriority(item));
+    }
+
+    [Fact]
+    public void Generic_CustomBodyUsesStandardMessageChromeByDefault()
+    {
+        var template = new GenericChatContentTemplate
+        {
+            ContentType = typeof(CustomContent),
+            ViewType = typeof(BareCustomView),
+        };
+        var item = ChatFactory.Item(ChatFactory.Remote(), new CustomContent());
+
+        var view = Assert.IsAssignableFrom<ChatBubbleView>(
+            template.GetTemplate().CreateContent());
+        view.BindingContext = item;
+
+        Assert.Same(item, view.Item);
+    }
+
+    [Fact]
+    public void Generic_CustomBodyCanOptOutOfStandardMessageChrome()
+    {
+        var template = new GenericChatContentTemplate
+        {
+            ViewType = typeof(BareCustomView),
+            UseMessageChrome = false,
+        };
+
+        Assert.IsType<BareCustomView>(template.GetTemplate().CreateContent());
+    }
+
+    [Fact]
+    public void Generic_BubbleViewIsNotWrappedTwice()
+    {
+        var template = new GenericChatContentTemplate
+        {
+            ViewType = typeof(ChatTextContentView),
+        };
+
+        Assert.IsType<ChatTextContentView>(template.GetTemplate().CreateContent());
+    }
+
+    [Fact]
+    public void Generic_PresentationOverrideAppliesToExistingBubbleView()
+    {
+        var template = new GenericChatContentTemplate
+        {
+            ViewType = typeof(ChatTextContentView),
+            Presentation = ChatContentPresentation.Bare,
+        };
+        var item = ChatFactory.Item(
+            ChatFactory.Remote(),
+            new TextMessageContent("hello"));
+
+        var view = Assert.IsType<ChatTextContentView>(
+            template.GetTemplate().CreateContent());
+        view.BindingContext = item;
+
+        Assert.False(view.UsesStandardBubble);
     }
 
     [Fact]
@@ -315,6 +426,17 @@ public class ChatContentTemplateTests
         public NeedsDependencyView(Dependency dependency) => Dependency = dependency;
 
         public Dependency Dependency { get; }
+
+        protected override void RefreshContent()
+        {
+        }
+    }
+
+    private sealed class BareCustomView : ChatContentView
+    {
+        public BareCustomView()
+        {
+        }
 
         protected override void RefreshContent()
         {

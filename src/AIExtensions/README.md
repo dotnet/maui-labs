@@ -29,7 +29,8 @@ thread.
 |--------|-------------|
 | [`AIExtensions.Sample.Hello`](../../samples/AIExtensions.Sample.Hello/) | Minimal end-to-end usage |
 | [`AIExtensions.Sample.DIParameters`](../../samples/AIExtensions.Sample.DIParameters/) | DI parameter binding with `[FromServices]` |
-| [`AIExtensions.Sample.Garden`](../../samples/AIExtensions.Sample.Garden/) | Full MAUI chat app: Azure OpenAI, custom product/order blocks, generated `[ToolBlock]`, approvals, neutral team chat, UI state, attachments, image generation, raw-block preview, and template switching |
+| [`ChatControls.Sample`](../../samples/ChatControls.Sample/) | Provider-neutral group chat: participants, delivery states, typing, media, attachments, custom XAML content, and theme overrides |
+| [`AIExtensions.Sample.Garden`](../../samples/AIExtensions.Sample.Garden/) | Full MAUI AI chat app: Azure OpenAI, custom product/order blocks, generated `[ToolBlock]`, approvals, UI state, attachments, image generation, raw-block preview, and template switching |
 
 ## CI
 

@@ -75,7 +75,11 @@ participate in a shared tool context while still writing through to singleton st
 | Transient tool host | `ViewModels/Catalog/CatalogViewModel.cs` → `recommend_bundle` |
 | Shell modal navigation tools | `ViewModels/MainViewModel.cs` + `AppShell.xaml.cs` |
 | Responsive welcome cards and centered chat layout | `Views/ChatView.xaml` + `Pages/MainPage.xaml` |
-| Provider-neutral group chat and custom content | `Pages/TeamChatPage.xaml` + `TeamChat/` |
+| Custom/default block handlers and raw block preview | `Views/ChatView.xaml` + `ViewModels/ChatViewModel.cs` |
+
+The provider-neutral group-chat showcase now lives in
+[`samples/ChatControls.Sample`](../ChatControls.Sample/README.md), where it can exercise the base
+`Microsoft.Maui.Chat.Controls` package without the Azure AI application around it.
 
 ## Approval flow
 
