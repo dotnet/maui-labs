@@ -91,9 +91,35 @@ public class ChatViewTests
 
         conversation.SetStatus(ChatConversationStatus.Busy);
         Assert.True(view.IsBusy);
+        Assert.True(view.IsBusyIndicatorVisible);
+
+        view.ShowBusyIndicator = false;
+        Assert.True(view.IsBusy);
+        Assert.False(view.IsBusyIndicatorVisible);
 
         conversation.SetStatus(ChatConversationStatus.Idle);
         Assert.False(view.IsBusy);
+        Assert.False(view.IsBusyIndicatorVisible);
+    }
+
+    [Fact]
+    public void TypingParticipants_UpdateTheTypingSummary()
+    {
+        var conversation = ChatFactory.Conversation();
+        var priya = ChatFactory.Remote("priya", "Priya");
+        var diego = ChatFactory.Remote("diego", "Diego");
+        var view = new ChatView { Conversation = conversation };
+
+        conversation.TypingParticipants.Add(priya);
+        Assert.True(view.HasTypingParticipants);
+        Assert.Equal("Priya is typing…", view.TypingText);
+
+        conversation.TypingParticipants.Add(diego);
+        Assert.Equal("Priya and Diego are typing…", view.TypingText);
+
+        conversation.TypingParticipants.Clear();
+        Assert.False(view.HasTypingParticipants);
+        Assert.Equal(string.Empty, view.TypingText);
     }
 
     [Fact]
@@ -575,6 +601,27 @@ public class ChatViewTests
     }
 
     [Fact]
+    public void ComposerStyles_CanBeSetPerControl()
+    {
+        var inputAreaStyle = new Style(typeof(Border));
+        var inputEntryStyle = new Style(typeof(Entry));
+        var attachButtonStyle = new Style(typeof(Button));
+        var sendButtonStyle = new Style(typeof(Button));
+        var view = new ChatView
+        {
+            InputAreaStyle = inputAreaStyle,
+            InputEntryStyle = inputEntryStyle,
+            AttachButtonStyle = attachButtonStyle,
+            SendButtonStyle = sendButtonStyle,
+        };
+
+        Assert.Same(inputAreaStyle, view.InputAreaStyle);
+        Assert.Same(inputEntryStyle, view.InputEntryStyle);
+        Assert.Same(attachButtonStyle, view.AttachButtonStyle);
+        Assert.Same(sendButtonStyle, view.SendButtonStyle);
+    }
+
+    [Fact]
     public void PartNames_AreStableContractValues()
     {
         Assert.Equal("PART_Header", ChatView.HeaderPartName);
@@ -585,6 +632,7 @@ public class ChatViewTests
         Assert.Equal("PART_EmptyView", ChatView.EmptyViewPartName);
         Assert.Equal("PART_BusyIndicator", ChatView.BusyIndicatorPartName);
         Assert.Equal("PART_Suggestions", ChatView.SuggestionsPartName);
+        Assert.Equal("PART_TypingIndicator", ChatView.TypingIndicatorPartName);
         Assert.Equal("PART_Footer", ChatView.FooterPartName);
         Assert.Equal("PART_InputArea", ChatView.InputAreaPartName);
         Assert.Equal("PART_Attachments", ChatView.AttachmentsPartName);

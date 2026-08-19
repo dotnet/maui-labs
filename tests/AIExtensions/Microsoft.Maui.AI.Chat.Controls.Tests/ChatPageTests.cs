@@ -2,6 +2,7 @@ using Microsoft.Maui.AI.Chat;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.Chat.Controls;
 using Microsoft.Maui.AI.Chat.Controls.Tests.TestHelpers;
+using Microsoft.Maui.AI.Chat.Controls.Themes;
 
 namespace Microsoft.Maui.AI.Chat.Controls.Tests;
 
@@ -25,6 +26,167 @@ public class ChatPageTests
 
         control.Session = null;
         Assert.Null(control.Conversation);
+    }
+
+    [Fact]
+    public async Task AgentProjection_MapsBlocksIntoNeutralChatModels()
+    {
+        var session = SessionFactory.Create("Hello from the assistant");
+        await session.SendMessageAsync("Hello from the user");
+        using var conversation = new AgentChatConversation(session);
+        var list = new MessageListView { Session = session };
+
+        Assert.All(
+            conversation.Messages,
+            message => Assert.All(
+                message.Contents,
+                content => Assert.IsAssignableFrom<MessageContent>(content)));
+        Assert.True(
+            conversation.Messages
+                .SelectMany(message => message.Contents)
+                .OfType<TextMessageContent>()
+                .Count() >= 2);
+        Assert.All(
+            list.Items,
+            item => Assert.IsAssignableFrom<ChatContentItem>(item));
+        list.Session = null;
+    }
+
+    [Fact]
+    public void AgentProjection_MapsEveryMediaItemIntoNeutralMediaContent()
+    {
+        var block = new MediaContentBlock
+        {
+            Id = "media",
+        };
+        block.AddContent(new DataContent(
+            new byte[] { 1, 2, 3 },
+            "image/png")
+        {
+            Name = "garden.png",
+        });
+        block.AddContent(new DataContent(
+            new byte[] { 4, 5 },
+            "application/pdf")
+        {
+            Name = "layout.pdf",
+        });
+
+        var contents = AgentChatConversation.CreateMessageContents(
+            block,
+            turn: null,
+            isRequest: false);
+
+        var image = Assert.IsAssignableFrom<MediaMessageContent>(contents[0]);
+        Assert.Equal("media:0", image.Id);
+        Assert.Equal("garden.png", image.FileName);
+        Assert.True(image.IsImage);
+        var file = Assert.IsAssignableFrom<MediaMessageContent>(contents[1]);
+        Assert.Equal("media:1", file.Id);
+        Assert.Equal("layout.pdf", file.FileName);
+        Assert.False(file.IsImage);
+    }
+
+    [Fact]
+    public void EmptyMediaBlock_ProjectsNoPlaceholderContent()
+    {
+        var contents = AgentChatConversation.CreateMessageContents(
+            new MediaContentBlock(),
+            turn: null,
+            isRequest: false);
+
+        Assert.Empty(contents);
+    }
+
+    [Fact]
+    public async Task HostedImageResult_ProjectsThroughAgentContextAsNeutralMedia()
+    {
+        var result = new ImageGenerationToolResultContent("call-1")
+        {
+            Outputs =
+            [
+                new DataContent(
+                    new byte[] { 0x89, 0x50, 0x4E, 0x47 },
+                    "image/png")
+                {
+                    Name = "sunflower.png",
+                },
+            ],
+        };
+        var client = new TestChatClient((_, _, _) =>
+            Task.FromResult(new ChatResponse(
+            [
+                new ChatMessage(ChatRole.Tool, [result]),
+                new ChatMessage(ChatRole.Assistant, "done"),
+            ])));
+        var session = SessionFactory.Create(client);
+
+        await session.SendMessageAsync("draw");
+        using var conversation = new AgentChatConversation(session);
+
+        var media = Assert.Single(
+            conversation.Messages
+                .SelectMany(message => message.Contents)
+                .OfType<MediaMessageContent>());
+        Assert.Equal("sunflower.png", media.FileName);
+        Assert.True(media.IsImage);
+    }
+
+    [Fact]
+    public void PackageReferences_PreserveTheThreeLayerBoundary()
+    {
+        var engineReferences = typeof(AgentContext).Assembly.GetReferencedAssemblies();
+        var neutralReferences = typeof(ChatView).Assembly.GetReferencedAssemblies();
+        var bridgeReferences = typeof(CopilotChatView).Assembly.GetReferencedAssemblies();
+
+        Assert.DoesNotContain(
+            engineReferences,
+            reference => reference.Name == "Microsoft.Maui.Chat.Controls");
+        Assert.DoesNotContain(
+            neutralReferences,
+            reference => reference.Name == "Microsoft.Maui.AI.Chat");
+        Assert.Contains(
+            bridgeReferences,
+            reference => reference.Name == "Microsoft.Maui.Chat.Controls");
+        Assert.Contains(
+            bridgeReferences,
+            reference => reference.Name == "Microsoft.Maui.AI.Chat");
+    }
+
+    [Fact]
+    public void CopilotChatView_UsesAiMessageListInsideTheSharedShell()
+    {
+        var theme = new MessageListTheme();
+        var view = new FactoryCopilotChatView
+        {
+            MessageListTemplate = Assert.IsType<DataTemplate>(
+                theme[ChatThemeKeys.MessageListTemplate]),
+        };
+
+        AssertAiMessageList(view);
+    }
+
+    [Fact]
+    public void CopilotChatView_ResolvesAiMessageListTemplateFromResources()
+    {
+        var host = new ContentView();
+        host.Resources.MergedDictionaries.Add(new ChatTheme());
+        var view = new FactoryCopilotChatView();
+
+        host.Content = view;
+
+        Assert.NotNull(view.MessageListTemplate);
+        AssertAiMessageList(view);
+    }
+
+    [Fact]
+    public void AiTheme_ContainsOnlyAiTokensAndBlockTemplates()
+    {
+        var theme = new ChatTheme();
+
+        Assert.Equal(2, theme.MergedDictionaries.Count);
+        Assert.Contains(theme.MergedDictionaries, dictionary => dictionary is ChatColors);
+        Assert.Contains(theme.MergedDictionaries, dictionary => dictionary is MessageListTheme);
     }
 
     [Fact]
@@ -53,6 +215,23 @@ public class ChatPageTests
         control.Session = session2;
 
         Assert.Same(session2, control.Session);
+    }
+
+    [Fact]
+    public void DetachAndReattach_ReleasesAndRebuildsAgentConversation()
+    {
+        var session = SessionFactory.Create("test");
+        var control = new CopilotChatView { Session = session };
+        var host = new ContentView { Content = control };
+        Assert.IsType<AgentChatConversation>(control.Conversation);
+
+        host.Content = null;
+        Assert.Null(control.Conversation);
+
+        host.Content = control;
+        var conversation = Assert.IsType<AgentChatConversation>(
+            control.Conversation);
+        Assert.Same(session, conversation.Session);
     }
 
     [Fact]
@@ -199,5 +378,16 @@ public class ChatPageTests
         Assert.Single(client.SentMessages);
         Assert.Equal("second", control.Text);
         Assert.Null(control.SendError);
+    }
+
+    private sealed class FactoryCopilotChatView : CopilotChatView
+    {
+        public ChatMessagesView CreateMessageList() => CreateMessageListView();
+    }
+
+    private static void AssertAiMessageList(FactoryCopilotChatView view)
+    {
+        Assert.IsType<MessageListView>(view.CreateMessageList());
+        Assert.False(view.ShowBusyIndicator);
     }
 }

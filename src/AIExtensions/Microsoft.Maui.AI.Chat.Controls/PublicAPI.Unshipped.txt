@@ -1,11 +1,6 @@
 #nullable enable
 abstract Microsoft.Maui.AI.Chat.Controls.ContentContextView.RefreshFromContentContext() -> void
 abstract Microsoft.Maui.AI.Chat.Controls.ContentTemplate.When(Microsoft.Maui.AI.Chat.Controls.ContentContext! context) -> bool
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.AssistantBackground = "MauiAIChat.Assistant.Background" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.AssistantTextColor = "MauiAIChat.Assistant.TextColor" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.BubbleMaxWidth = "MauiAIChat.Bubble.MaxWidth" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.ChatMessageTemplate = "MauiAIChat.ChatMessageTemplate" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.CopilotChatViewTemplate = "MauiAIChat.CopilotChatViewTemplate" -> string!
 const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.DefaultTemplate = "MauiAIChat.DefaultTemplate" -> string!
 const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.DefaultTextColor = "MauiAIChat.Default.TextColor" -> string!
 const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.ErrorBackground = "MauiAIChat.Error.Background" -> string!
@@ -15,56 +10,17 @@ const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.FunctionCallTextColor
 const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.FunctionInvocationTemplate = "MauiAIChat.FunctionInvocationTemplate" -> string!
 const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.FunctionResultBackground = "MauiAIChat.FunctionResult.Background" -> string!
 const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.FunctionResultTextColor = "MauiAIChat.FunctionResult.TextColor" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.InputBackground = "MauiAIChat.Input.Background" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.MessageListViewTemplate = "MauiAIChat.MessageListViewTemplate" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.SendBackground = "MauiAIChat.Send.Background" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.SendTextColor = "MauiAIChat.Send.TextColor" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.SuggestionBackground = "MauiAIChat.Suggestion.Background" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.SuggestionTextColor = "MauiAIChat.Suggestion.TextColor" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.TimestampFontSize = "MauiAIChat.Timestamp.FontSize" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.TimestampTextColor = "MauiAIChat.Timestamp.TextColor" -> string!
+const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.MessageListTemplate = "MauiAIChat.MessageListTemplate" -> string!
 const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.ToolApprovalArgNameLabelStyle = "MauiAIChat.ToolApproval.ArgNameLabelStyle" -> string!
 const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.ToolApprovalArgsRowStyle = "MauiAIChat.ToolApproval.ArgsRowStyle" -> string!
 const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.ToolApprovalArgsStackStyle = "MauiAIChat.ToolApproval.ArgsStackStyle" -> string!
 const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.ToolApprovalArgValueLabelStyle = "MauiAIChat.ToolApproval.ArgValueLabelStyle" -> string!
 const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.ToolApprovalEmptyArgsLabelStyle = "MauiAIChat.ToolApproval.EmptyArgsLabelStyle" -> string!
 const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.ToolApprovalTemplate = "MauiAIChat.ToolApprovalTemplate" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.UserBackground = "MauiAIChat.User.Background" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.UserTextColor = "MauiAIChat.User.TextColor" -> string!
 Microsoft.Maui.AI.Chat.Controls.AppBuilderExtensions
 Microsoft.Maui.AI.Chat.Controls.ChatAttachment
 Microsoft.Maui.AI.Chat.Controls.ChatAttachment.ChatAttachment(string! fileName, Microsoft.Extensions.AI.DataContent! content) -> void
 Microsoft.Maui.AI.Chat.Controls.ChatAttachment.Content.get -> Microsoft.Extensions.AI.DataContent!
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.AssistantDisplayName.get -> string!
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.AssistantDisplayName.set -> void
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.AvatarSize.get -> double
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.AvatarSize.set -> void
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.AvatarText.get -> string?
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.BubbleCornerRadii.get -> Microsoft.Maui.CornerRadius
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.BubbleCornerRadius.get -> double
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.BubbleCornerRadius.set -> void
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.BubbleStrokeColor.get -> Microsoft.Maui.Graphics.Color?
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.BubbleStrokeColor.set -> void
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.BubbleStrokeThickness.get -> double
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.BubbleStrokeThickness.set -> void
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.ChatMessageView() -> void
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.DisplayName.get -> string?
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.MaxBubbleWidth.get -> double
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.MaxBubbleWidth.set -> void
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.MessageRole.get -> string?
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.MessageRole.set -> void
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.SemanticDescription.get -> string?
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.ShowAvatars.get -> bool
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.ShowAvatars.set -> void
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.ShowTimestamp.get -> bool
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.ShowTimestamp.set -> void
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.Text.get -> string?
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.Text.set -> void
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.TimestampText.get -> string?
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.TimestampText.set -> void
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.UserDisplayName.get -> string!
-Microsoft.Maui.AI.Chat.Controls.ChatMessageView.UserDisplayName.set -> void
 Microsoft.Maui.AI.Chat.Controls.ChatSuggestion
 Microsoft.Maui.AI.Chat.Controls.ChatSuggestion.ChatSuggestion(string! label, string! prompt) -> void
 Microsoft.Maui.AI.Chat.Controls.ContentContext
@@ -94,41 +50,17 @@ Microsoft.Maui.AI.Chat.Controls.ContentContextView.ContentContext.set -> void
 Microsoft.Maui.AI.Chat.Controls.ContentContextView.ContentContextView() -> void
 Microsoft.Maui.AI.Chat.Controls.ContentTemplate
 Microsoft.Maui.AI.Chat.Controls.ContentTemplate.ContentTemplate() -> void
-Microsoft.Maui.AI.Chat.Controls.ContentTemplateSelector
-Microsoft.Maui.AI.Chat.Controls.ContentTemplateSelector.ContentTemplateSelector() -> void
-Microsoft.Maui.AI.Chat.Controls.ContentTemplateSelector.Templates.get -> System.Collections.Generic.IList<Microsoft.Maui.AI.Chat.Controls.ContentTemplate!>!
+Microsoft.Maui.AI.Chat.Controls.ContentTemplate.CreateMessageTemplate(System.Func<Microsoft.Maui.Controls.View!>! createView) -> Microsoft.Maui.Controls.DataTemplate!
+Microsoft.Maui.AI.Chat.Controls.ContentTemplate.Presentation.get -> Microsoft.Maui.Chat.Controls.ChatContentPresentation?
+Microsoft.Maui.AI.Chat.Controls.ContentTemplate.Presentation.set -> void
+Microsoft.Maui.AI.Chat.Controls.ContentTemplate.UseMessageChrome.get -> bool
+Microsoft.Maui.AI.Chat.Controls.ContentTemplate.UseMessageChrome.set -> void
 Microsoft.Maui.AI.Chat.Controls.CopilotChatView
 Microsoft.Maui.AI.Chat.Controls.CopilotChatView.AssistantDisplayName.get -> string!
 Microsoft.Maui.AI.Chat.Controls.CopilotChatView.AssistantDisplayName.set -> void
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.AvatarSize.get -> double
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.AvatarSize.set -> void
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.BubbleCornerRadius.get -> double
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.BubbleCornerRadius.set -> void
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.BubbleStrokeColor.get -> Microsoft.Maui.Graphics.Color?
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.BubbleStrokeColor.set -> void
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.BubbleStrokeThickness.get -> double
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.BubbleStrokeThickness.set -> void
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.ContentTemplates.get -> System.Collections.Generic.IList<Microsoft.Maui.AI.Chat.Controls.ContentTemplate!>!
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.ContentTemplates.set -> void
 Microsoft.Maui.AI.Chat.Controls.CopilotChatView.CopilotChatView() -> void
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.EffectiveInputAreaBackgroundColor.get -> Microsoft.Maui.Graphics.Color?
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.EffectiveSendButtonBackgroundColor.get -> Microsoft.Maui.Graphics.Color?
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.InputAreaBackgroundColor.get -> Microsoft.Maui.Graphics.Color?
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.InputAreaBackgroundColor.set -> void
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.InputAreaCornerRadius.get -> double
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.InputAreaCornerRadius.set -> void
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.MaxBubbleWidth.get -> double
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.MaxBubbleWidth.set -> void
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.SendButtonBackgroundColor.get -> Microsoft.Maui.Graphics.Color?
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.SendButtonBackgroundColor.set -> void
 Microsoft.Maui.AI.Chat.Controls.CopilotChatView.Session.get -> Microsoft.Maui.AI.Chat.AgentContext?
 Microsoft.Maui.AI.Chat.Controls.CopilotChatView.Session.set -> void
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.ShowAvatars.get -> bool
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.ShowAvatars.set -> void
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.ShowTimestamps.get -> bool
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.ShowTimestamps.set -> void
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.UseDefaultContentTemplates.get -> bool
-Microsoft.Maui.AI.Chat.Controls.CopilotChatView.UseDefaultContentTemplates.set -> void
 Microsoft.Maui.AI.Chat.Controls.CopilotChatView.UserDisplayName.get -> string!
 Microsoft.Maui.AI.Chat.Controls.CopilotChatView.UserDisplayName.set -> void
 Microsoft.Maui.AI.Chat.Controls.DefaultContentTemplate
@@ -170,33 +102,12 @@ Microsoft.Maui.AI.Chat.Controls.IChatAttachmentPicker
 Microsoft.Maui.AI.Chat.Controls.IChatAttachmentPicker.PickAsync(Microsoft.Maui.Storage.FilePickerFileType? fileTypes, long maxBytesPerFile, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Microsoft.Maui.AI.Chat.Controls.ChatAttachment!>!>!
 Microsoft.Maui.AI.Chat.Controls.IContentContextAware
 Microsoft.Maui.AI.Chat.Controls.IContentContextAware.ApplyContentContext(Microsoft.Maui.AI.Chat.Controls.ContentContext! context) -> void
-Microsoft.Maui.AI.Chat.Controls.MediaContentTemplate
-Microsoft.Maui.AI.Chat.Controls.MediaContentTemplate.MediaContentTemplate() -> void
-Microsoft.Maui.AI.Chat.Controls.MediaContentView
-Microsoft.Maui.AI.Chat.Controls.MediaContentView.MediaContentView() -> void
 Microsoft.Maui.AI.Chat.Controls.MessageListView
 Microsoft.Maui.AI.Chat.Controls.MessageListView.AssistantDisplayName.get -> string!
 Microsoft.Maui.AI.Chat.Controls.MessageListView.AssistantDisplayName.set -> void
-Microsoft.Maui.AI.Chat.Controls.MessageListView.AvatarSize.get -> double
-Microsoft.Maui.AI.Chat.Controls.MessageListView.AvatarSize.set -> void
-Microsoft.Maui.AI.Chat.Controls.MessageListView.BubbleCornerRadius.get -> double
-Microsoft.Maui.AI.Chat.Controls.MessageListView.BubbleCornerRadius.set -> void
-Microsoft.Maui.AI.Chat.Controls.MessageListView.BubbleStrokeColor.get -> Microsoft.Maui.Graphics.Color?
-Microsoft.Maui.AI.Chat.Controls.MessageListView.BubbleStrokeColor.set -> void
-Microsoft.Maui.AI.Chat.Controls.MessageListView.BubbleStrokeThickness.get -> double
-Microsoft.Maui.AI.Chat.Controls.MessageListView.BubbleStrokeThickness.set -> void
-Microsoft.Maui.AI.Chat.Controls.MessageListView.ContentTemplates.get -> System.Collections.Generic.IList<Microsoft.Maui.AI.Chat.Controls.ContentTemplate!>!
-Microsoft.Maui.AI.Chat.Controls.MessageListView.ContentTemplates.set -> void
-Microsoft.Maui.AI.Chat.Controls.MessageListView.Items.get -> System.Collections.ObjectModel.ReadOnlyObservableCollection<Microsoft.Maui.AI.Chat.Controls.ContentContext!>!
-Microsoft.Maui.AI.Chat.Controls.MessageListView.MaxBubbleWidth.get -> double
-Microsoft.Maui.AI.Chat.Controls.MessageListView.MaxBubbleWidth.set -> void
 Microsoft.Maui.AI.Chat.Controls.MessageListView.MessageListView() -> void
 Microsoft.Maui.AI.Chat.Controls.MessageListView.Session.get -> Microsoft.Maui.AI.Chat.AgentContext?
 Microsoft.Maui.AI.Chat.Controls.MessageListView.Session.set -> void
-Microsoft.Maui.AI.Chat.Controls.MessageListView.ShowAvatars.get -> bool
-Microsoft.Maui.AI.Chat.Controls.MessageListView.ShowAvatars.set -> void
-Microsoft.Maui.AI.Chat.Controls.MessageListView.ShowTimestamps.get -> bool
-Microsoft.Maui.AI.Chat.Controls.MessageListView.ShowTimestamps.set -> void
 Microsoft.Maui.AI.Chat.Controls.MessageListView.UserDisplayName.get -> string!
 Microsoft.Maui.AI.Chat.Controls.MessageListView.UserDisplayName.set -> void
 Microsoft.Maui.AI.Chat.Controls.ReasoningContentTemplate
@@ -216,8 +127,6 @@ Microsoft.Maui.AI.Chat.Controls.Themes.ChatColors.ChatColors() -> void
 Microsoft.Maui.AI.Chat.Controls.Themes.ChatTheme
 Microsoft.Maui.AI.Chat.Controls.Themes.ChatTheme.ChatTheme() -> void
 Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys
-Microsoft.Maui.AI.Chat.Controls.Themes.CopilotChatTheme
-Microsoft.Maui.AI.Chat.Controls.Themes.CopilotChatTheme.CopilotChatTheme() -> void
 Microsoft.Maui.AI.Chat.Controls.Themes.MessageListTheme
 Microsoft.Maui.AI.Chat.Controls.Themes.MessageListTheme.MessageListTheme() -> void
 Microsoft.Maui.AI.Chat.Controls.ThinkingContentBlock
@@ -249,10 +158,8 @@ Microsoft.Maui.AI.Chat.Controls.UIActionContentTemplate
 Microsoft.Maui.AI.Chat.Controls.UIActionContentTemplate.UIActionContentTemplate() -> void
 Microsoft.Maui.AI.Chat.Controls.UIActionView
 Microsoft.Maui.AI.Chat.Controls.UIActionView.UIActionView() -> void
-override Microsoft.Maui.AI.Chat.Controls.ChatMessageView.OnApplyTemplate() -> void
-override Microsoft.Maui.AI.Chat.Controls.ChatMessageView.RefreshFromContentContext() -> void
 override Microsoft.Maui.AI.Chat.Controls.ContentContextView.OnContentUpdated() -> void
-override Microsoft.Maui.AI.Chat.Controls.ContentTemplateSelector.OnSelectTemplate(object! item, Microsoft.Maui.Controls.BindableObject! container) -> Microsoft.Maui.Controls.DataTemplate!
+override Microsoft.Maui.AI.Chat.Controls.ContentTemplate.CreateTemplate() -> Microsoft.Maui.Controls.DataTemplate!
 override Microsoft.Maui.AI.Chat.Controls.CopilotChatView.OnApplyTemplate() -> void
 override Microsoft.Maui.AI.Chat.Controls.CopilotChatView.OnParentSet() -> void
 override Microsoft.Maui.AI.Chat.Controls.DefaultContentTemplate.CreateTemplate() -> Microsoft.Maui.Controls.DataTemplate!
@@ -264,15 +171,13 @@ override Microsoft.Maui.AI.Chat.Controls.FunctionInvocationTemplate.CreateTempla
 override Microsoft.Maui.AI.Chat.Controls.FunctionInvocationTemplate.When(Microsoft.Maui.AI.Chat.Controls.ContentContext! context) -> bool
 override Microsoft.Maui.AI.Chat.Controls.FunctionInvocationView.RefreshFromContentContext() -> void
 override Microsoft.Maui.AI.Chat.Controls.GenericContentTemplate.When(Microsoft.Maui.AI.Chat.Controls.ContentContext! context) -> bool
-override Microsoft.Maui.AI.Chat.Controls.MediaContentTemplate.When(Microsoft.Maui.AI.Chat.Controls.ContentContext! context) -> bool
-override Microsoft.Maui.AI.Chat.Controls.MediaContentView.RefreshFromContentContext() -> void
 override Microsoft.Maui.AI.Chat.Controls.MessageListView.CreateItem(Microsoft.Maui.Chat.Controls.ConversationMessage! message, Microsoft.Maui.Chat.Controls.MessageContent! content, Microsoft.Maui.Chat.Controls.ChatConversation? conversation, Microsoft.Maui.Chat.Controls.ChatAppearance! appearance) -> Microsoft.Maui.Chat.Controls.ChatContentItem!
 override Microsoft.Maui.AI.Chat.Controls.MessageListView.CreateTemplateSelector() -> Microsoft.Maui.Chat.Controls.ChatContentTemplateSelector!
+override Microsoft.Maui.AI.Chat.Controls.MessageListView.OnParentSet() -> void
 override Microsoft.Maui.AI.Chat.Controls.ReasoningContentTemplate.CreateTemplate() -> Microsoft.Maui.Controls.DataTemplate!
 override Microsoft.Maui.AI.Chat.Controls.ReasoningContentTemplate.When(Microsoft.Maui.AI.Chat.Controls.ContentContext! context) -> bool
 override Microsoft.Maui.AI.Chat.Controls.RichTextContentTemplate.CreateTemplate() -> Microsoft.Maui.Controls.DataTemplate!
 override Microsoft.Maui.AI.Chat.Controls.RichTextContentTemplate.When(Microsoft.Maui.AI.Chat.Controls.ContentContext! context) -> bool
-override Microsoft.Maui.AI.Chat.Controls.RichTextView.OnApplyTemplate() -> void
 override Microsoft.Maui.AI.Chat.Controls.RichTextView.RefreshFromContentContext() -> void
 override Microsoft.Maui.AI.Chat.Controls.TextContentTemplate.CreateTemplate() -> Microsoft.Maui.Controls.DataTemplate!
 override Microsoft.Maui.AI.Chat.Controls.TextContentTemplate.When(Microsoft.Maui.AI.Chat.Controls.ContentContext! context) -> bool
@@ -285,42 +190,15 @@ override Microsoft.Maui.AI.Chat.Controls.ToolApprovalView.RefreshFromContentCont
 override Microsoft.Maui.AI.Chat.Controls.UIActionContentTemplate.CreateTemplate() -> Microsoft.Maui.Controls.DataTemplate!
 override Microsoft.Maui.AI.Chat.Controls.UIActionContentTemplate.When(Microsoft.Maui.AI.Chat.Controls.ContentContext! context) -> bool
 override sealed Microsoft.Maui.AI.Chat.Controls.ContentContextView.OnItemChanged(Microsoft.Maui.Chat.Controls.ChatContentItem? oldItem, Microsoft.Maui.Chat.Controls.ChatContentItem? newItem) -> void
-override sealed Microsoft.Maui.AI.Chat.Controls.ContentContextView.OnItemPropertyUpdated(string? propertyName) -> void
 override sealed Microsoft.Maui.AI.Chat.Controls.ContentContextView.RefreshContent() -> void
 override sealed Microsoft.Maui.AI.Chat.Controls.ContentTemplate.GetPriority(Microsoft.Maui.Chat.Controls.ChatContentItem! item) -> int
 override sealed Microsoft.Maui.AI.Chat.Controls.ContentTemplate.When(Microsoft.Maui.Chat.Controls.ChatContentItem! item) -> bool
 static Microsoft.Maui.AI.Chat.Controls.AppBuilderExtensions.UseChatControls(this Microsoft.Maui.Hosting.MauiAppBuilder! builder) -> Microsoft.Maui.Hosting.MauiAppBuilder!
-static readonly Microsoft.Maui.AI.Chat.Controls.ChatMessageView.AssistantDisplayNameProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.ChatMessageView.AvatarSizeProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.ChatMessageView.AvatarTextProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.ChatMessageView.BubbleCornerRadiiProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.ChatMessageView.BubbleCornerRadiusProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.ChatMessageView.BubbleStrokeColorProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.ChatMessageView.BubbleStrokeThicknessProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.ChatMessageView.DisplayNameProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.ChatMessageView.MaxBubbleWidthProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.ChatMessageView.MessageRoleProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.ChatMessageView.SemanticDescriptionProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.ChatMessageView.ShowAvatarsProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.ChatMessageView.ShowTimestampProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.ChatMessageView.TextProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.ChatMessageView.TimestampTextProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.ChatMessageView.UserDisplayNameProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.ContentContextView.ContentContextProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.AI.Chat.Controls.ContentTemplate.PresentationProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.AI.Chat.Controls.ContentTemplate.UseMessageChromeProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.CopilotChatView.AssistantDisplayNameProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.CopilotChatView.AvatarSizeProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.CopilotChatView.BubbleCornerRadiusProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.CopilotChatView.BubbleStrokeColorProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.CopilotChatView.BubbleStrokeThicknessProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.CopilotChatView.ContentTemplatesProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.CopilotChatView.InputAreaBackgroundColorProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.CopilotChatView.InputAreaCornerRadiusProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.CopilotChatView.MaxBubbleWidthProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.CopilotChatView.SendButtonBackgroundColorProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.CopilotChatView.SessionProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.CopilotChatView.ShowAvatarsProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.CopilotChatView.ShowTimestampsProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.CopilotChatView.UseDefaultContentTemplatesProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.CopilotChatView.UserDisplayNameProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.DefaultMessageView.DisplayTextProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.FunctionInvocationView.FunctionNameProperty -> Microsoft.Maui.Controls.BindableProperty!
@@ -331,16 +209,7 @@ static readonly Microsoft.Maui.AI.Chat.Controls.GenericContentTemplate.BlockType
 static readonly Microsoft.Maui.AI.Chat.Controls.GenericContentTemplate.RoleProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.GenericContentTemplate.ToolNameProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.MessageListView.AssistantDisplayNameProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.MessageListView.AvatarSizeProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.MessageListView.BubbleCornerRadiusProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.MessageListView.BubbleStrokeColorProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.MessageListView.BubbleStrokeThicknessProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.MessageListView.ContentTemplatesProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.MessageListView.ItemsProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.MessageListView.MaxBubbleWidthProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.MessageListView.SessionProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.MessageListView.ShowAvatarsProperty -> Microsoft.Maui.Controls.BindableProperty!
-static readonly Microsoft.Maui.AI.Chat.Controls.MessageListView.ShowTimestampsProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.MessageListView.UserDisplayNameProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.ToolApprovalView.ApproveCommandProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.ToolApprovalView.IsPendingProperty -> Microsoft.Maui.Controls.BindableProperty!

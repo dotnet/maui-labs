@@ -1,4 +1,5 @@
 using Microsoft.Maui.AI.Chat;
+using Microsoft.Maui.Chat.Controls;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
 
@@ -9,20 +10,13 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 public class RichTextContentTemplate : ContentTemplate
 {
     public override bool When(ContentContext context) =>
-        context.Block is RichContentBlock and not TextContentBlock;
+        context.Content is StructuredTextMessageContent<IReadOnlyList<RichTextNode>>;
 
     protected override DataTemplate CreateTemplate()
     {
         if (ViewType is not null)
             return base.CreateTemplate();
 
-        return new DataTemplate(() =>
-        {
-            var view = new RichTextView();
-            view.SetDynamicResource(
-                ContentView.ControlTemplateProperty,
-                Themes.ChatThemeKeys.ChatMessageTemplate);
-            return PrepareDataTemplateView(view);
-        });
+        return CreateMessageTemplate(() => new RichTextView());
     }
 }

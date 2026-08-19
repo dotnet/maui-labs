@@ -10,6 +10,8 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// </summary>
 public sealed class ContentContext : ChatContentItem, IDisposable
 {
+    private readonly bool _ownsAgentContent;
+
     /// <summary>Creates a standalone context for a block.</summary>
     public ContentContext(
         AgentContext agentContext,
@@ -18,47 +20,31 @@ public sealed class ContentContext : ChatContentItem, IDisposable
             CreateStandalone(
                 agentContext ?? throw new ArgumentNullException(nameof(agentContext)),
                 block ?? throw new ArgumentNullException(nameof(block))),
-            agentContext,
-            owner: null)
-    {
-    }
-
-    internal ContentContext(
-        AgentContext agentContext,
-        ContentBlock block,
-        MessageListView? owner)
-        : this(
-            CreateStandalone(
-                agentContext ?? throw new ArgumentNullException(nameof(agentContext)),
-                block ?? throw new ArgumentNullException(nameof(block))),
-            agentContext,
-            owner)
+            agentContext)
     {
     }
 
     private ContentContext(
         StandaloneContext standalone,
-        AgentContext agentContext,
-        MessageListView? owner)
+        AgentContext agentContext)
         : base(
             standalone.Message,
             standalone.Content,
             conversation: null,
-            owner?.Appearance ?? new ChatAppearance())
+            new ChatAppearance())
     {
         AgentContext = agentContext;
-        AgentContent = standalone.Content;
-        Owner = owner;
-        AgentContent.ContentChanged += OnAgentContentChanged;
+        AgentContent = standalone.AgentContent;
+        _ownsAgentContent = true;
     }
 
     internal ContentContext(
         AgentContext agentContext,
         ConversationMessage message,
-        AgentBlockContent content,
+        MessageContent content,
+        IAgentBlockContent agentContent,
         AgentChatConversation conversation,
-        ChatAppearance appearance,
-        MessageListView? owner)
+        ChatAppearance appearance)
         : base(
             message,
             content,
@@ -66,9 +52,7 @@ public sealed class ContentContext : ChatContentItem, IDisposable
             appearance)
     {
         AgentContext = agentContext;
-        AgentContent = content;
-        Owner = owner;
-        AgentContent.ContentChanged += OnAgentContentChanged;
+        AgentContent = agentContent;
     }
 
     /// <summary>Gets the AI conversation context.</summary>
@@ -125,7 +109,7 @@ public sealed class ContentContext : ChatContentItem, IDisposable
 
     /// <summary>Gets rich text content when available.</summary>
     public string? TextContent =>
-        Block is RichContentBlock rich ? rich.RawText : null;
+        Content is TextMessageContent text ? text.Text : null;
 
     /// <summary>Gets approval status for an approval block.</summary>
     public ApprovalStatus? ApprovalState =>
@@ -144,25 +128,17 @@ public sealed class ContentContext : ChatContentItem, IDisposable
         _ => null,
     };
 
-    internal MessageListView? Owner { get; }
-
     /// <summary>Stops relaying block changes through this projected context.</summary>
     public void Dispose()
     {
-        AgentContent.ContentChanged -= OnAgentContentChanged;
+        if (_ownsAgentContent)
+            AgentContent.Dispose();
     }
 
     internal void NotifyBlockChanged() =>
         AgentContent.NotifyChanged();
 
-    private void OnAgentContentChanged(object? sender, EventArgs e)
-    {
-        _ = sender;
-        _ = e;
-        OnPropertyChanged(string.Empty);
-    }
-
-    internal AgentBlockContent AgentContent { get; }
+    internal IAgentBlockContent AgentContent { get; }
 
     private static StandaloneContext CreateStandalone(
         AgentContext agentContext,
@@ -175,22 +151,24 @@ public sealed class ContentContext : ChatContentItem, IDisposable
             block.Role == ChatRole.User
                 ? ChatParticipantKind.Local
                 : ChatParticipantKind.Agent);
-        var content = new AgentBlockContent(
+        var content = AgentChatConversation.CreateMessageContent(
             block,
             turn: null,
             isRequest: block.Role == ChatRole.User);
+        var agentContent = (IAgentBlockContent)content;
         var message = new ConversationMessage(
             participant,
             string.IsNullOrWhiteSpace(block.Id)
                 ? Guid.NewGuid().ToString("N")
                 : block.Id,
             block.CreatedAt);
-        content.AttachMessage(message);
+        agentContent.AttachMessage(message);
         message.Contents.Add(content);
-        return new StandaloneContext(message, content);
+        return new StandaloneContext(message, content, agentContent);
     }
 
     private sealed record StandaloneContext(
         ConversationMessage Message,
-        AgentBlockContent Content);
+        MessageContent Content,
+        IAgentBlockContent AgentContent);
 }

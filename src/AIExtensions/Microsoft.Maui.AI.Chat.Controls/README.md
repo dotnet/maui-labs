@@ -37,6 +37,32 @@ The AI package only adapts `AgentContext` blocks into neutral conversation messa
 AI-specific template types on top, so the composer, attachments, suggestions, appearance, and
 virtualized projection have one implementation.
 
+## Architecture
+
+| Layer | Responsibility | Dependencies |
+|---|---|---|
+| `Microsoft.Maui.AI.Chat` | Headless agent, turns, blocks, tools, approvals, state, persistence | No controls |
+| `Microsoft.Maui.Chat.Controls` | Provider-neutral participants, `MessageContent`, conversations, projection, and native views | No AI |
+| `Microsoft.Maui.AI.Chat.Controls` | Maps `ContentBlock` → neutral `ConversationMessage`/`MessageContent` and composes `AgentContext` with `ChatView` | Both layers |
+
+The adapter maps common AI content to neutral content primitives. Blocks that need AI-specific
+behavior are retained behind an internal `MessageContent` implementation so templates can inspect
+tools, approvals, reasoning, and transient status without leaking controls types into the engine.
+`ContentContext` is a specialized neutral `ChatContentItem`, not a second parallel row model.
+
+### Canonical content pipeline
+
+| Provider input | Headless block | Chat content | Default native body |
+|---|---|---|---|
+| `TextContent` / streamed text | `TextContentBlock` | `TextMessageContent` | `ChatTextContentView` |
+| `DataContent` / generated image | `MediaContentBlock` | one `MediaMessageContent` per item | `ChatMediaContentView` or `ChatFileContentView` |
+| provider rich snapshot | `RichContentBlock` | `StructuredTextMessageContent<IReadOnlyList<RichTextNode>>` | `RichTextView`, with neutral text fallback |
+| tool, approval, reasoning, transient status | specialized AI block | internal block-backed `MessageContent` | AI-specific body inside neutral message chrome |
+
+Blocks remain useful because they are processed, lifecycle-aware engine state. `MessageContent`
+remains useful because it is the provider-neutral UI contract. The bridge converts once between
+those boundaries; it does not define a second message shell, bubble, selector, or media/text view.
+
 ## Custom block views
 
 ```xml
@@ -52,6 +78,11 @@ virtualized projection have one implementation.
 Consumer templates always outrank built-in fallbacks. Set
 `UseDefaultContentTemplates="False"` for strict allow-list rendering.
 
+`ViewType` describes the **message body**, not a whole row. By default that body receives the same
+provider-neutral avatar, participant name, direction, grouping, timestamp, status, and bubble/bare
+presentation as every other message. Set `Presentation="Bubble"` or `"Bare"` to override the mapped
+content, or `UseMessageChrome="False"` only when a view intentionally owns the complete row.
+
 ## Features
 
 - Complete replaceable `ControlTemplate` with documented `PART_*` names.
@@ -65,7 +96,7 @@ Consumer templates always outrank built-in fallbacks. Set
 - Attachment-only messages.
 - Generic error UI with retry; diagnostic exceptions stay on `AgentContext.Error`.
 - Collapsible visible reasoning and protected-reasoning disclosure.
-- Avatars, display names, timestamps, bubble radius/stroke/width, and input colors.
+- Avatars, display names, timestamps, bubble radius/stroke/width, and template-bound composer styles.
 - Accessibility descriptions and automation IDs for core actions.
 
 ## Attachments
@@ -96,16 +127,18 @@ string-only compatibility.
 
 ## Customization
 
-Override `MauiAIChat.*` resources for colors and sizing, set the appearance bindable properties,
-or replace the complete control template. This native model is the MAUI equivalent of separate
-page/drawer/bubble shells: host the same control in the layout appropriate to your app instead of
-adding web-specific shell abstractions.
+The outer shell is the same `MauiChat.ChatViewTemplate` used by the provider-neutral control.
+Override `MauiChat.*` styles (or set `InputAreaStyle`, `InputEntryStyle`, `AttachButtonStyle`, and
+`SendButtonStyle`) for shell chrome. Override `MauiAIChat.*` resources only for AI block views.
+`CopilotChatView` swaps the message-list projection through `MessageListTemplate`; it does not carry
+a duplicate full-control theme.
 
 ## Platform support
 
 The package is MAUI-native and supports platforms where `Microsoft.Maui.Controls` and the chosen
-application features are available. The included Garden sample validates Android, iOS,
-Mac Catalyst, and Windows project targets; CI validates macOS and Windows hosts.
+application features are available. The Chat Controls and Garden samples cover the neutral and AI
+layers across Android, iOS, Mac Catalyst, and Windows project targets; CI validates macOS and
+Windows hosts.
 
 ## Related package
 

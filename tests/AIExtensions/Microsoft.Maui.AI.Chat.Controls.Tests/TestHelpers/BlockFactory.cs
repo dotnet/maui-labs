@@ -64,6 +64,12 @@ internal static class BlockFactory
     {
         var block = new MediaContentBlock();
         block.Role = ChatRole.Assistant;
+        block.AddContent(new DataContent(
+            new byte[] { 1, 2, 3 },
+            "image/png")
+        {
+            Name = "generated.png",
+        });
         return new ContentContext(CreateSession(), block);
     }
 

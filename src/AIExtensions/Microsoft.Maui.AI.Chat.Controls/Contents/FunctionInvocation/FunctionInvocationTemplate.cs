@@ -32,11 +32,11 @@ public class FunctionInvocationTemplate : ContentTemplate
         if (ViewType is not null)
             return base.CreateTemplate();
 
-        return new DataTemplate(() =>
+        return CreateMessageTemplate(() =>
         {
             var view = new FunctionInvocationView();
             view.SetDynamicResource(ContentView.ControlTemplateProperty, ChatThemeKeys.FunctionInvocationTemplate);
-            return PrepareDataTemplateView(view);
+            return view;
         });
     }
 

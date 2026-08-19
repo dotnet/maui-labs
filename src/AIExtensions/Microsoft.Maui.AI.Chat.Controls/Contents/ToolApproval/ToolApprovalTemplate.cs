@@ -28,13 +28,13 @@ public class ToolApprovalTemplate : ContentTemplate
 
     protected override DataTemplate CreateTemplate()
     {
-        return new DataTemplate(() =>
+        return CreateMessageTemplate(() =>
         {
             var wrapper = new ToolApprovalView();
             wrapper.InnerContentType = ViewType;
             // Explicit template lookup — implicit styles may not resolve inside CollectionView
             wrapper.SetDynamicResource(ContentView.ControlTemplateProperty, ChatThemeKeys.ToolApprovalTemplate);
-            return PrepareDataTemplateView(wrapper);
+            return wrapper;
         });
     }
 

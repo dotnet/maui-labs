@@ -7,13 +7,12 @@
     <!-- Root chat theme. It merges the layered dictionaries so a single      -->
     <!-- new ChatTheme() (via ChatThemeLoader) brings in everything:           -->
     <!--   • ChatColors        — shared color/size tokens                      -->
-    <!--   • MessageListTheme   — MessageListView + per-block view templates   -->
-    <!--   • CopilotChatTheme   — the full CopilotChatView surface             -->
+    <!--   • MessageListTheme   — AI-specific per-block view templates         -->
+    <!-- CopilotChatView inherits the provider-neutral ChatView shell.          -->
     <!-- Override individual keys in your App resources to restyle.            -->
     <ResourceDictionary.MergedDictionaries>
         <themes:ChatColors />
         <themes:MessageListTheme />
-        <themes:CopilotChatTheme />
     </ResourceDictionary.MergedDictionaries>
 
 </ResourceDictionary>
