@@ -1,4 +1,5 @@
 using System.ClientModel;
+using System.ClientModel.Primitives;
 using System.Reflection;
 using Azure.AI.OpenAI;
 using GenerativeUI.Sample.Garden.ViewModels;
@@ -89,7 +90,17 @@ public static class MauiProgram
         }
 
         Console.WriteLine($"[GenerativeUI] Chat deployment: {deploymentName}");
-        var azureClient = new AzureOpenAIClient(new Uri(endpoint), new ApiKeyCredential(apiKey));
+        var clientOptions = new AzureOpenAIClientOptions
+        {
+            // Fail fast in the interactive sample. The SDK's long default timeout + retries make a
+            // blocked corporate/VPN route look like a frozen app for several minutes.
+            NetworkTimeout = TimeSpan.FromSeconds(15),
+            RetryPolicy = new ClientRetryPolicy(maxRetries: 0),
+        };
+        var azureClient = new AzureOpenAIClient(
+            new Uri(endpoint),
+            new ApiKeyCredential(apiKey),
+            clientOptions);
         var chatClient = azureClient.GetChatClient(deploymentName);
         builder.Services.AddSingleton<IChatClient>(chatClient.AsIChatClient());
 

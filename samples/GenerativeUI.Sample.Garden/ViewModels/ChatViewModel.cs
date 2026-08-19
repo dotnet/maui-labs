@@ -258,13 +258,34 @@ public sealed partial class ChatViewModel : ObservableObject, IChatBridge
         }
         catch (Exception ex)
         {
-            AddMessage(ChatMessageKind.Error, $"Error: {ex.Message}");
+            AddMessage(ChatMessageKind.Error, UserFacingError(ex));
         }
         finally
         {
             IsBusy = false;
             _canvas.IsBusy = false;
         }
+    }
+
+    private static string UserFacingError(Exception exception)
+    {
+        var current = exception;
+        while (current is not null)
+        {
+            var message = current.Message;
+            if (current is TaskCanceledException ||
+                message.Contains("timed out", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("timeout", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("connection", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("network", StringComparison.OrdinalIgnoreCase))
+            {
+                return "AI service is unreachable. Check your network/VPN connection, then try again.";
+            }
+
+            current = current.InnerException;
+        }
+
+        return $"Error: {exception.Message}";
     }
 
     /// <summary>
