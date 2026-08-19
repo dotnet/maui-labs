@@ -22,7 +22,7 @@ public sealed class OpenApiReducerTests
     public void Reduces_all_operations() => Assert.Equal(19, Spec.Endpoints.Count);
 
     [Fact]
-    public void Reduces_all_models() => Assert.Equal(11, Spec.Models.Count);
+    public void Reduces_all_models() => Assert.Equal(15, Spec.Models.Count);
 
     [Fact]
     public void GetProduct_projects_method_path_param_and_response_model()

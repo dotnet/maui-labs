@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.AI.GenerativeUI.Canvas;
+using Microsoft.Maui.AI.GenerativeUI.Composition;
 using Microsoft.Maui.AI.GenerativeUI.Inflation;
 using Microsoft.Maui.AI.GenerativeUI.OpenApi;
 using Microsoft.Maui.AI.GenerativeUI.Registry;
@@ -46,6 +47,8 @@ public static class AddGenerativeUiServiceCollectionExtensions
         // Client-UI half.
         services.AddSingleton(options.Ui);
         services.AddSingleton<CanvasState>();
+        services.AddSingleton<ComponentCandidateResolver>();
+        services.AddSingleton<CompositionPlanValidator>();
         services.AddSingleton(sp => new GenUiInflator(sp.GetRequiredService<GenerativeUiRegistry>(), sp));
         services.AddSingleton<GenerativeUiTools>();
 

@@ -128,7 +128,13 @@ public sealed class RoundTripTests
             Assert.Null(detail["requestSchema"]); // GET has no body
             var props = detail["responseSchema"]!["properties"]!.AsArray()
                 .Select(p => p!["name"]!.GetValue<string>()).ToArray();
-            Assert.Equal(new[] { "sku", "name", "description", "price", "category", "emoji", "imageUrl", "quantity" }, props);
+            Assert.Equal(
+                new[]
+                {
+                    "sku", "name", "description", "price", "category", "emoji", "imageUrl", "quantity",
+                    "seedDetails", "dimensions", "colorOptions",
+                },
+                props);
         }
     }
 }

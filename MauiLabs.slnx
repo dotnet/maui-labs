@@ -73,6 +73,7 @@
   </Folder>
   <Folder Name="/tests/DevFlow/" />
   <Folder Name="/tests/GenerativeUI/">
+    <Project Path="tests/GenerativeUI/Microsoft.Maui.AI.GenerativeUI.Tests/Microsoft.Maui.AI.GenerativeUI.Tests.csproj" />
     <Project Path="tests/GenerativeUI/Microsoft.Maui.AI.GenerativeUI.OpenApi.Tests/Microsoft.Maui.AI.GenerativeUI.OpenApi.Tests.csproj" />
   </Folder>
   <Folder Name="/platforms/MacOS/">

@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsShipping>false</IsShipping>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>Microsoft.Maui.AI.GenerativeUI.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\GenerativeUI\Microsoft.Maui.AI.GenerativeUI\Microsoft.Maui.AI.GenerativeUI.csproj" />
+    <ProjectReference Include="..\..\..\samples\GenerativeUI.Sample.Garden.Shared\GenerativeUI.Sample.Garden.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

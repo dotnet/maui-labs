@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\GenerativeUI\Microsoft.Maui.AI.GenerativeUI.OpenApi\Microsoft.Maui.AI.GenerativeUI.OpenApi.csproj" />
+    <ProjectReference Include="..\..\..\samples\GenerativeUI.Sample.Garden.Shared\GenerativeUI.Sample.Garden.Shared.csproj" />
     <!-- Host the sample server in-memory for the round-trip test (WebApplicationFactory). -->
     <ProjectReference Include="..\..\..\samples\GenerativeUI.Sample.Garden.Server\GenerativeUI.Sample.Garden.Server.csproj" />
   </ItemGroup>

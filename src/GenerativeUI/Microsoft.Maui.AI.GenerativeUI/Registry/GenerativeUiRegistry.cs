@@ -1,4 +1,5 @@
 using System.Text;
+using Microsoft.Maui.AI.GenerativeUI.Composition;
 
 namespace Microsoft.Maui.AI.GenerativeUI.Registry;
 
@@ -13,6 +14,8 @@ public sealed class GenerativeUiRegistry
     private readonly Dictionary<string, UiStyleRegistration> _styles = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, UiControlRegistration> _controls = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, UiScreenRegistration> _screens = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, UiComponentRegistration> _components = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, UiScaffoldRegistration> _scaffolds = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _gate = new();
 
     public GenerativeUiRegistry() => RegisterBaseStyles();
@@ -72,6 +75,52 @@ public sealed class GenerativeUiRegistry
         return this;
     }
 
+    // ── Composition components & scaffolds ─────────────────────────────────────────────────────
+
+    public GenerativeUiRegistry AddComponent<TComponent>(ComponentDescriptor descriptor)
+        where TComponent : notnull
+    {
+        ArgumentNullException.ThrowIfNull(descriptor);
+        ArgumentException.ThrowIfNullOrWhiteSpace(descriptor.Alias);
+        ArgumentException.ThrowIfNullOrWhiteSpace(descriptor.Description);
+        ArgumentException.ThrowIfNullOrWhiteSpace(descriptor.DataContract);
+
+        lock (_gate)
+        {
+            _components[descriptor.Alias] = new UiComponentRegistration
+            {
+                Descriptor = descriptor,
+                ComponentType = typeof(TComponent),
+            };
+        }
+
+        return this;
+    }
+
+    public GenerativeUiRegistry AddScaffold<TScaffold>(
+        string name,
+        string description,
+        IReadOnlyList<CompositionSlotDescriptor> slots)
+        where TScaffold : notnull
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentException.ThrowIfNullOrWhiteSpace(description);
+        ArgumentNullException.ThrowIfNull(slots);
+
+        lock (_gate)
+        {
+            _scaffolds[name] = new UiScaffoldRegistration
+            {
+                Name = name,
+                Description = description,
+                ScaffoldType = typeof(TScaffold),
+                Slots = slots,
+            };
+        }
+
+        return this;
+    }
+
     /// <summary>Removes a style, control, or screen by name (base styles cannot be removed).</summary>
     public bool Remove(string name)
     {
@@ -79,7 +128,11 @@ public sealed class GenerativeUiRegistry
         {
             if (_styles.TryGetValue(name, out var s) && s.IsBuiltIn)
                 return false;
-            return _styles.Remove(name) | _controls.Remove(name) | _screens.Remove(name);
+            return _styles.Remove(name) |
+                   _controls.Remove(name) |
+                   _screens.Remove(name) |
+                   _components.Remove(name) |
+                   _scaffolds.Remove(name);
         }
     }
 
@@ -100,6 +153,16 @@ public sealed class GenerativeUiRegistry
         lock (_gate) return _screens.GetValueOrDefault(name);
     }
 
+    public UiComponentRegistration? GetComponent(string name)
+    {
+        lock (_gate) return _components.GetValueOrDefault(name);
+    }
+
+    public UiScaffoldRegistration? GetScaffold(string name)
+    {
+        lock (_gate) return _scaffolds.GetValueOrDefault(name);
+    }
+
     public IReadOnlyList<UiStyleRegistration> Styles
     {
         get { lock (_gate) return [.. _styles.Values]; }
@@ -113,6 +176,16 @@ public sealed class GenerativeUiRegistry
     public IReadOnlyList<UiScreenRegistration> Screens
     {
         get { lock (_gate) return [.. _screens.Values]; }
+    }
+
+    public IReadOnlyList<UiComponentRegistration> Components
+    {
+        get { lock (_gate) return [.. _components.Values]; }
+    }
+
+    public IReadOnlyList<UiScaffoldRegistration> Scaffolds
+    {
+        get { lock (_gate) return [.. _scaffolds.Values]; }
     }
 
     /// <summary>
@@ -147,6 +220,39 @@ public sealed class GenerativeUiRegistry
                     sb.AppendLine($"- {s.Name}: {s.Description}");
                     foreach (var i in s.Inputs)
                         sb.AppendLine($"    · {i.Name}: {i.Description}");
+                }
+            }
+
+            if (_components.Count > 0)
+            {
+                sb.AppendLine().AppendLine("Registered composition components:");
+                foreach (var component in _components.Values.OrderBy(
+                             component => component.Descriptor.Alias,
+                             StringComparer.OrdinalIgnoreCase))
+                {
+                    var descriptor = component.Descriptor;
+                    sb.AppendLine(
+                        $"- {descriptor.Alias} ({descriptor.DataContract}; slots: {string.Join("/", descriptor.AllowedSlots)}): " +
+                        descriptor.Description);
+                    if (descriptor.RequiredBindings.Count > 0)
+                        sb.AppendLine($"    · required bindings: {string.Join(", ", descriptor.RequiredBindings)}");
+                    if (descriptor.OptionalBindings.Count > 0)
+                        sb.AppendLine($"    · optional bindings: {string.Join(", ", descriptor.OptionalBindings)}");
+                    if (descriptor.Variants.Count > 0)
+                        sb.AppendLine($"    · variants: {string.Join(", ", descriptor.Variants)}");
+                }
+            }
+
+            if (_scaffolds.Count > 0)
+            {
+                sb.AppendLine().AppendLine("Registered composition scaffolds:");
+                foreach (var scaffold in _scaffolds.Values.OrderBy(
+                             scaffold => scaffold.Name,
+                             StringComparer.OrdinalIgnoreCase))
+                {
+                    sb.AppendLine(
+                        $"- {scaffold.Name} (slots: {string.Join("/", scaffold.Slots.Select(slot => slot.Slot))}): " +
+                        scaffold.Description);
                 }
             }
         }

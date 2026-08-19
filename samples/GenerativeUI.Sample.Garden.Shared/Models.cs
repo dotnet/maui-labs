@@ -25,7 +25,45 @@ public record Product(
     [property: Description("Absolute URL of the product image; rendered by the app's watermarking ProductImage control when present.")]
     string? ImageUrl = null,
     [property: Description("Current stock count; null when stock is not tracked for this product.")]
-    int? Quantity = null);
+    int? Quantity = null,
+    [property: Description("Optional planting, germination, and harvest details. Present only for seed products.")]
+    SeedDetails? SeedDetails = null,
+    [property: Description("Optional physical dimensions. Present only when size information is meaningful for this product.")]
+    Dimensions? Dimensions = null,
+    [property: Description("Optional ordered color choices. Present only when the product is offered in selectable colors.")]
+    ColorOptions? ColorOptions = null);
+
+[Description("Planting and growing guidance for a seed product.")]
+public record SeedDetails(
+    [property: Description("How and when to plant the seeds, including depth or spacing guidance.")]
+    string PlantingInstructions,
+    [property: Description("Expected time from planting until germination.")]
+    string GerminationWindow,
+    [property: Description("Expected time from planting until the crop is ready to harvest.")]
+    string HarvestWindow);
+
+[Description("Physical product dimensions expressed in a single unit.")]
+public record Dimensions(
+    [property: Description("Product width.")]
+    decimal Width,
+    [property: Description("Product height.")]
+    decimal Height,
+    [property: Description("Product depth.")]
+    decimal Depth,
+    [property: Description("Unit used by width, height, and depth (for example \"inches\").")]
+    string Unit);
+
+[Description("An ordered set of color variants available for a product.")]
+public record ColorOptions(
+    [property: Description("Available colors in display order.")]
+    IReadOnlyList<ProductColor> Options);
+
+[Description("One named product color and its hexadecimal RGB value.")]
+public record ProductColor(
+    [property: Description("Human-readable color name.")]
+    string Name,
+    [property: Description("Hexadecimal RGB color value (for example \"#6F7C70\").")]
+    string Hex);
 
 [Description("Payload to create a new product in the catalog.")]
 public record CreateProductRequest(
