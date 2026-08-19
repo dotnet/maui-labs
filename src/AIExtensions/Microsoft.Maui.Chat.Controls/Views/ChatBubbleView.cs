@@ -30,8 +30,11 @@ public abstract class ChatBubbleView : ChatContentView
     private readonly Label _nameLabel;
     private readonly Border _bubble;
     private readonly ContentView _contentHost;
+    private readonly ContentView _bareContentHost;
     private readonly Label _metadataLabel;
     private readonly RoundRectangle _bubbleShape;
+    private View? _bubbleContent;
+    private bool _usesStandardBubble = true;
 
     /// <summary>Builds the bubble chrome. Derived types fill <see cref="BubbleContent"/>.</summary>
     protected ChatBubbleView()
@@ -66,6 +69,7 @@ public abstract class ChatBubbleView : ChatContentView
         _nameLabel.SetDynamicResource(StyleProperty, ChatThemeKeys.ParticipantNameStyle);
 
         _contentHost = new ContentView();
+        _bareContentHost = new ContentView { IsVisible = false };
 
         _bubbleShape = new RoundRectangle { CornerRadius = 18 };
         _bubble = new Border
@@ -83,7 +87,7 @@ public abstract class ChatBubbleView : ChatContentView
         _stack = new VerticalStackLayout
         {
             Spacing = 2,
-            Children = { _nameLabel, _bubble, _metadataLabel },
+            Children = { _nameLabel, _bubble, _bareContentHost, _metadataLabel },
         };
 
         _root = new Grid
@@ -98,12 +102,23 @@ public abstract class ChatBubbleView : ChatContentView
         Content = _root;
     }
 
-    /// <summary>Gets or sets the view rendered inside the bubble.</summary>
+    /// <summary>
+    /// Gets or sets the message body. Depending on <see cref="MessageContent.Presentation"/>, the body
+    /// is rendered inside the standard bubble or bare inside the surrounding message chrome.
+    /// </summary>
     protected View? BubbleContent
     {
-        get => _contentHost.Content;
-        set => _contentHost.Content = value;
+        get => _bubbleContent;
+        set
+        {
+            _bubbleContent = value;
+            UpdateContentHost();
+        }
     }
+
+    internal bool UsesStandardBubble => _usesStandardBubble;
+
+    internal ChatContentPresentation? PresentationOverride { get; set; }
 
     /// <summary>
     /// Gets a short description of the content for accessibility, for example the message text or the
@@ -126,6 +141,7 @@ public abstract class ChatBubbleView : ChatContentView
 
         var appearance = item.Appearance;
         var outgoing = item.IsOutgoing;
+        SetUsesStandardBubble(ResolveUsesStandardBubble(item));
 
         ApplyAvatar(item, appearance, outgoing);
         ApplyName(item, appearance, outgoing);
@@ -167,6 +183,13 @@ public abstract class ChatBubbleView : ChatContentView
         else
             label.ClearValue(Label.TextColorProperty);
     }
+
+    /// <summary>Determines whether the current content uses the standard bubble.</summary>
+    /// <param name="item">The row being rendered.</param>
+    /// <returns><see langword="true"/> to use the standard bubble.</returns>
+    protected virtual bool ResolveUsesStandardBubble(ChatContentItem item) =>
+        (PresentationOverride ?? item.Content.Presentation) ==
+            ChatContentPresentation.Bubble;
 
     private void ApplyAvatar(ChatContentItem item, ChatAppearance appearance, bool outgoing)
     {
@@ -219,6 +242,8 @@ public abstract class ChatBubbleView : ChatContentView
         _bubble.StrokeThickness = appearance.BubbleStrokeThickness;
         _bubble.MaximumWidthRequest = appearance.MaxBubbleWidth;
         _bubble.HorizontalOptions = outgoing ? LayoutOptions.End : LayoutOptions.Start;
+        _bareContentHost.MaximumWidthRequest = appearance.MaxBubbleWidth;
+        _bareContentHost.HorizontalOptions = outgoing ? LayoutOptions.End : LayoutOptions.Start;
 
         var background = outgoing ? appearance.OutgoingBubbleColor : appearance.IncomingBubbleColor;
         if (background is not null)
@@ -230,6 +255,29 @@ public abstract class ChatBubbleView : ChatContentView
             _bubble.Stroke = stroke;
         else
             _bubble.ClearValue(Border.StrokeProperty);
+    }
+
+    private void SetUsesStandardBubble(bool value)
+    {
+        if (_usesStandardBubble == value)
+            return;
+
+        _usesStandardBubble = value;
+        UpdateContentHost();
+    }
+
+    private void UpdateContentHost()
+    {
+        _contentHost.Content = null;
+        _bareContentHost.Content = null;
+
+        if (_usesStandardBubble)
+            _contentHost.Content = _bubbleContent;
+        else
+            _bareContentHost.Content = _bubbleContent;
+
+        _bubble.IsVisible = _usesStandardBubble;
+        _bareContentHost.IsVisible = !_usesStandardBubble;
     }
 
     private void ApplyMetadata(ChatContentItem item, ChatAppearance appearance, bool outgoing)

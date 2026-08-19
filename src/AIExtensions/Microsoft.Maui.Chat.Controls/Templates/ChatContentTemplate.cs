@@ -143,4 +143,31 @@ public abstract class ChatContentTemplate : BindableObject
 
         return view;
     }
+
+    /// <summary>
+    /// Wraps a custom message body in the standard avatar/name/alignment/metadata chrome. A
+    /// <see cref="ChatBubbleView"/> already owns that chrome and is returned unchanged.
+    /// </summary>
+    /// <param name="body">The message body.</param>
+    /// <param name="presentationOverride">
+    /// An optional standard-bubble override; <see langword="null"/> uses the content's presentation.
+    /// </param>
+    /// <returns>The prepared message view.</returns>
+    protected static View WrapInMessageChrome(
+        View body,
+        ChatContentPresentation? presentationOverride = null)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+
+        var preparedBody = PrepareView(body);
+        if (preparedBody is ChatBubbleView bubble)
+        {
+            bubble.PresentationOverride = presentationOverride;
+            return bubble;
+        }
+
+        return PrepareView(new ChatTemplatedBubbleView(
+            preparedBody,
+            presentationOverride));
+    }
 }

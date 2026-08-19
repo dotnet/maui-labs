@@ -196,16 +196,19 @@ public class ContentContextTests
     }
 
     [Fact]
-    public void BlockChange_RaisesPropertyChangedWithoutReplacingContext()
+    public void BlockChange_RaisesMappedContentChangedWithoutRowPropertyNoise()
     {
         var context = BlockFactory.MakeText("Assistant", "streaming");
-        var changed = 0;
-        context.PropertyChanged += (_, _) => changed++;
+        var contentChanges = 0;
+        var rowChanges = 0;
+        context.Content.ContentChanged += (_, _) => contentChanges++;
+        context.PropertyChanged += (_, _) => rowChanges++;
 
         Assert.IsType<TextContentBlock>(context.Block).AppendText(" more");
         context.NotifyBlockChanged();
 
-        Assert.Equal(1, changed);
+        Assert.Equal(1, contentChanges);
+        Assert.Equal(0, rowChanges);
     }
 
     [Fact]

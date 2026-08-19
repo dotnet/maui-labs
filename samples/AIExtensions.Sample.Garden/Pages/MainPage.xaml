@@ -77,18 +77,6 @@
                         </DataTrigger>
                     </Border.Triggers>
                 </Border>
-                <!-- Provider-neutral team chat -->
-                <Border BackgroundColor="{AppThemeBinding Light={StaticResource PillBackgroundLight}, Dark={StaticResource PillBackgroundDark}}"
-                        StrokeThickness="0" StrokeShape="RoundRectangle 18"
-                        WidthRequest="36" HeightRequest="36">
-                    <Button Text="&#xF315;" FontFamily="FluentFilled" FontSize="16"
-                            AutomationId="OpenTeamChatButton"
-                            ToolTipProperties.Text="Open the provider-neutral garden crew chat"
-                            TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource TextAccentDark}}"
-                            BackgroundColor="Transparent" Padding="0"
-                            VerticalOptions="Center" HorizontalOptions="Center"
-                            Clicked="OnTeamChatClicked" />
-                </Border>
                 <!-- Handler axis: custom handlers vs built-in defaults -->
                 <Border BackgroundColor="{AppThemeBinding Light={StaticResource PillBackgroundLight}, Dark={StaticResource PillBackgroundDark}}"
                         StrokeThickness="0" StrokeShape="RoundRectangle 18"

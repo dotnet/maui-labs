@@ -7,7 +7,7 @@ namespace AIExtensions.Sample.Garden.Chat;
 /// </summary>
 /// <remarks>
 /// The idiomatic first-party way to wire a custom block to its view: a tiny typed
-/// <see cref="ContentTemplate"/> subclass (exactly like the built-in <c>MediaContentTemplate</c>),
+/// <see cref="ContentTemplate"/> subclass,
 /// rather than a declarative <c>GenericContentTemplate BlockType=… ViewType=…</c>. It encapsulates the
 /// block match, reads as one element in XAML (<c>&lt;gchat:ProductResultsTemplate /&gt;</c>), and is what
 /// a distributable custom-block library would ship alongside its block, handler, and view.

@@ -17,7 +17,8 @@ namespace Microsoft.Maui.Chat.Controls;
 /// </para>
 /// <list type="bullet">
 /// <item><c>PART_Header</c> — <see cref="ContentView"/> hosting <see cref="HeaderTemplate"/></item>
-/// <item><c>PART_MessageList</c> — the <see cref="ChatMessagesView"/> that renders the conversation</item>
+/// <item><c>PART_MessageList</c> — a <see cref="ContentView"/> host for the message list, or a
+/// directly supplied <see cref="ChatMessagesView"/></item>
 /// <item><c>PART_WelcomePanel</c> — shown while the conversation is empty</item>
 /// <item><c>PART_WelcomeIcon</c> — the welcome glyph</item>
 /// <item><c>PART_WelcomeMessage</c> — the welcome text</item>
@@ -25,6 +26,7 @@ namespace Microsoft.Maui.Chat.Controls;
 /// <item><c>PART_BusyIndicator</c> — reflects <see cref="IsBusy"/></item>
 /// <item><c>PART_Suggestions</c> — <see cref="Layout"/> filled from <see cref="Suggestions"/></item>
 /// <item><c>PART_Footer</c> — <see cref="ContentView"/> hosting <see cref="FooterTemplate"/></item>
+/// <item><c>PART_TypingIndicator</c> — displays the participants currently composing</item>
 /// <item><c>PART_InputArea</c> — the composer container</item>
 /// <item><c>PART_Attachments</c> — <see cref="Layout"/> filled from <see cref="Attachments"/></item>
 /// <item><c>PART_AttachButton</c> — opens the attachment picker</item>
@@ -48,7 +50,7 @@ public class ChatView : TemplatedView
     /// <summary>The name of the header host part.</summary>
     public const string HeaderPartName = "PART_Header";
 
-    /// <summary>The name of the <see cref="ChatMessagesView"/> part.</summary>
+    /// <summary>The name of the message-list host or <see cref="ChatMessagesView"/> part.</summary>
     public const string MessageListPartName = "PART_MessageList";
 
     /// <summary>The name of the welcome panel part.</summary>
@@ -71,6 +73,9 @@ public class ChatView : TemplatedView
 
     /// <summary>The name of the footer host part.</summary>
     public const string FooterPartName = "PART_Footer";
+
+    /// <summary>The name of the typing indicator part.</summary>
+    public const string TypingIndicatorPartName = "PART_TypingIndicator";
 
     /// <summary>The name of the composer container part.</summary>
     public const string InputAreaPartName = "PART_InputArea";
@@ -122,11 +127,19 @@ public class ChatView : TemplatedView
             nameof(ContentTemplates),
             typeof(IList<ChatContentTemplate>),
             typeof(ChatView),
-            defaultValueCreator: static _ => new ObservableCollection<ChatContentTemplate>());
+            defaultValueCreator: static _ => new ObservableCollection<ChatContentTemplate>(),
+            propertyChanged: static (bindable, _, _) =>
+                ((ChatView)bindable).ApplyMessageListProperties());
 
     /// <summary>Backing property for <see cref="UseDefaultContentTemplates"/>.</summary>
     public static readonly BindableProperty UseDefaultContentTemplatesProperty =
-        BindableProperty.Create(nameof(UseDefaultContentTemplates), typeof(bool), typeof(ChatView), true);
+        BindableProperty.Create(
+            nameof(UseDefaultContentTemplates),
+            typeof(bool),
+            typeof(ChatView),
+            true,
+            propertyChanged: static (bindable, _, _) =>
+                ((ChatView)bindable).ApplyMessageListProperties());
 
     /// <summary>Backing property for <see cref="Appearance"/>.</summary>
     public static readonly BindableProperty AppearanceProperty =
@@ -134,11 +147,28 @@ public class ChatView : TemplatedView
             nameof(Appearance),
             typeof(ChatAppearance),
             typeof(ChatView),
-            defaultValueCreator: static _ => new ChatAppearance());
+            defaultValueCreator: static _ => new ChatAppearance(),
+            propertyChanged: static (bindable, _, _) =>
+                ((ChatView)bindable).ApplyMessageListProperties());
 
     /// <summary>Backing property for <see cref="AutoScrollToLatest"/>.</summary>
     public static readonly BindableProperty AutoScrollToLatestProperty =
-        BindableProperty.Create(nameof(AutoScrollToLatest), typeof(bool), typeof(ChatView), true);
+        BindableProperty.Create(
+            nameof(AutoScrollToLatest),
+            typeof(bool),
+            typeof(ChatView),
+            true,
+            propertyChanged: static (bindable, _, _) =>
+                ((ChatView)bindable).ApplyMessageListProperties());
+
+    /// <summary>Backing property for <see cref="MessageListTemplate"/>.</summary>
+    public static readonly BindableProperty MessageListTemplateProperty =
+        BindableProperty.Create(
+            nameof(MessageListTemplate),
+            typeof(DataTemplate),
+            typeof(ChatView),
+            propertyChanged: static (bindable, _, _) =>
+                ((ChatView)bindable).RecreateMessageListPart());
 
     /// <summary>Backing property for <see cref="HeaderTemplate"/>.</summary>
     public static readonly BindableProperty HeaderTemplateProperty =
@@ -244,11 +274,51 @@ public class ChatView : TemplatedView
     public static readonly BindableProperty WelcomeIconProperty =
         BindableProperty.Create(nameof(WelcomeIcon), typeof(string), typeof(ChatView), "💬");
 
+    /// <summary>Backing property for <see cref="InputAreaStyle"/>.</summary>
+    public static readonly BindableProperty InputAreaStyleProperty =
+        BindableProperty.Create(nameof(InputAreaStyle), typeof(Style), typeof(ChatView));
+
+    /// <summary>Backing property for <see cref="InputEntryStyle"/>.</summary>
+    public static readonly BindableProperty InputEntryStyleProperty =
+        BindableProperty.Create(nameof(InputEntryStyle), typeof(Style), typeof(ChatView));
+
+    /// <summary>Backing property for <see cref="AttachButtonStyle"/>.</summary>
+    public static readonly BindableProperty AttachButtonStyleProperty =
+        BindableProperty.Create(nameof(AttachButtonStyle), typeof(Style), typeof(ChatView));
+
+    /// <summary>Backing property for <see cref="SendButtonStyle"/>.</summary>
+    public static readonly BindableProperty SendButtonStyleProperty =
+        BindableProperty.Create(nameof(SendButtonStyle), typeof(Style), typeof(ChatView));
+
+    /// <summary>Backing property for <see cref="InputAreaCornerRadius"/>.</summary>
+    public static readonly BindableProperty InputAreaCornerRadiusProperty =
+        BindableProperty.Create(nameof(InputAreaCornerRadius), typeof(double), typeof(ChatView), 22.0);
+
+    /// <summary>Backing property for <see cref="ShowBusyIndicator"/>.</summary>
+    public static readonly BindableProperty ShowBusyIndicatorProperty =
+        BindableProperty.Create(
+            nameof(ShowBusyIndicator),
+            typeof(bool),
+            typeof(ChatView),
+            true,
+            propertyChanged: static (bindable, _, _) => ((ChatView)bindable).UpdateState());
+
     private static readonly BindablePropertyKey IsBusyPropertyKey =
         BindableProperty.CreateReadOnly(nameof(IsBusy), typeof(bool), typeof(ChatView), false);
 
     /// <summary>Backing property for <see cref="IsBusy"/>.</summary>
     public static readonly BindableProperty IsBusyProperty = IsBusyPropertyKey.BindableProperty;
+
+    private static readonly BindablePropertyKey IsBusyIndicatorVisiblePropertyKey =
+        BindableProperty.CreateReadOnly(
+            nameof(IsBusyIndicatorVisible),
+            typeof(bool),
+            typeof(ChatView),
+            false);
+
+    /// <summary>Backing property for <see cref="IsBusyIndicatorVisible"/>.</summary>
+    public static readonly BindableProperty IsBusyIndicatorVisibleProperty =
+        IsBusyIndicatorVisiblePropertyKey.BindableProperty;
 
     private static readonly BindablePropertyKey SendErrorPropertyKey =
         BindableProperty.CreateReadOnly(
@@ -327,6 +397,23 @@ public class ChatView : TemplatedView
     /// <summary>Backing property for <see cref="ShowSuggestions"/>.</summary>
     public static readonly BindableProperty ShowSuggestionsProperty = ShowSuggestionsPropertyKey.BindableProperty;
 
+    private static readonly BindablePropertyKey TypingTextPropertyKey =
+        BindableProperty.CreateReadOnly(nameof(TypingText), typeof(string), typeof(ChatView), string.Empty);
+
+    /// <summary>Backing property for <see cref="TypingText"/>.</summary>
+    public static readonly BindableProperty TypingTextProperty = TypingTextPropertyKey.BindableProperty;
+
+    private static readonly BindablePropertyKey HasTypingParticipantsPropertyKey =
+        BindableProperty.CreateReadOnly(
+            nameof(HasTypingParticipants),
+            typeof(bool),
+            typeof(ChatView),
+            false);
+
+    /// <summary>Backing property for <see cref="HasTypingParticipants"/>.</summary>
+    public static readonly BindableProperty HasTypingParticipantsProperty =
+        HasTypingParticipantsPropertyKey.BindableProperty;
+
     private static readonly BindablePropertyKey CanSendPropertyKey =
         BindableProperty.CreateReadOnly(nameof(CanSend), typeof(bool), typeof(ChatView), false);
 
@@ -341,9 +428,15 @@ public class ChatView : TemplatedView
     private DataTemplate? _defaultSuggestionTemplate;
     private DataTemplate? _defaultAttachmentTemplate;
     private IDisposable? _conversationSubscription;
+    private ContentView? _messageListHostPart;
+    private ChatMessagesView? _messageListPart;
+    private bool _ownsMessageListPart;
     private ContentView? _headerPart;
     private ContentView? _footerPart;
     private ContentView? _emptyViewPart;
+    private VisualElement? _welcomePanelPart;
+    private ActivityIndicator? _busyIndicatorPart;
+    private Label? _typingIndicatorPart;
     private Layout? _suggestionsPart;
     private Layout? _attachmentsPart;
     private Entry? _inputEntryPart;
@@ -367,6 +460,10 @@ public class ChatView : TemplatedView
             prompts.CollectionChanged += OnSuggestionsChanged;
 
         SetDynamicResource(ControlTemplateProperty, ChatThemeKeys.ChatViewTemplate);
+        SetDynamicResource(InputAreaStyleProperty, ChatThemeKeys.InputAreaStyle);
+        SetDynamicResource(InputEntryStyleProperty, ChatThemeKeys.InputEntryStyle);
+        SetDynamicResource(AttachButtonStyleProperty, ChatThemeKeys.AttachButtonStyle);
+        SetDynamicResource(SendButtonStyleProperty, ChatThemeKeys.SendButtonStyle);
     }
 
     // ── Public surface ──
@@ -411,6 +508,17 @@ public class ChatView : TemplatedView
     {
         get => (bool)GetValue(AutoScrollToLatestProperty);
         set => SetValue(AutoScrollToLatestProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the template that creates the message-list view inside the shared chat shell.
+    /// The template root must derive from <see cref="ChatMessagesView"/>. A <see langword="null"/>
+    /// template creates the standard <see cref="ChatMessagesView"/>.
+    /// </summary>
+    public DataTemplate? MessageListTemplate
+    {
+        get => (DataTemplate?)GetValue(MessageListTemplateProperty);
+        set => SetValue(MessageListTemplateProperty, value);
     }
 
     /// <summary>Gets or sets the template shown in the header part.</summary>
@@ -525,8 +633,57 @@ public class ChatView : TemplatedView
         set => SetValue(WelcomeIconProperty, value);
     }
 
+    /// <summary>Gets or sets the style applied to the composer container.</summary>
+    public Style? InputAreaStyle
+    {
+        get => (Style?)GetValue(InputAreaStyleProperty);
+        set => SetValue(InputAreaStyleProperty, value);
+    }
+
+    /// <summary>Gets or sets the style applied to the composer text entry.</summary>
+    public Style? InputEntryStyle
+    {
+        get => (Style?)GetValue(InputEntryStyleProperty);
+        set => SetValue(InputEntryStyleProperty, value);
+    }
+
+    /// <summary>Gets or sets the style applied to the attachment button.</summary>
+    public Style? AttachButtonStyle
+    {
+        get => (Style?)GetValue(AttachButtonStyleProperty);
+        set => SetValue(AttachButtonStyleProperty, value);
+    }
+
+    /// <summary>Gets or sets the style applied to the send button.</summary>
+    public Style? SendButtonStyle
+    {
+        get => (Style?)GetValue(SendButtonStyleProperty);
+        set => SetValue(SendButtonStyleProperty, value);
+    }
+
+    /// <summary>Gets or sets the composer corner radius. Defaults to <c>22</c>.</summary>
+    public double InputAreaCornerRadius
+    {
+        get => (double)GetValue(InputAreaCornerRadiusProperty);
+        set => SetValue(InputAreaCornerRadiusProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets whether the shell shows its generic busy indicator. Defaults to <see langword="true"/>.
+    /// Set this to <see langword="false"/> when message content renders its own progress state.
+    /// </summary>
+    public bool ShowBusyIndicator
+    {
+        get => (bool)GetValue(ShowBusyIndicatorProperty);
+        set => SetValue(ShowBusyIndicatorProperty, value);
+    }
+
     /// <summary>Gets whether the conversation is busy. Driven by <see cref="ChatConversation.Status"/>.</summary>
     public bool IsBusy => (bool)GetValue(IsBusyProperty);
+
+    /// <summary>Gets whether the generic busy indicator should currently be visible.</summary>
+    public bool IsBusyIndicatorVisible =>
+        (bool)GetValue(IsBusyIndicatorVisibleProperty);
 
     /// <summary>Gets a generic, user-safe message describing the last failed send, or <see langword="null"/>.</summary>
     public string? SendError => (string?)GetValue(SendErrorProperty);
@@ -558,6 +715,13 @@ public class ChatView : TemplatedView
 
     /// <summary>Gets whether suggestion chips should be shown.</summary>
     public bool ShowSuggestions => (bool)GetValue(ShowSuggestionsProperty);
+
+    /// <summary>Gets the user-facing summary of participants currently composing.</summary>
+    public string TypingText => (string)GetValue(TypingTextProperty);
+
+    /// <summary>Gets whether one or more participants are currently composing.</summary>
+    public bool HasTypingParticipants =>
+        (bool)GetValue(HasTypingParticipantsProperty);
 
     /// <summary>Gets whether the current draft can be sent right now.</summary>
     public bool CanSend => (bool)GetValue(CanSendProperty);
@@ -652,11 +816,16 @@ public class ChatView : TemplatedView
     {
         base.OnApplyTemplate();
 
-        DetachParts();
+        var oldMessageList = DetachParts();
 
         _headerPart = FindPart<ContentView>(HeaderPartName);
         _footerPart = FindPart<ContentView>(FooterPartName);
         _emptyViewPart = FindPart<ContentView>(EmptyViewPartName);
+        _welcomePanelPart = FindPart<VisualElement>(WelcomePanelPartName);
+        _busyIndicatorPart = FindPart<ActivityIndicator>(BusyIndicatorPartName);
+        _typingIndicatorPart = FindPart<Label>(TypingIndicatorPartName);
+        var newMessageList = AttachMessageListPart(FindPart<Element>(MessageListPartName));
+        OnMessageListChanged(oldMessageList, newMessageList);
         AttachSuggestionsPart(FindPart<Layout>(SuggestionsPartName));
         _attachmentsPart = FindPart<Layout>(AttachmentsPartName);
         _inputEntryPart = FindPart<Entry>(InputEntryPartName);
@@ -676,6 +845,46 @@ public class ChatView : TemplatedView
         ApplySuggestionTemplate();
         ApplyAttachmentTemplate();
         UpdateState();
+    }
+
+    /// <summary>
+    /// Creates the message list inserted into the default template's <c>PART_MessageList</c> host.
+    /// The default implementation instantiates <see cref="MessageListTemplate"/>, when supplied.
+    /// </summary>
+    /// <returns>The message list for this chat surface.</returns>
+    protected virtual ChatMessagesView CreateMessageListView()
+    {
+        if (MessageListTemplate is null)
+            return new ChatMessagesView();
+
+        return MessageListTemplate.CreateContent() as ChatMessagesView
+            ?? throw new InvalidOperationException(
+                $"{nameof(MessageListTemplate)} must create a {nameof(ChatMessagesView)}.");
+    }
+
+    /// <summary>
+    /// Called after the message-list part changes. Derived controls can synchronize compatibility
+    /// properties with their specialized list.
+    /// </summary>
+    /// <param name="oldMessageList">The previously attached list, or <see langword="null"/>.</param>
+    /// <param name="newMessageList">The newly attached list, or <see langword="null"/>.</param>
+    protected virtual void OnMessageListChanged(
+        ChatMessagesView? oldMessageList,
+        ChatMessagesView? newMessageList)
+    {
+    }
+
+    /// <summary>Copies this control's message-list settings to an attached list.</summary>
+    /// <param name="messageList">The attached message list.</param>
+    protected virtual void ApplyMessageListProperties(ChatMessagesView messageList)
+    {
+        ArgumentNullException.ThrowIfNull(messageList);
+
+        messageList.Conversation = Conversation;
+        messageList.ContentTemplates = ContentTemplates;
+        messageList.UseDefaultContentTemplates = UseDefaultContentTemplates;
+        messageList.Appearance = Appearance;
+        messageList.AutoScrollToLatest = AutoScrollToLatest;
     }
 
     /// <summary>
@@ -711,29 +920,127 @@ public class ChatView : TemplatedView
         }
     }
 
-    private void DetachParts()
+    private ChatMessagesView? DetachParts()
     {
+        var oldMessageList = DetachMessageListPart();
+        _welcomePanelPart = null;
+        _busyIndicatorPart = null;
+        _typingIndicatorPart = null;
         if (_inputEntryPart is not null)
             _inputEntryPart.Completed -= OnInputCompleted;
         if (_sendButtonPart is not null)
             _sendButtonPart.Clicked -= OnSendClicked;
         if (_attachButtonPart is not null)
             _attachButtonPart.Clicked -= OnAttachClicked;
+        return oldMessageList;
+    }
+
+    private ChatMessagesView? AttachMessageListPart(Element? part)
+    {
+        _messageListHostPart = part as ContentView;
+        _ownsMessageListPart = _messageListHostPart is not null;
+
+        var messageList = part as ChatMessagesView;
+        if (messageList is null && _messageListHostPart is not null)
+        {
+            messageList = CreateMessageListView();
+            _messageListHostPart.Content = messageList;
+        }
+
+        _messageListPart = messageList;
+        ApplyMessageListProperties();
+        return _messageListPart;
+    }
+
+    private void RecreateMessageListPart()
+    {
+        if (!_ownsMessageListPart || _messageListHostPart is null)
+            return;
+
+        var host = _messageListHostPart;
+        var oldMessageList = DetachMessageListPart();
+        var newMessageList = AttachMessageListPart(host);
+        OnMessageListChanged(oldMessageList, newMessageList);
+    }
+
+    private ChatMessagesView? DetachMessageListPart()
+    {
+        var oldMessageList = _messageListPart;
+        if (_ownsMessageListPart && _messageListHostPart is not null)
+            _messageListHostPart.Content = null;
+
+        _messageListPart = null;
+        _messageListHostPart = null;
+        _ownsMessageListPart = false;
+        return oldMessageList;
+    }
+
+    private void ApplyMessageListProperties()
+    {
+        if (_messageListPart is not null)
+            ApplyMessageListProperties(_messageListPart);
     }
 
     // ── Conversation ──
 
     private void OnConversationChanged(ChatConversation? oldConversation, ChatConversation? newConversation)
     {
+        if (oldConversation is not null)
+            oldConversation.TypingParticipants.CollectionChanged -= OnTypingParticipantsChanged;
+
         _conversationSubscription?.Dispose();
         _conversationSubscription = null;
 
-        SetValue(SendErrorPropertyKey, null);
-
         if (newConversation is not null)
+        {
             _conversationSubscription = newConversation.Subscribe(OnConversationChange);
+            newConversation.TypingParticipants.CollectionChanged += OnTypingParticipantsChanged;
+        }
 
+        SetValue(SendErrorPropertyKey, null);
+        ApplyMessageListProperties();
         UpdateState();
+    }
+
+    private void OnTypingParticipantsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        UpdateTypingState();
+    }
+
+    private void UpdateTypingState()
+    {
+        var participants = Conversation?.TypingParticipants;
+        var text = participants is null
+            ? string.Empty
+            : FormatTypingText(participants);
+        var hasTypingParticipants = text.Length > 0;
+
+        SetValue(TypingTextPropertyKey, text);
+        SetValue(HasTypingParticipantsPropertyKey, hasTypingParticipants);
+        if (_typingIndicatorPart is not null)
+        {
+            _typingIndicatorPart.Text = text;
+            _typingIndicatorPart.IsVisible = hasTypingParticipants;
+        }
+    }
+
+    private static string FormatTypingText(IList<ChatParticipant> participants)
+    {
+        var names = participants
+            .Select(participant => participant.DisplayName)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        return names.Length switch
+        {
+            0 => string.Empty,
+            1 => $"{names[0]} is typing…",
+            2 => $"{names[0]} and {names[1]} are typing…",
+            _ => $"{names[0]}, {names[1]}, and {names.Length - 2} other{(names.Length == 3 ? string.Empty : "s")} are typing…",
+        };
     }
 
     private void OnConversationChange(ChatConversationChange change)
@@ -743,7 +1050,11 @@ public class ChatView : TemplatedView
             case ChatConversationChangeKind.StatusChanged:
             case ChatConversationChangeKind.MessageAdded:
             case ChatConversationChangeKind.MessageRemoved:
+                UpdateState();
+                break;
+
             case ChatConversationChangeKind.Reset:
+                SetValue(SendErrorPropertyKey, null);
                 UpdateState();
                 break;
 
@@ -754,14 +1065,30 @@ public class ChatView : TemplatedView
 
     private void UpdateState()
     {
+        UpdateTypingState();
         var conversation = Conversation;
         var isEmpty = conversation is null || conversation.Messages.Count == 0;
 
-        SetValue(IsBusyPropertyKey, conversation?.Status == ChatConversationStatus.Busy);
+        var isBusy = conversation?.Status == ChatConversationStatus.Busy;
+        SetValue(IsBusyPropertyKey, isBusy);
+        SetValue(IsBusyIndicatorVisiblePropertyKey, isBusy && ShowBusyIndicator);
         SetValue(IsEmptyPropertyKey, isEmpty);
         SetValue(ShowEmptyViewPropertyKey, isEmpty && EmptyViewTemplate is not null);
         SetValue(ShowWelcomePropertyKey, isEmpty && EmptyViewTemplate is null);
         SetValue(ShowSuggestionsPropertyKey, isEmpty && _effectiveSuggestions.Count > 0);
+
+        if (_welcomePanelPart is not null)
+            _welcomePanelPart.IsVisible = ShowWelcome;
+        if (_emptyViewPart is not null)
+            _emptyViewPart.IsVisible = ShowEmptyView;
+        if (_suggestionsPart is not null)
+            _suggestionsPart.IsVisible = ShowSuggestions;
+        if (_busyIndicatorPart is not null)
+        {
+            _busyIndicatorPart.IsRunning = IsBusyIndicatorVisible;
+            _busyIndicatorPart.IsVisible = IsBusyIndicatorVisible;
+        }
+
         UpdateCanSend();
     }
 
@@ -860,7 +1187,7 @@ public class ChatView : TemplatedView
         UpdateState();
     }
 
-    private static void ApplyTemplateToHost(ContentView? host, DataTemplate? template)
+    private void ApplyTemplateToHost(ContentView? host, DataTemplate? template)
     {
         if (host is null)
             return;
@@ -872,8 +1199,17 @@ public class ChatView : TemplatedView
             return;
         }
 
-        host.Content = template.CreateContent() as View;
-        host.IsVisible = host.Content is not null;
+        var content = template.CreateContent() as View;
+        if (content is not null &&
+            !content.IsSet(BindableObject.BindingContextProperty))
+        {
+            content.SetBinding(
+                BindableObject.BindingContextProperty,
+                new Binding(nameof(BindingContext), source: this));
+        }
+
+        host.Content = content;
+        host.IsVisible = content is not null;
     }
 
     private void ApplySuggestionTemplate()

@@ -1,12 +1,13 @@
 using Microsoft.Maui.AI.Chat;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.AI.Chat.Controls.Tests.TestHelpers;
+using Microsoft.Maui.Chat.Controls;
 
 namespace Microsoft.Maui.AI.Chat.Controls.Tests;
 
 /// <summary>
 /// Mirrors: Blazor.Tests/Components/MessageListContextTests.cs
-/// Tests ContentTemplateSelector — the MAUI equivalent of Blazor's MessageListContext
+/// Tests the neutral ChatContentTemplateSelector with AI template adapters.
 /// block rendering dispatch. Verifies that the selector picks the correct DataTemplate
 /// for each block type based on registered ContentTemplate instances.
 /// </summary>
@@ -48,7 +49,7 @@ public class TemplateSelectorTests
     [Fact]
     public void SelectTemplate_UnknownBlock_RendersNothing()
     {
-        var selector = new ContentTemplateSelector();
+        var selector = new ChatContentTemplateSelector();
         // Empty selector with no templates — an unmatched block renders nothing.
         var context = BlockFactory.MakeText("Assistant", "Hello");
 
@@ -62,7 +63,7 @@ public class TemplateSelectorTests
     {
         // Only a text template is registered; a tool-call block has no match, so it renders
         // nothing (templates are the allow-list — omitting FunctionInvocationTemplate hides tools).
-        var selector = new ContentTemplateSelector();
+        var selector = new ChatContentTemplateSelector();
         selector.Templates.Add(new TextContentTemplate { ViewType = typeof(Label) });
 
         var toolCall = BlockFactory.MakeToolCall("get_weather");
@@ -77,7 +78,7 @@ public class TemplateSelectorTests
         var genericText = new TextContentTemplate { ViewType = typeof(Label) };
         var roleSpecific = new TextContentTemplate { Role = "User", ViewType = typeof(Entry) };
 
-        var selector = new ContentTemplateSelector();
+        var selector = new ChatContentTemplateSelector();
         selector.Templates.Add(genericText);
         selector.Templates.Add(roleSpecific);
 
@@ -99,7 +100,7 @@ public class TemplateSelectorTests
         var genericTool = new FunctionInvocationTemplate { ViewType = typeof(Label) };
         var weatherTool = new FunctionInvocationTemplate { ToolName = "get_weather", ViewType = typeof(Entry) };
 
-        var selector = new ContentTemplateSelector();
+        var selector = new ChatContentTemplateSelector();
         selector.Templates.Add(genericTool);
         selector.Templates.Add(weatherTool);
 
@@ -145,7 +146,7 @@ public class TemplateSelectorTests
     [Fact]
     public void Templates_CanBeAddedDynamically()
     {
-        var selector = new ContentTemplateSelector();
+        var selector = new ChatContentTemplateSelector();
 
         Assert.Empty(selector.Templates);
 
@@ -163,7 +164,7 @@ public class TemplateSelectorTests
         var textTemplate = new TextContentTemplate { ViewType = typeof(Entry) };
         var roleTemplate = new TextContentTemplate { Role = "Assistant", ViewType = typeof(Editor) };
 
-        var selector = new ContentTemplateSelector();
+        var selector = new ChatContentTemplateSelector();
         selector.Templates.Add(defaultTemplate);
         selector.Templates.Add(textTemplate);
         selector.Templates.Add(roleTemplate);
@@ -176,38 +177,25 @@ public class TemplateSelectorTests
     }
 
     [Fact]
-    public void SelectTemplate_MediaBlock_MatchesMediaTemplate()
-    {
-        var mediaTemplate = new MediaContentTemplate { ViewType = typeof(Label) };
-        var selector = new ContentTemplateSelector();
-        selector.Templates.Add(mediaTemplate);
-
-        var context = BlockFactory.MakeMedia();
-
-        var template = selector.SelectTemplate(context, null!);
-        Assert.NotNull(template);
-    }
-
-    [Fact]
     public void SelectTemplate_ReasoningBlock_MatchesReasoningTemplate()
     {
-        var selector = new ContentTemplateSelector();
+        var selector = new ChatContentTemplateSelector();
         selector.Templates.Add(new ReasoningContentTemplate());
 
         var template = selector.SelectTemplate(BlockFactory.MakeReasoning(), null!);
 
-        Assert.IsType<ReasoningView>(template.CreateContent());
+        Assert.IsAssignableFrom<ChatBubbleView>(template.CreateContent());
     }
 
     [Fact]
     public void SelectTemplate_UIActionBlock_MatchesUIActionTemplate()
     {
-        var selector = new ContentTemplateSelector();
+        var selector = new ChatContentTemplateSelector();
         selector.Templates.Add(new UIActionContentTemplate());
 
         var template = selector.SelectTemplate(BlockFactory.MakeUIAction("Refresh"), null!);
 
-        Assert.IsType<UIActionView>(template.CreateContent());
+        Assert.IsAssignableFrom<ChatBubbleView>(template.CreateContent());
     }
 
     [Fact]
@@ -217,25 +205,25 @@ public class TemplateSelectorTests
         var selector = view.CreateAiTemplateSelector();
         var session = SessionFactory.Create();
 
-        Assert.IsType<ChatMessageView>(
+        Assert.IsType<Microsoft.Maui.Chat.Controls.ChatTextContentView>(
             selector.SelectTemplate(BlockFactory.MakeText("User", "Hello"), null!).CreateContent());
-        Assert.IsType<ChatMessageView>(
+        Assert.IsType<Microsoft.Maui.Chat.Controls.ChatTextContentView>(
             selector.SelectTemplate(BlockFactory.MakeText("Assistant", "Hi"), null!).CreateContent());
-        Assert.IsType<ToolApprovalView>(
+        Assert.IsAssignableFrom<ChatBubbleView>(
             selector.SelectTemplate(BlockFactory.MakeApproval("delete_file"), null!).CreateContent());
-        Assert.IsType<ReasoningView>(
+        Assert.IsAssignableFrom<ChatBubbleView>(
             selector.SelectTemplate(BlockFactory.MakeReasoning(), null!).CreateContent());
-        Assert.IsType<UIActionView>(
+        Assert.IsAssignableFrom<ChatBubbleView>(
             selector.SelectTemplate(BlockFactory.MakeUIAction("Refresh"), null!).CreateContent());
-        Assert.IsType<MediaContentView>(
+        Assert.IsType<ChatMediaContentView>(
             selector.SelectTemplate(BlockFactory.MakeMedia(), null!).CreateContent());
-        Assert.IsType<ThinkingView>(
+        Assert.IsAssignableFrom<ChatBubbleView>(
             selector.SelectTemplate(
-                new ContentContext(session, new ThinkingContentBlock(), view),
+                new ContentContext(session, new ThinkingContentBlock()),
                 null!).CreateContent());
-        Assert.IsType<ErrorMessageView>(
+        Assert.IsAssignableFrom<ChatBubbleView>(
             selector.SelectTemplate(
-                new ContentContext(session, new ErrorContentBlock("error"), view),
+                new ContentContext(session, new ErrorContentBlock("error")),
                 null!).CreateContent());
     }
 
@@ -248,7 +236,7 @@ public class TemplateSelectorTests
 
         AssertRendersNothing(selector.SelectTemplate(BlockFactory.MakeToolCall("get_weather"), null!));
         AssertRendersNothing(selector.SelectTemplate(
-            new ContentContext(session, new UnknownContentBlock(), view),
+            new ContentContext(session, new UnknownContentBlock()),
             null!));
     }
 
@@ -261,11 +249,11 @@ public class TemplateSelectorTests
         var block = new CustomTextBlock();
         block.AppendText("custom");
         block.Role = ChatRole.Assistant;
-        var context = new ContentContext(SessionFactory.Create(), block, view);
+        var context = new ContentContext(SessionFactory.Create(), block);
 
         var selected = view.CreateAiTemplateSelector().SelectTemplate(context, null!);
 
-        Assert.IsType<Editor>(selected.CreateContent());
+        Assert.IsAssignableFrom<ChatBubbleView>(selected.CreateContent());
     }
 
     [Fact]
@@ -280,6 +268,7 @@ public class TemplateSelectorTests
         {
             ViewType = typeof(Label),
             Priority = -20_000,
+            UseMessageChrome = false,
         });
 
         var selected = view.CreateAiTemplateSelector().SelectTemplate(context, null!);
@@ -290,12 +279,11 @@ public class TemplateSelectorTests
     /// Creates a selector with all standard templates registered (mirrors the default
     /// CopilotChatView template configuration).
     /// </summary>
-    private static ContentTemplateSelector CreateDefaultSelector()
+    private static ChatContentTemplateSelector CreateDefaultSelector()
     {
-        var selector = new ContentTemplateSelector();
+        var selector = new ChatContentTemplateSelector();
         selector.Templates.Add(new TextContentTemplate { ViewType = typeof(Label) });
         selector.Templates.Add(new FunctionInvocationTemplate { ViewType = typeof(Label) });
-        selector.Templates.Add(new MediaContentTemplate { ViewType = typeof(Label) });
         selector.Templates.Add(new DefaultContentTemplate { ViewType = typeof(Label) });
         return selector;
     }

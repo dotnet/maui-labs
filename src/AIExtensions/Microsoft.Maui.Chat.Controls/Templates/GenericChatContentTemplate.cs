@@ -31,6 +31,25 @@ public class GenericChatContentTemplate : ChatContentTemplate
     public static readonly BindableProperty IsOutgoingProperty =
         BindableProperty.Create(nameof(IsOutgoing), typeof(bool?), typeof(GenericChatContentTemplate));
 
+    /// <summary>Backing property for <see cref="UseMessageChrome"/>.</summary>
+    public static readonly BindableProperty UseMessageChromeProperty =
+        BindableProperty.Create(
+            nameof(UseMessageChrome),
+            typeof(bool),
+            typeof(GenericChatContentTemplate),
+            true,
+            propertyChanged: static (bindable, _, _) =>
+                ((GenericChatContentTemplate)bindable).InvalidateTemplate());
+
+    /// <summary>Backing property for <see cref="Presentation"/>.</summary>
+    public static readonly BindableProperty PresentationProperty =
+        BindableProperty.Create(
+            nameof(Presentation),
+            typeof(ChatContentPresentation?),
+            typeof(GenericChatContentTemplate),
+            propertyChanged: static (bindable, _, _) =>
+                ((GenericChatContentTemplate)bindable).InvalidateTemplate());
+
     /// <summary>Gets or sets the content type filter. Matches the type and its subclasses.</summary>
     public Type? ContentType
     {
@@ -50,6 +69,27 @@ public class GenericChatContentTemplate : ChatContentTemplate
     {
         get => (bool?)GetValue(IsOutgoingProperty);
         set => SetValue(IsOutgoingProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets whether a custom body view is wrapped in the standard avatar, participant name,
+    /// bubble, timestamp, grouping, and delivery-status chrome. Defaults to <see langword="true"/>.
+    /// A <see cref="ChatBubbleView"/> is never wrapped twice.
+    /// </summary>
+    public bool UseMessageChrome
+    {
+        get => (bool)GetValue(UseMessageChromeProperty);
+        set => SetValue(UseMessageChromeProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets an optional bubble-presentation override. A <see langword="null"/> value uses
+    /// <see cref="MessageContent.Presentation"/> from each rendered content instance.
+    /// </summary>
+    public ChatContentPresentation? Presentation
+    {
+        get => (ChatContentPresentation?)GetValue(PresentationProperty);
+        set => SetValue(PresentationProperty, value);
     }
 
     /// <inheritdoc />
@@ -83,5 +123,22 @@ public class GenericChatContentTemplate : ChatContentTemplate
             boost += 25;
 
         return base.GetPriority(item) + boost;
+    }
+
+    /// <inheritdoc />
+    protected override DataTemplate CreateTemplate()
+    {
+        var viewType = ViewType
+            ?? throw new InvalidOperationException(
+                $"{GetType().Name} has no {nameof(ViewType)} set. Set one, or override {nameof(CreateTemplate)}.");
+
+        if (!UseMessageChrome)
+            return base.CreateTemplate();
+
+        return new DataTemplate(() =>
+        {
+            var body = CreateView(viewType);
+            return WrapInMessageChrome(body, Presentation);
+        });
     }
 }

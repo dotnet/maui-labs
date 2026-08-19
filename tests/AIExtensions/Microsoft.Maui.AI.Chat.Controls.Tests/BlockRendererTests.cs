@@ -6,7 +6,7 @@ namespace Microsoft.Maui.AI.Chat.Controls.Tests;
 
 /// <summary>
 /// Mirrors: Blazor.Tests/Components/BlockRendererTests.cs
-/// Tests that ContentTemplateSelector correctly resolves templates for each block type,
+/// Tests that the neutral ChatContentTemplateSelector resolves AI templates for each block type,
 /// and that the CopilotChatView's ContentContext properly exposes block properties.
 /// </summary>
 public class BlockRendererTests

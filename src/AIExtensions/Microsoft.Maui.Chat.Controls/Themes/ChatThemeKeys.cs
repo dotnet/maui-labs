@@ -25,6 +25,12 @@ public static class ChatThemeKeys
     /// <summary>The <see cref="Style"/> applied to labels inside outgoing bubbles.</summary>
     public const string OutgoingTextStyle = "MauiChat.Text.Outgoing";
 
+    /// <summary>The <see cref="Style"/> applied to spans inside incoming rich text.</summary>
+    public const string IncomingSpanStyle = "MauiChat.Span.Incoming";
+
+    /// <summary>The <see cref="Style"/> applied to spans inside outgoing rich text.</summary>
+    public const string OutgoingSpanStyle = "MauiChat.Span.Outgoing";
+
     /// <summary>The <see cref="Style"/> applied to the participant name label.</summary>
     public const string ParticipantNameStyle = "MauiChat.ParticipantName";
 
@@ -66,6 +72,9 @@ public static class ChatThemeKeys
 
     /// <summary>The <see cref="Style"/> applied to error labels.</summary>
     public const string ErrorTextStyle = "MauiChat.ErrorText";
+
+    /// <summary>The <see cref="Style"/> applied to the typing-participant indicator.</summary>
+    public const string TypingIndicatorStyle = "MauiChat.TypingIndicator";
 
     /// <summary>The <see cref="Style"/> applied to the welcome panel heading.</summary>
     public const string WelcomeIconStyle = "MauiChat.WelcomeIcon";
