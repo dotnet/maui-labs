@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Runtime.InteropServices;
+using Microsoft.Maui.DevFlow.Driver;
 
 namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 
@@ -14,6 +15,8 @@ public sealed class iOSSimulatorFixture : AppFixtureBase
     string? _appBundleId;
 
     public override string Platform => "ios";
+    public override string? DeviceId => _simulatorUdid;
+    public override string? AppIdentifier => _appBundleId;
 
     protected override async Task InitializePlatformAsync()
     {
@@ -58,6 +61,33 @@ public sealed class iOSSimulatorFixture : AppFixtureBase
             {
             }
         }
+    }
+
+    public override async Task ResetPermissionAsync(PermissionService permission)
+    {
+        if (_simulatorUdid == null || _appBundleId == null)
+            throw new InvalidOperationException("The iOS Simulator app is not initialized.");
+
+        using var driver = new iOSSimulatorAppDriver
+        {
+            DeviceUdid = _simulatorUdid,
+            BundleId = _appBundleId
+        };
+        await driver.ResetPermissionAsync(permission);
+
+        try
+        {
+            await RunProcessAsync(
+                "xcrun",
+                $"simctl terminate {_simulatorUdid} {_appBundleId}",
+                timeoutSeconds: 10);
+        }
+        catch
+        {
+        }
+
+        await LaunchAppAsync();
+        await WaitForAgentAsync(timeoutSeconds: 60);
     }
 
     async Task<(string Udid, bool AlreadyBooted)> FindOrBootSimulatorAsync()

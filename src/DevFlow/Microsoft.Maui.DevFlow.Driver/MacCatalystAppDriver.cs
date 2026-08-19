@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Security.Cryptography;
 using Microsoft.Maui.DevFlow.Driver.Mac;
 
 namespace Microsoft.Maui.DevFlow.Driver;
@@ -11,7 +13,8 @@ namespace Microsoft.Maui.DevFlow.Driver;
 ///
 /// Detection strategy:
 ///   1. AXModalAlert subrole — standard macOS alert sheets (alerts, action sheets, confirm dialogs).
-///   2. Generic "dialog cluster" scan — recursively walks the AX tree looking for any subtree that
+///   2. Explicit AX dialog and sheet containers.
+///   3. Generic "dialog cluster" scan — recursively walks the AX tree looking for any subtree that
 ///      contains ≥1 AXButton plus either AXStaticText or AXTextField, without relying on specific
 ///      nesting depths or container subroles. This catches inline prompt dialogs and any future
 ///      layout changes Apple may introduce.
@@ -23,6 +26,17 @@ namespace Microsoft.Maui.DevFlow.Driver;
 /// </summary>
 public class MacCatalystAppDriver : AppDriverBase
 {
+    private static readonly HashSet<string> SystemDialogProcessNames =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "CoreServicesUIAgent",
+            "NetAuthAgent",
+            "SecurityAgent",
+            "authorizationhost"
+        };
+    private static readonly ConcurrentDictionary<string, DialogLease> DialogLeases = new();
+    private static readonly TimeSpan DialogLeaseLifetime = TimeSpan.FromMinutes(2);
+
     public override string Platform => "MacCatalyst";
 
     /// <summary>
@@ -41,35 +55,162 @@ public class MacCatalystAppDriver : AppDriverBase
 
     /// <summary>
     /// Detect a native dialog (alert, action sheet, or prompt) using macOS Accessibility API.
+    /// The target app is checked first, followed by known macOS system prompt hosts.
     /// </summary>
     public Task<AlertInfo?> DetectAlertAsync()
     {
         EnsureMacOS();
-        var pid = ResolveProcessId();
-        using var app = AXElement.CreateForApplication(pid);
-        return Task.FromResult(DetectDialog(app));
+        EnsureAccessibilityAuthorized();
+
+        var match = FindDialogMatch();
+        if (match is null)
+            return Task.FromResult<AlertInfo?>(null);
+
+        if (!match.Value.info.CanRespond)
+        {
+            DisposeAll(match.Value.buttons);
+            return Task.FromResult<AlertInfo?>(match.Value.info);
+        }
+
+        return Task.FromResult<AlertInfo?>(CreateDialogLease(match.Value));
+    }
+
+    public bool IsAccessibilityAuthorized()
+    {
+        EnsureMacOS();
+        return MacAccessibility.AXIsProcessTrusted();
+    }
+
+    public static void CancelAlertResponse(string promptId)
+    {
+        if (string.IsNullOrWhiteSpace(promptId))
+            return;
+        if (DialogLeases.TryRemove(promptId, out var lease))
+            lease.Dispose();
     }
 
     /// <summary>
-    /// Dismiss the current alert by pressing a button via AXPress action.
-    /// If buttonLabel is null, presses the first button found.
+    /// Presses an exact button on the exact prompt previously returned by
+    /// <see cref="DetectAlertAsync"/>. If the prompt changed, no action is performed.
     /// </summary>
-    public Task DismissAlertAsync(string? buttonLabel = null)
+    public Task<AlertActionResult> PressAlertButtonAsync(string promptId, string buttonLabel)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(promptId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(buttonLabel);
         EnsureMacOS();
-        var pid = ResolveProcessId();
-        using var app = AXElement.CreateForApplication(pid);
+        EnsureAccessibilityAuthorized();
 
-        var (_, buttonEls) = FindDialogButtons(app);
-        if (buttonEls is null || buttonEls.Count == 0)
+        PurgeExpiredDialogLeases();
+        if (!DialogLeases.TryRemove(promptId, out var lease))
         {
-            DisposeAll(buttonEls);
-            throw new InvalidOperationException("No alert detected to dismiss.");
+            return Task.FromResult(new AlertActionResult(
+                false,
+                true,
+                "The reviewed prompt expired or was already used. Detect the visible prompt again and ask the user what to do."));
         }
 
+        using (lease)
+        {
+            if (lease.TargetProcessId != ResolveProcessId())
+            {
+                return Task.FromResult(new AlertActionResult(
+                    false,
+                    true,
+                    "The connected app changed after the prompt was reviewed. Detect the prompt again.",
+                    lease.Info));
+            }
+
+            var match = FindDialogMatch();
+            if (match is null)
+            {
+                return Task.FromResult(new AlertActionResult(
+                    false,
+                    true,
+                    "The reviewed prompt is no longer visible. Ask the user before acting on any new prompt."));
+            }
+
+            var (info, currentButtons) = match.Value;
+            try
+            {
+                var currentFingerprint = NativeDialogIdentity.CreateFingerprint(
+                    Platform,
+                    $"{info.SourceProcessId ?? 0}:{info.SourceProcessName}",
+                    info);
+                if (!string.Equals(lease.Fingerprint, currentFingerprint, StringComparison.Ordinal))
+                {
+                    return Task.FromResult(new AlertActionResult(
+                        false,
+                        true,
+                        "The visible prompt changed after it was reviewed. Detect it again and ask the user what to do.",
+                        info));
+                }
+
+                if (!info.CanRespond)
+                {
+                    return Task.FromResult(new AlertActionResult(
+                        false,
+                        true,
+                        "The visible system dialog cannot be safely attributed to the target app. Ask the user to respond manually.",
+                        info));
+                }
+
+                AXElement target;
+                try
+                {
+                    target = PickExactButton(currentButtons, buttonLabel);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return Task.FromResult(new AlertActionResult(
+                        false,
+                        true,
+                        $"{ex.Message} Ask the user to choose one of the currently visible buttons.",
+                        info));
+                }
+
+                if (!target.Press())
+                {
+                    return Task.FromResult(new AlertActionResult(
+                        false,
+                        true,
+                        $"macOS did not allow the '{buttonLabel}' AXPress action. Ask the user to respond manually.",
+                        info));
+                }
+
+                return Task.FromResult(new AlertActionResult(
+                    true,
+                    false,
+                    $"Pressed '{buttonLabel}' using AXPress without synthesizing mouse or keyboard input.",
+                    info));
+            }
+            finally
+            {
+                DisposeAll(currentButtons);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Dismiss the current alert by pressing an exact button label via AXPress.
+    /// </summary>
+    /// <param name="buttonLabel">The exact visible button label. A label is always required on macOS.</param>
+    public Task DismissAlertAsync(string buttonLabel)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(buttonLabel);
+        EnsureMacOS();
+        EnsureAccessibilityAuthorized();
+
+        var match = FindDialogMatch();
+        if (match is null)
+            throw new InvalidOperationException("No alert detected to dismiss.");
+
+        var (info, buttonEls) = match.Value;
         try
         {
-            var target = PickButton(buttonEls, buttonLabel);
+            if (!info.CanRespond)
+                throw new InvalidOperationException("The visible system dialog cannot be safely attributed to the target app. Ask the user to respond manually.");
+
+            var target = PickExactButton(buttonEls, buttonLabel);
             if (!target.Press())
                 throw new InvalidOperationException("AXPress action failed.");
         }
@@ -82,23 +223,26 @@ public class MacCatalystAppDriver : AppDriverBase
     /// Convenience: detect and dismiss an alert if present, no-op if not.
     /// Single AX tree walk — detects and dismisses in one pass to avoid stale coordinates.
     /// </summary>
-    public Task<AlertInfo?> HandleAlertIfPresentAsync(string? buttonLabel = null)
+    /// <param name="buttonLabel">The exact visible button label. A label is always required on macOS.</param>
+    public Task<AlertInfo?> HandleAlertIfPresentAsync(string buttonLabel)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(buttonLabel);
         EnsureMacOS();
-        var pid = ResolveProcessId();
-        using var app = AXElement.CreateForApplication(pid);
+        EnsureAccessibilityAuthorized();
 
-        var (info, buttonEls) = FindDialogButtons(app);
-        if (info is null || buttonEls is null || buttonEls.Count == 0)
-        {
-            DisposeAll(buttonEls);
+        var match = FindDialogMatch();
+        if (match is null)
             return Task.FromResult<AlertInfo?>(null);
-        }
 
+        var (info, buttonEls) = match.Value;
         try
         {
-            var target = PickButton(buttonEls, buttonLabel);
-            target.Press();
+            if (!info.CanRespond)
+                throw new InvalidOperationException("The visible system dialog cannot be safely attributed to the target app. Ask the user to respond manually.");
+
+            var target = PickExactButton(buttonEls, buttonLabel);
+            if (!target.Press())
+                throw new InvalidOperationException("AXPress action failed.");
         }
         finally { DisposeAll(buttonEls); }
 
@@ -111,6 +255,7 @@ public class MacCatalystAppDriver : AppDriverBase
     public Task<string> GetAccessibilityTreeAsync()
     {
         EnsureMacOS();
+        EnsureAccessibilityAuthorized();
         var pid = ResolveProcessId();
         using var app = AXElement.CreateForApplication(pid);
         var children = app.GetChildren();
@@ -141,11 +286,10 @@ public class MacCatalystAppDriver : AppDriverBase
         if (!fullPath.EndsWith(".mov", StringComparison.OrdinalIgnoreCase))
             fullPath = Path.ChangeExtension(fullPath, ".mov");
 
-        // Try to capture just the app window using -l windowID
-        var args = $"-v \"{fullPath}\"";
-        var windowId = TryGetWindowId();
-        if (windowId.HasValue)
-            args = $"-v -l {windowId.Value} \"{fullPath}\"";
+        var windowId = TryGetWindowId()
+            ?? throw new InvalidOperationException(
+                "No visible app window was found. Refusing to record the entire desktop.");
+        var args = $"-v -l {windowId} \"{fullPath}\"";
 
         var psi = new ProcessStartInfo("screencapture", args)
         {
@@ -195,34 +339,15 @@ public class MacCatalystAppDriver : AppDriverBase
     }
 
     /// <summary>
-    /// Resolves the CGWindowID for the app's main window via the macOS window list.
-    /// Uses a small Python script to call CoreGraphics, avoiding native P/Invoke complexity.
+    /// Resolves the CGWindowID for the app's frontmost visible normal window via
+    /// CoreGraphics without activating the application.
     /// Returns null if the window cannot be found.
     /// </summary>
     private int? TryGetWindowId()
     {
         try
         {
-            var pid = ResolveProcessId();
-            var script = $"""
-                import Quartz
-                wl = Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionOnScreenOnly, Quartz.kCGNullWindowID)
-                for w in wl:
-                    if w.get('kCGWindowOwnerPID') == {pid} and w.get('kCGWindowLayer', 99) == 0:
-                        print(w['kCGWindowNumber'])
-                        break
-                """;
-            var psi = new ProcessStartInfo("python3", $"-c \"{script.Replace("\"", "\\\"")}\"")
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false
-            };
-            using var proc = Process.Start(psi);
-            if (proc == null) return null;
-            var output = proc.StandardOutput.ReadToEnd().Trim();
-            proc.WaitForExit(5000);
-            return int.TryParse(output, out var wid) ? wid : null;
+            return MacWindowServer.TryGetWindowId(ResolveProcessId());
         }
         catch
         {
@@ -231,14 +356,117 @@ public class MacCatalystAppDriver : AppDriverBase
     }
 
     // ──────────────────────────────────────────────
-    // Detection: returns AlertInfo only (for detect command)
+    // Detection
     // ──────────────────────────────────────────────
 
-    private static AlertInfo? DetectDialog(AXElement app)
+    private (AlertInfo info, List<AXElement> buttons)? FindDialogMatch()
     {
-        var (info, buttonEls) = FindDialogButtons(app);
-        DisposeAll(buttonEls);
-        return info;
+        var targetPid = ResolveProcessId();
+        var targetProcessName = GetProcessName(targetPid) ?? AppName ?? "Target App";
+        (AlertInfo info, List<AXElement> buttons)? unattributedSystemDialog = null;
+
+        foreach (var candidate in GetDialogProcesses(targetPid, targetProcessName))
+        {
+            try
+            {
+                using var app = AXElement.CreateForApplication(candidate.ProcessId);
+                var match = FindDialogButtons(app);
+                var isRecognizedDialog = match.isRecognizedDialog;
+                if ((match.info is null || match.buttons is null || match.buttons.Count == 0) &&
+                    candidate.IsSystemDialog)
+                {
+                    DisposeAll(match.buttons);
+                    match = FindSystemDialogButtons(app);
+                    isRecognizedDialog = false;
+                }
+
+                if (match.info is null || match.buttons is null || match.buttons.Count == 0)
+                {
+                    DisposeAll(match.buttons);
+                    continue;
+                }
+
+                var canRespond = !candidate.IsSystemDialog ||
+                    (isRecognizedDialog &&
+                    NativeDialogSafety.IsSystemDialogForTarget(
+                        match.info,
+                        AppName,
+                        targetProcessName));
+                var info = match.info with
+                {
+                    SourceProcessId = candidate.ProcessId,
+                    SourceProcessName = candidate.ProcessName,
+                    IsSystemDialog = candidate.IsSystemDialog,
+                    RequiresUserConfirmation = true,
+                    CanRespond = canRespond
+                };
+
+                if (canRespond)
+                {
+                    DisposeAll(unattributedSystemDialog?.buttons);
+                    return (info, match.buttons);
+                }
+
+                if (unattributedSystemDialog is null)
+                    unattributedSystemDialog = (info, match.buttons);
+                else
+                    DisposeAll(match.buttons);
+            }
+            catch when (candidate.IsSystemDialog)
+            {
+                // System prompt hosts are short-lived; continue if one exits during the scan.
+            }
+        }
+
+        return unattributedSystemDialog;
+    }
+
+    private AlertInfo CreateDialogLease(
+        (AlertInfo info, List<AXElement> buttons) match)
+    {
+        PurgeExpiredDialogLeases();
+
+        var promptId = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
+        var leasedInfo = match.info with { PromptId = promptId };
+        var fingerprint = NativeDialogIdentity.CreateFingerprint(
+            Platform,
+            $"{match.info.SourceProcessId ?? 0}:{match.info.SourceProcessName}",
+            match.info);
+        var lease = new DialogLease(
+            ResolveProcessId(),
+            fingerprint,
+            leasedInfo,
+            match.buttons,
+            DateTimeOffset.UtcNow.Add(DialogLeaseLifetime));
+
+        if (!DialogLeases.TryAdd(promptId, lease))
+        {
+            lease.Dispose();
+            throw new InvalidOperationException("Unable to create a unique native-dialog response token.");
+        }
+
+        _ = ExpireDialogLeaseAsync(promptId);
+        return leasedInfo;
+    }
+
+    private static async Task ExpireDialogLeaseAsync(string promptId)
+    {
+        await Task.Delay(DialogLeaseLifetime).ConfigureAwait(false);
+        if (DialogLeases.TryRemove(promptId, out var expired))
+            expired.Dispose();
+    }
+
+    private static void PurgeExpiredDialogLeases()
+    {
+        var now = DateTimeOffset.UtcNow;
+        foreach (var entry in DialogLeases)
+        {
+            if (entry.Value.ExpiresAt <= now &&
+                DialogLeases.TryRemove(entry.Key, out var expired))
+            {
+                expired.Dispose();
+            }
+        }
     }
 
     // ──────────────────────────────────────────────
@@ -250,9 +478,10 @@ public class MacCatalystAppDriver : AppDriverBase
     /// Caller MUST dispose the button elements.
     ///
     /// Strategy 1: Find an AXModalAlert subrole node — collect its direct-child text and buttons.
-    /// Strategy 2 (fallback): Generic dialog cluster scan via <see cref="FindDialogCluster"/>.
+    /// Strategy 2: Find an explicit dialog or sheet container.
+    /// Strategy 3: Generic dialog cluster scan via <see cref="FindDialogCluster"/>.
     /// </summary>
-    private static (AlertInfo? info, List<AXElement>? buttons) FindDialogButtons(AXElement app)
+    private static (AlertInfo? info, List<AXElement>? buttons, bool isRecognizedDialog) FindDialogButtons(AXElement app)
     {
         // Strategy 1: AXModalAlert — the standard, most reliable signal
         using var modalAlert = app.FindFirst(el => el.Subrole == "AXModalAlert");
@@ -260,16 +489,52 @@ public class MacCatalystAppDriver : AppDriverBase
         {
             var result = CollectButtonsAndText(modalAlert);
             if (result.buttons.Count > 0)
-                return (new AlertInfo(result.title, ToAlertButtons(result.buttons)), result.buttons);
+                return (CreateAlertInfo(result.texts, result.buttons), result.buttons, true);
             DisposeAll(result.buttons);
         }
 
-        // Strategy 2: Generic dialog cluster — handles inline prompts and any other dialog shape
+        // Strategy 2: Explicit AX dialog/sheet containers.
+        using var dialog = app.FindFirst(el =>
+            el.Role == "AXSheet" ||
+            el.Subrole is "AXDialog" or "AXSystemDialog");
+        if (dialog is not null)
+        {
+            var result = CollectButtonsAndText(dialog);
+            if (result.buttons.Count > 0)
+                return (CreateAlertInfo(result.texts, result.buttons), result.buttons, true);
+            DisposeAll(result.buttons);
+        }
+
+        // Strategy 3: Generic dialog cluster — handles inline prompts and any other dialog shape
         var cluster = FindDialogCluster(app);
         if (cluster is not null)
-            return cluster.Value;
+            return (cluster.Value.info, cluster.Value.buttons, false);
 
-        return (null, null);
+        return (null, null, false);
+    }
+
+    private static (AlertInfo? info, List<AXElement>? buttons, bool isRecognizedDialog) FindSystemDialogButtons(AXElement app)
+    {
+        var windows = app.GetChildren();
+        try
+        {
+            foreach (var window in windows)
+            {
+                if (window.Role != "AXWindow")
+                    continue;
+
+                var result = CollectButtonsAndText(window);
+                if (result.buttons.Count > 0)
+                    return (CreateAlertInfo(result.texts, result.buttons), result.buttons, false);
+                DisposeAll(result.buttons);
+            }
+        }
+        finally
+        {
+            DisposeAll(windows);
+        }
+
+        return (null, null, false);
     }
 
     /// <summary>
@@ -277,14 +542,14 @@ public class MacCatalystAppDriver : AppDriverBase
     /// Returns retained AXButton elements — caller must dispose.
     /// Reads label from ALL attributes (Title, Description, Value) for maximum resilience.
     /// </summary>
-    private static (string? title, List<AXElement> buttons) CollectButtonsAndText(AXElement container)
+    private static (List<string> texts, List<AXElement> buttons) CollectButtonsAndText(AXElement container)
     {
         var texts = new List<string>();
         var buttonEls = new List<AXElement>();
 
         CollectRecursive(container, texts, buttonEls, depth: 0, maxDepth: 6);
 
-        return (texts.Count > 0 ? texts[0] : null, buttonEls);
+        return (texts, buttonEls);
     }
 
     private static void CollectRecursive(AXElement el, List<string> texts, List<AXElement> buttonEls, int depth, int maxDepth)
@@ -376,7 +641,7 @@ public class MacCatalystAppDriver : AppDriverBase
 
                 if (buttonEls.Count > 0)
                 {
-                    var info = new AlertInfo(texts.Count > 0 ? texts[0] : null, ToAlertButtons(buttonEls));
+                    var info = CreateAlertInfo(texts, buttonEls);
                     return (info, buttonEls);
                 }
                 DisposeAll(buttonEls);
@@ -454,40 +719,48 @@ public class MacCatalystAppDriver : AppDriverBase
     }
 
     /// <summary>
-    /// Normalizes smart/curly quotes to ASCII for reliable matching across locales.
+    /// Picks one button by exact visible label and rejects ambiguous matches.
     /// </summary>
-    private static string NormalizeQuotes(string s)
-        => s.Replace('\u2018', '\'').Replace('\u2019', '\'')
-            .Replace('\u201C', '"').Replace('\u201D', '"');
-
-    /// <summary>
-    /// Picks the button to press. If a label is specified, matches case-insensitively
-    /// with quote normalization. Otherwise picks the first button.
-    /// </summary>
-    private static AXElement PickButton(List<AXElement> buttons, string? buttonLabel)
+    private static AXElement PickExactButton(List<AXElement> buttons, string buttonLabel)
     {
         if (buttons.Count == 0)
             throw new InvalidOperationException("No buttons found in dialog.");
 
-        if (buttonLabel is not null)
+        var matches = buttons
+            .Where(button => ButtonLabelsMatch(GetBestLabel(button), buttonLabel))
+            .ToList();
+        if (matches.Count == 1)
+            return matches[0];
+
+        var available = string.Join(", ", buttons.Select(GetBestLabel));
+        if (matches.Count == 0)
         {
-            var normalized = NormalizeQuotes(buttonLabel);
-            var match = buttons.FirstOrDefault(b =>
-                NormalizeQuotes(GetBestLabel(b)).Equals(normalized, StringComparison.OrdinalIgnoreCase));
-            if (match is null)
-            {
-                var available = string.Join(", ", buttons.Select(b => GetBestLabel(b)));
-                throw new InvalidOperationException($"Button '{buttonLabel}' not found. Available: {available}");
-            }
-            return match;
+            throw new InvalidOperationException(
+                $"Button '{buttonLabel}' was not found by exact label. Available: {available}");
         }
 
-        // No label specified — return first button
-        return buttons[0];
+        throw new InvalidOperationException(
+            $"More than one button has the exact label '{buttonLabel}'. No action was performed.");
     }
 
+    internal static bool ButtonLabelsMatch(string visibleLabel, string requestedLabel)
+        => NormalizeQuotes(visibleLabel).Equals(NormalizeQuotes(requestedLabel), StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeQuotes(string value)
+        => value.Replace('\u2018', '\'').Replace('\u2019', '\'')
+            .Replace('\u201C', '"').Replace('\u201D', '"');
+
     private static List<AlertButton> ToAlertButtons(List<AXElement> elements)
-        => elements.Select(b => new AlertButton(GetBestLabel(b), 0, 0, 0, 0)).ToList();
+        => elements.Select(button => new AlertButton(GetBestLabel(button), 0, 0, 0, 0)
+        {
+            Identifier = button.Identifier
+        }).ToList();
+
+    private static AlertInfo CreateAlertInfo(List<string> texts, List<AXElement> buttons)
+        => new(texts.FirstOrDefault(), ToAlertButtons(buttons))
+        {
+            Text = texts
+        };
 
     // ──────────────────────────────────────────────
     // Helpers
@@ -500,27 +773,67 @@ public class MacCatalystAppDriver : AppDriverBase
 
         if (!string.IsNullOrEmpty(AppName))
         {
-            var psi = new ProcessStartInfo("pgrep", $"-f {AppName}")
+            var processId = ProcessNameResolver.FindUniqueProcessId(AppName);
+            if (processId.HasValue)
             {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false
-            };
-            using var proc = Process.Start(psi);
-            if (proc is not null)
+                ProcessId = processId.Value;
+                return processId.Value;
+            }
+        }
+
+        throw new InvalidOperationException(
+            "Unable to uniquely resolve the Mac Catalyst process. Set ProcessId explicitly.");
+    }
+
+    private static IReadOnlyList<DialogProcess> GetDialogProcesses(
+        int targetPid,
+        string targetProcessName)
+    {
+        var processes = new List<DialogProcess>
+        {
+            new(targetPid, targetProcessName, false)
+        };
+
+        foreach (var process in Process.GetProcesses())
+        {
+            using (process)
             {
-                var output = proc.StandardOutput.ReadToEnd();
-                proc.WaitForExit();
-                var lines = output.Trim().Split('\n', StringSplitOptions.RemoveEmptyEntries);
-                if (lines.Length > 0 && int.TryParse(lines[0].Trim(), out var pid))
+                try
                 {
-                    ProcessId = pid;
-                    return pid;
+                    if (process.Id != targetPid && SystemDialogProcessNames.Contains(process.ProcessName))
+                        processes.Add(new DialogProcess(process.Id, process.ProcessName, true));
+                }
+                catch
+                {
+                    // A process may exit or deny metadata access while enumerating.
                 }
             }
         }
 
-        throw new InvalidOperationException("ProcessId or AppName must be set for Mac Catalyst operations.");
+        return processes;
+    }
+
+    private static string? GetProcessName(int processId)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(processId);
+            return process.ProcessName;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void EnsureAccessibilityAuthorized()
+    {
+        if (!MacAccessibility.AXIsProcessTrusted())
+        {
+            throw new InvalidOperationException(
+                "macOS Accessibility permission is required for native dialog interaction. " +
+                "Pause and ask the user to grant Accessibility access to the terminal or host running maui, then retry.");
+        }
     }
 
     private static void EnsureMacOS()
@@ -533,5 +846,26 @@ public class MacCatalystAppDriver : AppDriverBase
     {
         if (elements is null) return;
         foreach (var el in elements) el.Dispose();
+    }
+
+    private readonly record struct DialogProcess(
+        int ProcessId,
+        string ProcessName,
+        bool IsSystemDialog);
+
+    private sealed class DialogLease(
+        int targetProcessId,
+        string fingerprint,
+        AlertInfo info,
+        List<AXElement> buttons,
+        DateTimeOffset expiresAt) : IDisposable
+    {
+        public int TargetProcessId { get; } = targetProcessId;
+        public string Fingerprint { get; } = fingerprint;
+        public AlertInfo Info { get; } = info;
+        public List<AXElement> Buttons { get; } = buttons;
+        public DateTimeOffset ExpiresAt { get; } = expiresAt;
+
+        public void Dispose() => DisposeAll(Buttons);
     }
 }

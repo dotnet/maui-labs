@@ -9,7 +9,7 @@ namespace Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
 [McpServerToolType]
 public sealed class ScreenshotTool
 {
-	[McpServerTool(Name = "maui_screenshot"), Description("Capture a screenshot of the running MAUI app. Returns the image directly for visual verification of layout, colors, contrast, and rendering.")]
+	[McpServerTool(Name = "maui_screenshot"), Description("Capture the running MAUI app directly. On macOS AppKit this includes native window chrome without activating the app or changing keyboard focus. Always use this tool instead of osascript, screencapture, mouse clicks, or app activation. Returns the image directly for visual verification of layout, colors, contrast, and rendering.")]
 	public static async Task<ContentBlock[]> Screenshot(
 		McpAgentSession session,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null,

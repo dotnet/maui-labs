@@ -1,5 +1,6 @@
 #if MACOS
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using AppKit;
 using CoreGraphics;
 using Foundation;
@@ -18,6 +19,8 @@ internal static partial class NativeUi
     public static string UiFrameworkName => "appkit";
 
     public static string DeviceTypeName => "physical";
+
+    public static string? DeviceIdentifier => null;
 
     public static IAgentDispatcher CreateDispatcher() => new DelegateAgentDispatcher(
         () => !NSThread.IsMain,
@@ -328,22 +331,27 @@ internal static partial class NativeUi
         return CaptureViewViaCacheDisplay(view) ?? CaptureViewViaPdf(view);
     }
 
-    public static byte[]? CaptureScreen()
+    public static async Task<byte[]?> CaptureScreen()
     {
-        var window = NSApplication.SharedApplication.KeyWindow
-            ?? GetWindows().FirstOrDefault(w => w.IsVisible);
-
-        if (window?.AttachedSheet is NSWindow sheet)
-            window = sheet;
+        var window = GetWindows().FirstOrDefault(candidate =>
+                candidate.IsVisible && candidate.WindowNumber > 0)
+            ?? NSApplication.SharedApplication.KeyWindow;
 
         if (window != null)
         {
+            var screenCaptureKitBytes = await CaptureWindowViaScreenCaptureKitAsync(window);
+            if (screenCaptureKitBytes != null)
+                return screenCaptureKitBytes;
+
+            if (window.AttachedSheet is NSWindow sheet)
+                window = sheet;
+
             var windowPng = CaptureWindowViaCG(window);
             if (windowPng != null)
                 return windowPng;
 
             if (window.ContentView is { } content)
-                return CaptureView(content);
+                return CaptureView(content.Superview ?? content);
         }
 
         return GetRoots().FirstOrDefault() is { } root ? CaptureView(root) : null;
@@ -422,6 +430,112 @@ internal static partial class NativeUi
         using var data = rep.RepresentationUsingTypeProperties(NSBitmapImageFileType.Png, new NSDictionary());
         return data?.ToArray();
     }
+
+    private static async Task<byte[]?> CaptureWindowViaScreenCaptureKitAsync(NSWindow window)
+    {
+        if (!OperatingSystem.IsMacOSVersionAtLeast(14) ||
+            (!OperatingSystem.IsMacOSVersionAtLeast(14, 4) && !CGPreflightScreenCaptureAccess()))
+        {
+            return null;
+        }
+
+        return await CaptureWindowViaScreenCaptureKitSupportedAsync(window);
+    }
+
+    [SupportedOSPlatform("macos14.0")]
+    private static async Task<byte[]?> CaptureWindowViaScreenCaptureKitSupportedAsync(NSWindow window)
+    {
+        try
+        {
+            using var content = await GetShareableContentAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            var windowId = (uint)window.WindowNumber;
+            var shareableWindow = content.Windows.FirstOrDefault(candidate => candidate.WindowId == windowId);
+            if (shareableWindow == null)
+                return null;
+
+            using var filter = new ScreenCaptureKit.SCContentFilter(shareableWindow);
+            using var configuration = new ScreenCaptureKit.SCStreamConfiguration
+            {
+                Width = (nuint)Math.Max(1, Math.Ceiling(shareableWindow.Frame.Width * window.BackingScaleFactor)),
+                Height = (nuint)Math.Max(1, Math.Ceiling(shareableWindow.Frame.Height * window.BackingScaleFactor)),
+                ShowsCursor = false,
+                PreservesAspectRatio = true,
+                IgnoreShadowsSingleWindow = true,
+                IgnoreGlobalClipSingleWindow = true,
+                CaptureResolution = ScreenCaptureKit.SCCaptureResolutionType.Best
+            };
+
+            if (OperatingSystem.IsMacOSVersionAtLeast(14, 2))
+                configuration.IncludeChildWindows = true;
+
+            var completion = new TaskCompletionSource<byte[]?>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            ScreenCaptureKit.SCScreenshotManager.CaptureImage(
+                filter,
+                configuration,
+                (image, error) =>
+                {
+                    if (error != null || image == null)
+                    {
+                        completion.TrySetResult(null);
+                        return;
+                    }
+
+                    try
+                    {
+                        using var bitmapRep = new NSBitmapImageRep(image);
+                        using var properties = new NSDictionary();
+                        using var pngData = bitmapRep.RepresentationUsingTypeProperties(
+                            NSBitmapImageFileType.Png,
+                            properties);
+                        completion.TrySetResult(pngData?.ToArray());
+                    }
+                    catch
+                    {
+                        completion.TrySetResult(null);
+                    }
+                });
+
+            return await completion.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    [SupportedOSPlatform("macos14.0")]
+    private static Task<ScreenCaptureKit.SCShareableContent> GetShareableContentAsync()
+    {
+        var completion = new TaskCompletionSource<ScreenCaptureKit.SCShareableContent>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        void Complete(
+            ScreenCaptureKit.SCShareableContent content,
+            NSError error)
+        {
+            if (error != null)
+                completion.TrySetException(new InvalidOperationException(error.LocalizedDescription));
+            else if (content == null)
+                completion.TrySetException(new InvalidOperationException("ScreenCaptureKit returned no shareable content."));
+            else
+                completion.TrySetResult(content);
+        }
+
+        if (OperatingSystem.IsMacOSVersionAtLeast(14, 4))
+            ScreenCaptureKit.SCShareableContent.GetCurrentProcessShareableContent(Complete);
+        else
+            ScreenCaptureKit.SCShareableContent.GetShareableContent(
+                excludeDesktopWindows: true,
+                onScreenWindowsOnly: false,
+                Complete);
+
+        return completion.Task;
+    }
+
+    [DllImport("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")]
+    [return: MarshalAs(UnmanagedType.U1)]
+    private static extern bool CGPreflightScreenCaptureAccess();
 
     [DllImport("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")]
     private static extern IntPtr CGWindowListCreateImage(

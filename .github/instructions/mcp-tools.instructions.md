@@ -86,6 +86,7 @@ If the tool calls a new agent endpoint, add the client method in `Microsoft.Maui
 | `JobTools.cs` | `maui_jobs_list`, `maui_jobs_run` | Background jobs |
 | `LogsTool.cs` | `maui_logs` | Log retrieval |
 | `NavigationTools.cs` | `maui_navigate`, `maui_back`, `maui_focus`, `maui_resize` | Navigation & window |
+| `NativeDialogTools.cs` | `maui_native_dialog_detect`, `maui_native_dialog_respond` | Cross-platform native dialog detection and confirmed response |
 | `NetworkTool.cs` | `maui_network`, `maui_network_detail`, `maui_network_clear` | Network inspection |
 | `PlatformTools.cs` | `maui_app_info`, `maui_device_info`, `maui_display_info`, `maui_battery_info`, `maui_connectivity`, `maui_geolocation` | Device/app info |
 | `PreferencesTools.cs` | `maui_preferences_list`, `maui_preferences_get`, `maui_preferences_set`, `maui_preferences_delete`, `maui_preferences_clear`, `maui_secure_storage_get`, `maui_secure_storage_set`, `maui_secure_storage_delete`, `maui_secure_storage_clear` | Storage |

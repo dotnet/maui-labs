@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using Microsoft.Maui.DevFlow.Driver;
 
 namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 
@@ -27,6 +28,8 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
     string _sdkRoot = null!;
 
     public override string Platform => "android";
+    public override string? DeviceId => _serialNumber;
+    public override string? AppIdentifier => PackageId;
 
     protected override async Task InitializePlatformAsync()
     {
@@ -124,6 +127,31 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
         }
 
         _emulatorProcess?.Dispose();
+    }
+
+    public override async Task ResetPermissionAsync(PermissionService permission)
+    {
+        var platformPermissions = permission switch
+        {
+            PermissionService.Contacts => new[] { "android.permission.READ_CONTACTS" },
+            PermissionService.Location => new[]
+            {
+                "android.permission.ACCESS_FINE_LOCATION",
+                "android.permission.ACCESS_COARSE_LOCATION"
+            },
+            _ => throw new NotSupportedException($"Permission reset for {permission} is not configured on Android.")
+        };
+
+        foreach (var platformPermission in platformPermissions)
+        {
+            await AdbAsync($"shell pm revoke {PackageId} {platformPermission}", timeoutSeconds: 10);
+            await AdbAsync(
+                $"shell pm clear-permission-flags {PackageId} {platformPermission} user-set user-fixed",
+                timeoutSeconds: 10);
+        }
+
+        await LaunchAppAsync();
+        await WaitForAgentAsync(timeoutSeconds: 60);
     }
 
     void StartAppMonitor()

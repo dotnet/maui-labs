@@ -68,6 +68,35 @@ public class LinuxAppDriver : AppDriverBase
             await client.TapAsync(buttons[0].Id);
     }
 
+    public async Task<AlertActionResult> PressAlertButtonSafelyAsync(
+        AlertInfo reviewedDialog,
+        string buttonLabel)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(buttonLabel);
+        var matches = reviewedDialog.Buttons
+            .Where(button => button.Label.Equals(buttonLabel, StringComparison.Ordinal))
+            .ToArray();
+        if (matches.Length != 1 || string.IsNullOrEmpty(matches[0].Identifier))
+        {
+            return new AlertActionResult(
+                false,
+                true,
+                matches.Length == 0
+                    ? $"Button '{buttonLabel}' was not found by exact label."
+                    : "The exact dialog button could not be resolved safely.",
+                reviewedDialog);
+        }
+
+        var pressed = await EnsureClient().TapAsync(matches[0].Identifier!);
+        return new AlertActionResult(
+            pressed,
+            !pressed,
+            pressed
+                ? $"Pressed '{buttonLabel}' through the connected app agent."
+                : $"The connected app agent could not invoke '{buttonLabel}'. Ask the user to respond manually.",
+            reviewedDialog);
+    }
+
     /// <summary>
     /// Convenience: detect and dismiss an alert if present.
     /// </summary>
@@ -338,7 +367,15 @@ public class LinuxAppDriver : AppDriverBase
             var title = element.Text;
             CollectButtons(element, buttons);
             if (buttons.Count > 0)
-                return new AlertInfo(title, buttons);
+            {
+                var text = new List<string>();
+                CollectText(element, text);
+                return new AlertInfo(title, buttons)
+                {
+                    InstanceId = element.Id,
+                    Text = text.Distinct(StringComparer.Ordinal).ToArray()
+                };
+            }
         }
 
         if (element.Children != null)
@@ -357,13 +394,27 @@ public class LinuxAppDriver : AppDriverBase
     {
         if (element.Type == "Button" && element.Text != null)
         {
-            buttons.Add(new AlertButton(element.Text, 0, 0, 0, 0));
+            buttons.Add(new AlertButton(element.Text, 0, 0, 0, 0)
+            {
+                Identifier = element.Id
+            });
         }
 
         if (element.Children != null)
         {
             foreach (var child in element.Children)
                 CollectButtons(child, buttons);
+        }
+    }
+
+    private static void CollectText(ElementInfo element, List<string> text)
+    {
+        if (!string.IsNullOrWhiteSpace(element.Text))
+            text.Add(element.Text);
+        if (element.Children != null)
+        {
+            foreach (var child in element.Children)
+                CollectText(child, text);
         }
     }
 

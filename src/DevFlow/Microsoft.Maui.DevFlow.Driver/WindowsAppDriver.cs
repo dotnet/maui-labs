@@ -257,6 +257,37 @@ public class WindowsAppDriver : AppDriverBase
         return Task.CompletedTask;
     }
 
+    public Task<AlertActionResult> PressAlertButtonSafelyAsync(string buttonLabel)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(buttonLabel);
+        EnsureWindows();
+        var windows = ResolveTargetWindows();
+        var buttons = FindDialogButtonsCore(windows);
+        var matches = buttons
+            .Where(button => button.name.Equals(buttonLabel, StringComparison.Ordinal))
+            .ToArray();
+        var info = DetectDialog(windows);
+        if (matches.Length != 1)
+        {
+            return Task.FromResult(new AlertActionResult(
+                false,
+                true,
+                matches.Length == 0
+                    ? $"Button '{buttonLabel}' was not found by exact label."
+                    : $"More than one button has the exact label '{buttonLabel}'.",
+                info));
+        }
+
+        var pressed = UIAutomationInterop.InvokeElement(matches[0].element);
+        return Task.FromResult(new AlertActionResult(
+            pressed,
+            !pressed,
+            pressed
+                ? $"Pressed '{buttonLabel}' using UI Automation Invoke without synthesizing pointer input."
+                : $"UI Automation could not invoke '{buttonLabel}'. Ask the user to respond manually.",
+            info));
+    }
+
     public Task<AlertInfo?> HandleAlertIfPresentAsync(string? buttonLabel = null)
     {
         EnsureWindows();
@@ -267,7 +298,11 @@ public class WindowsAppDriver : AppDriverBase
 
         var alertButtons = buttons.Select(ToAlertButton).ToList();
         var texts = FindDialogTextsCore(windows);
-        var info = new AlertInfo(texts.FirstOrDefault(), alertButtons);
+        var info = new AlertInfo(texts.FirstOrDefault(), alertButtons)
+        {
+            InstanceId = FindDialogCandidate(windows)?.InstanceId,
+            Text = texts
+        };
 
         var target = PickButton(buttons, buttonLabel);
         if (!UIAutomationInterop.InvokeElement(target.element))
@@ -294,7 +329,11 @@ public class WindowsAppDriver : AppDriverBase
 
         var alertButtons = buttons.Select(ToAlertButton).ToList();
         var texts = FindDialogTextsCore(windows);
-        return new AlertInfo(texts.FirstOrDefault(), alertButtons);
+        return new AlertInfo(texts.FirstOrDefault(), alertButtons)
+        {
+            InstanceId = FindDialogCandidate(windows)?.InstanceId,
+            Text = texts
+        };
     }
 
     private static List<(IUIAutomationElement element, string name)> FindDialogButtonsCore(IReadOnlyList<IUIAutomationElement> windows)
@@ -321,7 +360,10 @@ public class WindowsAppDriver : AppDriverBase
                 {
                     var texts = UIAutomationInterop.FindTexts(childWindow);
                     if (texts.Count > 0)
-                        return new DialogCandidate(buttons, texts);
+                        return new DialogCandidate(
+                            buttons,
+                            texts,
+                            UIAutomationInterop.GetNativeWindowHandle(childWindow).ToInt64().ToString("X"));
                 }
             }
         }
@@ -333,7 +375,10 @@ public class WindowsAppDriver : AppDriverBase
             {
                 var texts = UIAutomationInterop.FindTexts(window);
                 if (texts.Count > 0)
-                    return new DialogCandidate(buttons, texts);
+                    return new DialogCandidate(
+                        buttons,
+                        texts,
+                        UIAutomationInterop.GetNativeWindowHandle(window).ToInt64().ToString("X"));
             }
         }
 
@@ -343,14 +388,18 @@ public class WindowsAppDriver : AppDriverBase
     private static AlertButton ToAlertButton((IUIAutomationElement element, string name) button)
     {
         var rect = UIAutomationInterop.GetBoundingRectangle(button.element);
-        return rect is null
+        return (rect is null
             ? new AlertButton(button.name, 0, 0, 0, 0)
-            : new AlertButton(button.name, rect.Value.X, rect.Value.Y, rect.Value.Width, rect.Value.Height);
+            : new AlertButton(button.name, rect.Value.X, rect.Value.Y, rect.Value.Width, rect.Value.Height)) with
+        {
+            Identifier = UIAutomationInterop.GetAutomationId(button.element)
+        };
     }
 
     private sealed record DialogCandidate(
         List<(IUIAutomationElement element, string name)> Buttons,
-        List<string> Texts);
+        List<string> Texts,
+        string InstanceId);
 
     private static readonly HashSet<string> CommonDialogButtonLabels = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -382,6 +431,7 @@ public class WindowsAppDriver : AppDriverBase
     public Task<AlertInfo?> DetectAlertAsync() => throw new PlatformNotSupportedException("Windows operations require Windows.");
     public Task DismissAlertAsync(string? buttonLabel = null) => throw new PlatformNotSupportedException("Windows operations require Windows.");
     public Task<AlertInfo?> HandleAlertIfPresentAsync(string? buttonLabel = null) => throw new PlatformNotSupportedException("Windows operations require Windows.");
+    public Task<AlertActionResult> PressAlertButtonSafelyAsync(string buttonLabel) => throw new PlatformNotSupportedException("Windows operations require Windows.");
     public Task<string> GetAccessibilityTreeAsync() => throw new PlatformNotSupportedException("Windows operations require Windows.");
 #endif
 

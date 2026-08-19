@@ -382,13 +382,15 @@ public class AgentStatusTests
     [Fact]
     public void Deserialization_Works()
     {
-        var json = """{"agent":{"name":"Microsoft.Maui.DevFlow.Agent","version":"1.0.0","framework":".NET MAUI","frameworkVersion":"10.0"},"device":{"platform":"MacCatalyst","deviceType":"Virtual","idiom":"Desktop"},"app":{"name":"SampleMauiApp"},"running":true}""";
+        var json = """{"agent":{"name":"Microsoft.Maui.DevFlow.Agent","version":"1.0.0","framework":".NET MAUI","frameworkVersion":"10.0"},"device":{"id":"simulator-123","platform":"MacCatalyst","deviceType":"Virtual","idiom":"Desktop"},"app":{"name":"SampleMauiApp","processId":4242},"running":true}""";
         var status = System.Text.Json.JsonSerializer.Deserialize<AgentStatus>(json);
 
         Assert.NotNull(status);
         Assert.Equal("Microsoft.Maui.DevFlow.Agent", status.Agent?.Name);
         Assert.Equal("1.0.0", status.Version);
         Assert.Equal("MacCatalyst", status.Platform);
+        Assert.Equal("simulator-123", status.Device?.Id);
+        Assert.Equal(4242, status.App?.ProcessId);
         Assert.True(status.Running);
     }
 }
