@@ -21,7 +21,7 @@ public sealed class ScreenshotTool
 		[Description("Capture epoch from maui_tree to require a matching screenshot snapshot")] long? captureEpoch = null,
 		[Description("Native registry generation from maui_tree")] long? registryGeneration = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.ScreenshotResultAsync(
 			window,
 			elementId,

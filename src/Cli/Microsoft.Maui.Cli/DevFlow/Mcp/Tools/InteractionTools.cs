@@ -15,7 +15,7 @@ public sealed class InteractionTools
 		[Description("Capture epoch from maui_tree or maui_hittest; stale epochs are rejected")] long? captureEpoch = null,
 		[Description("Native registry generation from maui_tree or maui_hittest")] long? registryGeneration = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.TapResultAsync(elementId, captureEpoch, registryGeneration);
 		return McpActionResult.RequireSuccess(
 			result,
@@ -32,7 +32,7 @@ public sealed class InteractionTools
 		[Description("Capture epoch from maui_tree or maui_hittest; stale epochs are rejected")] long? captureEpoch = null,
 		[Description("Native registry generation from maui_tree or maui_hittest")] long? registryGeneration = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.FillResultAsync(
 			elementId,
 			text,
@@ -52,7 +52,7 @@ public sealed class InteractionTools
 		[Description("Capture epoch from maui_tree or maui_hittest; stale epochs are rejected")] long? captureEpoch = null,
 		[Description("Native registry generation from maui_tree or maui_hittest")] long? registryGeneration = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.ClearResultAsync(elementId, captureEpoch, registryGeneration);
 		return McpActionResult.RequireSuccess(
 			result,
@@ -70,7 +70,7 @@ public sealed class InteractionTools
 		[Description("Capture epoch from maui_tree or maui_hittest; stale epochs are rejected")] long? captureEpoch = null,
 		[Description("Native registry generation from maui_tree or maui_hittest")] long? registryGeneration = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.KeyResultAsync(
 			key,
 			elementId,
@@ -139,7 +139,7 @@ public sealed class InteractionTools
 		if (normalizedType == "pinch" && scale is <= 0)
 			return "Pinch 'scale' must be greater than 0 — use 2.0 to zoom in or 0.5 to zoom out.";
 
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.GestureDetailedAsync(
 			normalizedType, elementId, normalizedDirection, distance, durationMs,
 			scale, rotation, deltaX, deltaY, originX, originY, steps,
@@ -178,7 +178,7 @@ public sealed class InteractionTools
 		[Description("Capture epoch from maui_tree or maui_hittest; stale epochs are rejected")] long? captureEpoch = null,
 		[Description("Native registry generation from maui_tree or maui_hittest")] long? registryGeneration = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.ScrollResultAsync(
 			elementId,
 			x ?? 0,

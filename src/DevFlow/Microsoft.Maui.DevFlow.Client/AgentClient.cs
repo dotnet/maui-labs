@@ -32,9 +32,22 @@ public class AgentClient : IDisposable
 
     private readonly HttpClient _http;
     private readonly string _baseUrl;
+    private readonly AsyncLocal<MutationLeaseIdentity?> _mutationLeaseOverride = new();
     private bool _disposed;
 
     public string BaseUrl => _baseUrl;
+
+    /// <summary>Stable identity used to coordinate mutating calls from this client.</summary>
+    public string MutationLeaseId { get; set; } = Guid.NewGuid().ToString("N");
+
+    /// <summary>Caller kind shown to other DevFlow hosts when this client holds the lease.</summary>
+    public string MutationLeaseHolderKind { get; set; } = "driver";
+
+    /// <summary>Human-readable holder label shown by inspector hosts.</summary>
+    public string? MutationLeaseLabel { get; set; }
+
+    /// <summary>Automatically claim the mutation lease before non-GET requests. Default: true.</summary>
+    public bool AutoAcquireMutationLease { get; set; } = true;
 
     /// <summary>
     /// Additional attempts for transient transport failures such as a dropped ADB port
@@ -74,45 +87,256 @@ public class AgentClient : IDisposable
     public AgentClient(string host = "localhost", int port = 9223)
     {
         _baseUrl = $"http://{host}:{port}";
-        _http = CreateHttpClient(host);
+        _http = CreateHttpClient(host, GetCurrentMutationLease);
+    }
+
+    /// <summary>
+    /// Temporarily uses a caller-provided mutation lease identity for all asynchronous calls made
+    /// within the returned scope. Used by shared proxy hosts that serve multiple browser sessions.
+    /// </summary>
+    public IDisposable UseMutationLease(string leaseId, string holderKind, string? label = null)
+    {
+        if (string.IsNullOrWhiteSpace(leaseId))
+            throw new ArgumentException("A lease id is required.", nameof(leaseId));
+        var previous = _mutationLeaseOverride.Value;
+        _mutationLeaseOverride.Value = new MutationLeaseIdentity(leaseId, holderKind, label);
+        return new MutationLeaseScope(_mutationLeaseOverride, previous);
+    }
+
+    /// <summary>Claim, query, heartbeat, or release this caller's mutation lease.</summary>
+    public Task<MutationLeaseStatus> ControlMutationLeaseAsync(
+        string action,
+        bool force = false,
+        string? leaseId = null,
+        string? holderKind = null,
+        string? label = null)
+        => ControlMutationLeaseAsync(action, force, leaseId, holderKind, label, transactionId: null);
+
+    public async Task<MutationLeaseStatus> ControlMutationLeaseAsync(
+        string action,
+        bool force,
+        string? leaseId,
+        string? holderKind,
+        string? label,
+        string? transactionId)
+    {
+        var current = GetCurrentMutationLease();
+        var id = string.IsNullOrWhiteSpace(leaseId) ? current?.LeaseId : leaseId;
+        var kind = string.IsNullOrWhiteSpace(holderKind) ? current?.HolderKind : holderKind;
+        var display = label ?? current?.Label;
+        var body = new JsonObject
+        {
+            ["action"] = action,
+            ["leaseId"] = id,
+            ["holderKind"] = kind,
+            ["label"] = display,
+            ["force"] = force,
+            ["transactionId"] = transactionId
+        };
+
+        using var content = ProtocolJson.CreateJsonContent(body);
+        using var response = await _http.PostAsync($"{_baseUrl}{AgentApi}/lease", content);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            // Rolling-upgrade compatibility: older agents predate mutation leases. They remain
+            // usable during a public-preview upgrade, while current agents enforce the lease.
+            return new MutationLeaseStatus
+            {
+                Ok = true,
+                Allowed = true,
+                YouHold = true,
+                Authority = "unsupported"
+            };
+        }
+        var responseBody = await response.Content.ReadAsStringAsync();
+        var status = ProtocolJson.Deserialize<MutationLeaseStatus>(responseBody) ?? new MutationLeaseStatus
+        {
+            Ok = false,
+            Error = $"Mutation lease request failed with HTTP {(int)response.StatusCode}."
+        };
+        status.Ok &= response.IsSuccessStatusCode;
+        return status;
+    }
+
+    public Task<MutationRecordingStatus> ControlMutationRecordingAsync(
+        string action,
+        string? name = null,
+        string? app = null,
+        string? platform = null,
+        string? preconditions = null)
+        => ControlMutationRecordingAsync(action, name, app, platform, preconditions, recordingId: null);
+
+    public async Task<MutationRecordingStatus> ControlMutationRecordingAsync(
+        string action,
+        string? name,
+        string? app,
+        string? platform,
+        string? preconditions,
+        string? recordingId)
+    {
+        var body = new JsonObject
+        {
+            ["action"] = action,
+            ["recordingId"] = recordingId,
+            ["name"] = name,
+            ["app"] = app,
+            ["platform"] = platform,
+            ["preconditions"] = preconditions
+        };
+        using var response = string.Equals(action, "status", StringComparison.OrdinalIgnoreCase)
+            ? await SendRecordingRequestAsync(body)
+            : await SendWithTransientRetriesAsync(HttpMethod.Post, () => SendRecordingRequestAsync(body));
+        return await ReadMutationRecordingResponseAsync(response);
+    }
+
+    public Task<MutationRecordingStatus> ObserveMutationRecordingAsync(MutationRecordingObservation observation)
+        => ObserveMutationRecordingAsync(observation, recordingId: null);
+
+    public async Task<MutationRecordingStatus> ObserveMutationRecordingAsync(
+        MutationRecordingObservation observation,
+        string? recordingId)
+    {
+        if (observation is null)
+            throw new ArgumentNullException(nameof(observation));
+        if (string.IsNullOrWhiteSpace(observation.Action))
+            throw new ArgumentException("A recording observation action is required.", nameof(observation));
+
+        var observationBody = new JsonObject
+        {
+            ["action"] = observation.Action,
+            ["automationId"] = observation.AutomationId,
+            ["text"] = observation.Text,
+            ["type"] = observation.Type,
+            ["index"] = observation.Index,
+            ["id"] = observation.Id,
+            ["value"] = observation.Value,
+            ["name"] = observation.Name,
+            ["dx"] = observation.Dx,
+            ["dy"] = observation.Dy,
+            ["itemIndex"] = observation.ItemIndex,
+            ["position"] = observation.Position,
+            ["page"] = observation.Page,
+            ["navigated"] = observation.Navigated,
+            ["assertsJson"] = observation.AssertsJson
+        };
+        var body = new JsonObject
+        {
+            ["action"] = "observe",
+            ["recordingId"] = recordingId,
+            ["observation"] = observationBody
+        };
+        using var response = await SendWithTransientRetriesAsync(
+            HttpMethod.Post,
+            () => SendRecordingRequestAsync(body));
+        return await ReadMutationRecordingResponseAsync(response);
+    }
+
+    private static async Task<MutationRecordingStatus> ReadMutationRecordingResponseAsync(
+        HttpResponseMessage response)
+    {
+        var responseBody = await response.Content.ReadAsStringAsync();
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return new MutationRecordingStatus
+            {
+                Ok = false,
+                Error = "The connected agent does not support coordinated workflow recording."
+            };
+        }
+        return ProtocolJson.Deserialize<MutationRecordingStatus>(responseBody) ?? new MutationRecordingStatus
+        {
+            Ok = false,
+            Error = $"Recording request failed with HTTP {(int)response.StatusCode}."
+        };
+    }
+
+    private async Task<HttpResponseMessage> SendRecordingRequestAsync(JsonObject body)
+    {
+        using var content = ProtocolJson.CreateJsonContent(body);
+        return await _http.PostAsync($"{_baseUrl}{AgentApi}/recording", content);
+    }
+
+    private MutationLeaseIdentity? GetCurrentMutationLease()
+    {
+        var current = _mutationLeaseOverride.Value;
+        if (current is not null)
+            return current;
+        if (string.IsNullOrWhiteSpace(MutationLeaseId))
+            return null;
+        return new MutationLeaseIdentity(
+            MutationLeaseId,
+            string.IsNullOrWhiteSpace(MutationLeaseHolderKind) ? "driver" : MutationLeaseHolderKind,
+            MutationLeaseLabel);
+    }
+
+    private async Task EnsureMutationLeaseAsync()
+    {
+        if (!AutoAcquireMutationLease)
+            return;
+
+        var identity = GetCurrentMutationLease();
+        if (identity is null)
+            throw new MutationLeaseException(new MutationLeaseStatus
+            {
+                Ok = false,
+                Error = "No DevFlow mutation lease identity is configured."
+            });
+
+        var status = await ControlMutationLeaseAsync(
+            "claim",
+            force: false,
+            identity.LeaseId,
+            identity.HolderKind,
+            identity.Label);
+        if (!status.YouHold)
+            throw new MutationLeaseException(status);
     }
 
     /// <summary>
     /// Builds the underlying <see cref="HttpClient"/>. When <paramref name="host"/> is the
-    /// <c>localhost</c> alias, both the IPv4 (<c>127.0.0.1</c>) and IPv6 (<c>::1</c>) loopback
-    /// addresses are attempted and whichever accepts the connection first is used.
+    /// <c>localhost</c> alias, the IPv4 (<c>127.0.0.1</c>) loopback used by the built-in agent is
+    /// preferred, with IPv6 (<c>::1</c>) kept as a fallback.
     /// </summary>
     /// <remarks>
     /// The DevFlow agent binds IPv4 loopback only, but .NET's default <see cref="HttpClient"/>
     /// may resolve <c>localhost</c> to IPv6 <c>::1</c> first and fail with "connection refused"
-    /// without falling back to IPv4 (see dotnet/maui-labs#341). Rather than forcing a single
-    /// address family — which has caused target-specific problems — this honors the OS-preferred
-    /// resolution order and falls back to the other loopback family on refusal. Explicit hosts
-    /// (a literal IP or a real hostname) are left on the default connect path unchanged.
+    /// without falling back to IPv4 (see dotnet/maui-labs#341). Trying the server's known address
+    /// first avoids paying an OS-level IPv6 connect timeout on every request while retaining IPv6
+    /// fallback for custom agents. Explicit hosts (a literal IP or a real hostname) are left on the
+    /// default connect path unchanged.
     /// <para>
     /// Modern .NET steers the connection HttpClient makes, via
     /// <c>SocketsHttpHandler.ConnectCallback</c>. netstandard2.0 has no such hook, so it resolves
-    /// the family up front with a probe socket instead; see <c>LoopbackPreferenceHandler</c>.
+    /// the family up front with a probe socket instead; see <c>LoopbackPreferenceHandler</c>. Both
+    /// share <see cref="ResolveLoopbackCandidatesAsync"/>, so the preference order cannot diverge
+    /// between the two.
     /// </para>
     /// </remarks>
-    private static HttpClient CreateHttpClient(string host)
+    private static HttpClient CreateHttpClient(
+        string host,
+        Func<MutationLeaseIdentity?> mutationLeaseProvider)
+    {
+        var leaseHandler = new MutationLeaseHeaderHandler(mutationLeaseProvider)
+        {
+            InnerHandler = CreateTransportHandler(host)
+        };
+        return new HttpClient(leaseHandler) { Timeout = TimeSpan.FromSeconds(30) };
+    }
+
+    private static HttpMessageHandler CreateTransportHandler(string host)
     {
         if (!IsLoopbackAlias(host))
-            return new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+            return new HttpClientHandler();
 
 #if DEVFLOW_NETSTANDARD
-        // netstandard2.0 has no SocketsHttpHandler.ConnectCallback, so the loopback race is run
-        // as a pre-flight probe by LoopbackPreferenceHandler instead (see that type).
-        return new HttpClient(new LoopbackPreferenceHandler(new HttpClientHandler()))
-        {
-            Timeout = TimeSpan.FromSeconds(30)
-        };
+        // netstandard2.0 has no SocketsHttpHandler.ConnectCallback, so the loopback preference is
+        // applied as a pre-flight probe by LoopbackPreferenceHandler instead (see that type).
+        return new LoopbackPreferenceHandler(new HttpClientHandler());
 #else
-        var handler = new SocketsHttpHandler
+        return new SocketsHttpHandler
         {
             ConnectCallback = ConnectLoopbackAsync
         };
-        return new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
 #endif
     }
 
@@ -316,7 +540,6 @@ public class AgentClient : IDisposable
 
         try
         {
-            // Honor the OS-preferred resolution order (e.g. macOS commonly yields ::1 first).
             foreach (var address in await ResolveHostAddressesAsync(host, cancellationToken).ConfigureAwait(false))
             {
                 if ((address.AddressFamily == AddressFamily.InterNetwork
@@ -330,9 +553,10 @@ public class AgentClient : IDisposable
             // DNS lookup failed (unusual for "localhost") — fall through to the explicit loopbacks below.
         }
 
-        // Guarantee both loopback families are attempted, regardless of hosts-file quirks.
-        if (!ordered.Contains(IPAddress.Loopback))
-            ordered.Add(IPAddress.Loopback);
+        // The built-in agent listens on IPv4 loopback. Keep all resolved candidates as fallbacks,
+        // but avoid an OS-level IPv6 timeout on every request when localhost resolves to ::1 first.
+        ordered.Remove(IPAddress.Loopback);
+        ordered.Insert(0, IPAddress.Loopback);
         if (Socket.OSSupportsIPv6 && !ordered.Contains(IPAddress.IPv6Loopback))
             ordered.Add(IPAddress.IPv6Loopback);
 
@@ -437,14 +661,150 @@ public class AgentClient : IDisposable
     /// <summary>
     /// Get the visual tree from the running app.
     /// </summary>
-    public async Task<List<ElementInfo>> GetTreeAsync(int maxDepth = 0, int? window = null)
+    public Task<List<ElementInfo>> GetTreeAsync(
+        int maxDepth = 0,
+        int? window = null)
+        => GetTreeAsync(maxDepth, window, includeNative: true);
+
+    public async Task<List<ElementInfo>> GetTreeAsync(
+        int maxDepth,
+        int? window,
+        bool includeNative)
     {
         var parts = new List<string>();
         if (maxDepth > 0) parts.Add($"depth={maxDepth}");
         if (window != null) parts.Add($"window={window}");
+        if (!includeNative) parts.Add("native=false");
         var url = parts.Count > 0 ? $"{UiApi}/tree?{string.Join("&", parts)}" : $"{UiApi}/tree";
         return await GetAsync<List<ElementInfo>>(url) ?? new();
     }
+
+    public async Task<ElementTreeSnapshot?> GetTreeSnapshotAsync(
+        int maxDepth = 0,
+        int? window = null,
+        bool includeNative = true)
+    {
+        var parts = new List<string> { "envelope=true" };
+        if (maxDepth > 0) parts.Add($"depth={maxDepth}");
+        if (window != null) parts.Add($"window={window}");
+        if (!includeNative) parts.Add("native=false");
+        try
+        {
+            using var response = await SendWithTransientRetriesAsync(() =>
+                _http.GetAsync(
+                    $"{_baseUrl}{UiApi}/tree?{string.Join("&", parts)}"));
+            if (!response.IsSuccessStatusCode)
+                return null;
+            var body = await response.Content.ReadAsStringAsync();
+            using var document = JsonDocument.Parse(body);
+            if (document.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                return new ElementTreeSnapshot
+                {
+                    Elements = ProtocolJson.Deserialize<List<ElementInfo>>(body)
+                        ?? []
+                };
+            }
+
+            return ProtocolJson.Deserialize<ElementTreeSnapshot>(body);
+        }
+        catch (Exception ex) when (IsExpectedClientException(ex))
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Analyze the current rendered UI for clipping, overflow, text truncation,
+    /// overlap, and occlusion findings.
+    /// </summary>
+    public Task<LayoutInspectionResult?> AnalyzeLayoutAsync(
+        LayoutInspectionRequest request)
+        => AnalyzeLayoutAsync(request, CancellationToken.None);
+
+    public async Task<LayoutInspectionResult?> AnalyzeLayoutAsync(
+        LayoutInspectionRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request is null)
+            throw new ArgumentNullException(nameof(request));
+        try
+        {
+            using var response = await SendWithTransientRetriesAsync(
+                HttpMethod.Post,
+                async () =>
+                {
+                    using var content = ProtocolJson.CreateJsonContent(
+                        ProtocolJson.SerializeToNode(request));
+                    return await _http.PostAsync(
+                        $"{_baseUrl}{UiApi}/diagnostics/layout",
+                        content,
+                        cancellationToken);
+                },
+                // Read-only despite being a POST: analysis inspects layout, it never drives the app.
+                mutating: false);
+            var responseBody = await response.Content.ReadAsStringAsync(
+                cancellationToken);
+            if (response.IsSuccessStatusCode)
+                return ProtocolJson.Deserialize<LayoutInspectionResult>(responseBody);
+            if ((int)response.StatusCode is 404 or 501)
+                return null;
+
+            var message = $"Layout diagnostics request failed with HTTP {(int)response.StatusCode}.";
+            string? errorType = null;
+            try
+            {
+                var error = ProtocolJson.ParseElement(responseBody);
+                if (error.TryGetProperty("error", out var errorMessage))
+                    message = errorMessage.GetString() ?? message;
+                if (error.TryGetProperty("reason", out var reason))
+                    errorType = reason.GetString();
+                else if (error.TryGetProperty("type", out var type))
+                    errorType = type.GetString();
+            }
+            catch (JsonException)
+            {
+            }
+
+            throw new LayoutDiagnosticsException(
+                (int)response.StatusCode,
+                message,
+                errorType,
+                retryable: (int)response.StatusCode is 429 or 503
+                    || (int)response.StatusCode >= 500);
+        }
+        catch (LayoutDiagnosticsException)
+        {
+            throw;
+        }
+        catch (NotSupportedByAgentException)
+        {
+            // A backend that does not implement layout diagnostics answers the shared 501
+            // not_supported envelope, which the transport turns into this exception before the
+            // status check above can run. Callers treat "unsupported" as null so the CLI and MCP
+            // surfaces can emit their own capability guidance.
+            return null;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsExpectedClientException(ex))
+        {
+            throw new LayoutDiagnosticsException(
+                0,
+                $"Unable to complete the layout diagnostics request: {ex.Message}",
+                "layout-diagnostics-unavailable",
+                retryable: true,
+                innerException: ex);
+        }
+    }
+
+    /// <summary>
+    /// Get the layout diagnostic rules and support levels advertised by the agent.
+    /// </summary>
+    public Task<LayoutRuleCatalog?> GetLayoutDiagnosticRulesAsync()
+        => GetAsync<LayoutRuleCatalog>($"{UiApi}/diagnostics/layout/rules");
 
     /// <summary>
     /// Get a single element by ID.
@@ -1222,6 +1582,10 @@ public class AgentClient : IDisposable
         return null;
     }
 
+    /// <summary>Get curated editable property descriptors and current values for an element.</summary>
+    public Task<JsonElement> GetPropertyDescriptorsAsync(string elementId)
+        => GetJsonAsync($"{UiApi}/elements/{elementId}/properties");
+
     /// <summary>
     /// Set a property value on an element.
     /// </summary>
@@ -1800,8 +2164,11 @@ public class AgentClient : IDisposable
     {
         try
         {
-            using var content = ProtocolJson.CreateJsonContent(body);
-            var response = await _http.PutAsync($"{_baseUrl}{path}", content);
+            using var response = await SendWithTransientRetriesAsync(HttpMethod.Put, async () =>
+            {
+                using var content = ProtocolJson.CreateJsonContent(body);
+                return await _http.PutAsync($"{_baseUrl}{path}", content);
+            });
             if (!response.IsSuccessStatusCode)
                 return null;
 
@@ -1919,9 +2286,19 @@ public class AgentClient : IDisposable
         => SendWithTransientRetriesAsync(HttpMethod.Get, send);
 
     private async Task<T> SendWithTransientRetriesAsync<T>(HttpMethod method, Func<Task<T>> send)
+        => await SendWithTransientRetriesAsync(method, send, mutating: method != HttpMethod.Get);
+
+    /// <summary>
+    /// <paramref name="mutating"/> is explicit because not every POST drives the app — layout
+    /// diagnostics analyze via POST but only read state, so acquiring a mutation lease for them
+    /// would fail against a session another host is holding.
+    /// </summary>
+    private async Task<T> SendWithTransientRetriesAsync<T>(HttpMethod method, Func<Task<T>> send, bool mutating)
     {
         var retryCount = Math.Max(0, TransientFailureRetryCount);
-        var isMutating = method != HttpMethod.Get;
+        var isMutating = mutating;
+        if (isMutating)
+            await EnsureMutationLeaseAsync();
         if (isMutating && !RetryMutatingRequests)
             retryCount = 0;
 
@@ -2196,11 +2573,16 @@ public class AgentClient : IDisposable
         return await GetJsonAsync($"{DeviceApi}/sensors");
     }
 
-    public async Task<bool> StartSensorAsync(string sensor, string? speed = null)
+    public Task<bool> StartSensorAsync(string sensor, string? speed = null)
+        => StartSensorAsync(sensor, speed, throttleMs: null);
+
+    public async Task<bool> StartSensorAsync(string sensor, string? speed, int? throttleMs)
     {
         var path = $"{DeviceApi}/sensors/{Uri.EscapeDataString(sensor)}/start";
-        if (!string.IsNullOrEmpty(speed))
-            path += $"?speed={Uri.EscapeDataString(speed)}";
+        var query = new List<string>();
+        if (!string.IsNullOrEmpty(speed)) query.Add($"speed={Uri.EscapeDataString(speed)}");
+        if (throttleMs is >= 0) query.Add($"throttleMs={throttleMs.Value}");
+        if (query.Count > 0) path += "?" + string.Join("&", query);
         return await PostActionAsync(path, new JsonObject());
     }
 
@@ -2352,6 +2734,61 @@ public class AgentClient : IDisposable
         [System.Text.Json.Serialization.JsonPropertyName("success")]
         public bool Success { get; set; }
     }
+
+    private sealed record MutationLeaseIdentity(string LeaseId, string HolderKind, string? Label);
+
+    private sealed class MutationLeaseScope : IDisposable
+    {
+        private readonly AsyncLocal<MutationLeaseIdentity?> _slot;
+        private readonly MutationLeaseIdentity? _previous;
+        private bool _disposed;
+
+        public MutationLeaseScope(
+            AsyncLocal<MutationLeaseIdentity?> slot,
+            MutationLeaseIdentity? previous)
+        {
+            _slot = slot;
+            _previous = previous;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _slot.Value = _previous;
+        }
+    }
+
+    private sealed class MutationLeaseHeaderHandler : DelegatingHandler
+    {
+        private readonly Func<MutationLeaseIdentity?> _leaseProvider;
+
+        public MutationLeaseHeaderHandler(Func<MutationLeaseIdentity?> leaseProvider)
+        {
+            _leaseProvider = leaseProvider;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var lease = _leaseProvider();
+            if (lease is not null)
+            {
+                request.Headers.Remove("X-DevFlow-Lease");
+                request.Headers.TryAddWithoutValidation("X-DevFlow-Lease", lease.LeaseId);
+                request.Headers.Remove("X-DevFlow-Holder");
+                request.Headers.TryAddWithoutValidation("X-DevFlow-Holder", lease.HolderKind);
+                if (!string.IsNullOrWhiteSpace(lease.Label))
+                {
+                    request.Headers.Remove("X-DevFlow-Label");
+                    request.Headers.TryAddWithoutValidation("X-DevFlow-Label", lease.Label);
+                }
+            }
+
+            return base.SendAsync(request, cancellationToken);
+        }
+    }
 }
 
 /// <summary>
@@ -2434,6 +2871,9 @@ public class AgentStatus
     [System.Text.Json.Serialization.JsonPropertyName("running")]
     public bool Running { get; set; }
 
+    [System.Text.Json.Serialization.JsonPropertyName("route")]
+    public string? Route { get; set; }
+
     [System.Text.Json.Serialization.JsonIgnore]
     public string? Version => Agent?.Version;
     [System.Text.Json.Serialization.JsonIgnore]
@@ -2498,6 +2938,8 @@ public class AppDescriptor
 {
     [System.Text.Json.Serialization.JsonPropertyName("name")]
     public string? Name { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("processId")]
+    public int? ProcessId { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("packageId")]
     public string? PackageId { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("version")]

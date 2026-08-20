@@ -13,7 +13,7 @@ public sealed class NavigationTools
 		[Description("Shell route to navigate to (e.g., '//home', '//blazor')")] string route,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var success = await agent.NavigateAsync(route);
 		return success
 			? $"Navigated to '{route}'."
@@ -25,7 +25,7 @@ public sealed class NavigationTools
 		McpAgentSession session,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var success = await agent.BackAsync();
 		return success
 			? "Navigated back successfully."
@@ -40,7 +40,7 @@ public sealed class NavigationTools
 		[Description("Capture epoch from maui_tree or maui_hittest; stale epochs are rejected")] long? captureEpoch = null,
 		[Description("Native registry generation from maui_tree or maui_hittest")] long? registryGeneration = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.FocusResultAsync(elementId, captureEpoch, registryGeneration);
 		return McpActionResult.RequireSuccess(
 			result,
@@ -56,7 +56,7 @@ public sealed class NavigationTools
 		[Description("Window index for multi-window apps")] int? window = null,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var success = await agent.ResizeAsync(width, height, window);
 		return success
 			? $"Resized window to {width}x{height}."

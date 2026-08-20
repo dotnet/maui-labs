@@ -16,6 +16,17 @@ internal static class NetStandardCompat
         => value.Length > 0 && value[0] == c;
 
     /// <summary>
+    /// netstandard2.0's <see cref="System.Net.Http.HttpContent"/> has no cancellable read. The body
+    /// is already buffered by the time this is reached, so honoring cancellation up front matches
+    /// the modern overload closely enough for the protocol client's use.
+    /// </summary>
+    public static Task<string> ReadAsStringAsync(
+        this System.Net.Http.HttpContent content, CancellationToken cancellationToken)
+        => cancellationToken.IsCancellationRequested
+            ? Task.FromCanceled<string>(cancellationToken)
+            : content.ReadAsStringAsync();
+
+    /// <summary>
     /// Cancellable connect for netstandard2.0, which only exposes the APM/EAP connect overloads.
     /// Cancellation disposes the socket, which is what aborts an in-flight connect; the resulting
     /// <see cref="ObjectDisposedException"/> or <see cref="SocketException"/> is translated into

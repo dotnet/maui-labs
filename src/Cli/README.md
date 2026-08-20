@@ -122,6 +122,7 @@ maui apple simulator delete "iPhone 16 Pro"
 | `maui devflow init` | Install project-scoped DevFlow onboarding/debugging skills |
 | `maui devflow skills` | Manage bundled DevFlow skill installs and updates |
 | `maui devflow ui` | Visual tree inspection, interaction, and screenshots |
+| `maui devflow ui diagnostics` | Detect clipping, overflow, text truncation, overlap, and occlusion |
 | `maui devflow recording` | Manage UI recording sessions (start, stop, status) |
 | `maui devflow webview` | Blazor WebView automation via Chrome DevTools Protocol |
 | `maui devflow logs` | Fetch and stream application logs |

@@ -602,7 +602,7 @@ public class InspectorServerCaptureMetadataTests
         {
             using var client = new HttpClient();
             using var response = await client.GetAsync(
-                $"http://localhost:{inspectorPort}/screenshot.png?t=999");
+                $"http://localhost:{inspectorPort}/screenshot.png?frame=00000000000000000000000000000000");
 
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
             Assert.DoesNotContain(
@@ -631,7 +631,7 @@ public class InspectorServerCaptureMetadataTests
             var html = await client.GetStringAsync($"http://localhost:{inspectorPort}/");
             var urlMatch = System.Text.RegularExpressions.Regex.Match(
                 html,
-                "id=\"screenshot\" src=\"(screenshot\\.png\\?t=\\d+)\"");
+                "id=\"screenshot\" src=\"(screenshot\\.png\\?frame=[0-9a-f]+)\"");
             Assert.True(urlMatch.Success);
 
             using var screenshot = await client.GetAsync(
@@ -677,7 +677,8 @@ public class InspectorServerCaptureMetadataTests
     }
 
     [Theory]
-    [InlineData("/")]
+    // "/" intentionally still serves the inspector shell when the agent has no tree — devflow.js
+    // renders the disconnected overlay and keeps polling /api/state, which is the gated endpoint.
     [InlineData("/api/state")]
     public async Task TreeEndpoint_WhenAgentReturnsNoTree_ReturnsServiceUnavailable(string path)
     {

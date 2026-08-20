@@ -14,7 +14,7 @@ public sealed class PropertyTools
 		[Description("Property name (e.g., 'Text', 'IsVisible', 'BackgroundColor')")] string property,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var value = await agent.GetPropertyAsync(elementId, property);
 		return value ?? $"Property '{property}' not found on element '{elementId}'.";
 	}
@@ -29,7 +29,7 @@ public sealed class PropertyTools
 		[Description("Capture epoch from maui_tree; stale epochs are rejected")] long? captureEpoch = null,
 		[Description("Native registry generation from maui_tree")] long? registryGeneration = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.SetPropertyResultAsync(
 			elementId,
 			property,

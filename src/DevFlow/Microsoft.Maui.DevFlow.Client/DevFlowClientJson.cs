@@ -9,6 +9,7 @@ namespace Microsoft.Maui.DevFlow.Driver;
 [JsonSerializable(typeof(AgentStatus))]
 [JsonSerializable(typeof(ElementInfo))]
 [JsonSerializable(typeof(List<ElementInfo>))]
+[JsonSerializable(typeof(ElementTreeSnapshot))]
 [JsonSerializable(typeof(NetworkRequest))]
 [JsonSerializable(typeof(List<NetworkRequest>))]
 [JsonSerializable(typeof(ProfilerCapabilities))]
@@ -27,6 +28,12 @@ namespace Microsoft.Maui.DevFlow.Driver;
 [JsonSerializable(typeof(ExtensionToolInfo))]
 [JsonSerializable(typeof(ExtensionToolAnnotationsInfo))]
 [JsonSerializable(typeof(Dictionary<string, ExtensionDescriptor>))]
+[JsonSerializable(typeof(MutationLeaseStatus))]
+[JsonSerializable(typeof(MutationRecordingObservation))]
+[JsonSerializable(typeof(MutationRecordingStatus))]
+[JsonSerializable(typeof(LayoutInspectionRequest))]
+[JsonSerializable(typeof(LayoutInspectionResult))]
+[JsonSerializable(typeof(LayoutRuleCatalog))]
 internal sealed partial class DevFlowClientJsonContext : JsonSerializerContext;
 
 internal static class ProtocolJson
@@ -60,6 +67,10 @@ internal static class ProtocolJson
 
     public static StringContent CreateJsonContent(JsonNode body)
         => new(SerializeUntyped(body), Encoding.UTF8, "application/json");
+
+    public static JsonNode SerializeToNode<T>(T value) where T : class
+        => JsonSerializer.SerializeToNode(value, typeof(T), DevFlowClientJsonContext.Default)
+            ?? new JsonObject();
 
     public static JsonElement ParseElement(string json)
     {

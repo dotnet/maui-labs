@@ -20,6 +20,7 @@ public class UnsupportedCapabilityTests
     [InlineData("/api/v1/ui/tree", "ui.tree")]
     [InlineData("/api/v1/ui/hit-test?x=1&y=1", "ui.tree")]
     [InlineData("/api/v1/ui/screenshot", "ui.screenshot")]
+    [InlineData("/api/v1/ui/elements/e1/properties", "ui.actions")]
     [InlineData("/api/v1/device/app/theme", "app.theme")]
     public async Task UnsupportedEndpoints_Return501NotSupportedEnvelope(string path, string capability)
     {
@@ -153,7 +154,13 @@ public class UnsupportedCapabilityTests
     public async Task JobRun_WithoutPlatformResult_ReturnsUniformNotSupportedEnvelope()
     {
         var port = GetFreePort();
-        using var service = new JobHostWithoutRunSupport(new AgentOptions { Port = port });
+        // Lease enforcement is exercised elsewhere; this test drives the endpoint with a raw
+        // HttpClient (no lease identity) to assert the 501 not_supported envelope shape.
+        using var service = new JobHostWithoutRunSupport(new AgentOptions
+        {
+            Port = port,
+            RequireMutationLease = false
+        });
         service.StartServerOnly(dispatcher: null);
 
         using var http = new HttpClient();
@@ -172,6 +179,32 @@ public class UnsupportedCapabilityTests
         Assert.Equal("not_supported", json.RootElement.GetProperty("error").GetString());
         Assert.Equal("device.jobs", json.RootElement.GetProperty("capability").GetString());
         Assert.False(string.IsNullOrWhiteSpace(json.RootElement.GetProperty("reason").GetString()));
+    }
+
+    // AnalyzeLayoutAsync documents returning null when the agent cannot analyze layout, and the
+    // CLI and MCP surfaces depend on that to print their own capability guidance. The shared retry
+    // path raises NotSupportedByAgentException for the uniform 501 envelope before the method can
+    // inspect the status code, so it has to translate that back into the documented null.
+    [Fact]
+    public async Task AnalyzeLayoutAsync_ReportsNotSupported_AsNull_WithoutThrowing()
+    {
+        var port = GetFreePort();
+        using var service = new DevFlowAgentService(new AgentOptions
+        {
+            Port = port,
+            EnableLayoutDiagnostics = true
+        });
+        using var client = new AgentClient("localhost", port);
+        service.StartServerOnly(dispatcher: null);
+
+        using (var http = new HttpClient())
+            await WaitForServerAsync(http, port, "/api/v1/agent/status");
+
+        var result = await client.AnalyzeLayoutAsync(
+            new Driver.LayoutInspectionRequest(),
+            CancellationToken.None);
+
+        Assert.Null(result);
     }
 
     [Fact]

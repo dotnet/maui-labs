@@ -82,6 +82,12 @@ public class AgentOptions
     public bool EnableProfiler { get; set; } = false;
 
     /// <summary>
+    /// Enables the experimental layout diagnostics API and capability advertisement.
+    /// Default: false until the cross-platform acceptance matrix is complete.
+    /// </summary>
+    public bool EnableLayoutDiagnostics { get; set; } = false;
+
+    /// <summary>
     /// Default profiler sampling interval in milliseconds. Default: 500ms.
     /// </summary>
     public int ProfilerSampleIntervalMs { get; set; } = 500;
@@ -115,6 +121,19 @@ public class AgentOptions
     /// Default: false to avoid broad attachment overhead.
     /// </summary>
     public bool EnableDetailedUiHooks { get; set; } = false;
+
+    /// <summary>
+    /// Whether mutating HTTP endpoints require a valid DevFlow mutation lease.
+    /// The lease is broker-authoritative when connected and falls back to the local agent when
+    /// no broker is available. Default: true.
+    /// </summary>
+    public bool RequireMutationLease { get; set; } = true;
+
+    /// <summary>
+    /// How long a mutation lease remains active without a successful mutation or heartbeat.
+    /// Default: 10 seconds.
+    /// </summary>
+    public int MutationLeaseTimeoutMs { get; set; } = 10_000;
 
     /// <summary>
     /// Custom routes registered under /api/v1/ext/{namespace}/...

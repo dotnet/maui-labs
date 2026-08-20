@@ -1,6 +1,7 @@
 using Microsoft.Maui;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.DevFlow.Agent.Core.Css;
+using Microsoft.Maui.DevFlow.Agent.Core.SourceMapping;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 
@@ -12,7 +13,7 @@ namespace Microsoft.Maui.DevFlow.Agent.Core;
 /// IDs are derived from element properties (Element.Id, AutomationId, platform stamps)
 /// rather than cached maps — the tree is walked fresh each time.
 /// </summary>
-public class VisualTreeWalker
+public partial class VisualTreeWalker
 {
     private const string RegisteredNativeElementPrefix = "native:registered:";
     private readonly RegisteredNativeElementRegistry? _nativeElementRegistry;
@@ -23,6 +24,7 @@ public class VisualTreeWalker
     // Per-walk state — fully rebuilt on each WalkTree call
     private readonly HashSet<string> _usedIds = new();
     private readonly Dictionary<Guid, string> _elementIdToExternalId = new();
+    private readonly Dictionary<string, IVisualTreeElement> _externalIdToElement = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<object, string> _objectToExternalId = new(ReferenceEqualityComparer.Instance);
     private readonly ConcurrentDictionary<string, (BoundsInfo Bounds, object Marker)> _syntheticBounds = new();
     private int _currentWindowId;
@@ -60,6 +62,7 @@ public class VisualTreeWalker
         // Walk tree fresh, searching for matching ID
         _usedIds.Clear();
         _elementIdToExternalId.Clear();
+        _externalIdToElement.Clear();
         _objectToExternalId.Clear();
         _syntheticBounds.Clear();
 
@@ -396,6 +399,7 @@ public class VisualTreeWalker
     {
         _usedIds.Clear();
         _elementIdToExternalId.Clear();
+        _externalIdToElement.Clear();
         _objectToExternalId.Clear();
         _syntheticBounds.Clear();
         try
@@ -420,6 +424,7 @@ public class VisualTreeWalker
                     }
                 }
                 AppendRegisteredNativeElements(results, maxDepth, completeScope: false);
+                ApplySourceMap(results);
                 return results;
             }
 
@@ -454,6 +459,7 @@ public class VisualTreeWalker
             }
 
             AppendRegisteredNativeElements(results, maxDepth, completeScope: maxDepth == 0);
+            ApplySourceMap(results);
             return results;
         }
         finally
@@ -1362,7 +1368,10 @@ public class VisualTreeWalker
     {
         // Check if we've already generated an ID for this Element.Id in this walk
         if (element is Element el && _elementIdToExternalId.TryGetValue(el.Id, out var cachedId))
+        {
+            _externalIdToElement[cachedId] = element;
             return cachedId;
+        }
 
         string id;
         if (element is VisualElement ve && !string.IsNullOrEmpty(ve.AutomationId))
@@ -1416,6 +1425,7 @@ public class VisualTreeWalker
         _usedIds.Add(id);
         if (element is Element elFinal)
             _elementIdToExternalId[elFinal.Id] = id;
+        _externalIdToElement[id] = element;
         _objectToExternalId.TryAdd(element, id);
         return id;
     }
@@ -1539,7 +1549,7 @@ public class VisualTreeWalker
             // ToolbarItems
             foreach (var toolbarItem in page.ToolbarItems)
             {
-                var tiId = GenerateObjectId(toolbarItem, toolbarItem.AutomationId);
+                var tiId = GetToolbarItemId(toolbarItem);
                 if (tiId == targetId) return toolbarItem;
             }
 
@@ -2041,7 +2051,13 @@ public class VisualTreeWalker
 
     private ElementInfo CreateToolbarItemInfo(ToolbarItem item, string parentId)
     {
-        var id = GenerateObjectId(item, item.AutomationId);
+        var id = GetToolbarItemId(item);
+        _usedIds.Add(id);
+        // Register the identity maps that GenerateObjectId would have populated. The registered
+        // native-element pass resolves an owner through these maps, so a toolbar item that skips
+        // them can never be given its native child.
+        _elementIdToExternalId.TryAdd(item.Id, id);
+        _objectToExternalId.TryAdd(item, id);
         var tiInfo = new ElementInfo
         {
             Id = id,
@@ -2055,6 +2071,14 @@ public class VisualTreeWalker
         };
         TryPopulateSyntheticBounds(id, item, tiInfo);
         return tiInfo;
+    }
+
+    internal static string GetToolbarItemId(ToolbarItem item)
+    {
+        var suffix = item.Id.ToString("N")[..8];
+        return string.IsNullOrWhiteSpace(item.AutomationId)
+            ? $"ToolbarItem_{suffix}"
+            : $"{item.AutomationId}_{suffix}";
     }
 
     private ElementInfo? CreateBackButtonInfo(Page page, string parentId)
@@ -2170,6 +2194,34 @@ public class VisualTreeWalker
         return null;
     }
 
+    /// <summary>
+    /// The text the visual tree exposes for an element. Shared with mutation recording so a
+    /// recorded text selector is byte-identical to what a query or replay will search for.
+    /// </summary>
+    internal static string? ExtractText(object element)
+    {
+        // Comet views implement IView but not VisualElement; their text comes off IText.
+        if (element is not VisualElement and IView and IText comet &&
+            !string.IsNullOrEmpty(comet.Text))
+        {
+            return comet.Text;
+        }
+
+        return element switch
+        {
+            Label l => l.Text,
+            Button b => b.Text,
+            Entry e => SensitiveValueRedactor.Redact(e.Text, e.IsPassword),
+            Editor ed => ed.Text,
+            SearchBar sb => sb.Text,
+            Span s => s.Text,
+            BaseShellItem si => si.Title,
+            // Fallback to IText interface for non-Controls types (e.g. Comet views)
+            IText it => it.Text,
+            _ => null
+        };
+    }
+
     private ElementInfo CreateElementInfo(IVisualTreeElement element, string id, string? parentId)
     {
         // Try to resolve Comet view type first (if Comet is loaded)
@@ -2229,30 +2281,10 @@ public class VisualTreeWalker
                     Height = double.IsFinite(frame.Height) ? frame.Height : 0
                 };
             }
-
-            // Try to extract text from Comet views via IText interface
-            if (element is IText iText && !string.IsNullOrEmpty(iText.Text))
-            {
-                info.Text = element is Entry entry
-                    ? SensitiveValueRedactor.Redact(iText.Text, entry.IsPassword)
-                    : iText.Text;
-            }
         }
 
         // Extract text from common controls (including Shell elements)
-        info.Text ??= element switch
-        {
-            Label l => l.Text,
-            Button b => b.Text,
-            Entry e => SensitiveValueRedactor.Redact(e.Text, e.IsPassword),
-            Editor ed => ed.Text,
-            SearchBar sb => sb.Text,
-            Span s => s.Text,
-            BaseShellItem si => si.Title,
-            // Fallback to IText interface for non-Controls types (e.g. Comet views)
-            IText it when info.Text == null => it.Text,
-            _ => null
-        };
+        info.Text = ExtractText(element);
 
         // Extract value/state from stateful controls
         info.Value = element switch
@@ -2373,6 +2405,7 @@ public class VisualTreeWalker
     {
         _usedIds.Clear();
         _elementIdToExternalId.Clear();
+        _externalIdToElement.Clear();
         _objectToExternalId.Clear();
         _syntheticBounds.Clear();
     }

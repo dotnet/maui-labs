@@ -1,322 +1,208 @@
 # DevFlow Web Inspector
 
-> **Status**: Mixed — the broker-hosted inspector at `http://localhost:19223/inspector/` is implemented and shipping in `maui devflow broker`. Sections that describe a standalone `maui devflow inspector` command, a `<nav id="devflow-toolbar">`, deep-link routing via URL paths, or a nested element tree are **future design** and are kept here for reference. See the [Usage](#usage) section for the current concrete commands.
+The DevFlow Web Inspector mirrors a running .NET MAUI app as a screenshot plus an interactive
+visual-tree overlay. It is served directly at `http://localhost:19223/inspector/`.
 
-## Overview
+The MAUI DevFlow Inspector host integrations embed that existing page in:
 
-The DevFlow Web Inspector serves a running MAUI app as a fully interactive HTML page. An external inspector tool (or any browser) connects to a local URL and sees the app rendered as a live, clickable web page — complete with DOM elements matching the native visual tree.
+- MAUI DevFlow Inspector for VS Code;
+- MAUI DevFlow Inspector for GitHub Copilot Canvas.
 
-This enables any HTML-based inspector tool to work with a native MAUI app without custom integration. The inspector tool sees a normal website; all interaction (taps, scrolls, gestures) is transparently proxied to the real app.
+The broker-hosted page remains the **DevFlow Web Inspector**. **MAUI DevFlow Inspector** is the
+public name for the host integrations added around it; all hosts embed the same page.
+
+## Start the inspector
+
+Add and start the DevFlow agent in a Debug build, launch the app, then:
+
+```bash
+maui devflow broker start
+```
+
+Open the broker URL above, run **MAUI DevFlow: Open Inspector** in VS Code, or open the MAUI
+DevFlow Inspector in GitHub Copilot Canvas.
+
+## Features
+
+- screenshot and visual-tree inspection with hover, selection, and searchable hierarchy;
+- a prominent disconnected-state overlay that preserves and clearly labels the last captured frame
+  while DevFlow waits for the app to reconnect;
+- tap, fill, scroll, named gestures (pinch, rotate, pan, swipe, double-tap, long-press, tap),
+  navigation, theme, and live property mutation, with explicit
+  **Apply to XAML** persistence for existing direct-literal attributes and runtime-owned property
+  editor metadata;
+- logs, live-updating network, preferences, device, sensor, native Alerts, read-only file browsing,
+  and WebView/CDP data docks;
+- click-to-XAML source navigation for Debug source maps;
+- one integrated Workflow panel for recording, loading project `maui-tests` files or local Markdown
+  files, replaying them, and reviewing per-step results;
+- an **Add to Copilot** context menu for the selected element, loaded workflow, both together, or
+  the current bounded and redacted Data snapshot, including alert metadata;
+- responsive light, dark, and high-contrast host theming.
 
 ## Architecture
 
-```
-┌─────────────────────┐         ┌──────────────────────────┐         ┌─────────────────────┐
-│  Inspector Tool /   │  HTTP   │  CLI Inspector Server     │  HTTP   │  DevFlow Agent      │
-│  Browser            │ ◄─────► │  (localhost:19223)       │ ◄─────► │  (device:9223+)     │
-│                     │         │  (broker-hosted)         │         │                     │
-│  Sees: HTML page    │         │  - Generates HTML        │         │  - Visual tree API  │
-│  Does: Click/scroll │         │  - Proxies API calls     │         │  - Screenshot API   │
-│                     │         │  - WebSocket relay       │         │  - Action endpoints │
-└─────────────────────┘         └──────────────────────────┘         └─────────────────────┘
+```text
+Browser / VS Code / Canvas
+          |
+          v
+DevFlow broker-hosted inspector
+          |
+          v
+In-app DevFlow agent
 ```
 
-The inspector is currently served by the **DevFlow broker** running on the developer's machine. The DevFlow agent runs **inside the native app** on any platform (device, emulator, simulator, desktop). The broker handles agent discovery, ADB port forwarding, and all the connection plumbing.
+The broker discovers agents and serves the HTML/CSS/JavaScript bundle. Inspector mutations are
+proxied to the selected in-app agent. VS Code and Canvas embed the same page and add an
+authenticated host bridge for source navigation, recording persistence, and Copilot context.
 
-## Usage
+## Host-adaptive layout
+
+The shared inspector keeps one interaction model while adapting its chrome to the host viewport:
+
+- **Wide browser/editor:** tree, screenshot, and properties are docked as three panes.
+- **Compact editor:** the tree remains available while properties open as a drawer, preserving
+  screenshot width.
+- **Narrow Canvas/editor:** the screenshot is primary; tree and properties become coordinated
+  full-height drawers with a scrim.
+- **Short host:** drawers and overlay Data/timeline sheets protect the screenshot's vertical budget.
+
+The toolbar keeps interaction mode, tree, fit, and recording visible. Secondary actions remain
+inline for as long as they fit; only the non-fitting actions move into the **More** menu. More can
+open over an active Data or properties surface, and Copilot choices open as a nested submenu.
+Host bridges also supply their color palette, font metadata, contrast mode, and reduced-motion
+preference. VS Code placement is configurable with
+`mauiDevflow.openLocation` (`auto`, `beside`, or `active`).
+
+## Coordinated frames and coordinates
+
+Each inspector refresh creates an immutable frame containing:
+
+- the visual tree used for the overlay;
+- the exact screenshot bytes;
+- screenshot dimensions;
+- the screenshotted root page and its window offset;
+- rendered element HTML.
+
+The screenshot URL includes the frame ID. Expired frame screenshots return `404`, causing the
+client to refresh state instead of pairing a new screenshot with stale bounds. When a modal or
+sheet is screenshotted, only that page subtree is rendered, preventing underlying window chrome
+from producing negative offsets.
+
+Browser coordinates are converted from the fit-scaled viewport back to screenshot coordinates,
+then translated to window coordinates with the frame's root offset before hit testing.
+
+## Global mutation lease
+
+All state-changing calls use one lease per running app. Browser tabs, VS Code, Canvas, MCP, and CLI
+therefore cannot drive the app concurrently.
+
+- The first mutating host claims the lease.
+- Read-only inspection remains available to other hosts.
+- A host can release or explicitly take over the lease.
+- Lease release or takeover hands an active app-scoped recording to the next valid lease holder.
+- Closing Canvas releases its lease; abandoned leases also expire automatically.
+
+The lease coordinates writers; it is not an authentication boundary.
+
+## Workflow recording
+
+Recording is owned by the broker and scoped to the current app. The current valid mutation lease
+holder controls it. The agent observes successful supported mutations from every host, so a
+workflow can begin in the browser, continue through Canvas or MCP after lease handoff, and stop in
+VS Code without separate local recorders.
+
+The Workflow panel can also load an existing test from the registered app project's top-level
+`maui-tests` directory or from an OS-selected `.md` file. Project files are confined to that
+directory, capped at 1 MB, and parsed and validated before Inspector makes them replayable.
+Replay results stay in the same Workflow panel instead of opening a separate report surface.
+
+Currently normalized actions include tap, fill, scroll, navigate, back, theme changes, and property
+changes. The result is a Markdown file with an authoritative `json maui-test` block for replay.
+Replay is blocked while recording is active.
+
+## Click-to-XAML
+
+The Agent.Core package supplies a build-transitive source generator. In Debug builds it maps XAML
+elements to source file, line, column, and a build-time content hash. VS Code compares the current
+file hash before opening the recorded line and warns when the file changed after the app was built.
+
+Source locations are emitted only when the runtime element can be matched conservatively to its
+XAML declaration. Repeated same-type siblings need sibling-unique `AutomationId` values; otherwise
+their source actions are withheld rather than risk opening or editing the wrong declaration.
+
+Source maps are disabled outside Debug by default because they embed XAML text and source paths.
+They can be disabled explicitly:
+
+```xml
+<DevFlowXamlSourceMapsEnabled>false</DevFlowXamlSourceMapsEnabled>
+```
+
+### Apply property values to XAML
+
+For source-mapped elements, each supported property row includes an **Apply to XAML** button. Live
+editing remains runtime-only until this button is selected. The broker then updates only an
+existing direct-literal attribute in the registered app project while preserving the rest of the
+file, its encoding, and line endings.
+
+The write is rejected when the property comes from a binding, resource, markup extension, style,
+property element, template, or code-created element. It is also rejected when the source changed
+outside Inspector after the app was built or after the previous Inspector write. Rebuild the app
+to refresh stale source maps.
+
+The broker validates the value against the running element before writing and restricts edits to
+the agent-advertised property grid. Current agents describe editor kind, current value, writability,
+enum choices, and numeric constraints from the runtime control. It binds relative project names to the build's default path-derived
+DevFlow session identity; builds using a custom `MauiDevFlowSessionId` should also set
+`MauiDevFlowIncludeProjectPath=true` to provide an unambiguous project root.
+
+## Platform boundaries
+
+The WebView data tab lists attached Blazor WebViews, displays page source, and evaluates JavaScript
+through the existing CDP bridge. Every expression requires confirmation because arbitrary
+JavaScript can read or change live application data. A bundled Chrome DevTools frontend is
+intentionally outside the Inspector scope; use external browser platform tools when the
+full DOM, console, network, and debugger experience is required.
+
+System dialogs and MAUI alerts are outside the in-app MAUI visual tree. The **Alerts** data tab uses
+the existing platform drivers to detect and dismiss them without pretending they are selectable
+MAUI elements. Detection remains read-only. Dismissal requires the mutation lease and is blocked
+while workflow replay is driving the app.
+
+- Android actions target only the online device whose existing ADB forward owns the selected
+  agent port. Missing or ambiguous ownership is rejected.
+- Windows and Mac Catalyst actions refresh and use the exact app process ID reported by the agent.
+- Linux actions connect the platform driver to the exact selected agent.
+- iOS alert control remains CLI-only because Inspector registration does not carry a simulator
+  UDID. Use the platform alert driver explicitly:
 
 ```bash
-# Start the broker (the inspector is served at http://localhost:19223/inspector/)
-maui devflow broker start
-
-# Then connect any MAUI app with the DevFlow agent — it will auto-register.
-# Open the agent list at:
-#   http://localhost:19223/inspector/
-# Or jump straight to the only connected agent:
-#   http://localhost:19223/inspector/default/
-# Or by agent id:
-#   http://localhost:19223/inspector/{agentId}/
+maui devflow ui alert detect --device <simulator-udid>
+maui devflow ui alert dismiss "OK" --device <simulator-udid>
 ```
 
-> The standalone `maui devflow inspector` command (with `--port`, `--agent-port`, `--device` flags) shown in earlier drafts is **future work**; today the inspector lives inside the broker.
+DevFlow Action request bodies are passed to the registered action. A generic
+`include: ["screenshot", "tree"]` field does not add post-action captures; use the CLI/MCP
+post-action options or request the screenshot and tree explicitly.
 
-## Generated HTML Structure
+## Compatibility
 
-The inspector server generates an interactive HTML page with two layers:
+Current clients remain read/write compatible with older agents that do not expose the lease
+endpoint. Older clients cannot mutate current agents because they do not send a lease identity.
+Inspector falls back to its legacy static property table when an older agent does not expose
+runtime descriptors. The Node client negotiates `ui.events`; unsupported agents enter a stable
+`polling-only` state and recheck the capability every 60 seconds so an in-place upgrade recovers
+without reconnect churn. Upgrade the agent packages and host tooling together.
 
-### Layer 1: App Viewport with Screenshot
-```html
-<div id="app-viewport" data-width="{W}" data-height="{H}" style="width:{W}px; height:{H}px;">
-  <img id="screenshot" src="screenshot.png" alt="App screenshot">
-```
+## Implementation
 
-### Layer 2: Element Divs (Flat, Positioned)
-
-All elements are rendered as **flat siblings** (not nested) using window-absolute bounds
-adjusted by the root page offset. This ensures 1:1 alignment with the screenshot regardless
-of whether the app is showing a modal, sheet, or safe-area-offset page.
-
-```html
-  <div class="devflow-element"
-       data-id="elem_1"
-       data-type="ContentPage"
-       data-fullType="Microsoft.Maui.Controls.ContentPage"
-       data-isVisible="true"
-       data-isEnabled="true"
-       style="position:absolute; left:0px; top:0px; width:390px; height:844px;"></div>
-
-  <div class="devflow-element"
-       data-id="elem_6"
-       data-type="Button"
-       data-fullType="Microsoft.Maui.Controls.Button"
-       data-automationId="btnSubmit"
-       data-text="Click Me"
-       data-role="button"
-       data-isVisible="true"
-       data-isEnabled="true"
-       data-isFocused="false"
-       data-opacity="1"
-       data-traits="interactive,focusable"
-       data-gestures="tap"
-       style="position:absolute; left:16px; top:120px; width:358px; height:44px;"></div>
-</div>
-```
-
-### Layer 3: Interaction Script
-```html
-<script src="devflow.js"></script>
-```
-
-## Element Attributes
-
-Each `<div class="devflow-element">` carries `data-*` attributes using the **exact DevFlow JSON property names** (camelCase). This gives a 1:1 mapping with the agent API — no translation needed.
-
-| Attribute | Source (`ElementInfo`) | Description |
-|-----------|----------------------|-------------|
-| `data-id` | `id` | DevFlow element ID |
-| `data-parentId` | `parentId` | Parent element ID |
-| `data-type` | `type` | Short type name (Button, Label, Entry) |
-| `data-fullType` | `fullType` | Full .NET type (Microsoft.Maui.Controls.Button) |
-| `data-framework` | `framework` | Always "maui" |
-| `data-automationId` | `automationId` | AutomationId for testing |
-| `data-text` | `text` | Text content |
-| `data-value` | `value` | Value property |
-| `data-role` | `role` | Accessibility role (button, textbox, checkbox, etc.) |
-| `data-isVisible` | `isVisible` | Visibility state |
-| `data-isEnabled` | `isEnabled` | Enabled state |
-| `data-isFocused` | `isFocused` | Focus state |
-| `data-opacity` | `opacity` | Opacity (0–1) |
-| `data-traits` | `traits` | Comma-separated: interactive, focusable, scrollable, header |
-| `data-gestures` | `gestures` | Comma-separated: tap, swipe, etc. |
-| `data-styleClass` | `styleClass` | Comma-separated CSS style classes |
-| `data-nativeType` | `nativeType` | Platform native type (e.g., Android.Widget.Button) |
-| `data-nativeProperties` | `nativeProperties` | JSON-encoded native property dictionary |
-| `data-frameworkProperties` | `frameworkProperties` | JSON-encoded MAUI property dictionary |
-
-> **Note**: HTML `data-*` attributes with camelCase suffixes work correctly. The DOM `dataset` API auto-converts them (e.g., `data-automationId` → `element.dataset.automationid`), but inspector tools read the raw attribute strings directly.
-
-## Agent UI Endpoints Reference
-
-The DevFlow agent exposes these UI endpoints. The inspector uses them as follows:
-
-### Read Endpoints
-
-| Endpoint | Method | Purpose | Inspector Use |
-|----------|--------|---------|---------------|
-| `/api/v1/ui/tree` | GET | Full visual tree (nested ElementInfo) | Generate HTML DOM structure |
-| `/api/v1/ui/tree?depth=N` | GET | Tree limited to N levels | Optimize for deep trees |
-| `/api/v1/ui/elements?type=X&text=Y&automationId=Z` | GET | Query/filter elements | Future: search |
-| `/api/v1/ui/elements/{id}` | GET | Full details for one element | On-demand detail fetch |
-| `/api/v1/ui/elements/{id}/properties/{name}` | GET | Read specific property | Property inspection |
-| `/api/v1/ui/hit-test?x=N&y=N` | GET | Find element at coordinates | Map click to element |
-| `/api/v1/ui/screenshot` | GET | PNG screenshot | Background image |
-
-### Action Endpoints
-
-| Endpoint | Method | Purpose | Inspector Use |
-|----------|--------|---------|---------------|
-| `/api/v1/ui/actions/tap` | POST | Tap element by ID or coordinates | Click handler |
-| `/api/v1/ui/actions/scroll` | POST | Scroll by delta or to index | Wheel event handler |
-| `/api/v1/ui/actions/gesture` | POST | Named gesture (pinch, rotate, pan, swipe, double-tap, long-press, tap) | Gesture inspector control |
-| `/api/v1/ui/actions/back` | POST | Navigate back | Toolbar back button |
-| `/api/v1/ui/actions/fill` | POST | Fill text into Entry/Editor | Text input (V1.1) |
-| `/api/v1/ui/actions/clear` | POST | Clear text from element | Text input (V1.1) |
-| `/api/v1/ui/actions/key` | POST | Send key press | Key events (V1.1) |
-| `/api/v1/ui/actions/focus` | POST | Focus an element | Auto on tap |
-| `/api/v1/ui/actions/navigate` | POST | Shell navigation by route | URL navigation (V1.2) |
-| `/api/v1/ui/actions/resize` | POST | Resize window | Not needed |
-| `/api/v1/ui/actions/batch` | POST | Multiple actions at once | Optimization |
-
-### Mutation Endpoints
-
-| Endpoint | Method | Purpose | Inspector Use |
-|----------|--------|---------|---------------|
-| `/api/v1/ui/elements/{id}/properties/{name}` | PUT | Set property value | Live editing (V1.2) |
-
-### WebSocket
-
-| Endpoint | Purpose | Inspector Use |
-|----------|---------|---------------|
-| `/ws/v1/ui/events` | Real-time UI events | Auto-refresh page |
-
-#### Event Types
-
-| Event | When | Inspector Action |
-|-------|------|-----------------|
-| `treeChange` | After tap, fill, scroll, property set | Rebuild DOM + refresh screenshot |
-| `navigation` | Shell route changed | Rebuild DOM + refresh screenshot |
-| `lifecycle` | App started/stopped | Show connection status |
-
-Clients can subscribe to specific events:
-```json
-{"type": "subscribe", "data": {"events": ["treeChange", "navigation"]}}
-```
-
-## Interaction Model
-
-### Click → Tap (V1)
-
-```javascript
-viewport.addEventListener('click', async (e) => {
-  const rect = viewport.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-  await fetch('/api/tap', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ x, y })
-  });
-  await refreshScreenshot();
-});
-```
-
-### Wheel → Scroll (V1)
-
-```javascript
-viewport.addEventListener('wheel', async (e) => {
-  e.preventDefault();
-  const rect = viewport.getBoundingClientRect();
-  await fetch('/api/scroll', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-      deltaX: e.deltaX,
-      deltaY: e.deltaY
-    })
-  });
-  await refreshScreenshot();
-});
-```
-
-### Pointer Drag → Gesture (V1)
-
-```javascript
-let gesturePoints = [];
-
-viewport.addEventListener('pointerdown', (e) => {
-  gesturePoints = [{ x: e.offsetX, y: e.offsetY, t: Date.now() }];
-  viewport.setPointerCapture(e.pointerId);
-});
-
-viewport.addEventListener('pointermove', (e) => {
-  if (gesturePoints.length > 0) {
-    gesturePoints.push({ x: e.offsetX, y: e.offsetY, t: Date.now() });
-  }
-});
-
-viewport.addEventListener('pointerup', async (e) => {
-  if (gesturePoints.length > 1) {
-    await fetch('/api/gesture', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ points: gesturePoints })
-    });
-    await refreshScreenshot();
-  }
-  gesturePoints = [];
-});
-```
-
-### AJAX Refresh (Current Implementation)
-
-```javascript
-// Poll every 3 seconds — no full page reload, no flash
-setInterval(async () => {
-  const resp = await fetch(`${basePath}/api/state`);
-  const state = await resp.json();
-  // Update screenshot src, patch element divs via DOM diff
-  screenshot.src = state.screenshotUrl;
-  patchElements(state.elements);
-}, 3000);
-```
-
-> **Note**: A WebSocket relay at `/ws/events` (→ agent `/ws/v1/ui/events`) is available
-> for external clients. The bundled `devflow.js` uses AJAX polling as the primary strategy.
-
-## Inspector Server Routes
-
-| Route | Method | Description |
-|-------|--------|-------------|
-| `/` | GET | Generated interactive HTML page |
-| `/screenshot.png` | GET | Proxied PNG from agent (cached ~200ms) |
-| `/devflow.js` | GET | Embedded interaction script |
-| `/api/tap` | POST | Proxy → agent `/api/v1/ui/actions/tap` |
-| `/api/scroll` | POST | Proxy → agent `/api/v1/ui/actions/scroll` |
-| `/api/gesture` | POST | Proxy → agent `/api/v1/ui/actions/gesture` |
-| `/api/back` | POST | Proxy → agent `/api/v1/ui/actions/back` |
-| `/api/fill` | POST | Proxy → agent `/api/v1/ui/actions/fill` (V1.1) |
-| `/api/key` | POST | Proxy → agent `/api/v1/ui/actions/key` (V1.1) |
-| `/api/tree` | GET | Proxy → agent `/api/v1/ui/tree` |
-| `/ws/events` | WS | Proxy → agent `/ws/v1/ui/events` |
-
-## Refresh Strategy
-
-The inspector uses **AJAX polling** (every 3 seconds) via `GET /api/state`:
-1. Fetch JSON containing a timestamped screenshot URL + rendered element HTML
-2. Update `<img>` src to the new screenshot URL (no flash)
-3. Smart DOM diff: patch only changed elements, preserving hover/selection state
-
-A WebSocket relay (`/ws/events` → agent `/ws/v1/ui/events`) is also available for
-external clients that want push-based updates. The bundled `devflow.js` uses AJAX
-polling as the primary strategy for simplicity and reliability.
-
-## Versioned Roadmap
-
-### V1 — Interactive Mirror (Current — Implemented)
-
-| Feature | Implementation |
-|---------|---------------|
-| Screenshot background | `<img src="screenshot.png">` |
-| Element divs with data-* | Flat positioned divs from tree |
-| Click → tap | Coordinate-based POST (with root offset adjustment) |
-| Scroll → scroll | Wheel event → delta POST |
-| Drag → gesture | Pointer events → swipe direction POST |
-| AJAX refresh | 3-second polling via `/api/state` |
-| Modal support | Screenshots topmost page; overlays offset-corrected |
-| Text fill | POST `/api/fill` |
-| Key press | POST `/api/key` |
-
-### V1.1 — Future: Navigation & Editing
-
-| Feature | Implementation |
-|---------|---------------|
-| Toolbar | Back, refresh, connection status controls |
-| URL = Shell route | Browser path maps to navigate endpoint |
-| Deep linking | Opening URL navigates app |
-| pushState | Navigation events update browser URL |
-| Property editing | PUT endpoint from inspector |
-
-## Implementation Files
-
-| File | Purpose |
-|------|---------|
-| `src/Cli/Microsoft.Maui.Cli/DevFlow/Inspector/InspectorServer.cs` | HTTP server, API proxy, WebSocket relay |
-| `src/Cli/Microsoft.Maui.Cli/DevFlow/Inspector/HtmlRenderer.cs` | Visual tree → flat positioned HTML generation |
-| `src/Cli/Microsoft.Maui.Cli/DevFlow/Inspector/LocalOriginValidator.cs` | Origin-based CORS/CSRF protection |
-| `src/Cli/Microsoft.Maui.Cli/DevFlow/Inspector/Web/inspector.html` | HTML template (viewport + placeholders) |
-| `src/Cli/Microsoft.Maui.Cli/DevFlow/Inspector/Web/devflow.js` | Client-side: AJAX polling, click/scroll/gesture handlers |
-| `src/Cli/Microsoft.Maui.Cli/DevFlow/Inspector/Web/devflow.css` | Inspector viewport styles |
-| `src/Cli/Microsoft.Maui.Cli/DevFlow/Broker/BrokerServer.cs` | Broker integration: routes `/inspector/*` to InspectorServer |
-| `src/DevFlow/Microsoft.Maui.DevFlow.Inspector.Tests/` | Playwright integration tests |
+| Area | Location |
+|---|---|
+| Inspector server and proxy | `src/Cli/Microsoft.Maui.Cli/DevFlow/Inspector/` |
+| Shared web UI | `src/Cli/Microsoft.Maui.Cli/DevFlow/Inspector/Web/` |
+| Broker routing and coordination | `src/Cli/Microsoft.Maui.Cli/DevFlow/Broker/` |
+| XAML source maps | `src/DevFlow/Microsoft.Maui.DevFlow.Agent.Core/SourceMapping/` |
+| Shared Node client | `src/DevFlow/js/devflow-client/` |
+| VS Code host | `src/DevFlow/js/vscode-inspector/` |
+| Copilot Canvas host | `.github/extensions/maui-devflow-canvas/` |
+| Playwright tests | `src/DevFlow/Microsoft.Maui.DevFlow.Inspector.Tests/` |
