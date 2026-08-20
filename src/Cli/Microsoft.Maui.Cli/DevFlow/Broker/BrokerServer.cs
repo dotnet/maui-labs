@@ -26,7 +26,7 @@ public class BrokerServer : IDisposable
     private HttpListener? _listener;
     private CancellationTokenSource? _cts;
     private readonly ConcurrentDictionary<string, AgentConnection> _agents = new();
-    private readonly ConcurrentDictionary<string, SemaphoreSlim> _agentRouteGates = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, AgentLifetimeGate> _agentRouteGates = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _agentStateGates = new(StringComparer.Ordinal);
     private readonly MutationLeaseRegistry _mutationLeases;
     private readonly BrokerFlowCoordinator _flows;
@@ -320,9 +320,9 @@ public class BrokerServer : IDisposable
             };
 
             var connection = new AgentConnection(agent, ws);
-            var routeGate = AgentRouteGate(id);
-            await routeGate.WaitAsync(_cts?.Token ?? CancellationToken.None);
-            try
+            // Replacing the registration is a lifetime change: wait for in-flight Inspector
+            // requests against the old connection before swapping it out.
+            await using (await AgentRouteGate(id).EnterExclusiveAsync(_cts?.Token ?? CancellationToken.None))
             {
                 var replaced = ReplaceConnection(_agents, id, connection);
                 if (_inspectors.TryRemove(id, out var staleInspector))
@@ -334,10 +334,6 @@ public class BrokerServer : IDisposable
                     try { replaced.WebSocket.Dispose(); } catch { }
                     Log($"Agent replaced: {agent.AppName}|{agent.Tfm} (was port {replaced.Registration.Port})");
                 }
-            }
-            finally
-            {
-                routeGate.Release();
             }
             publishedConnection = connection;
 
@@ -403,10 +399,9 @@ public class BrokerServer : IDisposable
     private async Task CleanupAgentConnectionAsync(AgentConnection connection)
     {
         // Use the KeyValuePair overload so a reconnecting agent that re-registered with the same ID
-        // cannot be evicted by stale cleanup from the superseded socket.
-        var routeGate = AgentRouteGate(connection.Registration.Id);
-        await routeGate.WaitAsync();
-        try
+        // cannot be evicted by stale cleanup from the superseded socket. Disposing the inspector is
+        // a lifetime change, so it waits for in-flight Inspector requests to finish first.
+        await using (await AgentRouteGate(connection.Registration.Id).EnterExclusiveAsync())
         {
             if (_agents.TryRemove(new KeyValuePair<string, AgentConnection>(connection.Registration.Id, connection)))
             {
@@ -427,14 +422,10 @@ public class BrokerServer : IDisposable
                 }
             }
         }
-        finally
-        {
-            routeGate.Release();
-        }
     }
 
-    private SemaphoreSlim AgentRouteGate(string agentId)
-        => _agentRouteGates.GetOrAdd(agentId, static _ => new SemaphoreSlim(1, 1));
+    private AgentLifetimeGate AgentRouteGate(string agentId)
+        => _agentRouteGates.GetOrAdd(agentId, static _ => new AgentLifetimeGate());
 
     private SemaphoreSlim AgentStateGate(string agentId)
         => _agentStateGates.GetOrAdd(agentId, static _ => new SemaphoreSlim(1, 1));
@@ -937,14 +928,17 @@ public class BrokerServer : IDisposable
             return;
         }
 
-        // Ordinary HTTP requests hold the generation gate through dispatch, so a same-ID reconnect
-        // cannot replace the agent after validation but before a mutation reaches it. Event sockets
-        // are long-lived and read-only; replacement disposes their InspectorServer instead.
-        var routeGate = context.Request.IsWebSocketRequest ? null : AgentRouteGate(connection.Registration.Id);
-        if (routeGate is not null)
-            await routeGate.WaitAsync(_cts?.Token ?? CancellationToken.None);
-        try
-        {
+        // Ordinary HTTP requests hold the SHARED side of the lifetime gate for the whole call, so
+        // a same-ID reconnect or a disconnect cannot replace the agent after validation but before
+        // a mutation reaches it. Shared admits concurrent requests, so a long call — a flow replay
+        // runs inline for up to two minutes — no longer serializes reads, screenshots and
+        // heartbeats behind it, and a concurrent mutation still reaches InspectorServer.RouteAsync
+        // where the replay-in-progress 409 lives. Event sockets are long-lived and read-only;
+        // replacement disposes their InspectorServer instead.
+        await using IAsyncDisposable? lifetime = context.Request.IsWebSocketRequest
+            ? null
+            : await AgentRouteGate(connection.Registration.Id)
+                .EnterSharedAsync(_cts?.Token ?? CancellationToken.None);
 
         // Get or create inspector server for this agent.
         // Three lifecycle hazards we have to defend against:
@@ -1029,11 +1023,6 @@ public class BrokerServer : IDisposable
 
         // Proxy the request through the inspector's route handler
         await inspector.HandleBrokerRequestAsync(context, subPath);
-        }
-        finally
-        {
-            routeGate?.Release();
-        }
     }
 
     internal static TConnection? ResolveInspectorAgent<TConnection>(

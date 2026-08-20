@@ -227,8 +227,54 @@ public class InspectorFlowReplayTests
         Assert.Contains("Stop the active recording", await replay.Content.ReadAsStringAsync());
     }
 
-    private static MauiFlow ValidFlow() => new()
+    [Fact]
+    public async Task Mutation_ArrivingWhileReplayIsInFlight_ReturnsConflict()
     {
+        // Broker-hosted Inspector requests used to serialize on a per-agent mutex held across the
+        // whole proxied call, so a second request never reached RouteAsync during a replay and
+        // this 409 was unreachable. It must be an explicit conflict, not a silent block.
+        await using var agent = new ReplayAgent(recording: false, blockElementQuery: true);
+        await using var inspector = await StartInspectorAsync(agent.Port);
+        using var http = new HttpClient();
+
+        var replayTask = http.PostAsync(
+            $"{inspector.Url}/api/flows/replay",
+            Json(JsonSerializer.Serialize(new { markdown = FlowMarkdown.Serialize(TapFlow()) })));
+
+        // The replay is now driving the app and parked inside the agent.
+        await agent.ElementQueryEntered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        using var mutation = await http
+            .PostAsync($"{inspector.Url}/api/tap", Json("{\"elementId\":\"other\"}"))
+            .WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(HttpStatusCode.Conflict, mutation.StatusCode);
+        Assert.Contains("A replay is in progress", await mutation.Content.ReadAsStringAsync());
+
+        agent.AllowElementQuery.TrySetResult();
+        using var replay = await replayTask.WaitAsync(TimeSpan.FromSeconds(20));
+        Assert.Equal(HttpStatusCode.OK, replay.StatusCode);
+
+        // And once the replay is done the same mutation is admitted again.
+        using var after = await http.PostAsync($"{inspector.Url}/api/tap", Json("{\"elementId\":\"other\"}"));
+        Assert.NotEqual(HttpStatusCode.Conflict, after.StatusCode);
+    }
+
+    private static MauiFlow TapFlow() => new()
+    {
+        Name = "tap",
+        Steps =
+        {
+            new FlowStep
+            {
+                Seq = 1,
+                Action = FlowActions.Tap,
+                Target = new FlowSelector { AutomationId = "label" },
+            },
+        },
+    };
+
+    private static MauiFlow ValidFlow() => new()    {
         Name = "valid",
         Steps =
         {
@@ -346,11 +392,13 @@ public class InspectorFlowReplayTests
         private readonly Task _loop;
         private bool _recording;
         private readonly bool _blockRecordingStart;
+        private readonly bool _blockElementQuery;
 
-        public ReplayAgent(bool recording, bool blockRecordingStart = false)
+        public ReplayAgent(bool recording, bool blockRecordingStart = false, bool blockElementQuery = false)
         {
             _recording = recording;
             _blockRecordingStart = blockRecordingStart;
+            _blockElementQuery = blockElementQuery;
             _listener = new TcpListener(IPAddress.Loopback, 0);
             _listener.Start();
             _loop = AcceptLoopAsync(_cts.Token);
@@ -358,6 +406,10 @@ public class InspectorFlowReplayTests
 
         public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
         public TaskCompletionSource RecordingStartEntered { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ElementQueryEntered { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource AllowElementQuery { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource AllowRecordingStart { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -425,6 +477,13 @@ public class InspectorFlowReplayTests
             {
                 return ("200 OK",
                     "{\"ok\":true,\"allowed\":true,\"youHold\":true,\"heldByOther\":false,\"authority\":\"broker\"}");
+            }
+            if (method == "GET" && path == "/api/v1/ui/elements")
+            {
+                // Park the replay mid-flight so a concurrent request can be observed against it.
+                if (_blockElementQuery && ElementQueryEntered.TrySetResult())
+                    await AllowElementQuery.Task.WaitAsync(ct);
+                return ("200 OK", "[]");
             }
             if (method == "POST" && path == "/api/v1/agent/recording")
             {
