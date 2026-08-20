@@ -48,7 +48,7 @@ Add to `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/McpServerHost.cs`:
 
 ### Step 3: Add the Corresponding AgentClient Method (if needed)
 
-If the tool calls a new agent endpoint, add the client method in `Microsoft.Maui.DevFlow.Driver/AgentClient.cs`.
+If the tool calls a new agent endpoint, add the client method in `Microsoft.Maui.DevFlow.Client/AgentClient.cs`.
 
 ## Naming Conventions
 

@@ -89,7 +89,7 @@ Agent HTTP endpoints are defined in `DevFlowAgentService.cs` (in Agent.Abstracti
 1. Register the route in the `RegisterRoutes()` method: `_server.MapGet("/api/myendpoint", HandleMyEndpoint);`
 2. Implement the handler as `protected virtual async Task<HttpResponse> HandleMyEndpoint(HttpRequest request)`
 3. For POST endpoints that accept JSON bodies, define a DTO class at the bottom of the file
-4. **Add a corresponding method in `AgentClient`** (in `Microsoft.Maui.DevFlow.Driver`) — this is the public API
+4. **Add a corresponding method in `AgentClient`** (in `Microsoft.Maui.DevFlow.Client`) — this is the public API
 
 ```csharp
 // In DevFlowAgentService.cs — handler
@@ -108,12 +108,28 @@ CLI commands use **System.CommandLine** in `Program.cs`:
 - Use `SetHandler` with `InvocationContext` for commands with many options
 - Post-action flags: `--and-screenshot`, `--and-tree`, `--and-tree-depth` for verification after mutations
 
-## Driver Library (AgentClient)
+## Client and Driver Libraries (AgentClient)
 
-`Microsoft.Maui.DevFlow.Driver/AgentClient.cs` is the **public API for NuGet consumers**. Changes to method signatures are:
+`Microsoft.Maui.DevFlow.Client/AgentClient.cs` is the **public API for NuGet consumers**. It lives
+in the portable `Microsoft.Maui.DevFlow.Client` package (`netstandard2.0` + modern .NET) so .NET
+Framework harnesses share the exact protocol behavior; `Microsoft.Maui.DevFlow.Driver` references it
+and keeps the platform/native concerns (app process management, UI Automation, Skia, recording).
+Changes to method signatures are:
 
 - **Binary breaking** — existing compiled code stops working
 - **Source breaking** — existing source code fails to compile
+
+Rules when working in this area:
+
+- Protocol DTOs are defined **once**, in Client. Never re-declare one in Driver or a test harness.
+- Everything in Client must compile for `netstandard2.0`. Where a modern API has no portable
+  equivalent (e.g. `SocketsHttpHandler.ConnectCallback`), guard it with `#if DEVFLOW_NETSTANDARD`
+  and supply a portable path — do not fork the DTOs or the client surface.
+- Missing BCL overloads belong in `Client/Compatibility/NetStandardCompat.cs` as extension methods
+  with the exact framework signature, so shared sources stay free of `#if`.
+- Types keep the `Microsoft.Maui.DevFlow.Driver` namespace and are re-exported from the Driver
+  assembly via `Driver/TypeForwards.cs`. Adding a new public type to Client means adding a forward.
+- Anything platform-specific or native stays in Driver. Do not grow the portable surface with it.
 
 The repo is at 0.1.0-preview so breaking changes are acceptable, but:
 - Document breaking changes in the PR description

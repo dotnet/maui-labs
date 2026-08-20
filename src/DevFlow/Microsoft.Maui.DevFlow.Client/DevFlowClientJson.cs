@@ -34,9 +34,9 @@ namespace Microsoft.Maui.DevFlow.Driver;
 [JsonSerializable(typeof(LayoutInspectionRequest))]
 [JsonSerializable(typeof(LayoutInspectionResult))]
 [JsonSerializable(typeof(LayoutRuleCatalog))]
-internal sealed partial class DevFlowDriverJsonContext : JsonSerializerContext;
+internal sealed partial class DevFlowClientJsonContext : JsonSerializerContext;
 
-internal static class DriverJson
+internal static class ProtocolJson
 {
     private static readonly JsonSerializerOptions s_nodeIndentedOptions = new()
     {
@@ -49,7 +49,7 @@ internal static class DriverJson
     };
 
     public static T? Deserialize<T>(string json) where T : class
-        => (T?)JsonSerializer.Deserialize(json, typeof(T), DevFlowDriverJsonContext.Default);
+        => (T?)JsonSerializer.Deserialize(json, typeof(T), DevFlowClientJsonContext.Default);
 
     public static string SerializeUntyped(object? value, bool indented = false)
     {
@@ -69,7 +69,7 @@ internal static class DriverJson
         => new(SerializeUntyped(body), Encoding.UTF8, "application/json");
 
     public static JsonNode SerializeToNode<T>(T value) where T : class
-        => JsonSerializer.SerializeToNode(value, typeof(T), DevFlowDriverJsonContext.Default)
+        => JsonSerializer.SerializeToNode(value, typeof(T), DevFlowClientJsonContext.Default)
             ?? new JsonObject();
 
     public static JsonElement ParseElement(string json)
@@ -98,7 +98,7 @@ internal static class DriverJson
 
     private static string SerializeTyped(object value, bool indented)
     {
-        var json = JsonSerializer.Serialize(value, value.GetType(), DevFlowDriverJsonContext.Default);
+        var json = JsonSerializer.Serialize(value, value.GetType(), DevFlowClientJsonContext.Default);
         return indented ? PrettyPrint(json) : json;
     }
 }

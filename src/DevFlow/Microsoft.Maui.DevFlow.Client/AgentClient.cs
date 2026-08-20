@@ -22,11 +22,11 @@ public class AgentClient : IDisposable
     private const string NetworkApi = $"{ApiV1}/network";
 
     /// <summary>
-    /// Per-address connect timeout for the loopback dial (see <see cref="ConnectLoopbackAsync"/>),
-    /// which attempts the IPv4 and IPv6 loopback addresses in turn. A loopback refusal returns an
-    /// RST almost instantly, so this only bounds the rare case of a silently-dropped connect (e.g. a
-    /// broken VPN/tunnel adapter). It is deliberately kept well under <see cref="HttpClient.Timeout"/>
-    /// so that even if the first family stalls there is ample budget left to try the other one.
+    /// Per-address connect timeout for the loopback dial, which attempts the IPv4 and IPv6 loopback
+    /// addresses in turn. A loopback refusal returns an RST almost instantly, so this only bounds
+    /// the rare case of a silently-dropped connect (e.g. a broken VPN/tunnel adapter). It is
+    /// deliberately kept well under <see cref="HttpClient.Timeout"/> so that even if the first
+    /// family stalls there is ample budget left to try the other one.
     /// </summary>
     private static readonly TimeSpan LoopbackConnectAttemptTimeout = TimeSpan.FromSeconds(5);
 
@@ -96,7 +96,8 @@ public class AgentClient : IDisposable
     /// </summary>
     public IDisposable UseMutationLease(string leaseId, string holderKind, string? label = null)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(leaseId);
+        if (string.IsNullOrWhiteSpace(leaseId))
+            throw new ArgumentException("A lease id is required.", nameof(leaseId));
         var previous = _mutationLeaseOverride.Value;
         _mutationLeaseOverride.Value = new MutationLeaseIdentity(leaseId, holderKind, label);
         return new MutationLeaseScope(_mutationLeaseOverride, previous);
@@ -133,7 +134,7 @@ public class AgentClient : IDisposable
             ["transactionId"] = transactionId
         };
 
-        using var content = DriverJson.CreateJsonContent(body);
+        using var content = ProtocolJson.CreateJsonContent(body);
         using var response = await _http.PostAsync($"{_baseUrl}{AgentApi}/lease", content);
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
@@ -148,7 +149,7 @@ public class AgentClient : IDisposable
             };
         }
         var responseBody = await response.Content.ReadAsStringAsync();
-        var status = DriverJson.Deserialize<MutationLeaseStatus>(responseBody) ?? new MutationLeaseStatus
+        var status = ProtocolJson.Deserialize<MutationLeaseStatus>(responseBody) ?? new MutationLeaseStatus
         {
             Ok = false,
             Error = $"Mutation lease request failed with HTTP {(int)response.StatusCode}."
@@ -195,7 +196,8 @@ public class AgentClient : IDisposable
         MutationRecordingObservation observation,
         string? recordingId)
     {
-        ArgumentNullException.ThrowIfNull(observation);
+        if (observation is null)
+            throw new ArgumentNullException(nameof(observation));
         if (string.IsNullOrWhiteSpace(observation.Action))
             throw new ArgumentException("A recording observation action is required.", nameof(observation));
 
@@ -241,7 +243,7 @@ public class AgentClient : IDisposable
                 Error = "The connected agent does not support coordinated workflow recording."
             };
         }
-        return DriverJson.Deserialize<MutationRecordingStatus>(responseBody) ?? new MutationRecordingStatus
+        return ProtocolJson.Deserialize<MutationRecordingStatus>(responseBody) ?? new MutationRecordingStatus
         {
             Ok = false,
             Error = $"Recording request failed with HTTP {(int)response.StatusCode}."
@@ -250,7 +252,7 @@ public class AgentClient : IDisposable
 
     private async Task<HttpResponseMessage> SendRecordingRequestAsync(JsonObject body)
     {
-        using var content = DriverJson.CreateJsonContent(body);
+        using var content = ProtocolJson.CreateJsonContent(body);
         return await _http.PostAsync($"{_baseUrl}{AgentApi}/recording", content);
     }
 
@@ -292,8 +294,8 @@ public class AgentClient : IDisposable
 
     /// <summary>
     /// Builds the underlying <see cref="HttpClient"/>. When <paramref name="host"/> is the
-    /// <c>localhost</c> alias, a custom connect callback prefers the IPv4 (<c>127.0.0.1</c>)
-    /// loopback used by the built-in agent and falls back to IPv6 (<c>::1</c>).
+    /// <c>localhost</c> alias, the IPv4 (<c>127.0.0.1</c>) loopback used by the built-in agent is
+    /// preferred, with IPv6 (<c>::1</c>) kept as a fallback.
     /// </summary>
     /// <remarks>
     /// The DevFlow agent binds IPv4 loopback only, but .NET's default <see cref="HttpClient"/>
@@ -302,27 +304,46 @@ public class AgentClient : IDisposable
     /// first avoids paying an OS-level IPv6 connect timeout on every request while retaining IPv6
     /// fallback for custom agents. Explicit hosts (a literal IP or a real hostname) are left on the
     /// default connect path unchanged.
+    /// <para>
+    /// Modern .NET steers the connection HttpClient makes, via
+    /// <c>SocketsHttpHandler.ConnectCallback</c>. netstandard2.0 has no such hook, so it resolves
+    /// the family up front with a probe socket instead; see <c>LoopbackPreferenceHandler</c>. Both
+    /// share <see cref="ResolveLoopbackCandidatesAsync"/>, so the preference order cannot diverge
+    /// between the two.
+    /// </para>
     /// </remarks>
     private static HttpClient CreateHttpClient(
         string host,
         Func<MutationLeaseIdentity?> mutationLeaseProvider)
     {
-        HttpMessageHandler transport = !IsLoopbackAlias(host)
-            ? new HttpClientHandler()
-            : new SocketsHttpHandler
+        var leaseHandler = new MutationLeaseHeaderHandler(mutationLeaseProvider)
+        {
+            InnerHandler = CreateTransportHandler(host)
+        };
+        return new HttpClient(leaseHandler) { Timeout = TimeSpan.FromSeconds(30) };
+    }
+
+    private static HttpMessageHandler CreateTransportHandler(string host)
+    {
+        if (!IsLoopbackAlias(host))
+            return new HttpClientHandler();
+
+#if DEVFLOW_NETSTANDARD
+        // netstandard2.0 has no SocketsHttpHandler.ConnectCallback, so the loopback preference is
+        // applied as a pre-flight probe by LoopbackPreferenceHandler instead (see that type).
+        return new LoopbackPreferenceHandler(new HttpClientHandler());
+#else
+        return new SocketsHttpHandler
         {
             ConnectCallback = ConnectLoopbackAsync
         };
-        var leaseHandler = new MutationLeaseHeaderHandler(mutationLeaseProvider)
-        {
-            InnerHandler = transport
-        };
-        return new HttpClient(leaseHandler) { Timeout = TimeSpan.FromSeconds(30) };
+#endif
     }
 
     private static bool IsLoopbackAlias(string host)
         => string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase);
 
+#if !DEVFLOW_NETSTANDARD
     private static async ValueTask<Stream> ConnectLoopbackAsync(
         SocketsHttpConnectionContext context, CancellationToken cancellationToken)
     {
@@ -362,6 +383,109 @@ public class AgentClient : IDisposable
             ? new SocketException((int)SocketError.ConnectionRefused, BuildLoopbackFailureMessage(failures))
             : new SocketException((int)SocketError.ConnectionRefused);
     }
+#endif
+
+#if DEVFLOW_NETSTANDARD
+    /// <summary>
+    /// netstandard2.0 stand-in for <c>SocketsHttpHandler.ConnectCallback</c>, which the portable
+    /// target does not have. Instead of steering the connection HttpClient is about to make, this
+    /// races the loopback families with a throwaway probe socket the first time the alias host is
+    /// used, then rewrites the request URI to the winning literal address and remembers it for the
+    /// life of the client. The <c>Host</c> header is pinned to the original alias so the request
+    /// still looks the same to the agent as it does from the modern target.
+    /// </summary>
+    private sealed class LoopbackPreferenceHandler : DelegatingHandler
+    {
+        private string? _preferredHost;
+
+        public LoopbackPreferenceHandler(HttpMessageHandler innerHandler)
+            : base(innerHandler)
+        {
+        }
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var uri = request.RequestUri;
+            if (uri is not null && IsLoopbackAlias(uri.Host))
+            {
+                var host = _preferredHost
+                    ?? await ProbeLoopbackHostAsync(uri.Host, uri.Port, cancellationToken).ConfigureAwait(false);
+                if (host is not null)
+                {
+                    _preferredHost = host;
+                    request.Headers.Host ??= uri.IsDefaultPort ? uri.Host : $"{uri.Host}:{uri.Port}";
+                    request.RequestUri = new UriBuilder(uri) { Host = host }.Uri;
+                }
+            }
+
+            try
+            {
+                return await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            }
+            catch (HttpRequestException)
+            {
+                // The agent may have restarted on the other family (or gone away entirely);
+                // re-probe on the next request rather than pinning a dead address forever.
+                _preferredHost = null;
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Returns the URI host literal (IPv6 bracketed) of whichever loopback family accepts a
+        /// connection first, or <c>null</c> when none does — in which case the request is left on
+        /// the default path so HttpClient reports the real failure.
+        /// </summary>
+        private static async Task<string?> ProbeLoopbackHostAsync(
+            string host, int port, CancellationToken cancellationToken)
+        {
+            List<IPAddress> candidates;
+            try
+            {
+                candidates = await ResolveLoopbackCandidatesAsync(host, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                return null;
+            }
+
+            using var raceCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var attempts = candidates
+                .Select(address => ConnectLoopbackAddressAsync(address, port, raceCts.Token))
+                .ToList();
+            while (attempts.Count > 0)
+            {
+                var completed = await Task.WhenAny(attempts).ConfigureAwait(false);
+                attempts.Remove(completed);
+                try
+                {
+                    using var socket = await completed.ConfigureAwait(false);
+                    raceCts.Cancel();
+                    await DisposeSuccessfulConnectionsAsync(attempts).ConfigureAwait(false);
+                    return FormatUriHost(((IPEndPoint)socket.RemoteEndPoint).Address);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    raceCts.Cancel();
+                    await DisposeSuccessfulConnectionsAsync(attempts).ConfigureAwait(false);
+                    throw;
+                }
+                catch (Exception)
+                {
+                    // This family refused; keep waiting on the others.
+                }
+            }
+
+            return null;
+        }
+
+        private static string FormatUriHost(IPAddress address)
+            => address.AddressFamily == AddressFamily.InterNetworkV6
+                ? $"[{address}]"
+                : address.ToString();
+    }
+#endif
 
     private static async Task<Socket> ConnectLoopbackAddressAsync(
         IPAddress address, int port, CancellationToken cancellationToken)
@@ -416,7 +540,7 @@ public class AgentClient : IDisposable
 
         try
         {
-            foreach (var address in await Dns.GetHostAddressesAsync(host, cancellationToken).ConfigureAwait(false))
+            foreach (var address in await ResolveHostAddressesAsync(host, cancellationToken).ConfigureAwait(false))
             {
                 if ((address.AddressFamily == AddressFamily.InterNetwork
                         || address.AddressFamily == AddressFamily.InterNetworkV6)
@@ -437,6 +561,38 @@ public class AgentClient : IDisposable
             ordered.Add(IPAddress.IPv6Loopback);
 
         return ordered;
+    }
+
+    private static Task<IPAddress[]> ResolveHostAddressesAsync(string host, CancellationToken cancellationToken)
+#if DEVFLOW_NETSTANDARD
+        // netstandard2.0 has no cancellable DNS overload. The lookup is a loopback alias resolve,
+        // which the OS answers from the hosts file, so the uncancellable call cannot hang.
+        => cancellationToken.IsCancellationRequested
+            ? Task.FromCanceled<IPAddress[]>(cancellationToken)
+            : Dns.GetHostAddressesAsync(host);
+#else
+        => Dns.GetHostAddressesAsync(host, cancellationToken);
+#endif
+
+    private static int ClampValue(int value, int min, int max)
+        => value < min ? min : value > max ? max : value;
+
+    /// <summary>
+    /// Builds the transport failure exception. netstandard2.0's <see cref="HttpRequestException"/>
+    /// predates the status-code constructor, so the portable build records the status in
+    /// <see cref="Exception.Data"/> under <c>"StatusCode"</c> rather than dropping it.
+    /// </summary>
+    private static HttpRequestException CreateHttpRequestException(
+        string message, Exception? inner, HttpStatusCode? statusCode)
+    {
+#if DEVFLOW_NETSTANDARD
+        var exception = new HttpRequestException(message, inner);
+        if (statusCode.HasValue)
+            exception.Data["StatusCode"] = (int)statusCode.Value;
+        return exception;
+#else
+        return new HttpRequestException(message, inner, statusCode);
+#endif
     }
 
     private static string BuildLoopbackFailureMessage(List<Exception> failures)
@@ -545,12 +701,12 @@ public class AgentClient : IDisposable
             {
                 return new ElementTreeSnapshot
                 {
-                    Elements = DriverJson.Deserialize<List<ElementInfo>>(body)
+                    Elements = ProtocolJson.Deserialize<List<ElementInfo>>(body)
                         ?? []
                 };
             }
 
-            return DriverJson.Deserialize<ElementTreeSnapshot>(body);
+            return ProtocolJson.Deserialize<ElementTreeSnapshot>(body);
         }
         catch (Exception ex) when (IsExpectedClientException(ex))
         {
@@ -570,15 +726,16 @@ public class AgentClient : IDisposable
         LayoutInspectionRequest request,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        if (request is null)
+            throw new ArgumentNullException(nameof(request));
         try
         {
             using var response = await SendWithTransientRetriesAsync(
                 HttpMethod.Post,
                 async () =>
                 {
-                    using var content = DriverJson.CreateJsonContent(
-                        DriverJson.SerializeToNode(request));
+                    using var content = ProtocolJson.CreateJsonContent(
+                        ProtocolJson.SerializeToNode(request));
                     return await _http.PostAsync(
                         $"{_baseUrl}{UiApi}/diagnostics/layout",
                         content,
@@ -589,7 +746,7 @@ public class AgentClient : IDisposable
             var responseBody = await response.Content.ReadAsStringAsync(
                 cancellationToken);
             if (response.IsSuccessStatusCode)
-                return DriverJson.Deserialize<LayoutInspectionResult>(responseBody);
+                return ProtocolJson.Deserialize<LayoutInspectionResult>(responseBody);
             if ((int)response.StatusCode is 404 or 501)
                 return null;
 
@@ -597,7 +754,7 @@ public class AgentClient : IDisposable
             string? errorType = null;
             try
             {
-                var error = DriverJson.ParseElement(responseBody);
+                var error = ProtocolJson.ParseElement(responseBody);
                 if (error.TryGetProperty("error", out var errorMessage))
                     message = errorMessage.GetString() ?? message;
                 if (error.TryGetProperty("reason", out var reason))
@@ -680,14 +837,14 @@ public class AgentClient : IDisposable
     {
         var url = $"{_baseUrl}{UiApi}/elements?selector={Uri.EscapeDataString(selector)}";
         var body = await GetStringWithRetryableUiReadAsync(url, returnErrorBody: true);
-        var json = DriverJson.ParseElement(body);
+        var json = ProtocolJson.ParseElement(body);
         if (json.ValueKind == JsonValueKind.Object &&
             json.TryGetProperty("success", out var s) && !s.GetBoolean())
         {
             var msg = json.TryGetProperty("error", out var e) ? e.GetString() : "Query failed";
             throw new InvalidOperationException(msg);
         }
-        return DriverJson.Deserialize<List<ElementInfo>>(json.GetRawText()) ?? new();
+        return ProtocolJson.Deserialize<List<ElementInfo>>(json.GetRawText()) ?? new();
     }
 
     /// <summary>
@@ -941,11 +1098,11 @@ public class AgentClient : IDisposable
         {
             using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
             {
-                using var content = DriverJson.CreateJsonContent(payload);
+                using var content = ProtocolJson.CreateJsonContent(payload);
                 return await _http.PostAsync($"{_baseUrl}{UiApi}/actions/gesture", content);
             });
             var responseBody = await response.Content.ReadAsStringAsync();
-            var result = DriverJson.Deserialize<GestureResult>(responseBody);
+            var result = ProtocolJson.Deserialize<GestureResult>(responseBody);
 
             if (result == null)
                 return new GestureResult { Success = false, Type = type, Error = "Agent returned an unreadable response" };
@@ -1064,11 +1221,11 @@ public class AgentClient : IDisposable
 
         using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
         {
-            using var content = DriverJson.CreateJsonContent(body);
+            using var content = ProtocolJson.CreateJsonContent(body);
             return await _http.PostAsync($"{_baseUrl}{UiApi}/actions/batch", content);
         });
         var responseBody = await response.Content.ReadAsStringAsync();
-        return DriverJson.ParseElement(responseBody);
+        return ProtocolJson.ParseElement(responseBody);
     }
 
     /// <summary>
@@ -1332,7 +1489,7 @@ public class AgentClient : IDisposable
 
         try
         {
-            var json = DriverJson.ParseElement(body);
+            var json = ProtocolJson.ParseElement(body);
             if (json.ValueKind != JsonValueKind.Object)
                 return ScreenshotResult.Failure(null);
 
@@ -1456,7 +1613,7 @@ public class AgentClient : IDisposable
                     ["value"] = value
                 };
                 AddCaptureMetadata(payload, captureEpoch, registryGeneration);
-                using var content = DriverJson.CreateJsonContent(payload);
+                using var content = ProtocolJson.CreateJsonContent(payload);
                 return await _http.PutAsync($"{_baseUrl}{UiApi}/elements/{elementId}/properties/{propertyName}", content);
             });
             return response.IsSuccessStatusCode;
@@ -1554,11 +1711,11 @@ public class AgentClient : IDisposable
 
         using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
         {
-            using var content = DriverJson.CreateJsonContent(body);
+            using var content = ProtocolJson.CreateJsonContent(body);
             return await _http.PostAsync($"{_baseUrl}{path}", content);
         });
         var responseBody = await response.Content.ReadAsStringAsync();
-        return DriverJson.ParseElement(responseBody);
+        return ProtocolJson.ParseElement(responseBody);
     }
 
     /// <summary>
@@ -1636,7 +1793,7 @@ public class AgentClient : IDisposable
         if (result.Success)
             return result.Body;
 
-        throw new HttpRequestException(
+        throw CreateHttpRequestException(
             result.Reason ?? "DevFlow hit testing failed.",
             inner: null,
             statusCode: result.StatusCode.HasValue
@@ -1673,7 +1830,7 @@ public class AgentClient : IDisposable
                 string? reason = null;
                 try
                 {
-                    var json = DriverJson.ParseElement(body);
+                    var json = ProtocolJson.ParseElement(body);
                     if (json.ValueKind == JsonValueKind.Object
                         && json.TryGetProperty("reason", out var reasonProperty))
                     {
@@ -1790,8 +1947,8 @@ public class AgentClient : IDisposable
         int minDurationMs = 16,
         string? kind = null)
     {
-        limit = Math.Clamp(limit, 1, 200);
-        minDurationMs = Math.Clamp(minDurationMs, 0, 60_000);
+        limit = ClampValue(limit, 1, 200);
+        minDurationMs = ClampValue(minDurationMs, 0, 60_000);
 
         var path = $"{ProfilerApi}/hotspots?limit={limit}&minDurationMs={minDurationMs}";
         if (!string.IsNullOrWhiteSpace(kind))
@@ -1804,7 +1961,7 @@ public class AgentClient : IDisposable
         try
         {
             var response = await GetStringWithRetryableUiReadAsync($"{_baseUrl}{path}");
-            return DriverJson.Deserialize<T>(response);
+            return ProtocolJson.Deserialize<T>(response);
         }
         catch (Exception ex) when (IsExpectedClientException(ex)) { return null; }
     }
@@ -1819,7 +1976,7 @@ public class AgentClient : IDisposable
             if (string.IsNullOrWhiteSpace(body))
                 return default;
 
-            return DriverJson.ParseElement(body);
+            return ProtocolJson.ParseElement(body);
         }
         catch (Exception ex) when (IsExpectedClientException(ex)) { return default; }
     }
@@ -1841,7 +1998,7 @@ public class AgentClient : IDisposable
             if (string.IsNullOrWhiteSpace(body))
                 return (default, statusCode);
 
-            return (DriverJson.ParseElement(body), statusCode);
+            return (ProtocolJson.ParseElement(body), statusCode);
         }
         catch (Exception ex) when (IsExpectedClientException(ex)) { return (default, statusCode); }
     }
@@ -1875,13 +2032,13 @@ public class AgentClient : IDisposable
         {
             using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
             {
-                using var content = DriverJson.CreateJsonContent(body);
+                using var content = ProtocolJson.CreateJsonContent(body);
                 return await _http.PostAsync($"{_baseUrl}{path}", content);
             });
             if (!response.IsSuccessStatusCode) return false;
 
             var responseBody = await response.Content.ReadAsStringAsync();
-            var result = DriverJson.Deserialize<ActionResponse>(responseBody);
+            var result = ProtocolJson.Deserialize<ActionResponse>(responseBody);
             return result?.Success == true;
         }
         catch (Exception ex) when (IsExpectedClientException(ex)) { return false; }
@@ -1902,7 +2059,7 @@ public class AgentClient : IDisposable
         {
             using var response = await SendWithTransientRetriesAsync(method, async () =>
             {
-                using var content = DriverJson.CreateJsonContent(body);
+                using var content = ProtocolJson.CreateJsonContent(body);
                 using var request = new HttpRequestMessage(method, $"{_baseUrl}{path}")
                 {
                     Content = content
@@ -1916,7 +2073,7 @@ public class AgentClient : IDisposable
             var explicitlyRetryable = false;
             try
             {
-                var result = DriverJson.ParseElement(responseBody);
+                var result = ProtocolJson.ParseElement(responseBody);
                 if (result.ValueKind == JsonValueKind.Object)
                 {
                     if (result.TryGetProperty("success", out var successProperty)
@@ -1989,13 +2146,13 @@ public class AgentClient : IDisposable
         {
             using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
             {
-                using var content = DriverJson.CreateJsonContent(body);
+                using var content = ProtocolJson.CreateJsonContent(body);
                 return await _http.PostAsync($"{_baseUrl}{path}", content);
             });
             var responseBody = await response.Content.ReadAsStringAsync();
             if (string.IsNullOrWhiteSpace(responseBody))
                 return null;
-            return DriverJson.Deserialize<T>(responseBody);
+            return ProtocolJson.Deserialize<T>(responseBody);
         }
         catch (Exception ex) when (IsExpectedClientException(ex))
         {
@@ -2009,7 +2166,7 @@ public class AgentClient : IDisposable
         {
             using var response = await SendWithTransientRetriesAsync(HttpMethod.Put, async () =>
             {
-                using var content = DriverJson.CreateJsonContent(body);
+                using var content = ProtocolJson.CreateJsonContent(body);
                 return await _http.PutAsync($"{_baseUrl}{path}", content);
             });
             if (!response.IsSuccessStatusCode)
@@ -2018,7 +2175,7 @@ public class AgentClient : IDisposable
             var responseBody = await response.Content.ReadAsStringAsync();
             if (string.IsNullOrWhiteSpace(responseBody))
                 return null;
-            return DriverJson.Deserialize<T>(responseBody);
+            return ProtocolJson.Deserialize<T>(responseBody);
         }
         catch
         {
@@ -2034,7 +2191,7 @@ public class AgentClient : IDisposable
             if (!response.IsSuccessStatusCode)
                 return null;
             var responseBody = await response.Content.ReadAsStringAsync();
-            return DriverJson.Deserialize<T>(responseBody);
+            return ProtocolJson.Deserialize<T>(responseBody);
         }
         catch (Exception ex) when (IsExpectedClientException(ex))
         {
@@ -2051,7 +2208,7 @@ public class AgentClient : IDisposable
                 return false;
 
             var responseBody = await response.Content.ReadAsStringAsync();
-            var result = DriverJson.Deserialize<ActionResponse>(responseBody);
+            var result = ProtocolJson.Deserialize<ActionResponse>(responseBody);
             return result?.Success == true;
         }
         catch (Exception ex) when (IsExpectedClientException(ex))
@@ -2066,7 +2223,7 @@ public class AgentClient : IDisposable
         var body = await response.Content.ReadAsStringAsync();
 
         if (!response.IsSuccessStatusCode)
-            throw new HttpRequestException($"GET {url} failed with {(int)response.StatusCode}.", null, response.StatusCode);
+            throw CreateHttpRequestException($"GET {url} failed with {(int)response.StatusCode}.", null, response.StatusCode);
 
         return body;
     }
@@ -2114,7 +2271,7 @@ public class AgentClient : IDisposable
 
         try
         {
-            var json = DriverJson.ParseElement(body);
+            var json = ProtocolJson.ParseElement(body);
             return json.ValueKind == JsonValueKind.Object
                 && json.TryGetProperty("reason", out var reason)
                 && reason.GetString() == "capture-changed-during-read";
@@ -2179,7 +2336,7 @@ public class AgentClient : IDisposable
 
         try
         {
-            var json = DriverJson.ParseElement(body);
+            var json = ProtocolJson.ParseElement(body);
 
             // Only the uniform not_supported envelope maps to the typed exception. Endpoints that
             // answer 501 with their own success/error shape keep their existing contract.
@@ -2222,13 +2379,25 @@ public class AgentClient : IDisposable
         => ex is HttpRequestException or TaskCanceledException or IOException or JsonException
             || (ex.InnerException is not null && IsExpectedClientException(ex.InnerException));
 
-    private static bool IsTransientTransportException(Exception ex)
+    internal static bool IsTransientTransportException(Exception ex)
     {
         switch (ex)
         {
-            case HttpRequestException httpEx when httpEx.InnerException is SocketException:
+            // A socket failure anywhere in the chain is a transport failure by definition — most
+            // often the connection refusal seen while racing agent or port-forward startup. It is
+            // matched on its own rather than only as HttpRequestException's direct inner exception
+            // because the two target families report it at different depths: modern .NET raises
+            // HttpRequestException -> SocketException, while .NET Framework's HttpClientHandler
+            // buries it one level deeper, as HttpRequestException -> WebException -> SocketException.
+            case SocketException:
                 return true;
             case IOException:
+                return true;
+            // .NET Framework's HttpClientHandler reports a connection dropped mid-request as a bare
+            // WebException carrying no inner exception at all, so neither case above sees it. Only
+            // transport-level statuses count: a protocol error is a real HTTP response, and a
+            // timeout stays non-retryable to match the modern target's behavior.
+            case WebException webEx when IsTransientWebExceptionStatus(webEx.Status):
                 return true;
             // Only retry a TaskCanceledException when it represents a real
             // transport failure (i.e. wraps another exception that is not the
@@ -2239,6 +2408,28 @@ public class AgentClient : IDisposable
                 return true;
         }
         return ex.InnerException is not null && IsTransientTransportException(ex.InnerException);
+    }
+
+    private static bool IsTransientWebExceptionStatus(WebExceptionStatus status)
+    {
+        switch (status)
+        {
+            case WebExceptionStatus.ConnectFailure:
+            case WebExceptionStatus.ConnectionClosed:
+            case WebExceptionStatus.KeepAliveFailure:
+            case WebExceptionStatus.NameResolutionFailure:
+            case WebExceptionStatus.PipelineFailure:
+            case WebExceptionStatus.ProxyNameResolutionFailure:
+            case WebExceptionStatus.ReceiveFailure:
+            case WebExceptionStatus.SendFailure:
+                return true;
+            default:
+                // Notably excluded: ProtocolError (a real HTTP response the caller must see),
+                // Timeout and RequestCanceled (retrying would defeat the caller's intent), and
+                // TrustFailure/SecureChannelFailure (configuration problems that will not
+                // resolve themselves on a retry).
+                return false;
+        }
     }
 
     // ── DevFlow Actions ──
@@ -2293,11 +2484,11 @@ public class AgentClient : IDisposable
 
         using var response = await SendWithTransientRetriesAsync(HttpMethod.Put, async () =>
         {
-            using var content = DriverJson.CreateJsonContent(body);
+            using var content = ProtocolJson.CreateJsonContent(body);
             return await _http.PutAsync($"{_baseUrl}{StorageApi}/preferences/{Uri.EscapeDataString(key)}", content);
         });
         var responseBody = await response.Content.ReadAsStringAsync();
-        return DriverJson.ParseElement(responseBody);
+        return ProtocolJson.ParseElement(responseBody);
     }
 
     public async Task<JsonElement> DeletePreferenceAsync(string key, string? sharedName = null)
@@ -2307,7 +2498,7 @@ public class AgentClient : IDisposable
             path += $"?sharedName={Uri.EscapeDataString(sharedName)}";
         using var response = await SendWithTransientRetriesAsync(HttpMethod.Delete, () => _http.DeleteAsync($"{_baseUrl}{path}"));
         var responseBody = await response.Content.ReadAsStringAsync();
-        return DriverJson.ParseElement(responseBody);
+        return ProtocolJson.ParseElement(responseBody);
     }
 
     public async Task<bool> ClearPreferencesAsync(string? sharedName = null)
@@ -2329,21 +2520,21 @@ public class AgentClient : IDisposable
     {
         using var response = await SendWithTransientRetriesAsync(HttpMethod.Put, async () =>
         {
-            using var content = DriverJson.CreateJsonContent(new JsonObject
+            using var content = ProtocolJson.CreateJsonContent(new JsonObject
             {
                 ["value"] = value
             });
             return await _http.PutAsync($"{_baseUrl}{StorageApi}/secure/{Uri.EscapeDataString(key)}", content);
         });
         var responseBody = await response.Content.ReadAsStringAsync();
-        return DriverJson.ParseElement(responseBody);
+        return ProtocolJson.ParseElement(responseBody);
     }
 
     public async Task<JsonElement> DeleteSecureStorageAsync(string key)
     {
         using var response = await SendWithTransientRetriesAsync(HttpMethod.Delete, () => _http.DeleteAsync($"{_baseUrl}{StorageApi}/secure/{Uri.EscapeDataString(key)}"));
         var responseBody = await response.Content.ReadAsStringAsync();
-        return DriverJson.ParseElement(responseBody);
+        return ProtocolJson.ParseElement(responseBody);
     }
 
     public async Task<bool> ClearSecureStorageAsync()
@@ -2417,13 +2608,13 @@ public class AgentClient : IDisposable
 
             using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
             {
-                using var content = DriverJson.CreateJsonContent(payload);
+                using var content = ProtocolJson.CreateJsonContent(payload);
                 return await _http.PostAsync($"{_baseUrl}{DeviceApi}/jobs/{Uri.EscapeDataString(identifier)}/run", content);
             });
             var responseBody = await response.Content.ReadAsStringAsync();
             if (string.IsNullOrWhiteSpace(responseBody))
                 return default;
-            return DriverJson.ParseElement(responseBody);
+            return ProtocolJson.ParseElement(responseBody);
         }
         catch (Exception ex) when (IsExpectedClientException(ex)) { return default; }
     }
@@ -2455,14 +2646,14 @@ public class AgentClient : IDisposable
         var body = new JsonObject { ["contentBase64"] = contentBase64 };
         using var response = await SendWithTransientRetriesAsync(HttpMethod.Put, async () =>
         {
-            using var content = DriverJson.CreateJsonContent(body);
+            using var content = ProtocolJson.CreateJsonContent(body);
             return await _http.PutAsync($"{_baseUrl}{StorageApi}/files/{Uri.EscapeDataString(path)}{BuildRootQuery(root)}", content);
         });
         var responseBody = await response.Content.ReadAsStringAsync();
         if (string.IsNullOrWhiteSpace(responseBody))
             return default;
 
-        return DriverJson.ParseElement(responseBody);
+        return ProtocolJson.ParseElement(responseBody);
     }
 
     public async Task<bool> DeleteFileAsync(string path, string? root = null)
@@ -2503,7 +2694,7 @@ public class AgentClient : IDisposable
             if (!string.IsNullOrEmpty(method)) url += $"&method={Uri.EscapeDataString(method)}";
 
             var response = await GetStringWithTransientRetriesAsync(url);
-            return DriverJson.Deserialize<List<NetworkRequest>>(response) ?? new();
+            return ProtocolJson.Deserialize<List<NetworkRequest>>(response) ?? new();
         }
         catch (Exception ex) when (IsExpectedClientException(ex)) { return new(); }
     }
@@ -2513,7 +2704,7 @@ public class AgentClient : IDisposable
         try
         {
             var response = await GetStringWithTransientRetriesAsync($"{_baseUrl}{NetworkApi}/requests/{Uri.EscapeDataString(id)}");
-            return DriverJson.Deserialize<NetworkRequest>(response);
+            return ProtocolJson.Deserialize<NetworkRequest>(response);
         }
         catch (Exception ex) when (IsExpectedClientException(ex)) { return null; }
     }
