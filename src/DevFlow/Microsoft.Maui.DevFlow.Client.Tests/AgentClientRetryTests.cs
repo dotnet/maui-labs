@@ -31,6 +31,7 @@ public class AgentClientRetryTests
         using var agent = FakeAgent.Start(_ => FakeAgent.Response.Reset());
         using var client = new AgentClient("localhost", agent.Port)
         {
+            AutoAcquireMutationLease = false,
             TransientFailureRetryCount = retryCount,
             TransientFailureRetryDelay = TimeSpan.Zero,
         };
@@ -52,6 +53,7 @@ public class AgentClientRetryTests
                 : FakeAgent.Response.Json(TapBody));
         using var client = new AgentClient("localhost", agent.Port)
         {
+            AutoAcquireMutationLease = false,
             TransientFailureRetryCount = 10,
             TransientFailureRetryDelay = TimeSpan.Zero,
         };
@@ -68,6 +70,7 @@ public class AgentClientRetryTests
         using var agent = FakeAgent.Start(_ => FakeAgent.Response.Reset());
         using var client = new AgentClient("localhost", agent.Port)
         {
+            AutoAcquireMutationLease = false,
             TransientFailureRetryCount = 3,
             TransientFailureRetryDelay = TimeSpan.Zero,
             RetryMutatingRequests = false,
@@ -169,6 +172,7 @@ public class AgentClientRetryTests
 
         using var client = new AgentClient("localhost", port)
         {
+            AutoAcquireMutationLease = false,
             TransientFailureRetryCount = 20,
             TransientFailureRetryDelay = TimeSpan.FromMilliseconds(50),
         };
@@ -192,6 +196,7 @@ public class AgentClientRetryTests
 
         using var client = new AgentClient("localhost", port)
         {
+            AutoAcquireMutationLease = false,
             TransientFailureRetryCount = 20,
             TransientFailureRetryDelay = TimeSpan.FromMilliseconds(50),
         };

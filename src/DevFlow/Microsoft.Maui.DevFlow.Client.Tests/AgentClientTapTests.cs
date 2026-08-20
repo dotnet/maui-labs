@@ -14,7 +14,7 @@ public class AgentClientTapTests
     public async Task TapAsync_PostsElementIdAndReportsSuccess()
     {
         using var agent = FakeAgent.StartJson("""{ "success": true }""");
-        using var client = new AgentClient("localhost", agent.Port);
+        using var client = new AgentClient("localhost", agent.Port) { AutoAcquireMutationLease = false };
 
         var tapped = await client.TapAsync("el-1");
 
@@ -33,7 +33,7 @@ public class AgentClientTapTests
     public async Task TapAsync_IncludesCaptureMetadataWhenSupplied()
     {
         using var agent = FakeAgent.StartJson("""{ "success": true }""");
-        using var client = new AgentClient("localhost", agent.Port);
+        using var client = new AgentClient("localhost", agent.Port) { AutoAcquireMutationLease = false };
 
         await client.TapAsync("el-9", captureEpoch: 12, registryGeneration: 5);
 
@@ -48,7 +48,7 @@ public class AgentClientTapTests
     public async Task TapAsync_AgentReportedFailureIsFalse()
     {
         using var agent = FakeAgent.StartJson("""{ "success": false }""");
-        using var client = new AgentClient("localhost", agent.Port);
+        using var client = new AgentClient("localhost", agent.Port) { AutoAcquireMutationLease = false };
 
         Assert.False(await client.TapAsync("missing"));
     }
@@ -58,7 +58,7 @@ public class AgentClientTapTests
     {
         using var agent = FakeAgent.Start(_ => FakeAgent.Response.Json(
             """{ "error": "element_not_found" }""", statusCode: 404));
-        using var client = new AgentClient("localhost", agent.Port);
+        using var client = new AgentClient("localhost", agent.Port) { AutoAcquireMutationLease = false };
 
         Assert.False(await client.TapAsync("missing"));
     }
@@ -70,7 +70,7 @@ public class AgentClientTapTests
         using (var agent = FakeAgent.StartJson("""{ "success": true }"""))
             port = agent.Port; // Disposed immediately: nothing is listening on this port anymore.
 
-        using var client = new AgentClient("localhost", port);
+        using var client = new AgentClient("localhost", port) { AutoAcquireMutationLease = false };
 
         Assert.False(await client.TapAsync("el-1"));
     }
@@ -81,7 +81,7 @@ public class AgentClientTapTests
         using var agent = FakeAgent.Start(_ => FakeAgent.Response.Json(
             """{ "error": "not_supported", "capability": "ui.tap", "reason": "Backend has no tap support." }""",
             statusCode: 501));
-        using var client = new AgentClient("localhost", agent.Port);
+        using var client = new AgentClient("localhost", agent.Port) { AutoAcquireMutationLease = false };
 
         var result = await client.TapResultAsync("el-1", captureEpoch: null, registryGeneration: null);
 
@@ -95,7 +95,7 @@ public class AgentClientTapTests
     public async Task TapResultAsync_SuccessCarriesNoFailureDetail()
     {
         using var agent = FakeAgent.StartJson("""{ "success": true }""");
-        using var client = new AgentClient("localhost", agent.Port);
+        using var client = new AgentClient("localhost", agent.Port) { AutoAcquireMutationLease = false };
 
         var result = await client.TapResultAsync("el-1", captureEpoch: null, registryGeneration: null);
 
@@ -108,7 +108,7 @@ public class AgentClientTapTests
     public async Task FillAsync_PostsTextPayload()
     {
         using var agent = FakeAgent.StartJson("""{ "success": true }""");
-        using var client = new AgentClient("localhost", agent.Port);
+        using var client = new AgentClient("localhost", agent.Port) { AutoAcquireMutationLease = false };
 
         Assert.True(await client.FillAsync("entry-1", "hello world"));
 

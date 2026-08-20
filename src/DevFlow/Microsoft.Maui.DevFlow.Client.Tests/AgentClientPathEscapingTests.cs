@@ -109,7 +109,7 @@ public class AgentClientPathEscapingTests
     private static async Task<FakeAgent.RecordedRequest> CaptureAsync(Func<AgentClient, Task> call)
     {
         using var agent = FakeAgent.StartJson("""{"success":true}""");
-        using var client = new AgentClient("localhost", agent.Port);
+        using var client = new AgentClient("localhost", agent.Port) { AutoAcquireMutationLease = false };
 
         await call(client);
 
