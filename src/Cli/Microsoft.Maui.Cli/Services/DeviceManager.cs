@@ -25,203 +25,276 @@ public class DeviceManager : IDeviceManager
 	}
 
 	public async Task<IReadOnlyList<Device>> GetAllDevicesAsync(CancellationToken cancellationToken = default)
+		=> await GetDevicesForPlatformAsync(Platforms.All, cancellationToken);
+
+	/// <summary>
+	/// Collects devices, querying only the providers that can produce devices for
+	/// <paramref name="normalizedPlatform"/>.
+	/// </summary>
+	/// <param name="normalizedPlatform">
+	/// A platform that has already been through <see cref="Platforms.Normalize"/>.
+	/// </param>
+	/// <remarks>
+	/// Provider selection is deliberately done *before* enumeration rather than by filtering
+	/// the combined result. Querying a provider is expensive and can hang: on macOS the Apple
+	/// provider shells out to <c>xcrun simctl list devices</c>, which takes 8-16s with a normal
+	/// number of installed runtimes and blocks indefinitely when CoreSimulator is wedged.
+	/// Asking for Android devices must never pay that cost.
+	/// </remarks>
+	async Task<IReadOnlyList<Device>> GetDevicesForPlatformAsync(string normalizedPlatform, CancellationToken cancellationToken)
 	{
 		var devices = new List<Device>();
 
-		// Get Android devices
-		if (_androidProvider != null)
-		{
-			var androidDevices = await _androidProvider.GetDevicesAsync(cancellationToken);
-			devices.AddRange(androidDevices);
+		if (Queries(_androidProvider?.SupportedPlatforms, normalizedPlatform))
+			await AddAndroidDevicesAsync(devices, cancellationToken);
 
-			// Also get AVDs (virtual devices that may not be running)
-			var avds = await _androidProvider.GetAvdsAsync(cancellationToken);
-
-			// Track which running emulator entries we've already merged with an
-			// AVD, so we can pair "offline" emulator-NNNN serials (whose AVD name
-			// has not yet been resolved by adb) with locked AVDs as a fallback.
-			var mergedIndices = new HashSet<int>();
-
-			foreach (var avd in avds)
-			{
-				// First pass: match by AVD name (requires adb to have resolved it,
-				// which only happens once the device is fully online).
-				var runningIndex = devices.FindIndex(d =>
-					d.Platforms.Contains("android") &&
-					d.IsEmulator &&
-					(
-						(d.Details != null &&
-						 d.Details.TryGetPropertyValue("avd", out var avdName) &&
-						 string.Equals(avdName?.ToString(), avd.Name, StringComparison.OrdinalIgnoreCase))
-						||
-						string.Equals(d.EmulatorId, avd.Name, StringComparison.OrdinalIgnoreCase)
-					));
-
-				// Second pass: if this AVD has an active lock file it is currently
-				// starting / booting. Pair it with the first unmerged offline
-				// emulator-* serial that has no resolved AVD name — that is the
-				// device produced by this AVD's qemu instance.
-				//
-				// Known limitation: when multiple AVDs are booted at exactly the
-				// same moment, pairing happens by iteration order and names can
-				// be swapped across the resulting entries. We accept this rather
-				// than leaving duplicates, and a future improvement could read
-				// the emulator console port from the lock files to disambiguate.
-				if (runningIndex < 0 && avd.IsLocked)
-				{
-					for (var i = 0; i < devices.Count; i++)
-					{
-						if (mergedIndices.Contains(i))
-							continue;
-
-						var d = devices[i];
-						if (!d.Platforms.Contains("android") || !d.IsEmulator)
-							continue;
-
-						// Only pair with serials adb currently reports as Offline —
-						// an online/Booted/Connected emulator with a transient empty
-						// AVD name must not be hijacked by a locked AVD.
-						if (d.State != DeviceState.Offline)
-							continue;
-
-						var hasAvdName =
-							(d.Details != null &&
-							 d.Details.TryGetPropertyValue("avd", out var existingAvd) &&
-							 !string.IsNullOrEmpty(existingAvd?.ToString())) ||
-							!string.IsNullOrEmpty(d.EmulatorId);
-						if (hasAvdName)
-							continue;
-
-						runningIndex = i;
-						break;
-					}
-				}
-
-				// Extract metadata from system image path (e.g., "system-images;android-35;google_apis_playstore;arm64-v8a")
-				var (apiLevel, tagId, abi) = ParseSystemImage(avd.SystemImage);
-				var playStoreEnabled = tagId?.Contains("playstore", StringComparison.OrdinalIgnoreCase) ?? false;
-
-				if (runningIndex >= 0)
-				{
-					// Merge AVD metadata into the running emulator device
-					var running = devices[runningIndex];
-					var subModel = AndroidEnvironment.MapTagIdToSubModel(tagId, playStoreEnabled);
-					var details = running.Details?.DeepClone() as JsonObject ?? new JsonObject();
-					details["avd"] = avd.Name;
-					details["tag_id"] = tagId ?? "default";
-					details["target"] = avd.Target ?? "unknown";
-
-					// If the running device didn't have an AVD-resolved name yet
-					// (e.g. still offline/booting), prefer the AVD name as the
-					// display name while keeping the adb serial as the Id so
-					// subsequent adb commands still work.
-					var displayName = string.IsNullOrEmpty(running.EmulatorId) ? avd.Name : running.Name;
-					var state = running.State == DeviceState.Offline && avd.IsLocked
-						? DeviceState.Booting
-						: running.State;
-
-					// A locked AVD paired with an adb-visible serial means qemu
-					// is alive. Keep IsRunning in sync with the promoted State
-					// so we never surface "Booting + IsRunning=false", which is
-					// internally inconsistent and confuses consumers.
-					var isRunning = running.IsRunning
-						|| state == DeviceState.Booting
-						|| state == DeviceState.Booted
-						|| state == DeviceState.Connected;
-
-					devices[runningIndex] = running with
-					{
-						Name = displayName,
-						EmulatorId = avd.Name,
-						Model = string.IsNullOrWhiteSpace(avd.DeviceProfile) ? running.Model : avd.DeviceProfile,
-						Manufacturer = !string.IsNullOrWhiteSpace(avd.Manufacturer)
-							? avd.Manufacturer
-							: (running.Manufacturer ?? "Google"),
-						SubModel = subModel,
-						State = state,
-						IsRunning = isRunning,
-						Details = details
-					};
-					mergedIndices.Add(runningIndex);
-				}
-				else
-				{
-					var architecture = AndroidEnvironment.MapAbiToArchitecture(abi) ?? (PlatformDetector.IsArm64 ? "arm64" : "x64");
-					var resolvedAbi = abi ?? (PlatformDetector.IsArm64 ? "arm64-v8a" : "x86_64");
-					var versionName = AndroidEnvironment.MapApiLevelToVersion(apiLevel);
-					var subModel = AndroidEnvironment.MapTagIdToSubModel(tagId, playStoreEnabled);
-
-					// Lock files signal that the emulator qemu process is alive.
-					// They cannot distinguish "still booting" from "fully
-					// booted"; only adb can, via the Offline -> Online
-					// transition surfaced by the merge path above. When we
-					// reach this else branch adb listed no serial for this
-					// AVD - almost always because the emulator is in the
-					// early boot window before adb has registered it.
-					// Report Booting so users know it's not yet ready; on
-					// the next refresh the merge path will take over and
-					// surface Booted once adb is online.
-					//
-					// The less common cause is a healthy emulator with a
-					// broken adb server (blind to a fully booted device).
-					// That is a user-environment issue (restart adb) rather
-					// than something we can reliably detect from lock files.
-					// IsRunning stays false in this branch even when the AVD
-					// is locked: we have no adb serial, so the entry is NOT
-					// addressable via `adb -s <id>`. Consumers like the
-					// profile command filter on IsRunning and then pass
-					// device.Id to adb — marking this IsRunning=true would
-					// let `maui profile --device <avd_name>` auto-select an
-					// un-addressable target and fail downstream.
-					devices.Add(new Device
-					{
-						Id = avd.Name,
-						Name = avd.Name,
-						Platforms = new[] { "android" },
-						Type = DeviceType.Emulator,
-						State = avd.IsLocked ? DeviceState.Booting : DeviceState.Shutdown,
-						IsEmulator = true,
-						IsRunning = false,
-						ConnectionType = Models.ConnectionType.Local,
-						EmulatorId = avd.Name,
-						Model = avd.DeviceProfile,
-						SubModel = subModel,
-						Manufacturer = avd.Manufacturer ?? "Google",
-						Version = apiLevel,
-						VersionName = versionName,
-						Architecture = architecture,
-						PlatformArchitecture = resolvedAbi,
-						RuntimeIdentifiers = AndroidEnvironment.GetRuntimeIdentifiers(architecture),
-						Idiom = DeviceIdiom.Phone,
-						Details = new JsonObject
-						{
-							["avd"] = avd.Name,
-							["target"] = avd.Target ?? "unknown",
-							["api_level"] = apiLevel ?? "unknown",
-							["abi"] = resolvedAbi,
-							["tag_id"] = tagId ?? "default"
-						}
-					});
-				}
-			}
-		}
-
-		// Get Apple devices (simulators) when on macOS
-		if (_appleProvider != null)
-		{
-			var appleDevices = _appleProvider.GetDevices();
-			devices.AddRange(appleDevices);
-		}
+		if (Queries(_appleProvider?.SupportedPlatforms, normalizedPlatform))
+			AddAppleDevices(devices);
 
 		// TODO: Get Windows devices when WindowsProvider is implemented
 
 		return devices;
 	}
 
+	/// <summary>
+	/// Whether any registered provider can currently produce devices for
+	/// <paramref name="platform"/>.
+	/// </summary>
+	/// <remarks>
+	/// Answered from the providers' own <c>SupportedPlatforms</c>, so it cannot disagree with
+	/// which providers <see cref="GetDevicesByPlatformAsync"/> actually queries.
+	/// <para>
+	/// Mac Catalyst and Windows are valid platforms with no backing provider, so they always
+	/// yield zero devices. Callers can use this to tell "not supported yet" apart from
+	/// "the provider ran and found nothing".
+	/// </para>
+	/// </remarks>
+	public bool HasProviderFor(string? platform)
+	{
+		var normalized = Platforms.Normalize(platform);
+		return Queries(_androidProvider?.SupportedPlatforms, normalized)
+			|| Queries(_appleProvider?.SupportedPlatforms, normalized);
+	}
+
+	/// <summary>
+	/// Whether a provider declaring <paramref name="providerPlatforms"/> should be queried for
+	/// the given normalized platform. An absent provider is never queried.
+	/// </summary>
+	static bool Queries(IReadOnlyList<string>? providerPlatforms, string normalizedPlatform)
+	{
+		if (providerPlatforms is null)
+			return false;
+
+		if (normalizedPlatform == Platforms.All)
+			return true;
+
+		for (var i = 0; i < providerPlatforms.Count; i++)
+		{
+			if (providerPlatforms[i] == normalizedPlatform)
+				return true;
+		}
+
+		return false;
+	}
+
+	async Task AddAndroidDevicesAsync(List<Device> devices, CancellationToken cancellationToken)
+	{
+		if (_androidProvider is null)
+			return;
+
+		var androidDevices = await _androidProvider.GetDevicesAsync(cancellationToken);
+		devices.AddRange(androidDevices);
+
+		// Also get AVDs (virtual devices that may not be running)
+		var avds = await _androidProvider.GetAvdsAsync(cancellationToken);
+
+		// Track which running emulator entries we've already merged with an
+		// AVD, so we can pair "offline" emulator-NNNN serials (whose AVD name
+		// has not yet been resolved by adb) with locked AVDs as a fallback.
+		var mergedIndices = new HashSet<int>();
+
+		foreach (var avd in avds)
+		{
+			// First pass: match by AVD name (requires adb to have resolved it,
+			// which only happens once the device is fully online).
+			var runningIndex = devices.FindIndex(d =>
+				d.Platforms.Contains("android") &&
+				d.IsEmulator &&
+				(
+					(d.Details != null &&
+					 d.Details.TryGetPropertyValue("avd", out var avdName) &&
+					 string.Equals(avdName?.ToString(), avd.Name, StringComparison.OrdinalIgnoreCase))
+					||
+					string.Equals(d.EmulatorId, avd.Name, StringComparison.OrdinalIgnoreCase)
+				));
+
+			// Second pass: if this AVD has an active lock file it is currently
+			// starting / booting. Pair it with the first unmerged offline
+			// emulator-* serial that has no resolved AVD name — that is the
+			// device produced by this AVD's qemu instance.
+			//
+			// Known limitation: when multiple AVDs are booted at exactly the
+			// same moment, pairing happens by iteration order and names can
+			// be swapped across the resulting entries. We accept this rather
+			// than leaving duplicates, and a future improvement could read
+			// the emulator console port from the lock files to disambiguate.
+			if (runningIndex < 0 && avd.IsLocked)
+			{
+				for (var i = 0; i < devices.Count; i++)
+				{
+					if (mergedIndices.Contains(i))
+						continue;
+
+					var d = devices[i];
+					if (!d.Platforms.Contains("android") || !d.IsEmulator)
+						continue;
+
+					// Only pair with serials adb currently reports as Offline —
+					// an online/Booted/Connected emulator with a transient empty
+					// AVD name must not be hijacked by a locked AVD.
+					if (d.State != DeviceState.Offline)
+						continue;
+
+					var hasAvdName =
+						(d.Details != null &&
+						 d.Details.TryGetPropertyValue("avd", out var existingAvd) &&
+						 !string.IsNullOrEmpty(existingAvd?.ToString())) ||
+						!string.IsNullOrEmpty(d.EmulatorId);
+					if (hasAvdName)
+						continue;
+
+					runningIndex = i;
+					break;
+				}
+			}
+
+			// Extract metadata from system image path (e.g., "system-images;android-35;google_apis_playstore;arm64-v8a")
+			var (apiLevel, tagId, abi) = ParseSystemImage(avd.SystemImage);
+			var playStoreEnabled = tagId?.Contains("playstore", StringComparison.OrdinalIgnoreCase) ?? false;
+
+			if (runningIndex >= 0)
+			{
+				// Merge AVD metadata into the running emulator device
+				var running = devices[runningIndex];
+				var subModel = AndroidEnvironment.MapTagIdToSubModel(tagId, playStoreEnabled);
+				var details = running.Details?.DeepClone() as JsonObject ?? new JsonObject();
+				details["avd"] = avd.Name;
+				details["tag_id"] = tagId ?? "default";
+				details["target"] = avd.Target ?? "unknown";
+
+				// If the running device didn't have an AVD-resolved name yet
+				// (e.g. still offline/booting), prefer the AVD name as the
+				// display name while keeping the adb serial as the Id so
+				// subsequent adb commands still work.
+				var displayName = string.IsNullOrEmpty(running.EmulatorId) ? avd.Name : running.Name;
+				var state = running.State == DeviceState.Offline && avd.IsLocked
+					? DeviceState.Booting
+					: running.State;
+
+				// A locked AVD paired with an adb-visible serial means qemu
+				// is alive. Keep IsRunning in sync with the promoted State
+				// so we never surface "Booting + IsRunning=false", which is
+				// internally inconsistent and confuses consumers.
+				var isRunning = running.IsRunning
+					|| state == DeviceState.Booting
+					|| state == DeviceState.Booted
+					|| state == DeviceState.Connected;
+
+				devices[runningIndex] = running with
+				{
+					Name = displayName,
+					EmulatorId = avd.Name,
+					Model = string.IsNullOrWhiteSpace(avd.DeviceProfile) ? running.Model : avd.DeviceProfile,
+					Manufacturer = !string.IsNullOrWhiteSpace(avd.Manufacturer)
+						? avd.Manufacturer
+						: (running.Manufacturer ?? "Google"),
+					SubModel = subModel,
+					State = state,
+					IsRunning = isRunning,
+					Details = details
+				};
+				mergedIndices.Add(runningIndex);
+			}
+			else
+			{
+				var architecture = AndroidEnvironment.MapAbiToArchitecture(abi) ?? (PlatformDetector.IsArm64 ? "arm64" : "x64");
+				var resolvedAbi = abi ?? (PlatformDetector.IsArm64 ? "arm64-v8a" : "x86_64");
+				var versionName = AndroidEnvironment.MapApiLevelToVersion(apiLevel);
+				var subModel = AndroidEnvironment.MapTagIdToSubModel(tagId, playStoreEnabled);
+
+				// Lock files signal that the emulator qemu process is alive.
+				// They cannot distinguish "still booting" from "fully
+				// booted"; only adb can, via the Offline -> Online
+				// transition surfaced by the merge path above. When we
+				// reach this else branch adb listed no serial for this
+				// AVD - almost always because the emulator is in the
+				// early boot window before adb has registered it.
+				// Report Booting so users know it's not yet ready; on
+				// the next refresh the merge path will take over and
+				// surface Booted once adb is online.
+				//
+				// The less common cause is a healthy emulator with a
+				// broken adb server (blind to a fully booted device).
+				// That is a user-environment issue (restart adb) rather
+				// than something we can reliably detect from lock files.
+				// IsRunning stays false in this branch even when the AVD
+				// is locked: we have no adb serial, so the entry is NOT
+				// addressable via `adb -s <id>`. Consumers like the
+				// profile command filter on IsRunning and then pass
+				// device.Id to adb — marking this IsRunning=true would
+				// let `maui profile --device <avd_name>` auto-select an
+				// un-addressable target and fail downstream.
+				devices.Add(new Device
+				{
+					Id = avd.Name,
+					Name = avd.Name,
+					Platforms = new[] { "android" },
+					Type = DeviceType.Emulator,
+					State = avd.IsLocked ? DeviceState.Booting : DeviceState.Shutdown,
+					IsEmulator = true,
+					IsRunning = false,
+					ConnectionType = Models.ConnectionType.Local,
+					EmulatorId = avd.Name,
+					Model = avd.DeviceProfile,
+					SubModel = subModel,
+					Manufacturer = avd.Manufacturer ?? "Google",
+					Version = apiLevel,
+					VersionName = versionName,
+					Architecture = architecture,
+					PlatformArchitecture = resolvedAbi,
+					RuntimeIdentifiers = AndroidEnvironment.GetRuntimeIdentifiers(architecture),
+					Idiom = DeviceIdiom.Phone,
+					Details = new JsonObject
+					{
+						["avd"] = avd.Name,
+						["target"] = avd.Target ?? "unknown",
+						["api_level"] = apiLevel ?? "unknown",
+						["abi"] = resolvedAbi,
+						["tag_id"] = tagId ?? "default"
+					}
+				});
+			}
+		}
+	}
+
+	void AddAppleDevices(List<Device> devices)
+	{
+		if (_appleProvider is null)
+			return;
+
+		// Apple devices (simulators); the provider returns an empty list off macOS.
+		devices.AddRange(_appleProvider.GetDevices());
+	}
+
 	public async Task<IReadOnlyList<Device>> GetDevicesByPlatformAsync(string platform, CancellationToken cancellationToken = default)
 	{
-		var allDevices = await GetAllDevicesAsync(cancellationToken);
-		return allDevices.Where(d => d.Platforms.Any(p => p.Equals(platform, StringComparison.OrdinalIgnoreCase))).ToList();
+		var normalized = Platforms.Normalize(platform);
+		var devices = await GetDevicesForPlatformAsync(normalized, cancellationToken);
+
+		if (normalized == Platforms.All)
+			return devices;
+
+		return devices.Where(d => d.Platforms.Any(p => p.Equals(normalized, StringComparison.OrdinalIgnoreCase))).ToList();
 	}
 
 	public async Task<Device?> GetDeviceByIdAsync(string deviceId, CancellationToken cancellationToken = default)

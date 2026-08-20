@@ -53,6 +53,10 @@ public class Program
 
 		var parseResult = rootCommand.Parse(args);
 
+		// Providers are resolved from DI and cannot see the parse result, so publish the
+		// verbosity they need before any command runs.
+		Providers.Apple.StandardErrorToolsLogger.DefaultVerbose = IsVerbose(parseResult);
+
 		try
 		{
 			var exitCode = await parseResult.InvokeAsync();
