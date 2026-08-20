@@ -417,10 +417,18 @@ public class AgentHttpServer : IDisposable
         {
             // Bounded, not indefinite: a wedged mutation must not accumulate every later
             // request behind it until each client times out on its own.
+            //
+            // Reuse the established "ui-mutation-busy" envelope (the same one the in-handler
+            // gate in ExecuteUiMutationAsync returns) and state details.retryable explicitly.
+            // AgentClient only treats a failure as retryable when it sees details.retryable or
+            // one of its known reasons, so a bespoke reason here would decode as terminal:
+            // Inspector replay would stop, MCP would throw without retry guidance, and the CLI
+            // would report retryable:false — the opposite of what Retry-After promises.
             var busy = HttpResponse.Error(
                 "The app is still applying another mutation. Retry shortly.",
                 statusCode: 503,
-                reason: "busy");
+                reason: "ui-mutation-busy",
+                details: new { retryable = true });
             busy.Headers["Retry-After"] = "1";
             return busy;
         }

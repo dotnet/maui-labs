@@ -182,11 +182,65 @@ public class AgentHttpServerTests : IDisposable
 
             Assert.Equal(HttpStatusCode.ServiceUnavailable, second.StatusCode);
             Assert.Contains("1", second.Headers.GetValues("Retry-After"));
-            Assert.Contains("\"reason\":\"busy\"", await second.Content.ReadAsStringAsync());
+            var body = await second.Content.ReadAsStringAsync();
+            // The established retryable envelope — a bespoke reason would decode as terminal in
+            // AgentClient and stop Inspector replay despite the Retry-After header.
+            Assert.Contains("\"reason\":\"ui-mutation-busy\"", body);
+            Assert.Contains("\"retryable\":true", body);
             Assert.Equal(1, handlerCalls); // the wedged handler is never re-entered
 
             releaseFirst.TrySetResult();
             Assert.True((await first).IsSuccessStatusCode);
+        }
+        finally
+        {
+            releaseFirst.TrySetResult();
+            await server.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task QueuedMutation_BusyResponse_SurvivesAgentClientDecodingAsRetryable()
+    {
+        // The raw 503 carrying Retry-After is only half the contract: the busy envelope must also
+        // survive AgentClient decoding as Retryable, otherwise Inspector replay treats it as
+        // terminal (it checks outcome.Retryable before the >= 500 branch), MCP throws without
+        // retry guidance, and the CLI prints retryable:false.
+        using var server = new AgentHttpServer(_port) { MutationAdmissionTimeout = TimeSpan.FromMilliseconds(250) };
+        var firstEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.MutationLeaseValidator = _ => Task.FromResult(new MutationLeaseStatus
+        {
+            Ok = true,
+            Allowed = true,
+            YouHold = true,
+        });
+        server.MapPost("/api/v1/ui/actions/tap", async _ =>
+        {
+            firstEntered.TrySetResult();
+            await releaseFirst.Task;
+            return HttpResponse.Json(new { success = true });
+        });
+        server.Start();
+        try
+        {
+            using var wedgeClient = new HttpClient();
+            var wedged = wedgeClient.PostAsync(
+                $"http://localhost:{_port}/api/v1/ui/actions/tap",
+                new StringContent("{\"elementId\":\"btn1\"}", Encoding.UTF8, "application/json"));
+            await firstEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            using var agentClient = CreateUncoordinatedClient();
+            var outcome = await agentClient.TapResultAsync("btn2", captureEpoch: null, registryGeneration: null);
+
+            Assert.False(outcome.Success);
+            Assert.Equal(503, outcome.StatusCode);
+            Assert.Equal("ui-mutation-busy", outcome.Reason);
+            Assert.True(outcome.Retryable);
+            Assert.False(outcome.TransportFailure);
+
+            releaseFirst.TrySetResult();
+            Assert.True((await wedged).IsSuccessStatusCode);
         }
         finally
         {
