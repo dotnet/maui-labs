@@ -99,6 +99,15 @@ internal sealed class FakeAgent : IDisposable
                     _requests.Add(request);
 
                 var response = _handler(request);
+                if (response.Abort)
+                {
+                    // Force an RST rather than a graceful close, so the client sees a transport
+                    // failure instead of an empty-but-valid response.
+                    client.LingerState = new LingerOption(true, 0);
+                    client.Close();
+                    return;
+                }
+
                 var bodyBytes = Encoding.UTF8.GetBytes(response.Body);
                 var header = new StringBuilder()
                     .Append("HTTP/1.1 ").Append(response.StatusCode).Append(" ").Append(ReasonPhrase(response.StatusCode)).Append("\r\n")
@@ -253,11 +262,12 @@ internal sealed class FakeAgent : IDisposable
 
     internal sealed class Response
     {
-        private Response(int statusCode, string body, string contentType)
+        private Response(int statusCode, string body, string contentType, bool abort = false)
         {
             StatusCode = statusCode;
             Body = body;
             ContentType = contentType;
+            Abort = abort;
         }
 
         public int StatusCode { get; }
@@ -266,7 +276,17 @@ internal sealed class FakeAgent : IDisposable
 
         public string ContentType { get; }
 
+        /// <summary>
+        /// When set, the connection is reset instead of answered, which the client surfaces as a
+        /// transport failure. Lets a test count retry attempts deterministically, since each attempt
+        /// still completes a TCP accept and is recorded.
+        /// </summary>
+        public bool Abort { get; }
+
         public static Response Json(string body, int statusCode = 200)
             => new Response(statusCode, body, "application/json");
+
+        public static Response Reset()
+            => new Response(0, string.Empty, string.Empty, abort: true);
     }
 }

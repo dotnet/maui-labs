@@ -1,12 +1,13 @@
-using System.Diagnostics;
 using System.Net;
+using System.Net.Http;
+using System.Net.Sockets;
 using Microsoft.Maui.DevFlow.Driver;
 
 namespace Microsoft.Maui.DevFlow.Client.Tests;
 
 /// <summary>
 /// <c>TransientFailureRetryCount</c> exists so a client can race an agent — or an ADB port forward —
-/// that is not listening yet. Whether a connection refusal is recognised as transient depends on how
+/// that is not listening yet. Whether a transport failure is recognised as transient depends on how
 /// the platform reports it, and the two families differ: modern .NET raises
 /// <c>HttpRequestException -&gt; SocketException</c>, while .NET Framework's <c>HttpClientHandler</c>
 /// buries it one level deeper, as <c>HttpRequestException -&gt; WebException -&gt; SocketException</c>.
@@ -18,38 +19,151 @@ public class AgentClientRetryTests
     private const string StatusBody = """{"running":true}""";
     private const string TapBody = """{"success":true}""";
 
-    [Fact]
-    public async Task TapAsync_RetriesTransientTransportFailures()
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(1, 2)]
+    [InlineData(3, 4)]
+    public async Task TapAsync_MakesExactlyOneAttemptPerConfiguredRetry(int retryCount, int expectedAttempts)
     {
-        // Nothing ever listens on this port, so every attempt fails the same way. Comparing two runs
-        // isolates the retry loop from however long a connection refusal happens to take on the host:
-        // the difference can only come from retries, since the backoff (400 + 800 ms) and the extra
-        // connection attempts both happen exclusively on the retrying run.
-        var port = FakeAgent.ReserveFreePort();
-        var retryDelay = TimeSpan.FromMilliseconds(400);
+        // The agent resets every connection, so each attempt fails the same way at the transport
+        // level while still completing a TCP accept — which is what makes the attempts countable
+        // rather than inferred from elapsed time.
+        using var agent = FakeAgent.Start(_ => FakeAgent.Response.Reset());
+        using var client = new AgentClient("localhost", agent.Port)
+        {
+            TransientFailureRetryCount = retryCount,
+            TransientFailureRetryDelay = TimeSpan.Zero,
+        };
 
-        // Warm up first: on some hosts the very first refused connect is markedly slower than later
-        // ones, which would otherwise inflate the baseline and mask the retries.
-        await TimeTapAsync(port, retryCount: 0, retryDelay);
+        Assert.False(await client.TapAsync("el-1"));
 
-        var withoutRetries = await TimeTapAsync(port, retryCount: 0, retryDelay);
-        var withRetries = await TimeTapAsync(port, retryCount: 2, retryDelay);
+        Assert.Equal(expectedAttempts, agent.Requests.Count);
+    }
 
-        var difference = withRetries - withoutRetries;
-        Assert.True(
-            difference >= TimeSpan.FromMilliseconds(800),
-            $"Expected two retries to add at least the 1200 ms backoff, but the retrying call took only "
-                + $"{difference.TotalMilliseconds:F0} ms longer ({withRetries.TotalMilliseconds:F0} ms vs "
-                + $"{withoutRetries.TotalMilliseconds:F0} ms). Transport failures are most likely no longer "
-                + "classified as transient on this target framework.");
+    [Fact]
+    public async Task TapAsync_StopsRetryingOnceTheAgentAnswers()
+    {
+        // Two transport failures, then a real answer: the call must succeed on the third attempt and
+        // not keep burning the remaining retries.
+        var failuresLeft = 2;
+        using var agent = FakeAgent.Start(_ =>
+            Interlocked.Decrement(ref failuresLeft) >= 0
+                ? FakeAgent.Response.Reset()
+                : FakeAgent.Response.Json(TapBody));
+        using var client = new AgentClient("localhost", agent.Port)
+        {
+            TransientFailureRetryCount = 10,
+            TransientFailureRetryDelay = TimeSpan.Zero,
+        };
+
+        Assert.True(await client.TapAsync("el-1"));
+
+        Assert.Equal(3, agent.Requests.Count);
+    }
+
+    [Fact]
+    public async Task TapAsync_DoesNotRetryWhenMutatingRetriesAreDisabled()
+    {
+        // Opting out must be honored, because a retried POST can duplicate the agent-side effect.
+        using var agent = FakeAgent.Start(_ => FakeAgent.Response.Reset());
+        using var client = new AgentClient("localhost", agent.Port)
+        {
+            TransientFailureRetryCount = 3,
+            TransientFailureRetryDelay = TimeSpan.Zero,
+            RetryMutatingRequests = false,
+        };
+
+        Assert.False(await client.TapAsync("el-1"));
+
+        Assert.Equal(1, agent.Requests.Count);
+    }
+
+    [Fact]
+    public void RefusedConnectionChainsAreTransientOnEveryTargetFramework()
+    {
+        // The shapes both target families actually produce for a refused connection. Asserting them
+        // directly pins the classification without depending on platform timing at all.
+        var socketFailure = new SocketException((int)SocketError.ConnectionRefused);
+
+        // Modern .NET.
+        Assert.True(AgentClient.IsTransientTransportException(
+            new HttpRequestException("refused", socketFailure)));
+
+        // .NET Framework's HttpClientHandler, which buries the socket failure under a WebException.
+        var webFailure = new WebException(
+            "Unable to connect to the remote server",
+            socketFailure,
+            WebExceptionStatus.ConnectFailure,
+            response: null);
+        Assert.True(AgentClient.IsTransientTransportException(
+            new HttpRequestException("refused", webFailure)));
+
+        // And the bare socket failure itself, however it reaches the classifier.
+        Assert.True(AgentClient.IsTransientTransportException(socketFailure));
+    }
+
+    [Fact]
+    public void DroppedConnectionChainsAreTransientOnEveryTargetFramework()
+    {
+        // A connection dropped mid-request — an agent restart, or an ADB port forward going away.
+        // Modern .NET reports it as an IOException; .NET Framework reports a bare WebException with
+        // no inner exception at all, which is why the status has to be inspected.
+        Assert.True(AgentClient.IsTransientTransportException(
+            new HttpRequestException("dropped", new IOException("reset"))));
+
+        foreach (var status in new[]
+        {
+            WebExceptionStatus.ConnectionClosed,
+            WebExceptionStatus.ConnectFailure,
+            WebExceptionStatus.ReceiveFailure,
+            WebExceptionStatus.SendFailure,
+            WebExceptionStatus.KeepAliveFailure,
+            WebExceptionStatus.NameResolutionFailure,
+        })
+        {
+            Assert.True(
+                AgentClient.IsTransientTransportException(
+                    new HttpRequestException("dropped", new WebException("dropped", null, status, response: null))),
+                $"WebExceptionStatus.{status} should be treated as a transient transport failure.");
+        }
+    }
+
+    [Fact]
+    public void ProtocolAndTrustFailuresAreNotTransient()
+    {
+        // A protocol error is a real HTTP response the caller must see, and a trust or timeout
+        // failure will not fix itself on a retry.
+        foreach (var status in new[]
+        {
+            WebExceptionStatus.ProtocolError,
+            WebExceptionStatus.TrustFailure,
+            WebExceptionStatus.Timeout,
+            WebExceptionStatus.RequestCanceled,
+        })
+        {
+            Assert.False(
+                AgentClient.IsTransientTransportException(
+                    new WebException("no", null, status, response: null)),
+                $"WebExceptionStatus.{status} must not be retried.");
+        }
+    }
+
+    [Fact]
+    public void CallerCancellationIsNotTransient()
+    {
+        // A caller-initiated cancellation and an HttpClient timeout must never be retried, otherwise
+        // a cancelled operation would keep running.
+        Assert.False(AgentClient.IsTransientTransportException(new TaskCanceledException()));
+        Assert.False(AgentClient.IsTransientTransportException(
+            new TaskCanceledException("timeout", new TimeoutException())));
     }
 
     [Fact]
     public async Task TapAsync_SucceedsAgainstAnAgentThatStartsLate()
     {
-        // The scenario the retry knob is for: the client fires before the agent has bound its port.
-        // TapAsync is used rather than GetStatusAsync because the latter has its own retry window for
-        // UI reads, which would mask whether transient-failure retries fired at all.
+        // The end-to-end scenario the retry knob exists for: the client fires before the agent has
+        // bound its port. TapAsync is used rather than GetStatusAsync because the latter has its own
+        // retry window for UI reads, which would mask whether transient-failure retries fired.
         var port = FakeAgent.ReserveFreePort();
         var agentTask = StartAgentAfterAsync(TimeSpan.FromMilliseconds(500), port, TapBody);
 
@@ -93,43 +207,6 @@ public class AgentClientRetryTests
         {
             (await agentTask).Dispose();
         }
-    }
-
-    [Fact]
-    public async Task TapAsync_MutatingRetriesCanBeDisabled()
-    {
-        // Opting out must be honored, because a retried POST can duplicate the agent-side effect.
-        var port = FakeAgent.ReserveFreePort();
-        var retryDelay = TimeSpan.FromMilliseconds(400);
-
-        await TimeTapAsync(port, retryCount: 0, retryDelay);
-
-        var baseline = await TimeTapAsync(port, retryCount: 0, retryDelay);
-        var optedOut = await TimeTapAsync(port, retryCount: 2, retryDelay, retryMutatingRequests: false);
-
-        Assert.True(
-            optedOut - baseline < TimeSpan.FromMilliseconds(800),
-            $"RetryMutatingRequests=false should not retry, but the call took "
-                + $"{(optedOut - baseline).TotalMilliseconds:F0} ms longer than the non-retrying baseline.");
-    }
-
-    private static async Task<TimeSpan> TimeTapAsync(
-        int port,
-        int retryCount,
-        TimeSpan retryDelay,
-        bool retryMutatingRequests = true)
-    {
-        using var client = new AgentClient("localhost", port)
-        {
-            TransientFailureRetryCount = retryCount,
-            TransientFailureRetryDelay = retryDelay,
-            RetryMutatingRequests = retryMutatingRequests,
-        };
-
-        var stopwatch = Stopwatch.StartNew();
-        Assert.False(await client.TapAsync("el-1"));
-        stopwatch.Stop();
-        return stopwatch.Elapsed;
     }
 
     private static Task<FakeAgent> StartAgentAfterAsync(TimeSpan delay, int port, string body)

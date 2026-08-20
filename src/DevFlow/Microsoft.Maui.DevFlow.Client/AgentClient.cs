@@ -2002,7 +2002,7 @@ public class AgentClient : IDisposable
         => ex is HttpRequestException or TaskCanceledException or IOException or JsonException
             || (ex.InnerException is not null && IsExpectedClientException(ex.InnerException));
 
-    private static bool IsTransientTransportException(Exception ex)
+    internal static bool IsTransientTransportException(Exception ex)
     {
         switch (ex)
         {
@@ -2016,6 +2016,12 @@ public class AgentClient : IDisposable
                 return true;
             case IOException:
                 return true;
+            // .NET Framework's HttpClientHandler reports a connection dropped mid-request as a bare
+            // WebException carrying no inner exception at all, so neither case above sees it. Only
+            // transport-level statuses count: a protocol error is a real HTTP response, and a
+            // timeout stays non-retryable to match the modern target's behavior.
+            case WebException webEx when IsTransientWebExceptionStatus(webEx.Status):
+                return true;
             // Only retry a TaskCanceledException when it represents a real
             // transport failure (i.e. wraps another exception that is not the
             // HttpClient timeout marker). A bare TCE with no inner is almost
@@ -2025,6 +2031,28 @@ public class AgentClient : IDisposable
                 return true;
         }
         return ex.InnerException is not null && IsTransientTransportException(ex.InnerException);
+    }
+
+    private static bool IsTransientWebExceptionStatus(WebExceptionStatus status)
+    {
+        switch (status)
+        {
+            case WebExceptionStatus.ConnectFailure:
+            case WebExceptionStatus.ConnectionClosed:
+            case WebExceptionStatus.KeepAliveFailure:
+            case WebExceptionStatus.NameResolutionFailure:
+            case WebExceptionStatus.PipelineFailure:
+            case WebExceptionStatus.ProxyNameResolutionFailure:
+            case WebExceptionStatus.ReceiveFailure:
+            case WebExceptionStatus.SendFailure:
+                return true;
+            default:
+                // Notably excluded: ProtocolError (a real HTTP response the caller must see),
+                // Timeout and RequestCanceled (retrying would defeat the caller's intent), and
+                // TrustFailure/SecureChannelFailure (configuration problems that will not
+                // resolve themselves on a retry).
+                return false;
+        }
     }
 
     // ── DevFlow Actions ──

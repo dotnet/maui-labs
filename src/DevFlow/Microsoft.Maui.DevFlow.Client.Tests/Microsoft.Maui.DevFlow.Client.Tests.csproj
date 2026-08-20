@@ -19,6 +19,13 @@
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Client\Microsoft.Maui.DevFlow.Client.csproj" />
   </ItemGroup>
 
+  <!-- On .NET Framework, HttpRequestException lives in the System.Net.Http facade rather than in
+       mscorlib, so tests that name the type directly need the assembly reference. The library
+       itself does not: its netstandard2.0 build resolves the type through the netstandard facade. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
