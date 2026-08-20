@@ -169,6 +169,18 @@ public class ElementInfo
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Dictionary<string, string?>? FrameworkProperties { get; set; }
 
+    [JsonPropertyName("sourceFile")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceFile { get; set; }
+
+    [JsonPropertyName("sourceLine")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? SourceLine { get; set; }
+
+    [JsonPropertyName("sourceColumn")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? SourceColumn { get; set; }
+
     [JsonPropertyName("children")]
     public List<ElementInfo>? Children { get; set; }
 

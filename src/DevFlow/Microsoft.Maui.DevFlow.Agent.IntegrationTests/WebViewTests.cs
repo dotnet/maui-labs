@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
+using Microsoft.Maui.DevFlow.Driver;
 using Xunit.Abstractions;
 
 namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests;
@@ -258,6 +259,46 @@ public class WebViewTests : IntegrationTestBase
         Assert.False(text.Contains("\"error\"", StringComparison.OrdinalIgnoreCase),
             $"Runtime.evaluate returned an error payload: {text}");
         Assert.Contains("\"value\":2", text);
+    }
+
+    [Fact]
+    public async Task LayoutDiagnostics_DetectsBlazorTextOverflow()
+    {
+        await EnsureOnBlazorPageAsync();
+        const string fixtureId = "DevFlowBlazorOverflowFixture";
+        var createFixture = JsonNode.Parse(
+            $$"""
+            {
+              "expression": "(() => { const old = document.getElementById('{{fixtureId}}'); if (old) old.remove(); const element = document.createElement('div'); element.id = '{{fixtureId}}'; element.textContent = 'This text is deliberately too wide for the fixture'; element.style.cssText = 'width:60px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:fixed;left:10px;top:10px;'; document.body.appendChild(element); return true; })()"
+            }
+            """);
+        _ = await Client.SendCdpCommandAsync("Runtime.evaluate", createFixture);
+
+        try
+        {
+            var result = await Client.AnalyzeLayoutAsync(new LayoutInspectionRequest
+            {
+                Profile = "strict",
+                MinimumSeverity = "info",
+                Scope = new LayoutInspectionScope
+                {
+                    IncludeBlazorElements = true,
+                    IncludeNativeElements = false
+                },
+                Stability = new LayoutStabilityOptions { Mode = "immediate" }
+            });
+
+            Assert.NotNull(result);
+            Assert.Contains(result!.Findings, finding =>
+                finding.RuleId == LayoutDiagnosticRules.TextNotFullyRendered
+                && finding.Element.AutomationId == fixtureId);
+        }
+        finally
+        {
+            var removeFixture = JsonNode.Parse(
+                $$"""{"expression":"document.getElementById('{{fixtureId}}')?.remove()"}""");
+            _ = await Client.SendCdpCommandAsync("Runtime.evaluate", removeFixture);
+        }
     }
 
     [Fact]

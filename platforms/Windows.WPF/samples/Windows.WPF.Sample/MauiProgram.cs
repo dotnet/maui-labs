@@ -14,7 +14,11 @@ public static class MauiProgram
 			.CreateBuilder()
 			.UseMauiAppWPF<MainApp>()
 			.UseWPFEssentials()
-			.AddMauiDevFlowAgent();
+			.AddMauiDevFlowAgent(options =>
+			{
+				options.EnableLayoutDiagnostics = true;
+				options.EnableFileLogging = false;
+			});
 
 		builder.ConfigureFonts(fonts =>
 		{

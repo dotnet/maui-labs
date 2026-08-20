@@ -5,6 +5,15 @@
 
   const viewport = document.getElementById('app-viewport');
   const screenshot = document.getElementById('screenshot');
+  const diagnosticsList = document.getElementById('diagnostics-list');
+  const diagnosticsSummary = document.getElementById('diagnostics-summary');
+  const diagnosticsCoverage = document.getElementById('diagnostics-coverage');
+  const diagnosticsFilter = document.getElementById('diagnostics-filter');
+  const diagnosticsSeverity = document.getElementById('diagnostics-severity');
+  const diagnosticsConfidence = document.getElementById('diagnostics-confidence');
+  const diagnosticsRule = document.getElementById('diagnostics-rule');
+  const diagnosticsSuppressed = document.getElementById('diagnostics-suppressed');
+  const diagnosticOverlays = document.getElementById('diagnostic-overlays');
 
   // Determine base path for API calls (handles being served under /inspector/{id}/)
   const basePath = location.pathname.replace(/\/$/, '');
@@ -116,6 +125,7 @@
         if (state.elements) {
           patchElements(state.elements);
         }
+        renderDiagnostics(state.diagnostics, state.rootOffsetX || 0, state.rootOffsetY || 0);
         return state;
       } catch (err) {
         console.error('State refresh failed:', err);
@@ -129,6 +139,265 @@
       if (refreshPromise === currentRefresh) refreshPromise = null;
     }
   }
+
+  let latestDiagnostics = null;
+  let latestRootOffsetX = 0;
+  let latestRootOffsetY = 0;
+  const severityRanks = { info: 0, minor: 1, moderate: 2, serious: 3, critical: 4 };
+  const confidenceRanks = { low: 0, medium: 1, high: 2, exact: 3 };
+
+  function renderDiagnostics(diagnostics, rootOffsetX, rootOffsetY) {
+    latestDiagnostics = diagnostics || null;
+    latestRootOffsetX = rootOffsetX;
+    latestRootOffsetY = rootOffsetY;
+    if (!diagnosticsList || !diagnosticsSummary || !diagnosticOverlays) return;
+
+    diagnosticsList.replaceChildren();
+    diagnosticOverlays.replaceChildren();
+    clearDiagnosticHighlights();
+
+    if (!diagnostics) {
+      diagnosticsSummary.textContent = 'Unavailable';
+      if (diagnosticsCoverage) diagnosticsCoverage.textContent = 'The connected agent does not provide layout diagnostics.';
+      return;
+    }
+
+    const summary = diagnostics.summary || {};
+    diagnosticsSummary.textContent =
+      `${summary.violations || 0} violations, ${summary.observations || 0} observations, ` +
+      `${summary.incomplete || 0} incomplete, ${summary.passes || 0} passes, ` +
+      `${summary.notApplicable || 0} n/a, ${summary.suppressed || 0} suppressed`;
+    const limitations = diagnostics.coverage?.limitations || [];
+    if (diagnosticsCoverage) {
+      diagnosticsCoverage.textContent = limitations.length
+        ? limitations.slice(0, 3).join(' ')
+        : `Coverage: ${diagnostics.coverage?.overall || 'unknown'}`;
+    }
+
+    const outcomeFilter = diagnosticsFilter?.value || 'actionable';
+    const severityFilter = diagnosticsSeverity?.value || 'all';
+    const confidenceFilter = diagnosticsConfidence?.value || 'all';
+    const ruleFilter = (diagnosticsRule?.value || '').trim().toLowerCase();
+    const includeSuppressed = diagnosticsSuppressed?.checked === true;
+    const findings = (diagnostics.findings || []).filter(finding => {
+      if (finding.suppressed && !includeSuppressed) return false;
+      if (outcomeFilter === 'incomplete' && finding.outcome !== 'incomplete') return false;
+      if (outcomeFilter === 'passes' && finding.outcome !== 'pass') return false;
+      if (outcomeFilter === 'actionable' && finding.outcome !== 'violation' && finding.outcome !== 'incomplete') return false;
+      if (severityFilter !== 'all' &&
+          (severityRanks[finding.severity || 'info'] || 0) < severityRanks[severityFilter]) return false;
+      if (confidenceFilter !== 'all' &&
+          (confidenceRanks[finding.confidence || 'low'] || 0) < confidenceRanks[confidenceFilter]) return false;
+      if (ruleFilter && !(finding.ruleId || '').toLowerCase().includes(ruleFilter)) return false;
+      return true;
+    });
+
+    for (const finding of findings) {
+      const item = document.createElement('div');
+      item.className = 'diagnostic-item';
+      item.tabIndex = 0;
+      item.setAttribute('role', 'button');
+
+      const title = document.createElement('div');
+      title.className = 'diagnostic-item-title';
+      const rule = document.createElement('span');
+      rule.textContent = finding.ruleId || 'layout finding';
+      const severity = document.createElement('span');
+      severity.className = `severity-${finding.severity || 'info'}`;
+      severity.textContent = `${(finding.severity || 'info').toUpperCase()} · ${finding.confidence || 'unknown'}`;
+      title.append(rule, severity);
+
+      const message = document.createElement('div');
+      message.className = 'diagnostic-item-message';
+      message.textContent = finding.message || '';
+
+      const element = document.createElement('div');
+      element.className = 'diagnostic-item-element';
+      const elementRef = finding.element || {};
+      element.textContent = `${elementRef.type || 'Element'}#${elementRef.automationId || elementRef.id || '?'}`;
+
+      item.append(title, message, element);
+      addSourceLink(item, elementRef);
+      addRelatedElements(item, finding.relatedElements || []);
+      addDiagnosticActions(item, finding);
+      item.addEventListener('click', () => selectDiagnosticFinding(finding, rootOffsetX, rootOffsetY));
+      item.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          selectDiagnosticFinding(finding, rootOffsetX, rootOffsetY);
+        }
+      });
+      diagnosticsList.appendChild(item);
+    }
+  }
+
+  function selectDiagnosticFinding(finding, rootOffsetX, rootOffsetY) {
+    diagnosticOverlays.replaceChildren();
+    clearDiagnosticHighlights();
+    highlightElement(finding.element?.id, 'diagnostic-selected', true);
+    for (const related of finding.relatedElements || [])
+      highlightElement(related.element?.id, 'diagnostic-related-highlight', false);
+
+    addDiagnosticRegion(finding.evidence?.fullRegion, 'diagnostic-region-full', rootOffsetX, rootOffsetY);
+    addDiagnosticRegion(finding.evidence?.visibleRegion, 'diagnostic-region-visible', rootOffsetX, rootOffsetY);
+    for (const clip of finding.evidence?.clipChain || [])
+      addDiagnosticRegion(clip.region, 'diagnostic-region-clip', rootOffsetX, rootOffsetY);
+    addDiagnosticRegion(finding.evidence?.overlap?.intersectionRegion, 'diagnostic-region-overlap', rootOffsetX, rootOffsetY);
+    addOverflowEdges(finding.evidence, rootOffsetX, rootOffsetY);
+  }
+
+  function addDiagnosticRegion(region, className, rootOffsetX, rootOffsetY) {
+    const bounds = region?.bounds;
+    if (!bounds || bounds.width <= 0 || bounds.height <= 0) return;
+    if (region.points?.length >= 3) {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.classList.add('diagnostic-region');
+      Object.assign(svg.style, { position: 'absolute', inset: '0', overflow: 'visible' });
+      const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+      polygon.setAttribute('class', className);
+      polygon.setAttribute('points', region.points
+        .map(point => `${point.x - rootOffsetX},${point.y - rootOffsetY}`)
+        .join(' '));
+      svg.appendChild(polygon);
+      diagnosticOverlays.appendChild(svg);
+      return;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.className = `diagnostic-region ${className}`;
+    Object.assign(overlay.style, {
+      left: `${bounds.x - rootOffsetX}px`,
+      top: `${bounds.y - rootOffsetY}px`,
+      width: `${bounds.width}px`,
+      height: `${bounds.height}px`
+    });
+    diagnosticOverlays.appendChild(overlay);
+  }
+
+  function addOverflowEdges(evidence, rootOffsetX, rootOffsetY) {
+    const bounds = evidence?.fullRegion?.bounds;
+    const insets = evidence?.overflowInsetsPhysicalPixels;
+    if (!bounds || !insets) return;
+    const scale = latestDiagnostics?.snapshot?.windows?.[0]?.scale || 1;
+    const edges = [
+      ['left', insets.left, bounds.x, bounds.y, 3, bounds.height],
+      ['top', insets.top, bounds.x, bounds.y, bounds.width, 3],
+      ['right', insets.right, bounds.x + bounds.width - 3, bounds.y, 3, bounds.height],
+      ['bottom', insets.bottom, bounds.x, bounds.y + bounds.height - 3, bounds.width, 3]
+    ];
+    for (const [, pixels, x, y, width, height] of edges) {
+      if ((pixels || 0) < 1) continue;
+      const edge = document.createElement('div');
+      edge.className = 'diagnostic-region diagnostic-region-overlap';
+      Object.assign(edge.style, {
+        left: `${x - rootOffsetX}px`,
+        top: `${y - rootOffsetY}px`,
+        width: `${Math.max(width, pixels / scale)}px`,
+        height: `${Math.max(height, pixels / scale)}px`
+      });
+      diagnosticOverlays.appendChild(edge);
+    }
+  }
+
+  function addSourceLink(item, element) {
+    if (!element?.sourceFile) return;
+    const link = document.createElement('a');
+    link.className = 'diagnostic-source';
+    const normalized = element.sourceFile.replace(/\\/g, '/');
+    link.href = `vscode://file/${encodeURI(normalized)}:${element.sourceLine || 1}:${element.sourceColumn || 1}`;
+    link.textContent = `Source ${element.sourceLine || '?'}`;
+    link.addEventListener('click', event => event.stopPropagation());
+    item.appendChild(link);
+  }
+
+  function addRelatedElements(item, relatedElements) {
+    if (!relatedElements.length) return;
+    const container = document.createElement('div');
+    container.className = 'diagnostic-related';
+    for (const related of relatedElements) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = `${related.relation}: ${related.element?.automationId || related.element?.id || '?'}`;
+      button.addEventListener('click', event => {
+        event.stopPropagation();
+        clearDiagnosticHighlights();
+        highlightElement(related.element?.id, 'diagnostic-related-highlight', true);
+      });
+      container.appendChild(button);
+    }
+    item.appendChild(container);
+  }
+
+  function addDiagnosticActions(item, finding) {
+    const actions = document.createElement('div');
+    actions.className = 'diagnostic-item-actions';
+    const suppress = document.createElement('button');
+    suppress.type = 'button';
+    suppress.textContent = finding.suppressed ? 'Unsuppress' : 'Suppress';
+    suppress.addEventListener('click', async event => {
+      event.stopPropagation();
+      const endpoint = finding.suppressed ? 'unsuppress' : 'suppress';
+      const response = await fetch(`${basePath}/api/diagnostics/${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ findingId: finding.id })
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        suppress.textContent = 'Policy conflict';
+        suppress.title = error?.message || 'The suppression policy could not be changed.';
+        return;
+      }
+      scheduleRefresh(50);
+    });
+
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.textContent = 'Copy agent payload';
+    copy.addEventListener('click', async event => {
+      event.stopPropagation();
+      const response = await fetch(`${basePath}/api/diagnostics/agent-payload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ findingId: finding.id })
+      });
+      if (!response.ok) return;
+      const text = await response.text();
+      await navigator.clipboard?.writeText(text);
+    });
+    actions.append(suppress, copy);
+    item.appendChild(actions);
+  }
+
+  function clearDiagnosticHighlights() {
+    viewport.querySelectorAll('.diagnostic-selected, .diagnostic-related-highlight')
+      .forEach(element => {
+        element.classList.remove('diagnostic-selected');
+        element.classList.remove('diagnostic-related-highlight');
+      });
+  }
+
+  function highlightElement(elementId, className, scroll) {
+    if (!elementId) return;
+    const target = [...viewport.querySelectorAll('.devflow-element')]
+      .find(element => element.dataset.id === elementId);
+    if (!target) return;
+    target.classList.add(className);
+    if (scroll)
+      target.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+  }
+
+  for (const control of [
+    diagnosticsFilter,
+    diagnosticsSeverity,
+    diagnosticsConfidence,
+    diagnosticsSuppressed
+  ]) {
+    control?.addEventListener('change', () =>
+      renderDiagnostics(latestDiagnostics, latestRootOffsetX, latestRootOffsetY));
+  }
+  diagnosticsRule?.addEventListener('input', () =>
+    renderDiagnostics(latestDiagnostics, latestRootOffsetX, latestRootOffsetY));
 
   // Keyed DOM diff: match elements by data-id, update in-place if changed
   function patchElements(newHtml) {
@@ -524,4 +793,61 @@
       }, 3000);
     }
   });
+
+  function connectEventStream() {
+    const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const socket = new WebSocket(`${scheme}//${location.host}${basePath}/ws/events`);
+    socket.addEventListener('message', event => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message.type === 'layout-diagnostics-delta') {
+          applyDiagnosticsDelta(message);
+          scheduleRefresh(250);
+          return;
+        }
+      } catch {
+      }
+      scheduleRefresh(100);
+    });
+    socket.addEventListener('close', () => {
+      if (!document.hidden) setTimeout(connectEventStream, 1000);
+    });
+    socket.addEventListener('error', () => socket.close());
+  }
+
+  function applyDiagnosticsDelta(delta) {
+    if (!latestDiagnostics) {
+      scheduleRefresh(50);
+      return;
+    }
+    const renderedTreeRevision = latestDiagnostics.snapshot?.treeRevision || '';
+    const deltaTreeRevision = delta.snapshot?.treeRevision || '';
+    if (renderedTreeRevision && deltaTreeRevision &&
+        renderedTreeRevision !== deltaTreeRevision) {
+      scheduleRefresh(50);
+      return;
+    }
+
+    const findings = new Map(
+      (latestDiagnostics.findings || []).map(finding => [finding.id, finding]));
+    for (const id of delta.removed || [])
+      findings.delete(id);
+    for (const finding of [...(delta.added || []), ...(delta.updated || [])])
+      findings.set(finding.id, finding);
+
+    latestDiagnostics = {
+      ...latestDiagnostics,
+      snapshot: delta.snapshot || latestDiagnostics.snapshot,
+      summary: delta.summary || latestDiagnostics.summary,
+      coverage: delta.coverage || latestDiagnostics.coverage,
+      findings: [...findings.values()]
+    };
+    renderDiagnostics(
+      latestDiagnostics,
+      latestRootOffsetX,
+      latestRootOffsetY);
+  }
+
+  refreshState();
+  connectEventStream();
 })();

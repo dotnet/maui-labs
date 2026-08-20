@@ -132,11 +132,75 @@ public class AgentHttpServer : IDisposable
             // Normal HTTP flow
             using (client)
             {
-                var response = await RouteRequestAsync(request).ConfigureAwait(false);
-                await WriteResponseAsync(stream, response, ct).ConfigureAwait(false);
+                using var requestCts =
+                    CancellationTokenSource.CreateLinkedTokenSource(ct);
+                request.CancellationToken = requestCts.Token;
+                var disconnectMonitor = MonitorClientDisconnectAsync(
+                    client,
+                    requestCts);
+                try
+                {
+                    var response = await RouteRequestAsync(request)
+                        .ConfigureAwait(false);
+                    if (!requestCts.IsCancellationRequested)
+                    {
+                        await WriteResponseAsync(
+                                stream,
+                                response,
+                                requestCts.Token)
+                            .ConfigureAwait(false);
+                    }
+                }
+                finally
+                {
+                    await requestCts.CancelAsync();
+                    try
+                    {
+                        await disconnectMonitor.ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                    }
+                }
             }
         }
+        catch (OperationCanceledException)
+        {
+        }
         catch (Exception ex) { Console.WriteLine($"[Microsoft.Maui.DevFlow.Agent] Request error: {ex.GetType().Name}: {ex.Message}"); }
+    }
+
+    private static async Task MonitorClientDisconnectAsync(
+        TcpClient client,
+        CancellationTokenSource requestCts)
+    {
+        while (!requestCts.IsCancellationRequested)
+        {
+            try
+            {
+                if (client.Client.Poll(
+                        1_000,
+                        SelectMode.SelectRead)
+                    && client.Available == 0)
+                {
+                    await requestCts.CancelAsync();
+                    return;
+                }
+            }
+            catch (SocketException)
+            {
+                await requestCts.CancelAsync();
+                return;
+            }
+            catch (ObjectDisposedException)
+            {
+                await requestCts.CancelAsync();
+                return;
+            }
+
+            await Task.Delay(100, requestCts.Token)
+                .ConfigureAwait(false);
+        }
     }
 
     private async Task<HttpRequest?> ReadRequestAsync(NetworkStream stream, CancellationToken ct)
@@ -452,6 +516,8 @@ public class HttpRequest
     public Dictionary<string, string> RouteParams { get; set; } = new();
     public Dictionary<string, string> Headers { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public string? Body { get; set; }
+    [JsonIgnore]
+    public CancellationToken CancellationToken { get; set; }
 
     internal object? MutationState { get; set; }
 
@@ -497,7 +563,9 @@ public class HttpResponse
         404 => "Not Found",
         408 => "Request Timeout",
         409 => "Conflict",
+        429 => "Too Many Requests",
         500 => "Internal Server Error",
+        503 => "Service Unavailable",
         501 => "Not Implemented",
         _ => "Bad Request"
     };

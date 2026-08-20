@@ -61,19 +61,28 @@ public partial class DevFlowAgentService
     /// </summary>
     public Func<string, Task<string>>? CdpCommandHandler
     {
-        get => _cdpWebViews.Count > 0 ? _cdpWebViews[0].CommandHandler : null;
+        get
+        {
+            lock (_cdpWebViewsLock)
+                return _cdpWebViews.Count > 0
+                    ? _cdpWebViews[0].CommandHandler
+                    : null;
+        }
         set
         {
-            if (value == null)
+            lock (_cdpWebViewsLock)
             {
+                if (value == null)
+                {
+                    if (_cdpWebViews.Count > 0)
+                        _cdpWebViews.RemoveAt(0);
+                    return;
+                }
                 if (_cdpWebViews.Count > 0)
-                    _cdpWebViews.RemoveAt(0);
-                return;
+                    _cdpWebViews[0].CommandHandler = value;
+                else
+                    _cdpWebViews.Add(new CdpWebViewInfo { Index = 0, CommandHandler = value, ReadyCheck = () => true });
             }
-            if (_cdpWebViews.Count > 0)
-                _cdpWebViews[0].CommandHandler = value;
-            else
-                _cdpWebViews.Add(new CdpWebViewInfo { Index = 0, CommandHandler = value, ReadyCheck = () => true });
         }
     }
 
@@ -81,15 +90,26 @@ public partial class DevFlowAgentService
     /// Deprecated: use RegisterCdpWebView() for multi-WebView support.</summary>
     public Func<bool>? CdpReadyCheck
     {
-        get => _cdpWebViews.Count > 0 ? _cdpWebViews[0].ReadyCheck : null;
+        get
+        {
+            lock (_cdpWebViewsLock)
+                return _cdpWebViews.Count > 0
+                    ? _cdpWebViews[0].ReadyCheck
+                    : null;
+        }
         set
         {
-            if (_cdpWebViews.Count > 0 && value != null)
-                _cdpWebViews[0].ReadyCheck = value;
+            lock (_cdpWebViewsLock)
+            {
+                if (_cdpWebViews.Count > 0 && value != null)
+                    _cdpWebViews[0].ReadyCheck = value;
+            }
         }
     }
 
     protected readonly List<CdpWebViewInfo> _cdpWebViews = new();
+
+    protected readonly object _cdpWebViewsLock = new();
 
     protected int _nextWebViewIndex = 0;
 
@@ -97,79 +117,107 @@ public partial class DevFlowAgentService
     public int RegisterCdpWebView(Func<string, Task<string>> commandHandler, Func<bool> readyCheck,
         string? automationId = null, string? elementId = null, string? url = null)
     {
-        // Shell route changes can recreate the same logical BlazorWebView multiple times.
-        // Reuse the existing slot for the same AutomationId/ElementId so callers don't get
-        // stranded on a stale index 0 bridge after navigating away and back.
-        var existing = _cdpWebViews.LastOrDefault(w =>
-            (!string.IsNullOrWhiteSpace(elementId) &&
-             string.Equals(w.ElementId, elementId, StringComparison.OrdinalIgnoreCase)) ||
-            (!string.IsNullOrWhiteSpace(automationId) &&
-             string.Equals(w.AutomationId, automationId, StringComparison.OrdinalIgnoreCase)));
-
-        if (existing != null)
+        lock (_cdpWebViewsLock)
         {
-            existing.CommandHandler = commandHandler;
-            existing.ReadyCheck = readyCheck;
-            existing.AutomationId = automationId ?? existing.AutomationId;
-            existing.ElementId = elementId ?? existing.ElementId;
-            existing.Url = url ?? existing.Url;
-            return existing.Index;
+            // Shell route changes can recreate the same logical BlazorWebView multiple times.
+            // Reuse the existing slot for the same AutomationId/ElementId so callers don't get
+            // stranded on a stale index 0 bridge after navigating away and back.
+            var existing = _cdpWebViews.LastOrDefault(w =>
+                (!string.IsNullOrWhiteSpace(elementId) &&
+                 string.Equals(w.ElementId, elementId, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrWhiteSpace(automationId) &&
+                 string.Equals(w.AutomationId, automationId, StringComparison.OrdinalIgnoreCase)));
+
+            if (existing != null)
+            {
+                existing.CommandHandler = commandHandler;
+                existing.ReadyCheck = readyCheck;
+                existing.AutomationId = automationId ?? existing.AutomationId;
+                existing.ElementId = elementId ?? existing.ElementId;
+                existing.Url = url ?? existing.Url;
+                return existing.Index;
+            }
+
+            var index = _nextWebViewIndex++;
+            _cdpWebViews.Add(new CdpWebViewInfo
+            {
+                Index = index,
+                AutomationId = automationId,
+                ElementId = elementId,
+                Url = url,
+                CommandHandler = commandHandler,
+                ReadyCheck = readyCheck,
+            });
+            return index;
         }
+    }
 
-        var index = _nextWebViewIndex++;
-        _cdpWebViews.Add(new CdpWebViewInfo
+    /// <summary>
+    /// Takes a defensive copy of the registered CDP WebViews so callers can enumerate them
+    /// without holding the lock while awaiting.
+    /// </summary>
+    protected CdpWebViewInfo[] GetCdpWebViewsSnapshot()
+    {
+        lock (_cdpWebViewsLock)
         {
-            Index = index,
-            AutomationId = automationId,
-            ElementId = elementId,
-            Url = url,
-            CommandHandler = commandHandler,
-            ReadyCheck = readyCheck,
-        });
-        return index;
+            return _cdpWebViews.Select(webView => new CdpWebViewInfo
+            {
+                Index = webView.Index,
+                AutomationId = webView.AutomationId,
+                ElementId = webView.ElementId,
+                Url = webView.Url,
+                CommandHandler = webView.CommandHandler,
+                ReadyCheck = webView.ReadyCheck
+            }).ToArray();
+        }
     }
 
     /// <summary>Unregister a CDP WebView by index.</summary>
     public void UnregisterCdpWebView(int index)
     {
-        _cdpWebViews.RemoveAll(w => w.Index == index);
+        lock (_cdpWebViewsLock)
+            _cdpWebViews.RemoveAll(w => w.Index == index);
     }
 
     /// <summary>Update metadata for a registered WebView.</summary>
     public void UpdateCdpWebView(int index, string? automationId = null, string? elementId = null, string? url = null)
     {
-        var wv = _cdpWebViews.FirstOrDefault(w => w.Index == index);
-        if (wv == null) return;
-        if (automationId != null) wv.AutomationId = automationId;
-        if (elementId != null) wv.ElementId = elementId;
-        if (url != null) wv.Url = url;
+        lock (_cdpWebViewsLock)
+        {
+            var wv = _cdpWebViews.FirstOrDefault(w => w.Index == index);
+            if (wv == null) return;
+            if (automationId != null) wv.AutomationId = automationId;
+            if (elementId != null) wv.ElementId = elementId;
+            if (url != null) wv.Url = url;
+        }
     }
 
     protected CdpWebViewInfo? ResolveCdpWebView(string? webviewId)
     {
-        if (_cdpWebViews.Count == 0) return null;
+        var webViews = GetCdpWebViewsSnapshot();
+        if (webViews.Length == 0) return null;
         if (string.IsNullOrEmpty(webviewId))
         {
             // Prefer the most recently registered ready bridge, falling back to the newest
             // bridge overall. This avoids defaulting to a stale, no-longer-visible WebView
             // after Shell recreates a page.
-            return _cdpWebViews.LastOrDefault(w => w.IsReady) ?? _cdpWebViews.Last();
+            return webViews.LastOrDefault(w => w.IsReady) ?? webViews[^1];
         }
 
         // Try index
         if (int.TryParse(webviewId, out var idx))
         {
-            var byIndex = _cdpWebViews.FirstOrDefault(w => w.Index == idx);
+            var byIndex = webViews.FirstOrDefault(w => w.Index == idx);
             if (byIndex != null) return byIndex;
         }
 
         // Try AutomationId
-        var byAutomationId = _cdpWebViews.LastOrDefault(w =>
+        var byAutomationId = webViews.LastOrDefault(w =>
             !string.IsNullOrEmpty(w.AutomationId) && w.AutomationId.Equals(webviewId, StringComparison.OrdinalIgnoreCase));
         if (byAutomationId != null) return byAutomationId;
 
         // Try ElementId
-        var byElementId = _cdpWebViews.LastOrDefault(w =>
+        var byElementId = webViews.LastOrDefault(w =>
             !string.IsNullOrEmpty(w.ElementId) && w.ElementId.Equals(webviewId, StringComparison.OrdinalIgnoreCase));
         if (byElementId != null) return byElementId;
 
@@ -283,6 +331,11 @@ public partial class DevFlowAgentService
         // Accept POST as well so callers can send coordinates in a body; both verbs share a handler.
         _server.MapPost("/api/v1/ui/hit-test", HandleHitTest);
         _server.MapGet("/api/v1/ui/screenshot", HandleScreenshot);
+        if (_options.EnableLayoutDiagnostics)
+        {
+            _server.MapGet("/api/v1/ui/diagnostics/layout/rules", HandleLayoutDiagnosticRules);
+            _server.MapPost("/api/v1/ui/diagnostics/layout", HandleLayoutDiagnostics);
+        }
         _server.MapGet("/api/v1/ui/elements/{id}/properties/{name}", HandleProperty);
         _server.MapPut("/api/v1/ui/elements/{id}/properties/{name}", request => ExecuteUiMutationAsync(request, HandleSetProperty));
         _server.MapPost("/api/v1/ui/actions/tap", request => ExecuteUiMutationAsync(request, HandleTap));
@@ -1765,7 +1818,7 @@ public partial class DevFlowAgentService
         [NotNullWhen(true)] out CdpWebViewInfo? webView,
         [NotNullWhen(false)] out HttpResponse? error)
     {
-        if (_cdpWebViews.Count == 0)
+        if (GetCdpWebViewsSnapshot().Length == 0)
         {
             webView = null;
             error = HttpResponse.Error("CDP not available (no Blazor WebViews registered)");
@@ -1914,7 +1967,10 @@ public partial class DevFlowAgentService
             if (!string.IsNullOrWhiteSpace(cdpError))
                 return HttpResponse.Error($"WebView navigation failed: {cdpError}");
 
+            // webView is a snapshot copy, so writing to it alone would leave the registry (and
+            // therefore /webview/contexts) reporting the pre-navigation URL.
             webView.Url = body.Url;
+            UpdateCdpWebView(webView.Index, url: body.Url);
             PublishUiEvent("navigation", new
             {
                 from = (string?)null,
@@ -2188,7 +2244,7 @@ public partial class DevFlowAgentService
 
     protected Task<HttpResponse> HandleCdpWebViews(HttpRequest request)
     {
-        var webviews = _cdpWebViews.Select(w => new
+        var webviews = GetCdpWebViewsSnapshot().Select(w => new
         {
             id = !string.IsNullOrWhiteSpace(w.AutomationId)
                 ? w.AutomationId

@@ -22,6 +22,7 @@ public class DevFlowCommands
 {
     private static Command? _devflowCommand;
     private static bool _errorOccurred;
+    private static int? _requestedExitCode;
     private static bool _agentLabelEmitted;
 
     /// <summary>
@@ -29,6 +30,9 @@ public class DevFlowCommands
     /// translate swallowed command failures into a non-zero process exit code.
     /// </summary>
     internal static bool ErrorOccurred => _errorOccurred;
+    internal static int? RequestedExitCode => _requestedExitCode;
+    internal static void RequestExitCode(int exitCode)
+        => _requestedExitCode = exitCode;
 
     private static IDevFlowOutputWriter? s_output;
     internal static Func<Task<int?>> ResolveRunningBrokerPortAsync { get; set; } = Broker.BrokerClient.GetRunningBrokerPortAsync;
@@ -45,6 +49,7 @@ public class DevFlowCommands
         CreateAndroidPortForwarder = AndroidDevFlowPortForwarder.CreateDefault;
         IsAndroidAdbLikelyAvailable = AndroidDevFlowPortForwarder.IsAdbLikelyAvailable;
         _errorOccurred = false;
+        _requestedExitCode = null;
         _agentLabelEmitted = false;
     }
 
@@ -372,6 +377,55 @@ public class DevFlowCommands
             await MauiTreeAsync(host, port, output.ResolveJsonMode(json, noJson), depth, window, fields, format);
         });
         mauiCommand.Add(mauiTreeCmd);
+
+        // MAUI layout diagnostics
+        var diagnosticsProfileOption = new Option<string>("--profile") { Description = "Inspection profile: agent, strict, exhaustive, or ci", DefaultValueFactory = _ => "agent" };
+        var diagnosticsRootOption = new Option<string?>("--root") { Description = "Root element ID to inspect" };
+        var diagnosticsChecksOption = new Option<string?>("--checks") { Description = "Comma-separated layout diagnostic rule IDs" };
+        var diagnosticsSeverityOption = new Option<string>("--minimum-severity") { Description = "Minimum severity: info, minor, moderate, serious, or critical", DefaultValueFactory = _ => "minor" };
+        var diagnosticsEvidenceOption = new Option<bool>("--include-evidence") { Description = "Include geometry, clip-chain, text, and overlap evidence", DefaultValueFactory = _ => true };
+        var diagnosticsPassesOption = new Option<bool>("--include-passes") { Description = "Include pass accounting" };
+        var diagnosticsWatchOption = new Option<bool>("--watch") { Description = "Continuously inspect and emit updated results" };
+        var diagnosticsFailOnOption = new Option<string?>("--fail-on") { Description = "Set a failing exit code for violations at or above this severity, or for 'incomplete'" };
+        var diagnosticsTimeoutOption = new Option<int>("--stability-timeout") { Description = "Geometry stability timeout in milliseconds", DefaultValueFactory = _ => 2500 };
+        var diagnosticsImmediateOption = new Option<bool>("--immediate") { Description = "Inspect immediately without waiting for stable geometry" };
+        var mauiDiagnosticsCmd = new Command("diagnostics", "Detect clipping, overflow, text truncation, overlap, and occlusion")
+        {
+            diagnosticsProfileOption,
+            diagnosticsRootOption,
+            diagnosticsChecksOption,
+            diagnosticsSeverityOption,
+            diagnosticsEvidenceOption,
+            diagnosticsPassesOption,
+            diagnosticsWatchOption,
+            diagnosticsFailOnOption,
+            diagnosticsTimeoutOption,
+            diagnosticsImmediateOption,
+            windowOption
+        };
+        mauiDiagnosticsCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var isJson = output.ResolveJsonMode(ctx.GetValue(jsonOption), ctx.GetValue(noJsonOption));
+            await MauiLayoutDiagnosticsAsync(
+                host,
+                port,
+                isJson,
+                ctx.GetValue(diagnosticsProfileOption)!,
+                ctx.GetValue(diagnosticsRootOption),
+                ctx.GetValue(diagnosticsChecksOption),
+                ctx.GetValue(diagnosticsSeverityOption)!,
+                ctx.GetValue(diagnosticsEvidenceOption),
+                ctx.GetValue(diagnosticsPassesOption),
+                ctx.GetValue(diagnosticsWatchOption),
+                ctx.GetValue(diagnosticsFailOnOption),
+                ctx.GetValue(diagnosticsTimeoutOption),
+                ctx.GetValue(diagnosticsImmediateOption),
+                ctx.GetValue(windowOption),
+                ct);
+        });
+        mauiCommand.Add(mauiDiagnosticsCmd);
 
         // MAUI query
         var queryTypeOption = new Option<string?>("--type") { Description = "Filter by element type" };
@@ -3053,6 +3107,209 @@ public class DevFlowCommands
         catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
     }
 
+    private static async Task MauiLayoutDiagnosticsAsync(
+        string host,
+        int port,
+        bool json,
+        string profile,
+        string? rootElementId,
+        string? checks,
+        string minimumSeverity,
+        bool includeEvidence,
+        bool includePasses,
+        bool watch,
+        string? failOn,
+        int stabilityTimeoutMs,
+        bool immediate,
+        int? window,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            failOn = ResolveLayoutDiagnosticsFailOn(profile, failOn);
+            var failOnIncomplete = profile.Equals(
+                    "ci",
+                    StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(
+                    failOn,
+                    "none",
+                    StringComparison.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(failOn)
+                && !failOn.Equals("none", StringComparison.OrdinalIgnoreCase)
+                && !failOn.Equals("incomplete", StringComparison.OrdinalIgnoreCase)
+                && LayoutSeverityRank(failOn) < 0)
+            {
+                _errorOccurred = true;
+                Output.WriteError(
+                    "--fail-on must be one of: none, incomplete, info, minor, moderate, serious, critical",
+                    json,
+                    "InvalidArgument");
+                return;
+            }
+
+            var policy = LayoutDiagnosticsPolicyLoader.Load();
+            using var client = await CreateAgentClientAsync(host, port);
+            do
+            {
+                var request = new LayoutInspectionRequest
+                {
+                    Profile = profile,
+                    MinimumSeverity = minimumSeverity,
+                    IncludeEvidence = includeEvidence,
+                    IncludePasses = includePasses,
+                    Scope = new LayoutInspectionScope
+                    {
+                        RootElementId = rootElementId,
+                        Window = window
+                    },
+                    Stability = new LayoutStabilityOptions
+                    {
+                        Mode = immediate ? "immediate" : "wait",
+                        TimeoutMs = stabilityTimeoutMs
+                    },
+                    Rules = string.IsNullOrWhiteSpace(checks)
+                        ? null
+                        : checks.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
+                    Suppressions = policy.Suppressions.ToList()
+                };
+                var result = await client.AnalyzeLayoutAsync(
+                    request,
+                    cancellationToken);
+                if (result is null)
+                {
+                    _errorOccurred = true;
+                    Output.WriteError(
+                        "Layout diagnostics failed. Verify that the connected agent advertises ui.layoutDiagnostics.",
+                        json,
+                        "UnsupportedCapability",
+                        suggestions: ["Run 'maui devflow agent capabilities' and update the in-app DevFlow agent package."]);
+                    return;
+                }
+
+                if (json && watch)
+                {
+                    Output.WriteJsonLine(result);
+                }
+                else
+                {
+                    Output.WriteResult(result, json, static data =>
+                    {
+                        Console.WriteLine(
+                            $"Layout diagnostics: {data.Summary.Violations} violation(s), "
+                            + $"{data.Summary.Observations} observation(s), "
+                            + $"{data.Summary.Incomplete} incomplete, "
+                            + $"{data.Summary.Suppressed} suppressed.");
+                        Console.WriteLine(
+                            $"Snapshot {data.Snapshot.Id} ({data.Snapshot.Platform}, "
+                            + $"{data.Snapshot.NodeCount} nodes, stable={data.Snapshot.Stable.ToString().ToLowerInvariant()})");
+                        foreach (var finding in data.Findings.Where(finding => !finding.Suppressed).Take(50))
+                        {
+                            Console.WriteLine(
+                                $"[{finding.Severity.ToUpperInvariant()}] {finding.RuleId} "
+                                + $"{finding.Element.Type}#{finding.Element.AutomationId ?? finding.Element.Id}: "
+                                + finding.Message);
+                        }
+                        foreach (var limitation in data.Coverage.Limitations.Take(20))
+                            Console.WriteLine($"Coverage: {limitation}");
+                    });
+                }
+
+                if (ShouldFailLayoutDiagnostics(
+                    result,
+                    failOn,
+                    failOnIncomplete))
+                {
+                    _errorOccurred = true;
+                    Environment.ExitCode = 1;
+                }
+
+                if (!watch)
+                    return;
+                await Task.Delay(1000, cancellationToken);
+            }
+            while (!cancellationToken.IsCancellationRequested);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _errorOccurred = true;
+            RequestExitCode(130);
+            Output.WriteError(
+                "Layout diagnostics was cancelled.",
+                json,
+                "Cancelled",
+                retryable: true);
+        }
+        catch (LayoutDiagnosticsException ex)
+        {
+            _errorOccurred = true;
+            var errorType = ex.ErrorType switch
+            {
+                "layout-diagnostics-validation" => "InvalidArgument",
+                "layout-diagnostics-busy" => "LayoutDiagnosticsBusy",
+                "layout-diagnostics-unavailable"
+                    or "layout-diagnostics-not-ready" => "AgentUnavailable",
+                "layout-diagnostics-server-error" => "LayoutDiagnosticsServerError",
+                _ => "LayoutDiagnosticsRequestError"
+            };
+            Output.WriteError(
+                ex.Message,
+                json,
+                errorType,
+                retryable: ex.Retryable,
+                suggestions: ex.ErrorType switch
+                {
+                    "layout-diagnostics-busy" =>
+                        ["Retry after the current layout scan completes."],
+                    "layout-diagnostics-unavailable"
+                        or "layout-diagnostics-not-ready" =>
+                        ["Verify the app is running and the DevFlow agent port is reachable."],
+                    _ => null
+                });
+        }
+        catch (Exception ex)
+        {
+            _errorOccurred = true;
+            Output.WriteError(ex.Message, json);
+        }
+    }
+
+    internal static bool ShouldFailLayoutDiagnostics(
+        LayoutInspectionResult result,
+        string? failOn,
+        bool failOnIncomplete = false)
+    {
+        if (failOnIncomplete && result.Summary.Incomplete > 0)
+            return true;
+        if (string.IsNullOrWhiteSpace(failOn) || failOn.Equals("none", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (failOn.Equals("incomplete", StringComparison.OrdinalIgnoreCase))
+            return result.Summary.Incomplete > 0;
+
+        var threshold = LayoutSeverityRank(failOn);
+        return result.Findings.Any(finding =>
+            !finding.Suppressed
+            && finding.Outcome == "violation"
+            && LayoutSeverityRank(finding.Severity) >= threshold);
+    }
+
+    internal static string? ResolveLayoutDiagnosticsFailOn(
+        string profile,
+        string? failOn)
+        => string.IsNullOrWhiteSpace(failOn)
+            && profile.Equals("ci", StringComparison.OrdinalIgnoreCase)
+                ? "serious"
+                : failOn;
+
+    private static int LayoutSeverityRank(string severity) => severity.ToLowerInvariant() switch
+    {
+        "info" => 0,
+        "minor" => 1,
+        "moderate" => 2,
+        "serious" => 3,
+        "critical" => 4,
+        _ => -1
+    };
+
     private static async Task MauiQueryAsync(string host, int port, bool json, string? type, string? autoId, string? text, string? selector, string? fields, string? format, string? waitUntil, int timeout)
     {
         try
@@ -5327,6 +5584,7 @@ public class DevFlowCommands
                 Console.SetError(errCapture);
 
                 _errorOccurred = false;
+                _requestedExitCode = null;
                 int exitCode;
                 try
                 {

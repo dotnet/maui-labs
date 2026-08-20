@@ -78,6 +78,134 @@ public class DevFlowAgentServiceLifecycleTests
     }
 
     [Fact]
+    public async Task LayoutDiagnostics_AreAdvertisedAndCallableBeforeWindowCreation()
+    {
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions
+        {
+            Port = port,
+            EnableLayoutDiagnostics = true
+        });
+        using var client = new AgentClient("localhost", port);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(new Application());
+        _ = await WaitForStatusAsync(client);
+
+        var capabilities = await client.GetCapabilitiesAsync();
+        var layoutCapabilities = capabilities.GetProperty("capabilities").GetProperty("ui.layoutDiagnostics");
+        Assert.Equal("1.0", layoutCapabilities.GetProperty("schemaVersion").GetString());
+        Assert.True(layoutCapabilities.GetProperty("watch").GetProperty("supported").GetBoolean());
+        Assert.Equal(
+            "polling",
+            layoutCapabilities.GetProperty("watch").GetProperty("transport").GetString());
+        Assert.False(layoutCapabilities.GetProperty("blazor").GetProperty("supported").GetBoolean());
+
+        var result = await client.AnalyzeLayoutAsync(new Microsoft.Maui.DevFlow.Driver.LayoutInspectionRequest
+        {
+            Stability = new Microsoft.Maui.DevFlow.Driver.LayoutStabilityOptions { Mode = "immediate" }
+        });
+
+        Assert.NotNull(result);
+        Assert.Equal("1.0", result!.SchemaVersion);
+        Assert.Equal(0, result.Snapshot.NodeCount);
+        Assert.True(result.Summary.Incomplete >= 1);
+        Assert.Contains(result.Coverage.Limitations, limitation =>
+            limitation.Contains("visual tree is empty", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task LayoutDiagnostics_DefaultOptions_DoNotAdvertiseExperimentalCapability()
+    {
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        _ = await WaitForStatusAsync(client);
+
+        var capabilities = await client.GetCapabilitiesAsync();
+        Assert.False(capabilities.GetProperty("capabilities").TryGetProperty(
+            "ui.layoutDiagnostics",
+            out _));
+        Assert.Null(await client.AnalyzeLayoutAsync(
+            new Microsoft.Maui.DevFlow.Driver.LayoutInspectionRequest()));
+    }
+
+    [Fact]
+    public async Task LayoutDiagnostics_UnboundAgent_ReturnsRetryableNotReadyError()
+    {
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions
+        {
+            Port = port,
+            EnableLayoutDiagnostics = true
+        });
+        using var client = new AgentClient("localhost", port);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        _ = await WaitForStatusAsync(client);
+
+        var exception = await Assert.ThrowsAsync<LayoutDiagnosticsException>(
+            () => client.AnalyzeLayoutAsync(
+                new Microsoft.Maui.DevFlow.Driver.LayoutInspectionRequest()));
+        Assert.Equal(503, exception.StatusCode);
+        Assert.Equal("layout-diagnostics-not-ready", exception.ErrorType);
+        Assert.True(exception.Retryable);
+    }
+
+    [Fact]
+    public async Task LayoutDiagnostics_InvalidContractValues_ReturnBadRequest()
+    {
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions
+        {
+            Port = port,
+            EnableLayoutDiagnostics = true
+        });
+        using var client = new AgentClient("localhost", port);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(new Application());
+        _ = await WaitForStatusAsync(client);
+
+        Microsoft.Maui.DevFlow.Driver.LayoutInspectionRequest[] invalidRequests =
+        [
+            new()
+            {
+                MinimumSeverity = "seriuos"
+            },
+            new()
+            {
+                Occlusion = new Microsoft.Maui.DevFlow.Driver.LayoutOcclusionOptions
+                {
+                    Mode = "sometimes"
+                }
+            },
+            new()
+            {
+                Privacy = new Microsoft.Maui.DevFlow.Driver.LayoutPrivacyOptions
+                {
+                    Text = "hash"
+                }
+            },
+            new()
+            {
+                Rules = ["layout.element-cliped"]
+            }
+        ];
+
+        foreach (var request in invalidRequests)
+        {
+            var exception = await Assert.ThrowsAsync<LayoutDiagnosticsException>(
+                () => client.AnalyzeLayoutAsync(request));
+            Assert.Equal(400, exception.StatusCode);
+            Assert.Equal("layout-diagnostics-validation", exception.ErrorType);
+            Assert.False(exception.Retryable);
+        }
+    }
+
+    [Fact]
     public async Task Capabilities_WhenJobsRunUnsupported_DoesNotAdvertiseRunFeature()
     {
         var port = GetFreePort();

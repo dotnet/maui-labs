@@ -191,6 +191,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         var appVersion = AppVersionString;
         var appBuild = AppBuildString;
 
+        var cdpWebViews = GetCdpWebViewsSnapshot();
         var result = await DispatchAsync(() =>
         {
             var (w, h, density) = GetWindowMetrics(windowIndex);
@@ -228,8 +229,9 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                 capabilities = new
                 {
                     ui = IsUiSupported,
+                    layoutDiagnostics = _options.EnableLayoutDiagnostics,
                     screenshots = IsScreenshotSupported,
-                    webview = _cdpWebViews.Any(v => v.IsReady),
+                    webview = cdpWebViews.Any(v => v.IsReady),
                     network = true,
                     logs = true,
                     sensors = IsSensorsSupported,
@@ -239,8 +241,8 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                     theme = IsThemeSupported,
                 },
                 running = IsAppBound,
-                cdpReady = _cdpWebViews.Any(v => v.IsReady),
-                cdpWebViewCount = _cdpWebViews.Count,
+                cdpReady = cdpWebViews.Any(v => v.IsReady),
+                cdpWebViewCount = cdpWebViews.Length,
                 profiler = BuildProfilerCapabilitiesPayload(),
                 profilerSession = _profilerSessions.CurrentSession,
                 extensions = BuildExtensionsMarker()
@@ -292,6 +294,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     private Task<HttpResponse> HandleCapabilities(HttpRequest request)
     {
+        var cdpWebViews = GetCdpWebViewsSnapshot();
         var reason = UnsupportedCapabilityReason;
         var capabilities = new Dictionary<string, object>();
 
@@ -302,9 +305,36 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         capabilities["ui.screenshot"] = Capability(1, IsScreenshotSupported,
             ["element", "fullscreen", "selector"], reason);
 
+        if (_options.EnableLayoutDiagnostics)
+        {
+            capabilities["ui.layoutDiagnostics"] = new
+            {
+                version = 1,
+                schemaVersion = "1.0",
+                ruleSetVersion = "1.0",
+                features = new[] { "clipping", "overflow", "text-truncation", "overlap", "occlusion", "coverage", "suppressions", "watch" }
+                    .Concat(cdpWebViews.Any(view => view.IsReady)
+                        ? ["blazor-dom"]
+                        : Array.Empty<string>())
+                    .ToArray(),
+                watch = new
+                {
+                    supported = true,
+                    transport = "polling"
+                },
+                blazor = new
+                {
+                    supported = cdpWebViews.Any(view => view.IsReady),
+                    readyWebViewCount = cdpWebViews.Count(view => view.IsReady)
+                },
+                profiles = new[] { "agent", "strict", "exhaustive", "ci" },
+                rules = GetLayoutRuleSupport()
+            };
+        }
+
         // Listed unconditionally so clients can discover the group and see *why* it is unavailable,
         // per the capability protocol: unsupported groups report supported:false rather than vanish.
-        capabilities["webview"] = Capability(1, _cdpWebViews.Count > 0,
+        capabilities["webview"] = Capability(1, cdpWebViews.Length > 0,
             ["evaluate", "contexts", "source", "dom", "dom-query", "network", "console", "screenshot"],
             "No WebView has registered a CDP endpoint with this agent.");
 
@@ -402,6 +432,22 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     /// <summary>Handles <c>GET /api/v1/ui/element/{id}/property</c>.</summary>
     protected virtual Task<HttpResponse> HandleProperty(HttpRequest request) => NotSupportedTask("ui.actions");
+
+    // ── Layout diagnostics seams ──────────────────────────────────────────
+
+    /// <summary>Handles <c>POST /api/v1/ui/diagnostics/layout</c>.</summary>
+    protected virtual Task<HttpResponse> HandleLayoutDiagnostics(HttpRequest request)
+        => NotSupportedTask("ui.layoutDiagnostics");
+
+    /// <summary>Handles <c>GET /api/v1/ui/diagnostics/layout/rules</c>.</summary>
+    protected virtual Task<HttpResponse> HandleLayoutDiagnosticRules(HttpRequest request)
+        => NotSupportedTask("ui.layoutDiagnostics");
+
+    /// <summary>
+    /// Per-rule support metadata advertised under the <c>ui.layoutDiagnostics</c> capability.
+    /// Backends that implement layout diagnostics override this.
+    /// </summary>
+    protected virtual object? GetLayoutRuleSupport() => null;
 
     /// <summary>Handles <c>PUT /api/v1/ui/element/{id}/property</c>.</summary>
     protected virtual Task<HttpResponse> HandleSetProperty(HttpRequest request) => NotSupportedTask("ui.actions");
@@ -699,6 +745,69 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         if (IsMainThreadDispatchRequired())
             return await DispatchViaMainThreadAsync(func);
 
+        return func();
+    }
+
+    /// <summary>
+    /// Cancellable variant of <see cref="DispatchAsync{T}(Func{T})"/>. Layout diagnostics runs
+    /// under a budget, so it must be able to abandon a UI-thread hop that never completes.
+    /// </summary>
+    protected async Task<T> DispatchAsync<T>(
+        Func<T> func,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_dispatcher is { IsDispatchRequired: true })
+        {
+            var dispatcher = _dispatcher;
+            var tcs = new TaskCompletionSource<T>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            using var registration = cancellationToken.Register(() =>
+                tcs.TrySetCanceled(cancellationToken));
+            dispatcher.Dispatch(() =>
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    tcs.TrySetCanceled(cancellationToken);
+                    return;
+                }
+                try
+                {
+                    tcs.TrySetResult(func());
+                }
+                catch (Exception ex)
+                {
+                    tcs.TrySetException(ex);
+                }
+            });
+            return await tcs.Task;
+        }
+
+        if (IsMainThreadDispatchRequired())
+        {
+            var dispatchTask = DispatchViaMainThreadAsync(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return func();
+            });
+            try
+            {
+                return await dispatchTask.WaitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+                when (cancellationToken.IsCancellationRequested)
+            {
+                _ = dispatchTask.ContinueWith(
+                    task => _ = task.Exception,
+                    CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted
+                        | TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
+                throw;
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
         return func();
     }
 

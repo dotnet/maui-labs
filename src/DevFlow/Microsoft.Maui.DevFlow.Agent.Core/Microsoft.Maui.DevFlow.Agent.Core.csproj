@@ -30,4 +30,24 @@
                       OutputItemType="Analyzer" />
   </ItemGroup>
 
+  <PropertyGroup>
+    <GetTargetPathDependsOn>$(GetTargetPathDependsOn);_ResolveDevFlowAnalyzerPath</GetTargetPathDependsOn>
+  </PropertyGroup>
+
+  <Target Name="_ResolveDevFlowAnalyzerPath" AfterTargets="ResolveProjectReferences">
+    <ItemGroup>
+      <None Include="@(Analyzer)"
+            Condition="'%(Analyzer.NuGetPackageId)' == '' and '%(Filename)' == 'Microsoft.Maui.DevFlow.Analyzers'"
+            Pack="true"
+            PackagePath="analyzers/dotnet/cs"
+            Visible="false" />
+    </ItemGroup>
+  </Target>
+
+  <ItemGroup>
+    <None Remove="buildTransitive\**" />
+    <None Include="buildTransitive\Microsoft.Maui.DevFlow.Agent.Core.props" Pack="true" PackagePath="buildTransitive\" />
+    <None Include="buildTransitive\Microsoft.Maui.DevFlow.Agent.Core.targets" Pack="true" PackagePath="buildTransitive\" />
+  </ItemGroup>
+
 </Project>

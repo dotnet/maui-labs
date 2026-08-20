@@ -584,6 +584,132 @@ public class AgentHttpServerTests : IDisposable
     }
 
     [Fact]
+    public async Task TreeSnapshot_FallsBackToLegacyArrayResponse()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, _port);
+        listener.Start();
+        var server = Task.Run(async () =>
+        {
+            using var client = await listener.AcceptTcpClientAsync();
+            using var stream = client.GetStream();
+            var buffer = new byte[4096];
+            var read = await stream.ReadAsync(buffer);
+            var request = Encoding.UTF8.GetString(buffer, 0, read);
+            Assert.Contains("envelope=true", request);
+
+            const string body =
+                """[{"id":"root","type":"Grid","isVisible":true,"isEnabled":true}]""";
+            var response =
+                $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{body}";
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
+        });
+
+        using var agentClient =
+            new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        var snapshot = await agentClient.GetTreeSnapshotAsync(
+            includeNative: false);
+
+        Assert.NotNull(snapshot);
+        Assert.Equal("root", Assert.Single(snapshot!.Elements).Id);
+        Assert.Equal(string.Empty, snapshot.Revision);
+        await server;
+    }
+
+    [Fact]
+    public async Task AnalyzeLayout_ValidationFailure_ThrowsTypedException()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, _port);
+        listener.Start();
+        var acceptTask = RespondOnceAsync(
+            listener,
+            "400 Bad Request",
+            """
+            {"success":false,"error":"Unsupported profile 'invalid'.","reason":"layout-diagnostics-validation"}
+            """);
+
+        using var agentClient =
+            new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        var exception = await Assert.ThrowsAsync<
+            Microsoft.Maui.DevFlow.Driver.LayoutDiagnosticsException>(() =>
+            agentClient.AnalyzeLayoutAsync(
+                new Microsoft.Maui.DevFlow.Driver.LayoutInspectionRequest
+                {
+                    Profile = "invalid"
+                }));
+
+        Assert.Equal(400, exception.StatusCode);
+        Assert.Equal("layout-diagnostics-validation", exception.ErrorType);
+        Assert.False(exception.Retryable);
+        Assert.Contains("Unsupported profile", exception.Message);
+        await acceptTask;
+    }
+
+    [Fact]
+    public async Task AnalyzeLayout_BusyFailure_IsMarkedRetryable()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, _port);
+        listener.Start();
+        var acceptTask = RespondOnceAsync(
+            listener,
+            "429 Too Many Requests",
+            """
+            {"success":false,"error":"A layout diagnostics scan is already running","reason":"layout-diagnostics-busy"}
+            """);
+
+        using var agentClient =
+            new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        var exception = await Assert.ThrowsAsync<
+            Microsoft.Maui.DevFlow.Driver.LayoutDiagnosticsException>(() =>
+            agentClient.AnalyzeLayoutAsync(
+                new Microsoft.Maui.DevFlow.Driver.LayoutInspectionRequest()));
+
+        Assert.Equal(429, exception.StatusCode);
+        Assert.Equal("layout-diagnostics-busy", exception.ErrorType);
+        Assert.True(exception.Retryable);
+        await acceptTask;
+    }
+
+    [Fact]
+    public async Task HttpServer_ClientDisconnect_CancelsRequestToken()
+    {
+        using var server = new AgentHttpServer(_port);
+        var started = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancelled = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        server.MapGet(
+            "/slow",
+            async request =>
+            {
+                started.TrySetResult();
+                try
+                {
+                    await Task.Delay(
+                        TimeSpan.FromSeconds(30),
+                        request.CancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    cancelled.TrySetResult();
+                    throw;
+                }
+                return HttpResponse.Ok();
+            });
+        server.Start();
+
+        using (var client = new TcpClient())
+        {
+            await client.ConnectAsync(IPAddress.Loopback, _port);
+            var request = Encoding.ASCII.GetBytes(
+                "GET /slow HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+            await client.GetStream().WriteAsync(request);
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+
+        await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
     public void HttpResponseError_IncludesReasonAndDetails_WhenProvided()
     {
         var response = HttpResponse.Error(
@@ -833,6 +959,20 @@ public class AgentHttpServerTests : IDisposable
 
         await acceptTask;
         listener.Stop();
+    }
+
+    private static async Task RespondOnceAsync(
+        TcpListener listener,
+        string status,
+        string body)
+    {
+        using var client = await listener.AcceptTcpClientAsync();
+        using var stream = client.GetStream();
+        var buffer = new byte[4096];
+        _ = await stream.ReadAsync(buffer);
+        var response =
+            $"HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{body}";
+        await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
     }
 
     public void Dispose() { }

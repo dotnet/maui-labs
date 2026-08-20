@@ -13,7 +13,7 @@ namespace Microsoft.Maui.DevFlow.Agent.WPF;
 /// <summary>
 /// WPF-specific visual tree walker that provides native WPF element info.
 /// </summary>
-public class WpfVisualTreeWalker : VisualTreeWalker
+public partial class WpfVisualTreeWalker : VisualTreeWalker
 {
     private readonly NativeWindowProbe _nativeProbe = new();
     private readonly object _nativeObjectsLock = new();
