@@ -543,13 +543,18 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             if (el is IVisualTreeElement vte)
             {
                 var info = _treeWalker.WalkElement(vte, null, 1, 2);
-                if (info is not null && _treeWalker.HasActiveSourceMaps)
+
+                // The depth-limited detail subtree has no parent-path context to map source
+                // directly, so source is transferred from a full source-mapped walk. That walk is
+                // expensive and this is an interactive path, so the id -> source map is cached
+                // until the UI actually changes.
+                if (info != null && _treeWalker.HasActiveSourceMaps)
                 {
-                    var fullTree = _treeWalker.WalkTree(_app, 0, null);
-                    var sources = VisualTreeWalker.CollectSourceById(fullTree);
+                    var sources = GetCachedSourceMap(capture);
                     if (sources.Count > 0)
                         VisualTreeWalker.ApplySourceById(info, sources);
                 }
+
                 return (object?)info;
             }
 
@@ -995,6 +1000,39 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
 
     private static bool IsRegisteredNativeElementId(string? elementId)
         => elementId?.StartsWith("native:registered:", StringComparison.Ordinal) == true;
+
+    /// <summary>
+    /// Cached <c>id -> source</c> map for element-detail requests. Rebuilt only when the UI has
+    /// actually changed, so an interactive Inspector selection does not repeat a full,
+    /// all-window tree walk on the UI thread for every request.
+    /// </summary>
+    private readonly object _sourceMapCacheGate = new();
+    private (long Registry, long Mutation, long External) _sourceMapCacheKey = (-1, -1, -1);
+    private Dictionary<string, (string File, int Line, int Column)>? _sourceMapCache;
+
+    private Dictionary<string, (string File, int Line, int Column)> GetCachedSourceMap(
+        UiCaptureContext capture)
+    {
+        var key = (capture.RegistryGeneration, capture.MutationGeneration, capture.ExternalMutationGeneration);
+        lock (_sourceMapCacheGate)
+        {
+            if (_sourceMapCache is not null && _sourceMapCacheKey == key)
+                return _sourceMapCache;
+        }
+
+        var fullTree = _app is null
+            ? []
+            : _treeWalker.WalkTree(_app, 0, null);
+        var sources = VisualTreeWalker.CollectSourceById(fullTree);
+
+        lock (_sourceMapCacheGate)
+        {
+            _sourceMapCache = sources;
+            _sourceMapCacheKey = key;
+        }
+
+        return sources;
+    }
 
     private UiCaptureContext BeginUiCapture(int? windowIndex)
     {

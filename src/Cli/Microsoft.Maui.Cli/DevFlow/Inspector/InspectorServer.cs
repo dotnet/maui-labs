@@ -1045,8 +1045,14 @@ public sealed class InspectorServer : IDisposable
         var screenshotUrl = "screenshot.png";
         lock (_cacheLock)
         {
-            _latestLayoutDiagnostics = diagnostics;
-            _latestLayoutDiagnosticsAt = DateTime.UtcNow;
+            // Only replace the cache when this frame produced a coherent result. An incoherent
+            // frame must not discard diagnostics that are still valid for their own revision —
+            // the cache read is revision-guarded, so a stale entry can never be reused wrongly.
+            if (diagnostics is not null)
+            {
+                _latestLayoutDiagnostics = diagnostics;
+                _latestLayoutDiagnosticsAt = DateTime.UtcNow;
+            }
             if (hasScreenshot)
             {
                 var now = DateTime.UtcNow;
@@ -1097,7 +1103,10 @@ public sealed class InspectorServer : IDisposable
                 Profile = "agent",
                 MinimumSeverity = "info",
                 IncludeEvidence = true,
-                Scope = new LayoutInspectionScope { IncludeNativeElements = false },
+                // Must match the tree the Inspector fetches (native-inclusive), otherwise the
+                // snapshot revisions are computed over different node sets and can never agree
+                // while a native dialog or detached top-level window is present.
+                Scope = new LayoutInspectionScope { IncludeNativeElements = true },
                 Suppressions = GetLayoutSuppressions(),
                 Stability = new LayoutStabilityOptions
                 {

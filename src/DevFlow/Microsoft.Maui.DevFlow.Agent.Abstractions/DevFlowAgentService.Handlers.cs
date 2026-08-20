@@ -1967,7 +1967,10 @@ public partial class DevFlowAgentService
             if (!string.IsNullOrWhiteSpace(cdpError))
                 return HttpResponse.Error($"WebView navigation failed: {cdpError}");
 
+            // webView is a snapshot copy, so writing to it alone would leave the registry (and
+            // therefore /webview/contexts) reporting the pre-navigation URL.
             webView.Url = body.Url;
+            UpdateCdpWebView(webView.Index, url: body.Url);
             PublishUiEvent("navigation", new
             {
                 from = (string?)null,

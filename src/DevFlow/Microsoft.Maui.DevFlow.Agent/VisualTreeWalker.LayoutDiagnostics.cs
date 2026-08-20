@@ -315,7 +315,7 @@ public partial class PlatformVisualTreeWalker
              current = current.Parent as global::Android.Views.View)
         {
             alpha *= current.Alpha;
-            if (alpha < 0.99)
+            if (alpha <= 0)
                 break;
         }
         return alpha;
@@ -367,7 +367,7 @@ public partial class PlatformVisualTreeWalker
         metrics.IsHitTestVisible = !view.Hidden
             && view.UserInteractionEnabled
             && effectiveAlpha > 0.01;
-        metrics.IsOpaque = view.Opaque && effectiveAlpha >= 0.99;
+        metrics.IsOpaque = GetUIKitBackgroundAlpha(view) >= 0.99 && effectiveAlpha >= 0.99;
         if (view.GetType().Name is "WKWebView" or "MTKView")
             metrics.IsCoverageOpaque = true;
         metrics.HasActiveAnimation = view.Layer.AnimationKeys is { Length: > 0 };
@@ -453,10 +453,25 @@ public partial class PlatformVisualTreeWalker
              current = current.Superview)
         {
             alpha *= current.Alpha;
-            if (alpha < 0.99)
+            if (alpha <= 0)
                 break;
         }
         return alpha;
+    }
+
+    /// <summary>
+    /// Alpha of the fill this view actually paints. <c>UIView.Opaque</c> is only a compositing
+    /// hint (it defaults to true on plain views, including transparent MAUI layout containers),
+    /// so occlusion has to be judged from a real background/layer fill like the other collectors.
+    /// </summary>
+    private static double GetUIKitBackgroundAlpha(UIView view)
+    {
+        var background = view.BackgroundColor?.CGColor;
+        if (background is not null && background.Alpha > 0)
+            return background.Alpha;
+
+        var layerColor = view.Layer?.BackgroundColor;
+        return layerColor is not null ? layerColor.Alpha : 0;
     }
 
     private static LayoutPointInfo ToPoint(CGPoint point) => Point(point.X, point.Y);
@@ -485,7 +500,7 @@ public partial class PlatformVisualTreeWalker
             : "unknown-platform-clip";
         var effectiveAlpha = GetAppKitEffectiveAlpha(view);
         metrics.IsHitTestVisible = !view.Hidden && effectiveAlpha > 0.01;
-        metrics.IsOpaque = view.IsOpaque && effectiveAlpha >= 0.99;
+        metrics.IsOpaque = GetAppKitBackgroundAlpha(view) >= 0.99 && effectiveAlpha >= 0.99;
         if (view.GetType().Name is "WKWebView" or "MTKView" or "AVPlayerView")
             metrics.IsCoverageOpaque = true;
 
@@ -569,10 +584,21 @@ public partial class PlatformVisualTreeWalker
              current = current.Superview)
         {
             alpha *= current.AlphaValue;
-            if (alpha < 0.99)
+            if (alpha <= 0)
                 break;
         }
         return alpha;
+    }
+
+    /// <summary>
+    /// Alpha of the fill this view actually paints. <c>NSView.IsOpaque</c> is a drawing hint
+    /// rather than evidence of a painted fill, so occlusion is judged from the layer's background
+    /// colour to stay consistent with the Android and WinUI collectors.
+    /// </summary>
+    private static double GetAppKitBackgroundAlpha(NSView view)
+    {
+        var layerColor = view.Layer?.BackgroundColor;
+        return layerColor is not null ? layerColor.Alpha : 0;
     }
 #elif WINDOWS
     private void PopulateWinUILayoutMetrics(

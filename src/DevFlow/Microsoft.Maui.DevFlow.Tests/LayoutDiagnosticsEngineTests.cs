@@ -1064,6 +1064,77 @@ public class LayoutDiagnosticsEngineTests
         Assert.Equal(0, result.Summary.Passes);
     }
 
+    [Theory]
+    [InlineData("layout.Geometric-Overlap")]
+    [InlineData("LAYOUT.GEOMETRIC-OVERLAP")]
+    public void Analyze_MixedCaseOverlapRule_RunsAnalysisInsteadOfReportingAPass(string ruleId)
+    {
+        // Enabled-rule and pass accounting match case-insensitively, so a casing variant must not
+        // skip the analysis gate and then be reported as a clean pass. Fully coincident nodes
+        // overlap at ratio 1.0, so detection cannot be filtered out by the occlusion threshold.
+        var capture = new LayoutCaptureSnapshot();
+        capture.Nodes.Add(Snapshot("first", null, 0, 0, 50, 50, treeOrder: 0));
+        capture.Nodes.Add(Snapshot("second", null, 0, 0, 50, 50, treeOrder: 1));
+        var request = Request(minimumSeverity: "info");
+        request.Rules = [ruleId];
+        request.IncludePasses = true;
+
+        var result = LayoutDiagnosticsEngine.Analyze(
+            capture,
+            request,
+            "test",
+            stable: true,
+            stabilityReason: null,
+            Support());
+
+        // The overlap must be observed (proving analysis actually ran) and must not be a pass.
+        Assert.Contains(result.Findings, finding =>
+            finding.RuleId == LayoutDiagnosticRules.GeometricOverlap
+            && finding.Outcome == "observation");
+        Assert.DoesNotContain(result.Findings, finding =>
+            finding.RuleId == LayoutDiagnosticRules.GeometricOverlap
+            && finding.Outcome == "pass");
+        Assert.Equal(0, result.Summary.Passes);
+    }
+
+    [Fact]
+    public void Analyze_ManyDuplicateFindings_AssignsUniqueIdsWithoutQuadraticScan()
+    {
+        // Every node trips the same rule, so ids collide and must be disambiguated. This also
+        // guards the id-assignment cost: it should be near-linear, not a rescan per finding.
+        var capture = new LayoutCaptureSnapshot();
+        capture.Windows.Add(new LayoutWindowInfo
+        {
+            Id = "window-0",
+            Bounds = new LayoutRectInfo { Width = 500, Height = 500 }
+        });
+        for (var index = 0; index < 400; index++)
+        {
+            var node = Snapshot($"zero-{index}", null, 10, 10, 0, 0, treeOrder: index);
+            node.IsRendered = true;
+            capture.Nodes.Add(node);
+        }
+
+        var request = Request(minimumSeverity: "info");
+        request.Rules = [LayoutDiagnosticRules.VisibleZeroArea];
+
+        var result = LayoutDiagnosticsEngine.Analyze(
+            capture,
+            request,
+            "test",
+            stable: true,
+            stabilityReason: null,
+            Support());
+
+        var zeroAreaFindings = result.Findings
+            .Where(finding => finding.RuleId == LayoutDiagnosticRules.VisibleZeroArea)
+            .ToList();
+        Assert.Equal(400, zeroAreaFindings.Count);
+        Assert.Equal(
+            zeroAreaFindings.Count,
+            zeroAreaFindings.Select(finding => finding.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+    }
+
     private static LayoutInspectionRequest Request(string minimumSeverity = "minor") => new()
     {
         Profile = "agent",

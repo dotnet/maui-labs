@@ -193,6 +193,14 @@ public sealed class LayoutInspectionResult
 
     [JsonPropertyName("findings")]
     public List<LayoutFinding> Findings { get; set; } = [];
+
+    /// <summary>
+    /// Finding ids already handed out during this analysis. Kept out of the wire contract; it
+    /// exists so id assignment stays O(1) instead of rescanning every previous finding.
+    /// </summary>
+    [JsonIgnore]
+    internal HashSet<string> AssignedFindingIds { get; } =
+        new(StringComparer.OrdinalIgnoreCase);
 }
 
 public sealed class LayoutSnapshotInfo

@@ -400,6 +400,14 @@ public class AgentClient : IDisposable
         {
             throw;
         }
+        catch (NotSupportedByAgentException)
+        {
+            // A backend that does not implement layout diagnostics answers the shared 501
+            // not_supported envelope, which the transport turns into this exception before the
+            // status check above can run. Callers treat "unsupported" as null so the CLI and MCP
+            // surfaces can emit their own capability guidance.
+            return null;
+        }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;

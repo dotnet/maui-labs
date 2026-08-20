@@ -459,6 +459,12 @@ internal static class LayoutDiagnosticsEngine
         string? stabilityReason,
         IReadOnlyList<LayoutRuleSupportInfo> ruleSupport)
     {
+        // Requested rule IDs are matched case-insensitively when deciding what is enabled and when
+        // accounting passes, but some analysis gates compare against the constants directly (an
+        // ordinal match). Canonicalize once here so a casing variant cannot skip analysis and then
+        // be reported as a pass.
+        request = CanonicalizeRequestedRules(request);
+
         var result = new LayoutInspectionResult
         {
             Snapshot = new LayoutSnapshotInfo
@@ -879,6 +885,27 @@ internal static class LayoutDiagnosticsEngine
         return detectedRules;
     }
 
+    private static LayoutInspectionRequest CanonicalizeRequestedRules(
+        LayoutInspectionRequest request)
+    {
+        if (request.Rules is not { Count: > 0 })
+            return request;
+
+        // Unknown ids are deliberately left untouched so they keep flowing through the
+        // unsupported/not-applicable accounting exactly as before.
+        var canonical = new List<string>(request.Rules.Count);
+        foreach (var rule in request.Rules)
+        {
+            var match = Array.Find(
+                LayoutDiagnosticRules.All,
+                known => known.Equals(rule, StringComparison.OrdinalIgnoreCase));
+            canonical.Add(match ?? rule);
+        }
+
+        request.Rules = canonical;
+        return request;
+    }
+
     private static HashSet<string> AnalyzeOverlaps(
         LayoutInspectionResult result,
         LayoutInspectionRequest request,
@@ -888,7 +915,8 @@ internal static class LayoutDiagnosticsEngine
         var detectedRules = new HashSet<string>(
             StringComparer.OrdinalIgnoreCase);
         var explicitOverlapRequest = request.Rules?.Any(rule =>
-            rule is LayoutDiagnosticRules.GeometricOverlap or LayoutDiagnosticRules.VisualOccluded) == true;
+            rule.Equals(LayoutDiagnosticRules.GeometricOverlap, StringComparison.OrdinalIgnoreCase)
+            || rule.Equals(LayoutDiagnosticRules.VisualOccluded, StringComparison.OrdinalIgnoreCase)) == true;
         if (!IsExhaustive(request.Profile) && !explicitOverlapRequest)
             return detectedRules;
 
@@ -1123,7 +1151,7 @@ internal static class LayoutDiagnosticsEngine
     {
         finding.SuppressionKey = Fingerprint(finding);
         finding.Id = UniqueFingerprint(
-            result.Findings,
+            result.AssignedFindingIds,
             finding,
             finding.SuppressionKey);
         var suppression = request.Suppressions.FirstOrDefault(candidate =>
@@ -1145,18 +1173,16 @@ internal static class LayoutDiagnosticsEngine
         }
 
         result.Findings.Add(finding);
+        result.AssignedFindingIds.Add(finding.Id);
     }
 
     private static string UniqueFingerprint(
-        IReadOnlyCollection<LayoutFinding> existing,
+        HashSet<string> assignedIds,
         LayoutFinding finding,
         string fingerprint)
     {
-        if (!existing.Any(candidate =>
-            candidate.Id.Equals(fingerprint, StringComparison.OrdinalIgnoreCase)))
-        {
+        if (!assignedIds.Contains(fingerprint))
             return fingerprint;
-        }
 
         var runtimeIdentity = string.Join(
             "|",
@@ -1173,8 +1199,7 @@ internal static class LayoutDiagnosticsEngine
             .ToLowerInvariant();
         var candidate = $"{fingerprint}-{disambiguated}";
         var occurrence = 2;
-        while (existing.Any(item =>
-            item.Id.Equals(candidate, StringComparison.OrdinalIgnoreCase)))
+        while (assignedIds.Contains(candidate))
         {
             candidate = $"{fingerprint}-{disambiguated}-{occurrence++}";
         }
