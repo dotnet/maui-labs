@@ -26,6 +26,7 @@ using Microsoft.Maui.DevFlow.Driver;
 [assembly: TypeForwardedTo(typeof(ExtensionsMarker))]
 [assembly: TypeForwardedTo(typeof(ExtensionToolAnnotationsInfo))]
 [assembly: TypeForwardedTo(typeof(ExtensionToolInfo))]
+[assembly: TypeForwardedTo(typeof(GestureResult))]
 [assembly: TypeForwardedTo(typeof(InvokeResult))]
 [assembly: TypeForwardedTo(typeof(NetworkRequest))]
 [assembly: TypeForwardedTo(typeof(NotSupportedByAgentException))]

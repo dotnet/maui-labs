@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 using Microsoft.Maui.DevFlow.Driver;
@@ -312,6 +313,238 @@ public class UiActionTests : IntegrationTestBase
         Assert.True(
             response.IsSuccessStatusCode || response.StatusCode == HttpStatusCode.NotImplemented,
             $"Expected 200 or 501, got {(int)response.StatusCode}");
+    }
+
+    [Fact]
+    public async Task Gesture_UnknownType_IsRejected()
+    {
+        using var response = await PostRawAsync("/api/v1/ui/actions/gesture", new { type = "wiggle" });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("Supported types", body);
+    }
+
+    [Fact]
+    public async Task Capabilities_AdvertisesSupportedGestures()
+    {
+        var caps = await GetJsonAsync("/api/v1/agent/capabilities");
+        var gestures = caps.GetProperty("capabilities").GetProperty("ui.actions").GetProperty("gestures")
+            .EnumerateArray().Select(g => g.GetString()).ToArray();
+
+        Assert.Contains("pinch", gestures);
+        Assert.Contains("pan", gestures);
+        Assert.Contains("rotate", gestures);
+    }
+
+    // ========== gestures against GestureTestPage ==========
+    // These assert the status label changed, not just that the call returned 200 — the
+    // point is that the gesture genuinely reached the app's own recognizer.
+
+    private Task NavigateToGesturePageAsync() => NavigateToPageAsync("//gestures", "PinchTarget");
+
+    [Fact]
+    public async Task Pinch_FiresPinchGestureRecognizer()
+    {
+        await NavigateToGesturePageAsync();
+        var target = await FindElementAsync("PinchTarget");
+
+        var result = await Client.PinchAsync(target.Id, scale: 2.0);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("recognizer", result.HandledBy);
+
+        await SettleAsync();
+        var status = await FindElementAsync("PinchStatusLabel");
+        // The page accumulates e.Scale, so a 2x request lands at 2.00 however many steps it took.
+        Assert.Contains("scale=2.00", status.Text);
+    }
+
+    [Fact]
+    public async Task Pinch_ZoomOut_ReportsScaleBelowOne()
+    {
+        await NavigateToGesturePageAsync();
+        var target = await FindElementAsync("PinchTarget");
+
+        var result = await Client.PinchAsync(target.Id, scale: 0.5);
+
+        Assert.True(result.Success, result.Error);
+
+        await SettleAsync();
+        var status = await FindElementAsync("PinchStatusLabel");
+        Assert.Contains("scale=0.50", status.Text);
+    }
+
+    [Fact]
+    public async Task Pan_FiresPanGestureRecognizerWithCumulativeTotals()
+    {
+        await NavigateToGesturePageAsync();
+        var target = await FindElementAsync("PanTarget");
+
+        var result = await Client.PanAsync(target.Id, deltaX: 0, deltaY: -150);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("recognizer", result.HandledBy);
+
+        await SettleAsync();
+        var status = await FindElementAsync("PanStatusLabel");
+        Assert.Contains("dy=-150", status.Text);
+    }
+
+    [Theory]
+    [InlineData("up")]
+    [InlineData("down")]
+    [InlineData("left")]
+    [InlineData("right")]
+    public async Task Swipe_FiresSwipeGestureRecognizer(string direction)
+    {
+        await NavigateToGesturePageAsync();
+        var target = await FindElementAsync("SwipeTarget");
+
+        var result = await Client.GestureDetailedAsync("swipe", target.Id, direction);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("recognizer", result.HandledBy);
+
+        await SettleAsync();
+        var status = await FindElementAsync("SwipeStatusLabel");
+        Assert.Equal($"swipe: {direction}", status.Text);
+    }
+
+    [Fact]
+    public async Task DoubleTap_FiresTwoTapRecognizerNotTheSingleTapOne()
+    {
+        await NavigateToGesturePageAsync();
+        var target = await FindElementAsync("DoubleTapTarget");
+
+        var result = await Client.GestureDetailedAsync("doubletap", target.Id);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("recognizer", result.HandledBy);
+
+        await SettleAsync();
+        var status = await FindElementAsync("TapStatusLabel");
+        Assert.Equal("tap: double", status.Text);
+    }
+
+    [Fact]
+    public async Task Tap_Gesture_UsesGestureEnvelopeAndReachesTheApp()
+    {
+        await NavigateToPageAsync("//interactions", "TestButton");
+        var target = await FindElementAsync("TestButton");
+
+        var result = await Client.GestureDetailedAsync(
+            "tap",
+            target.Id,
+            captureEpoch: target.CaptureEpoch,
+            registryGeneration: target.RegistryGeneration);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("tap", result.Type);
+        Assert.Equal("action", result.HandledBy);
+
+        await SettleAsync();
+        var status = await FindElementAsync("StatusLabel");
+        Assert.Contains("button", status.Text!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Tap_Gesture_WithoutTarget_IsRejectedConsistently()
+    {
+        using var response = await PostRawAsync("/api/v1/ui/actions/gesture", new { type = "tap" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("tap requires elementId", body);
+    }
+
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
+    [Fact]
+    public async Task LongPress_OnAndroid_HoldsTheNativeTouchForAtLeastThePlatformThreshold()
+    {
+        if (!Platform.Equals("android", StringComparison.OrdinalIgnoreCase))
+        {
+            Output.WriteLine("Native long-press timing is Android-specific.");
+            return;
+        }
+
+        await NavigateToGesturePageAsync();
+        var target = await FindElementAsync("LongPressTarget");
+
+        var result = await Client.GestureDetailedAsync("longpress", target.Id);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("native", result.HandledBy);
+
+        await SettleAsync();
+        var status = await FindElementAsync("LongPressStatusLabel");
+        var elapsedText = status.Text?["longpress: ".Length..].TrimEnd('m', 's');
+        Assert.True(
+            double.TryParse(elapsedText, NumberStyles.Number, CultureInfo.InvariantCulture, out var elapsedMs)
+                && elapsedMs >= 500,
+            $"Expected a native long press of at least 500ms, got '{status.Text}'.");
+    }
+
+    [Fact]
+    public async Task Pinch_OnElementWithoutRecognizer_ReportsWhichTierRan()
+    {
+        await NavigateToGesturePageAsync();
+        var target = await FindElementAsync("NativeScrollTarget");
+
+        var result = await Client.PinchAsync(target.Id, scale: 2.0);
+        Output.WriteLine($"pinch on NativeScrollTarget: handledBy={result.HandledBy} detail={result.Detail} error={result.Error}");
+
+        // A plain ScrollView has no PinchGestureRecognizer, so this must never claim
+        // the app's own recognizer handled it — either native injection ran, or nothing did.
+        Assert.NotEqual("recognizer", result.HandledBy);
+
+        if (result.Success)
+        {
+            Assert.Equal("native", result.HandledBy);
+        }
+        else
+        {
+            Assert.False(string.IsNullOrWhiteSpace(result.Error), "A failed gesture must explain why.");
+        }
+    }
+
+    [Fact]
+    public async Task Pan_OnElementWithoutRecognizer_FallsThroughToNative()
+    {
+        await NavigateToGesturePageAsync();
+        var target = await FindElementAsync("NativeScrollTarget");
+        var beforeText = await Client.GetPropertyAsync(target.Id, "ScrollY");
+        Assert.True(
+            double.TryParse(beforeText, NumberStyles.Number, CultureInfo.InvariantCulture, out var before),
+            $"Could not read the initial ScrollY value: '{beforeText}'.");
+
+        var result = await Client.PanAsync(
+            target.Id,
+            deltaX: 0,
+            deltaY: -120,
+            captureEpoch: target.CaptureEpoch,
+            registryGeneration: target.RegistryGeneration);
+        Output.WriteLine($"pan on NativeScrollTarget: handledBy={result.HandledBy} detail={result.Detail} error={result.Error}");
+
+        Assert.NotEqual("recognizer", result.HandledBy);
+
+        if (result.Success)
+        {
+            Assert.Equal("native", result.HandledBy);
+
+            await SettleAsync();
+            var afterText = await Client.GetPropertyAsync(target.Id, "ScrollY");
+            Assert.True(
+                double.TryParse(afterText, NumberStyles.Number, CultureInfo.InvariantCulture, out var after),
+                $"Could not read ScrollY after the native pan: '{afterText}'.");
+            Assert.True(after > before, $"Expected native pan to increase ScrollY; before={before}, after={after}.");
+
+            if (Platform == "android")
+                Assert.Contains("MotionEvent", result.Detail);
+        }
+        else
+        {
+            Assert.False(string.IsNullOrWhiteSpace(result.Error), "A failed gesture must explain why.");
+        }
     }
 
     [Fact]

@@ -58,6 +58,22 @@
               "type": "string"
             },
             "description": "List of supported features within this capability namespace."
+          },
+          "gestures": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "tap",
+                "doubletap",
+                "longpress",
+                "swipe",
+                "pan",
+                "pinch",
+                "rotate"
+              ]
+            },
+            "description": "Named gestures accepted by ui.actions/gesture when the backend exposes gesture automation."
           }
         },
         "additionalProperties": true,
@@ -103,6 +119,15 @@
               "capture-bound-batch",
               "properties",
               "stale-capture-rejection"
+            ],
+            "gestures": [
+              "tap",
+              "doubletap",
+              "longpress",
+              "swipe",
+              "pan",
+              "pinch",
+              "rotate"
             ]
           },
           "ui.screenshot": {

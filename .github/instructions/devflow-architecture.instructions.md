@@ -159,6 +159,42 @@ Override virtual methods from `Agent.Abstractions/DevFlowAgentService.cs`:
 - `ElementInfo` captures: Id, Type, AutomationId, Text, IsVisible, IsEnabled, Bounds, WindowBounds
 - CSS selectors (Fizzler) work in Blazor WebViews via CDP
 
+## Gesture Injection
+
+`POST /api/v1/ui/actions/gesture` supports `tap`, `doubletap`, `longpress`, `swipe`, `pan`,
+`pinch` and `rotate`. Resolution is two-tier, and the response reports which tier ran via
+`handledBy` (`recognizer` | `native` | `action` | `scroll` | `none`) plus a `detail` string:
+
+1. **Managed recognizer** (`Agent.Core`, all platforms) — walks the target element and its
+   ancestors for a matching MAUI gesture recognizer and drives it through MAUI's public
+   controller interfaces: `IPinchGestureController`, `IPanGestureController`,
+   `ISwipeGestureController`. Only `TapGestureRecognizer.SendTapped` needs reflection
+   (`TryInvokeTapped`), because it is `internal`. Continuous gestures are emitted as N
+   interpolated steps — `SendPinch` in particular takes a *delta* scale per event.
+2. **Native injection** (`Agent/PlatformAgentService.Gestures.cs`) — the fallback when no
+   recognizer exists, which is the case for Map, WebView and other controls that handle
+   gestures internally. Override the `TryNative{Pinch,Rotate,Pan,Swipe,LongPress,DoubleTap}`
+   virtuals; return a description string when handled, `null` when not.
+   - **Android** — real multi-pointer `MotionEvent`s dispatched via `Activity.DispatchTouchEvent`,
+     so the full hit-test and `GestureDetector` pipeline runs. Fully faithful.
+   - **iOS / Mac Catalyst** — MKMapView camera distance → UIScrollView zoom/offset → driving
+     the attached `UIGestureRecognizer` via `setState:`. In-process synthetic `UITouch` needs
+     private API and is not attempted, so the recognizer path is best-effort.
+   - **Windows** — `ScrollViewer.ChangeView`. Input injection needs the restricted
+     `inputInjectionBrokered` capability and is unusable from a normal app package.
+   - **macOS AppKit** — `NSScrollView` magnification and content offset.
+   - **GTK** — tier 1 only.
+
+Gesture directions describe finger travel, not content travel. An `up` swipe moves the pointer
+upward; a scroll fallback inverts that vector so scrollable content moves downward consistently
+with native touch injection. Named gestures target MAUI `VisualElement` IDs (or the current page
+for non-tap gestures; tap requires an element ID);
+registered native-only element IDs remain supported by the dedicated tap action, but are not
+targets for multi-pointer gesture synthesis.
+
+Gestures against `samples/DevFlow.Sample` → `GestureTestPage` (`//gestures`) write what they
+received to `AutomationId`'d status labels, so tests assert the gesture actually reached the app.
+
 ## Screenshot Capture Flow
 
 1. **Default** (no params): captures `window.Page` via `VisualDiagnostics.CaptureAsPngAsync` — page content only

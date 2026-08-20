@@ -358,7 +358,7 @@ public class NativeDevFlowAgentService : DevFlowAgentService
                 if (view == null) return $"Element '{body.ElementId}' not found";
             }
 
-            return NativeUi.TryGesture(view, body.Type, body.Direction, body.Distance, body.DurationMs, out var failure)
+            return NativeUi.TryGesture(view, body.Type, body.Direction, body.Distance, body.DurationMs ?? 200, out var failure)
                 ? "ok"
                 : failure ?? $"Gesture '{body.Type}' is not handled by this element";
         });

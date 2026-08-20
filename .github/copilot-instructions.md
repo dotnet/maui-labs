@@ -6,7 +6,8 @@ These instructions guide GitHub Copilot and other AI code generation tools when 
 
 DevFlow targets multiple platforms via multi-targeting. The pattern:
 
-- **`Microsoft.Maui.DevFlow.Agent.Core`** targets `net10.0` — all platform-agnostic code lives here.
+- **`Microsoft.Maui.DevFlow.Agent.Abstractions`** targets `net10.0` — all platform-agnostic code lives here (HTTP server, routing, `DevFlowAgentService` base class). No MAUI dependency.
+- **`Microsoft.Maui.DevFlow.Agent.Core`** targets `net10.0` — MAUI UI backend (`MauiDevFlowAgentService`, `VisualTreeWalker`). Depends on `Agent.Abstractions`.
 - **`Microsoft.Maui.DevFlow.Agent`** targets `net10.0-android`, `net10.0-ios`, `net10.0-maccatalyst`, `net10.0-macos`, `net10.0-windows10.0.19041.0` — platform-specific overrides.
 - **`Microsoft.Maui.DevFlow.Agent.Gtk`** targets `net10.0` — Linux/GTK-specific code.
 
@@ -27,17 +28,18 @@ Use `#if` directives for platform code in multi-targeting projects:
 
 **Important**: Both `.ios.cs` and `.maccatalyst.cs` files compile for Mac Catalyst. Use `#if IOS || MACCATALYST` when code applies to both.
 
-## Agent Architecture (Core/Platform Pattern)
+## Agent Architecture (Abstractions/Core/Platform Pattern)
 
 When adding new features to the DevFlow agent:
 
-1. **Add the virtual method in `Agent.Core/DevFlowAgentService.cs`** — this is the platform-agnostic base
-2. **Override in `Agent/DevFlowAgentService.cs`** with `#if` directives for platform-specific behavior
-3. **Override in `Agent.Gtk/GtkAgentService.cs`** for Linux/GTK if needed
+1. **Add the virtual method in `Agent.Abstractions/DevFlowAgentService.cs`** — this is the platform-agnostic base
+2. **Override in `Agent.Core/MauiDevFlowAgentService.cs`** for MAUI-specific behavior
+3. **Override in `Agent/DevFlowAgentService.cs`** with `#if` directives for platform-specific behavior
+4. **Override in `Agent.Gtk/GtkAgentService.cs`** for Linux/GTK if needed
 
 Example:
 ```csharp
-// In Agent.Core/DevFlowAgentService.cs
+// In Agent.Abstractions/DevFlowAgentService.cs
 protected virtual Task<byte[]?> CaptureFullScreenAsync() => Task.FromResult<byte[]?>(null);
 
 // In Agent/DevFlowAgentService.cs
@@ -82,9 +84,9 @@ public sealed class MyNewTool
 
 ## HTTP Endpoint Conventions
 
-Agent HTTP endpoints are defined in `DevFlowAgentService.cs` (in Agent.Core). When adding new endpoints:
+Agent HTTP endpoints are defined in `DevFlowAgentService.cs` (in Agent.Abstractions). When adding new endpoints:
 
-1. Register the route in the `ConfigureRoutes()` method: `_server.MapGet("/api/myendpoint", HandleMyEndpoint);`
+1. Register the route in the `RegisterRoutes()` method: `_server.MapGet("/api/myendpoint", HandleMyEndpoint);`
 2. Implement the handler as `protected virtual async Task<HttpResponse> HandleMyEndpoint(HttpRequest request)`
 3. For POST endpoints that accept JSON bodies, define a DTO class at the bottom of the file
 4. **Add a corresponding method in `AgentClient`** (in `Microsoft.Maui.DevFlow.Client`) — this is the public API

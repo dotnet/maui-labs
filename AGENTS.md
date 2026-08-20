@@ -96,19 +96,25 @@ maui-labs/
 │   │   ├── Microsoft.Maui.Cli.UnitTests/ # CLI unit tests
 │   │   └── Cli.slnf                      # Solution filter
 │   ├── DevFlow/                          # DevFlow agent product
-│   │   ├── Microsoft.Maui.DevFlow.Agent.Core/   # Platform-agnostic agent (HTTP server, visual tree)
-│   │   ├── Microsoft.Maui.DevFlow.Agent/         # Platform-specific overrides (iOS/Android/macOS/Windows)
-│   │   ├── Microsoft.Maui.DevFlow.Agent.Gtk/     # GTK/Linux agent
-│   │   ├── Microsoft.Maui.DevFlow.Agent.WPF/     # WPF agent
-│   │   ├── Microsoft.Maui.DevFlow.Analyzers/     # Roslyn analyzers
-│   │   ├── Microsoft.Maui.DevFlow.Blazor/        # Blazor WebView CDP bridge
-│   │   ├── Microsoft.Maui.DevFlow.Blazor.Gtk/    # WebKitGTK CDP bridge
-│   │   ├── Microsoft.Maui.DevFlow.Client/        # Portable protocol client (AgentClient, DTOs) — netstandard2.0
-│   │   ├── Microsoft.Maui.DevFlow.Client.Tests/  # xUnit tests (net472 + modern .NET)
-│   │   ├── Microsoft.Maui.DevFlow.Driver/        # Platform drivers (process management, UI Automation)
-│   │   ├── Microsoft.Maui.DevFlow.Logging/       # JSONL file logger
-│   │   ├── Microsoft.Maui.DevFlow.Tests/         # xUnit tests
-│   │   └── DevFlow.slnf                          # Solution filter
+│   │   ├── Microsoft.Maui.DevFlow.Agent.Abstractions/  # Platform-agnostic base (HTTP server, routing, DevFlowAgentService)
+│   │   ├── Microsoft.Maui.DevFlow.Agent.Core/          # MAUI UI backend (MauiDevFlowAgentService, VisualTreeWalker)
+│   │   ├── Microsoft.Maui.DevFlow.Agent/               # Platform-specific overrides (iOS/Android/macOS/Windows)
+│   │   ├── Microsoft.Maui.DevFlow.Agent.Gtk/           # GTK/Linux agent
+│   │   ├── Microsoft.Maui.DevFlow.Agent.WPF/           # WPF agent
+│   │   ├── Microsoft.Maui.DevFlow.Agent.Native/        # Plain .NET agent (no MAUI — Android/iOS/macOS)
+│   │   ├── Microsoft.Maui.DevFlow.Agent.Native.Essentials/  # Optional add-on with Essentials support
+│   │   ├── Microsoft.Maui.DevFlow.Analyzers/           # Roslyn analyzers
+│   │   ├── Microsoft.Maui.DevFlow.Blazor/              # Blazor WebView CDP bridge
+│   │   ├── Microsoft.Maui.DevFlow.Blazor.Gtk/          # WebKitGTK CDP bridge
+│   │   ├── Microsoft.Maui.DevFlow.Client/              # Portable protocol client (AgentClient, DTOs) — netstandard2.0
+│   │   ├── Microsoft.Maui.DevFlow.Client.Tests/        # Client tests (net472 + modern .NET)
+│   │   ├── Microsoft.Maui.DevFlow.Driver/              # Platform drivers (process management, UI Automation)
+│   │   ├── Microsoft.Maui.DevFlow.Logging/             # JSONL file logger
+│   │   ├── Microsoft.Maui.DevFlow.Tests/               # xUnit tests
+│   │   ├── Microsoft.Maui.DevFlow.Agent.IntegrationTests/  # Integration tests
+│   │   ├── Microsoft.Maui.DevFlow.Inspector.Tests/     # Inspector tests
+│   │   ├── Shared.Essentials/                          # Shared Essentials code (compiled into Agent.Core and Agent.Native.Essentials)
+│   │   └── DevFlow.slnf                               # Solution filter
 │   ├── AI/                               # Essentials.AI product
 │   │   └── Microsoft.Maui.Essentials.AI/ # On-device AI package
 │   ├── AIExtensions/                     # AI Extensions product
@@ -251,7 +257,7 @@ DevFlow exposes 67 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_fill` | Fill text into Entry/Editor |
 | `maui_focus` | Set focus to an element |
 | `maui_geolocation` | GPS coordinates |
-| `maui_gesture` | Perform a touch gesture on the app |
+| `maui_gesture` | Pinch/zoom, rotate, pan, swipe, double-tap, long-press |
 | `maui_get_property` | Read any element property |
 | `maui_get_theme` | Get the current app-scoped light/dark theme |
 | `maui_hittest` | Find elements at screen coordinates |

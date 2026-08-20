@@ -403,8 +403,13 @@ public sealed class MockAgentServer : IAsyncDisposable
             return Results.Content(MockAgentResponses.ActionSuccess, "application/json");
         });
 
-        foreach (var action in new[] { "clear", "focus", "navigate", "scroll", "resize", "back", "gesture", "batch" })
+        foreach (var action in new[] { "clear", "focus", "navigate", "scroll", "resize", "back", "batch" })
             app.MapPost($"/api/v1/ui/actions/{action}", () => Results.Content(MockAgentResponses.ActionSuccess, "application/json"));
+
+        // Gestures return a richer body than the shared ActionSuccess: callers need to know
+        // which tier serviced them.
+        app.MapPost("/api/v1/ui/actions/gesture", () =>
+            Results.Content(MockAgentResponses.GestureSuccess, "application/json"));
     }
 
     private static void RegisterDeviceEndpoints(WebApplication app)

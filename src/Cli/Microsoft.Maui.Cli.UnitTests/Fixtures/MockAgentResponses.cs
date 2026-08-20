@@ -57,7 +57,11 @@ internal static class MockAgentResponses
           },
           "capabilities": {
             "ui.tree": { "version": 1, "features": ["tree", "query"] },
-            "ui.actions": { "version": 2, "features": ["tap", "fill", "batch", "stale-capture-rejection"] },
+            "ui.actions": {
+              "version": 2,
+              "features": ["tap", "fill", "gesture", "batch", "stale-capture-rejection"],
+              "gestures": ["tap", "doubletap", "longpress", "swipe", "pan", "pinch", "rotate"]
+            },
             "webview": { "version": 1, "features": ["contexts", "evaluate", "source"] },
             "network": { "version": 1, "features": ["list", "detail", "clear"] },
             "logs": { "version": 1, "features": ["list", "stream"] },
@@ -322,6 +326,9 @@ internal static class MockAgentResponses
         """;
 
     public const string ActionSuccess = """{"success":true,"message":"ok"}""";
+
+    public const string GestureSuccess =
+        """{"success":true,"type":"pinch","elementId":"el-1","handledBy":"recognizer","platform":"iOS","detail":"PinchGestureRecognizer on Grid","error":null}""";
 
     public const string DeviceInfo = """
         {

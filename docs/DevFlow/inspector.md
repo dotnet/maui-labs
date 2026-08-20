@@ -137,7 +137,7 @@ The DevFlow agent exposes these UI endpoints. The inspector uses them as follows
 |----------|--------|---------|---------------|
 | `/api/v1/ui/actions/tap` | POST | Tap element by ID or coordinates | Click handler |
 | `/api/v1/ui/actions/scroll` | POST | Scroll by delta or to index | Wheel event handler |
-| `/api/v1/ui/actions/gesture` | POST | Touch gesture (swipe, drag, pinch) | Pointer drag handler |
+| `/api/v1/ui/actions/gesture` | POST | Named gesture (pinch, rotate, pan, swipe, double-tap, long-press, tap) | Gesture inspector control |
 | `/api/v1/ui/actions/back` | POST | Navigate back | Toolbar back button |
 | `/api/v1/ui/actions/fill` | POST | Fill text into Entry/Editor | Text input (V1.1) |
 | `/api/v1/ui/actions/clear` | POST | Clear text from element | Text input (V1.1) |
