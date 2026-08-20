@@ -282,6 +282,24 @@ public class AndroidProvider : IAndroidProvider
 			EmulatorProcessHelper.KillProcessIds(childPids);
 	}
 
+	public Task<IReadOnlyList<AndroidPortMapping>> ListForwardPortsAsync(string deviceSerial, CancellationToken cancellationToken = default) =>
+		_adb.ListForwardPortsAsync(deviceSerial, cancellationToken);
+
+	public Task<IReadOnlyList<AndroidPortMapping>> ListReversePortsAsync(string deviceSerial, CancellationToken cancellationToken = default) =>
+		_adb.ListReversePortsAsync(deviceSerial, cancellationToken);
+
+	public Task AddForwardPortAsync(string deviceSerial, int hostPort, int devicePort, CancellationToken cancellationToken = default) =>
+		_adb.AddForwardPortAsync(deviceSerial, hostPort, devicePort, cancellationToken);
+
+	public Task AddReversePortAsync(string deviceSerial, int devicePort, int hostPort, CancellationToken cancellationToken = default) =>
+		_adb.AddReversePortAsync(deviceSerial, devicePort, hostPort, cancellationToken);
+
+	public Task ClearForwardPortsAsync(string deviceSerial, CancellationToken cancellationToken = default) =>
+		_adb.ClearForwardPortsAsync(deviceSerial, cancellationToken);
+
+	public Task ClearReversePortsAsync(string deviceSerial, CancellationToken cancellationToken = default) =>
+		_adb.ClearReversePortsAsync(deviceSerial, cancellationToken);
+
 	public async Task<List<SdkPackage>> GetInstalledPackagesAsync(CancellationToken cancellationToken = default)
 	{
 		return await _sdkManager.GetInstalledPackagesAsync(cancellationToken);

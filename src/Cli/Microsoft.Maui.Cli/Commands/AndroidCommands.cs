@@ -39,6 +39,7 @@ public static partial class AndroidCommands
 		command.Add(CreateJdkCommand());
 		command.Add(CreateSdkCommand());
 		command.Add(CreateEmulatorCommand());
+		command.Add(CreatePortCommand());
 
 		return command;
 	}
