@@ -23,19 +23,32 @@ public sealed class XamlSourceMap
 
     public XamlSourceMap(
         string file,
-        IReadOnlyDictionary<string, XamlSourceEntry> paths)
+        IReadOnlyDictionary<string, XamlSourceEntry> paths,
+        string? contentHash = null)
     {
         File = file;
         _paths = paths;
+        ContentHash = contentHash;
     }
 
     public string File { get; }
+
+    /// <summary>
+    /// Short hash of the .xaml content at build time. A click-to-source consumer hashes the
+    /// current file and, on mismatch, reports the source as stale instead of navigating to a line
+    /// that may have moved. Also gates <c>XamlSourcePropertyEditor</c> write-back.
+    /// </summary>
+    public string? ContentHash { get; }
+
     public int Count => _paths.Count;
 
     public bool TryGet(string childPath, out XamlSourceEntry entry)
         => _paths.TryGetValue(childPath, out entry);
 
     public static XamlSourceMap? Parse(string xaml, string file)
+        => Parse(xaml, file, contentHash: null);
+
+    public static XamlSourceMap? Parse(string xaml, string file, string? contentHash)
     {
         if (string.IsNullOrWhiteSpace(xaml))
             return null;
@@ -55,8 +68,19 @@ public sealed class XamlSourceMap
 
         var map = new Dictionary<string, XamlSourceEntry>(StringComparer.Ordinal);
         Visit(root, string.Empty, map, root.Attribute("AutomationId")?.Value);
-        return new XamlSourceMap(file, map);
+        return new XamlSourceMap(file, map, contentHash ?? ComputeContentHash(xaml));
     }
+
+    /// <summary>
+    /// Build-time content hash of the .xaml text. Must stay byte-identical to
+    /// <c>XamlSourcePropertyEditor.ComputeSourceHash</c> (first 8 bytes of SHA-256 over the UTF-8
+    /// text, lowercase hex) — the inspector compares them to decide whether source is stale.
+    /// </summary>
+    internal static string ComputeContentHash(string xaml)
+        => Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(xaml)),
+            0,
+            8).ToLowerInvariant();
 
     private static void Visit(
         XElement element,

@@ -59,8 +59,31 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         _nativeElementRegistry = nativeElementRegistry;
         _nativeElementSubscription = nativeElementSubscription;
         _treeWalker = CreateTreeWalker();
+        // Attach the process-wide XAML source-map registry (populated by the build-time generator's
+        // module initializers). No-op when nothing is registered — GetMap returns null.
         _treeWalker.SourceMapProvider = SourceMapping.XamlSourceMapRegistry.Instance;
+        // Essentials is a reference assembly only on some TFMs (macOS AppKit); fall back to the
+        // hosting window's metrics so display info still resolves there.
+        _essentials.DisplayInfoFallback = BuildWindowDisplayInfoAsync;
     }
+
+    private Task<HttpResponse> BuildWindowDisplayInfoAsync(HttpRequest request)
+        => DispatchAsync(() =>
+        {
+            var window = GetWindow(ParseWindowIndex(request));
+            var width = window?.Width ?? 0;
+            var height = window?.Height ?? 0;
+            return HttpResponse.Json(new
+            {
+                width,
+                height,
+                density = GetWindowDisplayDensity(window),
+                orientation = width >= height ? "Landscape" : "Portrait",
+                rotation = "Rotation0",
+                refreshRate = 0d,
+                source = "window",
+            });
+        })!;
 
     // ── Framework identity ────────────────────────────────────────────────
 
@@ -112,7 +135,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         {
             version = 2,
             supported = true,
-            features = new[] { "tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "capture-bound-batch", "properties", "stale-capture-rejection" },
+            features = new[] { "tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "capture-bound-batch", "properties", "property-descriptors", "stale-capture-rejection" },
             gestures = SupportedGestures,
             reason = (string?)null
         };
@@ -268,7 +291,6 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     /// Manages sensor subscriptions and broadcasts readings to WebSocket clients.
     /// </summary>
     private readonly EssentialsAgentSupport _essentials = new();
-
     public SensorManager Sensors => _essentials.Sensors;
 
     private const int UiHookScanIntervalMs = 3000;
@@ -1008,9 +1030,9 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     /// </summary>
     private readonly object _sourceMapCacheGate = new();
     private (long Registry, long Mutation, long External) _sourceMapCacheKey = (-1, -1, -1);
-    private Dictionary<string, (string File, int Line, int Column)>? _sourceMapCache;
+    private Dictionary<string, (string File, int Line, int Column, string? Hash)>? _sourceMapCache;
 
-    private Dictionary<string, (string File, int Line, int Column)> GetCachedSourceMap(
+    private Dictionary<string, (string File, int Line, int Column, string? Hash)> GetCachedSourceMap(
         UiCaptureContext capture)
     {
         var key = (capture.RegistryGeneration, capture.MutationGeneration, capture.ExternalMutationGeneration);
@@ -2280,34 +2302,149 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 reason: "native-property-not-supported");
         }
 
-        var value = await DispatchAsync(() =>
-        {
-            var el = _treeWalker.GetElementById(id, _app);
-            if (el == null) return (object?)null;
-            if (el is Entry { IsPassword: true }
-                && propName.Equals(nameof(Entry.Text), StringComparison.OrdinalIgnoreCase))
-            {
-                return SensitiveValueRedactor.RedactedValue;
-            }
-
-            // Support dot-path notation (e.g., "Shadow.Radius")
-            var parts = propName.Split('.');
-            object? current = el;
-            PropertyInfo? prop = null;
-            foreach (var part in parts)
-            {
-                if (current == null) return null;
-                var type = current.GetType();
-                prop = type.GetProperty(part, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
-                if (prop == null) return null;
-                current = prop.GetValue(current);
-            }
-            return FormatMauiPropertyValue(current);
-        });
+        var value = await DispatchAsync(() => ReadFormattedPropertyValue(id, propName));
 
         return value != null
             ? HttpResponse.Json(new { id, property = propName, value })
             : HttpResponse.NotFound($"Property '{propName}' not found on element '{id}'");
+    }
+
+    /// <inheritdoc />
+    protected override async Task<HttpResponse> HandlePropertyDescriptors(HttpRequest request)
+    {
+        if (_app == null) return HttpResponse.Error("Agent not bound to app");
+        if (!request.RouteParams.TryGetValue("id", out var id))
+            return HttpResponse.Error("Element ID required");
+
+        var result = await DispatchAsync(() =>
+        {
+            var element = _treeWalker.GetElementById(id, _app);
+            if (element is null) return null;
+
+            var descriptors = new List<object>();
+            foreach (var name in GetInspectablePropertyNames(element))
+            {
+                var property = element.GetType().GetProperty(
+                    name,
+                    BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+                if (property is null || property.GetIndexParameters().Length != 0)
+                    continue;
+
+                object? rawValue;
+                try { rawValue = property.GetValue(element); }
+                catch { continue; }
+
+                var propertyType = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
+                var kind = GetPropertyEditorKind(propertyType);
+                if (kind is null) continue;
+
+                var isSensitive = element is Entry { IsPassword: true }
+                    && property.Name.Equals(nameof(Entry.Text), StringComparison.OrdinalIgnoreCase);
+                var constraints = GetPropertyConstraints(property.Name);
+                descriptors.Add(new
+                {
+                    name = property.Name,
+                    kind,
+                    value = isSensitive
+                        ? SensitiveValueRedactor.RedactedValue
+                        : FormatMauiPropertyValue(rawValue),
+                    writable = property.SetMethod?.IsPublic == true,
+                    choices = propertyType.IsEnum ? Enum.GetNames(propertyType) : null,
+                    min = constraints.Min,
+                    max = constraints.Max,
+                    step = constraints.Step
+                });
+            }
+
+            return new { id, type = element.GetType().Name, properties = descriptors };
+        });
+
+        return result is not null
+            ? HttpResponse.Json(result)
+            : HttpResponse.NotFound($"Element '{id}' not found");
+    }
+
+    private static IEnumerable<string> GetInspectablePropertyNames(object element)
+    {
+        var names = new List<string>();
+        void Add(params string[] properties)
+        {
+            foreach (var property in properties)
+            {
+                if (!names.Contains(property, StringComparer.OrdinalIgnoreCase))
+                    names.Add(property);
+            }
+        }
+
+        if (element is Label)
+            Add("Text", "TextColor", "FontSize", "FontAttributes", "HorizontalTextAlignment", "LineBreakMode");
+        if (element is Button)
+            Add("Text", "TextColor", "FontSize");
+        if (element is Entry or Editor)
+            Add("Text", "Placeholder", "TextColor");
+        if (element is SearchBar)
+            Add("Text", "Placeholder");
+        if (element is CheckBox)
+            Add("IsChecked", "Color");
+        if (element is Switch)
+            Add("IsToggled", "OnColor");
+        if (string.Equals(element.GetType().Name, "Frame", StringComparison.Ordinal))
+            Add("BorderColor", "CornerRadius", "HasShadow");
+        if (element is StackLayout or VerticalStackLayout or HorizontalStackLayout)
+            Add("Spacing");
+        if (element is VisualElement)
+            Add("IsVisible", "IsEnabled", "Opacity", "BackgroundColor");
+        return names;
+    }
+
+    private static string? GetPropertyEditorKind(Type propertyType)
+    {
+        if (propertyType == typeof(bool)) return "bool";
+        if (propertyType.IsEnum) return "enum";
+        if (propertyType == typeof(string)) return "text";
+        if (propertyType == typeof(Microsoft.Maui.Graphics.Color)) return "color";
+        if (propertyType == typeof(byte) || propertyType == typeof(sbyte) ||
+            propertyType == typeof(short) || propertyType == typeof(ushort) ||
+            propertyType == typeof(int) || propertyType == typeof(uint) ||
+            propertyType == typeof(long) || propertyType == typeof(ulong) ||
+            propertyType == typeof(float) || propertyType == typeof(double) ||
+            propertyType == typeof(decimal))
+            return "number";
+        return null;
+    }
+
+    private static (double? Min, double? Max, double? Step) GetPropertyConstraints(string propertyName)
+        => propertyName switch
+        {
+            "Opacity" => (0, 1, 0.05),
+            "FontSize" => (0.1, null, null),
+            _ => (null, null, null)
+        };
+
+    private string? ReadFormattedPropertyValue(string id, string propertyName)
+    {
+        if (_app is null) return null;
+        var element = _treeWalker.GetElementById(id, _app);
+        if (element is null) return null;
+
+        if (element is Entry { IsPassword: true }
+            && propertyName.Equals(nameof(Entry.Text), StringComparison.OrdinalIgnoreCase))
+        {
+            return SensitiveValueRedactor.RedactedValue;
+        }
+
+        // Support dot-path notation (e.g., "Shadow.Radius")
+        object? current = element;
+        foreach (var part in propertyName.Split('.'))
+        {
+            if (current is null) return null;
+            var property = current.GetType().GetProperty(
+                part,
+                BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            if (property is null) return null;
+            current = property.GetValue(current);
+        }
+        return FormatMauiPropertyValue(current);
     }
 
     private static string? FormatMauiPropertyValue(object? value)
@@ -2434,6 +2571,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 id,
                 elementId => _treeWalker.GetElementById(elementId, _app));
             if (el == null) return "Element not found";
+            CaptureMutationTarget(request, el);
 
             var type = el.GetType();
             var prop = type.GetProperty(propName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.IgnoreCase);
@@ -2489,14 +2627,18 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
 
     private static object? ConvertPropertyValue(Type targetType, string value)
     {
+        // Property values arrive as invariant strings (e.g. "0.5" from the inspector's number
+        // inputs); parse them invariantly so a non-en culture doesn't read "0.5" as 5.
+        static double D(string s) => double.Parse(s, System.Globalization.CultureInfo.InvariantCulture);
+
         // Handle nullable types
         var underlying = Nullable.GetUnderlyingType(targetType) ?? targetType;
 
         if (underlying == typeof(string)) return value;
         if (underlying == typeof(bool)) return bool.Parse(value);
-        if (underlying == typeof(int)) return int.Parse(value);
-        if (underlying == typeof(double)) return double.Parse(value);
-        if (underlying == typeof(float)) return float.Parse(value);
+        if (underlying == typeof(int)) return int.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+        if (underlying == typeof(double)) return D(value);
+        if (underlying == typeof(float)) return float.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
 
         // MAUI Color - supports named colors and hex
         if (underlying == typeof(Microsoft.Maui.Graphics.Color))
@@ -2530,10 +2672,10 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             var parts = value.Split(',');
             return parts.Length switch
             {
-                1 => new Microsoft.Maui.Thickness(double.Parse(parts[0])),
-                2 => new Microsoft.Maui.Thickness(double.Parse(parts[0]), double.Parse(parts[1])),
-                4 => new Microsoft.Maui.Thickness(double.Parse(parts[0]), double.Parse(parts[1]),
-                    double.Parse(parts[2]), double.Parse(parts[3])),
+                1 => new Microsoft.Maui.Thickness(D(parts[0])),
+                2 => new Microsoft.Maui.Thickness(D(parts[0]), D(parts[1])),
+                4 => new Microsoft.Maui.Thickness(D(parts[0]), D(parts[1]),
+                    D(parts[2]), D(parts[3])),
                 _ => throw new ArgumentException($"Invalid Thickness format: {value}")
             };
         }
@@ -2608,6 +2750,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 body.ElementId,
                 elementId => _treeWalker.GetElementById(elementId, _app));
             if (el == null) return "Element not found";
+            CaptureMutationTarget(request, el);
 
             switch (el)
             {
@@ -2735,6 +2878,24 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             body.ElementId);
 
         return result == "ok" ? HttpResponse.Ok("Tapped") : HttpResponse.Error(result);
+    }
+
+    internal static void CaptureMutationTarget(HttpRequest request, object target)
+    {
+        request.MutationTargetAutomationId = target switch
+        {
+            VisualElement element => element.AutomationId,
+            IView view => view.AutomationId,
+            _ => null
+        };
+        // Snapshot the fallback identity NOW, before the handler runs. MutationObserver fires
+        // after the mutation and re-walks the tree, so a control that rewrites its own text
+        // (the default MAUI counter button) would otherwise be recorded under its post-mutation
+        // text — a selector that cannot resolve when the flow replays from the initial state.
+        request.MutationTargetText = VisualTreeWalker.ExtractText(target);
+        request.MutationTargetType = target is IVisualTreeElement visualTreeElement
+            ? CometViewResolver.TryResolveCometView(visualTreeElement)?.Type ?? target.GetType().Name
+            : target.GetType().Name;
     }
 
     /// <summary>
@@ -2942,6 +3103,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 body.ElementId,
                 elementId => _treeWalker.GetElementById(elementId, _app));
             if (el == null) return "Element not found";
+            CaptureMutationTarget(request, el);
 
             switch (el)
             {
@@ -4809,22 +4971,25 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     {
         try
         {
-            return await MainThread.InvokeOnMainThreadAsync(() =>
+            return await DispatchAsync(() =>
             {
-                var info = AppInfo.Current;
                 var theme = BuildThemeInfoPayload(Application.Current ?? _app);
                 return HttpResponse.Json(new
                 {
-                    name = info.Name,
-                    packageName = info.PackageName,
-                    version = info.VersionString,
-                    buildNumber = info.BuildString,
+                    name = TryGetAppInfoString(() => AppInfo.Current.Name)
+                        ?? _app?.GetType().Assembly.GetName().Name
+                        ?? "unknown",
+                    packageName = TryGetAppInfoString(() => AppInfo.Current.PackageName) ?? "unknown",
+                    version = TryGetAppInfoString(() => AppInfo.Current.VersionString) ?? "unknown",
+                    buildNumber = TryGetAppInfoString(() => AppInfo.Current.BuildString) ?? "unknown",
                     theme = theme.Theme,
-                    requestedTheme = info.RequestedTheme.ToString(),
+                    requestedTheme = TryGetAppInfoString(() => AppInfo.Current.RequestedTheme.ToString())
+                        ?? theme.RequestedTheme,
                     requestedThemeValue = theme.RequestedTheme,
                     userAppTheme = theme.UserAppTheme,
                     effectiveTheme = theme.EffectiveTheme,
-                    requestedLayoutDirection = info.RequestedLayoutDirection.ToString(),
+                    requestedLayoutDirection = TryGetAppInfoString(
+                        () => AppInfo.Current.RequestedLayoutDirection.ToString()) ?? "Unknown",
                 });
             });
         }

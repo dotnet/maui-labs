@@ -29,7 +29,12 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     public DevFlowAgentService(AgentOptions? options = null)
     {
         _options = options ?? new AgentOptions();
+        _mutationLease = new MutationLeaseCoordinator(
+            () => _brokerRegistration,
+            _options.MutationLeaseTimeoutMs);
         _server = new AgentHttpServer(_options.Port);
+        _server.MutationLeaseValidator = ValidateMutationLeaseAsync;
+        _server.MutationObserver = ObserveMutationAsync;
         NetworkStore = new NetworkRequestStore(_options.MaxNetworkBufferSize);
         _profilerCollector = CreateProfilerCollector();
         _profilerSessions = new ProfilerSessionStore(
@@ -194,6 +199,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         var cdpWebViews = GetCdpWebViewsSnapshot();
         var result = await DispatchAsync(() =>
         {
+            var cdpWebViews = GetCdpWebViewsSnapshot();
             var (w, h, density) = GetWindowMetrics(windowIndex);
 
             return new
@@ -225,6 +231,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                     packageId = packageId,
                     version = appVersion,
                     build = appBuild,
+                    processId = Environment.ProcessId,
                 },
                 capabilities = new
                 {
@@ -239,8 +246,12 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                     profiler = IsProfilerFeatureAvailable,
                     jobs = IsJobsSupported,
                     theme = IsThemeSupported,
+                    mutationLease = _options.RequireMutationLease,
                 },
                 running = IsAppBound,
+                // Current navigation route (null for backends without a router). Powers the
+                // inspector's "Return to start route" checkpoint restore. Read on the UI thread.
+                route = GetCurrentRouteLocation(),
                 cdpReady = cdpWebViews.Any(v => v.IsReady),
                 cdpWebViewCount = cdpWebViews.Length,
                 profiler = BuildProfilerCapabilitiesPayload(),
@@ -304,6 +315,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             ["tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "properties"], reason);
         capabilities["ui.screenshot"] = Capability(1, IsScreenshotSupported,
             ["element", "fullscreen", "selector"], reason);
+        capabilities["ui.events"] = Capability(1, true, ["stream", "subscribe"], null);
 
         if (_options.EnableLayoutDiagnostics)
         {
@@ -358,6 +370,12 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         var themeCapability = Capability(1, IsThemeSupported, ["get", "set"], reason);
         capabilities["theme"] = themeCapability;
         capabilities["app.theme"] = themeCapability;
+        capabilities["agent.mutationLease"] = new
+        {
+            version = 1,
+            enforced = _options.RequireMutationLease,
+            features = new[] { "claim", "status", "heartbeat", "release", "force-takeover", "broker-authority", "local-fallback" }
+        };
 
         PopulateCapabilities(capabilities);
 
@@ -432,6 +450,9 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     /// <summary>Handles <c>GET /api/v1/ui/element/{id}/property</c>.</summary>
     protected virtual Task<HttpResponse> HandleProperty(HttpRequest request) => NotSupportedTask("ui.actions");
+
+    /// <summary>Handles <c>GET /api/v1/ui/elements/{id}/properties</c>.</summary>
+    protected virtual Task<HttpResponse> HandlePropertyDescriptors(HttpRequest request) => NotSupportedTask("ui.actions");
 
     // ── Layout diagnostics seams ──────────────────────────────────────────
 

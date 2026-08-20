@@ -118,6 +118,7 @@
               "batch",
               "capture-bound-batch",
               "properties",
+              "property-descriptors",
               "stale-capture-rejection"
             ],
             "gestures": [
@@ -128,6 +129,13 @@
               "pan",
               "pinch",
               "rotate"
+            ]
+          },
+          "ui.events": {
+            "version": 1,
+            "features": [
+              "stream",
+              "subscribe"
             ]
           },
           "ui.screenshot": {

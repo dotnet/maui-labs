@@ -198,7 +198,6 @@ public sealed class XamlSourceMapGenerator : IIncrementalGenerator
         builder.AppendLine("            => global::Microsoft.Maui.DevFlow.Agent.Core.SourceMapping.XamlSourceMapRegistry.Register(new __DevFlowXamlSourceMapProvider());");
         builder.AppendLine("    }");
         builder.AppendLine("}");
-
         context.AddSource(
             "DevFlowXamlSourceMaps.g.cs",
             SourceText.From(builder.ToString(), Encoding.UTF8));

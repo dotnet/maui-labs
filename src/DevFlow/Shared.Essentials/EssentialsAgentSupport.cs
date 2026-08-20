@@ -445,11 +445,24 @@ internal sealed class EssentialsAgentSupport
                 });
             });
         }
+        catch (Exception ex) when (ex.GetType().Name == "NotImplementedInReferenceAssemblyException"
+            && DisplayInfoFallback is not null)
+        {
+            // Backends whose TFM only has Essentials reference assemblies (macOS AppKit) can still
+            // report display metrics from the hosting window.
+            return await DisplayInfoFallback(request);
+        }
         catch (Exception ex)
         {
             return CreatePlatformError($"Failed to get display info: {ex.Message}", ex);
         }
     }
+
+    /// <summary>
+    /// Optional display-info source used when Essentials is a reference assembly only. Supplied by
+    /// the hosting agent service, which can read metrics from its window instead.
+    /// </summary>
+    public Func<HttpRequest, Task<HttpResponse>>? DisplayInfoFallback { get; set; }
 
     public Task<HttpResponse> HandlePlatformBattery(HttpRequest request)
     {
@@ -658,6 +671,11 @@ internal sealed class EssentialsAgentSupport
         var speedStr = request.QueryParams.GetValueOrDefault("speed", "UI");
         var speed = SensorManager.ParseSpeed(speedStr);
 
+        // Allow clients to override throttle interval (default 100ms)
+        if (request.QueryParams.TryGetValue("throttleMs", out var throttleStr) &&
+            int.TryParse(throttleStr, out var throttleMs) && throttleMs >= 0)
+            Sensors.ThrottleMs = throttleMs;
+
         var error = Sensors.Start(sensorName, speed);
         return Task.FromResult(error != null
             ? HttpResponse.Error(error)
@@ -697,26 +715,16 @@ internal sealed class EssentialsAgentSupport
 
         sensorName = sensorName.ToLowerInvariant();
 
-        // Auto-start the sensor if not already running
-        var speedStr = request.QueryParams.GetValueOrDefault("speed", "UI");
-        var speed = SensorManager.ParseSpeed(speedStr);
-
-        // Allow clients to override throttle interval (default 100ms)
-        if (request.QueryParams.TryGetValue("throttleMs", out var throttleStr) &&
-            int.TryParse(throttleStr, out var throttleMs) && throttleMs >= 0)
-        {
-            Sensors.ThrottleMs = throttleMs;
-        }
-
-        var startError = Sensors.Start(sensorName, speed);
-        if (startError != null)
+        // Sensors are started through the mutation-lease-protected HTTP endpoint; the read-only
+        // stream never starts hardware on its own.
+        if (!Sensors.IsActive(sensorName))
         {
             await AgentHttpServer.WebSocketSendTextAsync(stream,
                 WriteJson(w =>
                 {
                     w.WriteString("type", "error");
                     w.WriteString("timestamp", DateTimeOffset.UtcNow.ToString("O"));
-                    w.WriteString("error", startError);
+                    w.WriteString("error", "Sensor is not active. Start it through the mutation-lease-protected HTTP endpoint first.");
                 }), ct);
             return;
         }
@@ -741,7 +749,6 @@ internal sealed class EssentialsAgentSupport
                     w.WriteBoolean("active", true);
                     w.WriteEndObject();
                     w.WriteString("sensorName", sensorName);
-                    w.WriteString("speed", speed.ToString());
                     w.WriteNumber("throttleMs", Sensors.ThrottleMs);
                 }), ct);
 

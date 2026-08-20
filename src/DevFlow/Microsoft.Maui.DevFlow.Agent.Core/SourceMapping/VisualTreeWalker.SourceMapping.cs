@@ -13,10 +13,10 @@ public partial class VisualTreeWalker
         _ => true
     };
 
-    internal static Dictionary<string, (string File, int Line, int Column)>
+    internal static Dictionary<string, (string File, int Line, int Column, string? Hash)>
         CollectSourceById(IReadOnlyList<ElementInfo> roots)
     {
-        var result = new Dictionary<string, (string, int, int)>(StringComparer.Ordinal);
+        var result = new Dictionary<string, (string, int, int, string?)>(StringComparer.Ordinal);
         foreach (var root in roots)
             CollectSourceByIdCore(root, result);
         return result;
@@ -24,10 +24,10 @@ public partial class VisualTreeWalker
 
     private static void CollectSourceByIdCore(
         ElementInfo node,
-        Dictionary<string, (string, int, int)> result)
+        Dictionary<string, (string, int, int, string?)> result)
     {
         if (node.SourceFile is { } file && node.SourceLine is { } line)
-            result[node.Id] = (file, line, node.SourceColumn ?? 0);
+            result[node.Id] = (file, line, node.SourceColumn ?? 0, node.SourceHash);
         if (node.Children is null)
             return;
         foreach (var child in node.Children)
@@ -36,13 +36,14 @@ public partial class VisualTreeWalker
 
     internal static void ApplySourceById(
         ElementInfo detail,
-        IReadOnlyDictionary<string, (string File, int Line, int Column)> sources)
+        IReadOnlyDictionary<string, (string File, int Line, int Column, string? Hash)> sources)
     {
         if (sources.TryGetValue(detail.Id, out var source))
         {
             detail.SourceFile = source.File;
             detail.SourceLine = source.Line;
             detail.SourceColumn = source.Column;
+            detail.SourceHash = source.Hash;
         }
         if (detail.Children is null)
             return;
@@ -226,6 +227,7 @@ public partial class VisualTreeWalker
         info.SourceFile = NormalizeSourceFile(map.File);
         info.SourceLine = entry.Line;
         info.SourceColumn = entry.Column;
+        info.SourceHash = map.ContentHash;
     }
 
     private static string NormalizeSourceFile(string path)

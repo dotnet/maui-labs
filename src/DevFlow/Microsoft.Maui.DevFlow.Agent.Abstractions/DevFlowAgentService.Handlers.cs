@@ -192,12 +192,31 @@ public partial class DevFlowAgentService
         }
     }
 
-    protected CdpWebViewInfo? ResolveCdpWebView(string? webviewId)
+    protected CdpWebViewInfo? ResolveCdpWebView(
+        string? webviewId,
+        IReadOnlySet<string>? activeAutomationIds = null)
     {
         var webViews = GetCdpWebViewsSnapshot();
+
         if (webViews.Length == 0) return null;
         if (string.IsNullOrEmpty(webviewId))
         {
+            if (activeAutomationIds is { Count: > 0 })
+            {
+                var activeReady = webViews.LastOrDefault(w =>
+                    w.IsReady &&
+                    !string.IsNullOrWhiteSpace(w.AutomationId) &&
+                    activeAutomationIds.Contains(w.AutomationId));
+                if (activeReady is not null)
+                    return activeReady;
+
+                var active = webViews.LastOrDefault(w =>
+                    !string.IsNullOrWhiteSpace(w.AutomationId) &&
+                    activeAutomationIds.Contains(w.AutomationId));
+                if (active is not null)
+                    return active;
+            }
+
             // Prefer the most recently registered ready bridge, falling back to the newest
             // bridge overall. This avoids defaulting to a stale, no-longer-visible WebView
             // after Shell recreates a page.
@@ -223,6 +242,14 @@ public partial class DevFlowAgentService
 
         return null;
     }
+
+    /// <summary>
+    /// Automation ids of the WebViews currently reachable on the active page. Backends that can
+    /// walk a UI tree override this so a stale, no-longer-visible bridge is never preferred.
+    /// </summary>
+    protected virtual Task<HashSet<string>> GetActiveWebViewAutomationIdsAsync()
+        => Task.FromResult(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
 
     public bool IsRunning => _server.IsRunning;
 
@@ -323,6 +350,12 @@ public partial class DevFlowAgentService
         // Canonical DevFlow v1 routes aligned with the formal spec.
         _server.MapGet("/api/v1/agent/status", HandleStatus);
         _server.MapGet("/api/v1/agent/capabilities", HandleCapabilities);
+        _server.MapPost("/api/v1/agent/lease", HandleMutationLeaseControl, requiresMutationLease: false);
+        _server.MapPost(
+            "/api/v1/agent/recording",
+            HandleMutationRecordingControl,
+            requiresMutationLease: true,
+            mutationLeaseExemption: IsMutationRecordingStatusRequest);
 
         _server.MapGet("/api/v1/ui/tree", HandleTree);
         _server.MapGet("/api/v1/ui/elements", HandleQuery);
@@ -331,10 +364,13 @@ public partial class DevFlowAgentService
         // Accept POST as well so callers can send coordinates in a body; both verbs share a handler.
         _server.MapPost("/api/v1/ui/hit-test", HandleHitTest);
         _server.MapGet("/api/v1/ui/screenshot", HandleScreenshot);
+        _server.MapGet("/api/v1/ui/elements/{id}/properties", HandlePropertyDescriptors);
         if (_options.EnableLayoutDiagnostics)
         {
             _server.MapGet("/api/v1/ui/diagnostics/layout/rules", HandleLayoutDiagnosticRules);
-            _server.MapPost("/api/v1/ui/diagnostics/layout", HandleLayoutDiagnostics);
+            // Read-only analysis: it inspects layout and never drives the app, so it must not
+            // require the mutation lease another host may legitimately be holding.
+            _server.MapPost("/api/v1/ui/diagnostics/layout", HandleLayoutDiagnostics, requiresMutationLease: false);
         }
         _server.MapGet("/api/v1/ui/elements/{id}/properties/{name}", HandleProperty);
         _server.MapPut("/api/v1/ui/elements/{id}/properties/{name}", request => ExecuteUiMutationAsync(request, HandleSetProperty));
@@ -357,7 +393,7 @@ public partial class DevFlowAgentService
         _server.MapGet("/api/v1/webview/contexts", HandleCdpWebViews);
         _server.MapGet("/api/v1/webview/source", HandleCdpSource);
         _server.MapGet("/api/v1/webview/dom", HandleWebViewDom);
-        _server.MapPost("/api/v1/webview/dom/query", HandleWebViewDomQuery);
+        _server.MapPost("/api/v1/webview/dom/query", HandleWebViewDomQuery, requiresMutationLease: false);
         _server.MapPost("/api/v1/webview/navigate", request => ExecuteUiMutationAsync(request, HandleWebViewNavigate));
         _server.MapPost("/api/v1/webview/input/click", request => ExecuteUiMutationAsync(request, HandleWebViewInputClick));
         _server.MapPost("/api/v1/webview/input/fill", request => ExecuteUiMutationAsync(request, HandleWebViewInputFill));
@@ -445,13 +481,13 @@ public partial class DevFlowAgentService
                         _server.MapGet(route.Path, route.Handler);
                         break;
                     case "POST":
-                        _server.MapPost(route.Path, route.Handler);
+                        _server.MapPost(route.Path, route.Handler, route.RequiresMutationLease);
                         break;
                     case "PUT":
-                        _server.MapPut(route.Path, route.Handler);
+                        _server.MapPut(route.Path, route.Handler, route.RequiresMutationLease);
                         break;
                     case "DELETE":
-                        _server.MapDelete(route.Path, route.Handler);
+                        _server.MapDelete(route.Path, route.Handler, route.RequiresMutationLease);
                         break;
                     default:
                         throw new InvalidOperationException($"Unsupported extension route method: {route.Method}");
@@ -1395,7 +1431,13 @@ public partial class DevFlowAgentService
                         }
                         else if (msgType == "clear")
                         {
-                            NetworkStore.Clear();
+                            await AgentHttpServer.WebSocketSendTextAsync(stream,
+                                JsonSerializer.Serialize(new
+                                {
+                                    type = "error",
+                                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                                    error = "Network clear requires the mutation-lease-protected HTTP endpoint."
+                                }), cts.Token);
                         }
                     }
                     catch { }
@@ -1813,31 +1855,32 @@ public partial class DevFlowAgentService
             ?? request.QueryParams.GetValueOrDefault("contextId")
             ?? contextId;
 
-    protected bool TryResolveReadyCdpWebView(
-        string? webviewId,
-        [NotNullWhen(true)] out CdpWebViewInfo? webView,
-        [NotNullWhen(false)] out HttpResponse? error)
+    protected async Task<(CdpWebViewInfo? WebView, HttpResponse? Error)> ResolveReadyCdpWebViewAsync(
+        string? webviewId)
     {
-        if (GetCdpWebViewsSnapshot().Length == 0)
+        var webViews = GetCdpWebViewsSnapshot();
+        if (webViews.Length == 0)
         {
-            webView = null;
-            error = HttpResponse.Error("CDP not available (no Blazor WebViews registered)");
-            return false;
+            return (null, HttpResponse.Error("CDP not available (no Blazor WebViews registered)"));
         }
 
-        webView = ResolveCdpWebView(webviewId);
+        var activeAutomationIds = string.IsNullOrWhiteSpace(webviewId) && webViews.Length > 1
+            ? await GetActiveWebViewAutomationIdsAsync()
+            : null;
+        var webView = ResolveCdpWebView(webviewId, activeAutomationIds);
         if (webView == null)
         {
-            error = HttpResponse.Error($"WebView '{webviewId}' not found. Use GET /api/v1/webview/contexts to list available WebViews.");
-            return false;
+            return (
+                null,
+                HttpResponse.Error(
+                    $"WebView '{webviewId}' not found. Use GET /api/v1/webview/contexts to list available WebViews."));
         }
 
         // Do not hard-block transient "not ready" states here. The underlying
         // WebView bridge can re-inject chobitsu on demand inside CommandHandler,
         // so rejecting the request at resolution time prevents the self-heal path
         // from ever running and leaves callers stuck in a 400 loop.
-        error = null;
-        return true;
+        return (webView, null);
     }
 
     protected static string BuildCdpCommand(int id, string method, object? parameters = null)
@@ -1922,7 +1965,8 @@ public partial class DevFlowAgentService
     protected async Task<HttpResponse> HandleCdp(HttpRequest request)
     {
         request.QueryParams.TryGetValue("webview", out var webviewId);
-        if (!TryResolveReadyCdpWebView(webviewId, out var webView, out var error))
+        var (webView, error) = await ResolveReadyCdpWebViewAsync(webviewId);
+        if (webView is null)
             return error!;
 
         if (string.IsNullOrEmpty(request.Body))
@@ -1956,7 +2000,8 @@ public partial class DevFlowAgentService
             return HttpResponse.Error("url is required");
 
         var webviewId = GetRequestedWebViewId(request, body.ContextId);
-        if (!TryResolveReadyCdpWebView(webviewId, out var webView, out var error))
+        var (webView, error) = await ResolveReadyCdpWebViewAsync(webviewId);
+        if (webView is null)
             return error!;
 
         try
@@ -1999,7 +2044,8 @@ public partial class DevFlowAgentService
             return HttpResponse.Error("selector is required");
 
         var webviewId = GetRequestedWebViewId(request, body.ContextId);
-        if (!TryResolveReadyCdpWebView(webviewId, out var webView, out var error))
+        var (webView, error) = await ResolveReadyCdpWebViewAsync(webviewId);
+        if (webView is null)
             return error!;
 
         try
@@ -2048,7 +2094,8 @@ public partial class DevFlowAgentService
             return HttpResponse.Error("text is required");
 
         var webviewId = GetRequestedWebViewId(request, body.ContextId);
-        if (!TryResolveReadyCdpWebView(webviewId, out var webView, out var error))
+        var (webView, error) = await ResolveReadyCdpWebViewAsync(webviewId);
+        if (webView is null)
             return error!;
 
         try
@@ -2115,7 +2162,8 @@ public partial class DevFlowAgentService
             return HttpResponse.Error("text is required");
 
         var webviewId = GetRequestedWebViewId(request, body.ContextId);
-        if (!TryResolveReadyCdpWebView(webviewId, out var webView, out var error))
+        var (webView, error) = await ResolveReadyCdpWebViewAsync(webviewId);
+        if (webView is null)
             return error!;
 
         try
@@ -2157,7 +2205,8 @@ public partial class DevFlowAgentService
             return HttpResponse.Error("selector is required");
 
         var webviewId = GetRequestedWebViewId(request, body.ContextId);
-        if (!TryResolveReadyCdpWebView(webviewId, out var webView, out var error))
+        var (webView, error) = await ResolveReadyCdpWebViewAsync(webviewId);
+        if (webView is null)
             return error!;
 
         try
@@ -2205,7 +2254,8 @@ public partial class DevFlowAgentService
     protected async Task<HttpResponse> HandleWebViewScreenshot(HttpRequest request)
     {
         var webviewId = GetRequestedWebViewId(request);
-        if (!TryResolveReadyCdpWebView(webviewId, out var webView, out var error))
+        var (webView, error) = await ResolveReadyCdpWebViewAsync(webviewId);
+        if (webView is null)
             return error!;
 
         try
@@ -2242,8 +2292,9 @@ public partial class DevFlowAgentService
         }
     }
 
-    protected Task<HttpResponse> HandleCdpWebViews(HttpRequest request)
+    protected async Task<HttpResponse> HandleCdpWebViews(HttpRequest request)
     {
+        var activeAutomationIds = await GetActiveWebViewAutomationIdsAsync();
         var webviews = GetCdpWebViewsSnapshot().Select(w => new
         {
             id = !string.IsNullOrWhiteSpace(w.AutomationId)
@@ -2258,15 +2309,18 @@ public partial class DevFlowAgentService
             title = (string?)null,
             ready = w.IsReady,
             isReady = w.IsReady,
+            active = !string.IsNullOrWhiteSpace(w.AutomationId) &&
+                activeAutomationIds.Contains(w.AutomationId),
         }).ToList();
 
-        return Task.FromResult(HttpResponse.Json(new { webviews }));
+        return HttpResponse.Json(new { webviews });
     }
 
     protected async Task<HttpResponse> HandleCdpSource(HttpRequest request)
     {
         var webviewId = GetRequestedWebViewId(request);
-        if (!TryResolveReadyCdpWebView(webviewId, out var webView, out var error))
+        var (webView, error) = await ResolveReadyCdpWebViewAsync(webviewId);
+        if (webView is null)
             return error!;
 
         try

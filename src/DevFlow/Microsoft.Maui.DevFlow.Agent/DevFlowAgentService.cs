@@ -137,6 +137,9 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
                             null);
                         return Task.FromResult(true);
                     }
+#elif MACOS
+                    if (TryScrollMacOSView(platformView as NSView, deltaX, deltaY))
+                        return Task.FromResult(true);
 #endif
                 }
                 target = target.Parent as VisualElement;
@@ -202,6 +205,9 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
                     null);
                 return true;
             }
+#elif MACOS
+            if (TryScrollMacOSView(platformView as NSView, deltaX, deltaY))
+                return true;
 #endif
         }
         catch { }
@@ -373,6 +379,57 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
 
         invokeProvider.Invoke();
         return true;
+    }
+#endif
+
+#if MACOS
+    private static bool TryScrollMacOSView(NSView? view, double deltaX, double deltaY)
+    {
+        var scrollView = view as NSScrollView
+            ?? FindMacOSDescendant<NSScrollView>(view)
+            ?? FindMacOSAncestor<NSScrollView>(view);
+        var documentView = scrollView?.DocumentView;
+        if (scrollView is null || documentView is null)
+            return false;
+
+        var clipView = scrollView.ContentView;
+        var current = clipView.Bounds.Location;
+        var maxX = Math.Max(0d, (double)(documentView.Bounds.Width - clipView.Bounds.Width));
+        var maxY = Math.Max(0d, (double)(documentView.Bounds.Height - clipView.Bounds.Height));
+        var newX = Math.Clamp((double)current.X + deltaX, 0d, maxX);
+        var yDelta = documentView.IsFlipped ? -deltaY : deltaY;
+        var newY = Math.Clamp((double)current.Y + yDelta, 0d, maxY);
+
+        clipView.ScrollToPoint(new CoreGraphics.CGPoint(newX, newY));
+        scrollView.ReflectScrolledClipView(clipView);
+        return true;
+    }
+
+    private static T? FindMacOSAncestor<T>(NSView? view) where T : NSView
+    {
+        var current = view?.Superview;
+        while (current is not null)
+        {
+            if (current is T match)
+                return match;
+            current = current.Superview;
+        }
+        return null;
+    }
+
+    private static T? FindMacOSDescendant<T>(NSView? view) where T : NSView
+    {
+        if (view is null)
+            return null;
+        foreach (var subview in view.Subviews)
+        {
+            if (subview is T match)
+                return match;
+            var nested = FindMacOSDescendant<T>(subview);
+            if (nested is not null)
+                return nested;
+        }
+        return null;
     }
 #endif
 

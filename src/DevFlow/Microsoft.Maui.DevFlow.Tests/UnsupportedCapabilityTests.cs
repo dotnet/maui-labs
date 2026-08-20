@@ -20,6 +20,7 @@ public class UnsupportedCapabilityTests
     [InlineData("/api/v1/ui/tree", "ui.tree")]
     [InlineData("/api/v1/ui/hit-test?x=1&y=1", "ui.tree")]
     [InlineData("/api/v1/ui/screenshot", "ui.screenshot")]
+    [InlineData("/api/v1/ui/elements/e1/properties", "ui.actions")]
     [InlineData("/api/v1/device/app/theme", "app.theme")]
     public async Task UnsupportedEndpoints_Return501NotSupportedEnvelope(string path, string capability)
     {
@@ -153,7 +154,13 @@ public class UnsupportedCapabilityTests
     public async Task JobRun_WithoutPlatformResult_ReturnsUniformNotSupportedEnvelope()
     {
         var port = GetFreePort();
-        using var service = new JobHostWithoutRunSupport(new AgentOptions { Port = port });
+        // Lease enforcement is exercised elsewhere; this test drives the endpoint with a raw
+        // HttpClient (no lease identity) to assert the 501 not_supported envelope shape.
+        using var service = new JobHostWithoutRunSupport(new AgentOptions
+        {
+            Port = port,
+            RequireMutationLease = false
+        });
         service.StartServerOnly(dispatcher: null);
 
         using var http = new HttpClient();

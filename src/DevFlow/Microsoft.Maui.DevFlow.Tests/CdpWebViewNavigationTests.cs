@@ -31,13 +31,29 @@ public class CdpWebViewNavigationTests
         using (var ready = await WaitForServerAsync(http, port, "/api/v1/agent/status"))
             Assert.Equal(HttpStatusCode.OK, ready.StatusCode);
 
+        // WebView navigation drives the app, so it now runs under the global mutation lease.
+        // Claim one and present it on the mutating request.
+        using (var claim = new StringContent(
+            """{"action":"claim","leaseId":"cdp-nav-test","holderKind":"test","label":"CDP nav test"}""",
+            Encoding.UTF8,
+            "application/json"))
+        using (var claimed = await http.PostAsync($"http://localhost:{port}/api/v1/agent/lease", claim))
+        {
+            Assert.Equal(HttpStatusCode.OK, claimed.StatusCode);
+        }
+
         using var body = new StringContent(
             """{"url":"https://example.test/after"}""",
             Encoding.UTF8,
             "application/json");
-        using var navigate = await http.PostAsync(
-            $"http://localhost:{port}/api/v1/webview/navigate",
-            body);
+        using var navigateRequest = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"http://localhost:{port}/api/v1/webview/navigate")
+        {
+            Content = body
+        };
+        navigateRequest.Headers.Add("X-DevFlow-Lease", "cdp-nav-test");
+        using var navigate = await http.SendAsync(navigateRequest);
 
         Assert.Equal(HttpStatusCode.OK, navigate.StatusCode);
 

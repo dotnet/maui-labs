@@ -48,7 +48,7 @@ public class AgentHttpServerTests : IDisposable
             client.Close();
         });
 
-        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        using var agentClient = CreateUncoordinatedClient();
         var status = await agentClient.GetStatusAsync();
 
         Assert.NotNull(status);
@@ -81,7 +81,7 @@ public class AgentHttpServerTests : IDisposable
             client.Close();
         });
 
-        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        using var agentClient = CreateUncoordinatedClient();
         var results = await agentClient.QueryAsync(type: "Button", text: "Submit");
 
         Assert.Single(results);
@@ -90,6 +90,342 @@ public class AgentHttpServerTests : IDisposable
         Assert.Equal("Submit", results[0].Text);
 
         listener.Stop();
+    }
+
+    [Fact]
+    public async Task ForcedLeaseTakeover_IsNotBlockedByAnAdmittedMutation()
+    {
+        // A forced takeover exists to preempt a mutation that is stuck (typically on a blocked
+        // UI dispatcher). If lease control shared the mutation admission gate, the takeover
+        // would queue behind the very request it is meant to interrupt.
+        using var server = new AgentHttpServer(_port);
+        var mutationEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseMutation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.MutationLeaseValidator = request => Task.FromResult(new MutationLeaseStatus
+        {
+            Ok = true,
+            Allowed = true,
+            YouHold = true,
+            LeaseId = request.Headers.TryGetValue("X-DevFlow-Lease", out var lease) ? lease : null,
+        });
+        server.MapPost("/api/v1/ui/mutate", async _ =>
+        {
+            mutationEntered.TrySetResult();
+            await releaseMutation.Task;
+            return HttpResponse.Json(new { ok = true });
+        });
+        server.MapPost("/api/v1/agent/lease", _ => Task.FromResult(HttpResponse.Json(new { ok = true })), requiresMutationLease: false);
+        server.Start();
+        try
+        {
+            using var mutationClient = new HttpClient();
+            using var mutationRequest = new HttpRequestMessage(HttpMethod.Post, $"http://localhost:{_port}/api/v1/ui/mutate");
+            mutationRequest.Headers.Add("X-DevFlow-Lease", "A");
+            mutationRequest.Content = new StringContent("{}", Encoding.UTF8, "application/json");
+            var mutationTask = mutationClient.SendAsync(mutationRequest);
+            await mutationEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            using var takeoverClient = new HttpClient();
+            var takeoverTask = takeoverClient.PostAsync(
+                $"http://localhost:{_port}/api/v1/agent/lease",
+                new StringContent("{\"action\":\"claim\",\"leaseId\":\"B\",\"force\":true}", Encoding.UTF8, "application/json"));
+
+            // Completes while the mutation is still parked inside its handler.
+            using var takeover = await takeoverTask.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.True(takeover.IsSuccessStatusCode);
+            Assert.False(mutationTask.IsCompleted);
+
+            releaseMutation.TrySetResult();
+            Assert.True((await mutationTask).IsSuccessStatusCode);
+        }
+        finally
+        {
+            releaseMutation.TrySetResult();
+            await server.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task QueuedMutation_ReturnsRetryableBusy_WhenTheAdmittedOneIsWedged()
+    {
+        using var server = new AgentHttpServer(_port) { MutationAdmissionTimeout = TimeSpan.FromMilliseconds(250) };
+        var firstEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handlerCalls = 0;
+        server.MutationLeaseValidator = _ => Task.FromResult(new MutationLeaseStatus
+        {
+            Ok = true,
+            Allowed = true,
+            YouHold = true,
+        });
+        server.MapPost("/api/v1/ui/mutate", async _ =>
+        {
+            if (Interlocked.Increment(ref handlerCalls) == 1)
+            {
+                firstEntered.TrySetResult();
+                await releaseFirst.Task;
+            }
+            return HttpResponse.Json(new { ok = true });
+        });
+        server.Start();
+        try
+        {
+            using var client = new HttpClient();
+            var first = client.PostAsync(
+                $"http://localhost:{_port}/api/v1/ui/mutate",
+                new StringContent("{}", Encoding.UTF8, "application/json"));
+            await firstEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            using var second = await client.PostAsync(
+                $"http://localhost:{_port}/api/v1/ui/mutate",
+                new StringContent("{}", Encoding.UTF8, "application/json"));
+
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, second.StatusCode);
+            Assert.Contains("1", second.Headers.GetValues("Retry-After"));
+            var body = await second.Content.ReadAsStringAsync();
+            // The established retryable envelope — a bespoke reason would decode as terminal in
+            // AgentClient and stop Inspector replay despite the Retry-After header.
+            Assert.Contains("\"reason\":\"ui-mutation-busy\"", body);
+            Assert.Contains("\"retryable\":true", body);
+            Assert.Equal(1, handlerCalls); // the wedged handler is never re-entered
+
+            releaseFirst.TrySetResult();
+            Assert.True((await first).IsSuccessStatusCode);
+        }
+        finally
+        {
+            releaseFirst.TrySetResult();
+            await server.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task QueuedMutation_BusyResponse_SurvivesAgentClientDecodingAsRetryable()
+    {
+        // The raw 503 carrying Retry-After is only half the contract: the busy envelope must also
+        // survive AgentClient decoding as Retryable, otherwise Inspector replay treats it as
+        // terminal (it checks outcome.Retryable before the >= 500 branch), MCP throws without
+        // retry guidance, and the CLI prints retryable:false.
+        using var server = new AgentHttpServer(_port) { MutationAdmissionTimeout = TimeSpan.FromMilliseconds(250) };
+        var firstEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.MutationLeaseValidator = _ => Task.FromResult(new MutationLeaseStatus
+        {
+            Ok = true,
+            Allowed = true,
+            YouHold = true,
+        });
+        server.MapPost("/api/v1/ui/actions/tap", async _ =>
+        {
+            firstEntered.TrySetResult();
+            await releaseFirst.Task;
+            return HttpResponse.Json(new { success = true });
+        });
+        server.Start();
+        try
+        {
+            using var wedgeClient = new HttpClient();
+            var wedged = wedgeClient.PostAsync(
+                $"http://localhost:{_port}/api/v1/ui/actions/tap",
+                new StringContent("{\"elementId\":\"btn1\"}", Encoding.UTF8, "application/json"));
+            await firstEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            using var agentClient = CreateUncoordinatedClient();
+            var outcome = await agentClient.TapResultAsync("btn2", captureEpoch: null, registryGeneration: null);
+
+            Assert.False(outcome.Success);
+            Assert.Equal(503, outcome.StatusCode);
+            Assert.Equal("ui-mutation-busy", outcome.Reason);
+            Assert.True(outcome.Retryable);
+            Assert.False(outcome.TransportFailure);
+
+            releaseFirst.TrySetResult();
+            Assert.True((await wedged).IsSuccessStatusCode);
+        }
+        finally
+        {
+            releaseFirst.TrySetResult();
+            await server.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task StopAsync_CancelsMutationQueuedBehindAdmissionGate()
+    {
+        using var server = new AgentHttpServer(_port);
+        var firstEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handlerCalls = 0;
+        server.MutationLeaseValidator = _ => Task.FromResult(new MutationLeaseStatus
+        {
+            Ok = true,
+            Allowed = true,
+            YouHold = true,
+        });
+        server.MapPost("/api/v1/ui/mutate", async _ =>
+        {
+            if (Interlocked.Increment(ref handlerCalls) == 1)
+            {
+                firstEntered.TrySetResult();
+                await releaseFirst.Task;
+            }
+            return HttpResponse.Json(new { ok = true });
+        });
+        server.Start();
+        try
+        {
+            using var client = new HttpClient();
+            var first = client.PostAsync(
+                $"http://localhost:{_port}/api/v1/ui/mutate",
+                new StringContent("{}", Encoding.UTF8, "application/json"));
+            await firstEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var second = client.PostAsync(
+                $"http://localhost:{_port}/api/v1/ui/mutate",
+                new StringContent("{}", Encoding.UTF8, "application/json"));
+
+            var stop = server.StopAsync();
+            releaseFirst.TrySetResult();
+            await stop;
+            try { await first; } catch { }
+            try { await second; } catch { }
+
+            Assert.Equal(1, handlerCalls);
+        }
+        finally
+        {
+            releaseFirst.TrySetResult();
+        }
+    }
+
+    [Fact]
+    public async Task BrowserOrigin_NonLoopback_IsRejectedBeforeRouting()
+    {
+        using var server = new AgentHttpServer(_port);
+        var routed = false;
+        server.MapGet("/api/v1/sensitive", _ =>
+        {
+            routed = true;
+            return Task.FromResult(HttpResponse.Json(new { secret = "value" }));
+        });
+        server.Start();
+        try
+        {
+            using var client = new HttpClient();
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"http://localhost:{_port}/api/v1/sensitive");
+            request.Headers.Add("Origin", "https://attacker.example");
+
+            using var response = await client.SendAsync(request);
+
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            Assert.False(routed);
+            Assert.False(response.Headers.Contains("Access-Control-Allow-Origin"));
+        }
+        finally
+        {
+            await server.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task BrowserOrigin_SameAgentOrigin_IsAllowedAndReflectedExactly()
+    {
+        using var server = new AgentHttpServer(_port);
+        server.MapGet("/api/v1/local", _ => Task.FromResult(HttpResponse.Json(new { ok = true })));
+        server.Start();
+        try
+        {
+            using var client = new HttpClient();
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"http://localhost:{_port}/api/v1/local");
+            var origin = $"http://127.0.0.1:{_port}";
+            request.Headers.Add("Origin", origin);
+
+            using var response = await client.SendAsync(request);
+
+            Assert.True(response.IsSuccessStatusCode);
+            Assert.Equal(origin, response.Headers.GetValues("Access-Control-Allow-Origin").Single());
+        }
+        finally
+        {
+            await server.StopAsync();
+        }
+    }
+
+    [Theory]
+    [InlineData("http://127.0.0.1:8080")]
+    [InlineData("http://localhost:3000")]
+    [InlineData("null")]
+    [InlineData("file:///tmp/index.html")]
+    public async Task BrowserOrigin_OtherLoopbackOrOpaqueOrigin_IsRejected(string origin)
+    {
+        using var server = new AgentHttpServer(_port);
+        server.MapGet("/api/v1/local", _ => Task.FromResult(HttpResponse.Json(new { ok = true })));
+        server.Start();
+        try
+        {
+            using var client = new HttpClient();
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"http://localhost:{_port}/api/v1/local");
+            request.Headers.TryAddWithoutValidation("Origin", origin);
+
+            using var response = await client.SendAsync(request);
+
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            Assert.False(response.Headers.Contains("Access-Control-Allow-Origin"));
+        }
+        finally
+        {
+            await server.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task NoOrigin_LocalClient_RemainsAllowedWithoutCorsHeader()
+    {
+        using var server = new AgentHttpServer(_port);
+        server.MapGet("/api/v1/local", _ => Task.FromResult(HttpResponse.Json(new { ok = true })));
+        server.Start();
+        try
+        {
+            using var client = new HttpClient();
+            using var response = await client.GetAsync($"http://localhost:{_port}/api/v1/local");
+
+            Assert.True(response.IsSuccessStatusCode);
+            Assert.False(response.Headers.Contains("Access-Control-Allow-Origin"));
+        }
+        finally
+        {
+            await server.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task ReadRequest_OversizedDeclaredBody_Returns413WithoutWaitingForBody()
+    {
+        using var server = new AgentHttpServer(_port);
+        server.MapPost("/api/v1/echo", _ => Task.FromResult(HttpResponse.Json(new { ok = true })), requiresMutationLease: false);
+        server.Start();
+        try
+        {
+            using var client = new TcpClient();
+            await client.ConnectAsync(IPAddress.Loopback, _port);
+            using var stream = client.GetStream();
+            var request = Encoding.ASCII.GetBytes(
+                "POST /api/v1/echo HTTP/1.1\r\n" +
+                "Host: localhost\r\n" +
+                "Content-Type: application/json\r\n" +
+                "Content-Length: 1048577\r\n" +
+                "Connection: close\r\n\r\n");
+            await stream.WriteAsync(request);
+            await stream.FlushAsync();
+
+            using var reader = new StreamReader(stream, Encoding.ASCII);
+            var response = await reader.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.StartsWith("HTTP/1.1 413", response, StringComparison.Ordinal);
+        }
+        finally
+        {
+            await server.StopAsync();
+        }
     }
 
     [Fact]
@@ -150,7 +486,7 @@ public class AgentHttpServerTests : IDisposable
             client.Close();
         });
 
-        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        using var agentClient = CreateUncoordinatedClient();
         var result = await agentClient.TapAsync("btn1");
         Assert.True(result);
 
@@ -184,7 +520,7 @@ public class AgentHttpServerTests : IDisposable
             client.Close();
         });
 
-        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        using var agentClient = CreateUncoordinatedClient();
         var result = await agentClient.PinchAsync(
             "map1",
             scale: 2.0,
@@ -219,7 +555,7 @@ public class AgentHttpServerTests : IDisposable
             client.Close();
         });
 
-        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        using var agentClient = CreateUncoordinatedClient();
         var result = await agentClient.RotateAsync("grid1", 90);
 
         Assert.False(result.Success);
@@ -253,7 +589,7 @@ public class AgentHttpServerTests : IDisposable
             client.Close();
         });
 
-        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        using var agentClient = CreateUncoordinatedClient();
         var result = await agentClient.FillAsync("entry1", "hello world");
         Assert.True(result);
 
@@ -283,7 +619,7 @@ public class AgentHttpServerTests : IDisposable
             await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
         });
 
-        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        using var agentClient = CreateUncoordinatedClient();
         var result = await agentClient.NavigateWebViewAsync("https://example.com", "BlazorMain");
 
         Assert.True(result);
@@ -314,7 +650,7 @@ public class AgentHttpServerTests : IDisposable
             await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
         });
 
-        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        using var agentClient = CreateUncoordinatedClient();
         var result = await agentClient.ClickWebViewAsync("#submit");
 
         Assert.True(result);
@@ -346,7 +682,7 @@ public class AgentHttpServerTests : IDisposable
             await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
         });
 
-        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        using var agentClient = CreateUncoordinatedClient();
         var result = await agentClient.FillWebViewAsync("#email", "user@example.com");
 
         Assert.True(result);
@@ -377,7 +713,7 @@ public class AgentHttpServerTests : IDisposable
             await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
         });
 
-        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        using var agentClient = CreateUncoordinatedClient();
         var result = await agentClient.InsertWebViewTextAsync("hello from tests");
 
         Assert.True(result);
@@ -416,7 +752,7 @@ public class AgentHttpServerTests : IDisposable
             await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
         });
 
-        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        using var agentClient = CreateUncoordinatedClient();
         var capabilities = await agentClient.GetCapabilitiesAsync();
 
         Assert.Equal("maui", capabilities.GetProperty("agent").GetProperty("framework").GetString());
@@ -478,7 +814,7 @@ public class AgentHttpServerTests : IDisposable
             }
         });
 
-        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        using var agentClient = CreateUncoordinatedClient();
 
         var jobs = await agentClient.GetJobsAsync();
         Assert.True(jobs.GetProperty("supported").GetBoolean());
@@ -517,7 +853,7 @@ public class AgentHttpServerTests : IDisposable
             await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
         });
 
-        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        using var agentClient = CreateUncoordinatedClient();
         var result = await agentClient.BatchAsync(
             [
                 new JsonObject
@@ -568,7 +904,7 @@ public class AgentHttpServerTests : IDisposable
             client.Close();
         });
 
-        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        using var agentClient = CreateUncoordinatedClient();
         var tree = await agentClient.GetTreeAsync();
 
         Assert.Single(tree);
@@ -765,7 +1101,7 @@ public class AgentHttpServerTests : IDisposable
             await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
         });
 
-        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        using var agentClient = CreateUncoordinatedClient();
         var result = await agentClient.GetPlatformInfoAsync("battery");
 
         Assert.Equal(JsonValueKind.Object, result.ValueKind);
@@ -799,7 +1135,7 @@ public class AgentHttpServerTests : IDisposable
             await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
         });
 
-        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        using var agentClient = CreateUncoordinatedClient();
         var result = await agentClient.ListStorageRootsAsync();
 
         Assert.Equal("appData", result.GetProperty("roots")[0].GetProperty("id").GetString());
@@ -829,7 +1165,7 @@ public class AgentHttpServerTests : IDisposable
             await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
         });
 
-        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        using var agentClient = CreateUncoordinatedClient();
         var result = await agentClient.ListFilesAsync("logs/today");
 
         Assert.Equal("logs/today", result.GetProperty("path").GetString());
@@ -860,7 +1196,7 @@ public class AgentHttpServerTests : IDisposable
             await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
         });
 
-        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        using var agentClient = CreateUncoordinatedClient();
         var result = await agentClient.ListFilesAsync("logs/today", "appData");
 
         Assert.Equal("appData", result.GetProperty("root").GetString());
@@ -891,7 +1227,7 @@ public class AgentHttpServerTests : IDisposable
             await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
         });
 
-        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        using var agentClient = CreateUncoordinatedClient();
         var result = await agentClient.UploadFileAsync("logs/app.txt", "aGVsbG8=");
 
         Assert.True(result.GetProperty("success").GetBoolean());
@@ -922,7 +1258,7 @@ public class AgentHttpServerTests : IDisposable
             await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
         });
 
-        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        using var agentClient = CreateUncoordinatedClient();
         var result = await agentClient.DownloadFileAsync("logs/app.txt", "appData");
 
         Assert.Equal("appData", result.GetProperty("root").GetString());
@@ -952,7 +1288,7 @@ public class AgentHttpServerTests : IDisposable
             await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
         });
 
-        using var agentClient = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", _port);
+        using var agentClient = CreateUncoordinatedClient();
         var result = await agentClient.DeleteFileAsync("missing.txt");
 
         Assert.False(result);
@@ -960,6 +1296,96 @@ public class AgentHttpServerTests : IDisposable
         await acceptTask;
         listener.Stop();
     }
+
+    // ── Regression: multi-byte UTF-8 request bodies must not hang the parser ──────
+    // HTTP Content-Length counts bytes. These tests drive the real AgentHttpServer end-to-end to
+    // prove non-ASCII bodies parse promptly and round-trip byte-for-byte.
+
+    [Fact]
+    public async Task ReadRequest_MultibyteUtf8Body_RoundTripsWithoutHang()
+    {
+        const string json = "{\"value\":\"Monthly spend \u2713\"}"; // ✓ = U+2713, 3 bytes / 1 char
+        var received = await EchoRoundTripAsync(json);
+        Assert.Equal(json, received);
+    }
+
+    [Fact]
+    public async Task ReadRequest_AsciiBody_RoundTrips()
+    {
+        const string json = "{\"value\":\"Monthly spend\"}";
+        var received = await EchoRoundTripAsync(json);
+        Assert.Equal(json, received);
+    }
+
+    [Fact]
+    public async Task ReadRequest_LargeMultibyteBodyBeyondFirstRead_ReadsFullContentLength()
+    {
+        // ~40 KB of multi-byte content far exceeds the 8 KB initial read buffer and exercises the
+        // byte-accurate "read the remaining Content-Length" loop.
+        var json = "{\"value\":\"" + new string('\u00e9', 20000) + "\"}"; // é = U+00E9, 2 bytes each
+        var received = await EchoRoundTripAsync(json);
+        Assert.Equal(json, received);
+    }
+
+    /// <summary>
+    /// Drives the REAL <see cref="AgentHttpServer"/>: PUTs the given JSON body to an echo route and
+    /// returns the body the server parsed. If the server hangs on the body (the pre-fix bug), the
+    /// bounded read cancels and this returns null, failing the caller's assertion.
+    /// </summary>
+    private async Task<string?> EchoRoundTripAsync(string json)
+    {
+        using var server = new AgentHttpServer(_port);
+        server.MapPut("/api/v1/echo", req => Task.FromResult(new HttpResponse
+        {
+            StatusCode = 200,
+            StatusText = "OK",
+            ContentType = "application/json",
+            Body = req.Body,
+        }));
+        server.Start();
+
+        var bodyBytes = Encoding.UTF8.GetBytes(json);
+        var head = "PUT /api/v1/echo HTTP/1.1\r\n"
+                   + "Host: localhost\r\n"
+                   + "Content-Type: application/json\r\n"
+                   + $"Content-Length: {bodyBytes.Length}\r\n"
+                   + "Connection: close\r\n\r\n";
+        var requestBytes = Encoding.UTF8.GetBytes(head).Concat(bodyBytes).ToArray();
+
+        // 8s ceiling: the fixed server responds in milliseconds; the buggy server blocks until this
+        // cancels, turning the hang into a deterministic null (assertion failure) instead of a stall.
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+        try
+        {
+            using var client = new TcpClient();
+            await client.ConnectAsync(IPAddress.Loopback, _port, cts.Token);
+            using var stream = client.GetStream();
+            await stream.WriteAsync(requestBytes, cts.Token);
+            await stream.FlushAsync(cts.Token);
+
+            using var ms = new MemoryStream();
+            var buf = new byte[4096];
+            while (true)
+            {
+                int r;
+                try { r = await stream.ReadAsync(buf, cts.Token); }
+                catch (OperationCanceledException) { return null; } // server hung → regression
+                if (r == 0) break; // server sent Connection: close and closed the socket
+                ms.Write(buf, 0, r);
+            }
+
+            var raw = Encoding.UTF8.GetString(ms.ToArray());
+            var idx = raw.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+            return idx >= 0 ? raw[(idx + 4)..] : null;
+        }
+        finally
+        {
+            await server.StopAsync();
+        }
+    }
+
+    private Microsoft.Maui.DevFlow.Driver.AgentClient CreateUncoordinatedClient()
+        => new("localhost", _port) { AutoAcquireMutationLease = false };
 
     private static async Task RespondOnceAsync(
         TcpListener listener,
@@ -974,6 +1400,7 @@ public class AgentHttpServerTests : IDisposable
             $"HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{body}";
         await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
     }
+
 
     public void Dispose() { }
 }

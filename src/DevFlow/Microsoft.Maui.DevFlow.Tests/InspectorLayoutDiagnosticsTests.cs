@@ -21,7 +21,7 @@ public class InspectorLayoutDiagnosticsTests
         ],
         hasScreenshot: false);
 
-        Assert.Contains("id=\"diagnostics-panel\"", html);
+        Assert.Contains("id=\"df-diagnostics-pane\"", html);
         Assert.Contains("id=\"diagnostic-overlays\"", html);
         Assert.Contains("id=\"diagnostics-filter\"", html);
         Assert.Contains("id=\"diagnostics-severity\"", html);

@@ -73,7 +73,7 @@ public sealed class BatchTools
 
 		try
 		{
-			var agent = await session.GetAgentClientAsync(agentPort);
+			using var agent = await session.GetAgentClientAsync(agentPort);
 			var result = await agent.BatchAsync(
 				actions,
 				continueOnError,

@@ -1,10 +1,14 @@
 name: CI - DevFlow
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
       - 'src/DevFlow/**'
+      - 'src/Cli/Microsoft.Maui.Cli/DevFlow/**'
+      - '.github/extensions/maui-devflow-canvas/**'
+      - '.github/workflows/ci-devflow.yml'
       - 'samples/DevFlow.Sample.Native/**'
       - 'eng/**'
       - 'Directory.Build.props'
@@ -17,6 +21,9 @@ on:
     branches: [main]
     paths:
       - 'src/DevFlow/**'
+      - 'src/Cli/Microsoft.Maui.Cli/DevFlow/**'
+      - '.github/extensions/maui-devflow-canvas/**'
+      - '.github/workflows/ci-devflow.yml'
       - 'samples/DevFlow.Sample.Native/**'
       - 'eng/**'
       - 'Directory.Build.props'
@@ -34,6 +41,36 @@ jobs:
       run-tests: true
       pack: true
       os: '["windows-latest"]'
+
+  hosts:
+    name: JavaScript hosts and VSIX
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            src/DevFlow/js/package-lock.json
+            .github/extensions/maui-devflow-canvas/package-lock.json
+
+      - name: Build and test shared client and VS Code host
+        working-directory: src/DevFlow/js
+        run: |
+          npm ci
+          npm test
+          npm run build
+          npm run package:vsix
+
+      - name: Test Copilot Canvas host
+        working-directory: .github/extensions/maui-devflow-canvas
+        run: |
+          npm ci
+          npm test
+          npm run selftest:recorder
 
   # The native samples are the executable proof that a plain .NET app can host the agent, so they
   # are built even though samples are otherwise out of the product solution filter. They need a Mac:
