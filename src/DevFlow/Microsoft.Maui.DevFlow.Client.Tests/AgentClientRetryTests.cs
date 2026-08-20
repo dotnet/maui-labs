@@ -75,7 +75,7 @@ public class AgentClientRetryTests
 
         Assert.False(await client.TapAsync("el-1"));
 
-        Assert.Equal(1, agent.Requests.Count);
+        Assert.Single(agent.Requests);
     }
 
     [Fact]
