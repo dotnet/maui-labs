@@ -326,6 +326,10 @@ export class LiveStore {
     this._agentEpoch = 0;
     this._refreshTail = Promise.resolve();
     this._refreshPending = 0;
+    // Bumped on every authoritative tree application. A live-sync tick captures it before
+    // fetching and drops its result if it moved, so a slow sync can never re-apply a
+    // pre-mutation tree over the post-mutation one a refresh() already published.
+    this._treeGen = 0;
     // Monotonic snapshot revision — the browser drops any snapshot older than the
     // last one it applied, so overlapping refresh/sync/settle can't flicker the UI.
     this._rev = 0;
@@ -458,6 +462,7 @@ export class LiveStore {
   // Turn raw agent roots into the rendered/indexed tree and reconcile selection.
   // Shared by refresh() and the live-sync poll tick. Also refreshes the tree hash.
   _applyRoots(rawRoots) {
+    this._treeGen += 1;
     const roots = renderedRoots(rawRoots, this.state.info.window);
     this.state.roots = roots;
     const { index, order } = indexRoots(roots);
@@ -639,10 +644,18 @@ export class LiveStore {
     // Never contend with an in-flight refresh/mutation or another sync.
     if (this.state.busy || this._polling) return;
     const agentEpoch = this._agentEpoch;
+    const treeGen = this._treeGen;
     this._polling = true;
     try {
       const [t, theme] = await Promise.all([this.device.getRoots(0), this.device.themeGet()]);
       if (agentEpoch !== this._agentEpoch) return;
+      // The entry guard above only proves no refresh was running when we STARTED. A mutation
+      // may have run and published its post-mutation tree while we were awaiting, which would
+      // make the snapshot we just fetched stale. Applying it would regress the panel to the
+      // pre-mutation tree under a HIGHER rev — and the browser only drops older revs, so the
+      // stale view would stick until the next poll. Drop the tick; refresh() already published
+      // the authoritative state (and if one is still in flight, it is about to).
+      if (treeGen !== this._treeGen || this.state.busy) return;
       if (!t.ok) {
         if (this.state.connected) {
           this.state.connected = false;

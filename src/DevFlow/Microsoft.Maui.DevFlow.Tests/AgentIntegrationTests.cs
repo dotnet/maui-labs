@@ -93,8 +93,11 @@ public class AgentHttpServerTests : IDisposable
     }
 
     [Fact]
-    public async Task ForcedLeaseTakeover_WaitsForAdmittedMutation()
+    public async Task ForcedLeaseTakeover_IsNotBlockedByAnAdmittedMutation()
     {
+        // A forced takeover exists to preempt a mutation that is stuck (typically on a blocked
+        // UI dispatcher). If lease control shared the mutation admission gate, the takeover
+        // would queue behind the very request it is meant to interrupt.
         using var server = new AgentHttpServer(_port);
         var mutationEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseMutation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -127,16 +130,67 @@ public class AgentHttpServerTests : IDisposable
                 $"http://localhost:{_port}/api/v1/agent/lease",
                 new StringContent("{\"action\":\"claim\",\"leaseId\":\"B\",\"force\":true}", Encoding.UTF8, "application/json"));
 
-            await Task.Delay(100);
-            Assert.False(takeoverTask.IsCompleted);
+            // Completes while the mutation is still parked inside its handler.
+            using var takeover = await takeoverTask.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.True(takeover.IsSuccessStatusCode);
+            Assert.False(mutationTask.IsCompleted);
 
             releaseMutation.TrySetResult();
             Assert.True((await mutationTask).IsSuccessStatusCode);
-            Assert.True((await takeoverTask).IsSuccessStatusCode);
         }
         finally
         {
             releaseMutation.TrySetResult();
+            await server.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task QueuedMutation_ReturnsRetryableBusy_WhenTheAdmittedOneIsWedged()
+    {
+        using var server = new AgentHttpServer(_port) { MutationAdmissionTimeout = TimeSpan.FromMilliseconds(250) };
+        var firstEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handlerCalls = 0;
+        server.MutationLeaseValidator = _ => Task.FromResult(new MutationLeaseStatus
+        {
+            Ok = true,
+            Allowed = true,
+            YouHold = true,
+        });
+        server.MapPost("/api/v1/ui/mutate", async _ =>
+        {
+            if (Interlocked.Increment(ref handlerCalls) == 1)
+            {
+                firstEntered.TrySetResult();
+                await releaseFirst.Task;
+            }
+            return HttpResponse.Json(new { ok = true });
+        });
+        server.Start();
+        try
+        {
+            using var client = new HttpClient();
+            var first = client.PostAsync(
+                $"http://localhost:{_port}/api/v1/ui/mutate",
+                new StringContent("{}", Encoding.UTF8, "application/json"));
+            await firstEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            using var second = await client.PostAsync(
+                $"http://localhost:{_port}/api/v1/ui/mutate",
+                new StringContent("{}", Encoding.UTF8, "application/json"));
+
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, second.StatusCode);
+            Assert.Contains("1", second.Headers.GetValues("Retry-After"));
+            Assert.Contains("\"reason\":\"busy\"", await second.Content.ReadAsStringAsync());
+            Assert.Equal(1, handlerCalls); // the wedged handler is never re-entered
+
+            releaseFirst.TrySetResult();
+            Assert.True((await first).IsSuccessStatusCode);
+        }
+        finally
+        {
+            releaseFirst.TrySetResult();
             await server.StopAsync();
         }
     }

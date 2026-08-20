@@ -137,3 +137,52 @@ test("selectAgent supersedes an in-flight theme settle", async () => {
     store.dispose();
   }
 });
+
+test("live-sync applies its tree when no refresh intervened", async () => {
+  const device = new FakeDevice();
+  const store = liveStore(device);
+  try {
+    await store._syncNow();
+    assert.equal(store.state.roots[0].id, "root-1");
+  } finally {
+    store.dispose();
+  }
+});
+
+test("live-sync discards a tree fetched before a refresh published a newer one", async () => {
+  // The entry guard only proves no refresh was running when the sync STARTED. Here a
+  // mutation's refresh lands mid-flight, so the sync's snapshot is stale by the time it
+  // resumes; re-applying it would regress the panel to the pre-mutation tree under a
+  // higher rev (which the browser accepts, since it only drops older revs).
+  const device = new FakeDevice();
+  let markStarted;
+  let releaseFirst;
+  const started = new Promise((resolve) => {
+    markStarted = resolve;
+  });
+  const firstGate = new Promise((resolve) => {
+    releaseFirst = resolve;
+  });
+  device.beforeRootReturn = ({ call }) => {
+    if (call !== 1) return delay(5);
+    markStarted();
+    return firstGate;
+  };
+  const store = liveStore(device);
+  try {
+    const sync = store._syncNow(); // fetches root-1, then parks
+    await started;
+
+    await store.refresh({ shot: false }); // the post-mutation pull: applies root-2
+    assert.equal(store.state.roots[0].id, "root-2");
+    const afterRefresh = store._rev;
+
+    releaseFirst();
+    await sync;
+
+    assert.equal(store.state.roots[0].id, "root-2", "stale sync must not regress the tree");
+    assert.equal(store._rev, afterRefresh, "a discarded sync must not publish a new revision");
+  } finally {
+    store.dispose();
+  }
+});

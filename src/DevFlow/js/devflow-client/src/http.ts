@@ -33,6 +33,20 @@ export function httpRaw(
   const { json = null, timeoutMs = 8000, host = "127.0.0.1", hostHeader, headers = {} } = opts;
   return new Promise<RawResponse>((resolve) => {
     const data = json != null ? Buffer.from(JSON.stringify(json)) : null;
+
+    // Every terminal path funnels through `settle` so the promise resolves exactly once.
+    // Several of the teardown events below can fire together for a single failure.
+    let settled = false;
+    const settle = (r: RawResponse) => {
+      if (settled) return;
+      settled = true;
+      resolve(r);
+    };
+    const fail = (e?: NodeJS.ErrnoException | null) =>
+      settle({ ok: false, status: 0, error: e?.code || (e?.message ? String(e.message) : "ECONNRESET") });
+
+    let response: http.IncomingMessage | null = null;
+
     const req = http.request(
       {
         host,
@@ -49,20 +63,34 @@ export function httpRaw(
         },
       },
       (res) => {
+        response = res;
         const chunks: Buffer[] = [];
         res.on("data", (c: Buffer) => chunks.push(c));
         res.on("end", () => {
           const status = res.statusCode ?? 0;
-          resolve({ ok: status >= 200 && status < 300, status, buffer: Buffer.concat(chunks) });
+          settle({ ok: status >= 200 && status < 300, status, buffer: Buffer.concat(chunks) });
+        });
+        // A socket torn down *after* headers arrive surfaces on the response, not the request:
+        // a graceful FIN or a plain destroy() mid-body emits `aborted`/`error` here while `req`
+        // only emits `close`, and the dead socket never reaches the timeout below. Without these
+        // the promise would stay pending forever and wedge the resolver mutex in resolve.ts.
+        res.on("aborted", () => fail(null));
+        res.on("error", (e: NodeJS.ErrnoException) => fail(e));
+        res.on("close", () => {
+          if (!res.complete) fail(null);
         });
       },
     );
-    req.on("error", (e: NodeJS.ErrnoException) =>
-      resolve({ ok: false, status: 0, error: e.code || String(e.message || e) }),
-    );
+    req.on("error", (e: NodeJS.ErrnoException) => fail(e));
+    // Only a safety net for "socket died before any response"; once a response exists the
+    // handlers above own settling (`req` emits `close` before `res` emits `end` on a
+    // connection-terminated body, so settling here unconditionally would truncate reads).
+    req.on("close", () => {
+      if (!response) settle({ ok: false, status: 0, error: "socket hang up" });
+    });
     req.setTimeout(timeoutMs, () => {
+      settle({ ok: false, status: 0, error: "timeout" });
       req.destroy();
-      resolve({ ok: false, status: 0, error: "timeout" });
     });
     if (data) req.write(data);
     req.end();

@@ -30,6 +30,12 @@ public class AgentHttpServer : IDisposable
     public bool IsRunning => _listenTask != null && !_listenTask.IsCompleted;
     internal Func<HttpRequest, Task<MutationLeaseStatus>>? MutationLeaseValidator { get; set; }
     internal Func<HttpRequest, HttpResponse, Task>? MutationObserver { get; set; }
+    /// <summary>
+    /// How long a mutation waits for the one ahead of it before giving up with a retryable 503.
+    /// Long enough for a normal UI round-trip, short enough that a wedged dispatcher cannot
+    /// silently swallow every subsequent request.
+    /// </summary>
+    internal TimeSpan MutationAdmissionTimeout { get; set; } = TimeSpan.FromSeconds(10);
 
     public AgentHttpServer(int port = 9223)
     {
@@ -399,46 +405,70 @@ public class AgentHttpServer : IDisposable
     {
         var requiresMutationLease = route.RequiresMutationLease &&
             !(route.MutationLeaseExemption?.Invoke(request) ?? false);
-        var coordinatesLease = route.RequiresMutationLease ||
-            request.Path.Equals("/api/v1/agent/lease", StringComparison.OrdinalIgnoreCase);
-        if (coordinatesLease)
-            await _mutationAdmissionGate.WaitAsync(ct).ConfigureAwait(false);
+
+        // Only mutations are admitted one at a time. Lease control (/api/v1/agent/lease) must
+        // stay OUT of this gate: a forced takeover exists precisely to preempt a mutation that
+        // is stuck — typically on a blocked UI dispatcher — so queueing it behind that mutation
+        // would deadlock the one escape hatch. MutationLeaseCoordinator serializes itself.
+        if (!route.RequiresMutationLease)
+            return await RunRouteAsync(route, request, requiresMutationLease).ConfigureAwait(false);
+
+        if (!await _mutationAdmissionGate.WaitAsync(MutationAdmissionTimeout, ct).ConfigureAwait(false))
+        {
+            // Bounded, not indefinite: a wedged mutation must not accumulate every later
+            // request behind it until each client times out on its own.
+            var busy = HttpResponse.Error(
+                "The app is still applying another mutation. Retry shortly.",
+                statusCode: 503,
+                reason: "busy");
+            busy.Headers["Retry-After"] = "1";
+            return busy;
+        }
+
         try
         {
-            if (requiresMutationLease && MutationLeaseValidator is not null)
-            {
-                var status = await MutationLeaseValidator(request).ConfigureAwait(false);
-                request.MutationLease = status;
-                if (!status.Allowed)
-                {
-                    return HttpResponse.Error(
-                        "Another DevFlow session is driving this app. Take control before mutating it.",
-                        statusCode: 409,
-                        reason: "lease",
-                        details: new
-                        {
-                            status.HolderKind,
-                            status.Label,
-                            status.ExpiresInMs,
-                            status.Authority
-                        });
-                }
-            }
-
-            var response = await route.Handler(request).ConfigureAwait(false);
-            if (requiresMutationLease &&
-                response.StatusCode is >= 200 and < 300 &&
-                MutationObserver is not null)
-            {
-                try { await MutationObserver(request, response).ConfigureAwait(false); }
-                catch { }
-            }
-            return response;
+            return await RunRouteAsync(route, request, requiresMutationLease).ConfigureAwait(false);
         }
         finally
         {
-            if (coordinatesLease) _mutationAdmissionGate.Release();
+            _mutationAdmissionGate.Release();
         }
+    }
+
+    private async Task<HttpResponse> RunRouteAsync(
+        RouteHandler route,
+        HttpRequest request,
+        bool requiresMutationLease)
+    {
+        if (requiresMutationLease && MutationLeaseValidator is not null)
+        {
+            var status = await MutationLeaseValidator(request).ConfigureAwait(false);
+            request.MutationLease = status;
+            if (!status.Allowed)
+            {
+                return HttpResponse.Error(
+                    "Another DevFlow session is driving this app. Take control before mutating it.",
+                    statusCode: 409,
+                    reason: "lease",
+                    details: new
+                    {
+                        status.HolderKind,
+                        status.Label,
+                        status.ExpiresInMs,
+                        status.Authority
+                    });
+            }
+        }
+
+        var response = await route.Handler(request).ConfigureAwait(false);
+        if (requiresMutationLease &&
+            response.StatusCode is >= 200 and < 300 &&
+            MutationObserver is not null)
+        {
+            try { await MutationObserver(request, response).ConfigureAwait(false); }
+            catch { }
+        }
+        return response;
     }
 
     private static async Task WriteResponseAsync(
@@ -650,6 +680,12 @@ public class HttpRequest
     public string? Body { get; set; }
     internal MutationLeaseStatus? MutationLease { get; set; }
     internal string? MutationTargetAutomationId { get; set; }
+    // Fallback identity for a target without an AutomationId, snapshotted BEFORE the mutation
+    // runs. A control that rewrites its own text (the default MAUI counter button is the
+    // canonical case) would otherwise be recorded under its post-mutation text, which cannot
+    // resolve when the flow is replayed from the initial state.
+    internal string? MutationTargetText { get; set; }
+    internal string? MutationTargetType { get; set; }
 
     [JsonIgnore]
     public CancellationToken CancellationToken { get; set; }

@@ -185,16 +185,32 @@ public partial class MauiDevFlowAgentService
         var avoidText = action == "fill" ||
             (action == "setProperty" && string.Equals(name, "Text", StringComparison.OrdinalIgnoreCase));
         var automationId = request.MutationTargetAutomationId ?? target?.AutomationId;
+
+        // Identity for the replay selector must describe the element as it was when the user
+        // acted on it. Prefer the pre-mutation snapshot taken by CaptureMutationTarget and fall
+        // back to the post-mutation walk only for handlers that do not capture one (the value
+        // read above is the one thing that legitimately comes from after the mutation).
+        var fallbackText = request.MutationTargetText ?? target?.Text;
+        var fallbackType = request.MutationTargetType ?? target?.Type;
+
+        var useText = string.IsNullOrWhiteSpace(automationId) &&
+            !avoidText &&
+            !string.IsNullOrWhiteSpace(fallbackText);
+        var useId = string.IsNullOrWhiteSpace(automationId) &&
+            !useText &&
+            !string.IsNullOrWhiteSpace(targetId);
+        // Type is the last resort: a selector is better than none when the element carries no
+        // AutomationId, no usable text, and no runtime id.
+        var useType = string.IsNullOrWhiteSpace(automationId) && !useText && !useId;
+
         var route = await DispatchAsync(() => GetCurrentRouteLocation());
         return new MutationObservation
         {
             Action = action,
             AutomationId = automationId,
-            Text = !avoidText && string.IsNullOrWhiteSpace(automationId) ? target?.Text : null,
-            Type = null,
-            Id = string.IsNullOrWhiteSpace(automationId) && (avoidText || string.IsNullOrWhiteSpace(target?.Text))
-                ? targetId
-                : null,
+            Text = useText ? fallbackText : null,
+            Type = useType ? fallbackType : null,
+            Id = useId ? targetId : null,
             Value = value,
             Name = name,
             Dx = dx,

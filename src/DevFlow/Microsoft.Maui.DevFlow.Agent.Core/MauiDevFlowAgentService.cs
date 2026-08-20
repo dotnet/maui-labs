@@ -2571,6 +2571,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 id,
                 elementId => _treeWalker.GetElementById(elementId, _app));
             if (el == null) return "Element not found";
+            CaptureMutationTarget(request, el);
 
             var type = el.GetType();
             var prop = type.GetProperty(propName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.IgnoreCase);
@@ -2887,6 +2888,14 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             IView view => view.AutomationId,
             _ => null
         };
+        // Snapshot the fallback identity NOW, before the handler runs. MutationObserver fires
+        // after the mutation and re-walks the tree, so a control that rewrites its own text
+        // (the default MAUI counter button) would otherwise be recorded under its post-mutation
+        // text — a selector that cannot resolve when the flow replays from the initial state.
+        request.MutationTargetText = VisualTreeWalker.ExtractText(target);
+        request.MutationTargetType = target is IVisualTreeElement visualTreeElement
+            ? CometViewResolver.TryResolveCometView(visualTreeElement)?.Type ?? target.GetType().Name
+            : target.GetType().Name;
     }
 
     /// <summary>
@@ -3094,6 +3103,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 body.ElementId,
                 elementId => _treeWalker.GetElementById(elementId, _app));
             if (el == null) return "Element not found";
+            CaptureMutationTarget(request, el);
 
             switch (el)
             {

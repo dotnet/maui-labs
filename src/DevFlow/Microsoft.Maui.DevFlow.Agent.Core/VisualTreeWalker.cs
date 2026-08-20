@@ -2194,6 +2194,34 @@ public partial class VisualTreeWalker
         return null;
     }
 
+    /// <summary>
+    /// The text the visual tree exposes for an element. Shared with mutation recording so a
+    /// recorded text selector is byte-identical to what a query or replay will search for.
+    /// </summary>
+    internal static string? ExtractText(object element)
+    {
+        // Comet views implement IView but not VisualElement; their text comes off IText.
+        if (element is not VisualElement and IView and IText comet &&
+            !string.IsNullOrEmpty(comet.Text))
+        {
+            return comet.Text;
+        }
+
+        return element switch
+        {
+            Label l => l.Text,
+            Button b => b.Text,
+            Entry e => SensitiveValueRedactor.Redact(e.Text, e.IsPassword),
+            Editor ed => ed.Text,
+            SearchBar sb => sb.Text,
+            Span s => s.Text,
+            BaseShellItem si => si.Title,
+            // Fallback to IText interface for non-Controls types (e.g. Comet views)
+            IText it => it.Text,
+            _ => null
+        };
+    }
+
     private ElementInfo CreateElementInfo(IVisualTreeElement element, string id, string? parentId)
     {
         // Try to resolve Comet view type first (if Comet is loaded)
@@ -2253,30 +2281,10 @@ public partial class VisualTreeWalker
                     Height = double.IsFinite(frame.Height) ? frame.Height : 0
                 };
             }
-
-            // Try to extract text from Comet views via IText interface
-            if (element is IText iText && !string.IsNullOrEmpty(iText.Text))
-            {
-                info.Text = element is Entry entry
-                    ? SensitiveValueRedactor.Redact(iText.Text, entry.IsPassword)
-                    : iText.Text;
-            }
         }
 
         // Extract text from common controls (including Shell elements)
-        info.Text ??= element switch
-        {
-            Label l => l.Text,
-            Button b => b.Text,
-            Entry e => SensitiveValueRedactor.Redact(e.Text, e.IsPassword),
-            Editor ed => ed.Text,
-            SearchBar sb => sb.Text,
-            Span s => s.Text,
-            BaseShellItem si => si.Title,
-            // Fallback to IText interface for non-Controls types (e.g. Comet views)
-            IText it when info.Text == null => it.Text,
-            _ => null
-        };
+        info.Text = ExtractText(element);
 
         // Extract value/state from stateful controls
         info.Value = element switch

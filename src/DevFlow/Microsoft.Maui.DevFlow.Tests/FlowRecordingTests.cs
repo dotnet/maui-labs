@@ -126,6 +126,61 @@ public class FlowRecordingTests : System.IDisposable
         Assert.Equal("CloseModalButton", request.MutationTargetAutomationId);
     }
 
+    [Fact]
+    public void CaptureMutationTarget_SnapshotsTextAndTypeBeforeTheMutation()
+    {
+        // The default MAUI counter button: no AutomationId, and its own Clicked handler
+        // rewrites its Text. MutationObserver runs after the handler, so anything read from
+        // the tree at that point already reflects the mutation.
+        var counter = new Button { Text = "Click me" };
+        var request = new HttpRequest();
+
+        MauiDevFlowAgentService.CaptureMutationTarget(request, counter);
+        counter.Text = "Clicked 1 time";
+
+        Assert.Null(request.MutationTargetAutomationId);
+        Assert.Equal("Click me", request.MutationTargetText);
+        Assert.Equal("Button", request.MutationTargetType);
+    }
+
+    [Fact]
+    public void CaptureMutationTarget_RedactsPasswordText()
+    {
+        var request = new HttpRequest();
+        MauiDevFlowAgentService.CaptureMutationTarget(
+            request,
+            new Entry { Text = "hunter2", IsPassword = true });
+
+        Assert.NotEqual("hunter2", request.MutationTargetText);
+    }
+
+    [Fact]
+    public void RecordedSelector_UsesPreMutationText_SoTheStepCanReplayFromTheInitialState()
+    {
+        var counter = new Button { Text = "Click me" };
+        var request = new HttpRequest();
+        MauiDevFlowAgentService.CaptureMutationTarget(request, counter);
+        counter.Text = "Clicked 1 time"; // post-mutation state the observer would see
+
+        var target = FlowRecordTools.BuildSelector(
+            request.MutationTargetAutomationId,
+            request.MutationTargetText,
+            request.MutationTargetType,
+            index: null,
+            id: null);
+
+        // A "Clicked 1 time" selector cannot resolve against the app's initial state.
+        Assert.Equal("Click me", target?.Text);
+    }
+
+    [Fact]
+    public void BuildSelector_FallsBackToTypeWhenNoAutomationIdTextOrId()
+    {
+        var target = FlowRecordTools.BuildSelector(null, null, "CollectionView", index: 0, id: null);
+
+        Assert.Equal("CollectionView", target?.TypeIndex?.Type);
+    }
+
     // ── FlowRecordingStore ──
 
     [Fact]
