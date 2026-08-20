@@ -82,6 +82,12 @@ public class AgentOptions
     public bool EnableProfiler { get; set; } = false;
 
     /// <summary>
+    /// Enables the experimental layout diagnostics API and capability advertisement.
+    /// Default: false until the cross-platform acceptance matrix is complete.
+    /// </summary>
+    public bool EnableLayoutDiagnostics { get; set; } = false;
+
+    /// <summary>
     /// Default profiler sampling interval in milliseconds. Default: 500ms.
     /// </summary>
     public int ProfilerSampleIntervalMs { get; set; } = 500;

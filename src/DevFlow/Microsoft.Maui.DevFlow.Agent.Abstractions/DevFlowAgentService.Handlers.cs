@@ -63,12 +63,14 @@ public partial class DevFlowAgentService
     {
         get
         {
-            lock (_cdpWebViewsGate)
-                return _cdpWebViews.Count > 0 ? _cdpWebViews[0].CommandHandler : null;
+            lock (_cdpWebViewsLock)
+                return _cdpWebViews.Count > 0
+                    ? _cdpWebViews[0].CommandHandler
+                    : null;
         }
         set
         {
-            lock (_cdpWebViewsGate)
+            lock (_cdpWebViewsLock)
             {
                 if (value == null)
                 {
@@ -90,12 +92,14 @@ public partial class DevFlowAgentService
     {
         get
         {
-            lock (_cdpWebViewsGate)
-                return _cdpWebViews.Count > 0 ? _cdpWebViews[0].ReadyCheck : null;
+            lock (_cdpWebViewsLock)
+                return _cdpWebViews.Count > 0
+                    ? _cdpWebViews[0].ReadyCheck
+                    : null;
         }
         set
         {
-            lock (_cdpWebViewsGate)
+            lock (_cdpWebViewsLock)
             {
                 if (_cdpWebViews.Count > 0 && value != null)
                     _cdpWebViews[0].ReadyCheck = value;
@@ -105,7 +109,7 @@ public partial class DevFlowAgentService
 
     protected readonly List<CdpWebViewInfo> _cdpWebViews = new();
 
-    protected readonly object _cdpWebViewsGate = new();
+    protected readonly object _cdpWebViewsLock = new();
 
     protected int _nextWebViewIndex = 0;
 
@@ -113,7 +117,7 @@ public partial class DevFlowAgentService
     public int RegisterCdpWebView(Func<string, Task<string>> commandHandler, Func<bool> readyCheck,
         string? automationId = null, string? elementId = null, string? url = null)
     {
-        lock (_cdpWebViewsGate)
+        lock (_cdpWebViewsLock)
         {
             // Shell route changes can recreate the same logical BlazorWebView multiple times.
             // Reuse the existing slot for the same AutomationId/ElementId so callers don't get
@@ -148,17 +152,37 @@ public partial class DevFlowAgentService
         }
     }
 
+    /// <summary>
+    /// Takes a defensive copy of the registered CDP WebViews so callers can enumerate them
+    /// without holding the lock while awaiting.
+    /// </summary>
+    protected CdpWebViewInfo[] GetCdpWebViewsSnapshot()
+    {
+        lock (_cdpWebViewsLock)
+        {
+            return _cdpWebViews.Select(webView => new CdpWebViewInfo
+            {
+                Index = webView.Index,
+                AutomationId = webView.AutomationId,
+                ElementId = webView.ElementId,
+                Url = webView.Url,
+                CommandHandler = webView.CommandHandler,
+                ReadyCheck = webView.ReadyCheck
+            }).ToArray();
+        }
+    }
+
     /// <summary>Unregister a CDP WebView by index.</summary>
     public void UnregisterCdpWebView(int index)
     {
-        lock (_cdpWebViewsGate)
+        lock (_cdpWebViewsLock)
             _cdpWebViews.RemoveAll(w => w.Index == index);
     }
 
     /// <summary>Update metadata for a registered WebView.</summary>
     public void UpdateCdpWebView(int index, string? automationId = null, string? elementId = null, string? url = null)
     {
-        lock (_cdpWebViewsGate)
+        lock (_cdpWebViewsLock)
         {
             var wv = _cdpWebViews.FirstOrDefault(w => w.Index == index);
             if (wv == null) return;
@@ -217,13 +241,6 @@ public partial class DevFlowAgentService
         if (byElementId != null) return byElementId;
 
         return null;
-    }
-
-    /// <summary>Takes a point-in-time copy of the registered CDP WebViews.</summary>
-    protected CdpWebViewInfo[] GetCdpWebViewsSnapshot()
-    {
-        lock (_cdpWebViewsGate)
-            return _cdpWebViews.ToArray();
     }
 
     /// <summary>
@@ -348,6 +365,13 @@ public partial class DevFlowAgentService
         _server.MapPost("/api/v1/ui/hit-test", HandleHitTest);
         _server.MapGet("/api/v1/ui/screenshot", HandleScreenshot);
         _server.MapGet("/api/v1/ui/elements/{id}/properties", HandlePropertyDescriptors);
+        if (_options.EnableLayoutDiagnostics)
+        {
+            _server.MapGet("/api/v1/ui/diagnostics/layout/rules", HandleLayoutDiagnosticRules);
+            // Read-only analysis: it inspects layout and never drives the app, so it must not
+            // require the mutation lease another host may legitimately be holding.
+            _server.MapPost("/api/v1/ui/diagnostics/layout", HandleLayoutDiagnostics, requiresMutationLease: false);
+        }
         _server.MapGet("/api/v1/ui/elements/{id}/properties/{name}", HandleProperty);
         _server.MapPut("/api/v1/ui/elements/{id}/properties/{name}", request => ExecuteUiMutationAsync(request, HandleSetProperty));
         _server.MapPost("/api/v1/ui/actions/tap", request => ExecuteUiMutationAsync(request, HandleTap));
@@ -1988,7 +2012,10 @@ public partial class DevFlowAgentService
             if (!string.IsNullOrWhiteSpace(cdpError))
                 return HttpResponse.Error($"WebView navigation failed: {cdpError}");
 
+            // webView is a snapshot copy, so writing to it alone would leave the registry (and
+            // therefore /webview/contexts) reporting the pre-navigation URL.
             webView.Url = body.Url;
+            UpdateCdpWebView(webView.Index, url: body.Url);
             PublishUiEvent("navigation", new
             {
                 from = (string?)null,

@@ -181,6 +181,32 @@ public class UnsupportedCapabilityTests
         Assert.False(string.IsNullOrWhiteSpace(json.RootElement.GetProperty("reason").GetString()));
     }
 
+    // AnalyzeLayoutAsync documents returning null when the agent cannot analyze layout, and the
+    // CLI and MCP surfaces depend on that to print their own capability guidance. The shared retry
+    // path raises NotSupportedByAgentException for the uniform 501 envelope before the method can
+    // inspect the status code, so it has to translate that back into the documented null.
+    [Fact]
+    public async Task AnalyzeLayoutAsync_ReportsNotSupported_AsNull_WithoutThrowing()
+    {
+        var port = GetFreePort();
+        using var service = new DevFlowAgentService(new AgentOptions
+        {
+            Port = port,
+            EnableLayoutDiagnostics = true
+        });
+        using var client = new AgentClient("localhost", port);
+        service.StartServerOnly(dispatcher: null);
+
+        using (var http = new HttpClient())
+            await WaitForServerAsync(http, port, "/api/v1/agent/status");
+
+        var result = await client.AnalyzeLayoutAsync(
+            new Driver.LayoutInspectionRequest(),
+            CancellationToken.None);
+
+        Assert.Null(result);
+    }
+
     [Fact]
     public async Task Status_ReportsTheBackendFramework()
     {

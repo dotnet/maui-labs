@@ -35,6 +35,7 @@
   <PropertyGroup>
     <GetTargetPathDependsOn>$(GetTargetPathDependsOn);_ResolveDevFlowAnalyzerPath</GetTargetPathDependsOn>
   </PropertyGroup>
+
   <Target Name="_ResolveDevFlowAnalyzerPath" AfterTargets="ResolveProjectReferences">
     <ItemGroup>
       <None Include="@(Analyzer)"
@@ -48,6 +49,7 @@
   <!-- Ship the buildTransitive props/targets that promote @(MauiXaml) -> @(AdditionalFiles) for the
        generator (gated on $(DevFlowXamlSourceMapsEnabled)). Remove-then-Include so we never collide
        with the SDK's default None glob. -->
+
   <ItemGroup>
     <None Remove="buildTransitive\**" />
     <None Include="buildTransitive\Microsoft.Maui.DevFlow.Agent.Core.props" Pack="true" PackagePath="buildTransitive\" />

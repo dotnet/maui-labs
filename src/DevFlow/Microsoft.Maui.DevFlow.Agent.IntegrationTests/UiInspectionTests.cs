@@ -135,6 +135,90 @@ public class UiInspectionTests : IntegrationTestBase
         Assert.Empty(elements);
     }
 
+    [Fact]
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
+    public async Task LayoutDiagnostics_DetectsClippingWithoutFlaggingIntentionalOverlap()
+    {
+        await NavigateToPageAsync("//layoutdiagnostics", "ClippedButton");
+
+        var result = await Client.AnalyzeLayoutAsync(new LayoutInspectionRequest
+        {
+            Profile = "agent",
+            MinimumSeverity = "info",
+            Stability = new LayoutStabilityOptions
+            {
+                Mode = "wait",
+                TimeoutMs = 3000
+            }
+        });
+
+        Assert.NotNull(result);
+        var clippedFinding = Assert.Single(result!.Findings, finding =>
+            finding.RuleId == LayoutDiagnosticRules.ElementClipped
+            && finding.Element.AutomationId == "ClippedButton");
+        Assert.EndsWith(
+            "LayoutDiagnosticsTestPage.xaml",
+            clippedFinding.Element.SourceFile,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.False(Path.IsPathRooted(clippedFinding.Element.SourceFile));
+        Assert.True(clippedFinding.Element.SourceLine > 0);
+        Assert.DoesNotContain(result.Findings, finding =>
+            finding.Outcome == "violation"
+            && finding.Element.AutomationId is "IntentionalCard" or "IntentionalBadge");
+    }
+
+    [Fact]
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
+    public async Task LayoutDiagnostics_ExhaustiveProfileReportsIntentionalGeometricOverlap()
+    {
+        await NavigateToPageAsync("//layoutdiagnostics", "IntentionalBadge");
+
+        var result = await Client.AnalyzeLayoutAsync(new LayoutInspectionRequest
+        {
+            Profile = "exhaustive",
+            MinimumSeverity = "info",
+            Rules = [LayoutDiagnosticRules.GeometricOverlap],
+            Stability = new LayoutStabilityOptions { Mode = "immediate" }
+        });
+
+        Assert.NotNull(result);
+        Assert.Contains(result!.Findings, finding =>
+            finding.RuleId == LayoutDiagnosticRules.GeometricOverlap
+            && (finding.Element.AutomationId is "IntentionalCard" or "IntentionalBadge"
+                || finding.RelatedElements.Any(related =>
+                    related.Element.AutomationId is "IntentionalCard" or "IntentionalBadge")));
+    }
+
+    [Fact]
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
+    public async Task LayoutDiagnostics_MissingRootIsIncomplete()
+    {
+        await NavigateToMainPageAsync();
+
+        var result = await Client.AnalyzeLayoutAsync(
+            new LayoutInspectionRequest
+            {
+                Profile = "ci",
+                Scope = new LayoutInspectionScope
+                {
+                    RootElementId = "definitely-missing"
+                },
+                Stability = new LayoutStabilityOptions
+                {
+                    Mode = "immediate"
+                }
+            });
+
+        Assert.NotNull(result);
+        Assert.Equal(0, result!.Snapshot.NodeCount);
+        Assert.True(result.Summary.Incomplete > 0);
+        Assert.Contains(
+            result.Coverage.Limitations,
+            limitation => limitation.Contains(
+                "was not found",
+                StringComparison.Ordinal));
+    }
+
     // AppKit renders both labels and text fields as NSTextField, so the Label/Entry
     // split this asserts on is specific to MAUI's normalised control names.
     [Fact]

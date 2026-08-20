@@ -67,6 +67,7 @@
       <button id="df-toggle-record" class="df-tool-btn" title="Record your interactions into a replayable Markdown test. Enabled when you're driving the app — take control if another session is Read-only." aria-pressed="false"><svg class="df-ic df-ic-rec"><use href="#i-record"/></svg><span class="df-btn-label">Record</span></button>
       <div id="df-toolbar-secondary" class="df-toolbar-secondary" aria-label="More inspector actions">
         <button id="df-toggle-bounds" class="df-tool-btn" title="Outline every element" aria-pressed="false"><svg class="df-ic"><use href="#i-bounds"/></svg><span class="df-btn-label">Bounds</span></button>
+      <button id="df-toggle-diagnostics" class="df-tool-btn" title="Show/hide layout diagnostics" aria-expanded="false" aria-controls="df-diagnostics-pane"><svg class="df-ic"><use href="#i-layout"/></svg><span class="df-btn-label">Layout</span></button>
         <button id="df-assert" class="df-tool-btn" aria-disabled="true" title="Add an assertion on the selected element (its Text = current value, or that it exists) so the test validates, not just reproduces. Enabled while recording with an element selected."><svg class="df-ic"><use href="#i-assert"/></svg><span class="df-btn-label">Assert</span></button>
         <button id="df-load-flow" class="df-tool-btn" title="Load a saved workflow test from the project or a Markdown file"><svg class="df-ic"><use href="#i-folder"/></svg><span class="df-btn-label">Load test</span></button>
         <button id="df-toggle-replay" class="df-tool-btn" aria-disabled="true" title="Replay the recorded test against the live app (drives the app). Enabled after you record and stop a test."><svg class="df-ic"><use href="#i-replay"/></svg><span class="df-btn-label">Replay</span></button>
@@ -103,11 +104,45 @@
           <div id="df-stage">
             <div id="app-viewport" data-width="{{VIEWPORT_WIDTH}}" data-height="{{VIEWPORT_HEIGHT}}" data-root-offset-x="{{ROOT_OFFSET_X}}" data-root-offset-y="{{ROOT_OFFSET_Y}}" style="width:{{VIEWPORT_WIDTH}}px; height:{{VIEWPORT_HEIGHT}}px;">
               {{SCREENSHOT}}
+              <div id="diagnostic-overlays" aria-hidden="true"></div>
               {{ELEMENTS}}
             </div>
           </div>
         </div>
       </section>
+      <aside id="df-diagnostics-pane" class="df-pane df-hidden" aria-label="Layout diagnostics" tabindex="-1">
+        <div class="df-pane-header">
+          <h2 class="df-pane-title">Layout diagnostics</h2>
+          <span id="diagnostics-summary" class="df-pane-el"></span>
+          <button id="df-diagnostics-close" class="df-icon-btn df-pane-close" title="Close layout diagnostics"><svg class="df-ic"><use href="#i-close"/></svg></button>
+        </div>
+        <div class="df-diag-controls">
+          <select id="diagnostics-filter" class="df-field" aria-label="Outcome filter">
+            <option value="actionable">Actionable</option>
+            <option value="all">All findings</option>
+            <option value="incomplete">Incomplete</option>
+            <option value="passes">Passes</option>
+          </select>
+          <select id="diagnostics-severity" class="df-field" aria-label="Minimum severity">
+            <option value="all">All severities</option>
+            <option value="minor">Minor+</option>
+            <option value="moderate">Moderate+</option>
+            <option value="serious">Serious+</option>
+            <option value="critical">Critical</option>
+          </select>
+          <select id="diagnostics-confidence" class="df-field" aria-label="Minimum confidence">
+            <option value="all">All confidence</option>
+            <option value="low">Low+</option>
+            <option value="medium">Medium+</option>
+            <option value="high">High+</option>
+            <option value="exact">Exact</option>
+          </select>
+          <input id="diagnostics-rule" class="df-field" type="search" placeholder="Filter rule">
+          <label class="df-diag-check"><input id="diagnostics-suppressed" type="checkbox"> Suppressed</label>
+        </div>
+        <div id="diagnostics-coverage" class="df-diag-coverage"></div>
+        <div id="diagnostics-list" class="df-diag-list"></div>
+      </aside>
       <aside id="df-props-pane" class="df-pane df-hidden" aria-label="Properties" tabindex="-1">
         <div class="df-pane-header"><h2 class="df-pane-title">Properties</h2><span id="df-props-el" class="df-pane-el"></span><button id="df-props-close" class="df-icon-btn df-pane-close" title="Close properties"><svg class="df-ic"><use href="#i-close"/></svg></button></div>
         <div id="df-props" aria-label="Properties"></div>

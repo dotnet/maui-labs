@@ -72,6 +72,10 @@ public class XamlSourceMapGeneratorTests
     public void GeneratedProvider_EndToEnd_RegistersMapMatchingParser()
     {
         const string path = @"C:\proj\TestApp\MainPage.xaml";
+        // The generator normalizes to a project-relative path (falling back to the file name when
+        // MSBuildProjectDirectory is unavailable, as here) so shipped assemblies never embed
+        // developer-machine paths. The inspector resolves it against the registered project.
+        const string mappedFile = "MainPage.xaml";
         var (output, diagnostics, generated) = Run(("MainPage.xaml", SampleXaml, true, path));
         Assert.Empty(diagnostics);
         Assert.NotNull(generated);
@@ -86,10 +90,10 @@ public class XamlSourceMapGeneratorTests
 
             var map = XamlSourceMapRegistry.Instance.GetMap("TestApp.MainPage");
             Assert.NotNull(map);
-            Assert.Equal(path, map!.File);
+            Assert.Equal(mappedFile, map!.File);
 
             // The generated map must equal what the runtime parser produces from the same text.
-            var expected = XamlSourceMap.Parse(SampleXaml, path);
+            var expected = XamlSourceMap.Parse(SampleXaml, mappedFile);
             Assert.NotNull(expected);
 
             AssertEntry(map, "", expected!, "ContentPage");

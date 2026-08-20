@@ -257,10 +257,20 @@ internal sealed class XamlSourcePropertyEditor
         string sourcePath;
         try
         {
+            // The build-time generator emits project-relative paths so shipped assemblies do not
+            // embed developer-machine paths. Resolve them against the registered project before
+            // validating; the containment check below still confines writes to that project.
             if (!Path.IsPathFullyQualified(sourceFile))
-                return new(false, Error: "Only absolute XAML source paths are writable.");
-
-            sourcePath = Path.GetFullPath(sourceFile);
+            {
+                var projectDirectory = Path.GetDirectoryName(Path.GetFullPath(_project));
+                if (string.IsNullOrEmpty(projectDirectory))
+                    return new(false, Error: "The mapped XAML source path is invalid.");
+                sourcePath = Path.GetFullPath(Path.Combine(projectDirectory, sourceFile));
+            }
+            else
+            {
+                sourcePath = Path.GetFullPath(sourceFile);
+            }
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
         {
