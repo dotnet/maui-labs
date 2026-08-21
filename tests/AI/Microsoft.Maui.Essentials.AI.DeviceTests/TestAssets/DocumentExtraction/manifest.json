@@ -1,0 +1,63 @@
+{
+  "name": "Apple Vision document extraction corpus",
+  "version": 1,
+  "imageWidth": 1600,
+  "imageHeight": 1200,
+  "fixtures": [
+    {
+      "id": "headings-and-paragraphs",
+      "file": "headings-and-paragraphs.png",
+      "features": ["title", "paragraphs"],
+      "expectedText": ["DOCUMENT EXTRACTION EVALUATION", "STRUCTURED CONTENT", "provider fidelity"]
+    },
+    {
+      "id": "flat-list",
+      "file": "flat-list.png",
+      "features": ["paragraphs", "flat-list"],
+      "expectedText": ["WEEKEND SHOPPING", "Apples", "Coffee", "Bread"]
+    },
+    {
+      "id": "single-item-list",
+      "file": "single-item-list.png",
+      "features": ["paragraphs", "single-item-list"],
+      "expectedText": ["REQUIRED DOCUMENT", "Signed application form"]
+    },
+    {
+      "id": "nested-list",
+      "file": "nested-list.png",
+      "features": ["paragraphs", "nested-list"],
+      "expectedText": ["TRAVEL CHECKLIST", "Documents", "Passport", "Packing", "Jacket"]
+    },
+    {
+      "id": "table",
+      "file": "table.png",
+      "features": ["title", "table"],
+      "expectedText": ["QUARTERLY INVENTORY", "Product", "Quantity", "Notebook", "Marker"]
+    },
+    {
+      "id": "list-in-table",
+      "file": "list-in-table.png",
+      "features": ["title", "table", "list-in-cell"],
+      "expectedText": ["APPLICATION CHECKLIST", "Signed application form", "Passport copy"]
+    },
+    {
+      "id": "detected-data",
+      "file": "detected-data.png",
+      "features": ["title", "link", "email", "phone", "address", "date-time", "currency"],
+      "expectedText": ["CONTACT AND PAYMENT", "https://www.microsoft.com", "travel@example.com", "$1,234.56"]
+    },
+    {
+      "id": "barcodes",
+      "file": "barcodes.png",
+      "features": ["title", "qr", "code128"],
+      "expectedText": ["BARCODE RECOGNITION", "QR CODE", "CODE 128"],
+      "expectedPayloads": ["https://example.com/meai/vision-corpus", "MEAI-VISION-2026"]
+    },
+    {
+      "id": "mixed-document",
+      "file": "mixed-document.png",
+      "features": ["title", "paragraphs", "link", "table", "list"],
+      "expectedText": ["EVENT REGISTRATION SUMMARY", "https://example.com/register", "Workshop", "Bring identification"]
+    }
+  ]
+}
