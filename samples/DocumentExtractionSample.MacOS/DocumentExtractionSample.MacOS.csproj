@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-macos</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>DocumentExtractionSample</RootNamespace>
+    <UseMaui>true</UseMaui>
+    <SingleProject>true</SingleProject>
+    <ApplicationTitle>Document Extraction Sample (macOS)</ApplicationTitle>
+    <ApplicationId>com.microsoft.maui.documentextractionsample.macos</ApplicationId>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+    <IsPackable>false</IsPackable>
+    <!-- Apple Vision document recognition is only available on macOS 26+; the sample guards every call at runtime
+         with OperatingSystem.IsMacOSVersionAtLeast(26) and shows a message instead of crashing on older OS
+         versions, so suppress the corresponding platform-compatibility analyzer warning, plus the repo's
+         "evaluation purposes only" advisory for the Apple document-extraction provider types (see EssentialsAISample). -->
+    <NoWarn>$(NoWarn);CA1416;MAUIAI0001;MEDE0001</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\platforms\MacOS\src\MacOS\MacOS.csproj" />
+    <ProjectReference Include="..\..\platforms\MacOS\src\MacOS.Essentials\MacOS.Essentials.csproj" />
+    <PackageReference Include="Microsoft.Maui.Controls" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj" />
+    <!-- See DocumentExtractionSample.csproj for why these are referenced directly. -->
+    <ProjectReference Include="..\..\src\Libraries\Microsoft.Extensions.DocumentExtraction.Abstractions\Microsoft.Extensions.DocumentExtraction.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\Libraries\Microsoft.Extensions.DocumentExtraction\Microsoft.Extensions.DocumentExtraction.csproj" />
+    <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj" />
+    <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Analyzers\Microsoft.Maui.DevFlow.Analyzers.csproj"
+                      ReferenceOutputAssembly="false"
+                      OutputItemType="Analyzer" />
+  </ItemGroup>
+
+  <Import Project="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Core\buildTransitive\Microsoft.Maui.DevFlow.Agent.Core.props" />
+  <Import Project="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Core\buildTransitive\Microsoft.Maui.DevFlow.Agent.Core.targets" />
+
+  <!-- Link shared source files from DocumentExtractionSample. The camera-scanning service compiles to an empty
+       file here (it's wrapped in `#if IOS || MACCATALYST`), so the "Scan with Camera" button stays hidden on
+       macOS AppKit — VNDocumentCameraViewController does not exist outside iOS/Mac Catalyst. -->
+  <ItemGroup>
+    <Compile Include="..\DocumentExtractionSample\App.cs" Link="App.cs" />
+    <Compile Include="..\DocumentExtractionSample\DocumentOverlayDrawable.cs" Link="DocumentOverlayDrawable.cs" />
+    <Compile Include="..\DocumentExtractionSample\MainPage.cs" Link="MainPage.cs" />
+    <Compile Include="..\DocumentExtractionSample\Models\DocumentTreeNode.cs" Link="Models\DocumentTreeNode.cs" />
+    <Compile Include="..\DocumentExtractionSample\Services\DocumentTreeBuilder.cs" Link="Services\DocumentTreeBuilder.cs" />
+    <Compile Include="..\DocumentExtractionSample\Services\DocumentExtractionRunner.cs" Link="Services\DocumentExtractionRunner.cs" />
+    <Compile Include="..\DocumentExtractionSample\Services\DocumentFilePicker.cs" Link="Services\DocumentFilePicker.cs" />
+    <Compile Include="..\DocumentExtractionSample\Services\DocumentCameraScanner.cs" Link="Services\DocumentCameraScanner.cs" />
+    <Compile Include="..\DocumentExtractionSample\Pages\TextViewerPage.cs" Link="Pages\TextViewerPage.cs" />
+  </ItemGroup>
+
+  <!-- Resources (reuse the same assets as DocumentExtractionSample) -->
+  <ItemGroup>
+    <MauiIcon Include="..\DocumentExtractionSample\Resources\AppIcon\appicon.svg" ForegroundFile="..\DocumentExtractionSample\Resources\AppIcon\appiconfg.svg" Color="#512BD4" />
+  </ItemGroup>
+
+</Project>

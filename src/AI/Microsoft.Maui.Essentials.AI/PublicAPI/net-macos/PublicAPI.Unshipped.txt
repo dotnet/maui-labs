@@ -12,3 +12,84 @@ Microsoft.Maui.Essentials.AI.NLEmbeddingGenerator.NLEmbeddingGenerator() -> void
 Microsoft.Maui.Essentials.AI.NLEmbeddingGenerator.NLEmbeddingGenerator(NaturalLanguage.NLEmbedding! embedding) -> void
 Microsoft.Maui.Essentials.AI.NLEmbeddingGenerator.NLEmbeddingGenerator(NaturalLanguage.NLLanguage language) -> void
 static Microsoft.Extensions.AI.NLEmbeddingExtensions.AsIEmbeddingGenerator(this NaturalLanguage.NLEmbedding! embedding) -> Microsoft.Extensions.AI.IEmbeddingGenerator<string!, Microsoft.Extensions.AI.Embedding<float>!>!
+Microsoft.Maui.Essentials.AI.AppleBarcodeElement
+Microsoft.Maui.Essentials.AI.AppleBarcodeElement.AppleBarcodeElement(string! symbology) -> void
+Microsoft.Maui.Essentials.AI.AppleBarcodeElement.IsColorInverted.get -> bool?
+Microsoft.Maui.Essentials.AI.AppleBarcodeElement.IsColorInverted.set -> void
+Microsoft.Maui.Essentials.AI.AppleBarcodeElement.IsGs1DataCarrier.get -> bool?
+Microsoft.Maui.Essentials.AI.AppleBarcodeElement.IsGs1DataCarrier.set -> void
+Microsoft.Maui.Essentials.AI.AppleBarcodeElement.PayloadData.get -> System.ReadOnlyMemory<byte>?
+Microsoft.Maui.Essentials.AI.AppleBarcodeElement.PayloadData.set -> void
+Microsoft.Maui.Essentials.AI.AppleBarcodeElement.PayloadString.get -> string?
+Microsoft.Maui.Essentials.AI.AppleBarcodeElement.PayloadString.set -> void
+Microsoft.Maui.Essentials.AI.AppleBarcodeElement.SupplementalCompositeType.get -> string?
+Microsoft.Maui.Essentials.AI.AppleBarcodeElement.SupplementalCompositeType.set -> void
+Microsoft.Maui.Essentials.AI.AppleBarcodeElement.SupplementalPayloadData.get -> System.ReadOnlyMemory<byte>?
+Microsoft.Maui.Essentials.AI.AppleBarcodeElement.SupplementalPayloadData.set -> void
+Microsoft.Maui.Essentials.AI.AppleBarcodeElement.SupplementalPayloadString.get -> string?
+Microsoft.Maui.Essentials.AI.AppleBarcodeElement.SupplementalPayloadString.set -> void
+Microsoft.Maui.Essentials.AI.AppleBarcodeElement.Symbology.get -> string!
+Microsoft.Maui.Essentials.AI.AppleDocumentExtractionJson
+static Microsoft.Maui.Essentials.AI.AppleDocumentExtractionJson.CreateOptions() -> System.Text.Json.JsonSerializerOptions!
+static Microsoft.Maui.Essentials.AI.AppleDocumentExtractionJson.Default.get -> System.Text.Json.JsonSerializerOptions!
+Microsoft.Maui.Essentials.AI.AppleListElement
+Microsoft.Maui.Essentials.AI.AppleListElement.AppleListElement(System.Collections.Generic.IReadOnlyList<Microsoft.Maui.Essentials.AI.AppleListItemElement!>! items) -> void
+Microsoft.Maui.Essentials.AI.AppleListElement.Items.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Maui.Essentials.AI.AppleListItemElement!>!
+Microsoft.Maui.Essentials.AI.AppleListItemElement
+Microsoft.Maui.Essentials.AI.AppleListItemElement.AppleListItemElement(string! text) -> void
+Microsoft.Maui.Essentials.AI.AppleListItemElement.Elements.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.DocumentExtraction.DocumentElement!>!
+Microsoft.Maui.Essentials.AI.AppleListItemElement.Elements.set -> void
+Microsoft.Maui.Essentials.AI.AppleListItemElement.ItemString.get -> string?
+Microsoft.Maui.Essentials.AI.AppleListItemElement.ItemString.set -> void
+Microsoft.Maui.Essentials.AI.AppleListItemElement.MarkerString.get -> string?
+Microsoft.Maui.Essentials.AI.AppleListItemElement.MarkerString.set -> void
+Microsoft.Maui.Essentials.AI.AppleListItemElement.MarkerType.get -> string?
+Microsoft.Maui.Essentials.AI.AppleListItemElement.MarkerType.set -> void
+Microsoft.Maui.Essentials.AI.AppleListItemElement.Text.get -> string!
+Microsoft.Maui.Essentials.AI.ApplePdfKitPageReference
+Microsoft.Maui.Essentials.AI.ApplePdfKitPageReference.Bounds.get -> Microsoft.Extensions.DocumentExtraction.DocumentBoundingBox
+Microsoft.Maui.Essentials.AI.ApplePdfKitPageReference.InnerRawRepresentation.get -> object?
+Microsoft.Maui.Essentials.AI.ApplePdfKitPageReference.Label.get -> string?
+Microsoft.Maui.Essentials.AI.ApplePdfKitPageReference.PageNumber.get -> int
+Microsoft.Maui.Essentials.AI.ApplePdfKitPageReference.Rotation.get -> int
+Microsoft.Maui.Essentials.AI.ApplePdfKitRenderingExtractionClient
+Microsoft.Maui.Essentials.AI.ApplePdfKitRenderingExtractionClient.ApplePdfKitRenderingExtractionClient(Microsoft.Extensions.DocumentExtraction.IDocumentExtractionClient! pageClient, Microsoft.Maui.Essentials.AI.ApplePdfKitRenderingOptions? renderingOptions = null) -> void
+Microsoft.Maui.Essentials.AI.ApplePdfKitRenderingExtractionClient.ExtractAsync(System.IO.Stream! document, string! mediaType, Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.DocumentExtraction.DocumentExtractionResult!>!
+Microsoft.Maui.Essentials.AI.ApplePdfKitRenderingExtractionClient.ExtractPagesAsync(System.IO.Stream! document, string! mediaType, Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.DocumentExtraction.DocumentExtractionPageResult!>!
+Microsoft.Maui.Essentials.AI.ApplePdfKitRenderingOptions
+Microsoft.Maui.Essentials.AI.ApplePdfKitRenderingOptions.ApplePdfKitRenderingOptions() -> void
+Microsoft.Maui.Essentials.AI.ApplePdfKitRenderingOptions.DisplayBox.get -> PdfKit.PdfDisplayBox
+Microsoft.Maui.Essentials.AI.ApplePdfKitRenderingOptions.DisplayBox.set -> void
+Microsoft.Maui.Essentials.AI.ApplePdfKitRenderingOptions.Dpi.get -> double
+Microsoft.Maui.Essentials.AI.ApplePdfKitRenderingOptions.Dpi.set -> void
+Microsoft.Maui.Essentials.AI.ApplePdfKitRenderingOptions.IncludeAnnotations.get -> bool
+Microsoft.Maui.Essentials.AI.ApplePdfKitRenderingOptions.IncludeAnnotations.set -> void
+Microsoft.Maui.Essentials.AI.ApplePdfKitRenderingOptions.MaximumPixelDimension.get -> int
+Microsoft.Maui.Essentials.AI.ApplePdfKitRenderingOptions.MaximumPixelDimension.set -> void
+Microsoft.Maui.Essentials.AI.ApplePdfKitRenderingOptions.RespectCopyPermissions.get -> bool
+Microsoft.Maui.Essentials.AI.ApplePdfKitRenderingOptions.RespectCopyPermissions.set -> void
+Microsoft.Maui.Essentials.AI.AppleVisionDocumentCapabilities
+Microsoft.Maui.Essentials.AI.AppleVisionDocumentCapabilities.BarcodeSymbologies.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Microsoft.Maui.Essentials.AI.AppleVisionDocumentCapabilities.RecognitionLanguages.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Microsoft.Maui.Essentials.AI.AppleVisionDocumentCapabilities.Revisions.get -> System.Collections.Generic.IReadOnlyList<int>!
+Microsoft.Maui.Essentials.AI.AppleVisionDocumentNodeReference
+Microsoft.Maui.Essentials.AI.AppleVisionDocumentNodeReference.GetBoundingRegion(int pageNumber, int utf16Location, int utf16Length) -> Microsoft.Extensions.DocumentExtraction.DocumentBoundingRegion?
+Microsoft.Maui.Essentials.AI.AppleVisionDocumentNodeReference.GetRawJson() -> System.ReadOnlyMemory<byte>
+Microsoft.Maui.Essentials.AI.AppleVisionDocumentNodeReference.GetRawJsonText() -> string!
+Microsoft.Maui.Essentials.AI.AppleVisionDocumentNodeReference.Path.get -> string?
+Microsoft.Maui.Essentials.AI.AppleVisionDocumentOptionsExtensions
+static Microsoft.Maui.Essentials.AI.AppleVisionDocumentOptionsExtensions.WithAppleAutomaticLanguageDetection(this Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions! options, bool enabled) -> Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions!
+static Microsoft.Maui.Essentials.AI.AppleVisionDocumentOptionsExtensions.WithAppleBarcodeDetection(this Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions! options, bool enabled, bool? coalesceCompositeSymbologies = null, params string![]! symbologies) -> Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions!
+static Microsoft.Maui.Essentials.AI.AppleVisionDocumentOptionsExtensions.WithAppleCustomWords(this Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions! options, params string![]! customWords) -> Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions!
+static Microsoft.Maui.Essentials.AI.AppleVisionDocumentOptionsExtensions.WithAppleLanguageCorrection(this Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions! options, bool enabled) -> Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions!
+static Microsoft.Maui.Essentials.AI.AppleVisionDocumentOptionsExtensions.WithAppleMaximumCandidateCount(this Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions! options, int count) -> Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions!
+static Microsoft.Maui.Essentials.AI.AppleVisionDocumentOptionsExtensions.WithAppleMinimumTextHeightFraction(this Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions! options, float fraction) -> Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions!
+static Microsoft.Maui.Essentials.AI.AppleVisionDocumentOptionsExtensions.WithAppleRecognitionLanguages(this Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions! options, params string![]! recognitionLanguages) -> Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions!
+static Microsoft.Maui.Essentials.AI.AppleVisionDocumentOptionsExtensions.WithAppleRegionOfInterest(this Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions! options, float x, float y, float width, float height) -> Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions!
+static Microsoft.Maui.Essentials.AI.AppleVisionDocumentOptionsExtensions.WithAppleRevision(this Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions! options, int revision) -> Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions!
+Microsoft.Maui.Essentials.AI.AppleVisionRecognizeDocumentsClient
+Microsoft.Maui.Essentials.AI.AppleVisionRecognizeDocumentsClient.AppleVisionRecognizeDocumentsClient() -> void
+Microsoft.Maui.Essentials.AI.AppleVisionRecognizeDocumentsClient.Dispose() -> void
+Microsoft.Maui.Essentials.AI.AppleVisionRecognizeDocumentsClient.ExtractAsync(System.IO.Stream! document, string! mediaType, Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.DocumentExtraction.DocumentExtractionResult!>!
+Microsoft.Maui.Essentials.AI.AppleVisionRecognizeDocumentsClient.ExtractPagesAsync(System.IO.Stream! document, string! mediaType, Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.DocumentExtraction.DocumentExtractionPageResult!>!
+Microsoft.Maui.Essentials.AI.AppleVisionRecognizeDocumentsClient.GetService(System.Type! serviceType, object? serviceKey = null) -> object?
