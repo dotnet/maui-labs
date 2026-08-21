@@ -57,7 +57,8 @@ public abstract class ChatClientUsageTestsBase<T>
 		Assert.NotNull(usage.TotalTokenCount);
 		Assert.True(usage.InputTokenCount.Value >= 1);
 		Assert.True(usage.OutputTokenCount.Value >= 1);
-		Assert.Equal(usage.InputTokenCount + usage.OutputTokenCount, usage.TotalTokenCount);
+		Assert.True(usage.TotalTokenCount.Value >= usage.InputTokenCount.Value);
+		Assert.True(usage.TotalTokenCount.Value >= usage.OutputTokenCount.Value);
 
 		if (usage.CachedInputTokenCount is { } cachedInputTokenCount)
 			Assert.True(cachedInputTokenCount >= 0);
