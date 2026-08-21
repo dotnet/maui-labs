@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1200" viewBox="0 0 1600 1200">
+  <rect width="1600" height="1200" fill="white"/>
+  <g fill="#111111" font-family="Helvetica, Arial, sans-serif">
+    <text x="120" y="120" font-size="64" font-weight="700">WEEKEND SHOPPING</text>
+    <text x="120" y="230" font-size="44">Please purchase the following items before Saturday.</text>
+    <text x="170" y="380" font-size="48">&#x2022; Apples</text>
+    <text x="170" y="485" font-size="48">&#x2022; Coffee</text>
+    <text x="170" y="590" font-size="48">&#x2022; Bread</text>
+    <text x="120" y="750" font-size="44">Keep the receipt for reimbursement.</text>
+  </g>
+</svg>
