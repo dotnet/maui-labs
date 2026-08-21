@@ -104,6 +104,13 @@ public sealed class SeedGrowingTimeline : ProductComponentView
         string path)
     {
         var source = Microsoft.Maui.AI.GenerativeUI.Binding.UiObjectPath.ResolveDotted(product, path);
+        if (source is null)
+        {
+            label.RemoveBinding(Label.TextProperty);
+            label.Text = string.Empty;
+            return;
+        }
+
         label.SetBinding(Label.TextProperty, new Microsoft.Maui.Controls.Binding("Value") { Source = source });
     }
 }

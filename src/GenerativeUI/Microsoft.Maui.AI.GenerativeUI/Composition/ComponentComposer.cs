@@ -22,6 +22,9 @@ public sealed record ComponentCompositionResult(
     CompositionPlanSource Source,
     int CorrectionCount,
     CompositionValidationResult Validation,
+    TimeSpan ModelLatency,
+    long? InputTokens,
+    long? OutputTokens,
     CompositionValidationResult? RejectedModelValidation = null);
 
 public sealed class ComponentComposer(
@@ -63,32 +66,38 @@ public sealed class ComponentComposer(
             candidates,
             currentPlan);
 
-        var firstPlan = await generator.GenerateAsync(generationRequest, cancellationToken).ConfigureAwait(false);
-        var firstValidation = Validate(firstPlan, request.Scaffold, candidates, currentPlan, planId, revision);
-        if (firstPlan is not null && firstValidation.IsValid)
+        var first = await generator.GenerateAsync(generationRequest, cancellationToken).ConfigureAwait(false);
+        var firstValidation = Validate(first.Plan, request.Scaffold, candidates, currentPlan, planId, revision);
+        if (first.Plan is not null && firstValidation.IsValid)
         {
             return new ComponentCompositionResult(
-                firstPlan,
+                first.Plan,
                 CompositionPlanSource.Model,
                 CorrectionCount: 0,
-                firstValidation);
+                firstValidation,
+                first.Latency,
+                first.InputTokens,
+                first.OutputTokens);
         }
 
         var correction = CompositionValidationErrorFormatter.Format(firstValidation);
         var retryRequest = generationRequest with
         {
-            InvalidPlan = firstPlan,
+            InvalidPlan = first.Plan,
             CorrectionErrors = correction,
         };
-        var retryPlan = await generator.GenerateAsync(retryRequest, cancellationToken).ConfigureAwait(false);
-        var retryValidation = Validate(retryPlan, request.Scaffold, candidates, currentPlan, planId, revision);
-        if (retryPlan is not null && retryValidation.IsValid)
+        var retry = await generator.GenerateAsync(retryRequest, cancellationToken).ConfigureAwait(false);
+        var retryValidation = Validate(retry.Plan, request.Scaffold, candidates, currentPlan, planId, revision);
+        if (retry.Plan is not null && retryValidation.IsValid)
         {
             return new ComponentCompositionResult(
-                retryPlan,
+                retry.Plan,
                 CompositionPlanSource.Corrected,
                 CorrectionCount: 1,
                 retryValidation,
+                first.Latency + retry.Latency,
+                Sum(first.InputTokens, retry.InputTokens),
+                Sum(first.OutputTokens, retry.OutputTokens),
                 firstValidation);
         }
 
@@ -121,8 +130,16 @@ public sealed class ComponentComposer(
             CompositionPlanSource.Fallback,
             CorrectionCount: 1,
             fallbackValidation,
+            first.Latency + retry.Latency,
+            Sum(first.InputTokens, retry.InputTokens),
+            Sum(first.OutputTokens, retry.OutputTokens),
             retryValidation);
     }
+
+    private static long? Sum(long? first, long? second)
+        => first is null && second is null
+            ? null
+            : first.GetValueOrDefault() + second.GetValueOrDefault();
 
     private CompositionValidationResult Validate(
         CompositionPlan? plan,

@@ -1,32 +1,52 @@
 # Sample: GenerativeUI.Sample.Garden
 
-> **Status:** Implemented MVP (v0.2) for server/OpenAPI/chat/generated UI/stateful forms and lists.
-> Registered Garden-specific controls/screens remain planned. See the
+> **Status:** Implemented component-composer vertical slice (v0.3), with the v0.2 fully generated
+> primitive path preserved as Baseline Full Generation. See the
 > [Open Questions](#open-questions).
 > Parent: [`overview.md`](./overview.md). Related: [UI-DSL](./appendix-ui-dsl.md),
 > [OpenAPI processor](./appendix-openapi-processor.md).
 
 This spec describes the **reference sample** that exercises the library end to end: a "Garden
 shop" recreated from the existing in-memory [`AIExtensions.Sample.Garden`](../../../samples/AIExtensions.Sample.Garden),
-but with its data moved to a **minimal-API server** and its UI made **fully generative**. It is
+but with its data moved to a **minimal-API server** and two runtime UI modes. It is
 one concrete consumer of `Microsoft.Maui.AI.GenerativeUI` — the library stays app-agnostic; the
 sample is where a real client and server are co-developed and share typed models.
+
+## Component Composer v0.3
+
+The sample starts in **Component Composer** mode. A dedicated typed-output model receives only the
+active product, the current plan, user intent, and components whose required facet bindings exist.
+It returns a versioned plan for `ProductDetailScaffold`; the renderer preserves scaffold and
+unchanged component identity across follow-ups.
+
+The five app-owned components live in `GenerativeUI.Sample.Garden.Components`: ProductHero,
+ProductCoreInfo, DimensionsPanel, ColorGallery, and SeedGrowingTimeline. `Product` has optional
+SeedDetails, Dimensions, and ColorOptions records. The composer mode is read-only in this slice.
+
+The mode picker also exposes **Baseline Full Generation**, which retains the original primitive DSL,
+state tools, write API, and automatic approval behavior.
 
 ## 1. Goals
 
 - Prove the two tool families (server-API + client-UI) work against a real REST API.
-- Recreate the Garden feature set (products, cart, orders, reviews, recommendations) with **no
-  hand-authored pages** beyond the shell.
+- Preserve the full-generation Garden feature set (products, cart, orders, reviews,
+  recommendations) as a runnable research baseline.
+- Prove typed native component composition for focused product detail without hand-authoring every
+  intent-specific page combination.
 - Demonstrate the **shared-models** pattern: one `.Shared` project referenced by both server and
   client, with a **source-generated `JsonSerializerContext`** for typed/AOT (de)serialization.
 - Serve as the runnable acceptance harness for the MVP scenarios in `overview.md` §14.
 
 ## 2. Project layout
 
-Three sibling sample projects:
+Four sibling sample projects:
 
 ```
 samples/
+├── GenerativeUI.Sample.Garden.Components/ (native components + scaffold + typed compose tool)
+│   ├── Components/         five native product components
+│   ├── ProductDetailScaffold.cs
+│   └── GardenComponentCatalog.cs
 ├── GenerativeUI.Sample.Garden.Shared/     (net10.0 class library)
 │   ├── Models/            REST DTO records (shared by client + server)
 │   ├── Requests/          request DTOs (create/update payloads)
@@ -39,18 +59,20 @@ samples/
     ├── App.xaml
     ├── MainPage.xaml      2-col shell: [ GenerativeCanvasView ] [ Chat ]
     └── ViewModels/
-        └── ChatViewModel.cs   chat loop + two-source generated AIToolContext + IChatBridge
+        └── ChatViewModel.cs   chat loop + mode-filtered generated AIToolContext + IChatBridge
 ```
 
 - **`.Shared`** references nothing app-specific; it's plain DTOs + the JSON context.
 - **`.Server`** references `.Shared`.
-- The **MAUI client** references `Microsoft.Maui.AI.GenerativeUI` (which references the `.OpenApi`
-  data half) and the AI tool-source generator. The shared DTO project is used by the server and
-  tests; typed client deserialization is a future option.
+- **`.Components`** references the generic UI library and `.Shared`; it owns Garden-specific views,
+  descriptors, fallback, mode policy, metrics, and the typed composition tool.
+- The **MAUI client** references the generic library, `.Components`, `.Shared`, and the AI tool-source
+  generator.
 
 All projects are added to `MauiLabs.slnx`. The workload-free `GenerativeUI.slnf` contains the
-OpenAPI library/server/shared/tests; the MAUI UI library and client are built locally (not in that
-net10-only CI filter).
+shipping OpenAPI library and its server-backed tests. `GenerativeUI.App.slnf` contains the native
+composition tests and MAUI client; the CI workflow runs it in a separate macOS job with pinned
+workloads.
 
 ## 3. Shared models (`.Shared`)
 

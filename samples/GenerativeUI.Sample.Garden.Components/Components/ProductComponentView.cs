@@ -17,6 +17,8 @@ public abstract class ProductComponentView : ContentView, ICompositionComponent
         OnVariantChanged();
     }
 
+    public virtual void Detach() => BindingContext = null;
+
     protected virtual void OnVariantChanged()
     {
     }
@@ -115,20 +117,6 @@ internal sealed class InvariantValueConverter : IValueConverter
         => value is IFormattable formattable
             ? formattable.ToString(null, CultureInfo.InvariantCulture)
             : value?.ToString() ?? "";
-
-    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
-        => throw new NotSupportedException();
-}
-
-internal sealed class HexColorValueConverter : IValueConverter
-{
-    public static HexColorValueConverter Instance { get; } = new();
-
-    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-    {
-        var text = value?.ToString();
-        return string.IsNullOrWhiteSpace(text) ? Colors.Transparent : Color.FromArgb(text);
-    }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         => throw new NotSupportedException();

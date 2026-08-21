@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.AI;
@@ -20,10 +21,16 @@ public sealed record CompositionPlanGenerationRequest(
 
 public interface IComponentPlanGenerator
 {
-    Task<CompositionPlan?> GenerateAsync(
+    Task<ComponentPlanGenerationResult> GenerateAsync(
         CompositionPlanGenerationRequest request,
         CancellationToken cancellationToken = default);
 }
+
+public sealed record ComponentPlanGenerationResult(
+    CompositionPlan? Plan,
+    TimeSpan Latency,
+    long? InputTokens,
+    long? OutputTokens);
 
 /// <summary>Generates a tiny typed plan from the already-filtered native component catalog.</summary>
 public sealed class ComponentPlanGenerator(IChatClient chatClient) : IComponentPlanGenerator
@@ -41,41 +48,47 @@ public sealed class ComponentPlanGenerator(IChatClient chatClient) : IComponentP
         Keep reasons concise and specific to the user's intent.
         """;
 
-    private static readonly JsonSerializerOptions s_jsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        WriteIndented = true,
-    };
-
-    public async Task<CompositionPlan?> GenerateAsync(
+    public async Task<ComponentPlanGenerationResult> GenerateAsync(
         CompositionPlanGenerationRequest request,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        var stopwatch = Stopwatch.StartNew();
         var response = await chatClient.GetResponseAsync<CompositionPlan>(
             [
                 new(ChatRole.System, SystemPrompt),
                 new(ChatRole.User, BuildUserPrompt(request)),
             ],
+            CompositionJsonContext.Default.Options,
             new ChatOptions { MaxOutputTokens = 2000 },
             cancellationToken: cancellationToken).ConfigureAwait(false);
+        stopwatch.Stop();
 
-        return response.TryGetResult(out var plan) ? plan : null;
+        return new(
+            response.TryGetResult(out var plan) ? plan : null,
+            stopwatch.Elapsed,
+            response.Usage?.InputTokenCount,
+            response.Usage?.OutputTokenCount);
     }
 
     private static string BuildUserPrompt(CompositionPlanGenerationRequest request)
     {
-        var candidates = request.Candidates.Select(candidate => new
+        var candidates = new JsonArray();
+        foreach (var candidate in request.Candidates)
         {
-            candidate.Descriptor.Alias,
-            candidate.Descriptor.Description,
-            candidate.Descriptor.DataContract,
-            candidate.Descriptor.RequiredBindings,
-            candidate.Descriptor.OptionalBindings,
-            candidate.Descriptor.AllowedSlots,
-            candidate.Descriptor.Variants,
-            candidate.DataPath,
-        });
+            candidates.Add(new JsonObject
+            {
+                ["alias"] = candidate.Descriptor.Alias,
+                ["description"] = candidate.Descriptor.Description,
+                ["dataContract"] = candidate.Descriptor.DataContract,
+                ["requiredBindings"] = ToArray(candidate.Descriptor.RequiredBindings),
+                ["optionalBindings"] = ToArray(candidate.Descriptor.OptionalBindings),
+                ["allowedSlots"] = ToArray(candidate.Descriptor.AllowedSlots.Select(slot => slot.ToString())),
+                ["variants"] = ToArray(candidate.Descriptor.Variants),
+                ["dataPath"] = candidate.DataPath,
+            });
+        }
 
         var prompt = new JsonObject
         {
@@ -87,15 +100,28 @@ public sealed class ComponentPlanGenerator(IChatClient chatClient) : IComponentP
             ["requiredPlanId"] = request.ExpectedPlanId,
             ["requiredRevision"] = request.ExpectedRevision,
             ["data"] = request.Data?.DeepClone(),
-            ["candidates"] = JsonSerializer.SerializeToNode(candidates, s_jsonOptions),
-            ["currentPlan"] = JsonSerializer.SerializeToNode(request.CurrentPlan, s_jsonOptions),
+            ["candidates"] = candidates,
+            ["currentPlan"] = SerializePlan(request.CurrentPlan),
         };
 
         if (request.InvalidPlan is not null)
-            prompt["invalidPlan"] = JsonSerializer.SerializeToNode(request.InvalidPlan, s_jsonOptions);
+            prompt["invalidPlan"] = SerializePlan(request.InvalidPlan);
         if (request.CorrectionErrors is not null)
             prompt["correction"] = JsonNode.Parse(request.CorrectionErrors);
 
-        return prompt.ToJsonString(s_jsonOptions);
+        return prompt.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    private static JsonNode? SerializePlan(CompositionPlan? plan)
+        => plan is null
+            ? null
+            : JsonSerializer.SerializeToNode(plan, CompositionJsonContext.Default.CompositionPlan);
+
+    private static JsonArray ToArray(IEnumerable<string> values)
+    {
+        var array = new JsonArray();
+        foreach (var value in values)
+            array.Add(value);
+        return array;
     }
 }

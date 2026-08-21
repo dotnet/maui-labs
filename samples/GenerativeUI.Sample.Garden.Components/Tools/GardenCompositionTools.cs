@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using GenerativeUI.Sample.Garden.Components;
 using GenerativeUI.Sample.Garden.Shared;
 using Microsoft.Maui.AI.Attributes;
@@ -15,7 +16,8 @@ public sealed class GardenCompositionTools(
     CanvasState canvas,
     CompositionSessionState session,
     ComponentComposer composer,
-    CompositionPlanRenderer renderer)
+    CompositionPlanRenderer renderer,
+    GenerationMetricsCollector metrics)
 {
     private const string ProductDataPath = "product";
 
@@ -36,6 +38,15 @@ public sealed class GardenCompositionTools(
 
         if (product is not null)
         {
+            if (string.IsNullOrWhiteSpace(product.Sku) ||
+                string.IsNullOrWhiteSpace(product.Name) ||
+                string.IsNullOrWhiteSpace(product.Description))
+            {
+                return Error(
+                    "invalid_product_data",
+                    "The supplied product is incomplete. Re-read the full product and retry.");
+            }
+
             var element = JsonSerializer.SerializeToElement(product, GardenJsonContext.Default.Product);
             await MainThread.InvokeOnMainThreadAsync(() =>
             {
@@ -48,7 +59,22 @@ public sealed class GardenCompositionTools(
 
         var activeProduct = UiObjectPath.ResolveDotted(canvas.StateRoot, ProductDataPath);
         if (activeProduct is null || !UiObjectPath.HasData(activeProduct))
-            return "Error: no active product. Supply the complete product on the first compose_product_detail call.";
+        {
+            return Error(
+                "missing_product",
+                "No active product. Supply the complete product on the first compose_product_detail call.");
+        }
+
+        var missingCoreBinding = new[] { "name", "description", "price" }
+            .FirstOrDefault(path =>
+                UiObjectPath.ResolveDotted(activeProduct, path) is not { } node ||
+                !UiObjectPath.HasData(node));
+        if (missingCoreBinding is not null)
+        {
+            return Error(
+                "invalid_product_data",
+                $"The active product is missing required '{missingCoreBinding}' data. Re-read the full product and retry.");
+        }
 
         var title = UiObjectPath.ResolveDotted(activeProduct, "name")?.AsString() ?? "Product";
         var composition = await composer.ComposeAsync(
@@ -63,15 +89,21 @@ public sealed class GardenCompositionTools(
 
         var diff = await MainThread.InvokeOnMainThreadAsync(() =>
             renderer.Render(composition.Plan, canvas.StateRoot)).ConfigureAwait(false);
+        metrics.RecordComposition(composition, diff);
 
         return JsonSerializer.Serialize(
-            new
-            {
-                plan = composition.Plan,
-                source = composition.Source.ToString(),
-                correctionCount = composition.CorrectionCount,
-                render = diff,
-            },
-            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            new GardenCompositionToolResult(
+                composition.Plan,
+                composition.Source,
+                composition.CorrectionCount,
+                diff),
+            GardenCompositionJsonContext.Default.GardenCompositionToolResult);
     }
+
+    private static string Error(string code, string message)
+        => new JsonObject
+        {
+            ["error"] = code,
+            ["message"] = message,
+        }.ToJsonString();
 }

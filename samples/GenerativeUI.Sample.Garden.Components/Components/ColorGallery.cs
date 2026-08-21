@@ -68,21 +68,17 @@ public sealed class ColorGallery : ProductComponentView
 
     private static View BuildColor(UiObject color, bool gallery)
     {
-        var name = color["name"].AsString() ?? "Color";
+        var name = color.HasMember("name") ? color["name"].AsString() ?? "Color" : "Color";
+        var hex = color.HasMember("hex") ? color["hex"].AsString() : null;
         var swatch = new Border
         {
             WidthRequest = gallery ? 104 : 48,
             HeightRequest = gallery ? 72 : 48,
+            BackgroundColor = string.IsNullOrWhiteSpace(hex) ? Colors.Transparent : Color.FromArgb(hex),
             Stroke = new SolidColorBrush(GardenComponentVisuals.Stroke),
             StrokeThickness = 1,
             StrokeShape = new Microsoft.Maui.Controls.Shapes.RoundRectangle { CornerRadius = 14 },
         };
-        swatch.SetBinding(
-            BackgroundProperty,
-            new Microsoft.Maui.Controls.Binding("[hex].Value", converter: HexColorValueConverter.Instance)
-            {
-                Source = color,
-            });
 
         var label = new Label
         {

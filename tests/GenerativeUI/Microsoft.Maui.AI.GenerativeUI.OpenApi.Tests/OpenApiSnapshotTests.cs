@@ -23,8 +23,8 @@ public sealed class OpenApiSnapshotTests : IClassFixture<WebApplicationFactory<P
         using var client = _factory.CreateClient();
         var live = Normalize(await client.GetStringAsync("/openapi/v1.json"));
 
-        var snapshotPath = SnapshotPath();
         var regenerate = string.Equals(Environment.GetEnvironmentVariable("UPDATE_OPENAPI"), "1", StringComparison.Ordinal);
+        var snapshotPath = SnapshotPath(regenerate);
 
         if (regenerate || !File.Exists(snapshotPath))
         {
@@ -45,7 +45,12 @@ public sealed class OpenApiSnapshotTests : IClassFixture<WebApplicationFactory<P
         return JsonSerializer.Serialize(document.RootElement, new JsonSerializerOptions { WriteIndented = true });
     }
 
-    private static string SnapshotPath([CallerFilePath] string? callerFilePath = null)
-        => Path.GetFullPath(Path.Combine(
+    private static string SnapshotPath(bool regenerate, [CallerFilePath] string? callerFilePath = null)
+    {
+        var sourcePath = Path.GetFullPath(Path.Combine(
             Path.GetDirectoryName(callerFilePath)!, "..", "snapshots", "garden.openapi.json"));
+        return regenerate || File.Exists(sourcePath)
+            ? sourcePath
+            : Path.Combine(AppContext.BaseDirectory, "garden.openapi.json");
+    }
 }

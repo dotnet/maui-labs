@@ -1,4 +1,5 @@
 using GenerativeUI.Sample.Garden.Shared;
+using GenerativeUI.Sample.Garden.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.AI.GenerativeUI.Composition;
 using Microsoft.Maui.AI.GenerativeUI.Registry;
@@ -22,7 +23,9 @@ public static class GardenComponentCatalog
         services.AddTransient<ColorGallery>();
         services.AddTransient<SeedGrowingTimeline>();
         services.AddTransient<ProductDetailScaffold>();
+        services.AddSingleton<GardenCompositionTools>();
         services.AddSingleton<ICompositionFallbackPlanFactory, ProductDetailFallbackPlanFactory>();
+        services.AddSingleton<GenerationMetricsCollector>();
         return services;
     }
 

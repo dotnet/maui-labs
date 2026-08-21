@@ -117,6 +117,13 @@ public sealed class DimensionsPanel : ProductComponentView
         string path)
     {
         var source = Microsoft.Maui.AI.GenerativeUI.Binding.UiObjectPath.ResolveDotted(product, path);
+        if (source is null)
+        {
+            label.RemoveBinding(Label.TextProperty);
+            label.Text = string.Empty;
+            return;
+        }
+
         label.SetBinding(
             Label.TextProperty,
             new Microsoft.Maui.Controls.Binding("Value", converter: InvariantValueConverter.Instance)

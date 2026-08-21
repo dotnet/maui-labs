@@ -1,22 +1,24 @@
 # Generative UI — Overview Spec
 
-> **Status:** Implemented MVP (v0.2) — the OpenAPI, UI-DSL/inflator, state graph, and sample flows
-> are running end to end; remaining design work is tracked in the
+> **Status:** Implemented component-composer vertical slice (v0.3). The original v0.2 full primitive
+> generation path remains available as an explicit research baseline; remaining design work is tracked in the
 > [Open Questions](#16-open-questions).
 
 ## 1. Summary
 
-**Generative UI** is an experiment in building applications whose UI is produced *at runtime by
-an AI model* rather than authored ahead of time as fixed pages. The user talks to a chat
-assistant; the assistant reads and writes data over a REST API and **renders bespoke,
-data-bound UI** into a blank canvas in response.
+**Generative UI** is an experiment in runtime-adaptive application UI. The default v0.3 path asks a
+model to select, prioritize, and arrange tested app-authored MAUI components from a typed catalog.
+The user talks to a chat assistant; the assistant reads data over a REST API and composes a focused
+native surface in response.
+
+The original v0.2 path, where the model authors a complete constrained primitive UI tree, remains
+available as **Baseline Full Generation** for direct A/B comparison and continued research.
 
 This spec describes:
 
-- **`Microsoft.Maui.AI.GenerativeUI`** — a **reusable, app-agnostic library** that provides the
-  two capabilities an app needs to be "generative": a way for the model to **discover and call a
-  server's REST API** (via its OpenAPI document), and a way for the model to **render UI** (via a
-  constrained UI description language + a runtime inflator).
+- **`Microsoft.Maui.AI.GenerativeUI`** — a **reusable, app-agnostic library** that provides OpenAPI
+  discovery/invocation, the component composition contracts/validator/renderer, and the preserved
+  constrained UI description language + runtime inflator.
 - **`GenerativeUI.Sample.Garden`** — a concrete sample (a garden shop) that consumes the library.
   Its client and server are co-developed and **share a typed models project**.
 
@@ -31,9 +33,22 @@ Companion documents:
   controls, and full screens the model can use, at startup or **dynamically at runtime**.
 - [`appendix-binding-model.md`](./appendix-binding-model.md) — the generic observable data context
   the UI binds to when there are no hand-authored view models.
+- [`appendix-component-composer.md`](./appendix-component-composer.md) — typed component
+  descriptors/plans, candidate filtering, validation, retry/fallback, and incremental rendering.
 - [`appendix-openapi-processor.md`](./appendix-openapi-processor.md) — the OpenAPI explorer,
   reducer, and invoker.
 - [`sample-generative-garden.md`](./sample-generative-garden.md) — the sample app.
+
+### 1.1 v0.3 component-composer pivot
+
+The default runtime no longer asks a frontier model to reproduce a complete primitive tree on every
+turn. Apps register ordinary native components and a named-slot scaffold. The runtime filters that
+catalog against available `StateRoot` data, requests a tiny typed `CompositionPlan`, validates it,
+and reconciles the existing scaffold by stable section ID.
+
+The Garden first slice has ProductHero, ProductCoreInfo, DimensionsPanel, ColorGallery, and
+SeedGrowingTimeline. It is read-only. Invalid plans receive one correction retry and then a
+deterministic Hero/Core fallback; the composer never silently switches to primitive generation.
 
 ## 2. Motivation
 

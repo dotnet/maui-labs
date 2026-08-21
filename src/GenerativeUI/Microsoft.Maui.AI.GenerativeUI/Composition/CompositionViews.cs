@@ -8,6 +8,8 @@ public interface ICompositionComponent
     string? Variant { get; }
 
     void ApplyVariant(string? variant);
+
+    void Detach();
 }
 
 /// <summary>A persistent app-authored scaffold whose named slots are reconciled in place.</summary>

@@ -16,10 +16,48 @@
     <!-- Two columns: the generative canvas (left) and the chat (right). -->
     <Grid ColumnDefinitions="*,380">
 
-        <!-- Canvas — the AI renders bespoke, data-bound views here. -->
-        <ScrollView Grid.Column="0" Padding="16">
-            <genui:GenerativeCanvasView />
-        </ScrollView>
+        <!-- Canvas and explicit generation-mode selector. -->
+        <Grid Grid.Column="0" RowDefinitions="Auto,*">
+            <Border Grid.Row="0"
+                    Margin="16,12,16,0"
+                    Padding="12"
+                    Stroke="#C9DDD0"
+                    StrokeThickness="1"
+                    BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#202B27}">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="14" />
+                </Border.StrokeShape>
+                <VerticalStackLayout Spacing="6">
+                    <Grid ColumnDefinitions="Auto,240,*" ColumnSpacing="10">
+                        <Label Text="Runtime UI mode"
+                               FontAttributes="Bold"
+                               VerticalTextAlignment="Center" />
+                        <Picker Grid.Column="1"
+                                AutomationId="GenerationModePicker"
+                                ItemsSource="{Binding ModeOptions}"
+                                SelectedItem="{Binding SelectedMode, Mode=TwoWay}"
+                                IsEnabled="{Binding IsNotBusy}" />
+                        <Label Grid.Column="2"
+                               AutomationId="GenerationModeDescription"
+                               Text="{Binding ModeDescription}"
+                               FontSize="12"
+                               TextColor="{AppThemeBinding Light=#7A7062, Dark=#C9DDD0}"
+                               VerticalTextAlignment="Center"
+                               LineBreakMode="WordWrap" />
+                    </Grid>
+                    <Label AutomationId="GenerationMetrics"
+                           Text="{Binding MetricsText}"
+                           FontSize="11"
+                           FontFamily="OpenSansRegular"
+                           TextColor="{AppThemeBinding Light=#7A7062, Dark=#C9DDD0}"
+                           LineBreakMode="WordWrap" />
+                </VerticalStackLayout>
+            </Border>
+
+            <ScrollView Grid.Row="1" Padding="16">
+                <genui:GenerativeCanvasView />
+            </ScrollView>
+        </Grid>
 
         <!-- Chat column -->
         <Grid Grid.Column="1"

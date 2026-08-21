@@ -75,16 +75,47 @@ public static class UiObjectBuilder
         }
     }
 
-    /// <summary>Clears a subtree and replaces it with the supplied JSON value.</summary>
+    /// <summary>
+    /// Replaces a subtree while preserving object-member and collection identities where possible,
+    /// so existing MAUI bindings stay attached across fresh snapshots of the same data.
+    /// </summary>
     public static void Replace(UiObject node, JsonElement element)
     {
         ArgumentNullException.ThrowIfNull(node);
 
-        foreach (var (key, _) in node.Members.ToList())
-            node.RemoveMember(key);
-        node.Children.Clear();
-        node.Value = null;
-        Populate(node, element);
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                node.Value = null;
+                node.Children.Clear();
+
+                var incomingNames = element.EnumerateObject()
+                    .Select(property => property.Name)
+                    .ToHashSet(StringComparer.Ordinal);
+                foreach (var (key, _) in node.Members.ToList())
+                {
+                    if (!incomingNames.Contains(key))
+                        node.RemoveMember(key);
+                }
+
+                foreach (var property in element.EnumerateObject())
+                    Replace(node[property.Name], property.Value);
+                break;
+
+            case JsonValueKind.Array:
+                ClearMembers(node);
+                node.Value = null;
+                node.Children.Clear();
+                foreach (var item in element.EnumerateArray())
+                    node.Children.Add(Build(item));
+                break;
+
+            default:
+                ClearMembers(node);
+                node.Children.Clear();
+                Populate(node, element);
+                break;
+        }
     }
 
     /// <summary>Serializes a node's members/children/value back into a JSON object for <c>get_state</c>.</summary>
@@ -118,5 +149,11 @@ public static class UiObjectBuilder
             long l => JsonValue.Create(l),
             _ => JsonValue.Create(node.AsString()),
         };
+    }
+
+    private static void ClearMembers(UiObject node)
+    {
+        foreach (var (key, _) in node.Members.ToList())
+            node.RemoveMember(key);
     }
 }

@@ -1,13 +1,18 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GenerativeUI.Sample.Garden.Components;
 using GenerativeUI.Sample.Garden.Tools;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 using Microsoft.Maui.AI.Attributes;
 using Microsoft.Maui.AI.GenerativeUI;
+using Microsoft.Maui.AI.GenerativeUI.Composition;
 using Microsoft.Maui.AI.GenerativeUI.OpenApi;
 using Microsoft.Maui.AI.GenerativeUI.Tools;
+using Microsoft.Maui.ApplicationModel;
 using CanvasState = Microsoft.Maui.AI.GenerativeUI.Canvas.CanvasState;
 
 namespace GenerativeUI.Sample.Garden.ViewModels;
@@ -18,7 +23,7 @@ namespace GenerativeUI.Sample.Garden.ViewModels;
 /// intents back through <see cref="IChatBridge"/>, which this view model turns into synthetic user
 /// turns so the loop stays AI-driven.
 /// </summary>
-public sealed partial class ChatViewModel : ObservableObject, IChatBridge
+public sealed partial class ChatViewModel : ObservableObject, IChatBridge, IDisposable
 {
     /// <summary>
     /// Source-generated tool context. The generator scans the referenced tool types for
@@ -30,7 +35,7 @@ public sealed partial class ChatViewModel : ObservableObject, IChatBridge
     [AIToolSource(typeof(GardenCompositionTools))]
     private partial class GardenApiTools : AIToolContext { }
 
-    private const string SystemPrompt =
+    private const string BaselineSystemPrompt =
         """
         You are a helpful assistant for an online garden shop. The app has two columns: a large canvas
         you control by rendering UI, and this chat. You have generic tools to (1) explore and call the
@@ -147,27 +152,82 @@ public sealed partial class ChatViewModel : ObservableObject, IChatBridge
         { "schemaVersion": 1, "ui": <node>, "data"?: {...}, "form"?: {...} }.
         """;
 
+    private const string ComposerSystemPrompt =
+        """
+        You are a helpful assistant for an online garden shop. This session uses Component Composer:
+        trusted native product components are selected and arranged by a dedicated planner. You do not
+        author primitive UI.
+
+        - Discover the REST API with list_endpoints, describe_endpoint, and describe_model.
+        - Use read_api for safe GET operations.
+        - Product detail is the only composed surface in this first read-only slice.
+        - For the first product-detail request, read the complete Product and call
+          compose_product_detail with the user's intent and the full typed product.
+        - For follow-up questions about the active product, such as "how big?" or "what colors?",
+          call compose_product_detail with the new intent and omit product so the current state and
+          plan are reused.
+        - write_api and primitive render_ui are intentionally unavailable in this mode. Do not claim
+          to submit reviews, mutate server data, or invent another rendering path.
+        - Keep chat replies brief because the composed native view is the primary result.
+        """;
+
     private readonly IChatClient _chatClient;
+    private readonly ILogger<ChatViewModel> _logger;
     private readonly CanvasState _canvas;
+    private readonly CompositionSessionState _compositionSession;
+    private readonly GenerationMetricsCollector _metrics;
     private readonly List<ChatMessage> _history = [];
     private ToolApprovalRequestContent? _pendingApproval;
+    private GardenGenerationModeOption _selectedMode = GardenGenerationModes.Options[0];
 
-    public ChatViewModel(IServiceProvider rootProvider, IChatClient innerChatClient, CanvasState canvas)
+    public ChatViewModel(
+        IServiceProvider rootProvider,
+        IChatClient innerChatClient,
+        ILogger<ChatViewModel> logger,
+        CanvasState canvas,
+        CompositionSessionState compositionSession,
+        GenerationMetricsCollector metrics)
     {
         _chatClient = new ChatClientBuilder(innerChatClient)
             .UseFunctionInvocation()
             .Build(rootProvider);
+        _logger = logger;
         _canvas = canvas;
+        _compositionSession = compositionSession;
+        _metrics = metrics;
+        _metrics.Updated += OnMetricsUpdated;
 
-        _history.Add(new ChatMessage(ChatRole.System, SystemPrompt));
-
-        foreach (var tool in GardenApiTools.Default.Tools.OrderBy(t => t.Name))
-            AvailableTools.Add(tool.Name);
+        _history.Add(new ChatMessage(ChatRole.System, CurrentSystemPrompt));
+        RefreshAvailableTools();
+        _metrics.Reset(_selectedMode.Label);
     }
 
     public ObservableCollection<ChatMessageViewModel> Messages { get; } = [];
 
     public ObservableCollection<string> AvailableTools { get; } = [];
+
+    public IReadOnlyList<GardenGenerationModeOption> ModeOptions => GardenGenerationModes.Options;
+
+    public GardenGenerationModeOption SelectedMode
+    {
+        get => _selectedMode;
+        set
+        {
+            if (value is null || !SetProperty(ref _selectedMode, value))
+                return;
+
+            OnPropertyChanged(nameof(ModeDescription));
+            ResetConversation();
+        }
+    }
+
+    public string ModeDescription => SelectedMode.Description;
+
+    public string MetricsText => _metrics.Summary;
+
+    private string CurrentSystemPrompt => SelectedMode.Mode == GardenGenerationMode.ComponentComposer
+        ? ComposerSystemPrompt
+        : BaselineSystemPrompt;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsNotBusy))]
@@ -214,7 +274,9 @@ public sealed partial class ChatViewModel : ObservableObject, IChatBridge
     /// flight so we never clear history out from under a streaming response.
     /// </summary>
     [RelayCommand(CanExecute = nameof(IsNotBusy))]
-    private void Clear()
+    private void Clear() => ResetConversation();
+
+    private void ResetConversation()
     {
         _pendingApproval = null;
         IsApprovalPending = false;
@@ -223,8 +285,11 @@ public sealed partial class ChatViewModel : ObservableObject, IChatBridge
 
         Messages.Clear();
         _history.Clear();
-        _history.Add(new ChatMessage(ChatRole.System, SystemPrompt));
+        _history.Add(new ChatMessage(ChatRole.System, CurrentSystemPrompt));
         _canvas.Reset();
+        _compositionSession.Reset();
+        RefreshAvailableTools();
+        _metrics.Reset(SelectedMode.Label);
     }
 
     private async Task ResolveApprovalAsync(bool approved, string? reason = null)
@@ -247,16 +312,20 @@ public sealed partial class ChatViewModel : ObservableObject, IChatBridge
     {
         IsBusy = true;
         _canvas.IsBusy = true;
+        _metrics.BeginTurn(SelectedMode.Label);
+        var stopwatch = Stopwatch.StartNew();
+        long? inputTokens = null;
+        long? outputTokens = null;
         try
         {
             var options = new ChatOptions
             {
-                Tools = [.. GardenApiTools.Default.Tools],
+                Tools = [.. ActiveTools()],
                 // render_ui documents (pre-expanded lists with full descriptions) can be large;
                 // a low output cap truncates the JSON mid-document and the model loops on parse errors.
                 MaxOutputTokens = 16000,
             };
-            await StreamResponseAsync(options);
+            (inputTokens, outputTokens) = await StreamResponseAsync(options);
         }
         catch (Exception ex)
         {
@@ -264,6 +333,8 @@ public sealed partial class ChatViewModel : ObservableObject, IChatBridge
         }
         finally
         {
+            stopwatch.Stop();
+            _metrics.CompleteMain(stopwatch.Elapsed, inputTokens, outputTokens);
             IsBusy = false;
             _canvas.IsBusy = false;
         }
@@ -314,7 +385,7 @@ public sealed partial class ChatViewModel : ObservableObject, IChatBridge
         await RunTurnAsync();
     }
 
-    private async Task StreamResponseAsync(ChatOptions options)
+    private async Task<(long? InputTokens, long? OutputTokens)> StreamResponseAsync(ChatOptions options)
     {
         var updates = new List<ChatResponseUpdate>();
         var toolRows = new Dictionary<string, ChatMessageViewModel>();
@@ -356,6 +427,7 @@ public sealed partial class ChatViewModel : ObservableObject, IChatBridge
             }
         }
 
+        var response = updates.ToChatResponse();
         _history.AddMessages(updates);
 
         if (_pendingApproval is not null)
@@ -368,6 +440,28 @@ public sealed partial class ChatViewModel : ObservableObject, IChatBridge
         {
             AddMessage(ChatMessageKind.Assistant, "(no response)");
         }
+
+        return (response.Usage?.InputTokenCount, response.Usage?.OutputTokenCount);
+    }
+
+    private IEnumerable<AITool> ActiveTools()
+        => GardenApiTools.Default.Tools.Where(tool =>
+            GardenGenerationModes.IncludesTool(SelectedMode.Mode, tool.Name));
+
+    private void RefreshAvailableTools()
+    {
+        AvailableTools.Clear();
+        foreach (var tool in ActiveTools().OrderBy(tool => tool.Name, StringComparer.Ordinal))
+            AvailableTools.Add(tool.Name);
+    }
+
+    private void OnMetricsUpdated(object? sender, EventArgs e)
+    {
+        _logger.LogInformation("Generation metrics: {@Metrics}", _metrics.Snapshot);
+        if (MainThread.IsMainThread)
+            OnPropertyChanged(nameof(MetricsText));
+        else
+            MainThread.BeginInvokeOnMainThread(() => OnPropertyChanged(nameof(MetricsText)));
     }
 
     private ChatMessageViewModel AddMessage(ChatMessageKind kind, string text)
@@ -391,4 +485,6 @@ public sealed partial class ChatViewModel : ObservableObject, IChatBridge
         string s => s,
         _ => JsonSerializer.Serialize(result),
     };
+
+    public void Dispose() => _metrics.Updated -= OnMetricsUpdated;
 }

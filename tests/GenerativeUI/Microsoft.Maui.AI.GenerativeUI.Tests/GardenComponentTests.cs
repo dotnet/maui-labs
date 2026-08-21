@@ -67,6 +67,49 @@ public sealed class GardenComponentTests
     }
 
     [Fact]
+    public void SameProductSnapshot_PreservesBindingNodesAndRefreshesColorGallery()
+    {
+        var state = CreateState(GardenProductFixtures.WateringCan);
+        var productNode = state["product"];
+        var dimensionsNode = productNode["dimensions"];
+        var colorsNode = productNode["colorOptions"]["options"];
+        var gallery = new ColorGallery { BindingContext = productNode };
+        var updated = GardenProductFixtures.WateringCan with
+        {
+            Dimensions = new Dimensions(21m, 15m, 9m, "inches"),
+            ColorOptions = new ColorOptions([new ProductColor("Ocean Blue", "#245A77")]),
+        };
+
+        UiObjectBuilder.Replace(
+            productNode,
+            JsonSerializer.SerializeToElement(updated, GardenJsonContext.Default.Product));
+
+        Assert.Same(dimensionsNode, productNode["dimensions"]);
+        Assert.Same(colorsNode, productNode["colorOptions"]["options"]);
+        Assert.NotNull(Find<VerticalStackLayout>(gallery, "ColorOption-Ocean-Blue"));
+        Assert.DoesNotContain(
+            Descendants(gallery).OfType<VerticalStackLayout>(),
+            element => element.AutomationId == "ColorOption-Sage-Green");
+    }
+
+    [Fact]
+    public void ColorGallery_DetachUnsubscribesFromStateCollection()
+    {
+        var state = CreateState(GardenProductFixtures.WateringCan);
+        var colors = state["product"]["colorOptions"]["options"].Children;
+        var gallery = new ColorGallery { BindingContext = state["product"] };
+
+        gallery.Detach();
+        colors.Add(UiObjectBuilder.Build(JsonSerializer.SerializeToElement(
+            new ProductColor("Ocean Blue", "#245A77"),
+            GardenJsonContext.Default.ProductColor)));
+
+        Assert.DoesNotContain(
+            Descendants(gallery).OfType<VerticalStackLayout>(),
+            element => element.AutomationId?.StartsWith("ColorOption-", StringComparison.Ordinal) == true);
+    }
+
+    [Fact]
     public void SeedGrowingTimeline_RendersPlantingGerminationAndHarvest()
     {
         var component = Bind(new SeedGrowingTimeline(), GardenProductFixtures.BasilSeeds);

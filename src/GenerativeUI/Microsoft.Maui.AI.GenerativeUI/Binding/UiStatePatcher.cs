@@ -75,7 +75,8 @@ public static class UiStatePatcher
             return;
         }
 
-        var parent = Navigate(root, tokens, tokens.Count - 1, create: true);
+        var parent = Navigate(root, tokens, tokens.Count - 1, create: true)
+            ?? throw new UiPatchException($"add parent not found: {Join(tokens)}");
         var last = tokens[^1];
 
         // Array insert/append when the parent already holds a list, or the token is numeric / "-".

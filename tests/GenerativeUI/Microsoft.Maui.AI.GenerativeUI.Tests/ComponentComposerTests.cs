@@ -236,30 +236,38 @@ public sealed class ComponentComposerTests
 
         public List<CompositionPlanGenerationRequest> Requests { get; } = [];
 
-        public Task<CompositionPlan?> GenerateAsync(
+        public Task<ComponentPlanGenerationResult> GenerateAsync(
             CompositionPlanGenerationRequest request,
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             Requests.Add(request);
-            return Task.FromResult(_responses.Dequeue()(request));
+            return Task.FromResult(new ComponentPlanGenerationResult(
+                _responses.Dequeue()(request),
+                TimeSpan.Zero,
+                InputTokens: null,
+                OutputTokens: null));
         }
     }
 
     private sealed class CancelledPlanGenerator : IComponentPlanGenerator
     {
-        public Task<CompositionPlan?> GenerateAsync(
+        public Task<ComponentPlanGenerationResult> GenerateAsync(
             CompositionPlanGenerationRequest request,
             CancellationToken cancellationToken = default)
-            => Task.FromCanceled<CompositionPlan?>(cancellationToken);
+            => Task.FromCanceled<ComponentPlanGenerationResult>(cancellationToken);
     }
 
     private sealed class GoldenPlanGenerator : IComponentPlanGenerator
     {
-        public Task<CompositionPlan?> GenerateAsync(
+        public Task<ComponentPlanGenerationResult> GenerateAsync(
             CompositionPlanGenerationRequest request,
             CancellationToken cancellationToken = default)
-            => Task.FromResult<CompositionPlan?>(CreatePlan(request));
+            => Task.FromResult(new ComponentPlanGenerationResult(
+                CreatePlan(request),
+                TimeSpan.Zero,
+                InputTokens: null,
+                OutputTokens: null));
 
         public static CompositionPlan CreatePlan(CompositionPlanGenerationRequest request)
         {

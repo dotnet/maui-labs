@@ -37,6 +37,12 @@ public sealed class CompositionSessionState
 
     public void Reset()
     {
+        foreach (var mounted in _mounted.Values)
+        {
+            if (mounted.View is ICompositionComponent component)
+                component.Detach();
+        }
+
         CurrentPlan = null;
         ScaffoldView = null;
         Scaffold = null;
@@ -72,7 +78,13 @@ public sealed class CompositionPlanRenderer(
         var desiredIds = plan.Sections.Select(section => section.Id).ToHashSet(StringComparer.Ordinal);
         var removed = session.Mounted.Keys.Where(id => !desiredIds.Contains(id)).Order().ToList();
         foreach (var id in removed)
-            session.Mounted.Remove(id);
+        {
+            if (session.Mounted.Remove(id, out var mounted) &&
+                mounted.View is ICompositionComponent component)
+            {
+                component.Detach();
+            }
+        }
 
         var added = new List<string>();
         var reused = new List<string>();
@@ -112,6 +124,9 @@ public sealed class CompositionPlanRenderer(
                 }
                 else
                 {
+                    if (mounted?.View is ICompositionComponent previousComponent)
+                        previousComponent.Detach();
+
                     var view = CreateComponent(section, stateRoot);
                     session.Mounted[section.Id] = new(
                         section.Component,

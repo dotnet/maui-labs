@@ -1,5 +1,7 @@
 using System.Text.Json.Nodes;
 using GenerativeUI.Sample.Garden.Tools;
+using GenerativeUI.Sample.Garden.Components;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.AI.Attributes;
 
@@ -31,5 +33,17 @@ public sealed partial class GardenCompositionToolSchemaTests
         Assert.Contains("seedDetails", productSchema, StringComparison.Ordinal);
         Assert.Contains("dimensions", productSchema, StringComparison.Ordinal);
         Assert.Contains("colorOptions", productSchema, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GardenProductServices_RegisterCompositionToolSource()
+    {
+        var services = new ServiceCollection();
+
+        services.AddGardenProductComponents();
+
+        Assert.Contains(
+            services,
+            descriptor => descriptor.ServiceType == typeof(GardenCompositionTools));
     }
 }
