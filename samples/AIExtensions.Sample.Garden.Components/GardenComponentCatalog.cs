@@ -1,5 +1,4 @@
 using AIExtensions.Sample.Garden.Shared;
-using GenerativeUI.Sample.Garden.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.AI.GenerativeUI.Composition;
 using Microsoft.Maui.AI.GenerativeUI.Registry;
@@ -8,7 +7,6 @@ namespace AIExtensions.Sample.Garden.Components;
 
 public static class GardenComponentCatalog
 {
-    public const string ProductDetailScaffoldAlias = "ProductDetail";
     public const string ProductHeroAlias = "ProductHero";
     public const string ProductCoreInfoAlias = "ProductCoreInfo";
     public const string DimensionsPanelAlias = "DimensionsPanel";
@@ -50,7 +48,6 @@ public static class GardenComponentCatalog
         services.AddTransient<DimensionsPanel>();
         services.AddTransient<ColorGallery>();
         services.AddTransient<SeedGrowingTimeline>();
-        services.AddTransient<ProductDetailScaffold>();
         services.AddTransient<WelcomeHero>();
         services.AddTransient<RecommendationBundle>();
         services.AddTransient<QuickActions>();
@@ -79,9 +76,6 @@ public static class GardenComponentCatalog
         services.AddTransient<OrderStats>();
         services.AddTransient<OrderDetail>();
         services.AddTransient<OrdersEmptyState>();
-        services.AddSingleton<GardenCompositionTools>();
-        services.AddSingleton<ICompositionFallbackPlanFactory, ProductDetailFallbackPlanFactory>();
-        services.AddSingleton<GenerationMetricsCollector>();
         return services;
     }
 
@@ -160,16 +154,7 @@ public static class GardenComponentCatalog
                 AllowedSlots = [CompositionSlot.Primary, CompositionSlot.Supporting],
                 AllowedRegions = ["ProductBody"],
                 Variants = ["default"],
-            })
-            .AddScaffold<ProductDetailScaffold>(
-                ProductDetailScaffoldAlias,
-                "Native product detail scaffold with persistent Hero, Primary, Supporting, and Actions slots.",
-                [
-                    new(CompositionSlot.Hero, AllowsMultiple: false),
-                    new(CompositionSlot.Primary, AllowsMultiple: false),
-                    new(CompositionSlot.Supporting, AllowsMultiple: true),
-                    new(CompositionSlot.Actions, AllowsMultiple: true),
-                ]);
+            });
 
         return registry;
     }
@@ -335,53 +320,4 @@ public static class GardenComponentCatalog
             AllowedRegions = regions,
             Variants = ["default", "compact", "emphasis"],
         });
-}
-
-public sealed class ProductDetailFallbackPlanFactory : ICompositionFallbackPlanFactory
-{
-    public string Scaffold => GardenComponentCatalog.ProductDetailScaffoldAlias;
-
-    public CompositionPlan CreateFallback(CompositionFallbackContext context)
-    {
-        if (!string.Equals(context.Scaffold, Scaffold, StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException($"Unsupported scaffold '{context.Scaffold}'.", nameof(context));
-
-        var heroId = ExistingId(context.CurrentPlan, GardenComponentCatalog.ProductHeroAlias) ?? "product-hero";
-        var coreId = ExistingId(context.CurrentPlan, GardenComponentCatalog.ProductCoreInfoAlias) ?? "product-core";
-
-        return new CompositionPlan
-        {
-            PlanId = context.PlanId,
-            Revision = context.Revision,
-            Scaffold = Scaffold,
-            Title = context.Title,
-            Sections =
-            [
-                new()
-                {
-                    Id = heroId,
-                    Slot = CompositionSlot.Hero,
-                    Component = GardenComponentCatalog.ProductHeroAlias,
-                    DataPath = context.DataPath,
-                    Variant = "default",
-                    Priority = 100,
-                    Reason = "Deterministic product identity fallback.",
-                },
-                new()
-                {
-                    Id = coreId,
-                    Slot = CompositionSlot.Primary,
-                    Component = GardenComponentCatalog.ProductCoreInfoAlias,
-                    DataPath = context.DataPath,
-                    Variant = "default",
-                    Priority = 90,
-                    Reason = "Deterministic core product information fallback.",
-                },
-            ],
-        };
-    }
-
-    private static string? ExistingId(CompositionPlan? plan, string component)
-        => plan?.Sections.FirstOrDefault(section =>
-            string.Equals(section.Component, component, StringComparison.OrdinalIgnoreCase))?.Id;
 }

@@ -1,157 +1,123 @@
-# Appendix: Native Component Composer
+# Appendix — Adaptive Whole-Component Composer
 
-> **Status:** Implemented vertical slice (v0.3).
-> Parent: [`overview.md`](./overview.md). Sample:
-> [`sample-generative-garden.md`](./sample-generative-garden.md).
+> **Status:** Implemented v0.4.
 
-## 1. Why this path exists
+## 1. Contract
 
-The original Generative UI MVP remains useful as a research baseline: a frontier model authors a
-complete constrained primitive tree, and the runtime inflates it into MAUI views. The default v0.3
-path narrows the runtime model's role. The app owns tested native components; the model selects,
-prioritizes, and arranges only compatible candidates.
-
-This preserves runtime adaptation without asking a model to reproduce visual design, accessibility,
-binding, and component behavior on every turn.
-
-## 2. Runtime flow
-
-1. The main chat agent discovers and reads the Garden REST API through the existing OpenAPI tools.
-2. The typed `compose_product_detail` tool seeds the complete `Product` under the existing dotted
-   `StateRoot` path `product`.
-3. `ComponentCandidateResolver` filters the registered catalog by data contract and required
-   bindings. Missing facets remove components before the model sees them.
-4. A dedicated `IChatClient.GetResponseAsync<CompositionPlan>()` request receives only the intent,
-   state snapshot, current plan, scaffold, and valid candidates.
-5. `CompositionPlanValidator` rejects unknown components, invalid slots/variants/paths, duplicate or
-   unstable IDs, and stale revisions.
-6. One invalid response is returned to the planner as structured correction JSON. A second invalid
-   response selects the deterministic ProductHero + ProductCoreInfo plan.
-7. `CompositionPlanRenderer` resolves native views through DI and reconciles the persistent scaffold
-   by stable section ID.
-
-There is no primitive-generation fallback in this path.
-
-## 3. Minimal descriptor v1
-
-Each app-authored component declares only:
-
-- `alias`
-- full free-form `description` containing when/when-not guidance
-- accepted `dataContract`
-- `requiredBindings`
-- `optionalBindings`
-- `allowedSlots`
-- one or two `variants`
-
-The Garden catalog intentionally has no cost, density, risk, exclusivity, policy, or max-instance
-metadata. The scaffold separately declares its named slots and whether each slot accepts one or
-many children; this is the minimum needed for slot validation.
-
-## 4. CompositionPlan v1
+The model returns one `ComponentLayoutDocument`. It is a flat table rather than a recursive control
+tree, which keeps the contract small, enum-constrained, and straightforward to validate.
 
 ```json
 {
-  "schemaVersion": 1,
-  "planId": "composition-...",
-  "revision": 2,
-  "scaffold": "ProductDetail",
-  "title": "Watering Can",
-  "sections": [
+  "layoutId": "catalog-active",
+  "revision": 3,
+  "surface": "Catalog",
+  "explanation": "Show visual browsing first for the user's herb-garden goal.",
+  "regions": [
+    { "region": "CatalogBody", "rootNodeId": "catalog-root" }
+  ],
+  "nodes": [
     {
-      "id": "product-dimensions",
-      "slot": "Primary",
-      "component": "DimensionsPanel",
-      "dataPath": "product",
+      "id": "catalog-root",
+      "kind": "Grid",
+      "order": 0,
+      "gridPreset": "PrimaryWithSidebar",
+      "reason": "Keep products dominant and recommendations visible."
+    },
+    {
+      "id": "products",
+      "kind": "Component",
+      "parentId": "catalog-root",
+      "order": 0,
+      "component": "CatalogGrid",
+      "dataPath": "catalog",
       "variant": "default",
-      "priority": 100,
-      "reason": "The user asked how big the product is."
+      "reason": "The user asked to browse products visually."
+    },
+    {
+      "id": "recommendations",
+      "kind": "Component",
+      "parentId": "catalog-root",
+      "order": 1,
+      "component": "RecommendationStrip",
+      "dataPath": "recommendation",
+      "variant": "compact",
+      "reason": "Keep the current garden goal in context."
     }
   ]
 }
 ```
 
-`dataPath` is the existing dotted `UiObject` binding path. The state tools continue to use their
-existing JSON Pointer paths for subtree reads and RFC 6902 patches; the composer introduces no new
-binding language.
+Allowed kinds are `Stack`, `Grid`, `Tabs`, `Section`, and `Component`. Stack orientation and grid
+preset are enums. A component node must reference a registered alias; there is no arbitrary primitive
+leaf or style payload.
 
-Initial plans receive a stable `planId` and revision 1. Follow-ups preserve the plan ID and unchanged
-section IDs and increment the revision exactly once. Priority orders children within a slot.
+## 2. Catalog
 
-## 5. Garden components and facets
+`GenerativeUiRegistry` stores descriptors for app-authored whole components. A descriptor includes:
 
-The shared `Product` DTO keeps its existing fields and adds optional trailing records:
+- stable alias and full use/avoid guidance;
+- typed data contract;
+- required and optional binding facets;
+- allowed adaptive regions;
+- supported variants.
 
-- `SeedDetails`: planting instructions, germination window, harvest window.
-- `Dimensions`: width, height, depth, unit.
-- `ColorOptions`: ordered named/hex colors.
+The Garden app supplies the full catalog to every model request. This makes all valid alternatives
+visible without requiring a discovery or compose tool.
 
-The app-owned catalog contains:
+## 3. Data projection
 
-| Component | Required state | Slots | Variants |
-|---|---|---|---|
-| `ProductHero` | `name` | Hero | default, compact |
-| `ProductCoreInfo` | `name`, `description`, `price` | Primary, Supporting | default, compact |
-| `DimensionsPanel` | `dimensions.*` | Primary, Supporting | default |
-| `ColorGallery` | `colorOptions.options` | Primary, Supporting | swatches, gallery |
-| `SeedGrowingTimeline` | `seedDetails.*` | Primary, Supporting | default |
+`GardenAdaptiveContextFactory` gathers canonical typed values from `GardenDataStore`.
+`AdaptiveStateProjector` converts that snapshot to `UiObject` for rendering. The request contains a
+data manifest describing available paths and facets; it does not expose arbitrary object traversal.
 
-`ProductDetailScaffold` owns Hero, Primary, Supporting, and Actions hosts. Hero and Primary are
-single-section slots. Supporting and Actions are ordered multi-section slots.
+Projection updates existing nodes where possible so mounted components continue observing the same
+binding objects.
 
-## 6. Incremental rendering
+## 4. Generation and validation
 
-The renderer keeps:
+`AdaptiveLayoutGenerator` uses source-generated JSON metadata and a strict schema. The validator
+checks:
 
-- the scaffold `View`
-- the current typed plan
-- a section-ID-to-View map
-- the most recent render diff
+1. surface and region ownership;
+2. unique node IDs and valid parent/root references;
+3. cycle-free flat hierarchy;
+4. allowed node-kind properties and enum values;
+5. registered component aliases, variants, regions, and data paths;
+6. required binding facets;
+7. surface-required component groups.
 
-For a follow-up revision, unchanged IDs reuse their existing views and binding contexts. Moving a
-section removes that same view from one slot and inserts it into another. Variant changes call the
-component's in-place variant hook. Only removed or component-replaced IDs are unmounted.
+Invalid model output is returned as structured correction feedback for one retry. A second invalid
+result is not rendered.
 
-The render diff reports scaffold reuse and added, reused, moved, reconfigured, and removed section
-IDs. These signals are displayed beside model latency/token metrics for the sample A/B comparison.
+## 5. Sessions, ordering, and cache
 
-## 7. Modes and action boundary
+`AdaptiveSurfaceSession` owns one surface instance's projected state, standard/current layout,
+mounted views, region hosts, state version, and generation counter. `BeginGeneration` and
+`IsCurrentGeneration` prevent late results from replacing newer state.
 
-The Garden shell exposes:
+The cache key includes surface context rather than sharing a mutable session. Cached plans are
+revalidated before use. Suspending or disposing a session invalidates pending generation.
 
-- **Component Composer** (default): `list_endpoints`, `describe_endpoint`, `describe_model`,
-  `read_api`, and `compose_product_detail`.
-- **Baseline Full Generation**: the original OpenAPI and primitive UI tool set, including
-  `write_api`, `render_ui`, state tools, `itemsBind`, and automatic write approval.
+## 6. Reconciliation
 
-Switching modes clears conversation, canvas, and composition state so tool histories do not mix.
+`AdaptiveRegionRenderer` builds container nodes and resolves whole components from DI. Stable node IDs
+and compatible semantics allow existing views to move or reconfigure instead of being recreated.
+Removed components are detached from observable state.
 
-Component Composer v1 is read-only. Review submission and other write actions are deferred until the
-component-to-action path and approval ownership are explicitly designed and tested. The baseline
-automatic `write_api` approval behavior is unchanged.
+The renderer only mounts into named `AdaptiveRegionView` hosts. Fixed page chrome and essential
+actions are outside its authority.
 
-## 8. Validation
+## 7. Standard fallback
 
-Deterministic unit tests use typed plan deserialization and structural assertions. A scripted plan
-generator covers:
+Every surface has a checked-in `GardenAdaptiveLayouts` standard. Catalog, Cart, and Orders also have
+explicit empty-state standards. These layouts use the same validator and renderer as generated plans.
 
-- generic Watering Can composition
-- Dimensions promotion for "How big?"
-- ColorGallery promotion and `gallery` variant for "What colors?"
-- SeedGrowingTimeline with no dimensions/color components for a seed product
-- invalid-then-corrected output
-- invalid-twice deterministic fallback
-- cancellation propagation
-- persistent scaffold and component identity across follow-ups
+The standard renders before AI work starts and remains visible if data loading, model execution,
+validation, or rendering fails. Reset restores it and clears presentation intent.
 
-Live model quality and visual comparison are validated through the existing DevFlow agent rather
-than nondeterministic exact-output tests.
+## 8. Legacy composer APIs
 
-## 9. Deferred
-
-- ReviewEditor and all composer-mode write/approval routing.
-- Primitive `GeneratedPanel` fallback.
-- Rich descriptor policy.
-- `[GenerativeComponent]` source generation.
-- Development-time Copilot CLI component scaffolding.
-- Analytics-driven catalog promotion beyond the local comparison metrics.
+The reusable versioned `CompositionPlan`/scaffold composer remains available and tested as a generic
+library API. The Garden-specific product scaffold, explicit composition adapter, mode picker, and
+comparison metrics were retired; the destination app uses only automatic surface composition.

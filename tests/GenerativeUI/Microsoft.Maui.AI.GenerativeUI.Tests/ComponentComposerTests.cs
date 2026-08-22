@@ -6,12 +6,15 @@ using Microsoft.Maui.AI.GenerativeUI.Binding;
 using Microsoft.Maui.AI.GenerativeUI.Canvas;
 using Microsoft.Maui.AI.GenerativeUI.Composition;
 using Microsoft.Maui.AI.GenerativeUI.Registry;
+using Microsoft.Maui.Controls;
 using CanvasState = Microsoft.Maui.AI.GenerativeUI.Canvas.CanvasState;
 
 namespace Microsoft.Maui.AI.GenerativeUI.Tests;
 
 public sealed class ComponentComposerTests
 {
+    private const string TestScaffoldAlias = "ProductDetail";
+
     [Fact]
     public async Task Compose_InvalidThenValid_RetriesOnceWithStructuredCorrection()
     {
@@ -166,16 +169,28 @@ public sealed class ComponentComposerTests
     private static ComponentCompositionRequest Request(string intent)
         => new(
             intent,
-            GardenComponentCatalog.ProductDetailScaffoldAlias,
+            TestScaffoldAlias,
             nameof(Product),
             "product",
             intent.Contains("basil", StringComparison.OrdinalIgnoreCase) ? "Basil Seeds" : "Watering Can");
 
     private static TestHarness CreateHarness(IComponentPlanGenerator generator, Product product)
     {
-        var registry = new GenerativeUiRegistry().AddGardenProductCatalog();
+        var registry = new GenerativeUiRegistry()
+            .AddGardenProductCatalog()
+            .AddScaffold<TestScaffold>(
+                TestScaffoldAlias,
+                "Test-only product detail scaffold.",
+                [
+                    new(CompositionSlot.Hero, AllowsMultiple: false),
+                    new(CompositionSlot.Primary, AllowsMultiple: false),
+                    new(CompositionSlot.Supporting, AllowsMultiple: true),
+                    new(CompositionSlot.Actions, AllowsMultiple: true),
+                ]);
         var services = new ServiceCollection()
             .AddGardenProductComponents()
+            .AddTransient<TestScaffold>()
+            .AddSingleton<ICompositionFallbackPlanFactory, TestFallbackPlanFactory>()
             .BuildServiceProvider();
         var canvas = new CanvasState();
         var session = new CompositionSessionState();
@@ -402,5 +417,109 @@ public sealed class ComponentComposerTests
                 Priority = priority,
                 Reason = $"Selected for intent: {request.Intent}",
             };
+    }
+
+    private sealed class TestFallbackPlanFactory : ICompositionFallbackPlanFactory
+    {
+        public string Scaffold => TestScaffoldAlias;
+
+        public CompositionPlan CreateFallback(CompositionFallbackContext context)
+            => new()
+            {
+                PlanId = context.PlanId,
+                Revision = context.Revision,
+                Scaffold = context.Scaffold,
+                Title = context.Title,
+                Sections =
+                [
+                    new()
+                    {
+                        Id = "product-hero",
+                        Slot = CompositionSlot.Hero,
+                        Component = GardenComponentCatalog.ProductHeroAlias,
+                        DataPath = context.DataPath,
+                        Variant = "default",
+                        Priority = 100,
+                        Reason = "Test fallback keeps product identity visible.",
+                    },
+                    new()
+                    {
+                        Id = "product-core",
+                        Slot = CompositionSlot.Primary,
+                        Component = GardenComponentCatalog.ProductCoreInfoAlias,
+                        DataPath = context.DataPath,
+                        Variant = "default",
+                        Priority = 90,
+                        Reason = "Test fallback keeps buying information visible.",
+                    },
+                ],
+            };
+    }
+
+    private sealed class TestScaffold : ContentView, ICompositionScaffold
+    {
+        private readonly Label _title = new();
+        private readonly IReadOnlyDictionary<CompositionSlot, Layout> _hosts;
+
+        public TestScaffold()
+        {
+            var hero = new VerticalStackLayout();
+            var primary = new VerticalStackLayout();
+            var supporting = new VerticalStackLayout();
+            var actions = new HorizontalStackLayout();
+            _hosts = new Dictionary<CompositionSlot, Layout>
+            {
+                [CompositionSlot.Hero] = hero,
+                [CompositionSlot.Primary] = primary,
+                [CompositionSlot.Supporting] = supporting,
+                [CompositionSlot.Actions] = actions,
+            };
+            Content = new VerticalStackLayout
+            {
+                Children = { _title, hero, primary, supporting, actions },
+            };
+        }
+
+        public string? Title
+        {
+            get => _title.Text;
+            set => _title.Text = value;
+        }
+
+        public IReadOnlyList<View> GetSlotChildren(CompositionSlot slot)
+            => _hosts.TryGetValue(slot, out var host)
+                ? [.. host.Children.OfType<View>()]
+                : [];
+
+        public void ApplySlots(IReadOnlyDictionary<CompositionSlot, IReadOnlyList<View>> slots)
+        {
+            foreach (var (slot, host) in _hosts)
+            {
+                var desired = slots.GetValueOrDefault(slot) ?? [];
+                foreach (var current in host.Children.OfType<View>().ToList())
+                {
+                    if (!desired.Contains(current))
+                        host.Children.Remove(current);
+                }
+            }
+
+            foreach (var (slot, host) in _hosts)
+            {
+                var desired = slots.GetValueOrDefault(slot) ?? [];
+                for (var index = 0; index < desired.Count; index++)
+                {
+                    var view = desired[index];
+                    foreach (var otherHost in _hosts.Values.Where(candidate => !ReferenceEquals(candidate, host)))
+                        otherHost.Children.Remove(view);
+
+                    var currentIndex = host.Children.IndexOf(view);
+                    if (currentIndex == index)
+                        continue;
+                    if (currentIndex >= 0)
+                        host.Children.RemoveAt(currentIndex);
+                    host.Children.Insert(index, view);
+                }
+            }
+        }
     }
 }

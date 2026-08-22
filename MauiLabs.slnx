@@ -23,7 +23,6 @@
     <Project Path="samples/AIExtensions.Sample.Garden.Shared/AIExtensions.Sample.Garden.Shared.csproj" />
     <Project Path="samples/AIExtensions.Sample.Garden.Server/AIExtensions.Sample.Garden.Server.csproj" />
     <Project Path="samples/AIExtensions.Sample.Garden.Components/AIExtensions.Sample.Garden.Components.csproj" />
-    <Project Path="samples/GenerativeUI.Sample.Garden/GenerativeUI.Sample.Garden.csproj" />
   </Folder>
   <Folder Name="/src/" />
   <Folder Name="/src/AI/">

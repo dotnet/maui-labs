@@ -26,6 +26,27 @@ past purchases using source-generated tools.
   a fixed error banner with details and a Retry action.
 - **Approval flow** — every AI-initiated server mutation pauses the chat and shows an
   inline approve/reject banner, while equivalent human taps call the same typed client directly.
+- **Adaptive whole-component UI** — Home, Catalog, Product, Cart, and Orders render checked-in
+  standard layouts immediately, then may reconcile to an intent-aware layout made only from
+  registered native Garden components.
+- **Fixed trusted chrome** — navigation, retry, add/remove, checkout, open, reorder, and reset
+  stay app-authored and available regardless of AI output.
+
+![Adaptive Garden home](../../docs/GenerativeUI/images/adaptive-garden-home.png)
+
+## Adaptive surfaces
+
+The model returns a flat, enum-constrained `ComponentLayoutDocument`. It may use `Stack`, `Grid`,
+`Tabs`, `Section`, and registered whole components; it cannot author C#, XAML, styles, handlers,
+or primitive leaves. `GardenComponentCatalog` publishes the complete component/data manifest and
+`GardenAdaptiveLayouts` contains the canonical populated and empty-state standards.
+
+`AdaptiveSurfaceCoordinator` composes automatically from the active page context and recent chat
+intent. It debounces viewport and intent changes, cancels stale work, validates and retries once,
+reconciles stable native views, and preserves the standard layout on failure. There is no compose
+chat tool.
+
+![Adaptive Garden catalog](../../docs/GenerativeUI/images/adaptive-garden-catalog.png)
 
 ## Persistent chat across pages
 
@@ -37,6 +58,8 @@ resolves the same singleton through `ViewModelBinder`.
 
 Below 800 DIPs, the sidebar is hidden so each page keeps its full working area.
 Returning home restores the chat-first layout with the same conversation history.
+
+![Adaptive Garden catalog at narrow width](../../docs/GenerativeUI/images/adaptive-garden-catalog-narrow.png)
 
 ## Tool sources and lifetimes
 
@@ -72,6 +95,9 @@ assistant. The model can only invoke typed Garden operations and fixed-shell nav
 | Typed HTTP API with source-generated JSON | `Services/Api/GardenApiClient.cs` |
 | Shared async state and retry | `Services/GardenDataStore.cs` |
 | Curated typed assistant tools | `Services/GardenChatTools.cs` |
+| Automatic intent-driven adaptation | `Microsoft.Maui.AI.GenerativeUI/Composition/AdaptiveSurfaceCoordinator.cs` |
+| Per-page session lifecycle | `Pages/AdaptiveContentPage.cs` |
+| Whole-component catalog and standards | `AIExtensions.Sample.Garden.Components` |
 | Shell modal navigation tools | `ViewModels/MainViewModel.cs` + `AppShell.xaml.cs` |
 | Persistent assistant beside non-home pages | `Views/ChatSidebar.xaml`, backed by singleton `ChatViewModel` |
 | Responsive welcome cards and centered chat layout | `Views/ChatView.xaml` + `Pages/MainPage.xaml` |
@@ -88,7 +114,8 @@ chrome invoke `GardenDataStore` directly and never enter the AI approval flow.
 
 ```bash
 dotnet run --project samples/AIExtensions.Sample.Garden.Server
-dotnet build samples/AIExtensions.Sample.Garden -f net10.0-maccatalyst
+dotnet build samples/AIExtensions.Sample.Garden/AIExtensions.Sample.Garden.csproj \
+  -t:Run -f net10.0-maccatalyst
 ```
 
 The app uses `http://localhost:5225` on desktop and iOS simulator, and
