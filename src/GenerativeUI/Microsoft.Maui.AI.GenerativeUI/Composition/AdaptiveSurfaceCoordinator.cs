@@ -176,8 +176,24 @@ public sealed class AdaptiveSurfaceCoordinator(
         lock (_gate)
             active = _activeSurface;
 
-        if (active is not null)
-            ScheduleComposition(active, TimeSpan.Zero, cancellationToken);
+        return active is null
+            ? Task.CompletedTask
+            : RefreshAsync(active, cancellationToken);
+    }
+
+    public Task RefreshAsync(
+        IAdaptiveSurface surface,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(surface);
+        ThrowIfDisposed();
+        lock (_gate)
+        {
+            if (!ReferenceEquals(_activeSurface, surface))
+                return Task.CompletedTask;
+        }
+
+        ScheduleComposition(surface, TimeSpan.Zero, cancellationToken);
         return WhenIdleAsync();
     }
 

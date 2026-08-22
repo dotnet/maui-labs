@@ -18,6 +18,36 @@ public sealed class ComponentLayoutValidatorTests
     }
 
     [Fact]
+    public void Serialize_SurfaceRequirements_UsesSourceGeneratedContract()
+    {
+        var context = AdaptiveCompositionTestCatalog.Context() with
+        {
+            Surface = AdaptiveCompositionTestCatalog.Context().Surface with
+            {
+                RequiredComponentGroups =
+                [
+                    new()
+                    {
+                        Name = "essential actions",
+                        ComponentAliases = ["ActionBar", "PrimaryActions"],
+                    },
+                ],
+            },
+        };
+
+        var json = JsonSerializer.Serialize(
+            context,
+            ComponentLayoutJsonContext.Default.AdaptiveSurfaceContext);
+        var roundTrip = JsonSerializer.Deserialize(
+            json,
+            ComponentLayoutJsonContext.Default.AdaptiveSurfaceContext);
+
+        var requirement = Assert.Single(roundTrip!.Surface.RequiredComponentGroups);
+        Assert.Equal("essential actions", requirement.Name);
+        Assert.Equal(["ActionBar", "PrimaryActions"], requirement.ComponentAliases);
+    }
+
+    [Fact]
     public void Validate_StandardLayout_IsValid()
     {
         var result = new ComponentLayoutValidator().Validate(
@@ -205,5 +235,34 @@ public sealed class ComponentLayoutValidatorTests
         };
 
         Assert.True(new ComponentLayoutValidator().Validate(layout, context).IsValid);
+    }
+
+    [Fact]
+    public void Validate_MissingRequiredComponentGroup_ReturnsStructuredError()
+    {
+        var context = AdaptiveCompositionTestCatalog.Context() with
+        {
+            Surface = AdaptiveCompositionTestCatalog.Context().Surface with
+            {
+                RequiredComponentGroups =
+                [
+                    new()
+                    {
+                        Name = "essential actions",
+                        ComponentAliases = ["ActionBar", "PrimaryActions"],
+                    },
+                ],
+            },
+        };
+
+        var result = new ComponentLayoutValidator().Validate(
+            AdaptiveCompositionTestCatalog.StandardLayout(),
+            context);
+
+        var error = Assert.Single(
+            result.Errors,
+            issue => issue.Code == "missing_required_component_group");
+        Assert.Contains("essential actions", error.Message, StringComparison.Ordinal);
+        Assert.Contains("ActionBar", error.Message, StringComparison.Ordinal);
     }
 }

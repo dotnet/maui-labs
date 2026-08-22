@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+<pages:AdaptiveContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:local="clr-namespace:AIExtensions.Sample.Garden"
              xmlns:views="clr-namespace:AIExtensions.Sample.Garden.Views"
              xmlns:vm="clr-namespace:AIExtensions.Sample.Garden.ViewModels"
+             xmlns:pages="clr-namespace:AIExtensions.Sample.Garden.Pages"
+             xmlns:adaptive="clr-namespace:Microsoft.Maui.AI.GenerativeUI.Composition;assembly=Microsoft.Maui.AI.GenerativeUI"
              x:Class="AIExtensions.Sample.Garden.Pages.MainPage"
              x:DataType="vm:MainViewModel"
              Title="Garden AI Chat"
@@ -11,7 +13,7 @@
              SafeAreaEdges="None"
              BackgroundColor="{AppThemeBinding Light={StaticResource PageBackgroundLight}, Dark={StaticResource PageBackgroundDark}}">
 
-    <Grid RowDefinitions="Auto,*" ColumnDefinitions="*,Auto" ColumnSpacing="0" RowSpacing="0"
+    <Grid RowDefinitions="Auto,Auto,*" ColumnDefinitions="*,Auto" ColumnSpacing="0" RowSpacing="0"
           SafeAreaEdges="None">
 
         <!-- ═══ Green header background — spans both columns ═══ -->
@@ -88,16 +90,26 @@
             </HorizontalStackLayout>
         </Grid>
 
-        <!-- ═══ Chat — fills col 0, scrollbar at edge, content centered ═══ -->
-        <views:ChatView Grid.Row="1" Grid.Column="0"
-                        HorizontalOptions="Fill" />
-        <views:ServerUnavailableView Grid.Row="1" Grid.ColumnSpan="2"
+        <views:AdaptiveStatusView Grid.Row="1" />
+
+        <Grid Grid.Row="2" Grid.Column="0" RowDefinitions="Auto,*">
+            <ScrollView MaximumHeightRequest="340"
+                        Padding="16,12,16,0">
+                <adaptive:AdaptiveRegionView x:Name="AdaptiveBody"
+                                             Region="HomeBody"
+                                             MaximumWidthRequest="900"
+                                             HorizontalOptions="Center" />
+            </ScrollView>
+            <views:ChatView Grid.Row="1"
+                            HorizontalOptions="Fill" />
+        </Grid>
+        <views:ServerUnavailableView Grid.Row="2" Grid.ColumnSpan="2"
                                      ZIndex="100"
                                      VerticalOptions="Start"
                                      BindingContext="{Binding Store}" />
 
         <!-- ═══ Cart sidebar — col 1, visible on wide only ═══ -->
-        <Border Grid.Row="1" Grid.Column="1"
+        <Border Grid.Row="2" Grid.Column="1"
                 x:Name="CartSidebar"
                 WidthRequest="300"
                 Margin="0,12,12,12"
@@ -134,4 +146,4 @@
 
     </Grid>
 
-</ContentPage>
+</pages:AdaptiveContentPage>

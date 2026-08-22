@@ -152,6 +152,7 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
         {
             IsBusy = false;
             WeakReferenceMessenger.Default.Send(new ChatTurnCompletedMessage());
+            await _adaptiveCoordinator.RefreshAsync();
         }
     }
 
@@ -287,6 +288,7 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
         {
             IsBusy = false;
             WeakReferenceMessenger.Default.Send(new ChatTurnCompletedMessage());
+            await _adaptiveCoordinator.RefreshAsync();
         }
     }
 

@@ -17,7 +17,7 @@ public sealed partial class MainViewModel(GardenDataStore store) : ObservableObj
 
     public GardenDataStore Store => store;
 
-    public async Task InitializeAsync()
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         if (_initialized)
             return;
@@ -26,7 +26,12 @@ public sealed partial class MainViewModel(GardenDataStore store) : ObservableObj
         StartNewSession();
         try
         {
-            await store.RefreshAllAsync();
+            await store.RefreshAllAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _initialized = false;
+            throw;
         }
         catch
         {

@@ -22,10 +22,27 @@ public sealed partial class CatalogViewModel : ObservableObject
 
     public ObservableCollection<CatalogGroupViewModel> Groups { get; } = [];
 
+    public ObservableCollection<string> Categories { get; } = ["All"];
+
     public GardenDataStore Store => _store;
 
     [ObservableProperty]
     public partial string? ErrorMessage { get; private set; }
+
+    [ObservableProperty]
+    public partial string SearchText { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string SelectedCategory { get; set; } = "All";
+
+    public IReadOnlyList<Product> FilteredProducts => _store.Products
+        .Where(product =>
+            (SelectedCategory == "All" ||
+             string.Equals(product.Category, SelectedCategory, StringComparison.OrdinalIgnoreCase)) &&
+            (string.IsNullOrWhiteSpace(SearchText) ||
+             product.Name.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
+             product.Description.Contains(SearchText, StringComparison.OrdinalIgnoreCase)))
+        .ToArray();
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -33,7 +50,25 @@ public sealed partial class CatalogViewModel : ObservableObject
         {
             await _store.RefreshCatalogAsync(cancellationToken);
             RebuildGroups(_store.Products);
+            Categories.Clear();
+            Categories.Add("All");
+            foreach (var category in _store.Products
+                         .Select(product => product.Category)
+                         .Distinct(StringComparer.OrdinalIgnoreCase)
+                         .OrderBy(category => category))
+            {
+                Categories.Add(category);
+            }
+            if (string.IsNullOrWhiteSpace(SelectedCategory) ||
+                !Categories.Contains(SelectedCategory))
+            {
+                SelectedCategory = "All";
+            }
             ErrorMessage = null;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {

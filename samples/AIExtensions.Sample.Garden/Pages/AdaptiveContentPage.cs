@@ -10,6 +10,7 @@ public abstract class AdaptiveContentPage : ContentPage, IAdaptiveSurface
     private readonly IAdaptiveSurfaceSessionFactory _sessionFactory;
     private readonly AdaptiveSurfaceCoordinator _coordinator;
     private CancellationTokenSource? _appearanceCancellation;
+    private CancellationTokenSource? _viewportCancellation;
     private bool _released;
 
     protected AdaptiveContentPage(
@@ -24,6 +25,7 @@ public abstract class AdaptiveContentPage : ContentPage, IAdaptiveSurface
             $"{surface}:{Guid.NewGuid():N}",
             surface,
             standardLayout);
+        SizeChanged += OnSizeChanged;
     }
 
     public AdaptiveSurfaceSession Session { get; }
@@ -33,6 +35,9 @@ public abstract class AdaptiveContentPage : ContentPage, IAdaptiveSurface
 
     protected Task ActivateAdaptiveSurfaceAsync(CancellationToken cancellationToken = default)
         => _coordinator.ActivateAsync(this, cancellationToken);
+
+    protected Task RefreshAdaptiveSurfaceAsync(CancellationToken cancellationToken = default)
+        => _coordinator.RefreshAsync(this, cancellationToken);
 
     protected override async void OnAppearing()
     {
@@ -56,6 +61,7 @@ public abstract class AdaptiveContentPage : ContentPage, IAdaptiveSurface
     protected override void OnDisappearing()
     {
         _appearanceCancellation?.Cancel();
+        _viewportCancellation?.Cancel();
         _coordinator.Deactivate(this);
         base.OnDisappearing();
     }
@@ -68,6 +74,8 @@ public abstract class AdaptiveContentPage : ContentPage, IAdaptiveSurface
 
         _released = true;
         _appearanceCancellation?.Cancel();
+        _viewportCancellation?.Cancel();
+        SizeChanged -= OnSizeChanged;
         _coordinator.Deactivate(this);
         _sessionFactory.Release(Session.SurfaceInstanceId);
     }
@@ -78,6 +86,26 @@ public abstract class AdaptiveContentPage : ContentPage, IAdaptiveSurface
 
     protected virtual Task<bool> PrepareAdaptiveStateAsync(CancellationToken cancellationToken = default)
         => Task.FromResult(true);
+
+    private void OnSizeChanged(object? sender, EventArgs e)
+    {
+        _viewportCancellation?.Cancel();
+        _viewportCancellation?.Dispose();
+        var cancellation = _viewportCancellation = new();
+        _ = RefreshForViewportAsync(cancellation.Token);
+    }
+
+    private async Task RefreshForViewportAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(250, cancellationToken);
+            await RefreshAdaptiveSurfaceAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
 
     ValueTask<AdaptiveSurfaceContext> IAdaptiveSurface.CreateContextAsync(
         PresentationIntentContext presentation,

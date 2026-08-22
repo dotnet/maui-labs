@@ -96,6 +96,7 @@ public sealed partial class GardenDataStore(GardenApiClient api) : ObservableObj
         await RefreshOrdersAsync(cancellationToken);
         ApplyCart(new Cart([], 0));
         NotifyCartChanged();
+        NotifyOrdersChanged();
         return order;
     }
 
@@ -112,6 +113,7 @@ public sealed partial class GardenDataStore(GardenApiClient api) : ObservableObj
     {
         await ExecuteAsync(api.ClearOrdersAsync, cancellationToken);
         Orders.Clear();
+        NotifyOrdersChanged();
     }
 
     public async Task RefreshReviewsAsync(CancellationToken cancellationToken = default) =>
@@ -222,4 +224,7 @@ public sealed partial class GardenDataStore(GardenApiClient api) : ObservableObj
 
     private static void NotifyCartChanged() =>
         WeakReferenceMessenger.Default.Send(new CartChangedMessage());
+
+    private static void NotifyOrdersChanged() =>
+        WeakReferenceMessenger.Default.Send(new OrdersChangedMessage());
 }

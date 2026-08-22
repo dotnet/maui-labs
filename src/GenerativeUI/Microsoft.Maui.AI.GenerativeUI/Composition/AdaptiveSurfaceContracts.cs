@@ -14,9 +14,18 @@ public sealed record AdaptiveSurfaceDescriptor
 
     public required IReadOnlyList<AdaptiveRegionDescriptor> Regions { get; init; }
 
+    public IReadOnlyList<AdaptiveRequiredComponentGroup> RequiredComponentGroups { get; init; } = [];
+
     public int MaxNodes { get; init; } = 80;
 
     public int MaxDepth { get; init; } = 8;
+}
+
+public sealed record AdaptiveRequiredComponentGroup
+{
+    public required string Name { get; init; }
+
+    public required IReadOnlyList<string> ComponentAliases { get; init; }
 }
 
 public sealed record AdaptiveRegionDescriptor

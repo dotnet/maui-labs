@@ -10,7 +10,10 @@ namespace AIExtensions.Sample.Garden.ViewModels;
 /// <summary>
 /// Owns order history state, reorder, and clear actions.
 /// </summary>
-public sealed partial class OrdersViewModel : ObservableObject, IRecipient<ChatTurnCompletedMessage>
+public sealed partial class OrdersViewModel :
+    ObservableObject,
+    IRecipient<ChatTurnCompletedMessage>,
+    IRecipient<OrdersChangedMessage>
 {
     private readonly GardenDataStore _store;
 
@@ -18,7 +21,8 @@ public sealed partial class OrdersViewModel : ObservableObject, IRecipient<ChatT
     {
         _store = store;
 
-        WeakReferenceMessenger.Default.Register(this);
+        WeakReferenceMessenger.Default.Register<ChatTurnCompletedMessage>(this);
+        WeakReferenceMessenger.Default.Register<OrdersChangedMessage>(this);
         RefreshFromStore();
     }
 
@@ -27,6 +31,9 @@ public sealed partial class OrdersViewModel : ObservableObject, IRecipient<ChatT
     public GardenDataStore Store => _store;
 
     void IRecipient<ChatTurnCompletedMessage>.Receive(ChatTurnCompletedMessage message)
+        => RefreshFromStore();
+
+    void IRecipient<OrdersChangedMessage>.Receive(OrdersChangedMessage message)
         => RefreshFromStore();
 
     [ObservableProperty]
@@ -53,6 +60,10 @@ public sealed partial class OrdersViewModel : ObservableObject, IRecipient<ChatT
             await _store.RefreshOrdersAsync(cancellationToken);
             RefreshFromStore();
             ErrorMessage = null;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {

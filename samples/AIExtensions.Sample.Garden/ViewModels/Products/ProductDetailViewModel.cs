@@ -50,11 +50,15 @@ public sealed partial class ProductDetailViewModel : ObservableObject
 
     public Product? CurrentProduct { get; private set; }
 
+    public IReadOnlyList<Review> CurrentReviews { get; private set; } = [];
+
     public async Task LoadAsync(string sku, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(sku))
             return;
 
+        if (!string.Equals(Sku, sku, StringComparison.Ordinal))
+            ClearReviews();
         Sku = sku;
         try
         {
@@ -73,6 +77,7 @@ public sealed partial class ProductDetailViewModel : ObservableObject
         catch (Exception ex)
         {
             CurrentProduct = null;
+            ClearReviews();
             ErrorMessage = ex.Message;
             return;
         }
@@ -87,6 +92,7 @@ public sealed partial class ProductDetailViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            ClearReviews();
             ErrorMessage = ex.Message;
         }
     }
@@ -98,6 +104,7 @@ public sealed partial class ProductDetailViewModel : ObservableObject
             return;
 
         var reviews = await _store.GetProductReviewsAsync(sku, cancellationToken);
+        CurrentReviews = reviews;
         Reviews.Clear();
         foreach (var r in reviews)
             Reviews.Add(new ReviewViewModel(r));
@@ -107,6 +114,14 @@ public sealed partial class ProductDetailViewModel : ObservableObject
         RatingLabel = avg is not null
             ? $"{avg:F1} ★  ({reviews.Count} review{(reviews.Count != 1 ? "s" : "")})"
             : "No reviews yet";
+    }
+
+    private void ClearReviews()
+    {
+        CurrentReviews = [];
+        Reviews.Clear();
+        HasReviews = false;
+        RatingLabel = "No reviews yet";
     }
 
     [RelayCommand]

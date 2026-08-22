@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+<pages:AdaptiveContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:local="clr-namespace:AIExtensions.Sample.Garden"
              xmlns:views="clr-namespace:AIExtensions.Sample.Garden.Views"
              xmlns:vm="clr-namespace:AIExtensions.Sample.Garden.ViewModels"
+             xmlns:pages="clr-namespace:AIExtensions.Sample.Garden.Pages"
+             xmlns:adaptive="clr-namespace:Microsoft.Maui.AI.GenerativeUI.Composition;assembly=Microsoft.Maui.AI.GenerativeUI"
              x:Class="AIExtensions.Sample.Garden.Pages.CartPage"
              x:DataType="vm:CartViewModel"
              Title="Cart"
@@ -12,7 +14,7 @@
              SafeAreaEdges="None"
              BackgroundColor="{StaticResource Primary}">
 
-    <Grid RowDefinitions="Auto,*"
+    <Grid RowDefinitions="Auto,Auto,*,Auto"
           ColumnDefinitions="*,Auto"
           BackgroundColor="{AppThemeBinding Light={StaticResource ModalBackgroundLight}, Dark={StaticResource ModalBackgroundDark}}">
         <!-- Standard header: [back] [icon] [title] ... [mode pill] -->
@@ -58,15 +60,35 @@
             </Grid>
         </Border>
 
-        <!-- Cart content -->
-        <views:CartView Grid.Row="1"
-                        BindingContext="{Binding .}" />
-        <views:ServerUnavailableView Grid.Row="1" Grid.ColumnSpan="2"
+        <views:AdaptiveStatusView Grid.Row="1" />
+
+        <ScrollView Grid.Row="2" Padding="16">
+            <adaptive:AdaptiveRegionView x:Name="AdaptiveBody"
+                                         Region="CartBody"
+                                         MaximumWidthRequest="900"
+                                         HorizontalOptions="Center" />
+        </ScrollView>
+
+        <Grid Grid.Row="3" Padding="16,8" ColumnDefinitions="*,Auto" ColumnSpacing="12"
+              IsVisible="{Binding HasItems}">
+            <Label Text="{Binding CartTotal, StringFormat='Total: {0}'}"
+                   FontSize="{StaticResource FontSizeTitle}"
+                   FontAttributes="Bold"
+                   VerticalOptions="Center" />
+            <Button Grid.Column="1"
+                    Text="Checkout"
+                    AutomationId="CheckoutButton"
+                    Command="{Binding CheckoutCommand}"
+                    BackgroundColor="{StaticResource Primary}"
+                    TextColor="White" />
+        </Grid>
+
+        <views:ServerUnavailableView Grid.Row="2" Grid.ColumnSpan="2"
                                      ZIndex="100"
                                      VerticalOptions="Start"
                                      BindingContext="{Binding Store}" />
         <views:ChatSidebar Grid.Column="1"
-                           Grid.RowSpan="2" />
+                           Grid.RowSpan="4" />
     </Grid>
 
-</ContentPage>
+</pages:AdaptiveContentPage>

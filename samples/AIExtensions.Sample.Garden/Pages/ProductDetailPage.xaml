@@ -66,40 +66,6 @@
                             Command="{Binding WriteReviewCommand}" />
                 </Grid>
 
-                <!-- Reviews section -->
-                <Label Text="{Binding RatingLabel}"
-                       FontSize="{StaticResource FontSizeSubtitle}"
-                       FontAttributes="Bold"
-                       TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}" />
-
-                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Reviews}" Spacing="8">
-                    <BindableLayout.ItemTemplate>
-                        <DataTemplate x:DataType="vm:ReviewViewModel">
-                            <Border BackgroundColor="{AppThemeBinding Light={StaticResource CardBackgroundLight}, Dark={StaticResource CardBackgroundDark}}"
-                                    Stroke="{AppThemeBinding Light={StaticResource CardStrokeLight}, Dark={StaticResource CardStrokeDark}}"
-                                    StrokeThickness="1"
-                                    StrokeShape="RoundRectangle 10"
-                                    Padding="12">
-                                <VerticalStackLayout Spacing="4">
-                                    <Grid ColumnDefinitions="*,Auto">
-                                        <Label Text="{Binding Stars}"
-                                               FontSize="{StaticResource FontSizeBody}"
-                                               TextColor="#E5A100" />
-                                        <Label Grid.Column="1"
-                                               Text="{Binding Date}"
-                                               FontSize="{StaticResource FontSizeCaption}"
-                                               TextColor="{AppThemeBinding Light={StaticResource TextTertiaryLight}, Dark={StaticResource TextTertiaryDark}}" />
-                                    </Grid>
-                                    <Label Text="{Binding Comment}"
-                                           FontSize="{StaticResource FontSizeBody}"
-                                           IsVisible="{Binding HasComment}"
-                                           TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}" />
-                                </VerticalStackLayout>
-                            </Border>
-                        </DataTemplate>
-                    </BindableLayout.ItemTemplate>
-                </VerticalStackLayout>
-
             </VerticalStackLayout>
         </ScrollView>
         <views:ServerUnavailableView Grid.Row="2" Grid.ColumnSpan="2"

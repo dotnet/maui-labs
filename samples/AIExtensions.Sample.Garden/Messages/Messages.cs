@@ -8,6 +8,11 @@ namespace AIExtensions.Sample.Garden.Messages;
 public sealed class CartChangedMessage;
 
 /// <summary>
+/// Broadcast when order history changes after checkout, reorder, or clear.
+/// </summary>
+public sealed class OrdersChangedMessage;
+
+/// <summary>
 /// Broadcast after the AI chat completes a full turn (response + tool calls).
 /// </summary>
 public sealed class ChatTurnCompletedMessage;

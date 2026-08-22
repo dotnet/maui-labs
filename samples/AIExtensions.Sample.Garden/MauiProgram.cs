@@ -56,9 +56,13 @@ public static class MauiProgram
         });
         builder.Services.AddSingleton<GardenDataStore>();
         builder.Services.AddSingleton<GardenChatTools>();
-        var componentRegistry = new GenerativeUiRegistry().AddGardenProductCatalog();
+        var componentRegistry = new GenerativeUiRegistry()
+            .AddGardenProductCatalog()
+            .AddGardenAdaptiveCatalog();
+        builder.Services.AddSingleton<IGardenComponentActions, GardenComponentActions>();
         builder.Services.AddGardenProductComponents();
         builder.Services.AddAdaptiveGenerativeUi(componentRegistry);
+        builder.Services.AddSingleton<GardenAdaptiveContextFactory>();
 
         builder.AddOpenAIServices();
 

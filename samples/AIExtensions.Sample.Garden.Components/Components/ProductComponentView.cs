@@ -23,7 +23,7 @@ public abstract class ProductComponentView : ContentView, ICompositionComponent
     {
     }
 
-    protected static Microsoft.Maui.Controls.Binding Bind(
+    internal static Microsoft.Maui.Controls.Binding Bind(
         string path,
         IValueConverter? converter = null,
         object? converterParameter = null)

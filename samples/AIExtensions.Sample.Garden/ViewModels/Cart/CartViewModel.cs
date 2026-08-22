@@ -119,6 +119,10 @@ public sealed partial class CartViewModel : ObservableObject, IRecipient<CartCha
             RefreshFromStore();
             ErrorMessage = null;
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             ErrorMessage = ex.Message;

@@ -99,6 +99,21 @@ public sealed class ComponentLayoutValidator
                 Add("missing_required_region", "$.regions", $"Required region '{required.Name}' is missing.");
         }
 
+        var selectedComponents = validNodes
+            .Where(node => node.Kind == ComponentLayoutNodeKind.Component && node.Component is not null)
+            .Select(node => node.Component!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var required in context.Surface.RequiredComponentGroups)
+        {
+            if (!required.ComponentAliases.Any(selectedComponents.Contains))
+            {
+                Add(
+                    "missing_required_component_group",
+                    "$.nodes",
+                    $"Surface requirement '{required.Name}' needs one of: {string.Join(", ", required.ComponentAliases)}.");
+            }
+        }
+
         var siblingOrders = new HashSet<(string ParentId, int Order)>();
         for (var index = 0; index < validNodes.Length; index++)
         {

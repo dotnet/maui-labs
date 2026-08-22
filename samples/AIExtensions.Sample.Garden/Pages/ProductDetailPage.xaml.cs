@@ -1,3 +1,4 @@
+using AIExtensions.Sample.Garden.Components;
 using AIExtensions.Sample.Garden.Services;
 using AIExtensions.Sample.Garden.Shared;
 using AIExtensions.Sample.Garden.ViewModels;
@@ -9,14 +10,14 @@ public partial class ProductDetailPage : AdaptiveContentPage, IQueryAttributable
 {
     private readonly ProductDetailViewModel _viewModel;
     private readonly AdaptiveStateProjector _projector;
-    private readonly AdaptiveComponentCatalogBuilder _catalogBuilder;
+    private readonly GardenAdaptiveContextFactory _contextFactory;
 
     public ProductDetailPage(
         ProductDetailViewModel vm,
         IAdaptiveSurfaceSessionFactory sessionFactory,
         AdaptiveSurfaceCoordinator coordinator,
         AdaptiveStateProjector projector,
-        AdaptiveComponentCatalogBuilder catalogBuilder)
+        GardenAdaptiveContextFactory contextFactory)
         : base(
             sessionFactory,
             coordinator,
@@ -26,7 +27,7 @@ public partial class ProductDetailPage : AdaptiveContentPage, IQueryAttributable
         InitializeComponent();
         BindingContext = _viewModel = vm;
         _projector = projector;
-        _catalogBuilder = catalogBuilder;
+        _contextFactory = contextFactory;
         AttachAdaptiveRegion(AdaptiveBody);
     }
 
@@ -49,11 +50,9 @@ public partial class ProductDetailPage : AdaptiveContentPage, IQueryAttributable
         if (_viewModel.CurrentProduct is null)
             return false;
 
-        _projector.Project(
-            Session,
-            "product",
-            _viewModel.CurrentProduct,
-            GardenJsonContext.Default.Product);
+        if (_viewModel.Store.Products.Count == 0)
+            await _viewModel.Store.RefreshCatalogAsync(cancellationToken);
+        ProjectState();
         return true;
     }
 
@@ -63,6 +62,7 @@ public partial class ProductDetailPage : AdaptiveContentPage, IQueryAttributable
     {
         var product = _viewModel.CurrentProduct
             ?? throw new InvalidOperationException("The product must be loaded before composing its surface.");
+        ProjectState();
         var dataManifest = new AdaptiveDataDescriptor[]
         {
             new()
@@ -71,50 +71,62 @@ public partial class ProductDetailPage : AdaptiveContentPage, IQueryAttributable
                 Contract = nameof(Product),
                 Description = "The selected server-backed Garden product and its available facets.",
             },
-        };
-        var regions = new[]
-        {
-            new AdaptiveRegionDescriptor
+            new()
             {
-                Name = GardenAdaptiveLayouts.ProductBodyRegion,
-                Description = "The adaptive product information body above fixed purchase and review actions.",
+                Path = "reviews",
+                Contract = GardenDataContracts.ReviewList,
+                Description = "Customer reviews for the selected product.",
+            },
+            new()
+            {
+                Path = "related",
+                Contract = GardenDataContracts.ProductList,
+                Description = "Other products in the selected product's category.",
             },
         };
-        var display = DeviceDisplay.Current.MainDisplayInfo;
-        var context = new AdaptiveSurfaceContext
-        {
-            SurfaceInstanceId = Session.SurfaceInstanceId,
-            Surface = new()
-            {
-                Surface = GardenAdaptiveLayouts.ProductSurface,
-                Description =
-                    "Arrange product information for the user's current question. Purchase and review actions remain fixed.",
-                Regions = regions,
-            },
-            DataManifest = dataManifest,
-            ComponentCatalog = _catalogBuilder.Build(
-                Session.StateRoot,
-                dataManifest,
-                [GardenAdaptiveLayouts.ProductBodyRegion]),
-            Viewport = new()
-            {
-                Width = Width > 0 ? Width : display.Width / display.Density,
-                Height = Height > 0 ? Height : display.Height / display.Density,
-                Density = display.Density,
-                Idiom = DeviceInfo.Current.Idiom.ToString(),
-                Orientation = display.Orientation.ToString(),
-            },
-            Intent = presentation.Intent,
-            RecentContext = presentation.RecentUserContext,
-            StateSignature = string.Join(
+        var context = _contextFactory.Create(
+            Session,
+            GardenAdaptiveLayouts.Surface(
+                GardenAdaptiveLayouts.ProductSurface,
+                GardenAdaptiveLayouts.ProductBodyRegion,
+                "Arrange product information for the user's question. Add to Cart and Write Review remain fixed.",
+                GardenAdaptiveLayouts.Require(
+                    "essential product information",
+                    GardenComponentCatalog.ProductCoreInfoAlias)),
+            dataManifest,
+            presentation,
+            string.Join(
                 ':',
                 product.Sku,
                 product.Dimensions is not null,
                 product.ColorOptions is not null,
                 product.SeedDetails is not null,
-                _viewModel.HasReviews),
-        };
+                _viewModel.CurrentReviews.Count),
+            Width,
+            Height);
         return ValueTask.FromResult(context);
+    }
+
+    private void ProjectState()
+    {
+        var product = _viewModel.CurrentProduct
+            ?? throw new InvalidOperationException("The product must be loaded before projecting its state.");
+        _projector.Project(Session, "product", product, GardenJsonContext.Default.Product);
+        _projector.Project(
+            Session,
+            "reviews",
+            _viewModel.CurrentReviews.ToList(),
+            GardenJsonContext.Default.ListReview);
+        _projector.Project(
+            Session,
+            "related",
+            _viewModel.Store.Products
+                .Where(candidate =>
+                    candidate.Sku != product.Sku &&
+                    string.Equals(candidate.Category, product.Category, StringComparison.OrdinalIgnoreCase))
+                .Take(4)
+                .ToList(),
+            GardenJsonContext.Default.ListProduct);
     }
 
     private async void OnBackClicked(object? sender, EventArgs e)

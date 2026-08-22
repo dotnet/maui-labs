@@ -36,7 +36,7 @@ public sealed class AdaptiveSurfaceSession : IDisposable
 
     public UiObject StateRoot { get; } = new();
 
-    public ComponentLayoutDocument StandardLayout { get; }
+    public ComponentLayoutDocument StandardLayout { get; private set; }
 
     public ComponentLayoutDocument? CurrentLayout { get; internal set; }
 
@@ -47,6 +47,16 @@ public sealed class AdaptiveSurfaceSession : IDisposable
     public bool IsDisposed => _disposed;
 
     public bool IsStandardLayout { get; internal set; } = true;
+
+    public void SetStandardLayout(ComponentLayoutDocument standardLayout)
+    {
+        ArgumentNullException.ThrowIfNull(standardLayout);
+        ThrowIfDisposed();
+        if (!string.Equals(Surface, standardLayout.Surface, StringComparison.Ordinal))
+            throw new ArgumentException("The standard layout must target the session surface.", nameof(standardLayout));
+
+        StandardLayout = standardLayout;
+    }
 
     public long BeginGeneration()
     {

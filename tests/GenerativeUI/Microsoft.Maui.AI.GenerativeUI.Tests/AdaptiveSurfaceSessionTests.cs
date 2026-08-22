@@ -45,4 +45,23 @@ public sealed class AdaptiveSurfaceSessionTests
         Assert.False(session.IsCurrentGeneration(second));
         Assert.Throws<InvalidOperationException>(() => session.BeginGeneration());
     }
+
+    [Fact]
+    public void SetStandardLayout_UpdatesFallbackForSameSurface()
+    {
+        using var session = new AdaptiveSurfaceSession(
+            "product:first",
+            AdaptiveCompositionTestCatalog.Surface,
+            AdaptiveCompositionTestCatalog.StandardLayout());
+        var replacement = AdaptiveCompositionTestCatalog.StandardLayout() with
+        {
+            LayoutId = "replacement",
+        };
+
+        session.SetStandardLayout(replacement);
+
+        Assert.Same(replacement, session.StandardLayout);
+        Assert.Throws<ArgumentException>(() => session.SetStandardLayout(
+            replacement with { Surface = "Other" }));
+    }
 }

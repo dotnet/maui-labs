@@ -124,6 +124,25 @@ public sealed class GardenComponentTests
     }
 
     [Fact]
+    public void CatalogGrid_RendersProjectedProductsInsideScrollableSurface()
+    {
+        var element = JsonSerializer.SerializeToElement(
+            new List<Product> { GardenProductFixtures.BasilSeeds, GardenProductFixtures.WateringCan },
+            GardenJsonContext.Default.ListProduct);
+        var component = new CatalogGrid(new StubGardenComponentActions())
+        {
+            BindingContext = UiObjectBuilder.Build(element),
+        };
+
+        Assert.Contains(
+            Descendants(component).OfType<Label>(),
+            label => label.Text == GardenProductFixtures.BasilSeeds.Name);
+        Assert.Contains(
+            Descendants(component).OfType<Label>(),
+            label => label.Text == GardenProductFixtures.WateringCan.Name);
+    }
+
+    [Fact]
     public void Catalog_ResolvesOnlyComponentsWhoseFacetBindingsExist()
     {
         var registry = new GenerativeUiRegistry().AddGardenProductCatalog();
@@ -246,5 +265,22 @@ public sealed class GardenComponentTests
             foreach (var descendant in Descendants(child))
                 yield return descendant;
         }
+    }
+
+    private sealed class StubGardenComponentActions : IGardenComponentActions
+    {
+        public Task NavigateAsync(string destination) => Task.CompletedTask;
+
+        public Task OpenProductAsync(string sku) => Task.CompletedTask;
+
+        public Task AddToCartAsync(string sku) => Task.CompletedTask;
+
+        public Task SetCartQuantityAsync(string sku, int quantity) => Task.CompletedTask;
+
+        public Task RemoveFromCartAsync(string sku) => Task.CompletedTask;
+
+        public Task OpenOrderAsync(string orderId) => Task.CompletedTask;
+
+        public Task ReorderAsync(string orderId) => Task.CompletedTask;
     }
 }
