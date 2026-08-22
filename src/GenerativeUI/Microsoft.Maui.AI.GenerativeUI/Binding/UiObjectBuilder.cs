@@ -105,9 +105,22 @@ public static class UiObjectBuilder
             case JsonValueKind.Array:
                 ClearMembers(node);
                 node.Value = null;
-                node.Children.Clear();
+                var index = 0;
                 foreach (var item in element.EnumerateArray())
-                    node.Children.Add(Build(item));
+                {
+                    var child = FindReusableArrayChild(node.Children, item, index);
+                    var currentIndex = node.Children.IndexOf(child);
+                    if (currentIndex < 0)
+                        node.Children.Insert(index, child);
+                    else if (currentIndex != index)
+                        node.Children.Move(currentIndex, index);
+
+                    Replace(child, item);
+                    index++;
+                }
+
+                while (node.Children.Count > index)
+                    node.Children.RemoveAt(node.Children.Count - 1);
                 break;
 
             default:
@@ -155,5 +168,53 @@ public static class UiObjectBuilder
     {
         foreach (var (key, _) in node.Members.ToList())
             node.RemoveMember(key);
+    }
+
+    private static UiObject FindReusableArrayChild(
+        UiObjectCollection children,
+        JsonElement element,
+        int targetIndex)
+    {
+        var key = GetSemanticKey(element);
+        if (key is not null)
+        {
+            for (var index = targetIndex; index < children.Count; index++)
+            {
+                if (string.Equals(GetSemanticKey(children[index]), key, StringComparison.Ordinal))
+                    return children[index];
+            }
+
+            return new UiObject();
+        }
+
+        return targetIndex < children.Count ? children[targetIndex] : new UiObject();
+    }
+
+    private static string? GetSemanticKey(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+            return null;
+
+        foreach (var propertyName in new[] { "id", "sku", "key" })
+        {
+            if (element.TryGetProperty(propertyName, out var property) &&
+                property.ValueKind is JsonValueKind.String or JsonValueKind.Number)
+            {
+                return $"{propertyName}:{property}";
+            }
+        }
+
+        return null;
+    }
+
+    private static string? GetSemanticKey(UiObject item)
+    {
+        foreach (var propertyName in new[] { "id", "sku", "key" })
+        {
+            if (item.HasMember(propertyName) && item[propertyName].Value is not null)
+                return $"{propertyName}:{item[propertyName].AsString()}";
+        }
+
+        return null;
     }
 }

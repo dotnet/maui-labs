@@ -53,6 +53,7 @@ public static class AddGenerativeUiServiceCollectionExtensions
         services.AddSingleton<IComponentPlanGenerator, ComponentPlanGenerator>();
         services.AddSingleton<ComponentComposer>();
         services.AddSingleton<CompositionPlanRenderer>();
+        services.AddAdaptiveGenerativeUi();
         services.AddSingleton(sp => new GenUiInflator(sp.GetRequiredService<GenerativeUiRegistry>(), sp));
         services.AddSingleton<GenerativeUiTools>();
 
