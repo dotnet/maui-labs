@@ -7,17 +7,32 @@ namespace Microsoft.Maui.AI.GenerativeUI.Composition;
 /// </summary>
 public sealed class AdaptiveRegionView : ContentView
 {
+    public static readonly BindableProperty RegionProperty = BindableProperty.Create(
+        nameof(Region),
+        typeof(string),
+        typeof(AdaptiveRegionView),
+        string.Empty);
+
+    public AdaptiveRegionView()
+    {
+    }
+
     public AdaptiveRegionView(string region)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(region);
         Region = region;
     }
 
-    public string Region { get; }
+    public string Region
+    {
+        get => (string)GetValue(RegionProperty);
+        set => SetValue(RegionProperty, value);
+    }
 
     public void Attach(AdaptiveSurfaceSession session)
     {
         ArgumentNullException.ThrowIfNull(session);
+        ArgumentException.ThrowIfNullOrWhiteSpace(Region);
         session.RegisterRegionHost(this);
     }
 

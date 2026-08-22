@@ -83,6 +83,12 @@ public sealed record AdaptiveViewportContext
     public required string Idiom { get; init; }
 
     public required string Orientation { get; init; }
+
+    public double FontScale { get; init; } = 1;
+
+    public bool ReduceMotion { get; init; }
+
+    public bool ScreenReaderEnabled { get; init; }
 }
 
 /// <summary>
@@ -139,6 +145,7 @@ public enum AdaptiveCompositionSource
     Generated,
     Corrected,
     Cache,
+    CurrentLayout,
     StandardLayout,
 }
 
@@ -156,6 +163,7 @@ public sealed record AdaptiveLayoutCacheKey(
     string Surface,
     string StateSignature,
     string Intent,
+    string RecentContext,
     int WidthBucket,
     int HeightBucket)
 {
@@ -164,6 +172,7 @@ public sealed record AdaptiveLayoutCacheKey(
             context.Surface.Surface,
             context.StateSignature,
             context.Intent?.Trim() ?? string.Empty,
+            string.Join('\n', context.RecentContext.Select(item => item.Trim())),
             Bucket(context.Viewport.Width),
             Bucket(context.Viewport.Height));
 

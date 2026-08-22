@@ -48,6 +48,8 @@ public sealed partial class ProductDetailViewModel : ObservableObject
     [ObservableProperty]
     public partial string? ErrorMessage { get; private set; }
 
+    public Product? CurrentProduct { get; private set; }
+
     public async Task LoadAsync(string sku, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(sku))
@@ -57,12 +59,31 @@ public sealed partial class ProductDetailViewModel : ObservableObject
         try
         {
             var product = await _store.GetProductAsync(sku, cancellationToken);
+            CurrentProduct = product;
             Name = product.Name;
             Emoji = product.Emoji;
             Category = product.Category;
             PriceLabel = product.Price.ToString("C");
-            await RefreshReviewsAsync(sku, cancellationToken);
             ErrorMessage = null;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            CurrentProduct = null;
+            ErrorMessage = ex.Message;
+            return;
+        }
+
+        try
+        {
+            await RefreshReviewsAsync(sku, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {

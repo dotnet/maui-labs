@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+<pages:AdaptiveContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:views="clr-namespace:AIExtensions.Sample.Garden.Views"
              xmlns:vm="clr-namespace:AIExtensions.Sample.Garden.ViewModels"
+             xmlns:pages="clr-namespace:AIExtensions.Sample.Garden.Pages"
+             xmlns:adaptive="clr-namespace:Microsoft.Maui.AI.GenerativeUI.Composition;assembly=Microsoft.Maui.AI.GenerativeUI"
              x:Class="AIExtensions.Sample.Garden.Pages.ProductDetailPage"
              x:DataType="vm:ProductDetailViewModel"
              Title="{Binding Name}"
@@ -10,7 +12,7 @@
              SafeAreaEdges="None"
              BackgroundColor="{StaticResource Primary}">
 
-    <Grid RowDefinitions="Auto,*"
+    <Grid RowDefinitions="Auto,Auto,*"
           ColumnDefinitions="*,Auto"
           BackgroundColor="{AppThemeBinding Light={StaticResource ModalBackgroundLight}, Dark={StaticResource ModalBackgroundDark}}">
         <!-- Header -->
@@ -37,45 +39,15 @@
             </Grid>
         </Border>
 
+        <views:AdaptiveStatusView Grid.Row="1" />
+
         <!-- Product detail content -->
-        <ScrollView Grid.Row="1" Padding="16">
+        <ScrollView Grid.Row="2" Padding="16">
             <VerticalStackLayout Spacing="16" MaximumWidthRequest="600"
                                  HorizontalOptions="Center">
 
-                <!-- Hero card -->
-                <Border BackgroundColor="{AppThemeBinding Light={StaticResource CardBackgroundLight}, Dark={StaticResource CardBackgroundDark}}"
-                        Stroke="{AppThemeBinding Light={StaticResource CardStrokeLight}, Dark={StaticResource CardStrokeDark}}"
-                        StrokeThickness="1"
-                        StrokeShape="RoundRectangle 16"
-                        Padding="24">
-                    <VerticalStackLayout Spacing="12" HorizontalOptions="Center">
-                        <Border BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceLight}, Dark={StaticResource SurfaceDark}}"
-                                StrokeThickness="0"
-                                StrokeShape="RoundRectangle 16"
-                                WidthRequest="120" HeightRequest="120"
-                                HorizontalOptions="Center">
-                            <Label Text="{Binding Emoji}"
-                                   FontFamily="FluentFilled"
-                                   FontSize="56"
-                                   TextColor="{StaticResource Primary}"
-                                   HorizontalOptions="Center"
-                                   VerticalOptions="Center" />
-                        </Border>
-                        <Label Text="{Binding Name}"
-                               FontSize="{StaticResource FontSizeTitle}"
-                               FontAttributes="Bold"
-                               HorizontalTextAlignment="Center" />
-                        <Label Text="{Binding Category}"
-                               FontSize="{StaticResource FontSizeBody}"
-                               HorizontalTextAlignment="Center"
-                               TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}" />
-                        <Label Text="{Binding PriceLabel}"
-                               FontSize="{StaticResource FontSizeDisplay}"
-                               FontAttributes="Bold"
-                               HorizontalTextAlignment="Center"
-                               TextColor="{StaticResource Primary}" />
-                    </VerticalStackLayout>
-                </Border>
+                <adaptive:AdaptiveRegionView x:Name="AdaptiveBody"
+                                             Region="ProductBody" />
 
                 <!-- Actions -->
                 <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
@@ -130,12 +102,12 @@
 
             </VerticalStackLayout>
         </ScrollView>
-        <views:ServerUnavailableView Grid.Row="1" Grid.ColumnSpan="2"
+        <views:ServerUnavailableView Grid.Row="2" Grid.ColumnSpan="2"
                                      ZIndex="100"
                                      VerticalOptions="Start"
                                      BindingContext="{Binding Store}" />
         <views:ChatSidebar Grid.Column="1"
-                           Grid.RowSpan="2" />
+                           Grid.RowSpan="3" />
     </Grid>
 
-</ContentPage>
+</pages:AdaptiveContentPage>

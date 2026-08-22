@@ -84,6 +84,34 @@ public sealed class AdaptiveSurfaceComposerTests
     }
 
     [Fact]
+    public async Task Compose_DifferentRecentContext_DoesNotReuseCache()
+    {
+        var generator = new ScriptedGenerator(
+            request => AdaptiveCompositionTestCatalog.StandardLayout(
+                request.ExpectedLayoutId,
+                request.ExpectedRevision),
+            request => AdaptiveCompositionTestCatalog.StandardLayout(
+                request.ExpectedLayoutId,
+                request.ExpectedRevision));
+        var composer = new AdaptiveSurfaceComposer(
+            generator,
+            new ComponentLayoutValidator(),
+            new AdaptiveLayoutCache());
+        using var first = Session();
+        using var second = Session();
+        var context = AdaptiveCompositionTestCatalog.Context();
+
+        await composer.ComposeAsync(
+            context with { RecentContext = ["balcony constraints"] },
+            first);
+        await composer.ComposeAsync(
+            context with { RecentContext = ["indoor constraints"] },
+            second);
+
+        Assert.Equal(2, generator.Requests.Count);
+    }
+
+    [Fact]
     public async Task Compose_WrongInitialIdentity_RetriesThenUsesStandard()
     {
         var generator = new ScriptedGenerator(

@@ -24,7 +24,7 @@ public sealed class AdaptiveSurfaceComposer(
         var expectedLayoutId = current?.LayoutId ?? $"{context.SurfaceInstanceId}-layout";
         var expectedRevision = current?.Revision + 1 ?? 1;
         var cacheKey = AdaptiveLayoutCacheKey.Create(context);
-        if (current is null && cache.TryGet(cacheKey, out var cached))
+        if ((current is null || session.IsStandardLayout) && cache.TryGet(cacheKey, out var cached))
         {
             var normalizedCached = cached with
             {
@@ -124,6 +124,23 @@ public sealed class AdaptiveSurfaceComposer(
         }
 
         EnsureCurrent(session, generation, cancellationToken);
+        if (current is not null)
+        {
+            var currentValidation = validator.Validate(current, context);
+            if (currentValidation.IsValid)
+            {
+                return new(
+                    current,
+                    AdaptiveCompositionSource.CurrentLayout,
+                    currentValidation,
+                    CorrectionCount: invalidLayout is null ? 0 : 1,
+                    totalDuration,
+                    inputTokens,
+                    outputTokens,
+                    generation);
+            }
+        }
+
         var standard = session.StandardLayout with
         {
             LayoutId = expectedLayoutId,

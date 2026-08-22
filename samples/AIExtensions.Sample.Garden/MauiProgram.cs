@@ -1,5 +1,6 @@
 using System.ClientModel;
 using System.Reflection;
+using AIExtensions.Sample.Garden.Components;
 using AIExtensions.Sample.Garden.Pages;
 using AIExtensions.Sample.Garden.Services;
 using AIExtensions.Sample.Garden.ViewModels;
@@ -8,6 +9,8 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.DevFlow.Agent;
+using Microsoft.Maui.AI.GenerativeUI;
+using Microsoft.Maui.AI.GenerativeUI.Registry;
 
 namespace AIExtensions.Sample.Garden;
 
@@ -53,6 +56,9 @@ public static class MauiProgram
         });
         builder.Services.AddSingleton<GardenDataStore>();
         builder.Services.AddSingleton<GardenChatTools>();
+        var componentRegistry = new GenerativeUiRegistry().AddGardenProductCatalog();
+        builder.Services.AddGardenProductComponents();
+        builder.Services.AddAdaptiveGenerativeUi(componentRegistry);
 
         builder.AddOpenAIServices();
 

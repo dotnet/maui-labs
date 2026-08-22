@@ -46,6 +46,8 @@ public sealed class AdaptiveSurfaceSession : IDisposable
 
     public bool IsDisposed => _disposed;
 
+    public bool IsStandardLayout { get; internal set; } = true;
+
     public long BeginGeneration()
     {
         ThrowIfDisposed();
@@ -99,6 +101,8 @@ public sealed class AdaptiveSurfaceSession : IDisposable
         foreach (var host in _regionHosts.Values)
             host.SetAdaptiveContent(null);
     }
+
+    internal IReadOnlyList<AdaptiveRegionView> RegionHosts => [.. _regionHosts.Values];
 
     internal void NotifyStateProjected() => StateVersion++;
 

@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.AI.Attributes;
+using Microsoft.Maui.AI.GenerativeUI.Composition;
 
 namespace AIExtensions.Sample.Garden.ViewModels;
 
@@ -24,12 +25,17 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
     private partial class GardenShopTools : AIToolContext { }
 
     private readonly IChatClient _chatClient;
+    private readonly AdaptiveSurfaceCoordinator _adaptiveCoordinator;
     private List<ChatMessage> _history = [];
     private ToolApprovalRequestContent? _pendingApproval;
     private CancellationTokenSource _cts = new();
 
-    public ChatViewModel(IServiceProvider rootProvider, IChatClient innerChatClient)
+    public ChatViewModel(
+        IServiceProvider rootProvider,
+        IChatClient innerChatClient,
+        AdaptiveSurfaceCoordinator adaptiveCoordinator)
     {
+        _adaptiveCoordinator = adaptiveCoordinator;
         _chatClient = new ChatClientBuilder(innerChatClient)
             .UseFunctionInvocation()
             .Build(rootProvider);
@@ -130,6 +136,7 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
         IsBusy = true;
 
         AddMessage(ChatMessageKind.User, text);
+        _adaptiveCoordinator.PublishIntent(text);
         _history.Add(new ChatMessage(ChatRole.User, text));
 
         try

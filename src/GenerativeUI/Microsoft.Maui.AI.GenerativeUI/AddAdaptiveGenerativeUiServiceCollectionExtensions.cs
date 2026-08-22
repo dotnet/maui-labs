@@ -21,6 +21,9 @@ public static class AddAdaptiveGenerativeUiServiceCollectionExtensions
         services.AddSingleton<IAdaptiveLayoutGenerator, AdaptiveLayoutGenerator>();
         services.AddSingleton<AdaptiveSurfaceComposer>();
         services.AddSingleton<AdaptiveRegionRenderer>();
+        services.AddSingleton<IAdaptiveSurfaceDispatcher, MauiAdaptiveSurfaceDispatcher>();
+        services.AddSingleton<IAdaptiveSurfaceTransition, MauiAdaptiveSurfaceTransition>();
+        services.AddSingleton<AdaptiveSurfaceCoordinator>();
         return services;
     }
 
