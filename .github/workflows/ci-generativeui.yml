@@ -1,0 +1,57 @@
+name: CI - GenerativeUI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/GenerativeUI/**'
+      - 'tests/GenerativeUI/**'
+      - 'samples/GenerativeUI.Sample.Garden.Shared/**'
+      - 'samples/GenerativeUI.Sample.Garden.Server/**'
+      - 'samples/GenerativeUI.Sample.Garden.Components/**'
+      - 'samples/GenerativeUI.Sample.Garden/**'
+      - 'eng/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    branches: [main]
+    paths:
+      - 'src/GenerativeUI/**'
+      - 'tests/GenerativeUI/**'
+      - 'samples/GenerativeUI.Sample.Garden.Shared/**'
+      - 'samples/GenerativeUI.Sample.Garden.Server/**'
+      - 'samples/GenerativeUI.Sample.Garden.Components/**'
+      - 'samples/GenerativeUI.Sample.Garden/**'
+      - 'eng/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+
+jobs:
+  build:
+    uses: ./.github/workflows/_build.yml
+    with:
+      project-path: src/GenerativeUI/GenerativeUI.slnf
+      project-name: generativeui
+      run-tests: true
+      pack: true
+      install-workloads: false
+
+  app:
+    uses: ./.github/workflows/_build.yml
+    with:
+      project-path: src/GenerativeUI/GenerativeUI.App.slnf
+      project-name: generativeui-app
+      run-tests: true
+      pack: false
+      install-workloads: true
+      workloads: 'maui ios maccatalyst macos'
+      workload-version: '10.0.203'
+      android-project: samples/GenerativeUI.Sample.Garden/GenerativeUI.Sample.Garden.csproj
+      os: '["macos-latest"]'

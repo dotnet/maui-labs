@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:GenerativeUI.Sample.Garden.ViewModels"
+             xmlns:local="clr-namespace:GenerativeUI.Sample.Garden"
+             xmlns:genui="clr-namespace:Microsoft.Maui.AI.GenerativeUI.Canvas;assembly=Microsoft.Maui.AI.GenerativeUI"
+             x:Class="GenerativeUI.Sample.Garden.MainPage"
+             x:DataType="vm:ChatViewModel"
+             Title="Generative Garden">
+
+    <ContentPage.Resources>
+        <local:BoolToEndAlignmentConverter x:Key="EndAlign" />
+        <local:StringNotEmptyConverter x:Key="NotEmpty" />
+    </ContentPage.Resources>
+
+    <!-- Two columns: the generative canvas (left) and the chat (right). -->
+    <Grid ColumnDefinitions="*,380">
+
+        <!-- Canvas and explicit generation-mode selector. -->
+        <Grid Grid.Column="0" RowDefinitions="Auto,*">
+            <Border Grid.Row="0"
+                    Margin="16,12,16,0"
+                    Padding="12"
+                    Stroke="#C9DDD0"
+                    StrokeThickness="1"
+                    BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#202B27}">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="14" />
+                </Border.StrokeShape>
+                <VerticalStackLayout Spacing="6">
+                    <Grid ColumnDefinitions="Auto,240,*" ColumnSpacing="10">
+                        <Label Text="Runtime UI mode"
+                               FontAttributes="Bold"
+                               VerticalTextAlignment="Center" />
+                        <Picker Grid.Column="1"
+                                AutomationId="GenerationModePicker"
+                                ItemsSource="{Binding ModeOptions}"
+                                SelectedItem="{Binding SelectedMode, Mode=TwoWay}"
+                                IsEnabled="{Binding IsNotBusy}" />
+                        <Label Grid.Column="2"
+                               AutomationId="GenerationModeDescription"
+                               Text="{Binding ModeDescription}"
+                               FontSize="12"
+                               TextColor="{AppThemeBinding Light=#7A7062, Dark=#C9DDD0}"
+                               VerticalTextAlignment="Center"
+                               LineBreakMode="WordWrap" />
+                    </Grid>
+                    <Label AutomationId="GenerationMetrics"
+                           Text="{Binding MetricsText}"
+                           FontSize="11"
+                           FontFamily="OpenSansRegular"
+                           TextColor="{AppThemeBinding Light=#7A7062, Dark=#C9DDD0}"
+                           LineBreakMode="WordWrap" />
+                </VerticalStackLayout>
+            </Border>
+
+            <ScrollView Grid.Row="1" Padding="16">
+                <genui:GenerativeCanvasView />
+            </ScrollView>
+        </Grid>
+
+        <!-- Chat column -->
+        <Grid Grid.Column="1"
+              RowDefinitions="*,Auto"
+              Padding="12"
+              RowSpacing="8"
+              BackgroundColor="{AppThemeBinding Light=#F7F7F7, Dark=#1B1B1B}">
+
+            <!-- Transcript -->
+            <CollectionView x:Name="Transcript"
+                            Grid.Row="0"
+                            ItemsSource="{Binding Messages}"
+                            VerticalOptions="Fill">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ChatMessageViewModel">
+                        <Border StrokeThickness="0"
+                                Margin="0,4"
+                                Padding="12,8"
+                                HorizontalOptions="{Binding IsUser, Converter={StaticResource EndAlign}}"
+                                MaximumWidthRequest="320">
+                            <Border.StrokeShape>
+                                <RoundRectangle CornerRadius="12" />
+                            </Border.StrokeShape>
+                            <VerticalStackLayout Spacing="4">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Grid.GestureRecognizers>
+                                        <TapGestureRecognizer Command="{Binding ToggleExpandedCommand}" />
+                                    </Grid.GestureRecognizers>
+                                    <Label Text="{Binding Text}" LineBreakMode="WordWrap" />
+                                    <Label Grid.Column="1"
+                                           Text="{Binding Chevron}"
+                                           IsVisible="{Binding IsTool}"
+                                           FontSize="16"
+                                           TextColor="{StaticResource Gray500}"
+                                           Padding="8,0,0,0"
+                                           VerticalTextAlignment="Center" />
+                                </Grid>
+                                <Label Text="{Binding Detail}"
+                                       FontSize="12"
+                                       FontFamily="OpenSansRegular"
+                                       TextColor="{StaticResource Gray500}"
+                                       LineBreakMode="WordWrap"
+                                       IsVisible="{Binding IsDetailVisible}" />
+                            </VerticalStackLayout>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+
+            <!-- Input / approval -->
+            <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+
+                <!-- Clear / restart conversation (always available) -->
+                <Button Grid.Column="0"
+                        Text="Clear"
+                        Command="{Binding ClearCommand}" />
+
+                <!-- Normal input -->
+                <Entry Grid.Column="1"
+                       AutomationId="ChatInput"
+                       Placeholder="Ask about products, cart, orders…"
+                       Text="{Binding InputText}"
+                       IsVisible="{Binding IsInputVisible}"
+                       ReturnCommand="{Binding SendCommand}"
+                       IsEnabled="{Binding IsNotBusy}" />
+                <Button Grid.Column="2"
+                        Text="Send"
+                        Command="{Binding SendCommand}"
+                        IsVisible="{Binding IsInputVisible}"
+                        IsEnabled="{Binding IsNotBusy}" />
+
+                <!-- Approval bar -->
+                <Label Grid.Column="1"
+                       Text="{Binding ApprovalText}"
+                       VerticalOptions="Center"
+                       IsVisible="{Binding IsApprovalPending}" />
+                <HorizontalStackLayout Grid.Column="2"
+                                       Spacing="8"
+                                       IsVisible="{Binding IsApprovalPending}">
+                    <Button Text="Approve" Command="{Binding ApproveCommand}" />
+                    <Button Text="Reject" Command="{Binding RejectCommand}" />
+                </HorizontalStackLayout>
+            </Grid>
+
+            <!-- Busy indicator -->
+            <ActivityIndicator Grid.Row="0"
+                               IsRunning="{Binding IsBusy}"
+                               IsVisible="{Binding IsBusy}"
+                               VerticalOptions="End"
+                               HorizontalOptions="Center" />
+        </Grid>
+    </Grid>
+
+</ContentPage>

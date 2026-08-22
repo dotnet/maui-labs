@@ -1,0 +1,127 @@
+﻿<?xml version="1.0" encoding="UTF-8" ?>
+<ResourceDictionary 
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
+
+    <!-- ═══════════════════════════════════════════════════════════
+         BRAND PALETTE
+         ═══════════════════════════════════════════════════════════ -->
+    <Color x:Key="Primary">#5B8C5A</Color>
+    <Color x:Key="PrimaryDark">#3D6B3D</Color>
+    <Color x:Key="PrimaryDarkText">#D4E8D4</Color>
+    <Color x:Key="Secondary">#C9A96E</Color>
+    <Color x:Key="SecondaryDarkText">#C9A96E</Color>
+    <Color x:Key="Tertiary">#8B6F47</Color>
+    <Color x:Key="Danger">#C62828</Color>
+
+    <Color x:Key="White">#FFFFFF</Color>
+    <Color x:Key="Black">#000000</Color>
+
+    <!-- Gray scale (warm organic tones) -->
+    <Color x:Key="Gray100">#E8E0D4</Color>
+    <Color x:Key="Gray200">#D4CABF</Color>
+    <Color x:Key="Gray300">#B5ADA2</Color>
+    <Color x:Key="Gray400">#968E83</Color>
+    <Color x:Key="Gray500">#7A7062</Color>
+    <Color x:Key="Gray600">#4A4238</Color>
+    <Color x:Key="Gray900">#2C2416</Color>
+    <Color x:Key="Gray950">#1C1B18</Color>
+
+    <!-- Legacy keys used by Styles.xaml defaults -->
+    <Color x:Key="Magenta">#D600AA</Color>
+    <Color x:Key="MidnightBlue">#190649</Color>
+    <Color x:Key="OffBlack">#1f1f1f</Color>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         TYPE SCALE — 6 sizes from Hero → Caption
+         ═══════════════════════════════════════════════════════════ -->
+    <x:Double x:Key="FontSizeHero">48</x:Double>       <!-- Welcome emoji -->
+    <x:Double x:Key="FontSizeDisplay">28</x:Double>     <!-- Section emojis, decorative -->
+    <x:Double x:Key="FontSizeTitle">20</x:Double>       <!-- Page titles, major headings -->
+    <x:Double x:Key="FontSizeSubtitle">17</x:Double>    <!-- Modal headers, section titles -->
+    <x:Double x:Key="FontSizeBody">14</x:Double>        <!-- Messages, buttons, input, names -->
+    <x:Double x:Key="FontSizeCaption">12</x:Double>     <!-- Prices, descriptions, timestamps -->
+
+    <!-- ═══════════════════════════════════════════════════════════
+         SEMANTIC SURFACE COLORS (Light / Dark pairs)
+         ═══════════════════════════════════════════════════════════ -->
+    <!-- Page backgrounds -->
+    <Color x:Key="PageBackgroundLight">#F2F5F0</Color>
+    <Color x:Key="PageBackgroundDark">#1A1A18</Color>
+    <Color x:Key="ModalBackgroundLight">#E0EBDD</Color>
+    <Color x:Key="ModalBackgroundDark">#15201A</Color>
+
+    <!-- Cards and surfaces -->
+    <Color x:Key="CardBackgroundLight">#FFFFFF</Color>
+    <Color x:Key="CardBackgroundDark">#243024</Color>
+    <Color x:Key="CardStrokeLight">#D5E5D2</Color>
+    <Color x:Key="CardStrokeDark">#3A4A38</Color>
+    <Color x:Key="SurfaceLight">#F6FAF5</Color>
+    <Color x:Key="SurfaceDark">#2A3A2A</Color>
+
+    <!-- Input fields -->
+    <Color x:Key="InputBackgroundLight">#FFFFFF</Color>
+    <Color x:Key="InputBackgroundDark">#222222</Color>
+    <Color x:Key="InputStrokeLight">#D0D8CE</Color>
+    <Color x:Key="InputStrokeDark">#3A4A3A</Color>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         SEMANTIC TEXT COLORS
+         ═══════════════════════════════════════════════════════════ -->
+    <Color x:Key="TextSecondaryLight">#5A6A5A</Color>
+    <Color x:Key="TextSecondaryDark">#8AA08A</Color>
+    <Color x:Key="TextTertiaryLight">#7A8A7A</Color>
+    <Color x:Key="TextTertiaryDark">#6A8068</Color>
+    <Color x:Key="TextAccentLight">#3A5A3A</Color>
+    <Color x:Key="TextAccentDark">#B4D4B4</Color>
+    <Color x:Key="TextMetaLight">#555555</Color>
+    <Color x:Key="TextMetaDark">#AAAAAA</Color>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         CHAT BUBBLE COLORS
+         ═══════════════════════════════════════════════════════════ -->
+    <Color x:Key="UserBubbleLight">#E8C9A8</Color>
+    <Color x:Key="UserBubbleDark">#604830</Color>
+    <Color x:Key="UserBubbleTextLight">#3A2A1A</Color>
+    <Color x:Key="UserBubbleTextDark">#F0E0D0</Color>
+    <Color x:Key="AssistantBubbleLight">#FFFFFF</Color>
+    <Color x:Key="AssistantBubbleDark">#2A2A2A</Color>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         PILL / CHIP / INTERACTIVE COLORS
+         ═══════════════════════════════════════════════════════════ -->
+    <Color x:Key="PillBackgroundLight">#E3F2E3</Color>
+    <Color x:Key="PillBackgroundDark">#2A3A2A</Color>
+    <Color x:Key="ChipBackgroundLight">#E8F2E6</Color>
+    <Color x:Key="ChipBackgroundDark">#2E3A2C</Color>
+    <Color x:Key="ChipStrokeLight">#B8D4B4</Color>
+    <Color x:Key="ChipStrokeDark">#3A4A3A</Color>
+
+    <!-- Tool info cards (welcome screen) -->
+    <Color x:Key="ToolCardBackgroundLight">#FFFFFF</Color>
+    <Color x:Key="ToolCardBackgroundDark">#263026</Color>
+    <Color x:Key="ToolCardStrokeLight">#CFE0CD</Color>
+    <Color x:Key="ToolCardStrokeDark">#3A4A3A</Color>
+
+    <!-- Approval banner -->
+    <Color x:Key="ApprovalBackgroundLight">#FFF8E1</Color>
+    <Color x:Key="ApprovalBackgroundDark">#3E3520</Color>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         BRUSHES
+         ═══════════════════════════════════════════════════════════ -->
+    <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource Primary}"/>
+    <SolidColorBrush x:Key="SecondaryBrush" Color="{StaticResource Secondary}"/>
+    <SolidColorBrush x:Key="TertiaryBrush" Color="{StaticResource Tertiary}"/>
+    <SolidColorBrush x:Key="WhiteBrush" Color="{StaticResource White}"/>
+    <SolidColorBrush x:Key="BlackBrush" Color="{StaticResource Black}"/>
+
+    <SolidColorBrush x:Key="Gray100Brush" Color="{StaticResource Gray100}"/>
+    <SolidColorBrush x:Key="Gray200Brush" Color="{StaticResource Gray200}"/>
+    <SolidColorBrush x:Key="Gray300Brush" Color="{StaticResource Gray300}"/>
+    <SolidColorBrush x:Key="Gray400Brush" Color="{StaticResource Gray400}"/>
+    <SolidColorBrush x:Key="Gray500Brush" Color="{StaticResource Gray500}"/>
+    <SolidColorBrush x:Key="Gray600Brush" Color="{StaticResource Gray600}"/>
+    <SolidColorBrush x:Key="Gray900Brush" Color="{StaticResource Gray900}"/>
+    <SolidColorBrush x:Key="Gray950Brush" Color="{StaticResource Gray950}"/>
+</ResourceDictionary>

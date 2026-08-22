@@ -20,6 +20,10 @@
     <Project Path="samples/DevFlow.Sample.WPF/DevFlow.Sample.WPF.csproj" />
     <Project Path="samples/DevFlow.Sample/DevFlow.Sample.csproj" />
     <Project Path="samples/EssentialsAISample/EssentialsAISample.csproj" />
+    <Project Path="samples/GenerativeUI.Sample.Garden.Shared/GenerativeUI.Sample.Garden.Shared.csproj" />
+    <Project Path="samples/GenerativeUI.Sample.Garden.Server/GenerativeUI.Sample.Garden.Server.csproj" />
+    <Project Path="samples/GenerativeUI.Sample.Garden.Components/GenerativeUI.Sample.Garden.Components.csproj" />
+    <Project Path="samples/GenerativeUI.Sample.Garden/GenerativeUI.Sample.Garden.csproj" />
   </Folder>
   <Folder Name="/src/" />
   <Folder Name="/src/AI/">
@@ -30,6 +34,10 @@
     <Project Path="src/AIExtensions/Microsoft.Maui.AI.Attributes.Generators/Microsoft.Maui.AI.Attributes.Generators.csproj" />
     <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Attributes.Tests/Microsoft.Maui.AI.Attributes.Tests.csproj" />
     <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Attributes.Generators.Tests/Microsoft.Maui.AI.Attributes.Generators.Tests.csproj" />
+  </Folder>
+  <Folder Name="/src/GenerativeUI/">
+    <Project Path="src/GenerativeUI/Microsoft.Maui.AI.GenerativeUI.OpenApi/Microsoft.Maui.AI.GenerativeUI.OpenApi.csproj" />
+    <Project Path="src/GenerativeUI/Microsoft.Maui.AI.GenerativeUI/Microsoft.Maui.AI.GenerativeUI.csproj" />
   </Folder>
   <Folder Name="/src/Comet/">
     <Project Path="src/Comet/src/Comet.SourceGenerator/Comet.SourceGenerator.csproj" />
@@ -74,6 +82,10 @@
     <Project Path="tests/AI/Microsoft.Maui.Essentials.AI.UnitTests/Microsoft.Maui.Essentials.AI.UnitTests.csproj" />
   </Folder>
   <Folder Name="/tests/DevFlow/" />
+  <Folder Name="/tests/GenerativeUI/">
+    <Project Path="tests/GenerativeUI/Microsoft.Maui.AI.GenerativeUI.Tests/Microsoft.Maui.AI.GenerativeUI.Tests.csproj" />
+    <Project Path="tests/GenerativeUI/Microsoft.Maui.AI.GenerativeUI.OpenApi.Tests/Microsoft.Maui.AI.GenerativeUI.OpenApi.Tests.csproj" />
+  </Folder>
   <Folder Name="/platforms/MacOS/">
     <Project Path="platforms/MacOS/src/MacOS/MacOS.csproj" />
     <Project Path="platforms/MacOS/src/MacOS.Essentials/MacOS.Essentials.csproj" />

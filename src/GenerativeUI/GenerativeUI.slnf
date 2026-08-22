@@ -1,0 +1,9 @@
+{
+  "solution": {
+    "path": "../../MauiLabs.slnx",
+    "projects": [
+      "src\\GenerativeUI\\Microsoft.Maui.AI.GenerativeUI.OpenApi\\Microsoft.Maui.AI.GenerativeUI.OpenApi.csproj",
+      "tests\\GenerativeUI\\Microsoft.Maui.AI.GenerativeUI.OpenApi.Tests\\Microsoft.Maui.AI.GenerativeUI.OpenApi.Tests.csproj"
+    ]
+  }
+}
