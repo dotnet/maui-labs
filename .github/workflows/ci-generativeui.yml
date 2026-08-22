@@ -10,6 +10,7 @@ on:
       - 'samples/GenerativeUI.Sample.Garden.Server/**'
       - 'samples/GenerativeUI.Sample.Garden.Components/**'
       - 'samples/GenerativeUI.Sample.Garden/**'
+      - 'samples/AIExtensions.Sample.Garden/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -26,6 +27,7 @@ on:
       - 'samples/GenerativeUI.Sample.Garden.Server/**'
       - 'samples/GenerativeUI.Sample.Garden.Components/**'
       - 'samples/GenerativeUI.Sample.Garden/**'
+      - 'samples/AIExtensions.Sample.Garden/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -54,4 +56,17 @@ jobs:
       workloads: 'maui ios maccatalyst macos'
       workload-version: '10.0.203'
       android-project: samples/GenerativeUI.Sample.Garden/GenerativeUI.Sample.Garden.csproj
+      os: '["macos-latest"]'
+
+  adaptive-app:
+    uses: ./.github/workflows/_build.yml
+    with:
+      project-path: src/GenerativeUI/AdaptiveGarden.App.slnf
+      project-name: adaptive-garden-app
+      run-tests: true
+      pack: false
+      install-workloads: true
+      workloads: 'maui ios maccatalyst macos'
+      workload-version: '10.0.203'
+      android-project: samples/AIExtensions.Sample.Garden/AIExtensions.Sample.Garden.csproj
       os: '["macos-latest"]'

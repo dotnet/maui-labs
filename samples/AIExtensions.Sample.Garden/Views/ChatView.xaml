@@ -257,7 +257,7 @@
                                             BackgroundColor="Transparent"
                                             BorderWidth="0"
                                             Padding="14,8"
-                                            Command="{Binding Source={x:Reference ThisView}, Path=BindingContext.RunSuggestionCommand}"
+                                            Command="{Binding RunSuggestionCommand, Source={RelativeSource AncestorType={x:Type vm:ChatViewModel}}, x:DataType=vm:ChatViewModel}"
                                             CommandParameter="{Binding}" />
                                 </Border>
                             </DataTemplate>

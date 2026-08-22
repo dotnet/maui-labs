@@ -9,6 +9,7 @@
 		<UseMaui>true</UseMaui>
 		<SingleProject>true</SingleProject>
 		<ValidateXcodeVersion>false</ValidateXcodeVersion>
+		<MauiEnableXamlCBindingWithSourceCompilation>true</MauiEnableXamlCBindingWithSourceCompilation>
 
 		<ApplicationTitle>Garden AI Sample</ApplicationTitle>
 		<ApplicationId>com.microsoft.maui.aiattributes.sample.garden</ApplicationId>

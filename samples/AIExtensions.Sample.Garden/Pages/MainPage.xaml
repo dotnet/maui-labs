@@ -68,7 +68,7 @@
                             Command="{Binding ShowCartCommand}" />
                     <Border.Triggers>
                         <DataTrigger TargetType="Border"
-                                     Binding="{Binding Source={x:Reference CartSidebar}, Path=IsVisible}"
+                                     Binding="{Binding IsVisible, Source={x:Reference CartSidebar}, x:DataType=Border}"
                                      Value="False">
                             <Setter Property="IsVisible" Value="True" />
                         </DataTrigger>
