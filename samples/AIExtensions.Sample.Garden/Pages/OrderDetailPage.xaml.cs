@@ -10,12 +10,12 @@ public partial class OrderDetailPage : ContentPage, IQueryAttributable
         BindingContext = vm;
     }
 
-    public void ApplyQueryAttributes(IDictionary<string, object> query)
+    public async void ApplyQueryAttributes(IDictionary<string, object> query)
     {
         if (query.TryGetValue("orderId", out var id) && id is string s)
         {
             if (BindingContext is OrderDetailViewModel vm)
-                vm.OrderId = s;
+                await vm.LoadAsync(s);
         }
     }
 

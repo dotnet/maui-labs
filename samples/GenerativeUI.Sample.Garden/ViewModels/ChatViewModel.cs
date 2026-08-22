@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using GenerativeUI.Sample.Garden.Components;
+using AIExtensions.Sample.Garden.Components;
 using GenerativeUI.Sample.Garden.Tools;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;

@@ -20,10 +20,12 @@ past purchases using source-generated tools.
   as a sidebar on wider windows and moves behind a header button on narrower layouts.
 - **Live tool inventory** — the welcome screen renders cards from
   `GardenShopTools.Default.Tools`, so any new exported tool automatically appears there.
-- **Modal navigation** — catalog, cart, and orders open through Shell routes as
-  animated modal overlays.
-- **Approval flow** — checkout and destructive actions pause the chat and show an
-  inline approve/reject banner.
+- **Canonical server state** — catalog, cart, order, review, and recommendation data
+  all come from the typed Garden API through `GardenApiClient` and `GardenDataStore`.
+- **Offline recovery** — server failures preserve the current standard layout and show
+  a fixed error banner with details and a Retry action.
+- **Approval flow** — every AI-initiated server mutation pauses the chat and shows an
+  inline approve/reject banner, while equivalent human taps call the same typed client directly.
 
 ## Persistent chat across pages
 
@@ -38,7 +40,7 @@ Returning home restores the chat-first layout with the same conversation history
 
 ## Tool sources and lifetimes
 
-`GardenShopTools` composes several very different source types with repeated
+`GardenShopTools` composes the two intentional source types with repeated
 `[AIToolSource]` attributes — no hand-written wrapper classes required.
 The sample uses an **explicit** context on purpose to curate the exact set of
 tools Sage should see, even though the library can also auto-generate an
@@ -46,55 +48,51 @@ assembly-wide context for the whole app.
 
 | Source type | Lifetime | What it contributes |
 |---|---|---|
-| `ProductCatalog` | static | Catalog browsing tools like `list_all_products`, `search_products`, and `get_product` |
-| `CurrentCart` | singleton | Cart inspection and mutation tools like `show_list`, `add_to_list`, `change_qty`, and `remove_from_list` |
-| `IOrderArchive` | singleton interface | Past-order lookup, `checkout_list`, `reorder`, and `clear_past_orders` |
+| `GardenChatTools` | singleton | Typed Garden API reads and approval-gated cart, order, and review mutations |
 | `MainViewModel` | singleton | UI navigation tools: `navigate_to_page` and `dismiss_page` |
-| `CartViewModel` | singleton | Accessor-level tools: `get_cart_mode` / `set_cart_mode` |
-| `CatalogViewModel` | transient | `recommend_bundle`, a page-local bundle recommender that returns a starter kit without mutating the cart |
 
-This sample is especially useful if you want to see a **transient view-model**
-participate in a shared tool context while still writing through to singleton state.
+No OpenAPI explorer or generic Generative UI tools are exposed to the destination
+assistant. The model can only invoke typed Garden operations and fixed-shell navigation.
 
 ## Tool scenarios
 
 | Area | Tools |
 |---|---|
-| Catalog discovery | `list_all_products`, `search_products`, `get_product` |
-| Cart management | `show_list`, `add_to_list`, `change_qty`, `remove_from_list`, `cancel_list` |
-| Cart presentation | `get_cart_mode`, `set_cart_mode` |
-| Orders | `list_past_orders`, `find_order`, `checkout_list`, `reorder`, `clear_past_orders` |
+| Catalog discovery | `list_products`, `get_product` |
+| Cart management | `get_cart`, `add_to_cart`, `set_cart_quantity`, `remove_from_cart`, `clear_cart` |
+| Orders | `list_orders`, `get_order`, `checkout`, `reorder`, `clear_orders` |
 | Page navigation | `navigate_to_page`, `dismiss_page` |
-| Recommendations | `recommend_bundle` |
+| Reviews | `list_reviews`, `get_product_reviews`, `submit_review` |
+| Recommendations | `get_recommendations` |
 
 ## Feature showcase
 
 | Feature | Where |
 |---|---|
-| `[ExportAIFunction]` on a **static property** | `Services/Catalog/ProductCatalog.cs` → `All` / `list_all_products` |
-| `[ExportAIFunction]` on a **static method** with an optional param | `ProductCatalog.SearchProducts` |
-| Custom tool names (method ≠ tool name) | `ProductCatalog.FindByName` → `get_product`, `CurrentCart.SetQuantity` → `change_qty` |
-| `[ExportAIFunction]` on a **singleton DI service** | `Services/Cart/CurrentCart.cs` |
-| `[ExportAIFunction]` on an **interface** | `Services/Order/IOrderArchive.cs` |
-| `[FromServices]` parameter injection | `IOrderArchive.Checkout([FromServices] CurrentCart cart)` |
-| Accessor-level property tools | `ViewModels/Cart/CartViewModel.cs` → `get_cart_mode` / `set_cart_mode` |
-| Transient tool host | `ViewModels/Catalog/CatalogViewModel.cs` → `recommend_bundle` |
+| Typed HTTP API with source-generated JSON | `Services/Api/GardenApiClient.cs` |
+| Shared async state and retry | `Services/GardenDataStore.cs` |
+| Curated typed assistant tools | `Services/GardenChatTools.cs` |
 | Shell modal navigation tools | `ViewModels/MainViewModel.cs` + `AppShell.xaml.cs` |
 | Persistent assistant beside non-home pages | `Views/ChatSidebar.xaml`, backed by singleton `ChatViewModel` |
 | Responsive welcome cards and centered chat layout | `Views/ChatView.xaml` + `Pages/MainPage.xaml` |
 
 ## Approval flow
 
-`checkout_list`, `cancel_list`, and `clear_past_orders` carry
-`[ExportAIFunction(ApprovalRequired = true)]`. When the model requests one of
-those actions, the input bar is replaced by an approval banner until you accept
-or reject it.
+Every mutating tool in `GardenChatTools` carries
+`[ExportAIFunction(ApprovalRequired = true)]`. When the model requests a mutation,
+the input bar is replaced by an approval banner until you accept or reject it.
+Read-only tools and navigation do not require approval. Buttons in the fixed app
+chrome invoke `GardenDataStore` directly and never enter the AI approval flow.
 
 ## Build & run
 
 ```bash
+dotnet run --project samples/AIExtensions.Sample.Garden.Server
 dotnet build samples/AIExtensions.Sample.Garden -f net10.0-maccatalyst
 ```
+
+The app uses `http://localhost:5225` on desktop and iOS simulator, and
+`http://10.0.2.2:5225` on the Android emulator. Set `Api:BaseAddress` to override it.
 
 Configure user secrets (shared across AI Extensions samples):
 

@@ -39,7 +39,7 @@ need a polymorphic hierarchy.
 1. Start the Garden server:
 
    ```bash
-   dotnet run --project samples/GenerativeUI.Sample.Garden.Server
+   dotnet run --project samples/AIExtensions.Sample.Garden.Server
    ```
 
 2. Configure AI credentials (shared with the AIExtensions samples):

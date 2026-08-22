@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.1",
   "info": {
-    "title": "GenerativeUI.Sample.Garden.Server | v1",
+    "title": "AIExtensions.Sample.Garden.Server | v1",
     "version": "1.0.0"
   },
   "servers": [
@@ -303,14 +303,7 @@
         },
         "responses": {
           "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Cart"
-                }
-              }
-            }
+            "description": "OK"
           }
         }
       }
@@ -346,14 +339,7 @@
         },
         "responses": {
           "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Cart"
-                }
-              }
-            }
+            "description": "OK"
           }
         }
       },
@@ -399,14 +385,7 @@
         "operationId": "checkout",
         "responses": {
           "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Order"
-                }
-              }
-            }
+            "description": "OK"
           }
         }
       },
@@ -561,15 +540,8 @@
           "required": true
         },
         "responses": {
-          "201": {
-            "description": "Created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Review"
-                }
-              }
-            }
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -670,6 +642,18 @@
             ],
             "description": "UnitPrice multiplied by Quantity, in US dollars.",
             "format": "double"
+          },
+          "emoji": {
+            "type": "string",
+            "description": "Emoji used by the client when rendering the product.",
+            "default": "\uD83C\uDF31"
+          },
+          "imageUrl": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional absolute product image URL."
           }
         },
         "description": "A single line in the cart: a product and the quantity ordered."

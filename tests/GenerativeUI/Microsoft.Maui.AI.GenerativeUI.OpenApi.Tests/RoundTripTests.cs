@@ -1,5 +1,7 @@
+using System.Net.Http.Json;
 using System.Text.Json.Nodes;
-using GenerativeUI.Sample.Garden.Server;
+using AIExtensions.Sample.Garden.Server;
+using AIExtensions.Sample.Garden.Shared;
 using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace Microsoft.Maui.AI.GenerativeUI.OpenApi.Tests;
@@ -46,7 +48,9 @@ public sealed class RoundTripTests
             Assert.Equal(200, envelope["status"]!.GetValue<int>());
 
             var skus = envelope["data"]!.AsArray().Select(p => p!["sku"]!.GetValue<string>()).ToArray();
-            Assert.Equal(new[] { "basil-seeds", "potting-soil", "terracotta-pot", "tomato-seeds", "watering-can" }, skus);
+            Assert.Equal(
+                GardenProductFixtures.Catalog.OrderBy(p => p.Name).Select(p => p.Sku),
+                skus);
         }
     }
 
@@ -57,11 +61,11 @@ public sealed class RoundTripTests
         using (factory)
         {
             var added = JsonNode.Parse(await tools.WriteApiAsync("addCartItem",
-                new JsonObject { ["body"] = new JsonObject { ["sku"] = "basil-seeds", ["quantity"] = 2 } }))!;
+                new JsonObject { ["body"] = new JsonObject { ["sku"] = "seed-basil", ["quantity"] = 2 } }))!;
 
             Assert.Equal(200, added["status"]!.GetValue<int>());
             var line = Assert.Single(added["data"]!["items"]!.AsArray());
-            Assert.Equal("basil-seeds", line!["sku"]!.GetValue<string>());
+            Assert.Equal("seed-basil", line!["sku"]!.GetValue<string>());
             Assert.Equal(2, line!["quantity"]!.GetValue<int>());
 
             var cart = JsonNode.Parse(await tools.ReadApiAsync("getCart"))!;
@@ -98,10 +102,26 @@ public sealed class RoundTripTests
         var (factory, tools) = await CreateAsync();
         using (factory)
         {
-            var result = JsonNode.Parse(await tools.ReadApiAsync("deleteProduct", new JsonObject { ["sku"] = "basil-seeds" }))!;
+            var result = JsonNode.Parse(await tools.ReadApiAsync("deleteProduct", new JsonObject { ["sku"] = "seed-basil" }))!;
 
             Assert.Equal("wrong_tool", result["error"]!["title"]!.GetValue<string>());
         }
+    }
+
+    [Fact]
+    public async Task Mutations_reject_invalid_product_empty_checkout_and_invalid_review()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var missingProduct = await client.PostAsJsonAsync("/cart/items", new AddToCartRequest("missing", 1));
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, missingProduct.StatusCode);
+
+        var emptyCheckout = await client.PostAsync("/orders", content: null);
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, emptyCheckout.StatusCode);
+
+        var invalidReview = await client.PostAsJsonAsync("/reviews", new CreateReviewRequest("seed-basil", 6));
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, invalidReview.StatusCode);
     }
 
     [Fact]

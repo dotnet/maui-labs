@@ -10,12 +10,12 @@ public partial class ProductReviewPage : ContentPage, IQueryAttributable
         BindingContext = vm;
     }
 
-    public void ApplyQueryAttributes(IDictionary<string, object> query)
+    public async void ApplyQueryAttributes(IDictionary<string, object> query)
     {
         if (query.TryGetValue("sku", out var sku) && sku is string s)
         {
             if (BindingContext is ProductReviewViewModel vm)
-                vm.Sku = s;
+                await vm.LoadAsync(s);
         }
     }
 }

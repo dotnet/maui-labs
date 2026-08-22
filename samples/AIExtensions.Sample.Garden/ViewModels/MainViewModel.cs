@@ -9,25 +9,34 @@ namespace AIExtensions.Sample.Garden.ViewModels;
 
 /// <summary>
 /// Top-level view model for <see cref="Pages.MainPage"/>.
-/// Owns page navigation and the new-session action.
+/// Owns page navigation, initial server refresh, and the new-session action.
 /// </summary>
-public sealed partial class MainViewModel(CurrentCart currentCart) : ObservableObject
+public sealed partial class MainViewModel(GardenDataStore store) : ObservableObject
 {
     private bool _initialized;
 
-    public void Initialize()
+    public GardenDataStore Store => store;
+
+    public async Task InitializeAsync()
     {
         if (_initialized)
             return;
         _initialized = true;
 
         StartNewSession();
+        try
+        {
+            await store.RefreshAllAsync();
+        }
+        catch
+        {
+            // The fixed ServerUnavailableView exposes the error and retry action.
+        }
     }
 
     [RelayCommand]
     private void StartNewSession()
     {
-        currentCart.Clear();
         WeakReferenceMessenger.Default.Send(new StartNewChatSessionMessage());
     }
 

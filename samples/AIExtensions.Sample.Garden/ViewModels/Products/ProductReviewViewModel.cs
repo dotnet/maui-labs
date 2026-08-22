@@ -11,12 +11,14 @@ namespace AIExtensions.Sample.Garden.ViewModels;
 [QueryProperty(nameof(Sku), "sku")]
 public sealed partial class ProductReviewViewModel : ObservableObject
 {
-    private readonly ReviewStore _reviewStore;
+    private readonly GardenDataStore _store;
 
-    public ProductReviewViewModel(ReviewStore reviewStore)
+    public ProductReviewViewModel(GardenDataStore store)
     {
-        _reviewStore = reviewStore;
+        _store = store;
     }
+
+    public GardenDataStore Store => _store;
 
     [ObservableProperty]
     public partial string? Sku { get; set; }
@@ -30,14 +32,25 @@ public sealed partial class ProductReviewViewModel : ObservableObject
     [ObservableProperty]
     public partial string? Comment { get; set; }
 
-    partial void OnSkuChanged(string? value)
+    [ObservableProperty]
+    public partial string? ErrorMessage { get; private set; }
+
+    public async Task LoadAsync(string sku, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (string.IsNullOrWhiteSpace(sku))
             return;
 
-        var product = ProductCatalog.FindByName(value);
-        if (product is not null)
+        Sku = sku;
+        try
+        {
+            var product = await _store.GetProductAsync(sku, cancellationToken);
             ProductName = product.Name;
+            ErrorMessage = null;
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
     }
 
     [RelayCommand]
@@ -46,8 +59,16 @@ public sealed partial class ProductReviewViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(Sku))
             return;
 
-        _reviewStore.Submit(Sku, Rating, Comment);
-        await Shell.Current.GoToAsync("..");
+        try
+        {
+            await _store.SubmitReviewAsync(Sku, Rating, Comment);
+            ErrorMessage = null;
+            await Shell.Current.GoToAsync("..");
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
     }
 
     [RelayCommand]

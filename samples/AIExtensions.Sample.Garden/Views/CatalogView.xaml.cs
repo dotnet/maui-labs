@@ -1,3 +1,5 @@
+using AIExtensions.Sample.Garden.ViewModels;
+
 namespace AIExtensions.Sample.Garden.Views;
 
 public partial class CatalogView : ContentView
@@ -5,6 +7,11 @@ public partial class CatalogView : ContentView
     public CatalogView()
     {
         InitializeComponent();
+        Loaded += async (_, _) =>
+        {
+            if (BindingContext is CatalogViewModel viewModel)
+                await viewModel.InitializeAsync();
+        };
     }
 
     private async void OnProductTapped(object? sender, TappedEventArgs e)

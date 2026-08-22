@@ -1,5 +1,5 @@
 using System.Text.Json;
-using GenerativeUI.Sample.Garden.Shared;
+using AIExtensions.Sample.Garden.Shared;
 
 namespace Microsoft.Maui.AI.GenerativeUI.OpenApi.Tests;
 

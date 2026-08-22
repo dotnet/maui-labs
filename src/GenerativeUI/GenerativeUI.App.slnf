@@ -4,8 +4,8 @@
     "projects": [
       "src\\GenerativeUI\\Microsoft.Maui.AI.GenerativeUI.OpenApi\\Microsoft.Maui.AI.GenerativeUI.OpenApi.csproj",
       "src\\GenerativeUI\\Microsoft.Maui.AI.GenerativeUI\\Microsoft.Maui.AI.GenerativeUI.csproj",
-      "samples\\GenerativeUI.Sample.Garden.Shared\\GenerativeUI.Sample.Garden.Shared.csproj",
-      "samples\\GenerativeUI.Sample.Garden.Components\\GenerativeUI.Sample.Garden.Components.csproj",
+      "samples\\AIExtensions.Sample.Garden.Shared\\AIExtensions.Sample.Garden.Shared.csproj",
+      "samples\\AIExtensions.Sample.Garden.Components\\AIExtensions.Sample.Garden.Components.csproj",
       "samples\\GenerativeUI.Sample.Garden\\GenerativeUI.Sample.Garden.csproj",
       "tests\\GenerativeUI\\Microsoft.Maui.AI.GenerativeUI.Tests\\Microsoft.Maui.AI.GenerativeUI.Tests.csproj"
     ]

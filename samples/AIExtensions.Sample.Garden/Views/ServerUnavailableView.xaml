@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:services="clr-namespace:AIExtensions.Sample.Garden.Services"
+             x:Class="AIExtensions.Sample.Garden.Views.ServerUnavailableView"
+             x:DataType="services:GardenDataStore"
+             IsVisible="{Binding IsServerUnavailable}"
+             InputTransparent="False">
+    <Border Margin="12"
+            Padding="12"
+            BackgroundColor="{AppThemeBinding Light=#FFF4E5, Dark=#4A2D00}"
+            Stroke="{AppThemeBinding Light=#D97706, Dark=#FDBA74}"
+            StrokeThickness="1"
+            StrokeShape="RoundRectangle 10">
+        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+            <Label Text="!"
+                   FontAttributes="Bold"
+                   FontSize="{StaticResource FontSizeTitle}"
+                   TextColor="{AppThemeBinding Light=#9A3412, Dark=#FDBA74}"
+                   VerticalOptions="Center" />
+            <VerticalStackLayout Grid.Column="1" Spacing="2">
+                <Label Text="Garden server unavailable"
+                       FontAttributes="Bold"
+                       FontSize="{StaticResource FontSizeBody}" />
+                <Label Text="{Binding ServerError}"
+                       FontSize="{StaticResource FontSizeCaption}"
+                       LineBreakMode="TailTruncation"
+                       MaxLines="2" />
+            </VerticalStackLayout>
+            <Button Grid.Column="2"
+                    Text="Retry"
+                    AutomationId="RetryGardenServerButton"
+                    Command="{Binding RetryCommand}"
+                    BackgroundColor="{StaticResource Primary}"
+                    TextColor="White"
+                    CornerRadius="8"
+                    Padding="14,8"
+                    VerticalOptions="Center" />
+        </Grid>
+    </Border>
+</ContentView>

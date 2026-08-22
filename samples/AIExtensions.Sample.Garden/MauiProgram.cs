@@ -46,9 +46,13 @@ public static class MauiProgram
         builder.AddMauiDevFlowAgent();
 #endif
 
-        builder.Services.AddSingleton<IOrderArchive, PreferencesOrderArchive>();
-        builder.Services.AddSingleton<CurrentCart>();
-        builder.Services.AddSingleton<ReviewStore>();
+        builder.Services.AddHttpClient<GardenApiClient>(client =>
+        {
+            client.BaseAddress = ResolveGardenApiBaseAddress(builder.Configuration);
+            client.Timeout = TimeSpan.FromSeconds(15);
+        });
+        builder.Services.AddSingleton<GardenDataStore>();
+        builder.Services.AddSingleton<GardenChatTools>();
 
         builder.AddOpenAIServices();
 
@@ -73,6 +77,19 @@ public static class MauiProgram
 #endif
 
         return builder.Build();
+    }
+
+    private static Uri ResolveGardenApiBaseAddress(IConfiguration configuration)
+    {
+        var configured = configuration["Api:BaseAddress"];
+        if (!string.IsNullOrWhiteSpace(configured))
+            return new Uri(configured, UriKind.Absolute);
+
+#if ANDROID
+        return new Uri("http://10.0.2.2:5225/");
+#else
+        return new Uri("http://localhost:5225/");
+#endif
     }
 
     private static void AddUserSecrets(this ConfigurationManager manager)

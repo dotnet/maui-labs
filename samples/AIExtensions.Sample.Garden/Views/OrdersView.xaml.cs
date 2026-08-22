@@ -1,3 +1,5 @@
+using AIExtensions.Sample.Garden.ViewModels;
+
 namespace AIExtensions.Sample.Garden.Views;
 
 public partial class OrdersView : ContentView
@@ -5,6 +7,11 @@ public partial class OrdersView : ContentView
     public OrdersView()
     {
         InitializeComponent();
+        Loaded += async (_, _) =>
+        {
+            if (BindingContext is OrdersViewModel viewModel)
+                await viewModel.InitializeAsync();
+        };
     }
 
     private async void OnOrderTapped(object? sender, TappedEventArgs e)

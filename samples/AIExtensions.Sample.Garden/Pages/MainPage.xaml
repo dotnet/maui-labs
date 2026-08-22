@@ -91,6 +91,10 @@
         <!-- ═══ Chat — fills col 0, scrollbar at edge, content centered ═══ -->
         <views:ChatView Grid.Row="1" Grid.Column="0"
                         HorizontalOptions="Fill" />
+        <views:ServerUnavailableView Grid.Row="1" Grid.ColumnSpan="2"
+                                     ZIndex="100"
+                                     VerticalOptions="Start"
+                                     BindingContext="{Binding Store}" />
 
         <!-- ═══ Cart sidebar — col 1, visible on wide only ═══ -->
         <Border Grid.Row="1" Grid.Column="1"

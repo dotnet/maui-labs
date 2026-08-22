@@ -1,6 +1,6 @@
 using System.Text.Json;
-using GenerativeUI.Sample.Garden.Components;
-using GenerativeUI.Sample.Garden.Shared;
+using AIExtensions.Sample.Garden.Components;
+using AIExtensions.Sample.Garden.Shared;
 using Microsoft.Maui;
 using Microsoft.Maui.AI.GenerativeUI.Binding;
 using Microsoft.Maui.AI.GenerativeUI.Composition;
@@ -17,7 +17,7 @@ public sealed class GardenComponentTests
         var component = Bind(new ProductHero(), GardenProductFixtures.WateringCan);
 
         var name = Find<Label>(component, "ProductHeroName");
-        Assert.Equal("Watering Can", name.Text);
+        Assert.Equal(GardenProductFixtures.WateringCan.Name, name.Text);
         Assert.Equal(SemanticHeadingLevel.Level1, SemanticProperties.GetHeadingLevel(name));
         Assert.Equal("Product hero", SemanticProperties.GetDescription(component));
     }

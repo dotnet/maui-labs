@@ -94,6 +94,10 @@
 
             </VerticalStackLayout>
         </ScrollView>
+        <views:ServerUnavailableView Grid.Row="1" Grid.ColumnSpan="2"
+                                     ZIndex="100"
+                                     VerticalOptions="Start"
+                                     BindingContext="{Binding Store}" />
         <views:ChatSidebar Grid.Column="1"
                            Grid.RowSpan="2" />
     </Grid>

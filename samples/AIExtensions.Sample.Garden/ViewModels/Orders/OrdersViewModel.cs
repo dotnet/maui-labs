@@ -12,41 +12,57 @@ namespace AIExtensions.Sample.Garden.ViewModels;
 /// </summary>
 public sealed partial class OrdersViewModel : ObservableObject, IRecipient<ChatTurnCompletedMessage>
 {
-    private readonly IOrderArchive _archive;
-    private readonly CurrentCart _currentCart;
+    private readonly GardenDataStore _store;
 
-    public OrdersViewModel(IOrderArchive archive, CurrentCart currentCart)
+    public OrdersViewModel(GardenDataStore store)
     {
-        _archive = archive;
-        _currentCart = currentCart;
+        _store = store;
 
         WeakReferenceMessenger.Default.Register(this);
-        Refresh();
+        RefreshFromStore();
     }
 
     public ObservableCollection<OrderViewModel> Orders { get; } = [];
 
+    public GardenDataStore Store => _store;
+
     void IRecipient<ChatTurnCompletedMessage>.Receive(ChatTurnCompletedMessage message)
-        => Refresh();
+        => RefreshFromStore();
+
+    [ObservableProperty]
+    public partial string? ErrorMessage { get; private set; }
 
     [RelayCommand]
-    private void Reorder(string? orderId)
+    private async Task ReorderAsync(string? orderId)
     {
         if (string.IsNullOrWhiteSpace(orderId))
             return;
-        _archive.Reorder(orderId, _currentCart);
+        await RunAsync(ct => _store.ReorderAsync(orderId, ct));
     }
 
     [RelayCommand]
-    private void Clear()
+    private async Task ClearAsync()
     {
-        _archive.Clear();
-        Refresh();
+        await RunAsync(_store.ClearOrdersAsync);
     }
 
-    public void Refresh()
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        var source = _archive.Orders;
+        try
+        {
+            await _store.RefreshOrdersAsync(cancellationToken);
+            RefreshFromStore();
+            ErrorMessage = null;
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+    }
+
+    public void RefreshFromStore()
+    {
+        var source = _store.Orders;
         var sourceKeys = new HashSet<string>(source.Select(o => o.Id));
         for (int i = Orders.Count - 1; i >= 0; i--)
         {
@@ -58,6 +74,20 @@ public sealed partial class OrdersViewModel : ObservableObject, IRecipient<ChatT
         {
             if (!existing.Contains(order.Id))
                 Orders.Add(new OrderViewModel(order));
+        }
+    }
+
+    private async Task RunAsync(Func<CancellationToken, Task> action)
+    {
+        try
+        {
+            await action(CancellationToken.None);
+            RefreshFromStore();
+            ErrorMessage = null;
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
         }
     }
 }

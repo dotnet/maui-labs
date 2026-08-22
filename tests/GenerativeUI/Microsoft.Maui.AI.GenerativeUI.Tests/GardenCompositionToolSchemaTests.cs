@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
 using GenerativeUI.Sample.Garden.Tools;
-using GenerativeUI.Sample.Garden.Components;
+using AIExtensions.Sample.Garden.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.AI.Attributes;

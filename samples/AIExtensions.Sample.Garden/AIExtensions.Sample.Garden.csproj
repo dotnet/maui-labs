@@ -41,10 +41,12 @@
 		<PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
 		<PackageReference Include="Azure.AI.OpenAI" />
 		<PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+		<PackageReference Include="Microsoft.Extensions.Http" />
 		<PackageReference Include="CommunityToolkit.Mvvm" />
 	</ItemGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\AIExtensions.Sample.Garden.Shared\AIExtensions.Sample.Garden.Shared.csproj" />
 		<ProjectReference Include="..\..\src\AIExtensions\Microsoft.Maui.AI.Attributes\Microsoft.Maui.AI.Attributes.csproj" />
 		<ProjectReference Include="..\..\src\AIExtensions\Microsoft.Maui.AI.Attributes.Generators\Microsoft.Maui.AI.Attributes.Generators.csproj"
 		                  OutputItemType="Analyzer"

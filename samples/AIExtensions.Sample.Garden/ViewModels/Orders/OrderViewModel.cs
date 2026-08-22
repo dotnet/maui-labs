@@ -1,4 +1,4 @@
-using AIExtensions.Sample.Garden.Models;
+using AIExtensions.Sample.Garden.Shared;
 
 namespace AIExtensions.Sample.Garden.ViewModels;
 

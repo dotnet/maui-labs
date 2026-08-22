@@ -12,13 +12,11 @@ namespace AIExtensions.Sample.Garden.ViewModels;
 [QueryProperty(nameof(OrderId), "orderId")]
 public sealed partial class OrderDetailViewModel : ObservableObject
 {
-    private readonly IOrderArchive _archive;
-    private readonly CurrentCart _currentCart;
+    private readonly GardenDataStore _store;
 
-    public OrderDetailViewModel(IOrderArchive archive, CurrentCart currentCart)
+    public OrderDetailViewModel(GardenDataStore store)
     {
-        _archive = archive;
-        _currentCart = currentCart;
+        _store = store;
     }
 
     [ObservableProperty]
@@ -35,28 +33,48 @@ public sealed partial class OrderDetailViewModel : ObservableObject
 
     public ObservableCollection<OrderLineViewModel> Lines { get; } = [];
 
-    partial void OnOrderIdChanged(string? value)
+    public GardenDataStore Store => _store;
+
+    [ObservableProperty]
+    public partial string? ErrorMessage { get; private set; }
+
+    public async Task LoadAsync(string orderId, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (string.IsNullOrWhiteSpace(orderId))
             return;
 
-        var order = _archive.FindOrder(value);
-        if (order is null)
-            return;
-
-        PlacedAt = order.PlacedAt.ToString("MMM d, yyyy  h:mm tt");
-        Total = order.Total.ToString("C");
-        ItemCount = order.Items.Count;
-
-        Lines.Clear();
-        foreach (var item in order.Items)
-            Lines.Add(new OrderLineViewModel(item));
+        OrderId = orderId;
+        try
+        {
+            var order = await _store.GetOrderAsync(orderId, cancellationToken);
+            PlacedAt = order.PlacedAt.ToString("MMM d, yyyy  h:mm tt");
+            Total = order.Total.ToString("C");
+            ItemCount = order.Items.Count;
+            Lines.Clear();
+            foreach (var item in order.Items)
+                Lines.Add(new OrderLineViewModel(item));
+            ErrorMessage = null;
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
     }
 
     [RelayCommand]
-    private void Reorder()
+    private async Task ReorderAsync()
     {
         if (!string.IsNullOrWhiteSpace(OrderId))
-            _archive.Reorder(OrderId, _currentCart);
+        {
+            try
+            {
+                await _store.ReorderAsync(OrderId);
+                ErrorMessage = null;
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = ex.Message;
+            }
+        }
     }
 }

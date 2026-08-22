@@ -19,11 +19,11 @@ public partial class ProductDetailPage : ContentPage, IQueryAttributable
         }
     }
 
-    protected override void OnNavigatedTo(NavigatedToEventArgs args)
+    protected override async void OnNavigatedTo(NavigatedToEventArgs args)
     {
         base.OnNavigatedTo(args);
-        if (BindingContext is ProductDetailViewModel vm)
-            vm.RefreshReviews();
+        if (BindingContext is ProductDetailViewModel vm && !string.IsNullOrWhiteSpace(vm.Sku))
+            await vm.LoadAsync(vm.Sku);
     }
 
     private async void OnBackClicked(object? sender, EventArgs e)

@@ -1,11 +1,10 @@
 using System.Collections.ObjectModel;
-using System.ComponentModel;
 using AIExtensions.Sample.Garden.Messages;
+using AIExtensions.Sample.Garden.Shared;
 using AIExtensions.Sample.Garden.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
-using Microsoft.Maui.AI.Attributes;
 
 namespace AIExtensions.Sample.Garden.ViewModels;
 
@@ -16,21 +15,21 @@ namespace AIExtensions.Sample.Garden.ViewModels;
 /// </summary>
 public sealed partial class CartViewModel : ObservableObject, IRecipient<CartChangedMessage>
 {
-    private readonly CurrentCart _currentCart;
-    private readonly IOrderArchive _archive;
+    private readonly GardenDataStore _store;
 
-    public CartViewModel(CurrentCart currentCart, IOrderArchive archive)
+    public CartViewModel(GardenDataStore store)
     {
-        _currentCart = currentCart;
-        _archive = archive;
+        _store = store;
 
         WeakReferenceMessenger.Default.Register(this);
-        Refresh();
+        RefreshFromStore();
     }
 
-    void IRecipient<CartChangedMessage>.Receive(CartChangedMessage message) => Refresh();
+    void IRecipient<CartChangedMessage>.Receive(CartChangedMessage message) => RefreshFromStore();
 
     public ObservableCollection<CartItemViewModel> Items { get; } = [];
+
+    public GardenDataStore Store => _store;
 
     [ObservableProperty]
     public partial string CartTotal { get; set; } = $"Total: {0:C}";
@@ -39,16 +38,15 @@ public sealed partial class CartViewModel : ObservableObject, IRecipient<CartCha
     public partial bool HasItems { get; set; }
 
     [ObservableProperty]
+    public partial string? ErrorMessage { get; private set; }
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsNormalMode))]
     [NotifyPropertyChangedFor(nameof(IsCompactMode))]
     [NotifyPropertyChangedFor(nameof(CartModeLabel))]
     public partial CartMode CartMode
     {
-        [ExportAIFunction("get_cart_mode")]
-        [Description("Get the current cart display mode.")]
         get;
-        [ExportAIFunction("set_cart_mode")]
-        [Description("Change the shopping cart display mode. 'normal' shows full cards with icons and details. 'compact' shows dense single-line rows.")]
         set;
     } = CartMode.Normal;
 
@@ -73,46 +71,95 @@ public sealed partial class CartViewModel : ObservableObject, IRecipient<CartCha
     }
 
     [RelayCommand]
-    private void Checkout()
+    private async Task CheckoutAsync()
     {
-        if (_currentCart.Items.Count == 0)
+        if (_store.CartItems.Count == 0)
             return;
 
-        _archive.Checkout(_currentCart);
+        await RunAsync(_store.CheckoutAsync);
     }
 
     [RelayCommand]
-    private void AddFromCatalog(string? sku)
+    private async Task AddFromCatalogAsync(string? sku)
     {
         if (string.IsNullOrWhiteSpace(sku))
             return;
 
-        _currentCart.AddItem(sku);
+        await RunAsync(ct => _store.AddToCartAsync(sku, cancellationToken: ct));
     }
 
-    /// <summary>
-    /// Refresh the observable collections from the underlying cart model.
-    /// </summary>
-    public void Refresh()
+    [RelayCommand]
+    private async Task IncreaseAsync(string? sku)
     {
-        var source = _currentCart.Items;
+        var item = _store.CartItems.FirstOrDefault(i => i.Sku == sku);
+        if (item is not null)
+            await RunAsync(ct => _store.SetCartQuantityAsync(item.Sku, item.Quantity + 1, ct));
+    }
 
-        SyncCollection(Items, source, v => v.Sku, i => i.Product.Sku, i => new CartItemViewModel(i));
+    [RelayCommand]
+    private async Task DecreaseAsync(string? sku)
+    {
+        var item = _store.CartItems.FirstOrDefault(i => i.Sku == sku);
+        if (item is not null)
+            await RunAsync(ct => _store.SetCartQuantityAsync(item.Sku, item.Quantity - 1, ct));
+    }
 
-        CartTotal = $"Total: {source.Sum(i => i.Subtotal):C}";
+    [RelayCommand]
+    private async Task RemoveAsync(string? sku)
+    {
+        if (!string.IsNullOrWhiteSpace(sku))
+            await RunAsync(ct => _store.RemoveFromCartAsync(sku, ct));
+    }
+
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await _store.RefreshCartAsync(cancellationToken);
+            RefreshFromStore();
+            ErrorMessage = null;
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+    }
+
+    private void RefreshFromStore()
+    {
+        var source = _store.CartItems;
+        SyncCollection(Items, source, v => v.Sku, i => i.Sku, i => new CartItemViewModel(i));
+        CartTotal = _store.CartTotal.ToString("C");
         HasItems = source.Count > 0;
     }
 
-    /// <summary>
-    /// Clear cart and reset mode.
-    /// </summary>
-    public void Clear()
+    private async Task RunAsync(Func<CancellationToken, Task> action)
     {
-        _currentCart.Clear();
-        CartMode = CartMode.Normal;
+        try
+        {
+            await action(CancellationToken.None);
+            RefreshFromStore();
+            ErrorMessage = null;
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
     }
 
-    // ─────────────────────────────────────────────────────────────────
+    private async Task RunAsync<T>(Func<CancellationToken, Task<T>> action)
+    {
+        try
+        {
+            await action(CancellationToken.None);
+            RefreshFromStore();
+            ErrorMessage = null;
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+    }
 
     private static void SyncCollection<TVM, TModel>(
         ObservableCollection<TVM> target,

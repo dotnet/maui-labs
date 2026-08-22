@@ -24,7 +24,7 @@
                                 StrokeThickness="1"
                                 StrokeShape="RoundRectangle 10"
                                 Padding="10,8">
-                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
                                 <Label Text="{Binding Emoji}"
                                        FontFamily="FluentFilled"
                                        FontSize="{StaticResource FontSizeTitle}"
@@ -37,6 +37,36 @@
                                            FontSize="{StaticResource FontSizeCaption}"
                                            TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}" />
                                 </VerticalStackLayout>
+                                <HorizontalStackLayout Grid.Column="2"
+                                                       Spacing="4"
+                                                       VerticalOptions="Center">
+                                    <Button Text="−"
+                                            AutomationId="{Binding Sku, StringFormat='Decrease_{0}'}"
+                                            Command="{Binding DecreaseCommand, Source={RelativeSource AncestorType={x:Type vm:CartViewModel}}, x:DataType=vm:CartViewModel}"
+                                            CommandParameter="{Binding Sku}"
+                                            Padding="8,2"
+                                            BackgroundColor="Transparent"
+                                            TextColor="{StaticResource Primary}" />
+                                    <Label Text="{Binding Quantity}"
+                                           MinimumWidthRequest="24"
+                                           HorizontalTextAlignment="Center"
+                                           VerticalTextAlignment="Center" />
+                                    <Button Text="+"
+                                            AutomationId="{Binding Sku, StringFormat='Increase_{0}'}"
+                                            Command="{Binding IncreaseCommand, Source={RelativeSource AncestorType={x:Type vm:CartViewModel}}, x:DataType=vm:CartViewModel}"
+                                            CommandParameter="{Binding Sku}"
+                                            Padding="8,2"
+                                            BackgroundColor="Transparent"
+                                            TextColor="{StaticResource Primary}" />
+                                    <Button Text="&#xE74D;"
+                                            FontFamily="FluentFilled"
+                                            AutomationId="{Binding Sku, StringFormat='Remove_{0}'}"
+                                            Command="{Binding RemoveCommand, Source={RelativeSource AncestorType={x:Type vm:CartViewModel}}, x:DataType=vm:CartViewModel}"
+                                            CommandParameter="{Binding Sku}"
+                                            Padding="8,2"
+                                            BackgroundColor="Transparent"
+                                            TextColor="{AppThemeBinding Light=#B42318, Dark=#FDA29B}" />
+                                </HorizontalStackLayout>
                             </Grid>
                         </Border>
                     </Grid>

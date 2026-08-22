@@ -1,4 +1,4 @@
-using GenerativeUI.Sample.Garden.Components;
+using AIExtensions.Sample.Garden.Components;
 using Microsoft.Maui.AI.GenerativeUI.Composition;
 
 namespace Microsoft.Maui.AI.GenerativeUI.Tests;

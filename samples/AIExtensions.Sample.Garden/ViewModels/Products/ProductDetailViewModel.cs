@@ -1,5 +1,5 @@
 using System.Collections.ObjectModel;
-using AIExtensions.Sample.Garden.Models;
+using AIExtensions.Sample.Garden.Shared;
 using AIExtensions.Sample.Garden.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -13,13 +13,11 @@ namespace AIExtensions.Sample.Garden.ViewModels;
 [QueryProperty(nameof(Sku), "sku")]
 public sealed partial class ProductDetailViewModel : ObservableObject
 {
-    private readonly CurrentCart _currentCart;
-    private readonly ReviewStore _reviewStore;
+    private readonly GardenDataStore _store;
 
-    public ProductDetailViewModel(CurrentCart currentCart, ReviewStore reviewStore)
+    public ProductDetailViewModel(GardenDataStore store)
     {
-        _currentCart = currentCart;
-        _reviewStore = reviewStore;
+        _store = store;
     }
 
     [ObservableProperty]
@@ -45,45 +43,66 @@ public sealed partial class ProductDetailViewModel : ObservableObject
 
     public ObservableCollection<ReviewViewModel> Reviews { get; } = [];
 
-    partial void OnSkuChanged(string? value)
+    public GardenDataStore Store => _store;
+
+    [ObservableProperty]
+    public partial string? ErrorMessage { get; private set; }
+
+    public async Task LoadAsync(string sku, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (string.IsNullOrWhiteSpace(sku))
             return;
 
-        var product = ProductCatalog.FindByName(value);
-        if (product is null)
-            return;
-
-        Name = product.Name;
-        Emoji = product.Emoji;
-        Category = product.Category;
-        PriceLabel = product.Price.ToString("C");
-        RefreshReviews(value);
+        Sku = sku;
+        try
+        {
+            var product = await _store.GetProductAsync(sku, cancellationToken);
+            Name = product.Name;
+            Emoji = product.Emoji;
+            Category = product.Category;
+            PriceLabel = product.Price.ToString("C");
+            await RefreshReviewsAsync(sku, cancellationToken);
+            ErrorMessage = null;
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
     }
 
-    public void RefreshReviews(string? sku = null)
+    public async Task RefreshReviewsAsync(string? sku = null, CancellationToken cancellationToken = default)
     {
         sku ??= Sku;
         if (string.IsNullOrWhiteSpace(sku))
             return;
 
-        var reviews = _reviewStore.GetProductReviews(sku);
+        var reviews = await _store.GetProductReviewsAsync(sku, cancellationToken);
         Reviews.Clear();
         foreach (var r in reviews)
             Reviews.Add(new ReviewViewModel(r));
 
         HasReviews = reviews.Count > 0;
-        var avg = _reviewStore.AverageRating(sku);
+        double? avg = reviews.Count == 0 ? null : reviews.Average(r => r.Rating);
         RatingLabel = avg is not null
             ? $"{avg:F1} ★  ({reviews.Count} review{(reviews.Count != 1 ? "s" : "")})"
             : "No reviews yet";
     }
 
     [RelayCommand]
-    private void AddToCart()
+    private async Task AddToCartAsync()
     {
         if (!string.IsNullOrWhiteSpace(Sku))
-            _currentCart.AddItem(Sku);
+        {
+            try
+            {
+                await _store.AddToCartAsync(Sku);
+                ErrorMessage = null;
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = ex.Message;
+            }
+        }
     }
 
     [RelayCommand]
@@ -94,7 +113,7 @@ public sealed partial class ProductDetailViewModel : ObservableObject
     }
 }
 
-public sealed class ReviewViewModel(ProductReview review)
+public sealed class ReviewViewModel(Review review)
 {
     public string Stars => new string('★', review.Rating) + new string('☆', 5 - review.Rating);
     public string Comment => review.Comment ?? "";

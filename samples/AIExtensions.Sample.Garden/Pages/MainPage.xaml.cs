@@ -12,10 +12,10 @@ public partial class MainPage : ContentPage
         BindingContext = _viewModel = viewModel;
     }
 
-    protected override void OnAppearing()
+    protected override async void OnAppearing()
     {
         base.OnAppearing();
-        _viewModel.Initialize();
+        await _viewModel.InitializeAsync();
     }
 
     private async void OnProductsClicked(object? sender, EventArgs e)

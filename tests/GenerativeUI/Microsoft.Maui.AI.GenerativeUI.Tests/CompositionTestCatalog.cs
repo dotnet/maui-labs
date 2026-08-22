@@ -1,5 +1,5 @@
 using System.Text.Json;
-using GenerativeUI.Sample.Garden.Shared;
+using AIExtensions.Sample.Garden.Shared;
 using Microsoft.Maui.AI.GenerativeUI.Binding;
 using Microsoft.Maui.AI.GenerativeUI.Composition;
 using Microsoft.Maui.AI.GenerativeUI.Registry;

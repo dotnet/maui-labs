@@ -2,7 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 
-namespace GenerativeUI.Sample.Garden.Server.Tests;
+namespace AIExtensions.Sample.Garden.Server.Tests;
 
 /// <summary>
 /// Keeps the checked-in OpenAPI snapshot honest. Boots the Garden server in-memory, fetches the live

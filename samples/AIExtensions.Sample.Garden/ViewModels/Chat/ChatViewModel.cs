@@ -16,23 +16,11 @@ namespace AIExtensions.Sample.Garden.ViewModels;
 public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNewChatSessionMessage>
 {
     /// <summary>
-    /// Source-generated tool context that merges all tool sources into one.
-    /// Demonstrates several distinct attribute patterns:
-    /// <list type="bullet">
-    ///   <item><b>Static class</b> — ProductCatalog: tools on a plain static class.</item>
-    ///   <item><b>Instance class</b> — CurrentCart: tools on a DI-registered instance.</item>
-    ///   <item><b>Interface</b> — IOrderArchive: tools declared on the interface.</item>
-    ///   <item><b>ViewModel</b> — MainViewModel: navigation tools on a singleton VM.</item>
-    ///   <item><b>Transient view-model</b> — CatalogViewModel: stateless action tools that write through to singleton services.</item>
-    /// </list>
+    /// Source-generated tool context exposing only typed Garden business tools
+    /// and fixed-shell navigation tools to the model.
     /// </summary>
-    [AIToolSource(typeof(ProductCatalog))]
-    [AIToolSource(typeof(CurrentCart))]
-    [AIToolSource(typeof(IOrderArchive))]
+    [AIToolSource(typeof(GardenChatTools))]
     [AIToolSource(typeof(MainViewModel))]
-    [AIToolSource(typeof(CartViewModel))]
-    [AIToolSource(typeof(CatalogViewModel))]
-    [AIToolSource(typeof(ReviewStore))]
     private partial class GardenShopTools : AIToolContext { }
 
     private readonly IChatClient _chatClient;
@@ -102,21 +90,20 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
 
                 IMPORTANT RULES:
                 - Always use tools to perform actions. Never assume you know the cart state
-                  from previous messages — call show_list to check.
-                - Use search_products to discover items by name or category.
-                - Use recommend_bundle when the user asks for a starter kit, gift set, or curated bundle idea.
-                - When the user says "check out", call checkout_list (which requires approval).
+                  from previous messages — call get_cart to check.
+                - Use list_products to discover items by name or category.
+                - Use get_recommendations when the user asks for curated ideas.
+                - When the user says "check out", call checkout (which requires approval).
                 - After checkout clears the cart, the cart is EMPTY. If the user asks to add
-                  items again, always call add_to_list — do not say items are already there.
+                  items again, always call add_to_cart — do not say items are already there.
+                - Every business-data mutation requires explicit user approval. Read tools and
+                  navigation do not require approval.
 
                 NAVIGATION:
                 - Use navigate_to_page("catalog") to browse the product catalog.
                 - Use navigate_to_page("orders") to see past orders.
                 - Use navigate_to_page("cart") to view the cart.
                 - Use dismiss_page() to close a modal and return to chat.
-
-                CART DISPLAY:
-                - Use set_cart_mode("normal") or set_cart_mode("compact") to change the cart view.
 
                 REVIEWS:
                 - Use submit_review to add a product review with a rating and comment.

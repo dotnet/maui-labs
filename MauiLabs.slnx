@@ -20,9 +20,9 @@
     <Project Path="samples/DevFlow.Sample.WPF/DevFlow.Sample.WPF.csproj" />
     <Project Path="samples/DevFlow.Sample/DevFlow.Sample.csproj" />
     <Project Path="samples/EssentialsAISample/EssentialsAISample.csproj" />
-    <Project Path="samples/GenerativeUI.Sample.Garden.Shared/GenerativeUI.Sample.Garden.Shared.csproj" />
-    <Project Path="samples/GenerativeUI.Sample.Garden.Server/GenerativeUI.Sample.Garden.Server.csproj" />
-    <Project Path="samples/GenerativeUI.Sample.Garden.Components/GenerativeUI.Sample.Garden.Components.csproj" />
+    <Project Path="samples/AIExtensions.Sample.Garden.Shared/AIExtensions.Sample.Garden.Shared.csproj" />
+    <Project Path="samples/AIExtensions.Sample.Garden.Server/AIExtensions.Sample.Garden.Server.csproj" />
+    <Project Path="samples/AIExtensions.Sample.Garden.Components/AIExtensions.Sample.Garden.Components.csproj" />
     <Project Path="samples/GenerativeUI.Sample.Garden/GenerativeUI.Sample.Garden.csproj" />
   </Folder>
   <Folder Name="/src/" />
