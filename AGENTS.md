@@ -29,6 +29,7 @@ This repository hosts experimental .NET MAUI packages. It is a **multi-product m
 - **Central Package Management** — all versions in `Directory.Packages.props`
 - **xUnit** v2.9.3 for testing, **coverlet** for coverage
 - **System.CommandLine** 2.0.5 (stable) for CLI tooling
+- **Node.js 22+ / TypeScript** for the DevFlow Inspector hosts (`src/DevFlow/js`, npm workspaces) and the Copilot Canvas host (`.github/extensions/maui-devflow-canvas`). These **ship** — see **Dependencies and Supply Chain**.
 
 ## Building
 
@@ -53,6 +54,23 @@ dotnet build src/DevFlow/DevFlow.slnf
 eng\common\cibuild.cmd -configuration Release -prepareMachine -projects src/DevFlow/DevFlow.slnf
 ```
 
+### JavaScript / TypeScript
+
+The DevFlow Inspector hosts are **not** part of the .NET solution — `dotnet build` does not cover
+them. Build them with npm:
+
+```bash
+# DevFlow Inspector: shared client + VS Code host (npm workspaces)
+cd src/DevFlow/js
+npm ci
+npm run build          # tsc + esbuild for both workspaces
+npm run package:vsix   # produces the VS Code extension .vsix
+
+# Copilot Canvas host
+cd .github/extensions/maui-devflow-canvas
+npm ci
+```
+
 ### Build Troubleshooting
 
 - If restore fails, check `NuGet.config` — feeds are internal dnceng proxies, not nuget.org
@@ -72,6 +90,53 @@ dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Tests/
 - Tests run in CI on **macOS and Windows** (matrix build)
 - Test results: `artifacts/TestResults/**/*.xml`
 - No quarantine or outerloop test attributes are used in this repo
+
+### JavaScript / TypeScript tests
+
+`dotnet test` does not run these — they use the built-in Node test runner and run in the
+`hosts` job of `ci-devflow.yml`:
+
+```bash
+cd src/DevFlow/js
+npm ci
+npm test               # node --test across the shared client and VS Code host
+
+cd .github/extensions/maui-devflow-canvas
+npm ci
+npm test
+npm run selftest:recorder
+```
+
+## Dependencies and Supply Chain
+
+This repo ships. A vulnerable transitive dependency reaches users, so dependency changes get
+checked **locally, before the PR is opened** — not after Dependabot files an advisory PR.
+
+**If your change touches any npm dependency or lockfile, run this before opening the PR:**
+
+```bash
+node eng/scripts/audit-npm.mjs
+```
+
+It audits every npm project in the repo and verifies each one is registered in
+`.github/dependabot.yml`. Exit `0` is clean; `1` means `high`/`critical` advisories, an
+unregistered project, or a missing lockfile; `2` means a project could not be checked against
+the advisory database. All three must be fixed before the PR goes up — `2` is **not** a pass,
+because `npm audit` exits non-zero for an unreachable registry too, so that result carries no
+signal. `--allow-unverified` downgrades `2` to a warning for offline work, and CI never passes it.
+
+Fix findings with `npm audit fix` in the reported directory, re-run `npm ci && npm test`, and
+commit the updated `package-lock.json`. Remediation is required — leaving a known advisory in
+place keeps the check red and blocks every later dependency PR.
+
+- **Every new `package.json` must be registered in `.github/dependabot.yml` in the same PR.**
+  Security alerts fire repo-wide without config, but routine *version* updates only run for
+  listed directories, so an unregistered manifest quietly drifts until advisories pile up.
+- `devDependencies` count — they execute on CI runners with repo credentials in scope.
+- NuGet packages are **not** managed by Dependabot: versions live in `Directory.Packages.props`
+  and flow through Maestro/DARC.
+
+Full guidance: `.github/instructions/dependencies.instructions.md`.
 
 ## Code Conventions
 
@@ -112,6 +177,10 @@ maui-labs/
 │   │   ├── Microsoft.Maui.DevFlow.Agent.IntegrationTests/  # Integration tests
 │   │   ├── Microsoft.Maui.DevFlow.Inspector.Tests/     # Inspector tests
 │   │   ├── Shared.Essentials/                          # Shared Essentials code (compiled into Agent.Core and Agent.Native.Essentials)
+│   │   ├── js/                                         # JS/TS Inspector hosts — npm workspaces, SHIPS
+│   │   │   ├── devflow-client/                         # Shared TypeScript client library
+│   │   │   ├── vscode-inspector/                       # VS Code extension host (packaged as .vsix)
+│   │   │   └── test/                                   # node --test suites
 │   │   └── DevFlow.slnf                               # Solution filter
 │   ├── AI/                               # Essentials.AI product
 │   │   └── Microsoft.Maui.Essentials.AI/ # On-device AI package
@@ -136,8 +205,13 @@ maui-labs/
 │   └── Windows.WPF/                      # WPF platform backend
 ├── samples/                              # Sample MAUI apps (not shipped)
 ├── playground/                           # Manual test/scratch apps
+├── docs/                                 # Contributor documentation (docs/DevFlow/inspector.md, etc.)
+├── plugins/                              # Distributed agent skills (see Skills Marketplace)
+├── .github/                              # Workflows, instructions, agents
+│   └── extensions/maui-devflow-canvas/   # Copilot Canvas host for DevFlow (npm)
 ├── eng/                                  # Shared build infrastructure
 │   ├── pipelines/                        # Azure DevOps pipeline definitions
+│   ├── scripts/                          # Repo maintenance scripts (audit-npm.mjs)
 │   ├── Versions.props                    # Central version definitions
 │   ├── Signing.props                     # Code signing configuration
 │   ├── Publishing.props                  # NuGet publishing config
@@ -208,20 +282,21 @@ Each product requires source setup **and** CI/CD configuration across two system
 2. Add projects to `MauiLabs.slnx`
 3. Add package versions to `Directory.Packages.props`
 4. Add signing entries in `eng/Signing.props` for any new third-party DLLs
+5. If the product introduces a `package.json`, register its directory in `.github/dependabot.yml` and verify with `node eng/scripts/audit-npm.mjs` (see **Dependencies and Supply Chain**)
 
 ### Documentation
 
-5. Create **two READMEs**:
+6. Create **two READMEs**:
    - A **contributor README** at the product root (e.g. `src/{NewProduct}/README.md`) for GitHub browsing — describes features, build instructions, architecture, and links to the NuGet README.
    - A **NuGet README** next to the shipping csproj (e.g. `src/{NewProduct}/Microsoft.Maui.{NewProduct}/README.md`) — consumer-facing with install, quick start, and usage examples. Pack it via `<None Include="README.md" Pack="true" PackagePath="/" />` in the csproj and set `<PackRepoRootReadme>false</PackRepoRootReadme>` to avoid duplicating the repo-root README. **Images must use absolute URLs** (`https://raw.githubusercontent.com/dotnet/maui-labs/main/...`) — relative paths break on NuGet.org.
    
    Both should include: product name, feature list, platform support matrix, quick start code, package table, requirements, and experimental status warning. Keep feature descriptions aligned to avoid drift.
-6. Add a section for the product in the **repo-root `README.md`** under `## Products` with a brief description, feature highlights, and package table.
+7. Add a section for the product in the **repo-root `README.md`** under `## Products` with a brief description, feature highlights, and package table.
 
 ### CI/CD Setup
 
-7. **GitHub Actions**: Create `.github/workflows/ci-{newproduct}.yml` calling the reusable `_build.yml` workflow. Must include `pull_request.types: [opened, synchronize, reopened, edited]` and path filters scoped to the product source plus shared build files.
-8. **Azure DevOps**: Edit `eng/pipelines/devflow-official.yml` — add a publish parameter, a build job in the `build` stage, and a conditional publish stage for NuGet.org. Run workload installation through Arcade's SDK wrapper (`eng\common\dotnet.cmd workload install ...`) so it uses the same SDK that `cibuild.cmd` selects without assuming a repo-local `.dotnet` directory exists. For commands with quoted arguments or paths containing spaces, invoke `eng/common/dotnet.ps1` from a `pwsh` step instead of the CMD shim. If using `UseDotNet@2` instead, set an explicit `version:` matching `global.json` (not `useGlobalJson: true`). Pin workloads with `--version` matching `_build.yml`. Pure managed Apple products can build on Windows (workload provides reference assemblies). Products with native code (e.g. Swift) need a two-stage build: macOS compiles native + Windows packs/signs. See `EssentialsAI_macOS`/`EssentialsAI` for the native pattern, `MacOS` for the managed pattern.
+8. **GitHub Actions**: Create `.github/workflows/ci-{newproduct}.yml` calling the reusable `_build.yml` workflow. Must include `pull_request.types: [opened, synchronize, reopened, edited]` and path filters scoped to the product source plus shared build files.
+9. **Azure DevOps**: Edit `eng/pipelines/devflow-official.yml` — add a publish parameter, a build job in the `build` stage, and a conditional publish stage for NuGet.org. Run workload installation through Arcade's SDK wrapper (`eng\common\dotnet.cmd workload install ...`) so it uses the same SDK that `cibuild.cmd` selects without assuming a repo-local `.dotnet` directory exists. For commands with quoted arguments or paths containing spaces, invoke `eng/common/dotnet.ps1` from a `pwsh` step instead of the CMD shim. If using `UseDotNet@2` instead, set an explicit `version:` matching `global.json` (not `useGlobalJson: true`). Pin workloads with `--version` matching `_build.yml`. Pure managed Apple products can build on Windows (workload provides reference assemblies). Products with native code (e.g. Swift) need a two-stage build: macOS compiles native + Windows packs/signs. See `EssentialsAI_macOS`/`EssentialsAI` for the native pattern, `MacOS` for the managed pattern.
 
 > **Complete copy-paste templates** for both the GitHub Actions workflow and all three Azure DevOps blocks (parameter, build job, publish stage) are in `.github/copilot-instructions.md` under **"CI/CD — New Product Checklist"**.
 
