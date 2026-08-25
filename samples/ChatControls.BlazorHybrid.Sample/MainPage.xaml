@@ -4,6 +4,7 @@
              xmlns:local="clr-namespace:ChatControls.BlazorHybrid.Sample"
              xmlns:comp="clr-namespace:ChatControls.BlazorHybrid.Sample.Components"
              xmlns:cs="clr-namespace:ChatControls.Sample"
+             xmlns:chat="clr-namespace:Microsoft.Maui.Chat.Controls;assembly=Microsoft.Maui.Chat.Controls"
              x:Class="ChatControls.BlazorHybrid.Sample.MainPage"
              x:DataType="cs:TeamChatViewModel"
              Title="MAUI Chat Controls Blazor Hybrid"
@@ -30,8 +31,11 @@
                 <Label Text="Selected participant" FontSize="12" TextColor="#49454F" />
                 <Picker AutomationId="ParticipantPicker"
                         ItemsSource="{Binding Participants}"
-                        SelectedItem="{Binding SelectedParticipant}"
-                        ItemDisplayBinding="{Binding DisplayName}" />
+                        SelectedItem="{Binding SelectedParticipant}">
+                    <Picker.ItemDisplayBinding>
+                        <Binding Path="DisplayName" x:DataType="chat:ChatParticipant" />
+                    </Picker.ItemDisplayBinding>
+                </Picker>
 
                 <Button Text="Send text" AutomationId="SendParticipantTextButton" Command="{Binding SendParticipantTextCommand}" />
                 <Button Text="Send photo" AutomationId="SendParticipantPhotoButton" Command="{Binding SendParticipantPhotoCommand}" />

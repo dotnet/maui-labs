@@ -10,12 +10,7 @@ public class ChatComposerContextTests
 {
     private static ChatComposerContext CreateContext(ChatConversation? conversation = null)
     {
-        var context = new ChatComposerContext(
-            EventCallback.Empty,
-            EventCallback.Empty,
-            EventCallback.Empty,
-            EventCallback.Empty,
-            EventCallback.Empty);
+        var context = new ChatComposerContext();
         context.AttachConversation(conversation);
         return context;
     }

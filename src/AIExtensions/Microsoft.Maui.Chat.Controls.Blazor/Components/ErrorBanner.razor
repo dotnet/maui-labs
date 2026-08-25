@@ -2,8 +2,10 @@
     Licensed to the .NET Foundation under one or more agreements.
     The .NET Foundation licenses this file to you under the MIT license.
 
-    Generic user-safe error/retry banner. Bound to the composer context's error message
-    string, or explicitly to a send-side error the shell surfaced.
+    User-safe error banner. Shows the composer or send error string when one is present.
+    Intentionally does NOT expose a retry contract: the neutral layer preserves the draft
+    on failure so the ordinary Submit path re-tries; layer 2 (AI bridge) owns AgentContext
+    retry UI on top of this shell.
 *@
 @namespace Microsoft.Maui.Chat.Controls.Blazor
 @using Microsoft.Maui.Chat.Controls
@@ -12,12 +14,6 @@
 {
     <div class="mchat-error" role="alert">
         <span class="mchat-error__message">@Message</span>
-        @if (Retry.HasDelegate)
-        {
-            <button type="button" class="mchat-btn mchat-btn--secondary" @onclick="Retry">
-                Retry
-            </button>
-        }
     </div>
 }
 
@@ -25,8 +21,4 @@
     /// <summary>Gets or sets the user-safe error message. When empty, nothing renders.</summary>
     [Parameter]
     public string? Message { get; set; }
-
-    /// <summary>Gets or sets an optional retry callback. When set, a Retry button appears.</summary>
-    [Parameter]
-    public EventCallback Retry { get; set; }
 }
