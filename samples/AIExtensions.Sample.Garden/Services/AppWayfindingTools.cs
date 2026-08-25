@@ -14,8 +14,10 @@ public sealed class AppWayfindingTools(ApplicationMapService applicationMap)
     [ExportAIFunction("find_in_app")]
     [Description(
         "Search the app's real indexed screens for a feature, control, or task. " +
-        "Use this first for where/how questions and before opening a destination. " +
-        "Returns destination IDs, route requirements, the page path, and matching controls.")]
+        "MUST be used first for every where/how/back question and before opening a destination, " +
+        "even when a similar search was run in an earlier turn. Returns destination IDs, route " +
+        "requirements, the page path, and matching controls. For explanations, this result is " +
+        "incomplete until describe_app_destination is called.")]
     public string FindInApp(
         [Description(
             "Natural-language feature or task to find, such as 'write a review', " +
@@ -60,9 +62,9 @@ public sealed class AppWayfindingTools(ApplicationMapService applicationMap)
 
     [ExportAIFunction("describe_app_destination")]
     [Description(
-        "Read the complete indexed UI and route path for one app destination without moving " +
-        "the user. Use this to explain where a feature is and to inspect every page in the " +
-        "page path returned by find_in_app.")]
+        "Read the complete indexed UI for every page from home through one destination without " +
+        "moving the user. MUST be called after find_in_app before answering where/how/back " +
+        "questions. Its output is the authoritative source for exact path controls.")]
     public string DescribeAppDestination(
         [Description("Destination ID returned by find_in_app, for example 'ProductReviewPage'.")]
         string destinationId)
@@ -100,18 +102,33 @@ public sealed class AppWayfindingTools(ApplicationMapService applicationMap)
         }
 
         var destination = exact[0];
-        return
-            $"Destination ID: {destination.DestinationId}\n" +
-            $"Route: {destination.RouteTemplate}\n" +
-            $"Page path: {string.Join(" -> ", destination.PagePath)}\n\n" +
-            destination.Markdown;
+        var builder = new StringBuilder();
+        builder.AppendLine($"Destination ID: {destination.DestinationId}");
+        builder.AppendLine($"Route: {destination.RouteTemplate}");
+        builder.AppendLine($"Page path: {string.Join(" -> ", destination.PagePath)}");
+        builder.AppendLine();
+        builder.AppendLine("Verified page path UI:");
+
+        foreach (var pageIdentity in destination.PagePath)
+        {
+            var page = applicationMap.GetIndexedPage(pageIdentity);
+            if (page is null)
+                return $"The indexed page path could not resolve '{pageIdentity}'.";
+
+            builder.AppendLine();
+            builder.AppendLine($"## {page.Name}");
+            builder.AppendLine(page.Markdown);
+        }
+
+        return builder.ToString();
     }
 
     [ExportAIFunction("describe_current_screen")]
     [Description(
-        "Read the currently visible page and live controls. ALWAYS use this for questions " +
-        "containing 'this', 'here', 'current screen', or referring to a visible field, button, " +
-        "or value. Private input text is omitted.")]
+        "Read the currently visible page and live controls. MUST be called in the current turn " +
+        "for questions containing 'this', 'here', 'current screen', or 'back', and for any visible " +
+        "field, button, or value, even if it was called in the immediately preceding turn. " +
+        "Private input text is omitted.")]
     public async Task<string> DescribeCurrentScreenAsync()
     {
         var snapshot = await applicationMap.CaptureCurrentPageAsync();

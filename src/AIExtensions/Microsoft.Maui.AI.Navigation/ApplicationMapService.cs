@@ -74,6 +74,30 @@ public sealed class ApplicationMapService
             .ToArray();
     }
 
+    /// <summary>
+    /// Finds one indexed page by qualified type identity or an unambiguous simple name.
+    /// </summary>
+    public IndexedPage? GetIndexedPage(string pageIdentity)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(pageIdentity);
+
+        var qualifiedMatch = _catalog.Pages.FirstOrDefault(page =>
+            string.Equals(
+                page.TypeName,
+                pageIdentity,
+                StringComparison.OrdinalIgnoreCase));
+        if (qualifiedMatch is not null)
+            return qualifiedMatch;
+
+        var simpleMatches = _catalog.Pages.Where(page =>
+                string.Equals(
+                    page.Name,
+                    pageIdentity,
+                    StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        return simpleMatches.Length == 1 ? simpleMatches[0] : null;
+    }
+
     /// <summary>Searches the navigable UI index using a natural-language query.</summary>
     public IReadOnlyList<ApplicationSearchResult> Search(
         string query,
@@ -88,13 +112,14 @@ public sealed class ApplicationMapService
             return [];
 
         var phrase = string.Join(' ', terms);
-        var matches = new List<ApplicationSearchResult>();
+        var matches = new List<(ApplicationSearchResult Result, int MatchedTermCount)>();
 
         foreach (var destination in GetDestinations())
         {
             var normalizedName = Normalize(destination.PageName);
             var normalizedMarkdown = Normalize(destination.Markdown);
             var score = 0;
+            var matchedTermCount = 0;
 
             if (normalizedMarkdown.Contains(phrase, StringComparison.Ordinal)
                 || normalizedName.Contains(phrase, StringComparison.Ordinal))
@@ -104,9 +129,13 @@ public sealed class ApplicationMapService
 
             foreach (var term in terms)
             {
-                if (normalizedName.Contains(term, StringComparison.Ordinal))
+                var nameMatches = normalizedName.Contains(term, StringComparison.Ordinal);
+                var markdownMatches = normalizedMarkdown.Contains(term, StringComparison.Ordinal);
+                if (nameMatches || markdownMatches)
+                    matchedTermCount++;
+                if (nameMatches)
                     score += 8;
-                if (normalizedMarkdown.Contains(term, StringComparison.Ordinal))
+                if (markdownMatches)
                     score += 3;
             }
 
@@ -121,10 +150,20 @@ public sealed class ApplicationMapService
                 .Take(6)
                 .ToArray();
 
-            matches.Add(new ApplicationSearchResult(destination, score, relevantLines));
+            matches.Add((
+                new ApplicationSearchResult(destination, score, relevantLines),
+                matchedTermCount));
         }
 
+        if (matches.Count == 0)
+            return [];
+
+        var minimumTermMatches = matches.Max(match => match.MatchedTermCount) >= 2
+            ? 2
+            : 1;
         return matches
+            .Where(match => match.MatchedTermCount >= minimumTermMatches)
+            .Select(match => match.Result)
             .OrderByDescending(match => match.Score)
             .ThenBy(match => match.Destination.PageName, StringComparer.OrdinalIgnoreCase)
             .Take(maxResults)

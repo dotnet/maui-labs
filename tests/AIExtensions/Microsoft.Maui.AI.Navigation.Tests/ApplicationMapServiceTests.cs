@@ -12,12 +12,22 @@ public class ApplicationMapServiceTests
 
         var result = service.Search("Where are my past orders?");
 
-        Assert.NotEmpty(result);
-        var match = result[0];
+        var match = Assert.Single(result);
         Assert.Equal("OrdersPage", match.Destination.PageName);
         Assert.Equal("//main/orders", match.Destination.Route);
         Assert.Equal(["MainPage", "OrdersPage"], match.Destination.PagePath);
         Assert.Null(navigation.LastNavigatedRoute);
+    }
+
+    [Fact]
+    public void Search_WhenOnlyOneMeaningfulTermMatches_KeepsRankedResults()
+    {
+        var (service, _, _) = CreateService();
+
+        var result = service.Search("find orders");
+
+        Assert.Contains(result, match =>
+            match.Destination.PageName == "OrdersPage");
     }
 
     [Fact]
@@ -177,6 +187,10 @@ public class ApplicationMapServiceTests
 
         Assert.Equal("AreaA.SettingsPage", destination.PageTypeName);
         Assert.Equal("# Area A", destination.Markdown);
+        Assert.Null(service.GetIndexedPage("SettingsPage"));
+        Assert.Equal(
+            "# Area A",
+            service.GetIndexedPage("AreaA.SettingsPage")?.Markdown);
     }
 
     private static (
