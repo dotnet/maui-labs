@@ -88,6 +88,9 @@ PR that introduced the sample.
 | Suggestion send | Tap suggestion chip | welcome hides, first row shows the suggestion's `Prompt` text | ✅ |
 | Attachment removal | ✕ on staged chip | chip removed from `.mchat-attachments` on next render | ✅ |
 | Sticky-bottom follow | Rapid 5× send text | list stays scrolled to bottom (measured via `body.scrollHeight - scrollTop - clientHeight < 96 px`) | ✅ |
+| Sticky-scroll starting from empty | Clear + rapid 40× send | first message triggers auto-scroll despite `.mchat-chat-page__body` having no overflow at bind time; list stays anchored | ✅ |
+| Sticky-scroll — no snap when user scrolled up | Fill, scroll to top, add one | `scrollTop` stays 0, list does NOT snap to bottom (verified `scrollDist` grew from 1067 → 1109 without `scrollTop` changing) | ✅ |
+| Sticky-scroll — follow resumes at bottom | Scroll to bottom, add one | `scrollDist < 96 px` after add | ✅ |
 | Dark theme | `data-theme="dark"` on `.mchat-root` | palette switches: dark surface, purple outgoing bubble, dark composer, readable text-on-dark | ✅ |
 | Light theme | `data-theme="light"` | palette switches back to the light default | ✅ |
 | ARIA on message list | | `.mchat-message-list[role="log"][aria-live="polite"]` | ✅ |

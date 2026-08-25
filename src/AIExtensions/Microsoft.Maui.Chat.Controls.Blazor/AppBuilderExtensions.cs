@@ -12,7 +12,9 @@ public static class AppBuilderExtensions
 {
     /// <summary>
     /// Ensures the shared <c>Microsoft.Maui.Chat.Controls</c> theme is loaded at startup and
-    /// records the DI marker service the Blazor components look for. Call it from
+    /// registers the neutral multimodal service defaults so the Blazor composer resolves the same
+    /// <see cref="IChatAttachmentPicker"/>, <see cref="IChatAudioRecorder"/>, and
+    /// <see cref="IChatSpeechRecognizer"/> that the native XAML control uses. Call it from
     /// <c>MauiProgram.CreateMauiApp()</c>.
     /// </summary>
     /// <param name="builder">The MAUI app builder.</param>
@@ -20,16 +22,20 @@ public static class AppBuilderExtensions
     /// <exception cref="ArgumentNullException"><paramref name="builder"/> is <see langword="null"/>.</exception>
     /// <remarks>
     /// <para>
-    /// The Blazor components do not depend on any XAML resources at runtime — they render into
-    /// the WebView — but calling this method keeps the composer's optional platform services
-    /// (attachment picker, audio recorder, speech recognizer) available even when the app has
-    /// not called the native <c>UseChatControls()</c>.
+    /// This method delegates to
+    /// <see cref="Microsoft.Maui.Chat.Controls.AppBuilderExtensions.AddChatControlsDefaults"/> so
+    /// calling <see cref="AddChatControlsBlazor"/> alone (without also calling
+    /// <see cref="Microsoft.Maui.Chat.Controls.AppBuilderExtensions.UseChatControls"/>) still yields
+    /// resolvable service defaults for the Blazor composer.
+    /// </para>
+    /// <para>
+    /// The registrations use <c>TryAddSingleton</c>, so an app-supplied registration (a simulated
+    /// recorder in tests, a cloud picker) always wins if registered first.
     /// </para>
     /// <para>
     /// The static assets (<c>mchat.css</c>, <c>mchat.js</c>) still have to be referenced by the
     /// host <c>index.html</c>: link them from
-    /// <c>_content/Microsoft.Maui.Chat.Controls.Blazor/mchat.css</c> and
-    /// <c>_content/Microsoft.Maui.Chat.Controls.Blazor/mchat.js</c>.
+    /// <c>_content/Microsoft.Maui.Chat.Controls.Blazor/mchat.css</c>.
     /// </para>
     /// </remarks>
     public static MauiAppBuilder AddChatControlsBlazor(this MauiAppBuilder builder)
@@ -37,6 +43,7 @@ public static class AppBuilderExtensions
         ArgumentNullException.ThrowIfNull(builder);
 
         builder.Services.AddSingleton<IMauiInitializeService, ChatControlsBlazorInitializer>();
+        builder.Services.AddChatControlsDefaults();
         return builder;
     }
 
@@ -49,3 +56,4 @@ public static class AppBuilderExtensions
             ChatControlsTheme.EnsureLoaded();
     }
 }
+

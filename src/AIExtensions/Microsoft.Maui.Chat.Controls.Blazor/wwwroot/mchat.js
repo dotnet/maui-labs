@@ -80,15 +80,16 @@ export function stickToBottom(element, dotNet) {
 }
 
 function findScrollParent(element) {
-    // Walk up the tree looking for an element whose overflow-y is auto or scroll AND that
-    // actually has scrollable content. This lets the ChatMessagesView point its ref at
-    // its own root and still track whatever ancestor is scrollable (typically the
-    // .mchat-chat-page__body flex child rendered by ChatView).
+    // Walk up the tree looking for an element whose overflow-y is auto or scroll. Do NOT gate on
+    // current scrollHeight - an initially empty message list has no overflow yet, but its ancestor
+    // is still the container we want to bind the scroll listener to so that later growth stays
+    // anchored. If nothing on the chain has overflow-y set, fall back to the document scrolling
+    // element.
     let cur = element;
     while (cur && cur !== document.body) {
         const style = window.getComputedStyle(cur);
         const overflowY = style.overflowY;
-        if ((overflowY === "auto" || overflowY === "scroll") && cur.scrollHeight > cur.clientHeight + 1) {
+        if (overflowY === "auto" || overflowY === "scroll") {
             return cur;
         }
         cur = cur.parentElement;
