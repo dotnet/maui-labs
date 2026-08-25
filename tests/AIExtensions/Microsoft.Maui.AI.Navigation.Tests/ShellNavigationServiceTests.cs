@@ -5,7 +5,7 @@ namespace Microsoft.Maui.AI.Navigation.Tests;
 public class QueryParameterDiscoveryTests
 {
     [QueryProperty(nameof(Sku), "sku")]
-    private class FakePageWithQueryProperty
+    private class FakePageWithQueryProperty : ContentPage
     {
         public string? Sku { get; set; }
     }
@@ -68,6 +68,25 @@ public class QueryParameterDiscoveryTests
         public FakePageWithVMCtor(FakeVM vm) { }
     }
 
+    private sealed class FakeLogger
+    {
+    }
+
+    private class FakePageWithSecondVMCtor
+    {
+        public FakePageWithSecondVMCtor(FakeLogger logger, FakeVM vm) { }
+    }
+
+    [QueryProperty(nameof(Id), "baseId")]
+    private class FakeBaseVM
+    {
+        public string? Id { get; set; }
+    }
+
+    private sealed class FakeDerivedVM : FakeBaseVM
+    {
+    }
+
     [Fact]
     public void DiscoverQueryParameters_FindsParametersOnVMFromConstructor()
     {
@@ -76,6 +95,24 @@ public class QueryParameterDiscoveryTests
         Assert.Single(result);
         Assert.Equal("id", result[0].QueryName);
         Assert.Equal("Id", result[0].PropertyName);
+    }
+
+    [Fact]
+    public void DiscoverQueryParameters_ScansEveryInjectedConstructorParameter()
+    {
+        var result = ShellNavigationService.DiscoverQueryParameters(
+            typeof(FakePageWithSecondVMCtor));
+
+        Assert.Equal("id", Assert.Single(result).QueryName);
+    }
+
+    [Fact]
+    public void DiscoverQueryParameters_IncludesInheritedAttributes()
+    {
+        var result = ShellNavigationService.DiscoverQueryParameters(
+            typeof(FakeDerivedVM));
+
+        Assert.Equal("baseId", Assert.Single(result).QueryName);
     }
 
     [QueryProperty(nameof(Sku), "sku")]
@@ -98,6 +135,47 @@ public class QueryParameterDiscoveryTests
 
         Assert.Single(result);
         Assert.Equal("sku", result[0].QueryName);
+    }
+
+    [Fact]
+    public void GetRoutes_NativeShellRegistration_ReflectsTargetAndQueryProperties()
+    {
+        const string route = "ai-navigation-reflected-product";
+        Routing.RegisterRoute(route, typeof(FakePageWithQueryProperty));
+
+        try
+        {
+            var result = new ShellNavigationService()
+                .GetRoutes()
+                .Single(candidate => candidate.Route == route);
+
+            Assert.Equal(typeof(FakePageWithQueryProperty).FullName, result.TargetPageName);
+            Assert.Equal("sku", Assert.Single(result.Parameters).QueryName);
+        }
+        finally
+        {
+            Routing.UnRegisterRoute(route);
+        }
+    }
+
+    [Fact]
+    public void GetRoutes_RouteRegisteredAfterFirstRead_IsImmediatelyDiscoverable()
+    {
+        const string route = "ai-navigation-late-registration";
+        var service = new ShellNavigationService();
+        _ = service.GetRoutes();
+        Routing.RegisterRoute(route, typeof(FakePageWithQueryProperty));
+
+        try
+        {
+            Assert.Contains(
+                service.GetRoutes(),
+                candidate => candidate.Route == route);
+        }
+        finally
+        {
+            Routing.UnRegisterRoute(route);
+        }
     }
 }
 
@@ -395,6 +473,22 @@ public class ResolveRouteTests
     }
 
     [Fact]
+    public void Resolve_MultiSegmentRegisteredRoute_ConvertsInlineValue()
+    {
+        var service = new TestableNavigationService(
+        [
+            new RouteInfo(
+                "catalog/product",
+                "catalog/product",
+                [new QueryParameterInfo("sku", "Sku", "String")]),
+        ]);
+
+        var route = service.ResolveRoute("catalog/product/seed-basil");
+
+        Assert.Equal("catalog/product?sku=seed-basil", route);
+    }
+
+    [Fact]
     public void Resolve_ExplicitQueryString_PassesThrough()
     {
         const string uri =
@@ -459,6 +553,20 @@ public class ResolveRouteTests
         private sealed class ReviewPage : ContentPage
         {
             public string? Sku { get; set; }
+        }
+
+        [QueryProperty(nameof(Sku), "sku")]
+        private sealed class ProductViewModel
+        {
+            public string? Sku { get; set; }
+        }
+
+        private sealed class BindingContextPage : ContentPage
+        {
+            public BindingContextPage()
+            {
+                BindingContext = new ProductViewModel();
+            }
         }
 
         [Fact]
@@ -526,6 +634,34 @@ public class ResolveRouteTests
             {
                 Routing.UnRegisterRoute(ReviewRoute);
                 Routing.UnRegisterRoute(ProductRoute);
+            }
+        }
+
+        [Fact]
+        public async Task GoToAsync_QueryPropertyOnBindingContext_ReceivesParameter()
+        {
+            const string route = "ai-navigation-binding-context";
+            Routing.RegisterRoute(route, typeof(BindingContextPage));
+
+            try
+            {
+                var shell = new Shell();
+                shell.Items.Add(new ShellContent
+                {
+                    Route = "home",
+                    Content = new ContentPage()
+                });
+
+                await shell.GoToAsync($"{route}?sku=seed-basil");
+
+                var page = Assert.Single(
+                    shell.Navigation.NavigationStack.OfType<BindingContextPage>());
+                var viewModel = Assert.IsType<ProductViewModel>(page.BindingContext);
+                Assert.Equal("seed-basil", viewModel.Sku);
+            }
+            finally
+            {
+                Routing.UnRegisterRoute(route);
             }
         }
     }

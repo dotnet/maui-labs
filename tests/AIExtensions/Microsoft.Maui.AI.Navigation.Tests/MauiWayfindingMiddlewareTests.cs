@@ -82,6 +82,9 @@ public sealed class MauiWayfindingMiddlewareTests
         Assert.Equal("Orders", current.CurrentPage);
         Assert.DoesNotContain("//", current.ToString());
         Assert.DoesNotContain("OrdersPage", current.ToString());
+        Assert.DoesNotContain("OrderInsightsView", current.ToString());
+        Assert.DoesNotContain("- SalesChart:", current.ToString());
+        Assert.DoesNotContain("- SecretChart:", current.ToString());
         Assert.Equal("orders", search.DestinationId);
         Assert.DoesNotContain("//", search.ToString());
         Assert.NotNull(destination);
@@ -94,6 +97,15 @@ public sealed class MauiWayfindingMiddlewareTests
         Assert.DoesNotContain("CartTotal", destination.Pages[0].UiDescription);
         Assert.DoesNotContain("OpenCommand", destination.Pages[0].UiDescription);
         Assert.Contains("[shown in some states]", destination.Pages[0].UiDescription);
+        Assert.Contains(
+            "automationId: \"OrderInsightsCharts\"",
+            current.PageUi);
+        Assert.Contains("- Control: \"Order insights charts\"", current.PageUi);
+        Assert.Contains("- Control: \"Quarterly sales chart\"", current.PageUi);
+        Assert.Contains("- Control: \"Undescribed type chart\"", current.PageUi);
+        Assert.Contains(
+            "automationId: \"OrderInsightsCharts\"",
+            destination.Pages[0].UiDescription);
     }
 
     [Fact]
@@ -118,7 +130,7 @@ public sealed class MauiWayfindingMiddlewareTests
     }
 
     [Fact]
-    public void GetAppDestination_MultiHop_IncludesSanitizedUiForEveryPage()
+    public void GetAppDestination_ReflectedRoute_IncludesHomeAndTargetUi()
     {
         var services = new ServiceCollection();
         services.AddSingleton<ICurrentPageContextProvider>(
@@ -133,14 +145,12 @@ public sealed class MauiWayfindingMiddlewareTests
                     "product",
                     "product",
                     [new QueryParameterInfo("sku", "Sku", "String")],
-                    "ProductDetailPage",
-                    "//main/products"),
+                    "ProductDetailPage"),
                 new RouteInfo(
                     "review",
                     "review",
                     [new QueryParameterInfo("sku", "Sku", "String")],
-                    "ProductReviewPage",
-                    "//main/products/product"),
+                    "ProductReviewPage"),
             ]));
         services.AddMauiWayfinding(
             new TestCatalog(
@@ -174,13 +184,13 @@ public sealed class MauiWayfindingMiddlewareTests
         Assert.NotNull(destination);
         Assert.True(destinationResult.Found);
         Assert.Equal(
-            ["Sage", "Products", "Product Detail", "Write Review"],
+            ["Sage", "Write Review"],
             destination.Path);
-        Assert.Equal(4, destination.Pages.Count);
+        Assert.Equal(2, destination.Pages.Count);
         Assert.Contains(
             destination.Pages,
-            page => page.Title == "Product Detail"
-                && page.UiDescription.Contains("Write Review"));
+            page => page.Title == "Write Review"
+                && page.UiDescription.Contains("Submit Review"));
     }
 
     private static ServiceCollection CreateServices(bool enableVision)
@@ -190,7 +200,14 @@ public sealed class MauiWayfindingMiddlewareTests
             new StubCurrentPageContext(
                 new CurrentPageSnapshot(
                     "OrdersPage",
-                    "# Current UI: OrdersPage\n- Current page: OrdersPage\n- Heading (level 1): \"Orders\"",
+                    """
+                    # Current UI: OrdersPage
+                    - Current page: OrdersPage
+                    - Heading (level 1): "Orders"
+                    - OrderInsightsView: "Order insights charts" [automationId: "OrderInsightsCharts"]
+                    - SalesChart: "Quarterly sales chart" [automationId: "QuarterlySalesChart"]
+                    - SecretChart: "Undescribed type chart"
+                    """,
                     "Past Orders")));
         services.AddSingleton<ShellNavigationService>(
             new StubNavigationService(
@@ -212,13 +229,13 @@ public sealed class MauiWayfindingMiddlewareTests
                     - Button: "Clear All" → ClearCommand
                     - CollectionView: "{Orders}" [visible when IsNormalMode = true]
                     - Button: "Total: {CartTotal:C}" → BindingContext.OpenCommand
+                    - OrderInsightsView: "Order insights charts" [automationId: "OrderInsightsCharts"]
                     """,
                     "//main/orders"),
             ]),
             options =>
             {
                 options.EnableVision = enableVision;
-                options.DefaultVisualTargetAutomationId = "OrderInsightsCharts";
             });
         return services;
     }

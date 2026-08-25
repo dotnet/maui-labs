@@ -11,13 +11,14 @@ internal sealed class RuntimeMarkdownBuilder
     private readonly CurrentPageSnapshotOptions _options;
     private readonly StringBuilder _markdown = new();
     private readonly HashSet<IVisualTreeElement> _visited = new(ReferenceEqualityComparer.Instance);
+    private readonly HashSet<string> _automationIds = new(StringComparer.Ordinal);
 
     private RuntimeMarkdownBuilder(CurrentPageSnapshotOptions options)
     {
         _options = options;
     }
 
-    public static string Render(
+    public static RuntimeSemanticSnapshot Render(
         Page page,
         string pageName,
         CurrentPageSnapshotOptions options)
@@ -33,7 +34,7 @@ internal sealed class RuntimeMarkdownBuilder
         return builder.Build();
     }
 
-    public static string RenderShellFlyout(
+    public static RuntimeSemanticSnapshot RenderShellFlyout(
         Shell shell,
         CurrentPageSnapshotOptions options)
     {
@@ -183,12 +184,14 @@ internal sealed class RuntimeMarkdownBuilder
             _ => false,
         };
 
-    private string Build()
+    private RuntimeSemanticSnapshot Build()
     {
         if (_markdown.Length == 0)
-            return "";
+            return new RuntimeSemanticSnapshot("", [.. _automationIds]);
 
-        return _markdown.ToString().TrimEnd() + "\n";
+        return new RuntimeSemanticSnapshot(
+            _markdown.ToString().TrimEnd() + "\n",
+            [.. _automationIds]);
     }
 
     private void RenderChildren(IVisualTreeElement parent, int indent)
@@ -480,6 +483,13 @@ internal sealed class RuntimeMarkdownBuilder
         if (!string.IsNullOrWhiteSpace(placeholder))
             annotations.Add($"placeholder: \"{Escape(NormalizeForElement(placeholder, element))}\"");
 
+        if (!string.IsNullOrWhiteSpace(element.AutomationId)
+            && !ContainsExcludedDescendant(element))
+        {
+            annotations.Add($"automationId: \"{Escape(element.AutomationId)}\"");
+            _automationIds.Add(element.AutomationId);
+        }
+
         var hint = SemanticProperties.GetHint(element);
         if (!string.IsNullOrWhiteSpace(hint))
             annotations.Add($"hint: {NormalizeForElement(hint, element)}");
@@ -495,6 +505,31 @@ internal sealed class RuntimeMarkdownBuilder
             ? ""
             : $" [{string.Join(", ", annotations)}]";
     }
+
+    private static bool ContainsExcludedDescendant(IVisualTreeElement root)
+    {
+        var pending = new Stack<IVisualTreeElement>(root.GetVisualChildren());
+        var visited = new HashSet<IVisualTreeElement>(ReferenceEqualityComparer.Instance);
+        while (pending.TryPop(out var current))
+        {
+            if (!visited.Add(current))
+                continue;
+            if (current is BindableObject bindable
+                && IndexingProperties.GetExcludeWithChildren(bindable))
+            {
+                return true;
+            }
+
+            foreach (var child in current.GetVisualChildren())
+                pending.Push(child);
+        }
+
+        return false;
+    }
+
+    internal sealed record RuntimeSemanticSnapshot(
+        string Markdown,
+        IReadOnlyList<string> AutomationIds);
 
     private void AddControlState(VisualElement element, List<string> annotations)
     {

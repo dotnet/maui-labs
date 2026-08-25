@@ -6,7 +6,7 @@ namespace Microsoft.Maui.AI.Indexer;
 public sealed class CurrentPageSnapshot
 {
     public CurrentPageSnapshot(string pageName, string markdown)
-        : this(pageName, markdown, null)
+        : this(pageName, markdown, null, [])
     {
     }
 
@@ -14,15 +14,26 @@ public sealed class CurrentPageSnapshot
         string pageName,
         string markdown,
         string? pageTitle)
+        : this(pageName, markdown, pageTitle, [])
+    {
+    }
+
+    public CurrentPageSnapshot(
+        string pageName,
+        string markdown,
+        string? pageTitle,
+        IReadOnlyList<string> automationIds)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(pageName);
         ArgumentNullException.ThrowIfNull(markdown);
+        ArgumentNullException.ThrowIfNull(automationIds);
 
         PageName = pageName;
         Markdown = markdown;
         PageTitle = string.IsNullOrWhiteSpace(pageTitle)
             ? null
             : pageTitle;
+        AutomationIds = automationIds;
     }
 
     /// <summary>The runtime type name of the presented page.</summary>
@@ -30,6 +41,11 @@ public sealed class CurrentPageSnapshot
 
     /// <summary>The user-visible title of the presented page, when available.</summary>
     public string? PageTitle { get; }
+
+    /// <summary>
+    /// Automation identifiers for semantic controls included in this snapshot.
+    /// </summary>
+    public IReadOnlyList<string> AutomationIds { get; }
 
     /// <summary>
     /// The currently materialized, visible controls and their live semantic state.

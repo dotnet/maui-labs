@@ -143,6 +143,8 @@ internal sealed class MarkdownBuilder
 
         // Build annotations list
         var annotations = new List<string>();
+        if (!string.IsNullOrWhiteSpace(el.AutomationId))
+            annotations.Add($"automationId: \"{el.AutomationId}\"");
         if (el.IsGrouped)
             annotations.Add("grouped");
         if (el.Condition != null)
@@ -218,8 +220,14 @@ internal sealed class MarkdownBuilder
 
     private static void RenderUserControl(MarkdownBuilder mb, SemanticNode el)
     {
+        var description = !string.IsNullOrWhiteSpace(el.Semantics.Description)
+            ? $" \"{el.Semantics.Description}\""
+            : "";
+        var automationId = !string.IsNullOrWhiteSpace(el.AutomationId)
+            ? $" [automationId: \"{el.AutomationId}\"]"
+            : "";
         var cond = el.Condition != null ? $" [{el.Condition}]" : "";
-        mb.AppendLine($"- [{el.TypeName}]:{cond}");
+        mb.AppendLine($"- [{el.TypeName}]:{description}{automationId}{cond}");
 
         if (el.Children.Count > 0)
         {
@@ -232,9 +240,12 @@ internal sealed class MarkdownBuilder
     private static void RenderBindableLayout(MarkdownBuilder mb, SemanticNode el)
     {
         var source = el.BindableLayoutItemsSource != null ? $" with items from \"{{{el.BindableLayoutItemsSource}}}\"" : "";
+        var automationId = !string.IsNullOrWhiteSpace(el.AutomationId)
+            ? $" [automationId: \"{el.AutomationId}\"]"
+            : "";
         var cond = el.Condition != null ? $" [{el.Condition}]" : "";
 
-        mb.AppendLine($"- {el.TypeName}{source}{cond}:");
+        mb.AppendLine($"- {el.TypeName}{source}{automationId}{cond}:");
 
         mb.Indent();
 
@@ -365,6 +376,9 @@ internal sealed class MarkdownBuilder
         // important identifier for an input, so it comes first.
         if (el.Placeholder != null)
             brackets.Add($"placeholder: \"{el.Placeholder}\"");
+
+        if (!string.IsNullOrWhiteSpace(el.AutomationId))
+            brackets.Add($"automationId: \"{el.AutomationId}\"");
 
         if (el.Semantics.Hint != null)
             brackets.Add($"hint: {el.Semantics.Hint}");

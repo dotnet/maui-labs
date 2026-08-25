@@ -403,12 +403,60 @@ public sealed class RuntimePageIndexerTests
     }
 
     [Fact]
+    public void Capture_DescribedVisual_ExposesAutomationIdForTargetedCapture()
+    {
+        var chart = new GraphicsView
+        {
+            AutomationId = "SpendingChart",
+        };
+        SemanticProperties.SetDescription(chart, "Where the money went chart");
+        var page = new ContentPage { Content = chart };
+
+        var snapshot = RuntimePageIndexer.Capture(page);
+
+        Assert.Contains(
+            """
+            - GraphicsView: "Where the money went chart" [automationId: "SpendingChart"]
+            """,
+            snapshot.Markdown);
+        Assert.Equal(["SpendingChart"], snapshot.AutomationIds);
+    }
+
+    [Fact]
+    public void Capture_ParentContainingExcludedContent_DoesNotAdvertiseAutomationId()
+    {
+        var excluded = new Label { Text = "Private overlay" };
+        IndexingProperties.SetExcludeWithChildren(excluded, true);
+        var region = new Border
+        {
+            AutomationId = "UnsafeRegion",
+            Content = new VerticalStackLayout
+            {
+                Children =
+                {
+                    new Label { Text = "Public chart" },
+                    excluded,
+                },
+            },
+        };
+        SemanticProperties.SetDescription(region, "Mixed visual region");
+        var page = new ContentPage { Content = region };
+
+        var snapshot = RuntimePageIndexer.Capture(page);
+
+        Assert.Contains("Mixed visual region", snapshot.Markdown);
+        Assert.DoesNotContain("automationId: \"UnsafeRegion\"", snapshot.Markdown);
+        Assert.DoesNotContain("UnsafeRegion", snapshot.AutomationIds);
+    }
+
+    [Fact]
     public void Capture_ExcludedSubtree_OmitsGroupAndDescendants()
     {
         var sidebar = new ReviewSection
         {
             Content = new Entry
             {
+                AutomationId = "AssistantInput",
                 Text = "Assistant input",
                 Placeholder = "Ask Sage",
             },
@@ -435,6 +483,7 @@ public sealed class RuntimePageIndexerTests
         Assert.DoesNotContain("ReviewSection", snapshot.Markdown);
         Assert.DoesNotContain("Assistant input", snapshot.Markdown);
         Assert.DoesNotContain("Ask Sage", snapshot.Markdown);
+        Assert.DoesNotContain("AssistantInput", snapshot.AutomationIds);
     }
 
     [Fact]

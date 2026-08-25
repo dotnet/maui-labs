@@ -96,11 +96,13 @@ The Orders page starts with two separate MAUI.Graphics chart cards:
 - **Most popular products** — product quantities across completed orders.
 
 All chart titles, labels, bars, and values are painted inside `GraphicsView`.
-They intentionally do not appear in the semantic XAML/current-page index. The
-`OrderInsightsCharts` container has an `AutomationId`, so
-`describe_current_visual` captures that exact rendered `IView` rather than the
-whole page or Sage sidebar. PNG bytes stay in memory and are sent as
-`DataContent("image/png")` to the same raw Azure OpenAI `gpt-5-mini` client.
+They intentionally do not appear as semantic child text. The chart controls and
+their parent region provide meaningful `SemanticProperties.Description` values
+and stable AutomationIds. Sage reads those from the current-page index, chooses
+one chart or their shared parent, and passes the selected IDs to
+`describe_current_visual`. Only those rendered `IView` instances are captured;
+the page and Sage sidebar are excluded. PNG bytes stay in memory and are sent to
+the same raw Azure OpenAI `gpt-5-mini` client.
 
 The first launch seeds realistic completed orders so the charts are immediately
 useful. The seed marker is durable: **Clear All** remains cleared after restart.
@@ -135,7 +137,7 @@ and refreshes both charts.
 | Transient tool host | `ViewModels/Catalog/CatalogViewModel.cs` → `recommend_bundle` |
 | Plug-in semantic wayfinding | `AddMauiWayfinding(...)` + `UseMauiWayfinding()` |
 | Generated ShellContent route metadata | `Microsoft.Maui.AI.Indexer` catalog generation |
-| Typed deep-route registration | `AppShell.xaml.cs` + `ShellNavigationService.RegisterRoute&lt;TPage&gt;` |
+| Shell route discovery | Native `Routing.RegisterRoute` plus reflected route factories and `[QueryProperty]` metadata |
 | Runtime current-page augmentation | `RuntimePageContextProvider` over `RuntimePageIndexer` |
 | Element-level rendered capture | Wayfinding's optional `CurrentViewCaptureService` over `IView.CaptureAsync()` |
 | Vision-language chart description | Wayfinding's optional `describe_current_visual` tool |

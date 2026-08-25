@@ -755,4 +755,70 @@ public class AdditionalExactTests
             """,
             md);
     }
+
+    [Fact]
+    public void GraphicsView_DescribedWithAutomationId_IsCapturableSemanticContent()
+    {
+        var md = GeneratorTestHarness.GetMarkdown(
+            "OrdersPage",
+            ("Pages/OrdersPage.xaml", Page(
+                "MyApp.OrdersPage",
+                """
+                <GraphicsView AutomationId="SpendingChart"
+                              SemanticProperties.Description="Where the money went chart" />
+                """)));
+
+        Assert.Equal(
+            """
+            # OrdersPage
+
+            File: OrdersPage.xaml
+
+            - GraphicsView: "Where the money went chart" [automationId: "SpendingChart"]
+            """,
+            md);
+    }
+
+    [Fact]
+    public void CrossFile_VisualGroup_ExposesParentAndChildAutomationIds()
+    {
+        var page = Page(
+            "MyApp.OrdersPage",
+            """
+            <views:OrderInsightsView
+                AutomationId="OrderInsightsCharts"
+                SemanticProperties.Description="Order insights charts" />
+            """,
+            "xmlns:views=\"clr-namespace:MyApp.Views\"");
+        var visualGroup = """
+            <?xml version="1.0" encoding="utf-8" ?>
+            <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                         xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                         x:Class="MyApp.Views.OrderInsightsView">
+                <GraphicsView
+                    AutomationId="SpendingChart"
+                    SemanticProperties.Description="Where the money went chart" />
+                <GraphicsView
+                    AutomationId="ProductsChart"
+                    SemanticProperties.Description="Most popular products chart" />
+            </ContentView>
+            """;
+
+        var md = GeneratorTestHarness.GetMarkdown(
+            "OrdersPage",
+            ("Pages/OrdersPage.xaml", page),
+            ("Views/OrderInsightsView.xaml", visualGroup));
+
+        Assert.Equal(
+            """
+            # OrdersPage
+
+            File: OrdersPage.xaml
+
+            - [OrderInsightsView]: "Order insights charts" [automationId: "OrderInsightsCharts"]
+              - GraphicsView: "Where the money went chart" [automationId: "SpendingChart"]
+              - GraphicsView: "Most popular products chart" [automationId: "ProductsChart"]
+            """,
+            md);
+    }
 }

@@ -34,8 +34,11 @@ public sealed class MauiWayfindingOptions
     /// <summary>Enable rendered-view capture and the <c>describe_current_visual</c> tool.</summary>
     public bool EnableVision { get; set; }
 
-    /// <summary>Default view AutomationId used when visual analysis omits a target.</summary>
-    public string? DefaultVisualTargetAutomationId { get; set; }
+    /// <summary>Maximum semantic visual regions accepted by one vision tool call.</summary>
+    public int MaximumVisualTargets { get; set; } = 4;
+
+    /// <summary>Maximum total PNG payload accepted by one vision tool call.</summary>
+    public long MaximumVisualPayloadBytes { get; set; } = 8 * 1024 * 1024;
 
     /// <summary>Instructions applied to rendered-view analysis.</summary>
     public string VisionInstructions { get; set; } =
@@ -92,6 +95,33 @@ public sealed class MauiWayfindingTools(
     ICurrentPageContextProvider currentPage,
     MauiWayfindingOptions options)
 {
+    private static readonly HashSet<string> PublicControlTypes =
+    [
+        "ActivityIndicator",
+        "Button",
+        "CarouselView",
+        "CheckBox",
+        "CollectionView",
+        "DatePicker",
+        "Editor",
+        "Entry",
+        "GraphicsView",
+        "Image",
+        "ImageButton",
+        "Label",
+        "List",
+        "ListView",
+        "Picker",
+        "ProgressBar",
+        "RadioButton",
+        "SearchBar",
+        "Slider",
+        "Stepper",
+        "Switch",
+        "TimePicker",
+        "WebView",
+    ];
+
     [ExportAIFunction("search_app_ui")]
     [Description(
         "Search navigable app destinations for a page, feature, control, or task. " +
@@ -189,6 +219,7 @@ public sealed class MauiWayfindingTools(
     [Description(
         "Return the current user-visible screen title, optionally with its visible UI. " +
         "Use includePageUi=true for where/how/back/current-control questions. " +
+        "Semantically described controls include AutomationIds for targeted automation and vision. " +
         "Internal routes and type names are not returned.")]
     public async Task<CurrentAppState> GetCurrentAppStateAsync(
         [Description(
@@ -346,13 +377,29 @@ public sealed class MauiWayfindingTools(
             return "";
         }
 
-        if (Regex.IsMatch(trimmed, "^- \\[[A-Za-z_][A-Za-z0-9_.]*\\]:$"))
+        var sanitized = line;
+        var typeMatch = Regex.Match(
+            trimmed,
+            "^- (?<type>\\[[A-Za-z_][A-Za-z0-9_.]*\\]|[A-Za-z_][A-Za-z0-9_.]*):");
+        if (typeMatch.Success
+            && !PublicControlTypes.Contains(
+                typeMatch.Groups["type"].Value.Trim('[', ']')))
         {
-            return $"{line[..(line.Length - line.TrimStart().Length)]}- Group:";
+            var isBracketedType = typeMatch.Groups["type"].Value.StartsWith(
+                "[",
+                StringComparison.Ordinal);
+            var replacement = isBracketedType
+                && !trimmed.Contains("[automationId:", StringComparison.Ordinal)
+                    ? "Group"
+                    : "Control";
+            sanitized = Regex.Replace(
+                sanitized,
+                "^(\\s*)- (?:\\[[A-Za-z_][A-Za-z0-9_.]*\\]|[A-Za-z_][A-Za-z0-9_.]*):",
+                $"$1- {replacement}:");
         }
 
-        var sanitized = Regex.Replace(
-            line,
+        sanitized = Regex.Replace(
+            sanitized,
             "\\{[^}]+\\}",
             "[dynamic text]");
         sanitized = Regex.Replace(
@@ -455,6 +502,18 @@ public static class MauiWayfindingServiceCollectionExtensions
                 nameof(configure),
                 "MaximumSearchResults must be positive.");
         }
+        if (options.MaximumVisualTargets <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(configure),
+                "MaximumVisualTargets must be positive.");
+        }
+        if (options.MaximumVisualPayloadBytes <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(configure),
+                "MaximumVisualPayloadBytes must be positive.");
+        }
 
         services.AddSingleton(catalog);
         services.AddSingleton(options);
@@ -530,8 +589,8 @@ internal sealed class MauiWayfindingChatClient(
         USER-FACING LANGUAGE
 
         Never mention route URIs, route segments, CLR type names, source file paths,
-        command names, binding property names, or destination IDs. Refer only to
-        user-visible page titles, controls, labels, and requested values.
+        command names, binding property names, destination IDs, or AutomationIds.
+        Refer only to user-visible page titles, controls, labels, and requested values.
         """;
 
     public override Task<ChatResponse> GetResponseAsync(
@@ -567,8 +626,12 @@ internal sealed class MauiWayfindingChatClient(
                 RENDERED VISUALS
 
                 For charts, images, drawings, maps, diagrams, or other pixel-only
-                content, call describe_current_visual. If visual analysis fails,
-                report the failure and do not infer pixel contents from control names.
+                content, first call get_current_app_state with includePageUi=true.
+                Choose one or more automationId values from controls with relevant
+                semantic descriptions, then pass those exact values to
+                describe_current_visual. AutomationIds are tool selectors; do not
+                mention them to the user. If visual analysis fails, report the failure
+                and do not infer pixel contents from control names.
                 """;
         }
         prepared.Insert(

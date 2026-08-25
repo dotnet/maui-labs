@@ -5,7 +5,6 @@
              xmlns:vm="clr-namespace:AIExtensions.Sample.Garden.ViewModels"
              x:Class="AIExtensions.Sample.Garden.Views.OrderInsightsView"
              x:DataType="vm:OrdersViewModel"
-             AutomationId="OrderInsightsCharts"
              BackgroundColor="Transparent">
 
     <FlexLayout Direction="Row"
@@ -16,9 +15,13 @@
                 Padding="6,4">
         <charts:SpendingByCategoryChartView
             Margin="6"
+            AutomationId="SpendingByCategoryChart"
+            SemanticProperties.Description="Where the money went chart"
             Items="{Binding Insights.SpendingByCategory}" />
         <charts:PopularProductsChartView
             Margin="6"
+            AutomationId="PopularProductsChart"
+            SemanticProperties.Description="Most popular products chart"
             Items="{Binding Insights.PopularProducts}" />
     </FlexLayout>
 

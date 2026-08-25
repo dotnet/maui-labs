@@ -9,6 +9,7 @@ internal sealed class SemanticNode
     public string? Text { get; set; }
     public string? Placeholder { get; set; }
     public string? Source { get; set; }
+    public string? AutomationId { get; set; }
     public BindingInfo? TextBinding { get; set; }
     public string? CommandName { get; set; }
     public string? CommandParameter { get; set; }

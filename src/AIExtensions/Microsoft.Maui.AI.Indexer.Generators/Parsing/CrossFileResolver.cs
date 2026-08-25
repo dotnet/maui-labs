@@ -66,6 +66,7 @@ internal sealed class CrossFileResolver
                     {
                         TypeName = el.TypeName,
                         IsUserControlReference = true,
+                        AutomationId = el.AutomationId,
                         Semantics = el.Semantics,
                         Condition = el.Condition,
                         Children = inlined,
@@ -80,6 +81,7 @@ internal sealed class CrossFileResolver
                     {
                         TypeName = el.TypeName,
                         IsUserControlReference = true,
+                        AutomationId = el.AutomationId,
                         Semantics = el.Semantics,
                         Condition = el.Condition,
                     };
@@ -177,6 +179,7 @@ internal sealed class CrossFileResolver
             Text = el.Text,
             Placeholder = el.Placeholder,
             Source = el.Source,
+            AutomationId = el.AutomationId,
             TextBinding = el.TextBinding,
             CommandName = el.CommandName,
             CommandParameter = el.CommandParameter,

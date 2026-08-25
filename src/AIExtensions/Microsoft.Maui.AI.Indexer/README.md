@@ -120,6 +120,7 @@ if (current is not null)
 {
     Console.WriteLine(current.PageName);
     Console.WriteLine(current.Markdown);
+    Console.WriteLine(string.Join(", ", current.AutomationIds));
 }
 ```
 
@@ -147,6 +148,10 @@ The runtime index:
   of flattening every item's labels together;
 - reads resolved control text and semantic accessibility metadata, without
   reflection or platform handlers;
+- includes `AutomationId` for indexed controls so automation and optional
+  visual analysis can target the control the semantic description identifies;
+  the same filtered values are available structurally through
+  `CurrentPageSnapshot.AutomationIds`;
 - includes useful live state such as slider values, selections, toggle state,
   focus, and disabled state;
 - omits text entered into `Entry`, `Editor`, and `SearchBar` by default;
@@ -178,16 +183,25 @@ Use the two indexes together:
 
 Controls such as `GraphicsView` can paint charts, maps, diagrams, or custom
 drawings without exposing child controls or text. Those pixels intentionally do
-not become semantic Markdown. An app that needs a visual fallback can capture a
-specific rendered view with .NET MAUI 10
+not become semantic Markdown. Give useful visual regions a meaningful
+`SemanticProperties.Description` and stable `AutomationId`; both indexes then
+advertise that region without pretending to understand its pixels:
+
+```xml
+<GraphicsView
+    AutomationId="SpendingChart"
+    SemanticProperties.Description="Where the money went chart" />
+```
+
+An app can capture the model-selected rendered view with .NET MAUI 10
 [`IView.CaptureAsync()`](https://learn.microsoft.com/dotnet/api/microsoft.maui.viewextensions.captureasync?view=net-maui-10.0)
 and send the in-memory image to a vision-enabled model.
 
 The Garden sample demonstrates the optional Wayfinding vision feature with
-`describe_current_visual`: it captures
-only the `OrderInsightsCharts` view by `AutomationId`, excluding Sage's sidebar,
-then asks its Azure OpenAI `gpt-5-mini` deployment to describe the visible charts.
-This remains separate from the deterministic semantic index.
+`describe_current_visual`: the AI reads the current semantic index, selects one
+or more advertised chart AutomationIds, and asks its Azure OpenAI `gpt-5-mini`
+deployment to describe only those rendered views. This remains separate from
+the deterministic semantic index.
 
 `CaptureCurrentAsync` runs on the MAUI dispatcher. Apps with multiple windows can
 pass a specific `Window` to `RuntimePageIndexer.Capture`; callers already on the UI

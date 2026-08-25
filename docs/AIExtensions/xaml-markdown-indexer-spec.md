@@ -355,6 +355,17 @@ A heading level changes how the element is labeled: instead of its control type,
 - `<Label Text="Reviews" SemanticProperties.HeadingLevel="Level2" />`
   → `- Heading (level 2): "Reviews"`
 
+### 9.5 AutomationId — targetable semantic control
+
+When an included semantic control also has a non-empty `AutomationId`, the identifier is emitted as
+an `[automationId: "{value}"]` annotation. `AutomationId` alone does not promote an otherwise
+non-semantic visual element; custom rendered regions should also provide a meaningful
+`SemanticProperties.Description`.
+
+- `<GraphicsView AutomationId="SpendingChart"
+                 SemanticProperties.Description="Where the money went chart" />`
+  → `- GraphicsView: "Where the money went chart" [automationId: "SpendingChart"]`
+
 ---
 
 ## 10. Visibility and conditional elements
@@ -419,7 +430,8 @@ item. The generic line shape is:
 
 where `{Label}` is the control type (or `Heading (level N)` when a heading level is set),
 `{display}` is the resolved text/value, `→ {Command}` appears only when the control has a command,
-and `[{annotations}]` is the comma‑joined bracket group (placeholder, hint, condition — see
+and `[{annotations}]` is the comma‑joined bracket group (placeholder, AutomationId, hint,
+condition — see
 [Appendix B](#appendix-b--annotation-and-condition-grammar)). Any segment that does not apply is
 omitted, and there is never a doubled space when the display value is empty.
 
@@ -1062,6 +1074,7 @@ range         = number "–" number [ " → " "\"{" path "}\"" ]
 command       = name                          ; binding path or literal
 brackets      = "[" annotation *( ", " annotation ) "]"
 annotation    = "placeholder: \"" text "\""
+              | "automationId: \"" text "\""
               | "hint: " text
               | "visible when " prop " = " value
               | "hidden when " prop " = " value
@@ -1076,7 +1089,7 @@ home-marker   = "  (HOME — the screen the app opens to; users start here)"
 ```
 
 Bracket annotations, when combined on one control, always appear in this order: **placeholder,
-hint, condition** (see [Appendix B](#appendix-b--annotation-and-condition-grammar)).
+AutomationId, hint, condition** (see [Appendix B](#appendix-b--annotation-and-condition-grammar)).
 
 ---
 
@@ -1239,11 +1252,11 @@ A control line is assembled as:
 Within `[ … ]`, annotations are comma‑separated in this fixed order:
 
 1. `placeholder: "{text}"` — input controls only.
-2. `hint: {text}` — from `SemanticProperties.Hint`.
-3. condition — one of the visibility strings below.
+2. `automationId: "{text}"` — stable selector for an included semantic control.
+3. `hint: {text}` — from `SemanticProperties.Hint`.
+4. condition — one of the visibility strings below.
 
-For collections, the container annotation group is `[grouped]`, optionally combined with a
-condition as `[grouped, {condition}]`.
+For collections, AutomationId precedes `grouped`, which is optionally followed by a condition.
 
 ### B.3 Condition strings
 

@@ -11,20 +11,11 @@ namespace Microsoft.Maui.AI.Navigation;
 /// <param name="FullPath">The absolute Shell path (e.g. "//main/products").</param>
 /// <param name="Parameters">Query parameters the page accepts.</param>
 /// <param name="TargetPageName">The destination page's CLR type identity, when known.</param>
-/// <param name="ParentPath">The stable parent path for a registered route, when known.</param>
 public record RouteInfo(
     string Route,
     string FullPath,
     IReadOnlyList<QueryParameterInfo> Parameters,
-    string? TargetPageName = null,
-    string? ParentPath = null)
-{
-    /// <summary>The stable path used to reach this destination.</summary>
-    public string DestinationPath
-        => string.IsNullOrWhiteSpace(ParentPath)
-            ? FullPath
-            : $"{ParentPath!.TrimEnd('/')}/{Route.Trim('/')}";
-}
+    string? TargetPageName = null);
 
 /// <summary>
 /// A query parameter accepted by a route's page or view model.
@@ -48,55 +39,12 @@ public record QueryParameterInfo(
 /// </summary>
 public class ShellNavigationService
 {
-    private readonly List<RouteInfo> _registeredRoutes = [];
-    private List<RouteInfo>? _cachedRoutes;
-
-    /// <summary>
-    /// Registers a Shell route together with explicit destination metadata.
-    /// Prefer this overload in trimming/AOT-sensitive apps so page identity,
-    /// parent path, and parameters do not depend on runtime reflection.
-    /// </summary>
-    public RouteInfo RegisterRoute<TPage>(
-        string route,
-        string? parentPath,
-        IReadOnlyList<QueryParameterInfo> parameters)
-        where TPage : Page
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(route);
-        ArgumentNullException.ThrowIfNull(parameters);
-
-        var routeInfo = new RouteInfo(
-            route,
-            route,
-            parameters,
-            typeof(TPage).FullName ?? typeof(TPage).Name,
-            parentPath);
-
-        var existingIndex = _registeredRoutes.FindIndex(candidate =>
-            string.Equals(candidate.Route, route, StringComparison.OrdinalIgnoreCase));
-        if (existingIndex >= 0)
-        {
-            _registeredRoutes[existingIndex] = routeInfo;
-        }
-        else
-        {
-            Routing.RegisterRoute(route, typeof(TPage));
-            _registeredRoutes.Add(routeInfo);
-        }
-
-        InvalidateCache();
-        return routeInfo;
-    }
-
     /// <summary>
     /// Lists all available navigation routes by walking the Shell hierarchy
     /// and reflecting on <c>Routing.RegisterRoute</c> entries.
     /// </summary>
     public virtual IReadOnlyList<RouteInfo> GetRoutes()
     {
-        if (_cachedRoutes is not null)
-            return _cachedRoutes;
-
         var routes = new List<RouteInfo>();
 
         if (Shell.Current is { } shell)
@@ -145,19 +93,6 @@ public class ShellNavigationService
             }
         }
 
-        foreach (var registeredRoute in _registeredRoutes)
-        {
-            var existingIndex = routes.FindIndex(candidate =>
-                string.Equals(candidate.Route, registeredRoute.Route, StringComparison.OrdinalIgnoreCase)
-                && !candidate.FullPath.StartsWith("//", StringComparison.Ordinal));
-            if (existingIndex >= 0)
-                routes[existingIndex] = registeredRoute;
-            else
-                routes.Add(registeredRoute);
-        }
-
-        if (Shell.Current is not null)
-            _cachedRoutes = routes;
         return routes;
     }
 
@@ -184,12 +119,6 @@ public class ShellNavigationService
             new { route = resolvedRoute, location = GetCurrentRoute() }
         });
     }
-
-    /// <summary>
-    /// Invalidates the cached route list so the next <see cref="GetRoutes"/>
-    /// call rediscovers routes.
-    /// </summary>
-    public void InvalidateCache() => _cachedRoutes = null;
 
     /// <summary>
     /// Builds a multi-segment Shell route where shared query parameters are
@@ -291,32 +220,35 @@ public class ShellNavigationService
             return uri;
 
         var routes = GetRoutes();
-        var hierarchyRoutes = new HashSet<string>(
-            routes.Where(r => r.FullPath.StartsWith("//")).Select(r => r.Route),
-            StringComparer.OrdinalIgnoreCase);
-
-        var registeredRoutes = new Dictionary<string, RouteInfo>(StringComparer.OrdinalIgnoreCase);
-        foreach (var r in routes.Where(r => !r.FullPath.StartsWith("//")))
-            registeredRoutes.TryAdd(r.Route, r);
-
-        var allKnown = new HashSet<string>(
-            routes.Select(r => r.Route), StringComparer.OrdinalIgnoreCase);
+        var registeredRoutes = routes
+            .Where(route => !route.FullPath.StartsWith("//", StringComparison.Ordinal))
+            .GroupBy(route => route.Route, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .Select(route => (
+                Route: route,
+                Segments: route.Route.Split(
+                    '/',
+                    StringSplitOptions.RemoveEmptyEntries)))
+            .OrderByDescending(candidate => candidate.Segments.Length)
+            .ToArray();
         var segments = uri.Split('/', StringSplitOptions.RemoveEmptyEntries);
         var baseParts = new List<string>();
         var pushedStart = segments.Length;
 
         for (int i = 0; i < segments.Length; i++)
         {
-            if (hierarchyRoutes.Contains(segments[i]) ||
-                (!registeredRoutes.ContainsKey(segments[i]) && !allKnown.Contains(segments[i])))
-            {
-                baseParts.Add(segments[i]);
-            }
-            else
+            if (TryMatchRegisteredRoute(
+                segments,
+                i,
+                registeredRoutes,
+                out _,
+                out _))
             {
                 pushedStart = i;
                 break;
             }
+
+            baseParts.Add(segments[i]);
         }
 
         if (pushedStart >= segments.Length)
@@ -329,23 +261,32 @@ public class ShellNavigationService
         var matchedRoutes =
             new List<(RouteInfo Route, Dictionary<string, string> ExplicitParameters)>();
 
-        for (int i = pushedStart; i < segments.Length; i++)
+        for (int i = pushedStart; i < segments.Length;)
         {
-            var seg = segments[i];
-            if (!registeredRoutes.TryGetValue(seg, out var routeInfo))
-            {
+            if (!TryMatchRegisteredRoute(
+                segments,
+                i,
+                registeredRoutes,
+                out var routeInfo,
+                out var consumedSegments))
                 return uri;
-            }
+
+            i += consumedSegments;
 
             var explicitParameters =
                 new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             if (routeInfo.Parameters.Count > 0 &&
-                i + 1 < segments.Length &&
-                !allKnown.Contains(segments[i + 1]))
+                i < segments.Length &&
+                !TryMatchRegisteredRoute(
+                    segments,
+                    i,
+                    registeredRoutes,
+                    out _,
+                    out _))
             {
-                i++;
                 explicitParameters[routeInfo.Parameters[0].QueryName] =
                     Uri.UnescapeDataString(segments[i]);
+                i++;
             }
 
             matchedRoutes.Add((routeInfo, explicitParameters));
@@ -360,6 +301,47 @@ public class ShellNavigationService
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────
+
+    private static bool TryMatchRegisteredRoute(
+        IReadOnlyList<string> pathSegments,
+        int startIndex,
+        IReadOnlyList<(RouteInfo Route, string[] Segments)> registeredRoutes,
+        out RouteInfo route,
+        out int consumedSegments)
+    {
+        foreach (var candidate in registeredRoutes)
+        {
+            if (candidate.Segments.Length == 0
+                || startIndex + candidate.Segments.Length > pathSegments.Count)
+            {
+                continue;
+            }
+
+            var matches = true;
+            for (var offset = 0; offset < candidate.Segments.Length; offset++)
+            {
+                if (!string.Equals(
+                    candidate.Segments[offset],
+                    pathSegments[startIndex + offset],
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    matches = false;
+                    break;
+                }
+            }
+
+            if (!matches)
+                continue;
+
+            route = candidate.Route;
+            consumedSegments = candidate.Segments.Length;
+            return true;
+        }
+
+        route = null!;
+        consumedSegments = 0;
+        return false;
+    }
 
     private static string BuildResolvedRoute(
         string basePath,
@@ -497,7 +479,7 @@ public class ShellNavigationService
 
     /// <summary>
     /// Discovers <see cref="QueryPropertyAttribute"/> on the page type
-    /// and on the VM type (inferred from the page's first constructor parameter).
+    /// and on injected constructor parameter types that can act as view models.
     /// </summary>
     public static List<QueryParameterInfo> DiscoverQueryParameters(Type? pageType)
     {
@@ -507,12 +489,14 @@ public class ShellNavigationService
 
         AddQueryProperties(pageType, result);
 
-        var ctor = pageType.GetConstructors().FirstOrDefault();
-        if (ctor is not null)
+        var parameterTypes = pageType.GetConstructors()
+            .SelectMany(constructor => constructor.GetParameters())
+            .Select(parameter => parameter.ParameterType)
+            .Where(type => type != typeof(string) && !type.IsPrimitive)
+            .Distinct();
+        foreach (var parameterType in parameterTypes)
         {
-            var vmParam = ctor.GetParameters().FirstOrDefault();
-            if (vmParam is not null && vmParam.ParameterType != typeof(string) && !vmParam.ParameterType.IsPrimitive)
-                AddQueryProperties(vmParam.ParameterType, result);
+            AddQueryProperties(parameterType, result);
         }
 
         return result;
@@ -520,7 +504,7 @@ public class ShellNavigationService
 
     private static void AddQueryProperties(Type type, List<QueryParameterInfo> result)
     {
-        var attrs = type.GetCustomAttributes(typeof(QueryPropertyAttribute), false);
+        var attrs = type.GetCustomAttributes(typeof(QueryPropertyAttribute), inherit: true);
         foreach (QueryPropertyAttribute attr in attrs)
         {
             if (result.Any(r => r.QueryName == attr.QueryId))
