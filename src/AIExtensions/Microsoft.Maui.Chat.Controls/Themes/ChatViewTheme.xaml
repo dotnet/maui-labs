@@ -93,50 +93,102 @@
                 <Border.StrokeShape>
                     <RoundRectangle CornerRadius="{TemplateBinding InputAreaCornerRadius}" />
                 </Border.StrokeShape>
-                <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="Auto,*,Auto"
+                <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                      ColumnDefinitions="Auto,Auto,Auto,*,Auto"
                       ColumnSpacing="6" RowSpacing="4">
 
                     <FlexLayout x:Name="PART_Attachments"
                                 Grid.Row="0"
-                                Grid.ColumnSpan="3"
+                                Grid.ColumnSpan="5"
                                 Wrap="Wrap"
                                 AutomationId="ChatAttachments"
                                 IsVisible="{TemplateBinding HasAttachments}" />
 
                     <Label Grid.Row="1"
-                           Grid.ColumnSpan="3"
+                           Grid.ColumnSpan="5"
                            Margin="8,0"
                            Style="{DynamicResource MauiChat.ErrorText}"
                            AutomationId="ChatAttachmentError"
                            Text="{TemplateBinding AttachmentError}"
                            IsVisible="{TemplateBinding HasAttachmentError}" />
 
+                    <Label Grid.Row="2"
+                           Grid.ColumnSpan="5"
+                           Margin="8,0"
+                           FontSize="12"
+                           Opacity="0.7"
+                           AutomationId="ChatInputStatus"
+                           SemanticProperties.Description="{TemplateBinding InputStatusMessage}"
+                           Text="{TemplateBinding InputStatusMessage}"
+                           IsVisible="{TemplateBinding HasInputStatusMessage}" />
+
+                    <Label Grid.Row="3"
+                           Grid.ColumnSpan="5"
+                           Margin="8,0"
+                           Style="{DynamicResource MauiChat.ErrorText}"
+                           AutomationId="ChatInputError"
+                           SemanticProperties.Description="{TemplateBinding InputErrorMessage}"
+                           Text="{TemplateBinding InputErrorMessage}"
+                           IsVisible="{TemplateBinding HasInputErrorMessage}" />
+
                     <Button x:Name="PART_AttachButton"
-                            Grid.Row="2"
+                            Grid.Row="4"
                             Grid.Column="0"
                             Style="{TemplateBinding AttachButtonStyle}"
                             Text="{TemplateBinding AttachButtonText}"
                             AutomationId="ChatAttachButton"
                             SemanticProperties.Description="Add attachment"
+                            IsEnabled="{TemplateBinding IsInputEnabled}"
                             IsVisible="{TemplateBinding AllowAttachments}" />
 
+                    <Button x:Name="PART_AudioButton"
+                            Grid.Row="4"
+                            Grid.Column="1"
+                            Style="{TemplateBinding AudioButtonStyle}"
+                            Text="{TemplateBinding AudioButtonDisplayText}"
+                            AutomationId="ChatAudioButton"
+                            SemanticProperties.Description="{TemplateBinding AudioButtonLabel}"
+                            IsEnabled="{TemplateBinding CanToggleAudioCapture}"
+                            IsVisible="{TemplateBinding AllowAudioCapture}" />
+
+                    <Button x:Name="PART_LiveSpeechButton"
+                            Grid.Row="4"
+                            Grid.Column="2"
+                            Style="{TemplateBinding LiveSpeechButtonStyle}"
+                            Text="{TemplateBinding LiveSpeechButtonDisplayText}"
+                            AutomationId="ChatLiveSpeechButton"
+                            SemanticProperties.Description="{TemplateBinding LiveSpeechButtonLabel}"
+                            IsEnabled="{TemplateBinding CanToggleLiveSpeech}"
+                            IsVisible="{TemplateBinding AllowLiveSpeech}" />
+
                     <Entry x:Name="PART_InputEntry"
-                           Grid.Row="2"
-                           Grid.Column="1"
+                           Grid.Row="4"
+                           Grid.Column="3"
                            Style="{TemplateBinding InputEntryStyle}"
                            Text="{TemplateBinding Text, Mode=TwoWay}"
                            Placeholder="{TemplateBinding Placeholder}"
                            AutomationId="ChatInput"
-                           SemanticProperties.Description="Message text" />
+                           SemanticProperties.Description="Message text"
+                           IsEnabled="{TemplateBinding IsInputEnabled}" />
 
                     <Button x:Name="PART_SendButton"
-                            Grid.Row="2"
-                            Grid.Column="2"
+                            Grid.Row="4"
+                            Grid.Column="4"
                             Style="{TemplateBinding SendButtonStyle}"
                             Text="{TemplateBinding SendButtonText}"
                             AutomationId="ChatSendButton"
                             SemanticProperties.Description="Send message"
-                            IsEnabled="{TemplateBinding CanSend}" />
+                            IsEnabled="{TemplateBinding CanSend}"
+                            IsVisible="{TemplateBinding ShowSendButton}" />
+
+                    <Button x:Name="PART_StopButton"
+                            Grid.Row="4"
+                            Grid.Column="4"
+                            Style="{TemplateBinding StopButtonStyle}"
+                            Text="{TemplateBinding StopButtonText}"
+                            AutomationId="ChatStopButton"
+                            SemanticProperties.Description="Stop response"
+                            IsVisible="{TemplateBinding CanStop}" />
                 </Grid>
             </Border>
         </Grid>

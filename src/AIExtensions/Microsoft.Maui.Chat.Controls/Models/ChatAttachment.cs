@@ -96,6 +96,12 @@ public class ChatAttachment
     /// <summary>Gets whether <see cref="MediaType"/> denotes an image.</summary>
     public bool IsImage => MediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Gets whether <see cref="MediaType"/> denotes audio.</summary>
+    public bool IsAudio => MediaType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Gets whether <see cref="MediaType"/> denotes video.</summary>
+    public bool IsVideo => MediaType.StartsWith("video/", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Creates the <see cref="MediaMessageContent"/> that represents this attachment in a message.</summary>
     /// <returns>New media content carrying this attachment's source and metadata.</returns>
     public MediaMessageContent ToContent()

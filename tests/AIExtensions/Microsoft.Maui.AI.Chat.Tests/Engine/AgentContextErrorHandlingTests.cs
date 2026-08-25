@@ -127,8 +127,9 @@ public class AgentContextErrorHandlingTests
 
         Assert.Equal(2, sentMessages.Count);
         var retryRequest = sentMessages[1];
-        Assert.Equal(2, retryRequest.Count);
-        Assert.All(retryRequest, message => Assert.Equal(ChatRole.User, message.Role));
+        var retryMessage = Assert.Single(retryRequest);
+        Assert.Equal(ChatRole.User, retryMessage.Role);
+        Assert.Equal("second", retryMessage.Text);
         Assert.DoesNotContain(
             retryRequest.SelectMany(message => message.Contents),
             content => content is FunctionCallContent);
@@ -346,9 +347,9 @@ public class AgentContextErrorHandlingTests
 
         Assert.Equal(2, sentMessages.Count);
         var secondRequest = sentMessages[1];
-        Assert.Equal(2, secondRequest.Count);
-        Assert.Equal(ChatRole.User, secondRequest[0].Role);
-        Assert.Equal(ChatRole.User, secondRequest[1].Role);
+        var message = Assert.Single(secondRequest);
+        Assert.Equal(ChatRole.User, message.Role);
+        Assert.Equal("second", message.Text);
         Assert.DoesNotContain(
             secondRequest.SelectMany(message => message.Contents).OfType<TextContent>(),
             content => content.Text == "partial");
@@ -388,8 +389,9 @@ public class AgentContextErrorHandlingTests
 
         Assert.Equal(2, sentMessages.Count);
         var secondRequest = sentMessages[1];
-        Assert.Equal(2, secondRequest.Count);
-        Assert.All(secondRequest, message => Assert.Equal(ChatRole.User, message.Role));
+        var secondMessage = Assert.Single(secondRequest);
+        Assert.Equal(ChatRole.User, secondMessage.Role);
+        Assert.Equal("second", secondMessage.Text);
         Assert.DoesNotContain(
             secondRequest.SelectMany(message => message.Contents),
             content => content is ToolApprovalRequestContent);

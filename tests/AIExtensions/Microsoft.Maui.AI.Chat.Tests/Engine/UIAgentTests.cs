@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Runtime.CompilerServices;
 using Microsoft.Maui.AI.Chat.Tests.TestHelpers;
 using Microsoft.Extensions.AI;
 
@@ -163,5 +164,112 @@ public class UIAgentTests
             new ChatMessage(ChatRole.User, "test"))) { }
 
         Assert.Same(expectedOptions, capturedOptions);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_FailedAttemptsDoNotGrowHistory()
+    {
+        var requests = new List<IReadOnlyList<ChatMessage>>();
+        var callCount = 0;
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((messages, options, cancellationToken) =>
+        {
+            requests.Add(messages.ToArray());
+            callCount++;
+            return callCount == 1
+                ? ResponseEmitters.EmitErrorAfterTokens(
+                    ["partial"],
+                    new InvalidOperationException("failed"),
+                    cancellationToken)
+                : ResponseEmitters.EmitTextResponse(
+                    "recovered",
+                    cancellationToken);
+        });
+        var agent = new UIAgent(client);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => EnumerateAsync(agent.SendMessageAsync(
+                new ChatMessage(ChatRole.User, "failed request"))));
+        await EnumerateAsync(agent.SendMessageAsync(
+            new ChatMessage(ChatRole.User, "fresh request")));
+
+        Assert.Equal(2, requests.Count);
+        var freshRequest = Assert.Single(requests[1]);
+        Assert.Equal("fresh request", freshRequest.Text);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_SuccessfulTurnsGrowHistory()
+    {
+        var requests = new List<IReadOnlyList<ChatMessage>>();
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((messages, options, cancellationToken) =>
+        {
+            requests.Add(messages.ToArray());
+            return ResponseEmitters.EmitTextResponse(
+                $"response {requests.Count}",
+                cancellationToken);
+        });
+        var agent = new UIAgent(client);
+
+        await EnumerateAsync(agent.SendMessageAsync(
+            new ChatMessage(ChatRole.User, "first")));
+        await EnumerateAsync(agent.SendMessageAsync(
+            new ChatMessage(ChatRole.User, "second")));
+
+        Assert.Collection(
+            requests[1],
+            message => Assert.Equal("first", message.Text),
+            message => Assert.Equal("response 1", message.Text),
+            message => Assert.Equal("second", message.Text));
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_CanceledAttemptsDoNotGrowHistory()
+    {
+        var requests = new List<IReadOnlyList<ChatMessage>>();
+        var firstStarted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var callCount = 0;
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((messages, options, cancellationToken) =>
+        {
+            requests.Add(messages.ToArray());
+            callCount++;
+            return callCount == 1
+                ? CancelableResponse(firstStarted, cancellationToken)
+                : ResponseEmitters.EmitTextResponse("ok", cancellationToken);
+        });
+        var agent = new UIAgent(client);
+        using var cancellation = new CancellationTokenSource();
+
+        var first = EnumerateAsync(agent.SendMessageAsync(
+            new ChatMessage(ChatRole.User, "canceled"),
+            cancellation.Token));
+        await firstStarted.Task;
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
+
+        await EnumerateAsync(agent.SendMessageAsync(
+            new ChatMessage(ChatRole.User, "fresh")));
+
+        var request = Assert.Single(requests[1]);
+        Assert.Equal("fresh", request.Text);
+
+        static async IAsyncEnumerable<ChatResponseUpdate> CancelableResponse(
+            TaskCompletionSource started,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            started.TrySetResult();
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            yield break;
+        }
+    }
+
+    private static async Task EnumerateAsync(IAsyncEnumerable<ContentBlock> blocks)
+    {
+        await foreach (var _ in blocks)
+        {
+        }
     }
 }

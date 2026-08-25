@@ -4,21 +4,19 @@
 `Microsoft.AspNetCore.Components.AI` work in dotnet/aspnetcore.
 
 The old monolithic PR #67673 is closed. The current reference is the incremental
-01-09 stack whose top is:
+05-10 stack whose top is:
 
-- PR: [dotnet/aspnetcore#68335](https://github.com/dotnet/aspnetcore/pull/68335)
-- Branch: `javiercn-components-ai-09-predictive-state`
-- Compared SHA: `142ec3289c57f0d2e0efa0856771f71d4ae6157a`
-- ASP.NET main: `c349f7588f6619a62d370569acbb87234e8afd11`
-- Compared on: 2026-08-18
+- PR: [dotnet/aspnetcore#68672](https://github.com/dotnet/aspnetcore/pull/68672)
+- Branch: `milosk/components-ai-10-production-app`
+- Compared SHA: `b67462b1ab1111bc24a24cbe46edf7352d42dc1f`
+- ASP.NET main: `e072299dd7ec1733e9fb20c60993c5a48208c625`
+- Compared on: 2026-08-22
 
-The 01 streaming-chat and 02 rich-text layers are merged to ASP.NET `main`.
-Layer 03 client tools is retargeted to `main`; layers 04 through 09 remain
-stacked on it. All open layers still require review. Human inline reviews now
-exist across the stack, but there are no approvals or changes-requested
-decisions. Completed Components E2E runs at the stack merge ref report no
-failures in the main CoreCLR/Mono legs; unrelated quarantine/Helix aggregation
-keeps some top-level checks red.
+Client tools (#68325) and server tools (#68327) are now merged to ASP.NET
+`main`. Human approval through predictive state (#68329-#68335) remains stacked
+and has incorporated a full human-review pass. Multimodal input (#68672) is a
+new tenth layer and still needs rebase/review. The stack-top Components E2E run
+is green; the next-to-merge approval layer has unrelated QuickGrid flakes.
 
 ## Portable engine status
 
@@ -31,7 +29,8 @@ keeps some top-level checks red.
 | Rich-text node vocabulary | Converged; provider supplies a parsed tree and the library does not claim a Markdown parser |
 | Native rich rendering | MAUI equivalent covers headings, inline styles, code, quotes, lists, safe links/images, tables, and footnotes |
 | Function call/result pairing | Converged with order-independent `CallId` matching |
-| Media | MAUI superset; current ASP.NET stack removed media blocks/handlers |
+| Media | Converged; MAUI maps provider data into neutral `MediaMessageContent` and adds native audio playback |
+| Multimodal input | Converged with native file/audio/speech services and one reusable `ChatInputContext` |
 | Reasoning/protected reasoning | MAUI preserved; current ASP.NET stack removed reasoning blocks/handlers |
 | Approval | Converged; decisions are single-use and rejection reasons propagate |
 | Automatic UI actions | MAUI improvement: actions auto-run without entering human `AwaitingInput` |
@@ -39,7 +38,7 @@ keeps some top-level checks red.
 | Predictive state | Converged: provisional values can be accepted/rejected and otherwise roll back at turn completion, cancellation, error, clear, or dispose |
 | Shared state/stateful provider | Converged through thread replay plus `ConversationId` forwarding |
 | Conversation threads/restore | Converged plus explicit thread `Clear()` |
-| Retry/cancellation | Converged with separate graceful cancel and observable caller cancellation |
+| Retry/cancellation | Converged with separate graceful cancel, observable caller cancellation, transactional direct history, and pending-thread abort |
 | `[ToolBlock]` generator | Converged in `Microsoft.Maui.AI.Chat.Generators` |
 | Activity blocks | Not added to defaults; ASP.NET still leaves activity handlers unregistered |
 
@@ -63,6 +62,23 @@ audited and hardened the corresponding paths:
   stale predictions;
 - generated tool handlers cover informational calls and same-update results.
 
+## 2026-08-22 multimodal convergence
+
+ASP.NET PR #68672 adds a browser `MessageInputContext`, attachment/send/stop
+components, recorded audio, continuous speech recognition, and a `DataContent`
+block handler. MAUI ports the portable state machine rather than the Blazor/JS
+surface:
+
+- `ChatInputContext` is the single bindable composer boundary for text,
+  attachments, status/error, composing state, send/stop, audio, and live speech;
+- audio and speech are injectable, with real Android/iOS/Mac Catalyst/Windows
+  defaults and deterministic sample services;
+- `ChatView` owns the native control-template parts and platform permission UX;
+- failed/cancelled `UIAgent` attempts restore local history and call
+  `IConversationThread.AbortTurn`, so persistent pending updates cannot leak;
+- audio transcription and speech passes use operation identity checks so stale
+  callbacks cannot overwrite newer input.
+
 ## Current ASP.NET changes deliberately interpreted, not copied
 
 ### Rich text
@@ -83,11 +99,12 @@ is cancelled, fails, is cleared, or the context is disposed.
 This remains inbound server-to-client state mapping. Neither implementation
 ships a symmetric outbound state channel.
 
-### Minimal UI surface
+### UI surface
 
-The current ASP.NET stack removed media/reasoning components, drawer/bubble
-shells, suggestions, attachment input, SSR form components, and component-based
-block renderers. Those removals are not a specification for native MAUI.
+Earlier ASP.NET layers removed the old attachment input; #68672 replaces it
+with production-oriented browser components and JavaScript media services.
+Those renderers and browser APIs are not copied directly. MAUI keeps its native
+shell, virtualization, XAML templates, file picker, recorder, and speech APIs.
 
 ## Deliberate MAUI differences
 
@@ -109,7 +126,7 @@ MAUI uses:
 - priority-based XAML content templates;
 - replaceable control templates;
 - dynamic resource theming;
-- native file picking/media;
+- native file picking, audio capture/playback, and speech recognition;
 - coalesced in-place streaming refresh;
 - explicit session/conversation binding.
 
@@ -139,6 +156,7 @@ is added.
 - `AgentContext.Clear()` resets local and persistent history coherently.
 - UI actions auto-run and do not stall in `AwaitingInput`.
 - Mixed approval and tool results continue as separate user/tool messages.
+- Failed or canceled sends cannot grow local or persistent pending history.
 - Informational calls and same-update call/results are handled without
   duplicate execution.
 - Restore rolls back typed state/history on failure and cannot revive a rejected
@@ -158,17 +176,15 @@ is added.
 - The activity handler remains unregistered and `Pending` lifecycle remains
   unused.
 - Restore still rebuilds display history rather than resumable interactions.
-- Restore remains non-transactional upstream and can revive rejected predictive
-  state.
-- State-only mapper content remains in upstream local chat history.
-- Upstream handlers still claim informational calls and mishandle batched
-  call/result updates.
+- Server-tool handlers still render informational calls; MAUI filters them.
+- The ASP.NET direct-history fix does not add an explicit persistent-thread
+  abort contract; MAUI requires one.
 - `RawRepresentation` is not a durable serialized discriminator.
 - No production conversation-thread provider ships.
 - Pipeline handler cancellation remains reserved rather than propagated.
 - Blazor `MessageList` is not virtualized.
 - The rich-text library accepts provider ASTs but does not parse Markdown.
-- Media/multimodal and reasoning handling are absent in the current stack.
+- Reasoning handling remains absent from the current ASP.NET stack.
 
 ## Persistence limitations
 
@@ -182,16 +198,11 @@ mapper.
 - Restored pending approvals/UI actions are display history, not resumable work.
 - The thread must round-trip roles, IDs, contents, additional properties, and
   provider conversation IDs.
+- `AbortTurn` must discard pending updates after failure/cancellation while
+  preserving committed turns.
 
 ## Updating the reference
 
-The read-only comparison worktree used for this review tracks the stack top:
-
-```bash
-cd /Users/matthew/.copilot/repos/copilot-worktrees/aspnetcore/mattleibow-vigilant-potato
-git pull --ff-only
-```
-
-Re-check the entire effective stack, not only PR #68335's predictive-state
-delta: blocks, engine, pipeline, generator, tests, dojo scenarios, review
-threads, and completed CI runs.
+Fetch the latest #68672 head plus every parent in the effective stack. Re-check
+blocks, engine, pipeline, generator, tests, dojo scenarios, review threads, and
+completed CI runs rather than reviewing only the newest layer's diff.
