@@ -154,6 +154,7 @@ internal static class XamlFileParser
             {
                 TypeName = localName,
                 IsUserControlReference = true,
+                AutomationId = GetAttr(element, "AutomationId"),
                 Semantics = customSemantics,
                 Condition = customCondition,
             };
@@ -184,6 +185,7 @@ internal static class XamlFileParser
                 {
                     TypeName = localName,
                     Text = semantics.Description,
+                    AutomationId = GetAttr(element, "AutomationId"),
                     Semantics = semantics,
                     Condition = containerCondition,
                 };
@@ -261,6 +263,7 @@ internal static class XamlFileParser
         var ui = new SemanticNode
         {
             TypeName = typeName,
+            AutomationId = GetAttr(element, "AutomationId"),
             Semantics = semantics,
             Condition = condition,
         };
@@ -467,6 +470,7 @@ internal static class XamlFileParser
             TypeName = typeName,
             IsBindableLayout = true,
             BindableLayoutItemsSource = binding?.Path ?? itemsSource,
+            AutomationId = GetAttr(element, "AutomationId"),
             Semantics = AccessibilityExtractor.Extract(element),
             Condition = ConditionalDetector.DetectCondition(element),
         };

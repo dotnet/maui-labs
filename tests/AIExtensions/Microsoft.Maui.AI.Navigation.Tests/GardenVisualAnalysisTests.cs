@@ -61,23 +61,21 @@ public class GardenOrderInsightsTests
         var service = new MauiVisualAnalysisService(
             provider,
             capture,
-            new MauiWayfindingOptions
-            {
-                DefaultVisualTargetAutomationId = "OrderInsightsCharts",
-            });
+            new StubCurrentPageContext("OrderInsightsCharts"),
+            new MauiWayfindingOptions());
 
         var result = await service.DescribeAsync(
-            "OrderInsightsCharts",
+            ["OrderInsightsCharts"],
             "Which item is largest?");
 
         Assert.Equal("Two bar charts are visible.", result);
-        Assert.Equal("OrderInsightsCharts", capture.TargetAutomationId);
+        Assert.Equal(["OrderInsightsCharts"], capture.TargetAutomationIds);
         var userMessage = Assert.Single(
             chat.Messages!,
             message => message.Role == ChatRole.User);
         var image = Assert.Single(userMessage.Contents.OfType<DataContent>());
         Assert.Equal("image/png", image.MediaType);
-        Assert.Equal("screen.png", image.Name);
+        Assert.Equal("visual-1.png", image.Name);
         Assert.Equal(png, image.Data.ToArray());
         Assert.Contains(
             "Which item is largest?",
@@ -106,10 +104,10 @@ public class GardenOrderInsightsTests
     }
 
     [Fact]
-    public async Task DescribeAsync_DefaultTargetMissing_FailsWithoutCapturingCurrentPage()
+    public async Task DescribeAsync_MultipleTargets_SendsEverySelectedVisual()
     {
-        var capture = new DefaultMissingCaptureService([1, 2, 3]);
-        var chat = new RecordingChatClient("Current page description.");
+        var capture = new StubCaptureService([1, 2, 3]);
+        var chat = new RecordingChatClient("Both charts are visible.");
         var services = new ServiceCollection();
         services.AddKeyedSingleton<IChatClient>(
             MauiWayfindingOptions.VisionChatClientServiceKey,
@@ -118,22 +116,30 @@ public class GardenOrderInsightsTests
         var service = new MauiVisualAnalysisService(
             provider,
             capture,
-            new MauiWayfindingOptions
-            {
-                DefaultVisualTargetAutomationId = "MissingChart",
-            });
+            new StubCurrentPageContext("SpendingChart", "ProductsChart"),
+            new MauiWayfindingOptions());
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.DescribeAsync(
-                targetAutomationId: null,
-                question: "What is visible?"));
+        var result = await service.DescribeAsync(
+            ["SpendingChart", "ProductsChart"],
+            "Compare these charts.");
 
-        Assert.Contains("default view", error.Message);
-        Assert.Equal(["MissingChart"], capture.Targets);
+        Assert.Equal("Both charts are visible.", result);
+        Assert.Equal(
+            ["SpendingChart", "ProductsChart"],
+            capture.TargetAutomationIds);
+        var userMessage = Assert.Single(
+            chat.Messages!,
+            message => message.Role == ChatRole.User);
+        Assert.Equal(
+            ["visual-1.png", "visual-2.png"],
+            userMessage.Contents
+                .OfType<DataContent>()
+                .Select(content => content.Name!)
+                .ToArray());
     }
 
     [Fact]
-    public async Task DescribeAsync_NoDefaultTarget_CapturesCurrentPage()
+    public async Task DescribeAsync_NoTargets_RequiresIndexedAutomationId()
     {
         var capture = new StubCaptureService([1, 2, 3]);
         var chat = new RecordingChatClient("Current page description.");
@@ -145,14 +151,89 @@ public class GardenOrderInsightsTests
         var service = new MauiVisualAnalysisService(
             provider,
             capture,
+            new StubCurrentPageContext(),
             new MauiWayfindingOptions());
 
-        var result = await service.DescribeAsync(
-            targetAutomationId: null,
-            question: "What is visible?");
+        var error = await Assert.ThrowsAsync<ArgumentException>(() =>
+            service.DescribeAsync(
+                [],
+                "What is visible?"));
 
-        Assert.Equal("Current page description.", result);
-        Assert.Null(capture.TargetAutomationId);
+        Assert.Contains("At least one AutomationId", error.Message);
+        Assert.Empty(capture.TargetAutomationIds);
+    }
+
+    [Fact]
+    public async Task DescribeAsync_UnindexedTarget_FailsBeforeCapture()
+    {
+        var capture = new StubCaptureService([1, 2, 3]);
+        var services = new ServiceCollection();
+        services.AddKeyedSingleton<IChatClient>(
+            MauiWayfindingOptions.VisionChatClientServiceKey,
+            new RecordingChatClient("unused"));
+        using var provider = services.BuildServiceProvider();
+        var service = new MauiVisualAnalysisService(
+            provider,
+            capture,
+            new StubCurrentPageContext("AdvertisedChart"),
+            new MauiWayfindingOptions());
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.DescribeAsync(
+                ["GuessedSensitiveControl"],
+                "What is visible?"));
+
+        Assert.Contains("current semantic UI", error.Message);
+        Assert.Empty(capture.TargetAutomationIds);
+    }
+
+    [Fact]
+    public async Task DescribeAsync_TooManyTargets_FailsBeforeCapture()
+    {
+        var capture = new StubCaptureService([1, 2, 3]);
+        var services = new ServiceCollection();
+        services.AddKeyedSingleton<IChatClient>(
+            MauiWayfindingOptions.VisionChatClientServiceKey,
+            new RecordingChatClient("unused"));
+        using var provider = services.BuildServiceProvider();
+        var service = new MauiVisualAnalysisService(
+            provider,
+            capture,
+            new StubCurrentPageContext("One", "Two"),
+            new MauiWayfindingOptions { MaximumVisualTargets = 1 });
+
+        var error = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            service.DescribeAsync(
+                ["One", "Two"],
+                "What is visible?"));
+
+        Assert.Contains("At most 1", error.Message);
+        Assert.Empty(capture.TargetAutomationIds);
+    }
+
+    [Fact]
+    public async Task DescribeAsync_PayloadTooLarge_FailsBeforeSendingToModel()
+    {
+        var capture = new StubCaptureService([1, 2, 3]);
+        var chat = new RecordingChatClient("unused");
+        var services = new ServiceCollection();
+        services.AddKeyedSingleton<IChatClient>(
+            MauiWayfindingOptions.VisionChatClientServiceKey,
+            chat);
+        using var provider = services.BuildServiceProvider();
+        var service = new MauiVisualAnalysisService(
+            provider,
+            capture,
+            new StubCurrentPageContext("Chart"),
+            new MauiWayfindingOptions { MaximumVisualPayloadBytes = 2 });
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.DescribeAsync(
+                ["Chart"],
+                "What is visible?"));
+
+        Assert.Contains("2 byte payload limit", error.Message);
+        Assert.Null(chat.Messages);
     }
 
     private sealed class TestCatalog(IReadOnlyList<IndexedPage> pages)
@@ -164,43 +245,33 @@ public class GardenOrderInsightsTests
     private sealed class StubCaptureService(byte[] png)
         : ICurrentViewCaptureService
     {
-        public string? TargetAutomationId { get; private set; }
+        public List<string> TargetAutomationIds { get; } = [];
 
         public Task<CapturedViewImage> CaptureAsync(
             string? targetAutomationId = null,
             CancellationToken cancellationToken = default)
         {
-            TargetAutomationId = targetAutomationId;
+            ArgumentException.ThrowIfNullOrWhiteSpace(targetAutomationId);
+            TargetAutomationIds.Add(targetAutomationId);
             return Task.FromResult(new CapturedViewImage(
                 png,
-                targetAutomationId ?? "CurrentPage",
+                targetAutomationId,
                 600,
                 220));
         }
     }
 
-    private sealed class DefaultMissingCaptureService(byte[] png)
-        : ICurrentViewCaptureService
+    private sealed class StubCurrentPageContext(params string[] automationIds)
+        : ICurrentPageContextProvider
     {
-        public List<string?> Targets { get; } = [];
-
-        public Task<CapturedViewImage> CaptureAsync(
-            string? targetAutomationId = null,
-            CancellationToken cancellationToken = default)
-        {
-            Targets.Add(targetAutomationId);
-            if (targetAutomationId is not null)
-            {
-                throw new InvalidOperationException(
-                    "The default view is not on this screen.");
-            }
-
-            return Task.FromResult(new CapturedViewImage(
-                png,
-                "CurrentPage",
-                600,
-                400));
-        }
+        public Task<CurrentPageSnapshot?> CaptureAsync(
+            CurrentPageSnapshotOptions? options = null)
+            => Task.FromResult<CurrentPageSnapshot?>(
+                new CurrentPageSnapshot(
+                    "OrdersPage",
+                    "# Orders",
+                    "Orders",
+                    automationIds));
     }
 
     private sealed class RecordingChatClient(string response) : IChatClient

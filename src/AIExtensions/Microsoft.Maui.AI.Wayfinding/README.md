@@ -44,7 +44,9 @@ It also adds an ephemeral wayfinding policy to each request. “Where/how” req
 remain read-only; “open/show/go/take me” requests may navigate. The policy is not
 stored in conversation history. AI-facing results use user-visible titles and
 controls; route URIs, CLR type names, file paths, command names, and binding
-expressions are not exposed to the model.
+expressions are not exposed to the model. AutomationIds are exposed only as
+selectors for automation and vision tools and are never intended for user-facing
+prose.
 
 ## Optional rendered vision
 
@@ -53,26 +55,35 @@ Enable vision when the configured `IChatClient` accepts image input:
 ```csharp
 builder.Services.AddMauiWayfinding(
     MyAppIndexedPageCatalog.Default,
-    options =>
-    {
-        options.EnableVision = true;
-        options.DefaultVisualTargetAutomationId = "OrderInsightsCharts";
-    });
+    options => options.EnableVision = true);
 
 builder.Services.AddKeyedSingleton<IChatClient>(
     MauiWayfindingOptions.VisionChatClientServiceKey,
     rawVisionClient);
 ```
 
-This adds `describe_current_visual`. It captures a visible `IView` by
-`AutomationId` with `IView.CaptureAsync()`, keeps PNG bytes in memory, and asks
-the configured model to describe pixel-only charts, drawings, maps, or diagrams.
+This adds `describe_current_visual`. Give useful visual controls a semantic
+description and `AutomationId`:
+
+```xml
+<GraphicsView
+    AutomationId="SpendingChart"
+    SemanticProperties.Description="Where the money went chart" />
+```
+
+The compile-time and runtime indexes expose both values. Wayfinding first reads
+the current UI, selects one or more relevant AutomationIds, captures those
+visible `IView` instances with `IView.CaptureAsync()`, and asks the configured
+model to describe their pixel-only charts, drawings, maps, or diagrams. PNG
+bytes remain in memory.
 Register the raw vision client under the documented key; do not point it at the
 already-composed Wayfinding pipeline, which would recurse.
 
-When a default target is configured but is not visible, capture fails rather
-than silently broadening to the whole page. Leave the default unset only when
-whole-current-page capture is the intended privacy boundary.
+There is no global default target and no whole-page fallback. If a selected
+AutomationId is not present in the current semantic snapshot, capture fails
+before reading pixels. Calls accept at most four visual targets and 8 MB of PNG
+data by default; configure `MaximumVisualTargets` and
+`MaximumVisualPayloadBytes` when the app requires different limits.
 
 ## Migration from pre-Wayfinding APIs
 

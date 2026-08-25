@@ -36,7 +36,7 @@ public class ApplicationMapServiceTests
     {
         var (service, _, _) = CreateService();
 
-        var result = service.ResolveDestination("review");
+        var result = service.ResolveDestination("review feature");
 
         Assert.Equal(DestinationResolutionStatus.Ambiguous, result.Status);
         Assert.Contains(result.Candidates, candidate => candidate.PageName == "ProductDetailPage");
@@ -68,7 +68,7 @@ public class ApplicationMapServiceTests
     }
 
     [Fact]
-    public async Task NavigateAsync_ResolvedDestination_UsesSingleDeepRoute()
+    public async Task NavigateAsync_ReflectedDestination_UsesRegisteredShellRoute()
     {
         var (service, navigation, _) = CreateService();
 
@@ -77,20 +77,16 @@ public class ApplicationMapServiceTests
             new Dictionary<string, string> { ["sku"] = "seed-basil" });
 
         Assert.Equal(DestinationResolutionStatus.Success, result.Status);
-        Assert.Equal(
-            "//main/products/product/review?sku=seed-basil&product.sku=seed-basil",
-            result.Route);
+        Assert.Equal("review?sku=seed-basil", result.Route);
         Assert.Equal(result.Route, navigation.LastNavigatedRoute);
+        Assert.Equal("review/<sku>", result.Destination!.RouteTemplate);
         Assert.Equal(
-            "//main/products/product/<sku>/review",
-            result.Destination!.RouteTemplate);
-        Assert.Equal(
-            ["MainPage", "CatalogPage", "ProductDetailPage", "ProductReviewPage"],
+            ["MainPage", "ProductReviewPage"],
             result.Destination.PagePath);
     }
 
     [Fact]
-    public async Task NavigateAsync_RouteQualifiedParameters_CanUseDistinctValues()
+    public async Task NavigateAsync_RouteQualifiedParameter_UsesRegisteredRouteValue()
     {
         var (service, navigation, _) = CreateService();
 
@@ -98,14 +94,11 @@ public class ApplicationMapServiceTests
             "ProductReviewPage",
             new Dictionary<string, string>
             {
-                ["product.sku"] = "seed-tomato",
                 ["review.sku"] = "seed-basil",
             });
 
         Assert.Equal(DestinationResolutionStatus.Success, result.Status);
-        Assert.Equal(
-            "//main/products/product/review?sku=seed-basil&product.sku=seed-tomato",
-            navigation.LastNavigatedRoute);
+        Assert.Equal("review?sku=seed-basil", navigation.LastNavigatedRoute);
     }
 
     [Fact]
@@ -113,7 +106,7 @@ public class ApplicationMapServiceTests
     {
         var (service, navigation, _) = CreateService();
 
-        var result = await service.NavigateAsync("review");
+        var result = await service.NavigateAsync("review feature");
 
         Assert.Equal(DestinationResolutionStatus.Ambiguous, result.Status);
         Assert.Null(navigation.LastNavigatedRoute);
@@ -175,8 +168,7 @@ public class ApplicationMapServiceTests
                 "settings",
                 "settings",
                 [],
-                "AreaA.SettingsPage",
-                "//main"),
+                "AreaA.SettingsPage"),
         ]);
         var service = new ApplicationMapService(
             catalog,
@@ -194,6 +186,48 @@ public class ApplicationMapServiceTests
             service.GetIndexedPage("AreaA.SettingsPage")?.Markdown);
     }
 
+    [Fact]
+    public async Task NavigateAsync_MultiSegmentNativeRoute_PreservesQueryMetadata()
+    {
+        var catalog = new StubCatalog(
+        [
+            new IndexedPage(
+                "MainPage",
+                "MainPage.xaml",
+                "- Heading (level 1): \"Home\"",
+                "//main/home"),
+            new IndexedPage(
+                "ProductPage",
+                "ProductPage.xaml",
+                "- Heading (level 1): \"Product\"",
+                [],
+                "Example.ProductPage"),
+        ]);
+        var navigation = new RecordingNavigationService(
+        [
+            new RouteInfo("home", "//main/home", []),
+            new RouteInfo(
+                "catalog/product",
+                "catalog/product",
+                [new QueryParameterInfo("sku", "Sku", "String")],
+                "Example.ProductPage"),
+        ]);
+        var service = new ApplicationMapService(
+            catalog,
+            navigation,
+            new StubCurrentPageContext(
+                new CurrentPageSnapshot("MainPage", "# Home")));
+
+        var result = await service.NavigateAsync(
+            "ProductPage",
+            new Dictionary<string, string> { ["sku"] = "seed-basil" });
+
+        Assert.Equal(DestinationResolutionStatus.Success, result.Status);
+        Assert.Equal("catalog/product?sku=seed-basil", result.Route);
+        Assert.Equal("catalog/product/<sku>", result.Destination!.RouteTemplate);
+        Assert.Equal(result.Route, navigation.LastNavigatedRoute);
+    }
+
     private static (
         ApplicationMapService Service,
         RecordingNavigationService Navigation,
@@ -208,20 +242,17 @@ public class ApplicationMapServiceTests
                 "product",
                 "product",
                 [new QueryParameterInfo("sku", "Sku", "String")],
-                "ProductDetailPage",
-                "//main/products"),
+                "ProductDetailPage"),
             new(
                 "review",
                 "review",
                 [new QueryParameterInfo("sku", "Sku", "String")],
-                "ProductReviewPage",
-                "//main/products/product"),
+                "ProductReviewPage"),
             new(
                 "order",
                 "order",
                 [new QueryParameterInfo("orderId", "OrderId", "String")],
-                "OrderDetailPage",
-                "//main/orders"),
+                "OrderDetailPage"),
             new("cart", "cart", [], "CartPage"),
         };
 

@@ -47,7 +47,7 @@ public sealed class ApplicationMapService
             foreach (var route in routes.Where(candidate =>
                 MatchesPageIdentity(page, candidate.TargetPageName)))
             {
-                destinations.Add(CreateDestination(page, route.DestinationPath, routes));
+                destinations.Add(CreateDestination(page, route.FullPath, routes));
             }
         }
 
@@ -367,9 +367,15 @@ public sealed class ApplicationMapService
         var remainingPath = basePath.Length == 0
             ? destination.Route.Trim('/')
             : destination.Route[basePath.Length..].Trim('/');
-        var segments = remainingPath.Split(
-            '/',
-            StringSplitOptions.RemoveEmptyEntries);
+        var exactRegisteredRoute = routes.FirstOrDefault(route =>
+            !route.FullPath.StartsWith("//", StringComparison.Ordinal)
+            && string.Equals(
+                route.Route.Trim('/'),
+                remainingPath,
+                StringComparison.OrdinalIgnoreCase));
+        var segments = exactRegisteredRoute is null
+            ? remainingPath.Split('/', StringSplitOptions.RemoveEmptyEntries)
+            : [exactRegisteredRoute.Route];
 
         return _navigation.BuildRoute(basePath, segments, parameters);
     }
@@ -417,19 +423,59 @@ public sealed class ApplicationMapService
         var registeredRoutes = routes
             .Where(route => !route.FullPath.StartsWith("//", StringComparison.Ordinal))
             .GroupBy(route => route.Route, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-
-        return routePath
-            .Split('/', StringSplitOptions.RemoveEmptyEntries)
-            .Where(registeredRoutes.ContainsKey)
-            .Select(segment => registeredRoutes[segment])
+            .Select(group => group.First())
+            .Select(route => (
+                Route: route,
+                Segments: route.Route.Split(
+                    '/',
+                    StringSplitOptions.RemoveEmptyEntries)))
+            .OrderByDescending(candidate => candidate.Segments.Length)
             .ToArray();
+        var pathSegments = routePath.Split(
+            '/',
+            StringSplitOptions.RemoveEmptyEntries);
+        var result = new List<RouteInfo>();
+
+        for (var index = 0; index < pathSegments.Length;)
+        {
+            var match = registeredRoutes.FirstOrDefault(candidate =>
+                candidate.Segments.Length > 0
+                && index + candidate.Segments.Length <= pathSegments.Length
+                && candidate.Segments
+                    .Select((segment, offset) => string.Equals(
+                        segment,
+                        pathSegments[index + offset],
+                        StringComparison.OrdinalIgnoreCase))
+                    .All(isMatch => isMatch));
+            if (match.Route is null)
+            {
+                index++;
+                continue;
+            }
+
+            result.Add(match.Route);
+            index += match.Segments!.Length;
+        }
+
+        return result;
     }
 
     private static string BuildRouteTemplate(
         string routePath,
         IReadOnlyList<RouteInfo> routeChain)
     {
+        if (routeChain.Count == 1
+            && string.Equals(
+                routeChain[0].Route.Trim('/'),
+                routePath.Trim('/'),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            var template = new StringBuilder(routePath);
+            foreach (var parameter in routeChain[0].Parameters)
+                template.Append($"/<{parameter.QueryName}>");
+            return template.ToString();
+        }
+
         var routeByName = routeChain.ToDictionary(
             route => route.Route,
             StringComparer.OrdinalIgnoreCase);

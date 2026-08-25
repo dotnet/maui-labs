@@ -59,7 +59,9 @@
             </Grid>
         </Border>
 
-        <views:OrderInsightsView Grid.Row="1" />
+        <views:OrderInsightsView Grid.Row="1"
+                                 AutomationId="OrderInsightsCharts"
+                                 SemanticProperties.Description="Order insights containing spending and product popularity charts" />
         <views:OrdersView Grid.Row="2" />
         <views:ChatSidebar Grid.Column="1"
                            Grid.RowSpan="3"

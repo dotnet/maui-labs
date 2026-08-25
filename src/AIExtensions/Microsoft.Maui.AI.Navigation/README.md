@@ -7,17 +7,17 @@ MAUI apps. This package does not reference `Microsoft.Extensions.AI`.
 
 ## Register routes
 
-Typed registration supplies destination identity, parent paths, and parameters
-without relying on reflection:
+Use MAUI Shell's normal route registration:
 
 ```csharp
-builder.Services.AddSingleton<ShellNavigationService>();
-
-navigation.RegisterRoute<ProductDetailPage>(
-    "product",
-    "//main/products",
-    [new QueryParameterInfo("sku", "Sku", "String")]);
+Routing.RegisterRoute("product", typeof(ProductDetailPage));
 ```
+
+`ShellNavigationService` walks the live Shell hierarchy and reflects MAUI's
+registered route factories to recover destination page types. It discovers
+query parameters from `[QueryProperty]` on destination pages and their injected
+view models. This package is experimental and does not claim trimming or AOT
+compatibility for that reflective discovery.
 
 ## Navigate
 

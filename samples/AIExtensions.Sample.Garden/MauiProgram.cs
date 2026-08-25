@@ -57,10 +57,8 @@ public static class MauiProgram
             options =>
         {
             options.EnableVision = true;
-            options.DefaultVisualTargetAutomationId = "OrderInsightsCharts";
             options.AdditionalInstructions =
                 """
-                On the Orders screen, the rendered charts use the visual target OrderInsightsCharts.
                 Before opening product detail or review, identify the product with search_products
                 or get_product and pass its sku. Before opening order detail, identify the order
                 with list_past_orders or find_order and pass its orderId.

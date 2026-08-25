@@ -56,9 +56,12 @@ public static class RuntimePageIndexer
         var presentedRoot = ResolvePresentedRoot(window);
         if (presentedRoot is Shell { FlyoutIsPresented: true } shell)
         {
+            var rendered = RuntimeMarkdownBuilder.RenderShellFlyout(shell, options);
             return new CurrentPageSnapshot(
                 shell.GetType().Name,
-                RuntimeMarkdownBuilder.RenderShellFlyout(shell, options));
+                rendered.Markdown,
+                pageTitle: null,
+                automationIds: rendered.AutomationIds);
         }
 
         var page = presentedRoot is null ? null : ResolvePageContainer(presentedRoot);
@@ -78,11 +81,12 @@ public static class RuntimePageIndexer
         options.Validate();
 
         var pageName = page.GetType().Name;
-        var markdown = RuntimeMarkdownBuilder.Render(page, pageName, options);
+        var rendered = RuntimeMarkdownBuilder.Render(page, pageName, options);
         return new CurrentPageSnapshot(
             pageName,
-            markdown,
-            page.Title);
+            rendered.Markdown,
+            page.Title,
+            rendered.AutomationIds);
     }
 
     private static CurrentPageSnapshot? CaptureCurrent(

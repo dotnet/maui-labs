@@ -11,7 +11,6 @@ public sealed class SpendingByCategoryChartView : OrderBarChartView
             "#5B8C5A",
             value => value.ToString("C0"))
     {
-        AutomationId = "SpendingByCategoryChart";
     }
 }
 
@@ -23,7 +22,6 @@ public sealed class PopularProductsChartView : OrderBarChartView
             "#D8904F",
             value => $"{value:0} sold")
     {
-        AutomationId = "PopularProductsChart";
     }
 }
 
