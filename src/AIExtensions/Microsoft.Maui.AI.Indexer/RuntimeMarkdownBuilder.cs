@@ -213,6 +213,12 @@ internal sealed class RuntimeMarkdownBuilder
         if (element is BoxView || IsDecorative(element))
             return;
 
+        if (element is CollectionView collectionView)
+        {
+            RenderCollectionView(collectionView, indent);
+            return;
+        }
+
         if (IsSemanticElement(element) || HasSemanticDescription(element))
         {
             AppendLine(indent, RenderSemanticElement(element));
@@ -229,6 +235,149 @@ internal sealed class RuntimeMarkdownBuilder
 
         RenderChildren(node, indent);
     }
+
+    private void RenderCollectionView(
+        CollectionView collectionView,
+        int indent)
+    {
+        AppendLine(indent, RenderSemanticElement(collectionView));
+
+        var contexts = GetCollectionContexts(
+            collectionView.ItemsSource,
+            collectionView.IsGrouped);
+        if (contexts.Items.Count == 0)
+        {
+            AppendLine(indent + 1, "- Empty view:");
+            if (collectionView.EmptyView is IVisualTreeElement emptyView)
+            {
+                RenderNode(emptyView, indent + 2);
+            }
+            else
+            {
+                foreach (var child in ((IVisualTreeElement)collectionView).GetVisualChildren())
+                    RenderNode(child, indent + 2);
+            }
+            return;
+        }
+
+        var itemIndex = 0;
+        var groupIndex = 0;
+        var renderedItems = new HashSet<object>();
+        var renderedGroups = new HashSet<object>();
+        RenderCollectionChildren(
+            collectionView,
+            collectionView,
+            contexts,
+            renderedItems,
+            renderedGroups,
+            indent + 1,
+            ref itemIndex,
+            ref groupIndex);
+    }
+
+    private void RenderCollectionChildren(
+        CollectionView collectionView,
+        IVisualTreeElement parent,
+        CollectionContexts contexts,
+        HashSet<object> renderedItems,
+        HashSet<object> renderedGroups,
+        int indent,
+        ref int itemIndex,
+        ref int groupIndex)
+    {
+        foreach (var child in parent.GetVisualChildren())
+        {
+            if (ReferenceEquals(child, collectionView.EmptyView)
+                || !CanRenderCollectionRoot(child))
+            {
+                continue;
+            }
+
+            var bindingContext = (child as BindableObject)?.BindingContext;
+            if (bindingContext is not null
+                && contexts.Items.Contains(bindingContext))
+            {
+                if (!renderedItems.Add(bindingContext))
+                    continue;
+
+                AppendLine(indent, $"- Item {++itemIndex}:");
+                RenderNode(child, indent + 1);
+                continue;
+            }
+
+            if (bindingContext is not null
+                && contexts.Groups.Contains(bindingContext))
+            {
+                if (!renderedGroups.Add(bindingContext))
+                    continue;
+
+                AppendLine(indent, $"- Group {++groupIndex}:");
+                RenderNode(child, indent + 1);
+                continue;
+            }
+
+            if (!_visited.Add(child))
+                continue;
+
+            RenderCollectionChildren(
+                collectionView,
+                child,
+                contexts,
+                renderedItems,
+                renderedGroups,
+                indent,
+                ref itemIndex,
+                ref groupIndex);
+        }
+    }
+
+    private bool CanRenderCollectionRoot(IVisualTreeElement child)
+        => !_visited.Contains(child)
+            && IsVisible(child)
+            && (child is not BindableObject bindable
+                || !IndexingProperties.GetExcludeWithChildren(bindable)
+                    && !IsDecorative(bindable));
+
+    private static CollectionContexts GetCollectionContexts(
+        object? itemsSource,
+        bool isGrouped)
+    {
+        var groups = new HashSet<object>();
+        var items = new HashSet<object>();
+        if (itemsSource is not System.Collections.IEnumerable enumerable)
+            return new CollectionContexts(groups, items);
+
+        foreach (var entry in enumerable)
+        {
+            if (entry is null)
+                continue;
+
+            if (!isGrouped)
+            {
+                items.Add(entry);
+                continue;
+            }
+
+            groups.Add(entry);
+            if (entry is string
+                || entry is not System.Collections.IEnumerable groupItems)
+            {
+                continue;
+            }
+
+            foreach (var item in groupItems)
+            {
+                if (item is not null)
+                    items.Add(item);
+            }
+        }
+
+        return new CollectionContexts(groups, items);
+    }
+
+    private sealed record CollectionContexts(
+        HashSet<object> Groups,
+        HashSet<object> Items);
 
     private static bool IsVisible(IVisualTreeElement node)
     {
