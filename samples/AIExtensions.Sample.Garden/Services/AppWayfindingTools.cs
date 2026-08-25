@@ -9,16 +9,18 @@ namespace AIExtensions.Sample.Garden.Services;
 /// AI-facing bridge for semantic app discovery, current-screen context,
 /// destination explanation, and navigation.
 /// </summary>
-public sealed class AppWayfindingTools(ApplicationMapService applicationMap)
+public sealed class AppWayfindingTools(
+    ApplicationMapService applicationMap,
+    ShellNavigationService navigation)
 {
-    [ExportAIFunction("find_in_app")]
+    [ExportAIFunction("search_app_ui")]
     [Description(
         "Search the app's real indexed screens for a feature, control, or task. " +
         "MUST be used first for every where/how/back question and before opening a destination, " +
         "even when a similar search was run in an earlier turn. Returns destination IDs, route " +
         "requirements, the page path, and matching controls. For explanations, this result is " +
-        "incomplete until describe_app_destination is called.")]
-    public string FindInApp(
+        "incomplete until get_app_destination is called.")]
+    public string SearchAppUi(
         [Description(
             "Natural-language feature or task to find, such as 'write a review', " +
             "'past orders', or 'product catalog'.")]
@@ -55,18 +57,18 @@ public sealed class AppWayfindingTools(ApplicationMapService applicationMap)
 
         builder.AppendLine();
         builder.AppendLine(
-            "Use describe_app_destination with a Destination ID to read its full indexed UI. " +
-            "Use open_app_destination only when the user asked to move.");
+            "Use get_app_destination with a Destination ID to read its full indexed UI. " +
+            "Use navigate_to_app_destination only when the user asked to move.");
         return builder.ToString();
     }
 
-    [ExportAIFunction("describe_app_destination")]
+    [ExportAIFunction("get_app_destination")]
     [Description(
-        "Read the complete indexed UI for every page from home through one destination without " +
-        "moving the user. MUST be called after find_in_app before answering where/how/back " +
-        "questions. Its output is the authoritative source for exact path controls.")]
-    public string DescribeAppDestination(
-        [Description("Destination ID returned by find_in_app, for example 'ProductReviewPage'.")]
+        "Read the compile-time indexed UI for every page from home through one destination " +
+        "without moving the user. MUST be called after search_app_ui before answering " +
+        "where/how/back questions. Does not inspect or describe the current app state.")]
+    public string GetAppDestination(
+        [Description("Destination ID returned by search_app_ui, for example 'ProductReviewPage'.")]
         string destinationId)
     {
         var destinations = applicationMap.GetDestinations();
@@ -105,9 +107,9 @@ public sealed class AppWayfindingTools(ApplicationMapService applicationMap)
         var builder = new StringBuilder();
         builder.AppendLine($"Destination ID: {destination.DestinationId}");
         builder.AppendLine($"Route: {destination.RouteTemplate}");
-        builder.AppendLine($"Page path: {string.Join(" -> ", destination.PagePath)}");
+        builder.AppendLine($"Destination path: {string.Join(" -> ", destination.PagePath)}");
         builder.AppendLine();
-        builder.AppendLine("Verified page path UI:");
+        builder.AppendLine("Verified destination path UI:");
 
         foreach (var pageIdentity in destination.PagePath)
         {
@@ -123,13 +125,19 @@ public sealed class AppWayfindingTools(ApplicationMapService applicationMap)
         return builder.ToString();
     }
 
-    [ExportAIFunction("describe_current_screen")]
+    [ExportAIFunction("get_current_navigation_uri")]
     [Description(
-        "Read the currently visible page and live controls. MUST be called in the current turn " +
-        "for questions containing 'this', 'here', 'current screen', or 'back', and for any visible " +
-        "field, button, or value, even if it was called in the immediately preceding turn. " +
-        "Private input text is omitted.")]
-    public async Task<string> DescribeCurrentScreenAsync()
+        "Return the live Shell navigation URI. MUST be called in the current turn before " +
+        "giving directions, because the user may have navigated manually since the last message.")]
+    public string GetCurrentNavigationUri()
+        => navigation.GetCurrentRoute();
+
+    [ExportAIFunction("get_current_page_ui")]
+    [Description(
+        "Read the live controls and state on the currently visible page. MUST be called in the " +
+        "current turn before giving directions or answering questions about this/here/current " +
+        "controls. Private input text is omitted. Does not return route metadata.")]
+    public async Task<string> GetCurrentPageUiAsync()
     {
         var snapshot = await applicationMap.CaptureCurrentPageAsync();
         return snapshot is null
@@ -137,16 +145,16 @@ public sealed class AppWayfindingTools(ApplicationMapService applicationMap)
             : $"Current page: {snapshot.PageName}\n\n{snapshot.Markdown}";
     }
 
-    [ExportAIFunction("open_app_destination")]
+    [ExportAIFunction("navigate_to_app_destination")]
     [Description(
-        "Navigate to a Destination ID returned by find_in_app. Use only when the user " +
+        "Navigate to a Destination ID returned by search_app_ui. Use only when the user " +
         "explicitly asks to open, show, or be taken to that screen. Supply every required " +
-        "parameter shown by find_in_app.")]
-    public async Task<string> OpenAppDestinationAsync(
-        [Description("Destination ID returned by find_in_app.")]
+        "parameter shown by search_app_ui.")]
+    public async Task<string> NavigateToAppDestinationAsync(
+        [Description("Destination ID returned by search_app_ui.")]
         string destinationId,
         [Description(
-            "Route parameter values keyed by the required parameter names from find_in_app, " +
+            "Route parameter values keyed by the required parameter names from search_app_ui, " +
             "for example { \"sku\": \"seed-basil\" }. Omit for destinations without parameters.")]
         Dictionary<string, string>? parameters = null)
     {
@@ -156,7 +164,7 @@ public sealed class AppWayfindingTools(ApplicationMapService applicationMap)
             DestinationResolutionStatus.Success =>
                 $"Opened {resolution.Destination!.PageName} using {resolution.Route}.",
             DestinationResolutionStatus.NotFound =>
-                $"No app destination matched '{destinationId}'. Use find_in_app first.",
+                $"No app destination matched '{destinationId}'. Use search_app_ui first.",
             DestinationResolutionStatus.Ambiguous =>
                 $"'{destinationId}' is ambiguous. Use one of these Destination IDs: " +
                 string.Join(", ", resolution.Candidates.Select(candidate => candidate.DestinationId)),
@@ -167,4 +175,5 @@ public sealed class AppWayfindingTools(ApplicationMapService applicationMap)
                 $"Unsupported destination status '{resolution.Status}'."),
         };
     }
+
 }

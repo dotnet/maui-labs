@@ -35,7 +35,10 @@ Console.WriteLine(destination.PageName);
 Console.WriteLine(destination.RouteTemplate);
 Console.WriteLine(string.Join(" -> ", destination.PagePath));
 
-var current = await applicationMap.CaptureCurrentPageAsync();
+var currentRoute = navigationService.GetCurrentRoute();
+var currentPage = await applicationMap.CaptureCurrentPageAsync();
+Console.WriteLine(currentRoute);
+Console.WriteLine(currentPage?.PageName);
 
 var result = await applicationMap.NavigateAsync(
     destination.PageName,
@@ -88,7 +91,8 @@ The nested review path resolves to one MAUI call:
 
 - **Semantic destination search** over generated, accessibility-first page Markdown
 - **Verified page paths** from the generated home page through intermediate screens
-- **Live current-screen context** for "this", "here", and visible-control questions
+- **Live current-screen and Shell-route context** for from-here directions and
+  "this", "here", and visible-control questions
 - **Typed route identity** for trimming/AOT-conscious deep-page mapping
 - **Ambiguity and required-parameter validation** before navigation
 - **Single-call deep navigation** with shared parameters propagated to intermediate pages
@@ -96,8 +100,9 @@ The nested review path resolves to one MAUI call:
 
 The package has no dependency on `Microsoft.Maui.AI.Attributes`. Apps choose the
 small AI tool surface that fits their assistant. The Garden sample exposes
-`find_in_app`, `describe_app_destination`, `describe_current_screen`, and
-`open_app_destination` through one `AppWayfindingTools` bridge.
+`search_app_ui`, `get_app_destination`, `get_current_navigation_uri`,
+`get_current_page_ui`, and `navigate_to_app_destination` through one
+`AppWayfindingTools` bridge.
 
 ## Requirements
 

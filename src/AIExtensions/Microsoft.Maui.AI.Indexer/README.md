@@ -102,7 +102,8 @@ For a unified wayfinding service, use `Microsoft.Maui.AI.Navigation`.
 Shell navigation, then searches only pages with reliable destinations. The Garden
 sample's
 [`AppWayfindingTools`](../../../samples/AIExtensions.Sample.Garden/Services/AppWayfindingTools.cs)
-exposes that service as four focused AI tools.
+exposes that service as focused, orthogonal search, destination, current-page,
+current-route, and navigation tools.
 
 If your app spans multiple assemblies, collect each assembly's
 `{AssemblyName}IndexedPageCatalog.Default.Pages` yourself and merge them — there is no
