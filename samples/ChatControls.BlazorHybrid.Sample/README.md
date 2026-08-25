@@ -78,7 +78,8 @@ PR that introduced the sample.
 | File card | Send file | `.mchat-file-card` with file-name + size, `role="group"`, `aria-label` = alt text | ✅ |
 | Simulated audio → stage | Composer 🎤 → ■ | `.mchat-icon-btn--recording` while capturing, then `.mchat-attachment-chip` = `simulated-recording.wav` | ✅ |
 | Send audio → play/pause | ➤ then click ▶ on message | `.mchat-audio` renders with `aria-label`, `<audio>` element, `.mchat-audio__toggle` aria toggles | ✅ |
-| Live speech → auto-submit | Composer 🗣 | text streams into `.mchat-composer__textarea`, final utterance auto-sends a new `.mchat-row` | ✅ |
+| Live speech → auto-submit | Composer 🗣 | text streams into `.mchat-composer__textarea`; final utterance is treated as terminal-before-submit (recognizer detached, `IsListening`/`IsLiveSpeechEnabled` cleared so `CanSubmit` accepts), then the ordinary `SendAsync` path fires exactly once and a new `.mchat-row` appears | ✅ |
+| Live speech → `AutoSubmitLiveSpeech="false"` | Composer 🗣 | final utterance stays in `.mchat-composer__textarea`; recognizer is detached and `IsListening` is cleared so the user can submit manually | ✅ |
 | Typing (one) | ✔ Priya typing | `.mchat-typing[role="status"]` = "Priya is typing…" | ✅ |
 | Typing (two) | ✔ Priya + ✔ Diego typing | `.mchat-typing` = "Priya and Diego are typing…" | ✅ |
 | Delivery status | Apply delivery status | last message shows sending/sent/delivered/read glyphs and `aria-label` | ✅ |
