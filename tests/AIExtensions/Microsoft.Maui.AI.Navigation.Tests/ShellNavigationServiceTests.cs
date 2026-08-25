@@ -226,9 +226,20 @@ public class BuildRouteTests
 
         Assert.Contains("seed%20tomato%26fresh", route);
     }
+
+    [Fact]
+    public void BuildRoute_RelativeBase_DoesNotAddLeadingSlash()
+    {
+        var svc = CreateService();
+        var route = svc.BuildRoute("",
+            ["product"],
+            new Dictionary<string, string> { ["sku"] = "seed-tomato" });
+
+        Assert.Equal("product?sku=seed-tomato", route);
+    }
 }
 
-public class ParseRouteTests
+public class ResolveRouteTests
 {
     private class TestableNavigationService : ShellNavigationService
     {
@@ -251,174 +262,122 @@ public class ParseRouteTests
         new RouteInfo("cart", "cart", []),
     ]);
 
-    // ── Hierarchy-only routes ───────────────────────────────────────
-
-    [Fact]
-    public void Parse_HierarchyOnly_SingleStep()
+    [Theory]
+    [InlineData("//main/products")]
+    [InlineData("//main/orders")]
+    [InlineData("//main/chat")]
+    public void Resolve_HierarchyOnly_PassesThrough(string uri)
     {
-        var steps = CreateService().ParseRoute("//main/products");
-        Assert.Single(steps);
-        Assert.Equal("//main/products", steps[0].route);
+        Assert.Equal(uri, CreateService().ResolveRoute(uri));
     }
 
     [Fact]
-    public void Parse_HierarchyOnly_DifferentTab()
+    public void Resolve_ProductWithSku_ConvertsInlineValueToQuery()
     {
-        var steps = CreateService().ParseRoute("//main/orders");
-        Assert.Single(steps);
-        Assert.Equal("//main/orders", steps[0].route);
+        var route = CreateService().ResolveRoute("//main/products/product/seed-tomato");
+
+        Assert.Equal("//main/products/product?sku=seed-tomato", route);
     }
 
     [Fact]
-    public void Parse_HierarchyOnly_ChatTab()
+    public void Resolve_OrderWithId_ConvertsInlineValueToQuery()
     {
-        var steps = CreateService().ParseRoute("//main/chat");
-        Assert.Single(steps);
-        Assert.Equal("//main/chat", steps[0].route);
-    }
+        var route = CreateService().ResolveRoute("//main/orders/order/ORD-00001");
 
-    // ── Single pushed route with inline parameter ───────────────────
-
-    [Fact]
-    public void Parse_ProductWithSku_ExtractsParam()
-    {
-        var steps = CreateService().ParseRoute("//main/products/product/seed-tomato");
-        Assert.Single(steps);
-        Assert.Contains("sku=seed-tomato", steps[0].route);
-        Assert.Contains("//main/products/product", steps[0].route);
+        Assert.Equal("//main/orders/order?orderId=ORD-00001", route);
     }
 
     [Fact]
-    public void Parse_OrderWithId_ExtractsParam()
+    public void Resolve_UrlEncodedValue_PreservesEncoding()
     {
-        var steps = CreateService().ParseRoute("//main/orders/order/ORD-00001");
-        Assert.Single(steps);
-        Assert.Contains("orderId=ORD-00001", steps[0].route);
-        Assert.Contains("//main/orders/order", steps[0].route);
+        var route = CreateService().ResolveRoute("//main/products/product/seed%20tomato");
+
+        Assert.Equal("//main/products/product?sku=seed%20tomato", route);
     }
 
     [Fact]
-    public void Parse_ProductWithUrlEncodedSku_DecodesValue()
+    public void Resolve_ProductWithoutValue_DoesNotAddQuery()
     {
-        var steps = CreateService().ParseRoute("//main/products/product/seed%20tomato");
-        Assert.Single(steps);
-        Assert.Contains("sku=seed%20tomato", steps[0].route);
-    }
+        var route = CreateService().ResolveRoute("//main/products/product");
 
-    // ── Pushed route without parameter value ────────────────────────
-
-    [Fact]
-    public void Parse_ProductWithoutValue_NoBareParam()
-    {
-        var steps = CreateService().ParseRoute("//main/products/product");
-        Assert.Single(steps);
-        Assert.DoesNotContain("?", steps[0].route);
+        Assert.Equal("//main/products/product", route);
     }
 
     [Fact]
-    public void Parse_CartNoParams_SingleStep()
+    public void Resolve_CartWithoutParameters_PreservesPath()
     {
-        var steps = CreateService().ParseRoute("//main/products/cart");
-        Assert.Single(steps);
-    }
+        var route = CreateService().ResolveRoute("//main/products/cart");
 
-    // ── Nested pushed routes (product → review) ─────────────────────
-
-    [Fact]
-    public void Parse_ProductThenReview_TwoSteps()
-    {
-        var steps = CreateService().ParseRoute("//main/products/product/seed-tomato/review");
-        Assert.Equal(2, steps.Count);
-        Assert.Contains("//main/products/product", steps[0].route);
-        Assert.Contains("sku=seed-tomato", steps[0].route);
-        Assert.StartsWith("review", steps[1].route);
-        Assert.Contains("sku=seed-tomato", steps[1].route);
+        Assert.Equal("//main/products/cart", route);
     }
 
     [Fact]
-    public void Parse_ProductThenReviewBothHaveSku_ReviewAlsoGetsParam()
+    public void Resolve_NestedRoute_UsesSingleUriWithIntermediatePrefix()
     {
-        var steps = CreateService().ParseRoute("//main/products/product/seed-basil/review");
-        Assert.Equal(2, steps.Count);
-        Assert.Contains("sku=seed-basil", steps[0].route);
-        Assert.Contains("sku=seed-basil", steps[1].route);
-    }
+        var route = CreateService().ResolveRoute(
+            "//main/products/product/seed-tomato/review");
 
-    // ── Relative routes ─────────────────────────────────────────────
-
-    [Fact]
-    public void Parse_RelativeBack_PassesThrough()
-    {
-        var steps = CreateService().ParseRoute("..");
-        Assert.Single(steps);
-        Assert.Equal("..", steps[0].route);
+        Assert.Equal(
+            "//main/products/product/review?sku=seed-tomato&product.sku=seed-tomato",
+            route);
     }
 
     [Fact]
-    public void Parse_RelativeSingleSegment_PassesThrough()
+    public void Resolve_NestedRoute_PreservesDistinctValuesForSameParameterName()
     {
-        var steps = CreateService().ParseRoute("cart");
-        Assert.Single(steps);
-        Assert.Equal("cart", steps[0].route);
+        var route = CreateService().ResolveRoute(
+            "//main/products/product/seed-tomato/review/seed-basil");
+
+        Assert.Equal(
+            "//main/products/product/review?sku=seed-basil&product.sku=seed-tomato",
+            route);
+    }
+
+    [Theory]
+    [InlineData("..")]
+    [InlineData("../..")]
+    [InlineData("cart")]
+    [InlineData("review")]
+    public void Resolve_RelativeNavigationWithoutInlineValues_PassesThrough(string uri)
+    {
+        Assert.Equal(uri, CreateService().ResolveRoute(uri));
     }
 
     [Fact]
-    public void Parse_RelativeProductWithValue_ExtractsParam()
+    public void Resolve_RelativeRouteWithInlineValue_RemainsRelative()
     {
-        var steps = CreateService().ParseRoute("product/seed-tomato");
-        Assert.Single(steps);
-        Assert.Contains("sku=seed-tomato", steps[0].route);
+        var route = CreateService().ResolveRoute("product/seed-tomato");
+
+        Assert.Equal("product?sku=seed-tomato", route);
     }
 
     [Fact]
-    public void Parse_RelativeReviewOnly_PassesThrough()
+    public void Resolve_ExplicitQueryString_PassesThrough()
     {
-        var steps = CreateService().ParseRoute("review");
-        Assert.Single(steps);
-        Assert.Equal("review", steps[0].route);
+        const string uri =
+            "//main/products/product?sku=seed-tomato&highlight=true";
+
+        Assert.Equal(uri, CreateService().ResolveRoute(uri));
     }
 
-    // ── Routes with explicit query strings (pass through) ───────────
-
-    [Fact]
-    public void Parse_ExplicitQueryString_PreservesIt()
+    [Theory]
+    [InlineData("")]
+    [InlineData("//main")]
+    public void Resolve_TrivialRoute_PassesThrough(string uri)
     {
-        var steps = CreateService().ParseRoute("//main/products/product?sku=seed-tomato");
-        Assert.Single(steps);
-        Assert.Equal("//main/products/product?sku=seed-tomato", steps[0].route);
-    }
-
-    [Fact]
-    public void Parse_ExplicitQueryStringWithExtra_PreservesAll()
-    {
-        var steps = CreateService().ParseRoute("//main/products/product?sku=seed-tomato&highlight=true");
-        Assert.Single(steps);
-        Assert.Contains("sku=seed-tomato", steps[0].route);
-        Assert.Contains("highlight=true", steps[0].route);
-    }
-
-    // ── Edge cases ──────────────────────────────────────────────────
-
-    [Fact]
-    public void Parse_EmptyString_SingleEmptyStep()
-    {
-        var steps = CreateService().ParseRoute("");
-        Assert.Single(steps);
-        Assert.Equal("", steps[0].route);
+        Assert.Equal(uri, CreateService().ResolveRoute(uri));
     }
 
     [Fact]
-    public void Parse_JustSlashes_PassesThrough()
+    public void Resolve_UnknownTrailingSegment_PassesThrough()
     {
-        var steps = CreateService().ParseRoute("//main");
-        Assert.Single(steps);
-        Assert.Equal("//main", steps[0].route);
+        const string uri = "//main/products/cart/unknown";
+
+        Assert.Equal(uri, CreateService().ResolveRoute(uri));
     }
 
-    // ── Output is always a valid URI (no double ?) ──────────────────
-
     [Fact]
-    public void Parse_AllOutputSteps_HaveAtMostOneQuestionMark()
+    public void Resolve_OutputHasAtMostOneQuestionMark()
     {
         var testCases = new[]
         {
@@ -434,105 +393,97 @@ public class ParseRouteTests
         var svc = CreateService();
         foreach (var uri in testCases)
         {
-            var steps = svc.ParseRoute(uri);
-            foreach (var step in steps)
+            var route = svc.ResolveRoute(uri);
+            var questionMarkCount = route.Count(c => c == '?');
+
+            Assert.True(questionMarkCount <= 1,
+                $"Resolved route '{route}' (from '{uri}') has {questionMarkCount} '?' characters");
+        }
+    }
+
+    public class MauiShellParameterPassingTests
+    {
+        private const string ProductRoute = "ai-navigation-product";
+        private const string ReviewRoute = "ai-navigation-review";
+
+        [QueryProperty(nameof(Sku), "sku")]
+        private sealed class ProductPage : ContentPage
+        {
+            public string? Sku { get; set; }
+        }
+
+        [QueryProperty(nameof(Sku), "sku")]
+        private sealed class ReviewPage : ContentPage
+        {
+            public string? Sku { get; set; }
+        }
+
+        [Fact]
+        public async Task GoToAsync_SingleRoute_DeliversParameterToIntermediateAndLastPages()
+        {
+            Routing.RegisterRoute(ProductRoute, typeof(ProductPage));
+            Routing.RegisterRoute(ReviewRoute, typeof(ReviewPage));
+
+            try
             {
-                var qCount = step.route.Count(c => c == '?');
-                Assert.True(qCount <= 1,
-                    $"Route step '{step.route}' (from '{uri}') has {qCount} '?' characters");
+                var shell = new Shell();
+                shell.Items.Add(new ShellContent
+                {
+                    Route = "home",
+                    Content = new ContentPage()
+                });
+
+                await shell.GoToAsync(
+                    $"{ProductRoute}/{ReviewRoute}" +
+                    $"?{ProductRoute}.sku=seed-tomato&sku=seed-tomato");
+
+                var product = Assert.Single(
+                    shell.Navigation.NavigationStack.OfType<ProductPage>());
+                var review = Assert.Single(
+                    shell.Navigation.NavigationStack.OfType<ReviewPage>());
+
+                Assert.Equal("seed-tomato", product.Sku);
+                Assert.Equal("seed-tomato", review.Sku);
+            }
+            finally
+            {
+                Routing.UnRegisterRoute(ReviewRoute);
+                Routing.UnRegisterRoute(ProductRoute);
             }
         }
-    }
 
-    // ── Back-navigation stack correctness ───────────────────────────
-
-    [Fact]
-    public void Parse_ProductReview_Step1IsAbsoluteToProduct()
-    {
-        var steps = CreateService().ParseRoute("//main/products/product/seed-tomato/review");
-        Assert.StartsWith("//main/products/product", steps[0].route);
-    }
-
-    [Fact]
-    public void Parse_ProductReview_Step2IsRelativeReview()
-    {
-        var steps = CreateService().ParseRoute("//main/products/product/seed-tomato/review");
-        Assert.Equal(2, steps.Count);
-        Assert.DoesNotContain("//", steps[1].route);
-        Assert.StartsWith("review", steps[1].route);
-    }
-
-    [Fact]
-    public void Parse_ProductReview_BackStackIsThreeLevels()
-    {
-        var steps = CreateService().ParseRoute("//main/products/product/seed-tomato/review");
-        Assert.True(steps[0].route.StartsWith("//"), "Step 1 should be absolute");
-        Assert.False(steps[1].route.StartsWith("//"), "Step 2 should be relative");
-    }
-
-    [Fact]
-    public void Parse_OrderDetail_BackToOrders()
-    {
-        var steps = CreateService().ParseRoute("//main/orders/order/ORD-00001");
-        Assert.Single(steps);
-        Assert.StartsWith("//main/orders/order", steps[0].route);
-    }
-
-    [Fact]
-    public void Parse_ProductOnly_BackToProducts()
-    {
-        var steps = CreateService().ParseRoute("//main/products/product/seed-tomato");
-        Assert.Single(steps);
-        Assert.StartsWith("//main/products/product", steps[0].route);
-    }
-
-    [Fact]
-    public void Parse_BackRoute_IsPassedThrough()
-    {
-        var steps = CreateService().ParseRoute("..");
-        Assert.Single(steps);
-        Assert.Equal("..", steps[0].route);
-    }
-
-    [Fact]
-    public void Parse_MultipleBackRoutes_PassedThrough()
-    {
-        var steps = CreateService().ParseRoute("../..");
-        Assert.Single(steps);
-        Assert.Equal("../..", steps[0].route);
-    }
-
-    // ── Param propagation to child steps ────────────────────────────
-
-    [Fact]
-    public void Parse_ProductReview_BothStepsHaveSku()
-    {
-        var steps = CreateService().ParseRoute("//main/products/product/seed-tomato/review");
-        Assert.Equal(2, steps.Count);
-        Assert.Contains("sku=seed-tomato", steps[0].route);
-        Assert.Contains("sku=seed-tomato", steps[1].route);
-    }
-
-    [Fact]
-    public void Parse_ProductReview_BothStepsHaveSameSkuValue()
-    {
-        var steps = CreateService().ParseRoute("//main/products/product/seed-tomato/review");
-        var step0Sku = ExtractQueryParam(steps[0].route, "sku");
-        var step1Sku = ExtractQueryParam(steps[1].route, "sku");
-        Assert.Equal(step0Sku, step1Sku);
-    }
-
-    private static string? ExtractQueryParam(string route, string key)
-    {
-        var qIdx = route.IndexOf('?');
-        if (qIdx < 0) return null;
-        var query = route[(qIdx + 1)..];
-        foreach (var part in query.Split('&'))
+        [Fact]
+        public async Task GoToAsync_SingleRoute_ScopesDistinctValuesWithSameParameterName()
         {
-            var eq = part.IndexOf('=');
-            if (eq > 0 && part[..eq] == key)
-                return Uri.UnescapeDataString(part[(eq + 1)..]);
+            Routing.RegisterRoute(ProductRoute, typeof(ProductPage));
+            Routing.RegisterRoute(ReviewRoute, typeof(ReviewPage));
+
+            try
+            {
+                var shell = new Shell();
+                shell.Items.Add(new ShellContent
+                {
+                    Route = "home",
+                    Content = new ContentPage()
+                });
+
+                await shell.GoToAsync(
+                    $"{ProductRoute}/{ReviewRoute}" +
+                    $"?{ProductRoute}.sku=seed-tomato&sku=seed-basil");
+
+                var product = Assert.Single(
+                    shell.Navigation.NavigationStack.OfType<ProductPage>());
+                var review = Assert.Single(
+                    shell.Navigation.NavigationStack.OfType<ReviewPage>());
+
+                Assert.Equal("seed-tomato", product.Sku);
+                Assert.Equal("seed-basil", review.Sku);
+            }
+            finally
+            {
+                Routing.UnRegisterRoute(ReviewRoute);
+                Routing.UnRegisterRoute(ProductRoute);
+            }
         }
-        return null;
     }
 }

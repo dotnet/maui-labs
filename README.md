@@ -104,7 +104,7 @@ Source-generated AI tool discovery — annotate methods or property accessors wi
 
 #### AI Navigation
 
-Runtime Shell route discovery and template-aware navigation for AI agents. Clean URIs like `//main/products/product/seed-tomato/review` are automatically parsed into multi-step `GoToAsync` calls with extracted parameters.
+Runtime Shell route discovery and template-aware navigation for AI agents. Clean URIs like `//main/products/product/seed-tomato/review` are resolved to one Shell URI with route-scoped query parameters.
 
 | Package | Description |
 |---------|-------------|

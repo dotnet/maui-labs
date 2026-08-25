@@ -8,11 +8,11 @@ public partial class AppShell : Shell
     {
         InitializeComponent();
 
-        // Detail pages under products — friendly URLs: /products/product?sku=X
+        // Clean AI URI: //main/products/product/<sku>
         Routing.RegisterRoute("product", typeof(ProductDetailPage));
-        // Review modal — /products/product/review?sku=X
+        // Clean AI URI: //main/products/product/<sku>/review
         Routing.RegisterRoute("review", typeof(ProductReviewPage));
-        // Order detail — /orders/order?orderId=X
+        // Clean AI URI: //main/orders/order/<orderId>
         Routing.RegisterRoute("order", typeof(OrderDetailPage));
         // Cart stays modal — slides up from anywhere
         Routing.RegisterRoute("cart", typeof(CartPage));

@@ -4,7 +4,7 @@ Runtime Shell route discovery and template-aware navigation for .NET MAUI apps, 
 
 ## How it works
 
-`ShellNavigationService` walks the Shell hierarchy and `Routing.RegisterRoute` entries at runtime to build a route table. AI agents use clean template-style URIs — the service matches path segments against known routes, extracts inline parameter values, and issues the correct sequence of `Shell.GoToAsync` calls so each page receives its parameters.
+`ShellNavigationService` walks the Shell hierarchy and `Routing.RegisterRoute` entries at runtime to build a route table. AI agents use clean template-style URIs — the service matches path segments against known routes, extracts inline parameter values, and resolves them to one Shell URI with route-scoped query parameters.
 
 ### 1. Register the service
 
@@ -26,10 +26,10 @@ var routes = navigationService.GetRoutes();
 // Template-style URI — parameter values are inline in the path
 await navigationService.NavigateAsync("//main/products/product/seed-tomato");
 
-// Nested navigation — issues two GoToAsync calls so the back stack is correct
+// Nested navigation — resolves to one GoToAsync call
 await navigationService.NavigateAsync("//main/products/product/seed-tomato/review");
-// Step 1: //main/products/product?sku=seed-tomato
-// Step 2: review?sku=seed-tomato
+// Resolved URI:
+// //main/products/product/review?sku=seed-tomato&product.sku=seed-tomato
 
 // Back navigation
 await navigationService.NavigateAsync("..");
@@ -39,10 +39,11 @@ await navigationService.NavigateAsync("..");
 
 - **Route discovery** — walks `Shell.Items` hierarchy and `Routing.RegisterRoute` entries
 - **Query parameter discovery** — reflects `[QueryProperty]` on pages and view models
-- **Template URI parsing** — `ParseRoute` converts `//main/products/product/seed-tomato/review` into sequential navigation steps with extracted parameters
+- **Template URI resolution** — `ResolveRoute` converts `//main/products/product/seed-tomato/review` into one valid Shell URI
 - **Parameter propagation** — shared parameters (like `sku`) flow to all pages that accept them
-- **Back-stack correctness** — first step is absolute, subsequent steps are relative, so `..` pops to the right parent
-- **BuildRoute helper** — constructs multi-segment routes with Shell's dot-prefix convention for intermediate page parameters
+- **Single-call navigation** — MAUI 10.0.90+ delivers route-prefixed parameters to intermediate pages, avoiding a visible intermediate navigation
+- **Back-stack correctness** — one multi-page `GoToAsync` call pushes the complete stack, so `..` pops to the right parent
+- **BuildRoute helper** — constructs multi-segment routes with Shell's route-prefix convention for intermediate page parameters
 
 ## AI integration
 
@@ -68,6 +69,26 @@ public sealed class AINavigationService
 ## Requirements
 
 - .NET 10
-- `Microsoft.Maui.Controls`
+- `Microsoft.Maui.Controls` 10.0.90 or later (the package currently references 10.0.100)
+
+The intermediate-page parameter fix shipped in [dotnet/maui#35432](https://github.com/dotnet/maui/pull/35432) and is included in the [MAUI 10.0.100 release](https://github.com/dotnet/maui/releases/tag/10.0.100).
+
+## .NET MAUI 11 route templates
+
+.NET MAUI 11 adds native `{param}` Shell route templates in [dotnet/maui#35110](https://github.com/dotnet/maui/pull/35110). Apps targeting MAUI 11 can register:
+
+```csharp
+Routing.RegisterRoute("product/{sku}", typeof(ProductDetailPage));
+Routing.RegisterRoute("review", typeof(ProductReviewPage));
+```
+
+Shell then accepts the clean URI directly:
+
+```csharp
+await Shell.Current.GoToAsync(
+    "//main/products/product/seed-tomato/review");
+```
+
+Both the product and review pages receive `sku=seed-tomato`. For MAUI 11 apps, native route templates replace this package's inline-value resolution and `BuildRoute` conversion; route discovery and the AI tool wrapper can still be useful. Relative navigation to a templated route remains unsupported in the initial MAUI 11 implementation, so use absolute URIs.
 
 > ⚠️ **This package is experimental.** APIs may change between releases.
