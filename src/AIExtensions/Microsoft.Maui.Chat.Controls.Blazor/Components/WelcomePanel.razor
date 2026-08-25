@@ -1,0 +1,77 @@
+@*
+    Licensed to the .NET Foundation under one or more agreements.
+    The .NET Foundation licenses this file to you under the MIT license.
+
+    The default welcome / empty state shown while the conversation has no messages.
+    Replaced by <ChatView EmptyContent=…> when a consumer supplies a fragment.
+*@
+@namespace Microsoft.Maui.Chat.Controls.Blazor
+@using Microsoft.Maui.Chat.Controls
+
+<div class="mchat-welcome">
+    @if (!string.IsNullOrEmpty(Icon))
+    {
+        <div class="mchat-welcome__icon" aria-hidden="true">@Icon</div>
+    }
+
+    @if (!string.IsNullOrEmpty(Message))
+    {
+        <div class="mchat-welcome__message">@Message</div>
+    }
+
+    @if (EffectiveSuggestions.Count > 0)
+    {
+        <div class="mchat-suggestions">
+            @foreach (var suggestion in EffectiveSuggestions)
+            {
+                var captured = suggestion;
+                if (SuggestionTemplate is not null)
+                {
+                    @SuggestionTemplate(captured)
+                }
+                else
+                {
+                    <button type="button"
+                            class="mchat-suggestion"
+                            aria-label="@("Suggested prompt: " + captured.Label)"
+                            @onclick="() => OnSuggestionSelected(captured)">
+                        @if (!string.IsNullOrEmpty(captured.Icon))
+                        {
+                            <span aria-hidden="true">@captured.Icon</span>
+                        }
+                        <span>@captured.DisplayText</span>
+                    </button>
+                }
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private static readonly ChatSuggestion[] EmptySuggestions = Array.Empty<ChatSuggestion>();
+
+    /// <summary>Gets or sets the icon glyph shown at the top of the panel.</summary>
+    [Parameter]
+    public string? Icon { get; set; } = "💬";
+
+    /// <summary>Gets or sets the welcome message shown below the icon.</summary>
+    [Parameter]
+    public string? Message { get; set; } = "Start the conversation";
+
+    /// <summary>Gets or sets the suggestions rendered as chips.</summary>
+    [Parameter]
+    public IReadOnlyList<ChatSuggestion> Suggestions { get; set; } = EmptySuggestions;
+
+    /// <summary>Gets or sets an optional per-suggestion template.</summary>
+    [Parameter]
+    public RenderFragment<ChatSuggestion>? SuggestionTemplate { get; set; }
+
+    /// <summary>Gets or sets the callback fired when a suggestion is picked.</summary>
+    [Parameter]
+    public EventCallback<ChatSuggestion> OnSuggestionPicked { get; set; }
+
+    private IReadOnlyList<ChatSuggestion> EffectiveSuggestions => Suggestions ?? EmptySuggestions;
+
+    private Task OnSuggestionSelected(ChatSuggestion suggestion) =>
+        OnSuggestionPicked.HasDelegate ? OnSuggestionPicked.InvokeAsync(suggestion) : Task.CompletedTask;
+}

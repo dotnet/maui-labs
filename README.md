@@ -105,6 +105,7 @@ Source-generated AI tools plus a native block-based chat engine and drop-in MAUI
 | [![NuGet: Microsoft.Maui.AI.Chat](https://img.shields.io/nuget/v/Microsoft.Maui.AI.Chat.svg?label=Microsoft.Maui.AI.Chat)](https://www.nuget.org/packages/Microsoft.Maui.AI.Chat/) | Headless block-mapping conversation engine |
 | [![NuGet: Microsoft.Maui.AI.Chat.Controls](https://img.shields.io/nuget/v/Microsoft.Maui.AI.Chat.Controls.svg?label=Microsoft.Maui.AI.Chat.Controls)](https://www.nuget.org/packages/Microsoft.Maui.AI.Chat.Controls/) | Native MAUI chat controls and XAML templates |
 | [![NuGet: Microsoft.Maui.Chat.Controls](https://img.shields.io/nuget/v/Microsoft.Maui.Chat.Controls.svg?label=Microsoft.Maui.Chat.Controls)](https://www.nuget.org/packages/Microsoft.Maui.Chat.Controls/) | Provider-neutral human and group chat controls |
+| [![NuGet: Microsoft.Maui.Chat.Controls.Blazor](https://img.shields.io/nuget/v/Microsoft.Maui.Chat.Controls.Blazor.svg?label=Microsoft.Maui.Chat.Controls.Blazor)](https://www.nuget.org/packages/Microsoft.Maui.Chat.Controls.Blazor/) | Provider-neutral Blazor Hybrid chat controls (same neutral conversation model, no AI dependency) |
 
 ### macOS AppKit Backend
 

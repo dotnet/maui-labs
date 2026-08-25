@@ -1,0 +1,8 @@
+Portions of mchat.css in Microsoft.Maui.Chat.Controls.Blazor are adapted from the
+Microsoft.AspNetCore.Components.AI package in the dotnet/aspnetcore repository,
+specifically src/Components/AI/src/wwwroot/ai-chat.css at commit
+31b20463068f8d9ad900393bf96c9a182c397216.
+
+Copyright (c) .NET Foundation and Contributors.
+Licensed under the MIT license. See LICENSE at
+https://github.com/dotnet/aspnetcore/blob/main/LICENSE.txt.
