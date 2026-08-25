@@ -1,0 +1,39 @@
+@*
+    Sample chat page. Uses the neutral <ChatView> shell and registers two
+    MessageContentRenderer fragments for the linked GardenTaskContent and
+    GardenStickerContent types.
+*@
+@namespace ChatControls.BlazorHybrid.Sample.Components.Pages
+@using ChatControls.Sample
+@using Microsoft.Maui.Chat.Controls
+@using Microsoft.Maui.Chat.Controls.Blazor
+@inject TeamChatViewModel ViewModel
+
+<ChatView Conversation="ViewModel.Conversation"
+          Suggestions="ViewModel.Suggestions"
+          Placeholder="Message the garden crew"
+          WelcomeIcon="🌱"
+          WelcomeMessage="Say hi to Priya and Diego"
+          AllowAttachments="true"
+          AllowAudioCapture="true"
+          AllowLiveSpeech="true">
+
+    <MessageContentRenderer TContent="GardenTaskContent" Context="task">
+        <div class="garden-task">
+            <div class="garden-task__title">🌿 @task.Title</div>
+            <div class="garden-task__owner">@task.Assignee</div>
+            <div class="garden-task__meta">
+                Due @task.DueText
+                @if (task.Priority == GardenTaskPriority.High)
+                {
+                    <span> · High priority</span>
+                }
+            </div>
+        </div>
+    </MessageContentRenderer>
+
+    <MessageContentRenderer TContent="GardenStickerContent" Context="sticker">
+        <div class="garden-sticker" role="img" aria-label="@sticker.Description">@sticker.Glyph</div>
+    </MessageContentRenderer>
+
+</ChatView>

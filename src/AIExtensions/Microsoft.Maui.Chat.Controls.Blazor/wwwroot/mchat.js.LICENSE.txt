@@ -1,0 +1,10 @@
+mchat.js in Microsoft.Maui.Chat.Controls.Blazor is a new file written for this repository.
+It contains a minimal JS interop surface for the neutral Blazor chat components:
+focus, autoSize, scrollToBottom, stickToBottom, releaseStickToBottom. The design of the
+sticky-scroll observer follows the general pattern used by
+https://github.com/dotnet/aspnetcore/tree/31b20463068f8d9ad900393bf96c9a182c397216/src/Components/AI
+(pin to bottom while the user's scroll position is near the end, release when they scroll
+up) but does not copy any code.
+
+Copyright (c) .NET Foundation and Contributors.
+Licensed under the MIT license.
