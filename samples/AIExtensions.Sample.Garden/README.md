@@ -68,13 +68,14 @@ participate in a shared tool context while still writing through to singleton st
 ## Current-screen help
 
 This lets a user navigate to the review form and ask, "What is this text box for?"
-without leaving the form. `describe_current_screen` reads the visible `ProductReviewPage`,
-including the resolved product name and live rating, then identifies the editor by
-its `"Share your experience..."` placeholder.
+without leaving the form. `ChatViewModel` injects a fresh `RuntimePageIndexer`
+snapshot for deictic and back-navigation turns, while `describe_current_screen`
+remains available to the model. The live context includes the resolved product name,
+rating, and editor purpose without exposing user-entered text.
 
-The sidebar is marked with
-`IndexingProperties.ExcludeWithChildren="True"`. It remains visible and interactive
-but is omitted from compile-time and runtime UI indexes, so Sage receives the page's
+The home `ChatView` and persistent sidebar are marked with
+`IndexingProperties.ExcludeWithChildren="True"`. They remain visible and interactive
+but are omitted from compile-time and runtime UI indexes, so Sage receives the page's
 domain controls rather than recursively describing its own chat UI.
 
 ## Tool scenarios

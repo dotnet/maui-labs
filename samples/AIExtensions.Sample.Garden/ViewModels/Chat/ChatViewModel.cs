@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text;
 using AIExtensions.Sample.Garden.Messages;
 using AIExtensions.Sample.Garden.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -6,6 +7,7 @@ using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.AI.Attributes;
+using Microsoft.Maui.AI.Navigation;
 
 namespace AIExtensions.Sample.Garden.ViewModels;
 
@@ -36,15 +38,20 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
     private partial class GardenShopTools : AIToolContext { }
 
     private readonly IChatClient _chatClient;
+    private readonly ApplicationMapService _applicationMap;
     private List<ChatMessage> _history = [];
     private ToolApprovalRequestContent? _pendingApproval;
     private CancellationTokenSource _cts = new();
 
-    public ChatViewModel(IServiceProvider rootProvider, IChatClient innerChatClient)
+    public ChatViewModel(
+        IServiceProvider rootProvider,
+        IChatClient innerChatClient,
+        ApplicationMapService applicationMap)
     {
         _chatClient = new ChatClientBuilder(innerChatClient)
             .UseFunctionInvocation()
             .Build(rootProvider);
+        _applicationMap = applicationMap;
 
         WeakReferenceMessenger.Default.Register(this);
 
@@ -115,6 +122,59 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
         IsBusy = true;
 
         AddMessage(ChatMessageKind.User, text);
+        if (RequiresCurrentPageContext(text))
+        {
+            var snapshot = await _applicationMap.CaptureCurrentPageAsync();
+            if (snapshot is not null)
+            {
+                var context = new StringBuilder();
+                context.AppendLine("CURRENT-TURN LIVE SCREEN CONTEXT");
+                context.AppendLine($"Page: {snapshot.PageName}");
+                context.AppendLine();
+                context.AppendLine(snapshot.Markdown);
+
+                if (IsBackRequest(text))
+                {
+                    var currentDestinations = _applicationMap.GetDestinations()
+                        .Where(destination => string.Equals(
+                            destination.PageName,
+                            snapshot.PageName,
+                            StringComparison.OrdinalIgnoreCase))
+                        .ToArray();
+                    if (currentDestinations.Length == 1)
+                    {
+                        var destination = currentDestinations[0];
+                        context.AppendLine();
+                        context.AppendLine(
+                            $"VERIFIED ANCESTOR PATH: {string.Join(" -> ", destination.PagePath)}");
+                        context.AppendLine(
+                            "To explain back navigation, walk this path in reverse and use only " +
+                            "the Back/Cancel controls shown on those indexed pages:");
+                        foreach (var pageIdentity in destination.PagePath)
+                        {
+                            var page = _applicationMap.GetIndexedPage(pageIdentity);
+                            if (page is not null)
+                            {
+                                context.AppendLine();
+                                context.AppendLine($"## {page.Name}");
+                                context.AppendLine(page.Markdown);
+                            }
+                        }
+                    }
+                }
+
+                context.AppendLine();
+                context.AppendLine(
+                    "Use only facts present in this context when answering references to the " +
+                    "current screen. If the user's reference does not identify exactly one " +
+                    "control, ask one concise clarifying question and do not guess or explain " +
+                    "multiple controls.");
+
+                _history.Add(new ChatMessage(
+                    ChatRole.System,
+                    context.ToString()));
+            }
+        }
         _history.Add(new ChatMessage(ChatRole.User, text));
 
         try
@@ -284,6 +344,35 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
             AvailableTools.Add(new ToolInfoViewModel(tool.Name, tool.Description ?? ""));
     }
 
+    private static bool RequiresCurrentPageContext(string text)
+    {
+        var terms = text
+            .Split(
+                [' ', '\t', '\r', '\n', '.', ',', '?', '!', ':', ';', '"', '\'', '(', ')'],
+                StringSplitOptions.RemoveEmptyEntries)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return terms.Overlaps(
+        [
+            "back",
+            "button",
+            "control",
+            "current",
+            "field",
+            "here",
+            "screen",
+            "this",
+            "visible",
+        ]);
+    }
+
+    private static bool IsBackRequest(string text)
+        => text
+            .Split(
+                [' ', '\t', '\r', '\n', '.', ',', '?', '!', ':', ';', '"', '\'', '(', ')'],
+                StringSplitOptions.RemoveEmptyEntries)
+            .Contains("back", StringComparer.OrdinalIgnoreCase);
+
     private static string BuildSystemPrompt() =>
         """
         You are Sage, the friendly wayfinding and shopping assistant inside this garden-shop
@@ -293,6 +382,11 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
 
         ## Grounding rules
 
+        - Treat each user turn as a fresh grounding boundary. A tool result from an earlier
+          turn never satisfies a MUST-call rule for the current turn.
+        - The app may inject `CURRENT-TURN LIVE SCREEN CONTEXT` immediately before a user
+          message. That is fresh runtime data and satisfies the current-screen grounding
+          requirement for that turn; do not call `describe_current_screen` again.
         - Ground every app fact and action in tool results from this turn. Never assume the
           app follows a typical shopping-app layout.
         - Re-check dynamic product, cart, order, and review data with their dedicated tools.
@@ -305,23 +399,29 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
 
         First decide what the user means:
 
-        - WHERE / HOW / "walk me through": explain only. Call `find_in_app`, then call
-          `describe_app_destination` for every Destination ID in the returned page path that
-          you need to describe. Do not navigate or change app state.
-        - "BACK" questions are relative to the screen the user is on. Call
-          `describe_current_screen` before explaining where to go.
-        - TAKE / OPEN / SHOW / "go to": call `find_in_app`, identify the exact Destination ID,
-          gather any required parameter from product or order tools, then call
+        - WHERE / HOW / "walk me through": explain only. MUST call `find_in_app` this turn,
+          then MUST call `describe_app_destination` for the chosen Destination ID. That one
+          description returns every page from home through the destination. Do not navigate
+          or change app state.
+        - "BACK" questions are relative to the screen the user is on. Use the injected live
+          context (or call `describe_current_screen` when no context was injected), then MUST
+          call `find_in_app` and `describe_app_destination` this turn before explaining.
+        - TAKE / OPEN / SHOW / "go to": MUST call `find_in_app` this turn, identify the exact
+          Destination ID, gather any required parameter from product or order tools, then call
           `open_app_destination`.
-        - THIS / HERE / CURRENT / a visible field or button: call
-          `describe_current_screen` this turn. It is authoritative for the materialized page,
-          visible branches, and live state.
+        - THIS / HERE / CURRENT / a visible field or button: use the injected live context,
+          or call `describe_current_screen` when no context was injected. It is authoritative
+          for the materialized page, visible branches, and live state.
 
         Never answer a wayfinding question from memory. `find_in_app` searches only reachable
         destinations and returns a verified page path from home. `describe_app_destination`
-        contains the exact indexed labels and controls for one page. For a walkthrough, read
-        every page in the path before writing steps, name the exact control that causes each
-        transition, and say when the index does not reveal a complete interaction.
+        contains the exact indexed labels and controls for the complete path. For a
+        walkthrough, name the exact control that causes each transition and say when the
+        index does not reveal a complete interaction.
+
+        For current-control questions, paraphrase only labels, hints, and state returned by
+        `describe_current_screen`. Do not invent requirements, policies, examples, or advice.
+        If the user's reference is ambiguous, ask which visible control they mean.
 
         `open_app_destination` changes only the visible page. Sage remains available in the
         persistent sidebar and the conversation continues.
