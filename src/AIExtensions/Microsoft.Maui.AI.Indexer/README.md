@@ -69,36 +69,41 @@ public partial class MyAppIndexedPageCatalog : IndexedPageCatalog
 public abstract class IndexedPageCatalog
 {
     public abstract IReadOnlyList<IndexedPage> Pages { get; }
+    public string? EntryPageName { get; }
+    public string? EntryPageTypeName { get; }
+    public IndexedPage? Home { get; }
     public IndexedPage? FindByName(string name);
 }
 
 public sealed class IndexedPage
 {
     public string Name { get; }
+    public string TypeName { get; }
     public string? FilePath { get; }
     public string Markdown { get; }
+    public IReadOnlyList<string> Routes { get; }
+    public string? Route { get; }
 }
 ```
 
 ## Consuming the Index
 
-The package produces the indexes but does not prescribe retrieval — **searching is
-the app's job**. A typical integration exposes them to an AI agent as a few small tools. The Garden
-sample ([`Services/PageDiscovery.cs`](../../../samples/AIExtensions.Sample.Garden/Services/PageDiscovery.cs))
-does exactly this, backing three tools with `MyAppIndexedPageCatalog.Default`:
+The package produces the deterministic indexes. Apps can consume them directly:
 
 ```csharp
-// list_app_pages — enumerate every indexed page
 foreach (var page in MyAppIndexedPageCatalog.Default.Pages)
-    Console.WriteLine($"{page.Name} — {page.FilePath}");
+    Console.WriteLine($"{page.Name} — {page.Route ?? "not directly routable"}");
 
-// get_page_ui — return one page's full semantic Markdown
 var md = MyAppIndexedPageCatalog.Default.FindByName("ProductDetailPage")?.Markdown;
-
-// search_ui — a lightweight in-memory RAG over the Markdown corpus
-var hits = MyAppIndexedPageCatalog.Default.Pages
-    .Where(p => p.Markdown.Contains(query, StringComparison.OrdinalIgnoreCase));
 ```
+
+For a unified wayfinding service, use `Microsoft.Maui.AI.Navigation`.
+`ApplicationMapService` composes this catalog with runtime current-page context and
+Shell navigation, then searches only pages with reliable destinations. The Garden
+sample's
+[`AppWayfindingTools`](../../../samples/AIExtensions.Sample.Garden/Services/AppWayfindingTools.cs)
+exposes that service as focused, orthogonal search, destination, current-page,
+current-route, and navigation tools.
 
 If your app spans multiple assemblies, collect each assembly's
 `{AssemblyName}IndexedPageCatalog.Default.Pages` yourself and merge them — there is no
@@ -166,7 +171,7 @@ Use the two indexes together:
 
 | Question | Source |
 |---|---|
-| "How do I get to reviews?" | Search the compile-time `IndexedPageCatalog` and trace the full path |
+| "How do I get to reviews?" | Search the compile-time catalog through `ApplicationMapService` and inspect its page path |
 | "What is this text box for?" | Capture the runtime `CurrentPageSnapshot` |
 | "What can ever appear on this page?" | Read the compile-time `IndexedPage` |
 | "What is visible on this page right now?" | Read the runtime snapshot |
