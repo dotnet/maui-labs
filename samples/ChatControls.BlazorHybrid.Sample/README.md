@@ -96,6 +96,12 @@ PR that introduced the sample.
 | Light theme | `data-theme="light"` | palette switches back to the light default | ✅ |
 | ARIA on message list | | `.mchat-message-list[role="log"][aria-live="polite"]` | ✅ |
 | ARIA on send button | | primary composer button has `aria-label="Send message"` | ✅ |
+| **Single-mic — speech blocks audio button** | Composer 🗣 (start speech) | `button[aria-label="Stop live speech"]` visible + enabled AND `button[aria-label="Record audio"].disabled === true`. Trying `.click()` on the disabled audio button is a DOM no-op (verified) — mic stays with speech. | ✅ |
+| **Single-mic — audio blocks speech button** | Composer 🎤 (start audio) | `.mchat-icon-btn--recording` (Stop recording) enabled AND `button[aria-label="Start live speech"].disabled === true`. | ✅ |
+| **Single-mic — audio→speech preempt** | Composer 🎤 then 🗣 via `.click()` | `StartLiveSpeechAsync` awaits `EnsureAudioStoppedAsync` (cancels `_audioCts` + awaits `recorder.CancelAsync()`) before subscribing; final DOM shows only one active modality, `.mchat-attachment-chip` count did not change, `_activeRecorder` cleared. | ✅ |
+| **Single-mic — speech→audio preempt** | Composer 🗣 then 🎤 via `.click()` | `StartAudioRecordingAsync` awaits `EnsureLiveSpeechStoppedAsync` (cancels `_speechCts` + unsubscribes + awaits `recognizer.StopAsync()`) before starting; final DOM shows only one active modality, recognizer handler count = 0. | ✅ |
+| **Single-mic — chained toggles converge** | Rapid Stop speech + Start audio in one JS frame | Final state is single-owner-idle — no stuck `IsListening` / `IsRecordingAudio` / `IsAudioStarting` / `IsSpeechStarting`, no console errors. | ✅ |
+
 
 Reference invocations (adapt the agent port to whatever `maui devflow list` reports for
 this sample):
