@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
+    <PackageId>Microsoft.Maui.AI.Indexer</PackageId>
+    <Description>.NET MAUI UI indexer — generates compile-time semantic Markdown for every XAML page and runtime snapshots of the current page</Description>
+    <RootNamespace>Microsoft.Maui.AI.Indexer</RootNamespace>
+    <PackRepoRootReadme>false</PackRepoRootReadme>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Microsoft.Maui.AI.Indexer.Generators\Microsoft.Maui.AI.Indexer.Generators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!-- Pack the source generator DLL into the analyzers folder so NuGet consumers get it -->
+  <PropertyGroup>
+    <GetTargetPathDependsOn>$(GetTargetPathDependsOn);_ResolveGeneratorPath</GetTargetPathDependsOn>
+  </PropertyGroup>
+
+  <Target Name="_ResolveGeneratorPath" AfterTargets="ResolveProjectReferences">
+    <ItemGroup>
+      <None Include="@(Analyzer)" Condition="'%(Analyzer.NuGetPackageId)' == '' and '%(Filename)' == 'Microsoft.Maui.AI.Indexer.Generators'"
+            Pack="true"
+            PackagePath="analyzers/dotnet/cs"
+            Visible="false" />
+    </ItemGroup>
+  </Target>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <None Include="build/Microsoft.Maui.AI.Indexer.targets" Pack="true" PackagePath="build/Microsoft.Maui.AI.Indexer.targets" />
+    <None Include="build/Microsoft.Maui.AI.Indexer.targets" Pack="true" PackagePath="buildTransitive/Microsoft.Maui.AI.Indexer.targets" />
+  </ItemGroup>
+
+</Project>
