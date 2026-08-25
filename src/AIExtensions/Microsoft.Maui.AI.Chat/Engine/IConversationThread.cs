@@ -50,6 +50,13 @@ public interface IConversationThread
     /// </summary>
     void CompleteTurn();
 
+    /// <summary>
+    /// Discards the pending, uncommitted turn after cancellation or failure.
+    /// Committed turns and their provider conversation state are preserved.
+    /// </summary>
+    /// <remarks>Calling this when no turn is pending must be a no-op.</remarks>
+    void AbortTurn();
+
     /// <summary>Returns the raw updates for all committed turns.</summary>
     IReadOnlyList<ChatResponseUpdate> GetUpdates();
 

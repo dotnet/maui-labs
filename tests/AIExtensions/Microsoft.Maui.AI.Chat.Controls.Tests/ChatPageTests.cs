@@ -380,6 +380,38 @@ public class ChatPageTests
         Assert.Null(control.SendError);
     }
 
+    [Fact]
+    public async Task StopAsync_AgentSendIsGracefulAndDoesNotRestoreSentDraft()
+    {
+        var started = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var response = new TaskCompletionSource<ChatResponse>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var client = new TestChatClient((_, _, cancellationToken) =>
+        {
+            started.TrySetResult();
+            cancellationToken.Register(
+                () => response.TrySetCanceled(cancellationToken));
+            return response.Task;
+        });
+        var session = SessionFactory.Create(client);
+        var control = new CopilotChatView
+        {
+            Session = session,
+            Text = "sent once",
+        };
+
+        var send = control.SendCurrentTextAsync();
+        await started.Task;
+        await control.StopAsync();
+        await send;
+
+        Assert.Equal(ConversationStatus.Idle, session.Status);
+        Assert.Equal(string.Empty, control.Text);
+        Assert.Equal("Response stopped.", control.InputStatusMessage);
+        Assert.Null(control.SendError);
+    }
+
     private sealed class FactoryCopilotChatView : CopilotChatView
     {
         public ChatMessagesView CreateMessageList() => CreateMessageListView();

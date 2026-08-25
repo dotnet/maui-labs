@@ -25,6 +25,7 @@ public sealed class TeamChatViewModel : INotifyPropertyChanged
     private bool _diegoIsTyping;
     private bool _isConversationBusy;
     private bool _failNextSend;
+    private bool _slowNextSend;
     private ConversationMessageStatus _selectedDeliveryStatus =
         ConversationMessageStatus.Delivered;
 
@@ -160,6 +161,12 @@ public sealed class TeamChatViewModel : INotifyPropertyChanged
         set => SetProperty(ref _failNextSend, value);
     }
 
+    public bool SlowNextSend
+    {
+        get => _slowNextSend;
+        set => SetProperty(ref _slowNextSend, value);
+    }
+
     public ConversationMessageStatus SelectedDeliveryStatus
     {
         get => _selectedDeliveryStatus;
@@ -242,10 +249,12 @@ public sealed class TeamChatViewModel : INotifyPropertyChanged
         _diegoIsTyping = false;
         _isConversationBusy = false;
         _failNextSend = false;
+        _slowNextSend = false;
         OnPropertyChanged(nameof(PriyaIsTyping));
         OnPropertyChanged(nameof(DiegoIsTyping));
         OnPropertyChanged(nameof(IsConversationBusy));
         OnPropertyChanged(nameof(FailNextSend));
+        OnPropertyChanged(nameof(SlowNextSend));
         Conversation.Reset();
         NotifyLastOutgoingStatusChanged();
     }
@@ -273,7 +282,11 @@ public sealed class TeamChatViewModel : INotifyPropertyChanged
 
         try
         {
-            await Task.Delay(250, cancellationToken);
+            var deliveryDelay = SlowNextSend
+                ? TimeSpan.FromSeconds(5)
+                : TimeSpan.FromMilliseconds(250);
+            SlowNextSend = false;
+            await Task.Delay(deliveryDelay, cancellationToken);
             outgoing.Status = ConversationMessageStatus.Sent;
             NotifyLastOutgoingStatusChanged();
             await Task.Delay(250, cancellationToken);

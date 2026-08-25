@@ -22,6 +22,13 @@ public class ChatViewTests
         Assert.False(view.CanSend);
         Assert.False(view.HasAttachments);
         Assert.False(view.AllowAttachments);
+        Assert.False(view.AllowAudioCapture);
+        Assert.False(view.AllowLiveSpeech);
+        Assert.False(view.IsComposing);
+        Assert.True(view.IsInputEnabled);
+        Assert.False(view.CanStop);
+        Assert.True(view.ShowSendButton);
+        Assert.NotNull(view.InputContext);
         Assert.Null(view.SendError);
         Assert.Null(view.AttachmentError);
         Assert.False(view.HasSendError);
@@ -32,6 +39,9 @@ public class ChatViewTests
         Assert.True(view.AutoScrollToLatest);
         Assert.NotNull(view.Appearance);
         Assert.Equal(10L * 1024 * 1024, view.MaxAttachmentBytes);
+        Assert.Equal(10, view.MaximumAttachmentCount);
+        Assert.Equal(50L * 1024 * 1024, view.MaximumTotalAttachmentBytes);
+        Assert.Equal(10L * 1024 * 1024, view.MaximumAudioBytes);
     }
 
     [Fact]
@@ -174,6 +184,18 @@ public class ChatViewTests
 
         conversation.SetStatus(ChatConversationStatus.Busy);
 
+        Assert.False(view.CanSend);
+    }
+
+    [Fact]
+    public void CanSend_IsFalseWhileTheConversationAwaitsInput()
+    {
+        var conversation = ChatFactory.Conversation();
+        var view = new ChatView { Conversation = conversation, Text = "hello" };
+
+        conversation.SetStatus(ChatConversationStatus.AwaitingInput);
+
+        Assert.True(view.IsBusy);
         Assert.False(view.CanSend);
     }
 
@@ -482,6 +504,7 @@ public class ChatViewTests
         await view.PickAttachmentsAsync();
 
         Assert.Equal(ChatView.DefaultAttachmentErrorMessage, view.AttachmentError);
+        Assert.Equal(ChatView.DefaultAttachmentErrorMessage, view.InputContext.ErrorMessage);
         Assert.True(view.HasAttachmentError);
         Assert.DoesNotContain("secret", view.AttachmentError!, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(view.Attachments);
@@ -607,18 +630,27 @@ public class ChatViewTests
         var inputEntryStyle = new Style(typeof(Entry));
         var attachButtonStyle = new Style(typeof(Button));
         var sendButtonStyle = new Style(typeof(Button));
+        var stopButtonStyle = new Style(typeof(Button));
+        var audioButtonStyle = new Style(typeof(Button));
+        var speechButtonStyle = new Style(typeof(Button));
         var view = new ChatView
         {
             InputAreaStyle = inputAreaStyle,
             InputEntryStyle = inputEntryStyle,
             AttachButtonStyle = attachButtonStyle,
             SendButtonStyle = sendButtonStyle,
+            StopButtonStyle = stopButtonStyle,
+            AudioButtonStyle = audioButtonStyle,
+            LiveSpeechButtonStyle = speechButtonStyle,
         };
 
         Assert.Same(inputAreaStyle, view.InputAreaStyle);
         Assert.Same(inputEntryStyle, view.InputEntryStyle);
         Assert.Same(attachButtonStyle, view.AttachButtonStyle);
         Assert.Same(sendButtonStyle, view.SendButtonStyle);
+        Assert.Same(stopButtonStyle, view.StopButtonStyle);
+        Assert.Same(audioButtonStyle, view.AudioButtonStyle);
+        Assert.Same(speechButtonStyle, view.LiveSpeechButtonStyle);
     }
 
     [Fact]
@@ -637,8 +669,11 @@ public class ChatViewTests
         Assert.Equal("PART_InputArea", ChatView.InputAreaPartName);
         Assert.Equal("PART_Attachments", ChatView.AttachmentsPartName);
         Assert.Equal("PART_AttachButton", ChatView.AttachButtonPartName);
+        Assert.Equal("PART_AudioButton", ChatView.AudioButtonPartName);
+        Assert.Equal("PART_LiveSpeechButton", ChatView.LiveSpeechButtonPartName);
         Assert.Equal("PART_InputEntry", ChatView.InputEntryPartName);
         Assert.Equal("PART_SendButton", ChatView.SendButtonPartName);
+        Assert.Equal("PART_StopButton", ChatView.StopButtonPartName);
         Assert.Equal("PART_Messages", ChatMessagesView.MessagesPartName);
     }
 

@@ -141,6 +141,25 @@ public class ChatThemeTests
         Assert.IsType<ChatMessagesView>(new FactoryChatView().CreateMessageList());
 
     [Fact]
+    public void ChatView_DefaultTemplateExposesMultimodalActionParts()
+    {
+        var theme = new ChatControlsTheme();
+        var view = new PartChatView
+        {
+            AllowAudioCapture = true,
+            AllowLiveSpeech = true,
+            ControlTemplate = Assert.IsType<ControlTemplate>(
+                theme[ChatThemeKeys.ChatViewTemplate]),
+        };
+
+        Assert.Equal("ChatAttachButton", view.AttachButton?.AutomationId);
+        Assert.Equal("ChatAudioButton", view.AudioButton?.AutomationId);
+        Assert.Equal("ChatLiveSpeechButton", view.LiveSpeechButton?.AutomationId);
+        Assert.Equal("ChatSendButton", view.SendButton?.AutomationId);
+        Assert.Equal("ChatStopButton", view.StopButton?.AutomationId);
+    }
+
+    [Fact]
     public async Task ChatView_WithACodeTemplate_StillSends()
     {
         var conversation = TestHelpers.ChatFactory.Conversation();
@@ -206,5 +225,16 @@ public class ChatThemeTests
     private sealed class PartChatView : ChatView
     {
         public ContentView? HeaderPart => FindPart<ContentView>(HeaderPartName);
+
+        public Button? AttachButton => FindPart<Button>(AttachButtonPartName);
+
+        public Button? AudioButton => FindPart<Button>(AudioButtonPartName);
+
+        public Button? LiveSpeechButton =>
+            FindPart<Button>(LiveSpeechButtonPartName);
+
+        public Button? SendButton => FindPart<Button>(SendButtonPartName);
+
+        public Button? StopButton => FindPart<Button>(StopButtonPartName);
     }
 }

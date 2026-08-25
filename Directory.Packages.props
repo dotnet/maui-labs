@@ -31,11 +31,13 @@
 
   <!-- AI (Microsoft.Extensions.AI + Azure OpenAI) -->
   <ItemGroup Label="AI">
+    <PackageVersion Include="CommunityToolkit.Maui.Core" Version="14.0.1" />
     <PackageVersion Include="Microsoft.Extensions.AI" Version="$(MicrosoftExtensionsAIVersion)" />
     <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="$(MicrosoftExtensionsAIOpenAIVersion)" />
     <PackageVersion Include="Azure.AI.OpenAI" Version="$(AzureAIOpenAIVersion)" />
     <PackageVersion Include="Azure.Identity" Version="$(AzureIdentityVersion)" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="$(CommunityToolkitMvvmVersion)" />
+    <PackageVersion Include="Plugin.Maui.Audio" Version="4.0.0" />
   </ItemGroup>
 
   <!-- Roslyn (for source generators) -->

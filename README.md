@@ -95,8 +95,8 @@ Source-generated AI tools plus a native block-based chat engine and drop-in MAUI
 
 - **AOT-friendly tools** — `[ExportAIFunction]`, DI/keyed-DI parameter binding, property tools, and generated tool contexts.
 - **Headless chat engine** — streaming typed blocks, tools, approvals, automatic UI actions, reasoning, typed state, retry, and application-provided conversation persistence.
-- **Provider-neutral chat controls** — human/group `ChatView` models and XAML templates with no AI dependency.
-- **Native AI chat controls** — zero-config `CopilotChatView`, predictive state, rich content, attachments, suggestions, retry, accessibility, and full theme/control-template replacement.
+- **Provider-neutral chat controls** — human/group `ChatView` models, multimodal input, stop/cancel, and XAML templates with no AI dependency.
+- **Native AI chat controls** — zero-config `CopilotChatView`, predictive state, rich content, files/audio/live speech, suggestions, retry, accessibility, and full theme/control-template replacement.
 - **Typed tool views** — `[ToolBlock]` generates simple call/result projections while custom handlers support aggregate domain blocks.
 
 | Package | Description |

@@ -118,7 +118,12 @@ public abstract class ChatConversation : BindableObject
     /// <param name="draft">The draft the composer would send.</param>
     /// <returns><see langword="true"/> when the draft has content and the conversation is not busy.</returns>
     public virtual bool CanSend(ChatDraft? draft) =>
-        draft is not null && !draft.IsEmpty && Status != ChatConversationStatus.Busy;
+        draft is not null
+        && !draft.IsEmpty
+        && Status is not (ChatConversationStatus.Busy or ChatConversationStatus.AwaitingInput);
+
+    /// <summary>Gets whether the current operation can be canceled through <see cref="CancelAsync"/>.</summary>
+    public virtual bool CanCancel => false;
 
     /// <summary>
     /// Sends a draft. Returns whether the draft was accepted, which is what tells a composer to clear
@@ -145,6 +150,21 @@ public abstract class ChatConversation : BindableObject
     /// <param name="cancellationToken">Cancels the send.</param>
     /// <returns><see langword="true"/> when the draft was accepted; otherwise <see langword="false"/>.</returns>
     protected abstract Task<bool> SendCoreAsync(ChatDraft draft, CancellationToken cancellationToken);
+
+    /// <summary>Cancels the current operation when <see cref="CanCancel"/> is <see langword="true"/>.</summary>
+    /// <param name="cancellationToken">Cancels the cancellation request itself.</param>
+    public Task CancelAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return CanCancel
+            ? CancelCoreAsync(cancellationToken)
+            : Task.CompletedTask;
+    }
+
+    /// <summary>Performs provider-specific cancellation.</summary>
+    /// <param name="cancellationToken">Cancels the cancellation request itself.</param>
+    protected virtual Task CancelCoreAsync(CancellationToken cancellationToken) =>
+        Task.CompletedTask;
 
     // ── Automatic change publication ──
 

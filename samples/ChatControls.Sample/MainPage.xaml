@@ -26,6 +26,8 @@
                        Conversation="{Binding Conversation}"
                        Suggestions="{Binding Suggestions}"
                        AllowAttachments="True"
+                       AllowAudioCapture="True"
+                       AllowLiveSpeech="True"
                        Placeholder="Message the garden crew..."
                        WelcomeMessage="Plan something together"
                        WelcomeIcon="&#x1F331;"
@@ -237,6 +239,23 @@
                                 Clicked="OnClearAttachmentsClicked" />
                     </Grid>
 
+                    <Label Text="Multimodal input"
+                           FontSize="12"
+                           FontAttributes="Bold" />
+                    <Grid ColumnDefinitions="*,Auto"
+                          ColumnSpacing="8">
+                        <VerticalStackLayout Spacing="1">
+                            <Label Text="Use simulated microphone"
+                                   VerticalOptions="Center" />
+                            <Label Text="Off uses the real platform recorder and speech recognizer."
+                                   FontSize="10"
+                                   Opacity="0.6" />
+                        </VerticalStackLayout>
+                        <Switch Grid.Column="1"
+                                AutomationId="SimulatedVoiceSwitch"
+                                Toggled="OnSimulatedVoiceToggled" />
+                    </Grid>
+
                     <BoxView HeightRequest="1"
                              Color="{AppThemeBinding Light=#D6E3E0, Dark=#2B4540}" />
 
@@ -293,12 +312,20 @@
                            Opacity="0.65" />
 
                     <Grid ColumnDefinitions="*,Auto"
+                          RowDefinitions="Auto,Auto"
                           ColumnSpacing="8">
                         <Label Text="Fail next composer send"
                                VerticalOptions="Center" />
                         <Switch Grid.Column="1"
                                 IsToggled="{Binding FailNextSend}"
                                 AutomationId="FailNextSendSwitch" />
+                        <Label Grid.Row="1"
+                               Text="Slow next composer send"
+                               VerticalOptions="Center" />
+                        <Switch Grid.Row="1"
+                                Grid.Column="1"
+                                IsToggled="{Binding SlowNextSend}"
+                                AutomationId="SlowNextSendSwitch" />
                     </Grid>
                     <Button Text="Remove last message"
                             Command="{Binding RemoveLastMessageCommand}"

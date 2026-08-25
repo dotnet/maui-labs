@@ -108,6 +108,12 @@ public class MediaMessageContent : MessageContent
     /// <summary>Gets whether <see cref="MediaType"/> denotes an image, which the default templates render inline.</summary>
     public bool IsImage => MediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Gets whether <see cref="MediaType"/> denotes playable audio.</summary>
+    public bool IsAudio => MediaType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Gets whether <see cref="MediaType"/> denotes video.</summary>
+    public bool IsVideo => MediaType.StartsWith("video/", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Gets or sets the optional display file name.</summary>
     public string? FileName
     {

@@ -1,5 +1,6 @@
 using Microsoft.Maui.Chat.Controls.Themes;
 using Microsoft.Maui.Controls.Shapes;
+using Plugin.Maui.Audio;
 
 namespace Microsoft.Maui.Chat.Controls;
 
@@ -132,6 +133,10 @@ public class ChatFileContentView : ChatBubbleView
 {
     private readonly Label _nameLabel;
     private readonly Label _detailLabel;
+    private readonly Button _playButton;
+    private IAudioPlayer? _audioPlayer;
+    private Stream? _audioStream;
+    private MediaMessageContent? _audioContent;
 
     /// <summary>Creates the view.</summary>
     public ChatFileContentView()
@@ -142,16 +147,40 @@ public class ChatFileContentView : ChatBubbleView
         _detailLabel = new Label { LineBreakMode = LineBreakMode.NoWrap };
         _detailLabel.SetDynamicResource(StyleProperty, ChatThemeKeys.FileDetailStyle);
 
+        _playButton = new Button
+        {
+            Text = "Play",
+            AutomationId = "ChatAudioPlaybackButton",
+            VerticalOptions = LayoutOptions.Center,
+        };
+        _playButton.SetDynamicResource(
+            StyleProperty,
+            ChatThemeKeys.AudioPlaybackButtonStyle);
+        _playButton.Clicked += OnPlayClicked;
+
+        var labels = new VerticalStackLayout
+        {
+            Spacing = 2,
+            Children = { _nameLabel, _detailLabel },
+        };
+        var cardContent = new Grid
+        {
+            ColumnDefinitions =
+            {
+                new ColumnDefinition(GridLength.Star),
+                new ColumnDefinition(GridLength.Auto),
+            },
+            ColumnSpacing = 8,
+        };
+        cardContent.Add(labels);
+        cardContent.Add(_playButton, 1);
+
         var card = new Border
         {
             Padding = new Thickness(10, 8),
             StrokeThickness = 0,
             StrokeShape = new RoundRectangle { CornerRadius = 10 },
-            Content = new VerticalStackLayout
-            {
-                Spacing = 2,
-                Children = { _nameLabel, _detailLabel },
-            },
+            Content = cardContent,
         };
         card.SetDynamicResource(StyleProperty, ChatThemeKeys.FileCardStyle);
 
@@ -164,9 +193,40 @@ public class ChatFileContentView : ChatBubbleView
         base.RefreshContent();
 
         var media = Item?.Content as MediaMessageContent;
+        if (!ReferenceEquals(_audioContent, media))
+            DisposeAudioPlayer();
         _nameLabel.Text = media?.FileName ?? media?.DisplayName ?? string.Empty;
         _detailLabel.Text = media is null ? string.Empty : DescribeFile(media);
         _detailLabel.IsVisible = _detailLabel.Text.Length > 0;
+        var canPlay = media is not null && CanPlayAudio(media);
+        var isPlaying =
+            canPlay
+            && ReferenceEquals(_audioContent, media)
+            && _audioPlayer?.IsPlaying == true;
+        _playButton.IsVisible = canPlay;
+        _playButton.Text = isPlaying ? "Pause" : "Play";
+        SemanticProperties.SetDescription(
+            _playButton,
+            media is null
+                ? string.Empty
+                : $"{(isPlaying ? "Pause" : "Play")} {media.DisplayName}");
+    }
+
+    /// <inheritdoc />
+    protected override void OnItemChanged(
+        ChatContentItem? oldItem,
+        ChatContentItem? newItem)
+    {
+        DisposeAudioPlayer();
+        base.OnItemChanged(oldItem, newItem);
+    }
+
+    /// <inheritdoc />
+    protected override void OnHandlerChanging(HandlerChangingEventArgs args)
+    {
+        if (args.NewHandler is null)
+            DisposeAudioPlayer();
+        base.OnHandlerChanging(args);
     }
 
     /// <inheritdoc />
@@ -191,5 +251,96 @@ public class ChatFileContentView : ChatBubbleView
             >= kilobyte => $"{bytes / (double)kilobyte:0.#} KB",
             _ => $"{bytes} B",
         };
+    }
+
+    private void OnPlayClicked(object? sender, EventArgs e)
+    {
+        if (Item?.Content is not MediaMessageContent media
+            || !CanPlayAudio(media))
+            return;
+
+        if (_audioPlayer?.IsPlaying == true)
+        {
+            _audioPlayer.Pause();
+            _playButton.Text = "Play";
+            return;
+        }
+
+        if (!ReferenceEquals(_audioContent, media))
+        {
+            DisposeAudioPlayer();
+            _audioContent = media;
+            if (media.HasData)
+            {
+                _audioStream = new MemoryStream(media.Data.ToArray(), writable: false);
+                _audioPlayer = AudioManager.Current.CreatePlayer(_audioStream);
+            }
+            else
+            {
+                _audioPlayer = AudioManager.Current.CreatePlayer(
+                    GetAudioFilePath(media)!);
+            }
+            _audioPlayer.PlaybackEnded += OnPlaybackEnded;
+            _audioPlayer.Error += OnPlaybackEnded;
+        }
+
+        _audioPlayer?.Play();
+        _playButton.Text = "Pause";
+    }
+
+    private void OnPlaybackEnded(object? sender, EventArgs e)
+    {
+        var dispatcher =
+            Application.Current?.Dispatcher
+            ?? Microsoft.Maui.Dispatching.Dispatcher.GetForCurrentThread();
+        if (dispatcher is { IsDispatchRequired: true })
+        {
+            dispatcher.Dispatch(() => ResetPlayback(sender));
+            return;
+        }
+
+        ResetPlayback(sender);
+    }
+
+    private void ResetPlayback(object? sender)
+    {
+        if (ReferenceEquals(sender, _audioPlayer))
+            _audioPlayer?.Stop();
+        _playButton.Text = "Play";
+    }
+
+    private void DisposeAudioPlayer()
+    {
+        if (_audioPlayer is not null)
+        {
+            _audioPlayer.PlaybackEnded -= OnPlaybackEnded;
+            _audioPlayer.Error -= OnPlaybackEnded;
+            _audioPlayer.Stop();
+            _audioPlayer.Dispose();
+            _audioPlayer = null;
+        }
+
+        _audioStream?.Dispose();
+        _audioStream = null;
+        _audioContent = null;
+    }
+
+    private static bool CanPlayAudio(MediaMessageContent media) =>
+        media.IsAudio
+        && (media.HasData || GetAudioFilePath(media) is not null);
+
+    private static string? GetAudioFilePath(MediaMessageContent media)
+    {
+        if (media.Uri is not { } uri)
+            return null;
+
+        var path = uri.IsAbsoluteUri && uri.IsFile
+            ? uri.LocalPath
+            : !uri.IsAbsoluteUri
+                ? uri.OriginalString
+                : null;
+        return path is not null && File.Exists(path)
+            ? path
+            : null;
     }
 }

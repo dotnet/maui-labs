@@ -40,9 +40,25 @@ public class UIAgentThreadTests
     public async Task SendMessageAsync_Failure_LeavesPartialTurnUncommitted()
     {
         var thread = new InMemoryConversationThread("thread-1");
-        var client = CreateClient(ResponseEmitters.EmitErrorAfterTokens(
-            ["partial"],
-            new InvalidOperationException("boom")));
+        IReadOnlyList<ChatMessage>? secondRequest = null;
+        var callCount = 0;
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((messages, options, cancellationToken) =>
+        {
+            callCount++;
+            if (callCount == 1)
+            {
+                return ResponseEmitters.EmitErrorAfterTokens(
+                    ["partial"],
+                    new InvalidOperationException("boom"),
+                    cancellationToken);
+            }
+
+            secondRequest = messages.ToArray();
+            return ResponseEmitters.EmitTextResponse(
+                "recovered",
+                cancellationToken);
+        });
         var agent = CreateAgent(client, thread);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -51,8 +67,64 @@ public class UIAgentThreadTests
 
         Assert.Empty(thread.GetUpdates());
         Assert.Empty(thread.GetMessageHistory());
-        Assert.Equal(2, thread.PendingUpdateCount);
+        Assert.Equal(0, thread.PendingUpdateCount);
         Assert.Equal(0, thread.CompleteTurnCallCount);
+        Assert.Equal(1, thread.AbortTurnCallCount);
+
+        await EnumerateAsync(agent.SendMessageAsync(
+            new ChatMessage(ChatRole.User, "Fresh")));
+
+        var freshMessage = Assert.Single(secondRequest!);
+        Assert.Equal("Fresh", freshMessage.Text);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_StatefulFailure_PreservesCommittedConversation()
+    {
+        var thread = new InMemoryConversationThread("thread-1");
+        thread.AppendUserMessage(new ChatMessage(ChatRole.User, "committed"));
+        thread.AppendUpdate(new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            MessageId = "assistant-1",
+            ConversationId = "conversation-1",
+            Contents = [new TextContent("committed response")],
+        });
+        thread.CompleteTurn();
+
+        ChatOptions? secondOptions = null;
+        IReadOnlyList<ChatMessage>? secondRequest = null;
+        var callCount = 0;
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((messages, options, cancellationToken) =>
+        {
+            callCount++;
+            if (callCount == 1)
+            {
+                return ResponseEmitters.EmitErrorAfterTokens(
+                    ["partial"],
+                    new InvalidOperationException("boom"),
+                    cancellationToken);
+            }
+
+            secondOptions = options;
+            secondRequest = messages.ToArray();
+            return ResponseEmitters.EmitTextResponse(
+                "recovered",
+                cancellationToken);
+        });
+        var agent = CreateAgent(client, thread);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            EnumerateAsync(agent.SendMessageAsync(
+                new ChatMessage(ChatRole.User, "failed"))));
+        await EnumerateAsync(agent.SendMessageAsync(
+            new ChatMessage(ChatRole.User, "fresh")));
+
+        Assert.Equal("conversation-1", secondOptions?.ConversationId);
+        Assert.Equal("fresh", Assert.Single(secondRequest!).Text);
+        Assert.Equal(1, thread.AbortTurnCallCount);
+        Assert.Equal(2, thread.CommittedTurnCount);
     }
 
     [Fact]
