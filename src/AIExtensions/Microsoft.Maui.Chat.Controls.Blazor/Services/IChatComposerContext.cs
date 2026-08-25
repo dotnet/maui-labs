@@ -2,7 +2,6 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
-using Microsoft.AspNetCore.Components;
 using Microsoft.Maui.Chat.Controls;
 
 namespace Microsoft.Maui.Chat.Controls.Blazor;
@@ -11,9 +10,16 @@ namespace Microsoft.Maui.Chat.Controls.Blazor;
 /// The reusable state and action surface for a <see cref="ChatView"/> composer.
 /// </summary>
 /// <remarks>
+/// <para>
 /// A replacement composer, or the leading and trailing action fragments a consumer supplies to
 /// <see cref="ChatView"/>, bind to this context instead of reaching into the shell. The
 /// Blazor analogue of the native <c>ChatInputContext</c>.
+/// </para>
+/// <para>
+/// Actions expose plain <see cref="Task"/> / <see cref="ValueTask"/> methods so a consumer can
+/// <c>@onclick="() =&gt; composer.SubmitAsync()"</c> or invoke them programmatically without
+/// depending on Blazor's <c>EventCallback</c> machinery.
+/// </para>
 /// </remarks>
 public interface IChatComposerContext
 {
@@ -65,20 +71,25 @@ public interface IChatComposerContext
     /// <summary>Gets the user-safe composer error, or <see langword="null"/> when there is none.</summary>
     string? ErrorMessage { get; }
 
-    /// <summary>Submits the current draft. Never throws; expected failures surface through <see cref="ErrorMessage"/>.</summary>
-    EventCallback SubmitCallback { get; }
+    /// <summary>
+    /// Submits the current draft. Never throws; expected failures surface through
+    /// <see cref="ErrorMessage"/>. When the send is accepted the composer text and staged
+    /// attachments are cleared; on rejection or failure the draft is preserved so an
+    /// ordinary re-submit re-tries the same request.
+    /// </summary>
+    Task SubmitAsync();
 
-    /// <summary>Cancels the active send or stream.</summary>
-    EventCallback StopCallback { get; }
+    /// <summary>Cancels the active send or streaming response.</summary>
+    Task StopAsync();
 
     /// <summary>Opens the configured attachment picker.</summary>
-    EventCallback PickAttachmentsCallback { get; }
+    Task PickAttachmentsAsync();
 
     /// <summary>Starts, stops, or cancels audio capture.</summary>
-    EventCallback ToggleAudioCaptureCallback { get; }
+    Task ToggleAudioCaptureAsync();
 
     /// <summary>Starts or stops continuous speech recognition.</summary>
-    EventCallback ToggleLiveSpeechCallback { get; }
+    Task ToggleLiveSpeechAsync();
 
     /// <summary>Stages an attachment for the next send.</summary>
     /// <param name="attachment">The attachment to stage.</param>
@@ -101,3 +112,4 @@ public interface IChatComposerContext
     /// <param name="value"><see langword="true"/> to mark composing, <see langword="false"/> to clear it.</param>
     void SetComposing(bool value);
 }
+

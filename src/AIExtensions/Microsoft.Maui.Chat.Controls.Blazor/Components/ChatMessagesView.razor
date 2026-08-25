@@ -173,8 +173,10 @@
             case ChatConversationChangeKind.ContentChanged:
             case ChatConversationChangeKind.MessageChanged:
                 // Content mutated in place - the affected row's ChatMessageRow subscribes
-                // to ContentChanged directly and re-renders itself; the shell only needs
-                // to poke a general render pass so the streaming class updates.
+                // to ContentChanged directly and re-renders itself; poke the shell too so
+                // the streaming cursor class updates AND the scroll-to-bottom follows the
+                // growing bubble while the user is anchored at the bottom.
+                _hasPendingScroll = AutoScrollToLatest;
                 InvokeAsync(StateHasChanged);
                 break;
 

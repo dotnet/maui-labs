@@ -3,7 +3,6 @@
 
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using Microsoft.AspNetCore.Components;
 using Microsoft.Maui.Chat.Controls;
 
 namespace Microsoft.Maui.Chat.Controls.Blazor;
@@ -26,8 +25,16 @@ internal sealed class ChatComposerContext : IChatComposerContext
     public const string DefaultAttachmentErrorMessage =
         "That attachment could not be added.";
 
+    private static readonly Func<Task> NoAction = () => Task.CompletedTask;
+
     private readonly ObservableCollection<ChatAttachment> _attachments = new();
     private readonly ReadOnlyObservableCollection<ChatAttachment> _readOnlyAttachments;
+
+    private Func<Task> _onSubmit = NoAction;
+    private Func<Task> _onStop = NoAction;
+    private Func<Task> _onPickAttachments = NoAction;
+    private Func<Task> _onToggleAudioCapture = NoAction;
+    private Func<Task> _onToggleLiveSpeech = NoAction;
 
     private string _text = string.Empty;
     private bool _isSending;
@@ -43,26 +50,30 @@ internal sealed class ChatComposerContext : IChatComposerContext
     /// <summary>Fires when any observable composer state changed.</summary>
     public event Action? Changed;
 
-    /// <summary>Creates the context and wires the immutable callbacks.</summary>
-    /// <param name="onSubmit">The submit callback the shell installs.</param>
-    /// <param name="onStop">The stop callback the shell installs.</param>
-    /// <param name="onPickAttachments">The attachment-pick callback the shell installs.</param>
-    /// <param name="onToggleAudioCapture">The audio-capture callback the shell installs.</param>
-    /// <param name="onToggleLiveSpeech">The live-speech callback the shell installs.</param>
-    public ChatComposerContext(
-        EventCallback onSubmit,
-        EventCallback onStop,
-        EventCallback onPickAttachments,
-        EventCallback onToggleAudioCapture,
-        EventCallback onToggleLiveSpeech)
+    /// <summary>Creates an empty composer context. Actions must be attached via <see cref="AttachActions"/>.</summary>
+    public ChatComposerContext()
     {
-        SubmitCallback = onSubmit;
-        StopCallback = onStop;
-        PickAttachmentsCallback = onPickAttachments;
-        ToggleAudioCaptureCallback = onToggleAudioCapture;
-        ToggleLiveSpeechCallback = onToggleLiveSpeech;
-
         _readOnlyAttachments = new ReadOnlyObservableCollection<ChatAttachment>(_attachments);
+    }
+
+    /// <summary>Wires the shell-owned action delegates. Called once by <see cref="ChatView"/>.</summary>
+    /// <param name="onSubmit">Delegate invoked by <see cref="IChatComposerContext.SubmitAsync"/>.</param>
+    /// <param name="onStop">Delegate invoked by <see cref="IChatComposerContext.StopAsync"/>.</param>
+    /// <param name="onPickAttachments">Delegate invoked by <see cref="IChatComposerContext.PickAttachmentsAsync"/>.</param>
+    /// <param name="onToggleAudioCapture">Delegate invoked by <see cref="IChatComposerContext.ToggleAudioCaptureAsync"/>.</param>
+    /// <param name="onToggleLiveSpeech">Delegate invoked by <see cref="IChatComposerContext.ToggleLiveSpeechAsync"/>.</param>
+    public void AttachActions(
+        Func<Task> onSubmit,
+        Func<Task> onStop,
+        Func<Task> onPickAttachments,
+        Func<Task> onToggleAudioCapture,
+        Func<Task> onToggleLiveSpeech)
+    {
+        _onSubmit = onSubmit ?? NoAction;
+        _onStop = onStop ?? NoAction;
+        _onPickAttachments = onPickAttachments ?? NoAction;
+        _onToggleAudioCapture = onToggleAudioCapture ?? NoAction;
+        _onToggleLiveSpeech = onToggleLiveSpeech ?? NoAction;
     }
 
     /// <summary>Gets or sets whether the conversation currently supports attachments.</summary>
@@ -143,19 +154,19 @@ internal sealed class ChatComposerContext : IChatComposerContext
     public string? ErrorMessage => _errorMessage;
 
     /// <inheritdoc />
-    public EventCallback SubmitCallback { get; }
+    public Task SubmitAsync() => _onSubmit();
 
     /// <inheritdoc />
-    public EventCallback StopCallback { get; }
+    public Task StopAsync() => _onStop();
 
     /// <inheritdoc />
-    public EventCallback PickAttachmentsCallback { get; }
+    public Task PickAttachmentsAsync() => _onPickAttachments();
 
     /// <inheritdoc />
-    public EventCallback ToggleAudioCaptureCallback { get; }
+    public Task ToggleAudioCaptureAsync() => _onToggleAudioCapture();
 
     /// <inheritdoc />
-    public EventCallback ToggleLiveSpeechCallback { get; }
+    public Task ToggleLiveSpeechAsync() => _onToggleLiveSpeech();
 
     /// <summary>Sets the conversation this context tracks.</summary>
     /// <param name="conversation">The new conversation.</param>
@@ -311,3 +322,4 @@ internal sealed class ChatComposerContext : IChatComposerContext
 
     private void RaiseChanged() => Changed?.Invoke();
 }
+

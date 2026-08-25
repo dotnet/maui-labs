@@ -102,8 +102,7 @@ public class MessageContentRendererTests
 
     private static ChatViewContext CreateContext()
     {
-        var composer = new ChatComposerContext(
-            EventCallback.Empty, EventCallback.Empty, EventCallback.Empty, EventCallback.Empty, EventCallback.Empty);
+        var composer = new ChatComposerContext();
         return new ChatViewContext(conversation: null, composer);
     }
 

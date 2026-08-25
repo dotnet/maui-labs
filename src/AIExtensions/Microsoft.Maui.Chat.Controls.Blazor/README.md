@@ -57,10 +57,30 @@ using Microsoft.Maui.Chat.Controls.Blazor;
 var builder = MauiApp.CreateBuilder();
 builder
     .UseMauiApp<App>()
-    .UseChatControls()          // From Microsoft.Maui.Chat.Controls
+    .UseChatControls()          // From Microsoft.Maui.Chat.Controls - loads theme AND
+                                // registers the real IChatAttachmentPicker / IChatAudioRecorder
+                                // / IChatSpeechRecognizer defaults via TryAddSingleton, so the
+                                // Blazor composer resolves them from DI.
     .AddChatControlsBlazor();   // From this package
 
 builder.Services.AddMauiBlazorWebView();
+```
+
+The default services registered by `UseChatControls()` are:
+
+- `IChatAttachmentPicker` — the platform `FilePicker` wrapped as `FileChatAttachmentPicker.Default`.
+- `IChatAudioRecorder` — a `Plugin.Maui.Audio` WAV recorder on Android/iOS/Mac Catalyst/Windows.
+- `IChatSpeechRecognizer` — a CommunityToolkit.Maui speech-to-text recognizer on the same platforms.
+
+`TryAddSingleton` means an app-supplied registration (for a simulated microphone, a cloud picker,
+or a deterministic test double) wins if it is registered before `UseChatControls()`. This is how
+the [sample](../../../samples/ChatControls.BlazorHybrid.Sample/) swaps in
+`SimulatedChatAudioRecorder` / `SimulatedChatSpeechRecognizer` for DevFlow automation:
+
+```csharp
+builder.Services.AddSingleton<IChatAudioRecorder, SimulatedChatAudioRecorder>();
+builder.Services.AddSingleton<IChatSpeechRecognizer, SimulatedChatSpeechRecognizer>();
+builder.UseChatControls().AddChatControlsBlazor();
 ```
 
 Add the static assets to your `wwwroot/index.html`:

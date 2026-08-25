@@ -451,6 +451,9 @@
 }
 
 .mchat-suggestion {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--mchat-spacing-xs);
     padding: var(--mchat-spacing-sm) var(--mchat-spacing-md);
     background: var(--mchat-color-surface);
     color: var(--mchat-color-text);
