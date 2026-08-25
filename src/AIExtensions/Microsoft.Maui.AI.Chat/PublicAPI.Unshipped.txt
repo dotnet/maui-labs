@@ -3,6 +3,7 @@ abstract Microsoft.Maui.AI.Chat.ContentBlockHandler<TState>.Handle(Microsoft.Mau
 Microsoft.Maui.AI.Chat.AgentContext
 Microsoft.Maui.AI.Chat.AgentContext.AgentContext(Microsoft.Maui.AI.Chat.UIAgent! agent) -> void
 Microsoft.Maui.AI.Chat.AgentContext.CancelAsync() -> System.Threading.Tasks.Task!
+Microsoft.Maui.AI.Chat.AgentContext.CancelAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
 Microsoft.Maui.AI.Chat.AgentContext.Clear() -> void
 Microsoft.Maui.AI.Chat.AgentContext.Dispose() -> void
 Microsoft.Maui.AI.Chat.AgentContext.Error.get -> System.Exception?
@@ -121,6 +122,7 @@ Microsoft.Maui.AI.Chat.HtmlNode.HtmlNode(string! value) -> void
 Microsoft.Maui.AI.Chat.HtmlNode.Value.get -> string!
 Microsoft.Maui.AI.Chat.HtmlNode.Value.set -> void
 Microsoft.Maui.AI.Chat.IConversationThread
+Microsoft.Maui.AI.Chat.IConversationThread.AbortTurn() -> void
 Microsoft.Maui.AI.Chat.IConversationThread.AppendUpdate(Microsoft.Extensions.AI.ChatResponseUpdate! update) -> void
 Microsoft.Maui.AI.Chat.IConversationThread.AppendUserMessage(Microsoft.Extensions.AI.ChatMessage! message) -> void
 Microsoft.Maui.AI.Chat.IConversationThread.Clear() -> void

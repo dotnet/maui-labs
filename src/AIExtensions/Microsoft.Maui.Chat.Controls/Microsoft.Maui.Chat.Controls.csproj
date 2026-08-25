@@ -8,7 +8,7 @@
     <IsPackable>true</IsPackable>
     <IsShipping>true</IsShipping>
     <PackageId>Microsoft.Maui.Chat.Controls</PackageId>
-    <Description>Provider-neutral .NET MAUI chat controls: conversation models, content templates, and drop-in chat views. No AI provider dependency.</Description>
+    <Description>Provider-neutral .NET MAUI chat controls: conversation models, XAML templates, multimodal input, and drop-in chat views. No AI provider dependency.</Description>
     <PackRepoRootReadme>false</PackRepoRootReadme>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -26,8 +26,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Maui.Core" />
     <PackageReference Include="Microsoft.Maui.Controls" />
     <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
+    <PackageReference Include="Plugin.Maui.Audio" />
   </ItemGroup>
 
 </Project>

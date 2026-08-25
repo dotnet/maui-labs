@@ -21,8 +21,12 @@ model you drive: from a websocket, a local database, an AI client, or a unit tes
   outrank the built-in ones, and unmatched content stays hidden rather than leaking a placeholder.
 - **Replaceable templates** — the whole visual tree of both controls is a `ControlTemplate` with
   documented `PART_*` names, plus `MauiChat.*` resource keys for restyling.
-- **Composer** — text, attachments, suggestions, reentrancy-guarded sending, and generic user-safe error
-  strings.
+- **Multimodal composer** — text, files, recorded audio, continuous speech-to-text, suggestions,
+  reentrancy-guarded sending, stop/cancel, and generic user-safe errors.
+- **Audio message playback** — buffered recordings and local-file URI audio render with an accessible
+  play/pause affordance; remote audio stays a safe file card.
+- **Reusable input context** — custom control templates bind to one `ChatInputContext` for text,
+  attachments, status, send/stop, audio, and speech actions.
 - **Accessible defaults** — semantic descriptions on every bubble, automation IDs on every interactive
   part, and light and dark styling out of the box.
 
@@ -30,12 +34,12 @@ model you drive: from a websocket, a local database, an AI client, or a unit tes
 
 Targets `net10.0` with `UseMaui`, so it runs on every platform .NET MAUI supports.
 
-| Platform | Supported |
-| --- | --- |
-| Android | ✅ |
-| iOS / Mac Catalyst | ✅ |
-| Windows (WinUI) | ✅ |
-| Other MAUI backends | ✅ (cross-platform controls only) |
+| Platform | Controls | Audio capture | Live speech |
+| --- | --- | --- | --- |
+| Android | ✅ | ✅ | ✅ |
+| iOS / Mac Catalyst | ✅ | ✅ | ✅ |
+| Windows (WinUI) | ✅ | ✅ | ✅ |
+| Other MAUI backends | ✅ | Injectable service | Injectable service |
 
 ## Install
 
@@ -87,9 +91,35 @@ conversation.SendHandler = async (chat, draft, cancellationToken) =>
 <ContentPage xmlns:chat="clr-namespace:Microsoft.Maui.Chat.Controls;assembly=Microsoft.Maui.Chat.Controls">
     <chat:ChatView Conversation="{Binding Conversation}"
                    AllowAttachments="True"
+                   AllowAudioCapture="True"
+                   AllowLiveSpeech="True"
                    WelcomeMessage="Ask me anything" />
 </ContentPage>
 ```
+
+`ChatView` supplies platform audio and online speech-recognition services by default. Both seams are
+injectable through `AudioRecorder` and `SpeechRecognizer`; recorded audio can optionally be converted
+to text by setting `AudioTranscriber`. Set `LiveSpeechAutoSubmit="False"` to dictate into the composer
+without sending each finalized utterance.
+
+Microphone features require the normal platform declarations:
+
+```xml
+<!-- AndroidManifest.xml -->
+<uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+<!-- iOS / Mac Catalyst Info.plist -->
+<key>NSMicrophoneUsageDescription</key>
+<string>Record and dictate chat messages.</string>
+<key>NSSpeechRecognitionUsageDescription</key>
+<string>Convert spoken chat messages into text.</string>
+
+<!-- Windows Package.appxmanifest -->
+<DeviceCapability Name="microphone" />
+```
+
+The default service requests runtime permission when capture starts. Unsupported or denied features
+produce user-safe `InputErrorMessage` text instead of throwing from a button event.
 
 Only the message list, without header, composer, or welcome panel:
 
@@ -157,8 +187,9 @@ Three levels, from cheapest to deepest:
    bubble radius, stroke, maximum width, and spacing. Its colour properties are `null` by default, which
    means "use the theme"; set one to override just that colour.
 2. **Styles** — redefine any `MauiChat.*` style (see `ChatThemeKeys`) in application resources, or set
-   `InputAreaStyle`, `InputEntryStyle`, `AttachButtonStyle`, and `SendButtonStyle` on one `ChatView`.
-   The shared control template binds those style properties directly.
+   `InputAreaStyle`, `InputEntryStyle`, `AttachButtonStyle`, `AudioButtonStyle`,
+   `LiveSpeechButtonStyle`, `SendButtonStyle`, and `StopButtonStyle` on one `ChatView`. The shared
+   control template binds those style properties directly.
 3. **Message-list template** — set `MessageListTemplate` to swap the `ChatMessagesView` subclass while
    keeping the complete shell and its styles.
 4. **Control templates** — replace `MauiChat.ChatViewTemplate` or `MauiChat.ChatMessagesViewTemplate`
@@ -167,8 +198,13 @@ Three levels, from cheapest to deepest:
 `ChatView` parts: `PART_Header`, `PART_MessageList`, `PART_WelcomePanel`, `PART_WelcomeIcon`,
 `PART_WelcomeMessage`, `PART_EmptyView`, `PART_BusyIndicator`, `PART_Suggestions`, `PART_Footer`,
 `PART_TypingIndicator`, `PART_InputArea`, `PART_Attachments`, `PART_AttachButton`, `PART_InputEntry`,
-`PART_SendButton`.
+`PART_AudioButton`, `PART_LiveSpeechButton`, `PART_SendButton`, `PART_StopButton`.
 `ChatMessagesView` part: `PART_Messages`.
+
+A replacement template can bind any custom composer controls to `InputContext`, which exposes
+`SubmitCommand`, `CancelCommand`, `PickAttachmentsCommand`, `ToggleAudioCaptureCommand`, and
+`ToggleLiveSpeechCommand` plus the complete derived state. `SetComposing`, `SetStatusMessage`, and
+`SetErrorMessage` let an application-owned media action participate in the same state machine.
 
 ## Threading contract
 

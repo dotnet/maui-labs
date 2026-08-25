@@ -82,7 +82,9 @@ registered handlers and state mapper.
 
 No storage provider ships. Implementations own serialization and storage. Custom block
 discriminators must survive serialization; `RawRepresentation` is not durable unless explicitly
-persisted. Restored approvals and UI actions are display history, not resumable pending work.
+persisted. A thread keeps one pending turn until `CompleteTurn`; `AbortTurn` must discard that pending
+turn after cancellation or failure without touching committed history. Restored approvals and UI
+actions are display history, not resumable pending work.
 
 ## Threading contract
 
@@ -108,4 +110,3 @@ full Markdown parser.
 
 - .NET 10
 - `Microsoft.Extensions.AI` provider of your choice
-

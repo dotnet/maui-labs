@@ -4,6 +4,9 @@ namespace ChatControls.Sample;
 
 public partial class MainPage : ContentPage
 {
+    private readonly SimulatedChatAudioRecorder _simulatedAudioRecorder = new();
+    private readonly SimulatedChatSpeechRecognizer _simulatedSpeechRecognizer = new();
+
     public MainPage()
     {
         InitializeComponent();
@@ -25,6 +28,22 @@ public partial class MainPage : ContentPage
 
     private void OnClearAttachmentsClicked(object? sender, EventArgs e) =>
         Chat.ClearAttachments();
+
+    private void OnSimulatedVoiceToggled(object? sender, ToggledEventArgs e)
+    {
+        if (e.Value)
+        {
+            _simulatedSpeechRecognizer.Reset();
+            Chat.AudioRecorder = _simulatedAudioRecorder;
+            Chat.SpeechRecognizer = _simulatedSpeechRecognizer;
+            Chat.InputContext.SetStatusMessage("Simulated microphone enabled.");
+            return;
+        }
+
+        Chat.ClearValue(ChatView.AudioRecorderProperty);
+        Chat.ClearValue(ChatView.SpeechRecognizerProperty);
+        Chat.InputContext.SetStatusMessage("Real microphone enabled.");
+    }
 
     private void OnClearClicked(object? sender, EventArgs e) =>
         ClearComposer();

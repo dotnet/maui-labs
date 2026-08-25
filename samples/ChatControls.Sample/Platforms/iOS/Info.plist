@@ -28,5 +28,9 @@
 	</array>
 	<key>XSAppIconAssets</key>
 	<string>Assets.xcassets/appicon.appiconset</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Record audio messages and dictate chat text.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Convert spoken chat messages into text.</string>
 </dict>
 </plist>

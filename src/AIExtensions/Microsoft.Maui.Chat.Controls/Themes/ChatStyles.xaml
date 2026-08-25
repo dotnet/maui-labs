@@ -27,6 +27,7 @@
     <Color x:Key="MauiChat.Light.SuggestionBubble">#EAF0FE</Color>
     <Color x:Key="MauiChat.Light.SuggestionText">#1E4FBF</Color>
     <Color x:Key="MauiChat.Light.Error">#B3261E</Color>
+    <Color x:Key="MauiChat.Light.Stop">#B3261E</Color>
     <Color x:Key="MauiChat.Light.Overlay">#14000000</Color>
 
     <!-- Palette: dark -->
@@ -44,6 +45,7 @@
     <Color x:Key="MauiChat.Dark.SuggestionBubble">#22304A</Color>
     <Color x:Key="MauiChat.Dark.SuggestionText">#C7D8FF</Color>
     <Color x:Key="MauiChat.Dark.Error">#F2B8B5</Color>
+    <Color x:Key="MauiChat.Dark.Stop">#C42B1C</Color>
     <Color x:Key="MauiChat.Dark.Overlay">#22FFFFFF</Color>
 
     <!-- Bubbles -->
@@ -193,6 +195,37 @@
         <Setter Property="TextColor"
                 Value="{AppThemeBinding Light={StaticResource MauiChat.Light.Metadata},
                                         Dark={StaticResource MauiChat.Dark.Metadata}}" />
+    </Style>
+
+    <Style x:Key="MauiChat.AudioButton"
+           TargetType="Button"
+           BasedOn="{StaticResource MauiChat.AttachButton}" />
+
+    <Style x:Key="MauiChat.LiveSpeechButton"
+           TargetType="Button"
+           BasedOn="{StaticResource MauiChat.AttachButton}" />
+
+    <Style x:Key="MauiChat.AudioPlaybackButton" TargetType="Button">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Padding" Value="10,4" />
+        <Setter Property="WidthRequest" Value="64" />
+        <Setter Property="HeightRequest" Value="36" />
+        <Setter Property="CornerRadius" Value="18" />
+        <Setter Property="BackgroundColor"
+                Value="{AppThemeBinding Light={StaticResource MauiChat.Light.Accent},
+                                        Dark={StaticResource MauiChat.Dark.Accent}}" />
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource MauiChat.Light.AccentText},
+                                        Dark={StaticResource MauiChat.Dark.AccentText}}" />
+    </Style>
+
+    <Style x:Key="MauiChat.StopButton"
+           TargetType="Button"
+           BasedOn="{StaticResource MauiChat.SendButton}">
+        <Setter Property="BackgroundColor"
+                Value="{AppThemeBinding Light={StaticResource MauiChat.Light.Stop},
+                                        Dark={StaticResource MauiChat.Dark.Stop}}" />
+        <Setter Property="TextColor" Value="White" />
     </Style>
 
     <Style x:Key="MauiChat.ErrorText" TargetType="Label">

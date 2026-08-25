@@ -102,6 +102,11 @@ internal sealed class AgentChatConversation : ChatConversation, IDisposable
         && Session.Status is ConversationStatus.Idle or ConversationStatus.Error;
 
     /// <inheritdoc />
+    public override bool CanCancel =>
+        !_disposed
+        && Session.Status is ConversationStatus.Streaming or ConversationStatus.AwaitingInput;
+
+    /// <inheritdoc />
     protected override async Task<bool> SendCoreAsync(
         ChatDraft draft,
         CancellationToken cancellationToken)
@@ -135,6 +140,12 @@ internal sealed class AgentChatConversation : ChatConversation, IDisposable
             new ChatMessage(ChatRole.User, contents),
             cancellationToken);
         return true;
+    }
+
+    /// <inheritdoc />
+    protected override Task CancelCoreAsync(CancellationToken cancellationToken)
+    {
+        return Session.CancelAsync(cancellationToken);
     }
 
     /// <inheritdoc />
