@@ -41,7 +41,8 @@ export function autoSize(element) {
 export function scrollToBottom(element) {
     if (!element) return;
     try {
-        element.scrollTop = element.scrollHeight;
+        const target = findScrollParent(element);
+        target.scrollTop = target.scrollHeight;
     } catch {
         // Scroll is best-effort during layout thrash.
     }
@@ -50,12 +51,14 @@ export function scrollToBottom(element) {
 export function stickToBottom(element, dotNet) {
     if (!element) return 0;
 
+    const scrollTarget = findScrollParent(element);
+
     // A generous threshold: if the user is within 96 px of the bottom, treat them as anchored.
     const threshold = 96;
     let anchored = true;
 
     const onScroll = () => {
-        const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+        const distanceFromBottom = scrollTarget.scrollHeight - scrollTarget.scrollTop - scrollTarget.clientHeight;
         const nowAnchored = distanceFromBottom <= threshold;
         if (nowAnchored !== anchored) {
             anchored = nowAnchored;
@@ -67,13 +70,30 @@ export function stickToBottom(element, dotNet) {
         }
     };
 
-    element.addEventListener("scroll", onScroll, { passive: true });
+    scrollTarget.addEventListener("scroll", onScroll, { passive: true });
     const handle = nextStickyHandle++;
-    stickyRegistry.set(handle, { element, onScroll });
+    stickyRegistry.set(handle, { element: scrollTarget, onScroll });
 
     // Kick things off so the caller sees the initial state.
     onScroll();
     return handle;
+}
+
+function findScrollParent(element) {
+    // Walk up the tree looking for an element whose overflow-y is auto or scroll AND that
+    // actually has scrollable content. This lets the ChatMessagesView point its ref at
+    // its own root and still track whatever ancestor is scrollable (typically the
+    // .mchat-chat-page__body flex child rendered by ChatView).
+    let cur = element;
+    while (cur && cur !== document.body) {
+        const style = window.getComputedStyle(cur);
+        const overflowY = style.overflowY;
+        if ((overflowY === "auto" || overflowY === "scroll") && cur.scrollHeight > cur.clientHeight + 1) {
+            return cur;
+        }
+        cur = cur.parentElement;
+    }
+    return document.scrollingElement || document.documentElement || element;
 }
 
 export function releaseStickToBottom(handle) {

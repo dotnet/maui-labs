@@ -16,7 +16,10 @@
 @implements IDisposable
 
 <div @attributes="AdditionalAttributes" class="@RootClass" data-theme="@ThemeAttribute">
-    <CascadingValue Value="_context" IsFixed="true">
+    @* Key the cascade on the context so a conversation swap forces every descendant
+       (including MessageContentRenderer<T> registrations) to be recreated against the
+       new ChatViewContext instead of clinging to the old one via IsFixed=true. *@
+    <CascadingValue @key="_context" Value="_context" IsFixed="true">
         <div class="mchat-chat-page__header">
             @if (Header is not null)
             {
@@ -37,14 +40,12 @@
                     @Footer
                 }
 
-                <ErrorRetry Message="@_composer.ErrorMessage" />
-
                 <Composer @ref="_composer_ref"
                           Context="_composer"
                           AllowAttachments="AllowAttachments"
                           AllowAudioCapture="AllowAudioCapture"
                           AllowLiveSpeech="AllowLiveSpeech"
-                          Placeholder="Placeholder"
+                          Placeholder="@Placeholder"
                           LeadingActions="InputLeadingActions"
                           TrailingActions="InputTrailingActions"
                           AttachmentTemplate="Attachment" />
@@ -238,12 +239,13 @@
     /// <inheritdoc />
     protected override void OnInitialized()
     {
-        _composer = new ChatComposerContext(
-            onSubmit: EventCallback.Factory.Create(this, () => _ = SendAsync()),
-            onStop: EventCallback.Factory.Create(this, () => _ = StopAsync()),
-            onPickAttachments: EventCallback.Factory.Create(this, () => _ = PickAttachmentsAsync()),
-            onToggleAudioCapture: EventCallback.Factory.Create(this, () => _ = ToggleAudioCaptureAsync()),
-            onToggleLiveSpeech: EventCallback.Factory.Create(this, () => _ = ToggleLiveSpeechAsync()));
+        _composer = new ChatComposerContext();
+        _composer.AttachActions(
+            onSubmit: () => SendAsync(),
+            onStop: () => StopAsync(),
+            onPickAttachments: () => PickAttachmentsAsync(),
+            onToggleAudioCapture: ToggleAudioCaptureAsync,
+            onToggleLiveSpeech: ToggleLiveSpeechAsync);
 
         _composer.AllowAttachments = AllowAttachments;
         _composer.AllowAudioCapture = AllowAudioCapture;
@@ -315,6 +317,15 @@
             return;
         }
 
+        // Guard against a second submit landing while the first is in flight. CanSubmit
+        // folds the shell's IsSending flag, the composer's IsComposing state (attachment
+        // pick, recording, live speech), and the conversation's own CanSend into one
+        // check, so a rapid Enter+tap cannot race past this method.
+        if (!_composer.CanSubmit)
+        {
+            return;
+        }
+
         var draft = _composer.CreateDraft();
         if (!conversation.CanSend(draft))
         {
@@ -338,14 +349,23 @@
                 _composer.ClearAcceptedDraft(draft);
                 _composer.SetStatusMessage("Message sent.");
             }
+            else
+            {
+                // Rejection is not an error; just clear the "Sending message." status so the
+                // composer stops advertising an in-flight send when there isn't one. The draft
+                // stays put so an ordinary re-submit re-tries the same request.
+                _composer.SetStatusMessage(null);
+            }
         }
         catch (OperationCanceledException)
         {
             // Cancelled sends are not reported as failures.
+            _composer.SetStatusMessage(null);
         }
         catch (Exception)
         {
             _composer.SetErrorMessage(ChatComposerContext.DefaultSendErrorMessage);
+            _composer.SetStatusMessage(null);
         }
         finally
         {

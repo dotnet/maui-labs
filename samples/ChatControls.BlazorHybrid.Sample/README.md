@@ -60,39 +60,50 @@ dotnet build samples/ChatControls.BlazorHybrid.Sample/ChatControls.BlazorHybrid.
   -f net10.0-android
 ```
 
-## DevFlow / CDP runtime validation playbook
+## DevFlow / CDP runtime validation results
 
-Debug builds automatically start a DevFlow agent and register the Blazor CDP tools. From an
-adjacent shell, drive the sample with `maui devflow`:
+Debug builds automatically start a DevFlow agent and register the Blazor CDP tools. This
+scenario matrix was executed end-to-end on Mac Catalyst with the `maui devflow` CLI and
+CDP `Runtime.evaluate` walking the WebView DOM. Every row was captured as evidence in the
+PR that introduced the sample.
+
+| Scenario | XAML sidebar action | Blazor DOM assertion | Result |
+| --- | --- | --- | --- |
+| Empty state | Clear conversation | `.mchat-welcome` visible, `.mchat-row` count = 0, `.mchat-suggestion` count = 3 | ✅ |
+| Populated seed | Reset conversation | `.mchat-row` count = 6, participant chrome + timestamps | ✅ |
+| Streamed text | Stream text | last `.mchat-text-content` grows in place while `.mchat-bubble--streaming` toggles | ✅ |
+| Task card (bare) | Send task card | `.garden-task` inside `.mchat-bubble--bare`, no bubble background | ✅ |
+| Sticker (bare) | Send sticker | `.garden-sticker` with `aria-label`, `.mchat-bubble--bare` | ✅ |
+| Image render | Send photo | `<img>` inside `.mchat-media`, `alt` from `MediaMessageContent.AltText` | ✅ |
+| File card | Send file | `.mchat-file-card` with file-name + size, `role="group"`, `aria-label` = alt text | ✅ |
+| Simulated audio → stage | Composer 🎤 → ■ | `.mchat-icon-btn--recording` while capturing, then `.mchat-attachment-chip` = `simulated-recording.wav` | ✅ |
+| Send audio → play/pause | ➤ then click ▶ on message | `.mchat-audio` renders with `aria-label`, `<audio>` element, `.mchat-audio__toggle` aria toggles | ✅ |
+| Live speech → auto-submit | Composer 🗣 | text streams into `.mchat-composer__textarea`, final utterance auto-sends a new `.mchat-row` | ✅ |
+| Typing (one) | ✔ Priya typing | `.mchat-typing[role="status"]` = "Priya is typing…" | ✅ |
+| Typing (two) | ✔ Priya + ✔ Diego typing | `.mchat-typing` = "Priya and Diego are typing…" | ✅ |
+| Delivery status | Apply delivery status | last message shows sending/sent/delivered/read glyphs and `aria-label` | ✅ |
+| Failed send | ✔ Fail next send + submit | `.mchat-composer__error[role="alert"]` = default safe string, `mchat-composer__textarea.value` preserved | ✅ |
+| Slow send | ✔ Slow next send + submit | `.mchat-icon-btn--danger` (Stop) replaces primary send button with `aria-label="Stop"` | ✅ |
+| Cancel slow send | Click Stop mid-flight | outgoing message removed by handler, error stays null, draft preserved for a re-submit | ✅ |
+| Suggestion send | Tap suggestion chip | welcome hides, first row shows the suggestion's `Prompt` text | ✅ |
+| Attachment removal | ✕ on staged chip | chip removed from `.mchat-attachments` on next render | ✅ |
+| Sticky-bottom follow | Rapid 5× send text | list stays scrolled to bottom (measured via `body.scrollHeight - scrollTop - clientHeight < 96 px`) | ✅ |
+| Dark theme | `data-theme="dark"` on `.mchat-root` | palette switches: dark surface, purple outgoing bubble, dark composer, readable text-on-dark | ✅ |
+| Light theme | `data-theme="light"` | palette switches back to the light default | ✅ |
+| ARIA on message list | | `.mchat-message-list[role="log"][aria-live="polite"]` | ✅ |
+| ARIA on send button | | primary composer button has `aria-label="Send message"` | ✅ |
+
+Reference invocations (adapt the agent port to whatever `maui devflow list` reports for
+this sample):
 
 ```bash
-maui devflow status
-maui devflow screenshot --out screenshots/empty.png
-maui devflow tap --automation-id SendParticipantTextButton
-maui devflow screenshot --out screenshots/one-message.png
-maui devflow tap --automation-id StreamParticipantTextButton
-maui devflow screenshot --out screenshots/streaming.png
-maui devflow tap --automation-id FailNextSendCheck
-maui devflow cdp evaluate --script "document.querySelector('.mchat-composer__textarea').focus(); document.execCommand('insertText', false, 'hi')"
-maui devflow cdp evaluate --script "document.querySelector('.mchat-icon-btn--primary').click()"
-maui devflow screenshot --out screenshots/send-failure.png
+export MCHAT_PORT=10224
+maui devflow ui screenshot --agent-port $MCHAT_PORT --output empty.png --overwrite
+maui devflow ui tap --automationId StreamParticipantTextButton --agent-port $MCHAT_PORT
+maui devflow webview Runtime evaluate 'document.querySelectorAll(".mchat-row").length' \
+  --agent-port $MCHAT_PORT
+maui devflow webview Runtime evaluate 'document.querySelector(".mchat-typing").getAttribute("role")' \
+  --agent-port $MCHAT_PORT
 ```
-
-Full scenarios exercised in this round:
-
-| Scenario | XAML sidebar action | Blazor DOM assertion |
-| --- | --- | --- |
-| Empty state | (fresh app) | `.mchat-welcome` visible |
-| Text message | Send text | `.mchat-row--incoming .mchat-bubble` |
-| Grouped run | Send text · 3× same participant | `.mchat-row--group-continuation` × 2 |
-| Streaming | Stream text | `.mchat-bubble--streaming` present, then absent |
-| Task card | Send task card | `.garden-task` inside `.mchat-bubble--bare` |
-| Sticker | Send sticker | `.garden-sticker` inside `.mchat-row` |
-| Attachment | Compose attachment (native picker) | `.mchat-attachment-chip` |
-| Simulated audio | Toggle audio (composer) | `.mchat-audio` play/pause + `<audio>` element |
-| Live speech | Toggle live speech (composer) | Composer text streams; final utterance sends |
-| Send failure | Fail next send + type + Enter | `.mchat-composer__error` shows the safe string |
-| Slow send / stop | Slow next send + type + Enter, then Stop | Stop button replaces send during flight |
-| Theme swap | Cycle theme | `data-theme` attribute updates on `.mchat-root` |
 
 > This sample is experimental and may change before the neutral Blazor package stabilises.
