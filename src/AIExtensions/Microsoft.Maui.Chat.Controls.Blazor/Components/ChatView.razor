@@ -62,6 +62,16 @@
     private IDisposable? _subscription;
     private CancellationTokenSource? _sendCts;
     private CancellationTokenSource? _pickCts;
+    private CancellationTokenSource? _audioCts;
+    private IChatAudioRecorder? _activeRecorder;
+    private IChatSpeechRecognizer? _activeRecognizer;
+
+    // Operation-generation token. Bumped whenever the bound conversation changes so any
+    // in-flight send/pick/audio/speech operation that captured the old value fails its
+    // identity guard when the await unblocks. Every post-await write to _composer.* is
+    // gated on StillValid(gen, capturedConversation) so a stale completion cannot leak
+    // into the new conversation's composer state.
+    private int _operationGeneration;
 
     /// <summary>Gets or sets the conversation this view renders and sends to.</summary>
     [Parameter, EditorRequired]
@@ -274,6 +284,35 @@
 
     private void AttachConversation(ChatConversation? conversation)
     {
+        // Bump the operation generation FIRST so any in-flight async that reads
+        // _operationGeneration after AttachConversation fails its identity check even in the
+        // narrow window between the field bump and the CTS cancel. Guards run inside the
+        // async continuation which is single-thread-affine on the renderer's sync context.
+        _operationGeneration++;
+
+        // Cancel in-flight ops so their awaits unblock; their catches surface user-safe
+        // strings or silently swallow cancellation. Each async method also gates every
+        // post-await write on StillValid so any race between "we cancelled" and "await
+        // completed with a non-cancelled result" cannot bleed into the new conversation.
+        CancelInFlightOperations();
+        DetachActiveRecognizer(swallowStopExceptions: true);
+
+        // Reset transient composer state that was tied to the previous conversation. The user's
+        // draft text and staged attachments are preserved because those are user data - the
+        // shell only owns the send/record/status/error indicators, and leaving them behind
+        // would advertise a "Sending message." or "Failed" state that belongs to the old
+        // conversation on the new one.
+        if (_composer is not null)
+        {
+            _composer.SetIsSending(false);
+            _composer.SetIsRecordingAudio(false);
+            _composer.SetIsTranscribingAudio(false);
+            _composer.SetIsLiveSpeechEnabled(false);
+            _composer.SetIsListening(false);
+            _composer.SetStatusMessage(null);
+            _composer.SetErrorMessage(null);
+        }
+
         _subscription?.Dispose();
         _subscription = null;
         _observed = conversation;
@@ -283,6 +322,48 @@
             _subscription = conversation.Subscribe(OnConversationChange);
         }
     }
+
+    private void CancelInFlightOperations()
+    {
+        CancelAndDispose(ref _sendCts);
+        CancelAndDispose(ref _pickCts);
+        CancelAndDispose(ref _audioCts);
+
+        // If a recording was in progress the recorder's own StartAsync/StopAsync do not
+        // observe our tokens; fire CancelAsync on the tracked recorder so any pending
+        // buffer read unblocks. We do not await because the caller (AttachConversation)
+        // is synchronous; failures here are swallowed.
+        var recorder = _activeRecorder;
+        _activeRecorder = null;
+        if (recorder is not null && recorder.IsRecording)
+        {
+            _ = recorder.CancelAsync();
+        }
+    }
+
+    private static void CancelAndDispose(ref CancellationTokenSource? cts)
+    {
+        var current = cts;
+        cts = null;
+        if (current is null)
+        {
+            return;
+        }
+
+        try
+        {
+            current.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
+        current.Dispose();
+    }
+
+    private bool StillValid(int operationGeneration, ChatConversation? capturedConversation) =>
+        operationGeneration == _operationGeneration
+        && ReferenceEquals(capturedConversation, Conversation);
 
     private void OnConversationChange(ChatConversationChange change)
     {
@@ -317,10 +398,6 @@
             return;
         }
 
-        // Guard against a second submit landing while the first is in flight. CanSubmit
-        // folds the shell's IsSending flag, the composer's IsComposing state (attachment
-        // pick, recording, live speech), and the conversation's own CanSend into one
-        // check, so a rapid Enter+tap cannot race past this method.
         if (!_composer.CanSubmit)
         {
             return;
@@ -336,6 +413,11 @@
             ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
             : new CancellationTokenSource();
 
+        // Capture the generation and conversation identity BEFORE the first observable
+        // state change so a swap that races the send cannot make the "start" side of the
+        // operation appear to belong to the new conversation.
+        var gen = _operationGeneration;
+        var startConversation = conversation;
         _sendCts = linked;
         _composer.SetIsSending(true);
         _composer.SetErrorMessage(null);
@@ -344,6 +426,15 @@
         try
         {
             var accepted = await conversation.SendAsync(draft, linked.Token).ConfigureAwait(true);
+
+            // Identity guard: if the conversation changed underneath us, the accepted flag
+            // refers to a send that targeted a different conversation. Do NOT mutate the
+            // new conversation's composer.
+            if (!StillValid(gen, startConversation))
+            {
+                return;
+            }
+
             if (accepted)
             {
                 _composer.ClearAcceptedDraft(draft);
@@ -351,30 +442,39 @@
             }
             else
             {
-                // Rejection is not an error; just clear the "Sending message." status so the
-                // composer stops advertising an in-flight send when there isn't one. The draft
-                // stays put so an ordinary re-submit re-tries the same request.
                 _composer.SetStatusMessage(null);
             }
         }
         catch (OperationCanceledException)
         {
-            // Cancelled sends are not reported as failures.
-            _composer.SetStatusMessage(null);
+            if (StillValid(gen, startConversation))
+            {
+                _composer.SetStatusMessage(null);
+            }
         }
         catch (Exception)
         {
-            _composer.SetErrorMessage(ChatComposerContext.DefaultSendErrorMessage);
-            _composer.SetStatusMessage(null);
+            if (StillValid(gen, startConversation))
+            {
+                _composer.SetErrorMessage(ChatComposerContext.DefaultSendErrorMessage);
+                _composer.SetStatusMessage(null);
+            }
         }
         finally
         {
+            // Only clear the shared field if it still points at OUR CTS. A swap already
+            // reset _sendCts to null; a new send may have replaced it. Either way we
+            // dispose our own CTS and only touch IsSending when identity still holds.
             if (ReferenceEquals(_sendCts, linked))
             {
                 _sendCts = null;
             }
 
-            _composer.SetIsSending(false);
+            if (StillValid(gen, startConversation))
+            {
+                _composer.SetIsSending(false);
+            }
+
             linked.Dispose();
         }
     }
@@ -398,6 +498,7 @@
 
         if (conversation?.CanCancel == true)
         {
+            var gen = _operationGeneration;
             try
             {
                 await conversation.CancelAsync(cancellationToken).ConfigureAwait(true);
@@ -407,7 +508,10 @@
             }
             catch (Exception)
             {
-                _composer.SetErrorMessage(ChatComposerContext.DefaultSendErrorMessage);
+                if (StillValid(gen, conversation))
+                {
+                    _composer.SetErrorMessage(ChatComposerContext.DefaultSendErrorMessage);
+                }
             }
         }
     }
@@ -416,6 +520,7 @@
     /// <param name="cancellationToken">Cancels the pick.</param>
     public async Task PickAttachmentsAsync(CancellationToken cancellationToken = default)
     {
+        var conversation = Conversation;
         var picker = Services.GetService(typeof(IChatAttachmentPicker)) as IChatAttachmentPicker;
         if (picker is null)
         {
@@ -433,12 +538,21 @@
             : new CancellationTokenSource();
         _pickCts = linked;
 
+        var gen = _operationGeneration;
         _composer.SetErrorMessage(null);
         _composer.SetComposing(true);
 
         try
         {
             var picked = await picker.PickAsync(null, MaxAttachmentBytes, linked.Token).ConfigureAwait(true);
+
+            if (!StillValid(gen, conversation))
+            {
+                // A conversation swap happened while the picker was open. Discard the pick;
+                // staging attachments into the new conversation would leak the wrong intent.
+                return;
+            }
+
             if (picked is null || picked.Count == 0)
             {
                 return;
@@ -475,19 +589,33 @@
             {
                 if (attachment is not null)
                 {
+                    // Re-check identity between iterations; the collection is small so
+                    // the extra cost is negligible and it guarantees a swap during Add
+                    // does not stage into the new conversation.
+                    if (!StillValid(gen, conversation))
+                    {
+                        return;
+                    }
+
                     await _composer.AddAttachmentAsync(attachment).ConfigureAwait(true);
                 }
             }
 
-            _composer.SetStatusMessage(
-                picked.Count == 1 ? "1 file attached." : $"{picked.Count} files attached.");
+            if (StillValid(gen, conversation))
+            {
+                _composer.SetStatusMessage(
+                    picked.Count == 1 ? "1 file attached." : $"{picked.Count} files attached.");
+            }
         }
         catch (OperationCanceledException)
         {
         }
         catch (Exception)
         {
-            _composer.SetErrorMessage(ChatComposerContext.DefaultAttachmentErrorMessage);
+            if (StillValid(gen, conversation))
+            {
+                _composer.SetErrorMessage(ChatComposerContext.DefaultAttachmentErrorMessage);
+            }
         }
         finally
         {
@@ -496,18 +624,23 @@
                 _pickCts = null;
             }
 
-            _composer.SetComposing(false);
+            if (StillValid(gen, conversation))
+            {
+                _composer.SetComposing(false);
+            }
+
             linked.Dispose();
         }
     }
 
     /// <summary>
-    /// Toggles audio capture using the injected <see cref="IChatAudioRecorder"/>. This layer keeps the
-    /// state machine narrow (start / stop) because layer 2 (and app-specific composer templates) may
-    /// build richer flows on top of the composer context.
+    /// Toggles audio capture using the injected <see cref="IChatAudioRecorder"/>. Guarded against
+    /// conversation swap so an in-flight recording that finishes after the swap cannot stage its
+    /// attachment into the new conversation.
     /// </summary>
     public async Task ToggleAudioCaptureAsync()
     {
+        var conversation = Conversation;
         var recorder = Services.GetService(typeof(IChatAudioRecorder)) as IChatAudioRecorder;
         if (recorder is null || !recorder.IsSupported)
         {
@@ -515,36 +648,65 @@
             return;
         }
 
+        var gen = _operationGeneration;
+
         try
         {
             if (_composer.IsRecordingAudio)
             {
                 _composer.SetIsRecordingAudio(false);
                 var recording = await recorder.StopAsync(50L * 1024 * 1024).ConfigureAwait(true);
+
+                if (!StillValid(gen, conversation))
+                {
+                    return;
+                }
+
                 if (recording is not null)
                 {
                     await _composer.AddAttachmentAsync(recording).ConfigureAwait(true);
+                }
+
+                if (ReferenceEquals(_activeRecorder, recorder))
+                {
+                    _activeRecorder = null;
                 }
             }
             else
             {
                 await recorder.StartAsync().ConfigureAwait(true);
+
+                if (!StillValid(gen, conversation))
+                {
+                    // Swap happened while StartAsync was running; discard the recording
+                    // rather than parading a "recording" state on the new conversation.
+                    _ = recorder.CancelAsync();
+                    return;
+                }
+
+                _activeRecorder = recorder;
                 _composer.SetIsRecordingAudio(true);
             }
         }
         catch (Exception)
         {
-            _composer.SetIsRecordingAudio(false);
-            _composer.SetErrorMessage("The audio recording could not be completed.");
+            if (StillValid(gen, conversation))
+            {
+                _composer.SetIsRecordingAudio(false);
+                _composer.SetErrorMessage("The audio recording could not be completed.");
+            }
         }
     }
 
     /// <summary>
     /// Toggles continuous live speech using the injected <see cref="IChatSpeechRecognizer"/>. The
-    /// recognizer feeds interim results into the composer text and submits a final utterance.
+    /// active recognizer and an epoch are tracked so we unsubscribe on every terminal path
+    /// (toggle-off, error, conversation swap, dispose) instead of leaking a subscription into a
+    /// singleton recognizer that then keeps the ChatView alive and mutable.
     /// </summary>
     public async Task ToggleLiveSpeechAsync()
     {
+        var conversation = Conversation;
         var recognizer = Services.GetService(typeof(IChatSpeechRecognizer)) as IChatSpeechRecognizer;
         if (recognizer is null || !recognizer.IsSupported)
         {
@@ -552,53 +714,138 @@
             return;
         }
 
+        var gen = _operationGeneration;
+
         try
         {
             if (_composer.IsLiveSpeechEnabled)
             {
-                _composer.SetIsLiveSpeechEnabled(false);
-                _composer.SetIsListening(false);
-                recognizer.RecognitionChanged -= OnRecognition;
-                await recognizer.StopAsync().ConfigureAwait(true);
-            }
-            else
-            {
-                var granted = await recognizer.RequestPermissionsAsync().ConfigureAwait(true);
-                if (!granted)
+                DetachActiveRecognizer(swallowStopExceptions: true);
+                if (StillValid(gen, conversation))
                 {
-                    _composer.SetErrorMessage("Speech recognition permission was denied.");
-                    return;
+                    _composer.SetIsLiveSpeechEnabled(false);
+                    _composer.SetIsListening(false);
                 }
 
-                recognizer.RecognitionChanged += OnRecognition;
-                await recognizer.StartAsync(
-                    System.Globalization.CultureInfo.CurrentCulture,
-                    reportPartialResults: true).ConfigureAwait(true);
-                _composer.SetIsLiveSpeechEnabled(true);
-                _composer.SetIsListening(true);
+                await recognizer.StopAsync().ConfigureAwait(true);
+                return;
             }
+
+            var granted = await recognizer.RequestPermissionsAsync().ConfigureAwait(true);
+            if (!StillValid(gen, conversation))
+            {
+                if (granted)
+                {
+                    // Ensure we do not leave the recognizer running on the swap's tail.
+                    _ = recognizer.StopAsync();
+                }
+
+                return;
+            }
+
+            if (!granted)
+            {
+                _composer.SetErrorMessage("Speech recognition permission was denied.");
+                return;
+            }
+
+            // Detach any prior recognizer identity FIRST so a stale event from a previous
+            // pass does not race the new subscription.
+            DetachActiveRecognizer(swallowStopExceptions: true);
+            _activeRecognizer = recognizer;
+            recognizer.RecognitionChanged += OnRecognition;
+
+            await recognizer.StartAsync(
+                System.Globalization.CultureInfo.CurrentCulture,
+                reportPartialResults: true).ConfigureAwait(true);
+
+            if (!StillValid(gen, conversation))
+            {
+                // Swap during StartAsync: unwind cleanly.
+                DetachActiveRecognizer(swallowStopExceptions: true);
+                return;
+            }
+
+            _composer.SetIsLiveSpeechEnabled(true);
+            _composer.SetIsListening(true);
         }
         catch (Exception)
         {
-            _composer.SetIsLiveSpeechEnabled(false);
-            _composer.SetIsListening(false);
-            _composer.SetErrorMessage("Live voice could not continue.");
+            DetachActiveRecognizer(swallowStopExceptions: true);
+            if (StillValid(gen, conversation))
+            {
+                _composer.SetIsLiveSpeechEnabled(false);
+                _composer.SetIsListening(false);
+                _composer.SetErrorMessage("Live voice could not continue.");
+            }
+        }
+    }
+
+    private void DetachActiveRecognizer(bool swallowStopExceptions)
+    {
+        var recognizer = _activeRecognizer;
+        _activeRecognizer = null;
+        if (recognizer is null)
+        {
+            return;
+        }
+
+        try
+        {
+            recognizer.RecognitionChanged -= OnRecognition;
+        }
+        catch (Exception) when (swallowStopExceptions)
+        {
+            // Ignore: unsubscribe failure on a disposed recognizer is not actionable here.
+        }
+
+        // Fire-and-forget StopAsync to avoid holding the sync path (AttachConversation
+        // and Dispose call this synchronously). Any recognizer that surfaces recognition
+        // events after we detached is dropped by OnRecognition's identity guard.
+        try
+        {
+            _ = recognizer.StopAsync();
+        }
+        catch (Exception) when (swallowStopExceptions)
+        {
         }
     }
 
     private async void OnRecognition(object? sender, ChatSpeechRecognitionEventArgs e)
     {
+        // Identity guard: only the *current* recognizer's events are honoured. A recognizer
+        // singleton that fires a stale event after we detached (or after a conversation swap
+        // installed a new pass) is silently dropped.
+        if (!ReferenceEquals(sender, _activeRecognizer))
+        {
+            return;
+        }
+
+        var conversation = Conversation;
+        var gen = _operationGeneration;
+
         if (e.ErrorKind != ChatSpeechRecognitionErrorKind.None)
         {
             if (e.ErrorKind is ChatSpeechRecognitionErrorKind.PermissionDenied
                 or ChatSpeechRecognitionErrorKind.Fatal
                 or ChatSpeechRecognitionErrorKind.LanguageNotSupported)
             {
-                _composer.SetErrorMessage("Live voice could not continue.");
-                _composer.SetIsLiveSpeechEnabled(false);
-                _composer.SetIsListening(false);
+                // Terminal error: unsubscribe so the singleton recognizer stops holding this
+                // ChatView. Post-await composer writes are gated on identity.
+                DetachActiveRecognizer(swallowStopExceptions: true);
+                if (StillValid(gen, conversation))
+                {
+                    _composer.SetErrorMessage("Live voice could not continue.");
+                    _composer.SetIsLiveSpeechEnabled(false);
+                    _composer.SetIsListening(false);
+                }
             }
 
+            return;
+        }
+
+        if (!StillValid(gen, conversation))
+        {
             return;
         }
 
@@ -612,7 +859,14 @@
     /// <inheritdoc />
     public void Dispose()
     {
+        // Cancel every in-flight op and unhook the recognizer so nothing outside this
+        // component keeps mutating our composer after teardown.
+        _operationGeneration++;
+        CancelInFlightOperations();
+        DetachActiveRecognizer(swallowStopExceptions: true);
+
         _subscription?.Dispose();
         _subscription = null;
     }
 }
+
