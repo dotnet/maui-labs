@@ -133,6 +133,19 @@
     [Parameter]
     public bool AllowLiveSpeech { get; set; }
 
+    /// <summary>
+    /// Gets or sets whether a finalized speech-recognition utterance is auto-submitted through the
+    /// ordinary Submit path. Defaults to <see langword="true"/>.
+    /// </summary>
+    /// <remarks>
+    /// When <see langword="false"/> the final text lands in the composer and the recognizer is
+    /// detached, leaving the user to review and submit manually. Auto-submit deliberately performs
+    /// one send per recognition pass: this is a single-pass model, not a continuous-resume model.
+    /// A consumer that wants continuous voice can toggle live speech back on after the send lands.
+    /// </remarks>
+    [Parameter]
+    public bool AutoSubmitLiveSpeech { get; set; } = true;
+
     /// <summary>Gets or sets whether the message list stays anchored to the bottom while new content arrives.</summary>
     [Parameter]
     public bool AutoScrollToLatest { get; set; } = true;
@@ -849,11 +862,49 @@
             return;
         }
 
-        _composer.Text = e.Text;
-        if (e.IsFinal)
+        if (!e.IsFinal)
         {
-            await SendAsync().ConfigureAwait(true);
+            // Interim result: stream the partial text into the composer and keep listening.
+            _composer.Text = e.Text;
+            return;
         }
+
+        // === FINAL RESULT PATH — TERMINAL BEFORE SUBMIT ===
+        //
+        // Detach the recognizer FIRST so it stops holding this ChatView and so that
+        // IsListening / IsLiveSpeechEnabled clear. Without this, the composer's IsComposing
+        // derived state stays true, CanSubmit returns false, and the ordinary Submit path
+        // silently drops the recognized utterance. This is the single-pass model: a final
+        // result ends the recognition pass; a consumer that wants continuous voice re-arms
+        // it by toggling live speech back on once the send lands. This also guarantees
+        // AutoSubmit performs exactly one send per pass: no duplicate resume/send.
+        DetachActiveRecognizer(swallowStopExceptions: true);
+        if (!StillValid(gen, conversation))
+        {
+            return;
+        }
+
+        _composer.SetIsLiveSpeechEnabled(false);
+        _composer.SetIsListening(false);
+
+        // Preserve the recognized text so that either (a) AutoSubmit sends it, or (b) with
+        // AutoSubmit=false the user sees the finalized text and submits manually. A rejected
+        // send (draft empty, conversation busy, etc.) also leaves the text in place.
+        _composer.Text = e.Text;
+
+        if (!AutoSubmitLiveSpeech)
+        {
+            return;
+        }
+
+        // Re-check identity right before firing the send: a concurrent conversation swap or
+        // another detach could have happened between the state clears above and here.
+        if (!StillValid(gen, conversation))
+        {
+            return;
+        }
+
+        await SendAsync().ConfigureAwait(true);
     }
 
     /// <inheritdoc />
