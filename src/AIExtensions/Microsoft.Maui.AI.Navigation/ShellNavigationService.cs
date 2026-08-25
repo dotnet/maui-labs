@@ -31,8 +31,8 @@ public record QueryParameterInfo(
 /// <para>
 /// The AI writes clean URIs like <c>//main/products/product/seed-tomato/review</c>.
 /// This service matches path segments against known routes, extracts inline parameter
-/// values, and issues the correct sequence of <c>Shell.GoToAsync</c> calls so each
-/// page receives its parameters.
+/// values, and resolves them to a single Shell URI with route-prefixed query parameters
+/// so each page receives its parameters.
 /// </para>
 /// </summary>
 public class ShellNavigationService
@@ -112,31 +112,17 @@ public class ShellNavigationService
     /// <summary>
     /// Navigates using a clean template-style URI. Unknown path segments that
     /// follow a parameterized route are treated as inline parameter values.
-    /// The method automatically issues the correct sequence of
-    /// <c>GoToAsync</c> calls so each page receives its parameters.
-    /// Returns a JSON array of the navigation steps that were executed.
+    /// The method resolves the template to one Shell URI and issues a single
+    /// <c>GoToAsync</c> call. Returns a JSON array containing the executed route.
     /// </summary>
     public virtual async Task<string> NavigateAsync(string route)
     {
-        var steps = ParseRoute(route);
-
-        if (steps.Count == 0)
+        var resolvedRoute = ResolveRoute(route);
+        await GoToAsyncOnMainThread(resolvedRoute);
+        return System.Text.Json.JsonSerializer.Serialize(new[]
         {
-            await GoToAsyncOnMainThread(route);
-            return System.Text.Json.JsonSerializer.Serialize(new[]
-            {
-                new { route, location = GetCurrentRoute() }
-            });
-        }
-
-        var results = new List<object>();
-        foreach (var step in steps)
-        {
-            await GoToAsyncOnMainThread(step.route);
-            results.Add(new { route = step.route, location = GetCurrentRoute() });
-        }
-
-        return System.Text.Json.JsonSerializer.Serialize(results);
+            new { route = resolvedRoute, location = GetCurrentRoute() }
+        });
     }
 
     /// <summary>
@@ -147,7 +133,7 @@ public class ShellNavigationService
 
     /// <summary>
     /// Builds a multi-segment Shell route where shared query parameters are
-    /// applied to intermediate pages using Shell's dot-prefix convention.
+    /// applied to intermediate pages using Shell's route-prefix convention.
     /// </summary>
     public string BuildRoute(
         string basePath,
@@ -158,13 +144,7 @@ public class ShellNavigationService
             return basePath;
 
         var routes = GetRoutes();
-        var sb = new StringBuilder(basePath.TrimEnd('/'));
-
-        foreach (var segment in segments)
-        {
-            sb.Append('/');
-            sb.Append(segment);
-        }
+        var sb = BuildPath(basePath, segments);
 
         if (parameters is null or { Count: 0 })
             return sb.ToString();
@@ -213,42 +193,36 @@ public class ShellNavigationService
         return sb.ToString();
     }
 
-    // ─── Route parsing ──────────────────────────────────────────────
+    // ─── Route resolution ───────────────────────────────────────────
 
     /// <summary>
-    /// Parses a template-style URI into navigation steps.
+    /// Resolves a template-style URI to a Shell URI.
     /// <para>
     /// The algorithm walks each path segment and classifies it as:
     /// <list type="bullet">
     ///   <item>A Shell hierarchy segment (its route has FullPath starting with //) — accumulated into the base path</item>
-    ///   <item>A registered (pushed) route — becomes a navigation step</item>
+    ///   <item>A registered (pushed) route — appended to the resolved path</item>
     ///   <item>An unknown segment after a parameterized route — treated as an inline parameter value</item>
     /// </list>
     /// If the URI already contains a query string (<c>?</c>), it is preserved as-is
     /// and no template parsing is applied.
     /// </para>
     /// </summary>
-    internal List<(string route, Dictionary<string, string> extractedParams)> ParseRoute(string uri)
+    internal string ResolveRoute(string uri)
     {
-        // Empty / trivial
         if (string.IsNullOrEmpty(uri))
-            return [(uri, new())];
+            return uri;
 
-        // If the URI already has a query string, the caller is using explicit params — pass through
         if (uri.Contains('?'))
-            return [(uri, new())];
+            return uri;
 
-        // Relative single-segment routes (like "..", "cart", "review") — pass through
         if (!uri.Contains('/'))
-            return [(uri, new())];
+            return uri;
 
-        // Relative back navigation ("..","../..","../../..") — pass through
-        if (uri.StartsWith(".."))
-            return [(uri, new())];
+        if (uri.StartsWith("..", StringComparison.Ordinal))
+            return uri;
 
         var routes = GetRoutes();
-
-        // Build lookup sets
         var hierarchyRoutes = new HashSet<string>(
             routes.Where(r => r.FullPath.StartsWith("//")).Select(r => r.Route),
             StringComparer.OrdinalIgnoreCase);
@@ -259,19 +233,13 @@ public class ShellNavigationService
 
         var allKnown = new HashSet<string>(
             routes.Select(r => r.Route), StringComparer.OrdinalIgnoreCase);
-
-        // Split into segments
         var segments = uri.Split('/', StringSplitOptions.RemoveEmptyEntries);
-
-        // Phase 1: separate hierarchy prefix from pushed segments
         var baseParts = new List<string>();
-        int pushedStart = segments.Length; // index where pushed routes begin
+        var pushedStart = segments.Length;
 
         for (int i = 0; i < segments.Length; i++)
         {
             if (hierarchyRoutes.Contains(segments[i]) ||
-                // "main" or other TabBar-level route names that aren't in hierarchy
-                // but appear before any registered route
                 (!registeredRoutes.ContainsKey(segments[i]) && !allKnown.Contains(segments[i])))
             {
                 baseParts.Add(segments[i]);
@@ -283,82 +251,108 @@ public class ShellNavigationService
             }
         }
 
-        // No pushed segments — this is purely a hierarchy route
         if (pushedStart >= segments.Length)
         {
-            var hierarchyRoute = baseParts.Count > 0
+            return uri.StartsWith("//", StringComparison.Ordinal)
                 ? "//" + string.Join("/", baseParts)
-                : uri;
-            return [(hierarchyRoute, new())];
+                : string.Join("/", baseParts);
         }
 
-        // Phase 2: walk pushed segments, extract inline parameter values
-        var steps = new List<(string route, Dictionary<string, string> extractedParams)>();
-        var basePath = "//" + string.Join("/", baseParts);
-        var collectedParams = new Dictionary<string, string>(); // params inherited down the stack
+        var matchedRoutes =
+            new List<(RouteInfo Route, Dictionary<string, string> ExplicitParameters)>();
 
         for (int i = pushedStart; i < segments.Length; i++)
         {
             var seg = segments[i];
-
-            if (registeredRoutes.TryGetValue(seg, out var routeInfo))
+            if (!registeredRoutes.TryGetValue(seg, out var routeInfo))
             {
-                var stepParams = new Dictionary<string, string>();
-
-                // Check if the next segment is an inline value (not a known route)
-                if (routeInfo.Parameters.Count > 0 &&
-                    i + 1 < segments.Length &&
-                    !allKnown.Contains(segments[i + 1]))
-                {
-                    i++; // consume the value segment
-                    var value = Uri.UnescapeDataString(segments[i]);
-                    var paramName = routeInfo.Parameters[0].QueryName;
-                    stepParams[paramName] = value;
-                    collectedParams[paramName] = value;
-                }
-
-                // Build the step route string
-                var sb = new StringBuilder();
-                if (steps.Count == 0)
-                {
-                    // First pushed route: use absolute path
-                    sb.Append(basePath);
-                    sb.Append('/');
-                }
-                sb.Append(seg);
-
-                // Add query string for this step's params
-                // Include the step's own extracted params + any inherited params this route accepts
-                var queryParams = new Dictionary<string, string>(stepParams);
-                foreach (var (key, val) in collectedParams)
-                {
-                    if (!queryParams.ContainsKey(key) &&
-                        routeInfo.Parameters.Any(p =>
-                            string.Equals(p.QueryName, key, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        queryParams[key] = val;
-                    }
-                }
-
-                if (queryParams.Count > 0)
-                {
-                    sb.Append('?');
-                    sb.Append(string.Join('&', queryParams.Select(
-                        kv => $"{Uri.EscapeDataString(kv.Key)}={Uri.EscapeDataString(kv.Value)}")));
-                }
-
-                steps.Add((sb.ToString(), stepParams));
+                return uri;
             }
-            else
+
+            var explicitParameters =
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (routeInfo.Parameters.Count > 0 &&
+                i + 1 < segments.Length &&
+                !allKnown.Contains(segments[i + 1]))
             {
-                // Unknown segment not following a param route — just append to last step or pass through
+                i++;
+                explicitParameters[routeInfo.Parameters[0].QueryName] =
+                    Uri.UnescapeDataString(segments[i]);
             }
+
+            matchedRoutes.Add((routeInfo, explicitParameters));
         }
 
-        return steps.Count > 0 ? steps : [(uri, new Dictionary<string, string>())];
+        var isAbsolute = uri.StartsWith("//", StringComparison.Ordinal);
+        var basePath = string.Join("/", baseParts);
+        if (isAbsolute)
+            basePath = "//" + basePath;
+
+        return BuildResolvedRoute(basePath, matchedRoutes);
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────
+
+    private static string BuildResolvedRoute(
+        string basePath,
+        IReadOnlyList<(RouteInfo Route, Dictionary<string, string> ExplicitParameters)> routes)
+    {
+        var sb = BuildPath(basePath, routes.Select(r => r.Route.Route));
+        var inheritedParameters =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var lastRouteQueryParts = new List<string>();
+        var intermediateQueryParts = new List<string>();
+
+        for (int i = 0; i < routes.Count; i++)
+        {
+            var (route, explicitParameters) = routes[i];
+            foreach (var (key, value) in explicitParameters)
+                inheritedParameters[key] = value;
+
+            foreach (var parameter in route.Parameters)
+            {
+                if (!inheritedParameters.TryGetValue(parameter.QueryName, out var value))
+                    continue;
+
+                var queryName = i == routes.Count - 1
+                    ? parameter.QueryName
+                    : $"{route.Route}.{parameter.QueryName}";
+                var queryPart =
+                    $"{Uri.EscapeDataString(queryName)}={Uri.EscapeDataString(value)}";
+                if (i == routes.Count - 1)
+                    lastRouteQueryParts.Add(queryPart);
+                else
+                    intermediateQueryParts.Add(queryPart);
+            }
+        }
+
+        if (lastRouteQueryParts.Count > 0 || intermediateQueryParts.Count > 0)
+        {
+            sb.Append('?');
+            sb.Append(string.Join('&',
+                lastRouteQueryParts.Concat(intermediateQueryParts)));
+        }
+
+        return sb.ToString();
+    }
+
+    private static StringBuilder BuildPath(string basePath, IEnumerable<string> segments)
+    {
+        var trimmedBasePath = basePath.TrimEnd('/');
+        var sb = new StringBuilder(
+            trimmedBasePath.Length == 0 && basePath.StartsWith("//", StringComparison.Ordinal)
+                ? "//"
+                : trimmedBasePath);
+
+        foreach (var segment in segments)
+        {
+            if (sb.Length > 0 && sb[^1] != '/')
+                sb.Append('/');
+            sb.Append(segment);
+        }
+
+        return sb;
+    }
 
     private async Task GoToAsyncOnMainThread(string route)
     {

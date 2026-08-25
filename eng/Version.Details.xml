@@ -8,13 +8,13 @@
       <Sha>2114bc81fed892c4d166aeff637ca2387b0fcd8a</Sha>
     </Dependency>
     <!-- dotnet/maui -->
-    <Dependency Name="Microsoft.Maui.Controls" Version="10.0.41">
+    <Dependency Name="Microsoft.Maui.Controls" Version="10.0.100">
       <Uri>https://github.com/dotnet/maui</Uri>
-      <Sha>d15964ef4f0a6d0740b655ba7c6be9b96be8b187</Sha>
+      <Sha>7ed62a1cef553e6fdf30d123051b35090b98d617</Sha>
     </Dependency>
-    <Dependency Name="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.41">
+    <Dependency Name="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.100">
       <Uri>https://github.com/dotnet/maui</Uri>
-      <Sha>d15964ef4f0a6d0740b655ba7c6be9b96be8b187</Sha>
+      <Sha>7ed62a1cef553e6fdf30d123051b35090b98d617</Sha>
     </Dependency>
     <!-- dotnet/runtime -->
     <Dependency Name="Microsoft.Extensions.Http" Version="10.0.5">
