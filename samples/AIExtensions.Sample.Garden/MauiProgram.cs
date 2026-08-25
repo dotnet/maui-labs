@@ -9,6 +9,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.AI.Indexer;
 using Microsoft.Maui.AI.Navigation;
+using Microsoft.Maui.AI.Wayfinding;
 using Microsoft.Maui.DevFlow.Agent;
 
 namespace AIExtensions.Sample.Garden;
@@ -51,15 +52,20 @@ public static class MauiProgram
         builder.Services.AddSingleton<IOrderArchive, PreferencesOrderArchive>();
         builder.Services.AddSingleton<CurrentCart>();
         builder.Services.AddSingleton<ReviewStore>();
-        builder.Services.AddSingleton<ShellNavigationService>();
-        builder.Services.AddSingleton<IndexedPageCatalog>(
-            AIExtensions_Sample_GardenIndexedPageCatalog.Default);
-        builder.Services.AddSingleton<ICurrentPageContextProvider, RuntimePageContextProvider>();
-        builder.Services.AddSingleton<ApplicationMapService>();
-        builder.Services.AddSingleton<AppWayfindingTools>();
-        builder.Services.AddSingleton<ICurrentViewCaptureService, CurrentViewCaptureService>();
-        builder.Services.AddSingleton<VisualAnalysisService>();
-        builder.Services.AddSingleton<AppVisualTools>();
+        builder.Services.AddMauiWayfinding(
+            AIExtensions_Sample_GardenIndexedPageCatalog.Default,
+            options =>
+        {
+            options.EnableVision = true;
+            options.DefaultVisualTargetAutomationId = "OrderInsightsCharts";
+            options.AdditionalInstructions =
+                """
+                On the Orders screen, the rendered charts use the visual target OrderInsightsCharts.
+                Before opening product detail or review, identify the product with search_products
+                or get_product and pass its sku. Before opening order detail, identify the order
+                with list_past_orders or find_order and pass its orderId.
+                """;
+        });
 
         builder.AddOpenAIServices();
 
@@ -123,8 +129,12 @@ public static class MauiProgram
             new Uri(endpoint),
             new ApiKeyCredential(apiKey));
         var chatClient = azureClient.GetChatClient(deploymentName);
+        var aiChatClient = chatClient.AsIChatClient();
 
-        builder.Services.AddSingleton<IChatClient>(chatClient.AsIChatClient());
+        builder.Services.AddSingleton<IChatClient>(aiChatClient);
+        builder.Services.AddKeyedSingleton<IChatClient>(
+            MauiWayfindingOptions.VisionChatClientServiceKey,
+            aiChatClient);
 
         return builder;
     }

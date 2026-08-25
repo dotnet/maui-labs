@@ -1,6 +1,6 @@
 using Microsoft.Maui.Media;
 
-namespace AIExtensions.Sample.Garden.Services;
+namespace Microsoft.Maui.AI.Wayfinding;
 
 public sealed record CapturedViewImage(
     byte[] PngData,
@@ -36,7 +36,7 @@ public sealed class CurrentViewCaptureService : ICurrentViewCaptureService
             ? currentPage
             : FindByAutomationId(currentPage, targetAutomationId!)
                 ?? throw new InvalidOperationException(
-                    $"No visible view with AutomationId '{targetAutomationId}' was found on {currentPage.GetType().Name}.");
+                    $"No visible view with AutomationId '{targetAutomationId}' was found on the current screen.");
 
         if (!target.IsVisible || target.Opacity <= 0)
         {

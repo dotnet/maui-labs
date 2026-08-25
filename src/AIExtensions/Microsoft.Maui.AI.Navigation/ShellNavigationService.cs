@@ -97,7 +97,8 @@ public class ShellNavigationService
             // Reflection on internal Routing dictionary failed
         }
 
-        _cachedRoutes = routes;
+        if (Shell.Current is not null)
+            _cachedRoutes = routes;
         return routes;
     }
 

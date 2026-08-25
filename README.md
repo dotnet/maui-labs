@@ -111,7 +111,9 @@ Runtime Shell route discovery and template-aware navigation for AI agents. Clean
 
 | Package | Description |
 |---------|-------------|
-| `Microsoft.Maui.AI.Navigation` | Runtime Shell route discovery and AI-friendly navigation |
+| `Microsoft.Maui.AI.Indexer` | Generated semantic page catalog and runtime current-page snapshots |
+| `Microsoft.Maui.AI.Navigation` | Model-independent Shell route discovery and navigation |
+| `Microsoft.Maui.AI.Wayfinding` | AI middleware combining indexing, current context, semantic destinations, navigation, and optional vision |
 
 ### macOS AppKit Backend
 

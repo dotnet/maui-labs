@@ -1,5 +1,6 @@
 using Microsoft.Maui.AI.Indexer;
 using Microsoft.Maui.AI.Navigation;
+using Microsoft.Maui.AI.Wayfinding;
 
 namespace Microsoft.Maui.AI.Navigation.Tests;
 

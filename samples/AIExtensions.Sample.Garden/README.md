@@ -51,9 +51,9 @@ Returning home restores the chat-first layout with the same conversation history
 
 ## Tool sources and lifetimes
 
-`GardenShopTools` composes several very different source types with repeated
-`[AIToolSource]` attributes. Shopping tools bind directly from their source types;
-one focused `AppWayfindingTools` bridge curates the application-map operations.
+`GardenShopTools` composes the app's shopping/domain tools with repeated
+`[AIToolSource]` attributes. `UseMauiWayfinding()` injects the reusable semantic
+search, current-state, navigation, and optional vision tools independently.
 The sample uses an **explicit** context on purpose to curate the exact set of
 tools Sage should see, even though the library can also auto-generate an
 assembly-wide context for the whole app.
@@ -65,8 +65,7 @@ assembly-wide context for the whole app.
 | `IOrderArchive` | singleton interface | Past-order lookup, `checkout_list`, `reorder`, and `clear_past_orders` |
 | `CartViewModel` | singleton | Accessor-level tools: `get_cart_mode` / `set_cart_mode` |
 | `CatalogViewModel` | transient | `recommend_bundle`, a page-local bundle recommender that returns a starter kit without mutating the cart |
-| `AppWayfindingTools` | singleton | Destination search/description, configurable current app state, and navigation tools |
-| `AppVisualTools` | singleton | `describe_current_visual`, which captures and analyzes rendered pixel-only UI |
+| `Microsoft.Maui.AI.Wayfinding` | middleware | `search_app_ui`, `get_app_destination`, `get_current_app_state`, `navigate_to_app_destination`, and optional `describe_current_visual` |
 
 This sample is especially useful if you want to see a **transient view-model**
 participate in a shared tool context while still writing through to singleton state.
@@ -74,14 +73,15 @@ participate in a shared tool context while still writing through to singleton st
 ## Current-screen help
 
 This lets a user navigate to the review form and ask, "What is this text box for?"
-without leaving the form. `get_current_app_state(includePageUi: true)` combines the
-live Shell URI with a fresh `RuntimePageIndexer` snapshot containing the resolved
-product name, rating, and editor purpose without exposing user-entered text.
+without leaving the form. `get_current_app_state(includePageUi: true)` returns a
+user-visible page title plus a fresh `RuntimePageIndexer` snapshot containing the
+resolved product name, rating, and editor purpose without exposing user-entered
+text or internal routes/type names.
 
-Before giving directions, Sage calls `get_current_app_state`. It can request only
-the URI or include the current page UI when exact from-here controls are needed,
-then combines that live state with the compile-time destination returned by
-`get_app_destination`.
+The Wayfinding middleware injects an ephemeral intent policy on every request:
+where/how requests remain read-only, while explicit open/show/go/take requests may
+navigate. The app's conversation history stores neither this policy nor internal
+route metadata.
 
 The home `ChatView` and persistent sidebar are marked with
 `IndexingProperties.ExcludeWithChildren="True"`. They remain visible and interactive
@@ -116,7 +116,7 @@ and refreshes both charts.
 | Cart presentation | `get_cart_mode`, `set_cart_mode` |
 | Orders | `list_past_orders`, `find_order`, `checkout_list`, `reorder`, `clear_past_orders` |
 | App feature and control discovery | `search_app_ui`, `get_app_destination` |
-| Current URI and optional live page UI | `get_current_app_state(includePageUi)` |
+| Current user-visible page and optional live UI | `get_current_app_state(includePageUi)` |
 | Resolved deep navigation | `navigate_to_app_destination` |
 | Rendered charts/images/drawings | `describe_current_visual` |
 | Recommendations | `recommend_bundle` |
@@ -133,12 +133,12 @@ and refreshes both charts.
 | `[FromServices]` parameter injection | `IOrderArchive.Checkout([FromServices] CurrentCart cart)` |
 | Accessor-level property tools | `ViewModels/Cart/CartViewModel.cs` → `get_cart_mode` / `set_cart_mode` |
 | Transient tool host | `ViewModels/Catalog/CatalogViewModel.cs` → `recommend_bundle` |
-| Unified semantic application map | `Services/AppWayfindingTools.cs` over `ApplicationMapService` |
+| Plug-in semantic wayfinding | `AddMauiWayfinding(...)` + `UseMauiWayfinding()` |
 | Generated ShellContent route metadata | `Microsoft.Maui.AI.Indexer` catalog generation |
 | Typed deep-route registration | `AppShell.xaml.cs` + `ShellNavigationService.RegisterRoute&lt;TPage&gt;` |
 | Runtime current-page augmentation | `RuntimePageContextProvider` over `RuntimePageIndexer` |
-| Element-level rendered capture | `CurrentViewCaptureService` over `IView.CaptureAsync()` |
-| Vision-language chart description | `VisualAnalysisService` + `AppVisualTools` |
+| Element-level rendered capture | Wayfinding's optional `CurrentViewCaptureService` over `IView.CaptureAsync()` |
+| Vision-language chart description | Wayfinding's optional `describe_current_visual` tool |
 | Persistent assistant beside non-home pages | `Views/ChatSidebar.xaml`, backed by singleton `ChatViewModel` |
 | Responsive welcome cards and centered chat layout | `Views/ChatView.xaml` + `Pages/MainPage.xaml` |
 

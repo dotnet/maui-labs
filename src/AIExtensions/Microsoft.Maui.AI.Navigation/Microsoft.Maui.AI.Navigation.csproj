@@ -4,11 +4,12 @@
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Microsoft.Maui.AI.Navigation</RootNamespace>
     <PackageId>Microsoft.Maui.AI.Navigation</PackageId>
-    <Description>Runtime Shell route discovery and AI-friendly navigation for .NET MAUI apps.</Description>
+    <Description>Runtime Shell route discovery and deep navigation for .NET MAUI apps.</Description>
     <IsPackable>true</IsPackable>
     <IsShipping>true</IsShipping>
     <PackageTags>$(PackageTags) ai navigation shell</PackageTags>
     <PackRepoRootReadme>false</PackRepoRootReadme>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
