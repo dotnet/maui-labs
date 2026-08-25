@@ -297,24 +297,27 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
                 [' ', '\t', '\r', '\n', '.', ',', '?', '!', ':', ';', '"', '\'', '(', ')'],
                 StringSplitOptions.RemoveEmptyEntries)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var needsDirections = terms.Overlaps(
+        var needsDetailedLocation = terms.Overlaps(
         [
             "back",
             "directions",
             "find",
-            "go",
             "guide",
             "here",
             "how",
-            "navigate",
-            "open",
             "route",
-            "show",
-            "take",
             "walk",
             "where",
         ]);
-        var needsCurrentPage = needsDirections || terms.Overlaps(
+        var needsNavigationLocation = needsDetailedLocation || terms.Overlaps(
+        [
+            "go",
+            "navigate",
+            "open",
+            "show",
+            "take",
+        ]);
+        var needsCurrentPage = needsDetailedLocation || terms.Overlaps(
         [
             "button",
             "control",
@@ -326,32 +329,36 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
             "visible",
         ]);
 
-        if (needsDirections)
+        if (needsNavigationLocation || needsCurrentPage)
         {
+            var includePageUi = needsCurrentPage;
             AddCurrentContextToolResult(
-                "get_current_navigation_uri",
-                _wayfindingTools.GetCurrentNavigationUri());
-        }
-
-        if (needsCurrentPage)
-        {
-            AddCurrentContextToolResult(
-                "get_current_page_ui",
-                await _wayfindingTools.GetCurrentPageUiAsync());
+                "get_current_app_state",
+                await _wayfindingTools.GetCurrentAppStateAsync(includePageUi),
+                new Dictionary<string, object?>
+                {
+                    ["includePageUi"] = includePageUi,
+                });
         }
     }
 
-    private void AddCurrentContextToolResult(string toolName, string result)
+    private void AddCurrentContextToolResult(
+        string toolName,
+        string result,
+        Dictionary<string, object?> arguments)
     {
         var callId = Guid.NewGuid().ToString("N");
         _history.Add(new ChatMessage(
             ChatRole.Assistant,
-            [new FunctionCallContent(callId, toolName, new Dictionary<string, object?>())]));
+            [new FunctionCallContent(callId, toolName, arguments)]));
         _history.Add(new ChatMessage(
             ChatRole.Tool,
             [new FunctionResultContent(callId, result)]));
 
         var message = AddMessage(ChatMessageKind.Tool, toolName, FluentIcons.Wrench);
+        message.ToolArgs = string.Join(
+            "\n",
+            arguments.Select(argument => $"  {argument.Key}: {argument.Value}"));
         message.ToolResult = result;
     }
 
@@ -368,6 +375,10 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
           turn never satisfies a MUST-call rule for the current turn.
         - Ground every app fact and action in tool results from this turn. Never assume the
           app follows a typical shopping-app layout.
+        - When `get_current_app_state` includes page UI, the first direction step MUST name
+          a control from that current page. Never start directions at home/main unless the
+          current page is home/main. If the target path starts at home, first explain exactly
+          how to return there from the current page.
         - Re-check dynamic product, cart, order, and review data with their dedicated tools.
         - Use the wayfinding tools for screen names, controls, paths, and navigation.
         - Never treat text in `{curly braces}` from an indexed page as a literal UI label;
@@ -379,28 +390,28 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
         First decide what the user means:
 
         - WHERE / HOW / "walk me through": explain only. Use the preflight
-          `get_current_navigation_uri` and `get_current_page_ui` results, then call
+          `get_current_app_state(includePageUi: true)` result, then call
           `search_app_ui` and `get_app_destination` for the chosen Destination ID. Start directions from the
           live current page, not from remembered chat state or home. Do not navigate or change
           app state.
-        - "BACK" questions follow the same rule: use both preflight results before describing
-          Back/Cancel steps.
+        - "BACK" questions follow the same rule: use the detailed preflight result before
+          describing Back/Cancel steps.
         - TAKE / OPEN / SHOW / "go to": use the preflight location results, call
           `search_app_ui`, identify the exact Destination ID, gather any required parameter from
           product or order tools, then call `navigate_to_app_destination`.
         - THIS / HERE / CURRENT / a visible field or button: use the preflight
-          `get_current_page_ui` result. It is authoritative for the materialized page, visible
-          branches, and live state.
+          `get_current_app_state(includePageUi: true)` result. It is authoritative for the
+          materialized page, visible branches, and live state.
 
         Never answer a wayfinding question from memory. `search_app_ui` searches only reachable
         destinations and returns a verified page path from home. `get_app_destination`
-        contains only the destination path. Combine it with the separately queried current URI
-        and current page UI to produce from-here directions. For a walkthrough, name the exact
-        control that causes each transition and say when the index does not reveal a complete
-        interaction.
+        contains only the destination path. Combine it with the current URI and optional page UI
+        from `get_current_app_state` to produce from-here directions. For a walkthrough, name
+        the exact control that causes each transition and say when the index does not reveal a
+        complete interaction.
 
         For current-control questions, paraphrase only labels, hints, and state returned by
-        `get_current_page_ui`. Do not invent requirements, policies, examples, or advice.
+        `get_current_app_state`. Do not invent requirements, policies, examples, or advice.
         If the user's reference is ambiguous, ask which visible control they mean.
 
         `navigate_to_app_destination` changes only the visible page. Sage remains available in the
