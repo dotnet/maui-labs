@@ -44,6 +44,7 @@ internal sealed class ChatComposerContext : IChatComposerContext
     private bool _isLiveSpeechEnabled;
     private bool _isListening;
     private bool _isSpeechStarting;
+    private bool _isSpeechStopping;
     private bool _isComposingOverride;
     private string? _statusMessage;
     private string? _errorMessage;
@@ -124,11 +125,19 @@ internal sealed class ChatComposerContext : IChatComposerContext
     /// <inheritdoc />
     /// <inheritdoc />
     /// <remarks>
-    /// Allows stopping/cancelling an active audio operation (recording, transcribing,
-    /// or the start-up await). Denies starting a fresh recording while live-speech is
-    /// active, its subscription is being torn down, or its startup await is still
-    /// in flight — a single-microphone-owner rule prevents two modalities from
-    /// racing for the same platform capture device.
+    /// A toggle is only meaningful in two settled states:
+    /// <list type="bullet">
+    /// <item><description><c>IsRecordingAudio</c>: the user has an active recording and can stop it.</description></item>
+    /// <item><description>Idle (neither modality active): the user can start a fresh recording.</description></item>
+    /// </list>
+    /// The transient states <c>IsAudioStarting</c> (recorder <c>StartAsync</c> in flight) and
+    /// <c>IsTranscribingAudio</c> (recorder <c>StopAsync</c> in flight, waiting for the buffer
+    /// to be delivered) are NOT toggleable — the button is disabled so a rapid second click
+    /// cannot invoke <c>StartAsync</c> or <c>StopAsync</c> again. Programmatic callers must
+    /// also observe the gate; <see cref="ChatView.ToggleAudioCaptureAsync"/> reinforces the
+    /// rule with an early return for callers that bypass the DOM disabled flag.
+    /// Starting additionally requires <c>!IsConversationBusy</c> AND
+    /// <c>!IsSpeechActive</c> — the single-microphone-owner rule.
     /// </remarks>
     public bool CanToggleAudioCapture
     {
@@ -139,24 +148,34 @@ internal sealed class ChatComposerContext : IChatComposerContext
                 return false;
             }
 
-            // Stopping the active audio operation is always allowed - the user can always
-            // abort what they started.
-            if (IsAudioActive)
+            // Transient windows FIRST. The button is disabled during startup / stop-read
+            // regardless of whether IsRecordingAudio might also be true briefly (in the
+            // current state machine they are mutually exclusive, but ordering the guard
+            // this way keeps the contract robust to future refactors).
+            if (_isAudioStarting || _isTranscribingAudio)
+            {
+                return false;
+            }
+
+            // Settled recording: user can stop.
+            if (_isRecordingAudio)
             {
                 return true;
             }
 
-            // Starting audio requires: conversation not busy AND live speech is not the
-            // current microphone owner (including its startup await).
+            // Idle: fresh start requires conversation idle AND no speech contention.
             return !IsConversationBusy && !IsSpeechActive;
         }
     }
 
     /// <inheritdoc />
     /// <remarks>
-    /// Symmetric to <see cref="CanToggleAudioCapture"/>: allows stopping active speech,
-    /// denies starting while audio recording, transcribing, or its startup await is
-    /// in flight.
+    /// Symmetric to <see cref="CanToggleAudioCapture"/>. The stop-await window
+    /// (<c>IsSpeechStopping</c>) overlaps with the settled listening flags until the
+    /// finally clears them, so <c>IsSpeechStopping</c> must be checked BEFORE the
+    /// "settled listening allows stop" branch — otherwise the button would appear
+    /// enabled during the stop-await window and a rapid second click would try to
+    /// invoke <c>StopAsync</c> again on the already-detached recognizer.
     /// </remarks>
     public bool CanToggleLiveSpeech
     {
@@ -167,7 +186,14 @@ internal sealed class ChatComposerContext : IChatComposerContext
                 return false;
             }
 
-            if (IsSpeechActive)
+            // Transient windows FIRST. See remarks above.
+            if (_isSpeechStarting || _isSpeechStopping)
+            {
+                return false;
+            }
+
+            // Settled listening: user can stop.
+            if (_isLiveSpeechEnabled || _isListening)
             {
                 return true;
             }
@@ -200,9 +226,18 @@ internal sealed class ChatComposerContext : IChatComposerContext
     internal bool IsAudioActive =>
         _isRecordingAudio || _isTranscribingAudio || _isAudioStarting;
 
-    /// <summary>Gets whether the live-speech modality is starting, enabled, or listening.</summary>
+    /// <summary>Gets whether the live-speech modality is starting, enabled, listening, or stopping.</summary>
     internal bool IsSpeechActive =>
-        _isLiveSpeechEnabled || _isListening || _isSpeechStarting;
+        _isLiveSpeechEnabled || _isListening || _isSpeechStarting || _isSpeechStopping;
+
+    /// <summary>Gets whether the audio-capture startup await is currently in flight.</summary>
+    internal bool IsAudioStarting => _isAudioStarting;
+
+    /// <summary>Gets whether the live-speech startup await is currently in flight.</summary>
+    internal bool IsSpeechStarting => _isSpeechStarting;
+
+    /// <summary>Gets whether the live-speech stop await is currently in flight.</summary>
+    internal bool IsSpeechStopping => _isSpeechStopping;
 
     /// <inheritdoc />
     public string? StatusMessage => _statusMessage;
@@ -403,6 +438,23 @@ internal sealed class ChatComposerContext : IChatComposerContext
         }
 
         _isSpeechStarting = value;
+        RaiseChanged();
+    }
+
+    /// <summary>
+    /// Sets the shell's speech-stop-in-flight flag. Set while the recognizer is running
+    /// <c>StopAsync</c> so the composer treats the microphone as speech-owned across
+    /// the stop-await window, denying audio capture from racing for the same device
+    /// AND denying a second click from re-invoking <c>StopAsync</c>.
+    /// </summary>
+    internal void SetIsSpeechStopping(bool value)
+    {
+        if (_isSpeechStopping == value)
+        {
+            return;
+        }
+
+        _isSpeechStopping = value;
         RaiseChanged();
     }
 
