@@ -73,12 +73,14 @@ public sealed partial class CartViewModel : ObservableObject, IRecipient<CartCha
     }
 
     [RelayCommand]
-    private void Checkout()
+    private async Task CheckoutAsync()
     {
         if (_currentCart.Items.Count == 0)
             return;
 
         _archive.Checkout(_currentCart);
+        WeakReferenceMessenger.Default.Send(new OrderArchiveChangedMessage());
+        await Shell.Current.GoToAsync("//main/orders");
     }
 
     [RelayCommand]

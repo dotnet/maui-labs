@@ -176,6 +176,20 @@ Use the two indexes together:
 | "What can ever appear on this page?" | Read the compile-time `IndexedPage` |
 | "What is visible on this page right now?" | Read the runtime snapshot |
 
+### Pixel-only rendered content
+
+Controls such as `GraphicsView` can paint charts, maps, diagrams, or custom
+drawings without exposing child controls or text. Those pixels intentionally do
+not become semantic Markdown. An app that needs a visual fallback can capture a
+specific rendered view with .NET MAUI 10
+[`IView.CaptureAsync()`](https://learn.microsoft.com/dotnet/api/microsoft.maui.viewextensions.captureasync?view=net-maui-10.0)
+and send the in-memory image to a vision-enabled model.
+
+The Garden sample demonstrates this with `describe_current_visual`: it captures
+only the `OrderInsightsCharts` view by `AutomationId`, excluding Sage's sidebar,
+then asks its Azure OpenAI `gpt-5-mini` deployment to describe the visible charts.
+This remains separate from the deterministic semantic index.
+
 `CaptureCurrentAsync` runs on the MAUI dispatcher. Apps with multiple windows can
 pass a specific `Window` to `RuntimePageIndexer.Capture`; callers already on the UI
 thread can also capture a specific `Page`.

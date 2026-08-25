@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:charts="clr-namespace:AIExtensions.Sample.Garden.Views.Charts"
+             xmlns:vm="clr-namespace:AIExtensions.Sample.Garden.ViewModels"
+             x:Class="AIExtensions.Sample.Garden.Views.OrderInsightsView"
+             x:DataType="vm:OrdersViewModel"
+             AutomationId="OrderInsightsCharts"
+             BackgroundColor="Transparent">
+
+    <FlexLayout Direction="Row"
+                Wrap="Wrap"
+                AlignItems="Start"
+                AlignContent="Start"
+                JustifyContent="Start"
+                Padding="6,4">
+        <charts:SpendingByCategoryChartView
+            Margin="6"
+            Items="{Binding Insights.SpendingByCategory}" />
+        <charts:PopularProductsChartView
+            Margin="6"
+            Items="{Binding Insights.PopularProducts}" />
+    </FlexLayout>
+
+</ContentView>

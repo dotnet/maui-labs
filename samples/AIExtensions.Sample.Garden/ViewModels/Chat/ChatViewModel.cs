@@ -33,6 +33,7 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
     [AIToolSource(typeof(CatalogViewModel))]
     [AIToolSource(typeof(ReviewStore))]
     [AIToolSource(typeof(AppWayfindingTools))]
+    [AIToolSource(typeof(AppVisualTools))]
     private partial class GardenShopTools : AIToolContext { }
 
     private readonly IChatClient _chatClient;
@@ -70,6 +71,7 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
         "Where are my past orders?",
         "What is this field for?",
         "How do I get back to the catalog?",
+        "What do these charts show?",
         "Add 5 packs of tomato seeds and a trowel",
         "Build me a starter bundle",
         "Checkout my shopping list",
@@ -402,6 +404,11 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
         - THIS / HERE / CURRENT / a visible field or button: use the preflight
           `get_current_app_state(includePageUi: true)` result. It is authoritative for the
           materialized page, visible branches, and live state.
+        - CHART / IMAGE / DRAWING / GRAPH / VISUAL questions: call
+          `describe_current_visual`. The structural UI index cannot read pixels painted inside
+          a GraphicsView. On Orders, use targetAutomationId `OrderInsightsCharts`. If visual
+          analysis fails, report that failure and do not infer chart contents from control
+          names or prior messages.
 
         Never answer a wayfinding question from memory. `search_app_ui` searches only reachable
         destinations and returns a verified page path from home. `get_app_destination`

@@ -13,6 +13,8 @@ and deep-navigates while also handling catalog, cart, order, and review actions.
 - `Where are my past orders?`
 - `What is this field for?` — reads the live current-page snapshot.
 - `How do I get back to the catalog?`
+- `What do these charts show?` — captures the rendered Orders insight panel and
+  asks the deployed vision model to read the pixel-only charts.
 - `Add 5 packs of tomato seeds and a trowel.`
 - `Build me a basil starter bundle.`
 
@@ -30,6 +32,9 @@ and deep-navigates while also handling catalog, cart, order, and review actions.
   pages using MAUI 10 template-style URIs and one `GoToAsync` call.
 - **Intent-aware assistance** — "where/how" explains, "take/open/show" navigates,
   and "this/here" reads the visible runtime state.
+- **Rendered visual understanding** — `IView.CaptureAsync()` captures only the
+  requested chart panel, then `gpt-5-mini` describes its visible chart titles,
+  labels, values, and comparisons.
 - **Approval flow** — checkout and destructive actions pause the chat and show an
   inline approve/reject banner.
 
@@ -61,6 +66,7 @@ assembly-wide context for the whole app.
 | `CartViewModel` | singleton | Accessor-level tools: `get_cart_mode` / `set_cart_mode` |
 | `CatalogViewModel` | transient | `recommend_bundle`, a page-local bundle recommender that returns a starter kit without mutating the cart |
 | `AppWayfindingTools` | singleton | Destination search/description, configurable current app state, and navigation tools |
+| `AppVisualTools` | singleton | `describe_current_visual`, which captures and analyzes rendered pixel-only UI |
 
 This sample is especially useful if you want to see a **transient view-model**
 participate in a shared tool context while still writing through to singleton state.
@@ -82,6 +88,25 @@ The home `ChatView` and persistent sidebar are marked with
 but are omitted from compile-time and runtime UI indexes, so Sage receives the page's
 domain controls rather than recursively describing its own chat UI.
 
+## Order insights and visual analysis
+
+The Orders page starts with two separate MAUI.Graphics chart cards:
+
+- **Where the money went** — completed-order spending by category.
+- **Most popular products** — product quantities across completed orders.
+
+All chart titles, labels, bars, and values are painted inside `GraphicsView`.
+They intentionally do not appear in the semantic XAML/current-page index. The
+`OrderInsightsCharts` container has an `AutomationId`, so
+`describe_current_visual` captures that exact rendered `IView` rather than the
+whole page or Sage sidebar. PNG bytes stay in memory and are sent as
+`DataContent("image/png")` to the same raw Azure OpenAI `gpt-5-mini` client.
+
+The first launch seeds realistic completed orders so the charts are immediately
+useful. The seed marker is durable: **Clear All** remains cleared after restart.
+The Cart **Checkout** button creates a real order, clears the cart, opens Orders,
+and refreshes both charts.
+
 ## Tool scenarios
 
 | Area | Tools |
@@ -93,6 +118,7 @@ domain controls rather than recursively describing its own chat UI.
 | App feature and control discovery | `search_app_ui`, `get_app_destination` |
 | Current URI and optional live page UI | `get_current_app_state(includePageUi)` |
 | Resolved deep navigation | `navigate_to_app_destination` |
+| Rendered charts/images/drawings | `describe_current_visual` |
 | Recommendations | `recommend_bundle` |
 
 ## Feature showcase
@@ -111,6 +137,8 @@ domain controls rather than recursively describing its own chat UI.
 | Generated ShellContent route metadata | `Microsoft.Maui.AI.Indexer` catalog generation |
 | Typed deep-route registration | `AppShell.xaml.cs` + `ShellNavigationService.RegisterRoute&lt;TPage&gt;` |
 | Runtime current-page augmentation | `RuntimePageContextProvider` over `RuntimePageIndexer` |
+| Element-level rendered capture | `CurrentViewCaptureService` over `IView.CaptureAsync()` |
+| Vision-language chart description | `VisualAnalysisService` + `AppVisualTools` |
 | Persistent assistant beside non-home pages | `Views/ChatSidebar.xaml`, backed by singleton `ChatViewModel` |
 | Responsive welcome cards and centered chat layout | `Views/ChatView.xaml` + `Pages/MainPage.xaml` |
 

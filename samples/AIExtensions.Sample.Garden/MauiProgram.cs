@@ -7,6 +7,7 @@ using Azure.AI.OpenAI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Maui.AI.Indexer;
 using Microsoft.Maui.AI.Navigation;
 using Microsoft.Maui.DevFlow.Agent;
 
@@ -51,7 +52,14 @@ public static class MauiProgram
         builder.Services.AddSingleton<CurrentCart>();
         builder.Services.AddSingleton<ReviewStore>();
         builder.Services.AddSingleton<ShellNavigationService>();
-        builder.Services.AddSingleton<AINavigationService>();
+        builder.Services.AddSingleton<IndexedPageCatalog>(
+            AIExtensions_Sample_GardenIndexedPageCatalog.Default);
+        builder.Services.AddSingleton<ICurrentPageContextProvider, RuntimePageContextProvider>();
+        builder.Services.AddSingleton<ApplicationMapService>();
+        builder.Services.AddSingleton<AppWayfindingTools>();
+        builder.Services.AddSingleton<ICurrentViewCaptureService, CurrentViewCaptureService>();
+        builder.Services.AddSingleton<VisualAnalysisService>();
+        builder.Services.AddSingleton<AppVisualTools>();
 
         builder.AddOpenAIServices();
 
@@ -63,6 +71,7 @@ public static class MauiProgram
         builder.Services.AddTransient<ProductReviewViewModel>();
         builder.Services.AddTransient<OrderDetailViewModel>();
         builder.Services.AddSingleton<MainViewModel>();
+        builder.Services.AddTransient<AppShell>();
         builder.Services.AddTransient<MainPage>();
         builder.Services.AddTransient<OrdersPage>();
         builder.Services.AddTransient<CatalogPage>();
