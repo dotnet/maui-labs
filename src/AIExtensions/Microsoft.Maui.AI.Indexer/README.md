@@ -97,13 +97,9 @@ foreach (var page in MyAppIndexedPageCatalog.Default.Pages)
 var md = MyAppIndexedPageCatalog.Default.FindByName("ProductDetailPage")?.Markdown;
 ```
 
-For a unified wayfinding service, use `Microsoft.Maui.AI.Navigation`.
-`ApplicationMapService` composes this catalog with runtime current-page context and
-Shell navigation, then searches only pages with reliable destinations. The Garden
-sample's
-[`AppWayfindingTools`](../../../samples/AIExtensions.Sample.Garden/Services/AppWayfindingTools.cs)
-exposes focused search, destination, configurable current-state, and navigation
-tools.
+For AI-powered semantic navigation, use `Microsoft.Maui.AI.Wayfinding`. It
+combines this model-independent index with `Microsoft.Maui.AI.Navigation` and
+adds curated `Microsoft.Extensions.AI` tools and intent instructions.
 
 If your app spans multiple assemblies, collect each assembly's
 `{AssemblyName}IndexedPageCatalog.Default.Pages` yourself and merge them — there is no
@@ -187,7 +183,8 @@ specific rendered view with .NET MAUI 10
 [`IView.CaptureAsync()`](https://learn.microsoft.com/dotnet/api/microsoft.maui.viewextensions.captureasync?view=net-maui-10.0)
 and send the in-memory image to a vision-enabled model.
 
-The Garden sample demonstrates this with `describe_current_visual`: it captures
+The Garden sample demonstrates the optional Wayfinding vision feature with
+`describe_current_visual`: it captures
 only the `OrderInsightsCharts` view by `AutomationId`, excluding Sage's sidebar,
 then asks its Azure OpenAI `gpt-5-mini` deployment to describe the visible charts.
 This remains separate from the deterministic semantic index.

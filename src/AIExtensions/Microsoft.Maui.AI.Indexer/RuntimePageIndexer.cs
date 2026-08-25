@@ -79,7 +79,10 @@ public static class RuntimePageIndexer
 
         var pageName = page.GetType().Name;
         var markdown = RuntimeMarkdownBuilder.Render(page, pageName, options);
-        return new CurrentPageSnapshot(pageName, markdown);
+        return new CurrentPageSnapshot(
+            pageName,
+            markdown,
+            page.Title);
     }
 
     private static CurrentPageSnapshot? CaptureCurrent(

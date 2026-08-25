@@ -1,7 +1,8 @@
 using System.Text;
 using Microsoft.Maui.AI.Indexer;
+using Microsoft.Maui.AI.Navigation;
 
-namespace Microsoft.Maui.AI.Navigation;
+namespace Microsoft.Maui.AI.Wayfinding;
 
 /// <summary>
 /// Composes the generated semantic UI catalog, current-page runtime context,
@@ -102,8 +103,18 @@ public sealed class ApplicationMapService
     public IReadOnlyList<ApplicationSearchResult> Search(
         string query,
         int maxResults = 5)
+        => Search(
+            query,
+            GetDestinations(),
+            maxResults);
+
+    internal IReadOnlyList<ApplicationSearchResult> Search(
+        string query,
+        IReadOnlyList<ApplicationDestination> destinations,
+        int maxResults)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(query);
+        ArgumentNullException.ThrowIfNull(destinations);
         if (maxResults <= 0)
             throw new ArgumentOutOfRangeException(nameof(maxResults));
 
@@ -114,7 +125,7 @@ public sealed class ApplicationMapService
         var phrase = string.Join(' ', terms);
         var matches = new List<(ApplicationSearchResult Result, int MatchedTermCount)>();
 
-        foreach (var destination in GetDestinations())
+        foreach (var destination in destinations)
         {
             var normalizedName = Normalize(destination.PageName);
             var normalizedMarkdown = Normalize(destination.Markdown);

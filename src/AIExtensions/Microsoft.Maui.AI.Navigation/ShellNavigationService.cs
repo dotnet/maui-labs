@@ -156,7 +156,8 @@ public class ShellNavigationService
                 routes.Add(registeredRoute);
         }
 
-        _cachedRoutes = routes;
+        if (Shell.Current is not null)
+            _cachedRoutes = routes;
         return routes;
     }
 

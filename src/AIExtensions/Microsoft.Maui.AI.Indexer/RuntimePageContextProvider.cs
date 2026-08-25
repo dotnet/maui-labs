@@ -1,6 +1,4 @@
-using Microsoft.Maui.AI.Indexer;
-
-namespace Microsoft.Maui.AI.Navigation;
+namespace Microsoft.Maui.AI.Indexer;
 
 /// <summary>Provides semantic context for the page currently visible to the user.</summary>
 public interface ICurrentPageContextProvider

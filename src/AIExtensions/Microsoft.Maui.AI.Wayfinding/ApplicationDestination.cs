@@ -1,4 +1,6 @@
-namespace Microsoft.Maui.AI.Navigation;
+using Microsoft.Maui.AI.Navigation;
+
+namespace Microsoft.Maui.AI.Wayfinding;
 
 /// <summary>
 /// A semantically indexed page that can be reached through Shell navigation.

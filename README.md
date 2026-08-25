@@ -112,7 +112,8 @@ like `//main/products/product/seed-tomato/review` to one Shell navigation call.
 | Package | Description |
 |---------|-------------|
 | `Microsoft.Maui.AI.Indexer` | Generated semantic page catalog and runtime current-page snapshots |
-| `Microsoft.Maui.AI.Navigation` | Unified application map, route discovery, and AI-friendly deep navigation |
+| `Microsoft.Maui.AI.Navigation` | Model-independent Shell route discovery and navigation |
+| `Microsoft.Maui.AI.Wayfinding` | AI middleware combining indexing, current context, semantic destinations, navigation, and optional vision |
 
 ### macOS AppKit Backend
 
