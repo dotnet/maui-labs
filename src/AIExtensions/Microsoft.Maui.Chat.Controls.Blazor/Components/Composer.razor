@@ -30,7 +30,7 @@
                         <button type="button"
                                 class="mchat-attachment-chip__remove"
                                 aria-label="@("Remove attachment " + captured.FileName)"
-                                @onclick="() => Context.RemoveAttachmentAsync(captured)">
+                                @onclick="async () => await Context.RemoveAttachmentAsync(captured)">
                             ✕
                         </button>
                     </span>
@@ -67,7 +67,7 @@
                                 title="@AttachButtonText"
                                 aria-label="@AttachButtonText"
                                 disabled="@(!Context.CanPickAttachments)"
-                                @onclick="Context.PickAttachmentsCallback">
+                                @onclick="Context.PickAttachmentsAsync">
                             @AttachButtonGlyph
                         </button>
                     }
@@ -80,7 +80,7 @@
                                 aria-label="@(Context.IsRecordingAudio ? AudioStopButtonText : AudioStartButtonText)"
                                 aria-pressed="@Context.IsRecordingAudio"
                                 disabled="@(!Context.CanToggleAudioCapture)"
-                                @onclick="Context.ToggleAudioCaptureCallback">
+                                @onclick="Context.ToggleAudioCaptureAsync">
                             @(Context.IsRecordingAudio ? AudioStopButtonGlyph : AudioStartButtonGlyph)
                         </button>
                     }
@@ -93,7 +93,7 @@
                                 aria-label="@(Context.IsLiveSpeechEnabled ? LiveSpeechStopButtonText : LiveSpeechStartButtonText)"
                                 aria-pressed="@Context.IsLiveSpeechEnabled"
                                 disabled="@(!Context.CanToggleLiveSpeech)"
-                                @onclick="Context.ToggleLiveSpeechCallback">
+                                @onclick="Context.ToggleLiveSpeechAsync">
                             @(Context.IsLiveSpeechEnabled ? LiveSpeechStopButtonGlyph : LiveSpeechStartButtonGlyph)
                         </button>
                     }
@@ -125,7 +125,7 @@
                                 class="mchat-icon-btn mchat-icon-btn--danger"
                                 title="@StopButtonText"
                                 aria-label="@StopButtonText"
-                                @onclick="Context.StopCallback">
+                                @onclick="Context.StopAsync">
                             @StopButtonGlyph
                         </button>
                     }
@@ -136,7 +136,7 @@
                                 title="@SendButtonText"
                                 aria-label="@SendButtonText"
                                 disabled="@(!Context.CanSubmit)"
-                                @onclick="Context.SubmitCallback">
+                                @onclick="Context.SubmitAsync">
                             @SendButtonGlyph
                         </button>
                     }
@@ -292,7 +292,7 @@
     {
         if (e.Key == "Enter" && !e.ShiftKey && !e.CtrlKey && !e.AltKey && Context.CanSubmit)
         {
-            await Context.SubmitCallback.InvokeAsync();
+            await Context.SubmitAsync();
         }
     }
 
