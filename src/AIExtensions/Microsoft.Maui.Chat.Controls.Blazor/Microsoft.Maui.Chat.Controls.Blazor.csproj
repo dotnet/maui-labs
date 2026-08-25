@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Microsoft.Maui.Chat.Controls.Blazor</RootNamespace>
+    <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
+    <PackageId>Microsoft.Maui.Chat.Controls.Blazor</PackageId>
+    <Description>Provider-neutral Blazor Hybrid chat controls for .NET MAUI: virtualization-friendly message list, multimodal composer, streaming, typing, empty/header/footer slots, participant chrome, and a MessageContentRenderer&lt;T&gt; seam. Backed by Microsoft.Maui.Chat.Controls models. No AI provider dependency.</Description>
+    <PackRepoRootReadme>false</PackRepoRootReadme>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- Missing XML doc comments on Razor-generated members; these are indirect and out of our control. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+
+    <!-- Suppress JS module manifest to avoid conflicting with a consuming app's manifest.
+         The consuming app's build discovers our .lib.module.js and includes it. -->
+    <GenerateJSModuleManifest>false</GenerateJSModuleManifest>
+
+    <!-- Disable static web asset fingerprinting - MAUI Blazor Hybrid's WebView file
+         provider does not resolve fingerprinted filenames, causing 404s. -->
+    <StaticWebAssetsFingerprintContent>false</StaticWebAssetsFingerprintContent>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Microsoft.Maui.Chat.Controls.Blazor.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Microsoft.Maui.Chat.Controls\Microsoft.Maui.Chat.Controls.csproj" />
+  </ItemGroup>
+
+</Project>

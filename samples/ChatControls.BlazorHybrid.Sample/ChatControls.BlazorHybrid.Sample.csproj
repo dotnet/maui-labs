@@ -1,0 +1,63 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+	<PropertyGroup>
+		<TargetFrameworks>net10.0-android;net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
+		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
+
+		<OutputType>Exe</OutputType>
+		<RootNamespace>ChatControls.BlazorHybrid.Sample</RootNamespace>
+		<UseMaui>true</UseMaui>
+		<SingleProject>true</SingleProject>
+		<IsPackable>false</IsPackable>
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+		<ValidateXcodeVersion>false</ValidateXcodeVersion>
+		<ApplicationTitle>MAUI Chat Controls Blazor Hybrid</ApplicationTitle>
+		<ApplicationId>com.microsoft.maui.chatcontrols.blazor.sample</ApplicationId>
+		<ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+		<ApplicationVersion>1</ApplicationVersion>
+		<WindowsPackageType>None</WindowsPackageType>
+		<TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
+	</PropertyGroup>
+
+	<!-- Reuse the sibling ChatControls.Sample's icon and splash assets rather than duplicating them. -->
+	<ItemGroup>
+		<MauiIcon Include="..\ChatControls.Sample\Resources\AppIcon\appicon.svg" ForegroundFile="..\ChatControls.Sample\Resources\AppIcon\appiconfg.svg" Color="#0F766E" />
+		<MauiSplashScreen Include="..\ChatControls.Sample\Resources\Splash\splash.svg" Color="#0F766E" BaseSize="128,128" />
+		<MauiFont Include="..\ChatControls.Sample\Resources\Fonts\*" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Maui.Controls" />
+		<PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Debug" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\src\AIExtensions\Microsoft.Maui.Chat.Controls\Microsoft.Maui.Chat.Controls.csproj" />
+		<ProjectReference Include="..\..\src\AIExtensions\Microsoft.Maui.Chat.Controls.Blazor\Microsoft.Maui.Chat.Controls.Blazor.csproj" />
+		<ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj"
+		                  Condition="'$(Configuration)' == 'Debug'" />
+		<ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Blazor\Microsoft.Maui.DevFlow.Blazor.csproj"
+		                  Condition="'$(Configuration)' == 'Debug'" />
+	</ItemGroup>
+
+	<!-- Linked source from the sibling ChatControls.Sample keeps the two samples exercising
+	     the exact same neutral view model and simulated services, so any divergence between
+	     the native XAML surface and the Blazor Hybrid surface stays visible. -->
+	<ItemGroup>
+		<Compile Include="..\ChatControls.Sample\TeamChatViewModel.cs" Link="Shared\TeamChatViewModel.cs" />
+		<Compile Include="..\ChatControls.Sample\GardenTaskContent.cs" Link="Shared\GardenTaskContent.cs" />
+		<Compile Include="..\ChatControls.Sample\GardenStickerContent.cs" Link="Shared\GardenStickerContent.cs" />
+		<Compile Include="..\ChatControls.Sample\SimulatedVoiceServices.cs" Link="Shared\SimulatedVoiceServices.cs" />
+	</ItemGroup>
+
+	<!-- Same static-web-asset conflict shim as DevFlow.Sample: strip _framework/ duplicates from
+	     the DevFlow.Blazor transitive reference so this project's Blazor WebView reference wins. -->
+	<Target Name="ResolveDuplicateStaticWebAssets" BeforeTargets="ResolveStaticWebAssetsInputs">
+		<ItemGroup>
+			<StaticWebAsset Remove="@(StaticWebAsset)"
+				Condition="'%(SourceId)' == 'Microsoft.Maui.DevFlow.Blazor' AND $([System.String]::Copy('%(RelativePath)').StartsWith('_framework/'))" />
+		</ItemGroup>
+	</Target>
+
+</Project>

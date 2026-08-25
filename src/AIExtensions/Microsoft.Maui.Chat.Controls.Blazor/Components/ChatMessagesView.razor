@@ -1,0 +1,272 @@
+@*
+    Licensed to the .NET Foundation under one or more agreements.
+    The .NET Foundation licenses this file to you under the MIT license.
+
+    The scrolling body of the chat view: subscribes to the ambient ChatConversation via
+    the cascaded ChatViewContext, maintains the projected row list, and pins the scroll
+    position to the bottom while the user is at the bottom.
+
+    Layout adapted from Microsoft.AspNetCore.Components.AI.MessageList at commit
+    31b20463068f8d9ad900393bf96c9a182c397216 (MIT). See Components/UPSTREAM-NOTES.md.
+*@
+@namespace Microsoft.Maui.Chat.Controls.Blazor
+@using Microsoft.Maui.Chat.Controls
+@implements IAsyncDisposable
+
+<div class="mchat-message-list" role="log" aria-live="polite" @ref="_scrollHost">
+    @ChildContent
+
+    @if (_rows.Count == 0 && EmptyContent is not null)
+    {
+        @EmptyContent
+    }
+
+    @foreach (var row in _rows)
+    {
+        <ChatMessageRow @key="row.Key" Row="row" IsStreaming="ShouldStream(row)" />
+    }
+
+    <div class="mchat-message-list__footer">
+        @if (_typing.Count > 0)
+        {
+            <TypingIndicator Participants="_typing" />
+        }
+    </div>
+</div>
+
+@code {
+    private readonly List<ChatMessageRowModel> _rows = new();
+    private readonly List<ChatParticipant> _typing = new();
+
+    private ChatConversation? _conversation;
+    private ChatViewContext? _observedContext;
+    private IDisposable? _subscription;
+    private DotNetObjectReference<StickyAnchorHost>? _anchorHost;
+    private long _stickyHandle;
+    private MChatJsModule? _module;
+    private ElementReference _scrollHost;
+    private bool _anchored = true;
+    private bool _hasPendingScroll;
+
+    /// <summary>Gets or sets the ambient chat view context, cascaded from <see cref="ChatView"/>.</summary>
+    [CascadingParameter]
+    public ChatViewContext ViewContext { get; set; } = default!;
+
+    /// <summary>Gets or sets content rendered above the rows (typically <see cref="MessageContentRenderer{TContent}"/> registrations).</summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Gets or sets content rendered when no rows are present.</summary>
+    [Parameter]
+    public RenderFragment? EmptyContent { get; set; }
+
+    /// <summary>Gets or sets whether the list stays anchored to the bottom while new content arrives.</summary>
+    [Parameter]
+    public bool AutoScrollToLatest { get; set; } = true;
+
+    [Inject]
+    private Microsoft.JSInterop.IJSRuntime Js { get; set; } = default!;
+
+    /// <inheritdoc />
+    protected override void OnParametersSet()
+    {
+        if (ViewContext is null)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(ChatMessagesView)} must be placed inside a {nameof(ChatView)}.");
+        }
+
+        if (!ReferenceEquals(_observedContext, ViewContext))
+        {
+            AttachToContext();
+        }
+    }
+
+    /// <inheritdoc />
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        _module ??= new MChatJsModule(Js);
+
+        if (firstRender)
+        {
+            var host = new StickyAnchorHost(OnAnchorChanged);
+            _anchorHost = DotNetObjectReference.Create(host);
+            _stickyHandle = await _module.StickToBottomAsync(_scrollHost, _anchorHost);
+            _hasPendingScroll = true;
+        }
+
+        if (_hasPendingScroll && AutoScrollToLatest && _anchored)
+        {
+            _hasPendingScroll = false;
+            await _module.ScrollToBottomAsync(_scrollHost);
+        }
+    }
+
+    private void OnAnchorChanged(bool anchored)
+    {
+        _anchored = anchored;
+    }
+
+    /// <summary>Requests a scroll to the bottom on the next render pass. Callable from the shell.</summary>
+    internal void RequestScrollToBottom() => _hasPendingScroll = true;
+
+    private void AttachToContext()
+    {
+        DetachFromContext();
+
+        _observedContext = ViewContext;
+        _observedContext.SetRegistrationsChangedHandler(OnRegistrationsChanged);
+
+        var conversation = ViewContext.Conversation;
+        _conversation = conversation;
+        if (conversation is null)
+        {
+            _rows.Clear();
+            _typing.Clear();
+            return;
+        }
+
+        _subscription = conversation.Subscribe(OnConversationChange);
+        conversation.TypingParticipants.CollectionChanged += OnTypingChanged;
+
+        RebuildRows();
+        RebuildTyping();
+    }
+
+    private void DetachFromContext()
+    {
+        _subscription?.Dispose();
+        _subscription = null;
+
+        if (_observedContext is not null)
+        {
+            _observedContext.SetRegistrationsChangedHandler(null);
+            _observedContext = null;
+        }
+
+        if (_conversation is not null)
+        {
+            _conversation.TypingParticipants.CollectionChanged -= OnTypingChanged;
+            _conversation = null;
+        }
+
+        _rows.Clear();
+        _typing.Clear();
+    }
+
+    private void OnRegistrationsChanged() => InvokeAsync(StateHasChanged);
+
+    private void OnConversationChange(ChatConversationChange change)
+    {
+        switch (change.Kind)
+        {
+            case ChatConversationChangeKind.MessageAdded:
+            case ChatConversationChangeKind.MessageRemoved:
+            case ChatConversationChangeKind.ContentAdded:
+            case ChatConversationChangeKind.ContentRemoved:
+            case ChatConversationChangeKind.Reset:
+                RebuildRows();
+                _hasPendingScroll = AutoScrollToLatest;
+                InvokeAsync(StateHasChanged);
+                break;
+
+            case ChatConversationChangeKind.ContentChanged:
+            case ChatConversationChangeKind.MessageChanged:
+                // Content mutated in place - the affected row's ChatMessageRow subscribes
+                // to ContentChanged directly and re-renders itself; the shell only needs
+                // to poke a general render pass so the streaming class updates.
+                InvokeAsync(StateHasChanged);
+                break;
+
+            case ChatConversationChangeKind.StatusChanged:
+                InvokeAsync(StateHasChanged);
+                break;
+        }
+    }
+
+    private void OnTypingChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        RebuildTyping();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void RebuildRows()
+    {
+        _rows.Clear();
+        if (_conversation is null)
+        {
+            return;
+        }
+
+        var projected = ChatRowProjection.Project(_conversation);
+        _rows.AddRange(projected);
+    }
+
+    private void RebuildTyping()
+    {
+        _typing.Clear();
+        if (_conversation is null)
+        {
+            return;
+        }
+
+        foreach (var participant in _conversation.TypingParticipants)
+        {
+            if (participant is not null)
+            {
+                _typing.Add(participant);
+            }
+        }
+    }
+
+    private bool ShouldStream(ChatMessageRowModel row)
+    {
+        // Only the last row of the last message from a non-local participant during a
+        // busy conversation shows the streaming cursor. This matches the ChatMessagesView
+        // native behavior and avoids flickering the cursor on already-completed content.
+        if (_conversation?.Status != ChatConversationStatus.Busy)
+        {
+            return false;
+        }
+
+        if (row.IsOutgoing)
+        {
+            return false;
+        }
+
+        var last = _rows.Count > 0 ? _rows[^1] : null;
+        return last is not null && ReferenceEquals(last, row);
+    }
+
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        DetachFromContext();
+
+        if (_stickyHandle != 0 && _module is not null)
+        {
+            await _module.ReleaseStickToBottomAsync(_stickyHandle);
+            _stickyHandle = 0;
+        }
+
+        _anchorHost?.Dispose();
+        _anchorHost = null;
+
+        if (_module is not null)
+        {
+            await _module.DisposeAsync();
+            _module = null;
+        }
+    }
+
+    /// <summary>Blazor callback host for the sticky-anchor JS module.</summary>
+    private sealed class StickyAnchorHost
+    {
+        private readonly Action<bool> _onAnchored;
+
+        public StickyAnchorHost(Action<bool> onAnchored) => _onAnchored = onAnchored;
+
+        [JSInvokable]
+        public void OnAnchorChanged(bool anchored) => _onAnchored(anchored);
+    }
+}
