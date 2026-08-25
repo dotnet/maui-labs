@@ -10,7 +10,7 @@
 @namespace Microsoft.Maui.Chat.Controls.Blazor
 @using Microsoft.AspNetCore.Components.Web
 @using Microsoft.Maui.Chat.Controls
-@implements IDisposable
+@implements IAsyncDisposable
 
 <div class="mchat-composer" @attributes="AdditionalAttributes">
     @if (Context.Attachments.Count > 0)
@@ -297,12 +297,22 @@
     }
 
     /// <inheritdoc />
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
+        // Unhook the composer-context subscription BEFORE the module dispose so no
+        // callback races the module tear-down.
         if (_observed is not null)
         {
             _observed.Changed -= OnContextChanged;
             _observed = null;
+        }
+
+        // The JS module holds an IJSObjectReference that must be released so the
+        // WebView stops keeping the module alive across navigation and app tear-down.
+        if (_module is not null)
+        {
+            await _module.DisposeAsync().ConfigureAwait(true);
+            _module = null;
         }
     }
 }
