@@ -244,6 +244,144 @@ public sealed class RuntimePageIndexerTests
     }
 
     [Fact]
+    public void Capture_CollectionView_GroupsRealizedItemControls()
+    {
+        var pageContext = new object();
+        var firstOrder = new object();
+        var secondOrder = new object();
+        var emptyView = new VerticalStackLayout
+        {
+            BindingContext = pageContext,
+            Children =
+            {
+                new Label { Text = "No past orders yet." },
+            },
+        };
+        var collection = new RuntimeCollectionView
+        {
+            BindingContext = pageContext,
+            ItemsSource = new[] { firstOrder, secondOrder },
+            EmptyView = emptyView,
+        };
+        collection.VisualChildren.Add(emptyView);
+        collection.VisualChildren.Add(CreateOrderItem(
+            firstOrder,
+            "Aug 25, 2026",
+            "3 items",
+            "$34.91"));
+        collection.VisualChildren.Add(CreateOrderItem(
+            secondOrder,
+            "Aug 12, 2026",
+            "2 items",
+            "$19.98"));
+        var page = new ContentPage { Content = collection };
+
+        var snapshot = RuntimePageIndexer.Capture(page);
+
+        Assert.Contains(
+            """
+            - CollectionView:
+              - Item 1:
+                - Label: "Aug 25, 2026"
+                - Label: "3 items"
+                - Label: "$34.91"
+              - Item 2:
+                - Label: "Aug 12, 2026"
+                - Label: "2 items"
+                - Label: "$19.98"
+            """,
+            snapshot.Markdown);
+        Assert.DoesNotContain("No past orders yet.", snapshot.Markdown);
+
+        static Border CreateOrderItem(
+            object bindingContext,
+            string date,
+            string itemCount,
+            string total)
+            => new()
+            {
+                BindingContext = bindingContext,
+                Content = new VerticalStackLayout
+                {
+                    Children =
+                    {
+                        new Label { Text = date },
+                        new Label { Text = itemCount },
+                        new Label { Text = total },
+                    },
+                },
+            };
+    }
+
+    [Fact]
+    public void Capture_CollectionView_EmptyTemplateRendersAsEmptyView()
+    {
+        var realizedEmptyView = new VerticalStackLayout
+        {
+            Children =
+            {
+                new Label { Text = "No matching orders." },
+            },
+        };
+        var collection = new RuntimeCollectionView
+        {
+            ItemsSource = Array.Empty<object>(),
+            EmptyViewTemplate = new DataTemplate(
+                () => new Label { Text = "Template placeholder" }),
+        };
+        collection.VisualChildren.Add(realizedEmptyView);
+        var page = new ContentPage { Content = collection };
+
+        var snapshot = RuntimePageIndexer.Capture(page);
+
+        Assert.Contains(
+            """
+            - CollectionView:
+              - Empty view:
+                - Label: "No matching orders."
+            """,
+            snapshot.Markdown);
+    }
+
+    [Fact]
+    public void Capture_CollectionView_DuplicateAndExcludedRootsDoNotCreatePhantomItems()
+    {
+        var firstOrder = new object();
+        var excludedOrder = new object();
+        var firstRoot = new Border
+        {
+            BindingContext = firstOrder,
+            Content = new Label { Text = "First order" },
+        };
+        var excludedRoot = new Border
+        {
+            BindingContext = excludedOrder,
+            Content = new Label { Text = "Excluded order" },
+        };
+        IndexingProperties.SetExcludeWithChildren(excludedRoot, true);
+        var collection = new RuntimeCollectionView
+        {
+            ItemsSource = new[] { firstOrder, excludedOrder },
+        };
+        collection.VisualChildren.Add(firstRoot);
+        collection.VisualChildren.Add(firstRoot);
+        collection.VisualChildren.Add(excludedRoot);
+        var page = new ContentPage { Content = collection };
+
+        var snapshot = RuntimePageIndexer.Capture(page);
+
+        Assert.Contains(
+            """
+            - CollectionView:
+              - Item 1:
+                - Label: "First order"
+            """,
+            snapshot.Markdown);
+        Assert.DoesNotContain("Item 2", snapshot.Markdown);
+        Assert.DoesNotContain("Excluded order", snapshot.Markdown);
+    }
+
+    [Fact]
     public void Capture_DescribedFrameworkContainer_PreservesAccessibleGroup()
     {
         var card = new Border
@@ -751,6 +889,19 @@ public sealed class RuntimePageIndexerTests
     }
 
     private sealed class ReviewSection : ContentView;
+
+    private sealed class RuntimeCollectionView :
+        CollectionView,
+        IVisualTreeElement
+    {
+        public List<IVisualTreeElement> VisualChildren { get; } = [];
+
+        IReadOnlyList<IVisualTreeElement> IVisualTreeElement.GetVisualChildren()
+            => VisualChildren;
+
+        IVisualTreeElement? IVisualTreeElement.GetVisualParent()
+            => null;
+    }
 
     private sealed class RuntimeViewModel
     {

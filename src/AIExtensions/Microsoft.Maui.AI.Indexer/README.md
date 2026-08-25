@@ -147,6 +147,8 @@ The runtime index:
 - resolves the top modal and the current Shell, navigation, tab, or flyout page;
 - includes only materialized controls whose runtime visibility and opacity make
   them visible;
+- groups realized `CollectionView` controls under numbered runtime items instead
+  of flattening every item's labels together;
 - reads resolved control text and semantic accessibility metadata, without
   reflection or platform handlers;
 - includes useful live state such as slider values, selections, toggle state,
