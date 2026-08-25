@@ -162,6 +162,24 @@ public class BuildRouteTests
     }
 
     [Fact]
+    public void BuildRoute_RouteQualifiedParameter_OverridesIntermediateValue()
+    {
+        var svc = CreateService();
+        var route = svc.BuildRoute(
+            "//main/products",
+            ["product", "review"],
+            new Dictionary<string, string>
+            {
+                ["sku"] = "seed-basil",
+                ["product.sku"] = "seed-tomato",
+            });
+
+        Assert.Equal(
+            "//main/products/product/review?sku=seed-basil&product.sku=seed-tomato",
+            route);
+    }
+
+    [Fact]
     public void BuildRoute_SharedParameter_ProducesValidUri()
     {
         var svc = CreateService();
@@ -236,6 +254,31 @@ public class BuildRouteTests
             new Dictionary<string, string> { ["sku"] = "seed-tomato" });
 
         Assert.Equal("product?sku=seed-tomato", route);
+    }
+}
+
+public class ShellHierarchyTests
+{
+    [Fact]
+    public void BuildHierarchyPath_IncludesItemSectionAndContentRoutes()
+    {
+        var route = ShellNavigationService.BuildHierarchyPath(
+            "shop",
+            "browse",
+            "products");
+
+        Assert.Equal("//shop/browse/products", route);
+    }
+
+    [Fact]
+    public void BuildHierarchyPath_OmitsImplicitGeneratedItemRoute()
+    {
+        var route = ShellNavigationService.BuildHierarchyPath(
+            "IMPL_ShellItem",
+            "browse",
+            "products");
+
+        Assert.Equal("//browse/products", route);
     }
 }
 

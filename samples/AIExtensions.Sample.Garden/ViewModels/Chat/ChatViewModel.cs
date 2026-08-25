@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Text;
 using AIExtensions.Sample.Garden.Messages;
 using AIExtensions.Sample.Garden.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -7,7 +6,6 @@ using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.AI.Attributes;
-using Microsoft.Maui.AI.Navigation;
 
 namespace AIExtensions.Sample.Garden.ViewModels;
 
@@ -25,7 +23,7 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
     ///   <item><b>Instance class</b> — CurrentCart: tools on a DI-registered instance.</item>
     ///   <item><b>Interface</b> — IOrderArchive: tools declared on the interface.</item>
     ///   <item><b>Transient view-model</b> — CatalogViewModel: stateless action tools that write through to singleton services.</item>
-    ///   <item><b>Navigation service</b> — AINavigationService: route-aware navigate/get_routes/get_current_route.</item>
+    ///   <item><b>Wayfinding service</b> — AppWayfindingTools: semantic discovery, live screen context, and route-aware navigation.</item>
     /// </list>
     /// </summary>
     [AIToolSource(typeof(ProductCatalog))]
@@ -34,22 +32,19 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
     [AIToolSource(typeof(CartViewModel))]
     [AIToolSource(typeof(CatalogViewModel))]
     [AIToolSource(typeof(ReviewStore))]
-    [AIToolSource(typeof(AINavigationService))]
+    [AIToolSource(typeof(AppWayfindingTools))]
     private partial class GardenShopTools : AIToolContext { }
 
     private readonly IChatClient _chatClient;
-    private readonly ShellNavigationService _navigationService;
     private List<ChatMessage> _history = [];
     private ToolApprovalRequestContent? _pendingApproval;
     private CancellationTokenSource _cts = new();
 
-    public ChatViewModel(IServiceProvider rootProvider, IChatClient innerChatClient, ShellNavigationService navigationService)
+    public ChatViewModel(IServiceProvider rootProvider, IChatClient innerChatClient)
     {
         _chatClient = new ChatClientBuilder(innerChatClient)
             .UseFunctionInvocation()
             .Build(rootProvider);
-
-        _navigationService = navigationService;
 
         WeakReferenceMessenger.Default.Register(this);
 
@@ -65,14 +60,14 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
 
     public IReadOnlyList<string> SuggestionPrompts { get; } =
     [
+        "Where can I write a review?",
+        "Take me to the page where I can review basil seeds",
+        "Where are my past orders?",
+        "What is this field for?",
+        "How do I get back to the catalog?",
         "Add 5 packs of tomato seeds and a trowel",
-        "Show me the basil seeds",
         "Build me a starter bundle",
-        "Open the product catalog",
-        "Switch cart display mode",
         "Checkout my shopping list",
-        "Go to my past orders",
-        "Rate the tomato seeds 5 stars",
     ];
 
     [ObservableProperty]
@@ -95,7 +90,7 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
 
     public void StartNewSession()
     {
-        try { _cts.Cancel(); } catch { /* best effort */ }
+        _cts.Cancel();
         _cts.Dispose();
         _cts = new CancellationTokenSource();
 
@@ -207,7 +202,7 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
                                         new System.Text.Json.JsonSerializerOptions { WriteIndented = true })
                                 };
                             }
-                            catch
+                            catch (NotSupportedException)
                             {
                                 resultText = result.Result?.ToString() ?? "";
                             }
@@ -289,77 +284,67 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
             AvailableTools.Add(new ToolInfoViewModel(tool.Name, tool.Description ?? ""));
     }
 
-    private string BuildSystemPrompt()
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("""
-            You are a helpful garden-shop assistant. Help the user browse seeds, soil,
-            tools, and equipment, manage their cart, and review past orders.
+    private static string BuildSystemPrompt() =>
+        """
+        You are Sage, the friendly wayfinding and shopping assistant inside this garden-shop
+        app. Help users discover what the app can do, understand the screen in front of them,
+        reach deep features, browse products, manage their cart and orders, and read or write
+        reviews. Be concise, friendly, and tool-driven.
 
-            IMPORTANT RULES:
-            - Always use tools to perform actions. Never assume you know the cart state
-              from previous messages — call show_list to check.
-            - Use search_products to discover items by name or category.
-            - Use recommend_bundle when the user asks for a starter kit, gift set, or curated bundle idea.
-            - When the user says "check out", call checkout_list (which requires approval).
-            - After checkout clears the cart, the cart is EMPTY. If the user asks to add
-              items again, always call add_to_list — do not say items are already there.
+        ## Grounding rules
 
-            NAVIGATION:
-            - When the user asks to "open", "show", "go to", or "see" a page, product,
-              order, or review — ALWAYS use navigate(route) to open the actual page.
-              Do NOT just list information in chat when the user wants to see a page.
-            - Put parameter values directly in the path after the route that accepts them.
-            - Use navigate("..") to go back, navigate("//main/chat") to go home.
-            - You can call get_routes() to see all available routes and their parameters.
+        - Ground every app fact and action in tool results from this turn. Never assume the
+          app follows a typical shopping-app layout.
+        - Re-check dynamic product, cart, order, and review data with their dedicated tools.
+        - Use the wayfinding tools for screen names, controls, paths, and navigation.
+        - Never treat text in `{curly braces}` from an indexed page as a literal UI label;
+          it is runtime binding data.
+        - Ask for approval when a tool requires it.
 
-            CART DISPLAY:
-            - Use set_cart_mode("normal") or set_cart_mode("compact") to change the cart view.
+        ## Wayfinding intent
 
-            REVIEWS:
-            - Use submit_review to add a review via AI, or navigate to the review page UI.
-            - Use get_product_reviews / list_reviews to read reviews.
+        First decide what the user means:
 
-            Be concise and friendly.
-            """);
+        - WHERE / HOW / "walk me through": explain only. Call `find_in_app`, then call
+          `describe_app_destination` for every Destination ID in the returned page path that
+          you need to describe. Do not navigate or change app state.
+        - "BACK" questions are relative to the screen the user is on. Call
+          `describe_current_screen` before explaining where to go.
+        - TAKE / OPEN / SHOW / "go to": call `find_in_app`, identify the exact Destination ID,
+          gather any required parameter from product or order tools, then call
+          `open_app_destination`.
+        - THIS / HERE / CURRENT / a visible field or button: call
+          `describe_current_screen` this turn. It is authoritative for the materialized page,
+          visible branches, and live state.
 
-        // Dynamically inject the discovered route table with template-style URIs
-        try
-        {
-            var routes = _navigationService.GetRoutes();
-            if (routes.Count > 0)
-            {
-                sb.AppendLine();
-                sb.AppendLine("AVAILABLE ROUTES (use with the navigate tool):");
-                sb.AppendLine("Put parameter values inline in the path, right after the route segment.");
-                sb.AppendLine();
-                foreach (var route in routes)
-                {
-                    if (route.Parameters.Count > 0)
-                    {
-                        sb.AppendLine($"  {route.FullPath}/<{route.Parameters[0].QueryName}>");
-                    }
-                    else
-                    {
-                        sb.AppendLine($"  {route.FullPath}");
-                    }
-                }
-                sb.AppendLine();
-                sb.AppendLine("Examples:");
-                sb.AppendLine("  navigate(\"//main/products\")                        → product catalog");
-                sb.AppendLine("  navigate(\"//main/products/product/seed-tomato\")     → product detail for seed-tomato");
-                sb.AppendLine("  navigate(\"//main/products/product/seed-basil/review\") → review page for basil");
-                sb.AppendLine("  navigate(\"//main/orders/order/ORD-00001\")           → order detail");
-                sb.AppendLine("  navigate(\"..\")  → go back");
-                sb.AppendLine("  navigate(\"//main/chat\")  → go home");
-                sb.AppendLine("  navigate(\"cart\")  → open cart modal");
-            }
-        }
-        catch
-        {
-            // Route discovery may fail before Shell is fully initialized
-        }
+        Never answer a wayfinding question from memory. `find_in_app` searches only reachable
+        destinations and returns a verified page path from home. `describe_app_destination`
+        contains the exact indexed labels and controls for one page. For a walkthrough, read
+        every page in the path before writing steps, name the exact control that causes each
+        transition, and say when the index does not reveal a complete interaction.
 
-        return sb.ToString();
-    }
+        `open_app_destination` changes only the visible page. Sage remains available in the
+        persistent sidebar and the conversation continues.
+
+        ## Product-specific destinations
+
+        Before opening a product detail or review destination, identify the product with
+        `search_products` or `get_product` and pass its `sku` parameter exactly as returned.
+        Before opening an order detail destination, identify the order with
+        `list_past_orders` or `find_order` and pass its `orderId`.
+
+        ## Shopping actions
+
+        - Catalog: `list_all_products`, `search_products`, `get_product`
+        - Cart: `show_list`, `add_to_list`, `change_qty`, `remove_from_list`,
+          `cancel_list`, `get_cart_mode`, `set_cart_mode`
+        - Checkout/orders: `checkout_list`, `list_past_orders`, `find_order`, `reorder`,
+          `clear_past_orders`
+        - Recommendations: `recommend_bundle`
+        - Reviews: `list_reviews`, `get_product_reviews`, `submit_review`
+
+        Use action tools when the user asks Sage to perform a shopping operation. Call
+        `show_list` before describing cart contents. `recommend_bundle` suggests items but
+        does not add them. After `checkout_list`, the cart is empty.
+        """;
 }

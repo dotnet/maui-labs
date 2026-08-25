@@ -17,7 +17,8 @@
                                  VerticalOptions="Center">
                 <Label Text="&#xE1D0;" FontFamily="FluentFilled"
                        FontSize="{StaticResource FontSizeDisplay}" HorizontalOptions="Center"
-                       TextColor="{StaticResource Primary}" />
+                       TextColor="{StaticResource Primary}"
+                       SemanticProperties.Description="" />
                 <Label Text="No past orders yet."
                        FontSize="{StaticResource FontSizeBody}" HorizontalTextAlignment="Center"
                        TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}" />
@@ -57,7 +58,8 @@
                                    FontFamily="FluentFilled"
                                    FontSize="{StaticResource FontSizeTitle}"
                                    HorizontalTextAlignment="End"
-                                   TextColor="{AppThemeBinding Light={StaticResource TextTertiaryLight}, Dark={StaticResource TextTertiaryDark}}" />
+                                   TextColor="{AppThemeBinding Light={StaticResource TextTertiaryLight}, Dark={StaticResource TextTertiaryDark}}"
+                                   SemanticProperties.Description="" />
                         </VerticalStackLayout>
                     </Grid>
                 </Border>

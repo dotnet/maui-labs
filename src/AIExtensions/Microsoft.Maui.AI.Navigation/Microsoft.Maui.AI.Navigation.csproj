@@ -16,6 +16,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Microsoft.Maui.AI.Indexer\Microsoft.Maui.AI.Indexer.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Microsoft.Maui.AI.Navigation.Tests" />
   </ItemGroup>
 

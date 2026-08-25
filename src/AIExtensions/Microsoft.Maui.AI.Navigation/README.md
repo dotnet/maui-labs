@@ -1,76 +1,112 @@
 # Microsoft.Maui.AI.Navigation
 
-Runtime Shell route discovery and template-aware navigation for .NET MAUI apps, designed for AI agent integration.
+Semantic application mapping and template-aware Shell navigation for .NET MAUI apps.
+The package composes the generated `IndexedPageCatalog`, live
+`RuntimePageIndexer` context, and `ShellNavigationService` so an AI assistant can
+find a feature, explain its verified page path, and open the resolved destination.
 
-## How it works
+Install both packages directly so the UI indexer's analyzer and build assets are
+available to the app:
 
-`ShellNavigationService` walks the Shell hierarchy and `Routing.RegisterRoute` entries at runtime to build a route table. AI agents use clean template-style URIs — the service matches path segments against known routes, extracts inline parameter values, and resolves them to one Shell URI with route-scoped query parameters.
+```xml
+<PackageReference Include="Microsoft.Maui.AI.Indexer" />
+<PackageReference Include="Microsoft.Maui.AI.Navigation" />
+```
 
-### 1. Register the service
+## Application map
+
+Register the generated catalog and the three wayfinding services:
 
 ```csharp
+builder.Services.AddSingleton<IndexedPageCatalog>(
+    MyAppIndexedPageCatalog.Default);
 builder.Services.AddSingleton<ShellNavigationService>();
+builder.Services.AddSingleton<ICurrentPageContextProvider, RuntimePageContextProvider>();
+builder.Services.AddSingleton<ApplicationMapService>();
 ```
 
-### 2. Discover routes at runtime
+`ApplicationMapService` exposes one cohesive API:
 
 ```csharp
-var routes = navigationService.GetRoutes();
-// → RouteInfo("products", "//main/products", [])
-// → RouteInfo("product", "product", [QueryParameterInfo("sku", "Sku", "String")])
+var matches = applicationMap.Search("write a review");
+var destination = matches[0].Destination;
+
+Console.WriteLine(destination.PageName);
+Console.WriteLine(destination.RouteTemplate);
+Console.WriteLine(string.Join(" -> ", destination.PagePath));
+
+var current = await applicationMap.CaptureCurrentPageAsync();
+
+var result = await applicationMap.NavigateAsync(
+    destination.PageName,
+    new Dictionary<string, string> { ["sku"] = "seed-basil" });
 ```
 
-### 3. Navigate with clean URIs
+Only pages with a reliable Shell destination are returned. Generated
+`ShellContent` routes map top-level pages without reflection. Registered deep routes
+map to indexed pages by destination type identity. Resolution reports unknown,
+ambiguous, and missing-parameter states without moving the user.
+
+## Trimming-safe deep-route registration
+
+Prefer typed registration for pushed routes. It supplies destination identity,
+stable parent paths, and query parameters without discovering those facts through
+reflection:
 
 ```csharp
-// Template-style URI — parameter values are inline in the path
-await navigationService.NavigateAsync("//main/products/product/seed-tomato");
+navigation.RegisterRoute<ProductDetailPage>(
+    "product",
+    "//main/products",
+    [new QueryParameterInfo("sku", "Sku", "String")]);
 
-// Nested navigation — resolves to one GoToAsync call
-await navigationService.NavigateAsync("//main/products/product/seed-tomato/review");
-// Resolved URI:
-// //main/products/product/review?sku=seed-tomato&product.sku=seed-tomato
+navigation.RegisterRoute<ProductReviewPage>(
+    "review",
+    "//main/products/product",
+    [new QueryParameterInfo("sku", "Sku", "String")]);
+```
 
-// Back navigation
-await navigationService.NavigateAsync("..");
+The runtime discovery fallback remains available for existing
+`Routing.RegisterRoute` calls, but explicit metadata produces the reliable
+search-to-destination mapping used by `ApplicationMapService`.
+
+## Template-aware navigation
+
+AI agents can still use clean paths directly:
+
+```csharp
+await navigation.NavigateAsync("//main/products/product/seed-tomato");
+await navigation.NavigateAsync("//main/products/product/seed-tomato/review");
+```
+
+The nested review path resolves to one MAUI call:
+
+```text
+//main/products/product/review?sku=seed-tomato&product.sku=seed-tomato
 ```
 
 ## Key features
 
-- **Route discovery** — walks `Shell.Items` hierarchy and `Routing.RegisterRoute` entries
-- **Query parameter discovery** — reflects `[QueryProperty]` on pages and view models
-- **Template URI resolution** — `ResolveRoute` converts `//main/products/product/seed-tomato/review` into one valid Shell URI
-- **Parameter propagation** — shared parameters (like `sku`) flow to all pages that accept them
-- **Single-call navigation** — MAUI 10.0.90+ delivers route-prefixed parameters to intermediate pages, avoiding a visible intermediate navigation
-- **Back-stack correctness** — one multi-page `GoToAsync` call pushes the complete stack, so `..` pops to the right parent
-- **BuildRoute helper** — constructs multi-segment routes with Shell's route-prefix convention for intermediate page parameters
+- **Semantic destination search** over generated, accessibility-first page Markdown
+- **Verified page paths** from the generated home page through intermediate screens
+- **Live current-screen context** for "this", "here", and visible-control questions
+- **Typed route identity** for trimming/AOT-conscious deep-page mapping
+- **Ambiguity and required-parameter validation** before navigation
+- **Single-call deep navigation** with shared parameters propagated to intermediate pages
+- **Back-stack correctness** from one multi-page `GoToAsync` call
 
-## AI integration
-
-The library has no dependency on `Microsoft.Maui.AI.Attributes`. To expose routes as AI tools, create a thin wrapper:
-
-```csharp
-public sealed class AINavigationService
-{
-    private readonly ShellNavigationService _inner;
-
-    public AINavigationService(ShellNavigationService inner) => _inner = inner;
-
-    [ExportAIFunction("get_routes")]
-    [Description("Lists all available navigation routes with parameters.")]
-    public IReadOnlyList<RouteInfo> GetRoutes() => _inner.GetRoutes();
-
-    [ExportAIFunction("navigate")]
-    [Description("Navigate using a clean URI with inline parameter values.")]
-    public Task<string> NavigateAsync(string route) => _inner.NavigateAsync(route);
-}
-```
+The package has no dependency on `Microsoft.Maui.AI.Attributes`. Apps choose the
+small AI tool surface that fits their assistant. The Garden sample exposes
+`find_in_app`, `describe_app_destination`, `describe_current_screen`, and
+`open_app_destination` through one `AppWayfindingTools` bridge.
 
 ## Requirements
 
 - .NET 10
-- `Microsoft.Maui.Controls` 10.0.90 or later (the package currently references 10.0.100)
+- `Microsoft.Maui.Controls` 10.0.100
+- A direct `Microsoft.Maui.AI.Indexer` package reference for generated app metadata
 
-The intermediate-page parameter fix shipped in [dotnet/maui#35432](https://github.com/dotnet/maui/pull/35432) and is included in the [MAUI 10.0.100 release](https://github.com/dotnet/maui/releases/tag/10.0.100).
+The intermediate-page parameter fix shipped in
+[dotnet/maui#35432](https://github.com/dotnet/maui/pull/35432) and is included in
+the [MAUI 10.0.100 release](https://github.com/dotnet/maui/releases/tag/10.0.100).
 
 > ⚠️ **This package is experimental.** APIs may change between releases.

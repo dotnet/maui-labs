@@ -1,20 +1,27 @@
 using AIExtensions.Sample.Garden.Pages;
+using AIExtensions.Sample.Garden.ViewModels;
+using Microsoft.Maui.AI.Navigation;
 
 namespace AIExtensions.Sample.Garden;
 
 public partial class AppShell : Shell
 {
-    public AppShell()
+    public AppShell(ShellNavigationService navigation)
     {
         InitializeComponent();
 
-        // Clean AI URI: //main/products/product/<sku>
-        Routing.RegisterRoute("product", typeof(ProductDetailPage));
-        // Clean AI URI: //main/products/product/<sku>/review
-        Routing.RegisterRoute("review", typeof(ProductReviewPage));
-        // Clean AI URI: //main/orders/order/<orderId>
-        Routing.RegisterRoute("order", typeof(OrderDetailPage));
-        // Cart stays modal — slides up from anywhere
-        Routing.RegisterRoute("cart", typeof(CartPage));
+        navigation.RegisterRoute<ProductDetailPage>(
+            "product",
+            "//main/products",
+            [new QueryParameterInfo("sku", nameof(ProductDetailViewModel.Sku), nameof(String))]);
+        navigation.RegisterRoute<ProductReviewPage>(
+            "review",
+            "//main/products/product",
+            [new QueryParameterInfo("sku", nameof(ProductReviewViewModel.Sku), nameof(String))]);
+        navigation.RegisterRoute<OrderDetailPage>(
+            "order",
+            "//main/orders",
+            [new QueryParameterInfo("orderId", nameof(OrderDetailViewModel.OrderId), nameof(String))]);
+        navigation.RegisterRoute<CartPage>("cart", null, []);
     }
 }

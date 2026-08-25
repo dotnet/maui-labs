@@ -10,10 +10,21 @@ namespace Microsoft.Maui.AI.Navigation;
 /// <param name="Route">The route segment name (e.g. "product").</param>
 /// <param name="FullPath">The absolute Shell path (e.g. "//main/products").</param>
 /// <param name="Parameters">Query parameters the page accepts.</param>
+/// <param name="TargetPageName">The destination page's CLR type identity, when known.</param>
+/// <param name="ParentPath">The stable parent path for a registered route, when known.</param>
 public record RouteInfo(
     string Route,
     string FullPath,
-    IReadOnlyList<QueryParameterInfo> Parameters);
+    IReadOnlyList<QueryParameterInfo> Parameters,
+    string? TargetPageName = null,
+    string? ParentPath = null)
+{
+    /// <summary>The stable path used to reach this destination.</summary>
+    public string DestinationPath
+        => string.IsNullOrWhiteSpace(ParentPath)
+            ? FullPath
+            : $"{ParentPath!.TrimEnd('/')}/{Route.Trim('/')}";
+}
 
 /// <summary>
 /// A query parameter accepted by a route's page or view model.
@@ -37,7 +48,45 @@ public record QueryParameterInfo(
 /// </summary>
 public class ShellNavigationService
 {
+    private readonly List<RouteInfo> _registeredRoutes = [];
     private List<RouteInfo>? _cachedRoutes;
+
+    /// <summary>
+    /// Registers a Shell route together with explicit destination metadata.
+    /// Prefer this overload in trimming/AOT-sensitive apps so page identity,
+    /// parent path, and parameters do not depend on runtime reflection.
+    /// </summary>
+    public RouteInfo RegisterRoute<TPage>(
+        string route,
+        string? parentPath,
+        IReadOnlyList<QueryParameterInfo> parameters)
+        where TPage : Page
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(route);
+        ArgumentNullException.ThrowIfNull(parameters);
+
+        var routeInfo = new RouteInfo(
+            route,
+            route,
+            parameters,
+            typeof(TPage).FullName ?? typeof(TPage).Name,
+            parentPath);
+
+        var existingIndex = _registeredRoutes.FindIndex(candidate =>
+            string.Equals(candidate.Route, route, StringComparison.OrdinalIgnoreCase));
+        if (existingIndex >= 0)
+        {
+            _registeredRoutes[existingIndex] = routeInfo;
+        }
+        else
+        {
+            Routing.RegisterRoute(route, typeof(TPage));
+            _registeredRoutes.Add(routeInfo);
+        }
+
+        InvalidateCache();
+        return routeInfo;
+    }
 
     /// <summary>
     /// Lists all available navigation routes by walking the Shell hierarchy
@@ -55,46 +104,56 @@ public class ShellNavigationService
             foreach (var item in shell.Items)
             {
                 var itemRoute = Routing.GetRoute(item);
-                if (IsGenerated(itemRoute))
-                    continue;
 
                 foreach (var section in item.Items)
                 {
+                    var sectionRoute = Routing.GetRoute(section);
                     foreach (var content in section.Items)
                     {
                         var contentRoute = Routing.GetRoute(content);
                         if (IsGenerated(contentRoute))
                             continue;
 
-                        var fullPath = $"//{itemRoute}/{contentRoute}";
+                        var fullPath = BuildHierarchyPath(
+                            itemRoute,
+                            sectionRoute,
+                            contentRoute);
                         routes.Add(new RouteInfo(contentRoute, fullPath, []));
                     }
                 }
             }
         }
 
-        try
+        var field = typeof(Routing).GetField("s_routes",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        if (field?.GetValue(null) is System.Collections.IDictionary routeDict)
         {
-            var field = typeof(Routing).GetField("s_routes",
-                BindingFlags.Static | BindingFlags.NonPublic);
-            if (field?.GetValue(null) is System.Collections.IDictionary routeDict)
+            foreach (System.Collections.DictionaryEntry entry in routeDict)
             {
-                foreach (System.Collections.DictionaryEntry entry in routeDict)
-                {
-                    var routeName = entry.Key?.ToString();
-                    if (string.IsNullOrWhiteSpace(routeName) || IsGenerated(routeName))
-                        continue;
+                var routeName = entry.Key?.ToString();
+                if (string.IsNullOrWhiteSpace(routeName) || IsGenerated(routeName))
+                    continue;
 
-                    var pageType = GetTypeFromFactory(entry.Value);
-                    var queryParams = DiscoverQueryParameters(pageType);
+                var pageType = GetTypeFromFactory(entry.Value);
+                var queryParams = DiscoverQueryParameters(pageType);
 
-                    routes.Add(new RouteInfo(routeName, routeName, queryParams));
-                }
+                routes.Add(new RouteInfo(
+                    routeName,
+                    routeName,
+                    queryParams,
+                    pageType?.FullName ?? pageType?.Name));
             }
         }
-        catch
+
+        foreach (var registeredRoute in _registeredRoutes)
         {
-            // Reflection on internal Routing dictionary failed
+            var existingIndex = routes.FindIndex(candidate =>
+                string.Equals(candidate.Route, registeredRoute.Route, StringComparison.OrdinalIgnoreCase)
+                && !candidate.FullPath.StartsWith("//", StringComparison.Ordinal));
+            if (existingIndex >= 0)
+                routes[existingIndex] = registeredRoute;
+            else
+                routes.Add(registeredRoute);
         }
 
         _cachedRoutes = routes;
@@ -156,12 +215,16 @@ public class ShellNavigationService
             string.Equals(r.Route, lastSegment, StringComparison.OrdinalIgnoreCase));
         if (lastRouteInfo is not null)
         {
-            foreach (var (key, value) in parameters)
+            foreach (var parameter in lastRouteInfo.Parameters)
             {
-                if (lastRouteInfo.Parameters.Any(p =>
-                    string.Equals(p.QueryName, key, StringComparison.OrdinalIgnoreCase)))
+                if (TryGetParameterValue(
+                    parameters,
+                    lastRouteInfo.Route,
+                    parameter.QueryName,
+                    out var value))
                 {
-                    queryParts.Add($"{Uri.EscapeDataString(key)}={Uri.EscapeDataString(value)}");
+                    queryParts.Add(
+                        $"{Uri.EscapeDataString(parameter.QueryName)}={Uri.EscapeDataString(value)}");
                 }
             }
         }
@@ -174,12 +237,16 @@ public class ShellNavigationService
             if (routeInfo is null)
                 continue;
 
-            foreach (var (key, value) in parameters)
+            foreach (var parameter in routeInfo.Parameters)
             {
-                if (routeInfo.Parameters.Any(p =>
-                    string.Equals(p.QueryName, key, StringComparison.OrdinalIgnoreCase)))
+                if (TryGetParameterValue(
+                    parameters,
+                    routeInfo.Route,
+                    parameter.QueryName,
+                    out var value))
                 {
-                    queryParts.Add($"{Uri.EscapeDataString(segment)}.{Uri.EscapeDataString(key)}={Uri.EscapeDataString(value)}");
+                    queryParts.Add(
+                        $"{Uri.EscapeDataString(segment)}.{Uri.EscapeDataString(parameter.QueryName)}={Uri.EscapeDataString(value)}");
                 }
             }
         }
@@ -336,6 +403,12 @@ public class ShellNavigationService
         return sb.ToString();
     }
 
+    internal static string BuildHierarchyPath(params string[] routes)
+        => $"//{string.Join(
+            "/",
+            routes.Where(route =>
+                !string.IsNullOrWhiteSpace(route) && !IsGenerated(route)))}";
+
     private static StringBuilder BuildPath(string basePath, IEnumerable<string> segments)
     {
         var trimmedBasePath = basePath.TrimEnd('/');
@@ -352,6 +425,41 @@ public class ShellNavigationService
         }
 
         return sb;
+    }
+
+    private static bool TryGetParameterValue(
+        IReadOnlyDictionary<string, string> parameters,
+        string route,
+        string queryName,
+        out string value)
+    {
+        var qualifiedName = $"{route}.{queryName}";
+        foreach (var parameter in parameters)
+        {
+            if (string.Equals(
+                parameter.Key,
+                qualifiedName,
+                StringComparison.OrdinalIgnoreCase))
+            {
+                value = parameter.Value;
+                return true;
+            }
+        }
+
+        foreach (var parameter in parameters)
+        {
+            if (string.Equals(
+                parameter.Key,
+                queryName,
+                StringComparison.OrdinalIgnoreCase))
+            {
+                value = parameter.Value;
+                return true;
+            }
+        }
+
+        value = "";
+        return false;
     }
 
     private async Task GoToAsyncOnMainThread(string route)
