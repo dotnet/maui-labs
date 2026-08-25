@@ -63,6 +63,7 @@
     private CancellationTokenSource? _sendCts;
     private CancellationTokenSource? _pickCts;
     private CancellationTokenSource? _audioCts;
+    private CancellationTokenSource? _speechCts;
     private IChatAudioRecorder? _activeRecorder;
     private IChatSpeechRecognizer? _activeRecognizer;
 
@@ -320,8 +321,10 @@
             _composer.SetIsSending(false);
             _composer.SetIsRecordingAudio(false);
             _composer.SetIsTranscribingAudio(false);
+            _composer.SetIsAudioStarting(false);
             _composer.SetIsLiveSpeechEnabled(false);
             _composer.SetIsListening(false);
+            _composer.SetIsSpeechStarting(false);
             _composer.SetStatusMessage(null);
             _composer.SetErrorMessage(null);
         }
@@ -341,6 +344,7 @@
         CancelAndDispose(ref _sendCts);
         CancelAndDispose(ref _pickCts);
         CancelAndDispose(ref _audioCts);
+        CancelAndDispose(ref _speechCts);
 
         // If a recording was in progress the recorder's own StartAsync/StopAsync do not
         // observe our tokens; fire CancelAsync on the tracked recorder so any pending
@@ -647,9 +651,10 @@
     }
 
     /// <summary>
-    /// Toggles audio capture using the injected <see cref="IChatAudioRecorder"/>. Guarded against
-    /// conversation swap so an in-flight recording that finishes after the swap cannot stage its
-    /// attachment into the new conversation.
+    /// Toggles audio capture using the injected <see cref="IChatAudioRecorder"/>. Enforces the
+    /// single-microphone-owner rule: starting a fresh recording first tears down any active or
+    /// starting live-speech pass (identity-guarded await of <see cref="IChatSpeechRecognizer.StopAsync"/>)
+    /// so the two modalities cannot race for the same platform capture device.
     /// </summary>
     public async Task ToggleAudioCaptureAsync()
     {
@@ -663,36 +668,50 @@
 
         var gen = _operationGeneration;
 
+        if (_composer.IsRecordingAudio)
+        {
+            await StopAudioRecordingAsync(recorder, gen, conversation).ConfigureAwait(true);
+        }
+        else
+        {
+            await StartAudioRecordingAsync(recorder, gen, conversation).ConfigureAwait(true);
+        }
+    }
+
+    private async Task StartAudioRecordingAsync(
+        IChatAudioRecorder recorder,
+        int gen,
+        ChatConversation? conversation)
+    {
+        // Claim the audio-starting flag FIRST so CanToggleLiveSpeech immediately rejects a
+        // rapid programmatic caller. IsAudioActive collapses IsAudioStarting into the
+        // single-owner gate, so a competing ToggleLiveSpeechAsync entering during the
+        // EnsureLiveSpeechStopped await will see IsAudioActive=true and skip starting.
+        _composer.SetIsAudioStarting(true);
+
         try
         {
-            if (_composer.IsRecordingAudio)
+            // Defensive orchestration: even when a programmatic caller bypasses the disabled
+            // CanToggleAudioCapture gate, the single-mic rule holds. Tear down any active or
+            // starting live-speech pass before we claim the microphone, and identity-check
+            // the cleanup so a mid-cleanup conversation swap or dispose still short-circuits.
+            await EnsureLiveSpeechStoppedAsync().ConfigureAwait(true);
+            if (!StillValid(gen, conversation))
             {
-                _composer.SetIsRecordingAudio(false);
-                var recording = await recorder.StopAsync(50L * 1024 * 1024).ConfigureAwait(true);
-
-                if (!StillValid(gen, conversation))
-                {
-                    return;
-                }
-
-                if (recording is not null)
-                {
-                    await _composer.AddAttachmentAsync(recording).ConfigureAwait(true);
-                }
-
-                if (ReferenceEquals(_activeRecorder, recorder))
-                {
-                    _activeRecorder = null;
-                }
+                return;
             }
-            else
+
+            var audioCts = new CancellationTokenSource();
+            _audioCts = audioCts;
+
+            try
             {
-                await recorder.StartAsync().ConfigureAwait(true);
+                await recorder.StartAsync(audioCts.Token).ConfigureAwait(true);
 
                 if (!StillValid(gen, conversation))
                 {
-                    // Swap happened while StartAsync was running; discard the recording
-                    // rather than parading a "recording" state on the new conversation.
+                    // Swap during StartAsync: unwind cleanly rather than parade a stray
+                    // "recording" state on the new conversation.
                     _ = recorder.CancelAsync();
                     return;
                 }
@@ -700,22 +719,114 @@
                 _activeRecorder = recorder;
                 _composer.SetIsRecordingAudio(true);
             }
+            catch (OperationCanceledException)
+            {
+                // Cancellation via _audioCts (e.g. by EnsureAudioStoppedAsync from a speech
+                // preempt) is silent: the other modality preempted us. No error banner.
+            }
+            catch (Exception)
+            {
+                if (StillValid(gen, conversation))
+                {
+                    _composer.SetErrorMessage("The audio recording could not be completed.");
+                }
+            }
+            finally
+            {
+                if (ReferenceEquals(_audioCts, audioCts))
+                {
+                    _audioCts = null;
+                }
+
+                audioCts.Dispose();
+            }
+        }
+        finally
+        {
+            // Always drop the starting flag: whether we succeeded (recording flag now
+            // holds the state), were cancelled, or errored. StillValid gate keeps a
+            // conversation swap from clobbering the new conversation's composer, though
+            // AttachConversation also clears this defensively.
+            if (StillValid(gen, conversation))
+            {
+                _composer.SetIsAudioStarting(false);
+            }
+        }
+    }
+
+    private async Task StopAudioRecordingAsync(
+        IChatAudioRecorder recorder,
+        int gen,
+        ChatConversation? conversation)
+    {
+        _composer.SetIsRecordingAudio(false);
+        CancelAndDispose(ref _audioCts);
+
+        try
+        {
+            var recording = await recorder.StopAsync(50L * 1024 * 1024).ConfigureAwait(true);
+            if (!StillValid(gen, conversation))
+            {
+                return;
+            }
+
+            if (recording is not null)
+            {
+                await _composer.AddAttachmentAsync(recording).ConfigureAwait(true);
+            }
         }
         catch (Exception)
         {
             if (StillValid(gen, conversation))
             {
-                _composer.SetIsRecordingAudio(false);
                 _composer.SetErrorMessage("The audio recording could not be completed.");
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(_activeRecorder, recorder))
+            {
+                _activeRecorder = null;
             }
         }
     }
 
     /// <summary>
-    /// Toggles continuous live speech using the injected <see cref="IChatSpeechRecognizer"/>. The
-    /// active recognizer and an epoch are tracked so we unsubscribe on every terminal path
-    /// (toggle-off, error, conversation swap, dispose) instead of leaking a subscription into a
-    /// singleton recognizer that then keeps the ChatView alive and mutable.
+    /// Ensures any active or starting audio operation is torn down before starting the other
+    /// modality. Cancels the audio token and awaits <see cref="IChatAudioRecorder.CancelAsync"/>
+    /// on the tracked recorder so the microphone is really released. Clears the composer
+    /// audio flags regardless of who called first.
+    /// </summary>
+    private async Task EnsureAudioStoppedAsync()
+    {
+        var recorder = _activeRecorder;
+        _activeRecorder = null;
+        CancelAndDispose(ref _audioCts);
+
+        if (recorder is not null)
+        {
+            try
+            {
+                await recorder.CancelAsync().ConfigureAwait(true);
+            }
+            catch
+            {
+                // Cancel failure is not actionable and must not block the caller from
+                // starting speech; the composer flags are cleared unconditionally.
+            }
+        }
+
+        _composer.SetIsRecordingAudio(false);
+        _composer.SetIsTranscribingAudio(false);
+        _composer.SetIsAudioStarting(false);
+    }
+
+    /// <summary>
+    /// Toggles continuous live speech using the injected <see cref="IChatSpeechRecognizer"/>. Enforces
+    /// the single-microphone-owner rule: starting a fresh pass first cancels/detaches any active
+    /// audio recording (identity-guarded await of <see cref="IChatAudioRecorder.CancelAsync"/>). The
+    /// active recognizer + epoch are tracked so we unsubscribe on every terminal path (toggle-off,
+    /// error, conversation swap, dispose) instead of leaking a subscription.
     /// </summary>
     public async Task ToggleLiveSpeechAsync()
     {
@@ -729,27 +840,40 @@
 
         var gen = _operationGeneration;
 
-        try
+        if (_composer.IsLiveSpeechEnabled || _composer.IsListening)
         {
-            if (_composer.IsLiveSpeechEnabled)
+            await StopLiveSpeechAsync(recognizer).ConfigureAwait(true);
+            if (StillValid(gen, conversation))
             {
-                DetachActiveRecognizer(swallowStopExceptions: true);
-                if (StillValid(gen, conversation))
-                {
-                    _composer.SetIsLiveSpeechEnabled(false);
-                    _composer.SetIsListening(false);
-                }
-
-                await recognizer.StopAsync().ConfigureAwait(true);
-                return;
+                _composer.SetIsLiveSpeechEnabled(false);
+                _composer.SetIsListening(false);
             }
 
+            return;
+        }
+
+        await StartLiveSpeechAsync(recognizer, gen, conversation).ConfigureAwait(true);
+    }
+
+    private async Task StartLiveSpeechAsync(
+        IChatSpeechRecognizer recognizer,
+        int gen,
+        ChatConversation? conversation)
+    {
+        // Claim the speech-starting flag FIRST so CanToggleAudioCapture rejects a rapid
+        // programmatic caller from the moment the user tapped speech. IsSpeechActive
+        // collapses IsSpeechStarting into the single-owner gate, so a competing
+        // ToggleAudioCaptureAsync entering during the permission request or the
+        // EnsureAudioStoppedAsync await will see IsSpeechActive=true and skip starting.
+        _composer.SetIsSpeechStarting(true);
+
+        try
+        {
             var granted = await recognizer.RequestPermissionsAsync().ConfigureAwait(true);
             if (!StillValid(gen, conversation))
             {
                 if (granted)
                 {
-                    // Ensure we do not leave the recognizer running on the swap's tail.
                     _ = recognizer.StopAsync();
                 }
 
@@ -762,29 +886,68 @@
                 return;
             }
 
-            // Detach any prior recognizer identity FIRST so a stale event from a previous
-            // pass does not race the new subscription.
-            DetachActiveRecognizer(swallowStopExceptions: true);
-            _activeRecognizer = recognizer;
-            recognizer.RecognitionChanged += OnRecognition;
-
-            await recognizer.StartAsync(
-                System.Globalization.CultureInfo.CurrentCulture,
-                reportPartialResults: true).ConfigureAwait(true);
-
+            // Defensive orchestration: tear down any active/starting audio BEFORE we claim
+            // the microphone for speech. This must await CancelAsync so the audio recorder
+            // has actually released the platform capture device before we call
+            // recognizer.StartAsync — running both simultaneously would either double-open
+            // the device or leave one in an inconsistent state.
+            await EnsureAudioStoppedAsync().ConfigureAwait(true);
             if (!StillValid(gen, conversation))
             {
-                // Swap during StartAsync: unwind cleanly.
-                DetachActiveRecognizer(swallowStopExceptions: true);
                 return;
             }
 
-            _composer.SetIsLiveSpeechEnabled(true);
-            _composer.SetIsListening(true);
+            // Detach any prior recognizer identity FIRST so a stale event from a previous
+            // pass does not race the new subscription.
+            DetachActiveRecognizer(swallowStopExceptions: true);
+
+            var speechCts = new CancellationTokenSource();
+            _speechCts = speechCts;
+            _activeRecognizer = recognizer;
+            recognizer.RecognitionChanged += OnRecognition;
+
+            try
+            {
+                await recognizer.StartAsync(
+                    System.Globalization.CultureInfo.CurrentCulture,
+                    reportPartialResults: true,
+                    speechCts.Token).ConfigureAwait(true);
+
+                if (!StillValid(gen, conversation))
+                {
+                    DetachActiveRecognizer(swallowStopExceptions: true);
+                    return;
+                }
+
+                _composer.SetIsLiveSpeechEnabled(true);
+                _composer.SetIsListening(true);
+            }
+            catch (OperationCanceledException)
+            {
+                // Preempted by another modality demand or a swap. Detach and unwind.
+                DetachActiveRecognizer(swallowStopExceptions: true);
+            }
+            catch (Exception)
+            {
+                DetachActiveRecognizer(swallowStopExceptions: true);
+                if (StillValid(gen, conversation))
+                {
+                    _composer.SetErrorMessage("Live voice could not continue.");
+                }
+            }
+            finally
+            {
+                if (ReferenceEquals(_speechCts, speechCts))
+                {
+                    _speechCts = null;
+                }
+
+                speechCts.Dispose();
+            }
         }
         catch (Exception)
         {
-            DetachActiveRecognizer(swallowStopExceptions: true);
+            // Permission request itself failed.
             if (StillValid(gen, conversation))
             {
                 _composer.SetIsLiveSpeechEnabled(false);
@@ -792,6 +955,70 @@
                 _composer.SetErrorMessage("Live voice could not continue.");
             }
         }
+        finally
+        {
+            // Always drop the starting flag on every terminal path. StillValid keeps a
+            // conversation swap from clobbering the new conversation's composer, though
+            // AttachConversation also clears this defensively.
+            if (StillValid(gen, conversation))
+            {
+                _composer.SetIsSpeechStarting(false);
+            }
+        }
+    }
+
+    private async Task StopLiveSpeechAsync(IChatSpeechRecognizer recognizer)
+    {
+        // Detach synchronously so no more events land, then await StopAsync so the
+        // recognizer has released the microphone before the caller returns.
+        DetachActiveRecognizer(swallowStopExceptions: true);
+        try
+        {
+            await recognizer.StopAsync().ConfigureAwait(true);
+        }
+        catch
+        {
+            // Stop failure is not actionable; the composer state has already been cleared
+            // by the caller.
+        }
+    }
+
+    /// <summary>
+    /// Ensures any active or starting live-speech pass is torn down. Cancels the speech
+    /// token, unsubscribes the handler, and awaits <see cref="IChatSpeechRecognizer.StopAsync"/>
+    /// so the microphone is released before the caller starts audio capture. Called from
+    /// <see cref="StartAudioRecordingAsync"/> for the audio-preempts-speech direction and
+    /// from Dispose/AttachConversation for lifecycle events (fire-and-forget in the sync
+    /// call sites, awaited here).
+    /// </summary>
+    private async Task EnsureLiveSpeechStoppedAsync()
+    {
+        var recognizer = _activeRecognizer;
+        _activeRecognizer = null;
+        CancelAndDispose(ref _speechCts);
+
+        if (recognizer is not null)
+        {
+            try
+            {
+                recognizer.RecognitionChanged -= OnRecognition;
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                await recognizer.StopAsync().ConfigureAwait(true);
+            }
+            catch
+            {
+            }
+        }
+
+        _composer.SetIsLiveSpeechEnabled(false);
+        _composer.SetIsListening(false);
+        _composer.SetIsSpeechStarting(false);
     }
 
     private void DetachActiveRecognizer(bool swallowStopExceptions)
