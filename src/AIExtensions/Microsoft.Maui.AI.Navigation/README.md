@@ -73,22 +73,4 @@ public sealed class AINavigationService
 
 The intermediate-page parameter fix shipped in [dotnet/maui#35432](https://github.com/dotnet/maui/pull/35432) and is included in the [MAUI 10.0.100 release](https://github.com/dotnet/maui/releases/tag/10.0.100).
 
-## .NET MAUI 11 route templates
-
-.NET MAUI 11 adds native `{param}` Shell route templates in [dotnet/maui#35110](https://github.com/dotnet/maui/pull/35110). Apps targeting MAUI 11 can register:
-
-```csharp
-Routing.RegisterRoute("product/{sku}", typeof(ProductDetailPage));
-Routing.RegisterRoute("review", typeof(ProductReviewPage));
-```
-
-Shell then accepts the clean URI directly:
-
-```csharp
-await Shell.Current.GoToAsync(
-    "//main/products/product/seed-tomato/review");
-```
-
-Both the product and review pages receive `sku=seed-tomato`. For MAUI 11 apps, native route templates replace this package's inline-value resolution and `BuildRoute` conversion; route discovery and the AI tool wrapper can still be useful. Relative navigation to a templated route remains unsupported in the initial MAUI 11 implementation, so use absolute URIs.
-
 > ⚠️ **This package is experimental.** APIs may change between releases.
