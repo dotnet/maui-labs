@@ -125,24 +125,29 @@ public sealed class AppWayfindingTools(
         return builder.ToString();
     }
 
-    [ExportAIFunction("get_current_navigation_uri")]
+    [ExportAIFunction("get_current_app_state")]
     [Description(
-        "Return the live Shell navigation URI. MUST be called in the current turn before " +
-        "giving directions, because the user may have navigated manually since the last message.")]
-    public string GetCurrentNavigationUri()
-        => navigation.GetCurrentRoute();
-
-    [ExportAIFunction("get_current_page_ui")]
-    [Description(
-        "Read the live controls and state on the currently visible page. MUST be called in the " +
-        "current turn before giving directions or answering questions about this/here/current " +
-        "controls. Private input text is omitted. Does not return route metadata.")]
-    public async Task<string> GetCurrentPageUiAsync()
+        "Return the live Shell navigation URI, optionally with the currently visible page's UI. " +
+        "MUST be called in the current turn before giving directions because the user may have " +
+        "navigated manually since the last message. Private input text is omitted.")]
+    public async Task<string> GetCurrentAppStateAsync(
+        [Description(
+            "Set true when exact controls or from-here directions are needed. " +
+            "Set false to return only the current navigation URI.")]
+        bool includePageUi = false)
     {
+        var route = navigation.GetCurrentRoute();
+        if (!includePageUi)
+            return route;
+
         var snapshot = await applicationMap.CaptureCurrentPageAsync();
         return snapshot is null
-            ? "No currently presented app page is available."
-            : $"Current page: {snapshot.PageName}\n\n{snapshot.Markdown}";
+            ? $"Current navigation URI: {route}\nNo currently presented app page is available."
+            : $"Current navigation URI: {route}\n" +
+              $"Current page: {snapshot.PageName}\n\n{snapshot.Markdown}\n\n" +
+              $"DIRECTION CONSTRAINT: The first direction step must use a control from " +
+              $"{snapshot.PageName} above. Do not begin at home or another page unless " +
+              $"{snapshot.PageName} is home.";
     }
 
     [ExportAIFunction("navigate_to_app_destination")]

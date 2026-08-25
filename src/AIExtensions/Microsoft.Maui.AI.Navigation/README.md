@@ -100,8 +100,8 @@ The nested review path resolves to one MAUI call:
 
 The package has no dependency on `Microsoft.Maui.AI.Attributes`. Apps choose the
 small AI tool surface that fits their assistant. The Garden sample exposes
-`search_app_ui`, `get_app_destination`, `get_current_navigation_uri`,
-`get_current_page_ui`, and `navigate_to_app_destination` through one
+`search_app_ui`, `get_app_destination`,
+`get_current_app_state(includePageUi)`, and `navigate_to_app_destination` through one
 `AppWayfindingTools` bridge.
 
 ## Requirements

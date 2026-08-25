@@ -60,7 +60,7 @@ assembly-wide context for the whole app.
 | `IOrderArchive` | singleton interface | Past-order lookup, `checkout_list`, `reorder`, and `clear_past_orders` |
 | `CartViewModel` | singleton | Accessor-level tools: `get_cart_mode` / `set_cart_mode` |
 | `CatalogViewModel` | transient | `recommend_bundle`, a page-local bundle recommender that returns a starter kit without mutating the cart |
-| `AppWayfindingTools` | singleton | Separate destination search/description, current URI, current page UI, and navigation tools |
+| `AppWayfindingTools` | singleton | Destination search/description, configurable current app state, and navigation tools |
 
 This sample is especially useful if you want to see a **transient view-model**
 participate in a shared tool context while still writing through to singleton state.
@@ -68,14 +68,14 @@ participate in a shared tool context while still writing through to singleton st
 ## Current-screen help
 
 This lets a user navigate to the review form and ask, "What is this text box for?"
-without leaving the form. `get_current_page_ui` reads a fresh `RuntimePageIndexer`
-snapshot with the resolved product name, rating, and editor purpose without exposing
-user-entered text.
+without leaving the form. `get_current_app_state(includePageUi: true)` combines the
+live Shell URI with a fresh `RuntimePageIndexer` snapshot containing the resolved
+product name, rating, and editor purpose without exposing user-entered text.
 
-Before giving directions, Sage calls `get_current_navigation_uri` and
-`get_current_page_ui` separately. It then combines those live facts with the
-compile-time destination returned by `get_app_destination`, so manually
-navigating between chat turns does not leave stale location assumptions.
+Before giving directions, Sage calls `get_current_app_state`. It can request only
+the URI or include the current page UI when exact from-here controls are needed,
+then combines that live state with the compile-time destination returned by
+`get_app_destination`.
 
 The home `ChatView` and persistent sidebar are marked with
 `IndexingProperties.ExcludeWithChildren="True"`. They remain visible and interactive
@@ -91,8 +91,7 @@ domain controls rather than recursively describing its own chat UI.
 | Cart presentation | `get_cart_mode`, `set_cart_mode` |
 | Orders | `list_past_orders`, `find_order`, `checkout_list`, `reorder`, `clear_past_orders` |
 | App feature and control discovery | `search_app_ui`, `get_app_destination` |
-| Current Shell location | `get_current_navigation_uri` |
-| Current visible screen and live control state | `get_current_page_ui` |
+| Current URI and optional live page UI | `get_current_app_state(includePageUi)` |
 | Resolved deep navigation | `navigate_to_app_destination` |
 | Recommendations | `recommend_bundle` |
 
