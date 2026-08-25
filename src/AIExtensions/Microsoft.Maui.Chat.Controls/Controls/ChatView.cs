@@ -8,7 +8,7 @@ namespace Microsoft.Maui.Chat.Controls;
 
 /// <summary>
 /// A complete chat surface: header, message list, welcome and empty states, busy indicator,
-/// suggestions, footer, and a composer with text and attachments.
+/// suggestions, footer, and a multimodal composer with text, files, audio, speech, and stop/cancel.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -30,8 +30,11 @@ namespace Microsoft.Maui.Chat.Controls;
 /// <item><c>PART_InputArea</c> — the composer container</item>
 /// <item><c>PART_Attachments</c> — <see cref="Layout"/> filled from <see cref="Attachments"/></item>
 /// <item><c>PART_AttachButton</c> — opens the attachment picker</item>
+/// <item><c>PART_AudioButton</c> — starts/stops audio capture or cancels transcription</item>
+/// <item><c>PART_LiveSpeechButton</c> — starts/stops continuous speech recognition</item>
 /// <item><c>PART_InputEntry</c> — the text input, two-way bound to <see cref="Text"/></item>
 /// <item><c>PART_SendButton</c> — sends the draft</item>
+/// <item><c>PART_StopButton</c> — cancels the active send or interactive wait</item>
 /// </list>
 /// <para>
 /// Sending is guarded against reentrancy, so a double tap or an <c>Enter</c> keypress landing on top of a
@@ -45,7 +48,7 @@ namespace Microsoft.Maui.Chat.Controls;
 /// </para>
 /// </remarks>
 [ContentProperty(nameof(ContentTemplates))]
-public class ChatView : TemplatedView
+public partial class ChatView : TemplatedView
 {
     /// <summary>The name of the header host part.</summary>
     public const string HeaderPartName = "PART_Header";
@@ -119,7 +122,7 @@ public class ChatView : TemplatedView
             typeof(ChatView),
             string.Empty,
             BindingMode.TwoWay,
-            propertyChanged: static (bindable, _, _) => ((ChatView)bindable).UpdateCanSend());
+            propertyChanged: static (bindable, _, _) => ((ChatView)bindable).OnComposerTextChanged());
 
     /// <summary>Backing property for <see cref="ContentTemplates"/>.</summary>
     public static readonly BindableProperty ContentTemplatesProperty =
@@ -327,7 +330,11 @@ public class ChatView : TemplatedView
             typeof(ChatView),
             null,
             propertyChanged: static (bindable, _, newValue) =>
-                ((ChatView)bindable).SetValue(HasSendErrorPropertyKey, newValue is string { Length: > 0 }));
+            {
+                var view = (ChatView)bindable;
+                view.SetValue(HasSendErrorPropertyKey, newValue is string { Length: > 0 });
+                view.RefreshInputContextIfAvailable();
+            });
 
     /// <summary>Backing property for <see cref="SendError"/>.</summary>
     public static readonly BindableProperty SendErrorProperty = SendErrorPropertyKey.BindableProperty;
@@ -345,7 +352,11 @@ public class ChatView : TemplatedView
             typeof(ChatView),
             null,
             propertyChanged: static (bindable, _, newValue) =>
-                ((ChatView)bindable).SetValue(HasAttachmentErrorPropertyKey, newValue is string { Length: > 0 }));
+            {
+                var view = (ChatView)bindable;
+                view.SetValue(HasAttachmentErrorPropertyKey, newValue is string { Length: > 0 });
+                view.RefreshInputContextIfAvailable();
+            });
 
     /// <summary>Backing property for <see cref="AttachmentError"/>.</summary>
     public static readonly BindableProperty AttachmentErrorProperty = AttachmentErrorPropertyKey.BindableProperty;
@@ -464,6 +475,7 @@ public class ChatView : TemplatedView
         SetDynamicResource(InputEntryStyleProperty, ChatThemeKeys.InputEntryStyle);
         SetDynamicResource(AttachButtonStyleProperty, ChatThemeKeys.AttachButtonStyle);
         SetDynamicResource(SendButtonStyleProperty, ChatThemeKeys.SendButtonStyle);
+        InitializeMultimodalInput();
     }
 
     // ── Public surface ──
@@ -763,7 +775,15 @@ public class ChatView : TemplatedView
     /// <see cref="SendError"/>.
     /// </summary>
     /// <returns>A task that completes when the send finished.</returns>
-    public Task SendAsync() => SendCoreAsync();
+    public Task SendAsync() => SendCoreAsync(CancellationToken.None);
+
+    /// <summary>
+    /// Sends the current draft with caller cancellation. Expected failures and cancellation never
+    /// escape the control; failures land in <see cref="SendError"/>.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the send.</param>
+    public Task SendAsync(CancellationToken cancellationToken) =>
+        SendCoreAsync(cancellationToken);
 
     /// <summary>
     /// Prompts for attachments and stages the picked files. Never throws: expected failures land in
@@ -773,22 +793,61 @@ public class ChatView : TemplatedView
     /// <returns>A task that completes when picking finished.</returns>
     public async Task PickAttachmentsAsync(CancellationToken cancellationToken = default)
     {
+        if (IsComposing && _attachmentReadCts is null)
+            return;
+
         SetValue(AttachmentErrorPropertyKey, null);
+        var previous = _attachmentReadCts;
+        _attachmentReadCts = null;
+        previous?.Cancel();
+        previous?.Dispose();
+
+        var operationCts = cancellationToken.CanBeCanceled
+            ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
+            : new CancellationTokenSource();
+        _attachmentReadCts = operationCts;
+        UpdateMultimodalState();
 
         try
         {
             var picker = AttachmentPicker ?? FileChatAttachmentPicker.Default;
             var picked = await picker
-                .PickAsync(AttachmentFileTypes, MaxAttachmentBytes, cancellationToken)
+                .PickAsync(AttachmentFileTypes, MaxAttachmentBytes, operationCts.Token)
                 .ConfigureAwait(true);
 
-            if (picked is null)
+            if (!ReferenceEquals(_attachmentReadCts, operationCts)
+                || picked is null)
                 return;
 
-            foreach (var attachment in picked)
+            var additions = picked
+                .Where(static attachment => attachment is not null)
+                .ToArray();
+            if (_attachments.Count + additions.Length > MaximumAttachmentCount)
             {
-                if (attachment is not null)
-                    _attachments.Add(attachment);
+                SetValue(
+                    AttachmentErrorPropertyKey,
+                    $"Attach no more than {MaximumAttachmentCount} files.");
+                return;
+            }
+            var totalBytes = _attachments.Sum(static attachment => attachment.ByteCount)
+                + additions.Sum(static attachment => attachment.ByteCount);
+            if (totalBytes > MaximumTotalAttachmentBytes)
+            {
+                SetValue(
+                    AttachmentErrorPropertyKey,
+                    $"Attachments must be {FormatMegabytes(MaximumTotalAttachmentBytes)} MB or smaller in total.");
+                return;
+            }
+
+            foreach (var attachment in additions)
+                _attachments.Add(attachment);
+
+            if (additions.Length > 0)
+            {
+                SetInputStatusMessage(
+                    additions.Length == 1
+                        ? "1 file attached."
+                        : $"{additions.Length} files attached.");
             }
         }
         catch (OperationCanceledException)
@@ -799,6 +858,15 @@ public class ChatView : TemplatedView
         {
             // Anything a picker throws is reported generically: raw details are never safe to show.
             SetValue(AttachmentErrorPropertyKey, DefaultAttachmentErrorMessage);
+        }
+        finally
+        {
+            if (ReferenceEquals(_attachmentReadCts, operationCts))
+            {
+                _attachmentReadCts = null;
+                operationCts.Dispose();
+                UpdateMultimodalState();
+            }
         }
     }
 
@@ -831,6 +899,7 @@ public class ChatView : TemplatedView
         _inputEntryPart = FindPart<Entry>(InputEntryPartName);
         _sendButtonPart = FindPart<Button>(SendButtonPartName);
         _attachButtonPart = FindPart<Button>(AttachButtonPartName);
+        AttachMultimodalParts();
 
         if (_inputEntryPart is not null)
             _inputEntryPart.Completed += OnInputCompleted;
@@ -932,6 +1001,7 @@ public class ChatView : TemplatedView
             _sendButtonPart.Clicked -= OnSendClicked;
         if (_attachButtonPart is not null)
             _attachButtonPart.Clicked -= OnAttachClicked;
+        DetachMultimodalParts();
         return oldMessageList;
     }
 
@@ -1069,7 +1139,8 @@ public class ChatView : TemplatedView
         var conversation = Conversation;
         var isEmpty = conversation is null || conversation.Messages.Count == 0;
 
-        var isBusy = conversation?.Status == ChatConversationStatus.Busy;
+        var isBusy =
+            conversation?.Status is ChatConversationStatus.Busy or ChatConversationStatus.AwaitingInput;
         SetValue(IsBusyPropertyKey, isBusy);
         SetValue(IsBusyIndicatorVisiblePropertyKey, isBusy && ShowBusyIndicator);
         SetValue(IsEmptyPropertyKey, isEmpty);
@@ -1089,20 +1160,26 @@ public class ChatView : TemplatedView
             _busyIndicatorPart.IsVisible = IsBusyIndicatorVisible;
         }
 
+        UpdateMultimodalState();
         UpdateCanSend();
     }
 
     private void UpdateCanSend()
     {
         var conversation = Conversation;
-        SetValue(CanSendPropertyKey, !_isSending && conversation is not null && conversation.CanSend(CreateDraft()));
+        SetValue(
+            CanSendPropertyKey,
+            !_isSending
+            && !IsComposing
+            && conversation is not null
+            && conversation.CanSend(CreateDraft()));
     }
 
     // ── Send ──
 
-    private void OnSendClicked(object? sender, EventArgs e) => _ = SendCoreAsync();
+    private void OnSendClicked(object? sender, EventArgs e) => _ = SendCoreAsync(CancellationToken.None);
 
-    private void OnInputCompleted(object? sender, EventArgs e) => _ = SendCoreAsync();
+    private void OnInputCompleted(object? sender, EventArgs e) => _ = SendCoreAsync(CancellationToken.None);
 
     private void OnAttachClicked(object? sender, EventArgs e) => _ = PickAttachmentsAsync();
 
@@ -1111,7 +1188,7 @@ public class ChatView : TemplatedView
     /// affine: a second tap or an <c>Enter</c> keypress arriving while the first send is awaiting is
     /// simply ignored, so no lock is involved.
     /// </summary>
-    private async Task SendCoreAsync()
+    private async Task SendCoreAsync(CancellationToken cancellationToken)
     {
         if (_isSending)
             return;
@@ -1124,17 +1201,30 @@ public class ChatView : TemplatedView
         if (!conversation.CanSend(draft))
             return;
 
+        var sendCts = cancellationToken.CanBeCanceled
+            ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
+            : new CancellationTokenSource();
+        _sendCts = sendCts;
         _isSending = true;
         SetValue(SendErrorPropertyKey, null);
+        SetInputStatusMessage("Sending message.");
+        UpdateMultimodalState();
         UpdateCanSend();
 
         try
         {
-            var accepted = await conversation.SendAsync(draft).ConfigureAwait(true);
+            var accepted = await conversation
+                .SendAsync(draft, sendCts.Token)
+                .ConfigureAwait(true);
+            var wasStopped = ReferenceEquals(_stoppedSendCts, sendCts);
 
             // Only an accepted draft is cleared: a rejected one stays so the user can retry it.
             if (accepted)
+            {
                 ClearAcceptedDraft(draft);
+                if (!wasStopped)
+                    SetInputStatusMessage("Message sent.");
+            }
         }
         catch (OperationCanceledException)
         {
@@ -1147,7 +1237,15 @@ public class ChatView : TemplatedView
         }
         finally
         {
-            _isSending = false;
+            if (ReferenceEquals(_sendCts, sendCts))
+            {
+                _sendCts = null;
+                _isSending = false;
+            }
+            if (ReferenceEquals(_stoppedSendCts, sendCts))
+                _stoppedSendCts = null;
+            sendCts.Dispose();
+            UpdateMultimodalState();
             UpdateCanSend();
         }
     }
@@ -1172,7 +1270,7 @@ public class ChatView : TemplatedView
             return;
 
         Text = suggestion.Prompt;
-        await SendCoreAsync().ConfigureAwait(true);
+        await SendCoreAsync(CancellationToken.None).ConfigureAwait(true);
     }
 
     // ── Templates and parts ──
@@ -1321,5 +1419,6 @@ public class ChatView : TemplatedView
     {
         SetValue(HasAttachmentsPropertyKey, _attachments.Count > 0);
         UpdateCanSend();
+        InputContext.Refresh();
     }
 }

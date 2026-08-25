@@ -38,6 +38,17 @@ public class ObservableChatConversation : ChatConversation
     /// </summary>
     public Func<ObservableChatConversation, ChatDraft, CancellationToken, Task<bool>>? SendHandler { get; set; }
 
+    /// <summary>
+    /// Gets or sets the cancellation behavior for work that did not originate from the bound
+    /// <see cref="ChatView"/>. A send started by the view is always cancelable through its token.
+    /// </summary>
+    public Func<ObservableChatConversation, CancellationToken, Task>? CancelHandler { get; set; }
+
+    /// <inheritdoc />
+    public override bool CanCancel =>
+        CancelHandler is not null
+        && Status is ChatConversationStatus.Busy or ChatConversationStatus.AwaitingInput;
+
     /// <summary>Appends a message and publishes <see cref="ChatConversationChangeKind.MessageAdded"/>.</summary>
     /// <param name="message">The message to append.</param>
     /// <returns>The same <paramref name="message"/> instance.</returns>
@@ -141,4 +152,8 @@ public class ObservableChatConversation : ChatConversation
         AddMessage(message);
         return Task.FromResult(true);
     }
+
+    /// <inheritdoc />
+    protected override Task CancelCoreAsync(CancellationToken cancellationToken) =>
+        CancelHandler?.Invoke(this, cancellationToken) ?? Task.CompletedTask;
 }

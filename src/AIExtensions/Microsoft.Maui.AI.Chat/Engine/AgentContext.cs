@@ -191,7 +191,7 @@ public class AgentContext(UIAgent agent) : IDisposable
 
             if (outcome != AttemptOutcome.Succeeded && callerToken.IsCancellationRequested)
             {
-                CleanupCanceledTurn(turn, historyCheckpoint, message);
+                CleanupCanceledTurn(turn, historyCheckpoint);
                 callerToken.ThrowIfCancellationRequested();
             }
         }
@@ -349,13 +349,14 @@ public class AgentContext(UIAgent agent) : IDisposable
         catch (Exception) when (cancellationToken.IsCancellationRequested)
         {
             agent.RejectPendingPredictiveState();
-            CleanupCanceledTurn(turn, historyCheckpoint, message);
+            CleanupCanceledTurn(turn, historyCheckpoint);
             return AttemptOutcome.Canceled;
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
             agent.RejectPendingPredictiveState();
-            agent.RollbackHistory(historyCheckpoint, message);
+            agent.RestoreHistory(historyCheckpoint);
+            agent.AbortThreadTurn();
             _retryMessage = message;
             _retryHistoryCheckpoint = historyCheckpoint;
             Error = ex;
@@ -377,8 +378,13 @@ public class AgentContext(UIAgent agent) : IDisposable
         return result;
     }
 
-    public Task CancelAsync()
+    public Task CancelAsync() => CancelAsync(CancellationToken.None);
+
+    /// <summary>Cancels the active streaming or interactive operation.</summary>
+    /// <param name="cancellationToken">Cancels the cancellation request before it is issued.</param>
+    public Task CancelAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         if (Status is ConversationStatus.Idle or ConversationStatus.Error)
@@ -425,12 +431,12 @@ public class AgentContext(UIAgent agent) : IDisposable
 
     private void CleanupCanceledTurn(
         ConversationTurn turn,
-        UIAgent.HistoryCheckpoint historyCheckpoint,
-        ChatMessage requestMessage)
+        UIAgent.HistoryCheckpoint historyCheckpoint)
     {
         turn.ClearResponseBlocks();
         NotifyResponseBlocksCleared(turn);
-        agent.RollbackHistory(historyCheckpoint, requestMessage);
+        agent.RestoreHistory(historyCheckpoint);
+        agent.AbortThreadTurn();
         _retryMessage = null;
         _retryHistoryCheckpoint = default;
         Error = null;

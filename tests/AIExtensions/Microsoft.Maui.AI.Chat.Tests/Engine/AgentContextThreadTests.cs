@@ -376,7 +376,8 @@ public class AgentContextThreadTests
 
         await context.SendMessageAsync("question");
         Assert.Equal(ConversationStatus.Error, context.Status);
-        Assert.True(thread.PendingUpdateCount > 0);
+        Assert.Equal(0, thread.PendingUpdateCount);
+        Assert.Equal(1, thread.AbortTurnCallCount);
 
         context.Clear();
 
@@ -452,6 +453,7 @@ public class AgentContextThreadTests
         Assert.Empty(thread.GetUpdates());
         Assert.Empty(thread.GetMessageHistory());
         Assert.Equal(0, thread.CompleteTurnCallCount);
+        Assert.Equal(1, thread.AbortTurnCallCount);
         Assert.Empty(Assert.Single(context.Turns).ResponseBlocks);
     }
 
@@ -476,6 +478,7 @@ public class AgentContextThreadTests
         Assert.Empty(thread.GetUpdates());
         Assert.Empty(thread.GetMessageHistory());
         Assert.Equal(0, thread.CompleteTurnCallCount);
+        Assert.Equal(1, thread.AbortTurnCallCount);
         Assert.Empty(Assert.Single(context.Turns).ResponseBlocks);
     }
 

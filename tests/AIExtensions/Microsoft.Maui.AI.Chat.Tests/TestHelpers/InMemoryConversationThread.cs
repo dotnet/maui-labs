@@ -38,6 +38,8 @@ internal sealed class InMemoryConversationThread : IConversationThread
 
     internal int CompleteTurnCallCount { get; private set; }
 
+    internal int AbortTurnCallCount { get; private set; }
+
     internal int CommittedTurnCount { get; private set; }
 
     internal int ClearCallCount { get; private set; }
@@ -104,6 +106,16 @@ internal sealed class InMemoryConversationThread : IConversationThread
         _pendingUpdates = null;
         _pendingConversationId = null;
         CommittedTurnCount++;
+    }
+
+    public void AbortTurn()
+    {
+        if (_pendingUpdates is null)
+            return;
+
+        AbortTurnCallCount++;
+        _pendingUpdates = null;
+        _pendingConversationId = null;
     }
 
     public IReadOnlyList<ChatResponseUpdate> GetUpdates()

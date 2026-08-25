@@ -8,13 +8,15 @@ same native chat shell used by AI applications.
 
 - A drop-in `ChatView` with a virtualized message list and composer
 - Multiple participants, avatars, participant names, timestamps, and delivery states
-- Text, image, file, and custom `MessageContent`
+- Text, image, file, recorded audio, and custom `MessageContent`
 - A custom `GardenTaskContent` rendered by a XAML `GenericChatContentTemplate`
 - A participant-simulator sidebar for text, image, file, task, sticker, multipart, grouped, and streamed messages
 - Standard-bubble and bare-content presentation (task cards replace the bubble; stickers have no bubble)
-- Deterministic staging and sending of outgoing image/file attachments, alongside the native picker
+- Real platform recording and speech-to-text, plus a deterministic simulated-microphone mode for DevFlow
+- Staging, sending, and playing audio attachments alongside image/file attachments and the native picker
 - Independent Priya/Diego typing states, conversation busy state, send failure, and delivery-state controls
-- Interactive composer sends with asynchronous `Sending` → `Sent` → `Delivered` transitions
+- Interactive composer sends with asynchronous `Sending` → `Sent` → `Delivered` transitions and a
+  slow-send mode that exercises the stop button
 - Suggestions, file attachments, custom empty/header templates, and clear/reset actions
 - Light, dark, and system themes
 - `MauiChat.*` resource overrides in `App.xaml`

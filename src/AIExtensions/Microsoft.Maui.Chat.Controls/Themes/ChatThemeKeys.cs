@@ -70,6 +70,18 @@ public static class ChatThemeKeys
     /// <summary>The <see cref="Style"/> applied to the attach button.</summary>
     public const string AttachButtonStyle = "MauiChat.AttachButton";
 
+    /// <summary>The <see cref="Style"/> applied to the stop button.</summary>
+    public const string StopButtonStyle = "MauiChat.StopButton";
+
+    /// <summary>The <see cref="Style"/> applied to the audio-capture button.</summary>
+    public const string AudioButtonStyle = "MauiChat.AudioButton";
+
+    /// <summary>The <see cref="Style"/> applied to the live-speech button.</summary>
+    public const string LiveSpeechButtonStyle = "MauiChat.LiveSpeechButton";
+
+    /// <summary>The <see cref="Style"/> applied to audio-message play/pause buttons.</summary>
+    public const string AudioPlaybackButtonStyle = "MauiChat.AudioPlaybackButton";
+
     /// <summary>The <see cref="Style"/> applied to error labels.</summary>
     public const string ErrorTextStyle = "MauiChat.ErrorText";
 
