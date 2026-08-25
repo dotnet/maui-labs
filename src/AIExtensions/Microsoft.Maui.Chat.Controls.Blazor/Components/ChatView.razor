@@ -1,0 +1,598 @@
+@*
+    Licensed to the .NET Foundation under one or more agreements.
+    The .NET Foundation licenses this file to you under the MIT license.
+
+    The provider-neutral MAUI Blazor Hybrid chat shell. Header + body + footer inside a
+    ChatViewContext cascade. Owns the composer state machine, subscribes to the
+    conversation for status changes, and wires the leading/trailing action fragments to
+    the ambient IChatComposerContext so layer 2 (AI bridge) can slot AI-specific actions
+    in without touching the shell.
+
+    Layout adapted from Microsoft.AspNetCore.Components.AI.ChatPage at commit
+    31b20463068f8d9ad900393bf96c9a182c397216 (MIT). See Components/UPSTREAM-NOTES.md.
+*@
+@namespace Microsoft.Maui.Chat.Controls.Blazor
+@using Microsoft.Maui.Chat.Controls
+@implements IDisposable
+
+<div @attributes="AdditionalAttributes" class="@RootClass" data-theme="@ThemeAttribute">
+    <CascadingValue Value="_context" IsFixed="true">
+        <div class="mchat-chat-page__header">
+            @if (Header is not null)
+            {
+                @Header
+            }
+        </div>
+
+        <div class="mchat-chat-page__body">
+            <ChatMessagesView ChildContent="ChildContent"
+                              EmptyContent="EffectiveEmptyContent"
+                              AutoScrollToLatest="AutoScrollToLatest" />
+        </div>
+
+        <div class="mchat-chat-page__footer">
+            <div class="mchat-chat-page__composer-container">
+                @if (Footer is not null)
+                {
+                    @Footer
+                }
+
+                <ErrorRetry Message="@_composer.ErrorMessage" />
+
+                <Composer @ref="_composer_ref"
+                          Context="_composer"
+                          AllowAttachments="AllowAttachments"
+                          AllowAudioCapture="AllowAudioCapture"
+                          AllowLiveSpeech="AllowLiveSpeech"
+                          Placeholder="Placeholder"
+                          LeadingActions="InputLeadingActions"
+                          TrailingActions="InputTrailingActions"
+                          AttachmentTemplate="Attachment" />
+            </div>
+        </div>
+    </CascadingValue>
+</div>
+
+@code {
+    private ChatComposerContext _composer = default!;
+    private ChatViewContext _context = default!;
+    private Composer? _composer_ref;
+    private ChatConversation? _observed;
+    private IDisposable? _subscription;
+    private CancellationTokenSource? _sendCts;
+    private CancellationTokenSource? _pickCts;
+
+    /// <summary>Gets or sets the conversation this view renders and sends to.</summary>
+    [Parameter, EditorRequired]
+    public ChatConversation Conversation { get; set; } = default!;
+
+    /// <summary>Gets or sets content rendered above the message list.</summary>
+    [Parameter]
+    public RenderFragment? Header { get; set; }
+
+    /// <summary>Gets or sets content rendered below the message list and above the composer.</summary>
+    [Parameter]
+    public RenderFragment? Footer { get; set; }
+
+    /// <summary>Gets or sets content rendered inside the empty state, replacing the built-in welcome panel.</summary>
+    [Parameter]
+    public RenderFragment? EmptyContent { get; set; }
+
+    /// <summary>Gets or sets the welcome message shown by the default empty-state panel.</summary>
+    [Parameter]
+    public string? WelcomeMessage { get; set; } = "Start the conversation";
+
+    /// <summary>Gets or sets the icon glyph shown by the default empty-state panel.</summary>
+    [Parameter]
+    public string? WelcomeIcon { get; set; } = "💬";
+
+    /// <summary>Gets or sets the composer placeholder.</summary>
+    [Parameter]
+    public string Placeholder { get; set; } = "Type a message";
+
+    /// <summary>Gets or sets rich suggestions rendered as chips while the conversation is empty.</summary>
+    [Parameter]
+    public IReadOnlyList<ChatSuggestion>? Suggestions { get; set; }
+
+    /// <summary>Gets or sets plain-string suggestions, a shorthand for <see cref="Suggestions"/>.</summary>
+    [Parameter]
+    public IReadOnlyList<string>? SuggestionPrompts { get; set; }
+
+    /// <summary>Gets or sets an optional per-suggestion template.</summary>
+    [Parameter]
+    public RenderFragment<ChatSuggestion>? SuggestionTemplate { get; set; }
+
+    /// <summary>Gets or sets the per-attachment chip template.</summary>
+    [Parameter]
+    public RenderFragment<ChatAttachment>? Attachment { get; set; }
+
+    /// <summary>Gets or sets any child content that should live inside the ChatViewContext cascade.</summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Gets or sets whether the attach button is available.</summary>
+    [Parameter]
+    public bool AllowAttachments { get; set; }
+
+    /// <summary>Gets or sets whether the audio-capture button is available.</summary>
+    [Parameter]
+    public bool AllowAudioCapture { get; set; }
+
+    /// <summary>Gets or sets whether the live-speech button is available.</summary>
+    [Parameter]
+    public bool AllowLiveSpeech { get; set; }
+
+    /// <summary>Gets or sets whether the message list stays anchored to the bottom while new content arrives.</summary>
+    [Parameter]
+    public bool AutoScrollToLatest { get; set; } = true;
+
+    /// <summary>Gets or sets the maximum attachment size in bytes. Defaults to 10 MB.</summary>
+    [Parameter]
+    public long MaxAttachmentBytes { get; set; } = 10L * 1024 * 1024;
+
+    /// <summary>Gets or sets the maximum number of staged attachments. Defaults to 10.</summary>
+    [Parameter]
+    public int MaxAttachmentCount { get; set; } = 10;
+
+    /// <summary>Gets or sets the maximum total size across all staged attachments in bytes. Defaults to 50 MB.</summary>
+    [Parameter]
+    public long MaxTotalAttachmentBytes { get; set; } = 50L * 1024 * 1024;
+
+    /// <summary>Gets or sets an optional theme override. When <see langword="null"/>, the CSS respects <c>prefers-color-scheme</c>.</summary>
+    [Parameter]
+    public ChatViewTheme? Theme { get; set; }
+
+    /// <summary>Gets or sets the fragment rendered before the composer textarea. Bound to the composer context.</summary>
+    [Parameter]
+    public RenderFragment<IChatComposerContext>? InputLeadingActions { get; set; }
+
+    /// <summary>Gets or sets the fragment rendered after the composer textarea. Replaces the default send button when set.</summary>
+    [Parameter]
+    public RenderFragment<IChatComposerContext>? InputTrailingActions { get; set; }
+
+    /// <summary>Gets or sets any unmatched attributes applied to the shell root.</summary>
+    [Parameter(CaptureUnmatchedValues = true)]
+    public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    [Inject]
+    private IServiceProvider Services { get; set; } = default!;
+
+    /// <summary>Gets the composer context, which layer 2 or custom composers bind to.</summary>
+    public IChatComposerContext ComposerContext => _composer;
+
+    private string RootClass
+    {
+        get
+        {
+            var custom = AdditionalAttributes is not null
+                && AdditionalAttributes.TryGetValue("class", out var raw)
+                && raw is string s
+                    ? " " + s
+                    : string.Empty;
+            return "mchat-root mchat-chat-page" + custom;
+        }
+    }
+
+    private string? ThemeAttribute => Theme switch
+    {
+        ChatViewTheme.Light => "light",
+        ChatViewTheme.Dark => "dark",
+        _ => null,
+    };
+
+    private RenderFragment? EffectiveEmptyContent =>
+        EmptyContent ?? BuildDefaultEmptyContent();
+
+    private RenderFragment BuildDefaultEmptyContent() => builder =>
+    {
+        builder.OpenComponent<WelcomePanel>(0);
+        builder.AddComponentParameter(1, nameof(WelcomePanel.Icon), WelcomeIcon);
+        builder.AddComponentParameter(2, nameof(WelcomePanel.Message), WelcomeMessage);
+        builder.AddComponentParameter(3, nameof(WelcomePanel.Suggestions), (IReadOnlyList<ChatSuggestion>)ResolveSuggestions());
+        if (SuggestionTemplate is not null)
+        {
+            builder.AddComponentParameter(4, nameof(WelcomePanel.SuggestionTemplate), SuggestionTemplate);
+        }
+
+        builder.AddComponentParameter(5, nameof(WelcomePanel.OnSuggestionPicked),
+            EventCallback.Factory.Create<ChatSuggestion>(this, OnSuggestionPicked));
+        builder.CloseComponent();
+    };
+
+    private IReadOnlyList<ChatSuggestion> ResolveSuggestions()
+    {
+        var rich = Suggestions;
+        var text = SuggestionPrompts;
+
+        if ((rich is null || rich.Count == 0) && (text is null || text.Count == 0))
+        {
+            return Array.Empty<ChatSuggestion>();
+        }
+
+        var combined = new List<ChatSuggestion>((rich?.Count ?? 0) + (text?.Count ?? 0));
+        if (rich is not null)
+        {
+            foreach (var suggestion in rich)
+            {
+                if (suggestion is not null)
+                {
+                    combined.Add(suggestion);
+                }
+            }
+        }
+
+        if (text is not null)
+        {
+            foreach (var prompt in text)
+            {
+                if (!string.IsNullOrWhiteSpace(prompt))
+                {
+                    combined.Add(new ChatSuggestion(prompt));
+                }
+            }
+        }
+
+        return combined;
+    }
+
+    /// <inheritdoc />
+    protected override void OnInitialized()
+    {
+        _composer = new ChatComposerContext(
+            onSubmit: EventCallback.Factory.Create(this, () => _ = SendAsync()),
+            onStop: EventCallback.Factory.Create(this, () => _ = StopAsync()),
+            onPickAttachments: EventCallback.Factory.Create(this, () => _ = PickAttachmentsAsync()),
+            onToggleAudioCapture: EventCallback.Factory.Create(this, () => _ = ToggleAudioCaptureAsync()),
+            onToggleLiveSpeech: EventCallback.Factory.Create(this, () => _ = ToggleLiveSpeechAsync()));
+
+        _composer.AllowAttachments = AllowAttachments;
+        _composer.AllowAudioCapture = AllowAudioCapture;
+        _composer.AllowLiveSpeech = AllowLiveSpeech;
+
+        _context = new ChatViewContext(Conversation, _composer);
+        _composer.AttachConversation(Conversation);
+
+        AttachConversation(Conversation);
+    }
+
+    /// <inheritdoc />
+    protected override void OnParametersSet()
+    {
+        _composer.AllowAttachments = AllowAttachments;
+        _composer.AllowAudioCapture = AllowAudioCapture;
+        _composer.AllowLiveSpeech = AllowLiveSpeech;
+
+        if (!ReferenceEquals(_observed, Conversation))
+        {
+            AttachConversation(Conversation);
+            _composer.AttachConversation(Conversation);
+            _context = new ChatViewContext(Conversation, _composer);
+        }
+    }
+
+    private void AttachConversation(ChatConversation? conversation)
+    {
+        _subscription?.Dispose();
+        _subscription = null;
+        _observed = conversation;
+
+        if (conversation is not null)
+        {
+            _subscription = conversation.Subscribe(OnConversationChange);
+        }
+    }
+
+    private void OnConversationChange(ChatConversationChange change)
+    {
+        if (change.Kind is ChatConversationChangeKind.StatusChanged
+            or ChatConversationChangeKind.Reset)
+        {
+            _composer.NotifyChanged();
+        }
+    }
+
+    private Task OnSuggestionPicked(ChatSuggestion suggestion)
+    {
+        _composer.Text = suggestion.Prompt;
+        return SendAsync();
+    }
+
+    /// <summary>Focuses the composer textarea.</summary>
+    public Task FocusAsync() =>
+        _composer_ref is null ? Task.CompletedTask : _composer_ref.FocusAsync();
+
+    /// <summary>Creates the draft the composer would send right now.</summary>
+    /// <returns>The trimmed, staged draft.</returns>
+    public ChatDraft CreateDraft() => _composer.CreateDraft();
+
+    /// <summary>Sends the current draft. Never throws; failures land in the composer error message.</summary>
+    /// <param name="cancellationToken">Cancels the send.</param>
+    public async Task SendAsync(CancellationToken cancellationToken = default)
+    {
+        var conversation = Conversation;
+        if (conversation is null)
+        {
+            return;
+        }
+
+        var draft = _composer.CreateDraft();
+        if (!conversation.CanSend(draft))
+        {
+            return;
+        }
+
+        var linked = cancellationToken.CanBeCanceled
+            ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
+            : new CancellationTokenSource();
+
+        _sendCts = linked;
+        _composer.SetIsSending(true);
+        _composer.SetErrorMessage(null);
+        _composer.SetStatusMessage("Sending message.");
+
+        try
+        {
+            var accepted = await conversation.SendAsync(draft, linked.Token).ConfigureAwait(true);
+            if (accepted)
+            {
+                _composer.ClearAcceptedDraft(draft);
+                _composer.SetStatusMessage("Message sent.");
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancelled sends are not reported as failures.
+        }
+        catch (Exception)
+        {
+            _composer.SetErrorMessage(ChatComposerContext.DefaultSendErrorMessage);
+        }
+        finally
+        {
+            if (ReferenceEquals(_sendCts, linked))
+            {
+                _sendCts = null;
+            }
+
+            _composer.SetIsSending(false);
+            linked.Dispose();
+        }
+    }
+
+    /// <summary>Cancels the active send or streaming response.</summary>
+    /// <param name="cancellationToken">Cancels the cancellation request itself.</param>
+    public async Task StopAsync(CancellationToken cancellationToken = default)
+    {
+        var conversation = Conversation;
+        var cts = _sendCts;
+        if (cts is not null && !cts.IsCancellationRequested)
+        {
+            try
+            {
+                cts.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
+
+        if (conversation?.CanCancel == true)
+        {
+            try
+            {
+                await conversation.CancelAsync(cancellationToken).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception)
+            {
+                _composer.SetErrorMessage(ChatComposerContext.DefaultSendErrorMessage);
+            }
+        }
+    }
+
+    /// <summary>Opens the injected attachment picker and stages the picked files.</summary>
+    /// <param name="cancellationToken">Cancels the pick.</param>
+    public async Task PickAttachmentsAsync(CancellationToken cancellationToken = default)
+    {
+        var picker = Services.GetService(typeof(IChatAttachmentPicker)) as IChatAttachmentPicker;
+        if (picker is null)
+        {
+            _composer.SetErrorMessage(ChatComposerContext.DefaultAttachmentErrorMessage);
+            return;
+        }
+
+        var previous = _pickCts;
+        _pickCts = null;
+        previous?.Cancel();
+        previous?.Dispose();
+
+        var linked = cancellationToken.CanBeCanceled
+            ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
+            : new CancellationTokenSource();
+        _pickCts = linked;
+
+        _composer.SetErrorMessage(null);
+        _composer.SetComposing(true);
+
+        try
+        {
+            var picked = await picker.PickAsync(null, MaxAttachmentBytes, linked.Token).ConfigureAwait(true);
+            if (picked is null || picked.Count == 0)
+            {
+                return;
+            }
+
+            if (_composer.Attachments.Count + picked.Count > MaxAttachmentCount)
+            {
+                _composer.SetErrorMessage($"Attach no more than {MaxAttachmentCount} files.");
+                return;
+            }
+
+            var totalBytes = 0L;
+            foreach (var attachment in _composer.Attachments)
+            {
+                totalBytes += attachment.ByteCount;
+            }
+
+            foreach (var attachment in picked)
+            {
+                if (attachment is not null)
+                {
+                    totalBytes += attachment.ByteCount;
+                }
+            }
+
+            if (totalBytes > MaxTotalAttachmentBytes)
+            {
+                _composer.SetErrorMessage(
+                    $"Attachments must be smaller than {MaxTotalAttachmentBytes / (1024 * 1024)} MB in total.");
+                return;
+            }
+
+            foreach (var attachment in picked)
+            {
+                if (attachment is not null)
+                {
+                    await _composer.AddAttachmentAsync(attachment).ConfigureAwait(true);
+                }
+            }
+
+            _composer.SetStatusMessage(
+                picked.Count == 1 ? "1 file attached." : $"{picked.Count} files attached.");
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception)
+        {
+            _composer.SetErrorMessage(ChatComposerContext.DefaultAttachmentErrorMessage);
+        }
+        finally
+        {
+            if (ReferenceEquals(_pickCts, linked))
+            {
+                _pickCts = null;
+            }
+
+            _composer.SetComposing(false);
+            linked.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Toggles audio capture using the injected <see cref="IChatAudioRecorder"/>. This layer keeps the
+    /// state machine narrow (start / stop) because layer 2 (and app-specific composer templates) may
+    /// build richer flows on top of the composer context.
+    /// </summary>
+    public async Task ToggleAudioCaptureAsync()
+    {
+        var recorder = Services.GetService(typeof(IChatAudioRecorder)) as IChatAudioRecorder;
+        if (recorder is null || !recorder.IsSupported)
+        {
+            _composer.SetErrorMessage("Microphone is not available.");
+            return;
+        }
+
+        try
+        {
+            if (_composer.IsRecordingAudio)
+            {
+                _composer.SetIsRecordingAudio(false);
+                var recording = await recorder.StopAsync(50L * 1024 * 1024).ConfigureAwait(true);
+                if (recording is not null)
+                {
+                    await _composer.AddAttachmentAsync(recording).ConfigureAwait(true);
+                }
+            }
+            else
+            {
+                await recorder.StartAsync().ConfigureAwait(true);
+                _composer.SetIsRecordingAudio(true);
+            }
+        }
+        catch (Exception)
+        {
+            _composer.SetIsRecordingAudio(false);
+            _composer.SetErrorMessage("The audio recording could not be completed.");
+        }
+    }
+
+    /// <summary>
+    /// Toggles continuous live speech using the injected <see cref="IChatSpeechRecognizer"/>. The
+    /// recognizer feeds interim results into the composer text and submits a final utterance.
+    /// </summary>
+    public async Task ToggleLiveSpeechAsync()
+    {
+        var recognizer = Services.GetService(typeof(IChatSpeechRecognizer)) as IChatSpeechRecognizer;
+        if (recognizer is null || !recognizer.IsSupported)
+        {
+            _composer.SetErrorMessage("Speech recognition is not available.");
+            return;
+        }
+
+        try
+        {
+            if (_composer.IsLiveSpeechEnabled)
+            {
+                _composer.SetIsLiveSpeechEnabled(false);
+                _composer.SetIsListening(false);
+                recognizer.RecognitionChanged -= OnRecognition;
+                await recognizer.StopAsync().ConfigureAwait(true);
+            }
+            else
+            {
+                var granted = await recognizer.RequestPermissionsAsync().ConfigureAwait(true);
+                if (!granted)
+                {
+                    _composer.SetErrorMessage("Speech recognition permission was denied.");
+                    return;
+                }
+
+                recognizer.RecognitionChanged += OnRecognition;
+                await recognizer.StartAsync(
+                    System.Globalization.CultureInfo.CurrentCulture,
+                    reportPartialResults: true).ConfigureAwait(true);
+                _composer.SetIsLiveSpeechEnabled(true);
+                _composer.SetIsListening(true);
+            }
+        }
+        catch (Exception)
+        {
+            _composer.SetIsLiveSpeechEnabled(false);
+            _composer.SetIsListening(false);
+            _composer.SetErrorMessage("Live voice could not continue.");
+        }
+    }
+
+    private async void OnRecognition(object? sender, ChatSpeechRecognitionEventArgs e)
+    {
+        if (e.ErrorKind != ChatSpeechRecognitionErrorKind.None)
+        {
+            if (e.ErrorKind is ChatSpeechRecognitionErrorKind.PermissionDenied
+                or ChatSpeechRecognitionErrorKind.Fatal
+                or ChatSpeechRecognitionErrorKind.LanguageNotSupported)
+            {
+                _composer.SetErrorMessage("Live voice could not continue.");
+                _composer.SetIsLiveSpeechEnabled(false);
+                _composer.SetIsListening(false);
+            }
+
+            return;
+        }
+
+        _composer.Text = e.Text;
+        if (e.IsFinal)
+        {
+            await SendAsync().ConfigureAwait(true);
+        }
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        _subscription?.Dispose();
+        _subscription = null;
+    }
+}

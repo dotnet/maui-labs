@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Application xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="ChatControls.BlazorHybrid.Sample.App">
+    <Application.Resources>
+        <ResourceDictionary>
+            <Color x:Key="Primary">#0F766E</Color>
+            <Color x:Key="Secondary">#0891B2</Color>
+
+            <Style TargetType="Label">
+                <Setter Property="FontFamily" Value="OpenSansRegular" />
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

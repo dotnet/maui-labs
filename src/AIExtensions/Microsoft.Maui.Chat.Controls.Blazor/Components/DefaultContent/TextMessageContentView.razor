@@ -1,0 +1,51 @@
+@*
+    Licensed to the .NET Foundation under one or more agreements.
+    The .NET Foundation licenses this file to you under the MIT license.
+
+    Default renderer for TextMessageContent. Subscribes to ContentChanged so a streaming
+    text mutation redraws only the affected bubble; consumers who register their own
+    <MessageContentRenderer TContent="TextMessageContent"> replace this fallback.
+*@
+@namespace Microsoft.Maui.Chat.Controls.Blazor
+@using Microsoft.Maui.Chat.Controls
+@implements IDisposable
+
+<span class="mchat-text-content @(IsStreaming ? "mchat-bubble--streaming" : null)">@Content.Text</span>
+
+@code {
+    private TextMessageContent _content = default!;
+
+    /// <summary>Gets or sets the text content to render.</summary>
+    [Parameter, EditorRequired]
+    public TextMessageContent Content { get; set; } = default!;
+
+    /// <summary>Gets or sets whether the parent bubble is currently streaming.</summary>
+    [Parameter]
+    public bool IsStreaming { get; set; }
+
+    /// <inheritdoc />
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(_content, Content))
+        {
+            if (_content is not null)
+            {
+                _content.ContentChanged -= OnChanged;
+            }
+
+            _content = Content;
+            _content.ContentChanged += OnChanged;
+        }
+    }
+
+    private void OnChanged(object? sender, EventArgs e) => InvokeAsync(StateHasChanged);
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (_content is not null)
+        {
+            _content.ContentChanged -= OnChanged;
+        }
+    }
+}

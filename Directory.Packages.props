@@ -11,6 +11,7 @@
     <PackageVersion Include="Microsoft.Maui.Controls.Compatibility" Version="$(MicrosoftMauiControlsCompatibilityVersion)" />
     <PackageVersion Include="Microsoft.Maui.Core" Version="$(MicrosoftMauiControlsVersion)" />
     <PackageVersion Include="Microsoft.Maui.Essentials" Version="$(MicrosoftMauiEssentialsVersion)" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="$(MicrosoftAspNetCoreComponentsWebViewVersion)" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebView" Version="$(MicrosoftAspNetCoreComponentsWebViewVersion)" />
     <PackageVersion Include="Microsoft.Maui.Controls.Maps" Version="$(MicrosoftMauiControlsMapsVersion)" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MicrosoftAspNetCoreComponentsWebViewMauiVersion)" />
