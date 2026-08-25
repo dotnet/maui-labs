@@ -12,6 +12,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.AI" />
     <PackageReference Include="xunit" />
   </ItemGroup>
 
@@ -21,6 +22,15 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\AIExtensions\Microsoft.Maui.AI.Navigation\Microsoft.Maui.AI.Navigation.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.Garden\Models\Product.cs" Link="Garden\Product.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.Garden\Models\ListItem.cs" Link="Garden\ListItem.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.Garden\Models\Order.cs" Link="Garden\Order.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.Garden\ViewModels\Orders\OrderInsightsSnapshot.cs" Link="Garden\OrderInsightsSnapshot.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.Garden\Services\Visual\CurrentViewCaptureService.cs" Link="Garden\CurrentViewCaptureService.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.Garden\Services\Visual\VisualAnalysisService.cs" Link="Garden\VisualAnalysisService.cs" />
   </ItemGroup>
 
 </Project>

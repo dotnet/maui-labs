@@ -57,6 +57,9 @@ public static class MauiProgram
         builder.Services.AddSingleton<ICurrentPageContextProvider, RuntimePageContextProvider>();
         builder.Services.AddSingleton<ApplicationMapService>();
         builder.Services.AddSingleton<AppWayfindingTools>();
+        builder.Services.AddSingleton<ICurrentViewCaptureService, CurrentViewCaptureService>();
+        builder.Services.AddSingleton<VisualAnalysisService>();
+        builder.Services.AddSingleton<AppVisualTools>();
 
         builder.AddOpenAIServices();
 

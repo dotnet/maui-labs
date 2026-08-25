@@ -21,7 +21,7 @@ AI integration packages for .NET MAUI, built on [`Microsoft.Extensions.AI`](http
 |--------|-------------|
 | [`AIExtensions.Sample.Hello`](../../samples/AIExtensions.Sample.Hello/) | Minimal end-to-end usage |
 | [`AIExtensions.Sample.DIParameters`](../../samples/AIExtensions.Sample.DIParameters/) | DI parameter binding with `[FromServices]` |
-| [`AIExtensions.Sample.Garden`](../../samples/AIExtensions.Sample.Garden/) | Full MAUI app with persistent AI wayfinding, deep navigation, cart, and approval flow |
+| [`AIExtensions.Sample.Garden`](../../samples/AIExtensions.Sample.Garden/) | Full MAUI app with persistent AI wayfinding, deep navigation, rendered chart understanding, cart, and approval flow |
 
 ## CI
 

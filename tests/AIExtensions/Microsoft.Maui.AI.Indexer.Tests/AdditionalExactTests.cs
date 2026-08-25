@@ -732,4 +732,27 @@ public class AdditionalExactTests
             """,
             md);
     }
+
+    [Fact]
+    public void GraphicsView_PaintedPixelsAreNotSemanticContent()
+    {
+        var md = GeneratorTestHarness.GetMarkdown(
+            "OrdersPage",
+            ("Pages/OrdersPage.xaml", Page(
+                "MyApp.OrdersPage",
+                """
+                <Label Text="Orders" SemanticProperties.HeadingLevel="Level1" />
+                <GraphicsView AutomationId="OrderInsightsCharts" />
+                """)));
+
+        Assert.Equal(
+            """
+            # OrdersPage
+
+            File: OrdersPage.xaml
+
+            - Heading (level 1): "Orders"
+            """,
+            md);
+    }
 }
