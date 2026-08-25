@@ -40,8 +40,10 @@ internal sealed class ChatComposerContext : IChatComposerContext
     private bool _isSending;
     private bool _isRecordingAudio;
     private bool _isTranscribingAudio;
+    private bool _isAudioStarting;
     private bool _isLiveSpeechEnabled;
     private bool _isListening;
+    private bool _isSpeechStarting;
     private bool _isComposingOverride;
     private string? _statusMessage;
     private string? _errorMessage;
@@ -120,12 +122,59 @@ internal sealed class ChatComposerContext : IChatComposerContext
         AllowAttachments && !IsConversationBusy && !IsComposing;
 
     /// <inheritdoc />
-    public bool CanToggleAudioCapture =>
-        AllowAudioCapture && !IsConversationBusy;
+    /// <inheritdoc />
+    /// <remarks>
+    /// Allows stopping/cancelling an active audio operation (recording, transcribing,
+    /// or the start-up await). Denies starting a fresh recording while live-speech is
+    /// active, its subscription is being torn down, or its startup await is still
+    /// in flight — a single-microphone-owner rule prevents two modalities from
+    /// racing for the same platform capture device.
+    /// </remarks>
+    public bool CanToggleAudioCapture
+    {
+        get
+        {
+            if (!AllowAudioCapture)
+            {
+                return false;
+            }
+
+            // Stopping the active audio operation is always allowed - the user can always
+            // abort what they started.
+            if (IsAudioActive)
+            {
+                return true;
+            }
+
+            // Starting audio requires: conversation not busy AND live speech is not the
+            // current microphone owner (including its startup await).
+            return !IsConversationBusy && !IsSpeechActive;
+        }
+    }
 
     /// <inheritdoc />
-    public bool CanToggleLiveSpeech =>
-        AllowLiveSpeech && !IsConversationBusy;
+    /// <remarks>
+    /// Symmetric to <see cref="CanToggleAudioCapture"/>: allows stopping active speech,
+    /// denies starting while audio recording, transcribing, or its startup await is
+    /// in flight.
+    /// </remarks>
+    public bool CanToggleLiveSpeech
+    {
+        get
+        {
+            if (!AllowLiveSpeech)
+            {
+                return false;
+            }
+
+            if (IsSpeechActive)
+            {
+                return true;
+            }
+
+            return !IsConversationBusy && !IsAudioActive;
+        }
+    }
 
     /// <inheritdoc />
     public bool IsConversationBusy =>
@@ -133,7 +182,7 @@ internal sealed class ChatComposerContext : IChatComposerContext
 
     /// <inheritdoc />
     public bool IsComposing =>
-        _isRecordingAudio || _isTranscribingAudio || _isListening || _isComposingOverride;
+        IsAudioActive || IsSpeechActive || _isComposingOverride;
 
     /// <inheritdoc />
     public bool IsRecordingAudio => _isRecordingAudio;
@@ -146,6 +195,14 @@ internal sealed class ChatComposerContext : IChatComposerContext
 
     /// <inheritdoc />
     public bool IsListening => _isListening;
+
+    /// <summary>Gets whether the audio-capture modality is starting, recording, or transcribing.</summary>
+    internal bool IsAudioActive =>
+        _isRecordingAudio || _isTranscribingAudio || _isAudioStarting;
+
+    /// <summary>Gets whether the live-speech modality is starting, enabled, or listening.</summary>
+    internal bool IsSpeechActive =>
+        _isLiveSpeechEnabled || _isListening || _isSpeechStarting;
 
     /// <inheritdoc />
     public string? StatusMessage => _statusMessage;
@@ -314,6 +371,38 @@ internal sealed class ChatComposerContext : IChatComposerContext
         }
 
         _isListening = value;
+        RaiseChanged();
+    }
+
+    /// <summary>
+    /// Sets the shell's audio-startup-in-flight flag. Set while the recorder is running
+    /// <c>StartAsync</c> so the composer treats the microphone as audio-owned across
+    /// the await window, denying live-speech from racing for the same device.
+    /// </summary>
+    internal void SetIsAudioStarting(bool value)
+    {
+        if (_isAudioStarting == value)
+        {
+            return;
+        }
+
+        _isAudioStarting = value;
+        RaiseChanged();
+    }
+
+    /// <summary>
+    /// Sets the shell's speech-startup-in-flight flag. Set while the recognizer is
+    /// running <c>StartAsync</c> so the composer treats the microphone as speech-owned
+    /// across the await window, denying audio capture from racing for the same device.
+    /// </summary>
+    internal void SetIsSpeechStarting(bool value)
+    {
+        if (_isSpeechStarting == value)
+        {
+            return;
+        }
+
+        _isSpeechStarting = value;
         RaiseChanged();
     }
 
