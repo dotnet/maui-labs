@@ -46,6 +46,8 @@ ImageClassificationResult result =
 ImageClassificationPrediction? best = result.Predictions.FirstOrDefault();
 ```
 
+Provider identity is exposed through `ImageClassificationClientMetadata`; individual results retain model provenance and optional raw or additional response metadata.
+
 ## Packages
 
 | Package | Description |

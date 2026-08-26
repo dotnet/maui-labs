@@ -88,6 +88,8 @@ public static async Task<ImageClassificationPrediction?> ClassifyAsync(
 
 The stream remains owned by the caller. Clients read one encoded image from its current position and must not dispose or retain the stream. A provider should throw `NotSupportedException` for a valid image media type it cannot decode.
 
+Provider identity is available from `ImageClassificationClientMetadata` through `GetService`. Each result retains its `ModelId` and can preserve provider-native response data through `RawRepresentation` and `AdditionalProperties`.
+
 ## Requirements
 
 - .NET 10

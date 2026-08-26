@@ -121,10 +121,17 @@ public class ImageClassificationContractTests
 			new("cat", 0.25f),
 			new("dog", 0.9f)
 		};
+		var rawRepresentation = new object();
+		var additionalProperties = new AdditionalPropertiesDictionary
+		{
+			["taxonomy"] = "animals"
+		};
 
 		var result = new ImageClassificationResult(predictions)
 		{
-			ModelId = "animals-v1"
+			ModelId = "animals-v1",
+			RawRepresentation = rawRepresentation,
+			AdditionalProperties = additionalProperties
 		};
 		predictions.Clear();
 
@@ -141,6 +148,8 @@ public class ImageClassificationContractTests
 				Assert.Equal(0.25f, prediction.Confidence);
 			});
 		Assert.Equal("animals-v1", result.ModelId);
+		Assert.Same(rawRepresentation, result.RawRepresentation);
+		Assert.Same(additionalProperties, result.AdditionalProperties);
 	}
 
 	[Fact]
