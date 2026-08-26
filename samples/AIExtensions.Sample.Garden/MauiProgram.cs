@@ -54,16 +54,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<ReviewStore>();
         builder.Services.AddMauiWayfinding(
             AIExtensions_Sample_GardenIndexedPageCatalog.Default,
-            options =>
-        {
-            options.EnableVision = true;
-            options.AdditionalInstructions =
-                """
-                Before opening product detail or review, identify the product with search_products
-                or get_product and pass its sku. Before opening order detail, identify the order
-                with list_past_orders or find_order and pass its orderId.
-                """;
-        });
+            options => options.EnableVision = true);
 
         builder.AddOpenAIServices();
 

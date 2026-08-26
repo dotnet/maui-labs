@@ -24,11 +24,39 @@
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\Microsoft.Maui.AI.Indexer\Microsoft.Maui.AI.Indexer.csproj" />
+    <ProjectReference Include="..\Microsoft.Maui.AI.Indexer.Generators\Microsoft.Maui.AI.Indexer.Generators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\Microsoft.Maui.AI.Navigation\Microsoft.Maui.AI.Navigation.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
+    <None Include="..\Microsoft.Maui.AI.Indexer\build\Microsoft.Maui.AI.Indexer.targets"
+          Link="build\Microsoft.Maui.AI.Indexer.targets"
+          Pack="true"
+          PackagePath="build/Microsoft.Maui.AI.Wayfinding.targets" />
+    <None Include="..\Microsoft.Maui.AI.Indexer\build\Microsoft.Maui.AI.Indexer.targets"
+          Link="buildTransitive\Microsoft.Maui.AI.Indexer.targets"
+          Pack="true"
+          PackagePath="buildTransitive/Microsoft.Maui.AI.Wayfinding.targets" />
   </ItemGroup>
+
+  <PropertyGroup>
+    <TargetsForTfmSpecificContentInPackage>
+      $(TargetsForTfmSpecificContentInPackage);_IncludeWayfindingIndexerGenerator
+    </TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+
+  <Target Name="_IncludeWayfindingIndexerGenerator"
+          DependsOnTargets="ResolveProjectReferences"
+          Returns="@(TfmSpecificPackageFile)">
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="@(Analyzer)"
+                              Condition="'%(Filename)' == 'Microsoft.Maui.AI.Indexer.Generators'">
+        <PackagePath>analyzers/dotnet/cs</PackagePath>
+      </TfmSpecificPackageFile>
+    </ItemGroup>
+  </Target>
 
 </Project>

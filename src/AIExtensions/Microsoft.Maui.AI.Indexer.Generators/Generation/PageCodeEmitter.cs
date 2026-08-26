@@ -43,12 +43,155 @@ internal static class PageCodeEmitter
 
         sb.AppendLine($"        {delimiter};");
         sb.AppendLine();
+        var elements = FlattenElements(page.Elements).ToArray();
+        var title = elements.FirstOrDefault(element =>
+            element.Kind == "Heading"
+            && !element.IsDynamic
+            && !string.IsNullOrWhiteSpace(element.Text))?.Text;
+        sb.AppendLine("    /// <summary>Structured semantic elements for the page.</summary>");
+        sb.AppendLine("    public static global::System.Collections.Generic.IReadOnlyList<global::Microsoft.Maui.AI.Indexer.IndexedElement> Elements { get; } =");
+        sb.AppendLine("    [");
+        foreach (var element in elements)
+        {
+            sb.AppendLine(
+                $"        new(global::Microsoft.Maui.AI.Indexer.IndexedElementKind.{element.Kind}, " +
+                $"{Literal(element.Text)}, {Literal(element.Hint)}, {Literal(element.AutomationId)}, " +
+                $"{Literal(element.Placeholder)}, {Bool(element.IsDynamic)}, {Bool(element.IsActionable)}, " +
+                $"{Bool(element.IsConditional)}, {element.Depth}, global::System.Array.Empty<string>()),");
+        }
+        sb.AppendLine("    ];");
+        sb.AppendLine();
+        sb.AppendLine($"    /// <summary>User-visible page title, when statically known.</summary>");
+        sb.AppendLine($"    public const string? Title = {Literal(title)};");
+        sb.AppendLine();
         sb.AppendLine($"    /// <summary>The page class name.</summary>");
         sb.AppendLine($"    public const string PageName = \"{Escape(page.ClassName)}\";");
 
         sb.AppendLine("}");
 
         return sb.ToString();
+    }
+
+    private static IEnumerable<StructuredElement> FlattenElements(
+        IEnumerable<SemanticNode> elements,
+        int depth = 0)
+    {
+        foreach (var element in elements)
+        {
+            var kind = GetKind(element);
+            var (text, isDynamic) = GetText(element);
+            yield return new StructuredElement(
+                kind,
+                text,
+                GetStaticText(element.Semantics.Hint),
+                element.AutomationId,
+                GetStaticText(element.Placeholder),
+                isDynamic,
+                kind == "Action" || element.HasTapGesture || element.CommandName is not null,
+                element.Condition is not null,
+                depth);
+
+            foreach (var child in FlattenElements(GetChildren(element), depth + 1))
+                yield return child;
+        }
+    }
+
+    private static IEnumerable<SemanticNode> GetChildren(SemanticNode element)
+        => element.Children
+            .Concat(element.HeaderTemplate ?? [])
+            .Concat(element.GroupHeaderTemplate ?? [])
+            .Concat(element.ItemTemplate ?? [])
+            .Concat(element.GroupFooterTemplate ?? [])
+            .Concat(element.FooterTemplate ?? [])
+            .Concat(element.EmptyView ?? [])
+            .Concat(element.BindableLayoutItemTemplate ?? []);
+
+    private static string GetKind(SemanticNode element)
+    {
+        if (element.Semantics.HeadingLevel is not null)
+            return "Heading";
+        if (element.HasTapGesture)
+            return "Action";
+
+        return element.TypeName switch
+        {
+            "Label" or "Span" => "Text",
+            "Button" or "ImageButton" => "Action",
+            "Entry" or "Editor" or "SearchBar" => "Input",
+            "Picker" or "DatePicker" or "TimePicker" => "Selection",
+            "Switch" or "CheckBox" or "RadioButton" => "Toggle",
+            "Slider" or "Stepper" => "Range",
+            "CollectionView" or "ListView" or "CarouselView" => "Collection",
+            "Image" => "Image",
+            "GraphicsView" or "Map" or "MediaElement" => "Visual",
+            "ProgressBar" or "ActivityIndicator" => "Status",
+            "WebView" or "HybridWebView" => "WebContent",
+            "Grid" or "StackLayout" or "VerticalStackLayout" or "HorizontalStackLayout"
+                or "FlexLayout" or "AbsoluteLayout" or "ScrollView" or "Border"
+                or "Frame" or "ContentView" or "ContentPresenter" => "Group",
+            _ => "Unknown",
+        };
+    }
+
+    private static (string? Text, bool IsDynamic) GetText(SemanticNode element)
+    {
+        if (!string.IsNullOrWhiteSpace(element.Semantics.Description))
+            return element.Semantics.Description!.TrimStart().StartsWith(
+                "{",
+                StringComparison.Ordinal)
+                    ? (null, true)
+                    : (element.Semantics.Description, false);
+        if (element.TextBinding is not null)
+            return (element.TextBinding.Path, true);
+        if (!string.IsNullOrWhiteSpace(element.Text))
+            return (element.Text, false);
+        return (null, false);
+    }
+
+    private static string? GetStaticText(string? value)
+        => string.IsNullOrWhiteSpace(value)
+            || value!.TrimStart().StartsWith("{", StringComparison.Ordinal)
+                ? null
+                : value;
+
+    private static string Literal(string? value)
+        => value is null ? "null" : $"\"{Escape(value)}\"";
+
+    private static string Bool(bool value) => value ? "true" : "false";
+
+    private sealed class StructuredElement
+    {
+        public StructuredElement(
+            string kind,
+            string? text,
+            string? hint,
+            string? automationId,
+            string? placeholder,
+            bool isDynamic,
+            bool isActionable,
+            bool isConditional,
+            int depth)
+        {
+            Kind = kind;
+            Text = text;
+            Hint = hint;
+            AutomationId = automationId;
+            Placeholder = placeholder;
+            IsDynamic = isDynamic;
+            IsActionable = isActionable;
+            IsConditional = isConditional;
+            Depth = depth;
+        }
+
+        public string Kind { get; }
+        public string? Text { get; }
+        public string? Hint { get; }
+        public string? AutomationId { get; }
+        public string? Placeholder { get; }
+        public bool IsDynamic { get; }
+        public bool IsActionable { get; }
+        public bool IsConditional { get; }
+        public int Depth { get; }
     }
 
     private static (string text, string delimiter) EscapeForRawStringLiteral(string text)
@@ -67,7 +210,12 @@ internal static class PageCodeEmitter
 
     private static string Escape(string value)
     {
-        return value.Replace("\\", "\\\\").Replace("\"", "\\\"");
+        return value
+            .Replace("\\", "\\\\")
+            .Replace("\"", "\\\"")
+            .Replace("\r", "\\r")
+            .Replace("\n", "\\n")
+            .Replace("\t", "\\t");
     }
 
     private static string SanitizeIdentifier(string name)

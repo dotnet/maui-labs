@@ -1,4 +1,5 @@
 using Microsoft.Maui.AI.Navigation;
+using Microsoft.Maui.AI.Indexer;
 
 namespace Microsoft.Maui.AI.Wayfinding;
 
@@ -13,6 +14,8 @@ public sealed record ApplicationDestination(
     string RouteTemplate,
     IReadOnlyList<QueryParameterInfo> RequiredParameters,
     IReadOnlyList<string> PagePath,
+    string? Title,
+    IReadOnlyList<IndexedElement> Elements,
     string Markdown,
     string? FilePath);
 

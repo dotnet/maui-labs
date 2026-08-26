@@ -12,6 +12,7 @@ internal sealed class RuntimeMarkdownBuilder
     private readonly StringBuilder _markdown = new();
     private readonly HashSet<IVisualTreeElement> _visited = new(ReferenceEqualityComparer.Instance);
     private readonly HashSet<string> _automationIds = new(StringComparer.Ordinal);
+    private readonly List<IndexedElement> _elements = [];
 
     private RuntimeMarkdownBuilder(CurrentPageSnapshotOptions options)
     {
@@ -80,6 +81,17 @@ internal sealed class RuntimeMarkdownBuilder
 
                 var disabled = menuItem.IsEnabled ? "" : " [disabled]";
                 builder.AppendLine(1, $"- Item: \"{Escape(builder.Normalize(menuItem.Text))}\"{disabled}");
+                builder._elements.Add(new IndexedElement(
+                    IndexedElementKind.Action,
+                    builder.Normalize(menuItem.Text),
+                    null,
+                    null,
+                    null,
+                    false,
+                    true,
+                    false,
+                    1,
+                    menuItem.IsEnabled ? [] : ["disabled"]));
             }
         }
 
@@ -187,11 +199,12 @@ internal sealed class RuntimeMarkdownBuilder
     private RuntimeSemanticSnapshot Build()
     {
         if (_markdown.Length == 0)
-            return new RuntimeSemanticSnapshot("", [.. _automationIds]);
+            return new RuntimeSemanticSnapshot("", [.. _automationIds], _elements);
 
         return new RuntimeSemanticSnapshot(
             _markdown.ToString().TrimEnd() + "\n",
-            [.. _automationIds]);
+            [.. _automationIds],
+            _elements);
     }
 
     private void RenderChildren(IVisualTreeElement parent, int indent)
@@ -222,9 +235,12 @@ internal sealed class RuntimeMarkdownBuilder
             return;
         }
 
-        if (IsSemanticElement(element) || HasSemanticDescription(element))
+        if (IsSemanticElement(element)
+            || HasSemanticDescription(element)
+            || HasDirectTapGesture(element))
         {
             AppendLine(indent, RenderSemanticElement(element));
+            _elements.Add(CreateIndexedElement(element, indent));
             RenderChildren(node, indent + 1);
             return;
         }
@@ -232,6 +248,17 @@ internal sealed class RuntimeMarkdownBuilder
         if (IsCustomContainer(element))
         {
             AppendLine(indent, $"- [{element.GetType().Name}]:");
+            _elements.Add(new IndexedElement(
+                IndexedElementKind.Group,
+                null,
+                null,
+                null,
+                null,
+                false,
+                false,
+                false,
+                indent,
+                []));
             RenderChildren(node, indent + 1);
             return;
         }
@@ -244,6 +271,7 @@ internal sealed class RuntimeMarkdownBuilder
         int indent)
     {
         AppendLine(indent, RenderSemanticElement(collectionView));
+        _elements.Add(CreateIndexedElement(collectionView, indent));
 
         var contexts = GetCollectionContexts(
             collectionView.ItemsSource,
@@ -448,6 +476,73 @@ internal sealed class RuntimeMarkdownBuilder
         return $"- {typeName}{display}{annotations}";
     }
 
+    private IndexedElement CreateIndexedElement(VisualElement element, int depth)
+    {
+        var automationId = !string.IsNullOrWhiteSpace(element.AutomationId)
+            && !ContainsExcludedDescendant(element)
+                ? element.AutomationId
+                : null;
+        var headingLevel = GetHeadingLevel(element);
+        var kind = headingLevel is not null
+            ? IndexedElementKind.Heading
+            : HasDirectTapGesture(element)
+                ? IndexedElementKind.Action
+                : GetIndexedKind(element);
+        var placeholder = element switch
+        {
+            Entry entry => NormalizeForElement(entry.Placeholder ?? "", element),
+            Editor editor => NormalizeForElement(editor.Placeholder ?? "", element),
+            SearchBar search => NormalizeForElement(search.Placeholder ?? "", element),
+            _ => null,
+        };
+        var state = new List<string>();
+        AddControlState(element, state);
+        if (!element.IsEnabled)
+            state.Add("disabled");
+        if (element.IsFocused)
+            state.Add("focused");
+
+        return new IndexedElement(
+            kind,
+            GetDisplayText(element),
+            NormalizeForElement(SemanticProperties.GetHint(element) ?? "", element),
+            automationId,
+            string.IsNullOrEmpty(placeholder) ? null : placeholder,
+            false,
+            kind == IndexedElementKind.Action || HasDirectTapGesture(element),
+            false,
+            depth,
+            state);
+    }
+
+#pragma warning disable CS0618 // ListView remains a supported indexed legacy control.
+    private static IndexedElementKind GetIndexedKind(VisualElement element)
+        => element switch
+        {
+            Label => IndexedElementKind.Text,
+            Button or ImageButton => IndexedElementKind.Action,
+            Entry or Editor or SearchBar => IndexedElementKind.Input,
+            Picker or DatePicker or TimePicker => IndexedElementKind.Selection,
+            Switch or CheckBox or RadioButton => IndexedElementKind.Toggle,
+            Slider or Stepper => IndexedElementKind.Range,
+            CollectionView or ListView or CarouselView => IndexedElementKind.Collection,
+            Image => IndexedElementKind.Image,
+            GraphicsView => IndexedElementKind.Visual,
+            ProgressBar or ActivityIndicator => IndexedElementKind.Status,
+            WebView => IndexedElementKind.WebContent,
+            _ when string.Equals(
+                element.GetType().Name,
+                "HybridWebView",
+                StringComparison.Ordinal) => IndexedElementKind.WebContent,
+            ContentView or Layout or ScrollView or Border => IndexedElementKind.Group,
+            _ => IndexedElementKind.Unknown,
+        };
+#pragma warning restore CS0618
+
+    private static bool HasDirectTapGesture(VisualElement element)
+        => element is View view
+            && view.GestureRecognizers.OfType<TapGestureRecognizer>().Any();
+
     private string? GetDisplayText(VisualElement element)
     {
         var description = SemanticProperties.GetDescription(element);
@@ -529,7 +624,8 @@ internal sealed class RuntimeMarkdownBuilder
 
     internal sealed record RuntimeSemanticSnapshot(
         string Markdown,
-        IReadOnlyList<string> AutomationIds);
+        IReadOnlyList<string> AutomationIds,
+        IReadOnlyList<IndexedElement> Elements);
 
     private void AddControlState(VisualElement element, List<string> annotations)
     {

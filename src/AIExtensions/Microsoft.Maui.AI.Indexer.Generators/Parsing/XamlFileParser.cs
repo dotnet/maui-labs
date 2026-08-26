@@ -157,6 +157,7 @@ internal static class XamlFileParser
                 AutomationId = GetAttr(element, "AutomationId"),
                 Semantics = customSemantics,
                 Condition = customCondition,
+                HasTapGesture = HasDirectTapGesture(element),
             };
             results.Add(ucElement);
             return results;
@@ -177,7 +178,8 @@ internal static class XamlFileParser
             if (containerCondition != null && containerCondition.Property == "(always hidden)")
                 return results;
 
-            if (semantics.Description != null && semantics.Description.Length > 0)
+            var hasTapGesture = HasDirectTapGesture(element);
+            if (semantics.Description is { Length: > 0 } || hasTapGesture)
             {
                 // Promoted: developer explicitly set a description.
                 // ALSO walk children so actionable descendants are preserved.
@@ -188,6 +190,7 @@ internal static class XamlFileParser
                     AutomationId = GetAttr(element, "AutomationId"),
                     Semantics = semantics,
                     Condition = containerCondition,
+                    HasTapGesture = hasTapGesture,
                 };
                 foreach (var child in element.Elements())
                 {
@@ -266,6 +269,7 @@ internal static class XamlFileParser
             AutomationId = GetAttr(element, "AutomationId"),
             Semantics = semantics,
             Condition = condition,
+            HasTapGesture = HasDirectTapGesture(element),
         };
 
         // Extract text/content based on element type
@@ -473,6 +477,7 @@ internal static class XamlFileParser
             AutomationId = GetAttr(element, "AutomationId"),
             Semantics = AccessibilityExtractor.Extract(element),
             Condition = ConditionalDetector.DetectCondition(element),
+            HasTapGesture = HasDirectTapGesture(element),
         };
 
         // Find ItemTemplate
@@ -485,6 +490,17 @@ internal static class XamlFileParser
 
         return ui;
     }
+
+    private static bool HasDirectTapGesture(XElement element)
+        => element.Elements()
+            .Where(child => child.Name.LocalName.EndsWith(
+                ".GestureRecognizers",
+                StringComparison.Ordinal))
+            .SelectMany(child => child.Descendants())
+            .Any(child => string.Equals(
+                child.Name.LocalName,
+                "TapGestureRecognizer",
+                StringComparison.Ordinal));
 
     private static List<SemanticNode> WalkPropertyElement(XElement element)
     {

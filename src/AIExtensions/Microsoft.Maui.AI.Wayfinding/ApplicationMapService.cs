@@ -10,12 +10,6 @@ namespace Microsoft.Maui.AI.Wayfinding;
 /// </summary>
 public sealed class ApplicationMapService
 {
-    private static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "a", "an", "and", "are", "can", "do", "for", "how", "i", "in", "is",
-        "it", "me", "my", "of", "on", "the", "this", "to", "what", "where",
-    };
-
     private readonly IndexedPageCatalog _catalog;
     private readonly ShellNavigationService _navigation;
     private readonly ICurrentPageContextProvider _currentPageContext;
@@ -128,11 +122,18 @@ public sealed class ApplicationMapService
         foreach (var destination in destinations)
         {
             var normalizedName = Normalize(destination.PageName);
-            var normalizedMarkdown = Normalize(destination.Markdown);
+            var searchSource = destination.Elements.Count > 0
+                ? StructuredUiRenderer.GetSearchText(
+                    destination.Title,
+                    destination.Elements)
+                : destination.Title ?? "";
+            var normalizedContent = Normalize(searchSource);
+            var nameTerms = ExtractTerms(destination.PageName).ToHashSet(StringComparer.Ordinal);
+            var contentTerms = ExtractTerms(searchSource).ToHashSet(StringComparer.Ordinal);
             var score = 0;
             var matchedTermCount = 0;
 
-            if (normalizedMarkdown.Contains(phrase, StringComparison.Ordinal)
+            if (normalizedContent.Contains(phrase, StringComparison.Ordinal)
                 || normalizedName.Contains(phrase, StringComparison.Ordinal))
             {
                 score += 20;
@@ -140,26 +141,28 @@ public sealed class ApplicationMapService
 
             foreach (var term in terms)
             {
-                var nameMatches = normalizedName.Contains(term, StringComparison.Ordinal);
-                var markdownMatches = normalizedMarkdown.Contains(term, StringComparison.Ordinal);
-                if (nameMatches || markdownMatches)
+                var nameMatches = nameTerms.Contains(term);
+                var contentMatches = contentTerms.Contains(term);
+                if (nameMatches || contentMatches)
                     matchedTermCount++;
                 if (nameMatches)
                     score += 8;
-                if (markdownMatches)
+                if (contentMatches)
                     score += 3;
             }
 
             if (score == 0)
                 continue;
 
-            var relevantLines = destination.Markdown
-                .Split('\n')
-                .Select(line => line.Trim())
-                .Where(line => terms.Any(term =>
-                    Normalize(line).Contains(term, StringComparison.Ordinal)))
-                .Take(6)
-                .ToArray();
+            var relevantLines = destination.Elements.Count > 0
+                ? destination.Elements
+                    .Where(element => terms.Any(term =>
+                        ExtractTerms(StructuredUiRenderer.GetSearchText(null, [element]))
+                            .Contains(term)))
+                    .Select(StructuredUiRenderer.RenderElement)
+                    .Take(6)
+                    .ToArray()
+                : [];
 
             matches.Add((
                 new ApplicationSearchResult(destination, score, relevantLines),
@@ -295,6 +298,8 @@ public sealed class ApplicationMapService
             BuildRouteTemplate(routePath, routeChain),
             requiredParameters,
             BuildPagePath(page, routePath, routes),
+            page.Title,
+            page.Elements,
             page.Markdown,
             page.FilePath);
     }
@@ -533,7 +538,7 @@ public sealed class ApplicationMapService
     private static string[] ExtractTerms(string query)
         => Normalize(query)
             .Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            .Where(term => term.Length > 1 && !StopWords.Contains(term))
+            .Where(term => term.Length > 1)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 

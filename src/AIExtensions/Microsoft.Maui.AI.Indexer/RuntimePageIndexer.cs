@@ -61,7 +61,8 @@ public static class RuntimePageIndexer
                 shell.GetType().Name,
                 rendered.Markdown,
                 pageTitle: null,
-                automationIds: rendered.AutomationIds);
+                automationIds: rendered.AutomationIds,
+                elements: rendered.Elements);
         }
 
         var page = presentedRoot is null ? null : ResolvePageContainer(presentedRoot);
@@ -86,7 +87,8 @@ public static class RuntimePageIndexer
             pageName,
             rendered.Markdown,
             page.Title,
-            rendered.AutomationIds);
+            rendered.AutomationIds,
+            rendered.Elements);
     }
 
     private static CurrentPageSnapshot? CaptureCurrent(

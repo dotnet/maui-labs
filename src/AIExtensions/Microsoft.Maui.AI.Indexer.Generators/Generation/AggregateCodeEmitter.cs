@@ -61,7 +61,7 @@ internal static class AggregateCodeEmitter
                 ? $"global::{page.Namespace}.{SanitizeIdentifier(page.ClassName)}_Indexed"
                 : $"global::{SanitizeIdentifier(page.ClassName)}_Indexed";
 
-            sb.AppendLine($"        new global::Microsoft.Maui.AI.Indexer.IndexedPage(\"{Escape(page.ClassName)}\", {filePath}, {fqnClass}.Markdown, {routes}, \"{Escape(pageTypeName)}\"),");
+            sb.AppendLine($"        new global::Microsoft.Maui.AI.Indexer.IndexedPage(\"{Escape(page.ClassName)}\", {filePath}, {fqnClass}.Markdown, {routes}, \"{Escape(pageTypeName)}\", {fqnClass}.Title, {fqnClass}.Elements),");
         }
 
         sb.AppendLine("    };");

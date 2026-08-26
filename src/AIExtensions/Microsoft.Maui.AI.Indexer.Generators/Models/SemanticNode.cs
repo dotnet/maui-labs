@@ -25,6 +25,7 @@ internal sealed class SemanticNode
     public string? NavigationTargetTypeName { get; set; }
     public string? NavigationRoute { get; set; }
     public bool IsEntry { get; set; }
+    public bool HasTapGesture { get; set; }
 
     // Condition group (structural container with visibility condition wrapping children)
     public bool IsConditionGroup { get; set; }

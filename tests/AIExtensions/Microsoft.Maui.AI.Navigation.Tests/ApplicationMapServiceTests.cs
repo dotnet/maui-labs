@@ -258,13 +258,23 @@ public class ApplicationMapServiceTests
 
         var catalog = new StubCatalog(
         [
-            new("MainPage", "Pages/MainPage.xaml", "# MainPage\n- Button: \"Products\"\n- Button: \"Orders\"", "//main/chat"),
-            new("CatalogPage", "Pages/CatalogPage.xaml", "# CatalogPage\n- Heading: \"Products\"\n- Button: \"Details\"", "//main/products"),
-            new("OrdersPage", "Pages/OrdersPage.xaml", "# OrdersPage\n- Heading: \"Past Orders\"", "//main/orders"),
-            new("ProductDetailPage", "Pages/ProductDetailPage.xaml", "# ProductDetailPage\n- Button: \"Write Review\""),
-            new("ProductReviewPage", "Pages/ProductReviewPage.xaml", "# ProductReviewPage\n- Heading: \"Write Review\"\n- Button: \"Submit Review\""),
-            new("OrderDetailPage", "Pages/OrderDetailPage.xaml", "# OrderDetailPage\n- Heading: \"Order Details\""),
-            new("CartPage", "Pages/CartPage.xaml", "# CartPage\n- Heading: \"Shopping Cart\""),
+            Page("MainPage", "//main/chat", "Home",
+                Element(IndexedElementKind.Action, "Products"),
+                Element(IndexedElementKind.Action, "Orders")),
+            Page("CatalogPage", "//main/products", "Products",
+                Element(IndexedElementKind.Heading, "Products"),
+                Element(IndexedElementKind.Action, "Details")),
+            Page("OrdersPage", "//main/orders", "Past Orders",
+                Element(IndexedElementKind.Heading, "Past Orders")),
+            Page("ProductDetailPage", null, "Product Detail",
+                Element(IndexedElementKind.Action, "Write Review")),
+            Page("ProductReviewPage", null, "Write Review",
+                Element(IndexedElementKind.Heading, "Write Review"),
+                Element(IndexedElementKind.Action, "Submit Review")),
+            Page("OrderDetailPage", null, "Order Details",
+                Element(IndexedElementKind.Heading, "Order Details")),
+            Page("CartPage", null, "Shopping Cart",
+                Element(IndexedElementKind.Heading, "Shopping Cart")),
         ]);
 
         var navigation = new RecordingNavigationService(routes);
@@ -278,6 +288,25 @@ public class ApplicationMapServiceTests
             navigation,
             context);
     }
+
+    private static IndexedPage Page(
+        string name,
+        string? route,
+        string title,
+        params IndexedElement[] elements)
+        => new(
+            name,
+            $"Pages/{name}.xaml",
+            "",
+            route is null ? [] : [route],
+            name,
+            title,
+            elements);
+
+    private static IndexedElement Element(
+        IndexedElementKind kind,
+        string text)
+        => new(kind, text, null, null, null, false, kind == IndexedElementKind.Action, false, 0, []);
 
     private sealed class StubCatalog(IReadOnlyList<IndexedPage> pages)
         : IndexedPageCatalog

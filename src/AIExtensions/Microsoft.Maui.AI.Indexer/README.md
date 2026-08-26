@@ -1,15 +1,16 @@
 # Microsoft.Maui.AI.Indexer
 
-Hybrid UI indexer for .NET MAUI — generates AI-friendly semantic Markdown for the
-whole XAML app at compile time, then optionally augments it with the visible state
-of the current page at runtime.
+Hybrid UI indexer for .NET MAUI — generates structured semantic page/control
+metadata for the whole XAML app at compile time, then augments it with the visible
+state of the current page at runtime. Markdown remains a deterministic rendering
+of that model for diagnostics and text-based consumers.
 
 ## What It Does
 
 The indexer has two complementary views:
 
 - **Compile-time catalog** — analyzes every XAML file and generates structured
-  accessibility-first Markdown for the whole app. This makes every screen
+  accessibility-first elements plus Markdown for the whole app. This makes every screen
   discoverable without running the app.
 - **Runtime current-page snapshot** — reads the currently presented, materialized
   MAUI page and adds resolved labels, visible dynamic branches, focus, and live
@@ -28,7 +29,8 @@ compile-time catalog.
 <PackageReference Include="Microsoft.Maui.AI.Indexer" />
 ```
 
-Build your project. The generator produces one `{PageName}_Indexed.g.cs` per XAML page, each containing a `const string Markdown` with the page's semantic content.
+Build your project. The generator produces one `{PageName}_Indexed.g.cs` per XAML
+page containing `Title`, `Elements`, and the rendered `Markdown`.
 
 ## Generated Output
 
@@ -38,6 +40,8 @@ page's semantic Markdown:
 ```csharp
 public static partial class ProductDetailPage_Indexed
 {
+    public static IReadOnlyList<IndexedElement> Elements { get; }
+    public const string? Title = null;
     public const string Markdown = """
         # ProductDetailPage
 
@@ -81,6 +85,8 @@ public sealed class IndexedPage
     public string TypeName { get; }
     public string? FilePath { get; }
     public string Markdown { get; }
+    public string? Title { get; }
+    public IReadOnlyList<IndexedElement> Elements { get; }
     public IReadOnlyList<string> Routes { get; }
     public string? Route { get; }
 }

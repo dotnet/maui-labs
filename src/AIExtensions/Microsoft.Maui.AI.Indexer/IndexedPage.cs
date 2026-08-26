@@ -21,12 +21,26 @@ public sealed class IndexedPage
         string markdown,
         IReadOnlyList<string> routes,
         string typeName)
+        : this(name, filePath, markdown, routes, typeName, null, [])
+    {
+    }
+
+    public IndexedPage(
+        string name,
+        string? filePath,
+        string markdown,
+        IReadOnlyList<string> routes,
+        string typeName,
+        string? title,
+        IReadOnlyList<IndexedElement> elements)
     {
         Name = name;
         FilePath = filePath;
         Markdown = markdown;
         Routes = routes ?? throw new ArgumentNullException(nameof(routes));
         TypeName = typeName ?? throw new ArgumentNullException(nameof(typeName));
+        Title = title;
+        Elements = elements ?? throw new ArgumentNullException(nameof(elements));
     }
 
     /// <summary>The page class name.</summary>
@@ -40,6 +54,12 @@ public sealed class IndexedPage
 
     /// <summary>The page's fully qualified CLR type name.</summary>
     public string TypeName { get; }
+
+    /// <summary>User-visible page title inferred from the first static heading.</summary>
+    public string? Title { get; }
+
+    /// <summary>Structured semantic elements emitted for this page.</summary>
+    public IReadOnlyList<IndexedElement> Elements { get; }
 
     /// <summary>All explicit absolute ShellContent routes for this page.</summary>
     public IReadOnlyList<string> Routes { get; }

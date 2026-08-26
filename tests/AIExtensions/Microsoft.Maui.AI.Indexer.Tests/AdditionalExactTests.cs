@@ -486,10 +486,10 @@ public class AdditionalExactTests
             ("Pages/OrdersPage.xaml", orders));
 
         Assert.Contains(
-            """new global::Microsoft.Maui.AI.Indexer.IndexedPage("HomePage", "HomePage.xaml", global::MyApp.Pages.HomePage_Indexed.Markdown, new string[] { "//main/home", "//main/alternate-home" }, "MyApp.Pages.HomePage")""",
+            "\"MyApp.Pages.HomePage\", global::MyApp.Pages.HomePage_Indexed.Title, global::MyApp.Pages.HomePage_Indexed.Elements)",
             aggregate);
         Assert.Contains(
-            """new global::Microsoft.Maui.AI.Indexer.IndexedPage("OrdersPage", "OrdersPage.xaml", global::MyApp.Pages.OrdersPage_Indexed.Markdown, new string[] { "//main/orders" }, "MyApp.Pages.OrdersPage")""",
+            "\"MyApp.Pages.OrdersPage\", global::MyApp.Pages.OrdersPage_Indexed.Title, global::MyApp.Pages.OrdersPage_Indexed.Elements)",
             aggregate);
         Assert.DoesNotContain("//main", shellMarkdown);
     }
@@ -546,10 +546,10 @@ public class AdditionalExactTests
             ("AreaB/SettingsPage.xaml", areaB))["IndexedPageCatalog.g.cs"];
 
         Assert.Contains(
-            """global::AreaA.SettingsPage_Indexed.Markdown, new string[] { "//settings" }, "AreaA.SettingsPage")""",
+            "\"AreaA.SettingsPage\", global::AreaA.SettingsPage_Indexed.Title, global::AreaA.SettingsPage_Indexed.Elements)",
             aggregate);
         Assert.Contains(
-            """global::AreaB.SettingsPage_Indexed.Markdown, global::System.Array.Empty<string>(), "AreaB.SettingsPage")""",
+            "\"AreaB.SettingsPage\", global::AreaB.SettingsPage_Indexed.Title, global::AreaB.SettingsPage_Indexed.Elements)",
             aggregate);
         Assert.Contains(
             """public override string? EntryPageTypeName => "AreaA.SettingsPage";""",
@@ -820,5 +820,29 @@ public class AdditionalExactTests
               - GraphicsView: "Most popular products chart" [automationId: "ProductsChart"]
             """,
             md);
+    }
+
+    [Fact]
+    public void StructuredElements_UseKnownTypesHeadingAndDirectTapGesture()
+    {
+        var xaml = Page(
+            "MyApp.TestPage",
+            """
+            <Label Text="Title" SemanticProperties.HeadingLevel="Level1" />
+            <Border SemanticProperties.Description="Open details">
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnTapped" />
+                </Border.GestureRecognizers>
+            </Border>
+            <Entry Placeholder="Name" />
+            """);
+
+        var source = GeneratorTestHarness.GetGeneratedSources(
+            ("TestPage.xaml", xaml))["MyApp_TestPage_Indexed.g.cs"];
+
+        Assert.Contains("IndexedElementKind.Heading", source);
+        Assert.Contains("IndexedElementKind.Action", source);
+        Assert.Contains("IndexedElementKind.Input", source);
+        Assert.Contains("""public const string? Title = "Title";""", source);
     }
 }
