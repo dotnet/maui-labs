@@ -257,8 +257,13 @@ public class ChatViewSameModalityAndProcessingTests
     // ============================================================================
 
     [Fact]
-    public async Task AudioStopDelayed_ThenSpeechPreempts_NoStaleAttachmentStaged()
+    public async Task AudioStopDelayed_ThenSpeechPreempt_AwaitsStopBeforeStartingRecognizer()
     {
+        // Round-7 semantics: speech preemption during audio Stop AWAITS the stop task
+        // (recorder.StopAsync) before calling recognizer.StartAsync. The mic is never
+        // held by both modalities simultaneously. Once the stop completes with its
+        // attachment, it stages (the user explicitly initiated stop — this is user data),
+        // then speech starts fresh.
         var conversation = CreateConversation();
         var recorder = new TestAudioRecorder();
         var recognizer = new TestSpeechRecognizer();
@@ -270,34 +275,169 @@ public class ChatViewSameModalityAndProcessingTests
         await view.ToggleAudioCaptureAsync();
         Assert.True(view.ComposerContext.IsRecordingAudio);
 
-        // Start the stop — the recorder StopAsync is now gated on stopGate.
+        // Initiate stop — recorder.StopAsync is now blocked on stopGate.
         var stopTask = view.ToggleAudioCaptureAsync();
         await WaitFor(() => view.ComposerContext.IsTranscribingAudio);
+        Assert.Equal(1, recorder.StopCallCount);
+        Assert.Equal(0, recognizer.StartCallCount);
 
-        // Speech preempts during the transcribing window. This is a programmatic
-        // caller bypassing the disabled speech button (CanToggleLiveSpeech should be
-        // false during transcribing, but the toggle method's defensive orchestration
-        // must also enforce the invariant).
-        Assert.False(view.ComposerContext.CanToggleLiveSpeech);
-        await view.ToggleLiveSpeechAsync();
-        // Note: the defensive Toggle path DOES allow speech to start after Ensure-audio-stop.
-        // The important part is: the audio op-id has been bumped by EnsureAudioStoppedAsync,
-        // so when stopGate resolves, the stale attachment must NOT stage.
-
-        // Late audio StopAsync completes AFTER speech preemption.
-        stopGate.SetResult(new ChatAttachment(
-            "stale.wav",
-            "audio/wav",
-            new ReadOnlyMemory<byte>(new byte[] { 1, 2, 3 })));
-        await stopTask;
+        // Fire speech preemption. Do NOT await it yet — it should be blocked awaiting
+        // the audio cleanup task (recorder.StopAsync).
+        var speechTask = view.ToggleLiveSpeechAsync();
         await Task.Delay(30);
 
-        // Stale attachment must NOT have been staged.
-        Assert.Empty(view.ComposerContext.Attachments);
-        // Speech's IsListening flag must NOT have been clobbered by the stale
-        // audio finally clearing IsTranscribingAudio (which would be a stale write).
+        // Reviewer's key invariant: recognizer.StartAsync must NOT have been called
+        // yet because recorder.StopAsync is still in flight.
+        Assert.Equal(0, recognizer.StartCallCount);
+        Assert.Equal(1, recorder.StopCallCount);
+        // The audio mic-release call is still pending — no CancelAsync racing StopAsync.
+        Assert.Equal(0, recorder.CancelCallCount);
+
+        // Release the stop.
+        stopGate.SetResult(new ChatAttachment(
+            "recording.wav",
+            "audio/wav",
+            new ReadOnlyMemory<byte>(new byte[] { 1, 2, 3 })));
+
+        await stopTask;
+        await speechTask;
+
+        // Stop completed with attachment; then speech started. Exactly one of each.
+        Assert.Equal(1, recorder.StopCallCount);
+        Assert.Equal(1, recognizer.StartCallCount);
+        Assert.Single(view.ComposerContext.Attachments);
         Assert.True(view.ComposerContext.IsLiveSpeechEnabled);
         Assert.True(view.ComposerContext.IsListening);
+    }
+
+    [Fact]
+    public async Task SpeechStopDelayed_ThenAudioPreempt_AwaitsStopBeforeStartingRecorder()
+    {
+        // Symmetric to AudioStopDelayed_ThenSpeechPreempt: audio preemption during
+        // speech Stop AWAITS the recognizer.StopAsync before calling recorder.StartAsync.
+        // This is the specific reviewer bug — StopLiveSpeechAsync nulls _activeRecognizer
+        // BEFORE the await, so EnsureLiveSpeechStoppedAsync used to see null and think
+        // cleanup was done, letting recorder.StartAsync fire while the mic was still
+        // being released. The _speechCleanupTask field fixes this.
+        var conversation = CreateConversation();
+        var recorder = new TestAudioRecorder();
+        var recognizer = new TestSpeechRecognizer();
+
+        var stopGate = new TaskCompletionSource<bool>();
+        recognizer.StopGate = stopGate.Task;
+
+        var view = CreateView(conversation, recorder, recognizer);
+        await view.ToggleLiveSpeechAsync();
+        Assert.True(view.ComposerContext.IsLiveSpeechEnabled);
+        Assert.Equal(1, recognizer.StartCallCount);
+
+        // Initiate stop — recognizer.StopAsync is now blocked on stopGate.
+        var stopTask = view.ToggleLiveSpeechAsync();
+        await WaitFor(() => ((ChatComposerContext)view.ComposerContext).IsSpeechStopping);
+        Assert.Equal(1, recognizer.StopCallCount);
+        Assert.Equal(0, recorder.StartCallCount);
+
+        // Fire audio preemption. It should be blocked awaiting the speech cleanup task.
+        var audioTask = view.ToggleAudioCaptureAsync();
+        await Task.Delay(30);
+
+        // Reviewer's key invariant: recorder.StartAsync must NOT have been called yet
+        // because recognizer.StopAsync is still in flight — the mic is still held.
+        Assert.Equal(0, recorder.StartCallCount);
+        Assert.Equal(1, recognizer.StopCallCount);
+
+        // Release the stop.
+        stopGate.SetResult(true);
+
+        await stopTask;
+        await audioTask;
+
+        // Speech stopped, then audio started. Exactly one of each mic-release / mic-acquire.
+        Assert.Equal(1, recognizer.StopCallCount);
+        Assert.Equal(1, recorder.StartCallCount);
+        Assert.True(view.ComposerContext.IsRecordingAudio);
+        Assert.False(view.ComposerContext.IsLiveSpeechEnabled);
+    }
+
+    [Fact]
+    public async Task MultiplePreemptors_AwaitTheSameCleanupTask_ExactlyOneStopAsync()
+    {
+        // Round-7 invariant: concurrent preemptors from the OTHER modality all await the
+        // SAME cleanup Task. Awaiting a completed Task is a no-op yield, so multiple
+        // callers do not each initiate their own StopAsync — recognizer.StopAsync is
+        // called exactly once by the initiating stop.
+        var conversation = CreateConversation();
+        var recorder = new TestAudioRecorder();
+        var recognizer = new TestSpeechRecognizer();
+
+        var stopGate = new TaskCompletionSource<bool>();
+        recognizer.StopGate = stopGate.Task;
+
+        var view = CreateView(conversation, recorder, recognizer);
+        await view.ToggleLiveSpeechAsync();
+        Assert.Equal(1, recognizer.StartCallCount);
+
+        var stopTask = view.ToggleLiveSpeechAsync();
+        await WaitFor(() => ((ChatComposerContext)view.ComposerContext).IsSpeechStopping);
+        Assert.Equal(1, recognizer.StopCallCount);
+
+        // Queue three audio preemption attempts. Each hits ToggleAudioCaptureAsync;
+        // ONE of them (the first) enters StartAudioRecordingAsync and awaits the speech
+        // cleanup task; subsequent toggles see IsAudioStarting=true and early-return
+        // (proving the transient-window guard from round 6 still holds under round 7).
+        var audio1 = view.ToggleAudioCaptureAsync();
+        var audio2 = view.ToggleAudioCaptureAsync();
+        var audio3 = view.ToggleAudioCaptureAsync();
+        await Task.Delay(30);
+
+        Assert.Equal(0, recorder.StartCallCount);
+        // Only one stop call, not one per preemptor.
+        Assert.Equal(1, recognizer.StopCallCount);
+
+        stopGate.SetResult(true);
+        await stopTask;
+        await audio1;
+        await audio2;
+        await audio3;
+
+        Assert.Equal(1, recognizer.StopCallCount);
+        Assert.Equal(1, recorder.StartCallCount);  // audio started exactly once
+        Assert.True(view.ComposerContext.IsRecordingAudio);
+    }
+
+    [Fact]
+    public async Task PreemptDuringSpeechStop_DoesNotCallRecognizerStopTwice()
+    {
+        // Specific bug being fixed: when audio preempts during speech Stop, the old
+        // EnsureLiveSpeechStoppedAsync would look at _activeRecognizer (already null,
+        // cleared by StopLiveSpeechAsync BEFORE its await) and skip the stop entirely.
+        // This was benign in one way (no double-stop) but wrong in another (audio would
+        // start before the actual stop finished). The round-7 fix awaits _speechCleanupTask.
+        // Assert: recognizer.StopAsync is called EXACTLY ONCE across the whole preemption.
+        var conversation = CreateConversation();
+        var recorder = new TestAudioRecorder();
+        var recognizer = new TestSpeechRecognizer();
+
+        var stopGate = new TaskCompletionSource<bool>();
+        recognizer.StopGate = stopGate.Task;
+
+        var view = CreateView(conversation, recorder, recognizer);
+        await view.ToggleLiveSpeechAsync();
+        var stopTask = view.ToggleLiveSpeechAsync();
+        await WaitFor(() => ((ChatComposerContext)view.ComposerContext).IsSpeechStopping);
+
+        var audioTask = view.ToggleAudioCaptureAsync();
+        await Task.Delay(30);
+
+        Assert.Equal(1, recognizer.StopCallCount);
+
+        stopGate.SetResult(true);
+        await stopTask;
+        await audioTask;
+
+        // Still one - no double-stop from EnsureLiveSpeechStoppedAsync trying to stop
+        // again after the first stop completed.
+        Assert.Equal(1, recognizer.StopCallCount);
     }
 
     [Fact]
