@@ -89,6 +89,22 @@
     private int _audioOperationId;
     private int _speechOperationId;
 
+    // Cleanup Task references. When a Stop or Ensure-driven cancel begins, it stores the
+    // running mic-release task (recorder.StopAsync / recorder.CancelAsync / recognizer.
+    // StopAsync) here. A preemption from the OTHER modality reads this field and awaits
+    // it BEFORE calling recorder.StartAsync / recognizer.StartAsync so the two modalities
+    // cannot double-open the platform capture device. Field-nulling checks
+    // ReferenceEquals so a concurrent preempt that inserted a NEW task is not clobbered
+    // by a stale finally. Multiple concurrent preemptors all await the SAME task
+    // (idempotent — awaiting a completed Task just yields immediately).
+    //
+    // Contract: this task must complete (successfully or otherwise) ONLY after the mic
+    // release call has resolved. The rest of the Stop flow (staging attachment, clearing
+    // composer flags) may run after the cleanup task in the OWNING method's finally, and
+    // is separately gated by operation identity so a preempted stop's staging drops.
+    private Task? _speechCleanupTask;
+    private Task? _audioCleanupTask;
+
     /// <summary>Gets or sets the conversation this view renders and sends to.</summary>
     [Parameter, EditorRequired]
     public ChatConversation Conversation { get; set; } = default!;
@@ -828,46 +844,32 @@
         // IsAudioActive stays true across the whole stop/read span so:
         //   * CanToggleLiveSpeech is false — speech cannot preempt via a rapid click.
         //   * CanToggleAudioCapture is false — a rapid second click cannot double-invoke
-        //     recorder.StopAsync (which would try to read a buffer twice or nil-throw).
-        //   * IsComposing is true — Send/PickAttachments are gated off; a late Send
-        //     cannot race the in-flight stop for the same draft.
+        //     recorder.StopAsync.
+        //   * IsComposing is true — Send/PickAttachments are gated off.
         _composer.SetIsTranscribingAudio(true);
         _composer.SetIsRecordingAudio(false);
         CancelAndDispose(ref _audioCts);
 
+        // Publish the ENTIRE stop-lifecycle Task so preemptors await the fully-settled
+        // state (mic released + attachment staged + IsTranscribingAudio cleared), NOT
+        // just the raw recorder.StopAsync call. Awaiting only StopAsync would leave a
+        // scheduling gap between "stop completed" and "attachment staged" during which
+        // a preempting EnsureAudioStoppedAsync could bump the operation id and cause
+        // the staging to drop as stale — silently discarding a recording the user
+        // explicitly asked to stop.
+        var lifecycleTask = RunStopLifecycleAsync();
+        _audioCleanupTask = lifecycleTask;
+
         try
         {
-            var recording = await recorder.StopAsync(50L * 1024 * 1024).ConfigureAwait(true);
-
-            // If speech preempted during StopAsync, EnsureAudioStoppedAsync bumped
-            // _audioOperationId. StillMyAudioOp fails so the recording is silently
-            // dropped rather than staged into the newer modality's draft.
-            if (!StillValid(gen, conversation) || !StillMyAudioOp(audioOpId))
-            {
-                return;
-            }
-
-            if (recording is not null)
-            {
-                await _composer.AddAttachmentAsync(recording).ConfigureAwait(true);
-            }
-        }
-        catch (Exception)
-        {
-            if (StillValid(gen, conversation) && StillMyAudioOp(audioOpId))
-            {
-                _composer.SetErrorMessage("The audio recording could not be completed.");
-            }
+            await lifecycleTask.ConfigureAwait(true);
         }
         finally
         {
-            // Only clear the transcribing flag if this stop belongs to the current
-            // operation. A stale finally must not clobber a newer modality's flags
-            // (in particular, must not accidentally clear IsTranscribingAudio if a
-            // fresh audio operation is already transcribing after rapid stop/start).
-            if (StillValid(gen, conversation) && StillMyAudioOp(audioOpId))
+            // Clear cleanup task only if it's still ours.
+            if (ReferenceEquals(_audioCleanupTask, lifecycleTask))
             {
-                _composer.SetIsTranscribingAudio(false);
+                _audioCleanupTask = null;
             }
 
             if (ReferenceEquals(_activeRecorder, recorder))
@@ -875,21 +877,88 @@
                 _activeRecorder = null;
             }
         }
+
+        // The wrapped lifecycle. This Task completes only when the full Stop flow is
+        // done: mic released, attachment (if any) staged into the composer, and the
+        // IsTranscribingAudio flag cleared (identity-gated). Preemptors that await
+        // _audioCleanupTask observe the fully-settled state.
+        async Task RunStopLifecycleAsync()
+        {
+            try
+            {
+                var recording = await recorder.StopAsync(50L * 1024 * 1024).ConfigureAwait(true);
+
+                // If speech preempted during StopAsync, EnsureAudioStoppedAsync bumped
+                // _audioOperationId. StillMyAudioOp fails so the recording is silently
+                // dropped rather than staged into the newer modality's draft.
+                if (!StillValid(gen, conversation) || !StillMyAudioOp(audioOpId))
+                {
+                    return;
+                }
+
+                if (recording is not null)
+                {
+                    await _composer.AddAttachmentAsync(recording).ConfigureAwait(true);
+                }
+            }
+            catch (Exception)
+            {
+                if (StillValid(gen, conversation) && StillMyAudioOp(audioOpId))
+                {
+                    _composer.SetErrorMessage("The audio recording could not be completed.");
+                }
+            }
+            finally
+            {
+                // Only clear the transcribing flag if this stop belongs to the current
+                // operation. A stale finally must not clobber a newer modality's flags.
+                if (StillValid(gen, conversation) && StillMyAudioOp(audioOpId))
+                {
+                    _composer.SetIsTranscribingAudio(false);
+                }
+            }
+        }
     }
 
     /// <summary>
-    /// Ensures any active or starting audio operation is torn down before starting the other
-    /// modality. Bumps <see cref="_audioOperationId"/> FIRST so any in-flight audio start /
-    /// stop cannot mutate composer state after this returns, then cancels the audio token
-    /// and awaits <see cref="IChatAudioRecorder.CancelAsync"/> on the tracked recorder so
-    /// the microphone is really released. Clears the composer audio flags directly since
-    /// the identity bump guarantees no other writer will touch them.
+    /// Ensures any active, starting, or stopping audio operation is torn down before
+    /// starting the other modality. Awaits any in-flight audio cleanup Task FIRST so a
+    /// concurrent StopAudioRecordingAsync's <see cref="IChatAudioRecorder.StopAsync"/>
+    /// finishes releasing the mic before we call <see cref="IChatAudioRecorder.CancelAsync"/>
+    /// or start the other modality. Bumps <see cref="_audioOperationId"/> so any Start /
+    /// Stop that captured the previous id fails <see cref="StillMyAudioOp"/> and its
+    /// writes drop.
     /// </summary>
     private async Task EnsureAudioStoppedAsync()
     {
-        // Identity bump FIRST — this is what makes late audio writeback drop. Any Start
-        // or Stop that captured the previous id fails StillMyAudioOp and silently
-        // returns without staging attachments, setting errors, or clearing our flags.
+        // Await any in-flight audio cleanup FIRST. This is the fix for the reviewer's
+        // finding: a StopAudioRecordingAsync that has already cleared IsRecordingAudio
+        // (setting IsTranscribingAudio=true) may not have finished its recorder.StopAsync
+        // await. Without this await, EnsureAudioStoppedAsync would bump the id + null
+        // _activeRecorder + call CancelAsync ON THE SAME RECORDER that is still inside
+        // StopAsync — an unsafe double-invoke. Awaiting the task means the recorder has
+        // released the mic before we touch it again.
+        //
+        // Concurrent preemptors from the other modality all await the SAME task; awaiting
+        // a completed Task is a no-op yield.
+        var pendingCleanup = _audioCleanupTask;
+        if (pendingCleanup is not null)
+        {
+            try
+            {
+                await pendingCleanup.ConfigureAwait(true);
+            }
+            catch
+            {
+                // The Stop that owns this task will surface a user-safe error itself
+                // if it belongs to the current operation. Preemption path does not
+                // re-surface it.
+            }
+        }
+
+        // Identity bump — makes any late audio writeback drop. Any Start or Stop that
+        // captured the previous id fails StillMyAudioOp and silently returns without
+        // staging attachments, setting errors, or clearing our flags.
         _audioOperationId++;
 
         var recorder = _activeRecorder;
@@ -898,14 +967,26 @@
 
         if (recorder is not null)
         {
+            // Register our own CancelAsync task so a concurrent EnsureAudioStoppedAsync
+            // (or a StartLiveSpeechAsync) can await it instead of racing recorder.CancelAsync
+            // for a second time.
+            var cancelTask = recorder.CancelAsync();
+            _audioCleanupTask = cancelTask;
             try
             {
-                await recorder.CancelAsync().ConfigureAwait(true);
+                await cancelTask.ConfigureAwait(true);
             }
             catch
             {
                 // Cancel failure is not actionable and must not block the caller from
-                // starting speech; the composer flags are cleared unconditionally.
+                // starting speech; the composer flags are cleared unconditionally below.
+            }
+            finally
+            {
+                if (ReferenceEquals(_audioCleanupTask, cancelTask))
+                {
+                    _audioCleanupTask = null;
+                }
             }
         }
 
@@ -1080,18 +1161,11 @@
         var speechOpId = _speechOperationId;
 
         // Enter the Stopping window BEFORE clearing IsListening/IsLiveSpeechEnabled.
-        // IsSpeechActive stays true across the whole StopAsync span so:
-        //   * CanToggleAudioCapture stays false - audio cannot preempt via a rapid click.
-        //   * CanToggleLiveSpeech stays false - a rapid second click cannot double-invoke
-        //     recognizer.StopAsync.
-        //   * IsComposing stays true - Send is gated off across the stop window.
         _composer.SetIsSpeechStopping(true);
 
-        // Unsubscribe the handler so no more RecognitionChanged events land, but do NOT
-        // call DetachActiveRecognizer here - that helper also fire-and-forgets StopAsync
-        // and we want exactly ONE StopAsync invocation on this recognizer (the one below).
         // Clear _activeRecognizer so the OnRecognition identity guard drops any stale
-        // event that races the unsubscribe.
+        // event that races the unsubscribe. Unsubscribe the handler manually — do NOT
+        // call DetachActiveRecognizer, which fire-and-forgets StopAsync (double-invoke).
         if (ReferenceEquals(_activeRecognizer, recognizer))
         {
             _activeRecognizer = null;
@@ -1105,41 +1179,86 @@
         {
         }
 
+        // Publish the ENTIRE stop-lifecycle Task so preemptors observe the fully-settled
+        // state (mic released AND transient flags cleared, identity-gated). Same reason
+        // as StopAudioRecordingAsync — awaiting only recognizer.StopAsync would leave
+        // a scheduling gap between "mic released" and "flags cleared" during which a
+        // preempting audio start could initiate recorder.StartAsync while our stale
+        // flags are still set.
+        var lifecycleTask = RunStopLifecycleAsync();
+        _speechCleanupTask = lifecycleTask;
+
         try
         {
-            await recognizer.StopAsync().ConfigureAwait(true);
-        }
-        catch
-        {
-            // Stop failure is not actionable; the composer state has already been
-            // cleared by the finally block.
+            await lifecycleTask.ConfigureAwait(true);
         }
         finally
         {
-            // Only clear the transient flags if this stop belongs to the current
-            // operation. A preemption during StopAsync bumped the id, and the newer
-            // operation's flags must NOT be cleared by this stale finally.
-            if (StillValid(gen, conversation) && StillMySpeechOp(speechOpId))
+            if (ReferenceEquals(_speechCleanupTask, lifecycleTask))
             {
-                _composer.SetIsLiveSpeechEnabled(false);
-                _composer.SetIsListening(false);
-                _composer.SetIsSpeechStopping(false);
+                _speechCleanupTask = null;
+            }
+        }
+
+        async Task RunStopLifecycleAsync()
+        {
+            try
+            {
+                await recognizer.StopAsync().ConfigureAwait(true);
+            }
+            catch
+            {
+                // Stop failure is not actionable; the composer state is cleared below
+                // if this operation is still current.
+            }
+            finally
+            {
+                if (StillValid(gen, conversation) && StillMySpeechOp(speechOpId))
+                {
+                    _composer.SetIsLiveSpeechEnabled(false);
+                    _composer.SetIsListening(false);
+                    _composer.SetIsSpeechStopping(false);
+                }
             }
         }
     }
 
     /// <summary>
-    /// Ensures any active, starting, or stopping live-speech pass is torn down. Bumps
-    /// <see cref="_speechOperationId"/> FIRST so any in-flight speech Start / Stop cannot
-    /// mutate composer state after this returns. Then cancels the speech token,
-    /// unsubscribes the handler, and awaits <see cref="IChatSpeechRecognizer.StopAsync"/>
-    /// so the microphone is released before the caller starts audio capture. Called
-    /// from <see cref="StartAudioRecordingAsync"/> for the audio-preempts-speech direction.
+    /// Ensures any active, starting, or stopping live-speech pass is torn down. Awaits
+    /// any in-flight speech cleanup Task FIRST so a concurrent <see cref="StopLiveSpeechAsync"/>'s
+    /// <see cref="IChatSpeechRecognizer.StopAsync"/> has finished releasing the mic before we
+    /// start the other modality. Then bumps <see cref="_speechOperationId"/> so any Start
+    /// or Stop that captured the previous id fails <see cref="StillMySpeechOp"/>, unsubscribes,
+    /// awaits <see cref="IChatSpeechRecognizer.StopAsync"/> if a recognizer is still active,
+    /// and clears composer flags.
     /// </summary>
     private async Task EnsureLiveSpeechStoppedAsync()
     {
-        // Identity bump FIRST — makes late speech writeback drop. Any Start or Stop
-        // that captured the previous id fails StillMySpeechOp and silently returns.
+        // Await any in-flight speech cleanup FIRST. This is the round-7 fix: previously,
+        // if StopLiveSpeechAsync had already nulled _activeRecognizer but was still
+        // awaiting recognizer.StopAsync, this method would find _activeRecognizer == null
+        // and think cleanup was complete — allowing recorder.StartAsync to fire while the
+        // recognizer was still holding the platform mic. Awaiting _speechCleanupTask
+        // guarantees the mic-release call has resolved before we proceed.
+        //
+        // Concurrent preemptors from the other modality all await the SAME task; awaiting
+        // a completed Task is a no-op yield.
+        var pendingCleanup = _speechCleanupTask;
+        if (pendingCleanup is not null)
+        {
+            try
+            {
+                await pendingCleanup.ConfigureAwait(true);
+            }
+            catch
+            {
+                // The Stop that owns this task will surface a user-safe error itself
+                // if it belongs to the current operation.
+            }
+        }
+
+        // Identity bump — makes late speech writeback drop. Any Start or Stop that
+        // captured the previous id fails StillMySpeechOp and silently returns.
         _speechOperationId++;
 
         var recognizer = _activeRecognizer;
@@ -1156,12 +1275,23 @@
             {
             }
 
+            // Register our own StopAsync so a concurrent EnsureLiveSpeechStoppedAsync
+            // (or a StartAudioRecordingAsync) awaits this second cleanup too.
+            var stopTask = recognizer.StopAsync();
+            _speechCleanupTask = stopTask;
             try
             {
-                await recognizer.StopAsync().ConfigureAwait(true);
+                await stopTask.ConfigureAwait(true);
             }
             catch
             {
+            }
+            finally
+            {
+                if (ReferenceEquals(_speechCleanupTask, stopTask))
+                {
+                    _speechCleanupTask = null;
+                }
             }
         }
 
