@@ -1,0 +1,1475 @@
+@*
+    Licensed to the .NET Foundation under one or more agreements.
+    The .NET Foundation licenses this file to you under the MIT license.
+
+    The provider-neutral MAUI Blazor Hybrid chat shell. Header + body + footer inside a
+    ChatViewContext cascade. Owns the composer state machine, subscribes to the
+    conversation for status changes, and wires the leading/trailing action fragments to
+    the ambient IChatComposerContext so layer 2 (AI bridge) can slot AI-specific actions
+    in without touching the shell.
+
+    Layout adapted from Microsoft.AspNetCore.Components.AI.ChatPage at commit
+    31b20463068f8d9ad900393bf96c9a182c397216 (MIT). See Components/UPSTREAM-NOTES.md.
+*@
+@namespace Microsoft.Maui.Chat.Controls.Blazor
+@using Microsoft.Maui.Chat.Controls
+@implements IDisposable
+
+<div @attributes="AdditionalAttributes" class="@RootClass" data-theme="@ThemeAttribute">
+    @* Key the cascade on the context so a conversation swap forces every descendant
+       (including MessageContentRenderer<T> registrations) to be recreated against the
+       new ChatViewContext instead of clinging to the old one via IsFixed=true. *@
+    <CascadingValue @key="_context" Value="_context" IsFixed="true">
+        <div class="mchat-chat-page__header">
+            @if (Header is not null)
+            {
+                @Header
+            }
+        </div>
+
+        <div class="mchat-chat-page__body">
+            <ChatMessagesView ChildContent="ChildContent"
+                              EmptyContent="EffectiveEmptyContent"
+                              AutoScrollToLatest="AutoScrollToLatest" />
+        </div>
+
+        <div class="mchat-chat-page__footer">
+            <div class="mchat-chat-page__composer-container">
+                @if (Footer is not null)
+                {
+                    @Footer
+                }
+
+                <Composer @ref="_composer_ref"
+                          Context="_composer"
+                          AllowAttachments="AllowAttachments"
+                          AllowAudioCapture="AllowAudioCapture"
+                          AllowLiveSpeech="AllowLiveSpeech"
+                          Placeholder="@Placeholder"
+                          LeadingActions="InputLeadingActions"
+                          TrailingActions="InputTrailingActions"
+                          AttachmentTemplate="Attachment" />
+            </div>
+        </div>
+    </CascadingValue>
+</div>
+
+@code {
+    private ChatComposerContext _composer = default!;
+    private ChatViewContext _context = default!;
+    private Composer? _composer_ref;
+    private ChatConversation? _observed;
+    private IDisposable? _subscription;
+    private CancellationTokenSource? _sendCts;
+    private CancellationTokenSource? _pickCts;
+    private CancellationTokenSource? _audioCts;
+    private CancellationTokenSource? _speechCts;
+    private IChatAudioRecorder? _activeRecorder;
+    private IChatSpeechRecognizer? _activeRecognizer;
+
+    // Operation-generation token. Bumped whenever the bound conversation changes so any
+    // in-flight send/pick/audio/speech operation that captured the old value fails its
+    // identity guard when the await unblocks. Every post-await write to _composer.* is
+    // gated on StillValid(gen, capturedConversation) so a stale completion cannot leak
+    // into the new conversation's composer state.
+    private int _operationGeneration;
+
+    // Per-modality operation identities. A modality "operation" is one complete lifecycle
+    // (start -> [record | listen] -> stop). The identity is bumped:
+    //   * At the top of a Start method (a fresh operation begins).
+    //   * At the top of the corresponding EnsureXStoppedAsync (preemption invalidates the
+    //     current operation so any late writes from the recorder / recognizer drop).
+    //   * On conversation swap and dispose (part of the general reset).
+    // Every post-await write to composer state or attachment staging gates on
+    // StillMyOperation(startId, ref currentId) in addition to StillValid — so a stop
+    // completion delivered AFTER a modality preemption cannot stage a stale attachment
+    // or clobber the newer modality's flags. Stop paths capture the current id at entry
+    // WITHOUT bumping (they are the finale of that operation); if speech preempts during
+    // stop, EnsureAudioStoppedAsync bumps the id and the stale StopAsync return drops.
+    private int _audioOperationId;
+    private int _speechOperationId;
+
+    // Cleanup Task references. When a Stop or Ensure-driven cancel begins, it stores the
+    // running mic-release task (recorder.StopAsync / recorder.CancelAsync / recognizer.
+    // StopAsync) here. A preemption from the OTHER modality reads this field and awaits
+    // it BEFORE calling recorder.StartAsync / recognizer.StartAsync so the two modalities
+    // cannot double-open the platform capture device. Field-nulling checks
+    // ReferenceEquals so a concurrent preempt that inserted a NEW task is not clobbered
+    // by a stale finally. Multiple concurrent preemptors all await the SAME task
+    // (idempotent — awaiting a completed Task just yields immediately).
+    //
+    // Contract: this task must complete (successfully or otherwise) ONLY after the mic
+    // release call has resolved. The rest of the Stop flow (staging attachment, clearing
+    // composer flags) may run after the cleanup task in the OWNING method's finally, and
+    // is separately gated by operation identity so a preempted stop's staging drops.
+    private Task? _speechCleanupTask;
+    private Task? _audioCleanupTask;
+
+    /// <summary>Gets or sets the conversation this view renders and sends to.</summary>
+    [Parameter, EditorRequired]
+    public ChatConversation Conversation { get; set; } = default!;
+
+    /// <summary>Gets or sets content rendered above the message list.</summary>
+    [Parameter]
+    public RenderFragment? Header { get; set; }
+
+    /// <summary>Gets or sets content rendered below the message list and above the composer.</summary>
+    [Parameter]
+    public RenderFragment? Footer { get; set; }
+
+    /// <summary>Gets or sets content rendered inside the empty state, replacing the built-in welcome panel.</summary>
+    [Parameter]
+    public RenderFragment? EmptyContent { get; set; }
+
+    /// <summary>Gets or sets the welcome message shown by the default empty-state panel.</summary>
+    [Parameter]
+    public string? WelcomeMessage { get; set; } = "Start the conversation";
+
+    /// <summary>Gets or sets the icon glyph shown by the default empty-state panel.</summary>
+    [Parameter]
+    public string? WelcomeIcon { get; set; } = "💬";
+
+    /// <summary>Gets or sets the composer placeholder.</summary>
+    [Parameter]
+    public string Placeholder { get; set; } = "Type a message";
+
+    /// <summary>Gets or sets rich suggestions rendered as chips while the conversation is empty.</summary>
+    [Parameter]
+    public IReadOnlyList<ChatSuggestion>? Suggestions { get; set; }
+
+    /// <summary>Gets or sets plain-string suggestions, a shorthand for <see cref="Suggestions"/>.</summary>
+    [Parameter]
+    public IReadOnlyList<string>? SuggestionPrompts { get; set; }
+
+    /// <summary>Gets or sets an optional per-suggestion template.</summary>
+    [Parameter]
+    public RenderFragment<ChatSuggestion>? SuggestionTemplate { get; set; }
+
+    /// <summary>Gets or sets the per-attachment chip template.</summary>
+    [Parameter]
+    public RenderFragment<ChatAttachment>? Attachment { get; set; }
+
+    /// <summary>Gets or sets any child content that should live inside the ChatViewContext cascade.</summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Gets or sets whether the attach button is available.</summary>
+    [Parameter]
+    public bool AllowAttachments { get; set; }
+
+    /// <summary>Gets or sets whether the audio-capture button is available.</summary>
+    [Parameter]
+    public bool AllowAudioCapture { get; set; }
+
+    /// <summary>Gets or sets whether the live-speech button is available.</summary>
+    [Parameter]
+    public bool AllowLiveSpeech { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether a finalized speech-recognition utterance is auto-submitted through the
+    /// ordinary Submit path. Defaults to <see langword="true"/>.
+    /// </summary>
+    /// <remarks>
+    /// When <see langword="false"/> the final text lands in the composer and the recognizer is
+    /// detached, leaving the user to review and submit manually. Auto-submit deliberately performs
+    /// one send per recognition pass: this is a single-pass model, not a continuous-resume model.
+    /// A consumer that wants continuous voice can toggle live speech back on after the send lands.
+    /// </remarks>
+    [Parameter]
+    public bool AutoSubmitLiveSpeech { get; set; } = true;
+
+    /// <summary>Gets or sets whether the message list stays anchored to the bottom while new content arrives.</summary>
+    [Parameter]
+    public bool AutoScrollToLatest { get; set; } = true;
+
+    /// <summary>Gets or sets the maximum attachment size in bytes. Defaults to 10 MB.</summary>
+    [Parameter]
+    public long MaxAttachmentBytes { get; set; } = 10L * 1024 * 1024;
+
+    /// <summary>Gets or sets the maximum number of staged attachments. Defaults to 10.</summary>
+    [Parameter]
+    public int MaxAttachmentCount { get; set; } = 10;
+
+    /// <summary>Gets or sets the maximum total size across all staged attachments in bytes. Defaults to 50 MB.</summary>
+    [Parameter]
+    public long MaxTotalAttachmentBytes { get; set; } = 50L * 1024 * 1024;
+
+    /// <summary>Gets or sets an optional theme override. When <see langword="null"/>, the CSS respects <c>prefers-color-scheme</c>.</summary>
+    [Parameter]
+    public ChatViewTheme? Theme { get; set; }
+
+    /// <summary>Gets or sets the fragment rendered before the composer textarea. Bound to the composer context.</summary>
+    [Parameter]
+    public RenderFragment<IChatComposerContext>? InputLeadingActions { get; set; }
+
+    /// <summary>Gets or sets the fragment rendered after the composer textarea. Replaces the default send button when set.</summary>
+    [Parameter]
+    public RenderFragment<IChatComposerContext>? InputTrailingActions { get; set; }
+
+    /// <summary>Gets or sets any unmatched attributes applied to the shell root.</summary>
+    [Parameter(CaptureUnmatchedValues = true)]
+    public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    [Inject]
+    private IServiceProvider Services { get; set; } = default!;
+
+    /// <summary>Gets the composer context, which layer 2 or custom composers bind to.</summary>
+    public IChatComposerContext ComposerContext => _composer;
+
+    private string RootClass
+    {
+        get
+        {
+            var custom = AdditionalAttributes is not null
+                && AdditionalAttributes.TryGetValue("class", out var raw)
+                && raw is string s
+                    ? " " + s
+                    : string.Empty;
+            return "mchat-root mchat-chat-page" + custom;
+        }
+    }
+
+    private string? ThemeAttribute => Theme switch
+    {
+        ChatViewTheme.Light => "light",
+        ChatViewTheme.Dark => "dark",
+        _ => null,
+    };
+
+    private RenderFragment? EffectiveEmptyContent =>
+        EmptyContent ?? BuildDefaultEmptyContent();
+
+    private RenderFragment BuildDefaultEmptyContent() => builder =>
+    {
+        builder.OpenComponent<WelcomePanel>(0);
+        builder.AddComponentParameter(1, nameof(WelcomePanel.Icon), WelcomeIcon);
+        builder.AddComponentParameter(2, nameof(WelcomePanel.Message), WelcomeMessage);
+        builder.AddComponentParameter(3, nameof(WelcomePanel.Suggestions), (IReadOnlyList<ChatSuggestion>)ResolveSuggestions());
+        if (SuggestionTemplate is not null)
+        {
+            builder.AddComponentParameter(4, nameof(WelcomePanel.SuggestionTemplate), SuggestionTemplate);
+        }
+
+        builder.AddComponentParameter(5, nameof(WelcomePanel.OnSuggestionPicked),
+            EventCallback.Factory.Create<ChatSuggestion>(this, OnSuggestionPicked));
+        builder.CloseComponent();
+    };
+
+    private IReadOnlyList<ChatSuggestion> ResolveSuggestions()
+    {
+        var rich = Suggestions;
+        var text = SuggestionPrompts;
+
+        if ((rich is null || rich.Count == 0) && (text is null || text.Count == 0))
+        {
+            return Array.Empty<ChatSuggestion>();
+        }
+
+        var combined = new List<ChatSuggestion>((rich?.Count ?? 0) + (text?.Count ?? 0));
+        if (rich is not null)
+        {
+            foreach (var suggestion in rich)
+            {
+                if (suggestion is not null)
+                {
+                    combined.Add(suggestion);
+                }
+            }
+        }
+
+        if (text is not null)
+        {
+            foreach (var prompt in text)
+            {
+                if (!string.IsNullOrWhiteSpace(prompt))
+                {
+                    combined.Add(new ChatSuggestion(prompt));
+                }
+            }
+        }
+
+        return combined;
+    }
+
+    /// <inheritdoc />
+    protected override void OnInitialized()
+    {
+        _composer = new ChatComposerContext();
+        _composer.AttachActions(
+            onSubmit: () => SendAsync(),
+            onStop: () => StopAsync(),
+            onPickAttachments: () => PickAttachmentsAsync(),
+            onToggleAudioCapture: ToggleAudioCaptureAsync,
+            onToggleLiveSpeech: ToggleLiveSpeechAsync);
+
+        _composer.AllowAttachments = AllowAttachments;
+        _composer.AllowAudioCapture = AllowAudioCapture;
+        _composer.AllowLiveSpeech = AllowLiveSpeech;
+
+        _context = new ChatViewContext(Conversation, _composer);
+        _composer.AttachConversation(Conversation);
+
+        AttachConversation(Conversation);
+    }
+
+    /// <inheritdoc />
+    protected override void OnParametersSet()
+    {
+        _composer.AllowAttachments = AllowAttachments;
+        _composer.AllowAudioCapture = AllowAudioCapture;
+        _composer.AllowLiveSpeech = AllowLiveSpeech;
+
+        if (!ReferenceEquals(_observed, Conversation))
+        {
+            AttachConversation(Conversation);
+            _composer.AttachConversation(Conversation);
+            _context = new ChatViewContext(Conversation, _composer);
+        }
+    }
+
+    private void AttachConversation(ChatConversation? conversation)
+    {
+        // Bump the operation generation FIRST so any in-flight async that reads
+        // _operationGeneration after AttachConversation fails its identity check even in the
+        // narrow window between the field bump and the CTS cancel. Guards run inside the
+        // async continuation which is single-thread-affine on the renderer's sync context.
+        _operationGeneration++;
+
+        // Also invalidate every per-modality operation identity so a late writeback from
+        // an in-flight audio/speech operation on the OLD conversation cannot mutate the
+        // NEW conversation's composer even if StillValid narrowly passes.
+        _audioOperationId++;
+        _speechOperationId++;
+
+        // Cancel in-flight ops so their awaits unblock; their catches surface user-safe
+        // strings or silently swallow cancellation. Each async method also gates every
+        // post-await write on StillValid so any race between "we cancelled" and "await
+        // completed with a non-cancelled result" cannot bleed into the new conversation.
+        CancelInFlightOperations();
+        DetachActiveRecognizer(swallowStopExceptions: true);
+
+        // Reset transient composer state that was tied to the previous conversation via the
+        // shared helper. See ResetTransientComposerState for the invariant.
+        ResetTransientComposerState();
+
+        _subscription?.Dispose();
+        _subscription = null;
+        _observed = conversation;
+
+        if (conversation is not null)
+        {
+            _subscription = conversation.Subscribe(OnConversationChange);
+        }
+    }
+
+    /// <summary>
+    /// Resets every shell-owned transient composer flag to a clean idle state. Called at
+    /// operation-boundary transitions (conversation swap, Dispose) so the composer never
+    /// carries stale transient state across a boundary. The user's draft text and staged
+    /// attachments are preserved because those are user data owned by the composer, not
+    /// the shell.
+    /// </summary>
+    /// <remarks>
+    /// This centralises the reset so adding a new transient flag (Sending, RecordingAudio,
+    /// TranscribingAudio, AudioStarting, LiveSpeechEnabled, Listening, SpeechStarting,
+    /// SpeechStopping, generic IsComposing override, StatusMessage, ErrorMessage) only
+    /// requires one update. Each async operation's finally is gated on <c>StillValid</c>,
+    /// so any operation that captured the old operation-generation will skip its own
+    /// post-await teardown when a swap or Dispose fires — the reset here is the ONE
+    /// place responsible for putting the composer back to idle after a boundary.
+    ///
+    /// The <c>IsComposing</c> override in particular is the round-8 fix: <c>PickAttachmentsAsync</c>
+    /// calls <c>SetComposing(true)</c> during the pick and only calls <c>SetComposing(false)</c>
+    /// in a finally gated on <c>StillValid</c>. A swap during the pick would leave the
+    /// override set on the new conversation, permanently disabling <c>CanSubmit</c> and
+    /// <c>CanPickAttachments</c> via <c>IsComposing = ... || _isComposingOverride</c>.
+    /// </remarks>
+    private void ResetTransientComposerState()
+    {
+        if (_composer is null)
+        {
+            return;
+        }
+
+        _composer.SetIsSending(false);
+        _composer.SetIsRecordingAudio(false);
+        _composer.SetIsTranscribingAudio(false);
+        _composer.SetIsAudioStarting(false);
+        _composer.SetIsLiveSpeechEnabled(false);
+        _composer.SetIsListening(false);
+        _composer.SetIsSpeechStarting(false);
+        _composer.SetIsSpeechStopping(false);
+        _composer.SetComposing(false);
+        _composer.SetStatusMessage(null);
+        _composer.SetErrorMessage(null);
+    }
+
+    private void CancelInFlightOperations()
+    {
+        // Bump both modality identities so any late writeback drops. AttachConversation
+        // and Dispose already bump; CancelInFlightOperations is also called from other
+        // sync paths that need modality invalidation (e.g. a caller that wants to unwind
+        // both modalities atomically without waiting).
+        _audioOperationId++;
+        _speechOperationId++;
+
+        CancelAndDispose(ref _sendCts);
+        CancelAndDispose(ref _pickCts);
+        CancelAndDispose(ref _audioCts);
+        CancelAndDispose(ref _speechCts);
+
+        // If a recording was in progress the recorder's own StartAsync/StopAsync do not
+        // observe our tokens; fire CancelAsync on the tracked recorder so any pending
+        // buffer read unblocks. We do not await because the caller (AttachConversation)
+        // is synchronous; failures here are swallowed.
+        var recorder = _activeRecorder;
+        _activeRecorder = null;
+        if (recorder is not null && recorder.IsRecording)
+        {
+            _ = recorder.CancelAsync();
+        }
+    }
+
+    private static void CancelAndDispose(ref CancellationTokenSource? cts)
+    {
+        var current = cts;
+        cts = null;
+        if (current is null)
+        {
+            return;
+        }
+
+        try
+        {
+            current.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
+        current.Dispose();
+    }
+
+    private bool StillValid(int operationGeneration, ChatConversation? capturedConversation) =>
+        operationGeneration == _operationGeneration
+        && ReferenceEquals(capturedConversation, Conversation);
+
+    /// <summary>
+    /// True when the captured audio-operation identity still matches the current one.
+    /// False when a preemption (speech-preempts-audio, conversation swap, dispose) has
+    /// bumped <see cref="_audioOperationId"/> — every post-await write in the audio
+    /// pipeline uses this to drop stale completions rather than clobber the current owner.
+    /// </summary>
+    private bool StillMyAudioOp(int startId) => startId == _audioOperationId;
+
+    /// <summary>Symmetric to <see cref="StillMyAudioOp"/> for the live-speech pipeline.</summary>
+    private bool StillMySpeechOp(int startId) => startId == _speechOperationId;
+
+    private void OnConversationChange(ChatConversationChange change)
+    {
+        if (change.Kind is ChatConversationChangeKind.StatusChanged
+            or ChatConversationChangeKind.Reset)
+        {
+            _composer.NotifyChanged();
+        }
+    }
+
+    private Task OnSuggestionPicked(ChatSuggestion suggestion)
+    {
+        _composer.Text = suggestion.Prompt;
+        return SendAsync();
+    }
+
+    /// <summary>Focuses the composer textarea.</summary>
+    public Task FocusAsync() =>
+        _composer_ref is null ? Task.CompletedTask : _composer_ref.FocusAsync();
+
+    /// <summary>Creates the draft the composer would send right now.</summary>
+    /// <returns>The trimmed, staged draft.</returns>
+    public ChatDraft CreateDraft() => _composer.CreateDraft();
+
+    /// <summary>Sends the current draft. Never throws; failures land in the composer error message.</summary>
+    /// <param name="cancellationToken">Cancels the send.</param>
+    public async Task SendAsync(CancellationToken cancellationToken = default)
+    {
+        var conversation = Conversation;
+        if (conversation is null)
+        {
+            return;
+        }
+
+        if (!_composer.CanSubmit)
+        {
+            return;
+        }
+
+        var draft = _composer.CreateDraft();
+        if (!conversation.CanSend(draft))
+        {
+            return;
+        }
+
+        var linked = cancellationToken.CanBeCanceled
+            ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
+            : new CancellationTokenSource();
+
+        // Capture the generation and conversation identity BEFORE the first observable
+        // state change so a swap that races the send cannot make the "start" side of the
+        // operation appear to belong to the new conversation.
+        var gen = _operationGeneration;
+        var startConversation = conversation;
+        _sendCts = linked;
+        _composer.SetIsSending(true);
+        _composer.SetErrorMessage(null);
+        _composer.SetStatusMessage("Sending message.");
+
+        try
+        {
+            var accepted = await conversation.SendAsync(draft, linked.Token).ConfigureAwait(true);
+
+            // Identity guard: if the conversation changed underneath us, the accepted flag
+            // refers to a send that targeted a different conversation. Do NOT mutate the
+            // new conversation's composer.
+            if (!StillValid(gen, startConversation))
+            {
+                return;
+            }
+
+            if (accepted)
+            {
+                _composer.ClearAcceptedDraft(draft);
+                _composer.SetStatusMessage("Message sent.");
+            }
+            else
+            {
+                _composer.SetStatusMessage(null);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            if (StillValid(gen, startConversation))
+            {
+                _composer.SetStatusMessage(null);
+            }
+        }
+        catch (Exception)
+        {
+            if (StillValid(gen, startConversation))
+            {
+                _composer.SetErrorMessage(ChatComposerContext.DefaultSendErrorMessage);
+                _composer.SetStatusMessage(null);
+            }
+        }
+        finally
+        {
+            // Only clear the shared field if it still points at OUR CTS. A swap already
+            // reset _sendCts to null; a new send may have replaced it. Either way we
+            // dispose our own CTS and only touch IsSending when identity still holds.
+            if (ReferenceEquals(_sendCts, linked))
+            {
+                _sendCts = null;
+            }
+
+            if (StillValid(gen, startConversation))
+            {
+                _composer.SetIsSending(false);
+            }
+
+            linked.Dispose();
+        }
+    }
+
+    /// <summary>Cancels the active send or streaming response.</summary>
+    /// <param name="cancellationToken">Cancels the cancellation request itself.</param>
+    public async Task StopAsync(CancellationToken cancellationToken = default)
+    {
+        var conversation = Conversation;
+        var cts = _sendCts;
+        if (cts is not null && !cts.IsCancellationRequested)
+        {
+            try
+            {
+                cts.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
+
+        if (conversation?.CanCancel == true)
+        {
+            var gen = _operationGeneration;
+            try
+            {
+                await conversation.CancelAsync(cancellationToken).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception)
+            {
+                if (StillValid(gen, conversation))
+                {
+                    _composer.SetErrorMessage(ChatComposerContext.DefaultSendErrorMessage);
+                }
+            }
+        }
+    }
+
+    /// <summary>Opens the injected attachment picker and stages the picked files.</summary>
+    /// <param name="cancellationToken">Cancels the pick.</param>
+    public async Task PickAttachmentsAsync(CancellationToken cancellationToken = default)
+    {
+        var conversation = Conversation;
+        var picker = Services.GetService(typeof(IChatAttachmentPicker)) as IChatAttachmentPicker;
+        if (picker is null)
+        {
+            _composer.SetErrorMessage(ChatComposerContext.DefaultAttachmentErrorMessage);
+            return;
+        }
+
+        var previous = _pickCts;
+        _pickCts = null;
+        previous?.Cancel();
+        previous?.Dispose();
+
+        var linked = cancellationToken.CanBeCanceled
+            ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
+            : new CancellationTokenSource();
+        _pickCts = linked;
+
+        var gen = _operationGeneration;
+        _composer.SetErrorMessage(null);
+        _composer.SetComposing(true);
+
+        try
+        {
+            var picked = await picker.PickAsync(null, MaxAttachmentBytes, linked.Token).ConfigureAwait(true);
+
+            if (!StillValid(gen, conversation))
+            {
+                // A conversation swap happened while the picker was open. Discard the pick;
+                // staging attachments into the new conversation would leak the wrong intent.
+                return;
+            }
+
+            if (picked is null || picked.Count == 0)
+            {
+                return;
+            }
+
+            if (_composer.Attachments.Count + picked.Count > MaxAttachmentCount)
+            {
+                _composer.SetErrorMessage($"Attach no more than {MaxAttachmentCount} files.");
+                return;
+            }
+
+            var totalBytes = 0L;
+            foreach (var attachment in _composer.Attachments)
+            {
+                totalBytes += attachment.ByteCount;
+            }
+
+            foreach (var attachment in picked)
+            {
+                if (attachment is not null)
+                {
+                    totalBytes += attachment.ByteCount;
+                }
+            }
+
+            if (totalBytes > MaxTotalAttachmentBytes)
+            {
+                _composer.SetErrorMessage(
+                    $"Attachments must be smaller than {MaxTotalAttachmentBytes / (1024 * 1024)} MB in total.");
+                return;
+            }
+
+            foreach (var attachment in picked)
+            {
+                if (attachment is not null)
+                {
+                    // Re-check identity between iterations; the collection is small so
+                    // the extra cost is negligible and it guarantees a swap during Add
+                    // does not stage into the new conversation.
+                    if (!StillValid(gen, conversation))
+                    {
+                        return;
+                    }
+
+                    await _composer.AddAttachmentAsync(attachment).ConfigureAwait(true);
+                }
+            }
+
+            if (StillValid(gen, conversation))
+            {
+                _composer.SetStatusMessage(
+                    picked.Count == 1 ? "1 file attached." : $"{picked.Count} files attached.");
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception)
+        {
+            if (StillValid(gen, conversation))
+            {
+                _composer.SetErrorMessage(ChatComposerContext.DefaultAttachmentErrorMessage);
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(_pickCts, linked))
+            {
+                _pickCts = null;
+            }
+
+            if (StillValid(gen, conversation))
+            {
+                _composer.SetComposing(false);
+            }
+
+            linked.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Toggles audio capture using the injected <see cref="IChatAudioRecorder"/>. Contract:
+    /// startup and stop/read windows are NOT toggleable - they map to a disabled button
+    /// AND cause programmatic callers to no-op here. Only the settled recording state
+    /// invokes stop; only the idle state invokes start. Single-microphone-owner is
+    /// enforced by <see cref="StartAudioRecordingAsync"/> awaiting
+    /// <see cref="EnsureLiveSpeechStoppedAsync"/> before claiming the mic.
+    /// </summary>
+    public async Task ToggleAudioCaptureAsync()
+    {
+        var conversation = Conversation;
+        var recorder = Services.GetService(typeof(IChatAudioRecorder)) as IChatAudioRecorder;
+        if (recorder is null || !recorder.IsSupported)
+        {
+            _composer.SetErrorMessage("Microphone is not available.");
+            return;
+        }
+
+        // Contract: transient windows are NOT toggleable. The DOM button is disabled by
+        // CanToggleAudioCapture, but a programmatic caller (test, extension, keyboard
+        // shortcut that bypassed the visual state) must observe the same rule so it
+        // cannot re-invoke recorder.StartAsync during startup or land a duplicate
+        // recorder.StopAsync during the stop/read window.
+        if (_composer.IsAudioStarting || _composer.IsTranscribingAudio)
+        {
+            return;
+        }
+
+        var gen = _operationGeneration;
+
+        if (_composer.IsRecordingAudio)
+        {
+            await StopAudioRecordingAsync(recorder, gen, conversation).ConfigureAwait(true);
+        }
+        else
+        {
+            await StartAudioRecordingAsync(recorder, gen, conversation).ConfigureAwait(true);
+        }
+    }
+
+    private async Task StartAudioRecordingAsync(
+        IChatAudioRecorder recorder,
+        int gen,
+        ChatConversation? conversation)
+    {
+        // A fresh audio operation begins. Bump the identity FIRST so any earlier
+        // audio operation's late writeback (e.g. a StopAsync that resolved after the
+        // caller navigated away and came back) can no longer claim to be current.
+        // Capture it so this Start's writes below can gate on "am I still the current
+        // audio operation".
+        var audioOpId = ++_audioOperationId;
+
+        // Claim the audio-starting flag FIRST so CanToggleLiveSpeech immediately rejects a
+        // rapid programmatic caller. IsAudioActive collapses IsAudioStarting into the
+        // single-owner gate, so a competing ToggleLiveSpeechAsync entering during the
+        // EnsureLiveSpeechStopped await will see IsAudioActive=true and skip starting.
+        _composer.SetIsAudioStarting(true);
+
+        try
+        {
+            // Defensive orchestration: even when a programmatic caller bypasses the disabled
+            // CanToggleAudioCapture gate, the single-mic rule holds. Tear down any active or
+            // starting live-speech pass before we claim the microphone, and identity-check
+            // the cleanup so a mid-cleanup conversation swap or dispose still short-circuits.
+            await EnsureLiveSpeechStoppedAsync().ConfigureAwait(true);
+            if (!StillValid(gen, conversation) || !StillMyAudioOp(audioOpId))
+            {
+                return;
+            }
+
+            var audioCts = new CancellationTokenSource();
+            _audioCts = audioCts;
+
+            try
+            {
+                await recorder.StartAsync(audioCts.Token).ConfigureAwait(true);
+
+                if (!StillValid(gen, conversation) || !StillMyAudioOp(audioOpId))
+                {
+                    // Swap during StartAsync or another operation preempted us: unwind
+                    // cleanly rather than parade a stray "recording" state on the new
+                    // operation's composer.
+                    _ = recorder.CancelAsync();
+                    return;
+                }
+
+                _activeRecorder = recorder;
+                _composer.SetIsRecordingAudio(true);
+            }
+            catch (OperationCanceledException)
+            {
+                // Cancellation via _audioCts (e.g. by EnsureAudioStoppedAsync from a speech
+                // preempt) is silent: the other modality preempted us. No error banner.
+            }
+            catch (Exception)
+            {
+                if (StillValid(gen, conversation) && StillMyAudioOp(audioOpId))
+                {
+                    _composer.SetErrorMessage("The audio recording could not be completed.");
+                }
+            }
+            finally
+            {
+                if (ReferenceEquals(_audioCts, audioCts))
+                {
+                    _audioCts = null;
+                }
+
+                audioCts.Dispose();
+            }
+        }
+        finally
+        {
+            // Only clear the starting flag if this operation is still current. A stale
+            // finally from a preempted operation must not clobber the newer operation's
+            // starting flag (e.g. rapid speech-preempts-audio-preempts-audio: the FIRST
+            // audio's finally must not clear the SECOND audio's IsAudioStarting).
+            if (StillValid(gen, conversation) && StillMyAudioOp(audioOpId))
+            {
+                _composer.SetIsAudioStarting(false);
+            }
+        }
+    }
+
+    private async Task StopAudioRecordingAsync(
+        IChatAudioRecorder recorder,
+        int gen,
+        ChatConversation? conversation)
+    {
+        // Capture the current audio op-id WITHOUT bumping — the stop is the finale of
+        // the current start, not a new operation. If a preemption happens DURING the
+        // StopAsync await (EnsureAudioStoppedAsync bumps the id), the writes below drop.
+        var audioOpId = _audioOperationId;
+
+        // Enter the Transcribing / stop-processing window BEFORE clearing IsRecordingAudio.
+        // IsAudioActive stays true across the whole stop/read span so:
+        //   * CanToggleLiveSpeech is false — speech cannot preempt via a rapid click.
+        //   * CanToggleAudioCapture is false — a rapid second click cannot double-invoke
+        //     recorder.StopAsync.
+        //   * IsComposing is true — Send/PickAttachments are gated off.
+        _composer.SetIsTranscribingAudio(true);
+        _composer.SetIsRecordingAudio(false);
+        CancelAndDispose(ref _audioCts);
+
+        // Publish the ENTIRE stop-lifecycle Task so preemptors await the fully-settled
+        // state (mic released + attachment staged + IsTranscribingAudio cleared), NOT
+        // just the raw recorder.StopAsync call. Awaiting only StopAsync would leave a
+        // scheduling gap between "stop completed" and "attachment staged" during which
+        // a preempting EnsureAudioStoppedAsync could bump the operation id and cause
+        // the staging to drop as stale — silently discarding a recording the user
+        // explicitly asked to stop.
+        var lifecycleTask = RunStopLifecycleAsync();
+        _audioCleanupTask = lifecycleTask;
+
+        try
+        {
+            await lifecycleTask.ConfigureAwait(true);
+        }
+        finally
+        {
+            // Clear cleanup task only if it's still ours.
+            if (ReferenceEquals(_audioCleanupTask, lifecycleTask))
+            {
+                _audioCleanupTask = null;
+            }
+
+            if (ReferenceEquals(_activeRecorder, recorder))
+            {
+                _activeRecorder = null;
+            }
+        }
+
+        // The wrapped lifecycle. This Task completes only when the full Stop flow is
+        // done: mic released, attachment (if any) staged into the composer, and the
+        // IsTranscribingAudio flag cleared (identity-gated). Preemptors that await
+        // _audioCleanupTask observe the fully-settled state.
+        async Task RunStopLifecycleAsync()
+        {
+            try
+            {
+                var recording = await recorder.StopAsync(50L * 1024 * 1024).ConfigureAwait(true);
+
+                // If speech preempted during StopAsync, EnsureAudioStoppedAsync bumped
+                // _audioOperationId. StillMyAudioOp fails so the recording is silently
+                // dropped rather than staged into the newer modality's draft.
+                if (!StillValid(gen, conversation) || !StillMyAudioOp(audioOpId))
+                {
+                    return;
+                }
+
+                if (recording is not null)
+                {
+                    await _composer.AddAttachmentAsync(recording).ConfigureAwait(true);
+                }
+            }
+            catch (Exception)
+            {
+                if (StillValid(gen, conversation) && StillMyAudioOp(audioOpId))
+                {
+                    _composer.SetErrorMessage("The audio recording could not be completed.");
+                }
+            }
+            finally
+            {
+                // Only clear the transcribing flag if this stop belongs to the current
+                // operation. A stale finally must not clobber a newer modality's flags.
+                if (StillValid(gen, conversation) && StillMyAudioOp(audioOpId))
+                {
+                    _composer.SetIsTranscribingAudio(false);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Ensures any active, starting, or stopping audio operation is torn down before
+    /// starting the other modality. Awaits any in-flight audio cleanup Task FIRST so a
+    /// concurrent StopAudioRecordingAsync's <see cref="IChatAudioRecorder.StopAsync"/>
+    /// finishes releasing the mic before we call <see cref="IChatAudioRecorder.CancelAsync"/>
+    /// or start the other modality. Bumps <see cref="_audioOperationId"/> so any Start /
+    /// Stop that captured the previous id fails <see cref="StillMyAudioOp"/> and its
+    /// writes drop.
+    /// </summary>
+    private async Task EnsureAudioStoppedAsync()
+    {
+        // Await any in-flight audio cleanup FIRST. This is the fix for the reviewer's
+        // finding: a StopAudioRecordingAsync that has already cleared IsRecordingAudio
+        // (setting IsTranscribingAudio=true) may not have finished its recorder.StopAsync
+        // await. Without this await, EnsureAudioStoppedAsync would bump the id + null
+        // _activeRecorder + call CancelAsync ON THE SAME RECORDER that is still inside
+        // StopAsync — an unsafe double-invoke. Awaiting the task means the recorder has
+        // released the mic before we touch it again.
+        //
+        // Concurrent preemptors from the other modality all await the SAME task; awaiting
+        // a completed Task is a no-op yield.
+        var pendingCleanup = _audioCleanupTask;
+        if (pendingCleanup is not null)
+        {
+            try
+            {
+                await pendingCleanup.ConfigureAwait(true);
+            }
+            catch
+            {
+                // The Stop that owns this task will surface a user-safe error itself
+                // if it belongs to the current operation. Preemption path does not
+                // re-surface it.
+            }
+        }
+
+        // Identity bump — makes any late audio writeback drop. Any Start or Stop that
+        // captured the previous id fails StillMyAudioOp and silently returns without
+        // staging attachments, setting errors, or clearing our flags.
+        _audioOperationId++;
+
+        var recorder = _activeRecorder;
+        _activeRecorder = null;
+        CancelAndDispose(ref _audioCts);
+
+        if (recorder is not null)
+        {
+            // Register our own CancelAsync task so a concurrent EnsureAudioStoppedAsync
+            // (or a StartLiveSpeechAsync) can await it instead of racing recorder.CancelAsync
+            // for a second time.
+            var cancelTask = recorder.CancelAsync();
+            _audioCleanupTask = cancelTask;
+            try
+            {
+                await cancelTask.ConfigureAwait(true);
+            }
+            catch
+            {
+                // Cancel failure is not actionable and must not block the caller from
+                // starting speech; the composer flags are cleared unconditionally below.
+            }
+            finally
+            {
+                if (ReferenceEquals(_audioCleanupTask, cancelTask))
+                {
+                    _audioCleanupTask = null;
+                }
+            }
+        }
+
+        // Clear ALL audio flags. Safe because the identity bump above guarantees no
+        // other writer (in-flight Start / Stop) will see StillMyAudioOp == true.
+        _composer.SetIsRecordingAudio(false);
+        _composer.SetIsTranscribingAudio(false);
+        _composer.SetIsAudioStarting(false);
+    }
+
+    /// <summary>
+    /// Toggles continuous live speech using the injected <see cref="IChatSpeechRecognizer"/>.
+    /// Contract: startup (permission + StartAsync await) and stop (StopAsync await) are NOT
+    /// toggleable - the button is disabled AND programmatic callers no-op here. Only the
+    /// settled listening state invokes stop; only the idle state invokes start.
+    /// </summary>
+    public async Task ToggleLiveSpeechAsync()
+    {
+        var conversation = Conversation;
+        var recognizer = Services.GetService(typeof(IChatSpeechRecognizer)) as IChatSpeechRecognizer;
+        if (recognizer is null || !recognizer.IsSupported)
+        {
+            _composer.SetErrorMessage("Speech recognition is not available.");
+            return;
+        }
+
+        // Contract: transient windows are NOT toggleable. Reinforces the disabled DOM
+        // button for programmatic callers so a rapid second click cannot re-invoke
+        // recognizer.StartAsync during startup, or land a duplicate recognizer.StopAsync
+        // during the stop window.
+        if (_composer.IsSpeechStarting || _composer.IsSpeechStopping)
+        {
+            return;
+        }
+
+        var gen = _operationGeneration;
+
+        if (_composer.IsLiveSpeechEnabled || _composer.IsListening)
+        {
+            await StopLiveSpeechAsync(recognizer, gen, conversation).ConfigureAwait(true);
+            return;
+        }
+
+        await StartLiveSpeechAsync(recognizer, gen, conversation).ConfigureAwait(true);
+    }
+
+    private async Task StartLiveSpeechAsync(
+        IChatSpeechRecognizer recognizer,
+        int gen,
+        ChatConversation? conversation)
+    {
+        // A fresh speech operation begins. Bump the identity FIRST so any earlier
+        // pass's late writeback (e.g. an OnRecognition arriving after the pass ended
+        // but before subscription was removed) fails StillMySpeechOp.
+        var speechOpId = ++_speechOperationId;
+
+        // Claim the speech-starting flag FIRST so CanToggleAudioCapture rejects a rapid
+        // programmatic caller from the moment the user tapped speech. IsSpeechActive
+        // collapses IsSpeechStarting into the single-owner gate, so a competing
+        // ToggleAudioCaptureAsync entering during the permission request or the
+        // EnsureAudioStoppedAsync await will see IsSpeechActive=true and skip starting.
+        _composer.SetIsSpeechStarting(true);
+
+        try
+        {
+            var granted = await recognizer.RequestPermissionsAsync().ConfigureAwait(true);
+            if (!StillValid(gen, conversation) || !StillMySpeechOp(speechOpId))
+            {
+                if (granted)
+                {
+                    _ = recognizer.StopAsync();
+                }
+
+                return;
+            }
+
+            if (!granted)
+            {
+                _composer.SetErrorMessage("Speech recognition permission was denied.");
+                return;
+            }
+
+            // Defensive orchestration: tear down any active/starting audio BEFORE we claim
+            // the microphone for speech. This must await CancelAsync so the audio recorder
+            // has actually released the platform capture device before we call
+            // recognizer.StartAsync — running both simultaneously would either double-open
+            // the device or leave one in an inconsistent state.
+            await EnsureAudioStoppedAsync().ConfigureAwait(true);
+            if (!StillValid(gen, conversation) || !StillMySpeechOp(speechOpId))
+            {
+                return;
+            }
+
+            // Detach any prior recognizer identity FIRST so a stale event from a previous
+            // pass does not race the new subscription.
+            DetachActiveRecognizer(swallowStopExceptions: true);
+
+            var speechCts = new CancellationTokenSource();
+            _speechCts = speechCts;
+            _activeRecognizer = recognizer;
+            recognizer.RecognitionChanged += OnRecognition;
+
+            try
+            {
+                await recognizer.StartAsync(
+                    System.Globalization.CultureInfo.CurrentCulture,
+                    reportPartialResults: true,
+                    speechCts.Token).ConfigureAwait(true);
+
+                if (!StillValid(gen, conversation) || !StillMySpeechOp(speechOpId))
+                {
+                    DetachActiveRecognizer(swallowStopExceptions: true);
+                    return;
+                }
+
+                _composer.SetIsLiveSpeechEnabled(true);
+                _composer.SetIsListening(true);
+            }
+            catch (OperationCanceledException)
+            {
+                // Preempted by another modality demand or a swap. Detach and unwind.
+                DetachActiveRecognizer(swallowStopExceptions: true);
+            }
+            catch (Exception)
+            {
+                DetachActiveRecognizer(swallowStopExceptions: true);
+                if (StillValid(gen, conversation) && StillMySpeechOp(speechOpId))
+                {
+                    _composer.SetErrorMessage("Live voice could not continue.");
+                }
+            }
+            finally
+            {
+                if (ReferenceEquals(_speechCts, speechCts))
+                {
+                    _speechCts = null;
+                }
+
+                speechCts.Dispose();
+            }
+        }
+        catch (Exception)
+        {
+            // Permission request itself failed.
+            if (StillValid(gen, conversation) && StillMySpeechOp(speechOpId))
+            {
+                _composer.SetIsLiveSpeechEnabled(false);
+                _composer.SetIsListening(false);
+                _composer.SetErrorMessage("Live voice could not continue.");
+            }
+        }
+        finally
+        {
+            // Only clear the starting flag if this operation is still current. Stale
+            // finally from a preempted operation must not clobber a newer operation's
+            // IsSpeechStarting.
+            if (StillValid(gen, conversation) && StillMySpeechOp(speechOpId))
+            {
+                _composer.SetIsSpeechStarting(false);
+            }
+        }
+    }
+
+    private async Task StopLiveSpeechAsync(
+        IChatSpeechRecognizer recognizer,
+        int gen,
+        ChatConversation? conversation)
+    {
+        // Capture the current speech op-id WITHOUT bumping — the stop is the finale of
+        // the current start. If a preemption happens DURING the StopAsync await
+        // (EnsureLiveSpeechStoppedAsync bumps the id), the writes below drop.
+        var speechOpId = _speechOperationId;
+
+        // Enter the Stopping window BEFORE clearing IsListening/IsLiveSpeechEnabled.
+        _composer.SetIsSpeechStopping(true);
+
+        // Clear _activeRecognizer so the OnRecognition identity guard drops any stale
+        // event that races the unsubscribe. Unsubscribe the handler manually — do NOT
+        // call DetachActiveRecognizer, which fire-and-forgets StopAsync (double-invoke).
+        if (ReferenceEquals(_activeRecognizer, recognizer))
+        {
+            _activeRecognizer = null;
+        }
+
+        try
+        {
+            recognizer.RecognitionChanged -= OnRecognition;
+        }
+        catch
+        {
+        }
+
+        // Publish the ENTIRE stop-lifecycle Task so preemptors observe the fully-settled
+        // state (mic released AND transient flags cleared, identity-gated). Same reason
+        // as StopAudioRecordingAsync — awaiting only recognizer.StopAsync would leave
+        // a scheduling gap between "mic released" and "flags cleared" during which a
+        // preempting audio start could initiate recorder.StartAsync while our stale
+        // flags are still set.
+        var lifecycleTask = RunStopLifecycleAsync();
+        _speechCleanupTask = lifecycleTask;
+
+        try
+        {
+            await lifecycleTask.ConfigureAwait(true);
+        }
+        finally
+        {
+            if (ReferenceEquals(_speechCleanupTask, lifecycleTask))
+            {
+                _speechCleanupTask = null;
+            }
+        }
+
+        async Task RunStopLifecycleAsync()
+        {
+            try
+            {
+                await recognizer.StopAsync().ConfigureAwait(true);
+            }
+            catch
+            {
+                // Stop failure is not actionable; the composer state is cleared below
+                // if this operation is still current.
+            }
+            finally
+            {
+                if (StillValid(gen, conversation) && StillMySpeechOp(speechOpId))
+                {
+                    _composer.SetIsLiveSpeechEnabled(false);
+                    _composer.SetIsListening(false);
+                    _composer.SetIsSpeechStopping(false);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Ensures any active, starting, or stopping live-speech pass is torn down. Awaits
+    /// any in-flight speech cleanup Task FIRST so a concurrent <see cref="StopLiveSpeechAsync"/>'s
+    /// <see cref="IChatSpeechRecognizer.StopAsync"/> has finished releasing the mic before we
+    /// start the other modality. Then bumps <see cref="_speechOperationId"/> so any Start
+    /// or Stop that captured the previous id fails <see cref="StillMySpeechOp"/>, unsubscribes,
+    /// awaits <see cref="IChatSpeechRecognizer.StopAsync"/> if a recognizer is still active,
+    /// and clears composer flags.
+    /// </summary>
+    private async Task EnsureLiveSpeechStoppedAsync()
+    {
+        // Await any in-flight speech cleanup FIRST. This is the round-7 fix: previously,
+        // if StopLiveSpeechAsync had already nulled _activeRecognizer but was still
+        // awaiting recognizer.StopAsync, this method would find _activeRecognizer == null
+        // and think cleanup was complete — allowing recorder.StartAsync to fire while the
+        // recognizer was still holding the platform mic. Awaiting _speechCleanupTask
+        // guarantees the mic-release call has resolved before we proceed.
+        //
+        // Concurrent preemptors from the other modality all await the SAME task; awaiting
+        // a completed Task is a no-op yield.
+        var pendingCleanup = _speechCleanupTask;
+        if (pendingCleanup is not null)
+        {
+            try
+            {
+                await pendingCleanup.ConfigureAwait(true);
+            }
+            catch
+            {
+                // The Stop that owns this task will surface a user-safe error itself
+                // if it belongs to the current operation.
+            }
+        }
+
+        // Identity bump — makes late speech writeback drop. Any Start or Stop that
+        // captured the previous id fails StillMySpeechOp and silently returns.
+        _speechOperationId++;
+
+        var recognizer = _activeRecognizer;
+        _activeRecognizer = null;
+        CancelAndDispose(ref _speechCts);
+
+        if (recognizer is not null)
+        {
+            try
+            {
+                recognizer.RecognitionChanged -= OnRecognition;
+            }
+            catch
+            {
+            }
+
+            // Register our own StopAsync so a concurrent EnsureLiveSpeechStoppedAsync
+            // (or a StartAudioRecordingAsync) awaits this second cleanup too.
+            var stopTask = recognizer.StopAsync();
+            _speechCleanupTask = stopTask;
+            try
+            {
+                await stopTask.ConfigureAwait(true);
+            }
+            catch
+            {
+            }
+            finally
+            {
+                if (ReferenceEquals(_speechCleanupTask, stopTask))
+                {
+                    _speechCleanupTask = null;
+                }
+            }
+        }
+
+        // Clear ALL speech flags. Safe because the identity bump above guarantees no
+        // other writer (in-flight Start / Stop) will see StillMySpeechOp == true.
+        _composer.SetIsLiveSpeechEnabled(false);
+        _composer.SetIsListening(false);
+        _composer.SetIsSpeechStarting(false);
+        _composer.SetIsSpeechStopping(false);
+    }
+
+    private void DetachActiveRecognizer(bool swallowStopExceptions)
+    {
+        var recognizer = _activeRecognizer;
+        _activeRecognizer = null;
+        if (recognizer is null)
+        {
+            return;
+        }
+
+        try
+        {
+            recognizer.RecognitionChanged -= OnRecognition;
+        }
+        catch (Exception) when (swallowStopExceptions)
+        {
+            // Ignore: unsubscribe failure on a disposed recognizer is not actionable here.
+        }
+
+        // Fire-and-forget StopAsync to avoid holding the sync path (AttachConversation
+        // and Dispose call this synchronously). Any recognizer that surfaces recognition
+        // events after we detached is dropped by OnRecognition's identity guard.
+        try
+        {
+            _ = recognizer.StopAsync();
+        }
+        catch (Exception) when (swallowStopExceptions)
+        {
+        }
+    }
+
+    private async void OnRecognition(object? sender, ChatSpeechRecognitionEventArgs e)
+    {
+        // Identity guard: only the *current* recognizer's events are honoured. A recognizer
+        // singleton that fires a stale event after we detached (or after a conversation swap
+        // installed a new pass) is silently dropped.
+        if (!ReferenceEquals(sender, _activeRecognizer))
+        {
+            return;
+        }
+
+        var conversation = Conversation;
+        var gen = _operationGeneration;
+
+        // The one-pass model treats any of the following as terminal for the current pass:
+        //   * e.IsFinal (the recognizer explicitly ended the pass)
+        //   * Fatal / PermissionDenied / LanguageNotSupported (unrecoverable regardless of
+        //     whether the platform bothered to set IsFinal)
+        // Non-terminal events are either interim success (stream text) or interim
+        // non-fatal errors (drop; the recognizer keeps listening for the next chunk).
+        var isTerminal = e.IsFinal
+            || e.ErrorKind is ChatSpeechRecognitionErrorKind.PermissionDenied
+                or ChatSpeechRecognitionErrorKind.Fatal
+                or ChatSpeechRecognitionErrorKind.LanguageNotSupported;
+
+        if (!isTerminal)
+        {
+            if (e.ErrorKind == ChatSpeechRecognitionErrorKind.None && StillValid(gen, conversation))
+            {
+                _composer.Text = e.Text;
+            }
+
+            return;
+        }
+
+        // === TERMINAL PATH — TEAR DOWN THE PASS EXACTLY ONCE ===
+        //
+        // Detach the recognizer FIRST so it stops holding this ChatView, then clear the
+        // IsListening/IsLiveSpeechEnabled composer flags. Together these collapse
+        // IsComposing so the ordinary Submit path can accept the auto-submit (for a
+        // successful final) or so the user can compose+submit manually (for any error kind).
+        // Guarded on identity to avoid mutating a new conversation's composer if a swap
+        // happened underneath us. Stale/duplicate finals from the same recognizer are
+        // dropped by the ReferenceEquals(sender, _activeRecognizer) check at the top.
+        DetachActiveRecognizer(swallowStopExceptions: true);
+        if (!StillValid(gen, conversation))
+        {
+            return;
+        }
+
+        _composer.SetIsLiveSpeechEnabled(false);
+        _composer.SetIsListening(false);
+
+        switch (e.ErrorKind)
+        {
+            case ChatSpeechRecognitionErrorKind.None:
+                // Successful final. Preserve the recognized text so either AutoSubmit sends
+                // it, or the user reviews it manually when AutoSubmit is off. An empty final
+                // (recognizer decided the pass ended with no text) is left as-is: the
+                // composer's CanSubmit gate will reject it, so no accidental empty send.
+                _composer.Text = e.Text;
+                if (AutoSubmitLiveSpeech
+                    && !string.IsNullOrWhiteSpace(e.Text)
+                    && StillValid(gen, conversation))
+                {
+                    await SendAsync().ConfigureAwait(true);
+                }
+
+                break;
+
+            case ChatSpeechRecognitionErrorKind.NoSpeech:
+            case ChatSpeechRecognitionErrorKind.Aborted:
+                // Recoverable: silence timeout or user-initiated abort. Neither is a real
+                // failure worth surfacing; the recognizer is detached and the composer is
+                // usable, which is exactly what a next-time-lucky retry needs.
+                break;
+
+            case ChatSpeechRecognitionErrorKind.Transient:
+                // Transient recoverable interruption (e.g. network flake). Show a
+                // user-safe status so the user knows why the pass ended, but do not stay
+                // listening and do not raise an error banner - the user can toggle live
+                // speech back on to try again.
+                _composer.SetStatusMessage("Live voice was interrupted.");
+                break;
+
+            case ChatSpeechRecognitionErrorKind.PermissionDenied:
+            case ChatSpeechRecognitionErrorKind.Fatal:
+            case ChatSpeechRecognitionErrorKind.LanguageNotSupported:
+                _composer.SetErrorMessage("Live voice could not continue.");
+                break;
+        }
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        // Cancel every in-flight op and unhook the recognizer so nothing outside this
+        // component keeps mutating our composer after teardown.
+        _operationGeneration++;
+        CancelInFlightOperations();
+        DetachActiveRecognizer(swallowStopExceptions: true);
+
+        // Reset the composer to a clean idle state. Every in-flight operation's finally
+        // is gated on StillValid, so cancelled operations skip their own teardown - if
+        // the composer is externally referenced (custom composer, subclass, test harness)
+        // it must not permanently reflect a "composing"/"sending"/"recording"/etc. state
+        // that no longer has a live owner.
+        ResetTransientComposerState();
+
+        _subscription?.Dispose();
+        _subscription = null;
+    }
+}
+

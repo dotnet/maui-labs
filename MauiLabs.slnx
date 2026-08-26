@@ -12,6 +12,7 @@
     <Project Path="samples/AIExtensions.Sample.Hello/AIExtensions.Sample.Hello.csproj" />
     <Project Path="samples/AIExtensions.Sample.DIParameters/AIExtensions.Sample.DIParameters.csproj" />
     <Project Path="samples/ChatControls.Sample/ChatControls.Sample.csproj" />
+    <Project Path="samples/ChatControls.BlazorHybrid.Sample/ChatControls.BlazorHybrid.Sample.csproj" />
     <Project Path="samples/DevFlow.Sample.Linux/DevFlow.Sample.Linux.csproj" />
     <Project Path="samples/DevFlow.Sample.MacOS/DevFlow.Sample.MacOS.csproj" />
     <Project Path="samples/DevFlow.Sample/DevFlow.Sample.csproj" />
@@ -28,12 +29,14 @@
     <Project Path="src/AIExtensions/Microsoft.Maui.AI.Chat.Generators/Microsoft.Maui.AI.Chat.Generators.csproj" />
     <Project Path="src/AIExtensions/Microsoft.Maui.AI.Chat.Controls/Microsoft.Maui.AI.Chat.Controls.csproj" />
     <Project Path="src/AIExtensions/Microsoft.Maui.Chat.Controls/Microsoft.Maui.Chat.Controls.csproj" />
+    <Project Path="src/AIExtensions/Microsoft.Maui.Chat.Controls.Blazor/Microsoft.Maui.Chat.Controls.Blazor.csproj" />
     <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Attributes.Tests/Microsoft.Maui.AI.Attributes.Tests.csproj" />
     <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Attributes.Generators.Tests/Microsoft.Maui.AI.Attributes.Generators.Tests.csproj" />
     <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Chat.Tests/Microsoft.Maui.AI.Chat.Tests.csproj" />
     <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Chat.Generators.Tests/Microsoft.Maui.AI.Chat.Generators.Tests.csproj" />
     <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Chat.Controls.Tests/Microsoft.Maui.AI.Chat.Controls.Tests.csproj" />
     <Project Path="tests/AIExtensions/Microsoft.Maui.Chat.Controls.Tests/Microsoft.Maui.Chat.Controls.Tests.csproj" />
+    <Project Path="tests/AIExtensions/Microsoft.Maui.Chat.Controls.Blazor.Tests/Microsoft.Maui.Chat.Controls.Blazor.Tests.csproj" />
   </Folder>
   <Folder Name="/src/Comet/">
     <Project Path="src/Comet/src/Comet.SourceGenerator/Comet.SourceGenerator.csproj" />

@@ -1,0 +1,318 @@
+@*
+    Licensed to the .NET Foundation under one or more agreements.
+    The .NET Foundation licenses this file to you under the MIT license.
+
+    The multimodal composer. Textarea (Enter submits, Shift+Enter newline), leading and
+    trailing action slots, attach / audio / live-speech / send / stop buttons that route
+    every interaction through the IChatComposerContext. Everything is disabled when the
+    conversation is streaming or a composer operation is in flight.
+*@
+@namespace Microsoft.Maui.Chat.Controls.Blazor
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.Maui.Chat.Controls
+@implements IAsyncDisposable
+
+<div class="mchat-composer" @attributes="AdditionalAttributes">
+    @if (Context.Attachments.Count > 0)
+    {
+        <div class="mchat-attachments" role="list" aria-label="Staged attachments">
+            @foreach (var attachment in Context.Attachments)
+            {
+                var captured = attachment;
+                if (AttachmentTemplate is not null)
+                {
+                    @AttachmentTemplate(captured)
+                }
+                else
+                {
+                    <span class="mchat-attachment-chip" role="listitem">
+                        <span class="mchat-attachment-chip__name">@captured.FileName</span>
+                        <button type="button"
+                                class="mchat-attachment-chip__remove"
+                                aria-label="@("Remove attachment " + captured.FileName)"
+                                @onclick="async () => await Context.RemoveAttachmentAsync(captured)">
+                            ✕
+                        </button>
+                    </span>
+                }
+            }
+        </div>
+    }
+
+    <div class="mchat-composer__body">
+        @if (!string.IsNullOrEmpty(Context.StatusMessage))
+        {
+            <div class="mchat-composer__status" role="status">@Context.StatusMessage</div>
+        }
+
+        @if (!string.IsNullOrEmpty(Context.ErrorMessage))
+        {
+            <div class="mchat-composer__error" role="alert">@Context.ErrorMessage</div>
+        }
+
+        <div style="display:flex; align-items:flex-end; gap:0.5rem;">
+            @if (LeadingActions is not null)
+            {
+                <div class="mchat-composer__actions">
+                    @LeadingActions(Context)
+                </div>
+            }
+            else if (Context.CanPickAttachments || Context.CanToggleAudioCapture || Context.CanToggleLiveSpeech)
+            {
+                <div class="mchat-composer__actions">
+                    @if (AllowAttachments)
+                    {
+                        <button type="button"
+                                class="mchat-icon-btn"
+                                title="@AttachButtonText"
+                                aria-label="@AttachButtonText"
+                                disabled="@(!Context.CanPickAttachments)"
+                                @onclick="Context.PickAttachmentsAsync">
+                            @AttachButtonGlyph
+                        </button>
+                    }
+
+                    @if (AllowAudioCapture)
+                    {
+                        <button type="button"
+                                class="mchat-icon-btn @(Context.IsRecordingAudio ? "mchat-icon-btn--recording" : null)"
+                                title="@(Context.IsRecordingAudio ? AudioStopButtonText : AudioStartButtonText)"
+                                aria-label="@(Context.IsRecordingAudio ? AudioStopButtonText : AudioStartButtonText)"
+                                aria-pressed="@Context.IsRecordingAudio"
+                                disabled="@(!Context.CanToggleAudioCapture)"
+                                @onclick="Context.ToggleAudioCaptureAsync">
+                            @(Context.IsRecordingAudio ? AudioStopButtonGlyph : AudioStartButtonGlyph)
+                        </button>
+                    }
+
+                    @if (AllowLiveSpeech)
+                    {
+                        <button type="button"
+                                class="mchat-icon-btn @(Context.IsLiveSpeechEnabled ? "mchat-icon-btn--recording" : null)"
+                                title="@(Context.IsLiveSpeechEnabled ? LiveSpeechStopButtonText : LiveSpeechStartButtonText)"
+                                aria-label="@(Context.IsLiveSpeechEnabled ? LiveSpeechStopButtonText : LiveSpeechStartButtonText)"
+                                aria-pressed="@Context.IsLiveSpeechEnabled"
+                                disabled="@(!Context.CanToggleLiveSpeech)"
+                                @onclick="Context.ToggleLiveSpeechAsync">
+                            @(Context.IsLiveSpeechEnabled ? LiveSpeechStopButtonGlyph : LiveSpeechStartButtonGlyph)
+                        </button>
+                    }
+                </div>
+            }
+
+            <textarea @ref="_textarea"
+                      class="mchat-composer__textarea"
+                      placeholder="@Placeholder"
+                      aria-label="@Placeholder"
+                      disabled="@IsTextareaDisabled"
+                      rows="1"
+                      value="@Context.Text"
+                      @oninput="OnTextInput"
+                      @onkeydown="OnKeyDown"></textarea>
+
+            @if (TrailingActions is not null)
+            {
+                <div class="mchat-composer__actions">
+                    @TrailingActions(Context)
+                </div>
+            }
+            else
+            {
+                <div class="mchat-composer__actions">
+                    @if (Context.CanStop)
+                    {
+                        <button type="button"
+                                class="mchat-icon-btn mchat-icon-btn--danger"
+                                title="@StopButtonText"
+                                aria-label="@StopButtonText"
+                                @onclick="Context.StopAsync">
+                            @StopButtonGlyph
+                        </button>
+                    }
+                    else
+                    {
+                        <button type="button"
+                                class="mchat-icon-btn mchat-icon-btn--primary"
+                                title="@SendButtonText"
+                                aria-label="@SendButtonText"
+                                disabled="@(!Context.CanSubmit)"
+                                @onclick="Context.SubmitAsync">
+                            @SendButtonGlyph
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private ElementReference _textarea;
+    private MChatJsModule? _module;
+    private ChatComposerContext? _observed;
+
+    /// <summary>Gets or sets the composer context this composer binds to.</summary>
+    [Parameter, EditorRequired]
+    public IChatComposerContext Context { get; set; } = default!;
+
+    /// <summary>Gets or sets whether the attach button is shown.</summary>
+    [Parameter]
+    public bool AllowAttachments { get; set; }
+
+    /// <summary>Gets or sets whether the audio-capture button is shown.</summary>
+    [Parameter]
+    public bool AllowAudioCapture { get; set; }
+
+    /// <summary>Gets or sets whether the live-speech button is shown.</summary>
+    [Parameter]
+    public bool AllowLiveSpeech { get; set; }
+
+    /// <summary>Gets or sets the composer placeholder.</summary>
+    [Parameter]
+    public string Placeholder { get; set; } = "Type a message";
+
+    /// <summary>Gets or sets a fragment rendered before the textarea. Bound to the composer context.</summary>
+    [Parameter]
+    public RenderFragment<IChatComposerContext>? LeadingActions { get; set; }
+
+    /// <summary>Gets or sets a fragment rendered after the textarea. Replaces the default send/stop button when set.</summary>
+    [Parameter]
+    public RenderFragment<IChatComposerContext>? TrailingActions { get; set; }
+
+    /// <summary>Gets or sets the attachment chip template.</summary>
+    [Parameter]
+    public RenderFragment<ChatAttachment>? AttachmentTemplate { get; set; }
+
+    /// <summary>Gets or sets the send button label.</summary>
+    [Parameter]
+    public string SendButtonText { get; set; } = "Send message";
+
+    /// <summary>Gets or sets the send button glyph.</summary>
+    [Parameter]
+    public string SendButtonGlyph { get; set; } = "➤";
+
+    /// <summary>Gets or sets the stop button label.</summary>
+    [Parameter]
+    public string StopButtonText { get; set; } = "Stop";
+
+    /// <summary>Gets or sets the stop button glyph.</summary>
+    [Parameter]
+    public string StopButtonGlyph { get; set; } = "■";
+
+    /// <summary>Gets or sets the attach button label.</summary>
+    [Parameter]
+    public string AttachButtonText { get; set; } = "Add attachment";
+
+    /// <summary>Gets or sets the attach button glyph.</summary>
+    [Parameter]
+    public string AttachButtonGlyph { get; set; } = "＋";
+
+    /// <summary>Gets or sets the audio capture start label.</summary>
+    [Parameter]
+    public string AudioStartButtonText { get; set; } = "Record audio";
+
+    /// <summary>Gets or sets the audio capture start glyph.</summary>
+    [Parameter]
+    public string AudioStartButtonGlyph { get; set; } = "🎤";
+
+    /// <summary>Gets or sets the audio capture stop label.</summary>
+    [Parameter]
+    public string AudioStopButtonText { get; set; } = "Stop recording";
+
+    /// <summary>Gets or sets the audio capture stop glyph.</summary>
+    [Parameter]
+    public string AudioStopButtonGlyph { get; set; } = "■";
+
+    /// <summary>Gets or sets the live-speech start label.</summary>
+    [Parameter]
+    public string LiveSpeechStartButtonText { get; set; } = "Start live speech";
+
+    /// <summary>Gets or sets the live-speech start glyph.</summary>
+    [Parameter]
+    public string LiveSpeechStartButtonGlyph { get; set; } = "🗣";
+
+    /// <summary>Gets or sets the live-speech stop label.</summary>
+    [Parameter]
+    public string LiveSpeechStopButtonText { get; set; } = "Stop live speech";
+
+    /// <summary>Gets or sets the live-speech stop glyph.</summary>
+    [Parameter]
+    public string LiveSpeechStopButtonGlyph { get; set; } = "■";
+
+    /// <summary>Gets or sets any unmatched attributes applied to the composer root.</summary>
+    [Parameter(CaptureUnmatchedValues = true)]
+    public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    [Inject]
+    private Microsoft.JSInterop.IJSRuntime Js { get; set; } = default!;
+
+    private bool IsTextareaDisabled => Context.IsConversationBusy;
+
+    /// <inheritdoc />
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(_observed, Context))
+        {
+            if (_observed is not null)
+            {
+                _observed.Changed -= OnContextChanged;
+            }
+
+            _observed = Context as ChatComposerContext;
+            if (_observed is not null)
+            {
+                _observed.Changed += OnContextChanged;
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        _module ??= new MChatJsModule(Js);
+        await _module.AutoSizeAsync(_textarea);
+    }
+
+    /// <summary>Focuses the composer textarea and moves the caret to the end.</summary>
+    public async Task FocusAsync()
+    {
+        _module ??= new MChatJsModule(Js);
+        await _module.FocusAsync(_textarea);
+    }
+
+    private void OnContextChanged() => InvokeAsync(StateHasChanged);
+
+    private Task OnTextInput(ChangeEventArgs e)
+    {
+        Context.Text = e.Value?.ToString() ?? string.Empty;
+        return Task.CompletedTask;
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey && !e.CtrlKey && !e.AltKey && Context.CanSubmit)
+        {
+            await Context.SubmitAsync();
+        }
+    }
+
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        // Unhook the composer-context subscription BEFORE the module dispose so no
+        // callback races the module tear-down.
+        if (_observed is not null)
+        {
+            _observed.Changed -= OnContextChanged;
+            _observed = null;
+        }
+
+        // The JS module holds an IJSObjectReference that must be released so the
+        // WebView stops keeping the module alive across navigation and app tear-down.
+        if (_module is not null)
+        {
+            await _module.DisposeAsync().ConfigureAwait(true);
+            _module = null;
+        }
+    }
+}

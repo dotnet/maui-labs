@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:ChatControls.BlazorHybrid.Sample"
+             xmlns:comp="clr-namespace:ChatControls.BlazorHybrid.Sample.Components"
+             xmlns:cs="clr-namespace:ChatControls.Sample"
+             xmlns:chat="clr-namespace:Microsoft.Maui.Chat.Controls;assembly=Microsoft.Maui.Chat.Controls"
+             x:Class="ChatControls.BlazorHybrid.Sample.MainPage"
+             x:DataType="cs:TeamChatViewModel"
+             Title="MAUI Chat Controls Blazor Hybrid"
+             BackgroundColor="#F5F5F5">
+
+    <Grid ColumnDefinitions="*,320" RowSpacing="0" ColumnSpacing="0">
+
+        <!-- Blazor Hybrid chat surface -->
+        <BlazorWebView Grid.Column="0"
+                       x:Name="ChatWebView"
+                       AutomationId="ChatBlazorWebView"
+                       HostPage="wwwroot/index.html">
+            <BlazorWebView.RootComponents>
+                <RootComponent Selector="#app" ComponentType="{x:Type comp:Routes}" />
+            </BlazorWebView.RootComponents>
+        </BlazorWebView>
+
+        <!-- Native XAML sidebar drives the participant simulator, matching ChatControls.Sample -->
+        <ScrollView Grid.Column="1" BackgroundColor="#EEECEC">
+            <VerticalStackLayout Padding="16" Spacing="8">
+
+                <Label Text="Simulator" FontAttributes="Bold" FontSize="16" />
+
+                <Label Text="Selected participant" FontSize="12" TextColor="#49454F" />
+                <Picker AutomationId="ParticipantPicker"
+                        ItemsSource="{Binding Participants}"
+                        SelectedItem="{Binding SelectedParticipant}">
+                    <Picker.ItemDisplayBinding>
+                        <Binding Path="DisplayName" x:DataType="chat:ChatParticipant" />
+                    </Picker.ItemDisplayBinding>
+                </Picker>
+
+                <Button Text="Send text" AutomationId="SendParticipantTextButton" Command="{Binding SendParticipantTextCommand}" />
+                <Button Text="Send photo" AutomationId="SendParticipantPhotoButton" Command="{Binding SendParticipantPhotoCommand}" />
+                <Button Text="Send file" AutomationId="SendParticipantFileButton" Command="{Binding SendParticipantFileCommand}" />
+                <Button Text="Send task card" AutomationId="SendParticipantTaskButton" Command="{Binding SendParticipantTaskCommand}" />
+                <Button Text="Send sticker" AutomationId="SendParticipantStickerButton" Command="{Binding SendParticipantStickerCommand}" />
+                <Button Text="Send multipart" AutomationId="SendParticipantMultipartButton" Command="{Binding SendParticipantMultipartCommand}" />
+                <Button Text="Stream text" AutomationId="StreamParticipantTextButton" Command="{Binding StreamParticipantTextCommand}" />
+                <Button Text="Send burst" AutomationId="SendParticipantBurstButton" Command="{Binding SendParticipantBurstCommand}" />
+
+                <BoxView HeightRequest="1" Color="#DDD" Margin="0,8" />
+
+                <Label Text="Composer" FontAttributes="Bold" FontSize="16" />
+                <HorizontalStackLayout Spacing="8">
+                    <CheckBox AutomationId="PriyaTypingCheck" IsChecked="{Binding PriyaIsTyping}" />
+                    <Label Text="Priya typing" VerticalOptions="Center" />
+                </HorizontalStackLayout>
+                <HorizontalStackLayout Spacing="8">
+                    <CheckBox AutomationId="DiegoTypingCheck" IsChecked="{Binding DiegoIsTyping}" />
+                    <Label Text="Diego typing" VerticalOptions="Center" />
+                </HorizontalStackLayout>
+                <HorizontalStackLayout Spacing="8">
+                    <CheckBox AutomationId="ConversationBusyCheck" IsChecked="{Binding IsConversationBusy}" />
+                    <Label Text="Conversation busy" VerticalOptions="Center" />
+                </HorizontalStackLayout>
+                <HorizontalStackLayout Spacing="8">
+                    <CheckBox AutomationId="FailNextSendCheck" IsChecked="{Binding FailNextSend}" />
+                    <Label Text="Fail next send" VerticalOptions="Center" />
+                </HorizontalStackLayout>
+                <HorizontalStackLayout Spacing="8">
+                    <CheckBox AutomationId="SlowNextSendCheck" IsChecked="{Binding SlowNextSend}" />
+                    <Label Text="Slow next send" VerticalOptions="Center" />
+                </HorizontalStackLayout>
+
+                <Label Text="Delivery status for next simulated message" FontSize="12" TextColor="#49454F" />
+                <Picker AutomationId="DeliveryStatusPicker"
+                        ItemsSource="{Binding DeliveryStatuses}"
+                        SelectedItem="{Binding SelectedDeliveryStatus}" />
+                <Button Text="Apply delivery status to last message"
+                        AutomationId="ApplyDeliveryStatusButton"
+                        Command="{Binding ApplyDeliveryStatusCommand}" />
+
+                <BoxView HeightRequest="1" Color="#DDD" Margin="0,8" />
+
+                <Button Text="Edit last text" AutomationId="EditLastTextButton" Command="{Binding EditLastTextCommand}" />
+                <Button Text="Remove last message" AutomationId="RemoveLastMessageButton" Command="{Binding RemoveLastMessageCommand}" />
+                <Button Text="Reset conversation" AutomationId="ResetButton" Command="{Binding ResetCommand}" />
+                <Button Text="Clear conversation" AutomationId="ClearButton" Command="{Binding ClearCommand}" />
+                <Button Text="Cycle theme" AutomationId="CycleThemeButton" Command="{Binding CycleThemeCommand}" />
+
+            </VerticalStackLayout>
+        </ScrollView>
+    </Grid>
+
+</ContentPage>
