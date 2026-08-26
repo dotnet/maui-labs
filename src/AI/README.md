@@ -7,19 +7,20 @@ On-device AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://
 ## Features
 
 - **`IChatClient`** — backed by Apple Intelligence (Foundation Models) on iOS, macOS, and Mac Catalyst
+- **`IImageClassificationClient`** — provider-neutral contracts for classifying encoded images
 - **Streaming** — progressive JSON deserialization of LLM responses via `JsonStreamChunker` and `PlainTextStreamChunker`
 - **Tool calling** — function-calling support for on-device models
 - **NL embeddings** — on-device semantic search via Apple's NaturalLanguage framework (`NLEmbeddingGenerator`)
 
 ### Platform Support
 
-| Platform | Chat (IChatClient) | Embeddings (IEmbeddingGenerator) |
-|----------|-------------------|----------------------------------|
-| iOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
-| Mac Catalyst 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
-| macOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
-| Android | 🔜 Coming soon | 🔜 Coming soon |
-| Windows | 🔜 Coming soon | 🔜 Coming soon |
+| Platform | Chat (IChatClient) | Embeddings (IEmbeddingGenerator) | Image classification contract |
+|----------|-------------------|----------------------------------|-------------------------------|
+| iOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings | ✅ Provider-neutral contract |
+| Mac Catalyst 26+ | ✅ Apple Intelligence | ✅ NL Embeddings | ✅ Provider-neutral contract |
+| macOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings | ✅ Provider-neutral contract |
+| Android | 🔜 Coming soon | 🔜 Coming soon | ✅ Provider-neutral contract |
+| Windows | 🔜 Coming soon | 🔜 Coming soon | ✅ Provider-neutral contract |
 
 ## Quick Start
 
@@ -33,6 +34,16 @@ builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
 // Use via DI
 var client = serviceProvider.GetRequiredService<IChatClient>();
 var response = await client.GetResponseAsync("Plan a weekend trip to Portland");
+```
+
+Image classification providers implement `IImageClassificationClient`; consumer code remains provider-neutral:
+
+```csharp
+await using Stream image = File.OpenRead("photo.jpg");
+ImageClassificationResult result =
+    await classifier.ClassifyAsync(image, "image/jpeg");
+
+ImageClassificationPrediction? best = result.Predictions.FirstOrDefault();
 ```
 
 ## Packages

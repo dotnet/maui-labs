@@ -2,15 +2,15 @@
 
 On-device AI for .NET MAUI apps using platform-native models — no cloud required.
 
-This package provides [`Microsoft.Extensions.AI`](https://learn.microsoft.com/dotnet/ai/ai-extensions) abstractions (`IChatClient`, `IEmbeddingGenerator`) backed by on-device AI capabilities:
+This package provides [`Microsoft.Extensions.AI`](https://learn.microsoft.com/dotnet/ai/ai-extensions) abstractions (`IChatClient`, `IEmbeddingGenerator`) backed by on-device AI capabilities, plus an experimental provider-neutral `IImageClassificationClient` contract:
 
-| Platform | Chat (IChatClient) | Embeddings (IEmbeddingGenerator) |
-|----------|-------------------|----------------------------------|
-| iOS 26+ | ✅ Apple Intelligence (Foundation Models) | ✅ NL Embeddings |
-| Mac Catalyst 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
-| macOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
-| Android | 🔜 Coming soon | 🔜 Coming soon |
-| Windows | 🔜 Coming soon | 🔜 Coming soon |
+| Platform | Chat (IChatClient) | Embeddings (IEmbeddingGenerator) | Image classification contract |
+|----------|-------------------|----------------------------------|-------------------------------|
+| iOS 26+ | ✅ Apple Intelligence (Foundation Models) | ✅ NL Embeddings | ✅ Provider-neutral contract |
+| Mac Catalyst 26+ | ✅ Apple Intelligence | ✅ NL Embeddings | ✅ Provider-neutral contract |
+| macOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings | ✅ Provider-neutral contract |
+| Android | 🔜 Coming soon | 🔜 Coming soon | ✅ Provider-neutral contract |
+| Windows | 🔜 Coming soon | 🔜 Coming soon | ✅ Provider-neutral contract |
 
 ## Getting Started
 
@@ -65,6 +65,28 @@ await foreach (var update in _chat.GetStreamingResponseAsync("Plan a day trip to
 var generator = new NLEmbeddingGenerator(NLEmbeddingType.Sentence);
 var embeddings = await generator.GenerateAsync(["sunset beach", "mountain hiking"]);
 ```
+
+### Image classification
+
+Applications depend on the contract and receive a provider from dependency injection:
+
+```csharp
+public static async Task<ImageClassificationPrediction?> ClassifyAsync(
+    IImageClassificationClient classifier,
+    Stream image,
+    CancellationToken cancellationToken = default)
+{
+    ImageClassificationResult result = await classifier.ClassifyAsync(
+        image,
+        "image/jpeg",
+        new ImageClassificationOptions { MaximumPredictions = 3 },
+        cancellationToken);
+
+    return result.Predictions.FirstOrDefault();
+}
+```
+
+The stream remains owned by the caller. Clients read one encoded image from its current position and must not dispose or retain the stream. A provider should throw `NotSupportedException` for a valid image media type it cannot decode.
 
 ## Requirements
 
