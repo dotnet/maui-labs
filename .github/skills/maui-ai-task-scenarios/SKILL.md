@@ -17,7 +17,7 @@ implementations.
 
 ## Route Related Work
 
-Use the canonical `dotnet-maui-app` skills instead of repeating their guidance:
+Use the canonical MAUI plugin skills instead of repeating their guidance:
 
 | Need | Skill |
 | --- | --- |

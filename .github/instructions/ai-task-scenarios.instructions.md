@@ -1,5 +1,5 @@
 ---
-applyTo: "src/AI/**,src/AIExtensions/**,tests/AI/**,tests/AIExtensions/**,samples/*AI*/**,samples/*Classification*/**,samples/*Detection*/**,samples/*Extraction*/**,samples/*Recognition*/**,samples/*Speech*/**,samples/*TextAnalysis*/**"
+applyTo: "src/AI/**,tests/AI/**,samples/*AI*/**,samples/*Classification*/**,samples/*Detection*/**,samples/*Expense*/**,samples/*Extraction*/**,samples/*Inventory*/**,samples/*Recognition*/**,samples/*Speech*/**,samples/*TextAnalysis*/**"
 ---
 
 # AI Libraries, Providers, and Samples
