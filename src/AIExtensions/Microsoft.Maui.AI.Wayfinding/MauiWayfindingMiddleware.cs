@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -21,12 +20,6 @@ public sealed class MauiWayfindingOptions
 
     /// <summary>Runtime snapshot options used by <c>get_current_app_state</c>.</summary>
     public CurrentPageSnapshotOptions CurrentPage { get; } = new();
-
-    /// <summary>
-    /// Additional app-specific guidance appended to the built-in wayfinding policy.
-    /// Persona and domain behavior should remain in the app's own system prompt.
-    /// </summary>
-    public string? AdditionalInstructions { get; set; }
 
     /// <summary>User-visible title used while a Shell flyout is presented.</summary>
     public string NavigationMenuTitle { get; set; } = "Navigation menu";
@@ -95,33 +88,6 @@ public sealed class MauiWayfindingTools(
     ICurrentPageContextProvider currentPage,
     MauiWayfindingOptions options)
 {
-    private static readonly HashSet<string> PublicControlTypes =
-    [
-        "ActivityIndicator",
-        "Button",
-        "CarouselView",
-        "CheckBox",
-        "CollectionView",
-        "DatePicker",
-        "Editor",
-        "Entry",
-        "GraphicsView",
-        "Image",
-        "ImageButton",
-        "Label",
-        "List",
-        "ListView",
-        "Picker",
-        "ProgressBar",
-        "RadioButton",
-        "SearchBar",
-        "Slider",
-        "Stepper",
-        "Switch",
-        "TimePicker",
-        "WebView",
-    ];
-
     [ExportAIFunction("search_app_ui")]
     [Description(
         "Search navigable app destinations for a page, feature, control, or task. " +
@@ -154,10 +120,7 @@ public sealed class MauiWayfindingTools(
                     item.Destination.RequiredParameters
                         .Select(parameter => parameter.QueryName)
                         .ToArray(),
-                    match.RelevantLines
-                        .Select(SanitizeUiLine)
-                        .Where(line => !string.IsNullOrWhiteSpace(line))
-                        .ToArray());
+                    match.RelevantLines);
             })
             .ToArray();
     }
@@ -190,7 +153,9 @@ public sealed class MauiWayfindingTools(
             .Where(page => page is not null)
             .Select(page => new WayfindingPageDescription(
                 GetTitle(page!),
-                SanitizeUi(page!.Markdown)))
+                page!.Elements.Count > 0
+                    ? StructuredUiRenderer.Render(page.Elements)
+                    : ""))
             .ToArray();
         if (pathPages.Length != item.Destination.PagePath.Count)
         {
@@ -231,7 +196,9 @@ public sealed class MauiWayfindingTools(
         return new CurrentAppState(
             GetCurrentTitle(snapshot),
             includePageUi && snapshot is not null
-                ? SanitizeUi(snapshot.Markdown)
+                ? snapshot.Elements.Count > 0
+                    ? StructuredUiRenderer.Render(snapshot.Elements)
+                    : ""
                 : null);
     }
 
@@ -335,104 +302,10 @@ public sealed class MauiWayfindingTools(
     }
 
     private static string GetTitle(ApplicationDestination destination)
-        => GetTitle(new IndexedPage(
-            destination.PageName,
-            destination.FilePath,
-            destination.Markdown));
+        => destination.Title ?? HumanizeTypeName(destination.PageName);
 
     private static string GetTitle(IndexedPage page)
-    {
-        foreach (var line in page.Markdown.Split('\n'))
-        {
-            if (!Regex.IsMatch(
-                    line.TrimStart(),
-                    "^- Heading \\(level [1-9]\\):")
-                || !TryGetQuotedText(line, out var title)
-                || title.Contains('{'))
-            {
-                continue;
-            }
-
-            return title;
-        }
-
-        return HumanizeTypeName(page.Name);
-    }
-
-    private static string SanitizeUi(string markdown)
-        => string.Join(
-            '\n',
-            markdown.Split('\n')
-                .Select(SanitizeUiLine)
-                .Where(line => !string.IsNullOrWhiteSpace(line)));
-
-    private static string SanitizeUiLine(string line)
-    {
-        var trimmed = line.Trim();
-        if (trimmed.StartsWith("File:", StringComparison.Ordinal)
-            || trimmed.StartsWith("# ", StringComparison.Ordinal)
-            || Regex.IsMatch(trimmed, "^- Current page: [A-Za-z_][A-Za-z0-9_.]*$")
-            )
-        {
-            return "";
-        }
-
-        var sanitized = line;
-        var typeMatch = Regex.Match(
-            trimmed,
-            "^- (?<type>\\[[A-Za-z_][A-Za-z0-9_.]*\\]|[A-Za-z_][A-Za-z0-9_.]*):");
-        if (typeMatch.Success
-            && !PublicControlTypes.Contains(
-                typeMatch.Groups["type"].Value.Trim('[', ']')))
-        {
-            var isBracketedType = typeMatch.Groups["type"].Value.StartsWith(
-                "[",
-                StringComparison.Ordinal);
-            var replacement = isBracketedType
-                && !trimmed.Contains("[automationId:", StringComparison.Ordinal)
-                    ? "Group"
-                    : "Control";
-            sanitized = Regex.Replace(
-                sanitized,
-                "^(\\s*)- (?:\\[[A-Za-z_][A-Za-z0-9_.]*\\]|[A-Za-z_][A-Za-z0-9_.]*):",
-                $"$1- {replacement}:");
-        }
-
-        sanitized = Regex.Replace(
-            sanitized,
-            "\\{[^}]+\\}",
-            "[dynamic text]");
-        sanitized = Regex.Replace(
-            sanitized,
-            "\\s+→\\s+[A-Za-z_][A-Za-z0-9_.]*",
-            "");
-        sanitized = Regex.Replace(
-            sanitized,
-            "\\[(visible|hidden) when [^\\]]*\\]",
-            "[shown in some states]",
-            RegexOptions.IgnoreCase);
-        sanitized = sanitized.Replace(
-            "CollectionView:",
-            "List:",
-            StringComparison.Ordinal);
-        return sanitized;
-    }
-
-    private static bool TryGetQuotedText(
-        string line,
-        out string text)
-    {
-        var start = line.IndexOf('"');
-        var end = line.LastIndexOf('"');
-        if (start < 0 || end <= start)
-        {
-            text = "";
-            return false;
-        }
-
-        text = line[(start + 1)..end];
-        return true;
-    }
+        => page.Title ?? HumanizeTypeName(page.Name);
 
     private static string HumanizeTypeName(string value)
     {
@@ -441,10 +314,18 @@ public sealed class MauiWayfindingTools(
             : value.EndsWith("View", StringComparison.Ordinal)
                 ? value[..^4]
                 : value;
-        return Regex.Replace(
-            trimmed,
-            "(?<=[a-z0-9])(?=[A-Z])",
-            " ");
+        var builder = new StringBuilder(trimmed.Length + 8);
+        for (var index = 0; index < trimmed.Length; index++)
+        {
+            if (index > 0
+                && char.IsUpper(trimmed[index])
+                && char.IsLower(trimmed[index - 1]))
+            {
+                builder.Append(' ');
+            }
+            builder.Append(trimmed[index]);
+        }
+        return builder.ToString();
     }
 
     private static string Slugify(string value)
@@ -565,32 +446,12 @@ internal sealed class MauiWayfindingChatClient(
 {
     internal const string DefaultInstructions =
         """
-        MAUI WAYFINDING POLICY
+        MAUI WAYFINDING
 
-        Before calling tools, classify the user's intent:
-
-        - EXPLAIN: Questions using where, how, which screen, walkthrough, or asking
-          where something is are read-only. Call get_current_app_state with
-          includePageUi=true, search_app_ui, and get_app_destination. Explain from
-          the live current page. The first direction step MUST name a visible
-          control from the current PageUi. If the current screen appears anywhere
-          in the destination path, begin there and continue forward. Use a visible
-          Back or Cancel control only when the current screen is not in that path.
-          NEVER call navigate_to_app_destination.
-        - MOVE: Call navigate_to_app_destination only when the user explicitly asks
-          to open, show, go to, navigate to, or take them to a destination.
-        - CURRENT: For this/here/current screen or visible-control questions, call
-          get_current_app_state with includePageUi=true.
-
-        Never infer the current page from conversation history. Never navigate in
-        response to an EXPLAIN request. Indexed text in {curly braces} is a binding
-        expression, not a literal visible label.
-
-        USER-FACING LANGUAGE
-
-        Never mention route URIs, route segments, CLR type names, source file paths,
-        command names, binding property names, destination IDs, or AutomationIds.
-        Refer only to user-visible page titles, controls, labels, and requested values.
+        Inspect the live current page for questions about this screen or directions
+        from here. Search and destination tools are read-only. Navigate only when the
+        user explicitly asks to move. Refer to user-visible titles and controls;
+        never expose route, type, binding, destination, or AutomationId values.
         """;
 
     public override Task<ChatResponse> GetResponseAsync(
@@ -615,9 +476,7 @@ internal sealed class MauiWayfindingChatClient(
         IEnumerable<ChatMessage> messages)
     {
         var prepared = messages.ToList();
-        var instructions = string.IsNullOrWhiteSpace(options.AdditionalInstructions)
-            ? DefaultInstructions
-            : $"{DefaultInstructions}\n\nAPP-SPECIFIC WAYFINDING GUIDANCE\n{options.AdditionalInstructions}";
+        var instructions = DefaultInstructions;
         if (options.EnableVision)
         {
             instructions +=

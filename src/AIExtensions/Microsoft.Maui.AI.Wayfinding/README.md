@@ -7,11 +7,9 @@ Plug-in AI tools and chat middleware that compose the model-free
 
 ## Install
 
-Reference Indexer directly so its XAML analyzer/build assets are available, then
-add Wayfinding:
+Reference Wayfinding. It includes the Indexer analyzer and XAML build assets:
 
 ```xml
-<PackageReference Include="Microsoft.Maui.AI.Indexer" />
 <PackageReference Include="Microsoft.Maui.AI.Wayfinding" />
 ```
 

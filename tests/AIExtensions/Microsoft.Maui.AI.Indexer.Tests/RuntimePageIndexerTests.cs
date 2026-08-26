@@ -450,6 +450,34 @@ public sealed class RuntimePageIndexerTests
     }
 
     [Fact]
+    public void Capture_StructuredElements_UseInheritanceAndDirectGesture()
+    {
+        var tapped = new Border();
+        tapped.GestureRecognizers.Add(new TapGestureRecognizer());
+        var page = new ContentPage
+        {
+            Content = new VerticalStackLayout
+            {
+                Children =
+                {
+                    new Label { Text = "Title" },
+                    new Entry { Placeholder = "Name" },
+                    tapped,
+                },
+            },
+        };
+
+        var snapshot = RuntimePageIndexer.Capture(page);
+
+        Assert.Contains(snapshot.Elements, element =>
+            element.Kind == IndexedElementKind.Text && element.Text == "Title");
+        Assert.Contains(snapshot.Elements, element =>
+            element.Kind == IndexedElementKind.Input && element.Placeholder == "Name");
+        Assert.Contains(snapshot.Elements, element =>
+            element.Kind == IndexedElementKind.Action && element.IsActionable);
+    }
+
+    [Fact]
     public void Capture_ExcludedSubtree_OmitsGroupAndDescendants()
     {
         var sidebar = new ReviewSection

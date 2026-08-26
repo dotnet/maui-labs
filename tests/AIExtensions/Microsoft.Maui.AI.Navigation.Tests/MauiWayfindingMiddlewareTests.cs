@@ -30,11 +30,11 @@ public sealed class MauiWayfindingMiddlewareTests
         Assert.Contains(
             inner.Messages!,
             message => message.Role == ChatRole.System
-                && message.Text!.Contains("MAUI WAYFINDING POLICY"));
+                && message.Text!.Contains("MAUI WAYFINDING"));
         Assert.Contains(
             inner.Messages!,
             message => message.Role == ChatRole.System
-                && message.Text!.Contains("current screen appears anywhere"));
+                && message.Text!.Contains("Navigate only when the"));
         Assert.Equal(
             [
                 "get_app_destination",
@@ -159,20 +159,40 @@ public sealed class MauiWayfindingMiddlewareTests
                     "MainPage",
                     "Pages/MainPage.xaml",
                     "- Heading (level 1): \"Sage\"",
-                    "//main/chat"),
+                    ["//main/chat"],
+                    "MainPage",
+                    "Sage",
+                    [Element(IndexedElementKind.Heading, "Sage")]),
                 new IndexedPage(
                     "CatalogPage",
                     "Pages/CatalogPage.xaml",
                     "- Heading (level 1): \"Products\"\n- Button: \"Details\"",
-                    "//main/products"),
+                    ["//main/products"],
+                    "CatalogPage",
+                    "Products",
+                    [
+                        Element(IndexedElementKind.Heading, "Products"),
+                        Element(IndexedElementKind.Action, "Details"),
+                    ]),
                 new IndexedPage(
                     "ProductDetailPage",
                     "Pages/ProductDetailPage.xaml",
-                    "- Heading (level 1): \"{Name}\"\n- Button: \"Write Review\""),
+                    "- Heading (level 1): \"{Name}\"\n- Button: \"Write Review\"",
+                    [],
+                    "ProductDetailPage",
+                    null,
+                    [Element(IndexedElementKind.Action, "Write Review")]),
                 new IndexedPage(
                     "ProductReviewPage",
                     "Pages/ProductReviewPage.xaml",
-                    "- Heading (level 1): \"Write Review\"\n- Button: \"Submit Review\""),
+                    "- Heading (level 1): \"Write Review\"\n- Button: \"Submit Review\"",
+                    [],
+                    "ProductReviewPage",
+                    "Write Review",
+                    [
+                        Element(IndexedElementKind.Heading, "Write Review"),
+                        Element(IndexedElementKind.Action, "Submit Review"),
+                    ]),
             ],
             "MainPage"));
         using var provider = services.BuildServiceProvider();
@@ -208,7 +228,14 @@ public sealed class MauiWayfindingMiddlewareTests
                     - SalesChart: "Quarterly sales chart" [automationId: "QuarterlySalesChart"]
                     - SecretChart: "Undescribed type chart"
                     """,
-                    "Past Orders")));
+                    "Past Orders",
+                    ["OrderInsightsCharts", "QuarterlySalesChart"],
+                    [
+                        Element(IndexedElementKind.Heading, "Orders"),
+                        Element(IndexedElementKind.Unknown, "Order insights charts", automationId: "OrderInsightsCharts"),
+                        Element(IndexedElementKind.Unknown, "Quarterly sales chart", automationId: "QuarterlySalesChart"),
+                        Element(IndexedElementKind.Unknown, "Undescribed type chart"),
+                    ])));
         services.AddSingleton<ShellNavigationService>(
             new StubNavigationService(
             [
@@ -231,7 +258,15 @@ public sealed class MauiWayfindingMiddlewareTests
                     - Button: "Total: {CartTotal:C}" → BindingContext.OpenCommand
                     - OrderInsightsView: "Order insights charts" [automationId: "OrderInsightsCharts"]
                     """,
-                    "//main/orders"),
+                    ["//main/orders"],
+                    "OrdersPage",
+                    "Orders",
+                    [
+                        Element(IndexedElementKind.Heading, "Orders"),
+                        Element(IndexedElementKind.Action, "Clear All"),
+                        Element(IndexedElementKind.Collection, null, isConditional: true),
+                        Element(IndexedElementKind.Unknown, "Order insights charts", automationId: "OrderInsightsCharts"),
+                    ]),
             ]),
             options =>
             {
@@ -239,6 +274,23 @@ public sealed class MauiWayfindingMiddlewareTests
             });
         return services;
     }
+
+    private static IndexedElement Element(
+        IndexedElementKind kind,
+        string? text,
+        string? automationId = null,
+        bool isConditional = false)
+        => new(
+            kind,
+            text,
+            null,
+            automationId,
+            null,
+            false,
+            kind == IndexedElementKind.Action,
+            isConditional,
+            0,
+            []);
 
     private sealed class TestCatalog(
         IReadOnlyList<IndexedPage> pages,

@@ -24,6 +24,7 @@ internal sealed class SemanticNode
     // and whether it is the app's entry/home screen (first ShellContent in the Shell).
     public string? NavigationTarget { get; set; }
     public bool IsEntry { get; set; }
+    public bool HasTapGesture { get; set; }
 
     // Condition group (structural container with visibility condition wrapping children)
     public bool IsConditionGroup { get; set; }

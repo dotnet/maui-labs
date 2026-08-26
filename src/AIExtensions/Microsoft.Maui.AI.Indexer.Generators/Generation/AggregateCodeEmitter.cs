@@ -49,11 +49,19 @@ internal static class AggregateCodeEmitter
         foreach (var page in index.Pages.OrderBy(p => p.ClassName))
         {
             var filePath = !string.IsNullOrEmpty(page.FilePath) ? $"\"{Escape(page.FilePath)}\"" : "null";
+            var pageTypeName = !string.IsNullOrEmpty(page.Namespace)
+                ? $"{page.Namespace}.{page.ClassName}"
+                : page.ClassName;
+            var routes = index.RoutesByPageTypeName.TryGetValue(
+                pageTypeName,
+                out var pageRoutes)
+                ? $"new string[] {{ {string.Join(", ", pageRoutes.Select(route => $"\"{Escape(route)}\""))} }}"
+                : "global::System.Array.Empty<string>()";
             var fqnClass = !string.IsNullOrEmpty(page.Namespace)
                 ? $"global::{page.Namespace}.{SanitizeIdentifier(page.ClassName)}_Indexed"
                 : $"global::{SanitizeIdentifier(page.ClassName)}_Indexed";
 
-            sb.AppendLine($"        new global::Microsoft.Maui.AI.Indexer.IndexedPage(\"{Escape(page.ClassName)}\", {filePath}, {fqnClass}.Markdown),");
+            sb.AppendLine($"        new global::Microsoft.Maui.AI.Indexer.IndexedPage(\"{Escape(page.ClassName)}\", {filePath}, {fqnClass}.Markdown, {routes}, \"{Escape(pageTypeName)}\", {fqnClass}.Title, {fqnClass}.Elements),");
         }
 
         sb.AppendLine("    };");
@@ -66,6 +74,13 @@ internal static class AggregateCodeEmitter
             sb.AppendLine();
             sb.AppendLine("    /// <inheritdoc />");
             sb.AppendLine($"    public override string? EntryPageName => \"{Escape(index.EntryPageName!)}\";");
+        }
+
+        if (!string.IsNullOrEmpty(index.EntryPageTypeName))
+        {
+            sb.AppendLine();
+            sb.AppendLine("    /// <inheritdoc />");
+            sb.AppendLine($"    public override string? EntryPageTypeName => \"{Escape(index.EntryPageTypeName!)}\";");
         }
 
         sb.AppendLine("}");

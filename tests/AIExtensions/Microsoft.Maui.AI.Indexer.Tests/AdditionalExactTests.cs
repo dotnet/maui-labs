@@ -450,6 +450,140 @@ public class AdditionalExactTests
     }
 
     [Fact]
+    public void Shell_RoutesAreCatalogMetadata_NotSemanticMarkdown()
+    {
+        var shell = """
+            <?xml version="1.0" encoding="utf-8" ?>
+            <Shell xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                   xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                   xmlns:pages="clr-namespace:MyApp.Pages"
+                   x:Class="MyApp.AppShell">
+                <TabBar Route="main">
+                    <ShellContent Route="home"
+                                  Title="Home"
+                                  ContentTemplate="{DataTemplate pages:HomePage}" />
+                    <ShellContent Route="orders"
+                                  Title="Orders"
+                                  ContentTemplate="{DataTemplate pages:OrdersPage}" />
+                    <ShellContent Route="alternate-home"
+                                  Title="Alternate Home"
+                                  ContentTemplate="{DataTemplate pages:HomePage}" />
+                </TabBar>
+            </Shell>
+            """;
+        var home = Page("MyApp.Pages.HomePage", """<Label Text="Welcome" />""");
+        var orders = Page("MyApp.Pages.OrdersPage", """<Label Text="Past Orders" />""");
+
+        var sources = GeneratorTestHarness.GetGeneratedSources(
+            ("AppShell.xaml", shell),
+            ("Pages/HomePage.xaml", home),
+            ("Pages/OrdersPage.xaml", orders));
+        var aggregate = sources["IndexedPageCatalog.g.cs"];
+        var shellMarkdown = GeneratorTestHarness.GetMarkdown(
+            "AppShell",
+            ("AppShell.xaml", shell),
+            ("Pages/HomePage.xaml", home),
+            ("Pages/OrdersPage.xaml", orders));
+
+        Assert.Contains(
+            "\"MyApp.Pages.HomePage\", global::MyApp.Pages.HomePage_Indexed.Title, global::MyApp.Pages.HomePage_Indexed.Elements)",
+            aggregate);
+        Assert.Contains(
+            "\"MyApp.Pages.OrdersPage\", global::MyApp.Pages.OrdersPage_Indexed.Title, global::MyApp.Pages.OrdersPage_Indexed.Elements)",
+            aggregate);
+        Assert.DoesNotContain("//main", shellMarkdown);
+    }
+
+    [Fact]
+    public void ShellItemAndShellSection_ContributeRouteSegments()
+    {
+        var shell = """
+            <?xml version="1.0" encoding="utf-8" ?>
+            <Shell xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                   xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                   xmlns:pages="clr-namespace:MyApp.Pages"
+                   x:Class="MyApp.AppShell">
+                <ShellItem Route="shop">
+                    <ShellSection Route="browse">
+                        <ShellContent Route="products"
+                                      ContentTemplate="{DataTemplate pages:ProductsPage}" />
+                    </ShellSection>
+                </ShellItem>
+            </Shell>
+            """;
+        var products = Page(
+            "MyApp.Pages.ProductsPage",
+            """<Label Text="Products" />""");
+
+        var sources = GeneratorTestHarness.GetGeneratedSources(
+            ("AppShell.xaml", shell),
+            ("Pages/ProductsPage.xaml", products));
+
+        Assert.Contains(
+            """new string[] { "//shop/browse/products" }""",
+            sources["IndexedPageCatalog.g.cs"]);
+    }
+
+    [Fact]
+    public void ShellRouteMetadata_UsesQualifiedPageIdentity()
+    {
+        var shell = """
+            <?xml version="1.0" encoding="utf-8" ?>
+            <Shell xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                   xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                   xmlns:a="clr-namespace:AreaA"
+                   x:Class="MyApp.AppShell">
+                <ShellContent Route="settings"
+                              ContentTemplate="{DataTemplate a:SettingsPage}" />
+            </Shell>
+            """;
+        var areaA = Page("AreaA.SettingsPage", """<Label Text="Area A" />""");
+        var areaB = Page("AreaB.SettingsPage", """<Label Text="Area B" />""");
+
+        var aggregate = GeneratorTestHarness.GetGeneratedSources(
+            ("AppShell.xaml", shell),
+            ("AreaA/SettingsPage.xaml", areaA),
+            ("AreaB/SettingsPage.xaml", areaB))["IndexedPageCatalog.g.cs"];
+
+        Assert.Contains(
+            "\"AreaA.SettingsPage\", global::AreaA.SettingsPage_Indexed.Title, global::AreaA.SettingsPage_Indexed.Elements)",
+            aggregate);
+        Assert.Contains(
+            "\"AreaB.SettingsPage\", global::AreaB.SettingsPage_Indexed.Title, global::AreaB.SettingsPage_Indexed.Elements)",
+            aggregate);
+        Assert.Contains(
+            """public override string? EntryPageTypeName => "AreaA.SettingsPage";""",
+            aggregate);
+    }
+
+    [Fact]
+    public void IndexedPageCatalog_HomeUsesQualifiedTypeIdentity()
+    {
+        var catalog = new DuplicateNameCatalog();
+
+        var home = catalog.Home;
+
+        Assert.NotNull(home);
+        Assert.Equal("AreaB.HomePage", home.TypeName);
+        Assert.Equal("# Area B", home.Markdown);
+    }
+
+    private sealed class DuplicateNameCatalog : IndexedPageCatalog
+    {
+        private static readonly IndexedPage[] PagesValue =
+        [
+            new("HomePage", "AreaA/HomePage.xaml", "# Area A", [], "AreaA.HomePage"),
+            new("HomePage", "AreaB/HomePage.xaml", "# Area B", [], "AreaB.HomePage"),
+        ];
+
+        public override IReadOnlyList<IndexedPage> Pages => PagesValue;
+
+        public override string? EntryPageName => "HomePage";
+
+        public override string? EntryPageTypeName => "AreaB.HomePage";
+    }
+
+    [Fact]
     public void SelfBindingDot()
     {
         var md = GeneratorTestHarness.GetMarkdown("T",
@@ -686,5 +820,29 @@ public class AdditionalExactTests
               - GraphicsView: "Most popular products chart" [automationId: "ProductsChart"]
             """,
             md);
+    }
+
+    [Fact]
+    public void StructuredElements_UseKnownTypesHeadingAndDirectTapGesture()
+    {
+        var xaml = Page(
+            "MyApp.TestPage",
+            """
+            <Label Text="Title" SemanticProperties.HeadingLevel="Level1" />
+            <Border SemanticProperties.Description="Open details">
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnTapped" />
+                </Border.GestureRecognizers>
+            </Border>
+            <Entry Placeholder="Name" />
+            """);
+
+        var source = GeneratorTestHarness.GetGeneratedSources(
+            ("TestPage.xaml", xaml))["MyApp_TestPage_Indexed.g.cs"];
+
+        Assert.Contains("IndexedElementKind.Heading", source);
+        Assert.Contains("IndexedElementKind.Action", source);
+        Assert.Contains("IndexedElementKind.Input", source);
+        Assert.Contains("""public const string? Title = "Title";""", source);
     }
 }
