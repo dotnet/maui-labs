@@ -348,24 +348,9 @@
         CancelInFlightOperations();
         DetachActiveRecognizer(swallowStopExceptions: true);
 
-        // Reset transient composer state that was tied to the previous conversation. The user's
-        // draft text and staged attachments are preserved because those are user data - the
-        // shell only owns the send/record/status/error indicators, and leaving them behind
-        // would advertise a "Sending message." or "Failed" state that belongs to the old
-        // conversation on the new one.
-        if (_composer is not null)
-        {
-            _composer.SetIsSending(false);
-            _composer.SetIsRecordingAudio(false);
-            _composer.SetIsTranscribingAudio(false);
-            _composer.SetIsAudioStarting(false);
-            _composer.SetIsLiveSpeechEnabled(false);
-            _composer.SetIsListening(false);
-            _composer.SetIsSpeechStarting(false);
-            _composer.SetIsSpeechStopping(false);
-            _composer.SetStatusMessage(null);
-            _composer.SetErrorMessage(null);
-        }
+        // Reset transient composer state that was tied to the previous conversation via the
+        // shared helper. See ResetTransientComposerState for the invariant.
+        ResetTransientComposerState();
 
         _subscription?.Dispose();
         _subscription = null;
@@ -375,6 +360,48 @@
         {
             _subscription = conversation.Subscribe(OnConversationChange);
         }
+    }
+
+    /// <summary>
+    /// Resets every shell-owned transient composer flag to a clean idle state. Called at
+    /// operation-boundary transitions (conversation swap, Dispose) so the composer never
+    /// carries stale transient state across a boundary. The user's draft text and staged
+    /// attachments are preserved because those are user data owned by the composer, not
+    /// the shell.
+    /// </summary>
+    /// <remarks>
+    /// This centralises the reset so adding a new transient flag (Sending, RecordingAudio,
+    /// TranscribingAudio, AudioStarting, LiveSpeechEnabled, Listening, SpeechStarting,
+    /// SpeechStopping, generic IsComposing override, StatusMessage, ErrorMessage) only
+    /// requires one update. Each async operation's finally is gated on <c>StillValid</c>,
+    /// so any operation that captured the old operation-generation will skip its own
+    /// post-await teardown when a swap or Dispose fires — the reset here is the ONE
+    /// place responsible for putting the composer back to idle after a boundary.
+    ///
+    /// The <c>IsComposing</c> override in particular is the round-8 fix: <c>PickAttachmentsAsync</c>
+    /// calls <c>SetComposing(true)</c> during the pick and only calls <c>SetComposing(false)</c>
+    /// in a finally gated on <c>StillValid</c>. A swap during the pick would leave the
+    /// override set on the new conversation, permanently disabling <c>CanSubmit</c> and
+    /// <c>CanPickAttachments</c> via <c>IsComposing = ... || _isComposingOverride</c>.
+    /// </remarks>
+    private void ResetTransientComposerState()
+    {
+        if (_composer is null)
+        {
+            return;
+        }
+
+        _composer.SetIsSending(false);
+        _composer.SetIsRecordingAudio(false);
+        _composer.SetIsTranscribingAudio(false);
+        _composer.SetIsAudioStarting(false);
+        _composer.SetIsLiveSpeechEnabled(false);
+        _composer.SetIsListening(false);
+        _composer.SetIsSpeechStarting(false);
+        _composer.SetIsSpeechStopping(false);
+        _composer.SetComposing(false);
+        _composer.SetStatusMessage(null);
+        _composer.SetErrorMessage(null);
     }
 
     private void CancelInFlightOperations()
@@ -1433,6 +1460,13 @@
         _operationGeneration++;
         CancelInFlightOperations();
         DetachActiveRecognizer(swallowStopExceptions: true);
+
+        // Reset the composer to a clean idle state. Every in-flight operation's finally
+        // is gated on StillValid, so cancelled operations skip their own teardown - if
+        // the composer is externally referenced (custom composer, subclass, test harness)
+        // it must not permanently reflect a "composing"/"sending"/"recording"/etc. state
+        // that no longer has a live owner.
+        ResetTransientComposerState();
 
         _subscription?.Dispose();
         _subscription = null;
