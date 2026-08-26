@@ -2,6 +2,10 @@
 
 These instructions guide GitHub Copilot and other AI code generation tools when working with the maui-labs repository.
 
+For task-specific AI libraries, providers, and MAUI samples, use the
+`.github/skills/maui-ai-task-scenarios` project skill together with
+`.github/instructions/ai-task-scenarios.instructions.md`.
+
 ## Platform-Specific Code
 
 DevFlow targets multiple platforms via multi-targeting. The pattern:
