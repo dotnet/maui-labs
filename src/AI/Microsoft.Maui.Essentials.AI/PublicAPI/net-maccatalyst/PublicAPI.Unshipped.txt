@@ -24,8 +24,6 @@ Microsoft.Extensions.AI.ImageClassificationResult.ImageClassificationResult(Syst
 Microsoft.Extensions.AI.ImageClassificationResult.ModelId.get -> string?
 Microsoft.Extensions.AI.ImageClassificationResult.ModelId.init -> void
 Microsoft.Extensions.AI.ImageClassificationResult.Predictions.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ImageClassificationPrediction!>!
-Microsoft.Extensions.AI.ImageClassificationResult.ProviderName.get -> string?
-Microsoft.Extensions.AI.ImageClassificationResult.ProviderName.init -> void
 static Microsoft.Extensions.AI.ImageClassificationClientExtensions.ClassifyAsync(this Microsoft.Extensions.AI.IImageClassificationClient! client, Microsoft.Extensions.AI.DataContent! image, Microsoft.Extensions.AI.ImageClassificationOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.ImageClassificationResult!>!
 static Microsoft.Extensions.AI.ImageClassificationClientExtensions.GetService<TService>(this Microsoft.Extensions.AI.IImageClassificationClient! client, object? serviceKey = null) -> TService?
 virtual Microsoft.Extensions.AI.ImageClassificationOptions.Clone() -> Microsoft.Extensions.AI.ImageClassificationOptions!

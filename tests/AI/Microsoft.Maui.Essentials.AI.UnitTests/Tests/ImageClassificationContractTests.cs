@@ -114,7 +114,7 @@ public class ImageClassificationContractTests
 	}
 
 	[Fact]
-	public void Result_SnapshotsAndOrdersPredictions_WithProvenance()
+	public void Result_SnapshotsAndOrdersPredictions_WithModelProvenance()
 	{
 		var predictions = new List<ImageClassificationPrediction>
 		{
@@ -124,7 +124,6 @@ public class ImageClassificationContractTests
 
 		var result = new ImageClassificationResult(predictions)
 		{
-			ProviderName = "fixture",
 			ModelId = "animals-v1"
 		};
 		predictions.Clear();
@@ -141,7 +140,6 @@ public class ImageClassificationContractTests
 				Assert.Equal("cat", prediction.Label);
 				Assert.Equal(0.25f, prediction.Confidence);
 			});
-		Assert.Equal("fixture", result.ProviderName);
 		Assert.Equal("animals-v1", result.ModelId);
 	}
 

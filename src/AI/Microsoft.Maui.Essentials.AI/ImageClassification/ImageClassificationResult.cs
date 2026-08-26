@@ -29,9 +29,6 @@ public sealed class ImageClassificationResult
 	/// <summary>Gets the predictions, ordered from highest to lowest confidence.</summary>
 	public IReadOnlyList<ImageClassificationPrediction> Predictions { get; }
 
-	/// <summary>Gets or initializes the provider that produced this result, when known.</summary>
-	public string? ProviderName { get; init; }
-
 	/// <summary>Gets or initializes the model identifier that produced this result, when known.</summary>
 	public string? ModelId { get; init; }
 }
