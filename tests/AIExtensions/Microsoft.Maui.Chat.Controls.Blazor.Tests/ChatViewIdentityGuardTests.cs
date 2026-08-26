@@ -113,8 +113,17 @@ public class ChatViewIdentityGuardTests
         var pickTask = view.PickAttachmentsAsync();
         await Task.Yield();
 
+        // While the picker is open PickAttachmentsAsync set IsComposing=true via
+        // SetComposing so Send/Attach show as "busy".
+        Assert.True(view.ComposerContext.IsComposing);
+
         // Swap to B while the picker is open.
         SetConversation(view, b);
+
+        // Round-8 invariant: the swap must reset the generic IsComposing override so the
+        // NEW conversation reflects a clean idle state IMMEDIATELY after the swap - it
+        // must not inherit A's picker-in-flight busy state.
+        Assert.False(view.ComposerContext.IsComposing);
 
         // Now the picker "completes" with a picked file. Since we swapped, the file belongs to
         // A's intent and must NOT stage on B's composer.
@@ -125,6 +134,54 @@ public class ChatViewIdentityGuardTests
         await pickTask;
 
         Assert.Empty(view.ComposerContext.Attachments);
+        // AFTER the stale picker completion, IsComposing must remain false. The stale
+        // finally correctly skips the SetComposing(false) write because StillValid is
+        // false, but the swap already cleared it - the two together must not race back
+        // to a stuck true.
+        Assert.False(view.ComposerContext.IsComposing);
+        // The new conversation's draft is empty, so CanSubmit is false only for the
+        // no-draft reason - importantly, CanPickAttachments is now true again (would be
+        // false if IsComposing were stuck).
+        Assert.True(view.ComposerContext.CanPickAttachments);
+    }
+
+    [Fact]
+    public async Task SlowPicker_Dispose_ClearsIsComposingOverride()
+    {
+        // Symmetric to the swap case: if the ChatView disposes with a picker still open,
+        // the picker's finally is gated on StillValid (fails since Dispose bumped the
+        // generation) and skips the SetComposing(false) write. Dispose must reset the
+        // composer to a clean idle state so an externally-held composer reference does
+        // not permanently reflect IsComposing=true.
+        var a = CreateConversation("a");
+
+        var pickerGate = new TaskCompletionSource<IReadOnlyList<ChatAttachment>>();
+        var picker = new GatePicker(pickerGate.Task);
+
+        var services = BuildServices(collection =>
+            collection.AddSingleton<IChatAttachmentPicker>(picker));
+
+        var view = CreateView(services, a);
+        view.SetParameter(nameof(ChatView.AllowAttachments), true);
+        var pickTask = view.PickAttachmentsAsync();
+        await Task.Yield();
+        Assert.True(view.ComposerContext.IsComposing);
+
+        var composer = view.ComposerContext;
+        view.Dispose();
+
+        // Dispose reset the composer to idle.
+        Assert.False(composer.IsComposing);
+
+        // Complete the picker after Dispose; the stale finally must not touch the composer.
+        pickerGate.SetResult(new[]
+        {
+            new ChatAttachment("hi.txt", "text/plain", new ReadOnlyMemory<byte>(new byte[] { 1 })),
+        });
+        await pickTask;
+
+        Assert.False(composer.IsComposing);
+        Assert.Empty(composer.Attachments);
     }
 
     // ============================================================================
