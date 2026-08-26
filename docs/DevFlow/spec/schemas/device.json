@@ -30,7 +30,7 @@
         },
         "platform": {
           "type": "string",
-          "description": "Platform identifier (e.g. 'ios', 'android', 'maccatalyst', 'windows')."
+          "description": "Platform identifier (e.g. 'ios', 'android', 'maccatalyst', 'windows', 'macos', 'linux', 'tizen'). See docs/DevFlow/spec/README.md#platform-identity."
         },
         "idiom": {
           "type": "string",

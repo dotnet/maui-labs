@@ -83,17 +83,12 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     }
 
     /// <summary>Detects a platform name without depending on a UI framework.</summary>
+    /// <remarks>
+    /// Delegates to <see cref="DevFlowRuntimePlatform.DetectName"/>, which also recognizes Tizen
+    /// and honours the <c>DEVFLOW_PLATFORM</c> override used by out-of-tree agents.
+    /// </remarks>
     protected static string DetectPlatformName()
-    {
-        if (OperatingSystem.IsAndroid()) return "Android";
-        if (OperatingSystem.IsMacCatalyst()) return "MacCatalyst";
-        if (OperatingSystem.IsIOS()) return "iOS";
-        if (OperatingSystem.IsTvOS()) return "tvOS";
-        if (OperatingSystem.IsMacOS()) return "macOS";
-        if (OperatingSystem.IsWindows()) return "WinUI";
-        if (OperatingSystem.IsLinux()) return "Linux";
-        return "Unknown";
-    }
+        => DevFlowRuntimePlatform.DetectName(windowsName: "WinUI");
 
     /// <summary>Platform name reported to clients.</summary>
     protected virtual string PlatformName => DetectPlatformName();

@@ -43,6 +43,31 @@ await client.FillAsync("NameEntry", "Ada Lovelace");
 var tree = await client.GetTreeAsync(maxDepth: 3);
 ```
 
+## Platform identity
+
+Agents report the platform spelling native to their stack — `iOS`, `MacCatalyst`, `WinUI`,
+`Tizen`. `DevFlowPlatform` maps those onto canonical identifiers (`ios`, `maccatalyst`,
+`windows`, `tizen`, …) so client code compares one value instead of a family of spellings:
+
+```csharp
+var status = await client.GetStatusAsync();
+
+if (status?.PlatformId == DevFlowPlatform.Tizen)
+{
+    // status.Platform is still exactly what the agent reported ("Tizen").
+}
+```
+
+`DevFlowPlatform.Normalize` passes an identifier it does not recognize through unchanged rather
+than coercing it onto another platform, so this client keeps working against an agent on a newer
+platform. Use `DevFlowPlatform.IsKnown` to tell the two cases apart, and
+`DevFlowPlatform.GetDisplayName` for user-facing output.
+
+Agents that live outside this repository — such as the Tizen backend in
+[Redth/Maui.Tizen](https://github.com/Redth/Maui.Tizen) — are first-class here: see
+[Platform identity](https://github.com/dotnet/maui-labs/blob/main/docs/DevFlow/spec/README.md#platform-identity)
+in the protocol spec.
+
 ## Requirements
 
 - A consumer targeting `netstandard2.0` or later (including .NET Framework 4.6.2+)

@@ -150,15 +150,7 @@ internal sealed class InspectorAlertController
     }
 
     private static string NormalizePlatform(string? platform)
-    {
-        var value = (platform ?? string.Empty).ToLowerInvariant();
-        if (value.Contains("android")) return "android";
-        if (value.Contains("windows") || value.Contains("winui")) return "windows";
-        if (value.Contains("maccatalyst") || value.Contains("mac catalyst")) return "maccatalyst";
-        if (value.Contains("linux") || value.Contains("gtk")) return "linux";
-        if (value.Contains("ios")) return "ios";
-        return value;
-    }
+        => DevFlowPlatform.Normalize(platform);
 
     private async Task<int?> ResolveProcessIdAsync(string platform)
     {

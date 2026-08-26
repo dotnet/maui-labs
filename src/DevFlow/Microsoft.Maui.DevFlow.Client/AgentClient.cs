@@ -2878,6 +2878,14 @@ public class AgentStatus
     public string? Version => Agent?.Version;
     [System.Text.Json.Serialization.JsonIgnore]
     public string? Platform => Device?.Platform;
+
+    /// <summary>
+    /// <see cref="Platform"/> mapped onto its canonical DevFlow identifier — for example
+    /// <c>"tizen"</c> for an agent that reports <c>"Tizen"</c>. See <see cref="DevFlowPlatform"/>.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string PlatformId => DevFlowPlatform.Normalize(Platform);
+
     [System.Text.Json.Serialization.JsonIgnore]
     public string? DeviceType => Device?.DeviceType;
     [System.Text.Json.Serialization.JsonIgnore]

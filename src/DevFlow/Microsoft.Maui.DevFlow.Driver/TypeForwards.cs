@@ -15,6 +15,7 @@ using Microsoft.Maui.DevFlow.Driver;
 [assembly: TypeForwardedTo(typeof(AgentStatus))]
 [assembly: TypeForwardedTo(typeof(AppDescriptor))]
 [assembly: TypeForwardedTo(typeof(BoundsInfo))]
+[assembly: TypeForwardedTo(typeof(DevFlowPlatform))]
 [assembly: TypeForwardedTo(typeof(DevFlowTheme))]
 [assembly: TypeForwardedTo(typeof(DevFlowThemeJsonConverter))]
 [assembly: TypeForwardedTo(typeof(DeviceDescriptor))]

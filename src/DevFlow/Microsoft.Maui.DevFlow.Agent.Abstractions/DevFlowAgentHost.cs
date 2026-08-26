@@ -133,17 +133,7 @@ public static class DevFlowAgentHost
     private static (string Platform, string AppName) GetDefaultHostIdentity()
         => (DetectPlatformName(), Assembly.GetEntryAssembly()?.GetName().Name ?? "unknown");
 
-    private static string DetectPlatformName()
-    {
-        if (OperatingSystem.IsAndroid()) return "Android";
-        if (OperatingSystem.IsMacCatalyst()) return "MacCatalyst";
-        if (OperatingSystem.IsIOS()) return "iOS";
-        if (OperatingSystem.IsTvOS()) return "tvOS";
-        if (OperatingSystem.IsMacOS()) return "macOS";
-        if (OperatingSystem.IsWindows()) return "Windows";
-        if (OperatingSystem.IsLinux()) return "Linux";
-        return "Unknown";
-    }
+    private static string DetectPlatformName() => DevFlowRuntimePlatform.DetectName();
 }
 
 /// <summary>

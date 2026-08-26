@@ -49,9 +49,10 @@
         "maccatalyst",
         "windows",
         "linux",
-        "macos"
+        "macos",
+        "tizen"
       ],
-      "description": "The target platform the agent is running on."
+      "description": "The target platform the agent is running on, as a canonical lowercase identifier. Agents report the spelling native to their stack (for example 'iOS', 'MacCatalyst', 'WinUI' or 'Tizen'); clients normalize case and known aliases before comparing, and pass an unrecognized identifier through unchanged so an out-of-tree agent on a newer platform stays usable. See docs/DevFlow/spec/README.md#platform-identity."
     },
     "device": {
       "type": "object",

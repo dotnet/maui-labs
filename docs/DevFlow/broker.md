@@ -278,6 +278,13 @@ The HTTP server stays up throughout reconnection attempts — only broker discov
 | Linux/GTK      | `localhost:19223` direct     | `localhost:{port}` direct |
 | iOS Simulator  | Shares host network, direct  | `localhost:{port}` direct |
 | Android Emu    | `adb reverse tcp:19223 tcp:19223` | `adb forward tcp:{port} tcp:{port}` |
+| Tizen          | Reachable host address       | Reachable agent address   |
+
+Tizen agents are registered and discovered exactly like any other platform — the registration
+carries `"platform": "Tizen"` — but the Tizen backend lives outside this repository
+([Redth/Maui.Tizen](https://github.com/Redth/Maui.Tizen)) and DevFlow ships no host-side driver
+for it, so port plumbing to the emulator or device is the caller's responsibility. See
+[Platform identity](spec/README.md#platform-identity).
 
 For Android, the two directions are different: the app reaches the host broker through
 `adb reverse tcp:19223 tcp:19223`, while the host CLI reaches the in-emulator agent

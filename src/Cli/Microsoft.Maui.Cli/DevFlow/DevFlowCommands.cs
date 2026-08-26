@@ -1592,7 +1592,7 @@ public class DevFlowCommands
         // ===== wait command (wait for agent to connect) =====
         var waitTimeoutOption = new Option<int>("--timeout", "-t") { Description = "Maximum seconds to wait for an agent to connect", DefaultValueFactory = _ => 120 };
         var waitProjectOption = new Option<string?>("--project") { Description = "Filter by project path (csproj). Resolves to full path for matching.", DefaultValueFactory = _ => null };
-        var waitPlatformOption = new Option<string?>("--wait-platform") { Description = "Filter by platform (e.g., macOS, iOS, Android)", DefaultValueFactory = _ => null };
+        var waitPlatformOption = new Option<string?>("--wait-platform") { Description = "Filter by platform (e.g., macOS, iOS, Android, Tizen)", DefaultValueFactory = _ => null };
         var waitCmd = new Command("wait", "Wait for an agent to connect to the broker")
         {
             waitTimeoutOption, waitProjectOption, waitPlatformOption
@@ -1637,7 +1637,7 @@ public class DevFlowCommands
 
         var agentWaitTimeoutOption = new Option<int>("--timeout", "-t") { Description = "Maximum seconds to wait for an agent to connect", DefaultValueFactory = _ => 120 };
         var agentWaitProjectOption = new Option<string?>("--project") { Description = "Filter by project path (csproj). Resolves to full path for matching.", DefaultValueFactory = _ => null };
-        var agentWaitPlatformOption = new Option<string?>("--platform") { Description = "Filter by platform (e.g., macOS, iOS, Android)", DefaultValueFactory = _ => null };
+        var agentWaitPlatformOption = new Option<string?>("--platform") { Description = "Filter by platform (e.g., macOS, iOS, Android, Tizen)", DefaultValueFactory = _ => null };
         var agentWaitCmd = new Command("wait", "Wait for an agent to connect")
         {
             agentWaitTimeoutOption, agentWaitProjectOption, agentWaitPlatformOption
@@ -4565,6 +4565,7 @@ public class DevFlowCommands
                 if (sp.Contains("ios")) return "ios-simulator";
                 if (sp.Contains("android")) return "android";
                 if (sp.Contains("windows")) return "windows";
+                if (sp.Contains("tizen")) return "tizen";
                 if (sp.Contains("linux") || sp.Contains("gtk")) return "linux";
                 // For MacCatalyst, don't return immediately — check if there's a
                 // booted iOS simulator first, since it's more likely the user wants
@@ -4605,6 +4606,21 @@ public class DevFlowCommands
         if (OperatingSystem.IsWindows()) return "windows";
         if (OperatingSystem.IsLinux()) return "linux";
         return "maccatalyst";
+    }
+
+    /// <summary>
+    /// Alert automation drives the app from the host through a platform toolchain. Platforms that
+    /// DevFlow speaks the protocol with but has no local driver for — Tizen, for example — must
+    /// fail with an explicit message rather than silently falling through to the iOS simulator.
+    /// </summary>
+    private static void ThrowIfAlertPlatformUnsupported(string platform)
+    {
+        if (Microsoft.Maui.DevFlow.Driver.AppDriverFactory.HasLocalDriver(platform))
+            return;
+
+        throw new InvalidOperationException(
+            $"Alert automation is not available for platform '{platform}'. It requires a host-side " +
+            "app driver, which DevFlow provides for Android, iOS, Mac Catalyst, Windows and Linux.");
     }
 
     private static async Task<int> ResolveMacCatalystPidAsync(int? pid, string host, int port)
@@ -4666,6 +4682,7 @@ public class DevFlowCommands
         try
         {
             var plat = await ResolveAlertPlatformAsync(udid, pid, host, port);
+            ThrowIfAlertPlatformUnsupported(plat);
             Microsoft.Maui.DevFlow.Driver.AlertInfo? alert = null;
 
             if (plat == "maccatalyst")
@@ -4732,6 +4749,7 @@ public class DevFlowCommands
         try
         {
             var plat = await ResolveAlertPlatformAsync(udid, pid, host, port);
+            ThrowIfAlertPlatformUnsupported(plat);
             Microsoft.Maui.DevFlow.Driver.AlertInfo? alert = null;
 
             if (plat == "maccatalyst")
@@ -4778,6 +4796,7 @@ public class DevFlowCommands
         try
         {
             var plat = await ResolveAlertPlatformAsync(udid, pid, host, port);
+            ThrowIfAlertPlatformUnsupported(plat);
             string treeResult;
 
             if (plat == "maccatalyst")
@@ -5518,13 +5537,13 @@ public class DevFlowCommands
         => string.IsNullOrWhiteSpace(platformFilter)
            || platformFilter.Contains("Android", StringComparison.OrdinalIgnoreCase);
 
-    private static Broker.AgentRegistration? FindMatchingAgent(Broker.AgentRegistration[] agents, string? projectFilter, string? platformFilter)
+    internal static Broker.AgentRegistration? FindMatchingAgent(Broker.AgentRegistration[] agents, string? projectFilter, string? platformFilter)
     {
         foreach (var agent in agents)
         {
             if (projectFilter != null && !string.Equals(agent.Project, projectFilter, StringComparison.OrdinalIgnoreCase))
                 continue;
-            if (platformFilter != null && !agent.Platform.Contains(platformFilter, StringComparison.OrdinalIgnoreCase))
+            if (platformFilter != null && !DevFlowPlatform.Matches(agent.Platform, platformFilter))
                 continue;
             return agent;
         }

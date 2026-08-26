@@ -103,12 +103,7 @@ public static class DevFlowAgent
         }
         catch
         {
-            platform = OperatingSystem.IsAndroid() ? "Android"
-                : OperatingSystem.IsIOS() ? "iOS"
-                : OperatingSystem.IsMacCatalyst() ? "MacCatalyst"
-                : OperatingSystem.IsMacOS() ? "macOS"
-                : OperatingSystem.IsWindows() ? "Windows"
-                : "Unknown";
+            platform = DevFlowRuntimePlatform.DetectName();
         }
 
         string? appName = null;

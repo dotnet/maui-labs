@@ -13,6 +13,37 @@ Do not commit a generated JSON copy of the OpenAPI document. If a consumer needs
 
 The DevFlow unit tests parse `openapi.yaml` with OpenAPI tooling and validate YAML/JSON syntax plus `$ref` targets across this directory.
 
+## Platform identity
+
+`GET /api/v1/agent/status` reports `device.platform`, and the same value is sent in the broker registration. The canonical identifiers are:
+
+| Identifier | Display name | Typically reported by an agent as |
+|---|---|---|
+| `android` | Android | `Android` |
+| `ios` | iOS | `iOS` |
+| `maccatalyst` | Mac Catalyst | `MacCatalyst` |
+| `windows` | Windows | `WinUI`, `Windows`, `WPF` |
+| `linux` | Linux | `Linux` |
+| `macos` | macOS | `macOS` |
+| `tizen` | Tizen | `Tizen` |
+
+Rules that make this contract safe to extend:
+
+- **Agents report their native spelling.** Nothing on the wire changed when the canonical identifiers were introduced; an agent that has always sent `"MacCatalyst"` keeps sending it.
+- **Clients normalize before comparing.** `Microsoft.Maui.DevFlow.Driver.DevFlowPlatform.Normalize` in the `Microsoft.Maui.DevFlow.Client` package maps casing and known aliases (`winui` → `windows`, `gtk` → `linux`, `catalyst` → `maccatalyst`, `tizen-nui` → `tizen`) onto the canonical identifier. `AgentStatus.PlatformId` exposes the normalized value.
+- **Unknown identifiers pass through.** An identifier DevFlow does not recognize is lowercased and returned unchanged rather than rejected or coerced onto another platform, so a newer or out-of-tree agent stays usable with an older CLI. `DevFlowPlatform.IsKnown` distinguishes the two cases.
+- **A canonical identifier does not imply a host-side driver.** `AppDriverFactory.HasLocalDriver` reports whether this repository can launch, theme, record or drive alerts for a platform from the host. Tizen agents are fully usable over the HTTP protocol; only those host-side helpers are unavailable, and they fail with an explicit message instead of falling through to another platform's driver.
+
+### External agents
+
+An agent that lives outside this repository — for example the Tizen backend in [Redth/Maui.Tizen](https://github.com/Redth/Maui.Tizen) — reuses `Microsoft.Maui.DevFlow.Agent.Abstractions` and reports its platform in one of three ways, in precedence order:
+
+1. Override `DevFlowAgentService.PlatformName`. MAUI backends get this for free: `Microsoft.Maui.DevFlow.Agent.Core` returns `DeviceInfo.Current.Platform.ToString()`, which is already `Tizen` on Tizen.
+2. Set the `DEVFLOW_PLATFORM` environment variable. This wins over detection and covers the framework-neutral paths (broker registration, the runtime profiler) that run before a backend exists.
+3. Rely on `DevFlowRuntimePlatform.DetectName()`. It probes the `TIZEN` OS platform, the runtime identifier, `/etc/tizen-release` and the `Tizen.Applications.Common` assembly, and it tests Tizen **before** Linux because Tizen is a Linux distribution and would otherwise report `Linux`.
+
+**Minimum package version.** Tizen identity landed in `Microsoft.Maui.DevFlow.*` **0.1.0-preview.13**. `Maui.Tizen` should reference at least that version of `Microsoft.Maui.DevFlow.Agent.Abstractions` (and `Microsoft.Maui.DevFlow.Client` for consumers of `DevFlowPlatform`); with it, no platform spoofing and no local platform-name shim is needed on the Tizen side.
+
 ## Extension discovery
 
 Agents can expose app-specific diagnostics or automation under `/api/v1/ext/{namespace}/...`. Extension namespaces use reverse-domain notation such as `com.example.diagnostics`.

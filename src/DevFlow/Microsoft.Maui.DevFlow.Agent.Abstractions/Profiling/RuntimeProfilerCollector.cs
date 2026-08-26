@@ -369,16 +369,7 @@ public class RuntimeProfilerCollector : IProfilerCollector, IDisposable
             || ex is ObjectDisposedException;
     }
 
-    private static string GetPlatformName()
-    {
-        if (OperatingSystem.IsAndroid()) return "Android";
-        if (OperatingSystem.IsIOS()) return "iOS";
-        if (OperatingSystem.IsMacCatalyst()) return "MacCatalyst";
-        if (OperatingSystem.IsMacOS()) return "macOS";
-        if (OperatingSystem.IsWindows()) return "Windows";
-        if (OperatingSystem.IsLinux()) return "Linux";
-        return "Unknown";
-    }
+    private static string GetPlatformName() => DevFlowRuntimePlatform.DetectName();
 
     public void Dispose()
     {

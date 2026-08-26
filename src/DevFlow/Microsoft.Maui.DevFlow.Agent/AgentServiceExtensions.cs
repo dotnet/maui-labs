@@ -229,12 +229,7 @@ public static class AgentServiceExtensions
         catch
         {
             // MAUI not fully initialized yet during DI registration.
-            var platform = OperatingSystem.IsAndroid() ? "Android"
-                : OperatingSystem.IsIOS() ? "iOS"
-                : OperatingSystem.IsMacCatalyst() ? "MacCatalyst"
-                : OperatingSystem.IsMacOS() ? "macOS"
-                : OperatingSystem.IsWindows() ? "Windows"
-                : "Unknown";
+            var platform = DevFlowRuntimePlatform.DetectName();
             var appName = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name ?? "unknown";
             return (platform, appName);
         }
