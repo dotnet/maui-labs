@@ -314,18 +314,28 @@ These options apply to all `maui devflow` subcommands:
 |--------|-------------|
 | `--agent-port`, `-ap` | Agent HTTP port (auto-discovered via broker/.mauidevflow; falls back to 9223) |
 | `--agent-host`, `-ah` | Agent HTTP host (default: localhost) |
-| `--platform`, `-p` | Target platform (maccatalyst, android, ios, windows) |
+| `--platform`, `-p` | Target platform for host-side driving — recording, alerts, system theme (maccatalyst, android, ios, windows, linux) |
 | `--no-json` | Force human-readable output |
 
 ## Platform Support
 
-| Platform | Status |
-|----------|--------|
-| Mac Catalyst | ✅ |
-| iOS Simulator | ✅ |
-| Linux/GTK | ✅ |
-| Android | 🔄 In progress |
-| Windows | 🔄 In progress |
+| Platform | Status | Host-side driver |
+|----------|--------|------------------|
+| Mac Catalyst | ✅ | ✅ |
+| iOS Simulator | ✅ | ✅ |
+| Linux/GTK | ✅ | ✅ |
+| Android | 🔄 In progress | ✅ |
+| Windows | 🔄 In progress | ✅ |
+| Tizen | ✅ protocol identity | ❌ — agent protocol only |
+
+`tizen` is a first-class platform identity in the protocol, the broker registration and the CLI:
+an agent that reports `Tizen` is discovered, filtered and displayed as Tizen rather than being
+mistaken for Linux. The Tizen agent implementation itself lives outside this repository, in
+[Redth/Maui.Tizen](https://github.com/Redth/Maui.Tizen), and DevFlow ships no host-side driver for
+it — launching, recording, alert automation and system-scope theme switching are unavailable and
+fail with an explicit message instead of falling back to another platform's driver. Everything
+that runs over the agent protocol (tree, query, tap, screenshots, storage, logs, …) works normally.
+See [Platform identity](../../docs/DevFlow/spec/README.md#platform-identity).
 
 ## Documentation
 

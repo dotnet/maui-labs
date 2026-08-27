@@ -73,7 +73,7 @@ public class DevFlowCommands
         var agentHostOption = new Option<string>("--agent-host", "-ah") { Description = "Agent HTTP host", DefaultValueFactory = _ => "localhost" };
         var agentPortOption = new Option<int>("--agent-port", "-ap") { Description = "Agent HTTP port (auto-discovered via broker, .mauidevflow, or default 9223)", DefaultValueFactory = ar => ResolveAgentPort(ar.GetValue(agentHostOption)) };
         var deviceOption = new Option<string?>("--device") { Description = "Device/emulator/simulator identifier for platform-specific DevFlow setup (currently used as an Android serial for ADB forwarding)" };
-        var platformOption = new Option<string>("--platform", "-p") { Description = "Target platform (maccatalyst, android, ios, windows)", DefaultValueFactory = _ => "maccatalyst" };
+        var platformOption = new Option<string>("--platform", "-p") { Description = "Target platform for host-side driving — recording, alerts and system theme (maccatalyst, android, ios, windows, linux). Platforms without a host driver, such as tizen, are automated over the agent protocol instead.", DefaultValueFactory = _ => "maccatalyst" };
         var noJsonOption = new Option<bool>("--no-json") { Description = "Force human-readable output even when piped", DefaultValueFactory = _ => false };
 
         agentPortOption.Recursive = true;
@@ -4613,7 +4613,7 @@ public class DevFlowCommands
     /// DevFlow speaks the protocol with but has no local driver for — Tizen, for example — must
     /// fail with an explicit message rather than silently falling through to the iOS simulator.
     /// </summary>
-    private static void ThrowIfAlertPlatformUnsupported(string platform)
+    internal static void ThrowIfAlertPlatformUnsupported(string platform)
     {
         if (Microsoft.Maui.DevFlow.Driver.AppDriverFactory.HasLocalDriver(platform))
             return;

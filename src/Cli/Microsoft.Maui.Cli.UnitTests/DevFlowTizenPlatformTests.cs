@@ -1,6 +1,9 @@
+using System.ComponentModel;
+using System.Reflection;
 using System.Text.Json;
 using Microsoft.Maui.Cli.DevFlow;
 using Microsoft.Maui.Cli.DevFlow.Broker;
+using Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
 using Microsoft.Maui.Cli.UnitTests.Fixtures;
 using Microsoft.Maui.DevFlow.Driver;
 using Xunit;
@@ -158,6 +161,69 @@ public class DevFlowTizenPlatformTests
         => json.TryGetProperty("diagnostics", out var diagnostics) && diagnostics.TryGetProperty("android", out var android)
             ? android.ValueKind
             : JsonValueKind.Undefined;
+
+    // ── Command guards ────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("tizen")]
+    [InlineData("Tizen")]
+    public void AlertCommands_RejectTizenExplicitlyInsteadOfFallingThroughToIos(string platform)
+    {
+        // `maui devflow ui alert` resolves a platform and then picks a host-side driver, with the
+        // iOS simulator as the final else-branch. Without this guard a Tizen agent would be handed
+        // to the iOS simulator driver and fail with an unrelated xcrun error.
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => DevFlowCommands.ThrowIfAlertPlatformUnsupported(platform));
+
+        Assert.Contains("not available for platform", exception.Message);
+        Assert.Contains(platform, exception.Message);
+    }
+
+    [Theory]
+    [InlineData("maccatalyst")]
+    [InlineData("android")]
+    [InlineData("ios")]
+    [InlineData("ios-simulator")]
+    [InlineData("windows")]
+    [InlineData("linux")]
+    public void AlertCommands_StillAcceptEveryPlatformWithAHostDriver(string platform)
+        => DevFlowCommands.ThrowIfAlertPlatformUnsupported(platform);
+
+    // ── MCP tool surface ──────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(nameof(AgentTools.ListAgents))]
+    [InlineData(nameof(AgentTools.Wait))]
+    public void AgentTools_ExposeADescribedOptionalPlatformParameter(string methodName)
+    {
+        var method = typeof(AgentTools).GetMethod(methodName);
+        Assert.NotNull(method);
+
+        var parameter = method!.GetParameters().SingleOrDefault(p => p.Name == "platform");
+        Assert.NotNull(parameter);
+
+        // Optional and last, so existing MCP callers keep working unchanged.
+        Assert.True(parameter!.IsOptional);
+        Assert.Null(parameter.DefaultValue);
+        Assert.Equal(method.GetParameters().Length - 1, parameter.Position);
+
+        var description = parameter.GetCustomAttribute<DescriptionAttribute>();
+        Assert.NotNull(description);
+        Assert.Contains("tizen", description!.Description, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AgentRegistration_TizenAgentIsNotTreatedAsAnAndroidAgent()
+    {
+        // Android agents get adb forward/reverse plumbing. A Tizen agent must never trip it —
+        // neither its platform name nor its TFM may be mistaken for Android.
+        var tizen = TizenAgent();
+
+        Assert.DoesNotContain("android", tizen.Platform, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("-android", tizen.Tfm, StringComparison.OrdinalIgnoreCase);
+        Assert.NotEqual(DevFlowPlatform.Android, DevFlowPlatform.Normalize(tizen.Platform));
+        Assert.NotEqual(DevFlowPlatform.Linux, DevFlowPlatform.Normalize(tizen.Platform));
+    }
 
     [Fact]
     public void AgentRegistration_TizenPlatformSerializesAndNormalizes()

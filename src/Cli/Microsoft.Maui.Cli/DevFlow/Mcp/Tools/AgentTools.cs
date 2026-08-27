@@ -11,11 +11,20 @@ namespace Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
 public sealed class AgentTools
 {
     [McpServerTool(Name = "maui_list_agents"), Description("List all connected MAUI DevFlow agents (running apps). Shows app name, platform, port, and uptime.")]
-    public static async Task<string> ListAgents(McpAgentSession session)
+    public static async Task<string> ListAgents(
+        McpAgentSession session,
+        [Description("Optional platform filter — 'android', 'ios', 'maccatalyst', 'windows', 'linux', 'macos' or 'tizen'. Matching is case-insensitive and alias-aware, so 'tizen' matches an agent that reports 'Tizen'. Omit to list every agent.")] string? platform = null)
     {
         var agents = await session.ListAgentsAsync();
         if (agents == null || agents.Length == 0)
             return "No agents connected. Build and run a MAUI app with Microsoft.Maui.DevFlow.Agent configured.";
+
+        if (!string.IsNullOrWhiteSpace(platform))
+        {
+            agents = agents.Where(a => DevFlowPlatform.Matches(a.Platform, platform)).ToArray();
+            if (agents.Length == 0)
+                return $"No connected agents match platform '{platform}'.";
+        }
 
         var result = new JsonArray();
         foreach (var agent in agents)
@@ -25,6 +34,9 @@ public sealed class AgentTools
                 ["id"] = agent.Id,
                 ["appName"] = agent.AppName,
                 ["platform"] = agent.Platform,
+                // Canonical lowercase identifier, so an AI agent can branch on one value instead
+                // of every spelling a platform backend might report.
+                ["platformId"] = DevFlowPlatform.Normalize(agent.Platform),
                 ["tfm"] = agent.Tfm,
                 ["port"] = agent.Port,
                 ["version"] = agent.Version,
@@ -53,7 +65,8 @@ public sealed class AgentTools
     public static async Task<string> Wait(
         McpAgentSession session,
         [Description("Timeout in seconds (default: 30)")] int timeout = 30,
-        [Description("Wait for a specific app name")] string? app = null)
+        [Description("Wait for a specific app name")] string? app = null,
+        [Description("Wait for an agent on a specific platform — 'android', 'ios', 'maccatalyst', 'windows', 'linux', 'macos' or 'tizen'. Matching is case-insensitive and alias-aware, so 'tizen' matches an agent that reports 'Tizen'. Omit to accept any platform.")] string? platform = null)
     {
         var brokerPort = await session.GetBrokerPortAsync();
         var deadline = DateTime.UtcNow.AddSeconds(timeout);
@@ -63,9 +76,9 @@ public sealed class AgentTools
             var agents = await BrokerClient.ListAgentsAsync(brokerPort);
             if (agents != null && agents.Length > 0)
             {
-                var match = app != null
-                    ? agents.FirstOrDefault(a => a.AppName?.Contains(app, StringComparison.OrdinalIgnoreCase) == true)
-                    : agents.FirstOrDefault();
+                var match = agents.FirstOrDefault(a =>
+                    (app is null || a.AppName?.Contains(app, StringComparison.OrdinalIgnoreCase) == true)
+                    && DevFlowPlatform.Matches(a.Platform, platform));
 
                 if (match != null)
                 {
@@ -75,6 +88,7 @@ public sealed class AgentTools
                         ["id"] = match.Id,
                         ["appName"] = match.AppName,
                         ["platform"] = match.Platform,
+                        ["platformId"] = DevFlowPlatform.Normalize(match.Platform),
                         ["tfm"] = match.Tfm,
                         ["port"] = match.Port,
                         ["version"] = match.Version
@@ -85,7 +99,16 @@ public sealed class AgentTools
             await Task.Delay(500);
         }
 
-        return $"Timeout after {timeout}s — no agent connected" + (app != null ? $" matching '{app}'" : "") + ".";
+        var criteria = string.Join(
+            " and ",
+            new[]
+            {
+                app is null ? null : $"app '{app}'",
+                string.IsNullOrWhiteSpace(platform) ? null : $"platform '{platform}'"
+            }.Where(part => part is not null));
+
+        return $"Timeout after {timeout}s — no agent connected"
+            + (criteria.Length > 0 ? $" matching {criteria}" : "") + ".";
     }
 
     [McpServerTool(Name = "maui_capabilities"), Description("Get the capabilities supported by the connected agent. Returns a JSON object describing available features (e.g., profiler, sensors, webview). Use this to check what the agent supports before calling other tools.")]
