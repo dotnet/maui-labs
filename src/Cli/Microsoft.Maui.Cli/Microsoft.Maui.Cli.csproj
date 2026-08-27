@@ -9,8 +9,9 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>maui</ToolCommandName>
     <ToolPackageRuntimeIdentifiers>win-x64;linux-x64;osx-arm64;any</ToolPackageRuntimeIdentifiers>
-    <PublishAot>true</PublishAot>
-    <PublishTrimmed>true</PublishTrimmed>
+    <!-- NativeAOT requires a RID, so enable it for packaging rather than ordinary builds. -->
+    <PublishAot Condition="'$(_IsPacking)' == 'true'">true</PublishAot>
+    <PublishTrimmed Condition="'$(_IsPacking)' == 'true'">true</PublishTrimmed>
     <SelfContained Condition="'$(RuntimeIdentifier)' != '' and '$(RuntimeIdentifier)' != 'any'">true</SelfContained>
     <!-- Go.Server is consumed in-process even though its project also emits a standalone executable. -->
     <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
