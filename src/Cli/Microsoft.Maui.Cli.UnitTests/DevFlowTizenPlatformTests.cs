@@ -189,6 +189,38 @@ public class DevFlowTizenPlatformTests
     public void AlertCommands_StillAcceptEveryPlatformWithAHostDriver(string platform)
         => DevFlowCommands.ThrowIfAlertPlatformUnsupported(platform);
 
+    [Theory]
+    [InlineData("macOS", "macos")]
+    [InlineData("SomeFuturePlatform", "somefutureplatform")]
+    [InlineData("KaiOS", "kaios")]
+    [InlineData("Tizen (Linux) 8.0", "tizen")]
+    public void AlertRouting_PreservesExplicitDriverlessAndUnknownIdentity(string reported, string expected)
+    {
+        var resolved = DevFlowCommands.ResolveExplicitAlertPlatform(reported);
+
+        Assert.Equal(expected, resolved);
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => DevFlowCommands.ThrowIfAlertPlatformUnsupported(resolved!));
+        Assert.Contains(expected, exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("MacCatalyst")]
+    [InlineData("mac catalyst")]
+    public void AlertRouting_UsesFallbackOnlyWhenIdentityIsAbsentOrMacCatalyst(string? reported)
+        => Assert.Null(DevFlowCommands.ResolveExplicitAlertPlatform(reported));
+
+    [Theory]
+    [InlineData("iOS", "ios-simulator")]
+    [InlineData("Android", "android")]
+    [InlineData("WinUI", "windows")]
+    [InlineData("Linux", "linux")]
+    public void AlertRouting_MapsExplicitSupportedIdentityToItsDriver(string reported, string expected)
+        => Assert.Equal(expected, DevFlowCommands.ResolveExplicitAlertPlatform(reported));
+
     // ── MCP tool surface ──────────────────────────────────────────────────
 
     [Theory]

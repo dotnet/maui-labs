@@ -102,9 +102,10 @@ public static class DevFlowPlatform
         ["unknown"] = Unknown,
     };
 
-    // Ordered substring probes for agent strings that carry extra decoration, e.g. "Tizen 8.0"
-    // or "net10.0-windows10.0.19041.0". Tizen is probed before Linux because Tizen is a Linux
-    // distribution and its agents can legitimately describe themselves with both words.
+    // Ordered probes for agent strings that carry extra decoration, e.g. "Tizen 8.0" or
+    // "net10.0-windows10.0.19041.0". Matches require letter boundaries so an unknown identifier
+    // such as "KaiOS" is not coerced to iOS merely because it contains those letters. Tizen is
+    // probed before Linux because Tizen agents can legitimately describe themselves with both.
     private static readonly KeyValuePair<string, string>[] s_tokens =
     [
         new("android", Android),
@@ -161,7 +162,7 @@ public static class DevFlowPlatform
 
         foreach (var token in s_tokens)
         {
-            if (lowered.IndexOf(token.Key, StringComparison.Ordinal) >= 0)
+            if (ContainsDecoratedToken(lowered, token.Key))
                 return token.Value;
         }
 
@@ -230,6 +231,29 @@ public static class DevFlowPlatform
 
         return platform is not null
             && platform.IndexOf(filter!.Trim(), StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool ContainsDecoratedToken(string value, string token)
+    {
+        var searchFrom = 0;
+
+        while (searchFrom <= value.Length - token.Length)
+        {
+            var index = value.IndexOf(token, searchFrom, StringComparison.Ordinal);
+            if (index < 0)
+                return false;
+
+            var beforeIsBoundary = index == 0 || !char.IsLetter(value[index - 1]);
+            var afterIndex = index + token.Length;
+            var afterIsBoundary = afterIndex == value.Length || !char.IsLetter(value[afterIndex]);
+
+            if (beforeIsBoundary && afterIsBoundary)
+                return true;
+
+            searchFrom = index + 1;
+        }
+
+        return false;
     }
 
     private static bool IsKnownId(string normalized)

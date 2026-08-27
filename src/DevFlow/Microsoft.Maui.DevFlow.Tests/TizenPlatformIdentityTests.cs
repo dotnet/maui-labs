@@ -154,7 +154,7 @@ public class TizenPlatformIdentityTests
     public void AgentStatusSchema_PlatformEnumIsAdditiveAndIncludesTizen()
     {
         var schema = JsonNode.Parse(File.ReadAllText(Path.Combine(FindSpecRoot(), "schemas", "agent-status.json")))!;
-        var values = schema["properties"]!["platform"]!["enum"]!.AsArray()
+        var values = schema["properties"]!["device"]!["properties"]!["platform"]!["enum"]!.AsArray()
             .Select(node => node!.GetValue<string>())
             .ToArray();
 
@@ -178,15 +178,132 @@ public class TizenPlatformIdentityTests
     }
 
     [Fact]
-    public void AgentStatusExample_RemainsValidAgainstTheWidenedEnum()
+    public void AgentStatusExample_ValidatesAgainstTheNestedDevicePlatformSchema()
     {
+        var schema = JsonNode.Parse(File.ReadAllText(Path.Combine(FindSpecRoot(), "schemas", "agent-status.json")))!.AsObject();
         var examplePath = Path.Combine(FindSpecRoot(), "examples", "agent-status-response.json");
         using var document = JsonDocument.Parse(File.ReadAllText(examplePath));
 
-        var platform = document.RootElement.GetProperty("platform").GetString();
+        AssertSchemaValid(document.RootElement, schema);
 
+        var platform = document.RootElement.GetProperty("device").GetProperty("platform").GetString();
         Assert.False(string.IsNullOrWhiteSpace(platform));
         Assert.True(DevFlowPlatform.IsKnown(platform), platform);
+    }
+
+    [Fact]
+    public void AgentStatusSerialization_ValidatesAgainstTheProtocolSchema()
+    {
+        var status = new AgentStatus
+        {
+            Timestamp = DateTimeOffset.UtcNow.ToString("O"),
+            Agent = new AgentDescriptor
+            {
+                Name = "Microsoft.Maui.DevFlow.Agent",
+                Version = "0.1.0-preview.13",
+                Framework = ".NET MAUI",
+                FrameworkId = "maui",
+                FrameworkVersion = "10.0.0",
+                UiFramework = "maui-controls",
+            },
+            Device = new DeviceDescriptor
+            {
+                Platform = DevFlowPlatform.Tizen,
+                DeviceType = "Virtual",
+                Idiom = "tv",
+                DisplayDensity = 1,
+                WindowCount = 1,
+                WindowWidth = 1920,
+                WindowHeight = 1080,
+            },
+            App = new AppDescriptor
+            {
+                Name = "TizenSample",
+                Version = "1.0.0",
+                Build = "1",
+                PackageId = "org.tizen.sample",
+                ProcessId = 1234,
+            },
+            Capabilities = new AgentCapabilities
+            {
+                Ui = true,
+                Screenshots = true,
+                Network = true,
+                Logs = true,
+            },
+            Extensions = new ExtensionsMarker
+            {
+                Count = 0,
+                Hash = new string('0', 64),
+            },
+            Running = true,
+            Route = "//home",
+        };
+
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(status));
+        var schema = JsonNode.Parse(File.ReadAllText(Path.Combine(FindSpecRoot(), "schemas", "agent-status.json")))!.AsObject();
+
+        AssertSchemaValid(document.RootElement, schema);
+        Assert.Equal(
+            DevFlowPlatform.Tizen,
+            document.RootElement.GetProperty("device").GetProperty("platform").GetString());
+        Assert.False(document.RootElement.TryGetProperty("platform", out _));
+    }
+
+    private static void AssertSchemaValid(JsonElement value, JsonObject schema, string path = "$")
+    {
+        var type = schema["type"]?.GetValue<string>();
+        switch (type)
+        {
+            case "object":
+                Assert.True(value.ValueKind == JsonValueKind.Object, $"{path} must be an object.");
+
+                if (schema["required"] is JsonArray required)
+                {
+                    foreach (var requiredProperty in required)
+                    {
+                        var name = requiredProperty!.GetValue<string>();
+                        Assert.True(value.TryGetProperty(name, out _), $"{path}.{name} is required.");
+                    }
+                }
+
+                if (schema["properties"] is JsonObject properties)
+                {
+                    foreach (var property in properties)
+                    {
+                        if (value.TryGetProperty(property.Key, out var propertyValue))
+                            AssertSchemaValid(propertyValue, property.Value!.AsObject(), $"{path}.{property.Key}");
+                    }
+                }
+                break;
+
+            case "string":
+                Assert.True(value.ValueKind == JsonValueKind.String, $"{path} must be a string.");
+                if (schema["enum"] is JsonArray allowed)
+                {
+                    var actual = value.GetString();
+                    Assert.Contains(allowed, item => item!.GetValue<string>() == actual);
+                }
+                break;
+
+            case "boolean":
+                Assert.True(
+                    value.ValueKind is JsonValueKind.True or JsonValueKind.False,
+                    $"{path} must be a boolean.");
+                break;
+
+            case "integer":
+                Assert.True(value.TryGetInt64(out var integer), $"{path} must be an integer.");
+                if (schema["minimum"] is JsonValue integerMinimum)
+                    Assert.True(integer >= integerMinimum.GetValue<long>(), $"{path} is below its minimum.");
+                break;
+
+            case "number":
+                Assert.True(value.TryGetDouble(out var number), $"{path} must be a number.");
+                if (schema["minimum"] is JsonValue numberMinimum)
+                    Assert.True(number >= numberMinimum.GetValue<double>(), $"{path} is below its minimum.");
+                break;
+        }
     }
 
     private static string FindSpecRoot()

@@ -6,11 +6,9 @@
   "type": "object",
   "required": [
     "agent",
-    "platform",
     "device",
     "app",
-    "running",
-    "uptime"
+    "running"
   ],
   "properties": {
     "agent": {
@@ -41,40 +39,31 @@
         }
       }
     },
-    "platform": {
-      "type": "string",
-      "enum": [
-        "ios",
-        "android",
-        "maccatalyst",
-        "windows",
-        "linux",
-        "macos",
-        "tizen"
-      ],
-      "description": "The target platform the agent is running on, as a canonical lowercase identifier. Agents report the spelling native to their stack (for example 'iOS', 'MacCatalyst', 'WinUI' or 'Tizen'); clients normalize case and known aliases before comparing. This enum is the closed set of platforms DevFlow currently ships identity for and grows additively. Clients are deliberately lenient at runtime and pass an unrecognized identifier through unchanged rather than coercing it onto another platform, so an agent on a platform not yet listed here keeps working even though it will not validate against this schema until the platform is added. See docs/DevFlow/spec/README.md#platform-identity."
-    },
     "device": {
       "type": "object",
       "description": "Information about the device or emulator/simulator.",
       "required": [
-        "model",
-        "manufacturer",
-        "osVersion",
+        "platform",
+        "deviceType",
         "idiom"
       ],
       "properties": {
-        "model": {
+        "platform": {
           "type": "string",
-          "description": "Device model name (e.g. 'iPhone 15 Pro', 'Pixel 8')."
+          "enum": [
+            "ios",
+            "android",
+            "maccatalyst",
+            "windows",
+            "linux",
+            "macos",
+            "tizen"
+          ],
+          "description": "The target platform the agent is running on, as a canonical lowercase identifier. Agents may report the spelling native to their stack (for example 'iOS', 'MacCatalyst', 'WinUI' or 'Tizen'); clients normalize case and known aliases before comparing. This enum is the closed set of platforms DevFlow currently ships identity for and grows additively. Clients are deliberately lenient at runtime and pass an unrecognized identifier through unchanged rather than coercing it onto another platform, so an agent on a platform not yet listed here keeps working even though it will not validate against this schema until the platform is added. See docs/DevFlow/spec/README.md#platform-identity."
         },
-        "manufacturer": {
+        "deviceType": {
           "type": "string",
-          "description": "Device manufacturer (e.g. 'Apple', 'Google')."
-        },
-        "osVersion": {
-          "type": "string",
-          "description": "Operating system version string."
+          "description": "Whether the target is physical, virtual, or otherwise described by the platform backend."
         },
         "idiom": {
           "type": "string",
@@ -86,6 +75,21 @@
             "watch"
           ],
           "description": "Device form factor idiom."
+        },
+        "displayDensity": {
+          "type": "number"
+        },
+        "windowCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "windowWidth": {
+          "type": "number",
+          "minimum": 0
+        },
+        "windowHeight": {
+          "type": "number",
+          "minimum": 0
         }
       }
     },
@@ -139,11 +143,6 @@
         }
       },
       "additionalProperties": true
-    },
-    "uptime": {
-      "type": "string",
-      "description": "Agent uptime as an ISO 8601 duration (e.g. 'PT1H30M15S').",
-      "pattern": "^P"
     },
     "extensions": {
       "type": "object",

@@ -52,6 +52,20 @@ public class DevFlowPlatformTests
         Assert.False(DevFlowPlatform.IsKnown("WebAssembly"));
     }
 
+    [Theory]
+    [InlineData("KaiOS", "kaios")]
+    [InlineData("BIOS", "bios")]
+    [InlineData("Curious", "curious")]
+    [InlineData("NotAndroid", "notandroid")]
+    [InlineData("AmacOS", "amacos")]
+    [InlineData("Citizen", "citizen")]
+    [InlineData("TwinUI", "twinui")]
+    public void Normalize_KnownIdEmbeddedInsideUnknownName_RemainsUnknown(string reported, string expected)
+    {
+        Assert.Equal(expected, DevFlowPlatform.Normalize(reported));
+        Assert.False(DevFlowPlatform.IsKnown(reported));
+    }
+
     [Fact]
     public void IsKnown_RecognizesTizenAndEveryShippedPlatform()
     {

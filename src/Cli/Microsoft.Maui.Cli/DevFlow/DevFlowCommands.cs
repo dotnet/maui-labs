@@ -4559,21 +4559,10 @@ public class DevFlowCommands
         {
             using var client = await CreateAgentClientAsync(host, port);
             var status = await client.GetStatusAsync();
-            if (status?.Platform != null)
+            var explicitPlatform = ResolveExplicitAlertPlatform(status?.Platform);
+            if (explicitPlatform is not null)
             {
-                // Canonical identity, so a decorated string such as "Tizen (Linux) 8.0" cannot be
-                // read as Linux. Mac Catalyst deliberately falls through — see below.
-                switch (DevFlowPlatform.Normalize(status.Platform))
-                {
-                    case DevFlowPlatform.iOS: return "ios-simulator";
-                    case DevFlowPlatform.Android: return "android";
-                    case DevFlowPlatform.Windows: return "windows";
-                    case DevFlowPlatform.Tizen: return DevFlowPlatform.Tizen;
-                    case DevFlowPlatform.Linux: return "linux";
-                }
-                // For MacCatalyst, don't return immediately — check if there's a
-                // booted iOS simulator first, since it's more likely the user wants
-                // iOS dialog detection (Mac Catalyst dialogs are less common)
+                return explicitPlatform;
             }
         }
         catch { }
@@ -4613,6 +4602,23 @@ public class DevFlowCommands
         // Tizen device. Tizen is only ever reached as a remote agent, handled above.
         if (OperatingSystem.IsLinux()) return "linux";
         return "maccatalyst";
+    }
+
+    internal static string? ResolveExplicitAlertPlatform(string? reportedPlatform)
+    {
+        if (string.IsNullOrWhiteSpace(reportedPlatform))
+            return null;
+
+        var normalized = DevFlowPlatform.Normalize(reportedPlatform);
+
+        // Mac Catalyst deliberately uses host/simulator fallback because a booted iOS simulator is
+        // more likely to be the intended alert target. Every other explicit identity is
+        // authoritative, including recognized platforms without a driver and future unknown ids,
+        // so the unsupported-driver guard can report the real platform instead of a host fallback.
+        if (normalized == DevFlowPlatform.MacCatalyst)
+            return null;
+
+        return normalized == DevFlowPlatform.iOS ? "ios-simulator" : normalized;
     }
 
     /// <summary>

@@ -1,21 +1,29 @@
 {
+  "timestamp": "2026-08-27T00:00:00.0000000+00:00",
   "agent": {
-    "name": "devflow-maui",
-    "version": "1.0.0",
-    "framework": "maui",
-    "frameworkVersion": "10.0"
+    "name": "Microsoft.Maui.DevFlow.Agent",
+    "version": "0.1.0-preview.13",
+    "framework": ".NET MAUI",
+    "frameworkId": "maui",
+    "frameworkVersion": "10.0.0",
+    "uiFramework": "maui-controls",
+    "sessionId": "00000000-0000-0000-0000-000000000000"
   },
-  "platform": "maccatalyst",
   "device": {
-    "model": "MacBook Pro",
-    "manufacturer": "Apple",
-    "osVersion": "15.2",
-    "idiom": "desktop"
+    "platform": "maccatalyst",
+    "deviceType": "Virtual",
+    "idiom": "desktop",
+    "displayDensity": 2,
+    "windowCount": 1,
+    "windowWidth": 1280,
+    "windowHeight": 720
   },
   "app": {
     "name": "MyApp",
     "version": "2.1.0",
-    "packageId": "com.example.myapp"
+    "build": "42",
+    "packageId": "com.example.myapp",
+    "processId": 12345
   },
   "capabilities": {
     "ui": true,
@@ -26,8 +34,17 @@
     "sensors": true,
     "storage": true,
     "profiler": true,
-    "jobs": true
+    "jobs": true,
+    "theme": true,
+    "layoutDiagnostics": false,
+    "mutationLease": false
   },
   "running": true,
-  "uptime": "PT5M30S"
+  "route": "//home",
+  "cdpReady": false,
+  "cdpWebViewCount": 0,
+  "extensions": {
+    "count": 0,
+    "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
 }
