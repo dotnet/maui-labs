@@ -50,16 +50,8 @@
       "properties": {
         "platform": {
           "type": "string",
-          "enum": [
-            "ios",
-            "android",
-            "maccatalyst",
-            "windows",
-            "linux",
-            "macos",
-            "tizen"
-          ],
-          "description": "The target platform the agent is running on, as a canonical lowercase identifier. Agents may report the spelling native to their stack (for example 'iOS', 'MacCatalyst', 'WinUI' or 'Tizen'); clients normalize case and known aliases before comparing. This enum is the closed set of platforms DevFlow currently ships identity for and grows additively. Clients are deliberately lenient at runtime and pass an unrecognized identifier through unchanged rather than coercing it onto another platform, so an agent on a platform not yet listed here keeps working even though it will not validate against this schema until the platform is added. See docs/DevFlow/spec/README.md#platform-identity."
+          "minLength": 1,
+          "description": "The non-empty platform identity reported by the agent in its native spelling (for example 'Android', 'iOS', 'MacCatalyst', 'WinUI', 'Linux', 'macOS' or 'Tizen'). This wire field is open to external and future platforms. Clients normalize known spellings to canonical lowercase identifiers only when filtering or selecting platform-specific behavior; they preserve the reported value on the wire. See docs/DevFlow/spec/README.md#platform-identity."
         },
         "deviceType": {
           "type": "string",

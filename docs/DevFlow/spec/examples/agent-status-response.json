@@ -10,13 +10,13 @@
     "sessionId": "00000000-0000-0000-0000-000000000000"
   },
   "device": {
-    "platform": "maccatalyst",
+    "platform": "Tizen",
     "deviceType": "Virtual",
-    "idiom": "desktop",
-    "displayDensity": 2,
+    "idiom": "tv",
+    "displayDensity": 1,
     "windowCount": 1,
-    "windowWidth": 1280,
-    "windowHeight": 720
+    "windowWidth": 1920,
+    "windowHeight": 1080
   },
   "app": {
     "name": "MyApp",

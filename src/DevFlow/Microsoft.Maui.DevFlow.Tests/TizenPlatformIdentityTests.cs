@@ -151,30 +151,14 @@ public class TizenPlatformIdentityTests
     // ── Protocol schema ───────────────────────────────────────────────────
 
     [Fact]
-    public void AgentStatusSchema_PlatformEnumIsAdditiveAndIncludesTizen()
+    public void AgentStatusSchema_PlatformIsAnOpenNonEmptyNativeIdentity()
     {
         var schema = JsonNode.Parse(File.ReadAllText(Path.Combine(FindSpecRoot(), "schemas", "agent-status.json")))!;
-        var values = schema["properties"]!["device"]!["properties"]!["platform"]!["enum"]!.AsArray()
-            .Select(node => node!.GetValue<string>())
-            .ToArray();
+        var platformSchema = schema["properties"]!["device"]!["properties"]!["platform"]!.AsObject();
 
-        Assert.Contains(DevFlowPlatform.Tizen, values);
-
-        // Additive only: dropping a previously published identifier would break shipped clients.
-        foreach (var expected in new[] { "ios", "android", "maccatalyst", "windows", "linux", "macos" })
-            Assert.Contains(expected, values);
-
-        // Every identifier the schema advertises must be one the client can normalize to itself.
-        foreach (var value in values)
-        {
-            Assert.Equal(value, DevFlowPlatform.Normalize(value));
-            Assert.True(DevFlowPlatform.IsKnown(value), value);
-        }
-
-        // …and vice versa, so the schema and the client cannot drift apart.
-        Assert.Equal(
-            DevFlowPlatform.KnownIds.OrderBy(id => id, StringComparer.Ordinal),
-            values.OrderBy(value => value, StringComparer.Ordinal));
+        Assert.Equal("string", platformSchema["type"]!.GetValue<string>());
+        Assert.Equal(1, platformSchema["minLength"]!.GetValue<int>());
+        Assert.False(platformSchema.ContainsKey("enum"));
     }
 
     [Fact]
@@ -187,8 +171,7 @@ public class TizenPlatformIdentityTests
         AssertSchemaValid(document.RootElement, schema);
 
         var platform = document.RootElement.GetProperty("device").GetProperty("platform").GetString();
-        Assert.False(string.IsNullOrWhiteSpace(platform));
-        Assert.True(DevFlowPlatform.IsKnown(platform), platform);
+        Assert.Equal("Tizen", platform);
     }
 
     [Fact]
@@ -208,7 +191,7 @@ public class TizenPlatformIdentityTests
             },
             Device = new DeviceDescriptor
             {
-                Platform = DevFlowPlatform.Tizen,
+                Platform = "Tizen",
                 DeviceType = "Virtual",
                 Idiom = "tv",
                 DisplayDensity = 1,
@@ -245,9 +228,41 @@ public class TizenPlatformIdentityTests
 
         AssertSchemaValid(document.RootElement, schema);
         Assert.Equal(
-            DevFlowPlatform.Tizen,
+            "Tizen",
             document.RootElement.GetProperty("device").GetProperty("platform").GetString());
         Assert.False(document.RootElement.TryGetProperty("platform", out _));
+    }
+
+    [Fact]
+    public void AgentStatusSchema_AcceptsUnknownExternalPlatformIdentity()
+    {
+        using var document = JsonDocument.Parse(
+            """
+            {
+              "agent": {
+                "name": "External.DevFlow.Agent",
+                "version": "1.0.0",
+                "framework": "External UI",
+                "frameworkVersion": "1.0"
+              },
+              "device": {
+                "platform": "FutureExternalOS",
+                "deviceType": "Virtual",
+                "idiom": "desktop"
+              },
+              "app": {
+                "name": "ExternalApp",
+                "version": "1.0",
+                "packageId": "example.external"
+              },
+              "running": true
+            }
+            """);
+        var schema = JsonNode.Parse(File.ReadAllText(Path.Combine(FindSpecRoot(), "schemas", "agent-status.json")))!.AsObject();
+
+        AssertSchemaValid(document.RootElement, schema);
+        Assert.False(DevFlowPlatform.IsKnown(
+            document.RootElement.GetProperty("device").GetProperty("platform").GetString()));
     }
 
     private static void AssertSchemaValid(JsonElement value, JsonObject schema, string path = "$")
@@ -279,6 +294,8 @@ public class TizenPlatformIdentityTests
 
             case "string":
                 Assert.True(value.ValueKind == JsonValueKind.String, $"{path} must be a string.");
+                if (schema["minLength"] is JsonValue minLength)
+                    Assert.True(value.GetString()!.Length >= minLength.GetValue<int>(), $"{path} is shorter than its minimum length.");
                 if (schema["enum"] is JsonArray allowed)
                 {
                     var actual = value.GetString();
