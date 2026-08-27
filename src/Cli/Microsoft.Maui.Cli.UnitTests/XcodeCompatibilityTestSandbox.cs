@@ -12,11 +12,18 @@ namespace Microsoft.Maui.Cli.ManualTests.XcodeCompatibility;
 
 /// <summary>
 /// Manual test sandbox for Xcode compatibility check feature.
-/// This app demonstrates the end-to-end flow without requiring full CLI integration.
+/// This class demonstrates the end-to-end flow without requiring full CLI integration.
+/// 
+/// To use this sandbox manually:
+/// 1. Compile: dotnet build src/Cli/Microsoft.Maui.Cli.UnitTests/
+/// 2. Run tests to exercise the sandbox functionality
 /// </summary>
-class Program
+internal static class XcodeCompatibilityTestSandbox
 {
-	static async Task Main(string[] args)
+	/// <summary>
+	/// Runs all manual test scenarios. Call from a test or directly for interactive testing.
+	/// </summary>
+	public static async Task RunAllTests()
 	{
 		Console.WriteLine("=== Xcode Compatibility Check - Manual Test Sandbox ===\n");
 
@@ -61,7 +68,7 @@ class Program
 		}
 	}
 
-	static void TestDirectChecker()
+	private static void TestDirectChecker()
 	{
 		var checker = new XcodeCompatibilityChecker(xcodeManager: null);
 		var result = checker.CheckXcodeCompatibility();
@@ -82,7 +89,7 @@ class Program
 		}
 	}
 
-	static async Task TestAppleProviderIntegration()
+	private static async Task TestAppleProviderIntegration()
 	{
 		try
 		{
@@ -118,7 +125,7 @@ class Program
 		}
 	}
 
-	static async Task TestDoctorServiceIntegration()
+	private static async Task TestDoctorServiceIntegration()
 	{
 		try
 		{
@@ -142,7 +149,7 @@ class Program
 		}
 	}
 
-	static async Task TestFixApplication()
+	private static async Task TestFixApplication()
 	{
 		var doctorService = new DoctorService();
 
