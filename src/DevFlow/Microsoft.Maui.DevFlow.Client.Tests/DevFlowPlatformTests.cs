@@ -118,6 +118,18 @@ public class DevFlowPlatformTests
         => Assert.False(DevFlowPlatform.Matches(agentPlatform, filter));
 
     [Theory]
+    [InlineData("KaiOS", "ios")]
+    [InlineData("BIOS", "ios")]
+    [InlineData("NotAndroid", "android")]
+    [InlineData("NotWindows", "windows")]
+    public void Matches_KnownFilterDoesNotSubstringMatchUnknownIdentity(string agentPlatform, string filter)
+    {
+        Assert.False(DevFlowPlatform.IsKnown(agentPlatform));
+        Assert.True(DevFlowPlatform.IsKnown(filter));
+        Assert.False(DevFlowPlatform.Matches(agentPlatform, filter));
+    }
+
+    [Theory]
     [InlineData("Tizen (Linux) 8.0", "linux")]
     [InlineData("Tizen/Linux", "linux")]
     [InlineData("net10.0-tizen linux", "gtk")]

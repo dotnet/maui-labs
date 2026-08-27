@@ -211,9 +211,10 @@ public static class DevFlowPlatform
     /// When both sides resolve to platforms DevFlow knows, canonical equality is authoritative and
     /// nothing else is considered — otherwise a decorated string such as <c>"Tizen (Linux) 8.0"</c>
     /// would still be matched by a <c>linux</c> filter, reintroducing exactly the confusion this
-    /// type exists to remove. A substring fallback is kept only when at least one side is
-    /// unrecognized, so partial filters (<c>andro</c>, <c>tiz</c>) and raw TFM fragments keep
-    /// matching the agents they always matched.
+    /// type exists to remove. A substring fallback is kept only when the filter is unrecognized,
+    /// so partial filters (<c>andro</c>, <c>tiz</c>) and raw TFM fragments keep matching the
+    /// agents they always matched without allowing unknown identities such as <c>NotAndroid</c>
+    /// to satisfy a known <c>android</c> filter.
     /// </remarks>
     public static bool Matches(string? platform, string? filter)
     {
@@ -226,7 +227,7 @@ public static class DevFlowPlatform
         if (string.Equals(normalizedPlatform, normalizedFilter, StringComparison.Ordinal))
             return true;
 
-        if (IsKnownId(normalizedPlatform) && IsKnownId(normalizedFilter))
+        if (IsKnownId(normalizedFilter))
             return false;
 
         return platform is not null

@@ -769,6 +769,22 @@ public class DevFlowCliCommandTests
         Assert.False(actual);
     }
 
+    [Theory]
+    [InlineData("NotAndroid")]
+    [InlineData("KaiOS")]
+    [InlineData("BIOS")]
+    public void ThemeHostSelector_Auto_DoesNotUseHostForUnknownEmbeddedPlatformToken(string platform)
+    {
+        var actual = ThemeHostSelector.ShouldUseHostThemeScopeAutomatically(
+            platform,
+            "Virtual",
+            DevFlowTheme.Dark,
+            androidDevice: null,
+            simulatorUdid: null);
+
+        Assert.False(actual);
+    }
+
     // ========== device/platform info ==========
 
     [Fact]

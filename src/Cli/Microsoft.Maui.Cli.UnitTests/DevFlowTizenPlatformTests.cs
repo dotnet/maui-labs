@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text.Json;
 using Microsoft.Maui.Cli.DevFlow;
 using Microsoft.Maui.Cli.DevFlow.Broker;
+using Microsoft.Maui.Cli.DevFlow.Mcp;
 using Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
 using Microsoft.Maui.Cli.UnitTests.Fixtures;
 using Microsoft.Maui.DevFlow.Driver;
@@ -113,6 +114,17 @@ public class DevFlowTizenPlatformTests
 
         Assert.Equal("future-agent", DevFlowCommands.FindMatchingAgent([futureAgent], null, "futureos")!.Id);
         Assert.Null(DevFlowCommands.FindMatchingAgent([futureAgent], null, "tizen"));
+    }
+
+    [Theory]
+    [InlineData("KaiOS", "ios")]
+    [InlineData("BIOS", "ios")]
+    [InlineData("NotAndroid", "android")]
+    public void FindMatchingAgent_KnownFilterDoesNotMatchUnknownEmbeddedToken(string reportedPlatform, string platformFilter)
+    {
+        var agent = TizenAgent(platform: reportedPlatform);
+
+        Assert.Null(DevFlowCommands.FindMatchingAgent([agent], null, platformFilter));
     }
 
     [Fact]
@@ -255,6 +267,35 @@ public class DevFlowTizenPlatformTests
         Assert.DoesNotContain("-android", tizen.Tfm, StringComparison.OrdinalIgnoreCase);
         Assert.NotEqual(DevFlowPlatform.Android, DevFlowPlatform.Normalize(tizen.Platform));
         Assert.NotEqual(DevFlowPlatform.Linux, DevFlowPlatform.Normalize(tizen.Platform));
+    }
+
+    [Theory]
+    [InlineData("NotAndroid", "net10.0-notandroid")]
+    [InlineData("KaiOS", "net10.0-kaios")]
+    public void AndroidHostRouting_DoesNotSelectUnknownEmbeddedToken(string platform, string tfm)
+    {
+        var agent = TizenAgent(platform) with { Tfm = tfm };
+
+        Assert.False(DevFlowCommands.IsAndroidAgent(agent));
+        Assert.False(McpAgentSession.IsAndroidAgent(agent));
+        Assert.False(DevFlowCommands.ShouldPrepareAndroidBrokerReverse(platform));
+    }
+
+    [Theory]
+    [InlineData("KaiOS")]
+    [InlineData("BIOS")]
+    public void ScreenshotHostRouting_DoesNotSelectSimctlForUnknownEmbeddedToken(string platform)
+        => Assert.False(DevFlowCommands.ShouldTrySimctlScreenshot(platform));
+
+    [Theory]
+    [InlineData("Android", "net10.0")]
+    [InlineData("Unknown", "net10.0-android")]
+    public void AndroidHostRouting_StillRecognizesCanonicalPlatformOrTfm(string platform, string tfm)
+    {
+        var agent = TizenAgent(platform) with { Tfm = tfm };
+
+        Assert.True(DevFlowCommands.IsAndroidAgent(agent));
+        Assert.True(McpAgentSession.IsAndroidAgent(agent));
     }
 
     [Fact]

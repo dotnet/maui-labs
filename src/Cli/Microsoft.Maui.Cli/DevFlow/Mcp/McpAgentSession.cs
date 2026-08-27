@@ -129,7 +129,6 @@ public class McpAgentSession
 		}
 	}
 
-	static bool IsAndroidAgent(AgentRegistration agent)
-		=> agent.Platform.Contains("Android", StringComparison.OrdinalIgnoreCase)
-		   || agent.Tfm.Contains("-android", StringComparison.OrdinalIgnoreCase);
+	internal static bool IsAndroidAgent(AgentRegistration agent)
+		=> DevFlowHostPlatform.IsAndroid(agent.Platform, agent.Tfm);
 }

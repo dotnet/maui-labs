@@ -86,7 +86,7 @@ internal static class ThemeHostSelector
 
     private static bool IsAndroidTarget(string? platform, string? androidDevice)
         => !string.IsNullOrWhiteSpace(androidDevice)
-            || (platform?.Contains("android", StringComparison.OrdinalIgnoreCase) == true);
+            || DevFlowHostPlatform.IsAndroid(platform);
 
     private static bool IsIosSimulatorTarget(string? platform, string? deviceType, string? simulatorUdid)
     {
@@ -96,8 +96,7 @@ internal static class ThemeHostSelector
         if (!IsVirtualDevice(deviceType))
             return false;
 
-        return platform?.Equals("ios", StringComparison.OrdinalIgnoreCase) == true
-            || platform?.Contains("iossimulator", StringComparison.OrdinalIgnoreCase) == true;
+        return DevFlowHostPlatform.IsIosSimulator(platform);
     }
 
     private static bool IsVirtualDevice(string? deviceType)

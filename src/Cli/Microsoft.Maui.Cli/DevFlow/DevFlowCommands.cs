@@ -3503,7 +3503,7 @@ public class DevFlowCommands
             if (id == null && selector == null && !OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
             {
                 var status = await client.GetStatusAsync();
-                if (status?.Platform?.Contains("iOS", StringComparison.OrdinalIgnoreCase) == true)
+                if (ShouldTrySimctlScreenshot(status?.Platform))
                 {
                     data = await TrySimctlScreenshotAsync();
                     fromSimctl = data != null;
@@ -5166,9 +5166,11 @@ public class DevFlowCommands
             Console.WriteLine($"   Suggestion:       {suggestion}");
     }
 
-    private static bool IsAndroidAgent(Broker.AgentRegistration agent)
-        => agent.Platform.Contains("Android", StringComparison.OrdinalIgnoreCase)
-           || agent.Tfm.Contains("-android", StringComparison.OrdinalIgnoreCase);
+    internal static bool IsAndroidAgent(Broker.AgentRegistration agent)
+        => DevFlowHostPlatform.IsAndroid(agent.Platform, agent.Tfm);
+
+    internal static bool ShouldTrySimctlScreenshot(string? platform)
+        => DevFlowHostPlatform.IsIosSimulator(platform);
 
     // ===== Broker Commands =====
 
@@ -5546,9 +5548,9 @@ public class DevFlowCommands
         }
     }
 
-    private static bool ShouldPrepareAndroidBrokerReverse(string? platformFilter)
+    internal static bool ShouldPrepareAndroidBrokerReverse(string? platformFilter)
         => string.IsNullOrWhiteSpace(platformFilter)
-           || platformFilter.Contains("Android", StringComparison.OrdinalIgnoreCase);
+           || DevFlowHostPlatform.IsAndroid(platformFilter);
 
     internal static Broker.AgentRegistration? FindMatchingAgent(Broker.AgentRegistration[] agents, string? projectFilter, string? platformFilter)
     {
