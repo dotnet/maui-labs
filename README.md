@@ -38,6 +38,8 @@ A command-line tool for .NET MAUI development environment setup, device manageme
 |---------|-------------|
 | [![NuGet: Microsoft.Maui.Cli](https://img.shields.io/nuget/v/Microsoft.Maui.Cli.svg?label=Microsoft.Maui.Cli)](https://www.nuget.org/packages/Microsoft.Maui.Cli/) | CLI global tool (`maui`) |
 
+The .NET 10 SDK is required to install the tool. It automatically selects a NativeAOT package on `win-x64`, `linux-x64`, and `osx-arm64`, with a framework-dependent fallback for other platforms.
+
 ```bash
 # Microsoft.Maui.Cli is currently released as a pre-release, so make sure to use the --prerelease flag
 dotnet tool install -g Microsoft.Maui.Cli --prerelease

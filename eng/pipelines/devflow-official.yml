@@ -87,6 +87,7 @@ extends:
       - template: /eng/common/templates-official/jobs/jobs.yml@self
         parameters:
           enableMicrobuild: true
+          enableMicrobuildForMacAndLinux: true
           enablePublishBuildAssets: true
           enablePublishBuildArtifacts: true
           enablePublishTestResults: true
@@ -150,7 +151,114 @@ extends:
                 -prepareMachine
                 -projects $(Build.SourcesDirectory)\src\Cli\Cli.slnf
                 $(_OfficialBuildArgs)
-              displayName: Build and Test Cli
+              displayName: Build, Test, Sign and Publish Cli
+            - pwsh: |
+                $artifactsDir = '$(Build.ArtifactStagingDirectory)/CliRidArtifacts'
+                $commonArguments = @(
+                  'pack'
+                  'src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj'
+                  '--configuration'
+                  '$(_BuildConfig)'
+                  "/p:ArtifactsDir=$artifactsDir"
+                  '/p:OfficialBuildId=$(BUILD.BUILDNUMBER)'
+                  '/p:TeamName=$(_TeamName)'
+                  '/p:DotNetSignType=$(_SignType)'
+                )
+
+                & eng/common/dotnet.ps1 @commonArguments --runtime win-x64
+                if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+                & eng/common/dotnet.ps1 @commonArguments --runtime any /p:PublishAot=false /p:PublishTrimmed=false /p:SelfContained=false
+                if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+                & eng/common/build.ps1 `
+                  -configuration '$(_BuildConfig)' `
+                  -restore `
+                  -sign `
+                  -publish `
+                  -ci `
+                  -prepareMachine `
+                  -projects '$(Build.SourcesDirectory)/src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj' `
+                  "/p:ArtifactsDir=$artifactsDir" `
+                  '/p:OfficialBuildId=$(BUILD.BUILDNUMBER)' `
+                  '/p:TeamName=$(_TeamName)' `
+                  '/p:DotNetSignType=$(_SignType)'
+                if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+              displayName: Pack and sign Cli RID packages
+
+          - job: Cli_macOS
+            displayName: Cli NativeAOT - macOS
+            pool:
+              name: Azure Pipelines
+              vmImage: macos-latest-internal
+              os: macOS
+            strategy:
+              matrix:
+                Release:
+                  _BuildConfig: Release
+                  _OfficialBuildArgs: /p:DotNetSignType=$(_SignType)
+                    /p:TeamName=$(_TeamName)
+                    /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
+            steps:
+            - template: /eng/pipelines/install-dotnet-sdk.yml@self
+            - script: |
+                dotnet pack src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj \
+                  --configuration $(_BuildConfig) \
+                  --runtime osx-arm64 \
+                  /p:ArtifactsDir='$(Build.ArtifactStagingDirectory)/CliRidArtifacts' \
+                  $(_OfficialBuildArgs)
+              displayName: Pack Cli NativeAOT for macOS
+            - script: |
+                ./eng/common/build.sh \
+                  --restore \
+                  --sign \
+                  --publish \
+                  --ci \
+                  --prepareMachine \
+                  --configuration $(_BuildConfig) \
+                  --projects $(Build.SourcesDirectory)/src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj \
+                  /p:ArtifactsDir='$(Build.ArtifactStagingDirectory)/CliRidArtifacts' \
+                  $(_OfficialBuildArgs)
+              displayName: Sign and publish Cli macOS package
+
+          - job: Cli_Linux
+            displayName: Cli NativeAOT - Linux
+            pool:
+              name: NetCore1ESPool-Internal
+              demands: ImageOverride -equals build.ubuntu.2204.amd64
+              os: linux
+            strategy:
+              matrix:
+                Release:
+                  _BuildConfig: Release
+                  _OfficialBuildArgs: /p:DotNetSignType=$(_SignType)
+                    /p:TeamName=$(_TeamName)
+                    /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
+            steps:
+            - template: /eng/pipelines/install-dotnet-sdk.yml@self
+            - script: |
+                sudo apt-get update
+                sudo apt-get install -y clang zlib1g-dev
+              displayName: Install NativeAOT dependencies
+            - script: |
+                dotnet pack src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj \
+                  --configuration $(_BuildConfig) \
+                  --runtime linux-x64 \
+                  /p:ArtifactsDir='$(Build.ArtifactStagingDirectory)/CliRidArtifacts' \
+                  $(_OfficialBuildArgs)
+              displayName: Pack Cli NativeAOT for Linux
+            - script: |
+                ./eng/common/build.sh \
+                  --restore \
+                  --sign \
+                  --publish \
+                  --ci \
+                  --prepareMachine \
+                  --configuration $(_BuildConfig) \
+                  --projects $(Build.SourcesDirectory)/src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj \
+                  /p:ArtifactsDir='$(Build.ArtifactStagingDirectory)/CliRidArtifacts' \
+                  $(_OfficialBuildArgs)
+              displayName: Sign and publish Cli Linux package
 
           - job: AI
             displayName: AI Extensions - Windows
@@ -488,9 +596,61 @@ extends:
             artifact: PackageArtifacts
             displayName: Download PackageArtifacts
           - powershell: |
-              New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/CliPackages'
-              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.Cli.*.nupkg' '$(Pipeline.Workspace)/CliPackages/' -Verbose
-              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.ProfilingHelper.*.nupkg' '$(Pipeline.Workspace)/CliPackages/' -Verbose -ErrorAction Stop
+              $ridSpecificPath = '$(Pipeline.Workspace)/CliPackages/RidSpecific'
+              $topLevelPath = '$(Pipeline.Workspace)/CliPackages/TopLevel'
+              New-Item -ItemType Directory -Force -Path $ridSpecificPath, $topLevelPath
+
+              Add-Type -AssemblyName System.IO.Compression.FileSystem
+              $cliPackages = Get-ChildItem '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.Cli.*.nupkg' |
+                ForEach-Object {
+                  $archive = [System.IO.Compression.ZipFile]::OpenRead($_.FullName)
+                  try {
+                    $nuspecEntry = $archive.Entries | Where-Object { $_.FullName -like '*.nuspec' } | Select-Object -First 1
+                    $reader = [System.IO.StreamReader]::new($nuspecEntry.Open())
+                    try {
+                      [xml] $nuspec = $reader.ReadToEnd()
+                    } finally {
+                      $reader.Dispose()
+                    }
+
+                    [pscustomobject]@{
+                      File = $_
+                      Id = [string] $nuspec.package.metadata.id
+                      Version = [string] $nuspec.package.metadata.version
+                    }
+                  } finally {
+                    $archive.Dispose()
+                  }
+                }
+
+              $ridPackageIds = @(
+                'Microsoft.Maui.Cli.win-x64'
+                'Microsoft.Maui.Cli.linux-x64'
+                'Microsoft.Maui.Cli.osx-arm64'
+                'Microsoft.Maui.Cli.any'
+              )
+              $expectedPackageIds = @('Microsoft.Maui.Cli') + $ridPackageIds
+              if ($cliPackages.Count -ne $expectedPackageIds.Count) {
+                throw "Expected exactly $($expectedPackageIds.Count) CLI packages, but found $($cliPackages.Count)."
+              }
+
+              foreach ($packageId in $expectedPackageIds) {
+                if ($packageId -notin $cliPackages.Id) {
+                  throw "Expected CLI package '$packageId' was not produced."
+                }
+              }
+
+              $versions = @($cliPackages.Version | Sort-Object -Unique)
+              if ($versions.Count -ne 1) {
+                throw "CLI pointer and RID package versions must match. Found: $($versions -join ', ')"
+              }
+
+              foreach ($package in $cliPackages) {
+                $destination = if ($package.Id -in $ridPackageIds) { $ridSpecificPath } else { $topLevelPath }
+                Copy-Item $package.File.FullName $destination -Verbose
+              }
+
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.ProfilingHelper.*.nupkg' $topLevelPath -Verbose -ErrorAction Stop
             displayName: Filter Cli packages
 
         - job: PublishNuGet
@@ -510,11 +670,19 @@ extends:
               targetPath: '$(Pipeline.Workspace)/CliPackages'
           steps:
           - task: 1ES.PublishNuget@1
-            displayName: 'Push Cli to NuGet.org'
+            displayName: 'Push Cli RID packages to NuGet.org'
             inputs:
               useDotNetTask: false
-              packagesToPush: '$(Pipeline.Workspace)/CliPackages/*.nupkg'
-              packageParentPath: '$(Pipeline.Workspace)/CliPackages'
+              packagesToPush: '$(Pipeline.Workspace)/CliPackages/RidSpecific/*.nupkg'
+              packageParentPath: '$(Pipeline.Workspace)/CliPackages/RidSpecific'
+              nuGetFeedType: external
+              publishFeedCredentials: 'nuget.org (dotnetframework)'
+          - task: 1ES.PublishNuget@1
+            displayName: 'Push Cli top-level packages to NuGet.org'
+            inputs:
+              useDotNetTask: false
+              packagesToPush: '$(Pipeline.Workspace)/CliPackages/TopLevel/*.nupkg'
+              packageParentPath: '$(Pipeline.Workspace)/CliPackages/TopLevel'
               nuGetFeedType: external
               publishFeedCredentials: 'nuget.org (dotnetframework)'
 

@@ -91,6 +91,10 @@ jobs:
         if: inputs.native-deps != ''
         run: ${{ inputs.native-deps }}
 
+      - name: Install NativeAOT dependencies
+        if: inputs.project-name == 'cli' && runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+
       # Use Arcade's dotnet wrapper for workload-related setup so SDK resolution
       # matches the later cibuild invocation.
       - name: Install workloads (Windows)
@@ -148,6 +152,34 @@ jobs:
           --prepareMachine
           --projects $(pwd)/${{ inputs.project-path }}
           /p:VersionSuffix=$CI_PACKAGE_VERSION_SUFFIX
+
+      - name: Pack NativeAOT CLI
+        if: inputs.pack && inputs.project-name == 'cli'
+        shell: pwsh
+        run: |
+          $rid = switch ('${{ runner.os }}') {
+            'Windows' { 'win-x64' }
+            'Linux' { 'linux-x64' }
+            'macOS' { 'osx-arm64' }
+            default { throw "Unsupported NativeAOT build OS: ${{ runner.os }}" }
+          }
+
+          dotnet pack src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj `
+            --configuration Release `
+            --runtime $rid `
+            -p:VersionSuffix=$env:CI_PACKAGE_VERSION_SUFFIX
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          if ('${{ runner.os }}' -eq 'Windows') {
+            dotnet pack src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj `
+              --configuration Release `
+              --runtime any `
+              -p:PublishAot=false `
+              -p:PublishTrimmed=false `
+              -p:SelfContained=false `
+              -p:VersionSuffix=$env:CI_PACKAGE_VERSION_SUFFIX
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
 
       - name: NativeAOT publish smoke test (macOS)
         if: matrix.os == 'macos-latest' && inputs.project-name == 'cli'

@@ -2,13 +2,18 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <!-- Multi-target net9.0 and net10.0 so `dotnet tool install` works on both
-         SDKs. dotnet picks the highest compatible TFM at install time. -->
-    <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+    <!-- RID-specific .NET tool packages require the .NET 10 SDK. -->
+    <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Microsoft.Maui.Cli</RootNamespace>
     <AssemblyName>maui</AssemblyName>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>maui</ToolCommandName>
+    <ToolPackageRuntimeIdentifiers>win-x64;linux-x64;osx-arm64;any</ToolPackageRuntimeIdentifiers>
+    <PublishAot>true</PublishAot>
+    <PublishTrimmed>true</PublishTrimmed>
+    <SelfContained Condition="'$(RuntimeIdentifier)' != '' and '$(RuntimeIdentifier)' != 'any'">true</SelfContained>
+    <!-- Go.Server is consumed in-process even though its project also emits a standalone executable. -->
+    <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
     <PackageId>Microsoft.Maui.Cli</PackageId>
     <Description>CLI for .NET MAUI development environment setup and device management</Description>
     <IsPackable>true</IsPackable>
@@ -19,9 +24,6 @@
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
     <EnableAotAnalyzer>true</EnableAotAnalyzer>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
     <!-- Let the latest packaged tool TFM run on newer major runtimes. -->
     <RollForward>Major</RollForward>
   </PropertyGroup>
@@ -36,17 +38,10 @@
     <PackageReference Include="Websocket.Client" />
     <PackageReference Include="Xamarin.Android.Tools.AndroidSdk" />
     <PackageReference Include="Xamarin.Apple.Tools.MaciOS" />
-    <!-- XenoAtom.Terminal.UI requires .NET 10 (uses C# 14 extension members).
-         On net9.0 we fall back to JSON output for the network monitor. -->
-    <PackageReference Include="XenoAtom.Terminal.UI" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <PackageReference Include="XenoAtom.Terminal.UI" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0'">
-    <!-- Exclude sources that depend on XenoAtom.Terminal.UI on non-net10 targets. -->
-    <Compile Remove="DevFlow\NetworkMonitorTui.cs" />
-  </ItemGroup>
-
-  <!-- Exclude native debug symbols (e.g. SkiaSharp PDBs) from the tool package to reduce size.
+  <!-- Exclude native debug symbols from the tool package to reduce size.
        PackTool globs everything from PublishDir — delete PDBs from there before the glob runs.
        Only runs during 'dotnet pack', not standalone 'dotnet publish'. -->
   <Target Name="RemoveNativeRuntimePdbsBeforeToolPack"
@@ -55,14 +50,16 @@
           Condition="'$(PackAsTool)' == 'true' and '$(IsPackable)' != 'false'">
     <ItemGroup>
       <_PdbsToRemove Include="$(PublishDir)runtimes/**/*.pdb" />
+      <_NativeDebugSymbolsToRemove Include="$(PublishDir)**/*.dSYM/**" />
     </ItemGroup>
     <Delete Files="@(_PdbsToRemove)" />
+    <Delete Files="@(_NativeDebugSymbolsToRemove)" />
   </Target>
 
   <ItemGroup>
     <ProjectReference Include="..\Microsoft.Maui.ProfilingHelper\Microsoft.Maui.ProfilingHelper.csproj" />
     <ProjectReference Include="..\..\DevFlow\Microsoft.Maui.DevFlow.Driver\Microsoft.Maui.DevFlow.Driver.csproj" />
-    <ProjectReference Include="..\..\Go\Server\Microsoft.Maui.Go.Server.csproj" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <ProjectReference Include="..\..\Go\Server\Microsoft.Maui.Go.Server.csproj" />
   </ItemGroup>
 
   <ItemGroup>
