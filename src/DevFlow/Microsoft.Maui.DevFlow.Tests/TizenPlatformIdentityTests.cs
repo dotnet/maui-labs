@@ -10,6 +10,11 @@ namespace Microsoft.Maui.DevFlow.Tests;
 /// lives in Redth/Maui.Tizen; what this repository owns is the contract that lets such an agent
 /// report <c>Tizen</c> truthfully.
 /// </summary>
+/// <remarks>
+/// Several tests mutate the <c>DEVFLOW_PLATFORM</c> environment variable, which is process-wide.
+/// The collection keeps them from running in parallel with any other environment-mutating class.
+/// </remarks>
+[Collection("EnvironmentVariables")]
 public class TizenPlatformIdentityTests
 {
     // ── Agent-side detection ──────────────────────────────────────────────
@@ -17,33 +22,44 @@ public class TizenPlatformIdentityTests
     [Fact]
     public void DetectName_HonoursTheDevFlowPlatformOverride()
     {
-        // The escape hatch for an out-of-tree agent on a platform detection cannot see: it must
-        // win outright so the agent never has to ship as "Unknown" or as another platform.
-        var original = Environment.GetEnvironmentVariable(DevFlowRuntimePlatform.OverrideEnvironmentVariable);
-        try
-        {
-            Environment.SetEnvironmentVariable(DevFlowRuntimePlatform.OverrideEnvironmentVariable, "Tizen");
-
-            Assert.Equal("Tizen", DevFlowRuntimePlatform.DetectName());
-            Assert.Equal(DevFlowPlatform.Tizen, DevFlowPlatform.Normalize(DevFlowRuntimePlatform.DetectName()));
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(DevFlowRuntimePlatform.OverrideEnvironmentVariable, original);
-        }
+        // The escape hatch for an out-of-tree agent on a platform detection reads incorrectly: it
+        // must win even when detection succeeds, because the failure mode it addresses is a
+        // confidently wrong answer (a Tizen host detecting as Linux), not detection giving up.
+        Assert.Equal("Tizen", DetectNameWithOverride("Tizen"));
+        Assert.Equal(DevFlowPlatform.Tizen, DevFlowPlatform.Normalize(DetectNameWithOverride("Tizen")));
     }
 
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
     public void DetectName_IgnoresAnEmptyOverride(string overrideValue)
+        => Assert.Equal(ExpectedHostPlatformName(), DetectNameWithOverride(overrideValue));
+
+    [Theory]
+    // The override is reported verbatim to clients and serialized into JSON, so a value that is
+    // not a plausible platform name must be ignored rather than placed on the wire.
+    [InlineData("Tizen\"},\"evil\":{\"")]
+    [InlineData("Tizen\nX-Injected: 1")]
+    [InlineData("<script>alert(1)</script>")]
+    [InlineData("Tizen/../../etc/passwd")]
+    [InlineData("ThisPlatformNameIsFarTooLongToBeLegitimate")]
+    public void DetectName_RejectsAnImplausibleOverrideAndFallsBackToDetection(string overrideValue)
+        => Assert.Equal(ExpectedHostPlatformName(), DetectNameWithOverride(overrideValue));
+
+    [Theory]
+    [InlineData("Tizen")]
+    [InlineData("Tizen 8.0")]
+    [InlineData("my-custom_platform.1")]
+    public void DetectName_AcceptsAPlausibleOverride(string overrideValue)
+        => Assert.Equal(overrideValue, DetectNameWithOverride(overrideValue));
+
+    private static string DetectNameWithOverride(string? overrideValue)
     {
         var original = Environment.GetEnvironmentVariable(DevFlowRuntimePlatform.OverrideEnvironmentVariable);
         try
         {
             Environment.SetEnvironmentVariable(DevFlowRuntimePlatform.OverrideEnvironmentVariable, overrideValue);
-
-            Assert.Equal(ExpectedHostPlatformName(), DevFlowRuntimePlatform.DetectName());
+            return DevFlowRuntimePlatform.DetectName();
         }
         finally
         {
@@ -84,15 +100,16 @@ public class TizenPlatformIdentityTests
     [InlineData("Tizen")]
     [InlineData("tizen")]
     [InlineData("tizen-nui")]
-    public void AppDriverFactory_TizenIsRecognizedButHasNoLocalDriver(string platform)
+    [InlineData("macOS")]
+    public void AppDriverFactory_RecognizedPlatformsWithoutAHostDriverFailExplicitly(string platform)
     {
         Assert.False(AppDriverFactory.HasLocalDriver(platform));
 
         var exception = Assert.Throws<PlatformNotSupportedException>(() => AppDriverFactory.Create(platform));
 
         // The point of the change: an explicit "recognized, but host-side driving is unavailable"
-        // instead of the old "Unknown platform" that made Tizen look unsupported outright.
-        Assert.Contains("tizen", exception.Message, StringComparison.OrdinalIgnoreCase);
+        // instead of the old "Unknown platform" that made these look unsupported outright.
+        Assert.Contains(DevFlowPlatform.Normalize(platform), exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Unknown platform", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -121,7 +138,14 @@ public class TizenPlatformIdentityTests
     public void AppDriverFactory_UnknownPlatformStillThrowsArgumentException()
     {
         Assert.False(AppDriverFactory.HasLocalDriver("nintendo64"));
-        Assert.Throws<ArgumentException>(() => AppDriverFactory.Create("nintendo64"));
+
+        var exception = Assert.Throws<ArgumentException>(() => AppDriverFactory.Create("nintendo64"));
+
+        // The "Supported:" list must name only platforms Create can actually construct, not every
+        // identity DevFlowPlatform recognizes.
+        Assert.DoesNotContain(DevFlowPlatform.Tizen, exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(DevFlowPlatform.MacOS, exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(DevFlowPlatform.Android, exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     // ── Protocol schema ───────────────────────────────────────────────────

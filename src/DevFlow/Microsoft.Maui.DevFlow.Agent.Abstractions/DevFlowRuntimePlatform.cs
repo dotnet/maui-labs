@@ -23,7 +23,14 @@ namespace Microsoft.Maui.DevFlow.Agent.Core;
 public static class DevFlowRuntimePlatform
 {
     /// <summary>Environment variable that overrides the detected platform name.</summary>
+    /// <remarks>
+    /// The value is reported verbatim to clients, so it is validated before use: it must be
+    /// 1–32 characters of letters, digits, <c>.</c>, <c>-</c>, <c>_</c> or spaces. Anything else
+    /// is ignored in favour of detection rather than being placed on the wire.
+    /// </remarks>
     public const string OverrideEnvironmentVariable = "DEVFLOW_PLATFORM";
+
+    private const int MaxOverrideLength = 32;
 
     private static readonly bool s_isTizen = DetectTizen();
 
@@ -31,8 +38,16 @@ public static class DevFlowRuntimePlatform
     /// Whether the process is running on Tizen.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Tizen is a Linux distribution, so <see cref="OperatingSystem.IsLinux"/> is also true there.
     /// Every platform switch must therefore test Tizen before Linux.
+    /// </para>
+    /// <para>
+    /// This reports what the process is actually running on and is intentionally unaffected by the
+    /// <c>DEVFLOW_PLATFORM</c> override, which only changes the <em>reported</em> name. The two can
+    /// therefore disagree, and that is by design: use <see cref="DetectName"/> for anything that
+    /// reaches a client.
+    /// </para>
     /// </remarks>
     public static bool IsTizen => s_isTizen;
 
@@ -46,6 +61,13 @@ public static class DevFlowRuntimePlatform
     /// while host bootstrap and the profiler report <c>"Windows"</c>. Both normalize to the
     /// canonical <c>windows</c> identifier on the client.
     /// </param>
+    /// <remarks>
+    /// A valid <c>DEVFLOW_PLATFORM</c> override outranks detection even when detection succeeds.
+    /// That is deliberate: the failure it exists to solve is detection returning a confidently
+    /// <em>wrong</em> answer, not detection giving up. A Tizen host, for instance, satisfies
+    /// <see cref="OperatingSystem.IsLinux"/>, so an override that only applied when the result was
+    /// <c>"Unknown"</c> would never get a chance to correct it.
+    /// </remarks>
     public static string DetectName(string windowsName = "Windows")
     {
         var overrideName = GetOverride();
@@ -68,12 +90,30 @@ public static class DevFlowRuntimePlatform
         try
         {
             var value = Environment.GetEnvironmentVariable(OverrideEnvironmentVariable);
-            return string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
+            if (string.IsNullOrWhiteSpace(value))
+                return null;
+
+            var trimmed = value!.Trim();
+            return IsAcceptableOverride(trimmed) ? trimmed : null;
         }
         catch
         {
             return null;
         }
+    }
+
+    private static bool IsAcceptableOverride(string value)
+    {
+        if (value.Length > MaxOverrideLength)
+            return false;
+
+        foreach (var c in value)
+        {
+            if (!char.IsLetterOrDigit(c) && c != '.' && c != '-' && c != '_' && c != ' ')
+                return false;
+        }
+
+        return true;
     }
 
     private static bool DetectTizen()

@@ -98,7 +98,6 @@ public static class DevFlowPlatform
         ["tizen"] = Tizen,
         ["tizen-nui"] = Tizen,
         ["tizennui"] = Tizen,
-        ["nui"] = Tizen,
 
         ["unknown"] = Unknown,
     };
@@ -178,13 +177,7 @@ public static class DevFlowPlatform
     {
         var normalized = Normalize(platform);
 
-        foreach (var id in s_knownIds)
-        {
-            if (string.Equals(id, normalized, StringComparison.Ordinal))
-                return true;
-        }
-
-        return false;
+        return IsKnownId(normalized);
     }
 
     /// <summary>
@@ -213,17 +206,40 @@ public static class DevFlowPlatform
     /// </summary>
     /// <param name="platform">The platform reported by the agent.</param>
     /// <param name="filter">The requested platform. A null or whitespace filter matches everything.</param>
+    /// <remarks>
+    /// When both sides resolve to platforms DevFlow knows, canonical equality is authoritative and
+    /// nothing else is considered — otherwise a decorated string such as <c>"Tizen (Linux) 8.0"</c>
+    /// would still be matched by a <c>linux</c> filter, reintroducing exactly the confusion this
+    /// type exists to remove. A substring fallback is kept only when at least one side is
+    /// unrecognized, so partial filters (<c>andro</c>, <c>tiz</c>) and raw TFM fragments keep
+    /// matching the agents they always matched.
+    /// </remarks>
     public static bool Matches(string? platform, string? filter)
     {
         if (string.IsNullOrWhiteSpace(filter))
             return true;
 
-        if (string.Equals(Normalize(platform), Normalize(filter), StringComparison.Ordinal))
+        var normalizedPlatform = Normalize(platform);
+        var normalizedFilter = Normalize(filter);
+
+        if (string.Equals(normalizedPlatform, normalizedFilter, StringComparison.Ordinal))
             return true;
 
-        // Preserve the historical substring behavior so partial filters such as "--platform mac"
-        // or a raw TFM fragment keep matching the agents they always matched.
+        if (IsKnownId(normalizedPlatform) && IsKnownId(normalizedFilter))
+            return false;
+
         return platform is not null
             && platform.IndexOf(filter!.Trim(), StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool IsKnownId(string normalized)
+    {
+        foreach (var id in s_knownIds)
+        {
+            if (string.Equals(id, normalized, StringComparison.Ordinal))
+                return true;
+        }
+
+        return false;
     }
 }

@@ -4561,12 +4561,16 @@ public class DevFlowCommands
             var status = await client.GetStatusAsync();
             if (status?.Platform != null)
             {
-                var sp = status.Platform.ToLowerInvariant();
-                if (sp.Contains("ios")) return "ios-simulator";
-                if (sp.Contains("android")) return "android";
-                if (sp.Contains("windows")) return "windows";
-                if (sp.Contains("tizen")) return "tizen";
-                if (sp.Contains("linux") || sp.Contains("gtk")) return "linux";
+                // Canonical identity, so a decorated string such as "Tizen (Linux) 8.0" cannot be
+                // read as Linux. Mac Catalyst deliberately falls through — see below.
+                switch (DevFlowPlatform.Normalize(status.Platform))
+                {
+                    case DevFlowPlatform.iOS: return "ios-simulator";
+                    case DevFlowPlatform.Android: return "android";
+                    case DevFlowPlatform.Windows: return "windows";
+                    case DevFlowPlatform.Tizen: return DevFlowPlatform.Tizen;
+                    case DevFlowPlatform.Linux: return "linux";
+                }
                 // For MacCatalyst, don't return immediately — check if there's a
                 // booted iOS simulator first, since it's more likely the user wants
                 // iOS dialog detection (Mac Catalyst dialogs are less common)
@@ -4604,6 +4608,9 @@ public class DevFlowCommands
         }
 
         if (OperatingSystem.IsWindows()) return "windows";
+        // No Tizen branch here on purpose: this fallback describes the machine running the CLI,
+        // and the maui CLI is a .NET SDK global tool that runs on a developer host, never on a
+        // Tizen device. Tizen is only ever reached as a remote agent, handled above.
         if (OperatingSystem.IsLinux()) return "linux";
         return "maccatalyst";
     }

@@ -52,7 +52,7 @@
         "macos",
         "tizen"
       ],
-      "description": "The target platform the agent is running on, as a canonical lowercase identifier. Agents report the spelling native to their stack (for example 'iOS', 'MacCatalyst', 'WinUI' or 'Tizen'); clients normalize case and known aliases before comparing, and pass an unrecognized identifier through unchanged so an out-of-tree agent on a newer platform stays usable. See docs/DevFlow/spec/README.md#platform-identity."
+      "description": "The target platform the agent is running on, as a canonical lowercase identifier. Agents report the spelling native to their stack (for example 'iOS', 'MacCatalyst', 'WinUI' or 'Tizen'); clients normalize case and known aliases before comparing. This enum is the closed set of platforms DevFlow currently ships identity for and grows additively. Clients are deliberately lenient at runtime and pass an unrecognized identifier through unchanged rather than coercing it onto another platform, so an agent on a platform not yet listed here keeps working even though it will not validate against this schema until the platform is added. See docs/DevFlow/spec/README.md#platform-identity."
     },
     "device": {
       "type": "object",

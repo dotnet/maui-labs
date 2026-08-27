@@ -226,6 +226,17 @@ public class DevFlowTizenPlatformTests
     }
 
     [Fact]
+    public void FindMatchingAgent_LinuxFilterDoesNotMatchADecoratedTizenAgent()
+    {
+        // A Tizen agent may legitimately describe itself with the word "Linux". Discovery must
+        // still route it to Tizen and keep it away from callers asking for the GTK backend.
+        var decorated = TizenAgent(platform: "Tizen (Linux) 8.0");
+
+        Assert.Null(DevFlowCommands.FindMatchingAgent([decorated], null, "linux"));
+        Assert.Equal("tizen-agent", DevFlowCommands.FindMatchingAgent([decorated], null, "tizen")!.Id);
+    }
+
+    [Fact]
     public void AgentRegistration_TizenPlatformSerializesAndNormalizes()
     {
         var registration = TizenAgent();

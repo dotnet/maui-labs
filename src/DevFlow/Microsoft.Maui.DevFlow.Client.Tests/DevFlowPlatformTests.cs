@@ -90,7 +90,7 @@ public class DevFlowPlatformTests
     [InlineData("Tizen", "tizen-nui")]
     [InlineData("Tizen", "tiz")]
     [InlineData("WinUI", "windows")]
-    [InlineData("macOS", "mac")]
+    [InlineData("Windows", "winui")]
     public void Matches_FilterMatchesAgentAcrossSpellings(string agentPlatform, string filter)
         => Assert.True(DevFlowPlatform.Matches(agentPlatform, filter));
 
@@ -98,8 +98,36 @@ public class DevFlowPlatformTests
     [InlineData("Tizen", "android")]
     [InlineData("Tizen", "linux")]
     [InlineData("Linux", "tizen")]
+    // "mac" is an alias for Mac Catalyst, so it must not also sweep up macOS agents.
+    [InlineData("macOS", "mac")]
     public void Matches_FilterRejectsOtherPlatforms(string agentPlatform, string filter)
         => Assert.False(DevFlowPlatform.Matches(agentPlatform, filter));
+
+    [Theory]
+    [InlineData("Tizen (Linux) 8.0", "linux")]
+    [InlineData("Tizen/Linux", "linux")]
+    [InlineData("net10.0-tizen linux", "gtk")]
+    public void Matches_DecoratedTizenStringIsNeverMatchedByALinuxFilter(string agentPlatform, string filter)
+    {
+        // Tizen is a Linux distribution, so its reported string may legitimately contain "linux".
+        // Canonical identity must win outright — a substring fallback here would quietly hand a
+        // Tizen agent to a caller that asked for the GTK/Linux backend.
+        Assert.Equal(DevFlowPlatform.Tizen, DevFlowPlatform.Normalize(agentPlatform));
+        Assert.False(DevFlowPlatform.Matches(agentPlatform, filter));
+        Assert.True(DevFlowPlatform.Matches(agentPlatform, "tizen"));
+    }
+
+    [Theory]
+    [InlineData("Android", "andro")]
+    [InlineData("Tizen", "tiz")]
+    [InlineData("MacCatalyst", "Catal")]
+    public void Matches_PartialFilterStillMatchesWhenItIsNotItselfAKnownPlatform(string agentPlatform, string filter)
+    {
+        // The substring fallback is retained for filters DevFlow cannot resolve, so partial input
+        // and raw TFM fragments keep matching the agents they always matched.
+        Assert.False(DevFlowPlatform.IsKnown(filter));
+        Assert.True(DevFlowPlatform.Matches(agentPlatform, filter));
+    }
 
     [Fact]
     public void Matches_EmptyFilterMatchesEverything()
