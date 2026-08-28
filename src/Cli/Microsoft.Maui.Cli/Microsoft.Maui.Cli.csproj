@@ -17,11 +17,12 @@
     <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
     <PackageId>Microsoft.Maui.Cli</PackageId>
     <Description>CLI for .NET MAUI development environment setup and device management</Description>
-    <IsPackable>true</IsPackable>
+    <IsPackable Condition="'$(SkipMauiCliPack)' != 'true'">true</IsPackable>
+    <IsPackable Condition="'$(SkipMauiCliPack)' == 'true'">false</IsPackable>
     <IsShipping>true</IsShipping>
     <IsAotCompatible>true</IsAotCompatible>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1572;CS1573;IL2026;IL2104;IL3050</NoWarn>
+    <NoWarn>$(NoWarn);CS1572;CS1573;IL2104</NoWarn>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
     <EnableAotAnalyzer>true</EnableAotAnalyzer>
@@ -55,6 +56,17 @@
     </ItemGroup>
     <Delete Files="@(_PdbsToRemove)" />
     <Delete Files="@(_NativeDebugSymbolsToRemove)" />
+  </Target>
+
+  <!-- NativeAOT cannot run Go's Roslyn compilation in-process. Keep its managed server
+       untrimmed in a subdirectory so the native CLI can launch it through the installed SDK. -->
+  <Target Name="PublishManagedGoServer"
+          AfterTargets="Publish"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <MSBuild Projects="..\..\Go\Server\Microsoft.Maui.Go.Server.csproj"
+             Targets="Publish"
+             BuildInParallel="false"
+             Properties="Configuration=$(Configuration);TargetFramework=net10.0;RuntimeIdentifier=;SelfContained=false;PublishAot=false;PublishTrimmed=false;RollForward=Major;PublishDir=$(PublishDir)go-server/" />
   </Target>
 
   <ItemGroup>

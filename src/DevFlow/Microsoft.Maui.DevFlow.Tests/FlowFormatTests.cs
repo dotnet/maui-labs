@@ -96,6 +96,17 @@ public class FlowFormatTests
     }
 
     [Fact]
+    public void Serialize_UnsetMetadata_PreservesNullFields()
+    {
+        var markdown = FlowMarkdown.Serialize(new MauiFlow());
+
+        Assert.Contains("\"app\": null", markdown);
+        Assert.Contains("\"platform\": null", markdown);
+        Assert.Contains("\"recordedAt\": null", markdown);
+        Assert.Contains("\"preconditions\": null", markdown);
+    }
+
+    [Fact]
     public void Validate_ValidFlow_HasNoErrors()
     {
         var flow = FlowMarkdown.Parse(SampleMd).Flow!;

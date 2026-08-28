@@ -1,6 +1,8 @@
 using Microsoft.Maui.Cli.DevFlow.Android;
+using Microsoft.Maui.Cli.DevFlow;
 using Microsoft.Maui.Cli.DevFlow.Inspector;
 using Microsoft.Maui.DevFlow.Driver;
+using System.Text.Json;
 
 namespace Microsoft.Maui.DevFlow.Tests;
 
@@ -129,6 +131,21 @@ public class InspectorAlertControllerTests
     {
         Assert.True(InspectorServer.IsBlockedDuringReplay("/api/alerts/dismiss"));
         Assert.False(InspectorServer.IsBlockedDuringReplay("/api/alerts"));
+    }
+
+    [Fact]
+    public void JsonContract_UsesCamelCaseAndPreservesNulls()
+    {
+        var result = new InspectorAlertResult(true, true);
+
+        var json = JsonSerializer.Serialize(
+            result,
+            DevFlowCliJsonPreserveNullContext.Default.InspectorAlertResult);
+
+        Assert.Contains("\"ok\":true", json);
+        Assert.Contains("\"alert\":null", json);
+        Assert.Contains("\"error\":null", json);
+        Assert.DoesNotContain("\"Ok\"", json);
     }
 
     private sealed class FakeAlertDriver(AlertInfo? alert) : IAlertDriver

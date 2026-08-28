@@ -151,6 +151,7 @@ extends:
                 -prepareMachine
                 -projects $(Build.SourcesDirectory)\src\Cli\Cli.slnf
                 $(_OfficialBuildArgs)
+                /p:SkipMauiCliPack=true
               displayName: Build, Test, Sign and Publish Cli
             - pwsh: |
                 $artifactsDir = '$(Build.ArtifactStagingDirectory)/CliRidArtifacts'
@@ -169,6 +170,9 @@ extends:
                 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
                 & eng/common/dotnet.ps1 @commonArguments --runtime any /p:PublishAot=false /p:PublishTrimmed=false /p:SelfContained=false
+                if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+                & eng/common/dotnet.ps1 @commonArguments
                 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
                 & eng/common/build.ps1 `

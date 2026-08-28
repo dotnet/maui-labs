@@ -129,6 +129,7 @@ jobs:
           -prepareMachine
           -projects %CD%\${{ inputs.project-path }}
           /p:VersionSuffix=%CI_PACKAGE_VERSION_SUFFIX%
+          ${{ inputs.project-name == 'cli' && '/p:SkipMauiCliPack=true' || '' }}
         shell: cmd
 
       - name: Build and Test (macOS)
@@ -141,6 +142,7 @@ jobs:
           --prepareMachine
           --projects $(pwd)/${{ inputs.project-path }}
           /p:VersionSuffix=$CI_PACKAGE_VERSION_SUFFIX
+          ${{ inputs.project-name == 'cli' && '/p:SkipMauiCliPack=true' || '' }}
 
       - name: Build and Test (Linux)
         if: startsWith(matrix.os, 'ubuntu')
@@ -152,6 +154,7 @@ jobs:
           --prepareMachine
           --projects $(pwd)/${{ inputs.project-path }}
           /p:VersionSuffix=$CI_PACKAGE_VERSION_SUFFIX
+          ${{ inputs.project-name == 'cli' && '/p:SkipMauiCliPack=true' || '' }}
 
       - name: Pack NativeAOT CLI
         if: inputs.pack && inputs.project-name == 'cli'
@@ -177,6 +180,11 @@ jobs:
               -p:PublishAot=false `
               -p:PublishTrimmed=false `
               -p:SelfContained=false `
+              -p:VersionSuffix=$env:CI_PACKAGE_VERSION_SUFFIX
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+            dotnet pack src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj `
+              --configuration Release `
               -p:VersionSuffix=$env:CI_PACKAGE_VERSION_SUFFIX
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
@@ -218,9 +226,13 @@ jobs:
           "$cli_path" devflow list --json > "$agents_json"
           "$cli_path" devflow broker stop >/dev/null 2>&1 || true
 
-          python - "$commands_json" "$agents_json" <<'PY'
+          python - "$commands_json" "$agents_json" "$cli_path" <<'PY'
           import json
+          import queue
+          import subprocess
           import sys
+          import threading
+          import time
 
           with open(sys.argv[1], "r", encoding="utf-8") as fp:
               commands = json.load(fp)
@@ -231,6 +243,62 @@ jobs:
           assert commands, "Expected at least one command description"
           assert all("command" in item and "description" in item for item in commands), "Command entries must include command and description"
           assert isinstance(agents, list), "Expected list --json output to be a JSON array"
+
+          mcp = subprocess.Popen(
+              [sys.argv[3], "devflow", "mcp"],
+              stdin=subprocess.PIPE,
+              stdout=subprocess.PIPE,
+              stderr=subprocess.PIPE,
+              text=True,
+              bufsize=1,
+          )
+          requests = [
+              {
+                  "jsonrpc": "2.0",
+                  "id": 1,
+                  "method": "initialize",
+                  "params": {
+                      "protocolVersion": "2024-11-05",
+                      "capabilities": {},
+                      "clientInfo": {"name": "nativeaot-smoke", "version": "1.0"},
+                  },
+              },
+              {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+              {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+          ]
+          try:
+              for request in requests:
+                  mcp.stdin.write(json.dumps(request) + "\n")
+              mcp.stdin.flush()
+
+              responses = queue.Queue()
+              def read_responses():
+                  for line in mcp.stdout:
+                      responses.put(json.loads(line))
+
+              threading.Thread(target=read_responses, daemon=True).start()
+              deadline = time.monotonic() + 20
+              tools_response = None
+              while time.monotonic() < deadline and tools_response is None:
+                  if mcp.poll() is not None:
+                      raise RuntimeError(f"MCP server exited early: {mcp.stderr.read()}")
+                  try:
+                      response = responses.get(timeout=1)
+                  except queue.Empty:
+                      continue
+                  if response.get("id") == 2:
+                      tools_response = response
+
+              assert tools_response is not None, "Timed out waiting for MCP tools/list response"
+              tools = tools_response.get("result", {}).get("tools")
+              assert isinstance(tools, list) and tools, "Expected MCP tools/list to return a non-empty tool catalog"
+          finally:
+              mcp.terminate()
+              try:
+                  mcp.wait(timeout=5)
+              except subprocess.TimeoutExpired:
+                  mcp.kill()
+                  mcp.wait()
           PY
 
           rm -f "$commands_json" "$agents_json"

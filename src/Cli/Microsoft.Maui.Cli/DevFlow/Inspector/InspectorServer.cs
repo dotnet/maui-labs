@@ -338,7 +338,7 @@ public sealed class InspectorServer : IDisposable
     }
 
     private static (int, string, byte[]) CaptureMetadataError(string error)
-        => (400, "application/json", JsonSerializer.SerializeToUtf8Bytes(new { error }));
+        => (400, "application/json", Encoding.UTF8.GetBytes(new JsonObject { ["error"] = error }.ToJsonString()));
 
     private static (int, string, byte[]) ActionOutcomeResponse(ActionResult outcome)
     {
@@ -351,12 +351,12 @@ public sealed class InspectorServer : IDisposable
         return (
             statusCode,
             "application/json",
-            JsonSerializer.SerializeToUtf8Bytes(new
+            Encoding.UTF8.GetBytes(new JsonObject
             {
-                ok = false,
-                reason = outcome.Reason,
-                retryable = outcome.Retryable
-            }));
+                ["ok"] = false,
+                ["reason"] = outcome.Reason,
+                ["retryable"] = outcome.Retryable
+            }.ToJsonString()));
     }
 
     private static (int, string, byte[]) UiReadOutcomeResponse(UiReadResult outcome)
@@ -367,12 +367,12 @@ public sealed class InspectorServer : IDisposable
         return (
             statusCode,
             "application/json",
-            JsonSerializer.SerializeToUtf8Bytes(new
+            Encoding.UTF8.GetBytes(new JsonObject
             {
-                ok = false,
-                reason = outcome.Reason,
-                retryable = outcome.Retryable
-            }));
+                ["ok"] = false,
+                ["reason"] = outcome.Reason,
+                ["retryable"] = outcome.Retryable
+            }.ToJsonString()));
     }
 
     private async Task<bool> RequiresCaptureEpochAsync()
@@ -927,16 +927,16 @@ public sealed class InspectorServer : IDisposable
                     holderLabel);
                 if (!status.YouHold)
                 {
-                    var payload = JsonSerializer.Serialize(new
+                    var payload = new JsonObject
                     {
-                        ok = false,
-                        reason = "writer",
-                        error = "Another session is driving this app.",
-                        holderKind = status.HolderKind,
-                        label = status.Label,
-                        expiresInMs = status.ExpiresInMs,
-                        authority = status.Authority
-                    }, CamelCase);
+                        ["ok"] = false,
+                        ["reason"] = "writer",
+                        ["error"] = "Another session is driving this app.",
+                        ["holderKind"] = status.HolderKind,
+                        ["label"] = status.Label,
+                        ["expiresInMs"] = status.ExpiresInMs,
+                        ["authority"] = status.Authority
+                    }.ToJsonString();
                     return (409, "application/json", Encoding.UTF8.GetBytes(payload));
                 }
             }
@@ -1081,12 +1081,12 @@ public sealed class InspectorServer : IDisposable
             return (
                 503,
                 "application/json",
-                JsonSerializer.SerializeToUtf8Bytes(new
+                Encoding.UTF8.GetBytes(new JsonObject
                 {
-                    ok = false,
-                    error = "The DevFlow agent is unavailable.",
-                    retryable = true
-                }));
+                    ["ok"] = false,
+                    ["error"] = "The DevFlow agent is unavailable.",
+                    ["retryable"] = true
+                }.ToJsonString()));
         }
 
         if (frame.Png.Length == 0)
@@ -1094,30 +1094,33 @@ public sealed class InspectorServer : IDisposable
             return (
                 503,
                 "application/json",
-                JsonSerializer.SerializeToUtf8Bytes(new
+                Encoding.UTF8.GetBytes(new JsonObject
                 {
-                    ok = false,
-                    error = "Unable to capture the current app state.",
-                    retryable = true
-                }));
+                    ["ok"] = false,
+                    ["error"] = "Unable to capture the current app state.",
+                    ["retryable"] = true
+                }.ToJsonString()));
         }
 
-        var json = JsonSerializer.Serialize(new
+        var diagnostics = wantsDiagnostics
+            ? await ResolveFrameDiagnosticsAsync(frame.TreeRevision)
+            : null;
+        var json = new JsonObject
         {
-            frameId = frame.Id,
-            screenshotUrl = $"screenshot.png?frame={Uri.EscapeDataString(frame.Id)}",
-            elements = frame.ElementsHtml,
-            viewportWidth = frame.Width,
-            viewportHeight = frame.Height,
-            rootOffsetX = frame.RootOffsetX,
-            rootOffsetY = frame.RootOffsetY,
-            diagnostics = wantsDiagnostics
-                ? await ResolveFrameDiagnosticsAsync(frame.TreeRevision)
-                : null,
-            captureEpoch = frame.CaptureEpoch,
-            registryGeneration = frame.RegistryGeneration,
-            windowId = frame.WindowId
-        });
+            ["frameId"] = frame.Id,
+            ["screenshotUrl"] = $"screenshot.png?frame={Uri.EscapeDataString(frame.Id)}",
+            ["elements"] = frame.ElementsHtml,
+            ["viewportWidth"] = frame.Width,
+            ["viewportHeight"] = frame.Height,
+            ["rootOffsetX"] = frame.RootOffsetX,
+            ["rootOffsetY"] = frame.RootOffsetY,
+            ["diagnostics"] = diagnostics is null
+                ? null
+                : JsonSerializer.SerializeToNode(diagnostics, DevFlowCliJsonContext.Default.LayoutInspectionResult),
+            ["captureEpoch"] = frame.CaptureEpoch,
+            ["registryGeneration"] = frame.RegistryGeneration,
+            ["windowId"] = frame.WindowId
+        }.ToJsonString();
 
         return (200, "application/json", Encoding.UTF8.GetBytes(json));
     }
@@ -1125,7 +1128,8 @@ public sealed class InspectorServer : IDisposable
     private async Task<(int, string, byte[])> HandleEventSupportAsync()
     {
         var capabilities = await _client.GetCapabilitiesAsync();
-        return Ok(JsonSerializer.Serialize(new { supported = SupportsUiEvents(capabilities) }, CamelCase));
+        var supported = SupportsUiEvents(capabilities);
+        return Ok(new JsonObject { ["supported"] = supported }.ToJsonString());
     }
 
     internal static bool? SupportsUiEvents(JsonElement capabilities)
@@ -1405,14 +1409,14 @@ public sealed class InspectorServer : IDisposable
             {
                 return JsonResponse(
                     409,
-                    new
+                    new JsonObject
                     {
-                        success = false,
-                        findingId = request.FindingId,
-                        suppressed = true,
-                        projectRemovable = false,
-                        provenance = ex.Provenance,
-                        message = ex.Provenance.Count == 0
+                        ["success"] = false,
+                        ["findingId"] = request.FindingId,
+                        ["suppressed"] = true,
+                        ["projectRemovable"] = false,
+                        ["provenance"] = JsonSerializer.SerializeToNode(ex.Provenance.ToArray(), DevFlowCliJsonContext.Default.StringArray),
+                        ["message"] = ex.Provenance.Count == 0
                             ? "No project-owned exact suppression exists for this finding."
                             : "This finding is also suppressed by a user or broad project policy. Edit that policy to unsuppress it."
                     });
@@ -1455,13 +1459,15 @@ public sealed class InspectorServer : IDisposable
 
         return JsonResponse(
             200,
-            new
+            new JsonObject
             {
-                success = true,
-                findingId = request.FindingId,
-                suppressed = !remove,
-                projectRemovable = !remove,
-                provenance = remove ? Array.Empty<string>() : ["project-exact"]
+                ["success"] = true,
+                ["findingId"] = request.FindingId,
+                ["suppressed"] = !remove,
+                ["projectRemovable"] = !remove,
+                ["provenance"] = JsonSerializer.SerializeToNode(
+                    remove ? Array.Empty<string>() : ["project-exact"],
+                    DevFlowCliJsonContext.Default.StringArray)
             });
     }
 
@@ -1834,7 +1840,7 @@ public sealed class InspectorServer : IDisposable
 
         using (hitDocument)
         {
-            var candidates = new List<Dictionary<string, string?>>(Math.Min(12, elements.GetArrayLength()));
+            var candidates = new JsonArray();
             for (var index = 0; index < elements.GetArrayLength() && candidates.Count < 12; index++)
             {
                 var element = elements[index];
@@ -1843,7 +1849,7 @@ public sealed class InspectorServer : IDisposable
                 var id = idProperty.GetString();
                 if (string.IsNullOrEmpty(id)) continue;
 
-                candidates.Add(new Dictionary<string, string?>
+                candidates.Add((JsonNode?)new JsonObject
                 {
                     ["id"] = id,
                     ["type"] = ReadOptionalString(element, "type"),
@@ -1852,12 +1858,13 @@ public sealed class InspectorServer : IDisposable
                 });
             }
 
-            var payload = JsonSerializer.Serialize(new
+            var elementId = candidates.Count > 0 ? (string?)candidates[0]!["id"] : null;
+            var payload = new JsonObject
             {
-                ok = true,
-                elementId = candidates.FirstOrDefault()?["id"],
-                candidates
-            }, CamelCase);
+                ["ok"] = true,
+                ["elementId"] = elementId,
+                ["candidates"] = candidates
+            }.ToJsonString();
             return Ok(payload);
         }
     }
@@ -2226,7 +2233,7 @@ public sealed class InspectorServer : IDisposable
             return (400, "application/json", Encoding.UTF8.GetBytes("{\"error\":\"elementId and name required\"}"));
 
         var value = await _client.GetPropertyAsync(elementId!, name!);
-        var payload = JsonSerializer.Serialize(new { ok = true, value });
+        var payload = new JsonObject { ["ok"] = true, ["value"] = value }.ToJsonString();
         return (200, "application/json", Encoding.UTF8.GetBytes(payload));
     }
 
@@ -2244,15 +2251,16 @@ public sealed class InspectorServer : IDisposable
             return Ok("{\"ok\":false,\"supported\":false}");
         }
 
-        var descriptors = properties.EnumerateArray().Select(property =>
+        var descriptors = new JsonArray();
+        foreach (var property in properties.EnumerateArray())
         {
             var node = JsonNode.Parse(property.GetRawText())!.AsObject();
             var name = property.TryGetProperty("name", out var nameElement) ? nameElement.GetString() : null;
             node["persistable"] = !string.IsNullOrWhiteSpace(name) &&
                 XamlSourcePropertyEditor.IsSupportedPropertyName(name);
-            return node;
-        }).ToArray();
-        return Ok(JsonSerializer.Serialize(new { ok = true, supported = true, properties = descriptors }, CamelCase));
+            descriptors.Add((JsonNode?)node);
+        }
+        return Ok(new JsonObject { ["ok"] = true, ["supported"] = true, ["properties"] = descriptors }.ToJsonString());
     }
 
     // Live-edits a single property value on an element, proxied to the agent, then invalidates the
@@ -2415,15 +2423,15 @@ public sealed class InspectorServer : IDisposable
             XamlSourceEditStatus.SourceUnavailable or XamlSourceEditStatus.Unsupported => 422,
             _ => 500,
         };
-        var payload = JsonSerializer.Serialize(new
+        var payload = new JsonObject
         {
-            ok = result.Success,
-            error = result.Error,
-            file = result.File,
-            line = result.Line,
-            column = result.Column,
-            sourceHash = result.SourceHash
-        }, CamelCase);
+            ["ok"] = result.Success,
+            ["error"] = result.Error,
+            ["file"] = result.File,
+            ["line"] = result.Line,
+            ["column"] = result.Column,
+            ["sourceHash"] = result.SourceHash
+        }.ToJsonString();
         return (statusCode, "application/json", Encoding.UTF8.GetBytes(payload));
     }
 
@@ -2492,15 +2500,15 @@ public sealed class InspectorServer : IDisposable
             catch { /* best-effort — a recording can start without agent metadata */ }
 
             var result = await _client.ControlMutationRecordingAsync("start", name, app, platform, preconditions);
-            var payload = JsonSerializer.Serialize(new
+            var payload = new JsonObject
             {
-                ok = result.Ok,
-                recordingId = result.RecordingId,
-                name = result.Name ?? name,
-                steps = result.Steps,
-                route,
-                error = result.Error
-            }, CamelCase);
+                ["ok"] = result.Ok,
+                ["recordingId"] = result.RecordingId,
+                ["name"] = result.Name ?? name,
+                ["steps"] = result.Steps,
+                ["route"] = route,
+                ["error"] = result.Error
+            }.ToJsonString();
             return (result.Ok ? 200 : 400, "application/json", Encoding.UTF8.GetBytes(payload));
         }
         finally
@@ -2547,14 +2555,14 @@ public sealed class InspectorServer : IDisposable
                 AssertsJson = assertsJson
             }, recordingId)
             : await _client.ControlMutationRecordingAsync("status");
-        var payload = JsonSerializer.Serialize(new
+        var payload = new JsonObject
         {
-            ok = result.Ok,
-            seq = result.Seq ?? result.Steps,
-            stepCount = result.Steps,
-            fragile = result.Fragile,
-            error = result.Error
-        }, CamelCase);
+            ["ok"] = result.Ok,
+            ["seq"] = result.Seq ?? result.Steps,
+            ["stepCount"] = result.Steps,
+            ["fragile"] = result.Fragile,
+            ["error"] = result.Error
+        }.ToJsonString();
         return (result.Ok ? 200 : 400, "application/json", Encoding.UTF8.GetBytes(payload));
     }
 
@@ -2565,40 +2573,40 @@ public sealed class InspectorServer : IDisposable
         if (!result.Ok && result.Empty)
         {
             var cancelled = await _client.ControlMutationRecordingAsync("cancel-if-empty", null, null, null, null, recordingId);
-            var emptyPayload = JsonSerializer.Serialize(new
+            var emptyPayload = new JsonObject
             {
-                ok = cancelled.Ok && cancelled.Empty,
-                empty = cancelled.Empty,
-                steps = 0,
-                error = cancelled.Ok ? null : cancelled.Error ?? result.Error
-            }, CamelCase);
+                ["ok"] = cancelled.Ok && cancelled.Empty,
+                ["empty"] = cancelled.Empty,
+                ["steps"] = 0,
+                ["error"] = cancelled.Ok ? null : cancelled.Error ?? result.Error
+            }.ToJsonString();
             return (cancelled.Ok && cancelled.Empty ? 200 : 409, "application/json", Encoding.UTF8.GetBytes(emptyPayload));
         }
 
-        var payload = JsonSerializer.Serialize(new
+        var payload = new JsonObject
         {
-            ok = result.Ok,
-            markdown = result.Markdown,
-            name = result.Name,
-            steps = result.Steps,
-            warnings = result.Warnings,
-            error = result.Error
-        }, CamelCase);
+            ["ok"] = result.Ok,
+            ["markdown"] = result.Markdown,
+            ["name"] = result.Name,
+            ["steps"] = result.Steps,
+            ["warnings"] = result.Warnings is null ? null : JsonSerializer.SerializeToNode(result.Warnings, DevFlowCliJsonContext.Default.StringArray),
+            ["error"] = result.Error
+        }.ToJsonString();
         return (result.Ok ? 200 : 400, "application/json", Encoding.UTF8.GetBytes(payload));
     }
 
     private async Task<(int, string, byte[])> HandleFlowRecordStatusAsync(string? body)
     {
         var result = await _client.ControlMutationRecordingAsync("status");
-        var payload = JsonSerializer.Serialize(new
+        var payload = new JsonObject
         {
-            ok = result.Ok,
-            recording = result.Recording,
-            recordingId = result.RecordingId,
-            name = result.Name,
-            steps = result.Steps,
-            error = result.Error
-        }, CamelCase);
+            ["ok"] = result.Ok,
+            ["recording"] = result.Recording,
+            ["recordingId"] = result.RecordingId,
+            ["name"] = result.Name,
+            ["steps"] = result.Steps,
+            ["error"] = result.Error
+        }.ToJsonString();
         return (result.Ok ? 200 : 400, "application/json", Encoding.UTF8.GetBytes(payload));
     }
 
@@ -2611,13 +2619,13 @@ public sealed class InspectorServer : IDisposable
             null,
             null,
             ReadStringField(body, "recordingId"));
-        var payload = JsonSerializer.Serialize(new
+        var payload = new JsonObject
         {
-            ok = result.Ok,
-            recording = result.Recording,
-            recordingId = result.RecordingId,
-            error = result.Error
-        }, CamelCase);
+            ["ok"] = result.Ok,
+            ["recording"] = result.Recording,
+            ["recordingId"] = result.RecordingId,
+            ["error"] = result.Error
+        }.ToJsonString();
         return (result.Ok ? 200 : 400, "application/json", Encoding.UTF8.GetBytes(payload));
     }
 
@@ -2625,31 +2633,31 @@ public sealed class InspectorServer : IDisposable
     // the same engine as maui_flow_replay — and returns a per-step pass/fail report. This RE-DRIVES
     // the app (destructive by nature); the UI gates it behind an explicit button and blocks it while
     // a recording is active.
-    private static readonly JsonSerializerOptions CamelCase = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     private async Task<(int, string, byte[])> HandleFlowFilesListAsync()
     {
         var root = await ResolveWorkflowRootAsync();
         if (root is null)
         {
-            return JsonResponse(200, new
+            return JsonResponse(200, new JsonObject
             {
-                ok = true,
-                supported = false,
-                tests = Array.Empty<object>(),
-                error = "The registered app project could not be resolved. Use Choose file instead."
+                ["ok"] = true,
+                ["supported"] = false,
+                ["tests"] = new JsonArray(),
+                ["error"] = "The registered app project could not be resolved. Use Choose file instead."
             });
         }
 
         if (!Directory.Exists(root))
-            return JsonResponse(200, new { ok = true, supported = true, tests = Array.Empty<object>() });
+            return JsonResponse(200, new JsonObject { ["ok"] = true, ["supported"] = true, ["tests"] = new JsonArray() });
 
         try
         {
             if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0)
-                return JsonResponse(403, new { ok = false, error = "The project workflow directory cannot be a symbolic link or reparse point." });
+                return JsonError(403, "The project workflow directory cannot be a symbolic link or reparse point.");
 
-            var tests = Directory.EnumerateFiles(root, "*", SearchOption.TopDirectoryOnly)
+            var tests = new JsonArray();
+            foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.TopDirectoryOnly)
                 .Where(path => string.Equals(Path.GetExtension(path), ".md", StringComparison.OrdinalIgnoreCase))
                 .Select(path => new FileInfo(path))
                 .Where(file =>
@@ -2657,30 +2665,31 @@ public sealed class InspectorServer : IDisposable
                     file.Length <= MaxWorkflowFileBytes)
                 .OrderByDescending(file => file.LastWriteTimeUtc)
                 .ThenBy(file => file.Name, StringComparer.OrdinalIgnoreCase)
-                .Take(MaxWorkflowFiles)
-                .Select(file => new
+                .Take(MaxWorkflowFiles))
+            {
+                tests.Add((JsonNode?)new JsonObject
                 {
-                    name = file.Name,
-                    size = file.Length,
-                    modifiedAt = file.LastWriteTimeUtc
-                })
-                .ToArray();
-            return JsonResponse(200, new { ok = true, supported = true, tests });
+                    ["name"] = file.Name,
+                    ["size"] = file.Length,
+                    ["modifiedAt"] = file.LastWriteTimeUtc
+                });
+            }
+            return JsonResponse(200, new JsonObject { ["ok"] = true, ["supported"] = true, ["tests"] = tests });
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return JsonResponse(500, new { ok = false, error = "Could not list project workflow tests." });
+            return JsonError(500, "Could not list project workflow tests.");
         }
     }
 
     private async Task<(int, string, byte[])> HandleFlowFileLoadAsync(string? body)
     {
         if (!TryReadWorkflowFileName(body, out var name, out var requestError))
-            return JsonResponse(400, new { ok = false, error = requestError });
+            return JsonError(400, requestError!);
 
         var root = await ResolveWorkflowRootAsync();
         if (root is null)
-            return JsonResponse(400, new { ok = false, error = "The registered app project could not be resolved. Use Choose file instead." });
+            return JsonError(400, "The registered app project could not be resolved. Use Choose file instead.");
 
         string path;
         try
@@ -2689,59 +2698,59 @@ public sealed class InspectorServer : IDisposable
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
         {
-            return JsonResponse(400, new { ok = false, error = "The workflow filename is invalid." });
+            return JsonError(400, "The workflow filename is invalid.");
         }
 
         if (!XamlSourcePropertyEditor.IsUnderRoot(path, root) ||
             !string.Equals(Path.GetFileName(path), name, StringComparison.Ordinal) ||
             !string.Equals(Path.GetExtension(path), ".md", StringComparison.OrdinalIgnoreCase))
         {
-            return JsonResponse(403, new { ok = false, error = "Only top-level Markdown files in the project maui-tests directory can be loaded." });
+            return JsonError(403, "Only top-level Markdown files in the project maui-tests directory can be loaded.");
         }
 
         try
         {
             if (!File.Exists(path))
-                return JsonResponse(404, new { ok = false, error = "The selected workflow test no longer exists." });
+                return JsonError(404, "The selected workflow test no longer exists.");
             var info = new FileInfo(path);
             if ((info.Attributes & FileAttributes.ReparsePoint) != 0 ||
                 XamlSourcePropertyEditor.PathContainsReparsePoint(root, path))
             {
-                return JsonResponse(403, new { ok = false, error = "Workflow tests reached through symbolic links or reparse points cannot be loaded." });
+                return JsonError(403, "Workflow tests reached through symbolic links or reparse points cannot be loaded.");
             }
             if (info.Length > MaxWorkflowFileBytes)
-                return JsonResponse(413, new { ok = false, error = "Workflow test files larger than 1 MB cannot be loaded." });
+                return JsonError(413, "Workflow test files larger than 1 MB cannot be loaded.");
 
             var markdown = await File.ReadAllTextAsync(path, _lifetimeCts.Token);
             var parsed = Flows.FlowMarkdown.Parse(markdown, path);
             if (!parsed.Ok || parsed.Flow is null)
-                return JsonResponse(400, new { ok = false, error = parsed.Error ?? "Could not parse the workflow test." });
+                return JsonError(400, parsed.Error ?? "Could not parse the workflow test.");
             if (parsed.Flow.Steps.Count > MaxReplaySteps)
-                return JsonResponse(400, new { ok = false, error = $"Flow too large (max {MaxReplaySteps} steps)." });
+                return JsonError(400, $"Flow too large (max {MaxReplaySteps} steps).");
             var validation = Flows.FlowValidator.Validate(parsed.Flow);
             if (!validation.Ok)
             {
-                return JsonResponse(400, new
+                return JsonResponse(400, new JsonObject
                 {
-                    ok = false,
-                    error = "Flow failed validation.",
-                    errors = validation.Errors,
-                    warnings = validation.Warnings
+                    ["ok"] = false,
+                    ["error"] = "Flow failed validation.",
+                    ["errors"] = JsonSerializer.SerializeToNode(validation.Errors, DevFlowCliJsonContext.Default.ListString),
+                    ["warnings"] = JsonSerializer.SerializeToNode(validation.Warnings, DevFlowCliJsonContext.Default.ListString)
                 });
             }
 
-            return JsonResponse(200, new
+            return JsonResponse(200, new JsonObject
             {
-                ok = true,
-                name,
-                markdown,
-                steps = parsed.Flow.Steps.Count,
-                warnings = validation.Warnings
+                ["ok"] = true,
+                ["name"] = name,
+                ["markdown"] = markdown,
+                ["steps"] = parsed.Flow.Steps.Count,
+                ["warnings"] = JsonSerializer.SerializeToNode(validation.Warnings, DevFlowCliJsonContext.Default.ListString)
             });
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DecoderFallbackException)
         {
-            return JsonResponse(500, new { ok = false, error = "Could not read the selected workflow test." });
+            return JsonError(500, "Could not read the selected workflow test.");
         }
     }
 
@@ -2829,8 +2838,11 @@ public sealed class InspectorServer : IDisposable
         return true;
     }
 
-    private static (int, string, byte[]) JsonResponse(int status, object value)
-        => (status, "application/json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(value, CamelCase)));
+    private static (int, string, byte[]) JsonResponse(int status, JsonNode value)
+        => (status, "application/json", Encoding.UTF8.GetBytes(value.ToJsonString()));
+
+    private static (int, string, byte[]) JsonError(int status, string error)
+        => JsonResponse(status, new JsonObject { ["ok"] = false, ["error"] = error });
 
     private async Task<(int, string, byte[])> HandleFlowReplayAsync(string? body)
     {
@@ -2859,20 +2871,20 @@ public sealed class InspectorServer : IDisposable
 
         var parsed = Flows.FlowMarkdown.Parse(markdown);
         if (!parsed.Ok || parsed.Flow is null)
-            return (400, "application/json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { ok = false, error = parsed.Error ?? "Could not parse the flow." })));
+            return (400, "application/json", Encoding.UTF8.GetBytes(new JsonObject { ["ok"] = false, ["error"] = parsed.Error ?? "Could not parse the flow." }.ToJsonString()));
         if (parsed.Flow.Steps.Count > MaxReplaySteps)
             return (400, "application/json", Encoding.UTF8.GetBytes($"{{\"ok\":false,\"error\":\"Flow too large (max {MaxReplaySteps} steps).\"}}"));
 
         var validation = Flows.FlowValidator.Validate(parsed.Flow);
         if (!validation.Ok)
         {
-            var payload = JsonSerializer.Serialize(new
+            var payload = new JsonObject
             {
-                ok = false,
-                error = "Flow failed validation.",
-                errors = validation.Errors,
-                warnings = validation.Warnings
-            }, CamelCase);
+                ["ok"] = false,
+                ["error"] = "Flow failed validation.",
+                ["errors"] = JsonSerializer.SerializeToNode(validation.Errors, DevFlowCliJsonContext.Default.ListString),
+                ["warnings"] = JsonSerializer.SerializeToNode(validation.Warnings, DevFlowCliJsonContext.Default.ListString)
+            }.ToJsonString();
             return (400, "application/json", Encoding.UTF8.GetBytes(payload));
         }
 
@@ -2901,12 +2913,19 @@ public sealed class InspectorServer : IDisposable
             using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
             var replayer = new Flows.FlowReplayer(_client);
             var report = await replayer.ReplayAsync(parsed.Flow, null, cts.Token);
-            return (200, "application/json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(report, CamelCase)));
+            return (200, "application/json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(report, DevFlowCliJsonPreserveNullContext.Default.FlowReplayReport)));
         }
         catch (OperationCanceledException)
         {
             // Surface a timeout as a normal replay failure, not a generic server error.
-            var timeout = JsonSerializer.Serialize(new { ok = false, error = "Replay timed out.", total = parsed.Flow.Steps.Count, passed = 0, failed = parsed.Flow.Steps.Count });
+            var timeout = new JsonObject
+            {
+                ["ok"] = false,
+                ["error"] = "Replay timed out.",
+                ["total"] = parsed.Flow.Steps.Count,
+                ["passed"] = 0,
+                ["failed"] = parsed.Flow.Steps.Count
+            }.ToJsonString();
             return (200, "application/json", Encoding.UTF8.GetBytes(timeout));
         }
         finally
@@ -2948,7 +2967,7 @@ public sealed class InspectorServer : IDisposable
     {
         string? route = null;
         try { route = (await _client.GetStatusAsync())?.Route; } catch { /* best-effort */ }
-        var payload = JsonSerializer.Serialize(new { ok = true, route });
+        var payload = new JsonObject { ["ok"] = true, ["route"] = route }.ToJsonString();
         return (200, "application/json", Encoding.UTF8.GetBytes(payload));
     }
 
@@ -2965,14 +2984,14 @@ public sealed class InspectorServer : IDisposable
         var el = await _client.GetElementAsync(elementId);
         if (el?.SourceFile is null)
             return (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":false,\"error\":\"No source available for this element.\"}"));
-        var payload = JsonSerializer.Serialize(new
+        var payload = new JsonObject
         {
-            ok = true,
-            file = el.SourceFile,
-            line = el.SourceLine,
-            column = el.SourceColumn,
-            sourceHash = el.SourceHash
-        });
+            ["ok"] = true,
+            ["file"] = el.SourceFile,
+            ["line"] = el.SourceLine,
+            ["column"] = el.SourceColumn,
+            ["sourceHash"] = el.SourceHash
+        }.ToJsonString();
         return (200, "application/json", Encoding.UTF8.GetBytes(payload));
     }
 
@@ -3000,7 +3019,7 @@ public sealed class InspectorServer : IDisposable
     private async Task<(int, string, byte[])> HandleAlertsAsync()
     {
         var result = await _alertController.DetectAsync();
-        return Ok(JsonSerializer.Serialize(result, CamelCase));
+        return Ok(JsonSerializer.Serialize(result, DevFlowCliJsonPreserveNullContext.Default.InspectorAlertResult));
     }
 
     private async Task<(int, string, byte[])> HandleAlertDismissAsync(string? body)
@@ -3009,7 +3028,7 @@ public sealed class InspectorServer : IDisposable
         if (string.IsNullOrWhiteSpace(buttonLabel) || buttonLabel.Length > 256)
             return BadRequest("buttonLabel is required and must be 256 characters or fewer");
         var result = await _alertController.DismissAsync(buttonLabel);
-        return Ok(JsonSerializer.Serialize(result, CamelCase));
+        return Ok(JsonSerializer.Serialize(result, DevFlowCliJsonPreserveNullContext.Default.InspectorAlertResult));
     }
 
     private async Task<(int, string, byte[])> HandleLogsAsync(string? body)
@@ -3034,7 +3053,12 @@ public sealed class InspectorServer : IDisposable
         {
             var requests = await _client.GetNetworkRequestsAsync(limit);
             foreach (var r in requests) RedactNetwork(r);
-            return Ok(JsonSerializer.Serialize(new { ok = true, requests }, CamelCase));
+            var node = new JsonObject
+            {
+                ["ok"] = true,
+                ["requests"] = JsonSerializer.SerializeToNode(requests, DevFlowCliJsonPreserveNullContext.Default.ListNetworkRequest)
+            };
+            return Ok(node.ToJsonString());
         }
         catch { return Ok("{\"ok\":false,\"error\":\"network unavailable\"}"); }
     }
@@ -3049,7 +3073,12 @@ public sealed class InspectorServer : IDisposable
             var detail = await _client.GetNetworkRequestDetailAsync(id);
             if (detail is null) return Ok("{\"ok\":false,\"error\":\"not found\"}");
             RedactNetwork(detail);
-            return Ok(JsonSerializer.Serialize(new { ok = true, request = detail }, CamelCase));
+            var node = new JsonObject
+            {
+                ["ok"] = true,
+                ["request"] = JsonSerializer.SerializeToNode(detail, DevFlowCliJsonPreserveNullContext.Default.NetworkRequest)
+            };
+            return Ok(node.ToJsonString());
         }
         catch { return Ok("{\"ok\":false,\"error\":\"network unavailable\"}"); }
     }
@@ -3062,7 +3091,7 @@ public sealed class InspectorServer : IDisposable
             var prefs = await _client.GetPreferencesAsync(string.IsNullOrWhiteSpace(shared) ? null : shared);
             // Unknown shape across platforms — mask obvious secrets in the serialized text; the client
             // additionally masks values by key heuristic and only reveals on demand.
-            var masked = MaskSecrets(JsonSerializer.Serialize(prefs, CamelCase));
+            var masked = MaskSecrets(CliJson.PrettyPrint(prefs, indented: false));
             return Ok(WrapRaw("preferences", masked));
         }
         catch { return Ok("{\"ok\":false,\"error\":\"preferences unavailable\"}"); }
@@ -3073,13 +3102,13 @@ public sealed class InspectorServer : IDisposable
 
     private async Task<(int, string, byte[])> HandleDeviceAsync(string? body)
     {
-        var result = new Dictionary<string, JsonElement>();
+        var device = new JsonObject();
         foreach (var ep in DeviceEndpoints)
         {
-            try { result[ep] = await _client.GetPlatformInfoAsync(ep); }
+            try { device[ep] = JsonValue.Create(await _client.GetPlatformInfoAsync(ep)); }
             catch { /* unsupported on this platform — omit */ }
         }
-        return Ok(JsonSerializer.Serialize(new { ok = true, device = result }, CamelCase));
+        return Ok(new JsonObject { ["ok"] = true, ["device"] = device }.ToJsonString());
     }
 
     private async Task<(int, string, byte[])> HandleSensorsAsync(string? body)
@@ -3087,7 +3116,7 @@ public sealed class InspectorServer : IDisposable
         try
         {
             var sensors = await _client.GetSensorsAsync();
-            return Ok(JsonSerializer.Serialize(new { ok = true, sensors }, CamelCase));
+            return Ok(new JsonObject { ["ok"] = true, ["sensors"] = JsonValue.Create(sensors) }.ToJsonString());
         }
         catch { return Ok("{\"ok\":false,\"error\":\"sensors unavailable\"}"); }
     }
@@ -3099,7 +3128,7 @@ public sealed class InspectorServer : IDisposable
         try
         {
             var loc = await _client.GetGeolocationAsync(accuracy: "medium", timeoutSeconds: 10);
-            return Ok(JsonSerializer.Serialize(new { ok = true, location = loc }, CamelCase));
+            return Ok(new JsonObject { ["ok"] = true, ["location"] = JsonValue.Create(loc) }.ToJsonString());
         }
         catch { return Ok("{\"ok\":false,\"error\":\"geolocation unavailable\"}"); }
     }
@@ -3109,7 +3138,7 @@ public sealed class InspectorServer : IDisposable
         try
         {
             var roots = await _client.ListStorageRootsAsync();
-            return Ok(JsonSerializer.Serialize(new { ok = true, roots }, CamelCase));
+            return Ok(new JsonObject { ["ok"] = true, ["roots"] = JsonValue.Create(roots) }.ToJsonString());
         }
         catch { return Ok("{\"ok\":false,\"error\":\"storage unavailable\"}"); }
     }
@@ -3129,7 +3158,7 @@ public sealed class InspectorServer : IDisposable
         {
             var files = await _client.ListFilesAsync(string.IsNullOrWhiteSpace(path) ? null : path,
                                                      string.IsNullOrWhiteSpace(root) ? null : root);
-            return Ok(JsonSerializer.Serialize(new { ok = true, files }, CamelCase));
+            return Ok(new JsonObject { ["ok"] = true, ["files"] = JsonValue.Create(files) }.ToJsonString());
         }
         catch { return Ok("{\"ok\":false,\"error\":\"files unavailable\"}"); }
     }
@@ -3138,14 +3167,22 @@ public sealed class InspectorServer : IDisposable
     // existing chobitsu.js CDP bridge.
     private async Task<(int, string, byte[])> HandleCdpWebViewsAsync(string? body)
     {
-        try { var wv = await _client.GetCdpWebViewsAsync(); return Ok(JsonSerializer.Serialize(new { ok = true, webviews = wv }, CamelCase)); }
+        try
+        {
+            var wv = await _client.GetCdpWebViewsAsync();
+            return Ok(new JsonObject { ["ok"] = true, ["webviews"] = JsonValue.Create(wv) }.ToJsonString());
+        }
         catch { return Ok("{\"ok\":false,\"error\":\"no WebViews / CDP unavailable\"}"); }
     }
 
     private async Task<(int, string, byte[])> HandleCdpSourceAsync(string? body)
     {
         var id = ReadStringField(body, "webviewId");
-        try { var src = await _client.GetCdpSourceAsync(string.IsNullOrWhiteSpace(id) ? null : id); return Ok(JsonSerializer.Serialize(new { ok = true, source = src }, CamelCase)); }
+        try
+        {
+            var src = await _client.GetCdpSourceAsync(string.IsNullOrWhiteSpace(id) ? null : id);
+            return Ok(new JsonObject { ["ok"] = true, ["source"] = src }.ToJsonString());
+        }
         catch { return Ok("{\"ok\":false,\"error\":\"source unavailable\"}"); }
     }
 
@@ -3159,7 +3196,7 @@ public sealed class InspectorServer : IDisposable
         {
             var pars = new System.Text.Json.Nodes.JsonObject { ["expression"] = expr, ["returnByValue"] = true };
             var res = await _client.SendCdpCommandAsync("Runtime.evaluate", pars, string.IsNullOrWhiteSpace(id) ? null : id);
-            return Ok(JsonSerializer.Serialize(new { ok = true, result = res }, CamelCase));
+            return Ok(new JsonObject { ["ok"] = true, ["result"] = JsonValue.Create(res) }.ToJsonString());
         }
         catch { return Ok("{\"ok\":false,\"error\":\"evaluate failed\"}"); }
     }
@@ -3168,7 +3205,7 @@ public sealed class InspectorServer : IDisposable
 
     private static (int, string, byte[]) Ok(string json) => (200, "application/json", Encoding.UTF8.GetBytes(json));
     private static (int, string, byte[]) BadRequest(string error)
-        => (400, "application/json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { error }, CamelCase)));
+        => (400, "application/json", Encoding.UTF8.GetBytes(new JsonObject { ["error"] = error }.ToJsonString()));
     private static string WrapRaw(string field, string rawJson)
         => "{\"ok\":true,\"" + field + "\":" + (string.IsNullOrWhiteSpace(rawJson) ? "null" : rawJson) + "}";
 
@@ -3279,16 +3316,16 @@ public sealed class InspectorServer : IDisposable
             leaseId,
             holderKind,
             holderLabel);
-        return Ok(JsonSerializer.Serialize(new
+        return Ok(new JsonObject
         {
-            ok = status.Ok,
-            youAreWriter = status.YouHold,
-            heldByOther = status.HeldByOther,
-            holderKind = status.HolderKind,
-            label = status.Label,
-            expiresInMs = status.ExpiresInMs,
-            authority = status.Authority
-        }, CamelCase));
+            ["ok"] = status.Ok,
+            ["youAreWriter"] = status.YouHold,
+            ["heldByOther"] = status.HeldByOther,
+            ["holderKind"] = status.HolderKind,
+            ["label"] = status.Label,
+            ["expiresInMs"] = status.ExpiresInMs,
+            ["authority"] = status.Authority
+        }.ToJsonString());
     }
 
     private static bool ReadBoolField(string? body, string name)
