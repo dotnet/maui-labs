@@ -131,6 +131,97 @@ public class EvidenceCaptureTests : IDisposable
     public void NormalizeSourcePath_KeepsRelativePathsButRejectsTraversal(string input, string expected)
         => Assert.Equal(expected, EvidenceRedaction.NormalizeSourcePath(input, projectRoot: null));
 
+    // ── root admissibility ───────────────────────────────────────────────────────────────────
+    //
+    // A root decides whether an absolute path becomes project-relative or is reduced to a file
+    // name. A bare volume root encloses every file the machine can address, so accepting one turns
+    // this redaction into a disclosure: the bundle publishes the absolute path verbatim, minus its
+    // leading separator. Both separator styles are judged on either OS, because a capture driven
+    // from one platform routinely carries the other platform's paths.
+
+    [Theory]
+    // Windows volume roots, including the drive-relative designator with no separator.
+    [InlineData(@"C:\")]
+    [InlineData("C:/")]
+    [InlineData("C:")]
+    [InlineData(@"c:\\")]
+    [InlineData(@"Z:\")]
+    // POSIX roots, and the separator-only spellings a Windows host resolves to a drive root.
+    [InlineData("/")]
+    [InlineData("//")]
+    [InlineData("///")]
+    [InlineData(@"\")]
+    [InlineData(@"\\")]
+    // A UNC path names no directory until it has both a server and a share below it.
+    [InlineData(@"\\server")]
+    [InlineData(@"\\server\share")]
+    [InlineData(@"\\server\share\")]
+    [InlineData("//server/share")]
+    // Nothing at all, and a root that only becomes bare once it is resolved. "/home/.." lands on
+    // the volume root on both platforms — Windows resolves a leading separator against the current
+    // drive — so it states the traversal case without an OS-specific expectation.
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("/home/..")]
+    public void IsShareableSourceRoot_RejectsBareFilesystemRoots(string root)
+        => Assert.False(EvidenceRedaction.IsShareableSourceRoot(root));
+
+    [Fact]
+    public void IsShareableSourceRoot_RejectsAWindowsRootReachedByTraversal()
+    {
+        if (!OperatingSystem.IsWindows())
+            return; // A backslash is an ordinary file-name character elsewhere.
+
+        Assert.False(EvidenceRedaction.IsShareableSourceRoot(@"C:\repo\.."));
+    }
+
+    [Theory]
+    [InlineData(@"C:\src\App")]
+    [InlineData(@"C:\src")]
+    [InlineData("C:/src/App")]
+    [InlineData("/home/me/app")]
+    [InlineData("/src")]
+    [InlineData(@"\\server\share\app")]
+    [InlineData("//server/share/app")]
+    public void IsShareableSourceRoot_AcceptsOrdinaryCheckoutRoots(string root)
+        => Assert.True(EvidenceRedaction.IsShareableSourceRoot(root));
+
+    [Fact]
+    public void IsShareableSourceRoot_RejectsNull()
+        => Assert.False(EvidenceRedaction.IsShareableSourceRoot(null));
+
+    /// <summary>
+    /// The consequence the guard exists for: with a volume root accepted, every absolute path in a
+    /// bundle keeps its full directory chain and the capture describes the machine rather than the
+    /// project. Stated on both platforms' spellings so neither host can regress silently.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\Users\alice\secrets\App\Views\MainPage.xaml", @"C:\", "MainPage.xaml")]
+    [InlineData(@"C:\Users\alice\secrets\App\Views\MainPage.xaml", "C:", "MainPage.xaml")]
+    [InlineData("/home/alice/secrets/App/Views/MainPage.xaml", "/", "MainPage.xaml")]
+    [InlineData(@"\\server\share\App\Views\MainPage.xaml", @"\\server\share", "MainPage.xaml")]
+    public void NormalizeSourcePath_TreatsABareRootAsNoRootAtAll(
+        string file,
+        string root,
+        string expected)
+    {
+        var normalized = EvidenceRedaction.NormalizeSourcePath(file, root);
+
+        Assert.Equal(expected, normalized);
+        Assert.DoesNotContain("secrets", normalized!, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("alice", normalized!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>A legitimate repository root keeps relativizing exactly as it did.</summary>
+    [Fact]
+    public void NormalizeSourcePath_StillRelativizesInsideARealCheckout()
+    {
+        var projectRoot = Path.Combine(_root, "src", "App");
+        var file = Path.Combine(projectRoot, "Views", "MainPage.xaml");
+
+        Assert.Equal("Views/MainPage.xaml", EvidenceRedaction.NormalizeSourcePath(file, projectRoot));
+    }
+
     [Fact]
     public void SafeIdentifier_DoesNotRetainAbsolutePaths()
     {
@@ -380,7 +471,7 @@ public class EvidenceCaptureTests : IDisposable
             new FakeEvidenceSource(),
             Options() with
             {
-                ProjectRoot = _root,
+                DestinationRoot = _root,
                 FlowRun = new EvidenceFlowRunLink
                 {
                     RunId = "run-1",
@@ -403,6 +494,30 @@ public class EvidenceCaptureTests : IDisposable
         Assert.DoesNotContain("flow-run.json", EvidenceFormat.AllowedEntries.Where(entry => entry != EvidenceFormat.ManifestEntry));
     }
 
+    /// <summary>
+    /// The linked flow-run report is written by the CLI or broker, not by the app, so it lives
+    /// beside the bundle's destination rather than in the app's project. Normalizing it against the
+    /// app's source-path root would drop it to a bare file name the moment the two differ — which
+    /// is exactly the case the source-path root exists for.
+    /// </summary>
+    [Fact]
+    public async Task BuildAsync_FlowRunLink_UsesTheDestinationRootNotTheAppsSourceRoot()
+    {
+        var appProject = Path.Combine(_root, "repo-a");
+        var reportPath = Path.Combine(_root, "artifacts", "run-2", "flow-run.json");
+
+        var bundle = await EvidenceBuilder.BuildAsync(
+            new FakeEvidenceSource(),
+            Options() with
+            {
+                DestinationRoot = _root,
+                SourcePathRoot = appProject,
+                FlowRun = new EvidenceFlowRunLink { RunId = "run-2", ReportPath = reportPath },
+            });
+
+        Assert.Equal("artifacts/run-2/flow-run.json", bundle.Manifest.FlowRun!.ReportPath);
+    }
+
     [Fact]
     public async Task BuildAsync_TurnsSectionFailuresIntoExclusions()
     {
@@ -413,6 +528,169 @@ public class EvidenceCaptureTests : IDisposable
         Assert.DoesNotContain(bundle.Entries, e => e.Name == EvidenceFormat.NetworkEntry);
         // The rest of the bundle still built.
         Assert.Contains(bundle.Entries, e => e.Name == EvidenceFormat.TreeEntry);
+    }
+
+    // ── layout.json ──────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task BuildAsync_IncludesLayoutFindingsAndCountsThem()
+    {
+        var bundle = await EvidenceBuilder.BuildAsync(new FakeEvidenceSource(), Options());
+
+        Assert.Contains(bundle.Entries, e => e.Name == EvidenceFormat.LayoutEntry);
+        Assert.Equal(1, bundle.Manifest.Counts.LayoutFindings);
+        Assert.Equal(1, bundle.Manifest.Counts.LayoutViolations);
+        Assert.Contains(bundle.Plan.Included, entry => entry.Name == EvidenceFormat.LayoutEntry && entry.Count == 1);
+        Assert.Equal(EvidenceFormat.MaxLayoutFindings, bundle.Manifest.Limits.LayoutFindings);
+    }
+
+    [Fact]
+    public async Task BuildAsync_ExcludesLayoutWhenTheAgentDoesNotSupportIt()
+    {
+        var bundle = await EvidenceBuilder.BuildAsync(
+            new FakeEvidenceSource { LayoutUnsupported = true }, Options());
+
+        Assert.DoesNotContain(bundle.Entries, e => e.Name == EvidenceFormat.LayoutEntry);
+        Assert.Contains(bundle.Manifest.Excluded,
+            e => e.Name == EvidenceFormat.LayoutEntry && e.Reason.Contains("does not support", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(0, bundle.Manifest.Counts.LayoutFindings);
+    }
+
+    [Fact]
+    public void ProjectLayout_NormalizesSourcePathsAndKeepsNoTextOrValues()
+    {
+        var report = new LayoutDiagnosticsReport
+        {
+            SchemaVersion = "1.0",
+            RuleSetVersion = "1.0",
+            Platform = "Windows",
+            Snapshot = new LayoutSnapshotInfo
+            {
+                Id = "snapshot-1",
+                TreeRevision = "tree-1",
+                DiagnosticsRevision = "diagnostics-1",
+                Stable = true,
+            },
+            Summary = new LayoutSummary { Violations = 1, Suppressed = 1 },
+            SystemEvidence = new LayoutSystemEvidence
+            {
+                Status = "complete",
+                DeviceId = "android:emulator-5554",
+                CapturedAt = "2026-08-25T10:00:00Z",
+                CaptureSkewMs = 120,
+                GeometryStable = true,
+                ForegroundOwner = "com.android.permissioncontroller",
+                KeyboardVisible = false,
+                ScreenshotCaptured = true,
+                ScreenshotDigest = new string('a', 64),
+                Elements = [new LayoutSystemElement { Id = "permission-dialog" }],
+                Limitations = ["Accessibility bounds are not compositor paint evidence."],
+            },
+            Coverage = new LayoutCoverage { Overall = "partial", NeverCaptured = ["Element Text/Value content"] },
+            Findings =
+            [
+                new LayoutFinding
+                {
+                    Id = "layout.visible-zero-area:e1:area",
+                    RuleId = "layout.visible-zero-area",
+                    Outcome = "violation",
+                    Confidence = "high",
+                    Severity = "serious",
+                    Actionability = "fix",
+                    SuppressionKey = "suppression-1",
+                    Suppressed = true,
+                    SuppressionReason = "Known fixture",
+                    FixCategories = ["adjust-layout-constraints"],
+                    Message = @"Collapsed in C:\Users\alice\App\MainPage.xaml with token=abcdefghijklmnop",
+                    Explanation = "explanation",
+                    Element = new LayoutElementReference
+                    {
+                        Id = "e1",
+                        Type = "Label",
+                        SourceFile = Path.Combine(_root, "MyApp", "Views", "MainPage.xaml"),
+                        SourceLine = 7,
+                    },
+                    RelatedElements =
+                    [
+                        new LayoutRelatedElement
+                        {
+                            Relation = "parent",
+                            Element = new LayoutElementReference { Id = "parent", Type = "Grid" },
+                        },
+                    ],
+                },
+            ],
+        };
+
+        var projected = EvidenceBuilder.ProjectLayout(report, Path.Combine(_root, "MyApp"));
+        var finding = Assert.Single(projected.Findings);
+
+        Assert.Equal("Views/MainPage.xaml", finding.SourceFile);
+        Assert.DoesNotContain(@"C:\Users\alice", finding.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("abcdefghijklmnop", finding.Message, StringComparison.Ordinal);
+        Assert.Equal("snapshot-1", projected.SnapshotId);
+        Assert.Equal("tree-1", projected.TreeRevision);
+        Assert.Equal("diagnostics-1", projected.DiagnosticsRevision);
+        Assert.True(projected.Stable);
+        Assert.Equal(1, projected.Suppressed);
+        Assert.Equal("serious", finding.Severity);
+        Assert.Equal("fix", finding.Actionability);
+        Assert.True(finding.Suppressed);
+        Assert.Equal("Known fixture", finding.SuppressionReason);
+        Assert.Equal(["parent"], finding.RelatedElementIds);
+        Assert.Equal(["adjust-layout-constraints"], finding.FixCategories);
+        Assert.NotNull(projected.SystemEvidence);
+        Assert.Equal("complete", projected.SystemEvidence!.Status);
+        Assert.Equal(1, projected.SystemEvidence.ExternalElementCount);
+        Assert.True(projected.SystemEvidence.ScreenshotCaptured);
+
+        var json = EvidenceJson.Serialize(projected);
+        Assert.DoesNotContain("\"text\"", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"value\"", json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ProjectLayout_StopsAtTheFindingBudget()
+    {
+        var report = new LayoutDiagnosticsReport
+        {
+            Findings = [.. Enumerable.Range(0, EvidenceFormat.MaxLayoutFindings + 25).Select(index => new LayoutFinding
+            {
+                Id = $"layout.visible-zero-area:e{index}:area",
+                RuleId = "layout.visible-zero-area",
+                Outcome = "violation",
+                Message = "message",
+                Explanation = "explanation",
+            })],
+        };
+
+        var projected = EvidenceBuilder.ProjectLayout(report, projectRoot: null);
+
+        Assert.Equal(EvidenceFormat.MaxLayoutFindings, projected.Findings.Count);
+        Assert.True(projected.FindingsTruncated);
+    }
+
+    [Fact]
+    public async Task Bundle_RoundTripsLayoutFindingsThroughTheReader()
+    {
+        var bundle = await EvidenceBuilder.BuildAsync(new FakeEvidenceSource(), Options());
+        var path = Path.Combine(_root, "layout-roundtrip.mauitrace");
+        EvidenceBundleWriter.Write(bundle, path, overwrite: true);
+
+        var read = EvidenceBundleReader.Read(path);
+
+        Assert.True(read.Ok, read.Error);
+        Assert.NotNull(read.Layout);
+        Assert.Contains(EvidenceFormat.LayoutEntry, read.Entries);
+        var finding = Assert.Single(read.Layout!.Findings);
+        Assert.Equal("layout.visible-zero-area", finding.RuleId);
+        Assert.Equal("violation", finding.Outcome);
+        Assert.NotEmpty(read.Layout.NeverCaptured);
+
+        var html = EvidenceReportRenderer.Render(read);
+        Assert.Contains("Layout diagnostics", html, StringComparison.Ordinal);
+        Assert.Contains("layout.visible-zero-area", html, StringComparison.Ordinal);
+        Assert.Contains("incomplete", html, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -1293,10 +1571,12 @@ public class EvidenceCaptureTests : IDisposable
     private sealed class FakeEvidenceSource : IEvidenceDataSource
     {
         public bool FailNetwork { get; init; }
+        public bool LayoutUnsupported { get; init; }
         public bool CancelOnTree { get; init; }
         public string? LogsJson { get; init; }
         public List<ElementInfo>? Tree { get; init; }
         public int ScreenshotReads { get; private set; }
+        public int LayoutMaxElements { get; private set; }
 
         public Task<AgentStatus?> GetStatusAsync(CancellationToken ct) => Task.FromResult<AgentStatus?>(new AgentStatus
         {
@@ -1350,6 +1630,58 @@ public class EvidenceCaptureTests : IDisposable
         public Task<string> GetLogsAsync(int limit, CancellationToken ct)
             => Task.FromResult(LogsJson ??
                 """[{"t":"2026-07-29T10:00:00Z","l":"info","c":"App","m":"started","s":"native"}]""");
+
+        public Task<LayoutDiagnosticsReport?> GetLayoutDiagnosticsAsync(int maxElements, CancellationToken ct)
+        {
+            LayoutMaxElements = maxElements;
+            if (LayoutUnsupported)
+                return Task.FromResult<LayoutDiagnosticsReport?>(null);
+
+            return Task.FromResult<LayoutDiagnosticsReport?>(new LayoutDiagnosticsReport
+            {
+                SchemaVersion = "1.0",
+                RuleSetVersion = "1.0",
+                CapturedUtc = "2026-07-29T10:00:00.000Z",
+                Platform = "Windows",
+                Scope = new LayoutScope { ElementsExamined = 2, MaxElements = maxElements },
+                Summary = new LayoutSummary { Violations = 1, Observations = 0, Incomplete = 1 },
+                Coverage = new LayoutCoverage
+                {
+                    Overall = "partial",
+                    Rules =
+                    [
+                        new LayoutRuleCoverage { RuleId = "layout.visible-zero-area", Support = "full", Confidence = "high", Evaluated = 2 },
+                    ],
+                    Limitations = ["Managed layout state only."],
+                    NeverCaptured = ["Element Text/Value content"],
+                },
+                Findings =
+                [
+                    new LayoutFinding
+                    {
+                        Id = "layout.visible-zero-area:e2:area",
+                        RuleId = "layout.visible-zero-area",
+                        Outcome = "violation",
+                        Confidence = "high",
+                        Message = @"Label collapsed, declared in C:\Users\alice\App\MainPage.xaml",
+                        Explanation = "A realized element with no area cannot draw.",
+                        Element = new LayoutElementReference
+                        {
+                            Id = "e2",
+                            Type = "Label",
+                            AutomationId = "Title",
+                            SourceFile = @"C:\Users\alice\App\MainPage.xaml",
+                            SourceLine = 12,
+                        },
+                        Evidence = new LayoutFindingEvidence
+                        {
+                            Frame = new LayoutRect { X = 1, Y = 2, Width = 0, Height = 20 },
+                        },
+                        Limitations = ["A deliberately collapsed element matches this rule."],
+                    },
+                ],
+            });
+        }
 
         public Task<List<NetworkRequest>> GetNetworkAsync(int limit, CancellationToken ct)
             => FailNetwork

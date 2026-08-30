@@ -10,19 +10,36 @@ internal sealed class FlowReplayEvidenceCapture : IFlowRunEvidenceCapture
     private readonly AgentClient _client;
     private readonly string? _outputPath;
     private readonly string? _projectHint;
+    private readonly string? _layoutPolicyStartPath;
     private readonly string _source;
     private readonly bool _includeScreenshot;
 
+    /// <param name="projectHint">
+    /// Where the flow lives. It steers only the default bundle destination.
+    /// </param>
+    /// <param name="layoutPolicyStartPath">
+    /// The bound app's project root. Two app-scoped decisions are pinned to it and never to the
+    /// flow's own directory: which reviewed layout suppressions apply, and which root the app's
+    /// absolute source paths are rewritten against. Every call site passes the directory the flow
+    /// <em>file</em> sits in as <paramref name="projectHint"/>, which is not a project root at all,
+    /// so a flow stored outside the app project would otherwise either lose the app's reviewed
+    /// suppressions or pick up an unrelated project's, and its source paths would fall through to
+    /// the bare-file-name policy. It is required rather than optional so a new call site cannot
+    /// silently fall back to user-wide policy; pass null only when the caller genuinely cannot
+    /// identify the app's project.
+    /// </param>
     public FlowReplayEvidenceCapture(
         AgentClient client,
         string? outputPath,
         string? projectHint,
+        string? layoutPolicyStartPath,
         string source,
         bool includeScreenshot = false)
     {
         _client = client;
         _outputPath = outputPath;
         _projectHint = projectHint;
+        _layoutPolicyStartPath = layoutPolicyStartPath;
         _source = source;
         _includeScreenshot = includeScreenshot;
     }
@@ -67,13 +84,24 @@ internal sealed class FlowReplayEvidenceCapture : IFlowRunEvidenceCapture
         MauiFlow flow,
         MauiFlowRunEvidenceContext? context,
         CancellationToken cancellationToken)
-        => EvidenceCapture.CaptureAsync(_client, new EvidenceRequest
+        => EvidenceCapture.CaptureAsync(_client, CreateRequest(flow, context), cancellationToken);
+
+    /// <summary>
+    /// Builds the exact request <see cref="CaptureAsync"/> sends. It is separated so a test can
+    /// assert what this adapter actually asks for — in particular that the layout suppression
+    /// policy root is the bound app's and not the flow file's directory — without needing a live
+    /// agent to answer.
+    /// </summary>
+    internal EvidenceRequest CreateRequest(MauiFlow flow, MauiFlowRunEvidenceContext? context)
+        => new()
         {
             // Screenshots stay an explicit opt-in: raw pixels are never redacted, so only a caller
             // that asked for them gets them. Everything else follows the normal redaction policy.
             IncludeScreenshot = _includeScreenshot,
             OutputPath = _outputPath,
             ProjectHint = _projectHint,
+            LayoutPolicyStartPath = _layoutPolicyStartPath,
+            SourcePathRoot = _layoutPolicyStartPath,
             Source = _source,
             WorkflowMarkdown = FlowMarkdown.Serialize(flow),
             FlowRun = context is null ? null : new EvidenceFlowRunLink
@@ -90,7 +118,7 @@ internal sealed class FlowReplayEvidenceCapture : IFlowRunEvidenceCapture
                     ? "failure-only-redacted+screenshot"
                     : "failure-only-redacted",
             }
-        }, cancellationToken);
+        };
 
     private void SetCaptured(EvidenceCaptureResult captured, MauiFlowRunEvidenceContext? context)
     {

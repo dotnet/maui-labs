@@ -39,7 +39,7 @@ public static class McpServerHost
 		"maui_flow_record_start", "maui_flow_record_status", "maui_flow_record_step", "maui_flow_record_stop",
 		"maui_flow_replay", "maui_flow_validate", "maui_focus", "maui_geolocation", "maui_get_property",
 		"maui_get_theme", "maui_gesture", "maui_hittest", "maui_invoke_action", "maui_jobs_list",
-		"maui_jobs_run", "maui_key", "maui_list_actions", "maui_list_agents",
+		"maui_jobs_run", "maui_key", "maui_layout_diagnostics", "maui_list_actions", "maui_list_agents",
 		"maui_logs", "maui_navigate", "maui_network", "maui_network_clear", "maui_network_detail",
 		"maui_performance_snapshot", "maui_performance_start", "maui_performance_stop", "maui_preferences_clear",
 		"maui_preferences_delete", "maui_preferences_get", "maui_preferences_list", "maui_preferences_set",
@@ -90,6 +90,7 @@ public static class McpServerHost
 		"maui_test_explore",
 		"maui_test_failure",
 		"maui_test_improvements",
+		"maui_test_layout_diagnostics",
 		"maui_test_patch",
 		"maui_test_run",
 		"maui_test_status",
@@ -225,6 +226,7 @@ public static class McpServerHost
 				.WithTools<InteractionTools>()
 				.WithTools<PropertyTools>()
 				.WithTools<DiagnosticsTools>()
+				.WithTools<LayoutDiagnosticsTool>()
 				.WithTools<PerformanceTools>()
 				.WithTools<EvidenceTools>()
 				.WithTools<ResumeTools>()

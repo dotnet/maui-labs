@@ -13,12 +13,14 @@ public sealed class MockAgentServer : IAsyncDisposable
     private readonly List<RecordedRequest> _recordedRequests = [];
     private readonly object _lock = new();
     private readonly string _agentStatus;
+    private readonly string _visualTree;
     private readonly bool _supportsLayoutPost;
     private WebApplication? _app;
 
-    public MockAgentServer(string? agentStatus = null, bool supportsLayoutPost = true)
+    public MockAgentServer(string? agentStatus = null, bool supportsLayoutPost = true, string? visualTree = null)
     {
         _agentStatus = agentStatus ?? MockAgentResponses.AgentStatus;
+        _visualTree = visualTree ?? MockAgentResponses.VisualTree;
         _supportsLayoutPost = supportsLayoutPost;
     }
 
@@ -112,9 +114,9 @@ public sealed class MockAgentServer : IAsyncDisposable
         });
     }
 
-    private static void RegisterUiEndpoints(WebApplication app)
+    private void RegisterUiEndpoints(WebApplication app)
     {
-        app.MapGet("/api/v1/ui/tree", () => Results.Content(MockAgentResponses.VisualTree, "application/json"));
+        app.MapGet("/api/v1/ui/tree", () => Results.Content(_visualTree, "application/json"));
         app.MapGet("/api/v1/ui/elements", () => Results.Content(MockAgentResponses.QueryElements, "application/json"));
         app.MapGet("/api/v1/ui/elements/{id}", (string id) => Results.Content(MockAgentResponses.SingleElement(id), "application/json"));
         app.MapGet("/api/v1/ui/elements/{id}/properties/{name}", (string id, string name) =>

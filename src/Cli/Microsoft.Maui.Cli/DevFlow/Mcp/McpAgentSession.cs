@@ -89,6 +89,42 @@ public class McpAgentSession
 	}
 
 	/// <summary>
+	/// Resolves the project root the selected agent registered with, or null when it reported none
+	/// usable. Policy files that belong to the app under inspection — such as the layout
+	/// diagnostics suppressions in <c>.mauidevflow</c> — must be resolved from this, never from the
+	/// broker or MCP server's working directory: those processes are started by an editor and
+	/// routinely sit in a different repository from the running app.
+	/// </summary>
+	public async Task<string?> TryGetAgentProjectRootAsync(int? agentPort = null)
+	{
+		try
+		{
+			return ResolveRegisteredProjectRoot(await GetSelectedBrokerAgentAsync(agentPort));
+		}
+		catch (Exception ex)
+		{
+			// Fail soft on every failure, like the sibling Try* helpers here. Resolving the root
+			// walks a broker launch, an HTTP call, and a filesystem path, so it can fail with a
+			// process-start error or a timeout as easily as with a connection error, and none of
+			// those are worth failing an otherwise valid tool call over. A tool that cannot
+			// identify the app's project falls back to no project policy at all — never to
+			// whatever directory this process happens to be running in.
+			//
+			// A catch this broad hides real defects, so it leaves a trace. Only the exception's
+			// type name is written: a message from a broker, an agent, or a path operation can
+			// carry a filesystem path or app text, and this trace must not become a way to obtain
+			// either. Nothing about the failure reaches the calling agent.
+			System.Diagnostics.Trace.WriteLine(
+				$"DevFlow agent project root lookup failed with {ex.GetType().Name}.");
+			return null;
+		}
+	}
+
+	/// <summary>Maps a registration's project path — a project file or a directory — to a directory.</summary>
+	internal static string? ResolveRegisteredProjectRoot(AgentRegistration? agent)
+		=> agent?.ResolveProjectRoot();
+
+	/// <summary>
 	/// Resolves an exact broker registration for the restricted test-agent profile. Unlike legacy
 	/// MCP helpers, this never selects a default, project match, port, or most-recent agent.
 	/// </summary>

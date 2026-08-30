@@ -22,6 +22,8 @@ packages and `builder.AddMauiDevFlowAgent()` registered.
 ## Route Elsewhere
 
 - If DevFlow packages or `MauiProgram.cs` registration are missing, use `maui-devflow-onboard`.
+- If the primary question is clipping, overflow, text truncation, overlap, blocked input, or
+  layout stability, use `maui-devflow-layout-diagnostics`.
 - If the failure is a generic build or SDK issue with no DevFlow angle, use normal .NET/MAUI diagnostics.
 
 ## Optional Session Feedback Nudge

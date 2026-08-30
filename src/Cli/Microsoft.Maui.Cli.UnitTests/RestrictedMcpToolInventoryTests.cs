@@ -25,6 +25,7 @@ public sealed class RestrictedMcpToolInventoryTests
         "maui_test_explore",
         "maui_test_failure",
         "maui_test_improvements",
+        "maui_test_layout_diagnostics",
         "maui_test_patch",
         "maui_test_run",
         "maui_test_status",
@@ -33,13 +34,13 @@ public sealed class RestrictedMcpToolInventoryTests
     ];
 
     [Fact]
-    public void TestAgentProfile_ExposesExactlyThirteenTools()
+    public void TestAgentProfile_ExposesExactlyFourteenTools()
     {
         var inventory = McpServerHost.GetToolInventory(
             McpServerProfile.TestAgent,
             PreviewFlags());
 
-        Assert.Equal(13, inventory.Count);
+        Assert.Equal(14, inventory.Count);
         Assert.Equal(Expected, inventory);
     }
 
@@ -111,7 +112,7 @@ public sealed class RestrictedMcpToolInventoryTests
         {
             var text = File.ReadAllText(Path.Combine(skill, "SKILL.md"));
             Assert.Contains(
-                "exposes exactly these 13 tools",
+                "exposes exactly these 14 tools",
                 text,
                 StringComparison.Ordinal);
             Assert.Equal(Expected, ToolNames(text).Order(StringComparer.Ordinal).ToArray());
@@ -128,12 +129,13 @@ public sealed class RestrictedMcpToolInventoryTests
 
         var mcpDoc = File.ReadAllText(
             Path.Combine(RepositoryRoot(), "docs", "DevFlow", "testing-mcp-server.md"));
-        Assert.Contains("exactly these 13 tools", mcpDoc, StringComparison.Ordinal);
+        Assert.Contains("exactly these 14 tools", mcpDoc, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// Layout diagnostics is a later layer. Nothing here may advertise it, because an agent that
-    /// reads the name will call it and stall on a tool the broker does not serve.
+    /// The published inventory is what an agent trusts. Nothing under the skills, docs, evaluations,
+    /// or agent definitions may name a <c>maui_test_*</c> tool this profile does not serve, because
+    /// an agent that reads the name will call it and stall on a tool the broker never answers.
     /// </summary>
     [Fact]
     public void NothingAdvertisesToolsThisLayerDoesNotServe()

@@ -1368,6 +1368,164 @@ public class AgentClient : IDisposable
     }
 
     /// <summary>
+    /// Runs a single, explicit, read-only layout diagnostics scan against the running app.
+    /// </summary>
+    /// <param name="elementId">Restrict the scan to this element's subtree.</param>
+    /// <param name="window">0-based window index; defaults to every window.</param>
+    /// <param name="maxElements">Element budget (clamped to the agent's supported range).</param>
+    /// <remarks>
+    /// The report describes managed MAUI layout state only. It never asserts clipping, occlusion,
+    /// text truncation, or accessibility mismatches, and geometry the agent could not read is
+    /// reported as <c>incomplete</c> rather than as a pass. Returns <c>null</c> when the agent does
+    /// not support layout diagnostics or the requested element does not exist.
+    /// </remarks>
+    public async Task<LayoutDiagnosticsReport?> GetLayoutDiagnosticsAsync(
+        string? elementId = null,
+        int? window = null,
+        int? maxElements = null)
+    {
+        int? boundedMaxElements = maxElements.HasValue
+            ? Math.Clamp(maxElements.Value, 1, 5000)
+            : null;
+        LayoutInspectionResult? report;
+        try
+        {
+            report = await AnalyzeLayoutAsync(new LayoutInspectionRequest
+            {
+                Scope = new LayoutInspectionScope
+                {
+                    Mode = LayoutScopeModes.AllWindows,
+                    RootElementId = string.IsNullOrWhiteSpace(elementId) ? null : elementId,
+                    Window = window,
+                },
+                Rules =
+                [
+                    LayoutDiagnosticRules.VisibleZeroArea,
+                    LayoutDiagnosticRules.ConstraintViolation,
+                    LayoutDiagnosticRules.ElementOutsideWindow,
+                    LayoutDiagnosticRules.DesiredSizeConstrained,
+                    LayoutDiagnosticRules.ChildOutsideParent,
+                ],
+                MinimumSeverity = "info",
+                MaxElements = boundedMaxElements,
+            });
+        }
+        catch (LayoutDiagnosticsException ex)
+            when (string.Equals(
+                ex.ErrorType,
+                LayoutDiagnosticsErrorTypes.ElementNotFound,
+                StringComparison.Ordinal))
+        {
+            return null;
+        }
+        if (report is not null)
+            return report;
+
+        // Older agents expose only the compatibility GET route. Keep that fallback until the
+        // versioned POST contract is universally available.
+        var query = new List<string>();
+        if (!string.IsNullOrWhiteSpace(elementId))
+            query.Add($"elementId={Uri.EscapeDataString(elementId!)}");
+        if (window.HasValue)
+            query.Add($"window={window.Value}");
+        if (boundedMaxElements.HasValue)
+            query.Add($"maxElements={boundedMaxElements.Value}");
+
+        var path = $"{UiApi}/diagnostics/layout";
+        if (query.Count > 0)
+            path += "?" + string.Join("&", query);
+        return await GetAsync<LayoutDiagnosticsReport>(path);
+    }
+
+    /// <summary>
+    /// Runs the versioned layout diagnostics contract with profile, filtering, evidence, privacy,
+    /// stability, and suppression options.
+    /// </summary>
+    public Task<LayoutInspectionResult?> AnalyzeLayoutAsync(LayoutInspectionRequest request)
+        => AnalyzeLayoutAsync(request, CancellationToken.None);
+
+    public async Task<LayoutInspectionResult?> AnalyzeLayoutAsync(
+        LayoutInspectionRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        try
+        {
+            // The endpoint uses POST for a structured query body but is read-only. Use the read
+            // retry path so diagnostics never claims the app mutation lease.
+            using var response = await SendWithTransientRetriesAsync(async () =>
+            {
+                using var content = new StringContent(
+                    DriverJson.SerializeUntyped(request),
+                    Encoding.UTF8,
+                    "application/json");
+                return await _http.PostAsync(
+                    $"{_baseUrl}{UiApi}/diagnostics/layout",
+                    content,
+                    cancellationToken);
+            });
+            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (response.IsSuccessStatusCode)
+                return DriverJson.Deserialize<LayoutInspectionResult>(responseBody);
+            if (response.StatusCode is HttpStatusCode.MethodNotAllowed or HttpStatusCode.NotImplemented)
+                return null;
+
+            var message =
+                $"Layout diagnostics request failed with HTTP {(int)response.StatusCode}.";
+            string? errorType = null;
+            try
+            {
+                var error = DriverJson.ParseElement(responseBody);
+                if (error.TryGetProperty("error", out var errorMessage))
+                    message = errorMessage.GetString() ?? message;
+                if (error.TryGetProperty("reason", out var reason))
+                    errorType = reason.GetString();
+            }
+            catch (JsonException)
+            {
+            }
+
+            if (response.StatusCode == HttpStatusCode.NotFound &&
+                !string.Equals(
+                    errorType,
+                    LayoutDiagnosticsErrorTypes.ElementNotFound,
+                    StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            throw new LayoutDiagnosticsException(
+                (int)response.StatusCode,
+                message,
+                errorType,
+                retryable: response.StatusCode is HttpStatusCode.TooManyRequests or
+                    HttpStatusCode.ServiceUnavailable ||
+                    (int)response.StatusCode >= 500);
+        }
+        catch (LayoutDiagnosticsException)
+        {
+            throw;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsExpectedClientException(ex))
+        {
+            throw new LayoutDiagnosticsException(
+                0,
+                $"Unable to complete the layout diagnostics request: {ex.Message}",
+                "layout-diagnostics-unavailable",
+                retryable: true,
+                innerException: ex);
+        }
+    }
+
+    /// <summary>Gets the layout diagnostic rules and current support levels advertised by the agent.</summary>
+    public Task<LayoutRuleCatalog?> GetLayoutDiagnosticRulesAsync()
+        => GetAsync<LayoutRuleCatalog>($"{UiApi}/diagnostics/layout/rules");
+
+    /// <summary>
     /// Collects a performance triage summary from the agent's current profiler session.
     /// </summary>
     /// <remarks>

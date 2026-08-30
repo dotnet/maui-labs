@@ -69,6 +69,10 @@ public sealed partial class InspectorServer
             "/api/network" => await HandleNetworkAsync(request.Body),
             "/api/network/detail" => await HandleNetworkDetailAsync(request.Body),
             "/api/problems" => await HandleProblemsAsync(request.Body),
+            "/api/diagnostics/layout" => await HandleLayoutDiagnosticsAsync(request.Body),
+            "/api/diagnostics/suppress" => await HandleLayoutSuppressionAsync(request.Body, remove: false),
+            "/api/diagnostics/unsuppress" => await HandleLayoutSuppressionAsync(request.Body, remove: true),
+            "/api/diagnostics/suppression/apply" => HandleLayoutSuppressionApply(request.Body),
             "/api/performance/start" => await HandlePerformanceStartAsync(
                 request.Body,
                 leaseId,
@@ -120,10 +124,10 @@ public sealed partial class InspectorServer
 
     internal static readonly IReadOnlyList<InspectorOptionalSurface> OptionalSurfaces =
     [
-        // Layout diagnostics and the managed device host are served by later layers. Their browser
-        // modules ship here so the panels stay one file, but they stay hidden until the route
-        // exists.
-        new("devflow-surface-layout-diagnostics", "/api/diagnostics/layout", Served: false),
+        // The managed device host is served by a later layer. Its browser module ships here so the
+        // panel stays one file, but it stays hidden until the route exists. Layout diagnostics is
+        // served by this layer.
+        new("devflow-surface-layout-diagnostics", "/api/diagnostics/layout", Served: true),
         new("devflow-surface-device-host", "/api/device/host", Served: false),
     ];
 

@@ -4869,12 +4869,21 @@ import { mergeRecordedFlow } from './inspector-steps.js';
     return details;
   }
 
-  // No Inspector host in this layer can mutate the project's layout suppression policy, so an
-  // approval-required result is always terminal here: copy the exact proposal for review instead.
+  // A suppression is a policy-file write, so it needs a human-confirmed capability from a trusted
+  // native approval host. Only VS Code can obtain one, and it spends the capability itself so the
+  // page never holds one; the Canvas Inspector and a plain browser tab fall back to copying the
+  // exact proposal for review rather than pretending it was saved.
   async function completeLayoutSuppression(result) {
     if (result?.type !== 'WorkspaceApprovalRequired' || !result.proposal)
       return result;
-    await copyText(JSON.stringify(result.proposal, null, 2));
+    const proposal = result.proposal;
+    if (hostBridge?.has?.('layoutPolicyMutation')) {
+      const approval = await hostBridge.request('layoutPolicyMutation', { proposal });
+      if (approval?.ok)
+        return { ok: true, message: approval.message };
+      return { ok: false, error: approval?.error || 'The layout suppression policy could not be changed.' };
+    }
+    await copyText(JSON.stringify(proposal, null, 2));
     setStatus('Copied the exact suppression proposal. Applying it to the project is not available in this Inspector.');
     return null;
   }
@@ -5477,6 +5486,10 @@ import { mergeRecordedFlow } from './inspector-steps.js';
     const previous = latestLayoutReport;
     try {
       result = await apiPost('/api/diagnostics/layout', {
+        // 2.0, not 2.1: the agent ships inside the app and is updated independently of this host,
+        // and it rejects an unknown request version outright. 2.1 removed response fields and
+        // redefined suppressionKey — nothing a request can ask for — so declaring it would only
+        // break scans against an app built against the previous package.
         schemaVersion: '2.0',
         profile: layoutOptions.profile,
         rules: layoutRuleSet,

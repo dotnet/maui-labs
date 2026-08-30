@@ -24,10 +24,11 @@ maui devflow evidence inspect-trust ./artifacts/flow-run.json --json
 maui devflow evidence verify-apple-qa ./devflow-flow-qa-<run-id>-ios.zip --import-diagnostics --json
 ```
 
-When available, `layout.json.systemEvidence` records the paired device ID, capture time/skew,
-geometry-stability decision, foreground owner, keyboard state, screenshot availability/digest,
-external-element count, and limitations. It does not include screenshot pixels or raw native
-accessibility text.
+`layout.json.systemEvidence` is not populated by this layer: correlating a layout finding with the
+device's own accessibility tree needs device capture, which arrives with the Mobile Device Canvas
+layer. Bundles written here carry an app-scoped layout scan only, so nothing in a bundle claims a
+keyboard, permission dialog, alert, or share sheet was ruled in or out. Readers already tolerate the
+field being absent.
 
 ## What a bundle contains
 

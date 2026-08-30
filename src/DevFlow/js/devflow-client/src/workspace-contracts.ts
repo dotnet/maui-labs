@@ -42,7 +42,14 @@ export interface LayoutInspectionScope {
 }
 
 export interface LayoutInspectionRequest {
-  schemaVersion?: "2.0";
+  /**
+   * Payload shape version this request declares. Send "2.0" — the newest version both 2.0 and 2.1
+   * agents accept. The agent ships inside the app under inspection and is updated independently of
+   * this client, and it rejects an unknown request version outright; 2.1 removed response fields
+   * and redefined suppressionKey, so declaring it buys a request nothing. Responses may declare
+   * "2.1", which this client understands.
+   */
+  schemaVersion?: "1.0" | "2.0" | "2.1";
   scope?: LayoutInspectionScope;
   profile?: string;
   rules?: string[];

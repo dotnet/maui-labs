@@ -8,6 +8,15 @@ namespace Microsoft.Maui.Cli.UnitTests;
 public class InspectorHtmlRendererTests
 {
     [Fact]
+    public void Render_IncludesDedicatedLayoutOverlayLayer()
+    {
+        var html = HtmlRenderer.Render([], hasScreenshot: false);
+
+        Assert.Contains("id=\"df-layout-overlays\"", html);
+        Assert.Contains("aria-hidden=\"true\"", html);
+    }
+
+    [Fact]
     public void RenderElements_EscapesHtmlInTextAttribute()
     {
         var tree = new List<ElementInfo>
@@ -130,5 +139,40 @@ public class InspectorHtmlRendererTests
 
         Assert.Contains("top:80px", html);
         Assert.Contains("left:30px", html);
+    }
+
+    [Theory]
+    [InlineData("Button", true, true, true)]
+    [InlineData("CollectionView", true, true, true)]
+    [InlineData("Label", true, true, false)]
+    [InlineData("Button", true, false, false)]
+    [InlineData("Button", false, true, false)]
+    public void RenderElements_EmitsInteractabilityFromTraitsAndState(
+        string type,
+        bool visible,
+        bool enabled,
+        bool expected)
+    {
+        var html = HtmlRenderer.RenderElements(new List<ElementInfo>
+        {
+            new()
+            {
+                Id = "target",
+                Type = type,
+                IsVisible = visible,
+                IsEnabled = enabled,
+                Bounds = new BoundsInfo { X = 0, Y = 0, Width = 20, Height = 20 },
+            },
+        });
+
+        Assert.Contains($"data-interactable=\"{expected.ToString().ToLowerInvariant()}\"", html);
+    }
+
+    [Fact]
+    public void ComputeWebSocketAcceptKey_MatchesRfc6455SampleVector()
+    {
+        var acceptKey = InspectorServer.ComputeWebSocketAcceptKey("dGhlIHNhbXBsZSBub25jZQ==");
+
+        Assert.Equal("s3pPLMBiTxaQ9kYGzzhZRbK+xOo=", acceptKey);
     }
 }

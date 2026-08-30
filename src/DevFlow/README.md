@@ -111,6 +111,66 @@ dotnet build -p:MauiDevFlowSessionId=mysession
 
 The same value can also be supplied via the `MAUI_DEVFLOW_SESSION_ID` environment variable.
 
+### Layout diagnostics (experimental)
+
+`GET|POST /api/v1/ui/diagnostics/layout` (rule catalog `GET /api/v1/ui/diagnostics/layout/rules`;
+capabilities `diagnostics.layout` and `ui.layoutDiagnostics`) runs a versioned schema v2 contract
+shared by the CLI, Driver, MCP tools, evidence, and Inspector. The Driver compatibility method
+prefers the v2 read-only POST preset and falls back to GET for older agents. Both perform the
+managed baseline scan in one UI-thread tree walk:
+
+| Rule | Outcome | Confidence |
+|------|---------|------------|
+| `layout.visible-zero-area` | violation | high |
+| `layout.constraint-violation` | violation | high |
+| `layout.element-outside-window` | observation | medium |
+| `layout.desired-size-constrained` | observation | medium |
+| `layout.child-outside-parent` | observation | low |
+
+The v2 POST request supports active-page or all-window scope, stable multi-frame capture, native and
+same-origin Blazor evidence, sampled interaction routing, profiles, rule/severity filters, evidence
+and pass controls, and `report`/`ignore`/`off` suppression modes. Native clipping,
+content extent, exact platform truncation indicators, interaction samples, and geometric overlap
+feed the same analyzer. Visual occlusion and accessibility visibility remain unavailable rather
+than being inferred from rectangles, opacity, or z-order.
+
+Geometry the active collector cannot read is reported as `incomplete`, never as a pass, and every
+report carries per-rule `coverage`, explicit `limitations`, stable suppression fingerprints,
+source-aware element references, and immutable snapshot/revision metadata. Element text, values,
+and property dictionaries are never read: `privacy.text` accepts only `none`, `length` and `full`
+are rejected rather than silently downgraded, the report carries no member that could hold text or a
+text length, and `coverage.neverCaptured` is published unconditionally on every report. Suppression
+fingerprints are built only from restart-stable identity — rule, subtype, source path/line,
+AutomationId, and type, plus the same stable identity of any related elements a rule reports — so
+an approved suppression keeps matching after the page is rebuilt or the app restarts. That is
+restart stability, not portability: every input to the key can change without the finding changing.
+The source path is the one the app reported, so a fingerprint stops matching when the file moves or
+is renamed, when the declaration line moves, or when the app is built from a different checkout,
+clone path, or machine. It equally stops matching when the element's `AutomationId` is added,
+removed, or renamed, when its type changes (a `Label` refactored to a `Border`, or a control
+replaced by a custom subclass), or when a related element a finding is reported against is renamed
+or removed. A `.mauidevflow` committed to source control may need its suppressions re-created from
+a fresh scan on another machine, in CI, or after an ordinary refactor — that is expected, not a
+defect: matching on anything less specific would suppress findings the reviewer never saw.
+Inspector suppressions are exact project
+entries under `layoutDiagnostics.suppressions` in `.mauidevflow`; user-wide suppressions can be
+placed in `~/.mauidevflow/layout-diagnostics.json`.
+
+`report.systemEvidence` is not populated by this layer. Correlating a finding with the device's own
+accessibility tree needs device capture, which arrives with the Mobile Device Canvas layer, so every
+scan here is app-scoped and never rules a keyboard, permission dialog, alert, or share sheet in or
+out.
+
+Inspector suppression persistence is reviewed by a trusted VS Code host — the only native approval
+host; the Canvas Inspector has no approval authority. Proposals bind the exact suppression key,
+diagnostics revision, agent instance, project file digest, and expiry; the final write uses
+compare-and-swap and atomic replacement. In the Canvas Inspector or a standalone browser the
+proposal is copied for human review instead of being written.
+
+Layout diagnostics is **experimental** and is not an MVP dependency: no authoring path, run, or
+evidence bundle requires a layout scan, and every other surface behaves identically when the
+connected agent does not support it.
+
 ## Features
 
 - **Visual Tree Inspection** — query the full MAUI visual tree via HTTP API or CLI
@@ -119,6 +179,7 @@ The same value can also be supplied via the `MAUI_DEVFLOW_SESSION_ID` environmen
 - **Screen Recording** — start/stop video recording of app sessions
 - **Network Monitoring** — intercept and inspect HTTP requests/responses
 - **Performance Profiling** — CPU, memory, GC, and jank detection with markers and spans
+- **Layout Diagnostics** (experimental) — an on-demand, read-only scan of managed MAUI layout state (`maui devflow diagnostics layout`) with typed findings, per-rule coverage, and explicit limitations
 - **Blazor CDP Bridge** — Chrome DevTools Protocol for Blazor WebViews (DOM, JS eval, navigation, input)
 - **MCP Server** — 69 structured tools for AI agent integration (Claude, etc.)
 - **Logging** — buffered JSONL file logging with WebView JS console capture

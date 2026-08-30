@@ -49,6 +49,7 @@ public class TestAgentSessionServiceTests
                 "maui_test_explore",
                 "maui_test_failure",
                 "maui_test_improvements",
+                "maui_test_layout_diagnostics",
                 "maui_test_patch",
                 "maui_test_run",
                 "maui_test_status",
@@ -56,7 +57,7 @@ public class TestAgentSessionServiceTests
                 "maui_test_validate",
             ],
             restricted);
-        Assert.Equal(13, restricted.Count);
+        Assert.Equal(14, restricted.Count);
     }
 
     [Fact]

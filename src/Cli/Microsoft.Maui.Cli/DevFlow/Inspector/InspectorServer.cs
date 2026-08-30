@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -56,6 +57,10 @@ public sealed partial class InspectorServer : IDisposable
     private readonly XamlAutomationIdProposalService _xamlSourceProposalService;
     private readonly CSharpAutomationIdProposalService _csharpSourceProposalService;
     private readonly InspectorAlertController _alertController;
+    private readonly object _layoutDiagnosticsLock = new();
+    private LayoutInspectionResult? _latestLayoutDiagnostics;
+    private string? _layoutDiagnosticsPolicyStartPath;
+    private readonly LayoutSuppressionProposalStore _layoutSuppressionProposals = new();
     // Per-inspector read token gating the data tabs (Logs/Network/Preferences/Device/Sensors/
     // Files) — the app data these expose (tokens in network, secrets in prefs/logs) exceeds the
     // visible tree. Injected into the served page as a <meta>; devflow.js echoes it back in the
@@ -785,13 +790,20 @@ public sealed partial class InspectorServer : IDisposable
                         StringComparison.OrdinalIgnoreCase) &&
                     hostTokenVerified;
                 // Approve verifies the capability itself further down, so it does not need the read
-                // token; a caller without a matching capability is refused there regardless.
+                // token; a caller without a matching capability is refused there regardless. The
+                // layout suppression apply works the same way: the single-use, digest-bound
+                // capability is the authority, so the trusted host can spend it directly and the
+                // page never has to be handed one.
                 var consumesTrustedHostConfirmation =
                     request.Method == "POST" &&
-                    normalizedPath.StartsWith(
-                        "/api/workbench/agent-requests/",
-                        StringComparison.OrdinalIgnoreCase) &&
-                    normalizedPath.EndsWith("/approve", StringComparison.OrdinalIgnoreCase);
+                    ((normalizedPath.StartsWith(
+                          "/api/workbench/agent-requests/",
+                          StringComparison.OrdinalIgnoreCase) &&
+                      normalizedPath.EndsWith("/approve", StringComparison.OrdinalIgnoreCase)) ||
+                     string.Equals(
+                         normalizedPath,
+                         "/api/diagnostics/suppression/apply",
+                         StringComparison.OrdinalIgnoreCase));
                 // Listing and rejecting carry no later capability check, so the owner token itself
                 // must be verified here. Neither can mint authority: reject only closes a request.
                 var trustedHostAgentRequestReview =
@@ -3372,6 +3384,41 @@ public sealed partial class InspectorServer : IDisposable
                     request.GrantDurationSeconds);
                 break;
             }
+            case WorkbenchApprovalConfirmationActions.LayoutPolicyMutation:
+            {
+                if (string.IsNullOrWhiteSpace(request.SubjectId) ||
+                    !_layoutSuppressionProposals.TryGet(request.SubjectId, out var proposal) ||
+                    proposal!.ExpiresAt <= DateTimeOffset.UtcNow)
+                {
+                    return JsonResponse(404, new
+                    {
+                        ok = false,
+                        error = "The layout suppression proposal was not found or has expired.",
+                    });
+                }
+                if (!string.Equals(proposal.AgentId, _agentId, StringComparison.Ordinal) ||
+                    !string.Equals(proposal.AgentInstanceId, _agentInstanceId, StringComparison.Ordinal))
+                {
+                    return JsonResponse(409, new { ok = false, error = "The layout proposal targets a different app instance." });
+                }
+                if (!string.Equals(
+                        request.ContentDigest,
+                        proposal.ExpectedPolicyDigest,
+                        StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(
+                        request.PatchDigest,
+                        proposal.ProposalDigest,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return JsonResponse(409, new
+                    {
+                        ok = false,
+                        error = "The trusted host did not confirm the exact policy and proposal digests.",
+                    });
+                }
+                material = LayoutSuppressionApprovalMaterial(proposal);
+                break;
+            }
             default:
                 return JsonResponse(400, new { ok = false, error = "The approval confirmation action is unsupported." });
         }
@@ -3380,6 +3427,24 @@ public sealed partial class InspectorServer : IDisposable
             request.Action!,
             request.SubjectId!,
             material);
+        object? layoutPolicyReview = null;
+        if (request.Action == WorkbenchApprovalConfirmationActions.LayoutPolicyMutation &&
+            _layoutSuppressionProposals.TryGet(request.SubjectId!, out var layoutProposal))
+        {
+            layoutPolicyReview = new
+            {
+                layoutProposal!.Action,
+                layoutProposal.FindingId,
+                layoutProposal.SuppressionKey,
+                layoutProposal.Reason,
+                projectFile = ".mauidevflow",
+                policyPath = layoutProposal.PolicyPath,
+                layoutProposal.ExpectedPolicyDigest,
+                layoutProposal.DiagnosticsRevision,
+                layoutProposal.ProposalDigest,
+                layoutProposal.ExpiresAt,
+            };
+        }
         return JsonResponse(201, new
         {
             ok = true,
@@ -3391,6 +3456,7 @@ public sealed partial class InspectorServer : IDisposable
                 agentId = _agentId,
                 agentInstanceId = _agentInstanceId,
             },
+            layoutPolicyReview,
             note = "This single-use capability confirms one exact target, subject, and digest. Chat text is not approval.",
         });
     }
@@ -5087,7 +5153,8 @@ public sealed partial class InspectorServer : IDisposable
                 client => new InspectorReplayEvidenceCapture(
                     client,
                     consent,
-                    StoreWorkbenchEvidence),
+                    StoreWorkbenchEvidence,
+                    PinnedLayoutPolicyStartPath),
                 new WorkflowRunLeaseHandoff(leaseId, holderKind, holderLabel));
             if (result.Ok && result.Run is not null && !string.IsNullOrWhiteSpace(result.CapabilityToken))
             {
@@ -5837,6 +5904,7 @@ public sealed partial class InspectorServer : IDisposable
     private static class WorkbenchApprovalConfirmationActions
     {
         public const string AgentRequestApprove = "agent-request-approve";
+        public const string LayoutPolicyMutation = "layout-policy-mutation";
     }
 
     private sealed class WorkbenchApprovalConfirmationIssueRequest
@@ -5845,6 +5913,16 @@ public sealed partial class InspectorServer : IDisposable
         [JsonPropertyName("subjectId")] public string? SubjectId { get; set; }
         [JsonPropertyName("approvedScope")] public Testing.MauiTestAgentMutationScope? ApprovedScope { get; set; }
         [JsonPropertyName("grantDurationSeconds")] public int? GrantDurationSeconds { get; set; }
+        // Layout policy mutations are confirmed by digest: the trusted host echoes the exact policy
+        // file digest it reviewed and the exact proposal digest it displayed.
+        [JsonPropertyName("contentDigest")] public string? ContentDigest { get; set; }
+        [JsonPropertyName("patchDigest")] public string? PatchDigest { get; set; }
+    }
+
+    private sealed class LayoutSuppressionApplyRequest
+    {
+        [JsonPropertyName("proposalId")] public string? ProposalId { get; set; }
+        [JsonPropertyName("confirmationCapability")] public string? ConfirmationCapability { get; set; }
     }
 
     private sealed record WorkbenchApprovalConfirmation(
@@ -6139,7 +6217,7 @@ public sealed partial class InspectorServer : IDisposable
                     client => new InspectorReplayEvidenceCapture(client, WorkbenchEvidenceConsent.None, (_, bytes, _) =>
                     {
                         lock (_replayEvidenceGate) _lastReplayEvidence = bytes;
-                    }),
+                    }, PinnedLayoutPolicyStartPath),
                     new WorkflowRunLeaseHandoff(leaseId, holderKind, holderLabel),
                     cts.Token);
             lock (_replayEvidenceGate) report.EvidenceAvailable = _lastReplayEvidence is { Length: > 0 };
@@ -6168,7 +6246,7 @@ public sealed partial class InspectorServer : IDisposable
         var capture = new InspectorReplayEvidenceCapture(_client, WorkbenchEvidenceConsent.None, (_, bytes, _) =>
         {
             lock (_replayEvidenceGate) _lastReplayEvidence = bytes;
-        });
+        }, PinnedLayoutPolicyStartPath);
         var replayer = new Testing.FlowReplayer(_client, evidenceCapture: capture);
         return await replayer.ReplayAsync(flow, null, cancellationToken);
     }
@@ -6190,16 +6268,19 @@ public sealed partial class InspectorServer : IDisposable
         private readonly AgentClient _client;
         private readonly WorkbenchEvidenceConsent _consent;
         private readonly Action<string, byte[], WorkbenchEvidenceConsent> _capture;
+        private readonly string? _layoutPolicyStartPath;
         public Testing.MauiFlowArtifactReference? CapturedArtifact { get; private set; }
 
         public InspectorReplayEvidenceCapture(
             AgentClient client,
             WorkbenchEvidenceConsent consent,
-            Action<string, byte[], WorkbenchEvidenceConsent> capture)
+            Action<string, byte[], WorkbenchEvidenceConsent> capture,
+            string? layoutPolicyStartPath = null)
         {
             _client = client;
             _consent = consent;
             _capture = capture;
+            _layoutPolicyStartPath = layoutPolicyStartPath;
         }
 
         public async Task CaptureOnFailureAsync(
@@ -6213,6 +6294,7 @@ public sealed partial class InspectorServer : IDisposable
                 Source = "inspector",
                 IncludeScreenshot = _consent.IncludeScreenshot,
                 WorkflowMarkdown = _consent.IncludeWorkflow ? Testing.FlowMarkdown.Serialize(flow) : null,
+                LayoutPolicyStartPath = _layoutPolicyStartPath,
             }, cancellationToken);
             _capture("legacy-evidence", bundle.Bytes, _consent);
             CapturedArtifact = new Testing.MauiFlowArtifactReference
@@ -6235,6 +6317,7 @@ public sealed partial class InspectorServer : IDisposable
                 Source = "inspector",
                 IncludeScreenshot = _consent.IncludeScreenshot,
                 WorkflowMarkdown = _consent.IncludeWorkflow ? Testing.FlowMarkdown.Serialize(context.Flow) : null,
+                LayoutPolicyStartPath = _layoutPolicyStartPath,
                 FlowRun = new Evidence.EvidenceFlowRunLink
                 {
                     RunId = context.Report.RunId,
@@ -6370,6 +6453,8 @@ public sealed partial class InspectorServer : IDisposable
             or
         "/api/source" or "/api/persistProperty" or "/api/logs" or "/api/network" or "/api/network/detail" or "/api/problems" or "/api/preferences"
             or "/api/device" or "/api/sensors" or "/api/geolocation"
+            or "/api/diagnostics/layout" or "/api/diagnostics/suppress" or "/api/diagnostics/unsuppress"
+            or "/api/diagnostics/suppression/apply"
             or "/api/performance/start" or "/api/performance/snapshot" or "/api/performance/stop"
             or "/api/files/roots" or "/api/files/list"
             or "/api/flows/files/list" or "/api/flows/files/load" or "/api/flows/replay/evidence"
@@ -6468,6 +6553,345 @@ public sealed partial class InspectorServer : IDisposable
     // Both are token-gated POST reads that proxy the shared AgentClient/Driver analysis, so the
     // Inspector, the CLI, and the MCP tools present identical results. Neither one refreshes the
     // frame or takes a screenshot: a diagnostic must not change what the user is looking at.
+
+    private async Task<(int, string, byte[])> HandleLayoutDiagnosticsAsync(string? body)
+    {
+        LayoutInspectionRequest request;
+        try
+        {
+            request = string.IsNullOrWhiteSpace(body)
+                ? new LayoutInspectionRequest()
+                : CliJson.Deserialize<LayoutInspectionRequest>(body!) ??
+                    throw new JsonException("The request body was empty.");
+        }
+        catch (JsonException ex)
+        {
+            return JsonResponse(400, new
+            {
+                ok = false,
+                error = $"Invalid layout diagnostics request: {ex.Message}",
+                type = "InvalidArgument",
+            });
+        }
+
+        request.Scope ??= new LayoutInspectionScope();
+        request.Stability ??= new LayoutStabilityOptions();
+        request.Occlusion ??= new LayoutOcclusionOptions();
+        // Privacy is pinned, not defaulted. The body arrives from a browser page, and this layer
+        // reads no element text or values at all, so a page must not be able to ask for a text
+        // length or content — not even one an older 2.0 agent would still answer.
+        request.Privacy = new LayoutPrivacyOptions();
+        request.MaxElements ??= 2000;
+
+        try
+        {
+            var policyStartPath = await ResolveLayoutDiagnosticsPolicyStartPathAsync();
+            var policy = string.IsNullOrWhiteSpace(policyStartPath)
+                ? LayoutDiagnosticsPolicyLoader.LoadUserPolicy()
+                : LayoutDiagnosticsPolicyLoader.Load(policyStartPath);
+            request.Suppressions = policy.Suppressions.ToList();
+            var report = await _client.AnalyzeLayoutAsync(request, _lifetimeCts.Token);
+            if (report is null)
+                return Ok("{\"ok\":false,\"error\":\"Layout diagnostics are not supported by the connected agent.\"}");
+
+            lock (_layoutDiagnosticsLock)
+            {
+                _latestLayoutDiagnostics = report;
+                _layoutDiagnosticsPolicyStartPath = policyStartPath;
+            }
+            return Ok(JsonSerializer.Serialize(new { ok = true, report }, CamelCase));
+        }
+        catch (LayoutDiagnosticsException ex)
+        {
+            return JsonResponse(ex.StatusCode is >= 400 and <= 599 ? ex.StatusCode : 502, new
+            {
+                ok = false,
+                error = ex.Message,
+                type = ex.ErrorType ?? "LayoutDiagnosticsError",
+                retryable = ex.Retryable,
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return JsonResponse(409, new
+            {
+                ok = false,
+                error = ex.Message,
+                type = "LayoutDiagnosticsPolicyError",
+            });
+        }
+        catch (IOException ex)
+        {
+            return JsonResponse(503, new
+            {
+                ok = false,
+                error = ex.Message,
+                type = "LayoutDiagnosticsPolicyUnavailable",
+                retryable = true,
+            });
+        }
+    }
+
+    /// <summary>
+    /// Project root that layout suppression policy is resolved from, without doing discovery I/O.
+    /// It reuses the already-resolved value when a scan has run, otherwise the Inspector's own
+    /// <c>--project</c>. It never falls back to this process's working directory: the broker is
+    /// started by an editor and often sits in a different repository from the running app.
+    /// </summary>
+    private string? PinnedLayoutPolicyStartPath
+    {
+        get
+        {
+            lock (_layoutDiagnosticsLock)
+            {
+                if (!string.IsNullOrWhiteSpace(_layoutDiagnosticsPolicyStartPath))
+                    return _layoutDiagnosticsPolicyStartPath;
+            }
+            return !string.IsNullOrWhiteSpace(_project) && Path.IsPathFullyQualified(_project)
+                ? _project
+                : null;
+        }
+    }
+
+    private async Task<string?> ResolveLayoutDiagnosticsPolicyStartPathAsync()    {
+        lock (_layoutDiagnosticsLock)
+        {
+            if (!string.IsNullOrWhiteSpace(_layoutDiagnosticsPolicyStartPath))
+                return _layoutDiagnosticsPolicyStartPath;
+        }
+
+        string? resolved = null;
+        if (!string.IsNullOrWhiteSpace(_project) && Path.IsPathFullyQualified(_project))
+        {
+            resolved = _project;
+        }
+        else
+        {
+            var workflowRoot = await ResolveWorkflowRootAsync();
+            resolved = workflowRoot is null ? null : Path.GetDirectoryName(workflowRoot);
+        }
+
+        // Never cache a blank root: the policy loader would read it as "probe my working
+        // directory", which is precisely the wrong project.
+        if (string.IsNullOrWhiteSpace(resolved))
+            resolved = null;
+
+        lock (_layoutDiagnosticsLock)
+            _layoutDiagnosticsPolicyStartPath = resolved;
+        return resolved;
+    }
+
+    private async Task<(int, string, byte[])> HandleLayoutSuppressionAsync(
+        string? body,
+        bool remove)
+    {
+        var findingId = ReadStringField(body, "findingId");
+        var reason = ReadStringField(body, "reason");
+        if (string.IsNullOrWhiteSpace(findingId) || findingId.Length > 512)
+            return BadRequest("findingId is required and must be 512 characters or fewer");
+        if (reason is { Length: > 512 })
+            return BadRequest("reason must be 512 characters or fewer");
+
+        var policyStartPath = await ResolveLayoutDiagnosticsPolicyStartPathAsync();
+        if (policyStartPath is null)
+        {
+            return JsonResponse(409, new
+            {
+                ok = false,
+                error = "The registered app project could not be resolved, so its .mauidevflow policy cannot be changed.",
+                type = "ProjectUnavailable",
+            });
+        }
+
+        LayoutFinding? finding;
+        string? diagnosticsRevision;
+        lock (_layoutDiagnosticsLock)
+        {
+            var report = _latestLayoutDiagnostics;
+            finding = report?.Findings.FirstOrDefault(candidate =>
+                candidate.Id.Equals(findingId, StringComparison.OrdinalIgnoreCase));
+            diagnosticsRevision = report?.Snapshot.DiagnosticsRevision;
+        }
+        if (finding is null)
+            return JsonResponse(404, new { ok = false, error = "Finding not found. Rescan Layout and try again." });
+
+        var suppressionKey = string.IsNullOrWhiteSpace(finding.SuppressionKey)
+            ? finding.Id
+            : finding.SuppressionKey;
+        if (string.IsNullOrWhiteSpace(diagnosticsRevision) ||
+            string.IsNullOrWhiteSpace(_agentId) ||
+            string.IsNullOrWhiteSpace(_agentInstanceId))
+        {
+            return JsonResponse(409, new { ok = false, error = "The current layout snapshot has no stable target identity." });
+        }
+
+        var proposal = new LayoutSuppressionProposal(
+            ProposalId: Guid.NewGuid().ToString("N"),
+            Action: remove ? "remove-exact-suppression" : "add-exact-suppression",
+            FindingId: findingId,
+            SuppressionKey: suppressionKey,
+            Reason: string.IsNullOrWhiteSpace(reason)
+                ? "Suppressed in DevFlow Inspector"
+                : reason.Trim(),
+            PolicyStartPath: policyStartPath,
+            PolicyPath: Path.GetFullPath(
+                LayoutDiagnosticsPolicyLoader.ResolveProjectConfigPath(policyStartPath)),
+            ExpectedPolicyDigest: LayoutDiagnosticsPolicyLoader.GetProjectPolicyDigest(policyStartPath),
+            DiagnosticsRevision: diagnosticsRevision,
+            AgentId: _agentId,
+            AgentInstanceId: _agentInstanceId,
+            ExpiresAt: DateTimeOffset.UtcNow.AddMinutes(10));
+        proposal = proposal with { ProposalDigest = LayoutSuppressionProposalDigest(proposal) };
+        _layoutSuppressionProposals.Add(proposal, DateTimeOffset.UtcNow);
+        return JsonResponse(409, new
+        {
+            ok = false,
+            error = "Persisting a layout suppression requires explicit approval from a trusted native host.",
+            type = "WorkspaceApprovalRequired",
+            proposal = new
+            {
+                proposalId = proposal.ProposalId,
+                proposal.Action,
+                proposal.FindingId,
+                proposal.SuppressionKey,
+                proposal.Reason,
+                proposal.ExpectedPolicyDigest,
+                proposal.PolicyPath,
+                proposal.DiagnosticsRevision,
+                proposal.ProposalDigest,
+                proposal.ExpiresAt,
+                projectFile = ".mauidevflow",
+                appName = _appName,
+                platform = _platform,
+            },
+        });
+    }
+
+    private (int, string, byte[]) HandleLayoutSuppressionApply(string? body)
+    {
+        LayoutSuppressionApplyRequest? request;
+        try
+        {
+            request = JsonSerializer.Deserialize<LayoutSuppressionApplyRequest>(body ?? "{}", CamelCase);
+        }
+        catch (JsonException ex)
+        {
+            return BadRequest($"Invalid layout suppression apply request: {ex.Message}");
+        }
+        if (string.IsNullOrWhiteSpace(request?.ProposalId) ||
+            string.IsNullOrWhiteSpace(request.ConfirmationCapability) ||
+            !_layoutSuppressionProposals.TryGet(request.ProposalId, out var proposal))
+        {
+            return JsonResponse(404, new { ok = false, error = "The layout suppression proposal was not found." });
+        }
+        if (proposal!.ExpiresAt <= DateTimeOffset.UtcNow)
+        {
+            _layoutSuppressionProposals.Remove(proposal.ProposalId);
+            return JsonResponse(409, new { ok = false, error = "The layout suppression proposal expired." });
+        }
+        if (!TryConsumeWorkbenchApprovalConfirmation(
+                request.ConfirmationCapability,
+                WorkbenchApprovalConfirmationActions.LayoutPolicyMutation,
+                proposal.ProposalId,
+                LayoutSuppressionApprovalMaterial(proposal),
+                out var confirmationError))
+        {
+            return JsonResponse(403, new { ok = false, error = confirmationError });
+        }
+        lock (_layoutDiagnosticsLock)
+        {
+            if (!string.Equals(
+                    _latestLayoutDiagnostics?.Snapshot.DiagnosticsRevision,
+                    proposal.DiagnosticsRevision,
+                    StringComparison.Ordinal))
+            {
+                return JsonResponse(409, new
+                {
+                    ok = false,
+                    error = "The layout diagnostics revision changed after review. Rescan and approve a new proposal.",
+                });
+            }
+        }
+
+        try
+        {
+            LayoutDiagnosticsPolicyLoader.UpdateProjectPolicyCas(
+                proposal.PolicyStartPath,
+                proposal.ExpectedPolicyDigest,
+                policy =>
+                {
+                    if (proposal.Action == "remove-exact-suppression")
+                    {
+                        var removed = policy.Suppressions.RemoveAll(item =>
+                            item.Fingerprint?.Equals(
+                                proposal.SuppressionKey,
+                                StringComparison.OrdinalIgnoreCase) == true);
+                        if (removed == 0)
+                            throw new LayoutPolicyConcurrencyException(
+                                "The exact project suppression no longer exists.");
+                    }
+                    else if (!policy.Suppressions.Any(item =>
+                        item.Fingerprint?.Equals(
+                            proposal.SuppressionKey,
+                            StringComparison.OrdinalIgnoreCase) == true))
+                    {
+                        policy.Suppressions.Add(new LayoutSuppression
+                        {
+                            Fingerprint = proposal.SuppressionKey,
+                            Reason = proposal.Reason,
+                        });
+                    }
+                },
+                proposal.PolicyPath);
+        }
+        catch (LayoutPolicyConcurrencyException ex)
+        {
+            return JsonResponse(409, new { ok = false, error = ex.Message, type = "PolicyChanged" });
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException)
+        {
+            return JsonResponse(409, new { ok = false, error = ex.Message, type = "PolicyWriteRefused" });
+        }
+
+        _layoutSuppressionProposals.Remove(proposal.ProposalId);
+        lock (_layoutDiagnosticsLock)
+            _latestLayoutDiagnostics = null;
+        return JsonResponse(200, new
+        {
+            ok = true,
+            findingId = proposal.FindingId,
+            suppressed = proposal.Action == "add-exact-suppression",
+            provenance = proposal.Action == "add-exact-suppression"
+                ? new[] { "project-exact" }
+                : Array.Empty<string>(),
+        });
+    }
+
+    private static string LayoutSuppressionApprovalMaterial(LayoutSuppressionProposal proposal)
+        => string.Join(
+            "|",
+            proposal.ProposalId,
+            proposal.ProposalDigest,
+            proposal.Action,
+            proposal.SuppressionKey,
+            proposal.ExpectedPolicyDigest,
+            proposal.DiagnosticsRevision,
+            proposal.AgentId,
+            proposal.AgentInstanceId);
+
+    private static string LayoutSuppressionProposalDigest(LayoutSuppressionProposal proposal)
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join(
+            "|",
+            proposal.Action,
+            proposal.FindingId,
+            proposal.SuppressionKey,
+            proposal.Reason,
+            proposal.ExpectedPolicyDigest,
+            proposal.PolicyPath,
+            proposal.DiagnosticsRevision,
+            proposal.AgentId,
+            proposal.AgentInstanceId,
+            proposal.ExpiresAt.ToUnixTimeSeconds())))).ToLowerInvariant();
 
     private async Task<(int, string, byte[])> HandlePerformanceStartAsync(
         string? body,
@@ -6605,6 +7029,7 @@ public sealed partial class InspectorServer : IDisposable
             WorkflowMarkdown = workflow,
             Source = "inspector",
             ProjectHint = _project,
+            LayoutPolicyStartPath = PinnedLayoutPolicyStartPath,
         };
     }
 

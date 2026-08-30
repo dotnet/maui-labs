@@ -6,7 +6,7 @@ namespace Microsoft.Maui.DevFlow.Agent.Gtk;
 /// <summary>
 /// GTK-specific visual tree walker that provides native GTK widget info.
 /// </summary>
-public class GtkVisualTreeWalker : VisualTreeWalker
+public partial class GtkVisualTreeWalker : VisualTreeWalker
 {
     protected override BoundsInfo? ResolveWindowBounds(VisualElement ve)
     {

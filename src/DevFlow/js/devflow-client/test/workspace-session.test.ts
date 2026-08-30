@@ -83,8 +83,8 @@ test("workspace session resolves an exact agent and uses broker-hosted Inspector
       response.end(JSON.stringify(layoutSupported ? {
         ok: true,
         report: {
-          schemaVersion: "2.0",
-          ruleSetVersion: "2.0",
+          schemaVersion: "2.1",
+          ruleSetVersion: "2.1",
           snapshot: {
             id: "layout-1",
             capturedAt: "2026-01-01T00:00:00Z",
@@ -176,9 +176,21 @@ test("workspace session resolves an exact agent and uses broker-hosted Inspector
   assert.equal(problems.ok, true);
   assert.equal(problems.ok && problems.value.value.problems[0]?.id, "problem-1");
 
-  const layout = await session.analyzeLayout({ schemaVersion: "2.0", maxElements: 100 });
+  const layout = await session.analyzeLayout({ schemaVersion: "2.1", maxElements: 100 });
   assert.equal(layout.ok, true);
   assert.equal(layout.ok && layout.value.value.coverage.overall, "full");
+
+  // The agent accepts 1.0 and 2.0 requests alongside 2.1, so the client must not reject them.
+  for (const schemaVersion of ["1.0", "2.0", "2.1"] as const) {
+    const accepted = await session.analyzeLayout({ schemaVersion, maxElements: 100 });
+    assert.equal(accepted.ok, true, `schemaVersion ${schemaVersion} should be accepted`);
+  }
+  const rejectedVersion = await session.analyzeLayout({
+    schemaVersion: "3.0" as unknown as "2.1",
+    maxElements: 100,
+  });
+  assert.equal(rejectedVersion.ok, false);
+  assert.equal(!rejectedVersion.ok && rejectedVersion.error.kind, "invalid-argument");
 
   const layoutRequestCount = requests.filter((request) =>
     request.url?.endsWith("/api/diagnostics/layout")).length;

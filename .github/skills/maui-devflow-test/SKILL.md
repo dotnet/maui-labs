@@ -36,12 +36,13 @@ pending, rejected, or expired request.
 
 ## Tool Inventory
 
-The `test-agent` profile exposes exactly these 13 tools, and no others:
+The `test-agent` profile exposes exactly these 14 tools, and no others:
 
 `maui_test_agents`, `maui_test_capabilities`, `maui_test_improvements`,
 `maui_test_explore`, `maui_test_author`, `maui_test_action`,
 `maui_test_assertion`, `maui_test_validate`, `maui_test_status`,
-`maui_test_run`, `maui_test_trace`, `maui_test_failure`, `maui_test_patch`.
+`maui_test_run`, `maui_test_trace`, `maui_test_failure`, `maui_test_patch`,
+`maui_test_layout_diagnostics`.
 
 ### Load the tools before calling one
 

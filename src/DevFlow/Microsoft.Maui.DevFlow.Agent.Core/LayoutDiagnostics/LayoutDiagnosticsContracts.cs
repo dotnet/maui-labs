@@ -11,8 +11,17 @@ namespace Microsoft.Maui.DevFlow.Agent.Core.LayoutDiagnostics;
 /// </summary>
 public static class LayoutDiagnosticsFormat
 {
-    /// <summary>Payload shape version. Bump when a field is removed or changes meaning.</summary>
-    public const string SchemaVersion = "2.0";
+    /// <summary>
+    /// Payload shape version. Bump when a field is removed or changes meaning.
+    ///
+    /// 2.1 removed <c>textEvidence.text</c> and <c>textEvidence.textLength</c> — this layer never
+    /// read either, so keeping members that could hold them let a report be misread as evidence
+    /// that text was captured — and redefined <c>suppressionKey</c> to exclude runtime element ids,
+    /// which makes a persisted suppression survive a page rebuild or an app restart. Both are
+    /// removals or meaning changes, so the version moves with them. Requests may still declare
+    /// <c>1.0</c> or <c>2.0</c>.
+    /// </summary>
+    public const string SchemaVersion = "2.1";
 
     /// <summary>Rule semantics version. Bump when a rule's outcome or threshold changes.</summary>
     public const string RuleSetVersion = "2.1";
@@ -305,8 +314,21 @@ public sealed class LayoutOcclusionOptions
 
 public sealed class LayoutPrivacyOptions
 {
+    /// <summary>
+    /// The only accepted value is <c>none</c>. This subsystem never reads element text or values,
+    /// so a request that asks for text length or content is rejected rather than silently
+    /// downgraded — a knob that cannot be honoured must not look like one that can.
+    /// </summary>
     [JsonPropertyName("text")]
-    public string Text { get; set; } = "none";
+    public string Text { get; set; } = LayoutPrivacyTextModes.None;
+}
+
+/// <summary>The complete set of accepted <c>privacy.text</c> values. There is only one.</summary>
+public static class LayoutPrivacyTextModes
+{
+    public const string None = "none";
+
+    public static readonly IReadOnlyList<string> All = [None];
 }
 
 public sealed class LayoutSuppression
@@ -1040,6 +1062,10 @@ public sealed class LayoutOverflowInsets
     public double Bottom { get; set; }
 }
 
+/// <summary>
+/// Text-shape evidence. It carries measurement geometry only: there is no member for text content
+/// or text length, so a report structurally cannot imply that text was read.
+/// </summary>
 public sealed class LayoutTextEvidence
 {
     [JsonPropertyName("kind")]
@@ -1049,14 +1075,6 @@ public sealed class LayoutTextEvidence
     [JsonPropertyName("isTruncated")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? IsTruncated { get; set; }
-
-    [JsonPropertyName("textLength")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? TextLength { get; set; }
-
-    [JsonPropertyName("text")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? Text { get; set; }
 
     [JsonPropertyName("renderedLineCount")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
