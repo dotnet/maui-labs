@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "planId": "plan-appkit-native-fill",
+  "revision": 1,
+  "flow": {
+    "path": "appkit-native-fill.md",
+    "digest": "a47763c59837579f8c82be1b48428712dcf932152ee81b16133e21096cb6173f"
+  },
+  "title": "appkit-native-fill",
+  "goal": "Replay the committed appkit-native-fill flow against the sample app.",
+  "scenarios": [],
+  "assumptions": [],
+  "risks": [],
+  "preconditions": [],
+  "reset": {
+    "required": false
+  },
+  "acceptanceCriteria": [],
+  "requiredPlatforms": [],
+  "requirements": {
+    "requiredCapabilities": [],
+    "requiredSemantics": []
+  },
+  "prohibitedActionClasses": [],
+  "provenance": {
+    "actorKind": "human",
+    "channel": "repository",
+    "intent": "human-authored"
+  },
+  "reviews": [],
+  "approvals": [],
+  "sideEffectPolicy": "none",
+  "businessOracles": [],
+  "independentBusinessOracles": []
+}

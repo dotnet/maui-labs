@@ -1,0 +1,313 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/dotnet/maui-labs/main/docs/DevFlow/spec/schemas/maui-test-execution-manifest-v1.json",
+  "title": "MAUI Test Execution Manifest v1",
+  "description": "Provider-neutral redacted host, build, artifact, device, lifecycle, and ownership facts for one test occurrence. Fact objects are omitted when that stage has no facts, such as a device before preflight completes. The contract has no raw-log, prompt, secret, machine-name, user-name, absolute-path, or device-serial fields.",
+  "type": "object",
+  "required": [
+    "schema",
+    "fingerprintVersion",
+    "artifacts"
+  ],
+  "properties": {
+    "schema": {
+      "const": 1
+    },
+    "manifestId": {
+      "$ref": "#/$defs/Identifier"
+    },
+    "runId": {
+      "$ref": "#/$defs/Identifier"
+    },
+    "flowId": {
+      "$ref": "#/$defs/Identifier"
+    },
+    "flowRevision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "flowDigest": {
+      "$ref": "#/$defs/Fingerprint"
+    },
+    "fingerprintVersion": {
+      "const": "maui-flow-fingerprints-v1"
+    },
+    "testIdentityFingerprint": {
+      "$ref": "#/$defs/Fingerprint"
+    },
+    "incidentFingerprint": {
+      "$ref": "#/$defs/Fingerprint"
+    },
+    "occurrenceFingerprint": {
+      "$ref": "#/$defs/Fingerprint"
+    },
+    "host": {
+      "$ref": "#/$defs/HostFacts"
+    },
+    "build": {
+      "$ref": "#/$defs/BuildFacts"
+    },
+    "device": {
+      "$ref": "#/$defs/DeviceFacts"
+    },
+    "lifecycle": {
+      "$ref": "#/$defs/LifecycleFacts"
+    },
+    "outcome": {
+      "$ref": "#/$defs/OutcomeFacts"
+    },
+    "artifacts": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "$ref": "#/$defs/Artifact"
+      }
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "Fingerprint": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "Identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "HostFacts": {
+      "type": "object",
+      "properties": {
+        "os": {
+          "type": "string"
+        },
+        "architecture": {
+          "type": "string"
+        },
+        "runtime": {
+          "type": "string"
+        },
+        "runnerKind": {
+          "type": "string"
+        },
+        "environmentFingerprint": {
+          "$ref": "#/$defs/Fingerprint"
+        }
+      },
+      "additionalProperties": true
+    },
+    "BuildFacts": {
+      "type": "object",
+      "properties": {
+        "repositoryFingerprint": {
+          "$ref": "#/$defs/Fingerprint"
+        },
+        "projectFingerprint": {
+          "$ref": "#/$defs/Fingerprint"
+        },
+        "sourceRevision": {
+          "type": "string"
+        },
+        "targetFramework": {
+          "type": "string"
+        },
+        "configuration": {
+          "type": "string"
+        },
+        "appId": {
+          "type": "string"
+        },
+        "appBuildFingerprint": {
+          "$ref": "#/$defs/Fingerprint"
+        },
+        "appSourceFingerprint": {
+          "$ref": "#/$defs/Fingerprint"
+        },
+        "packageDigest": {
+          "$ref": "#/$defs/Fingerprint"
+        }
+      },
+      "additionalProperties": true
+    },
+    "DeviceFacts": {
+      "type": "object",
+      "properties": {
+        "platform": {
+          "type": "string"
+        },
+        "runtimeKind": {
+          "type": "string"
+        },
+        "profile": {
+          "type": "string"
+        },
+        "architecture": {
+          "type": "string"
+        },
+        "apiLevel": {
+          "type": "string"
+        },
+        "osVersion": {
+          "type": "string"
+        },
+        "formFactor": {
+          "type": "string"
+        },
+        "virtual": {
+          "type": "boolean"
+        },
+        "deviceIdentityFingerprint": {
+          "$ref": "#/$defs/Fingerprint"
+        }
+      },
+      "additionalProperties": true
+    },
+    "LifecycleFacts": {
+      "type": "object",
+      "properties": {
+        "startedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "endedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "cleanupPolicy": {
+          "type": "string"
+        },
+        "installedByInvocation": {
+          "type": "boolean"
+        },
+        "launchedByInvocation": {
+          "type": "boolean"
+        },
+        "cleanupCompleted": {
+          "type": "boolean"
+        },
+        "stages": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/LifecycleStage"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "LifecycleStage": {
+      "type": "object",
+      "required": [
+        "sequence",
+        "name",
+        "status"
+      ],
+      "properties": {
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "detailCode": {
+          "type": "string"
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ownedResource": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "OutcomeFacts": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "description": "The preserved primary run status. It is not a projection of exitCategory: an owned cleanup failure after a passing run keeps status `passed`."
+        },
+        "exitCategory": {
+          "type": "string",
+          "description": "The category the whole command exited with, composing the primary run verdict with any owned cleanup failure."
+        },
+        "terminal": {
+          "type": "boolean"
+        },
+        "verified": {
+          "type": "boolean"
+        },
+        "unknownCompletion": {
+          "type": "boolean"
+        },
+        "secondaryFailures": {
+          "type": "array",
+          "maxItems": 4,
+          "description": "Mirrors the flow-run report's secondaryFailures for the same occurrence, through the same projection: one entry per phase, the two known phases (`cleanup`, `artifact-cleanup`) first so the cap can only ever drop a phase an artifact invented, then the remainder in ascending phase order.",
+          "items": {
+            "$ref": "#/$defs/SecondaryFailure"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "SecondaryFailure": {
+      "type": "object",
+      "properties": {
+        "phase": {
+          "type": "string",
+          "description": "The owned cleanup phase that failed: `cleanup` or `artifact-cleanup` for this producer. The value is deliberately not closed; see the flow-run report schema."
+        },
+        "code": { "type": "string" },
+        "class": {
+          "type": "string",
+          "const": "infrastructure"
+        },
+        "retryable": { "type": "boolean" }
+      },
+      "required": ["phase", "code"],
+      "additionalProperties": false
+    },
+    "Artifact": {
+      "type": "object",
+      "properties": {
+        "artifactId": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "mediaType": {
+          "type": "string"
+        },
+        "digest": {
+          "$ref": "#/$defs/Fingerprint"
+        },
+        "sizeBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "relativePath": {
+          "type": "string",
+          "pattern": "^(?![/\\\\])(?![A-Za-z]:)(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+$"
+        },
+        "redacted": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

@@ -1,0 +1,499 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/dotnet/maui-labs/main/docs/DevFlow/spec/schemas/broker-workflow-run-v1.json",
+  "title": "DevFlow Broker Workflow Run v1",
+  "description": "Local broker protocol for a bounded canonical flow replay. A capability token grants access only to one allocated run.",
+  "$defs": {
+    "RunState": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "acquiring-lease",
+        "preparing",
+        "running",
+        "passed",
+        "failed",
+        "cancelled",
+        "timed-out",
+        "lease-lost",
+        "infrastructure-error",
+        "unknown-completion",
+        "orphaned"
+      ]
+    },
+    "RunTarget": {
+      "type": "object",
+      "required": [
+        "agentId",
+        "agentInstanceId"
+      ],
+      "properties": {
+        "agentId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "agentInstanceId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The broker-assigned connected-instance generation from /api/agents."
+        },
+        "platform": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "appName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "LifecycleEvent": {
+      "type": "object",
+      "required": [
+        "at",
+        "kind",
+        "message"
+      ],
+      "properties": {
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "RunSnapshot": {
+      "type": "object",
+      "required": [
+        "schema",
+        "runId",
+        "state",
+        "terminal",
+        "flowDigest",
+        "target",
+        "createdAt",
+        "events"
+      ],
+      "properties": {
+        "schema": {
+          "const": 1
+        },
+        "runId": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/RunState"
+        },
+        "terminal": {
+          "type": "boolean"
+        },
+        "flowDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "authorityEpoch": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "description": "Broker mutation-lease authority epoch bound into every fenced workflow command."
+        },
+        "target": {
+          "$ref": "#/$defs/RunTarget"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "startedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "endedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "totalSteps": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total canonical flow steps retained for progress presentation."
+        },
+        "completedSteps": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Completed retained step attempts. A runner without live step callbacks reports zero until its terminal report is available."
+        },
+        "currentStepId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Latest completed step identifier when retained; null never means that an in-flight mutation did not complete."
+        },
+        "firstDivergence": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "cancellationRequested": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LifecycleEvent"
+          }
+        },
+        "report": {
+          "anyOf": [
+            {
+              "$ref": "./maui-flow-run-report-v1.json"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reportPath": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Optional local atomic flow-run.json artifact path when the broker has an artifact root."
+        },
+        "reportDigest": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "SHA-256 digest of the retained report artifact when available."
+        },
+        "admission": {
+          "anyOf": [
+            {
+              "$ref": "./maui-flow-run-report-v1.json#/$defs/ReplayEligibility"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The pre-lease side-effect/reset/oracle replay-admission decision."
+        }
+      },
+      "additionalProperties": false
+    },
+    "StartRequest": {
+      "type": "object",
+      "required": [
+        "agentId",
+        "agentInstanceId",
+        "idempotencyKey"
+      ],
+      "properties": {
+        "agentId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "agentInstanceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "markdown": {
+          "type": "string"
+        },
+        "flow": {
+          "$ref": "./maui-flow-v2.json"
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "plan": {
+          "$ref": "./maui-test-plan-v1.json"
+        },
+        "context": {
+          "$ref": "#/$defs/RunContext"
+        },
+        "reproductionExpectation": {
+          "$ref": "#/$defs/ReproductionExpectation",
+          "description": "Optional host-supplied current-workspace fingerprints recorded with a new local run for later imported-artifact reproduction matching. This field never authorizes a repair or source proposal."
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "markdown"
+          ],
+          "not": {
+            "required": [
+              "flow"
+            ]
+          }
+        },
+        {
+          "required": [
+            "flow"
+          ],
+          "not": {
+            "required": [
+              "markdown"
+            ]
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "RunContext": {
+      "type": "object",
+      "properties": {
+        "intent": {
+          "enum": [
+            "ordinary-replay",
+            "diagnostic-replay",
+            "repair-validation",
+            "downstream-continuation"
+          ]
+        },
+        "manualOneShotAuthorization": {
+          "type": "boolean",
+          "description": "Distinct explicit human authorization required for a non-replayable one-shot run."
+        },
+        "preconditions": {
+          "$ref": "./maui-flow-run-report-v1.json#/$defs/ReplayPreconditions"
+        },
+        "reset": {
+          "$ref": "./maui-flow-run-report-v1.json#/$defs/ResetResult"
+        },
+        "compensator": {
+          "$ref": "./maui-flow-run-report-v1.json#/$defs/CompensatorOutcome"
+        },
+        "businessOracles": {
+          "type": "array",
+          "items": {
+            "$ref": "./maui-flow-run-report-v1.json#/$defs/IndependentBusinessOracleResult"
+          }
+        },
+        "priorMutationCompletionCertain": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "StartResponse": {
+      "type": "object",
+      "required": [
+        "ok",
+        "run",
+        "capabilityToken"
+      ],
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "existing": {
+          "type": "boolean"
+        },
+        "run": {
+          "$ref": "#/$defs/RunSnapshot"
+        },
+        "capabilityToken": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "ReproductionExpectation": {
+      "type": "object",
+      "required": [
+        "flowDigest",
+        "appBuildFingerprint",
+        "appSourceFingerprint",
+        "packageDigest",
+        "platform",
+        "deviceProfile"
+      ],
+      "properties": {
+        "flowDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "appBuildFingerprint": {
+          "type": "string"
+        },
+        "appSourceFingerprint": {
+          "type": "string"
+        },
+        "packageDigest": {
+          "type": "string"
+        },
+        "platform": {
+          "type": "string"
+        },
+        "deviceProfile": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "AccessRequest": {
+      "type": "object",
+      "required": [
+        "capabilityToken"
+      ],
+      "properties": {
+        "capabilityToken": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "StatusResponse": {
+      "type": "object",
+      "required": [
+        "ok",
+        "run"
+      ],
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "run": {
+          "$ref": "#/$defs/RunSnapshot"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CancelResponse": {
+      "type": "object",
+      "required": [
+        "ok",
+        "accepted",
+        "alreadyTerminal",
+        "run"
+      ],
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "accepted": {
+          "type": "boolean"
+        },
+        "alreadyTerminal": {
+          "type": "boolean"
+        },
+        "run": {
+          "$ref": "#/$defs/RunSnapshot"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CapabilitiesResponse": {
+      "type": "object",
+      "required": [
+        "schema",
+        "supported",
+        "requiresExplicitAgentInstance",
+        "requiresIdempotencyKey",
+        "capabilityTokenRequired",
+        "states",
+        "maxTimeoutMs",
+        "maxSteps"
+      ],
+      "properties": {
+        "schema": {
+          "const": 1
+        },
+        "supported": {
+          "const": true
+        },
+        "requiresExplicitAgentInstance": {
+          "const": true
+        },
+        "requiresIdempotencyKey": {
+          "const": true
+        },
+        "capabilityTokenRequired": {
+          "const": true
+        },
+        "states": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RunState"
+          }
+        },
+        "maxTimeoutMs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxSteps": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "workflowCommandLedger": {
+          "type": "boolean",
+          "description": "Whether runs use the agent-instance-bound command ledger and fail closed when broker authority is unavailable."
+        }
+      },
+      "additionalProperties": false
+    },
+    "ErrorResponse": {
+      "type": "object",
+      "required": [
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "error": {
+          "type": "string"
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

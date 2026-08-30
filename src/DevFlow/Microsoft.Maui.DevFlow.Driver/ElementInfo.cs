@@ -108,6 +108,18 @@ public class ElementInfo
     [JsonPropertyName("nativeType")]
     public string? NativeType { get; set; }
 
+    /// <summary>
+    /// The platform accessibility identity when the platform can authoritatively expose one.
+    /// Unlike <see cref="Id"/>, this is never synthesized from a runtime object identifier.
+    /// </summary>
+    [JsonPropertyName("nativeAutomationIdentity")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? NativeAutomationIdentity { get; set; }
+
+    [JsonPropertyName("nativeAutomationIdentityKind")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? NativeAutomationIdentityKind { get; set; }
+
     [JsonPropertyName("nativeProperties")]
     public Dictionary<string, string?>? NativeProperties { get; set; }
 
@@ -135,6 +147,45 @@ public class ElementInfo
 
     [JsonPropertyName("children")]
     public List<ElementInfo>? Children { get; set; }
+
+    // Click-to-XAML source location, populated by the agent from build-time XAML source maps
+    // when available; null otherwise). Additive — mirrors the agent's ElementInfo field names.
+    [JsonPropertyName("sourceFile")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceFile { get; set; }
+
+    [JsonPropertyName("sourceLine")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? SourceLine { get; set; }
+
+    [JsonPropertyName("sourceColumn")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? SourceColumn { get; set; }
+
+    [JsonPropertyName("sourceHash")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceHash { get; set; }
+
+    [JsonPropertyName("sourceConfidence")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceConfidence { get; set; }
+
+    /// <summary>Optional app-supplied durable item identity for a realized collection row.</summary>
+    [JsonPropertyName("stableItemKey")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? StableItemKey { get; set; }
+
+    [JsonPropertyName("collectionScope")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CollectionScope { get; set; }
+
+    [JsonPropertyName("templateKind")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TemplateKind { get; set; }
+
+    [JsonPropertyName("isVirtualized")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsVirtualized { get; set; }
 
     [JsonIgnore]
     public bool IsSelected { get; set; }

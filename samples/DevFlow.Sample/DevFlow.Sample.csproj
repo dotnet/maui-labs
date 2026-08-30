@@ -20,6 +20,11 @@
         <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
     </PropertyGroup>
 
+    <!-- The reset/seed extension is compiled only into the explicit Debug integration-test build. -->
+    <PropertyGroup Condition="'$(Configuration)' == 'Debug' and '$(DevFlowIntegrationTest)' == 'true'">
+        <DefineConstants>$(DefineConstants);DEVFLOW_INTEGRATION_TEST</DefineConstants>
+    </PropertyGroup>
+
     <ItemGroup>
         <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#512BD4" />
         <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#512BD4" BaseSize="128,128" />

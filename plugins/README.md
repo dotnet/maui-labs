@@ -2,7 +2,7 @@
 
 Distributable agent skills for .NET MAUI development. Installable via the Copilot CLI, Claude Code, or VS Code plugin system.
 
-DevFlow runtime skills (`maui-devflow-onboard`, `maui-devflow-debug`, `maui-devflow-session-review`) are bundled with the `maui` CLI from `plugins/dotnet-maui/skills/`, installed with `maui devflow init`, and exposed through the plugin manifest.
+DevFlow runtime skills are bundled with the `maui` CLI from `plugins/dotnet-maui/skills/` and exposed through the plugin manifest. `maui devflow init` installs the recommended onboarding, debugging, and session-review skills; `maui devflow skills install` or `update` also installs the optional collaborative-testing and artifact-diagnosis skills.
 
 ## Plugin
 
@@ -11,6 +11,12 @@ DevFlow runtime skills (`maui-devflow-onboard`, `maui-devflow-debug`, `maui-devf
 | [dotnet-maui](dotnet-maui/) | [maui-devflow-onboard](dotnet-maui/skills/maui-devflow-onboard/) | Add MAUI DevFlow packages and app registration to a project. |
 | | [maui-devflow-debug](dotnet-maui/skills/maui-devflow-debug/) | Run MAUI DevFlow build, deploy, connection recovery, inspect, and fix loops. |
 | | [maui-devflow-session-review](dotnet-maui/skills/maui-devflow-session-review/) | Review opt-in MAUI DevFlow sessions for friction, retries, workarounds, and product feedback. |
+| | [maui-devflow-test](dotnet-maui/skills/maui-devflow-test/) | Collaboratively author, review, run, triage, and hand off human-approved DevFlow tests. |
+| | [maui-devflow-record](dotnet-maui/skills/maui-devflow-record/) | Prepare a human-driven Inspector recording and promote the capture into a reviewable flow. |
+| | [maui-devflow-run-cli](dotnet-maui/skills/maui-devflow-run-cli/) | Run committed DevFlow flows from the terminal with the `maui devflow flow` command family. |
+| | [maui-devflow-ci](dotnet-maui/skills/maui-devflow-ci/) | Wire DevFlow flow execution into GitHub Actions with least-privilege, label-gated jobs. |
+| | [maui-devflow-ci-triage](dotnet-maui/skills/maui-devflow-ci-triage/) | Diagnose a red DevFlow CI run from its artifacts and hand off a bounded local reproduction. |
+| | [maui-devflow-artifact](dotnet-maui/skills/maui-devflow-artifact/) | Diagnose explicit DevFlow flow-run and `.mauitrace` artifacts through a read-only trust projection. |
 | | [devflow-connect](dotnet-maui/skills/devflow-connect/) | Diagnose and fix DevFlow agent connectivity issues between the `maui` CLI and running .NET MAUI apps. |
 | | [maui-ai-debugging](dotnet-maui/skills/maui-ai-debugging/) | Legacy compatibility skill for older DevFlow clients. |
 | | [android-slim-bindings](dotnet-maui/skills/android-slim-bindings/) | Create Android slim bindings using the Native Library Interop approach. |

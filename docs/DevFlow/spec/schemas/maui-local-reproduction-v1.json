@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/dotnet/maui-labs/main/docs/DevFlow/spec/schemas/maui-local-reproduction-v1.json",
+  "title": "MAUI Local Reproduction v1",
+  "description": "A bounded redacted comparison between one imported diagnostic artifact and one newly executed local flow run. It records a trust decision and inert Inspector review handoff, but never proposal, approval, apply, validation, or rollback authority.",
+  "type": "object",
+  "required": [
+    "schema",
+    "importTrustState",
+    "matched",
+    "trustState",
+    "reasonCodes",
+    "missingFacts",
+    "localArtifacts",
+    "brokerBindingPersisted",
+    "approvalGranted",
+    "proposalCreated",
+    "reviewAction"
+  ],
+  "properties": {
+    "schema": {
+      "const": 1
+    },
+    "importedArtifact": {
+      "$ref": "maui-artifact-trust-v1.json#/$defs/ImportedIdentity"
+    },
+    "importedArtifactKind": {
+      "enum": [
+        "flow-run",
+        "mauitrace"
+      ]
+    },
+    "importedArtifactDigest": {
+      "$ref": "maui-test-execution-manifest-v1.json#/$defs/Fingerprint"
+    },
+    "importTrustState": {
+      "enum": [
+        "untrusted",
+        "attested",
+        "locally-reproduced"
+      ]
+    },
+    "localRunId": {
+      "type": "string"
+    },
+    "localExitCategory": {
+      "type": "string"
+    },
+    "localManifestDigest": {
+      "$ref": "maui-test-execution-manifest-v1.json#/$defs/Fingerprint"
+    },
+    "localReportDigest": {
+      "$ref": "maui-test-execution-manifest-v1.json#/$defs/Fingerprint"
+    },
+    "matched": {
+      "type": "boolean"
+    },
+    "trustState": {
+      "enum": [
+        "untrusted",
+        "attested",
+        "locally-reproduced"
+      ]
+    },
+    "reasonCodes": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    },
+    "missingFacts": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    },
+    "importedFailureFingerprint": {
+      "$ref": "maui-test-execution-manifest-v1.json#/$defs/Fingerprint"
+    },
+    "importedStepFingerprint": {
+      "$ref": "maui-test-execution-manifest-v1.json#/$defs/Fingerprint"
+    },
+    "importedRuntimeProfileFingerprint": {
+      "$ref": "maui-test-execution-manifest-v1.json#/$defs/Fingerprint"
+    },
+    "localFailureFingerprint": {
+      "$ref": "maui-test-execution-manifest-v1.json#/$defs/Fingerprint"
+    },
+    "localStepFingerprint": {
+      "$ref": "maui-test-execution-manifest-v1.json#/$defs/Fingerprint"
+    },
+    "localRuntimeProfileFingerprint": {
+      "$ref": "maui-test-execution-manifest-v1.json#/$defs/Fingerprint"
+    },
+    "localExpectedCheckpointFingerprint": {
+      "$ref": "maui-test-execution-manifest-v1.json#/$defs/Fingerprint"
+    },
+    "localObservedCheckpointFingerprint": {
+      "$ref": "maui-test-execution-manifest-v1.json#/$defs/Fingerprint"
+    },
+    "localArtifacts": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "$ref": "maui-test-execution-manifest-v1.json#/$defs/Artifact"
+      }
+    },
+    "brokerBindingPersisted": {
+      "const": false
+    },
+    "approvalGranted": {
+      "const": false
+    },
+    "proposalCreated": {
+      "const": false
+    },
+    "reviewAction": {
+      "enum": [
+        "open-inspector-workbench-repair-review",
+        "inspect-local-reproduction-diagnostics"
+      ]
+    },
+    "reviewCommand": {
+      "const": "maui devflow inspect --test <committed-flow.md> --trace <imported-artifact>"
+    }
+  },
+  "additionalProperties": true
+}

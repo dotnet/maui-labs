@@ -1,0 +1,232 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/dotnet/maui-labs/main/docs/DevFlow/spec/schemas/maui-csharp-source-proposal-v1.json",
+  "title": "MAUI C# Source Proposal v1",
+  "description": "A reviewable Roslyn-proven proposal to add or replace one static literal AutomationId in C#. It is advisory only: the broker never writes C# source and a native IDE host must acknowledge exact pre/post hashes.",
+  "type": "object",
+  "required": [
+    "schema",
+    "language",
+    "proposalId",
+    "operation",
+    "element",
+    "baseContentDigest",
+    "patch",
+    "rollbackPatch",
+    "patchDigest",
+    "rollbackPatchDigest",
+    "eligibility"
+  ],
+  "properties": {
+    "schema": { "const": 1 },
+    "language": { "const": "CSharp" },
+    "proposalId": { "type": "string", "minLength": 1 },
+    "revision": { "type": "integer", "minimum": 1 },
+    "state": {
+      "enum": [
+        "proposed",
+        "previewed",
+        "approved",
+        "awaiting-host-apply",
+        "applying",
+        "applied",
+        "verification-failed",
+        "rollback-required",
+        "verified",
+        "stale",
+        "rejected",
+        "reverted",
+        "rollback-failed"
+      ]
+    },
+    "operation": { "$ref": "#/$defs/Operation" },
+    "element": { "$ref": "#/$defs/Element" },
+    "baseContentDigest": { "$ref": "#/$defs/Digest" },
+    "patch": { "$ref": "#/$defs/Patch" },
+    "rollbackPatch": { "$ref": "#/$defs/Patch" },
+    "patchDigest": { "$ref": "#/$defs/Digest" },
+    "rollbackPatchDigest": { "$ref": "#/$defs/Digest" },
+    "diffDigest": { "$ref": "#/$defs/Digest" },
+    "diff": { "type": "string", "maxLength": 1048576 },
+    "eligibility": { "$ref": "#/$defs/Eligibility" },
+    "uniqueness": { "$ref": "#/$defs/Uniqueness" },
+    "affectedFlows": { "type": "array", "items": { "$ref": "#/$defs/FlowFollowUp" } },
+    "affectedPlatforms": { "type": "array", "items": { "$ref": "#/$defs/PlatformVerification" } },
+    "approval": { "$ref": "#/$defs/Approval" },
+    "apply": { "$ref": "#/$defs/Apply" },
+    "verification": { "$ref": "#/$defs/Verification" },
+    "rollback": { "$ref": "#/$defs/Rollback" }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "Digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-fA-F]{64}$"
+    },
+    "Operation": {
+      "type": "object",
+      "required": [
+        "operationId",
+        "kind",
+        "fileRelativePath",
+        "sourceHash",
+        "sourceAnchor",
+        "symbolId",
+        "semanticType",
+        "newLiteral",
+        "attribute",
+        "spanStart",
+        "spanLength"
+      ],
+      "properties": {
+        "operationId": { "type": "string" },
+        "kind": { "enum": [ "add-literal-automation-id", "replace-literal-automation-id" ] },
+        "fileRelativePath": {
+          "type": "string",
+          "pattern": "^(?!.*(?:^|/)\\.\\.(?:/|$)).+\\.cs$"
+        },
+        "sourceHash": { "type": "string", "pattern": "^[0-9a-fA-F]{16}$" },
+        "sourceAnchor": { "$ref": "#/$defs/Digest" },
+        "symbolId": { "type": "string", "minLength": 1 },
+        "semanticType": { "type": "string", "minLength": 1 },
+        "oldLiteral": { "type": [ "string", "null" ] },
+        "newLiteral": {
+          "type": "string",
+          "pattern": "^[A-Za-z](?:[A-Za-z0-9]|[._-](?=[A-Za-z0-9])){0,127}$"
+        },
+        "attribute": { "const": "AutomationId" },
+        "spanStart": { "type": "integer", "minimum": 0 },
+        "spanLength": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": true
+    },
+    "Element": {
+      "type": "object",
+      "required": [ "path", "sourceAnchor", "spanStart", "spanLength", "symbolId", "semanticType" ],
+      "properties": {
+        "elementType": { "type": "string" },
+        "line": { "type": "integer", "minimum": 1 },
+        "column": { "type": "integer", "minimum": 1 },
+        "path": { "type": "string" },
+        "sourceAnchor": { "$ref": "#/$defs/Digest" },
+        "spanStart": { "type": "integer", "minimum": 0 },
+        "spanLength": { "type": "integer", "minimum": 1 },
+        "symbolId": { "type": "string" },
+        "semanticType": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "Patch": {
+      "type": "object",
+      "required": [ "format", "operation", "beforeDigest", "afterDigest", "start", "length", "replacement" ],
+      "properties": {
+        "format": { "const": "text-replace-v1" },
+        "operation": { "type": "string" },
+        "beforeDigest": { "$ref": "#/$defs/Digest" },
+        "afterDigest": { "$ref": "#/$defs/Digest" },
+        "start": { "type": "integer", "minimum": 0 },
+        "length": { "type": "integer", "minimum": 0 },
+        "replacement": { "type": "string", "maxLength": 1024 }
+      },
+      "additionalProperties": true
+    },
+    "Eligibility": {
+      "type": "object",
+      "required": [ "eligible", "reasons" ],
+      "properties": {
+        "eligible": { "type": "boolean" },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [ "code" ],
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" },
+              "blocking": { "type": "boolean" }
+            },
+            "additionalProperties": true
+          }
+        },
+        "policy": { "const": "csharp-automation-id-proposal-v1" }
+      },
+      "additionalProperties": true
+    },
+    "Uniqueness": {
+      "type": "object",
+      "properties": {
+        "projectScope": { "type": "string" },
+        "projectMatchCount": { "type": "integer", "minimum": 0 },
+        "liveScope": { "type": "string" },
+        "liveMatchCount": { "type": [ "integer", "null" ], "minimum": 0 },
+        "liveScopeAvailable": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    },
+    "FlowFollowUp": {
+      "type": "object",
+      "properties": {
+        "flowPath": { "type": "string" },
+        "flowId": { "type": "string" },
+        "flowDigest": { "type": "string" },
+        "stepIds": { "type": "array", "items": { "type": "string" } },
+        "requiresSeparateApproval": { "const": true }
+      },
+      "additionalProperties": true
+    },
+    "PlatformVerification": {
+      "type": "object",
+      "properties": {
+        "platform": { "type": "string" },
+        "targetFramework": { "type": "string" },
+        "buildState": { "type": "string" },
+        "runtimeRemapState": { "type": "string" },
+        "uniquenessState": { "type": "string" },
+        "replayState": { "type": "string" },
+        "oracleState": { "type": "string" },
+        "reasonCode": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "Approval": {
+      "type": "object",
+      "properties": {
+        "state": { "type": "string" },
+        "reviewer": { "type": "string" },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "grantDigest": { "$ref": "#/$defs/Digest" }
+      },
+      "additionalProperties": true
+    },
+    "Apply": {
+      "type": "object",
+      "properties": {
+        "state": { "type": "string" },
+        "hostKind": { "type": "string" },
+        "preContentDigest": { "$ref": "#/$defs/Digest" },
+        "appliedContentDigest": { "$ref": "#/$defs/Digest" },
+        "patchDigest": { "$ref": "#/$defs/Digest" }
+      },
+      "additionalProperties": true
+    },
+    "Verification": {
+      "type": "object",
+      "properties": {
+        "state": { "type": "string" },
+        "verificationRunIds": { "type": "array", "items": { "type": "string" } },
+        "platforms": { "type": "array", "items": { "$ref": "#/$defs/PlatformVerification" } }
+      },
+      "additionalProperties": true
+    },
+    "Rollback": {
+      "type": "object",
+      "properties": {
+        "state": { "type": "string" },
+        "preContentDigest": { "$ref": "#/$defs/Digest" },
+        "contentDigest": { "$ref": "#/$defs/Digest" },
+        "patchDigest": { "$ref": "#/$defs/Digest" }
+      },
+      "additionalProperties": true
+    }
+  }
+}

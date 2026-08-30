@@ -1,0 +1,57 @@
+{
+  "acceptanceCriteria": [],
+  "approvals": [],
+  "assumptions": [],
+  "businessOracles": [],
+  "checkpoint": {},
+  "explorationBudget": {
+    "allowedScopes": [],
+    "maxActions": 0,
+    "maxDurationSeconds": 0
+  },
+  "flow": {
+    "digest": "3b4edbacc43a360b301f8e55eaa621d5997bd5edeedb0007d81e6264c51cd13a",
+    "path": "modal-roundtrip.md"
+  },
+  "goal": "Verify that Show Modal opens the modal and Close returns to the main todo page.",
+  "independentBusinessOracles": [],
+  "planId": "plan_gol5st4j56",
+  "preconditions": [],
+  "prohibitedActionClasses": [],
+  "provenance": {
+    "actorKind": "human",
+    "channel": "inspector",
+    "intent": "human-authored",
+    "provider": "",
+    "recordedAt": "2026-08-03T09:13:02.775Z"
+  },
+  "requiredPlatforms": [],
+  "requirements": {
+    "requiredCapabilities": [],
+    "requiredSemantics": []
+  },
+  "reset": {
+    "backendStateFingerprint": "",
+    "required": false,
+    "resetIdentity": "",
+    "seedFingerprint": "",
+    "strategy": ""
+  },
+  "reviews": [],
+  "revision": 2,
+  "risks": [
+    "Different page is open",
+    "feature is broken"
+  ],
+  "scenarios": [
+    {
+      "acceptanceCriterionIds": [],
+      "description": "",
+      "risks": [],
+      "scenarioId": "scenario-1"
+    }
+  ],
+  "schema": 1,
+  "sideEffectPolicy": "none",
+  "title": "modal-roundtrip"
+}

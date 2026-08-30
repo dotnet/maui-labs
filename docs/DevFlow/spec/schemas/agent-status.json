@@ -38,6 +38,13 @@
         "frameworkVersion": {
           "type": "string",
           "description": "Version of the UI framework."
+        },
+        "instanceId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Broker-assigned identity for this exact connected agent process instance. Null or absent when no broker authority is active."
         }
       }
     },
@@ -130,6 +137,10 @@
         "jobs": {
           "type": "boolean",
           "description": "Whether platform background jobs are supported by this agent."
+        },
+        "workflowCommandLedger": {
+          "type": "boolean",
+          "description": "Whether the agent supports broker-owned workflow command fencing and in-process receipts."
         }
       },
       "additionalProperties": true

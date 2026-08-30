@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "id": "repair-grant-stale-reuse-expiry",
+  "kind": "repair-negative",
+  "disposition": "no-repair",
+  "provenance": {
+    "labeledBy": "devflow-maintainers",
+    "labeledOn": "2026-08-15",
+    "method": "hand-authored",
+    "sourceKind": "synthetic",
+    "reviewStatus": "unreviewed",
+    "notes": "Approval-grant policy case; models no replay failure."
+  },
+  "fixture": {
+    "grantFailures": [
+      "reused",
+      "expired",
+      "stale-flow-digest",
+      "concurrent-edit"
+    ]
+  },
+  "expect": {
+    "diagnosticIds": [],
+    "candidateKinds": [],
+    "repairEligible": false,
+    "ineligibilityCodes": [
+      "approval-grant-invalid",
+      "proposal-stale"
+    ]
+  }
+}

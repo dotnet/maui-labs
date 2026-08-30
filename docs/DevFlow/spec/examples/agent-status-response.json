@@ -3,7 +3,8 @@
     "name": "devflow-maui",
     "version": "1.0.0",
     "framework": "maui",
-    "frameworkVersion": "10.0"
+    "frameworkVersion": "10.0",
+    "instanceId": "agent-instance-7f3d"
   },
   "platform": "maccatalyst",
   "device": {
@@ -26,7 +27,8 @@
     "sensors": true,
     "storage": true,
     "profiler": true,
-    "jobs": true
+    "jobs": true,
+    "workflowCommandLedger": true
   },
   "running": true,
   "uptime": "PT5M30S"

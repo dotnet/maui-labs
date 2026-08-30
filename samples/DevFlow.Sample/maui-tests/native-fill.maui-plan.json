@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "planId": "plan-native-fill",
+  "revision": 1,
+  "flow": {
+    "path": "native-fill.md",
+    "digest": "0a1f2bca8694ada82e4f9a7f034d623dc551c51321d47f6af117664b2b0d4b79"
+  },
+  "title": "native-fill",
+  "goal": "Replay the committed native-fill flow against the sample app.",
+  "scenarios": [],
+  "assumptions": [],
+  "risks": [],
+  "preconditions": [],
+  "reset": {
+    "required": false
+  },
+  "acceptanceCriteria": [],
+  "requiredPlatforms": [],
+  "requirements": {
+    "requiredCapabilities": [],
+    "requiredSemantics": []
+  },
+  "prohibitedActionClasses": [],
+  "provenance": {
+    "actorKind": "human",
+    "channel": "repository",
+    "intent": "human-authored"
+  },
+  "reviews": [],
+  "approvals": [],
+  "sideEffectPolicy": "none",
+  "businessOracles": [],
+  "independentBusinessOracles": []
+}

@@ -41,6 +41,8 @@
   <ItemGroup Label="Roslyn">
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="$(MicrosoftCodeAnalysisCSharpVersion)" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="$(MicrosoftCodeAnalysisAnalyzersVersion)" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="$(MicrosoftCodeAnalysisCSharpVersion)" />
+    <PackageVersion Include="Microsoft.Build.Locator" Version="1.7.8" />
   </ItemGroup>
 
   <!-- DevFlow dependencies (pinned, third party) -->
@@ -110,6 +112,7 @@
     <PackageVersion Include="YamlDotNet" Version="$(YamlDotNetVersion)" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing" Version="1.1.2" />
     <PackageVersion Include="Microsoft.Playwright" Version="1.52.0" />
+    <PackageVersion Include="Appium.WebDriver" Version="8.3.2" />
   </ItemGroup>
 
   <!-- Source Link -->

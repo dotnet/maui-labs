@@ -26,6 +26,16 @@ namespace Microsoft.Maui.DevFlow.Driver;
 [JsonSerializable(typeof(ExtensionToolInfo))]
 [JsonSerializable(typeof(ExtensionToolAnnotationsInfo))]
 [JsonSerializable(typeof(Dictionary<string, ExtensionDescriptor>))]
+[JsonSerializable(typeof(MutationLeaseStatus))]
+[JsonSerializable(typeof(MutationRecordingObservation))]
+[JsonSerializable(typeof(MutationRecordingStatus))]
+[JsonSerializable(typeof(MauiSelectorObservation))]
+[JsonSerializable(typeof(MauiSelectorObservationElement))]
+[JsonSerializable(typeof(MauiSelectorObservationContext))]
+[JsonSerializable(typeof(WorkflowRunControlStatus))]
+[JsonSerializable(typeof(DiagnosticProblemBatch))]
+[JsonSerializable(typeof(ElementPropertyDescriptorSet))]
+[JsonSerializable(typeof(PropertyMutationResponse))]
 internal sealed partial class DevFlowDriverJsonContext : JsonSerializerContext;
 
 internal static class DriverJson

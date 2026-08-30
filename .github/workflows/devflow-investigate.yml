@@ -1,0 +1,202 @@
+name: DevFlow Failure Guidance
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: Verified DevFlow CI failure issue number
+        required: true
+        type: number
+
+permissions: {}
+
+concurrency:
+  group: devflow-failure-guidance-${{ inputs.issue_number }}
+  cancel-in-progress: false
+
+jobs:
+  guide:
+    if: inputs.issue_number > 0
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Validate the selected issue and add fixed guidance
+        uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553 # v9
+        env:
+          DEVFLOW_ISSUE_NUMBER: ${{ inputs.issue_number }}
+        with:
+          script: |
+            const crypto = require("crypto");
+
+            const digest = (value) =>
+              `sha256:${crypto.createHash("sha256").update(value, "utf8").digest("hex")}`;
+            const fail = (reason) => {
+              core.setFailed(`Selected DevFlow issue was rejected: ${reason}`);
+            };
+
+            const issueNumber = Number(process.env.DEVFLOW_ISSUE_NUMBER);
+            if (!Number.isSafeInteger(issueNumber) ||
+                issueNumber <= 0 ||
+                issueNumber > 2147483647) {
+              fail("issue-number-invalid");
+              return;
+            }
+
+            let issue;
+            try {
+              ({ data: issue } = await github.rest.issues.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+              }));
+            } catch {
+              fail("issue-lookup-failed");
+              return;
+            }
+
+            const labels = Array.isArray(issue.labels)
+              ? issue.labels.map((label) =>
+                  typeof label === "string" ? label : label?.name)
+              : [];
+            if (issue.pull_request ||
+                issue.user?.login !== "github-actions[bot]" ||
+                issue.user?.type !== "Bot" ||
+                !labels.includes("devflow-ci-failure")) {
+              fail("issue-identity-untrusted");
+              return;
+            }
+
+            const body = typeof issue.body === "string" ? issue.body : "";
+            if (body.length === 0 || body.length > 65000) {
+              fail("issue-body-invalid");
+              return;
+            }
+            const markerMatches = body.match(/<!-- devflow-ci-failure:v1 /g) || [];
+            const marker = body.match(
+              /^<!-- devflow-ci-failure:v1 fingerprint=(sha256:[0-9a-f]{64}) body=(sha256:[0-9a-f]{64}) -->\n/);
+            if (markerMatches.length !== 1 || !marker) {
+              fail("issue-marker-invalid");
+              return;
+            }
+
+            const payload = body.slice(marker[0].length);
+            if (digest(payload) !== marker[2]) {
+              fail("issue-body-digest-mismatch");
+              return;
+            }
+
+            const occurrenceMatches = [...payload.matchAll(
+              /^<!-- devflow-ci-failure-occurrence:v1 run=[1-9][0-9]* attempt=[1-9][0-9]* -->$/gm)];
+            const dataMatches = [...payload.matchAll(
+              /^<!-- devflow-ci-failure-data:v1 category=(test-failure|app-crash|timeout|device-failure|harness-failure|infrastructure|unknown) platform=(android|ios|maccatalyst|macos|windows|cross-platform|unknown) testIdentity=(sha256:[0-9a-f]{64}) evidence=(sufficient|partial) -->$/gm)];
+            if (occurrenceMatches.length !== 1 ||
+                dataMatches.length !== 1 ||
+                !payload.startsWith(
+                  `${occurrenceMatches[0][0]}\n${dataMatches[0][0]}\n\n## Verified handoff\n`)) {
+              fail("issue-template-invalid");
+              return;
+            }
+
+            const headings = [
+              "## Verified handoff",
+              "## Evidence",
+              "## Artifact handoff",
+              "## Local handoff",
+            ];
+            let previousIndex = -1;
+            for (const heading of headings) {
+              const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+              const matches = payload.match(new RegExp(`^${escaped}$`, "gm")) || [];
+              const index = payload.indexOf(heading);
+              if (matches.length !== 1 || index <= previousIndex) {
+                fail("issue-template-invalid");
+                return;
+              }
+              previousIndex = index;
+            }
+
+            const [, category, platform, testIdentity, evidence] = dataMatches[0];
+            const expectedTitle =
+              `[DevFlow CI] ${category} on ${platform} (${testIdentity.slice(7, 19)})`;
+            if (issue.title !== expectedTitle) {
+              fail("issue-title-invalid");
+              return;
+            }
+
+            const categoryGuidance =
+              category === "test-failure" || category === "app-crash"
+                ? "Reproduce the test/product behavior before inspecting harness infrastructure."
+                : "Treat this as a harness, device, timeout, or infrastructure classification until local reproduction provides stronger facts.";
+            const guidancePayload = [
+              "## Deterministic investigation guidance",
+              "",
+              `- Category: \`${category}\``,
+              `- Platform: \`${platform}\``,
+              `- Test identity: \`${testIdentity}\``,
+              `- Evidence sufficiency: \`${evidence}\``,
+              "",
+              categoryGuidance,
+              `Run a maintainer-owned local reproduction on \`${platform}\`; this classification does not assert a root cause.`,
+              "Before using retained evidence, run the fixed local verification command already recorded in this issue.",
+              "",
+              "This guidance parsed no raw evidence, source, logs, comments, pull requests, or artifacts and grants no repair authority.",
+            ].join("\n");
+            const guidanceDigest = digest(guidancePayload);
+            const guidanceMarker =
+              `<!-- devflow-ci-guidance:v1 fingerprint=${marker[1]} body=${guidanceDigest} -->`;
+            const guidanceBody = `${guidanceMarker}\n${guidancePayload}`;
+
+            let page = 1;
+            let trustedExisting = false;
+            let untrustedClaim = false;
+            while (true) {
+              const { data: comments } =
+                await github.rest.issues.listComments({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issueNumber,
+                  per_page: 100,
+                  page,
+                });
+              if (!Array.isArray(comments)) {
+                fail("comment-list-invalid");
+                return;
+              }
+              for (const comment of comments) {
+                const commentBody =
+                  typeof comment.body === "string" ? comment.body : "";
+                if (!commentBody.includes(
+                    `<!-- devflow-ci-guidance:v1 fingerprint=${marker[1]} `)) {
+                  continue;
+                }
+                if (comment.user?.login === "github-actions[bot]" &&
+                    comment.user?.type === "Bot" &&
+                    commentBody === guidanceBody) {
+                  trustedExisting = true;
+                } else {
+                  untrustedClaim = true;
+                }
+              }
+              if (comments.length < 100) {
+                break;
+              }
+              page++;
+            }
+
+            if (untrustedClaim) {
+              fail("guidance-marker-untrusted");
+              return;
+            }
+            if (trustedExisting) {
+              core.info("Deterministic guidance is already present.");
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body: guidanceBody,
+            });

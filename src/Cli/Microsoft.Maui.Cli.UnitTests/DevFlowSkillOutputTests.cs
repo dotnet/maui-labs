@@ -34,6 +34,8 @@ public sealed class DevFlowSkillOutputTests
         Assert.Contains("maui-devflow-onboard", output);
         Assert.Contains("maui-devflow-debug", output);
         Assert.Contains("maui-devflow-session-review", output);
+        Assert.DoesNotContain("maui-devflow-test", output);
+        Assert.DoesNotContain("maui-devflow-artifact", output);
         Assert.Contains("maui devflow ui tree --depth 1", output);
         Assert.DoesNotContain("[yellow]", output);
         Assert.DoesNotContain("[/]", output);

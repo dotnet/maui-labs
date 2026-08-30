@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/dotnet/maui-labs/main/docs/DevFlow/spec/schemas/maui-flow-triage-v1.json",
+  "title": "MAUI Flow Triage v1",
+  "description": "A deterministic safe diagnosis derived from a flow report and execution manifest. It contains fixed classifications, evidence sufficiency, stable fingerprints, retry and repair policy, inert next actions, and redacted execution facts. It never contains raw logs, app text, prompts, secrets, absolute paths, or device serials.",
+  "type": "object",
+  "required": [
+    "schema",
+    "fingerprintVersion",
+    "classification",
+    "evidence",
+    "retryable",
+    "repairEligible",
+    "allowedNextActions",
+    "localReproductionRequired",
+    "importedEvidence",
+    "repairEligibilityCodes",
+    "execution"
+  ],
+  "properties": {
+    "schema": {
+      "const": 1
+    },
+    "fingerprintVersion": {
+      "const": "maui-flow-fingerprints-v1"
+    },
+    "testIdentityFingerprint": {
+      "$ref": "maui-test-execution-manifest-v1.json#/$defs/Fingerprint"
+    },
+    "incidentFingerprint": {
+      "$ref": "maui-test-execution-manifest-v1.json#/$defs/Fingerprint"
+    },
+    "occurrenceFingerprint": {
+      "$ref": "maui-test-execution-manifest-v1.json#/$defs/Fingerprint"
+    },
+    "classification": {
+      "$ref": "#/$defs/Classification"
+    },
+    "evidence": {
+      "$ref": "#/$defs/Evidence"
+    },
+    "retryable": {
+      "type": "boolean"
+    },
+    "repairEligible": {
+      "type": "boolean"
+    },
+    "allowedNextActions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "collect-evidence",
+          "retry-run",
+          "reproduce-locally",
+          "review-selector-repair",
+          "inspect-selector-evidence",
+          "restore-preconditions",
+          "investigate-app-regression",
+          "inspect-infrastructure",
+          "select-supported-target",
+          "fence-unknown-completion",
+          "correct-flow",
+          "inspect-actionability",
+          "provide-sensitive-input",
+          "investigate-failure"
+        ]
+      }
+    },
+    "localReproductionRequired": {
+      "type": "boolean"
+    },
+    "localReproductionReason": {
+      "type": "string"
+    },
+    "importedEvidence": {
+      "type": "boolean"
+    },
+    "summaryCode": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "repairEligibilityCodes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    },
+    "execution": {
+      "$ref": "#/$defs/Execution"
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "Classification": {
+      "type": "object",
+      "required": [
+        "class",
+        "code",
+        "category",
+        "phase"
+      ],
+      "properties": {
+        "class": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "disposition": {
+          "description": "Optional four-value ownership axis projected from the failure class. Absent when the run passed or carries no classification.",
+          "enum": [
+            "app-regression",
+            "test-drift",
+            "infrastructure",
+            "inconclusive"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "Evidence": {
+      "type": "object",
+      "required": [
+        "state",
+        "missingFacts"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "sufficient",
+            "insufficient"
+          ]
+        },
+        "missingFacts": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "Execution": {
+      "type": "object",
+      "required": [
+        "artifacts"
+      ],
+      "properties": {
+        "manifestId": {
+          "$ref": "maui-test-execution-manifest-v1.json#/$defs/Fingerprint"
+        },
+        "runId": {
+          "$ref": "maui-test-execution-manifest-v1.json#/$defs/Fingerprint"
+        },
+        "flowId": {
+          "$ref": "maui-test-execution-manifest-v1.json#/$defs/Fingerprint"
+        },
+        "host": {
+          "$ref": "maui-test-execution-manifest-v1.json#/$defs/HostFacts"
+        },
+        "build": {
+          "$ref": "maui-test-execution-manifest-v1.json#/$defs/BuildFacts"
+        },
+        "device": {
+          "$ref": "maui-test-execution-manifest-v1.json#/$defs/DeviceFacts"
+        },
+        "lifecycle": {
+          "$ref": "maui-test-execution-manifest-v1.json#/$defs/LifecycleFacts"
+        },
+        "outcome": {
+          "$ref": "maui-test-execution-manifest-v1.json#/$defs/OutcomeFacts"
+        },
+        "artifacts": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "$ref": "maui-test-execution-manifest-v1.json#/$defs/Artifact"
+          }
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

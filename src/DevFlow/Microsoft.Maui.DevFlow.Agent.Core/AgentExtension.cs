@@ -84,7 +84,10 @@ public sealed class AgentExtension
         if (_tools.Any(tool => string.Equals(tool.Name, toolName, StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException($"Duplicate extension tool name registration: {toolName}");
 
-        _routes.Add(new AgentExtensionRoute(normalizedMethod, fullPath, handler));
+        var requiresMutationLease =
+            !normalizedMethod.Equals("GET", StringComparison.OrdinalIgnoreCase) &&
+            annotations?.ReadOnly != true;
+        _routes.Add(new AgentExtensionRoute(normalizedMethod, fullPath, handler, requiresMutationLease));
         _tools.Add(new ExtensionToolDescriptor
         {
             Name = toolName,
@@ -118,16 +121,22 @@ public sealed class AgentExtension
 
 internal sealed class AgentExtensionRoute
 {
-    public AgentExtensionRoute(string method, string path, Func<HttpRequest, Task<HttpResponse>> handler)
+    public AgentExtensionRoute(
+        string method,
+        string path,
+        Func<HttpRequest, Task<HttpResponse>> handler,
+        bool requiresMutationLease)
     {
         Method = method;
         Path = path;
         Handler = handler;
+        RequiresMutationLease = requiresMutationLease;
     }
 
     public string Method { get; }
     public string Path { get; }
     public Func<HttpRequest, Task<HttpResponse>> Handler { get; }
+    public bool RequiresMutationLease { get; }
 }
 
 public sealed class ExtensionToolDescriptor

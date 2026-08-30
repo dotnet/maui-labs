@@ -23,11 +23,17 @@ public static class AgentServiceExtensions
     {
         var options = new AgentOptions();
         configure?.Invoke(options);
+        var enabledMetadata = ReadAssemblyMetadata("Microsoft.Maui.DevFlowEnabled");
+        var buildMode = ReadAssemblyMetadata("Microsoft.Maui.DevFlowMode");
+        options.ApplyBuildMetadata(enabledMetadata, buildMode);
+        options.ApplyPortMetadata(ReadAssemblyMetadataPort());
+        options.ValidateForRegistration();
 
         // Read project identity from assembly metadata (injected by .targets)
         var project = ReadAssemblyMetadataProject() ?? "unknown";
         var tfm = ReadAssemblyMetadataTfm() ?? "unknown";
         var sessionId = ReadAssemblyMetadataSessionId();
+        var packageId = ReadAssemblyMetadataPackageId();
 
         // Always register with the broker for discoverability (must run on thread pool
         // to avoid deadlock with SynchronizationContext — AddMauiDevFlowAgent runs on
@@ -44,6 +50,7 @@ public static class AgentServiceExtensions
             {
                 platform = DeviceInfo.Platform.ToString();
                 appName = AppInfo.Name ?? "unknown";
+                packageId ??= AppInfo.PackageName;
             }
             catch
             {
@@ -56,7 +63,8 @@ public static class AgentServiceExtensions
                     : "Unknown";
                 appName = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name ?? "unknown";
             }
-            brokerReg = new BrokerRegistration(project, tfm, platform, appName, sessionId);
+            brokerReg = new BrokerRegistration(
+                project, tfm, platform, appName, sessionId, packageId, ResolveDeviceIdentity());
             // If the user set a custom port, tell the broker upfront so it registers
             // with that port instead of assigning one from the pool.
             if (hasCustomPort)
@@ -78,13 +86,7 @@ public static class AgentServiceExtensions
             brokerReg = null;
         }
 
-        // Fall back to assembly metadata port if broker didn't assign one
-        if (!hasCustomPort && brokerReg?.AssignedPort == null)
-        {
-            var metaPort = ReadAssemblyMetadataPort();
-            if (metaPort.HasValue)
-                options.Port = metaPort.Value;
-        }
+        options.ValidateForRegistration();
 
         var service = new PlatformAgentService(options);
         service.SetSessionId(sessionId);
@@ -265,6 +267,96 @@ public static class AgentServiceExtensions
     }
 
     /// <summary>
+    /// Resolves the identity of the virtual device this app is running on, so the broker can pair
+    /// the app agent with the device around it.
+    /// <para>
+    /// This lives in the platform-specific package because the strongest signals need platform
+    /// APIs. Each platform contributes what its own tooling addresses devices by, so the value
+    /// can be matched exactly rather than guessed:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>Android — the serial adb uses, plus the AVD name as a weaker fallback.</item>
+    /// <item>iOS and Mac Catalyst — the simulator UDID, read from the environment by the core
+    /// resolver since the simulator runtime injects it.</item>
+    /// <item>Windows and macOS — nothing; a desktop app has no virtual device around it.</item>
+    /// </list>
+    /// </summary>
+    private static string? ResolveDeviceIdentity()
+    {
+        try
+        {
+#if ANDROID
+            var parts = new List<string> { "platform=android" };
+
+            // The AVD name is the primary Android join key. adb addresses an emulator as
+            // "emulator-<consolePort>", which is derived from the console port and is NOT
+            // ro.serialno — so the serial below is a secondary signal that matches only on the
+            // configurations where the two happen to agree.
+            var avd = GetAndroidSystemProperty("ro.boot.qemu.avd_name")
+                ?? GetAndroidSystemProperty("ro.kernel.qemu.avd_name");
+            if (!string.IsNullOrWhiteSpace(avd))
+                parts.Add($"avd={Sanitize(avd)}");
+
+            var serial = global::Android.OS.Build.Serial;
+            if (!string.IsNullOrWhiteSpace(serial) && !serial.Equals("unknown", StringComparison.OrdinalIgnoreCase))
+                parts.Add($"serial={Sanitize(serial)}");
+
+            return parts.Count > 1 ? string.Join(";", parts) : null;
+#else
+            // Everything else is either handled by the environment-based core resolver (the iOS
+            // simulator injects SIMULATOR_UDID) or has no virtual device at all.
+            return DeviceIdentityProvider.Resolve();
+#endif
+        }
+        catch
+        {
+            // Pairing is an enhancement. An app must still register and be inspectable when we
+            // cannot work out what it is running on.
+            return null;
+        }
+    }
+
+#if ANDROID
+    /// <summary>
+    /// Strips the wire format's own separators from a value.
+    /// <para>
+    /// The identity is <c>key=value;key=value</c>, so a value containing <c>;</c> or <c>=</c>
+    /// would split into fields that parse as something else. AVD names should not contain either,
+    /// but a value read from a system property is not ours to trust.
+    /// </para>
+    /// </summary>
+    private static string Sanitize(string value) =>
+        value.Replace(";", "").Replace("=", "").Trim();
+
+    /// <summary>
+    /// Reads an Android system property. The emulator exposes its AVD name this way, and there is
+    /// no managed API for it.
+    /// </summary>
+    private static string? GetAndroidSystemProperty(string key)
+    {
+        global::Java.Lang.Process? process = null;
+        try
+        {
+            process = new global::Java.Lang.ProcessBuilder("/system/bin/getprop", key).Start();
+            using var reader = new StreamReader(process!.InputStream!);
+            var value = reader.ReadToEnd()?.Trim();
+            return string.IsNullOrWhiteSpace(value) ? null : value;
+        }
+        catch
+        {
+            return null;
+        }
+        finally
+        {
+            // The subprocess holds a file descriptor until it is reaped; leaking one per property
+            // read would accumulate over an app's lifetime.
+            try { process?.Destroy(); } catch { }
+            process?.Dispose();
+        }
+    }
+#endif
+
+    /// <summary>
     /// Reads Microsoft.Maui.DevFlow metadata from AssemblyMetadataAttributes injected by the .targets file.
     /// </summary>
     private static string? ReadAssemblyMetadata(string key)
@@ -292,14 +384,12 @@ public static class AgentServiceExtensions
     }
 
     private static int? ReadAssemblyMetadataPort()
-    {
-        var value = ReadAssemblyMetadata("Microsoft.Maui.DevFlowPort");
-        return value != null && int.TryParse(value, out var port) ? port : null;
-    }
+        => AgentOptions.ParsePortMetadata(ReadAssemblyMetadata("Microsoft.Maui.DevFlowPort"));
 
     internal static string? ReadAssemblyMetadataProject() => ReadAssemblyMetadata("Microsoft.Maui.DevFlowProject");
     internal static string? ReadAssemblyMetadataTfm() => ReadAssemblyMetadata("Microsoft.Maui.DevFlowTfm");
     internal static string? ReadAssemblyMetadataSessionId() => ReadAssemblyMetadata("Microsoft.Maui.DevFlowSessionId");
+    internal static string? ReadAssemblyMetadataPackageId() => ReadAssemblyMetadata("Microsoft.Maui.DevFlowPackageId");
 
     private static string? FindMetadataInAssembly(System.Reflection.Assembly assembly, string key)
     {

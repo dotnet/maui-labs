@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "runId": "run-20260814191908180-cc9b7bd9",
+  "flowId": "sha256:3b4edbacc43a360b301f8e55eaa621d5997bd5edeedb0007d81e6264c51cd13a",
+  "flowDigest": "3b4edbacc43a360b301f8e55eaa621d5997bd5edeedb0007d81e6264c51cd13a",
+  "legacyFlowIdentity": "modal-roundtrip.md",
+  "target": {
+    "appSourceFingerprint": "sha256:eaab4224b2a4ddecb44008bd4718f21a7024a7c75cc4cd9c1a184d4aa4f7c120"
+  },
+  "sideEffectPolicy": "none",
+  "businessOracles": [],
+  "verification": {
+    "verified": false,
+    "checkedAt": "2026-08-14T19:19:35.3580194+00:00"
+  },
+  "startedAt": "2026-08-14T19:19:08.1861352+00:00",
+  "endedAt": "2026-08-14T19:19:35.3580194+00:00",
+  "outcome": {
+    "status": "infrastructure-error",
+    "summary": "MSBuild could not resolve the app artifact (exit code 1). Diagnostics: osoft.Maui.DevFlow.Agent.csproj (in 982 ms).  Restored \u003Cpath\u003E (in 1 sec).  Restored \u003Cpath\u003E (in 832 ms).  Restored \u003Cpath\u003E",
+    "terminal": true,
+    "verified": false
+  },
+  "events": [],
+  "steps": [],
+  "failure": {
+    "failureId": "failure-run-20260814191908180-cc9b7bd9",
+    "class": "infrastructure",
+    "code": "app-build-failed",
+    "category": "infrastructure-failure",
+    "phase": "resolve-artifact",
+    "retryable": false,
+    "repairEligible": false,
+    "message": "MSBuild could not resolve the app artifact (exit code 1). Diagnostics: osoft.Maui.DevFlow.Agent.csproj (in 982 ms).  Restored \u003Cpath\u003E (in 1 sec).  Restored \u003Cpath\u003E (in 832 ms).  Restored \u003Cpath\u003E",
+    "at": "2026-08-14T19:19:35.3580194+00:00",
+    "artifacts": []
+  },
+  "artifacts": [
+    {
+      "artifactId": "flow-run-run-20260814191908180-cc9b7bd9",
+      "kind": "flow-run-report",
+      "path": "flow-run.json",
+      "digest": "b8215ed5705a5457744fd326691d4d32011363d14ffeefd7fea72238aadb4d34",
+      "mediaType": "application/json",
+      "redacted": true,
+      "createdAt": "2026-08-14T19:19:35.3580194+00:00"
+    }
+  ],
+  "reportDigest": "b8215ed5705a5457744fd326691d4d32011363d14ffeefd7fea72238aadb4d34",
+  "reportPath": "flow-run.json",
+  "omissions": [],
+  "exitCategory": "infrastructure-failure"
+}

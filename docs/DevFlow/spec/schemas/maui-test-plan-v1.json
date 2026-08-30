@@ -1,0 +1,619 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/dotnet/maui-labs/main/docs/DevFlow/spec/schemas/maui-test-plan-v1.json",
+  "title": "MAUI Test Plan v1",
+  "description": "A non-executable plan that describes intent, safety conditions, and approvals for a flow. It does not authorize or perform device lifecycle operations.",
+  "type": "object",
+  "required": [
+    "schema",
+    "planId",
+    "revision",
+    "flow",
+    "goal",
+    "scenarios",
+    "preconditions",
+    "reset",
+    "acceptanceCriteria",
+    "sideEffectPolicy",
+    "provenance"
+  ],
+  "properties": {
+    "schema": {
+      "const": 1
+    },
+    "planId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "flow": {
+      "$ref": "#/$defs/FlowReference"
+    },
+    "title": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "goal": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scenarios": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Scenario"
+      }
+    },
+    "assumptions": {
+      "$ref": "#/$defs/StringList"
+    },
+    "risks": {
+      "$ref": "#/$defs/StringList"
+    },
+    "preconditions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Precondition"
+      }
+    },
+    "reset": {
+      "$ref": "#/$defs/ResetRequirement"
+    },
+    "acceptanceCriteria": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AcceptanceCriterion"
+      }
+    },
+    "requiredPlatforms": {
+      "$ref": "#/$defs/StringList"
+    },
+    "requirements": {
+      "$ref": "#/$defs/Requirements"
+    },
+    "explorationBudget": {
+      "$ref": "#/$defs/ExplorationBudget"
+    },
+    "prohibitedActionClasses": {
+      "$ref": "#/$defs/StringList"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "reviews": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Review"
+      }
+    },
+    "approvals": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Approval"
+      }
+    },
+    "sideEffectPolicy": {
+      "enum": [
+        "none",
+        "app-state-resettable",
+        "test-tenant-resettable",
+        "compensated",
+        "non-replayable"
+      ]
+    },
+    "repairPolicy": {
+      "$ref": "#/$defs/RepairPolicy"
+    },
+    "businessOracles": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/BusinessOracle"
+      }
+    },
+    "independentBusinessOracles": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/IndependentBusinessOracle"
+      }
+    },
+    "compensator": {
+      "$ref": "#/$defs/Compensator"
+    },
+    "checkpoint": {
+      "$ref": "#/$defs/CheckpointRequirements"
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "StringList": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "RepairPolicy": {
+      "type": "object",
+      "properties": {
+        "allowedCandidateKinds": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "automation-id",
+              "exact-text"
+            ]
+          }
+        },
+        "allowedRiskFlags": {
+          "type": "array",
+          "items": {
+            "const": "localization"
+          }
+        },
+        "maxCandidates": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "minimumScore": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "minimumScoreGap": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "FlowReference": {
+      "type": "object",
+      "required": [
+        "digest"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "flowId": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "digest": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "Scenario": {
+      "type": "object",
+      "properties": {
+        "scenarioId": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "acceptanceCriterionIds": {
+          "$ref": "#/$defs/StringList"
+        },
+        "risks": {
+          "$ref": "#/$defs/StringList"
+        }
+      },
+      "additionalProperties": true
+    },
+    "Precondition": {
+      "type": "object",
+      "properties": {
+        "preconditionId": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "ResetRequirement": {
+      "type": "object",
+      "properties": {
+        "required": {
+          "type": "boolean"
+        },
+        "strategy": {
+          "type": "string"
+        },
+        "resetIdentity": {
+          "type": "string"
+        },
+        "seedFingerprint": {
+          "type": "string"
+        },
+        "backendStateFingerprint": {
+          "type": "string"
+        },
+        "reference": {
+          "$ref": "#/$defs/ResetReference"
+        },
+        "appStateSeed": {
+          "$ref": "#/$defs/AppStateSeed"
+        },
+        "backendTestDataSeed": {
+          "$ref": "#/$defs/BackendTestDataSeed"
+        }
+      },
+      "additionalProperties": true
+    },
+    "AcceptanceCriterion": {
+      "type": "object",
+      "properties": {
+        "criterionId": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "businessOracleId": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "Requirements": {
+      "type": "object",
+      "properties": {
+        "requiredCapabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CapabilityRequirement"
+          }
+        },
+        "requiredSemantics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RequiredSemantic"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "CapabilityRequirement": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "minimumVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "features": {
+          "$ref": "#/$defs/StringList"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "RequiredSemantic": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "minimumVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "ExplorationBudget": {
+      "description": "A bounded allowance for agent-driven exploration. The broker refuses every exploration step unless all three fields are present and positive, so a partially-declared budget is a plan-authoring error rather than a runtime surprise.",
+      "type": "object",
+      "required": [
+        "maxActions",
+        "maxDurationSeconds",
+        "allowedScopes"
+      ],
+      "properties": {
+        "maxActions": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxDurationSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "allowedScopes": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/StringList"
+            },
+            {
+              "minItems": 1
+            }
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "Provenance": {
+      "type": "object",
+      "required": [
+        "actorKind",
+        "channel"
+      ],
+      "properties": {
+        "actorKind": {
+          "type": "string"
+        },
+        "actorId": {
+          "type": "string"
+        },
+        "channel": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "intent": {
+          "type": "string"
+        },
+        "recordedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": true
+    },
+    "Review": {
+      "type": "object",
+      "properties": {
+        "reviewer": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "reviewedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "Approval": {
+      "type": "object",
+      "properties": {
+        "approver": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "approvedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "digest": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "BusinessOracle": {
+      "type": "object",
+      "properties": {
+        "oracleId": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "independent": {
+          "type": "boolean"
+        },
+        "evidenceKind": {
+          "type": "string"
+        },
+        "reference": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "IndependentBusinessOracle": {
+      "type": "object",
+      "properties": {
+        "oracleId": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "independent": {
+          "type": "boolean"
+        },
+        "evidenceKind": {
+          "type": "string"
+        },
+        "reference": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "ResetReference": {
+      "type": "object",
+      "properties": {
+        "strategy": {
+          "type": "string"
+        },
+        "resetId": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "evidenceReference": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "AppStateSeed": {
+      "type": "object",
+      "properties": {
+        "seedId": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "BackendTestDataSeed": {
+      "type": "object",
+      "properties": {
+        "seedId": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "type": "string"
+        },
+        "dataset": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "Compensator": {
+      "type": "object",
+      "properties": {
+        "compensatorId": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "evidenceKind": {
+          "type": "string"
+        },
+        "reference": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "CheckpointRequirements": {
+      "type": "object",
+      "properties": {
+        "appBuildFingerprint": {
+          "type": "string"
+        },
+        "seedFingerprint": {
+          "type": "string"
+        },
+        "backendStateFingerprint": {
+          "type": "string"
+        },
+        "appStateSeed": {
+          "$ref": "#/$defs/AppStateSeed"
+        },
+        "backendTestDataSeed": {
+          "$ref": "#/$defs/BackendTestDataSeed"
+        },
+        "locale": {
+          "type": "string"
+        },
+        "theme": {
+          "type": "string"
+        },
+        "orientation": {
+          "type": "string"
+        },
+        "route": {
+          "type": "string"
+        },
+        "window": {
+          "type": "string"
+        },
+        "modal": {
+          "type": "string"
+        },
+        "collectionItemKey": {
+          "type": "string"
+        },
+        "displayProfile": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

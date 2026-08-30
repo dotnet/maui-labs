@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "id": "product-regression-no-repair",
+  "kind": "product-regression",
+  "disposition": "no-repair",
+  "expectedFailureClass": "assertion-failed",
+  "provenance": {
+    "labeledBy": "devflow-maintainers",
+    "labeledOn": "2026-08-15",
+    "method": "hand-authored",
+    "sourceKind": "synthetic",
+    "reviewStatus": "unreviewed",
+    "notes": "Hard postcondition disagrees with the observed route."
+  },
+  "fixture": {
+    "action": "tap",
+    "selector": {
+      "automationId": "submit"
+    },
+    "assertion": {
+      "kind": "routeIs",
+      "expected": "/receipt",
+      "actual": "/error"
+    }
+  },
+  "expect": {
+    "diagnosticIds": [
+      "DFSH009"
+    ],
+    "candidateKinds": []
+  }
+}

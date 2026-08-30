@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "id": "repair-no-ambiguity-close-score",
+  "kind": "repair-negative",
+  "disposition": "no-repair",
+  "expectedFailureClass": "locator-ambiguous",
+  "provenance": {
+    "labeledBy": "devflow-maintainers",
+    "labeledOn": "2026-08-15",
+    "method": "hand-authored",
+    "sourceKind": "synthetic",
+    "reviewStatus": "unreviewed",
+    "notes": "Two near-tied repair candidates; a maintainer would call this ambiguity."
+  },
+  "fixture": {
+    "failure": "locator-not-found",
+    "candidates": [
+      {
+        "kind": "automation-id",
+        "score": 0.91,
+        "matchCount": 1
+      },
+      {
+        "kind": "automation-id",
+        "score": 0.9,
+        "matchCount": 1
+      }
+    ]
+  },
+  "expect": {
+    "diagnosticIds": [
+      "DFSH001"
+    ],
+    "candidateKinds": [
+      "automation-id"
+    ],
+    "repairEligible": false,
+    "ineligibilityCodes": [
+      "candidate-scores-too-close"
+    ]
+  }
+}

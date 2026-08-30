@@ -1,14 +1,16 @@
 using System.ComponentModel;
+using Microsoft.Maui.DevFlow.Agent.Core;
 
 namespace DevFlow.Sample;
 
-public class TodoItem : INotifyPropertyChanged
+public class TodoItem : INotifyPropertyChanged, IDevFlowStableItemKey
 {
     private string _title = string.Empty;
     private string _description = string.Empty;
     private bool _isCompleted;
 
     public string Id { get; set; } = Guid.NewGuid().ToString("N")[..8];
+    string? IDevFlowStableItemKey.DevFlowStableItemKey => Id;
 
     public string Title
     {

@@ -2,6 +2,158 @@ namespace Microsoft.Maui.Cli.UnitTests.Fixtures;
 
 internal static class MockAgentResponses
 {
+    /// <summary>One violation, one observation, and one incomplete rule with partial coverage.</summary>
+    public const string LayoutDiagnostics = """
+        {
+          "schemaVersion": "1.0",
+          "ruleSetVersion": "1.0",
+          "capturedUtc": "2026-04-01T12:00:00.000Z",
+          "platform": "MacCatalyst",
+          "scope": {
+            "maxElements": 2000,
+            "elementsExamined": 3,
+            "truncated": false,
+            "windowBounds": { "x": 0, "y": 0, "width": 1440, "height": 900 }
+          },
+          "coverage": {
+            "overall": "partial",
+            "rules": [
+              { "ruleId": "layout.visible-zero-area", "support": "full", "confidence": "high", "evaluated": 3, "skipped": 0, "limitations": [] },
+              { "ruleId": "layout.outside-window", "support": "partial", "confidence": "high", "evaluated": 2, "skipped": 1, "limitations": ["Requires platform-resolved window bounds."] }
+            ],
+            "limitations": ["Findings are derived from managed MAUI layout state only."],
+            "neverCaptured": ["Element Text/Value content"]
+          },
+          "summary": { "violations": 1, "observations": 1, "incomplete": 1 },
+          "findings": [
+            {
+              "id": "layout.visible-zero-area:label1:area",
+              "ruleId": "layout.visible-zero-area",
+              "outcome": "violation",
+              "confidence": "high",
+              "message": "Label is visible and realized but was arranged with a non-positive width (0x20).",
+              "explanation": "A realized element whose arranged rectangle has no area occupies no space on screen.",
+              "element": { "id": "label1", "type": "Label", "automationId": "Title", "sourceFile": "Views/MainPage.xaml", "sourceLine": 12 },
+              "evidence": { "frame": { "x": 0, "y": 0, "width": 0, "height": 20 } },
+              "limitations": ["An element that is intentionally collapsed matches this rule."]
+            },
+            {
+              "id": "layout.desired-size-constrained:label2:desired",
+              "ruleId": "layout.desired-size-constrained",
+              "outcome": "observation",
+              "confidence": "medium",
+              "message": "Label measured 300x20 but was arranged 120x20.",
+              "explanation": "This is normal whenever a parent intentionally constrains a child.",
+              "element": { "id": "label2", "type": "Label" },
+              "limitations": []
+            },
+            {
+              "id": "layout.outside-window:scope:incomplete",
+              "ruleId": "layout.outside-window",
+              "outcome": "incomplete",
+              "confidence": "high",
+              "message": "layout.outside-window could not be evaluated for 1 element(s).",
+              "explanation": "Managed layout state did not expose the measurements the rule requires.",
+              "evidence": { "affectedElements": 1 },
+              "limitations": ["An unevaluated element is reported as incomplete and must never be read as a pass."]
+            }
+          ]
+        }
+        """;
+
+    public const string ProfilerCapabilities = """
+        {
+          "available": true,
+          "supportedInBuild": true,
+          "featureEnabled": true,
+          "platform": "MacCatalyst",
+          "managedMemorySupported": true,
+          "nativeMemorySupported": false,
+          "processMemorySupported": true,
+          "gcSupported": true,
+          "cpuPercentSupported": true,
+          "fpsSupported": false,
+          "frameTimingsEstimated": true,
+          "nativeFrameTimingsSupported": false,
+          "jankEventsSupported": false,
+          "uiThreadStallSupported": false,
+          "threadCountSupported": true
+        }
+        """;
+
+    public const string ProfilerSessionEnvelope = """
+        {
+          "stopToken": "qa-stop-token",
+          "session": {
+            "sessionId": "session-1",
+            "startedAtUtc": "2026-04-01T12:00:00Z",
+            "sampleIntervalMs": 250,
+            "isActive": true
+          }
+        }
+        """;
+
+    public const string ProfilerStoppedSessionEnvelope = """
+        {
+          "session": {
+            "sessionId": "session-1",
+            "startedAtUtc": "2026-04-01T12:00:00Z",
+            "sampleIntervalMs": 250,
+            "isActive": false
+          },
+          "batch": {
+            "sessionId": "session-1",
+            "isActive": false,
+            "samples": [
+              { "tsUtc": "2026-04-01T12:00:00Z", "managedBytes": 1000000, "gc0": 1, "gc1": 0, "gc2": 0, "cpuPercent": 12.5, "threadCount": 20, "frameSource": "estimated", "frameQuality": "low", "jankFrameCount": 0, "uiThreadStallCount": 0, "fps": 58.0 },
+              { "tsUtc": "2026-04-01T12:00:01Z", "managedBytes": 1500000, "gc0": 3, "gc1": 1, "gc2": 0, "cpuPercent": 42.0, "threadCount": 24, "frameSource": "estimated", "frameQuality": "low", "jankFrameCount": 2, "uiThreadStallCount": 1, "fps": 31.0 }
+            ],
+            "markers": [
+              { "tsUtc": "2026-04-01T12:00:00Z", "type": "navigation", "name": "push" },
+              { "tsUtc": "2026-04-01T12:00:01Z", "type": "user.action", "name": "tap" }
+            ],
+            "spans": [],
+            "sampleCursor": 2,
+            "markerCursor": 2,
+            "spanCursor": 0,
+            "sampleMetadata": { "oldestCursor": 0, "latestCursor": 2, "lostCount": 4, "availableCount": 2 },
+            "markerMetadata": { "oldestCursor": 0, "latestCursor": 2, "lostCount": 0, "availableCount": 2 },
+            "spanMetadata": { "oldestCursor": 0, "latestCursor": 0, "lostCount": 0, "availableCount": 0 }
+          },
+          "hotspots": [
+            { "kind": "ui.operation", "name": "MainPage.Appearing", "screen": "//main", "count": 3, "errorCount": 0, "avgDurationMs": 40.0, "p95DurationMs": 90.0, "maxDurationMs": 95.0 }
+          ]
+        }
+        """;
+
+    public const string ProfilerBatch = """
+        {
+          "sessionId": "session-1",
+          "isActive": true,
+          "samples": [
+            { "tsUtc": "2026-04-01T12:00:00Z", "managedBytes": 1000000, "gc0": 1, "gc1": 0, "gc2": 0, "cpuPercent": 12.5, "threadCount": 20, "frameSource": "estimated", "frameQuality": "low", "jankFrameCount": 0, "uiThreadStallCount": 0, "fps": 58.0 },
+            { "tsUtc": "2026-04-01T12:00:01Z", "managedBytes": 1500000, "gc0": 3, "gc1": 1, "gc2": 0, "cpuPercent": 42.0, "threadCount": 24, "frameSource": "estimated", "frameQuality": "low", "jankFrameCount": 2, "uiThreadStallCount": 1, "fps": 31.0 }
+          ],
+          "markers": [
+            { "tsUtc": "2026-04-01T12:00:00Z", "type": "navigation", "name": "push" },
+            { "tsUtc": "2026-04-01T12:00:01Z", "type": "user.action", "name": "tap" }
+          ],
+          "spans": [],
+          "sampleCursor": 2,
+          "markerCursor": 2,
+          "spanCursor": 0,
+          "sampleMetadata": { "oldestCursor": 0, "latestCursor": 2, "lostCount": 4, "availableCount": 2 },
+          "markerMetadata": { "oldestCursor": 0, "latestCursor": 2, "lostCount": 0, "availableCount": 2 },
+          "spanMetadata": { "oldestCursor": 0, "latestCursor": 0, "lostCount": 0, "availableCount": 0 }
+        }
+        """;
+
+    public const string ProfilerHotspots = """
+        [
+          { "kind": "ui.operation", "name": "MainPage.Appearing", "screen": "//main", "count": 3, "errorCount": 0, "avgDurationMs": 40.0, "p95DurationMs": 90.0, "maxDurationMs": 95.0 }
+        ]
+        """;
+
     public const string AgentStatus = """
         {
           "timestamp": "2026-04-01T12:00:00Z",
@@ -40,6 +192,12 @@ internal static class MockAgentResponses
           "running": true,
           "cdpReady": true,
           "cdpWebViewCount": 1,
+          "profilerSession": {
+            "sessionId": "session-1",
+            "startedAtUtc": "2026-04-01T12:00:00Z",
+            "sampleIntervalMs": 250,
+            "isActive": true
+          },
           "extensions": {
             "count": 1,
             "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"

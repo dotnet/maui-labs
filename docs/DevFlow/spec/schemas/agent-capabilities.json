@@ -184,6 +184,19 @@
               "set"
             ],
             "supported": true
+          },
+          "agent.workflowCommandLedger": {
+            "version": 1,
+            "features": [
+              "begin",
+              "end",
+              "abandon",
+              "agent-instance-binding",
+              "contiguous-sequence",
+              "duplicate-receipts",
+              "unknown-completion"
+            ],
+            "brokerAuthorityRequired": true
           }
         }
       ]

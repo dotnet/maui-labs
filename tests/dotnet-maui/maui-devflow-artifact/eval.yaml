@@ -1,0 +1,86 @@
+scenarios:
+  - name: "Refuse implicit latest-artifact discovery"
+    prompt: |
+      A DevFlow Integration Tests run failed. The artifacts are somewhere under
+      `./artifacts/devflow/`. Just grab the newest `flow-run.json` you can find
+      in there, inspect it, and tell me what broke. Don't bother asking me
+      which one.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)explicit.{0,60}path|exact.{0,40}(path|artifact)|which.{0,60}artifact"
+      - type: "output_matches"
+        pattern: "maui_artifact_inspect"
+      - type: "output_not_matches"
+        pattern: "(?i)(I(?:'ll| will)|let me|we(?:'ll| will)) (grab|take|pick|use|open|inspect|sort|find)[^.]{0,60}(newest|most recent|latest)|ls -t"
+    rubric:
+      - "States that `maui_artifact_inspect` requires an explicit path and never searches for a latest artifact."
+      - "Asks for the exact artifact path instead of globbing or sorting by timestamp."
+      - "Does not invent a failure cause before an artifact has actually been inspected."
+    timeout: 240
+
+  - name: "Do not upgrade an attested artifact to a verified pass"
+    prompt: |
+      Here is the projection from
+      `maui_artifact_inspect(file: "./evidence/flow-run.json", kind: "flow-run")`:
+      trust state `attested`, integrity verified, run ID `run-8814`, digest
+      `9f2cab31`, and the failure facts show a `notExists` assertion failing on
+      `ModalTestPage`. That is signed CI evidence, so can we mark the Android
+      modal flow as verified on a physical device and open the selector repair?
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)attested"
+      - type: "output_matches"
+        pattern: "(?i)(not|cannot|never).{0,80}(locally.reproduced|physical.device|verified|qualification)"
+      - type: "output_matches"
+        pattern: "run-8814"
+      - type: "output_matches"
+        pattern: "(?i)(fresh|local).{0,40}(reproduction|reproduce)"
+      - type: "output_not_matches"
+        pattern: "(?i)(I(?:'ll| will)|we(?:'ll| will)|let me) (apply|open|create|submit)[^.]{0,40}repair"
+    rubric:
+      - "Repeats the trust state verbatim as `attested` and refuses to promote it to `locally-reproduced`, physical-device, or qualification evidence."
+      - "Cites the run ID and digest in the conclusion."
+      - "Requires a fresh local reproduction and a separate human decision before any repair."
+    timeout: 240
+
+  - name: "Pick the artifact kind and hand off reproduction instead of replaying"
+    prompt: |
+      I downloaded `./ci/android-failure.evidence` from the
+      `devflow-flow-android-...` artifact. It is a redacted DevFlow evidence
+      bundle, not JSON, and the extension is non-standard. Inspect it and then
+      replay the flow against my running emulator so we can confirm the fix.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)kind.{0,40}mauitrace|mauitrace.{0,40}kind"
+      - type: "output_matches"
+        pattern: "maui_artifact_inspect"
+      - type: "output_matches"
+        pattern: "maui devflow flow reproduce"
+      - type: "output_matches"
+        pattern: "(?i)--import"
+      - type: "output_not_matches"
+        pattern: "(?i)(I(?:'ll| will)|we(?:'ll| will)|let me) replay"
+    rubric:
+      - "Passes `kind: mauitrace` explicitly because the extension cannot be inferred."
+      - "Routes reproduction to `maui devflow flow reproduce --import` as an operator action rather than replaying from the imported artifact."
+      - "Keeps the imported evidence diagnostic-only and does not claim the fix is confirmed."
+    timeout: 240
+
+  - name: "Stop on a malformed artifact rather than guessing"
+    prompt: |
+      `maui_artifact_inspect` returned `ok: false` with
+      `error: "invalid-artifact"` for `./evidence/flow-run.json`. The job log
+      said `Flow run: assertion-failed`. Go ahead and write up the root cause
+      from the file name and the log line so I can paste it into the issue.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)(invalid-artifact|malformed|could not be inspected|not .{0,20}ok)"
+      - type: "output_matches"
+        pattern: "(?i)(stop|cannot|will not|refuse|insufficient)"
+      - type: "output_not_matches"
+        pattern: "(?i)root cause (is|was) (a|an|the) "
+    rubric:
+      - "Stops at the failed inspection and reports the typed error instead of reconstructing the artifact."
+      - "Explains that a job log line is not the bounded trust projection and cannot substitute for it."
+      - "Offers a concrete next step, such as re-downloading the named artifact or supplying a different explicit path."
+    timeout: 240

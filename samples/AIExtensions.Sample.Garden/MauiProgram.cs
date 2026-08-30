@@ -91,9 +91,9 @@ public static class MauiProgram
     private static MauiAppBuilder AddOpenAIServices(this MauiAppBuilder builder)
     {
         var aiSection = builder.Configuration.GetSection("AI");
-        var apiKey = aiSection["ApiKey"];
-        var endpoint = aiSection["Endpoint"];
-        var deploymentName = aiSection["DeploymentName"];
+        var apiKey = aiSection["ApiKey"] ?? Environment.GetEnvironmentVariable("AI__ApiKey");
+        var endpoint = aiSection["Endpoint"] ?? Environment.GetEnvironmentVariable("AI__Endpoint");
+        var deploymentName = aiSection["DeploymentName"] ?? Environment.GetEnvironmentVariable("AI__DeploymentName");
 
         if (string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(deploymentName))
         {

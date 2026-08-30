@@ -62,12 +62,15 @@
   <ItemGroup>
     <ProjectReference Include="..\Microsoft.Maui.ProfilingHelper\Microsoft.Maui.ProfilingHelper.csproj" />
     <ProjectReference Include="..\..\DevFlow\Microsoft.Maui.DevFlow.Driver\Microsoft.Maui.DevFlow.Driver.csproj" />
+    <ProjectReference Include="..\..\DevFlow\Microsoft.Maui.DevFlow.Devices\Microsoft.Maui.DevFlow.Devices.csproj" />
+    <ProjectReference Include="..\..\DevFlow\Microsoft.Maui.DevFlow.Testing\Microsoft.Maui.DevFlow.Testing.csproj" />
     <ProjectReference Include="..\..\Go\Server\Microsoft.Maui.Go.Server.csproj" Condition="'$(TargetFramework)' == 'net10.0'" />
   </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="Microsoft.Maui.Cli.UnitTests" />
     <InternalsVisibleTo Include="Microsoft.Maui.DevFlow.Tests" />
+    <InternalsVisibleTo Include="Microsoft.Maui.DevFlow.Agent.IntegrationTests" />
   </ItemGroup>
 
   <ItemGroup>
@@ -84,6 +87,12 @@
       <WithCulture>false</WithCulture>
     </EmbeddedResource>
     <EmbeddedResource Include="..\..\..\plugins\dotnet-maui\skills\maui-devflow-session-review\**\*" LogicalName="devflow.skills/maui-devflow-session-review/%(RecursiveDir)%(Filename)%(Extension)">
+      <WithCulture>false</WithCulture>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\..\plugins\dotnet-maui\skills\maui-devflow-artifact\**\*" LogicalName="devflow.skills/maui-devflow-artifact/%(RecursiveDir)%(Filename)%(Extension)">
+      <WithCulture>false</WithCulture>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\..\plugins\dotnet-maui\skills\maui-devflow-ci-triage\**\*" LogicalName="devflow.skills/maui-devflow-ci-triage/%(RecursiveDir)%(Filename)%(Extension)">
       <WithCulture>false</WithCulture>
     </EmbeddedResource>
   </ItemGroup>

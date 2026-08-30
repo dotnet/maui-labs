@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/dotnet/maui-labs/main/docs/DevFlow/spec/schemas/workflow-command-ledger.json",
+  "title": "WorkflowCommandLedger",
+  "description": "Agent-instance-bound command fencing and in-process receipts for broker workflow runs.",
+  "$defs": {
+    "WorkflowRunControlRequest": {
+      "type": "object",
+      "required": ["action", "runId", "agentInstanceId", "authorityEpoch"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["begin", "end", "abandon"]
+        },
+        "runId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "agentInstanceId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "authorityEpoch": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "approvalDigest": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 128
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorkflowRunControlStatus": {
+      "type": "object",
+      "required": ["ok"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "alreadyTerminal": { "type": "boolean" },
+        "state": { "type": "string" },
+        "error": { "type": "string" },
+        "reason": { "type": "string" },
+        "commands": { "type": "integer", "minimum": 0 },
+        "authorityEpoch": { "type": "integer", "minimum": 1 },
+        "agentInstanceId": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "WorkflowCommandEnvelopeHeaders": {
+      "type": "object",
+      "description": "Required on each workflow-run mutation. The agent independently recomputes actionDigest from the canonical HTTP method, path, query, and body.",
+      "required": [
+        "X-DevFlow-Workflow-Run",
+        "X-DevFlow-Workflow-Agent-Instance",
+        "X-DevFlow-Workflow-Sequence",
+        "X-DevFlow-Workflow-Command",
+        "X-DevFlow-Workflow-Digest",
+        "X-DevFlow-Workflow-Epoch"
+      ],
+      "properties": {
+        "X-DevFlow-Workflow-Run": { "type": "string", "maxLength": 128 },
+        "X-DevFlow-Workflow-Agent-Instance": { "type": "string", "maxLength": 128 },
+        "X-DevFlow-Workflow-Sequence": { "type": "integer", "minimum": 1 },
+        "X-DevFlow-Workflow-Command": { "type": "string", "maxLength": 128 },
+        "X-DevFlow-Workflow-Digest": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{64}$"
+        },
+        "X-DevFlow-Workflow-Epoch": { "type": "integer", "minimum": 1 },
+        "X-DevFlow-Workflow-Approval": { "type": "string", "maxLength": 128 }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "planId": "plan-agent-authored-contract",
+  "revision": 1,
+  "flow": {
+    "path": "agent-authored-contract.md",
+    "digest": "45fdc11a242a38376ca0698bd17913573deff57531b2d4f4012c061544f2f6d7"
+  },
+  "title": "agent-authored-contract",
+  "goal": "Replay the committed agent-authored-contract flow against the sample app.",
+  "scenarios": [],
+  "assumptions": [],
+  "risks": [],
+  "preconditions": [],
+  "reset": {
+    "required": false
+  },
+  "acceptanceCriteria": [],
+  "requiredPlatforms": [],
+  "requirements": {
+    "requiredCapabilities": [],
+    "requiredSemantics": []
+  },
+  "prohibitedActionClasses": [],
+  "provenance": {
+    "actorKind": "human",
+    "channel": "repository",
+    "intent": "human-authored"
+  },
+  "reviews": [],
+  "approvals": [],
+  "sideEffectPolicy": "none",
+  "businessOracles": [],
+  "independentBusinessOracles": []
+}

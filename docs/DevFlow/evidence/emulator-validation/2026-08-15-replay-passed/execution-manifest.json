@@ -1,0 +1,205 @@
+{
+  "schema": 1,
+  "manifestId": "manifest-run-20260815182033097-c0728f6c",
+  "runId": "run-20260815182033097-c0728f6c",
+  "flowId": "sha256:3b4edbacc43a360b301f8e55eaa621d5997bd5edeedb0007d81e6264c51cd13a",
+  "flowDigest": "sha256:3b4edbacc43a360b301f8e55eaa621d5997bd5edeedb0007d81e6264c51cd13a",
+  "fingerprintVersion": "maui-flow-fingerprints-v1",
+  "testIdentityFingerprint": "sha256:9caec2a77244930c5a527cbdc4e8131702f54b9bc2cf53807b6d0b5d1ab11e3e",
+  "host": {
+    "os": "windows",
+    "architecture": "x64",
+    "runtime": "10.0.10",
+    "runnerKind": "maui-cli",
+    "environmentFingerprint": "sha256:957a328c4bba8a4afa797ab70c2e8e382b43b0ac4e0ad2b8316333a98fb07f31"
+  },
+  "build": {
+    "repositoryFingerprint": "sha256:d309ac27a959046d6fe6977ce3e1dcbdc39edaf2132baac4eabacbc0e7fb9538",
+    "projectFingerprint": "sha256:fcf914f5a3f1cd331e67a855a4e827906685359b86562793de0efb75a57c9ea4",
+    "sourceRevision": "7643531e05626323ffe0989d7425e93a887bd6bf",
+    "targetFramework": "net10.0-android",
+    "configuration": "Debug",
+    "appId": "com.companyname.mauitodo",
+    "appBuildFingerprint": "sha256:88f216be5131a0d5153136e244606065b8d175f389ee038a9439c3df8f847672",
+    "appSourceFingerprint": "sha256:33b0166775d7c116ef7c3736212a66d6bf2b652817027eedca97701f8d7c97f3",
+    "packageDigest": "sha256:a19f654778147972c61bb7ec8e608f57e0af642c95a90ce420bb8fd8016e4bc6"
+  },
+  "device": {
+    "platform": "android",
+    "runtimeKind": "emulator",
+    "profile": "emulator",
+    "architecture": "x64",
+    "apiLevel": "35",
+    "osVersion": "35",
+    "formFactor": "phone",
+    "virtual": true,
+    "deviceIdentityFingerprint": "sha256:1f62693be5a95a247d01220664ab9a594e282c75ee75adaf57e446187448dc38"
+  },
+  "lifecycle": {
+    "startedAt": "2026-08-15T18:20:33.1021496+00:00",
+    "endedAt": "2026-08-15T18:25:27.0687114+00:00",
+    "cleanupPolicy": "stop",
+    "installedByInvocation": true,
+    "launchedByInvocation": true,
+    "cleanupCompleted": true,
+    "stages": [
+      {
+        "sequence": 1,
+        "name": "validate-request",
+        "status": "passed",
+        "detailCode": "request-valid",
+        "durationMs": 0,
+        "ownedResource": false
+      },
+      {
+        "sequence": 2,
+        "name": "source-identity",
+        "status": "passed",
+        "detailCode": "source-identity-complete",
+        "durationMs": 197,
+        "ownedResource": false
+      },
+      {
+        "sequence": 3,
+        "name": "load-workflow",
+        "status": "passed",
+        "detailCode": "load-workflow-complete",
+        "durationMs": 264,
+        "ownedResource": false
+      },
+      {
+        "sequence": 4,
+        "name": "validate-target",
+        "status": "passed",
+        "detailCode": "target-supported",
+        "durationMs": 0,
+        "ownedResource": false
+      },
+      {
+        "sequence": 5,
+        "name": "resolve-artifact",
+        "status": "passed",
+        "detailCode": "resolve-artifact-complete",
+        "durationMs": 262815,
+        "ownedResource": true
+      },
+      {
+        "sequence": 6,
+        "name": "platform-preflight",
+        "status": "passed",
+        "detailCode": "platform-preflight-complete",
+        "durationMs": 400,
+        "ownedResource": false
+      },
+      {
+        "sequence": 7,
+        "name": "preflight",
+        "status": "passed",
+        "detailCode": "preflight-complete",
+        "durationMs": 4,
+        "ownedResource": false
+      },
+      {
+        "sequence": 8,
+        "name": "broker-snapshot",
+        "status": "passed",
+        "detailCode": "broker-snapshot-complete",
+        "durationMs": 119,
+        "ownedResource": false
+      },
+      {
+        "sequence": 9,
+        "name": "platform-launch",
+        "status": "passed",
+        "detailCode": "platform-launch-complete",
+        "durationMs": 21830,
+        "ownedResource": true
+      },
+      {
+        "sequence": 10,
+        "name": "bind-agent",
+        "status": "passed",
+        "detailCode": "bind-agent-complete",
+        "durationMs": 10,
+        "ownedResource": false
+      },
+      {
+        "sequence": 11,
+        "name": "agent-forward",
+        "status": "passed",
+        "detailCode": "agent-forward-complete",
+        "durationMs": 791,
+        "ownedResource": true
+      },
+      {
+        "sequence": 12,
+        "name": "validate-agent",
+        "status": "passed",
+        "detailCode": "validate-agent-complete",
+        "durationMs": 1274,
+        "ownedResource": false
+      },
+      {
+        "sequence": 13,
+        "name": "execute-flow",
+        "status": "passed",
+        "detailCode": "execute-flow-complete",
+        "durationMs": 3495,
+        "ownedResource": false
+      },
+      {
+        "sequence": 14,
+        "name": "post-run-oracles",
+        "status": "passed",
+        "detailCode": "post-run-oracles-complete",
+        "durationMs": 3,
+        "ownedResource": false
+      },
+      {
+        "sequence": 15,
+        "name": "cleanup",
+        "status": "passed",
+        "detailCode": "cleanup-complete",
+        "durationMs": 408,
+        "ownedResource": true
+      },
+      {
+        "sequence": 16,
+        "name": "artifact-cleanup",
+        "status": "passed",
+        "detailCode": "artifact-cleanup-complete",
+        "durationMs": 0,
+        "ownedResource": true
+      }
+    ]
+  },
+  "outcome": {
+    "status": "passed",
+    "exitCategory": "unverified",
+    "terminal": true,
+    "verified": false,
+    "unknownCompletion": false
+  },
+  "artifacts": [
+    {
+      "artifactId": "flow-run",
+      "role": "semantic-report",
+      "kind": "flow-run-report",
+      "mediaType": "application/json",
+      "digest": "sha256:7b5249ee6c2d5a9b6795e7d25602967017cf9acbb8d16c12938cf66f4ef0378a",
+      "sizeBytes": 43340,
+      "relativePath": "flow-run.json",
+      "redacted": true
+    },
+    {
+      "artifactId": "junit",
+      "role": "test-report",
+      "kind": "junit",
+      "mediaType": "application/xml",
+      "digest": "sha256:cef994170916ce877f4830841292010f373f10077cb065f19b7127cba5280f5e",
+      "sizeBytes": 529,
+      "relativePath": "report.junit.xml",
+      "redacted": true
+    }
+  ]
+}

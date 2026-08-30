@@ -9,14 +9,17 @@ namespace Microsoft.Maui.Cli.UnitTests.Fakes;
 /// In-memory fake for <see cref="AdbRunner"/> used to test <see cref="Microsoft.Maui.Cli.DevFlow.Android.AndroidDevFlowPortForwarder"/>
 /// without shelling out to a real <c>adb</c> binary. Only the members the forwarder actually calls
 /// (<see cref="ListForwardPortsAsync"/>, <see cref="ListReversePortsAsync"/>, <see cref="ForwardPortAsync"/>,
-/// <see cref="ReversePortAsync"/>) are overridden. Port state is intentionally not keyed by serial - the
-/// forwarder always targets a single selected device per call, and per-serial fidelity is <see cref="AdbRunner"/>'s
-/// own concern, not something this fake needs to reproduce.
+/// <see cref="ReversePortAsync"/>) are overridden. Tests can use shared port state for single-device
+/// operations or per-serial state when verifying exact multi-device ownership.
 /// </summary>
 public sealed class FakeAdbRunner : AdbRunner
 {
 	readonly HashSet<int> _forwardPorts;
 	readonly HashSet<int> _reversePorts;
+	readonly IReadOnlyDictionary<string, HashSet<int>>? _forwardPortsBySerial;
+	readonly IReadOnlySet<string>? _forwardListFailures;
+	readonly IReadOnlyList<AdbPortRule>? _forwardRules;
+	readonly IReadOnlyList<AdbPortRule>? _reverseRules;
 
 	public List<string> Commands { get; } = [];
 
@@ -36,22 +39,41 @@ public sealed class FakeAdbRunner : AdbRunner
 	/// </summary>
 	public Action? OnForwardPort { get; set; }
 
-	public FakeAdbRunner(HashSet<int>? forwardPorts = null, HashSet<int>? reversePorts = null)
+	public FakeAdbRunner(
+		HashSet<int>? forwardPorts = null,
+		HashSet<int>? reversePorts = null,
+		IReadOnlyDictionary<string, HashSet<int>>? forwardPortsBySerial = null,
+		IReadOnlySet<string>? forwardListFailures = null,
+		IReadOnlyList<AdbPortRule>? forwardRules = null,
+		IReadOnlyList<AdbPortRule>? reverseRules = null)
 		: base("adb")
 	{
 		_forwardPorts = forwardPorts ?? [];
 		_reversePorts = reversePorts ?? [];
+		_forwardPortsBySerial = forwardPortsBySerial;
+		_forwardListFailures = forwardListFailures;
+		_forwardRules = forwardRules;
+		_reverseRules = reverseRules;
 	}
 
 	public override Task<IReadOnlyList<AdbPortRule>> ListForwardPortsAsync(string serial, CancellationToken cancellationToken = default)
 	{
 		Commands.Add($"-s {serial} forward --list");
-		return Task.FromResult(ToRules(_forwardPorts));
+		if (_forwardListFailures?.Contains(serial) == true)
+			throw new InvalidOperationException($"Could not inspect {serial}");
+		if (_forwardRules is not null)
+			return Task.FromResult(_forwardRules);
+		var ports = _forwardPortsBySerial is not null && _forwardPortsBySerial.TryGetValue(serial, out var serialPorts)
+			? serialPorts
+			: _forwardPorts;
+		return Task.FromResult(ToRules(ports));
 	}
 
 	public override Task<IReadOnlyList<AdbPortRule>> ListReversePortsAsync(string serial, CancellationToken cancellationToken = default)
 	{
 		Commands.Add($"-s {serial} reverse --list");
+		if (_reverseRules is not null)
+			return Task.FromResult(_reverseRules);
 		return Task.FromResult(ToRules(_reversePorts));
 	}
 
@@ -63,7 +85,12 @@ public sealed class FakeAdbRunner : AdbRunner
 		OnForwardPort?.Invoke();
 		Commands.Add($"-s {serial} forward {local.ToSocketSpec()} {remote.ToSocketSpec()}");
 		if (local.Port == remote.Port)
-			_forwardPorts.Add(local.Port);
+		{
+			if (_forwardPortsBySerial is not null && _forwardPortsBySerial.TryGetValue(serial, out var serialPorts))
+				serialPorts.Add(local.Port);
+			else
+				_forwardPorts.Add(local.Port);
+		}
 		return Task.CompletedTask;
 	}
 

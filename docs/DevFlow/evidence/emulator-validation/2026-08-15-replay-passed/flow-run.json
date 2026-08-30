@@ -1,0 +1,1230 @@
+{
+  "schema": 1,
+  "runId": "run-20260815182033097-c0728f6c",
+  "flowId": "sha256:3b4edbacc43a360b301f8e55eaa621d5997bd5edeedb0007d81e6264c51cd13a",
+  "flowDigest": "3b4edbacc43a360b301f8e55eaa621d5997bd5edeedb0007d81e6264c51cd13a",
+  "legacyFlowIdentity": "modal-roundtrip.md",
+  "target": {
+    "targetId": "21488e3183ec",
+    "platform": "android",
+    "deviceId": "sha256:1f62693be5a95a247d01220664ab9a594e282c75ee75adaf57e446187448dc38",
+    "deviceProfile": "emulator",
+    "appId": "com.companyname.mauitodo",
+    "appBuildFingerprint": "sha256:88f216be5131a0d5153136e244606065b8d175f389ee038a9439c3df8f847672",
+    "appSourceFingerprint": "sha256:33b0166775d7c116ef7c3736212a66d6bf2b652817027eedca97701f8d7c97f3",
+    "packageDigest": "sha256:a19f654778147972c61bb7ec8e608f57e0af642c95a90ce420bb8fd8016e4bc6",
+    "agentId": "21488e3183ec",
+    "agentInstanceId": "d2c85c057610bf56413eb9f16ca0470a",
+    "locale": "en-US",
+    "theme": "Light",
+    "orientation": "Portrait"
+  },
+  "preconditions": {
+    "expected": {},
+    "observed": {},
+    "checkedAt": "2026-08-15T18:24:56.7962779+00:00"
+  },
+  "sideEffectPolicy": "none",
+  "businessOracles": [],
+  "replayEligibility": {
+    "sideEffectPolicy": "none",
+    "ordinaryReplayAllowed": true,
+    "diagnosticReplayAllowed": true,
+    "repairValidationAllowed": false,
+    "downstreamContinuationAllowed": true,
+    "repairEligibility": false,
+    "runVerificationAllowed": false,
+    "requiresManualOneShotAuthorization": false,
+    "reasons": [
+      {
+        "code": "independent-oracle-absent",
+        "message": "No required independent business oracle is declared, so the run or repair cannot be verified.",
+        "blocking": false,
+        "scope": "verification"
+      },
+      {
+        "code": "required-scenario-uncovered",
+        "message": "A declared scenario does not have complete hard-assertion coverage for its acceptance criteria.",
+        "blocking": false,
+        "scope": "verification"
+      }
+    ]
+  },
+  "verification": {
+    "verified": false,
+    "reason": "The execution passed, but independent verification requirements were not satisfied: independent-oracle-absent, required-scenario-uncovered.",
+    "checkedAt": "2026-08-15T18:25:26.6196324+00:00"
+  },
+  "startedAt": "2026-08-15T18:25:23.1282857+00:00",
+  "endedAt": "2026-08-15T18:25:26.3990356+00:00",
+  "outcome": {
+    "status": "passed",
+    "summary": "Flow replay passed.",
+    "terminal": true,
+    "verified": false,
+    "verificationReason": "The execution passed, but independent verification requirements were not satisfied: independent-oracle-absent, required-scenario-uncovered."
+  },
+  "events": [
+    {
+      "sequence": 1,
+      "at": "2026-08-15T18:25:23.1467916+00:00",
+      "kind": "started",
+      "message": "Canonical flow run started."
+    },
+    {
+      "sequence": 2,
+      "at": "2026-08-15T18:25:23.2782382+00:00",
+      "kind": "step-started",
+      "message": "Started tap.",
+      "stepId": "1"
+    },
+    {
+      "sequence": 3,
+      "at": "2026-08-15T18:25:24.803323+00:00",
+      "kind": "step-passed",
+      "message": "Step completed.",
+      "stepId": "1"
+    },
+    {
+      "sequence": 4,
+      "at": "2026-08-15T18:25:24.8990305+00:00",
+      "kind": "step-started",
+      "message": "Started tap.",
+      "stepId": "2"
+    },
+    {
+      "sequence": 5,
+      "at": "2026-08-15T18:25:26.3969117+00:00",
+      "kind": "step-passed",
+      "message": "Step completed.",
+      "stepId": "2"
+    },
+    {
+      "sequence": 6,
+      "at": "2026-08-15T18:25:26.401765+00:00",
+      "kind": "terminal",
+      "message": "Flow replay passed."
+    }
+  ],
+  "steps": [
+    {
+      "stepId": "1",
+      "sequence": 1,
+      "action": "tap",
+      "intent": "Tap target.",
+      "startedAt": "2026-08-15T18:25:23.2351489+00:00",
+      "endedAt": "2026-08-15T18:25:24.760973+00:00",
+      "durationMs": 1525,
+      "selector": {
+        "automationId": "ShowModalButton"
+      },
+      "selectorRequest": {
+        "kind": "automationId",
+        "value": {
+          "state": "redacted",
+          "type": "string",
+          "length": 15,
+          "digest": "sha256:5cfedcda51ae9e84a10bb366e95ade05f219b1c8e003199de3c4bf0ecb09eebd"
+        }
+      },
+      "candidateCount": 1,
+      "candidateSummary": {
+        "count": 1,
+        "types": [
+          "Button"
+        ],
+        "final": "\u003Credacted\u003E"
+      },
+      "targetResolution": {
+        "status": "resolved",
+        "matchCount": 1,
+        "elementId": "sha256:5cfedcda51ae9e84",
+        "finalResolution": "\u003Credacted\u003E"
+      },
+      "actionability": [
+        {
+          "sequence": 1,
+          "attempt": 1,
+          "at": "2026-08-15T18:25:23.798814+00:00",
+          "kind": "resolution",
+          "passed": true,
+          "resolved": true,
+          "visible": true,
+          "enabled": true,
+          "hasBounds": true,
+          "waitDurationMs": 512,
+          "outcome": "resolved"
+        },
+        {
+          "sequence": 2,
+          "attempt": 1,
+          "at": "2026-08-15T18:25:24.0230593+00:00",
+          "kind": "bounds",
+          "passed": true,
+          "resolved": true,
+          "visible": true,
+          "enabled": true,
+          "hasBounds": true,
+          "boundsStable": true,
+          "waitDurationMs": 221,
+          "outcome": "stable"
+        }
+      ],
+      "assertions": [
+        {
+          "kind": "exists",
+          "passed": true,
+          "skipped": false,
+          "expectedDisclosure": {
+            "state": "omitted"
+          },
+          "actualDisclosure": {
+            "state": "omitted"
+          }
+        }
+      ],
+      "expectedCheckpoint": {},
+      "observedCheckpoint": {
+        "appBuildFingerprint": "1.0:1",
+        "agentInstanceId": "d2c85c057610bf56413eb9f16ca0470a",
+        "route": "//native",
+        "window": "window-0",
+        "locale": "en-US",
+        "theme": "Light",
+        "orientation": "Portrait"
+      },
+      "fingerprint": {
+        "schema": 1,
+        "fingerprintId": "fp1_d54a82af9312a79a4234fab2",
+        "appId": "com.companyname.mauitodo",
+        "buildFingerprint": "sha256:88f216be5131a0d5153136e244606065b8d175f389ee038a9439c3df8f847672",
+        "platform": "android",
+        "route": "//native",
+        "window": "window-0",
+        "managedType": "Button",
+        "fullType": "Microsoft.Maui.Controls.Button",
+        "role": "button",
+        "traits": [
+          "focusable",
+          "interactive"
+        ],
+        "automationId": "ShowModalButton",
+        "sourceAnchor": "<repo>\\samples\\DevFlow.Sample\\MainPage.xaml:29",
+        "sourceHash": "892fb6b7bfeb543d",
+        "sourceConfidence": "mapped",
+        "ancestorTopologyHash": "7e6951a902356b1bb009092b",
+        "siblingTopologyHash": "7e5ca1421a904ab676e3e2e5",
+        "normalizedBounds": {
+          "x": -0.1787,
+          "y": -5.2077,
+          "width": 1,
+          "height": 1
+        },
+        "observedAt": "2026-08-15T18:25:24.771954+00:00",
+        "capabilityVersion": "flow-run-selector-evidence-v1",
+        "locale": "en-US",
+        "theme": "Light",
+        "orientation": "Portrait",
+        "displayProfile": "411.4286x914.2857@2.625",
+        "context": {
+          "appId": "com.companyname.mauitodo",
+          "appBuild": "sha256:88f216be5131a0d5153136e244606065b8d175f389ee038a9439c3df8f847672",
+          "platform": "android",
+          "route": "//native",
+          "window": "window-0",
+          "locale": "en-US",
+          "theme": "Light",
+          "orientation": "Portrait"
+        },
+        "managed": {
+          "type": "Button",
+          "fullType": "sha256:9bb91103f09f5eaaed9b782b15be9daa5ef756ef8f48c09f81bd2504f6733d95",
+          "framework": "maui",
+          "role": "button",
+          "traits": [
+            "focusable",
+            "interactive"
+          ],
+          "automationId": "ShowModalButton"
+        },
+        "source": {
+          "line": 29,
+          "column": 18,
+          "buildHash": "892fb6b7bfeb543d",
+          "state": "current",
+          "confidence": "mapped"
+        },
+        "topology": {
+          "ancestorHash": "7e6951a902356b1bb009092b",
+          "siblingHash": "7e5ca1421a904ab676e3e2e5",
+          "childHash": "e3b0c44298fc1c149afbf4c8"
+        },
+        "evidenceRefs": [
+          "fingerprint:fp1_d54a82af9312a79a4234fab2",
+          "source:current",
+          "topology:7e6951a902356b1bb009092b"
+        ]
+      },
+      "selectorCandidates": [
+        {
+          "schema": 1,
+          "candidateId": "sc1_b6f6a4172c37b4cec9fec600",
+          "rank": 1,
+          "priority": 1,
+          "selector": {
+            "automationId": "ShowModalButton"
+          },
+          "selectorDescriptor": {
+            "kind": "automation-id",
+            "automationId": "ShowModalButton"
+          },
+          "scope": {
+            "route": "//native",
+            "window": "window-0"
+          },
+          "scopeDescriptor": {
+            "route": "//native",
+            "window": "window-0"
+          },
+          "origin": "app-automation-id",
+          "originCodes": [
+            "app-automation-id"
+          ],
+          "rationaleCodes": [
+            "unique-app-owned-automation-id"
+          ],
+          "riskFlags": [],
+          "score": 0.94,
+          "scoreComponents": {
+            "appOwnedIdentifier": 1,
+            "scopeMatch": 1,
+            "managedNativeAgreement": 0.5,
+            "sourceAnchorMatch": 1,
+            "topologySimilarity": 1,
+            "normalizedGeometryCorroboration": 1,
+            "localizationPenalty": 0,
+            "virtualizationPenalty": 0,
+            "staleSourcePenalty": 0,
+            "platformDivergencePenalty": 0,
+            "ambiguityPenalty": 0,
+            "deterministicRankScore": 0.94
+          },
+          "unique": true,
+          "calibrationStatus": "uncalibrated",
+          "scores": {
+            "ruleVersion": "selector-ranker-v1",
+            "appOwnedIdentifier": 1,
+            "scopeMatch": 1,
+            "managedNativeAgreement": 0.5,
+            "sourceAnchorMatch": 1,
+            "topologySimilarity": 1,
+            "normalizedGeometryCorroboration": 1,
+            "localizationPenalty": 0,
+            "virtualizationPenalty": 0,
+            "staleSourcePenalty": 0,
+            "platformDivergencePenalty": 0,
+            "ambiguityPenalty": 0,
+            "deterministicRankScore": 0.94
+          },
+          "validation": {
+            "unique": true,
+            "matchCount": 1,
+            "platformState": "not-validated",
+            "sourceState": "current",
+            "accepted": true
+          },
+          "calibration": {
+            "state": "uncalibrated",
+            "ruleVersion": "selector-ranker-v1"
+          },
+          "fingerprint": {
+            "schema": 1,
+            "fingerprintId": "fp1_d54a82af9312a79a4234fab2",
+            "appId": "com.companyname.mauitodo",
+            "buildFingerprint": "sha256:88f216be5131a0d5153136e244606065b8d175f389ee038a9439c3df8f847672",
+            "platform": "android",
+            "route": "//native",
+            "window": "window-0",
+            "managedType": "Button",
+            "fullType": "Microsoft.Maui.Controls.Button",
+            "role": "button",
+            "traits": [
+              "focusable",
+              "interactive"
+            ],
+            "automationId": "ShowModalButton",
+            "sourceAnchor": "<repo>\\samples\\DevFlow.Sample\\MainPage.xaml:29",
+            "sourceHash": "892fb6b7bfeb543d",
+            "sourceConfidence": "mapped",
+            "ancestorTopologyHash": "7e6951a902356b1bb009092b",
+            "siblingTopologyHash": "7e5ca1421a904ab676e3e2e5",
+            "normalizedBounds": {
+              "x": -0.1787,
+              "y": -5.2077,
+              "width": 1,
+              "height": 1
+            },
+            "observedAt": "2026-08-15T18:25:24.771954+00:00",
+            "capabilityVersion": "flow-run-selector-evidence-v1",
+            "locale": "en-US",
+            "theme": "Light",
+            "orientation": "Portrait",
+            "displayProfile": "411.4286x914.2857@2.625",
+            "context": {
+              "appId": "com.companyname.mauitodo",
+              "appBuild": "sha256:88f216be5131a0d5153136e244606065b8d175f389ee038a9439c3df8f847672",
+              "platform": "android",
+              "route": "//native",
+              "window": "window-0",
+              "locale": "en-US",
+              "theme": "Light",
+              "orientation": "Portrait"
+            },
+            "managed": {
+              "type": "Button",
+              "fullType": "sha256:9bb91103f09f5eaaed9b782b15be9daa5ef756ef8f48c09f81bd2504f6733d95",
+              "framework": "maui",
+              "role": "button",
+              "traits": [
+                "focusable",
+                "interactive"
+              ],
+              "automationId": "ShowModalButton"
+            },
+            "source": {
+              "line": 29,
+              "column": 18,
+              "buildHash": "892fb6b7bfeb543d",
+              "state": "current",
+              "confidence": "mapped"
+            },
+            "topology": {
+              "ancestorHash": "7e6951a902356b1bb009092b",
+              "siblingHash": "7e5ca1421a904ab676e3e2e5",
+              "childHash": "e3b0c44298fc1c149afbf4c8"
+            },
+            "evidenceRefs": [
+              "fingerprint:fp1_d54a82af9312a79a4234fab2",
+              "source:current",
+              "topology:7e6951a902356b1bb009092b"
+            ]
+          },
+          "evidenceRefs": [
+            "fingerprint:fp1_d54a82af9312a79a4234fab2",
+            "source:current",
+            "topology:7e6951a902356b1bb009092b",
+            "candidate:sc1_b6f6a4172c37b4cec9fec600"
+          ],
+          "evidenceArtifacts": []
+        },
+        {
+          "schema": 1,
+          "candidateId": "sc1_99f5c0251124de6b0372df2b",
+          "rank": 2,
+          "priority": 5,
+          "selectorDescriptor": {
+            "kind": "source-topology",
+            "sourceAnchor": "\u003Cpath\u003E"
+          },
+          "scope": {
+            "route": "//native",
+            "window": "window-0"
+          },
+          "scopeDescriptor": {
+            "route": "//native",
+            "window": "window-0"
+          },
+          "origin": "source-topology",
+          "originCodes": [
+            "source-topology"
+          ],
+          "rationaleCodes": [
+            "current-source-anchor",
+            "topology-corroborated"
+          ],
+          "riskFlags": [],
+          "score": 0.49,
+          "scoreComponents": {
+            "appOwnedIdentifier": 0,
+            "scopeMatch": 1,
+            "managedNativeAgreement": 0.5,
+            "sourceAnchorMatch": 1,
+            "topologySimilarity": 1,
+            "normalizedGeometryCorroboration": 1,
+            "localizationPenalty": 0,
+            "virtualizationPenalty": 0,
+            "staleSourcePenalty": 0,
+            "platformDivergencePenalty": 0,
+            "ambiguityPenalty": 0,
+            "deterministicRankScore": 0.49
+          },
+          "unique": true,
+          "calibrationStatus": "uncalibrated",
+          "scores": {
+            "ruleVersion": "selector-ranker-v1",
+            "appOwnedIdentifier": 0,
+            "scopeMatch": 1,
+            "managedNativeAgreement": 0.5,
+            "sourceAnchorMatch": 1,
+            "topologySimilarity": 1,
+            "normalizedGeometryCorroboration": 1,
+            "localizationPenalty": 0,
+            "virtualizationPenalty": 0,
+            "staleSourcePenalty": 0,
+            "platformDivergencePenalty": 0,
+            "ambiguityPenalty": 0,
+            "deterministicRankScore": 0.49
+          },
+          "validation": {
+            "unique": true,
+            "matchCount": 1,
+            "platformState": "not-validated",
+            "sourceState": "current",
+            "accepted": true
+          },
+          "calibration": {
+            "state": "uncalibrated",
+            "ruleVersion": "selector-ranker-v1"
+          },
+          "fingerprint": {
+            "schema": 1,
+            "fingerprintId": "fp1_d54a82af9312a79a4234fab2",
+            "appId": "com.companyname.mauitodo",
+            "buildFingerprint": "sha256:88f216be5131a0d5153136e244606065b8d175f389ee038a9439c3df8f847672",
+            "platform": "android",
+            "route": "//native",
+            "window": "window-0",
+            "managedType": "Button",
+            "fullType": "Microsoft.Maui.Controls.Button",
+            "role": "button",
+            "traits": [
+              "focusable",
+              "interactive"
+            ],
+            "automationId": "ShowModalButton",
+            "sourceAnchor": "<repo>\\samples\\DevFlow.Sample\\MainPage.xaml:29",
+            "sourceHash": "892fb6b7bfeb543d",
+            "sourceConfidence": "mapped",
+            "ancestorTopologyHash": "7e6951a902356b1bb009092b",
+            "siblingTopologyHash": "7e5ca1421a904ab676e3e2e5",
+            "normalizedBounds": {
+              "x": -0.1787,
+              "y": -5.2077,
+              "width": 1,
+              "height": 1
+            },
+            "observedAt": "2026-08-15T18:25:24.771954+00:00",
+            "capabilityVersion": "flow-run-selector-evidence-v1",
+            "locale": "en-US",
+            "theme": "Light",
+            "orientation": "Portrait",
+            "displayProfile": "411.4286x914.2857@2.625",
+            "context": {
+              "appId": "com.companyname.mauitodo",
+              "appBuild": "sha256:88f216be5131a0d5153136e244606065b8d175f389ee038a9439c3df8f847672",
+              "platform": "android",
+              "route": "//native",
+              "window": "window-0",
+              "locale": "en-US",
+              "theme": "Light",
+              "orientation": "Portrait"
+            },
+            "managed": {
+              "type": "Button",
+              "fullType": "sha256:9bb91103f09f5eaaed9b782b15be9daa5ef756ef8f48c09f81bd2504f6733d95",
+              "framework": "maui",
+              "role": "button",
+              "traits": [
+                "focusable",
+                "interactive"
+              ],
+              "automationId": "ShowModalButton"
+            },
+            "source": {
+              "line": 29,
+              "column": 18,
+              "buildHash": "892fb6b7bfeb543d",
+              "state": "current",
+              "confidence": "mapped"
+            },
+            "topology": {
+              "ancestorHash": "7e6951a902356b1bb009092b",
+              "siblingHash": "7e5ca1421a904ab676e3e2e5",
+              "childHash": "e3b0c44298fc1c149afbf4c8"
+            },
+            "evidenceRefs": [
+              "fingerprint:fp1_d54a82af9312a79a4234fab2",
+              "source:current",
+              "topology:7e6951a902356b1bb009092b"
+            ]
+          },
+          "evidenceRefs": [
+            "fingerprint:fp1_d54a82af9312a79a4234fab2",
+            "source:current",
+            "topology:7e6951a902356b1bb009092b",
+            "candidate:sc1_99f5c0251124de6b0372df2b"
+          ],
+          "evidenceArtifacts": []
+        }
+      ],
+      "selectorCandidateOmissions": [],
+      "artifacts": []
+    },
+    {
+      "stepId": "2",
+      "sequence": 2,
+      "action": "tap",
+      "intent": "Tap target.",
+      "startedAt": "2026-08-15T18:25:24.8034719+00:00",
+      "endedAt": "2026-08-15T18:25:26.395004+00:00",
+      "durationMs": 1591,
+      "selector": {
+        "automationId": "CloseModalButton"
+      },
+      "selectorRequest": {
+        "kind": "automationId",
+        "value": {
+          "state": "redacted",
+          "type": "string",
+          "length": 16,
+          "digest": "sha256:3a727d0ce1731b09014b1093751b55ce6d9432c28efc6f3dabeec9a47d6c6ce7"
+        }
+      },
+      "candidateCount": 1,
+      "candidateSummary": {
+        "count": 1,
+        "types": [
+          "Button"
+        ],
+        "final": "\u003Credacted\u003E"
+      },
+      "targetResolution": {
+        "status": "resolved",
+        "matchCount": 1,
+        "elementId": "sha256:3a727d0ce1731b09",
+        "finalResolution": "\u003Credacted\u003E"
+      },
+      "actionability": [
+        {
+          "sequence": 1,
+          "attempt": 1,
+          "at": "2026-08-15T18:25:25.0830516+00:00",
+          "kind": "resolution",
+          "passed": true,
+          "resolved": true,
+          "visible": true,
+          "enabled": true,
+          "hasBounds": true,
+          "waitDurationMs": 183,
+          "outcome": "resolved"
+        },
+        {
+          "sequence": 2,
+          "attempt": 1,
+          "at": "2026-08-15T18:25:25.3289476+00:00",
+          "kind": "bounds",
+          "passed": true,
+          "resolved": true,
+          "visible": true,
+          "enabled": true,
+          "hasBounds": true,
+          "boundsStable": true,
+          "waitDurationMs": 245,
+          "outcome": "stable"
+        }
+      ],
+      "assertions": [
+        {
+          "kind": "notExists",
+          "passed": true,
+          "skipped": false,
+          "actual": "0",
+          "expectedDisclosure": {
+            "state": "omitted"
+          },
+          "actualDisclosure": {
+            "state": "disclosed",
+            "type": "scalar",
+            "length": 1,
+            "digest": "sha256:5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+            "value": "0"
+          }
+        },
+        {
+          "kind": "exists",
+          "passed": true,
+          "skipped": false,
+          "expectedDisclosure": {
+            "state": "omitted"
+          },
+          "actualDisclosure": {
+            "state": "omitted"
+          }
+        }
+      ],
+      "expectedCheckpoint": {},
+      "observedCheckpoint": {
+        "appBuildFingerprint": "1.0:1",
+        "agentInstanceId": "d2c85c057610bf56413eb9f16ca0470a",
+        "route": "//native",
+        "window": "window-0",
+        "locale": "en-US",
+        "theme": "Light",
+        "orientation": "Portrait"
+      },
+      "fingerprint": {
+        "schema": 1,
+        "fingerprintId": "fp1_a35f468f8d26aabb57bdd79f",
+        "appId": "com.companyname.mauitodo",
+        "buildFingerprint": "sha256:88f216be5131a0d5153136e244606065b8d175f389ee038a9439c3df8f847672",
+        "platform": "android",
+        "route": "//native",
+        "window": "window-0",
+        "managedType": "Button",
+        "fullType": "Microsoft.Maui.Controls.Button",
+        "role": "button",
+        "traits": [
+          "focusable",
+          "interactive"
+        ],
+        "automationId": "CloseModalButton",
+        "sourceAnchor": "<repo>\\samples\\DevFlow.Sample\\ModalTestPage.xaml:31",
+        "sourceHash": "6fa4d802ab2ad245",
+        "sourceConfidence": "mapped",
+        "ancestorTopologyHash": "d5b7a0dbbcd6fb9bf7fa785d",
+        "siblingTopologyHash": "c8f84d5d4c904001bd2bfc05",
+        "normalizedBounds": {
+          "x": 0,
+          "y": -11.4326,
+          "width": 1,
+          "height": 1
+        },
+        "observedAt": "2026-08-15T18:25:26.3953077+00:00",
+        "capabilityVersion": "flow-run-selector-evidence-v1",
+        "locale": "en-US",
+        "theme": "Light",
+        "orientation": "Portrait",
+        "displayProfile": "411.4286x914.2857@2.625",
+        "context": {
+          "appId": "com.companyname.mauitodo",
+          "appBuild": "sha256:88f216be5131a0d5153136e244606065b8d175f389ee038a9439c3df8f847672",
+          "platform": "android",
+          "route": "//native",
+          "window": "window-0",
+          "locale": "en-US",
+          "theme": "Light",
+          "orientation": "Portrait"
+        },
+        "managed": {
+          "type": "Button",
+          "fullType": "sha256:9bb91103f09f5eaaed9b782b15be9daa5ef756ef8f48c09f81bd2504f6733d95",
+          "framework": "maui",
+          "role": "button",
+          "traits": [
+            "focusable",
+            "interactive"
+          ],
+          "automationId": "CloseModalButton"
+        },
+        "source": {
+          "line": 31,
+          "column": 10,
+          "buildHash": "6fa4d802ab2ad245",
+          "state": "current",
+          "confidence": "mapped"
+        },
+        "topology": {
+          "ancestorHash": "d5b7a0dbbcd6fb9bf7fa785d",
+          "siblingHash": "c8f84d5d4c904001bd2bfc05",
+          "childHash": "e3b0c44298fc1c149afbf4c8",
+          "stableAncestorAutomationId": "ModalTestPage"
+        },
+        "evidenceRefs": [
+          "fingerprint:fp1_a35f468f8d26aabb57bdd79f",
+          "source:current",
+          "topology:d5b7a0dbbcd6fb9bf7fa785d"
+        ]
+      },
+      "selectorCandidates": [
+        {
+          "schema": 1,
+          "candidateId": "sc1_24fea0bd243a623b66c78301",
+          "rank": 1,
+          "priority": 1,
+          "selector": {
+            "automationId": "CloseModalButton"
+          },
+          "selectorDescriptor": {
+            "kind": "automation-id",
+            "automationId": "CloseModalButton"
+          },
+          "scope": {
+            "route": "//native",
+            "window": "window-0"
+          },
+          "scopeDescriptor": {
+            "route": "//native",
+            "window": "window-0"
+          },
+          "origin": "app-automation-id",
+          "originCodes": [
+            "app-automation-id"
+          ],
+          "rationaleCodes": [
+            "unique-app-owned-automation-id"
+          ],
+          "riskFlags": [],
+          "score": 0.94,
+          "scoreComponents": {
+            "appOwnedIdentifier": 1,
+            "scopeMatch": 1,
+            "managedNativeAgreement": 0.5,
+            "sourceAnchorMatch": 1,
+            "topologySimilarity": 1,
+            "normalizedGeometryCorroboration": 1,
+            "localizationPenalty": 0,
+            "virtualizationPenalty": 0,
+            "staleSourcePenalty": 0,
+            "platformDivergencePenalty": 0,
+            "ambiguityPenalty": 0,
+            "deterministicRankScore": 0.94
+          },
+          "unique": true,
+          "calibrationStatus": "uncalibrated",
+          "scores": {
+            "ruleVersion": "selector-ranker-v1",
+            "appOwnedIdentifier": 1,
+            "scopeMatch": 1,
+            "managedNativeAgreement": 0.5,
+            "sourceAnchorMatch": 1,
+            "topologySimilarity": 1,
+            "normalizedGeometryCorroboration": 1,
+            "localizationPenalty": 0,
+            "virtualizationPenalty": 0,
+            "staleSourcePenalty": 0,
+            "platformDivergencePenalty": 0,
+            "ambiguityPenalty": 0,
+            "deterministicRankScore": 0.94
+          },
+          "validation": {
+            "unique": true,
+            "matchCount": 1,
+            "platformState": "not-validated",
+            "sourceState": "current",
+            "accepted": true
+          },
+          "calibration": {
+            "state": "uncalibrated",
+            "ruleVersion": "selector-ranker-v1"
+          },
+          "fingerprint": {
+            "schema": 1,
+            "fingerprintId": "fp1_a35f468f8d26aabb57bdd79f",
+            "appId": "com.companyname.mauitodo",
+            "buildFingerprint": "sha256:88f216be5131a0d5153136e244606065b8d175f389ee038a9439c3df8f847672",
+            "platform": "android",
+            "route": "//native",
+            "window": "window-0",
+            "managedType": "Button",
+            "fullType": "Microsoft.Maui.Controls.Button",
+            "role": "button",
+            "traits": [
+              "focusable",
+              "interactive"
+            ],
+            "automationId": "CloseModalButton",
+            "sourceAnchor": "<repo>\\samples\\DevFlow.Sample\\ModalTestPage.xaml:31",
+            "sourceHash": "6fa4d802ab2ad245",
+            "sourceConfidence": "mapped",
+            "ancestorTopologyHash": "d5b7a0dbbcd6fb9bf7fa785d",
+            "siblingTopologyHash": "c8f84d5d4c904001bd2bfc05",
+            "normalizedBounds": {
+              "x": 0,
+              "y": -11.4326,
+              "width": 1,
+              "height": 1
+            },
+            "observedAt": "2026-08-15T18:25:26.3953077+00:00",
+            "capabilityVersion": "flow-run-selector-evidence-v1",
+            "locale": "en-US",
+            "theme": "Light",
+            "orientation": "Portrait",
+            "displayProfile": "411.4286x914.2857@2.625",
+            "context": {
+              "appId": "com.companyname.mauitodo",
+              "appBuild": "sha256:88f216be5131a0d5153136e244606065b8d175f389ee038a9439c3df8f847672",
+              "platform": "android",
+              "route": "//native",
+              "window": "window-0",
+              "locale": "en-US",
+              "theme": "Light",
+              "orientation": "Portrait"
+            },
+            "managed": {
+              "type": "Button",
+              "fullType": "sha256:9bb91103f09f5eaaed9b782b15be9daa5ef756ef8f48c09f81bd2504f6733d95",
+              "framework": "maui",
+              "role": "button",
+              "traits": [
+                "focusable",
+                "interactive"
+              ],
+              "automationId": "CloseModalButton"
+            },
+            "source": {
+              "line": 31,
+              "column": 10,
+              "buildHash": "6fa4d802ab2ad245",
+              "state": "current",
+              "confidence": "mapped"
+            },
+            "topology": {
+              "ancestorHash": "d5b7a0dbbcd6fb9bf7fa785d",
+              "siblingHash": "c8f84d5d4c904001bd2bfc05",
+              "childHash": "e3b0c44298fc1c149afbf4c8",
+              "stableAncestorAutomationId": "ModalTestPage"
+            },
+            "evidenceRefs": [
+              "fingerprint:fp1_a35f468f8d26aabb57bdd79f",
+              "source:current",
+              "topology:d5b7a0dbbcd6fb9bf7fa785d"
+            ]
+          },
+          "evidenceRefs": [
+            "fingerprint:fp1_a35f468f8d26aabb57bdd79f",
+            "source:current",
+            "topology:d5b7a0dbbcd6fb9bf7fa785d",
+            "candidate:sc1_24fea0bd243a623b66c78301"
+          ],
+          "evidenceArtifacts": []
+        },
+        {
+          "schema": 1,
+          "candidateId": "sc1_8c7c176c589257665ca5eeb3",
+          "rank": 2,
+          "priority": 4,
+          "selectorDescriptor": {
+            "kind": "role-type-ancestor",
+            "role": "button",
+            "type": "Button",
+            "ancestorAutomationId": "ModalTestPage"
+          },
+          "scope": {
+            "route": "//native",
+            "window": "window-0"
+          },
+          "scopeDescriptor": {
+            "route": "//native",
+            "window": "window-0"
+          },
+          "origin": "role-type-ancestor",
+          "originCodes": [
+            "role-type-ancestor"
+          ],
+          "rationaleCodes": [
+            "role-type-with-unique-stable-ancestor"
+          ],
+          "riskFlags": [],
+          "score": 0.49,
+          "scoreComponents": {
+            "appOwnedIdentifier": 0,
+            "scopeMatch": 1,
+            "managedNativeAgreement": 0.5,
+            "sourceAnchorMatch": 1,
+            "topologySimilarity": 1,
+            "normalizedGeometryCorroboration": 1,
+            "localizationPenalty": 0,
+            "virtualizationPenalty": 0,
+            "staleSourcePenalty": 0,
+            "platformDivergencePenalty": 0,
+            "ambiguityPenalty": 0,
+            "deterministicRankScore": 0.49
+          },
+          "unique": true,
+          "calibrationStatus": "uncalibrated",
+          "scores": {
+            "ruleVersion": "selector-ranker-v1",
+            "appOwnedIdentifier": 0,
+            "scopeMatch": 1,
+            "managedNativeAgreement": 0.5,
+            "sourceAnchorMatch": 1,
+            "topologySimilarity": 1,
+            "normalizedGeometryCorroboration": 1,
+            "localizationPenalty": 0,
+            "virtualizationPenalty": 0,
+            "staleSourcePenalty": 0,
+            "platformDivergencePenalty": 0,
+            "ambiguityPenalty": 0,
+            "deterministicRankScore": 0.49
+          },
+          "validation": {
+            "unique": true,
+            "matchCount": 1,
+            "platformState": "not-validated",
+            "sourceState": "current",
+            "accepted": true
+          },
+          "calibration": {
+            "state": "uncalibrated",
+            "ruleVersion": "selector-ranker-v1"
+          },
+          "fingerprint": {
+            "schema": 1,
+            "fingerprintId": "fp1_a35f468f8d26aabb57bdd79f",
+            "appId": "com.companyname.mauitodo",
+            "buildFingerprint": "sha256:88f216be5131a0d5153136e244606065b8d175f389ee038a9439c3df8f847672",
+            "platform": "android",
+            "route": "//native",
+            "window": "window-0",
+            "managedType": "Button",
+            "fullType": "Microsoft.Maui.Controls.Button",
+            "role": "button",
+            "traits": [
+              "focusable",
+              "interactive"
+            ],
+            "automationId": "CloseModalButton",
+            "sourceAnchor": "<repo>\\samples\\DevFlow.Sample\\ModalTestPage.xaml:31",
+            "sourceHash": "6fa4d802ab2ad245",
+            "sourceConfidence": "mapped",
+            "ancestorTopologyHash": "d5b7a0dbbcd6fb9bf7fa785d",
+            "siblingTopologyHash": "c8f84d5d4c904001bd2bfc05",
+            "normalizedBounds": {
+              "x": 0,
+              "y": -11.4326,
+              "width": 1,
+              "height": 1
+            },
+            "observedAt": "2026-08-15T18:25:26.3953077+00:00",
+            "capabilityVersion": "flow-run-selector-evidence-v1",
+            "locale": "en-US",
+            "theme": "Light",
+            "orientation": "Portrait",
+            "displayProfile": "411.4286x914.2857@2.625",
+            "context": {
+              "appId": "com.companyname.mauitodo",
+              "appBuild": "sha256:88f216be5131a0d5153136e244606065b8d175f389ee038a9439c3df8f847672",
+              "platform": "android",
+              "route": "//native",
+              "window": "window-0",
+              "locale": "en-US",
+              "theme": "Light",
+              "orientation": "Portrait"
+            },
+            "managed": {
+              "type": "Button",
+              "fullType": "sha256:9bb91103f09f5eaaed9b782b15be9daa5ef756ef8f48c09f81bd2504f6733d95",
+              "framework": "maui",
+              "role": "button",
+              "traits": [
+                "focusable",
+                "interactive"
+              ],
+              "automationId": "CloseModalButton"
+            },
+            "source": {
+              "line": 31,
+              "column": 10,
+              "buildHash": "6fa4d802ab2ad245",
+              "state": "current",
+              "confidence": "mapped"
+            },
+            "topology": {
+              "ancestorHash": "d5b7a0dbbcd6fb9bf7fa785d",
+              "siblingHash": "c8f84d5d4c904001bd2bfc05",
+              "childHash": "e3b0c44298fc1c149afbf4c8",
+              "stableAncestorAutomationId": "ModalTestPage"
+            },
+            "evidenceRefs": [
+              "fingerprint:fp1_a35f468f8d26aabb57bdd79f",
+              "source:current",
+              "topology:d5b7a0dbbcd6fb9bf7fa785d"
+            ]
+          },
+          "evidenceRefs": [
+            "fingerprint:fp1_a35f468f8d26aabb57bdd79f",
+            "source:current",
+            "topology:d5b7a0dbbcd6fb9bf7fa785d",
+            "candidate:sc1_8c7c176c589257665ca5eeb3"
+          ],
+          "evidenceArtifacts": []
+        },
+        {
+          "schema": 1,
+          "candidateId": "sc1_01d2fad33896073990b3cd78",
+          "rank": 3,
+          "priority": 5,
+          "selectorDescriptor": {
+            "kind": "source-topology",
+            "sourceAnchor": "\u003Cpath\u003E"
+          },
+          "scope": {
+            "route": "//native",
+            "window": "window-0"
+          },
+          "scopeDescriptor": {
+            "route": "//native",
+            "window": "window-0"
+          },
+          "origin": "source-topology",
+          "originCodes": [
+            "source-topology"
+          ],
+          "rationaleCodes": [
+            "current-source-anchor",
+            "topology-corroborated"
+          ],
+          "riskFlags": [],
+          "score": 0.49,
+          "scoreComponents": {
+            "appOwnedIdentifier": 0,
+            "scopeMatch": 1,
+            "managedNativeAgreement": 0.5,
+            "sourceAnchorMatch": 1,
+            "topologySimilarity": 1,
+            "normalizedGeometryCorroboration": 1,
+            "localizationPenalty": 0,
+            "virtualizationPenalty": 0,
+            "staleSourcePenalty": 0,
+            "platformDivergencePenalty": 0,
+            "ambiguityPenalty": 0,
+            "deterministicRankScore": 0.49
+          },
+          "unique": true,
+          "calibrationStatus": "uncalibrated",
+          "scores": {
+            "ruleVersion": "selector-ranker-v1",
+            "appOwnedIdentifier": 0,
+            "scopeMatch": 1,
+            "managedNativeAgreement": 0.5,
+            "sourceAnchorMatch": 1,
+            "topologySimilarity": 1,
+            "normalizedGeometryCorroboration": 1,
+            "localizationPenalty": 0,
+            "virtualizationPenalty": 0,
+            "staleSourcePenalty": 0,
+            "platformDivergencePenalty": 0,
+            "ambiguityPenalty": 0,
+            "deterministicRankScore": 0.49
+          },
+          "validation": {
+            "unique": true,
+            "matchCount": 1,
+            "platformState": "not-validated",
+            "sourceState": "current",
+            "accepted": true
+          },
+          "calibration": {
+            "state": "uncalibrated",
+            "ruleVersion": "selector-ranker-v1"
+          },
+          "fingerprint": {
+            "schema": 1,
+            "fingerprintId": "fp1_a35f468f8d26aabb57bdd79f",
+            "appId": "com.companyname.mauitodo",
+            "buildFingerprint": "sha256:88f216be5131a0d5153136e244606065b8d175f389ee038a9439c3df8f847672",
+            "platform": "android",
+            "route": "//native",
+            "window": "window-0",
+            "managedType": "Button",
+            "fullType": "Microsoft.Maui.Controls.Button",
+            "role": "button",
+            "traits": [
+              "focusable",
+              "interactive"
+            ],
+            "automationId": "CloseModalButton",
+            "sourceAnchor": "<repo>\\samples\\DevFlow.Sample\\ModalTestPage.xaml:31",
+            "sourceHash": "6fa4d802ab2ad245",
+            "sourceConfidence": "mapped",
+            "ancestorTopologyHash": "d5b7a0dbbcd6fb9bf7fa785d",
+            "siblingTopologyHash": "c8f84d5d4c904001bd2bfc05",
+            "normalizedBounds": {
+              "x": 0,
+              "y": -11.4326,
+              "width": 1,
+              "height": 1
+            },
+            "observedAt": "2026-08-15T18:25:26.3953077+00:00",
+            "capabilityVersion": "flow-run-selector-evidence-v1",
+            "locale": "en-US",
+            "theme": "Light",
+            "orientation": "Portrait",
+            "displayProfile": "411.4286x914.2857@2.625",
+            "context": {
+              "appId": "com.companyname.mauitodo",
+              "appBuild": "sha256:88f216be5131a0d5153136e244606065b8d175f389ee038a9439c3df8f847672",
+              "platform": "android",
+              "route": "//native",
+              "window": "window-0",
+              "locale": "en-US",
+              "theme": "Light",
+              "orientation": "Portrait"
+            },
+            "managed": {
+              "type": "Button",
+              "fullType": "sha256:9bb91103f09f5eaaed9b782b15be9daa5ef756ef8f48c09f81bd2504f6733d95",
+              "framework": "maui",
+              "role": "button",
+              "traits": [
+                "focusable",
+                "interactive"
+              ],
+              "automationId": "CloseModalButton"
+            },
+            "source": {
+              "line": 31,
+              "column": 10,
+              "buildHash": "6fa4d802ab2ad245",
+              "state": "current",
+              "confidence": "mapped"
+            },
+            "topology": {
+              "ancestorHash": "d5b7a0dbbcd6fb9bf7fa785d",
+              "siblingHash": "c8f84d5d4c904001bd2bfc05",
+              "childHash": "e3b0c44298fc1c149afbf4c8",
+              "stableAncestorAutomationId": "ModalTestPage"
+            },
+            "evidenceRefs": [
+              "fingerprint:fp1_a35f468f8d26aabb57bdd79f",
+              "source:current",
+              "topology:d5b7a0dbbcd6fb9bf7fa785d"
+            ]
+          },
+          "evidenceRefs": [
+            "fingerprint:fp1_a35f468f8d26aabb57bdd79f",
+            "source:current",
+            "topology:d5b7a0dbbcd6fb9bf7fa785d",
+            "candidate:sc1_01d2fad33896073990b3cd78"
+          ],
+          "evidenceArtifacts": []
+        }
+      ],
+      "selectorCandidateOmissions": [],
+      "artifacts": []
+    }
+  ],
+  "artifacts": [
+    {
+      "artifactId": "flow-run-run-20260815182033097-c0728f6c",
+      "kind": "flow-run-report",
+      "path": "flow-run.json",
+      "digest": "286ac15f8d2d39e20bfbeb9eb022e6319a264c0824259ae4b8aa24523322ad90",
+      "mediaType": "application/json",
+      "redacted": true,
+      "createdAt": "2026-08-15T18:25:26.3990356+00:00"
+    }
+  ],
+  "selectorHealth": {
+    "ruleVersion": "selector-health-v1",
+    "rankerRuleVersion": "selector-ranker-v1",
+    "calibrationState": "uncalibrated",
+    "capturedSteps": 2,
+    "candidateCount": 5,
+    "omissionCount": 0
+  },
+  "reportDigest": "286ac15f8d2d39e20bfbeb9eb022e6319a264c0824259ae4b8aa24523322ad90",
+  "reportPath": "flow-run.json",
+  "omissions": [],
+  "exitCategory": "unverified"
+}

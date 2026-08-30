@@ -1,0 +1,99 @@
+{
+  "schema": 1,
+  "manifestId": "manifest-run-20260814191908180-cc9b7bd9",
+  "runId": "run-20260814191908180-cc9b7bd9",
+  "flowId": "sha256:3b4edbacc43a360b301f8e55eaa621d5997bd5edeedb0007d81e6264c51cd13a",
+  "flowDigest": "sha256:3b4edbacc43a360b301f8e55eaa621d5997bd5edeedb0007d81e6264c51cd13a",
+  "fingerprintVersion": "maui-flow-fingerprints-v1",
+  "testIdentityFingerprint": "sha256:9caec2a77244930c5a527cbdc4e8131702f54b9bc2cf53807b6d0b5d1ab11e3e",
+  "incidentFingerprint": "sha256:35e893db6e4a03e0e64a969b84fd1e9aa81a1cd1595f22758475f51faf913a72",
+  "occurrenceFingerprint": "sha256:eb2c67ca6996f65674573f8fc944dce712a457d3b7c8a01c4108898ac40bc958",
+  "host": {
+    "os": "windows",
+    "architecture": "x64",
+    "runtime": "10.0.10",
+    "runnerKind": "maui-cli",
+    "environmentFingerprint": "sha256:957a328c4bba8a4afa797ab70c2e8e382b43b0ac4e0ad2b8316333a98fb07f31"
+  },
+  "build": {
+    "sourceRevision": "72e7d2b1770d35620b7701408eb43310dbcedcc3",
+    "appSourceFingerprint": "sha256:eaab4224b2a4ddecb44008bd4718f21a7024a7c75cc4cd9c1a184d4aa4f7c120"
+  },
+  "lifecycle": {
+    "startedAt": "2026-08-14T19:19:08.1861352+00:00",
+    "endedAt": "2026-08-14T19:19:35.3580194+00:00",
+    "cleanupPolicy": "stop",
+    "cleanupCompleted": true,
+    "stages": [
+      {
+        "sequence": 1,
+        "name": "validate-request",
+        "status": "passed",
+        "detailCode": "request-valid",
+        "durationMs": 0,
+        "ownedResource": false
+      },
+      {
+        "sequence": 2,
+        "name": "source-identity",
+        "status": "passed",
+        "detailCode": "source-identity-complete",
+        "durationMs": 259,
+        "ownedResource": false
+      },
+      {
+        "sequence": 3,
+        "name": "load-workflow",
+        "status": "passed",
+        "detailCode": "load-workflow-complete",
+        "durationMs": 296,
+        "ownedResource": false
+      },
+      {
+        "sequence": 4,
+        "name": "validate-target",
+        "status": "passed",
+        "detailCode": "target-supported",
+        "durationMs": 0,
+        "ownedResource": false
+      },
+      {
+        "sequence": 5,
+        "name": "resolve-artifact",
+        "status": "failed",
+        "detailCode": "app-build-failed",
+        "durationMs": 26601,
+        "ownedResource": true
+      }
+    ]
+  },
+  "outcome": {
+    "status": "infrastructure-error",
+    "exitCategory": "infrastructure-failure",
+    "terminal": true,
+    "verified": false,
+    "unknownCompletion": false
+  },
+  "artifacts": [
+    {
+      "artifactId": "flow-run",
+      "role": "semantic-report",
+      "kind": "flow-run-report",
+      "mediaType": "application/json",
+      "digest": "sha256:0ccb2942fbd69e0cdceabb02b94ae390ba497c9a10dbe77bb8c99269061e51c1",
+      "sizeBytes": 2205,
+      "relativePath": "flow-run.json",
+      "redacted": true
+    },
+    {
+      "artifactId": "junit",
+      "role": "test-report",
+      "kind": "junit",
+      "mediaType": "application/xml",
+      "digest": "sha256:e3faaad2ce0b9e8da39df393678a59ee75fb52908dd635affb57d0d8284593a2",
+      "sizeBytes": 509,
+      "relativePath": "report.junit.xml",
+      "redacted": true
+    }
+  ]
+}

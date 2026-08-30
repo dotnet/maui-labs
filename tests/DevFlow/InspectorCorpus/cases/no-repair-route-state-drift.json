@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "id": "no-repair-route-state-drift",
+  "kind": "no-repair",
+  "disposition": "no-repair",
+  "expectedFailureClass": "route-state-drift",
+  "provenance": {
+    "labeledBy": "devflow-maintainers",
+    "labeledOn": "2026-08-15",
+    "method": "hand-authored",
+    "sourceKind": "synthetic",
+    "reviewStatus": "unreviewed",
+    "notes": "Observed route differs from the recorded route."
+  },
+  "fixture": {
+    "recordedRoute": "/orders/42",
+    "observedRoute": "/sign-in",
+    "selector": {
+      "automationId": "submit"
+    }
+  },
+  "expect": {
+    "diagnosticIds": [
+      "DFSH006"
+    ],
+    "candidateKinds": []
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "kind": "maui-preview-security-privacy-corpus",
+  "version": "security-privacy-corpus-v1",
+  "cases": [
+    { "id": "prompt-injection-ui", "surface": "ui", "kind": "prompt-injection", "canary": "DEVFLOW_CANARY_UI_IGNORE_INSTRUCTIONS" },
+    { "id": "prompt-injection-log", "surface": "log", "kind": "prompt-injection", "canary": "DEVFLOW_CANARY_LOG_IGNORE_INSTRUCTIONS" },
+    { "id": "prompt-injection-network", "surface": "network", "kind": "prompt-injection", "canary": "DEVFLOW_CANARY_NETWORK_IGNORE_INSTRUCTIONS" },
+    { "id": "prompt-injection-markdown", "surface": "markdown", "kind": "prompt-injection", "canary": "DEVFLOW_CANARY_MARKDOWN_IGNORE_INSTRUCTIONS" },
+    { "id": "prompt-injection-artifact", "surface": "artifact", "kind": "prompt-injection", "canary": "DEVFLOW_CANARY_ARTIFACT_IGNORE_INSTRUCTIONS" },
+    { "id": "secret-canary", "surface": "report", "kind": "secret-canary", "canary": "DEVFLOW_CANARY_SECRET_VALUE" },
+    { "id": "path-canary", "surface": "artifact-path", "kind": "path-canary", "canary": "DEVFLOW_CANARY_PATH_ESCAPE" },
+    { "id": "source-canary", "surface": "source", "kind": "source-canary", "canary": "DEVFLOW_CANARY_SOURCE_SNIPPET" },
+    { "id": "hostile-json-depth", "surface": "import", "kind": "hostile-json", "canary": "DEVFLOW_CANARY_JSON_DEPTH" },
+    { "id": "hostile-zip-entry", "surface": "import", "kind": "hostile-zip", "canary": "DEVFLOW_CANARY_ZIP_ENTRY" },
+    { "id": "hostile-path-traversal", "surface": "import", "kind": "path-traversal", "canary": "DEVFLOW_CANARY_TRAVERSAL" },
+    { "id": "hostile-origin", "surface": "broker", "kind": "origin", "canary": "DEVFLOW_CANARY_ORIGIN" },
+    { "id": "hostile-grant", "surface": "grant", "kind": "grant-scope", "canary": "DEVFLOW_CANARY_GRANT" },
+    { "id": "hostile-idempotency", "surface": "command", "kind": "idempotency", "canary": "DEVFLOW_CANARY_IDEMPOTENCY" },
+    { "id": "imported-artifact-trust", "surface": "artifact-trust", "kind": "untrusted-import", "canary": "DEVFLOW_CANARY_IMPORT_TRUST" },
+    { "id": "agent-prohibited-tools", "surface": "test-agent", "kind": "prohibited-tool", "canary": "DEVFLOW_CANARY_PROHIBITED_TOOL" },
+    { "id": "repair-non-apply", "surface": "repair", "kind": "non-apply", "canary": "DEVFLOW_CANARY_REPAIR_APPLY" },
+    { "id": "source-non-apply", "surface": "source", "kind": "non-apply", "canary": "DEVFLOW_CANARY_SOURCE_APPLY" }
+  ]
+}

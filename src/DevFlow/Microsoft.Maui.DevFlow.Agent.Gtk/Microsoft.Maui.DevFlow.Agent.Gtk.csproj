@@ -19,4 +19,15 @@
     <PackageReference Include="Microsoft.Extensions.Http" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\Microsoft.Maui.DevFlow.Agent\build\Microsoft.Maui.DevFlow.Agent.targets"
+          Link="build\Microsoft.Maui.DevFlow.Agent.Gtk.targets"
+          Pack="true"
+          PackagePath="build\Microsoft.Maui.DevFlow.Agent.Gtk.targets" />
+    <None Include="..\Microsoft.Maui.DevFlow.Agent\build\Microsoft.Maui.DevFlow.Agent.targets"
+          Link="buildTransitive\Microsoft.Maui.DevFlow.Agent.Gtk.targets"
+          Pack="true"
+          PackagePath="buildTransitive\Microsoft.Maui.DevFlow.Agent.Gtk.targets" />
+  </ItemGroup>
+
 </Project>

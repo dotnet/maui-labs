@@ -24,4 +24,15 @@
     <Compile Include="..\Microsoft.Maui.DevFlow.Agent\Windows\NativeWindowProbe.cs" Link="Windows\NativeWindowProbe.cs" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\Microsoft.Maui.DevFlow.Agent\build\Microsoft.Maui.DevFlow.Agent.targets"
+          Link="build\Microsoft.Maui.DevFlow.Agent.WPF.targets"
+          Pack="true"
+          PackagePath="build\Microsoft.Maui.DevFlow.Agent.WPF.targets" />
+    <None Include="..\Microsoft.Maui.DevFlow.Agent\build\Microsoft.Maui.DevFlow.Agent.targets"
+          Link="buildTransitive\Microsoft.Maui.DevFlow.Agent.WPF.targets"
+          Pack="true"
+          PackagePath="buildTransitive\Microsoft.Maui.DevFlow.Agent.WPF.targets" />
+  </ItemGroup>
+
 </Project>

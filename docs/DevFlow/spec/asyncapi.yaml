@@ -120,24 +120,6 @@ channels:
                   $ref: './schemas/network.json#/$defs/NetworkRequestDetail'
                   description: Full details of the network request.
 
-      networkCleared:
-        name: networkCleared
-        title: Buffer Cleared
-        summary: Server confirms the request buffer has been cleared.
-        contentType: application/json
-        payload:
-          type: object
-          description: Confirmation that the request buffer was cleared.
-          required: [type, timestamp]
-          properties:
-            type:
-              type: string
-              const: cleared
-              description: Message type identifier.
-            timestamp:
-              $ref: './schemas/common.json#/$defs/Timestamp'
-              description: UTC timestamp when this message was produced.
-
       # ── client → server ──
       networkGetDetails:
         name: networkGetDetails
@@ -163,24 +145,6 @@ channels:
                 id:
                   type: string
                   description: Unique identifier of the network request to retrieve.
-
-      networkClear:
-        name: networkClear
-        title: Clear Request Buffer
-        summary: Clear the server's captured request buffer.
-        contentType: application/json
-        payload:
-          type: object
-          description: Command to clear the request buffer.
-          required: [type, timestamp]
-          properties:
-            type:
-              type: string
-              const: clear
-              description: Message type identifier.
-            timestamp:
-              $ref: './schemas/common.json#/$defs/Timestamp'
-              description: UTC timestamp when this message was produced.
 
   # ── Log Stream ───────────────────────────────────────────────────────────
   logs:
@@ -402,65 +366,6 @@ channels:
                   type: string
                   description: Name of the sensor that was stopped.
 
-      # ── client → server ──
-      sensorSubscribe:
-        name: sensorSubscribe
-        title: Subscribe to Sensor
-        summary: Subscribe to a different sensor or change settings.
-        contentType: application/json
-        payload:
-          type: object
-          description: Command to subscribe to a sensor or update settings.
-          required: [type, timestamp, data]
-          properties:
-            type:
-              type: string
-              const: subscribe
-              description: Message type identifier.
-            timestamp:
-              $ref: './schemas/common.json#/$defs/Timestamp'
-              description: UTC timestamp when this message was produced.
-            data:
-              type: object
-              required: [sensor]
-              properties:
-                sensor:
-                  type: string
-                  description: Name of the sensor to subscribe to.
-                speed:
-                  type: string
-                  enum: [UI, Game, Fastest, Default]
-                  description: Reading speed preset.
-                throttleMs:
-                  type: integer
-                  minimum: 0
-                  description: Minimum milliseconds between readings.
-
-      sensorUnsubscribe:
-        name: sensorUnsubscribe
-        title: Unsubscribe from Sensor
-        summary: Stop receiving readings for a sensor.
-        contentType: application/json
-        payload:
-          type: object
-          description: Command to unsubscribe from a sensor.
-          required: [type, timestamp, data]
-          properties:
-            type:
-              type: string
-              const: unsubscribe
-              description: Message type identifier.
-            timestamp:
-              $ref: './schemas/common.json#/$defs/Timestamp'
-              description: UTC timestamp when this message was produced.
-            data:
-              type: object
-              required: [sensor]
-              properties:
-                sensor:
-                  type: string
-                  description: Name of the sensor to unsubscribe from.
-
   # ── Profiler Data Stream ────────────────────────────────────────────────
   profiler:
     address: /ws/v1/profiler
@@ -503,7 +408,7 @@ channels:
         contentType: application/json
         payload:
           type: object
-          description: Batch of profiler data with updated cursors.
+          description: Batch of profiler data with next cursors and stream loss metadata.
           required: [type, timestamp, data]
           properties:
             type:
@@ -517,7 +422,7 @@ channels:
               $ref: './schemas/profiler.json#/$defs/ProfilerBatch'
               description: >
                 Profiler batch containing samples, markers, spans, and
-                updated cursor positions for pagination.
+                next cursors and retained-range/loss metadata for pagination.
 
       profilerStopped:
         name: profilerStopped
@@ -550,7 +455,9 @@ channels:
     description: |
       Real-time UI state change notifications including navigation, lifecycle
       changes, visual tree mutations, system alerts, and unhandled exceptions.
-      Clients subscribe to the event types they are interested in.
+      Clients subscribe to the event types they are interested in. Each
+      subscription retains a bounded queue; a loss notification precedes
+      retained events when older events were discarded.
     servers:
       - $ref: '#/servers/agent'
     messages:
@@ -662,6 +569,35 @@ channels:
                   $ref: './schemas/common.json#/$defs/Timestamp'
                   description: Timestamp when the tree change occurred.
 
+      uiProblemsChange:
+        name: uiProblemsChange
+        title: Problems Change Event
+        summary: The bounded runtime Problems snapshot changed.
+        contentType: application/json
+        payload:
+          type: object
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: problemsChange
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+            data:
+              type: object
+              required: [revision, count, timestamp]
+              properties:
+                revision:
+                  type: integer
+                  minimum: 0
+                  description: Latest monotonic Problems revision.
+                count:
+                  type: integer
+                  minimum: 0
+                  description: Number of deduplicated Problems currently retained.
+                timestamp:
+                  $ref: './schemas/common.json#/$defs/Timestamp'
+
       uiAlert:
         name: uiAlert
         title: Alert Event
@@ -735,6 +671,40 @@ channels:
                   $ref: './schemas/common.json#/$defs/Timestamp'
                   description: Timestamp when the error occurred.
 
+      uiLoss:
+        name: uiLoss
+        title: UI Event Loss
+        summary: Older UI events were dropped because this subscriber's queue was full.
+        contentType: application/json
+        payload:
+          type: object
+          description: Bounded UI event subscription queue overflow notification.
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: loss
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+            data:
+              type: object
+              required: [stream, reason, droppedCount, totalDroppedCount]
+              properties:
+                stream:
+                  type: string
+                  const: ui-events
+                reason:
+                  type: string
+                  const: queue-overflow
+                droppedCount:
+                  type: integer
+                  minimum: 1
+                  description: Events dropped since the preceding loss notification.
+                totalDroppedCount:
+                  type: integer
+                  minimum: 1
+                  description: Total events dropped for this subscription.
+
       # ── client → server ──
       uiSubscribe:
         name: uiSubscribe
@@ -761,7 +731,7 @@ channels:
                   type: array
                   items:
                     type: string
-                    enum: [navigation, lifecycle, treeChange, alert, error, all]
+                    enum: [navigation, lifecycle, treeChange, problemsChange, alert, error, all]
                   description: >
                     Event types to subscribe to. Use "all" to receive every
                     event type.
@@ -791,7 +761,7 @@ channels:
                   type: array
                   items:
                     type: string
-                    enum: [navigation, lifecycle, treeChange, alert, error, all]
+                    enum: [navigation, lifecycle, treeChange, problemsChange, alert, error, all]
                   description: Event types to unsubscribe from.
 
 # ---------------------------------------------------------------------------
@@ -855,18 +825,6 @@ operations:
       - $ref: '#/channels/sensors/messages/sensorError'
       - $ref: '#/channels/sensors/messages/sensorStopped'
 
-  receiveSensorCommands:
-    action: receive
-    channel:
-      $ref: '#/channels/sensors'
-    summary: Client sends sensor subscription commands.
-    description: |
-      Clients can subscribe to a different sensor or change settings,
-      or unsubscribe to stop receiving readings.
-    messages:
-      - $ref: '#/channels/sensors/messages/sensorSubscribe'
-      - $ref: '#/channels/sensors/messages/sensorUnsubscribe'
-
   # ── Profiler ─────────────────────────────────────────────────────────────
   sendProfilerEvents:
     action: send
@@ -888,13 +846,16 @@ operations:
     summary: Server streams UI lifecycle events to the client.
     description: |
       Sends real-time notifications for navigation, lifecycle changes,
-      visual tree mutations, system alerts, and unhandled exceptions.
+      visual tree mutations, system alerts, unhandled exceptions, and queue
+      loss notifications when a subscriber falls behind.
     messages:
       - $ref: '#/channels/uiEvents/messages/uiNavigation'
       - $ref: '#/channels/uiEvents/messages/uiLifecycle'
       - $ref: '#/channels/uiEvents/messages/uiTreeChange'
+      - $ref: '#/channels/uiEvents/messages/uiProblemsChange'
       - $ref: '#/channels/uiEvents/messages/uiAlert'
       - $ref: '#/channels/uiEvents/messages/uiError'
+      - $ref: '#/channels/uiEvents/messages/uiLoss'
 
   receiveUICommands:
     action: receive

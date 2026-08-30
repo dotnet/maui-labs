@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "id": "csharp-no-proposal-template-factory",
+  "kind": "no-repair",
+  "disposition": "no-repair",
+  "provenance": {
+    "labeledBy": "devflow-maintainers",
+    "labeledOn": "2026-08-15",
+    "method": "hand-authored",
+    "sourceKind": "synthetic",
+    "reviewStatus": "unreviewed",
+    "notes": "Source advisory; models no runtime failure."
+  },
+  "fixture": {
+    "language": "CSharp",
+    "source": "new DataTemplate(() => new Button { Text = \"Save\" });",
+    "scope": "template-lambda-factory"
+  },
+  "expect": {
+    "diagnosticIds": [
+      "DFCS003"
+    ],
+    "repairEligible": false,
+    "ineligibilityCodes": [
+      "template-or-repeater",
+      "collection-lambda-or-factory"
+    ]
+  }
+}

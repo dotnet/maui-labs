@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "diagnostic-problems.json",
+  "title": "DiagnosticProblemBatch",
+  "type": "object",
+  "required": [
+    "enabled",
+    "revision",
+    "count",
+    "evicted",
+    "problems"
+  ],
+  "properties": {
+    "enabled": {
+      "type": "boolean"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "evicted": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "problems": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DiagnosticProblem"
+      }
+    }
+  },
+  "$defs": {
+    "DiagnosticProblem": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "severity",
+        "message",
+        "count",
+        "firstSeenUtc",
+        "lastSeenUtc"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "severity": {
+          "type": "string"
+        },
+        "code": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "description": "Bounded and redacted diagnostic message."
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "firstSeenUtc": {
+          "$ref": "./common.json#/$defs/Timestamp"
+        },
+        "lastSeenUtc": {
+          "$ref": "./common.json#/$defs/Timestamp"
+        },
+        "elementId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "elementType": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "property": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bindingType": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bindingPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bindingMode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sourceType": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "converterType": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sourceFile": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sourceLine": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sourceColumn": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

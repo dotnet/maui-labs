@@ -89,6 +89,21 @@ You can also test by configuring the MCP server in an AI tool that supports MCP 
 }
 ```
 
+## Copilot host integration
+
+The full MCP profile also exposes:
+
+- structured results for `maui_tree`, `maui_problems`, `maui_layout_diagnostics`, and
+  `maui_evidence_preview`;
+- a negotiated compact MCP App at `ui://maui-devflow/compact-view/v1` for clients that advertise
+  `io.modelcontextprotocol/ui` with `text/html;profile=mcp-app`; and
+- `maui_artifact_inspect`, a read-only hostile-input projection for an explicit local
+  `flow-run.json` or `.mauitrace` artifact.
+
+Clients that do not negotiate MCP Apps receive the normal text result and no UI metadata.
+`maui_artifact_inspect` never searches for a latest artifact, replays a flow, imports into the
+broker, writes source, or mutates GitHub or the running app.
+
 > **Note:** This assumes the `maui` CLI is installed as a global tool (`dotnet tool install -g Microsoft.Maui.Cli`). For a local build, use the full path to the built executable.
 
 ## Manual stdio test

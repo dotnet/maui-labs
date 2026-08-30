@@ -55,7 +55,10 @@ public class ProfilerSessionStore
                 SessionId = Guid.NewGuid().ToString("N"),
                 StartedAtUtc = DateTime.UtcNow,
                 SampleIntervalMs = sampleIntervalMs,
-                IsActive = true
+                IsActive = true,
+                StopToken = Convert.ToHexString(
+                    System.Security.Cryptography.RandomNumberGenerator.GetBytes(32))
+                    .ToLowerInvariant()
             };
             return _session;
         }
@@ -129,7 +132,7 @@ public class ProfilerSessionStore
         List<ProfilerSpan> spans;
         lock (_gate)
         {
-            spans = _spans.ReadAfter(0, _spans.Capacity, out _);
+            spans = _spans.ReadAfter(0, _spans.Capacity).Items;
         }
 
         if (spans.Count == 0)
@@ -194,25 +197,73 @@ public class ProfilerSessionStore
                     Spans = new(),
                     SampleCursor = 0,
                     MarkerCursor = 0,
-                    SpanCursor = 0
+                    SpanCursor = 0,
+                    SampleMetadata = new(),
+                    MarkerMetadata = new(),
+                    SpanMetadata = new()
                 };
             }
 
-            var samples = _samples.ReadAfter(sampleCursor, limit, out var latestSampleCursor);
-            var markers = _markers.ReadAfter(markerCursor, limit, out var latestMarkerCursor);
-            var spans = _spans.ReadAfter(spanCursor, limit, out var latestSpanCursor);
+            var samples = _samples.ReadAfter(sampleCursor, limit);
+            var markers = _markers.ReadAfter(markerCursor, limit);
+            var spans = _spans.ReadAfter(spanCursor, limit);
 
             return new ProfilerBatch
             {
                 SessionId = _session.SessionId,
                 IsActive = _session.IsActive,
-                Samples = samples,
-                Markers = markers,
-                Spans = spans,
-                SampleCursor = latestSampleCursor,
-                MarkerCursor = latestMarkerCursor,
-                SpanCursor = latestSpanCursor
+                Samples = samples.Items,
+                Markers = markers.Items,
+                Spans = spans.Items,
+                SampleCursor = samples.NextCursor,
+                MarkerCursor = markers.NextCursor,
+                SpanCursor = spans.NextCursor,
+                SampleMetadata = ToMetadata(samples),
+                MarkerMetadata = ToMetadata(markers),
+                SpanMetadata = ToMetadata(spans)
             };
         }
     }
+
+    public ProfilerBatch GetFinalBatch(int limit)
+    {
+        lock (_gate)
+        {
+            if (_session == null)
+            {
+                return new ProfilerBatch
+                {
+                    SessionId = "",
+                    IsActive = false
+                };
+            }
+
+            var samples = _samples.ReadLatest(limit);
+            var markers = _markers.ReadLatest(limit);
+            var spans = _spans.ReadLatest(limit);
+            return new ProfilerBatch
+            {
+                SessionId = _session.SessionId,
+                IsActive = _session.IsActive,
+                Samples = samples.Items,
+                Markers = markers.Items,
+                Spans = spans.Items,
+                SampleCursor = samples.NextCursor,
+                MarkerCursor = markers.NextCursor,
+                SpanCursor = spans.NextCursor,
+                SampleMetadata = ToMetadata(samples),
+                MarkerMetadata = ToMetadata(markers),
+                SpanMetadata = ToMetadata(spans)
+            };
+        }
+    }
+
+    private static ProfilerStreamReadMetadata ToMetadata<T>(ProfilerRingBufferReadResult<T> result) where T : class
+        => new()
+        {
+            OldestCursor = result.OldestCursor,
+            LatestCursor = result.LatestCursor,
+            LostCount = result.LostCount,
+            AvailableCount = result.AvailableCount
+        };
 }

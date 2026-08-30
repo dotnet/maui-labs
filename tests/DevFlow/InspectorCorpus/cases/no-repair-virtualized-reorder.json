@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "id": "no-repair-virtualized-reorder",
+  "kind": "no-repair",
+  "disposition": "no-repair",
+  "expectedFailureClass": "locator-not-found",
+  "provenance": {
+    "labeledBy": "devflow-maintainers",
+    "labeledOn": "2026-08-15",
+    "method": "hand-authored",
+    "sourceKind": "synthetic",
+    "reviewStatus": "unreviewed",
+    "notes": "Type-index selector under a reordered virtualized collection."
+  },
+  "fixture": {
+    "collection": "orders",
+    "virtualized": true,
+    "selector": {
+      "typeIndex": {
+        "type": "Button",
+        "index": 1
+      }
+    },
+    "reordered": true
+  },
+  "expect": {
+    "diagnosticIds": [
+      "DFSH003",
+      "DFSH005"
+    ],
+    "candidateKinds": []
+  }
+}

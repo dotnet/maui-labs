@@ -746,9 +746,13 @@ public class ProfileCommandTests
 	[Fact]
 	public void MauiProfilingHelperInjectionTargets_IncludeDynamicPgoEnvironmentVariables()
 	{
-		var targetsPath = Path.GetFullPath(Path.Combine(
-			AppContext.BaseDirectory,
-			"../../../../../src/Cli/Microsoft.Maui.Cli/Build/MauiProfilingHelperInjection.targets"));
+		var targetsPath = Path.Combine(
+			FindRepositoryRoot(),
+			"src",
+			"Cli",
+			"Microsoft.Maui.Cli",
+			"Build",
+			"MauiProfilingHelperInjection.targets");
 
 		var contents = File.ReadAllText(targetsPath);
 
@@ -756,6 +760,18 @@ public class ProfileCommandTests
 		Assert.Contains("DOTNET_TieredPGO=1", contents);
 		Assert.Contains("DOTNET_ReadyToRun=0", contents);
 		Assert.Contains("DOTNET_JitMinimalJitProfiling=1", contents);
+	}
+
+	private static string FindRepositoryRoot()
+	{
+		var directory = new DirectoryInfo(AppContext.BaseDirectory);
+		while (directory is not null)
+		{
+			if (File.Exists(Path.Combine(directory.FullName, "MauiLabs.slnx")))
+				return directory.FullName;
+			directory = directory.Parent;
+		}
+		throw new DirectoryNotFoundException("Could not locate the maui-labs repository root.");
 	}
 
 

@@ -414,12 +414,43 @@ extends:
             displayName: Download PackageArtifacts
           - powershell: |
               New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/DevFlowPackages'
-              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.DevFlow.*.nupkg' '$(Pipeline.Workspace)/DevFlowPackages/' -Verbose
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.DevFlow.*.nupkg' '$(Pipeline.Workspace)/DevFlowPackages/' -Verbose -ErrorAction Stop
+              if (-not (Get-ChildItem '$(Pipeline.Workspace)/DevFlowPackages/Microsoft.Maui.DevFlow.Testing.*.nupkg' -File)) {
+                throw 'Microsoft.Maui.DevFlow.Testing was not present in the DevFlow publish artifact set.'
+              }
             displayName: Filter DevFlow packages
+
+        # This is a package-consumer compile gate only. It uses the signed/produced package
+        # artifacts and never launches an app, simulator, or physical device.
+        - job: MacOSPackageConsumer
+          displayName: 'Compile DevFlow Testing package consumers - macOS'
+          timeoutInMinutes: 30
+          pool:
+            name: Azure Pipelines
+            vmImage: macos-latest-internal
+            os: macOS
+          steps:
+          - template: /eng/pipelines/install-dotnet-sdk.yml@self
+          - script: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+            displayName: Select Xcode 26.3
+          - script: ./eng/common/dotnet.sh workload install ios maccatalyst macos --version 10.0.203
+            displayName: Install Apple targeting workloads
+          - download: current
+            artifact: PackageArtifacts
+            displayName: Download PackageArtifacts
+          - pwsh: |
+              ./tests/DevFlow/PackageConsumer/Validate-TestingPackage.ps1 `
+                -PackageDirectory '$(Pipeline.Workspace)/PackageArtifacts' `
+                -WorkingDirectory '$(Build.SourcesDirectory)/artifacts/devflow-testing-package-consumer' `
+                -RequireTargetFrameworks net10.0-ios,net10.0-maccatalyst,net10.0-macos `
+                -SkipCliBuild
+            displayName: Restore packed Testing package and compile Apple consumers
 
         - job: PublishNuGet
           displayName: 'Push DevFlow to NuGet.org'
-          dependsOn: PrepareArtifacts
+          dependsOn:
+          - PrepareArtifacts
+          - MacOSPackageConsumer
           timeoutInMinutes: 30
           pool:
             name: NetCore1ESPool-Internal

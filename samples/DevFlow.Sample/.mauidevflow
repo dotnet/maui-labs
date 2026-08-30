@@ -1,3 +1,11 @@
 {
-  "port": 9225
+  "port": 9225,
+  "layoutDiagnostics": {
+    "suppressions": [
+      {
+        "fingerprint": "2df5ba2be5f7447cde849444",
+        "reason": "Suppressed in DevFlow Inspector"
+      }
+    ]
+  }
 }

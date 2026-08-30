@@ -9,7 +9,7 @@ namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 /// Shared base class for platform-specific app fixtures. Handles port allocation,
 /// agent readiness polling, sample app build invocation, and client setup.
 /// </summary>
-public abstract class AppFixtureBase : IAppFixture
+public abstract class AppFixtureBase : IAppFixture, IFlowLifecycleFixture
 {
     bool _disposed;
 
@@ -18,6 +18,10 @@ public abstract class AppFixtureBase : IAppFixture
     public int AgentPort { get; private set; }
     public string AgentBaseUrl => $"http://localhost:{AgentPort}";
     public abstract string Platform { get; }
+    public virtual bool SupportsFlowLifecycle => FlowLifecycle is not null;
+    internal virtual IPlatformFlowTestLifecycle? FlowLifecycle => null;
+    IPlatformFlowTestLifecycle? IFlowLifecycleFixture.FlowLifecycle => FlowLifecycle;
+    protected virtual bool CanReuseExistingAgent => true;
 
     protected AppFixtureBase()
     {
@@ -31,7 +35,7 @@ public abstract class AppFixtureBase : IAppFixture
         {
             SetupClients();
 
-            if (await IsAgentReadyAsync())
+            if (CanReuseExistingAgent && await IsAgentReadyAsync())
                 return;
         }
 
@@ -199,7 +203,7 @@ public abstract class AppFixtureBase : IAppFixture
         }
     }
 
-    protected static string FindRepoRoot()
+    protected internal static string FindRepoRoot()
     {
         var dir = AppContext.BaseDirectory;
         while (dir != null)

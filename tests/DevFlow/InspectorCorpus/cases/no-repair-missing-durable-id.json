@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "id": "no-repair-missing-durable-id",
+  "kind": "no-repair",
+  "disposition": "no-repair",
+  "expectedFailureClass": "locator-not-found",
+  "provenance": {
+    "labeledBy": "devflow-maintainers",
+    "labeledOn": "2026-08-15",
+    "method": "hand-authored",
+    "sourceKind": "synthetic",
+    "reviewStatus": "unreviewed",
+    "notes": "Runtime id selector does not survive a restart."
+  },
+  "fixture": {
+    "route": "/checkout",
+    "selector": {
+      "id": "runtime-42"
+    },
+    "action": "tap"
+  },
+  "expect": {
+    "diagnosticIds": [
+      "DFSH002",
+      "DFSH003",
+      "DFSH009"
+    ],
+    "candidateKinds": []
+  }
+}

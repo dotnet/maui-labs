@@ -1,0 +1,70 @@
+name: DevFlow Failure Publisher
+
+on:
+  workflow_run:
+    workflows:
+      - DevFlow Integration Tests
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+
+concurrency:
+  group: devflow-failure-publisher-${{ github.repository_id }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event.workflow_run.name == 'DevFlow Integration Tests' &&
+      github.event.workflow_run.path == '.github/workflows/devflow-integration.yml' &&
+      (github.event.workflow_run.event == 'schedule' ||
+       github.event.workflow_run.event == 'workflow_dispatch') &&
+      github.event.workflow_run.repository.full_name == github.repository &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == github.event.repository.default_branch &&
+      github.event.workflow_run.pull_requests[0] == null
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout trusted publisher from the default branch
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify the handoff ZIP and publish a qualified recurrence
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEVFLOW_REPOSITORY: ${{ github.repository }}
+          DEVFLOW_WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          DEVFLOW_WORKFLOW_PATH: ${{ github.event.workflow_run.path }}
+          DEVFLOW_SOURCE_EVENT: ${{ github.event.workflow_run.event }}
+          DEVFLOW_HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
+          DEVFLOW_HEAD_REF: ${{ github.event.workflow_run.head_branch }}
+          DEVFLOW_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          DEVFLOW_WORKFLOW_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          DEVFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+          DEVFLOW_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          DEVFLOW_COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+          DEVFLOW_PULL_REQUEST_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number || '0' }}
+        run: |
+          & ./eng/devflow/Publish-DevFlowFailureIssue.ps1 `
+            -Repository $env:DEVFLOW_REPOSITORY `
+            -WorkflowName $env:DEVFLOW_WORKFLOW_NAME `
+            -WorkflowPath $env:DEVFLOW_WORKFLOW_PATH `
+            -SourceEvent $env:DEVFLOW_SOURCE_EVENT `
+            -HeadRepository $env:DEVFLOW_HEAD_REPOSITORY `
+            -HeadRef $env:DEVFLOW_HEAD_REF `
+            -DefaultBranch $env:DEVFLOW_DEFAULT_BRANCH `
+            -WorkflowConclusion $env:DEVFLOW_WORKFLOW_CONCLUSION `
+            -RunId ([Int64] $env:DEVFLOW_RUN_ID) `
+            -RunAttempt ([Int32] $env:DEVFLOW_RUN_ATTEMPT) `
+            -CommitSha $env:DEVFLOW_COMMIT_SHA `
+            -PullRequestNumber ([Int32] $env:DEVFLOW_PULL_REQUEST_NUMBER)

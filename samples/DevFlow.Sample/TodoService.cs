@@ -9,7 +9,15 @@ namespace DevFlow.Sample;
 /// </summary>
 public class TodoService
 {
+    private int _nextItemId = 1;
+
     public ObservableCollection<TodoItem> Items { get; } = new();
+
+    /// <summary>
+    /// Durable record of every committed mutation. No page reads it, so an out-of-band reader can
+    /// use it to check what the app committed rather than what the UI rendered.
+    /// </summary>
+    public TodoLedger Ledger { get; } = new();
 
     /// <summary>
     /// Raised when items or their completion states change.
@@ -20,22 +28,38 @@ public class TodoService
     public TodoService()
     {
         Items.CollectionChanged += (_, _) => NotifyChanged();
-
-        // Seed sample data
-        Add("Buy groceries");
-        Add("Walk the dog");
-        Add("Finish Microsoft.Maui.DevFlow project");
+        ResetToIntegrationSeed();
     }
 
-    public void Add(string title, string description = "")
+    internal void ResetToIntegrationSeed()
     {
-        Items.Add(new TodoItem { Title = title, Description = description });
+        Items.Clear();
+        _nextItemId = 1;
+        Ledger.Clear();
+        Add("Buy groceries", id: "todo-buy-groceries");
+        Add("Walk the dog", id: "todo-walk-dog");
+        Add("Finish Microsoft.Maui.DevFlow project", id: "todo-finish-devflow");
+    }
+
+    public void Add(string title, string description = "", string? id = null)
+    {
+        var item = new TodoItem
+        {
+            Id = string.IsNullOrWhiteSpace(id) ? $"todo-{_nextItemId++:D4}" : id,
+            Title = title,
+            Description = description,
+        };
+        Items.Add(item);
+        Ledger.RecordAdded(item);
         NotifyChanged();
     }
 
     public void Remove(TodoItem item)
     {
-        Items.Remove(item);
+        if (!Items.Remove(item))
+            return;
+
+        Ledger.RecordRemoved(item);
         NotifyChanged();
     }
 
