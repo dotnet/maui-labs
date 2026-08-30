@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Microsoft.Maui.DevFlow.Devices;
 
 /// <summary>A point in decoded video-frame or device-screenshot pixels.</summary>
@@ -10,7 +12,11 @@ public readonly record struct DevicePoint(double X, double Y);
 public readonly record struct AppPoint(double X, double Y);
 
 /// <summary>A rectangle in device-independent points.</summary>
-public readonly record struct DeviceRect(double X, double Y, double Width, double Height)
+public readonly record struct DeviceRect(
+    [property: JsonPropertyName("x")] double X,
+    [property: JsonPropertyName("y")] double Y,
+    [property: JsonPropertyName("width")] double Width,
+    [property: JsonPropertyName("height")] double Height)
 {
     public double Right => X + Width;
     public double Bottom => Y + Height;

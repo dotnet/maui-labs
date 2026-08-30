@@ -32,7 +32,13 @@
   "main": "./dist/extension.js",
   "activationEvents": [],
   "contributes": {
-    "commands": [
+  "mcpServerDefinitionProviders": [
+    {
+      "id": "mauiDevflow.mobileCanvasMcp",
+      "label": "Mobile Canvas (optional device automation)"
+    }
+  ],
+  "commands": [
       {
         "command": "mauiDevflow.openInspector",
         "title": "MAUI DevFlow: Open Inspector"
@@ -65,6 +71,11 @@
           "type": "boolean",
           "default": false,
           "description": "Preview: publish current DevFlow runtime Problems and explicit layout findings into VS Code Diagnostics."
+        },
+        "mauiDevflow.registerMobileCanvasMcpServer": {
+          "type": "boolean",
+          "default": false,
+          "description": "Experimental: offer the separately installed, optional Mobile Canvas device automation MCP server. Off by default; the companion is not shipped with this extension and the command fails closed when it is absent or fails its integrity check."
         }
       }
     }

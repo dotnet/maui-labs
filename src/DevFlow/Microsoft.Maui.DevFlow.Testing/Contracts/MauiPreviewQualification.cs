@@ -180,6 +180,13 @@ public sealed class MauiPreviewFeatureFlags
     [JsonPropertyName("repairProposalsEnabled")] public bool RepairProposalsEnabled { get; set; }
     [JsonPropertyName("sourceProposalsEnabled")] public bool SourceProposalsEnabled { get; set; }
     [JsonPropertyName("traceImportExportEnabled")] public bool TraceImportExportEnabled { get; set; }
+
+    /// <summary>
+    /// Exposes the optional Mobile Canvas device layer to model-facing surfaces. Off by default:
+    /// the companion is a separately installed, experimental binary that DevFlow does not ship, so
+    /// advertising its tools unasked would offer a surface that is usually not installed.
+    /// </summary>
+    [JsonPropertyName("mobileCanvasEnabled")] public bool MobileCanvasEnabled { get; set; }
     [JsonPropertyName("autoApplyRepair")] public bool AutoApplyRepair { get; set; }
     [JsonPropertyName("autoApplySource")] public bool AutoApplySource { get; set; }
     [JsonPropertyName("modelProviderEnabled")] public bool ModelProviderEnabled { get; set; }
@@ -204,6 +211,7 @@ public sealed class MauiPreviewFeatureFlags
             "repair-proposals" => RepairProposalsEnabled,
             "source-proposals" => SourceProposalsEnabled,
             "trace-import-export" => TraceImportExportEnabled,
+            "mobile-canvas" => MobileCanvasEnabled,
             _ => false,
         };
     }
@@ -223,7 +231,7 @@ public static class MauiPreviewFeatureFlagConfiguration
         var killSwitches = (readEnvironment("DEVFLOW_PREVIEW_KILL_SWITCHES") ?? string.Empty)
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(static value => value.ToLowerInvariant())
-            .Where(static value => value is "workbench" or "agent-authoring" or "repair-proposals" or "source-proposals" or "trace-import-export")
+            .Where(static value => value is "workbench" or "agent-authoring" or "repair-proposals" or "source-proposals" or "trace-import-export" or "mobile-canvas")
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(static value => value, StringComparer.Ordinal)
             .ToList();
@@ -234,6 +242,7 @@ public static class MauiPreviewFeatureFlagConfiguration
             RepairProposalsEnabled = IsEnabled(readEnvironment("DEVFLOW_PREVIEW_REPAIR_PROPOSALS")),
             SourceProposalsEnabled = IsEnabled(readEnvironment("DEVFLOW_PREVIEW_SOURCE_PROPOSALS")),
             TraceImportExportEnabled = IsEnabled(readEnvironment("DEVFLOW_PREVIEW_TRACE_IMPORT_EXPORT")),
+            MobileCanvasEnabled = IsEnabled(readEnvironment("DEVFLOW_PREVIEW_MOBILE_CANVAS")),
             KillSwitches = killSwitches,
             AutoApplyRepair = false,
             AutoApplySource = false,

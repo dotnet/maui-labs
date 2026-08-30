@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
@@ -8,6 +9,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Microsoft.Maui.Cli.DevFlow.Broker;
+using Microsoft.Maui.DevFlow.Devices;
 using Microsoft.Maui.DevFlow.Driver;
 using Testing = Microsoft.Maui.DevFlow.Testing;
 
@@ -98,6 +100,8 @@ public sealed partial class InspectorServer : IDisposable
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, WorkbenchEvidence> _workbenchEvidence =
         new(StringComparer.Ordinal);
+    private readonly Dictionary<string, WorkbenchDeviceRecording> _workbenchDeviceRecordings =
+        new(StringComparer.Ordinal);
     private readonly Dictionary<string, WorkbenchRepairClassification> _workbenchRepairClassifications =
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, WorkbenchAgentHandoff> _workbenchAgentHandoffs =
@@ -123,7 +127,15 @@ public sealed partial class InspectorServer : IDisposable
     private const int MaxRetainedWorkbenchAgentHandoffs = 16;
     private const int MaxRetainedWorkbenchApprovalConfirmations = 64;
     private const int MaxCachedWorkbenchEvidenceBytes = 16 * 1024 * 1024;
+    private const long MaxWorkbenchDeviceRecordingBytes = 2L * 1024 * 1024 * 1024;
+    private const string LocalFileResponseContentType = "application/x-devflow-local-file";
     private const int MaxSelectorVerifyAmbiguityMatches = 20;
+    private static readonly string WorkbenchDeviceRecordingParent = Path.Combine(
+        Path.GetTempPath(),
+        "maui-devflow",
+        "workbench-device-recordings");
+    private static readonly object WorkbenchDeviceRecordingCleanupGate = new();
+    private readonly string _workbenchDeviceRecordingRoot;
 
     public int Port => _port;
 
@@ -207,6 +219,7 @@ public sealed partial class InspectorServer : IDisposable
         _testAgentSessions = testAgentSessions;
         _testAgentTargetStateRefresh = testAgentTargetStateRefresh;
         _repairValidationAvailable = repairValidationHost is not null;
+        _workbenchDeviceRecordingRoot = CreateWorkbenchDeviceRecordingRoot();
         _repairValidation = new WorkflowRepairValidationService(
             repairValidationHost ?? UnavailableWorkflowRepairValidationHost.Instance);
         _sourcePropertyEditor = new XamlSourcePropertyEditor(project, sessionId);
@@ -477,8 +490,19 @@ public sealed partial class InspectorServer : IDisposable
                 context.Response.Headers.Set("X-Frame-Options", "DENY");
                 context.Response.Headers.Set("Content-Security-Policy", "frame-ancestors 'none'");
             }
-            context.Response.ContentLength64 = responseBody.Length;
-            await context.Response.OutputStream.WriteAsync(responseBody);
+            if (string.Equals(contentType, LocalFileResponseContentType, StringComparison.Ordinal))
+            {
+                var recordingPath = Encoding.UTF8.GetString(responseBody);
+                await using var input = OpenWorkbenchDeviceRecording(recordingPath);
+                context.Response.ContentType = "video/mp4";
+                context.Response.ContentLength64 = input.Length;
+                await input.CopyToAsync(context.Response.OutputStream, _lifetimeCts.Token);
+            }
+            else
+            {
+                context.Response.ContentLength64 = responseBody.Length;
+                await context.Response.OutputStream.WriteAsync(responseBody);
+            }
             context.Response.Close();
         }
         catch (HttpListenerException ex) when (ex.ErrorCode == 64)
@@ -649,6 +673,20 @@ public sealed partial class InspectorServer : IDisposable
         try { _lifetimeCts.Dispose(); } catch { }
         try { _flowAdmissionGate.Dispose(); } catch { }
         try { _frameCreationGate.Dispose(); } catch { }
+        lock (_workbenchRunGate)
+        {
+            foreach (var runId in _workbenchDeviceRecordings.Keys.ToArray())
+                RemoveWorkbenchDeviceRecording(runId);
+        }
+        try
+        {
+            if (Directory.Exists(_workbenchDeviceRecordingRoot))
+                Directory.Delete(_workbenchDeviceRecordingRoot, recursive: true);
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException)
+        {
+        }
         try { _client.Dispose(); } catch { }
     }
 
@@ -734,6 +772,27 @@ public sealed partial class InspectorServer : IDisposable
                 }
 
                 var (statusCode, contentType, body) = await RouteAsync(request);
+                // The device-recording route answers with a sentinel content type whose body is a
+                // local path, not bytes. Only this listener and the broker proxy know how to stream
+                // it; writing it verbatim would return the absolute temp path to the browser.
+                if (string.Equals(contentType, LocalFileResponseContentType, StringComparison.Ordinal))
+                {
+                    try
+                    {
+                        await WriteFileResponseAsync(stream, Encoding.UTF8.GetString(body), ct);
+                    }
+                    catch (Exception exception) when (
+                        exception is IOException or UnauthorizedAccessException or ArgumentException)
+                    {
+                        await WriteResponseAsync(
+                            stream,
+                            404,
+                            "application/json",
+                            Encoding.UTF8.GetBytes("{\"ok\":false,\"error\":\"The recording is no longer available.\"}"),
+                            ct);
+                    }
+                    return;
+                }
                 await WriteResponseAsync(stream, statusCode, contentType, body, ct);
             }
         }
@@ -855,7 +914,9 @@ public sealed partial class InspectorServer : IDisposable
             }
 
             // Mutations share the agent-enforced global lease with Canvas, MCP, CLI, and other hosts.
-            if (request.Method == "POST" && IsMutation(request.Path))
+            if (request.Method == "POST" &&
+                IsMutation(request.Path) &&
+                !string.Equals(request.Path, "/api/device/control", StringComparison.Ordinal))
             {
                 var status = await _client.ControlMutationLeaseAsync(
                     "claim",
@@ -978,6 +1039,102 @@ public sealed partial class InspectorServer : IDisposable
     /// Returns JSON state for AJAX polling: screenshot (as timestamped URL) + element divs HTML.
     /// This avoids full page reload flash.
     /// </summary>
+    private object? _deviceContext;
+    private DateTime _deviceContextAt = DateTime.MinValue;
+    private static readonly TimeSpan DeviceContextLifetime = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// The device this app is running inside, plus where its window sits on that device's screen.
+    /// <para>
+    /// Returns <c>null</c> whenever any part is unknown — no broker, no pairing, a device that
+    /// cannot tap, or an agent that cannot report its window origin. A partial answer would be
+    /// worse than none: without the origin a device tap lands offset by the status bar height,
+    /// which looks plausible and is wrong, so the client is told nothing rather than something it
+    /// might act on.
+    /// </para>
+    /// <para>
+    /// Cached, because <c>/api/state</c> is requested after every tap, scroll and gesture as well
+    /// as on a poll, and this is the only part of that response that would otherwise touch the
+    /// in-app agent on a frame cache hit. The value it carries changes only on rotation or resize.
+    /// </para>
+    /// </summary>
+    private async Task<object?> BuildDeviceContextAsync()
+    {
+        if (DateTime.UtcNow - _deviceContextAt < DeviceContextLifetime)
+            return _deviceContext;
+
+        var refreshed = await ResolveDeviceContextAsync();
+        // The app agent can disappear while the device remains alive. Preserve the last valid
+        // pairing/geometry so the Inspector can keep showing and driving the device after a crash;
+        // a later successful resolution (including a different paired device) replaces it.
+        if (refreshed is not null)
+            _deviceContext = refreshed;
+        _deviceContextAt = DateTime.UtcNow;
+        return _deviceContext;
+    }
+
+    private async Task<object?> ResolveDeviceContextAsync()
+    {
+        try
+        {
+            var brokerPort = Broker.BrokerClient.ReadBrokerPortPublic();
+            if (brokerPort is null)
+                return null;
+
+            var device = await Broker.BrokerClient.ResolveDeviceNodeForAgentAsync(brokerPort.Value, _agentId);
+            var deviceId = device?["id"]?.GetValue<string>();
+            if (string.IsNullOrWhiteSpace(deviceId))
+                return null;
+
+            // Honour what the device actually reports. Claiming tap on a device that cannot do it
+            // would let the client consume a click and then fail, which is worse than never
+            // offering the fallthrough.
+            var canTap = device?["capabilities"]?["tap"]?.GetValue<bool>() ?? false;
+            var canStream = device?["capabilities"]?["liveStream"]?.GetValue<bool>() ?? false;
+            var canScreenshot = device?["capabilities"]?["screenshot"]?.GetValue<bool>() ?? false;
+            if (!canTap && !canStream && !canScreenshot)
+                return null;
+
+            var status = await _client.GetStatusAsync();
+            var x = status?.Device?.WindowScreenX;
+            var y = status?.Device?.WindowScreenY;
+            if (x is null || y is null)
+                return null;
+
+            // The device screen size is what lets the Inspector render the app window inset within
+            // the device rather than as the whole world. Without it the fallthrough has no pixels
+            // to fall through to, so the substrate stays app-only.
+            var display = device?["display"];
+            var screenWidth = display?["pointWidth"]?.GetValue<double>() ?? 0;
+            var screenHeight = display?["pointHeight"]?.GetValue<double>() ?? 0;
+
+            return new
+            {
+                deviceId,
+                originX = x.Value,
+                originY = y.Value,
+                screenWidth,
+                screenHeight,
+                cornerRadius = display?["cornerRadius"]?.GetValue<double?>(),
+                orientation = display?["orientation"]?.GetValue<string>(),
+                canTap,
+                canLongPress = device?["capabilities"]?["longPress"]?.GetValue<bool>() ?? false,
+                canSwipe = device?["capabilities"]?["swipe"]?.GetValue<bool>() ?? false,
+                // Only advertise a stream the device actually offers. A client that opened a
+                // socket the host will refuse would sit on a blank canvas instead of falling
+                // straight back to the screenshot it already had.
+                canStream,
+                canScreenshot,
+                brokerPort = brokerPort.Value,
+            };
+        }
+        catch
+        {
+            // Device context is an enhancement; the Inspector must render without it.
+            return null;
+        }
+    }
+
     private async Task<(int, string, byte[])> HandleStateAsync()
     {
         var frame = await CreateFrameAsync();
@@ -995,7 +1152,11 @@ public sealed partial class InspectorServer : IDisposable
             viewportWidth = frame.Width,
             viewportHeight = frame.Height,
             rootOffsetX = frame.RootOffsetX,
-            rootOffsetY = frame.RootOffsetY
+            rootOffsetY = frame.RootOffsetY,
+            // Device context, when this app is paired with an emulator or simulator. Absent on
+            // desktop apps and on machines with no device host, in which case the client keeps
+            // behaving exactly as it did before.
+            device = await BuildDeviceContextAsync()
         });
 
         return (200, "application/json", Encoding.UTF8.GetBytes(json));
@@ -1399,6 +1560,169 @@ public sealed partial class InspectorServer : IDisposable
         => element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString()
             : null;
+
+    /// <summary>
+    /// Forwards a tap to the device rather than the app, for UI the visual tree cannot reach.
+    /// <para>
+    /// Routed through the broker so the device layer has a single front door and the tap contends
+    /// for the same mutation lease as an app-level tap on the same screen.
+    /// </para>
+    /// </summary>
+    private async Task<(int, string, byte[])> HandleDeviceTapAsync(
+        IReadOnlyDictionary<string, string> query,
+        string leaseId,
+        string holderKind,
+        string holderLabel)
+    {
+        if (!TryParseInvariant(query.GetValueOrDefault("x"), out var x)
+            || !TryParseInvariant(query.GetValueOrDefault("y"), out var y))
+        {
+            return (400, "application/json",
+                Encoding.UTF8.GetBytes("{\"success\":false,\"reason\":\"A device tap requires x and y coordinates.\"}"));
+        }
+
+        var brokerPort = Broker.BrokerClient.ReadBrokerPortPublic();
+        if (brokerPort is null)
+        {
+            return (409, "application/json",
+                Encoding.UTF8.GetBytes("{\"success\":false,\"reason\":\"The DevFlow broker is not running, so device input is unavailable.\"}"));
+        }
+
+        var deviceId = await Broker.BrokerClient.ResolveDeviceForAgentAsync(brokerPort.Value, _agentId);
+        if (string.IsNullOrWhiteSpace(deviceId))
+        {
+            return (409, "application/json",
+                Encoding.UTF8.GetBytes("{\"success\":false,\"reason\":\"This app is not paired with a device, so device input is unavailable.\"}"));
+        }
+
+        var result = await Broker.BrokerClient.ControlDeviceAsync(
+            brokerPort.Value, deviceId, "tap", x, y, leaseId, holderKind, holderLabel);
+        var payload = System.Text.Json.JsonSerializer.Serialize(new System.Text.Json.Nodes.JsonObject
+        {
+            ["success"] = result.Success,
+            ["reason"] = result.Reason,
+        });
+
+        return (200, "application/json", Encoding.UTF8.GetBytes(payload));
+    }
+
+    private async Task<(int, string, byte[])> HandleDeviceHostAsync()
+    {
+        var brokerPort = Broker.BrokerClient.ReadBrokerPortPublic();
+        if (brokerPort is null)
+            return JsonResponse(503, new { ok = false, error = "The DevFlow broker is not running." });
+
+        var payload = await Broker.BrokerClient
+            .GetDeviceCatalogAsync(brokerPort.Value, _lifetimeCts?.Token ?? CancellationToken.None)
+            .ConfigureAwait(false);
+        return payload is null
+            ? JsonResponse(503, new { ok = false, error = "The broker device layer is unavailable." })
+            : (200, "application/json", Encoding.UTF8.GetBytes(payload));
+    }
+
+    private async Task<(int, string, byte[])> HandleDeviceResourceAsync(
+        IReadOnlyDictionary<string, string> query,
+        string resource)
+    {
+        var deviceId = query.GetValueOrDefault("deviceId")?.Trim();
+        if (string.IsNullOrWhiteSpace(deviceId) || deviceId.Length > 512)
+            return JsonResponse(400, new { ok = false, error = "A bounded deviceId is required." });
+
+        var brokerPort = Broker.BrokerClient.ReadBrokerPortPublic();
+        if (brokerPort is null)
+            return JsonResponse(503, new { ok = false, error = "The DevFlow broker is not running." });
+
+        var response = await Broker.BrokerClient
+            .GetDeviceResourceAsync(
+                brokerPort.Value,
+                deviceId,
+                resource,
+                _embedToken,
+                _lifetimeCts?.Token ?? CancellationToken.None)
+            .ConfigureAwait(false);
+        return (response.StatusCode, response.ContentType, response.Body);
+    }
+
+    /// <summary>
+    /// Forwards a device operation to the broker without claiming the app's mutation lease here.
+    /// <para>
+    /// This looks like a bypass and is not one. <see cref="AgentClient.UseMutationLease"/> only tags
+    /// requests that go to a connected agent, and a device operation never does — it targets the
+    /// emulator or simulator around the app. Claiming the app lease here would also be wrong on its
+    /// own terms: the whole point of device control is that it works when no app is running, before
+    /// launch and after a crash, when there is no agent to key a lease on.
+    /// </para>
+    /// <para>
+    /// So the caller's lease identity is forwarded verbatim and arbitration happens once, at the
+    /// broker, which resolves the <em>stable device</em> lease key and takes it with
+    /// <c>ClaimAndBeginExclusive</c> for the duration of the operation. That key is the same one an
+    /// agent on that device gets, so an app tap and a device tap still compete for a single lease.
+    /// Claiming again in the Inspector would create a second, weaker authority over the same
+    /// hardware, and would deadlock against the broker's own exclusive transaction.
+    /// </para>
+    /// </summary>
+    private async Task<(int, string, byte[])> HandleDeviceControlAsync(
+        string? body,
+        string leaseId,
+        string holderKind,
+        string holderLabel)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+            return JsonResponse(400, new { success = false, reason = "A JSON request body is required." });
+
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+                return JsonResponse(400, new { success = false, reason = "The device request must be an object." });
+            var root = document.RootElement;
+            if (!root.TryGetProperty("action", out var actionElement) ||
+                actionElement.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(actionElement.GetString()) ||
+                actionElement.GetString()!.Length > 64)
+            {
+                return JsonResponse(400, new { success = false, reason = "A bounded device action is required." });
+            }
+            if (root.TryGetProperty("deviceId", out var deviceElement) &&
+                (deviceElement.ValueKind != JsonValueKind.String ||
+                 string.IsNullOrWhiteSpace(deviceElement.GetString()) ||
+                 deviceElement.GetString()!.Length > 512))
+            {
+                return JsonResponse(400, new { success = false, reason = "deviceId exceeded its bound." });
+            }
+        }
+        catch (JsonException)
+        {
+            return JsonResponse(400, new { success = false, reason = "Invalid JSON request body." });
+        }
+
+        var brokerPort = Broker.BrokerClient.ReadBrokerPortPublic();
+        if (brokerPort is null)
+            return JsonResponse(503, new { success = false, reason = "The DevFlow broker is not running." });
+
+        var response = await Broker.BrokerClient
+            .ControlManagedDeviceAsync(
+                brokerPort.Value,
+                body,
+                leaseId,
+                holderKind,
+                holderLabel,
+                _lifetimeCts?.Token ?? CancellationToken.None)
+            .ConfigureAwait(false);
+        if (response.StatusCode is >= 200 and < 300)
+        {
+            _deviceContextAt = DateTime.MinValue;
+            InvalidateScreenshotCache();
+        }
+        return (response.StatusCode, "application/json", Encoding.UTF8.GetBytes(response.Body));
+    }
+
+    private static bool TryParseInvariant(string? value, out double parsed) =>
+        double.TryParse(
+            value,
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out parsed);
 
     private async Task<(int, string, byte[])> HandleProxyTapAsync(string? body)
     {
@@ -3144,6 +3468,12 @@ public sealed partial class InspectorServer : IDisposable
             {
                 return request.Method == "POST"
                     ? HandleWorkbenchEvidenceDownload(services, runId, request.Body)
+                    : JsonResponse(405, new { ok = false, error = "Method not allowed." });
+            }
+            if (string.Equals(action, "device-recording", StringComparison.OrdinalIgnoreCase))
+            {
+                return request.Method == "POST"
+                    ? HandleWorkbenchDeviceRecordingDownload(services, runId, request.Body)
                     : JsonResponse(405, new { ok = false, error = "Method not allowed." });
             }
         }
@@ -5092,7 +5422,24 @@ public sealed partial class InspectorServer : IDisposable
         if (enriched.Error is not null)
             return JsonResponse(enriched.StatusCode, new { ok = false, error = enriched.Error });
 
+        var consent = WorkbenchEvidenceConsent.From(envelope.Evidence);
+        var deviceReview = Flows.DeviceFlowReview.Describe(
+            enriched.Request!.Flow,
+            consent.IncludeDeviceRecording);
+        if (!deviceReview.Valid)
+        {
+            return JsonResponse(400, new
+            {
+                ok = false,
+                error = deviceReview.Error,
+                errors = new[] { deviceReview.Error },
+            });
+        }
+
         var preflight = services.Preflight(enriched.Request!);
+        if (!preflight.Ok)
+            return JsonResponse(preflight.StatusCode, preflight);
+        preflight.WithDeviceReview(deviceReview.Effects, deviceReview.Digest);
         return JsonResponse(preflight.StatusCode, preflight);
     }
 
@@ -5108,6 +5455,10 @@ public sealed partial class InspectorServer : IDisposable
 
         CancellationTokenSource? heartbeatCancellation = null;
         Task? heartbeatTask = null;
+        // A claim that never reaches a started run has to be released here. Leaking it would leave
+        // the app locked to a session that is no longer driving it.
+        var leaseClaimed = false;
+        var leaseTransferred = false;
         try
         {
             if (!TryReadWorkbenchRunEnvelope(body, out var envelope, out var error))
@@ -5135,6 +5486,7 @@ public sealed partial class InspectorServer : IDisposable
                     authority = claim.Authority,
                 });
             }
+            leaseClaimed = true;
 
             heartbeatCancellation = new CancellationTokenSource();
             heartbeatTask = HeartbeatStartingLeaseAsync(
@@ -5148,6 +5500,16 @@ public sealed partial class InspectorServer : IDisposable
                 return JsonResponse(enriched.StatusCode, new { ok = false, error = enriched.Error });
 
             var consent = WorkbenchEvidenceConsent.From(envelope.Evidence);
+            var deviceReviewError = ValidateReviewedDeviceEffects(
+                enriched.Request!.Flow,
+                envelope.ReviewedDeviceEffectsDigest,
+                consent.IncludeDeviceRecording);
+            if (deviceReviewError is not null)
+                return JsonResponse(403, new { ok = false, error = deviceReviewError });
+
+            var deviceReview = Flows.DeviceFlowReview.Describe(
+                enriched.Request.Flow,
+                consent.IncludeDeviceRecording);
             var result = services.Start(
                 enriched.Request!,
                 client => new InspectorReplayEvidenceCapture(
@@ -5155,7 +5517,10 @@ public sealed partial class InspectorServer : IDisposable
                     consent,
                     StoreWorkbenchEvidence,
                     PinnedLayoutPolicyStartPath),
-                new WorkflowRunLeaseHandoff(leaseId, holderKind, holderLabel));
+                new WorkflowRunLeaseHandoff(leaseId, holderKind, holderLabel),
+                recordDeviceRun: deviceReview.RecordDeviceRun,
+                deviceRecordingCaptured: StoreWorkbenchDeviceRecording);
+            leaseTransferred = result.Ok && !result.Existing;
             if (result.Ok && result.Run is not null && !string.IsNullOrWhiteSpace(result.CapabilityToken))
             {
                 RememberWorkbenchRun(
@@ -5180,6 +5545,21 @@ public sealed partial class InspectorServer : IDisposable
                     catch (OperationCanceledException) { }
                 }
                 heartbeatCancellation.Dispose();
+            }
+            if (leaseClaimed && !leaseTransferred)
+            {
+                try
+                {
+                    await _client.ControlMutationLeaseAsync(
+                        "release",
+                        force: false,
+                        leaseId,
+                        holderKind,
+                        holderLabel).ConfigureAwait(false);
+                }
+                catch (Exception exception) when (IsAgentUnavailableException(exception))
+                {
+                }
             }
             Volatile.Write(ref _workbenchRunStartingIdempotencyKey, null);
             Volatile.Write(ref _workbenchRunStarting, 0);
@@ -5541,6 +5921,53 @@ public sealed partial class InspectorServer : IDisposable
         }
     }
 
+    private (int, string, byte[]) HandleWorkbenchDeviceRecordingDownload(
+        InspectorWorkflowServices services,
+        string runId,
+        string? body)
+    {
+        if (!TryReadWorkbenchAccess(body, out var access, out var error))
+            return JsonResponse(400, new { ok = false, error });
+
+        var token = ResolveWorkbenchRunToken(runId, access!.CapabilityToken);
+        var accessResult = services.GetRunStatus(runId, token);
+        if (accessResult.Run is null)
+            return JsonResponse(accessResult.StatusCode, WorkflowRunStatusResponse.Failure(accessResult.Error ?? "Workflow run was not found."));
+
+        string path;
+        lock (_workbenchRunGate)
+        {
+            if (!_workbenchDeviceRecordings.TryGetValue(runId, out var recording))
+            {
+                return JsonResponse(404, new
+                {
+                    ok = false,
+                    error = "No retained device recording is available for this run.",
+                });
+            }
+            path = recording.Path;
+        }
+
+        try
+        {
+            // Containment is re-proved at serve time, not just at store time. The retained file
+            // lives in a DevFlow-owned per-process directory, and anything that no longer resolves
+            // inside it is reported as unavailable rather than streamed to the browser.
+            var resolved = DeviceRecordingPathGuard.Resolve(path, _workbenchDeviceRecordingRoot);
+            if (resolved is null)
+                return JsonResponse(404, new { ok = false, error = "The retained device recording is unavailable." });
+            var info = new FileInfo(resolved);
+            if (!info.Exists || info.Length <= 0 || info.Length > MaxWorkbenchDeviceRecordingBytes)
+                return JsonResponse(404, new { ok = false, error = "The retained device recording is unavailable." });
+            return (200, LocalFileResponseContentType, Encoding.UTF8.GetBytes(resolved));
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return JsonResponse(404, new { ok = false, error = "The retained device recording is unavailable." });
+        }
+    }
+
     private (int, string, byte[]) HandleWorkbenchArtifactStatus(
         InspectorWorkflowServices services,
         string artifactId,
@@ -5686,6 +6113,22 @@ public sealed partial class InspectorServer : IDisposable
         return true;
     }
 
+    internal static string? ValidateReviewedDeviceEffects(
+        Testing.MauiFlow? flow,
+        string? reviewedDigest,
+        bool includeDeviceRecording = false)
+    {
+        var review = Flows.DeviceFlowReview.Describe(flow, includeDeviceRecording);
+        if (!review.Valid)
+            return review.Error;
+        if (review.Effects.Count > 0 &&
+            !string.Equals(reviewedDigest, review.Digest, StringComparison.Ordinal))
+        {
+            return "Review and confirm the exact device mutations from the current run check before starting.";
+        }
+        return null;
+    }
+
     private static bool TryReadWorkbenchAccess(
         string? body,
         out WorkflowRunAccessRequest? access,
@@ -5761,6 +6204,7 @@ public sealed partial class InspectorServer : IDisposable
                     .First();
                 _workbenchRunCapabilities.Remove(evicted.RunId);
                 _workbenchEvidence.Remove(evicted.RunId);
+                RemoveWorkbenchDeviceRecording(evicted.RunId);
             }
         }
     }
@@ -5839,6 +6283,7 @@ public sealed partial class InspectorServer : IDisposable
         {
             _workbenchRunCapabilities.Remove(runId);
             _workbenchEvidence.Remove(runId);
+            RemoveWorkbenchDeviceRecording(runId);
             foreach (var key in _workbenchAgentHandoffs
                          .Where(pair => string.Equals(pair.Value.Context.RunId, runId, StringComparison.Ordinal))
                          .Select(static pair => pair.Key)
@@ -5877,9 +6322,148 @@ public sealed partial class InspectorServer : IDisposable
         }
     }
 
+    private void StoreWorkbenchDeviceRecording(string runId, DeviceRecordingCapture capture)
+    {
+        if (string.IsNullOrWhiteSpace(runId) || capture is null)
+            return;
+
+        string? stagingPath = null;
+        try
+        {
+            // Re-prove containment through the authority that vouched for this capture, at the
+            // moment DevFlow opens the bytes: a link could have been swapped in since the last hop.
+            // The authority is whoever owns the directory the file is currently in — the device
+            // surface, or the coordinator's artifact root after retention — and this server has no
+            // business naming either of them.
+            var sourcePath = capture.ResolveForRead();
+            if (sourcePath is null)
+                return;
+            var info = new FileInfo(sourcePath);
+            if (!info.Exists || info.Length <= 0 || info.Length > MaxWorkbenchDeviceRecordingBytes)
+                return;
+
+            Directory.CreateDirectory(_workbenchDeviceRecordingRoot);
+            var retainedPath = Path.Combine(
+                _workbenchDeviceRecordingRoot,
+                Guid.NewGuid().ToString("N") + ".mp4");
+            stagingPath = retainedPath + ".tmp";
+            File.Copy(sourcePath, stagingPath, overwrite: false);
+            File.Move(stagingPath, retainedPath);
+            stagingPath = null;
+
+            lock (_workbenchRunGate)
+            {
+                RemoveWorkbenchDeviceRecording(runId);
+                _workbenchDeviceRecordings[runId] =
+                    new WorkbenchDeviceRecording(retainedPath, DateTimeOffset.UtcNow);
+                while (_workbenchDeviceRecordings.Count > MaxRetainedWorkbenchEvidence)
+                {
+                    var evicted = _workbenchDeviceRecordings
+                        .OrderBy(pair => pair.Value.CapturedAt)
+                        .First();
+                    RemoveWorkbenchDeviceRecording(evicted.Key);
+                }
+            }
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            if (stagingPath is not null)
+            {
+                try { File.Delete(stagingPath); } catch { }
+            }
+        }
+    }
+
+    private void RemoveWorkbenchDeviceRecording(string runId)
+    {
+        if (!_workbenchDeviceRecordings.Remove(runId, out var recording))
+            return;
+        try { File.Delete(recording.Path); } catch { }
+    }
+
+    private static string CreateWorkbenchDeviceRecordingRoot()
+    {
+        lock (WorkbenchDeviceRecordingCleanupGate)
+        {
+            CleanupAbandonedWorkbenchDeviceRecordings();
+            using var process = Process.GetCurrentProcess();
+            var startTicks = process.StartTime.ToUniversalTime().Ticks;
+            return Path.Combine(
+                WorkbenchDeviceRecordingParent,
+                $"inspector_{Environment.ProcessId}_{startTicks}_{Guid.NewGuid():N}");
+        }
+    }
+
+    private static void CleanupAbandonedWorkbenchDeviceRecordings()
+    {
+        if (!Directory.Exists(WorkbenchDeviceRecordingParent))
+            return;
+
+        try
+        {
+            foreach (var directory in Directory.EnumerateDirectories(
+                         WorkbenchDeviceRecordingParent,
+                         "inspector_*",
+                         SearchOption.TopDirectoryOnly))
+            {
+                var name = Path.GetFileName(directory);
+                var parts = name.Split('_');
+                if (parts.Length != 4 ||
+                    !string.Equals(parts[0], "inspector", StringComparison.Ordinal) ||
+                    !int.TryParse(parts[1], out var processId) ||
+                    !long.TryParse(parts[2], out var startTicks) ||
+                    !Guid.TryParseExact(parts[3], "N", out _))
+                {
+                    continue;
+                }
+
+                if (!IsExactProcessAlive(processId, startTicks))
+                {
+                    try { Directory.Delete(directory, recursive: true); }
+                    catch (Exception exception) when (
+                        exception is IOException or UnauthorizedAccessException)
+                    {
+                    }
+                }
+            }
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
+
+    private static bool IsExactProcessAlive(int processId, long startTicks)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(processId);
+            return !process.HasExited &&
+                process.StartTime.ToUniversalTime().Ticks == startTicks;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            // If ownership cannot be proved stale, preserve the directory.
+            return true;
+        }
+    }
+
     private static string? SafeWorkbenchText(string? value, int maximum = 256)
         => SafeInspectorText(value, maximum);
 
+    /// <summary>
+    /// Normalizes an untrusted display string to bounded, control-character-free text. Input that
+    /// normalizes away entirely is reported as missing rather than as an empty observation.
+    /// </summary>
     internal static string? SafeInspectorText(string? value, int maximum = 256)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -5899,6 +6483,10 @@ public sealed partial class InspectorServer : IDisposable
     {
         [JsonPropertyName("run")] public WorkflowRunStartRequest? Run { get; set; }
         [JsonPropertyName("evidence")] public WorkbenchEvidenceRequest? Evidence { get; set; }
+        // The exact device-effect set a human reviewed before starting this run. Compared against
+        // what the flow actually declares, so an approval for a smaller effect set never authorizes
+        // a larger one.
+        [JsonPropertyName("reviewedDeviceEffectsDigest")] public string? ReviewedDeviceEffectsDigest { get; set; }
     }
 
     private static class WorkbenchApprovalConfirmationActions
@@ -5959,6 +6547,7 @@ public sealed partial class InspectorServer : IDisposable
     {
         [JsonPropertyName("includeScreenshot")] public bool? IncludeScreenshot { get; set; }
         [JsonPropertyName("includeWorkflow")] public bool? IncludeWorkflow { get; set; }
+        [JsonPropertyName("includeDeviceRecording")] public bool? IncludeDeviceRecording { get; set; }
     }
 
     private sealed class WorkbenchArtifactAccess
@@ -6086,12 +6675,18 @@ public sealed partial class InspectorServer : IDisposable
             => new() { StatusCode = statusCode, Error = error };
     }
 
-    private sealed record WorkbenchEvidenceConsent(bool IncludeScreenshot, bool IncludeWorkflow)
+    private sealed record WorkbenchEvidenceConsent(
+        bool IncludeScreenshot,
+        bool IncludeWorkflow,
+        bool IncludeDeviceRecording)
     {
-        public static WorkbenchEvidenceConsent None { get; } = new(false, false);
+        public static WorkbenchEvidenceConsent None { get; } = new(false, false, false);
 
         public static WorkbenchEvidenceConsent From(WorkbenchEvidenceRequest? request)
-            => new(request?.IncludeScreenshot == true, request?.IncludeWorkflow == true);
+            => new(
+                request?.IncludeScreenshot == true,
+                request?.IncludeWorkflow == true,
+                request?.IncludeDeviceRecording == true);
     }
 
     private sealed record WorkbenchRunCapability(
@@ -6130,6 +6725,10 @@ public sealed partial class InspectorServer : IDisposable
     private sealed record WorkbenchEvidence(
         byte[] Bytes,
         WorkbenchEvidenceConsent Consent,
+        DateTimeOffset CapturedAt);
+
+    private sealed record WorkbenchDeviceRecording(
+        string Path,
         DateTimeOffset CapturedAt);
 
     private static readonly JsonSerializerOptions WorkbenchJsonOptions = new()
@@ -6352,6 +6951,7 @@ public sealed partial class InspectorServer : IDisposable
         return path switch
         {
             "/api/tap" or "/api/scroll" or "/api/gesture" or "/api/back" or "/api/fill" or "/api/key"
+                or "/api/device/tap" or "/api/device/control"
                 or "/api/setProperty" or "/api/persistProperty" or "/api/navigate" or "/api/cdp/eval"
                 or "/api/alerts/dismiss" or "/api/flows/record/start" or "/api/flows/record/step"
                 or "/api/flows/replay" or "/api/control" or "/api/checkpoint/restore" => true,
@@ -6452,7 +7052,8 @@ public sealed partial class InspectorServer : IDisposable
         "/api/checkpoint/status" or "/api/checkpoint/save" or "/api/checkpoint/restore" or "/api/checkpoint/clear"
             or
         "/api/source" or "/api/persistProperty" or "/api/logs" or "/api/network" or "/api/network/detail" or "/api/problems" or "/api/preferences"
-            or "/api/device" or "/api/sensors" or "/api/geolocation"
+            or "/api/device" or "/api/device/host" or "/api/device/screenshot" or "/api/device/recording" or "/api/device/control"
+            or "/api/sensors" or "/api/geolocation"
             or "/api/diagnostics/layout" or "/api/diagnostics/suppress" or "/api/diagnostics/unsuppress"
             or "/api/diagnostics/suppression/apply"
             or "/api/performance/start" or "/api/performance/snapshot" or "/api/performance/stop"
@@ -7203,6 +7804,7 @@ public sealed partial class InspectorServer : IDisposable
     internal static bool IsMutation(string path) => path switch
     {
         "/api/tap" or "/api/scroll" or "/api/gesture" or "/api/back" or "/api/fill" or "/api/key"
+            or "/api/device/tap" or "/api/device/control"
             or "/api/setProperty" or "/api/persistProperty" or "/api/navigate" or "/api/cdp/eval"
             or "/api/alerts/dismiss"
             or "/api/checkpoint/restore"
@@ -7594,6 +8196,42 @@ public sealed partial class InspectorServer : IDisposable
         await stream.WriteAsync(Encoding.UTF8.GetBytes(header), ct);
         await stream.WriteAsync(body, ct);
         await stream.FlushAsync(ct);
+    }
+
+    private async Task WriteFileResponseAsync(
+        NetworkStream stream,
+        string path,
+        CancellationToken cancellationToken)
+    {
+        await using var input = OpenWorkbenchDeviceRecording(path);
+        var header = "HTTP/1.1 200 OK\r\n" +
+                     "Content-Type: video/mp4\r\n" +
+                     $"Content-Length: {input.Length}\r\n" +
+                     "Cache-Control: no-store\r\n" +
+                     "X-Content-Type-Options: nosniff\r\n" +
+                     "Connection: close\r\n\r\n";
+        await stream.WriteAsync(Encoding.UTF8.GetBytes(header), cancellationToken);
+        await input.CopyToAsync(stream, cancellationToken);
+        await stream.FlushAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Opens a retained device recording. The trusted root is re-proved on the handle that is
+    /// actually read: the resolve above and the open here are separated by a scheduling boundary,
+    /// and the containment claim has to hold at the open, not merely at the check.
+    /// </summary>
+    private FileStream OpenWorkbenchDeviceRecording(string path)
+    {
+        var resolved = DeviceRecordingPathGuard.Resolve(path, _workbenchDeviceRecordingRoot)
+            ?? throw new UnauthorizedAccessException(
+                "The requested recording does not resolve inside the DevFlow recording directory.");
+        return new FileStream(
+            resolved,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 81920,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
     }
 
     internal sealed class HttpRequestInfo

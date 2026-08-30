@@ -68,9 +68,13 @@ Use this skill for a conversational, read-only layout investigation against one 
   has to be re-created from a fresh scan, and that is expected rather than a bug.
 - Blazor analysis is same-origin and structural; cross-origin frames, closed shadow roots, canvas,
   and native overlays remain opaque.
-- `systemEvidence` is never populated by this layer. Correlating findings with the device's own
-  accessibility tree needs device capture, which ships with the Mobile Device Canvas layer. Until
-  then every scan is app-scoped: never claim a keyboard, dialog, or share sheet was ruled in or out.
+- `systemEvidence` is populated only by the optional device layer, through the broker's
+  `POST /api/layout-diagnostics/composite` route. With no Mobile Canvas host, no exact device
+  pairing, or no hierarchy from the host, its `status` is `unavailable` and the scan stays
+  app-scoped. Read `status` first: only `complete` means the device hierarchy was captured on the
+  paired device, in the same geometry, from the same agent instance, within the allowed capture
+  skew. On `incomplete` the elements are dropped on purpose — never claim a keyboard, dialog, or
+  share sheet was ruled in or out from it.
 - Suppression persistence requires a trusted VS Code confirmation and digest CAS. VS Code is the
   only native approval host; the Canvas Inspector has no approval authority. In the Canvas Inspector
   or a standalone browser, copy the proposal for human review instead of claiming it was saved.

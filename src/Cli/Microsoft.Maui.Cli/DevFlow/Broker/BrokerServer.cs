@@ -9,6 +9,7 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Web;
 using Microsoft.Maui.Cli.DevFlow.Inspector;
+using Microsoft.Maui.DevFlow.Devices;
 using Microsoft.Maui.DevFlow.Testing;
 
 namespace Microsoft.Maui.Cli.DevFlow.Broker;
@@ -32,6 +33,9 @@ public partial class BrokerServer : IDisposable
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _agentRouteGates = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _agentStateGates = new(StringComparer.Ordinal);
     private readonly MutationLeaseRegistry _mutationLeases;
+    private readonly DeviceRegistry _devices;
+    private readonly Func<MobileCanvasHostState?> _mobileCanvasHostStateProvider;
+
     /// <summary>
     /// Reads independent business-oracle evidence out of band for a run against an already-running
     /// app. Null in a broker whose host registered no evaluator, in which case such a run stays
@@ -159,7 +163,9 @@ public partial class BrokerServer : IDisposable
         string? nativeApprovalToken = null,
         bool requireWorkflowRunAuthorization = true,
         Func<AgentRegistration, IWorkflowRepairResetAttester?>? repairResetAttesterResolver = null,
-        Execution.IAttachedRunOracleEvaluator? attachedRunOracles = null)
+        Execution.IAttachedRunOracleEvaluator? attachedRunOracles = null,
+        DeviceRegistry? devices = null,
+        Func<MobileCanvasHostState?>? mobileCanvasHostStateProvider = null)
     {
         _port = port;
         _idleTimeout = idleTimeout ?? TimeSpan.FromMinutes(5);
@@ -167,6 +173,8 @@ public partial class BrokerServer : IDisposable
         _requireWorkflowRunAuthorization = requireWorkflowRunAuthorization;
         _repairResetAttesterResolver = repairResetAttesterResolver;
         _attachedRunOracles = attachedRunOracles;
+        _devices = devices ?? new DeviceRegistry();
+        _mobileCanvasHostStateProvider = mobileCanvasHostStateProvider ?? MobileCanvasHost.TryRead;
         _previewFlags = previewFlags ?? MauiPreviewFeatureFlagConfiguration.FromEnvironment();
         _nativeApprovalToken = nativeApprovalToken;
         _trustedHostApprovalVerifier = nativeApprovalToken is null
@@ -198,6 +206,22 @@ public partial class BrokerServer : IDisposable
         _workflowRepairs = new WorkflowRepairProposalStore(clock: clock);
         _workflowXamlSources = new WorkflowXamlSourceProposalStore(clock: clock);
         _workflowCSharpSources = new WorkflowCSharpSourceProposalStore(clock: clock);
+    }
+
+    internal BrokerServer(
+        int port,
+        DeviceRegistry devices,
+        Func<MobileCanvasHostState?>? mobileCanvasHostStateProvider = null)
+        : this(
+            port,
+            idleTimeout: null,
+            log: null,
+            checkpointStore: null,
+            recordingStorageRoot: null,
+            clock: null,
+            devices: devices,
+            mobileCanvasHostStateProvider: mobileCanvasHostStateProvider)
+    {
     }
 
     public async Task RunAsync(CancellationToken cancellationToken = default)
@@ -297,6 +321,16 @@ public partial class BrokerServer : IDisposable
                 return;
             }
 
+            // WebSocket upgrade for the device video stream. Proxied rather than handed to the
+            // browser directly: the device host authenticates with a bearer token that a browser
+            // cannot attach to a WebSocket, and that we must never place in a page anyway. The
+            // proxy holds it server-side and the browser presents only the embed token.
+            if (context.Request.IsWebSocketRequest && path.Equals("/ws/video", StringComparison.OrdinalIgnoreCase))
+            {
+                await HandleDeviceVideoWebSocket(context);
+                return;
+            }
+
             // WebSocket upgrade for inspector event relay
             if (context.Request.IsWebSocketRequest && path.StartsWith("/inspector", StringComparison.OrdinalIgnoreCase))
             {
@@ -325,6 +359,11 @@ public partial class BrokerServer : IDisposable
                 await HandleMutationLeaseRoute(context, method, path);
                 return;
             }
+            if (path.Equals("/api/device-leases", StringComparison.OrdinalIgnoreCase))
+            {
+                await HandleDeviceMutationLeaseRoute(context, method);
+                return;
+            }
             if (path.StartsWith("/api/recordings/", StringComparison.OrdinalIgnoreCase))
             {
                 await HandleRecordingRoute(context, method, path);
@@ -343,6 +382,16 @@ public partial class BrokerServer : IDisposable
             if (path.StartsWith("/api/test-agent", StringComparison.OrdinalIgnoreCase))
             {
                 await HandleTestAgentRoute(context, method, path);
+                return;
+            }
+            if (path.Equals("/api/layout-diagnostics/composite", StringComparison.OrdinalIgnoreCase))
+            {
+                await HandleCompositeLayoutDiagnostics(context, method);
+                return;
+            }
+            if (path.StartsWith("/api/devices", StringComparison.OrdinalIgnoreCase))
+            {
+                await HandleDeviceRoute(context, method, path);
                 return;
             }
             if (path.StartsWith("/api/artifact-trust", StringComparison.OrdinalIgnoreCase))
@@ -603,9 +652,7 @@ public partial class BrokerServer : IDisposable
                 try
                 {
                     ReleasePort(connection.Registration.Port);
-                    var leaseKey = LeaseKeyForRegistration(connection.Registration);
-                    if (string.Equals(leaseKey, connection.Registration.Id, StringComparison.Ordinal))
-                        _mutationLeases.Remove(leaseKey);
+                    RecoverMutationLeaseOnDisconnect(connection.Registration);
                     _flows.RemoveAgent(connection.Registration.Id);
                     _workflowRuns.MarkAgentInstanceUnavailable(
                         connection.Registration.Id,
@@ -627,9 +674,58 @@ public partial class BrokerServer : IDisposable
         }
     }
 
+    /// <summary>
+    /// Frees the mutation lease a disappearing agent was holding, so the next session does not wait
+    /// out the lease TTL before it can drive the app again.
+    /// <para>
+    /// Recovery is a convenience, never a privilege. It goes through the same ownership and
+    /// transaction rules an explicit <c>release</c> obeys, for the app-keyed lease as much as the
+    /// device-keyed one. Dropping the whole entry instead — which is what an app key used to do —
+    /// looks safe only while an app key is believed to be private to one process, and it is not:
+    /// the Inspector claims it, an agent run adopts it, and a relaunched app re-registers under the
+    /// same id. Clearing it unconditionally would revoke a live holder's lease, cut a mutation that
+    /// is already in flight, and reset the authority epoch to zero so a client caching one could not
+    /// tell that its hold had been taken away.
+    /// </para>
+    /// <para>
+    /// So both keys take the same path: stand down when an identical registration has replaced this
+    /// one, then release only when the exact identity that took the lease still owns it and nothing
+    /// is mid-transaction. Nothing is lost by refusing — leases and transactions both expire — and
+    /// an unattributed holder, which is every non-agent surface, is never touched at all.
+    /// </para>
+    /// </summary>
+    private void RecoverMutationLeaseOnDisconnect(AgentRegistration registration)
+    {
+        // A reconnect that reused the same instance is the same holder, not a stale one.
+        _agents.TryGetValue(registration.Id, out var replacement);
+        if (!ShouldRecoverLeaseOnDisconnect(registration, replacement?.Registration))
+            return;
+
+        var leaseKey = LeaseKeyForRegistration(registration);
+        if (_mutationLeases.RemoveIfOwnedBy(leaseKey, AgentLeaseOwner(registration)))
+            Log($"Released the lease held by the disconnected agent {registration.Id}.");
+    }
+
+    /// <summary>
+    /// Whether a disconnected registration's lease may be recovered. False when an identical
+    /// registration — same id <em>and</em> same instance — is currently connected, because that is
+    /// the same process still holding its own lease rather than a stale one to clean up.
+    /// </summary>
+    internal static bool ShouldRecoverLeaseOnDisconnect(
+        AgentRegistration disconnected,
+        AgentRegistration? currentForSameId)
+    {
+        ArgumentNullException.ThrowIfNull(disconnected);
+        if (currentForSameId is null)
+            return true;
+        return !string.Equals(
+            currentForSameId.InstanceId,
+            disconnected.InstanceId,
+            StringComparison.Ordinal);
+    }
+
     private SemaphoreSlim AgentRouteGate(string agentId)
         => _agentRouteGates.GetOrAdd(agentId, static _ => new SemaphoreSlim(1, 1));
-
     private SemaphoreSlim AgentStateGate(string agentId)
         => _agentStateGates.GetOrAdd(agentId, static _ => new SemaphoreSlim(1, 1));
 
@@ -638,6 +734,171 @@ public partial class BrokerServer : IDisposable
         var agents = _agents.Values.Select(c => c.Registration).ToArray();
         return CliJson.SerializeUntyped(agents, indented: true);
     }
+
+    /// <summary>
+    /// The device layer surface. Kept behind the broker so hosts have a single front door: a
+    /// second front door is what produces duplicate device pickers and two competing ideas of
+    /// which device is selected.
+    /// </summary>
+    private async Task HandleDeviceRoute(HttpListenerContext context, string method, string path)
+    {
+        if (method == "GET" && TryParseDeviceResourcePath(path, "screenshot", out var screenshotDeviceId))
+        {
+            if (!string.Equals(
+                context.Request.Headers["X-DevFlow-Embed-Token"],
+                _embedToken,
+                StringComparison.Ordinal))
+            {
+                context.Response.StatusCode = 403;
+                context.Response.ContentType = "application/json";
+                var forbidden = Encoding.UTF8.GetBytes("{\"error\":\"Forbidden\"}");
+                context.Response.ContentLength64 = forbidden.Length;
+                await context.Response.OutputStream.WriteAsync(forbidden);
+                context.Response.Close();
+                return;
+            }
+            var screenshot = await _devices.ScreenshotAsync(screenshotDeviceId);
+            context.Response.StatusCode = screenshot is null ? 404 : 200;
+            context.Response.ContentType = screenshot is null ? "application/json" : "image/png";
+            var responseBytes = screenshot ?? Encoding.UTF8.GetBytes(
+                CliJson.SerializeUntyped(
+                    new JsonObject { ["error"] = "The device screenshot is unavailable." },
+                    indented: false));
+            context.Response.ContentLength64 = responseBytes.Length;
+            await context.Response.OutputStream.WriteAsync(responseBytes);
+            context.Response.Close();
+            return;
+        }
+
+        var (statusCode, body) = await BuildDeviceResponse(context, method, path);
+
+        context.Response.StatusCode = statusCode;
+        context.Response.ContentType = "application/json";
+        var bytes = Encoding.UTF8.GetBytes(body);
+        context.Response.ContentLength64 = bytes.Length;
+        await context.Response.OutputStream.WriteAsync(bytes);
+        context.Response.Close();
+    }
+
+    /// <summary>
+    /// The one device paired with this agent at exact confidence, or <c>null</c>.
+    /// <para>
+    /// Mutating and recording a device demands the same identity standard the read-only composite
+    /// layout route already applies: exactly one match, at exact confidence. Anything weaker is a
+    /// guess, and a guess here drives the wrong emulator.
+    /// </para>
+    /// </summary>
+    private async Task<DeviceTarget?> ResolveExactPairedDeviceAsync(
+        AgentRegistration registration,
+        CancellationToken cancellationToken)
+    {
+        var paired = await _devices
+            .ListPairedAsync([registration], forceRefresh: false, cancellationToken)
+            .ConfigureAwait(false);
+        var matches = paired
+            .Where(item =>
+                string.Equals(item.AgentId, registration.Id, StringComparison.Ordinal) &&
+                item.MatchConfidence == DeviceMatchConfidence.Exact)
+            .ToArray();
+        return matches.Length == 1 ? matches[0].Device : null;
+    }
+
+    private async Task<(int, string)> BuildDeviceResponse(HttpListenerContext context, string method, string path)
+    {
+        var trimmed = path.TrimEnd('/');
+
+        if (method == "GET" && trimmed.Equals("/api/devices/catalog", StringComparison.OrdinalIgnoreCase))
+            return await BuildDeviceCatalogResponse();
+
+        if (method == "POST" && trimmed.Equals("/api/devices/control", StringComparison.OrdinalIgnoreCase))
+            return await BuildExpandedDeviceControlResponse(context);
+
+        if (method == "GET" && TryParseDeviceResourcePath(trimmed, "recording", out var recordingDeviceId))
+            return await BuildDeviceRecordingStatusResponse(recordingDeviceId);
+
+        if (method == "GET" && TryParseDeviceDetailPath(trimmed, out var detailDeviceId))
+            return await BuildDeviceDetailResponse(detailDeviceId);
+
+        if (trimmed.StartsWith("/api/devices/", StringComparison.OrdinalIgnoreCase))
+            return await BuildDeviceControlResponse(context, method, trimmed);
+
+        if (method == "GET" && trimmed.Equals("/api/devices", StringComparison.OrdinalIgnoreCase))
+        {
+            var health = await _devices.GetHealthAsync();
+            var agents = _agents.Values.Select(c => c.Registration).ToArray();
+            var paired = await _devices.ListPairedAsync(agents);
+
+            var list = new JsonArray(paired.Select(BuildPairedDeviceNode).ToArray());
+
+            // The host's availability travels with the list so a caller can tell "no devices"
+            // apart from "no device layer" — they need very different messages in the UI.
+            return (200, CliJson.SerializeUntyped(new JsonObject
+            {
+                ["available"] = health.Available,
+                ["reason"] = health.Reason,
+                ["devices"] = list,
+            }, indented: true));
+        }
+
+        return (404, CliJson.SerializeUntyped(new JsonObject { ["error"] = "Not found" }, indented: false));
+    }
+
+    /// <summary>
+    /// Device control: <c>POST /api/devices/{id}/{action}</c>.
+    /// <para>
+    /// A refusal is a 200 with <c>success:false</c> and a reason rather than an HTTP error,
+    /// because "this platform cannot do that" is an expected answer that callers must be able to
+    /// show a human, not an exceptional condition.
+    /// </para>
+    /// </summary>
+    private async Task<(int, string)> BuildDeviceControlResponse(HttpListenerContext context, string method, string trimmed)
+    {
+        if (method != "POST")
+            return (405, CliJson.SerializeUntyped(new JsonObject { ["error"] = "Method not allowed" }, indented: false));
+
+        var segments = trimmed["/api/devices/".Length..].Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length != 2)
+            return (404, CliJson.SerializeUntyped(new JsonObject { ["error"] = "Not found" }, indented: false));
+
+        var deviceId = Uri.UnescapeDataString(segments[0]);
+        var action = segments[1].ToLowerInvariant();
+
+        if (action is not ("boot" or "shutdown" or "tap"))
+            return (404, CliJson.SerializeUntyped(new JsonObject { ["error"] = $"Unknown device action '{action}'" }, indented: false));
+
+        var body = new JsonObject
+        {
+            ["action"] = action,
+            ["deviceId"] = deviceId,
+        };
+        if (action == "tap")
+        {
+            var query = context.Request.QueryString;
+            var x = ParseDouble(query["x"]);
+            var y = ParseDouble(query["y"]);
+            if (x is null || y is null)
+            {
+                return (400, CliJson.SerializeUntyped(new JsonObject
+                {
+                    ["success"] = false,
+                    ["reason"] = "A tap requires x and y coordinates.",
+                }, indented: false));
+            }
+            body["x"] = x.Value;
+            body["y"] = y.Value;
+        }
+
+        return await BuildExpandedDeviceControlResponse(context, body);
+    }
+
+    private static double? ParseDouble(string? value) =>
+        double.TryParse(
+            value,
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var parsed)
+            ? parsed
+            : null;
 
     private (int, string) HandleShutdown()
     {
@@ -968,7 +1229,8 @@ public partial class BrokerServer : IDisposable
                 holderKind,
                 label,
                 force,
-                transactionId);
+                transactionId,
+                AgentLeaseOwner(connection.Registration));
         }
         catch (ArgumentException ex)
         {
@@ -2462,7 +2724,20 @@ public partial class BrokerServer : IDisposable
             registration.AppName,
             LeaseKeyForRegistration(registration));
 
-    internal static string LeaseKeyForRegistration(AgentRegistration registration) => registration.Id;
+    internal static string LeaseKeyForRegistration(AgentRegistration registration) =>
+        DeviceLeaseKeys.FromIdentity(DeviceIdentity.Parse(registration.DeviceId))
+        ?? registration.Id;
+
+    /// <summary>
+    /// The identity a lease taken against a running app belongs to.
+    /// <para>
+    /// It carries the instance, not just the agent id, because a crashed-and-relaunched app
+    /// re-registers under the same id. Recovering a lease has to distinguish "the process that took
+    /// this is gone" from "that same process is still here"; only the instance can tell them apart.
+    /// </para>
+    /// </summary>
+    internal static string AgentLeaseOwner(AgentRegistration registration) =>
+        "agent:" + registration.Id + "\u001f" + registration.InstanceId;
 
     /// <summary>
     /// The broker's one authorization boundary for starting a device-mutating workflow run. The
@@ -2621,6 +2896,40 @@ public partial class BrokerServer : IDisposable
             registration = currentConnection.Registration;
         }
 
+        var hasDeviceWork = Flows.DeviceFlowExecutionExtension.HasDeclarations(execution.Flow);
+        // Only an exact, unique pairing may be driven or recorded. `FindForAgentAsync` also accepts
+        // a weak match on the user-chosen device name, which is enough to answer "which device is
+        // this app probably on?" but not to grant permissions, tap coordinates, or attach a video
+        // to a run: two emulators named "Pixel 7" would silently swap under the run.
+        var pairedDevice = registration is null
+            ? null
+            : await ResolveExactPairedDeviceAsync(registration, cancellationToken).ConfigureAwait(false);
+        var appPackageId = liveStatus?.App?.PackageId ?? registration?.PackageId;
+        var deviceExecution = hasDeviceWork
+            ? new Flows.DeviceFlowExecutionExtension(
+                _devices.ExecutionSurface,
+                pairedDevice,
+                appPackageId)
+            : null;
+        if (pairedDevice is not null)
+        {
+            var recordDeviceRun = execution.Options.RecordDeviceRun ||
+                (execution.Flow.ExpectedEvidence ?? []).Any(expected =>
+                    string.Equals(
+                        expected?.Kind,
+                        MauiFlowEvidenceKinds.DeviceRecording,
+                        StringComparison.Ordinal));
+            evidenceCapture = new Flows.DeviceFlowObserver(
+                _devices.ExecutionSurface,
+                pairedDevice.Id,
+                evidenceCapture,
+                appPackageId,
+                onRecording: capture =>
+                    execution.Options.DeviceRecordingCaptured?.Invoke(execution.RunId, capture),
+                recordRun: recordDeviceRun,
+                recordingTimeoutSeconds: execution.Options.DeviceRecordingTimeoutSeconds);
+        }
+
         var runner = new MauiFlowRunner(
             client,
             new MauiFlowRunnerOptions
@@ -2648,7 +2957,7 @@ public partial class BrokerServer : IDisposable
                 ThrowOnCancellation = false,
                 Progress = execution.Options.Progress,
                 StepObservationDelayMs = 900,
-                ExecutionExtension = null,
+                ExecutionExtension = deviceExecution,
             },
             evidenceCapture);
         return (await runner.RunWithLegacyAsync(execution.Flow, file: null, cancellationToken)
@@ -2829,6 +3138,7 @@ public partial class BrokerServer : IDisposable
             try { inspector.Dispose(); } catch { }
         }
         _inspectors.Clear();
+        _companionLeaseBindings.Clear();
         _mutationLeases.Clear();
         _flows.Clear();
         _workflowRuns.Dispose();

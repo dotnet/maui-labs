@@ -49,3 +49,42 @@ jobs:
       run-tests: true
       pack: true
       os: '["windows-latest"]'
+
+  # The device layer ships two JavaScript hosts and a shared client that the .NET job never
+  # compiles, so a break in either canvas is invisible without this job. The standalone Mobile
+  # Device Canvas is the reason it exists: it drives real devices through the pinned companion, and
+  # its lease, target-identity, and integrity tests are the only automated guard on that path.
+  hosts:
+    name: JavaScript hosts and canvases
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            src/DevFlow/js/package-lock.json
+            .github/extensions/maui-devflow-canvas/package-lock.json
+            .github/extensions/maui-device-canvas/package-lock.json
+
+      - name: Build and test shared client and VS Code host
+        working-directory: src/DevFlow/js
+        run: |
+          npm ci
+          npm test
+          npm run build
+
+      - name: Test Copilot Canvas host
+        working-directory: .github/extensions/maui-devflow-canvas
+        run: |
+          npm ci
+          npm test
+
+      - name: Test standalone Mobile Device Canvas
+        working-directory: .github/extensions/maui-device-canvas
+        run: |
+          npm ci
+          npm test

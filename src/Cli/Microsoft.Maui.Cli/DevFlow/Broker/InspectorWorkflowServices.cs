@@ -58,7 +58,7 @@ internal sealed class InspectorWorkflowServices
         Func<AgentClient, IFlowReplayEvidenceCapture?>? evidenceCaptureFactory = null,
         WorkflowRunLeaseHandoff? leaseHandoff = null,
         bool recordDeviceRun = false,
-        Action<string, string>? deviceRecordingCaptured = null)
+        Action<string, Microsoft.Maui.DevFlow.Devices.DeviceRecordingCapture>? deviceRecordingCaptured = null)
     {
         if (!_isTargetCurrent())
         {

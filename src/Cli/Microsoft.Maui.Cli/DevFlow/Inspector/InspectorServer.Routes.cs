@@ -11,6 +11,9 @@ public sealed partial class InspectorServer
             "/api/state" => await HandleStateAsync(),
             "/api/inspect/snapshot" => await HandleInspectSnapshotAsync(),
             "/api/eventSupport" => await HandleEventSupportAsync(),
+            "/api/device/host" => await HandleDeviceHostAsync(),
+            "/api/device/screenshot" => await HandleDeviceResourceAsync(request.Query, "screenshot"),
+            "/api/device/recording" => await HandleDeviceResourceAsync(request.Query, "recording"),
             "/api/checkpoint/status" => HandleResumeCheckpointStatus(),
             "/api/flows/replay/evidence" => HandleReplayEvidenceDownload(),
             "/screenshot.png" => await HandleScreenshotAsync(request.Query.GetValueOrDefault("frame")),
@@ -27,6 +30,8 @@ public sealed partial class InspectorServer
         => request.Path switch
         {
             "/api/tap" => await HandleProxyTapAsync(request.Body),
+            "/api/device/tap" => await HandleDeviceTapAsync(request.Query, leaseId, holderKind, holderLabel),
+            "/api/device/control" => await HandleDeviceControlAsync(request.Body, leaseId, holderKind, holderLabel),
             "/api/scroll" => await HandleProxyScrollAsync(request.Body),
             "/api/gesture" => await HandleProxyGestureAsync(request.Body),
             "/api/back" => await HandleProxyBackAsync(),

@@ -245,7 +245,15 @@ Each product requires source setup **and** CI/CD configuration across two system
 
 ## DevFlow MCP Tools
 
-DevFlow exposes 83 MCP tools for AI agent integration (in `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/`):
+DevFlow exposes 83 MCP tools for AI agent integration (in `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/`).
+
+The four `maui_device_*` device-layer tools marked **opt-in** below are **not** served by default.
+They need the separately installed Mobile Canvas companion, so they are registered only when
+`DEVFLOW_PREVIEW_MOBILE_CANVAS=true` — the CLI counterpart of the VS Code setting
+`mauiDevflow.registerMobileCanvasMcpServer`, which is likewise off by default. Without the gate the
+full profile serves 79 tools. `maui_device_info` is unrelated and always served: it is the device as
+the running app sees it.
+
 
 | Tool | Purpose |
 |------|---------|
@@ -262,10 +270,10 @@ DevFlow exposes 83 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_clear` | Clear text from an element |
 | `maui_connectivity` | Network access and connection profiles |
 | `maui_device_info` | Device manufacturer, model, OS |
-| `maui_device_boot` | Boot an emulator/simulator and wait until it is ready |
-| `maui_device_list` | List emulators/simulators, each paired with the app running inside it |
-| `maui_device_shutdown` | Power an emulator/simulator off without erasing it |
-| `maui_device_tap` | Tap a physical device point, for UI the app's visual tree cannot reach |
+| `maui_device_boot` | Boot an emulator/simulator and wait until it is ready (opt-in) |
+| `maui_device_list` | List emulators/simulators, each paired with the app running inside it (opt-in) |
+| `maui_device_shutdown` | Power an emulator/simulator off without erasing it (opt-in) |
+| `maui_device_tap` | Tap a physical device point, for UI the app's visual tree cannot reach (opt-in) |
 | `maui_display_info` | Screen density, size, orientation |
 | `maui_element` | Get full element details |
 | `maui_evidence_capture` | Write a redacted `.mauitrace` evidence bundle for the running app |

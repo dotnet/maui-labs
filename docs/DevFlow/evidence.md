@@ -24,11 +24,14 @@ maui devflow evidence inspect-trust ./artifacts/flow-run.json --json
 maui devflow evidence verify-apple-qa ./devflow-flow-qa-<run-id>-ios.zip --import-diagnostics --json
 ```
 
-`layout.json.systemEvidence` is not populated by this layer: correlating a layout finding with the
-device's own accessibility tree needs device capture, which arrives with the Mobile Device Canvas
-layer. Bundles written here carry an app-scoped layout scan only, so nothing in a bundle claims a
-keyboard, permission dialog, alert, or share sheet was ruled in or out. Readers already tolerate the
-field being absent.
+`layout.json.systemEvidence` is present only when the optional device layer produced the scan
+through the broker's composite route and a device was paired with this agent at exact confidence.
+Otherwise the field is absent or carries `"status": "unavailable"`, and the bundle holds an
+app-scoped layout scan that claims nothing about a keyboard, permission dialog, alert, or share
+sheet. When it is present, read `status` before the elements: only `complete` means the device
+hierarchy was captured on the paired device, in the same geometry, from the same agent instance,
+and within the allowed capture skew; `incomplete` carries no elements by design. Readers already
+tolerate the field being absent.
 
 ## What a bundle contains
 

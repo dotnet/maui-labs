@@ -28,6 +28,23 @@ public static class McpServerHost
 	/// <summary>Environment variable that enables the agent-authoring preview surface.</summary>
 	public const string PreviewAgentAuthoringVariable = "DEVFLOW_PREVIEW_AGENT_AUTHORING";
 
+	/// <summary>
+	/// Environment variable that enables the optional Mobile Canvas device layer in the MCP surface.
+	/// The CLI counterpart of the VS Code setting <c>mauiDevflow.registerMobileCanvasMcpServer</c>,
+	/// and off by default for the same reason.
+	/// </summary>
+	public const string PreviewMobileCanvasVariable = "DEVFLOW_PREVIEW_MOBILE_CANVAS";
+
+	/// <summary>
+	/// The device-layer tools. They are held apart from <see cref="FullToolNames"/> because they are
+	/// the only part of the full profile that is not unconditionally served: the device layer needs
+	/// a separately installed companion, so it is opt-in rather than advertised to every session.
+	/// </summary>
+	private static readonly string[] MobileCanvasToolNames =
+	[
+		"maui_device_boot", "maui_device_list", "maui_device_shutdown", "maui_device_tap",
+	];
+
 	private static readonly string[] FullToolNames =
 	[
 		"maui_app_info", "maui_artifact_inspect", "maui_assert", "maui_back", "maui_batch", "maui_battery_info",
@@ -150,7 +167,10 @@ public static class McpServerHost
 
 		return profile switch
 		{
-			McpServerProfile.Full => FullToolNames.OrderBy(static name => name, StringComparer.Ordinal).ToArray(),
+			McpServerProfile.Full => (DevFlowPreviewPolicy.IsMobileCanvasEnabled(previewFlags)
+					? FullToolNames.Concat(MobileCanvasToolNames)
+					: FullToolNames)
+				.OrderBy(static name => name, StringComparer.Ordinal).ToArray(),
 			McpServerProfile.TestAgent => TestAgentToolNames.OrderBy(static name => name, StringComparer.Ordinal).ToArray(),
 			_ => throw new ArgumentOutOfRangeException(nameof(profile)),
 		};
@@ -213,7 +233,7 @@ public static class McpServerHost
 		}
 		else if (profile == McpServerProfile.Full)
 		{
-			builder.Services
+			var mcp = builder.Services
 				.AddMcpServer(options =>
 				{
 					options.ServerInfo = new() { Name = "maui", Version = version };
@@ -249,6 +269,12 @@ public static class McpServerHost
 				.WithTools<Flows.FlowTools>()
 				.WithTools<Flows.FlowRecordTools>()
 				.WithResources<McpAppResources>();
+
+			// The device layer is the one opt-in part of this profile. It is registered here rather
+			// than folded into the list above so that "the gate is off" and "the tools are absent"
+			// are the same statement in the source a reader checks.
+			if (DevFlowPreviewPolicy.IsMobileCanvasEnabled(previewFlags))
+				mcp.WithTools<DeviceTools>();
 		}
 		else
 		{

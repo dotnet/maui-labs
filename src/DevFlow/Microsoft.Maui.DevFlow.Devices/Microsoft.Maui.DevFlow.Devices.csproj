@@ -6,4 +6,8 @@
     <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Microsoft.Maui.DevFlow.Tests" />
+  </ItemGroup>
+
 </Project>

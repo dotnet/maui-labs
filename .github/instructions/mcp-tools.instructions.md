@@ -79,6 +79,7 @@ If the tool calls a new agent endpoint, add the client method in `Microsoft.Maui
 | `AssertTool.cs` | `maui_assert` | Property assertions |
 | `BatchTools.cs` | `maui_batch` | Batch actions |
 | `CdpTools.cs` | `maui_cdp_evaluate`, `maui_cdp_screenshot`, `maui_cdp_source`, `maui_cdp_webviews` | Blazor WebView CDP |
+| `DeviceTools.cs` | `maui_device_list`, `maui_device_boot`, `maui_device_shutdown`, `maui_device_tap` | Device layer (experimental; **opt-in**, registered only when `DEVFLOW_PREVIEW_MOBILE_CANVAS=true`, and degrades when no device host is installed) |
 | `ExtensionTools.cs` | `maui_extension_list`, `maui_extension_call` | Agent extensions |
 | `FileTools.cs` | `maui_storage_roots`, `maui_files_list`, `maui_files_download`, `maui_files_upload`, `maui_files_delete` | File storage |
 | `InteractionTools.cs` | `maui_tap`, `maui_fill`, `maui_clear`, `maui_key`, `maui_gesture`, `maui_scroll` | User interactions |
