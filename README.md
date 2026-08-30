@@ -74,6 +74,7 @@ A comprehensive MAUI testing, automation, and debugging toolkit. The DevFlow CLI
 - **Real-time streaming** — WebSocket channels for logs, network requests, sensor data, profiler samples, and UI events
 - **Storage access** — read/write app preferences and secure storage
 - **Device introspection** — battery, connectivity, geolocation, display info, and permissions
+- **Evidence bundles** — on-demand, redacted `.mauitrace` snapshots for bug reports, with a preview before anything is shared (`maui devflow evidence`)
 
 | Package | Description |
 |---------|-------------|
@@ -83,6 +84,7 @@ A comprehensive MAUI testing, automation, and debugging toolkit. The DevFlow CLI
 | [![NuGet: Microsoft.Maui.DevFlow.Blazor](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Blazor.svg?label=Microsoft.Maui.DevFlow.Blazor)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Blazor/) | Blazor WebView CDP bridge |
 | [![NuGet: Microsoft.Maui.DevFlow.Blazor.Gtk](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Blazor.Gtk.svg?label=Microsoft.Maui.DevFlow.Blazor.Gtk)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Blazor.Gtk/) | WebKitGTK CDP bridge |
 | [![NuGet: Microsoft.Maui.DevFlow.Driver](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Driver.svg?label=Microsoft.Maui.DevFlow.Driver)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Driver/) | Platform driver library |
+| [![NuGet: Microsoft.Maui.DevFlow.Testing](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Testing.svg?label=Microsoft.Maui.DevFlow.Testing)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Testing/) | Experimental, framework-neutral flow contracts and runner. Android is an engineering pilot; the official MAUI Windows second-platform contract is implemented but not yet qualified by accepted runtime evidence. WPF is a separate experimental backend. |
 | [![NuGet: Microsoft.Maui.DevFlow.Logging](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Logging.svg?label=Microsoft.Maui.DevFlow.Logging)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Logging/) | Buffered JSONL file logger |
 
 ### AI Extensions
@@ -106,6 +108,7 @@ A native macOS AppKit backend for .NET MAUI — run MAUI apps as true AppKit app
 - **Blazor WebView** — via WKWebView
 - **MapKit** — native MapView integration
 - **Essentials** — AppInfo, Battery, Clipboard, Geolocation, Preferences, SecureStorage, Sensors
+- **DevFlow QA** — optional experimental AppKit flow artifacts are labeled `backend=appkit`; they never count as Mac Catalyst qualification
 
 | Package | Description |
 |---------|-------------|

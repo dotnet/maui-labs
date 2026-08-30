@@ -9,7 +9,7 @@ namespace Microsoft.Maui.DevFlow.Driver;
 /// Includes simctl-based permission management and accessibility-based alert detection
 /// using the apple CLI (appledev.tools) for HID tap and accessibility tree queries.
 /// </summary>
-public class iOSSimulatorAppDriver : AppDriverBase
+public class iOSSimulatorAppDriver : AppDriverBase, IAlertDriver
 {
     private static readonly string[] AcceptLabels =
     [
@@ -179,6 +179,29 @@ public class iOSSimulatorAppDriver : AppDriverBase
             await TapCoordinateAsync(button.CenterX, button.CenterY).ConfigureAwait(false);
 
         return alert;
+    }
+
+    public async Task<AlertActionResult> HandleAlertAsync(
+        string? buttonLabel = null,
+        string? expectedRevision = null)
+    {
+        var alert = await DetectAlertAsync().ConfigureAwait(false);
+        if (alert is null || alert.Buttons.Count == 0)
+            return new(alert, MatchesExpected: true, Dismissed: false);
+        if (!string.IsNullOrEmpty(expectedRevision) &&
+            !string.Equals(expectedRevision, AlertRevision.Create(alert), StringComparison.Ordinal))
+        {
+            return new(alert, MatchesExpected: false, Dismissed: false);
+        }
+
+        var button = buttonLabel is not null
+            ? alert.Buttons.FirstOrDefault(b => b.Label.Equals(buttonLabel, StringComparison.OrdinalIgnoreCase))
+            : alert.Buttons.FirstOrDefault(b => AcceptLabels.Contains(b.Label, StringComparer.OrdinalIgnoreCase))
+                ?? alert.Buttons[0];
+        if (button is null)
+            return new(alert, MatchesExpected: true, Dismissed: false);
+        await TapCoordinateAsync(button.CenterX, button.CenterY).ConfigureAwait(false);
+        return new(alert, MatchesExpected: true, Dismissed: true);
     }
 
     /// <summary>

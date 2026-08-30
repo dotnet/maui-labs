@@ -49,8 +49,10 @@
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Microsoft.Maui.DevFlow.Agent.IntegrationTests.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Blazor.Gtk/Microsoft.Maui.DevFlow.Blazor.Gtk.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Blazor/Microsoft.Maui.DevFlow.Blazor.csproj" />
+    <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Devices/Microsoft.Maui.DevFlow.Devices.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Driver/Microsoft.Maui.DevFlow.Driver.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Logging/Microsoft.Maui.DevFlow.Logging.csproj" />
+    <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Testing/Microsoft.Maui.DevFlow.Testing.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Tests/Microsoft.Maui.DevFlow.Tests.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Inspector.Tests/Microsoft.Maui.DevFlow.Inspector.Tests.csproj" />
   </Folder>

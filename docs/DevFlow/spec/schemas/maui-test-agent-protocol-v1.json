@@ -1,0 +1,225 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/dotnet/maui-labs/main/docs/DevFlow/spec/schemas/maui-test-agent-protocol-v1.json",
+  "title": "MAUI DevFlow restricted test-agent protocol v1",
+  "description": "Provider-neutral, bounded authoring and replay protocol. Agent requests are persisted until an owner-token approval host decides them; opaque grants are human-issued and never represented by an authorization-bearing schema default.",
+  "type": "object",
+  "required": [ "schema", "requestId", "idempotencyKey", "target", "correlation", "provenance", "intent", "deadlineMs", "policyVersion" ],
+  "properties": {
+    "schema": { "const": 1 },
+    "requestId": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "idempotencyKey": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "target": { "$ref": "#/$defs/target" },
+    "correlation": { "$ref": "#/$defs/correlation" },
+    "provenance": { "$ref": "#/$defs/provenance" },
+    "intent": { "type": "string", "minLength": 1, "maxLength": 1024, "description": "User-visible intent only; it cannot widen policy." },
+    "approvalGrantId": { "type": "string", "minLength": 1, "maxLength": 256, "description": "Required for each mutation and opaque to callers other than the approved actor." },
+    "readCapabilityId": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "deadlineMs": { "type": "integer", "minimum": 1, "maximum": 300000 },
+    "policyVersion": { "const": "test-agent-policy-v1" }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "target": {
+      "type": "object",
+      "required": [ "agentId", "agentInstanceId" ],
+      "properties": {
+        "agentId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "agentInstanceId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "appBuildFingerprint": { "type": "string", "maxLength": 512 },
+        "seedFingerprint": { "type": "string", "maxLength": 512 },
+        "backendStateFingerprint": { "type": "string", "maxLength": 512 }
+      },
+      "additionalProperties": true
+    },
+    "correlation": {
+      "type": "object",
+      "properties": {
+        "authoringSessionId": { "type": "string", "maxLength": 256 },
+        "planId": { "type": "string", "maxLength": 256 },
+        "planRevision": { "type": "integer", "minimum": 0 },
+        "planDigest": { "type": "string", "maxLength": 128 },
+        "flowId": { "type": "string", "maxLength": 256 },
+        "flowRevision": { "type": "integer", "minimum": 0 },
+        "flowDigest": { "type": "string", "maxLength": 128 },
+        "runId": { "type": "string", "maxLength": 256 }
+      },
+      "additionalProperties": true
+    },
+    "provenance": {
+      "type": "object",
+      "required": [ "actorKind", "actorId", "channel", "provider" ],
+      "properties": {
+        "actorKind": { "type": "string", "enum": [ "agent", "human", "host" ] },
+        "actorId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "channel": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "provider": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "intent": { "type": "string", "maxLength": 1024 }
+      },
+      "additionalProperties": true
+    },
+    "mutationScope": {
+      "type": "object",
+      "required": [ "allowedActions", "maxActionCount" ],
+      "properties": {
+        "allowedActions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": { "type": "string", "enum": [ "tap", "fill", "scroll", "navigate", "back", "assert", "run", "cancel", "author-commit", "draft-append" ] }
+        },
+        "allowedSelectors": { "type": "array", "maxItems": 64, "items": { "type": "string", "maxLength": 512 } },
+        "allowedRoutes": { "type": "array", "maxItems": 64, "items": { "type": "string", "maxLength": 512 } },
+        "allowedSideEffectClasses": { "type": "array", "maxItems": 16, "items": { "type": "string", "maxLength": 128 } },
+        "maxActionCount": { "type": "integer", "minimum": 1, "maximum": 64 },
+        "maxValueBytes": { "type": "integer", "minimum": 0, "maximum": 65536 }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "allowedActions": { "contains": { "const": "author-commit" } }
+            },
+            "required": [ "allowedActions" ]
+          },
+          "then": {
+            "properties": {
+              "allowedActions": {
+                "minItems": 1,
+                "maxItems": 1,
+                "items": { "const": "author-commit" }
+              },
+              "maxActionCount": { "const": 1 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "allowedActions": { "contains": { "const": "run" } }
+            },
+            "required": [ "allowedActions" ]
+          },
+          "then": {
+            "properties": {
+              "allowedActions": {
+                "minItems": 1,
+                "maxItems": 1,
+                "items": { "const": "run" }
+              },
+              "maxActionCount": { "const": 1 }
+            }
+          }
+        }
+      ],
+      "additionalProperties": true
+    },
+    "approvalSubmit": {
+      "type": "object",
+      "required": [ "envelope", "kind", "scope" ],
+      "properties": {
+        "envelope": { "$ref": "#" },
+        "kind": {
+          "type": "string",
+          "enum": [ "exploration", "draft-change", "assertion", "commit", "run" ]
+        },
+        "scope": { "$ref": "#/$defs/mutationScope" },
+        "expiresAt": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": true
+    },
+    "approvalRecord": {
+      "type": "object",
+      "required": [ "schema", "approvalRequestId", "kind", "state", "sessionId", "target", "targetState", "correlation", "requestedScope", "createdAt", "expiresAt" ],
+      "properties": {
+        "schema": { "const": 1 },
+        "approvalRequestId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "kind": {
+          "type": "string",
+          "enum": [ "exploration", "draft-change", "assertion", "commit", "run" ]
+        },
+        "state": {
+          "type": "string",
+          "enum": [ "pending", "approved", "rejected", "expired", "stale", "consumed" ]
+        },
+        "sessionId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "intent": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "target": { "$ref": "#/$defs/target" },
+        "targetState": {
+          "allOf": [ { "$ref": "#/$defs/target" } ],
+          "properties": {
+            "route": { "type": "string", "maxLength": 2048 },
+            "window": { "type": "string", "maxLength": 512 },
+            "observedAt": { "type": "string", "format": "date-time" }
+          }
+        },
+        "correlation": { "$ref": "#/$defs/correlation" },
+        "requestedScope": { "$ref": "#/$defs/mutationScope" },
+        "approvedScope": { "$ref": "#/$defs/mutationScope" },
+        "deviceEffects": {
+          "type": "array",
+          "maxItems": 32,
+          "description": "Bounded, value-safe descriptions of device mutations embedded in the exact flow bound by correlation.flowDigest. Present for run approvals only.",
+          "items": { "type": "string", "maxLength": 320 }
+        },
+        "deviceEffectsDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "decidedAt": { "type": "string", "format": "date-time" },
+        "decidedBy": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Bounded, non-secret label naming the issuing surface that claims to have decided this request, such as 'workbench/inspector-server' or 'cli/maui-cli'. Self-asserted provenance only: it is not attested, never grants or widens authority, and is excluded from the approval confirmation digest."
+        },
+        "reasonCode": { "type": "string", "maxLength": 128 },
+        "grantId": {
+          "type": "string",
+          "maxLength": 256,
+          "description": "Present only in read-capability-authenticated authoring-session status after approval. Approval list and decision responses omit it."
+        },
+        "grantExpiresAt": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": true
+    },
+    "error": {
+      "type": "object",
+      "required": [ "code", "category", "retryable" ],
+      "properties": {
+        "code": { "type": "string", "maxLength": 128 },
+        "category": { "type": "string", "maxLength": 128 },
+        "retryable": { "type": "boolean" },
+        "message": { "type": "string", "maxLength": 1024 },
+        "artifactRefs": { "type": "array", "maxItems": 32 }
+      },
+      "additionalProperties": true
+    },
+    "auditEntry": {
+      "type": "object",
+      "required": [ "sequence", "at", "kind", "policyDecision" ],
+      "properties": {
+        "sequence": { "type": "integer", "minimum": 1 },
+        "at": { "type": "string", "format": "date-time" },
+        "kind": { "type": "string", "maxLength": 128 },
+        "requestId": { "type": "string", "maxLength": 256 },
+        "sessionId": { "type": "string", "maxLength": 256 },
+        "agentId": { "type": "string", "maxLength": 256 },
+        "agentInstanceId": { "type": "string", "maxLength": 256 },
+        "planRevision": { "type": "integer", "minimum": 0 },
+        "flowRevision": { "type": "integer", "minimum": 0 },
+        "runId": { "type": "string", "maxLength": 256 },
+        "policyDecision": { "type": "string", "maxLength": 128 },
+        "decidedBy": { "type": "string", "maxLength": 128 },
+        "intentDigest": { "type": "string", "maxLength": 128 },
+        "grantDigest": { "type": "string", "maxLength": 128 },
+        "actionDigest": { "type": "string", "maxLength": 128 },
+        "resultDigest": { "type": "string", "maxLength": 128 },
+        "errorCode": { "type": "string", "maxLength": 128 }
+      },
+      "additionalProperties": true
+    }
+  }
+}

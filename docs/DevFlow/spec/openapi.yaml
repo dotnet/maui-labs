@@ -580,6 +580,30 @@ paths:
           $ref: "#/components/responses/InternalError"
 
   # ──────────────────────── UI Element Properties ──────────────────────
+  /api/v1/ui/elements/{id}/properties:
+    get:
+      operationId: getElementPropertyDescriptors
+      tags: [ui]
+      summary: Get editable element property descriptors
+      description: >
+        Returns the running control's supported property editors, current formatted values,
+        safe/default and explicit-override writability, value-source provenance, mutation safety,
+        enum choices, and numeric constraints. Clients should prefer these runtime descriptors over
+        a static control-type table.
+      parameters:
+        - $ref: "#/components/parameters/ElementIdPath"
+      responses:
+        "200":
+          description: Runtime property descriptors for the element.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/element-property-descriptors.json"
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/ui/elements/{id}/properties/{name}:
     get:
       operationId: getElementProperty
@@ -676,8 +700,10 @@ paths:
       tags: [webview]
       summary: Execute JavaScript in WebView
       description: >
-        Evaluates a JavaScript expression inside a WebView context and returns
-        the result.
+        Evaluates a JavaScript expression inside a WebView context and returns the result. This
+        low-level endpoint can read or change application data. Interactive Inspector hosts require
+        explicit confirmation before calling it; direct API callers are responsible for equivalent
+        authorization and user intent.
       requestBody:
         required: true
         content:

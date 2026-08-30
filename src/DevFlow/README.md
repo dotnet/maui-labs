@@ -15,6 +15,7 @@ A comprehensive testing, automation, and debugging toolkit for .NET MAUI applica
 | **Microsoft.Maui.DevFlow.Blazor.Gtk** | Blazor CDP bridge for WebKitGTK on Linux. |
 | **Microsoft.Maui.DevFlow.CLI** | DevFlow command implementation used by the unified `maui devflow` CLI surface for automation, debugging, and MCP server support. |
 | **Microsoft.Maui.DevFlow.Driver** | Platform-aware app driver for iOS, Android, Mac Catalyst, Windows, and Linux. |
+| **Microsoft.Maui.DevFlow.Testing** | Experimental public preview of framework-neutral flow contracts, Markdown parsing, validation, recording, and replay. It is independent of CLI, broker, Inspector, MCP, and test-framework adapters. |
 | **Microsoft.Maui.DevFlow.Logging** | Buffered rotating JSONL file logger. No MAUI dependency. |
 
 ## Quick Start
@@ -159,23 +160,45 @@ These options apply to all `maui devflow` subcommands:
 | `--platform`, `-p` | Target platform (maccatalyst, android, ios, windows) |
 | `--no-json` | Force human-readable output |
 
-## Platform Support
+## Test Workbench platform qualification
 
-| Platform | Status |
-|----------|--------|
-| Mac Catalyst | ✅ |
-| iOS Simulator | ✅ |
-| Linux/GTK | ✅ |
-| Android | 🔄 In progress |
-| Windows | 🔄 In progress |
+The Testing package is a `net9.0` library and has compile-only consumers for .NET 9/.NET 10,
+Android, iOS, Mac Catalyst, Windows, and experimental AppKit. Compilation and general agent
+availability do **not** qualify a platform runtime. The required all-platform completion gate is
+Android, iOS, Mac Catalyst, and Windows:
+
+| Required platform | Workbench qualification status |
+|---|---|
+| Android | Engineering pilot only; currently **not-qualified** because the required real-device first-attempt evidence is absent. Emulator artifacts remain pilot evidence only. |
+| iOS | Required gate not yet qualified. |
+| Mac Catalyst | Required gate not yet qualified. |
+| Windows | Required gate not yet qualified. |
+
+| Separately reported experimental platform | Status |
+|---|---|
+| macOS AppKit | Experimental AppKit fixture and advisory macOS handoff; it never waives a Mac Catalyst gate. |
+| WPF | Experimental; it does not waive the Windows gate. |
+| GTK/Linux | Experimental; it does not waive any required MAUI gate. |
+
+The macOS package-consumer job is an Apple **compile** smoke before a publish; it does not launch
+an app, simulator, or device. A macOS QA handoff is still required for iOS and Mac Catalyst
+runtime evidence. Detailed QA scripts are intentionally owned by the `platform-qa-scripts` todo.
+The independent Appium lane is black-box smoke coverage, not the DevFlow flow-execution kernel or
+a qualification pass.
 
 ## Documentation
 
+- [DevFlow Web Inspector and MAUI DevFlow Inspector hosts](../../docs/DevFlow/inspector.md)
 - [Broker Architecture](../../docs/DevFlow/broker.md)
 - [Protocol Spec](../../docs/DevFlow/spec/README.md)
+- [Human-authored Testing and platform qualification](../../docs/DevFlow/testing.md)
+- [Restricted test-agent protocol](../../docs/DevFlow/test-agent.md)
+- [Evidence privacy and artifact trust](../../docs/DevFlow/evidence.md)
+- [Preview API and contract compatibility policy](../../docs/DevFlow/compatibility.md)
 - [Android Setup](../../docs/DevFlow/setup-guides/android-setup.md)
 - [Apple Platforms Setup](../../docs/DevFlow/setup-guides/apple-platforms-setup.md)
 - [Windows Setup](../../docs/DevFlow/setup-guides/windows-setup.md)
+- [Independent Appium black-box smoke tests](../../docs/DevFlow/appium-smoke-testing.md)
 
 ## Development
 

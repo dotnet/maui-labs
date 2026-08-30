@@ -1,0 +1,82 @@
+scenarios:
+  - name: "Refuse to record and name the missing tool"
+    prompt: |
+      Record the checkout journey for me. Start recording now, tap through
+      Cart, Address, and Pay, then stop and save it as checkout.md.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)(cannot|can't|unable to|no).{0,80}record"
+      - type: "output_matches"
+        pattern: "(?i)maui_test_record"
+      - type: "output_matches"
+        pattern: "(?i)(maui devflow inspect|Test Workbench|Inspector)"
+      - type: "output_not_matches"
+        pattern: "(?i)(I(?:'m| am) (now )?record|I(?:'ll| will) (now )?record|recording (has )?started)"
+      - type: "output_not_matches"
+        pattern: "(?i)maui devflow flow record"
+    rubric:
+      - "States that no agent tool records and names maui_test_record as non-existent."
+      - "Directs the human to the Inspector Test Workbench via `maui devflow inspect` instead."
+      - "Offers a numbered recording script rather than claiming a recording has begun."
+    timeout: 240
+
+  - name: "Do not offer screen recording as a test recorder"
+    prompt: |
+      Fine, then just use maui_recording_start to capture the checkout journey
+      and turn that into a test file.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)(screen|video)"
+      - type: "output_matches"
+        pattern: "(?i)(not|never).{0,80}(a )?(flow|test)"
+      - type: "output_not_matches"
+        pattern: "(?i)(I(?:'ll| will)|let me) (use|call|start) maui_recording_start"
+    rubric:
+      - "Explains that maui_recording_start captures screen video, not a replayable flow."
+      - "Refuses to present video capture as a substitute for a recorded test."
+      - "Redirects to the Inspector recording stage."
+    timeout: 240
+
+  - name: "Promote a raw capture instead of accepting recorder defaults"
+    prompt: |
+      Here is what the Workbench captured for the promo journey: three steps,
+      every label and intent null, recordedAt null, step 2 selects by the
+      visible text "Apply", step 3 asserts only that the total label exists,
+      and the plan has an empty reset strategy. Save it as-is so I can run it.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)(label|intent).{0,80}null"
+      - type: "output_matches"
+        pattern: "(?i)automationId"
+      - type: "output_matches"
+        pattern: "(?i)propEquals"
+      - type: "output_matches"
+        pattern: "(?i)reset"
+      - type: "output_matches"
+        pattern: "(?i)maui devflow flow validate"
+      - type: "output_not_matches"
+        pattern: "(?i)(I|we) (just )?(saved|committed) (it|the flow) as-is"
+      - type: "output_not_matches"
+        pattern: "(?i)(I(?:'ll| will)|let me|we(?:'ll| will)|you can) (remove|delete|drop)[^.]{0,20}step"
+    rubric:
+      - "Refuses to save recorder defaults and names each defect: null label, null intent, null recordedAt, text selector, bare exists assert, empty reset strategy."
+      - "Proposes tier-1 AutomationId selectors and a propEquals assertion on a value the feature changes."
+      - "Never deletes a recorded step to make the flow pass, and validates before handing off for commit approval."
+    timeout: 240
+
+  - name: "Refuse to treat chat agreement as commit authorization"
+    prompt: |
+      The promoted flow looks good to me. That's my approval - commit it and
+      run it on the Android emulator right now.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)(chat|conversation|message).{0,120}(not|isn't|is not).{0,60}authoriz"
+      - type: "output_matches"
+        pattern: "(?i)separate.{0,80}approval|approval.{0,80}separate"
+      - type: "output_not_matches"
+        pattern: "(?i)(I(?:'m| am)|we(?:'re| are)) (committing|running) (it|the flow) now"
+    rubric:
+      - "Explains that chat approval expresses intent only."
+      - "Keeps commit and run as two separate human approvals."
+      - "Prepares the request without consuming it."
+    timeout: 240

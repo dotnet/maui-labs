@@ -231,11 +231,11 @@ channels:
 
   # ── Sensor Readings Stream ──────────────────────────────────────────────
   sensors:
-    address: /ws/v1/device/sensors
+    address: /ws/v1/sensors
     description: |
-      Live sensor data streaming. Connect with query parameters to specify the
-      sensor, reading speed, and throttle interval. Supports subscribing to
-      different sensors or changing settings over the same connection.
+      Read-only live sensor data streaming. Start and configure the sensor first
+      through the mutation-lease-protected HTTP endpoint, then connect with the
+      sensor query parameter to receive readings.
     servers:
       - $ref: '#/servers/agent'
     bindings:
@@ -249,16 +249,6 @@ channels:
               type: string
               enum: [accelerometer, barometer, compass, gyroscope, magnetometer, orientation]
               description: Sensor to subscribe to (required).
-            speed:
-              type: string
-              enum: [UI, Game, Fastest, Default]
-              default: UI
-              description: Reading speed preset.
-            throttleMs:
-              type: integer
-              default: 100
-              minimum: 0
-              description: Minimum milliseconds between readings.
     messages:
       # ── server → client ──
       sensorSubscribed:
@@ -269,7 +259,7 @@ channels:
         payload:
           type: object
           description: Sensor subscription confirmation.
-          required: [type, timestamp, data]
+          required: [type, timestamp, sensor, sensorName, throttleMs]
           properties:
             type:
               type: string
@@ -278,19 +268,25 @@ channels:
             timestamp:
               $ref: './schemas/common.json#/$defs/Timestamp'
               description: UTC timestamp when this message was produced.
-            data:
+            sensor:
               type: object
-              required: [sensor, speed, throttleMs]
+              required: [name, available, active]
               properties:
-                sensor:
+                name:
                   type: string
                   description: Name of the subscribed sensor.
-                speed:
-                  type: string
-                  description: Active reading speed.
-                throttleMs:
-                  type: number
-                  description: Active throttle interval in milliseconds.
+                available:
+                  type: boolean
+                  description: Whether the sensor is available on the current device.
+                active:
+                  type: boolean
+                  description: Whether the sensor was started through the HTTP control endpoint.
+            sensorName:
+              type: string
+              description: Name of the subscribed sensor.
+            throttleMs:
+              type: integer
+              description: Active throttle interval in milliseconds.
 
       sensorReading:
         name: sensorReading
@@ -778,12 +774,11 @@ operations:
     description: |
       Sends a replay of recent requests on connect, followed by individual
       request events as new HTTP traffic is captured. Also sends detail
-      responses and buffer-cleared confirmations in reply to client commands.
+      responses in reply to client commands.
     messages:
       - $ref: '#/channels/network/messages/networkReplay'
       - $ref: '#/channels/network/messages/networkRequest'
       - $ref: '#/channels/network/messages/networkDetails'
-      - $ref: '#/channels/network/messages/networkCleared'
 
   receiveNetworkCommands:
     action: receive
@@ -791,11 +786,10 @@ operations:
       $ref: '#/channels/network'
     summary: Client sends commands to the network channel.
     description: |
-      Clients can request full details for a captured request or clear the
-      request buffer.
+      Clients can request full details for a captured request. Clearing the
+      buffer uses the mutation-lease-protected HTTP endpoint.
     messages:
       - $ref: '#/channels/network/messages/networkGetDetails'
-      - $ref: '#/channels/network/messages/networkClear'
 
   # ── Logs ─────────────────────────────────────────────────────────────────
   sendLogEvents:

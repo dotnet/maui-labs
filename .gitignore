@@ -430,6 +430,11 @@ screenshot_*.png
 .comet_sample_bid
 sim_tap.py
 
+# DevFlow evidence bundles — capture app logs, network traffic, visual tree and
+# screenshots from a running app, so they must never be committed by accident.
+*.mauitrace
+maui-traces/
+
 # Personal / per-machine agent state
 .claude/settings.local.json
 .claude/skills/**/.skill-version

@@ -108,6 +108,11 @@
           "type": "string",
           "description": "Display name of the application."
         },
+        "processId": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Operating-system process ID of the exact running app instance. Used for process-scoped desktop tooling."
+        },
         "version": {
           "type": "string",
           "description": "Application version string."
