@@ -7,10 +7,16 @@
     <UseMaui>true</UseMaui>
     <SingleProject>true</SingleProject>
     <ApplicationTitle>MauiTodo</ApplicationTitle>
-    <ApplicationId>com.companyname.mauitodo</ApplicationId>
+    <!-- This AppKit-only fixture must never share a bundle identity with the Mac Catalyst sample. -->
+    <ApplicationId>com.companyname.mauitodo.appkit</ApplicationId>
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
     <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- The reset/seed extension is compiled only into the explicit Debug AppKit QA build. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug' and '$(DevFlowIntegrationTest)' == 'true'">
+    <DefineConstants>$(DefineConstants);DEVFLOW_INTEGRATION_TEST</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,7 +31,14 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj" />
     <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Blazor\Microsoft.Maui.DevFlow.Blazor.csproj" />
+    <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Analyzers\Microsoft.Maui.DevFlow.Analyzers.csproj"
+                      ReferenceOutputAssembly="false"
+                      OutputItemType="Analyzer" />
   </ItemGroup>
+
+  <Import Project="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Core\buildTransitive\Microsoft.Maui.DevFlow.Agent.Core.props" />
+  <Import Project="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Core\buildTransitive\Microsoft.Maui.DevFlow.Agent.Core.targets" />
+  <Import Project="..\..\platforms\MacOS\src\MacOS.BlazorWebView\buildTransitive\Microsoft.Maui.Platforms.MacOS.BlazorWebView.targets" />
 
   <!-- Link shared source files from DevFlow.Sample -->
   <ItemGroup>
@@ -39,6 +52,7 @@
     <Compile Include="..\DevFlow.Sample\NetworkTestPage.xaml.cs" Link="NetworkTestPage.xaml.cs" />
     <Compile Include="..\DevFlow.Sample\TodoService.cs" Link="TodoService.cs" />
     <Compile Include="..\DevFlow.Sample\TodoItem.cs" Link="TodoItem.cs" />
+    <Compile Include="..\DevFlow.Sample\IntegrationTestState.cs" Link="IntegrationTestState.cs" />
     <Compile Include="..\DevFlow.Sample\MultiBlazorPage.xaml.cs" Link="MultiBlazorPage.xaml.cs" />
     <Compile Include="..\DevFlow.Sample\DebugFileLogger.cs" Link="DebugFileLogger.cs" />
   </ItemGroup>

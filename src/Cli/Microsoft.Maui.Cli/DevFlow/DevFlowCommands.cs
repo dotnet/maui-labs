@@ -1636,6 +1636,11 @@ public class DevFlowCommands
             platformOption,
             output,
             static () => _errorOccurred = true));
+        flowCommand.Add(Flows.FlowStudyCommands.Create(
+            jsonOption,
+            noJsonOption,
+            output,
+            static () => _errorOccurred = true));
         flowCommand.Add(Flows.FlowCommitCommands.Create(
             jsonOption,
             noJsonOption,

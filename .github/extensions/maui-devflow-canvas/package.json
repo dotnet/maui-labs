@@ -1,0 +1,20 @@
+{
+  "name": "maui-devflow-canvas",
+  "version": "0.1.0-preview.12",
+  "private": true,
+  "type": "module",
+  "description": "MAUI DevFlow Inspector host for GitHub Copilot Canvas — embeds the existing DevFlow Web Inspector for a running .NET MAUI app.",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "scripts": {
+    "start": "node extension.mjs",
+    "selftest": "node selftest.mjs",
+    "selftest:recorder": "node selftest-recorder.mjs",
+    "test": "node --test \"test/**/*.test.mjs\""
+  },
+  "dependencies": {
+    "@github/copilot-sdk": "^1.0.0",
+    "@maui-devflow/client": "file:../../../src/DevFlow/js/devflow-client"
+  }
+}

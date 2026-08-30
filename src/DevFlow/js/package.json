@@ -1,0 +1,19 @@
+{
+  "name": "@maui-devflow/js",
+  "version": "0.1.0-preview.12",
+  "private": true,
+  "description": "JavaScript/TypeScript packages for the MAUI DevFlow Inspector hosts and shared client.",
+  "workspaces": [
+    "devflow-client",
+    "vscode-inspector"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test:inspector && npm run test --workspaces --if-present",
+    "test:inspector": "node --test \"test/**/*.test.mjs\"",
+    "package:vsix": "npm run package:vsix -w maui-devflow-inspector"
+  }
+}

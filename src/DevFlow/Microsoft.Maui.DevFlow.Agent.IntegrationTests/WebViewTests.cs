@@ -490,4 +490,70 @@ public class WebViewTests : IntegrationTestBase
             App.InvalidateBlazorReady();
         }
     }
+
+    [Fact]
+    public async Task DefaultContext_FollowsActiveShellPage_AfterMultiBlazor()
+    {
+        App.InvalidateBlazorReady();
+        try
+        {
+            await NavigateToPageAsync("//multiblazor", "BlazorLeft");
+
+            var timeoutMs = Platform switch
+            {
+                "ios" => 60000,
+                "android" or "windows" => 90000,
+                _ => 45000,
+            };
+            var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            JsonElement contexts = default;
+            while (DateTime.UtcNow < deadline)
+            {
+                contexts = await Client.GetCdpWebViewsAsync();
+                var items = EnumerateContexts(contexts).ToList();
+                if (items.Count >= 2 && items.Count(IsReadyContext) >= 2)
+                    break;
+                await Task.Delay(500);
+            }
+
+            Assert.True(
+                EnumerateContexts(contexts).Count(IsReadyContext) >= 2,
+                $"Expected both multi-Blazor contexts to be ready. Last response: {contexts}");
+
+            await Client.SendCdpCommandAsync(
+                "Runtime.evaluate",
+                JsonNode.Parse("""{"expression":"window.__devflowContext = 'right'"}"""),
+                "BlazorRight");
+
+            await Client.NavigateAsync("//blazor");
+            App.InvalidateBlazorReady();
+            await EnsureOnBlazorPageAsync();
+
+            await Client.SendCdpCommandAsync(
+                "Runtime.evaluate",
+                JsonNode.Parse("""{"expression":"window.__devflowContext = 'main'"}"""),
+                "BlazorWebView");
+            var defaultResult = await Client.SendCdpCommandAsync(
+                "Runtime.evaluate",
+                JsonNode.Parse("""{"expression":"window.__devflowContext"}"""));
+
+            Assert.Contains("\"value\":\"main\"", defaultResult.ToString());
+
+            contexts = await Client.GetCdpWebViewsAsync();
+            var active = EnumerateContexts(contexts)
+                .Where(context =>
+                    context.TryGetProperty("active", out var activeProperty) &&
+                    activeProperty.ValueKind == JsonValueKind.True)
+                .ToList();
+            var activeContext = Assert.Single(active);
+            Assert.Equal(
+                "BlazorWebView",
+                activeContext.GetProperty("automationId").GetString());
+        }
+        finally
+        {
+            await NavigateToMainPageAsync();
+            App.InvalidateBlazorReady();
+        }
+    }
 }

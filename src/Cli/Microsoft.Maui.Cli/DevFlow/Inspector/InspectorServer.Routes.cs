@@ -37,6 +37,7 @@ public sealed partial class InspectorServer
             "/api/getProperties" => await HandleProxyGetPropertiesAsync(request.Body),
             "/api/getProperty" => await HandleProxyGetPropertyAsync(request.Body),
             "/api/setProperty" => await HandleProxySetPropertyAsync(request.Body),
+            "/api/persistProperty" => await HandlePersistPropertyAsync(request.Body),
             "/api/navigate" => await HandleProxyNavigateAsync(request.Body),
             "/api/checkpoint" => await HandleCheckpointAsync(request.Body),
             "/api/checkpoint/save" => await HandleResumeCheckpointAsync("save"),
@@ -110,6 +111,23 @@ public sealed partial class InspectorServer
     private sealed record InspectorAsset(string ResourceName, string ContentType);
 
     /// <summary>
+    /// An Inspector panel whose browser code calls a route that only some layers serve. The page
+    /// hides a panel that is not advertised here, so a tab can never fetch a route this server
+    /// answers with 404. <c>InspectorPreviewFeatureFlagTests</c> probes each route and asserts the
+    /// flag matches what <see cref="HandlePostRouteAsync"/> actually handles.
+    /// </summary>
+    internal sealed record InspectorOptionalSurface(string MetaName, string Route, bool Served);
+
+    internal static readonly IReadOnlyList<InspectorOptionalSurface> OptionalSurfaces =
+    [
+        // Layout diagnostics and the managed device host are served by later layers. Their browser
+        // modules ship here so the panels stay one file, but they stay hidden until the route
+        // exists.
+        new("devflow-surface-layout-diagnostics", "/api/diagnostics/layout", Served: false),
+        new("devflow-surface-device-host", "/api/device/host", Served: false),
+    ];
+
+    /// <summary>
     /// Every browser asset this layer actually embeds. The table is deliberately exhaustive: an
     /// entry with no matching file under <c>DevFlow/Inspector/Web/</c> would advertise a page the
     /// server cannot serve, so new modules are added here only together with the file itself.
@@ -118,6 +136,28 @@ public sealed partial class InspectorServer
         new Dictionary<string, InspectorAsset>(StringComparer.Ordinal)
         {
             ["/devflow.js"] = new("devflow.js", "application/javascript"),
+            ["/inspector-api.js"] = new("inspector-api.js", "application/javascript"),
+            ["/inspector-dialog.js"] = new("inspector-dialog.js", "application/javascript"),
+            ["/inspector-data-context.js"] = new("inspector-data-context.js", "application/javascript"),
+            ["/inspector-data-controller.js"] = new("inspector-data-controller.js", "application/javascript"),
+            ["/inspector-data-ui.js"] = new("inspector-data-ui.js", "application/javascript"),
+            ["/inspector-diagnostics.js"] = new("inspector-diagnostics.js", "application/javascript"),
+            ["/inspector-video.js"] = new("inspector-video.js", "application/javascript"),
+            ["/inspector-evidence.js"] = new("inspector-evidence.js", "application/javascript"),
+            ["/inspector-study.js"] = new("inspector-study.js", "application/javascript"),
+            ["/inspector-agent-requests.js"] = new("inspector-agent-requests.js", "application/javascript"),
+            ["/inspector-host-bridge.js"] = new("inspector-host-bridge.js", "application/javascript"),
+            ["/inspector-workbench.js"] = new("inspector-workbench.js", "application/javascript"),
+            ["/inspector-plan.js"] = new("inspector-plan.js", "application/javascript"),
+            ["/inspector-steps.js"] = new("inspector-steps.js", "application/javascript"),
+            ["/inspector-run.js"] = new("inspector-run.js", "application/javascript"),
+            ["/inspector-trace.js"] = new("inspector-trace.js", "application/javascript"),
+            ["/inspector-repair.js"] = new("inspector-repair.js", "application/javascript"),
+            ["/inspector-improve.js"] = new("inspector-improve.js", "application/javascript"),
+            ["/inspector-source.js"] = new("inspector-source.js", "application/javascript"),
+            ["/inspector-properties.js"] = new("inspector-properties.js", "application/javascript"),
+            ["/inspector-tree.js"] = new("inspector-tree.js", "application/javascript"),
             ["/devflow.css"] = new("devflow.css", "text/css"),
+            ["/inspector-workbench.css"] = new("inspector-workbench.css", "text/css"),
         };
 }

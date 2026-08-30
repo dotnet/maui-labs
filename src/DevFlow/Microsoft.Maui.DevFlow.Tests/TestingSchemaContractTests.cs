@@ -180,6 +180,128 @@ public class TestingSchemaContractTests
     }
 
     [Fact]
+    public void XamlSourceProposalContract_RoundTripsSourceSpecificApprovalFields()
+    {
+        const string json = """
+            {
+              "schema": 1,
+              "proposalId": "xamlproposal_1",
+              "state": "awaiting-host-apply",
+              "operation": {
+                "operationId": "xamlop_1",
+                "kind": "add-literal-automation-id",
+                "fileRelativePath": "Views/MainPage.xaml",
+                "sourceHash": "0123456789abcdef",
+                "sourceAnchor": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "attribute": "AutomationId",
+                "newLiteral": "SaveButton"
+              },
+              "element": {
+                "elementType": "Button",
+                "line": 12,
+                "column": 5,
+                "sourceAnchor": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              "baseContentDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "patch": {
+                "format": "text-replace-v1",
+                "beforeDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "afterDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "start": 42,
+                "length": 0,
+                "replacement": " AutomationId=\"SaveButton\""
+              },
+              "patchDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "affectedFlows": [{ "flowPath": "maui-tests/save.md", "requiresSeparateApproval": true }],
+              "approval": { "state": "approved", "grantDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" },
+              "x-source-extension": true
+            }
+            """;
+
+        var proposal = JsonSerializer.Deserialize(json, MauiTestingJsonContext.Default.MauiXamlSourceProposal);
+
+        Assert.NotNull(proposal);
+        Assert.Equal("Views/MainPage.xaml", proposal!.Operation.FileRelativePath);
+        Assert.Equal("SaveButton", proposal.Operation.NewLiteral);
+        Assert.True(Assert.Single(proposal.AffectedFlows).RequiresSeparateApproval);
+        Assert.True(proposal.ExtensionData!.ContainsKey("x-source-extension"));
+        AssertExtensionRoundTrips(
+            JsonSerializer.Serialize(proposal, MauiTestingJsonContext.Default.MauiXamlSourceProposal),
+            "x-source-extension");
+    }
+
+    [Fact]
+    public void CSharpSourceProposalContract_RoundTripsIDEHandoffFields()
+    {
+        const string json = """
+            {
+              "schema": 1,
+              "language": "CSharp",
+              "proposalId": "csharpproposal_1",
+              "state": "awaiting-host-apply",
+              "operation": {
+                "operationId": "csharpop_1",
+                "kind": "add-literal-automation-id",
+                "fileRelativePath": "Views/MainPage.cs",
+                "sourceHash": "0123456789abcdef",
+                "sourceAnchor": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "symbolId": "global::Page.save",
+                "semanticType": "global::Microsoft.Maui.Controls.Button",
+                "attribute": "AutomationId",
+                "newLiteral": "SaveButton",
+                "spanStart": 42,
+                "spanLength": 18
+              },
+              "element": {
+                "elementType": "Button",
+                "path": "Views/MainPage.cs",
+                "sourceAnchor": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "spanStart": 42,
+                "spanLength": 18,
+                "symbolId": "global::Page.save",
+                "semanticType": "global::Microsoft.Maui.Controls.Button"
+              },
+              "baseContentDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "patch": {
+                "format": "text-replace-v1",
+                "beforeDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "afterDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "start": 42,
+                "length": 0,
+                "replacement": " AutomationId = \"SaveButton\""
+              },
+              "rollbackPatch": {
+                "format": "text-replace-v1",
+                "beforeDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "afterDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "start": 42,
+                "length": 28,
+                "replacement": ""
+              },
+              "patchDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "rollbackPatchDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+              "apply": {
+                "state": "awaiting-host-apply",
+                "hostKind": "vscode",
+                "preContentDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "patchDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+              },
+              "x-csharp-source-extension": true
+            }
+            """;
+
+        var proposal = JsonSerializer.Deserialize(json, MauiTestingJsonContext.Default.MauiCSharpSourceProposal);
+
+        Assert.NotNull(proposal);
+        Assert.Equal("CSharp", proposal!.Language);
+        Assert.Equal("Views/MainPage.cs", proposal.Operation.FileRelativePath);
+        Assert.True(proposal.ExtensionData!.ContainsKey("x-csharp-source-extension"));
+        AssertExtensionRoundTrips(
+            JsonSerializer.Serialize(proposal, MauiTestingJsonContext.Default.MauiCSharpSourceProposal),
+            "x-csharp-source-extension");
+    }
+
+    [Fact]
     public void ArtifactTrustContracts_RoundTripWithSourceGeneratedContext()
     {
         const string json = """

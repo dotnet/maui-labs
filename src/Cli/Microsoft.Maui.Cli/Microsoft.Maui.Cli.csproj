@@ -35,6 +35,9 @@
     <PackageReference Include="Spectre.Console" />
     <PackageReference Include="Websocket.Client" />
     <PackageReference Include="Xamarin.Android.Tools.AndroidSdk" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" />
+    <PackageReference Include="Microsoft.Build.Locator" />
     <PackageReference Include="Xamarin.Apple.Tools.MaciOS" />
     <!-- XenoAtom.Terminal.UI requires .NET 10 (uses C# 14 extension members).
          On net9.0 we fall back to JSON output for the network monitor. -->
@@ -64,6 +67,7 @@
     <ProjectReference Include="..\..\DevFlow\Microsoft.Maui.DevFlow.Driver\Microsoft.Maui.DevFlow.Driver.csproj" />
     <ProjectReference Include="..\..\DevFlow\Microsoft.Maui.DevFlow.Devices\Microsoft.Maui.DevFlow.Devices.csproj" />
     <ProjectReference Include="..\..\DevFlow\Microsoft.Maui.DevFlow.Testing\Microsoft.Maui.DevFlow.Testing.csproj" />
+    <ProjectReference Include="..\..\DevFlow\Microsoft.Maui.DevFlow.Analyzers\Microsoft.Maui.DevFlow.Analyzers.csproj" />
     <ProjectReference Include="..\..\Go\Server\Microsoft.Maui.Go.Server.csproj" Condition="'$(TargetFramework)' == 'net10.0'" />
   </ItemGroup>
 
