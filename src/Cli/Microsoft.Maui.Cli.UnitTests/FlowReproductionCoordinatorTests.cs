@@ -68,6 +68,7 @@ public sealed class FlowReproductionCoordinatorTests
         Assert.False(result.Ok);
         Assert.Equal(MauiArtifactTrustStates.Untrusted, result.Report.TrustState);
         Assert.Contains("flowDigest-mismatch", result.Report.ReasonCodes);
+        Assert.Equal("indeterminate", result.Report.FailureCorrespondence);
     }
 
     [Fact]
@@ -85,6 +86,7 @@ public sealed class FlowReproductionCoordinatorTests
 
         Assert.False(result.Ok);
         Assert.Contains("platform-mismatch", result.Report.ReasonCodes);
+        Assert.Equal("indeterminate", result.Report.FailureCorrespondence);
     }
 
     [Fact]
@@ -160,6 +162,7 @@ public sealed class FlowReproductionCoordinatorTests
 
         Assert.False(result.Ok);
         Assert.False(result.Report.Matched);
+        Assert.Equal("same-failure", result.Report.FailureCorrespondence);
         Assert.Contains("normalized-payload-identity-unproven", result.Report.ReasonCodes);
         Assert.DoesNotContain("normalized-payload-identity-unavailable", result.Report.ReasonCodes);
         Assert.DoesNotContain("normalized-payload-identity-differs", result.Report.ReasonCodes);

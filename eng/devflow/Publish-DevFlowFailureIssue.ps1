@@ -999,7 +999,7 @@ function New-IssueBody {
         "maui devflow flow identity --resolve $($Handoff['testIdentitySha256']) --platform $($Handoff['platform'])",
         '```',
         '',
-        'Run it from a trusted checkout of the commit above; `matched-superseded` means the flow was edited since this run. To have an agent triage this issue, assign it to Copilot and select the `devflow-ci-repair` agent. That agent proposes a reviewable repair and cannot run the test itself, so validate on a real device before closing. This issue is a handoff, not repair authority.'
+        'Run it from a trusted checkout of the commit above; `matched-superseded` means the flow was edited since this run. For the complete local workflow, open this issue in Copilot on a machine with the required emulator or device and use the `maui-devflow-ci-fix` skill. If it is not installed, run `maui devflow init --scope project --target github` first. The skill validates this issue, downloads only the named evidence, reproduces before editing, reruns after the change, and leaves the worktree uncommitted for developer review. The hosted `devflow-ci-repair` agent can only propose an unverified change because it cannot run the local MAUI target. This issue is a handoff, not repair authority.'
     )
 
     $payload = $payloadLines -join "`n"

@@ -147,6 +147,7 @@ public class MauiArtifactTrustEvaluatorTests
         Assert.NotEqual(MauiArtifactTrustStates.LocallyReproduced, evaluation.Verification.State);
         Assert.False(evaluation.Binding.Matched);
         Assert.Contains(evaluation.Verification.Reasons, reason => reason.Code == "packageDigest-mismatch");
+        Assert.Contains(evaluation.Verification.Reasons, reason => reason.Code == "failure-correspondence-same");
         Assert.DoesNotContain(evaluation.Verification.Reasons, reason => reason.Code == "normalized-payload-identity-matched");
     }
 

@@ -10,3 +10,4 @@
 #   mcp-server:PLUGIN-NAME:server-name - MCP server declaration in plugin.json
 #
 # To get clean, remove entries as the underlying dependency is resolved.
+script:maui-devflow-ci-fix:scripts/Resolve-DevFlowCiFailureIssue.ps1

@@ -73,3 +73,21 @@ scenarios:
       - "Notes that a re-run may have overwritten the first failure's artifact if the name lacked run_attempt."
       - "Does not authorize ignoring the result."
     timeout: 240
+
+  - name: "Route a requested local fix to the local CI fix skill"
+    prompt: |
+      Here is a bot-authored devflow-ci-failure issue. I have the matching
+      Android emulator locally. Do not just summarize it: reproduce it, fix the
+      app or test, rerun it, and leave me the diff.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)maui-devflow-ci-fix"
+      - type: "output_matches"
+        pattern: "(?i)(local reproduction|flow reproduce)"
+      - type: "output_matches"
+        pattern: "(?i)(uncommitted|Source Control|worktree diff)"
+    rubric:
+      - "Recognizes that CI-only triage is not the requested completion route."
+      - "Routes the device-backed issue-to-diff request to maui-devflow-ci-fix."
+      - "Does not invent a helper skill for operator-run flow execution."
+    timeout: 180

@@ -1,19 +1,17 @@
 ---
 name: maui-devflow-test
 description: >-
-  Collaboratively author, review, run, diagnose, and hand off safe MAUI DevFlow
-  tests through the restricted test-agent MCP profile. USE FOR: any request to
-  create, review, save, run, repair, or improve a UI test against a
-  connected/running MAUI app; restating a flow described in words as a test;
-  conversational test planning; AutomationId-based journeys; committed-flow
-  execution; selector triage; repair handoff; CI-evidence interpretation; and
-  app-testability recommendations. DO NOT USE FOR: promoting an existing
-  Inspector recording into a named flow (use maui-devflow-record); operator-run
-  `maui devflow flow` CLI execution (use maui-devflow-run-cli); editing
-  xUnit/integration-test source unless the user explicitly asks for a code-based
-  unit or integration test; broad app automation; source editing; automatic
-  selector repair; treating chat approval as authorization; or choosing
-  ambiguous projects, targets, artifacts, agents, devices, or selectors.
+  Collaboratively author, review, run, diagnose, and hand off safe DevFlow
+  tests through the restricted test-agent MCP profile. USE FOR: creating or
+  changing a test against a connected MAUI app; word-described flows;
+  AutomationId journeys; committed-flow execution; selector triage; repair
+  handoff; CI evidence interpretation; and testability recommendations. DO NOT
+  USE FOR: promoting an Inspector recording (use maui-devflow-record);
+  operator-run flow CLI execution; code-based xUnit or integration tests; taking
+  a `devflow-ci-failure` issue through local source editing and rerun (use
+  maui-devflow-ci-fix); broad app automation; source editing; automatic repair;
+  chat as authorization; or choosing ambiguous projects, targets, artifacts,
+  agents, devices, or selectors.
 ---
 
 # MAUI DevFlow Collaborative Testing
@@ -23,16 +21,15 @@ Use this skill for a human-and-agent testing conversation backed by
 the human operator owns the review boundary and owns approval, commit, run,
 and repair decisions.
 **Current availability:** approval is issued by an owner-token approval host.
-Three exist: the `maui devflow approve` CLI, the VS Code Inspector, and the
-GitHub Copilot Canvas Inspector. Each reads the owner-only approval token from
-the local broker state file, shows the exact scope for confirmation, and
-performs the digest-bound single-use confirmation ceremony. The editor hosts
-show a native modal first; the approval inbox they present requires
-`DEVFLOW_PREVIEW_AGENT_AUTHORING`. None of them proves a human rather than a
-local agent decided: an agent running as the same OS user can read the same
-token. Standalone browser tabs and chat are non-authoritative and cannot issue a
-grant at all. If no approval host is running, stop at an inert draft or a
-pending, rejected, or expired request.
+Two exist: the `maui devflow approve` CLI and the VS Code Inspector. The CLI is
+operator convenience rather than a human-attestation boundary. VS Code shows a
+native modal before reading the owner-only token and completing the
+digest-bound single-use confirmation ceremony; its approval inbox requires
+`DEVFLOW_PREVIEW_AGENT_AUTHORING`. Neither proves a human rather than a local
+agent decided because both run as the same OS user. The Copilot Canvas,
+standalone browser tabs, and chat are non-authoritative and cannot issue a
+grant. If no approval host is available, stop at an inert draft or a pending,
+rejected, or expired request.
 
 ## Tool Inventory
 
@@ -141,14 +138,16 @@ when deciding whether to ask a question.
 | Discuss a selector change | [repair](references/repair.md) |
 | Make the app easier to test | [testability](references/testability.md) |
 | Interpret CI evidence or prepare a handoff | [ci-handoff](references/ci-handoff.md) |
+| Take a CI failure through local reproduction, source edit, and rerun | `maui-devflow-ci-fix` |
 
 If a request spans routes, complete the least-effectful route first. For
 example, diagnose a failure before discussing a repair, and prepare an inert
 draft before asking a human to commit it.
 
-`maui-devflow-record` and `maui-devflow-run-cli`, named in the frontmatter, ship
-in the `dotnet-maui` marketplace plugin rather than the `maui devflow init`
-bundle. If one is not installed, say so and stay inside the routes above.
+`maui-devflow-record` ships in the `dotnet-maui` marketplace plugin rather than
+the `maui devflow init` bundle. Operator-run execution uses the
+`maui devflow flow` command family directly. If the recording skill is not
+installed, say so and stay inside the routes above.
 
 ## Conversational Intake
 

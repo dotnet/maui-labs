@@ -373,26 +373,27 @@ IDs/provenance, or executes imported content. A new local run is performed by th
 build/source/package/failure/checkpoint drift, infrastructure or unknown completion, unsupported
 artifacts/targets, and missing required independent-oracle declarations.
 
-`local-reproduction.json` grants no repair authority. Even an exact CLI match is diagnostic-only:
-the CLI-to-broker binding and capability are memory-only, so it cannot unlock repair. Continue
-with the human-gated sequence:
+`local-reproduction.json` grants no broker repair authority. Even an exact CLI match cannot issue a
+`maui_test_patch` apply grant because the CLI-to-broker binding is memory-only. That does not require
+a second generic test-management UI for ordinary coding work. When the developer asks local Copilot
+to fix the failure, use the `maui-devflow-ci-fix` skill:
 
-1. Open the Inspector with the committed test and original diagnostic:
+1. validate the bot-authored issue and workflow run through its bundled resolver;
+2. download only the deterministic handoff and platform evidence artifacts;
+3. resolve the one-way test identity to exactly one current committed flow;
+4. run `maui devflow flow reproduce` on the exact local project and device before editing;
+5. require `failureCorrespondence: same-failure` with no separate flow/source/platform/runtime,
+   evidence, completion, or cleanup blocker, then classify the fresh local result as test drift,
+   app regression, infrastructure, or inconclusive;
+6. for test drift, make the narrow proven flow edit and run `maui devflow flow commit`; for an app
+   regression, fix the app and leave the test unchanged;
+7. run `maui devflow flow run` again on the same target and report its actual verification state;
+8. leave the ordinary worktree diff uncommitted for review in Source Control.
 
-```powershell
-maui devflow inspect --test maui-tests\checkout.md --trace downloaded\flow-run.json
-```
-
-2. Import the original diagnostic through the Inspector Workbench **Trace** path.
-3. Choose **Reproduce locally** to prepare the broker-owned reproduction. Native approval can be
-   completed only in a trusted VS Code Inspector or GitHub Copilot Canvas host when the broker
-   reports approval available and the host advertises `nativeApproval`; standalone browser and chat
-   remain non-authoritative.
-4. Verify the matching broker-owned reproduction against the current flow, app, target, failure,
-   and checkpoint facts.
-5. Only then open **Repair** review.
-
-Never infer broker authority from the CLI report.
+Imported evidence alone never permits an edit. Infrastructure, inconclusive, superseded, ambiguous,
+unknown-completion, truncated, or non-reproducing cases stop without a source change. The Inspector
+remains available for MAUI-specific tree, screenshot, property, and recorder diagnosis, but it is
+not the approval or diff surface for this workflow.
 
 ## Current activation state
 

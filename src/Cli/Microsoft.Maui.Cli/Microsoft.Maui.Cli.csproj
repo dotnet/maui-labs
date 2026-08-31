@@ -102,6 +102,9 @@
     <EmbeddedResource Include="..\..\..\plugins\dotnet-maui\skills\maui-devflow-ci-triage\**\*" LogicalName="devflow.skills/maui-devflow-ci-triage/%(RecursiveDir)%(Filename)%(Extension)">
       <WithCulture>false</WithCulture>
     </EmbeddedResource>
+    <EmbeddedResource Include="..\..\..\plugins\dotnet-maui\skills\maui-devflow-ci-fix\**\*" LogicalName="devflow.skills/maui-devflow-ci-fix/%(RecursiveDir)%(Filename)%(Extension)">
+      <WithCulture>false</WithCulture>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup>
