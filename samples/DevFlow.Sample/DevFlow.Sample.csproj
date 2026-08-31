@@ -38,6 +38,14 @@
     <!-- WorkManager gives DevFlow a real background job to list, force-run via adb, and assert on. -->
     <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
         <PackageReference Include="Xamarin.AndroidX.Work.Runtime" />
+        <!-- Work.Runtime asks for 1.2.x of these two -Ktx packages, whose classes AndroidX has
+             since merged into their base packages. The MAUI baseline pulls the merged 1.3.0
+             bases in, so the old -Ktx packages both conflict on version and duplicate classes
+             at dex time. Referencing the matching 1.3.0 -Ktx facades directly settles both.
+             Lifecycle.Service is matched to the baseline Lifecycle.Runtime for the same reason. -->
+        <PackageReference Include="Xamarin.AndroidX.Concurrent.Futures.Ktx" />
+        <PackageReference Include="Xamarin.AndroidX.Tracing.Tracing.Ktx" />
+        <PackageReference Include="Xamarin.AndroidX.Lifecycle.Service" />
     </ItemGroup>
 
     <ItemGroup>

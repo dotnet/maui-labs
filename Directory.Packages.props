@@ -18,6 +18,11 @@
 
   <ItemGroup Label="AndroidX">
     <PackageVersion Include="Xamarin.AndroidX.Work.Runtime" Version="$(XamarinAndroidXWorkRuntimeVersion)" />
+    <PackageVersion Include="Xamarin.AndroidX.Concurrent.Futures.Ktx" Version="$(XamarinAndroidXKtxFacadeVersion)" />
+    <PackageVersion Include="Xamarin.AndroidX.Tracing.Tracing.Ktx" Version="$(XamarinAndroidXKtxFacadeVersion)" />
+    <!-- Work.Runtime pins Lifecycle.Service to the 2.8.7 line while the MAUI baseline resolves
+         Lifecycle.Runtime 2.9.x; matching the two keeps restore warning-free. -->
+    <PackageVersion Include="Xamarin.AndroidX.Lifecycle.Service" Version="$(XamarinAndroidXLifecycleServiceVersion)" />
   </ItemGroup>
 
   <!-- Microsoft Extensions (versions from eng/Versions.props, flowing via maestro) -->

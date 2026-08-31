@@ -25,12 +25,16 @@
   </PropertyGroup>
   <PropertyGroup Label="AndroidX">
     <!-- WorkManager: used by DevFlow.Sample to exercise background job inspection/triggering.
-         Held at 2.11.1.1 deliberately. 2.11.2.1 requires Xamarin.AndroidX.Core 1.19.0.1, which
-         absorbed the core-ktx classes; that collides with the Core.Core.Ktx 1.16.0.3 the MAUI
-         baseline pulls in and fails dexing with "androidx.core.animation.AnimatorKt is defined
-         multiple times". 2.11.1.1 requires Core 1.17.0.2, which predates the merge.
-         Revisit when the MAUI AndroidX baseline moves to Core 1.19+. -->
-    <XamarinAndroidXWorkRuntimeVersion>2.11.1.1</XamarinAndroidXWorkRuntimeVersion>
+         Held at 2.10.0.5 because it is the newest version whose *complete* dependency graph is
+         available on this repo's feeds. From 2.10.1 on, WorkManager depends on Room 2.7+, which
+         AndroidX split into KMP-style sub-packages (Room.Runtime.Android, Room.Common.JVM,
+         Sqlite.Android, Sqlite.Framework.Android). Those sub-packages are not mirrored to
+         dotnet-public, so restore fails with NU1101 in CI even though it succeeds on a machine
+         with a warm package cache. Room 2.6.x, which 2.10.0.5 uses, predates the split.
+         Revisit once the Room/Sqlite platform packages are mirrored. -->
+    <XamarinAndroidXWorkRuntimeVersion>2.10.0.5</XamarinAndroidXWorkRuntimeVersion>
+    <XamarinAndroidXKtxFacadeVersion>1.3.0.1</XamarinAndroidXKtxFacadeVersion>
+    <XamarinAndroidXLifecycleServiceVersion>2.9.2.1</XamarinAndroidXLifecycleServiceVersion>
   </PropertyGroup>
   <PropertyGroup Label="Dotnet Runtime / Extensions">
     <MicrosoftExtensionsDependencyInjectionVersion>10.0.5</MicrosoftExtensionsDependencyInjectionVersion>
