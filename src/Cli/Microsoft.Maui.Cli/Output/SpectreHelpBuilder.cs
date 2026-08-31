@@ -138,8 +138,11 @@ static class SpectreHelpBuilder
 
 		var options = command.Options.Where(o => !o.Hidden && !IsBuiltIn(o)).ToList();
 
-		// Walk all ancestor commands to collect inherited/recursive options
-		foreach (var ancestor in command.Parents.OfType<Command>())
+		// Walk the full ancestor chain to collect inherited/recursive options.
+		// Symbol.Parents contains direct parents, not the transitive command ancestry.
+		for (var ancestor = command.Parents.OfType<Command>().FirstOrDefault();
+			 ancestor is not null;
+			 ancestor = ancestor.Parents.OfType<Command>().FirstOrDefault())
 		{
 			foreach (var globalOpt in ancestor.Options.Where(o => !o.Hidden && !IsBuiltIn(o) && o.Recursive))
 			{

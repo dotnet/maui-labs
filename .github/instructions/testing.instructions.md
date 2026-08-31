@@ -52,12 +52,30 @@ dotnet test --logger "console;verbosity=detailed"
 
 ## CI Matrix
 
-Tests run on **macOS and Windows** in CI (`.github/workflows/_build.yml`):
+The matrix is per product (`.github/workflows/ci-{product}.yml` calling `_build.yml`), defaulting
+to **macOS and Windows**. DevFlow pins `os: '["windows-latest"]'`, so its tests run on Windows only:
 
 - **macOS**: `./eng/common/cibuild.sh --configuration Release --prepareMachine --projects src/DevFlow/DevFlow.slnf`
 - **Windows**: `eng\common\cibuild.cmd -configuration Release -prepareMachine -projects src/DevFlow/DevFlow.slnf`
 
-Test results are uploaded as artifacts: `artifacts/TestResults/**/*.xml`
+Test results are uploaded as artifacts from `artifacts/TestResults/`. The format depends on the
+runner Arcade selects: the default xunit console runner writes `*.xml`, while coverage legs switch
+to the VSTest runner (see `eng/Tests.targets`) which writes `*.trx` plus a `coverage.cobertura.xml`
+per test project.
+
+### Coverage
+
+Products that opt in pass `collect-coverage: true` and `coverage-threshold` to `_build.yml`.
+Coverage is collected and gated on a single matrix leg only (`coverage-os`, default
+`windows-latest`) because the thresholds are calibrated against one OS; the other legs still run
+the tests. A project is held to the threshold only if it sets `EnforceCoverageThreshold` in its
+csproj. See `eng/Tests.targets` and `eng/test.runsettings`.
+
+```powershell
+# Reproduce the CI coverage run locally
+dotnet build src/DevFlow/Microsoft.Maui.DevFlow.Tests/Microsoft.Maui.DevFlow.Tests.csproj `
+  -c Release -t:Test -p:CollectCoverage=true -p:Threshold=30
+```
 
 ## Test Patterns
 

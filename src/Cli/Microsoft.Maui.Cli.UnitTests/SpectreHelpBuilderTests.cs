@@ -174,4 +174,24 @@ public class SpectreHelpBuilderTests
 		var optsIdx = output.IndexOf("Options:");
 		Assert.True(argsIdx < optsIdx, "Arguments section should appear before Options section");
 	}
+
+	[Fact]
+	public void WriteHelp_ChildCommand_ShowsRecursiveAncestorOptions()
+	{
+		var root = new RootCommand();
+		var json = new Option<bool>("--json") { Description = "JSON output", Recursive = true };
+		root.Add(json);
+		var parent = new Command("parent");
+		var noJson = new Option<bool>("--no-json") { Description = "Human output", Recursive = true };
+		parent.Add(noJson);
+		var child = new Command("child");
+		parent.Add(child);
+		root.Add(parent);
+		var console = new TestConsole();
+
+		SpectreHelpBuilder.WriteHelp(child, console);
+
+		Assert.Contains("--json", console.Output);
+		Assert.Contains("--no-json", console.Output);
+	}
 }

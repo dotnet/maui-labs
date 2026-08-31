@@ -588,7 +588,8 @@ public sealed class NativeWindowProbe
             ["isModal"] = TryGetIsModal(element)?.ToString(),
             ["framework"] = string.IsNullOrWhiteSpace(current.FrameworkId) ? null : current.FrameworkId,
             ["isOffscreen"] = current.IsOffscreen.ToString(),
-            ["hasKeyboardFocus"] = current.HasKeyboardFocus.ToString()
+            ["hasKeyboardFocus"] = current.HasKeyboardFocus.ToString(),
+            ["isPassword"] = current.IsPassword.ToString()
         };
 
         return new ElementInfo
