@@ -86,8 +86,11 @@ public static class BrokerClient
         var agents = await ListAgentsAsync(brokerPort);
         if (agents == null) return null;
 
-        var id = AgentRegistration.ComputeId(project, tfm);
-        return agents.FirstOrDefault(a => a.Id == id);
+        var matches = agents
+            .Where(a => AgentMatchesProject(a, project) &&
+                        a.Tfm.Equals(tfm, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        return matches.Length == 1 ? matches[0] : null;
     }
 
     /// <summary>

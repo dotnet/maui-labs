@@ -1,10 +1,19 @@
 name: CI - DevFlow
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
       - 'src/DevFlow/**'
+      - 'tests/DevFlow/**'
+      - 'src/Cli/Microsoft.Maui.Cli/DevFlow/**'
+      - '.github/extensions/maui-devflow-canvas/**'
+      - '.github/extensions/maui-device-canvas/**'
+      - 'plugins/dotnet-maui/**'
+      - '.github/workflows/ci-devflow.yml'
+      - 'docs/DevFlow/**'
+      - 'README.md'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -16,6 +25,14 @@ on:
     branches: [main]
     paths:
       - 'src/DevFlow/**'
+      - 'tests/DevFlow/**'
+      - 'src/Cli/Microsoft.Maui.Cli/DevFlow/**'
+      - '.github/extensions/maui-devflow-canvas/**'
+      - '.github/extensions/maui-device-canvas/**'
+      - 'plugins/dotnet-maui/**'
+      - '.github/workflows/ci-devflow.yml'
+      - 'docs/DevFlow/**'
+      - 'README.md'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'

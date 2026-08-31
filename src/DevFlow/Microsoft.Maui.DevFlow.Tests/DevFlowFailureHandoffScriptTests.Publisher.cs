@@ -146,12 +146,172 @@ public sealed partial class DevFlowFailureHandoffScriptTests
     }
 
     [Fact]
+    public async Task Publisher_DemoLane_VerifiesADemoHandoffWithoutAToken()
+    {
+        var inputs = DemoInputs("publish-demo-verified");
+        var producer = await RunProducerAsync(
+            inputs.ManifestPath,
+            inputs.QualificationPath,
+            "publish-demo-verified",
+            laneKind: "demo-emulator-showcase");
+        Assert.Equal("created", producer.Json.GetProperty("status").GetString());
+
+        var result = await RunPublisherAsync(
+            DemoArchivePath("publish-demo-verified"),
+            verifyOnly: true,
+            gitHubToken: string.Empty,
+            lane: "demo");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("verified", result.Json.GetProperty("status").GetString());
+        Assert.Equal("demo-incident", result.Json.GetProperty("reason").GetString());
+        Assert.StartsWith(
+            "sha256:",
+            result.Json.GetProperty("fingerprint").GetString(),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Publisher_DemoLane_RefusesAProductionHandoff()
+    {
+        var inputs = CreateInputs("publish-cross-production");
+        var producer = await RunProducerAsync(
+            inputs.ManifestPath, inputs.QualificationPath, "publish-cross-production");
+        Assert.Equal("created", producer.Json.GetProperty("status").GetString());
+
+        var result = await RunPublisherAsync(
+            ArchivePath("publish-cross-production"),
+            verifyOnly: true,
+            gitHubToken: string.Empty,
+            lane: "demo");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("ignored-malformed", result.Json.GetProperty("status").GetString());
+        Assert.Equal("manifest-schema-invalid", result.Json.GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    public async Task Publisher_ProductionLane_RefusesADemoHandoff()
+    {
+        var inputs = DemoInputs("publish-cross-demo");
+        var producer = await RunProducerAsync(
+            inputs.ManifestPath,
+            inputs.QualificationPath,
+            "publish-cross-demo",
+            laneKind: "demo-emulator-showcase");
+        Assert.Equal("created", producer.Json.GetProperty("status").GetString());
+
+        var result = await RunPublisherAsync(
+            DemoArchivePath("publish-cross-demo"),
+            verifyOnly: true,
+            gitHubToken: string.Empty,
+            lane: "production");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("ignored-malformed", result.Json.GetProperty("status").GetString());
+        Assert.Equal("manifest-schema-invalid", result.Json.GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    public async Task Publisher_DemoLane_RefusesANonDispatchSourceEvent()
+    {
+        var inputs = DemoInputs("publish-demo-schedule");
+        var producer = await RunProducerAsync(
+            inputs.ManifestPath,
+            inputs.QualificationPath,
+            "publish-demo-schedule",
+            laneKind: "demo-emulator-showcase");
+        Assert.Equal("created", producer.Json.GetProperty("status").GetString());
+
+        var result = await RunPublisherAsync(
+            DemoArchivePath("publish-demo-schedule"),
+            verifyOnly: true,
+            gitHubToken: string.Empty,
+            lane: "demo",
+            sourceEvent: "schedule");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("ignored-unverifiable", result.Json.GetProperty("status").GetString());
+        Assert.Equal("provenance-mismatch", result.Json.GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    public async Task Publisher_DemoAndProductionFingerprints_NeverCollide()
+    {
+        var productionInputs = CreateInputs("fingerprint-production");
+        var demoInputs = DemoInputs("fingerprint-demo");
+        var producedProduction = await RunProducerAsync(
+            productionInputs.ManifestPath, productionInputs.QualificationPath, "fingerprint-production");
+        var producedDemo = await RunProducerAsync(
+            demoInputs.ManifestPath,
+            demoInputs.QualificationPath,
+            "fingerprint-demo",
+            laneKind: "demo-emulator-showcase");
+        Assert.Equal("created", producedProduction.Json.GetProperty("status").GetString());
+        Assert.Equal("created", producedDemo.Json.GetProperty("status").GetString());
+
+        var production = await RunPublisherAsync(
+            ArchivePath("fingerprint-production"),
+            verifyOnly: true,
+            gitHubToken: string.Empty,
+            lane: "production");
+        var demo = await RunPublisherAsync(
+            DemoArchivePath("fingerprint-demo"),
+            verifyOnly: true,
+            gitHubToken: string.Empty,
+            lane: "demo");
+
+        Assert.NotEqual(
+            production.Json.GetProperty("fingerprint").GetString(),
+            demo.Json.GetProperty("fingerprint").GetString());
+    }
+
+    [Fact]
+    public void Publisher_DeclaresDisjointLaneProfiles()
+    {
+        var script = File.ReadAllText(
+            Path.Combine(_repositoryRoot, "eng", "devflow", "Publish-DevFlowFailureIssue.ps1"));
+
+        Assert.Contains("[ValidateSet('production', 'demo')]", script, StringComparison.Ordinal);
+        Assert.Contains("devflow-ci-failure-demo", script, StringComparison.Ordinal);
+        Assert.Contains("devflow-ci-demo-manifest", script, StringComparison.Ordinal);
+        Assert.Contains("devflow-ci-demo-handoff", script, StringComparison.Ordinal);
+        Assert.Contains("devflow-demo-handoff", script, StringComparison.Ordinal);
+        Assert.Contains("[DevFlow CI DEMO - NOT QUALIFIED]", script, StringComparison.Ordinal);
+        Assert.Contains("## Demo handoff (not qualified)", script, StringComparison.Ordinal);
+        Assert.Contains("demo-emulator-showcase", script, StringComparison.Ordinal);
+        // The demo label must never be produced with the production label's identity.
+        Assert.Contains("issueLabel = 'devflow-ci-failure'", script, StringComparison.Ordinal);
+        Assert.Contains("issueLabel = 'devflow-ci-failure-demo'", script, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "labels = @($issueLabel, 'devflow-ci-failure')",
+            script,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Publisher_DeclaresItsMinimumPowerShellVersion()
     {
         var script = File.ReadAllText(
             Path.Combine(_repositoryRoot, "eng", "devflow", "Publish-DevFlowFailureIssue.ps1"));
         Assert.StartsWith("#Requires -Version 7.3", script, StringComparison.Ordinal);
         Assert.Contains("loopback-test-api-requires-verify-only", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Publisher_RoutesQualifiedIssuesToTheLocalCiFixSkill()
+    {
+        var script = File.ReadAllText(
+            Path.Combine(_repositoryRoot, "eng", "devflow", "Publish-DevFlowFailureIssue.ps1"));
+
+        Assert.Contains("use the `maui-devflow-ci-fix` skill", script, StringComparison.Ordinal);
+        Assert.Contains("maui devflow init --scope project --target github", script, StringComparison.Ordinal);
+        Assert.Contains("leaves the worktree uncommitted for developer review", script, StringComparison.Ordinal);
+        Assert.Contains("reproduces before editing", script, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "assign it to Copilot and select the `devflow-ci-repair` agent",
+            script,
+            StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -314,7 +474,8 @@ public sealed partial class DevFlowFailureHandoffScriptTests
         string sourceEvent = SourceEvent,
         int pullRequestNumber = PullRequestNumber,
         string workflowConclusion = "failure",
-        string defaultBranch = DefaultBranch)
+        string defaultBranch = DefaultBranch,
+        string lane = "production")
     {
         var script = Path.Combine(_repositoryRoot, "eng", "devflow", "Publish-DevFlowFailureIssue.ps1");
         using var process = new Process
@@ -335,6 +496,8 @@ public sealed partial class DevFlowFailureHandoffScriptTests
         AddArgument("-NoProfile");
         AddArgument("-File");
         AddArgument(script);
+        AddArgument("-Lane");
+        AddArgument(lane);
         AddArgument("-Repository");
         AddArgument(Repository);
         AddArgument("-WorkflowName");

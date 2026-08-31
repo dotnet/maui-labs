@@ -2,7 +2,7 @@
 
 Distributable agent skills for .NET MAUI development. Installable via the Copilot CLI, Claude Code, or VS Code plugin system.
 
-DevFlow runtime skills are bundled with the `maui` CLI from `plugins/dotnet-maui/skills/` and exposed through the plugin manifest. `maui devflow init` installs the recommended onboarding, debugging, and session-review skills; `maui devflow skills install` or `update` also installs the optional collaborative-testing and artifact-diagnosis skills.
+DevFlow runtime skills are bundled with the `maui` CLI from `plugins/dotnet-maui/skills/` and exposed through the plugin manifest. `maui devflow init` installs the recommended onboarding, debugging, session-review, and local CI-fix skills; `maui devflow skills install` or `update` also installs the optional collaborative-testing and artifact-diagnosis skills.
 
 ## Plugin
 
@@ -13,9 +13,9 @@ DevFlow runtime skills are bundled with the `maui` CLI from `plugins/dotnet-maui
 | | [maui-devflow-session-review](dotnet-maui/skills/maui-devflow-session-review/) | Review opt-in MAUI DevFlow sessions for friction, retries, workarounds, and product feedback. |
 | | [maui-devflow-test](dotnet-maui/skills/maui-devflow-test/) | Collaboratively author, review, run, triage, and hand off human-approved DevFlow tests. |
 | | [maui-devflow-record](dotnet-maui/skills/maui-devflow-record/) | Prepare a human-driven Inspector recording and promote the capture into a reviewable flow. |
-| | [maui-devflow-run-cli](dotnet-maui/skills/maui-devflow-run-cli/) | Run committed DevFlow flows from the terminal with the `maui devflow flow` command family. |
 | | [maui-devflow-ci](dotnet-maui/skills/maui-devflow-ci/) | Wire DevFlow flow execution into GitHub Actions with least-privilege, label-gated jobs. |
 | | [maui-devflow-ci-triage](dotnet-maui/skills/maui-devflow-ci-triage/) | Diagnose a red DevFlow CI run from its artifacts and hand off a bounded local reproduction. |
+| | [maui-devflow-ci-fix](dotnet-maui/skills/maui-devflow-ci-fix/) | Take a trusted DevFlow failure issue through local reproduction, an ordinary worktree fix, rerun, and uncommitted diff handoff. |
 | | [maui-devflow-artifact](dotnet-maui/skills/maui-devflow-artifact/) | Diagnose explicit DevFlow flow-run and `.mauitrace` artifacts through a read-only trust projection. |
 | | [devflow-connect](dotnet-maui/skills/devflow-connect/) | Diagnose and fix DevFlow agent connectivity issues between the `maui` CLI and running .NET MAUI apps. |
 | | [maui-ai-debugging](dotnet-maui/skills/maui-ai-debugging/) | Legacy compatibility skill for older DevFlow clients. |

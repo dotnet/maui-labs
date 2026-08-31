@@ -1,0 +1,369 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/dotnet/maui-labs/main/docs/DevFlow/spec/schemas/maui-artifact-trust-v1.json",
+  "title": "MAUI Imported Artifact Trust v1",
+  "description": "Provider-neutral, bounded metadata for imported diagnostic artifacts. Raw input is intentionally not represented. Internal artifact hashes establish integrity only and never provenance.",
+  "type": "object",
+  "required": [
+    "identity",
+    "artifactKind",
+    "importedAt",
+    "integrity",
+    "verification"
+  ],
+  "properties": {
+    "identity": {
+      "$ref": "#/$defs/ImportedIdentity"
+    },
+    "artifactKind": {
+      "enum": [
+        "flow-run",
+        "mauitrace"
+      ]
+    },
+    "importedAt": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "integrity": {
+      "$ref": "#/$defs/Integrity"
+    },
+    "verification": {
+      "$ref": "#/$defs/Verification"
+    },
+    "projection": {
+      "$ref": "#/$defs/SafeProjection"
+    },
+    "localReproduction": {
+      "$ref": "#/$defs/LocalReproductionBinding"
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "Fingerprint": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "ImportedIdentity": {
+      "type": "object",
+      "required": [
+        "namespace",
+        "id"
+      ],
+      "properties": {
+        "namespace": {
+          "const": "imported-artifact"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^iat_[a-f0-9]{32}$"
+        }
+      },
+      "additionalProperties": true
+    },
+    "TrustState": {
+      "type": "string",
+      "enum": [
+        "untrusted",
+        "attested",
+        "locally-reproduced"
+      ]
+    },
+    "ProvenanceSubject": {
+      "type": "object",
+      "description": "A caller-supplied subject used only after independent verification; embedded artifact content cannot satisfy this contract by itself.",
+      "properties": {
+        "repository": {
+          "type": "string"
+        },
+        "workflow": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "string"
+        },
+        "issuer": {
+          "type": "string"
+        },
+        "artifactDigest": {
+          "type": "string"
+        },
+        "appDigest": {
+          "type": "string"
+        },
+        "packageDigest": {
+          "type": "string"
+        },
+        "flowDigest": {
+          "type": "string"
+        },
+        "platform": {
+          "type": "string"
+        },
+        "deviceProfile": {
+          "type": "string"
+        },
+        "capturedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "policyVersion": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "VerifiedProvenanceFacts": {
+      "type": "object",
+      "required": [
+        "verified",
+        "verifiedBy",
+        "verifiedAt",
+        "subject"
+      ],
+      "properties": {
+        "verified": {
+          "const": true
+        },
+        "verifiedBy": {
+          "type": "string"
+        },
+        "verifiedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "subject": {
+          "$ref": "#/$defs/ProvenanceSubject"
+        }
+      },
+      "additionalProperties": true
+    },
+    "TrustPolicy": {
+      "type": "object",
+      "properties": {
+        "allowAttestation": {
+          "type": "boolean",
+          "default": false
+        },
+        "expectedProvenance": {
+          "$ref": "#/$defs/ProvenanceSubject"
+        },
+        "policyVersion": {
+          "type": "string"
+        },
+        "requireVerifiedIssuer": {
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "Integrity": {
+      "type": "object",
+      "required": [
+        "algorithm",
+        "artifactDigest",
+        "integrityOnly"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "sha256"
+        },
+        "artifactDigest": {
+          "type": "string"
+        },
+        "verified": {
+          "type": "boolean"
+        },
+        "internalHashesPresent": {
+          "type": "boolean"
+        },
+        "internalHashesVerified": {
+          "type": "boolean"
+        },
+        "integrityOnly": {
+          "const": true
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "Reason": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "blocking": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "Omission": {
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "Verification": {
+      "type": "object",
+      "required": [
+        "state",
+        "reasons",
+        "omissions"
+      ],
+      "properties": {
+        "state": {
+          "$ref": "#/$defs/TrustState"
+        },
+        "integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "policyVersion": {
+          "type": "string"
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Reason"
+          }
+        },
+        "omissions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Omission"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "SafeProjection": {
+      "type": "object",
+      "description": "A redacted projection. Fingerprints are one-way hashes; raw source bytes, messages, and embedded IDs are absent.",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "sourceSchema": {
+          "type": "string"
+        },
+        "flowFingerprint": {
+          "$ref": "#/$defs/Fingerprint"
+        },
+        "appBuildFingerprint": {
+          "$ref": "#/$defs/Fingerprint"
+        },
+        "appSourceFingerprint": {
+          "$ref": "#/$defs/Fingerprint"
+        },
+        "packageFingerprint": {
+          "$ref": "#/$defs/Fingerprint"
+        },
+        "platformFingerprint": {
+          "$ref": "#/$defs/Fingerprint"
+        },
+        "deviceProfileFingerprint": {
+          "$ref": "#/$defs/Fingerprint"
+        },
+        "runtimeProfileFingerprint": {
+          "$ref": "#/$defs/Fingerprint"
+        },
+        "capturedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "outcome": {
+          "type": "string"
+        },
+        "failure": {
+          "$ref": "#/$defs/FailureProjection"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "omissions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Omission"
+          }
+        },
+        "embeddedIdentifierDigests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "FailureProjection": {
+      "type": "object",
+      "properties": {
+        "failureKey": {
+          "type": "string",
+          "pattern": "^if_[a-f0-9]{64}$"
+        },
+        "code": {
+          "type": "string"
+        },
+        "class": {
+          "type": "string"
+        },
+        "stepFingerprint": {
+          "$ref": "#/$defs/Fingerprint"
+        },
+        "expectedCheckpointFingerprint": {
+          "$ref": "#/$defs/Fingerprint"
+        },
+        "observedCheckpointFingerprint": {
+          "$ref": "#/$defs/Fingerprint"
+        }
+      },
+      "additionalProperties": true
+    },
+    "LocalReproductionBinding": {
+      "type": "object",
+      "required": [
+        "importedArtifact",
+        "localRunId",
+        "matched",
+        "verification"
+      ],
+      "properties": {
+        "importedArtifact": {
+          "$ref": "#/$defs/ImportedIdentity"
+        },
+        "importedFailureKey": {
+          "type": "string"
+        },
+        "localRunId": {
+          "type": "string",
+          "description": "A distinct broker-owned local run ID, never an imported-artifact ID."
+        },
+        "boundAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "matched": {
+          "type": "boolean"
+        },
+        "verification": {
+          "$ref": "#/$defs/Verification"
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

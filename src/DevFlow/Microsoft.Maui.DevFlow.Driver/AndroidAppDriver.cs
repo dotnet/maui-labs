@@ -8,12 +8,15 @@ namespace Microsoft.Maui.DevFlow.Driver;
 /// Handles adb reverse port forwarding, adb shell commands,
 /// and dialog detection/dismissal via UIAutomator dump.
 /// </summary>
-public class AndroidAppDriver : AppDriverBase
+public class AndroidAppDriver : AppDriverBase, IAlertDriver
 {
     /// <summary>
     /// Optional serial number for targeting a specific device/emulator (adb -s).
     /// </summary>
     public string? Serial { get; set; }
+
+    /// <summary>ADB executable path. Defaults to resolving <c>adb</c> from PATH.</summary>
+    public string AdbPath { get; set; } = "adb";
 
     public override string Platform => "Android";
 
@@ -143,6 +146,24 @@ public class AndroidAppDriver : AppDriverBase
         var btn = FindButtonToTap(alert, buttonLabel);
         await RunAdbAsync($"shell input tap {btn.CenterX} {btn.CenterY}");
         return alert;
+    }
+
+    public async Task<AlertActionResult> HandleAlertAsync(
+        string? buttonLabel = null,
+        string? expectedRevision = null)
+    {
+        var alert = await DetectAlertAsync().ConfigureAwait(false);
+        if (alert is null)
+            return new(null, MatchesExpected: true, Dismissed: false);
+        if (!string.IsNullOrEmpty(expectedRevision) &&
+            !string.Equals(expectedRevision, AlertRevision.Create(alert), StringComparison.Ordinal))
+        {
+            return new(alert, MatchesExpected: false, Dismissed: false);
+        }
+
+        var button = FindButtonToTap(alert, buttonLabel);
+        await RunAdbAsync($"shell input tap {button.CenterX} {button.CenterY}");
+        return new(alert, MatchesExpected: true, Dismissed: true);
     }
 
     /// <summary>
@@ -349,7 +370,7 @@ public class AndroidAppDriver : AppDriverBase
         var args = Serial is not null ? $"-s {Serial} " : "";
         args += $"shell screenrecord --time-limit {effectiveTimeout} {DeviceRecordingPath}";
 
-        var psi = new ProcessStartInfo("adb", args)
+        var psi = new ProcessStartInfo(AdbPath, args)
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -409,7 +430,7 @@ public class AndroidAppDriver : AppDriverBase
     private async Task RunAdbAsync(string arguments)
     {
         var args = Serial is not null ? $"-s {Serial} {arguments}" : arguments;
-        var psi = new ProcessStartInfo("adb", args)
+        var psi = new ProcessStartInfo(AdbPath, args)
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -431,7 +452,7 @@ public class AndroidAppDriver : AppDriverBase
     private async Task<string> RunAdbWithOutputAsync(string arguments)
     {
         var args = Serial is not null ? $"-s {Serial} {arguments}" : arguments;
-        var psi = new ProcessStartInfo("adb", args)
+        var psi = new ProcessStartInfo(AdbPath, args)
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,

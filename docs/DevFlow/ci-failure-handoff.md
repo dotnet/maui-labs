@@ -373,26 +373,27 @@ IDs/provenance, or executes imported content. A new local run is performed by th
 build/source/package/failure/checkpoint drift, infrastructure or unknown completion, unsupported
 artifacts/targets, and missing required independent-oracle declarations.
 
-`local-reproduction.json` grants no repair authority. Even an exact CLI match is diagnostic-only:
-the CLI-to-broker binding and capability are memory-only, so it cannot unlock repair. Continue
-with the human-gated sequence:
+`local-reproduction.json` grants no broker repair authority. Even an exact CLI match cannot issue a
+`maui_test_patch` apply grant because the CLI-to-broker binding is memory-only. That does not require
+a second generic test-management UI for ordinary coding work. When the developer asks local Copilot
+to fix the failure, use the `maui-devflow-ci-fix` skill:
 
-1. Open the Inspector with the committed test and original diagnostic:
+1. validate the bot-authored issue and workflow run through its bundled resolver;
+2. download only the deterministic handoff and platform evidence artifacts;
+3. resolve the one-way test identity to exactly one current committed flow;
+4. run `maui devflow flow reproduce` on the exact local project and device before editing;
+5. require `failureCorrespondence: same-failure` with no separate flow/source/platform/runtime,
+   evidence, completion, or cleanup blocker, then classify the fresh local result as test drift,
+   app regression, infrastructure, or inconclusive;
+6. for test drift, make the narrow proven flow edit and run `maui devflow flow commit`; for an app
+   regression, fix the app and leave the test unchanged;
+7. run `maui devflow flow run` again on the same target and report its actual verification state;
+8. leave the ordinary worktree diff uncommitted for review in Source Control.
 
-```powershell
-maui devflow inspect --test maui-tests\checkout.md --trace downloaded\flow-run.json
-```
-
-2. Import the original diagnostic through the Inspector Workbench **Trace** path.
-3. Choose **Reproduce locally** to prepare the broker-owned reproduction. Native approval can be
-   completed only in a trusted VS Code Inspector or GitHub Copilot Canvas host when the broker
-   reports approval available and the host advertises `nativeApproval`; standalone browser and chat
-   remain non-authoritative.
-4. Verify the matching broker-owned reproduction against the current flow, app, target, failure,
-   and checkpoint facts.
-5. Only then open **Repair** review.
-
-Never infer broker authority from the CLI report.
+Imported evidence alone never permits an edit. Infrastructure, inconclusive, superseded, ambiguous,
+unknown-completion, truncated, or non-reproducing cases stop without a source change. The Inspector
+remains available for MAUI-specific tree, screenshot, property, and recorder diagnosis, but it is
+not the approval or diff surface for this workflow.
 
 ## Current activation state
 
@@ -411,6 +412,54 @@ qualification report with explicit `status: pass` and satisfy all deterministic
 producer checks. A PR run
 may retain such a diagnostic artifact, but only a same-repository default-branch
 schedule or workflow dispatch can reach issue publication.
+
+## The demo lane
+
+A third lane, `demo-emulator-showcase`, exists solely to demonstrate the
+CI-to-local-fix route end to end. It is disjoint from the production lane in
+every observable way and can never be mistaken for it:
+
+| Fact | Production | Demo |
+| --- | --- | --- |
+| Producer `-LaneKind` | `physical-device-flow-qa` | `demo-emulator-showcase` |
+| Device evidence | `physical-device`/`real-device`, `realDevice: true` | `emulator`, `realDevice: false` |
+| Qualification status | must be `pass` | must be `not-qualified` or `fail`; published as nonqualified |
+| Source event | `schedule` or `workflow_dispatch` | `workflow_dispatch` only |
+| Archive schemas | `devflow-ci-failure-manifest` / `devflow-ci-failure-handoff` | `devflow-ci-demo-manifest` / `devflow-ci-demo-handoff` |
+| Handoff artifact | `devflow-failure-handoff-<run>-<attempt>` | `devflow-demo-handoff-<run>-<attempt>` |
+| Evidence artifact | `devflow-flow-evidence-<platform>-<run>-<attempt>` | `devflow-demo-evidence-android-<run>-<attempt>` |
+| Publisher `-Lane` | `production` | `demo` |
+| Issue label | `devflow-ci-failure` | `devflow-ci-failure-demo` |
+| Title prefix | `[DevFlow CI]` | `[DevFlow CI DEMO - NOT QUALIFIED]` |
+| Markers | `devflow-ci-failure*:v1` | `devflow-ci-failure-demo*:v1` |
+| First heading | `## Verified handoff` | `## Demo handoff (not qualified)` |
+| Fingerprint domain | none | `demo-emulator-showcase` |
+| Handoff `qualification` | `qualified` | `not-qualified` |
+| Repair authority | none | none |
+
+The demo lane still runs every strict producer check: the same source-manifest
+validation, artifact inventory, selected flow-run and `.mauitrace` binding,
+truncation and omission rules, provenance, ambiguity, and redaction. It bypasses
+nothing. It simply inverts the qualification gate, because a demo that claimed
+qualification would be a lie.
+
+The `android-demo-ci-fix` job in `devflow-integration.yml` runs only for a
+default-branch `workflow_dispatch` with the `demo-ci-fix` input set. It replays
+`samples/DevFlow.Sample/maui-tests/demo-ci-fix-drift.md`, a committed flow that
+is intended to fail with `locator-not-found` on a trailing action selector, and
+then fails the run deliberately so the workflow conclusion is `failure`. It is
+not a member of `devflow-flow-gate.needs`, it holds only `contents: read`, and
+it uses its own concurrency group so an ordinary main run cannot cancel it. The
+ordinary Android Tier-1 pilot never loads a `demo-`-prefixed flow: that requires
+the explicit `DEVFLOW_FLOW_PILOT_DEMO_FLOW` opt-in, which loads exactly the one
+named demo flow.
+
+Enabling `demo-ci-fix` also suppresses every ordinary platform and flow-QA lane
+for that dispatch, regardless of the `platforms` input. Only the cheap planning,
+static qualification, required-gate bookkeeping, and dedicated demo job run.
+
+No demo artifact, issue, comment, or resolver result is production
+qualification, and none of them grants broker or source repair authority.
 
 ## Repository enablement and residual platform limits
 

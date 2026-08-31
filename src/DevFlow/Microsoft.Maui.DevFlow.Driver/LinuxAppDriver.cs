@@ -7,7 +7,7 @@ namespace Microsoft.Maui.DevFlow.Driver;
 /// Direct localhost connection, no special setup needed (like Windows).
 /// Dialog detection uses the agent's /api/tree endpoint initially.
 /// </summary>
-public class LinuxAppDriver : AppDriverBase
+public class LinuxAppDriver : AppDriverBase, IAlertDriver
 {
     public override string Platform => "Linux";
 
@@ -31,7 +31,7 @@ public class LinuxAppDriver : AppDriverBase
         try
         {
             var tree = await client.GetTreeAsync();
-            return FindAlertInTree(tree);
+            return FindAlertCandidate(tree)?.Info;
         }
         catch
         {
@@ -46,26 +46,22 @@ public class LinuxAppDriver : AppDriverBase
     {
         var client = EnsureClient();
         var tree = await client.GetTreeAsync();
-        var alert = FindAlertInTree(tree);
-        if (alert == null)
+        var candidate = FindAlertCandidate(tree);
+        if (candidate == null)
             throw new InvalidOperationException("No alert detected to dismiss.");
 
         // Find and tap the target button
         var button = buttonLabel != null
-            ? alert.Buttons.FirstOrDefault(b => b.Label.Equals(buttonLabel, StringComparison.OrdinalIgnoreCase))
-            : alert.Buttons.FirstOrDefault();
+            ? candidate.Buttons.FirstOrDefault(b => b.Button.Label.Equals(buttonLabel, StringComparison.OrdinalIgnoreCase))
+            : candidate.Buttons.FirstOrDefault();
 
         if (button == null)
         {
-            var available = string.Join(", ", alert.Buttons.Select(b => b.Label));
+            var available = string.Join(", ", candidate.Info.Buttons.Select(b => b.Label));
             throw new InvalidOperationException($"Button '{buttonLabel}' not found. Available: {available}");
         }
 
-        // The button ID is stored in the label for tree-based detection
-        // We need to query the tree for the actual element ID
-        var buttons = await client.QueryAsync(type: "Button", text: button.Label);
-        if (buttons.Count > 0)
-            await client.TapAsync(buttons[0].Id);
+        await client.TapAsync(button.ElementId);
     }
 
     /// <summary>
@@ -78,6 +74,32 @@ public class LinuxAppDriver : AppDriverBase
 
         await DismissAlertAsync(buttonLabel);
         return alert;
+    }
+
+    public async Task<AlertActionResult> HandleAlertAsync(
+        string? buttonLabel = null,
+        string? expectedRevision = null)
+    {
+        var client = EnsureClient();
+        var tree = await client.GetTreeAsync();
+        var candidate = FindAlertCandidate(tree);
+        if (candidate is null)
+            return new(null, MatchesExpected: true, Dismissed: false);
+        if (!string.IsNullOrEmpty(expectedRevision) &&
+            !string.Equals(expectedRevision, AlertRevision.Create(candidate.Info), StringComparison.Ordinal))
+        {
+            return new(candidate.Info, MatchesExpected: false, Dismissed: false);
+        }
+
+        var target = buttonLabel is not null
+            ? candidate.Buttons.FirstOrDefault(item =>
+                item.Button.Label.Equals(buttonLabel, StringComparison.OrdinalIgnoreCase))
+            : candidate.Buttons.FirstOrDefault();
+        if (target is null)
+            return new(candidate.Info, MatchesExpected: true, Dismissed: false);
+
+        await client.TapAsync(target.ElementId);
+        return new(candidate.Info, MatchesExpected: true, Dismissed: true);
     }
 
     // ──────────────────────────────────────────────
@@ -318,34 +340,41 @@ public class LinuxAppDriver : AppDriverBase
     /// Searches the MAUI visual tree for dialog/alert patterns.
     /// GTK dialogs rendered by Maui.Gtk's GtkAlertManager appear as overlay elements.
     /// </summary>
-    private static AlertInfo? FindAlertInTree(List<ElementInfo> tree)
+    private sealed record LinuxAlertButton(AlertButton Button, string ElementId);
+    private sealed record LinuxAlertCandidate(AlertInfo Info, IReadOnlyList<LinuxAlertButton> Buttons);
+
+    private static LinuxAlertCandidate? FindAlertCandidate(List<ElementInfo> tree)
     {
         foreach (var element in tree)
         {
-            var alert = FindAlertRecursive(element);
+            var alert = FindAlertCandidateRecursive(element);
             if (alert != null) return alert;
         }
         return null;
     }
 
-    private static AlertInfo? FindAlertRecursive(ElementInfo element)
+    private static LinuxAlertCandidate? FindAlertCandidateRecursive(ElementInfo element)
     {
         // Look for common alert dialog patterns in the MAUI tree
         // AlertDialog, DisplayAlert results, etc.
         if (element.Type is "AlertDialog" or "DialogOverlay" or "ModalPage")
         {
-            var buttons = new List<AlertButton>();
+            var buttons = new List<LinuxAlertButton>();
             var title = element.Text;
-            CollectButtons(element, buttons);
+            CollectAlertButtons(element, buttons);
             if (buttons.Count > 0)
-                return new AlertInfo(title, buttons);
+            {
+                return new LinuxAlertCandidate(
+                    new AlertInfo(title, buttons.Select(item => item.Button).ToList()),
+                    buttons);
+            }
         }
 
         if (element.Children != null)
         {
             foreach (var child in element.Children)
             {
-                var alert = FindAlertRecursive(child);
+                var alert = FindAlertCandidateRecursive(child);
                 if (alert != null) return alert;
             }
         }
@@ -353,17 +382,19 @@ public class LinuxAppDriver : AppDriverBase
         return null;
     }
 
-    private static void CollectButtons(ElementInfo element, List<AlertButton> buttons)
+    private static void CollectAlertButtons(ElementInfo element, List<LinuxAlertButton> buttons)
     {
-        if (element.Type == "Button" && element.Text != null)
+        if (element.Type == "Button" && element.Text != null && element.Id is not null)
         {
-            buttons.Add(new AlertButton(element.Text, 0, 0, 0, 0));
+            buttons.Add(new LinuxAlertButton(
+                new AlertButton(element.Text, 0, 0, 0, 0),
+                element.Id));
         }
 
         if (element.Children != null)
         {
             foreach (var child in element.Children)
-                CollectButtons(child, buttons);
+                CollectAlertButtons(child, buttons);
         }
     }
 

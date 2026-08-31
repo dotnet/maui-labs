@@ -42,6 +42,9 @@ param(
 
     [string] $GitHubApiBaseUrl = 'https://api.github.com',
 
+    [ValidateSet('production', 'demo')]
+    [string] $Lane = 'production',
+
     [switch] $VerifyOnly
 )
 
@@ -50,7 +53,6 @@ $ErrorActionPreference = 'Stop'
 
 $expectedWorkflowName = 'DevFlow Integration Tests'
 $expectedWorkflowPath = '.github/workflows/devflow-integration.yml'
-$issueLabel = 'devflow-ci-failure'
 $publisherBotLogin = 'github-actions[bot]'
 $manifestEntryName = 'manifest.json'
 $handoffEntryName = 'handoff.json'
@@ -62,6 +64,72 @@ $maximumCompressionRatio = 100.0
 $maximumJsonSafeInteger = 9007199254740991
 $maximumRunAttempt = 1000
 $script:LoopbackTestApi = $false
+
+# Exactly one lane profile is resolved per invocation, and every lane-specific schema, artifact
+# name, label, title, marker, heading, and fingerprint domain is read from it. The two lanes are
+# disjoint by construction: a production artifact fails demo verification and a demo artifact fails
+# production verification, and neither lane's issues are visible to the other's label query.
+function Get-LanePublisherProfile {
+    param([Parameter(Mandatory)] [string] $Name)
+
+    switch ($Name) {
+        'demo' {
+            return [ordered]@{
+                lane = 'demo'
+                demo = $true
+                manifestSchema = 'devflow-ci-demo-manifest'
+                handoffSchema = 'devflow-ci-demo-handoff'
+                artifactBaseName = 'devflow-demo-handoff'
+                issueLabel = 'devflow-ci-failure-demo'
+                labelColor = 'fbca04'
+                labelDescription = 'Nonqualified DevFlow CI demo handoff; never production qualification'
+                markerPrefix = 'devflow-ci-failure-demo'
+                titlePrefix = '[DevFlow CI DEMO - NOT QUALIFIED]'
+                firstHeading = '## Demo handoff (not qualified)'
+                fingerprintDomain = 'demo-emulator-showcase'
+                requiredQualification = 'not-qualified'
+                requiredCategory = 'test-failure'
+                requiredPlatform = 'android'
+                requiredEvidenceSufficiency = 'sufficient'
+                requiredSourceEvents = @('workflow_dispatch')
+                verifiedReason = 'demo-incident'
+                createdReason = 'demo-incident-created'
+                recurrenceReason = 'demo-incident-recurrence'
+            }
+        }
+        default {
+            return [ordered]@{
+                lane = 'production'
+                demo = $false
+                manifestSchema = 'devflow-ci-failure-manifest'
+                handoffSchema = 'devflow-ci-failure-handoff'
+                artifactBaseName = 'devflow-failure-handoff'
+                issueLabel = 'devflow-ci-failure'
+                labelColor = '5319e7'
+                labelDescription = 'Verified DevFlow CI failure handoff'
+                markerPrefix = 'devflow-ci-failure'
+                titlePrefix = '[DevFlow CI]'
+                firstHeading = '## Verified handoff'
+                fingerprintDomain = ''
+                requiredQualification = 'qualified'
+                requiredCategory = ''
+                requiredPlatform = ''
+                requiredEvidenceSufficiency = ''
+                requiredSourceEvents = @('schedule', 'workflow_dispatch')
+                verifiedReason = 'qualified-failure'
+                createdReason = 'qualified-failure-created'
+                recurrenceReason = 'qualified-failure-recurrence'
+            }
+        }
+    }
+}
+
+$laneProfile = Get-LanePublisherProfile $Lane
+$issueLabel = [string] $laneProfile['issueLabel']
+$expectedHandoffSchema = [string] $laneProfile['handoffSchema']
+$expectedManifestSchema = [string] $laneProfile['manifestSchema']
+$markerPrefix = [string] $laneProfile['markerPrefix']
+$expectedArtifactName = "$([string] $laneProfile['artifactBaseName'])-$RunId-$RunAttempt"
 
 function New-PublisherResult {
     param(
@@ -171,7 +239,7 @@ function Test-TrustedInputs {
 }
 
 function Test-PublicationTrust {
-    if ($SourceEvent -cnotin @('schedule', 'workflow_dispatch')) {
+    if ($SourceEvent -cnotin ([string[]] $laneProfile['requiredSourceEvents'])) {
         return 'source-event-not-publishable'
     }
     if ($PullRequestNumber -ne 0) {
@@ -344,8 +412,8 @@ function Ensure-DedicatedIssueLabel {
     if ($null -eq $label) {
         $label = Invoke-GitHubJson -Method POST -Path "/repos/$Repository/labels" -Body @{
             name = $issueLabel
-            color = '5319e7'
-            description = 'Verified DevFlow CI failure handoff'
+            color = [string] $laneProfile['labelColor']
+            description = [string] $laneProfile['labelDescription']
         }
     }
 
@@ -355,7 +423,7 @@ function Ensure-DedicatedIssueLabel {
 }
 
 function Get-ExpectedArtifact {
-    $expectedName = "devflow-failure-handoff-$RunId-$RunAttempt"
+    $expectedName = $expectedArtifactName
     $matches = [System.Collections.Generic.List[object]]::new()
     $page = 1
 
@@ -760,7 +828,7 @@ function Test-HandoffArchive {
 
         if (-not (Test-JsonObject $manifest) -or
             -not (Test-RequiredString $manifest 'schema') -or
-            -not [string]::Equals([string] $manifest['schema'], 'devflow-ci-failure-manifest', [StringComparison]::Ordinal) -or
+            -not [string]::Equals([string] $manifest['schema'], $expectedManifestSchema, [StringComparison]::Ordinal) -or
             -not $manifest.Contains('version') -or
             -not (Test-JsonIntegerRange $manifest['version'] 1 1) -or
             [Int64] $manifest['version'] -ne 1 -or
@@ -791,7 +859,7 @@ function Test-HandoffArchive {
 
         if (-not (Test-JsonObject $handoff) -or
             -not (Test-RequiredString $handoff 'schema') -or
-            -not [string]::Equals([string] $handoff['schema'], 'devflow-ci-failure-handoff', [StringComparison]::Ordinal) -or
+            -not [string]::Equals([string] $handoff['schema'], $expectedHandoffSchema, [StringComparison]::Ordinal) -or
             -not $handoff.Contains('version') -or
             -not (Test-JsonIntegerRange $handoff['version'] 1 1) -or
             [Int64] $handoff['version'] -ne 1 -or
@@ -869,6 +937,32 @@ function Test-HandoffArchive {
             return [ordered]@{ ok = $false; kind = 'malformed'; reason = 'handoff-enum-invalid' }
         }
 
+        # A demo handoff has to say, in the artifact itself, that it is a demo, which lane produced
+        # it, that the device was an emulator, and that it carries no repair authority. A production
+        # handoff must carry none of those fields: they are what separates the two lanes even if an
+        # attacker renames an artifact.
+        if ($laneProfile['demo']) {
+            if (-not $handoff.Contains('demo') -or $handoff['demo'] -isnot [bool] -or
+                $handoff['demo'] -ne $true -or
+                -not (Test-RequiredString $handoff 'laneKind') -or
+                [string] $handoff['laneKind'] -cne 'demo-emulator-showcase' -or
+                -not (Test-RequiredString $handoff 'deviceEvidenceKind') -or
+                [string] $handoff['deviceEvidenceKind'] -cne 'emulator' -or
+                -not (Test-RequiredString $handoff 'repairAuthority') -or
+                [string] $handoff['repairAuthority'] -cne 'none' -or
+                -not (Test-RequiredString $handoff 'qualificationStatus') -or
+                [string] $handoff['qualificationStatus'] -cnotin @('not-qualified', 'fail')) {
+                return [ordered]@{ ok = $false; kind = 'malformed'; reason = 'handoff-demo-fields-invalid' }
+            }
+        }
+        elseif ($handoff.Contains('demo') -or
+            $handoff.Contains('laneKind') -or
+            $handoff.Contains('deviceEvidenceKind') -or
+            $handoff.Contains('repairAuthority') -or
+            $handoff.Contains('qualificationStatus')) {
+            return [ordered]@{ ok = $false; kind = 'malformed'; reason = 'handoff-lane-fields-unexpected' }
+        }
+
         $archiveHash = "sha256:$((Get-FileHash -LiteralPath $archiveFile.FullName -Algorithm SHA256).Hash.ToLowerInvariant())"
         return [ordered]@{
             ok = $true
@@ -899,6 +993,29 @@ function Get-PublicationDisposition {
     if ([string] $Handoff['outcome'] -eq 'pending' -or [string] $Handoff['qualification'] -eq 'pending') {
         return [ordered]@{ publish = $false; status = 'ignored-pending'; reason = 'artifact-pending' }
     }
+    if ($laneProfile['demo']) {
+        # The demo lane inverts the production qualification gate on purpose: it publishes only a
+        # nonqualified emulator incident, and only from an operator-triggered workflow_dispatch run.
+        # It can never launder a passing qualification into a demo issue, and it can never be read
+        # as production qualification or as repair authority.
+        if ([string] $Handoff['qualification'] -cne 'not-qualified' -or
+            [string] $Handoff['outcome'] -cne 'failure') {
+            return [ordered]@{ publish = $false; status = 'ignored-unverifiable'; reason = 'artifact-disposition-inconsistent' }
+        }
+        if ([string] $Handoff['category'] -cne [string] $laneProfile['requiredCategory'] -or
+            [string] $Handoff['platform'] -cne [string] $laneProfile['requiredPlatform'] -or
+            [string] $Handoff['evidenceSufficiency'] -cne [string] $laneProfile['requiredEvidenceSufficiency']) {
+            return [ordered]@{ publish = $false; status = 'ignored-unverifiable'; reason = 'artifact-demo-classification-unexpected' }
+        }
+        if ($SourceEvent -cnotin ([string[]] $laneProfile['requiredSourceEvents'])) {
+            return [ordered]@{ publish = $false; status = 'ignored-unverifiable'; reason = 'artifact-demo-source-event-unexpected' }
+        }
+        if ($WorkflowConclusion -notin @('failure', 'timed_out')) {
+            return [ordered]@{ publish = $false; status = 'ignored-unverifiable'; reason = 'trusted-run-not-failed' }
+        }
+
+        return [ordered]@{ publish = $true; status = 'qualified'; reason = 'demo-incident' }
+    }
     if ([string] $Handoff['qualification'] -eq 'not-qualified' -or
         [string] $Handoff['evidenceSufficiency'] -eq 'insufficient') {
         return [ordered]@{ publish = $false; status = 'ignored-not-qualified'; reason = 'artifact-not-qualified' }
@@ -916,14 +1033,20 @@ function Get-PublicationDisposition {
 function Get-Fingerprint {
     param([Parameter(Mandatory)] [System.Collections.IDictionary] $Handoff)
 
+    # The production identity is byte-for-byte what it has always been. The demo lane inserts its
+    # own domain, so a demo incident and a production incident for the same test can never collide
+    # on one fingerprint or update one another's issue.
     $identity = @(
         $Repository,
         $WorkflowPath,
         [string] $Handoff['category'],
         [string] $Handoff['platform'],
         [string] $Handoff['testIdentitySha256']
-    ) -join "`n"
-    return Get-Sha256Text $identity
+    )
+    if (-not [string]::IsNullOrEmpty([string] $laneProfile['fingerprintDomain'])) {
+        $identity = @([string] $laneProfile['fingerprintDomain']) + $identity
+    }
+    return Get-Sha256Text ($identity -join "`n")
 }
 
 function Get-RunUrl {
@@ -931,13 +1054,17 @@ function Get-RunUrl {
 }
 
 function Get-OccurrenceMarker {
-    return "<!-- devflow-ci-failure-occurrence:v1 run=$RunId attempt=$RunAttempt -->"
+    return "<!-- $markerPrefix-occurrence:v1 run=$RunId attempt=$RunAttempt -->"
 }
 
 function Get-IssueDataMarker {
     param([Parameter(Mandatory)] [System.Collections.IDictionary] $Handoff)
 
-    return "<!-- devflow-ci-failure-data:v1 category=$($Handoff['category']) platform=$($Handoff['platform']) testIdentity=$($Handoff['testIdentitySha256']) evidence=$($Handoff['evidenceSufficiency']) -->"
+    $marker = "<!-- $markerPrefix-data:v1 category=$($Handoff['category']) platform=$($Handoff['platform']) testIdentity=$($Handoff['testIdentitySha256']) evidence=$($Handoff['evidenceSufficiency'])"
+    if ($laneProfile['demo']) {
+        $marker += " lane=$($Handoff['laneKind']) device=$($Handoff['deviceEvidenceKind']) qualification=$($Handoff['qualification'])"
+    }
+    return "$marker -->"
 }
 
 function New-IssueBody {
@@ -953,58 +1080,114 @@ function New-IssueBody {
     $dataMarker = Get-IssueDataMarker $Handoff
     $runUrl = Get-RunUrl
     $artifactUrl = "https://github.com/$Repository/actions/runs/$RunId/artifacts/$ArtifactId"
+    $verifyCommand =
+        "pwsh ./eng/devflow/Publish-DevFlowFailureIssue.ps1 -VerifyOnly -Lane $($laneProfile['lane']) -ArchivePath ./$($laneProfile['artifactBaseName']).zip -Repository '$Repository' -WorkflowName '$WorkflowName' -WorkflowPath '$WorkflowPath' -SourceEvent '$SourceEvent' -HeadRepository '$HeadRepository' -HeadRef '$HeadRef' -DefaultBranch '$DefaultBranch' -WorkflowConclusion '$WorkflowConclusion' -RunId $RunId -RunAttempt $RunAttempt -CommitSha '$CommitSha' -PullRequestNumber $PullRequestNumber"
 
-    $payloadLines = @(
-        $occurrence,
-        $dataMarker,
-        '',
-        '## Verified handoff',
-        '',
-        'A qualified default-branch DevFlow Integration Tests failure recurred. The publisher read the ZIP without generally extracting it and matched its provenance to the trusted workflow-run API.',
-        '',
-        "- Run: [#$RunId attempt $RunAttempt]($runUrl)",
-        "- Source event: ``$SourceEvent``",
-        '- Pull request: none; PR-originated runs are diagnostic-only and are never published',
-        "- Commit: ``$CommitSha``",
-        "- Category: ``$($Handoff['category'])``",
-        "- Platform: ``$($Handoff['platform'])``",
-        "- Test identity: ``$($Handoff['testIdentitySha256'])``",
-        '',
-        '## Evidence',
-        '',
-        "- Sufficiency: ``$($Handoff['evidenceSufficiency'])``",
-        "- Handoff entry: ``$HandoffSha256``",
-        "- Downloaded ZIP: ``$ArchiveSha256``",
-        "- Failure fingerprint: ``$Fingerprint``",
-        '',
-        'No raw test name, log text, stack trace, untrusted branch name, artifact filename, or model-authored text was copied into this issue.',
-        '',
-        '## Artifact handoff',
-        '',
-        "- Download: [retained workflow artifact]($artifactUrl)",
-        '- Retention: the artifact was unexpired when verified; the producer contract expects 30-day retention.',
-        '- Contents: exactly `manifest.json` and `handoff.json`; do not generally extract the ZIP.',
-        '',
-        '## Local handoff',
-        '',
-        'Download the ZIP to a trusted local checkout, then verify it before using it:',
-        '',
-        '```powershell',
-        "pwsh ./eng/devflow/Publish-DevFlowFailureIssue.ps1 -VerifyOnly -ArchivePath ./devflow-failure-handoff.zip -Repository '$Repository' -WorkflowName '$WorkflowName' -WorkflowPath '$WorkflowPath' -SourceEvent '$SourceEvent' -HeadRepository '$HeadRepository' -HeadRef '$HeadRef' -DefaultBranch '$DefaultBranch' -WorkflowConclusion '$WorkflowConclusion' -RunId $RunId -RunAttempt $RunAttempt -CommitSha '$CommitSha' -PullRequestNumber $PullRequestNumber",
-        '```',
-        '',
-        'After verification, map the test-identity digest to the committed flow that produced it:',
-        '',
-        '```powershell',
-        "maui devflow flow identity --resolve $($Handoff['testIdentitySha256']) --platform $($Handoff['platform'])",
-        '```',
-        '',
-        'Run it from a trusted checkout of the commit above; `matched-superseded` means the flow was edited since this run. To have an agent triage this issue, assign it to Copilot and select the `devflow-ci-repair` agent. That agent proposes a reviewable repair and cannot run the test itself, so validate on a real device before closing. This issue is a handoff, not repair authority.'
-    )
+    if ($laneProfile['demo']) {
+        $payloadLines = @(
+            $occurrence,
+            $dataMarker,
+            '',
+            $laneProfile['firstHeading'],
+            '',
+            'This is a deliberate, operator-triggered demonstration incident. It is emulator-based, it is NOT production qualification, and it grants no broker or source repair authority. The failing flow is a committed demo flow that is intended to fail; nothing here says the product regressed.',
+            '',
+            "- Run: [#$RunId attempt $RunAttempt]($runUrl)",
+            "- Source event: ``$SourceEvent``",
+            '- Pull request: none; PR-originated runs are diagnostic-only and are never published',
+            "- Commit: ``$CommitSha``",
+            "- Category: ``$($Handoff['category'])``",
+            "- Platform: ``$($Handoff['platform'])``",
+            "- Device evidence: ``$($Handoff['deviceEvidenceKind'])``",
+            "- Qualification: ``$($Handoff['qualification'])``",
+            "- Repair authority: ``$($Handoff['repairAuthority'])``",
+            "- Test identity: ``$($Handoff['testIdentitySha256'])``",
+            '',
+            '## Evidence',
+            '',
+            "- Sufficiency: ``$($Handoff['evidenceSufficiency'])``",
+            "- Handoff entry: ``$HandoffSha256``",
+            "- Downloaded ZIP: ``$ArchiveSha256``",
+            "- Failure fingerprint: ``$Fingerprint``",
+            '',
+            'No raw test name, log text, stack trace, untrusted branch name, artifact filename, or model-authored text was copied into this issue.',
+            '',
+            '## Artifact handoff',
+            '',
+            "- Download: [retained workflow artifact]($artifactUrl)",
+            '- Retention: the artifact was unexpired when verified; the producer contract expects 30-day retention.',
+            '- Contents: exactly `manifest.json` and `handoff.json`; do not generally extract the ZIP.',
+            '',
+            '## Local handoff',
+            '',
+            'Download the ZIP to a trusted local checkout, then verify it before using it:',
+            '',
+            '```powershell',
+            $verifyCommand,
+            '```',
+            '',
+            'After verification, map the test-identity digest to the committed flow that produced it:',
+            '',
+            '```powershell',
+            "maui devflow flow identity --resolve $($Handoff['testIdentitySha256']) --platform $($Handoff['platform'])",
+            '```',
+            '',
+            'To walk the local route, open this issue in Copilot on a machine with the required Android emulator and use the `maui-devflow-ci-fix` skill. If it is not installed, run `maui devflow init --scope project --target github` first. The skill still requires a fresh local reproduction of the current committed flow before any editing, exactly as it does for a production incident. This demo issue is a nonqualified diagnostic showcase: it is not production qualification, it is not broker repair authority, and it must not be used to justify a source change on its own.'
+        )
+    }
+    else {
+        $payloadLines = @(
+            $occurrence,
+            $dataMarker,
+            '',
+            '## Verified handoff',
+            '',
+            'A qualified default-branch DevFlow Integration Tests failure recurred. The publisher read the ZIP without generally extracting it and matched its provenance to the trusted workflow-run API.',
+            '',
+            "- Run: [#$RunId attempt $RunAttempt]($runUrl)",
+            "- Source event: ``$SourceEvent``",
+            '- Pull request: none; PR-originated runs are diagnostic-only and are never published',
+            "- Commit: ``$CommitSha``",
+            "- Category: ``$($Handoff['category'])``",
+            "- Platform: ``$($Handoff['platform'])``",
+            "- Test identity: ``$($Handoff['testIdentitySha256'])``",
+            '',
+            '## Evidence',
+            '',
+            "- Sufficiency: ``$($Handoff['evidenceSufficiency'])``",
+            "- Handoff entry: ``$HandoffSha256``",
+            "- Downloaded ZIP: ``$ArchiveSha256``",
+            "- Failure fingerprint: ``$Fingerprint``",
+            '',
+            'No raw test name, log text, stack trace, untrusted branch name, artifact filename, or model-authored text was copied into this issue.',
+            '',
+            '## Artifact handoff',
+            '',
+            "- Download: [retained workflow artifact]($artifactUrl)",
+            '- Retention: the artifact was unexpired when verified; the producer contract expects 30-day retention.',
+            '- Contents: exactly `manifest.json` and `handoff.json`; do not generally extract the ZIP.',
+            '',
+            '## Local handoff',
+            '',
+            'Download the ZIP to a trusted local checkout, then verify it before using it:',
+            '',
+            '```powershell',
+            "pwsh ./eng/devflow/Publish-DevFlowFailureIssue.ps1 -VerifyOnly -ArchivePath ./devflow-failure-handoff.zip -Repository '$Repository' -WorkflowName '$WorkflowName' -WorkflowPath '$WorkflowPath' -SourceEvent '$SourceEvent' -HeadRepository '$HeadRepository' -HeadRef '$HeadRef' -DefaultBranch '$DefaultBranch' -WorkflowConclusion '$WorkflowConclusion' -RunId $RunId -RunAttempt $RunAttempt -CommitSha '$CommitSha' -PullRequestNumber $PullRequestNumber",
+            '```',
+            '',
+            'After verification, map the test-identity digest to the committed flow that produced it:',
+            '',
+            '```powershell',
+            "maui devflow flow identity --resolve $($Handoff['testIdentitySha256']) --platform $($Handoff['platform'])",
+            '```',
+            '',
+            'Run it from a trusted checkout of the commit above; `matched-superseded` means the flow was edited since this run. For the complete local workflow, open this issue in Copilot on a machine with the required emulator or device and use the `maui-devflow-ci-fix` skill. If it is not installed, run `maui devflow init --scope project --target github` first. The skill validates this issue, downloads only the named evidence, reproduces before editing, reruns after the change, and leaves the worktree uncommitted for developer review. The hosted `devflow-ci-repair` agent can only propose an unverified change because it cannot run the local MAUI target. This issue is a handoff, not repair authority.'
+        )
+    }
 
     $payload = $payloadLines -join "`n"
     $bodyDigest = Get-Sha256Text $payload
-    $marker = "<!-- devflow-ci-failure:v1 fingerprint=$Fingerprint body=$bodyDigest -->"
+    $marker = "<!-- ${markerPrefix}:v1 fingerprint=$Fingerprint body=$bodyDigest -->"
     return "$marker`n$payload"
 }
 
@@ -1018,6 +1201,12 @@ function New-RecurrenceComment {
 
     $runUrl = Get-RunUrl
     $artifactUrl = "https://github.com/$Repository/actions/runs/$RunId/artifacts/$ArtifactId"
+    $closing = if ($laneProfile['demo']) {
+        'Verify the retained ZIP with the local handoff command in the issue body before using it. This demo recurrence is nonqualified and grants no repair authority.'
+    }
+    else {
+        'Verify the retained ZIP with the local handoff command in the issue body before using it. This recurrence grants no repair authority.'
+    }
     $payloadLines = @(
         '',
         '## Recurrence',
@@ -1031,12 +1220,12 @@ function New-RecurrenceComment {
         "- Handoff entry: ``$HandoffSha256``",
         "- Downloaded ZIP: ``$ArchiveSha256``",
         '',
-        'Verify the retained ZIP with the local handoff command in the issue body before using it. This recurrence grants no repair authority.'
+        $closing
     )
 
     $payload = $payloadLines -join "`n"
     $bodyDigest = Get-Sha256Text $payload
-    $marker = "<!-- devflow-ci-failure-occurrence:v1 run=$RunId attempt=$RunAttempt body=$bodyDigest -->"
+    $marker = "<!-- $markerPrefix-occurrence:v1 run=$RunId attempt=$RunAttempt body=$bodyDigest -->"
     return "$marker`n$payload"
 }
 
@@ -1078,13 +1267,13 @@ function Get-TrustedIssueBody {
 
     $body = [string] $Issue.body
     if ([string]::IsNullOrWhiteSpace($body) -or $body.Length -gt 65000 -or
-        [regex]::Matches($body, '<!-- devflow-ci-failure:v1 ').Count -ne 1) {
+        [regex]::Matches($body, "<!-- $([regex]::Escape($markerPrefix)):v1 ").Count -ne 1) {
         return [ordered]@{ trusted = $false; reason = 'issue-marker-invalid' }
     }
 
     $markerMatch = [regex]::Match(
         $body,
-        '\A<!-- devflow-ci-failure:v1 fingerprint=(sha256:[0-9a-f]{64}) body=(sha256:[0-9a-f]{64}) -->\n',
+        "\A<!-- $([regex]::Escape($markerPrefix)):v1 fingerprint=(sha256:[0-9a-f]{64}) body=(sha256:[0-9a-f]{64}) -->\n",
         [System.Text.RegularExpressions.RegexOptions]::CultureInvariant)
     if (-not $markerMatch.Success -or
         -not [string]::Equals($markerMatch.Groups[1].Value, $Fingerprint, [StringComparison]::Ordinal)) {
@@ -1099,18 +1288,26 @@ function Get-TrustedIssueBody {
         return [ordered]@{ trusted = $false; reason = 'issue-body-digest-mismatch' }
     }
 
+    $escapedPrefix = [regex]::Escape($markerPrefix)
+    $dataSuffix = if ($laneProfile['demo']) {
+        ' lane=(demo-emulator-showcase) device=(emulator) qualification=(not-qualified)'
+    }
+    else {
+        ''
+    }
     $occurrenceMatches = [regex]::Matches(
         $payload,
-        '(?m)^<!-- devflow-ci-failure-occurrence:v1 run=[1-9][0-9]* attempt=[1-9][0-9]* -->$')
+        "(?m)^<!-- $escapedPrefix-occurrence:v1 run=[1-9][0-9]* attempt=[1-9][0-9]* -->`$")
     $dataMatches = [regex]::Matches(
         $payload,
-        '(?m)^<!-- devflow-ci-failure-data:v1 category=(test-failure|app-crash|timeout|device-failure|harness-failure|infrastructure|unknown) platform=(android|ios|maccatalyst|macos|windows|cross-platform|unknown) testIdentity=(sha256:[0-9a-f]{64}) evidence=(sufficient|partial) -->$')
+        "(?m)^<!-- $escapedPrefix-data:v1 category=(test-failure|app-crash|timeout|device-failure|harness-failure|infrastructure|unknown) platform=(android|ios|maccatalyst|macos|windows|cross-platform|unknown) testIdentity=(sha256:[0-9a-f]{64}) evidence=(sufficient|partial)$dataSuffix -->`$")
+    $firstHeading = [string] $laneProfile['firstHeading']
     if ($occurrenceMatches.Count -ne 1 -or $dataMatches.Count -ne 1 -or
-        -not $payload.StartsWith("$($occurrenceMatches[0].Value)`n$($dataMatches[0].Value)`n`n## Verified handoff`n", [StringComparison]::Ordinal)) {
+        -not $payload.StartsWith("$($occurrenceMatches[0].Value)`n$($dataMatches[0].Value)`n`n$firstHeading`n", [StringComparison]::Ordinal)) {
         return [ordered]@{ trusted = $false; reason = 'issue-template-invalid' }
     }
 
-    $headings = @('## Verified handoff', '## Evidence', '## Artifact handoff', '## Local handoff')
+    $headings = @($firstHeading, '## Evidence', '## Artifact handoff', '## Local handoff')
     $previousIndex = -1
     foreach ($heading in $headings) {
         if ([regex]::Matches($payload, "(?m)^$([regex]::Escape($heading))$").Count -ne 1) {
@@ -1127,7 +1324,7 @@ function Get-TrustedIssueBody {
     $platform = $dataMatches[0].Groups[2].Value
     $testIdentity = $dataMatches[0].Groups[3].Value
     $evidence = $dataMatches[0].Groups[4].Value
-    $expectedTitle = "[DevFlow CI] $category on $platform ($($testIdentity.Substring(7, 12)))"
+    $expectedTitle = "$([string] $laneProfile['titlePrefix']) $category on $platform ($($testIdentity.Substring(7, 12)))"
     if (-not [string]::Equals([string] $Issue.title, $expectedTitle, [StringComparison]::Ordinal)) {
         return [ordered]@{ trusted = $false; reason = 'issue-title-invalid' }
     }
@@ -1147,7 +1344,7 @@ function Find-FingerprintIssue {
     $matches = [System.Collections.Generic.List[object]]::new()
     $untrustedMatch = $false
     $encodedLabel = [Uri]::EscapeDataString($issueLabel)
-    $fingerprintPattern = "<!-- devflow-ci-failure:v1 fingerprint=$([regex]::Escape($Fingerprint))(?:\s|-->)"
+    $fingerprintPattern = "<!-- $([regex]::Escape($markerPrefix)):v1 fingerprint=$([regex]::Escape($Fingerprint))(?:\s|-->)"
     $page = 1
     while ($true) {
         $issues = Invoke-GitHubJson -Method GET -Path "/repos/$Repository/issues?state=all&labels=$encodedLabel&sort=updated&direction=desc&per_page=100&page=$page"
@@ -1196,12 +1393,12 @@ function Test-TrustedRecurrenceComment {
     }
 
     $body = [string] $Comment.body
-    if ([regex]::Matches($body, '<!-- devflow-ci-failure-occurrence:v1 ').Count -ne 1) {
+    if ([regex]::Matches($body, "<!-- $([regex]::Escape($markerPrefix))-occurrence:v1 ").Count -ne 1) {
         return $false
     }
     $match = [regex]::Match(
         $body,
-        '\A<!-- devflow-ci-failure-occurrence:v1 run=([1-9][0-9]*) attempt=([1-9][0-9]*) body=(sha256:[0-9a-f]{64}) -->\n',
+        "\A<!-- $([regex]::Escape($markerPrefix))-occurrence:v1 run=([1-9][0-9]*) attempt=([1-9][0-9]*) body=(sha256:[0-9a-f]{64}) -->\n",
         [System.Text.RegularExpressions.RegexOptions]::CultureInvariant)
     if (-not $match.Success -or
         [Int64] $match.Groups[1].Value -ne $RunId -or
@@ -1222,7 +1419,7 @@ function Get-OccurrencePublicationState {
         return 'found'
     }
 
-    $claimPrefix = "<!-- devflow-ci-failure-occurrence:v1 run=$RunId attempt=$RunAttempt"
+    $claimPrefix = "<!-- $markerPrefix-occurrence:v1 run=$RunId attempt=$RunAttempt"
     $page = 1
     while ($true) {
         $comments = Invoke-GitHubJson -Method GET -Path "/repos/$Repository/issues/$($Issue.number)/comments?per_page=100&page=$page"
@@ -1333,7 +1530,7 @@ try {
     $fingerprint = Get-Fingerprint $handoff
     if ($VerifyOnly) {
         $status = if ($publicationTrustError) { 'verified-diagnostic-only' } else { 'verified' }
-        $reason = if ($publicationTrustError) { $publicationTrustError } else { 'qualified-failure' }
+        $reason = if ($publicationTrustError) { $publicationTrustError } else { [string] $laneProfile['verifiedReason'] }
         Write-PublisherResult (New-PublisherResult -Status $status -Reason $reason -Fingerprint $fingerprint)
         return
     }
@@ -1350,7 +1547,7 @@ try {
 
     if ($issueResult['status'] -eq 'none') {
         $testDigestPrefix = ([string] $handoff['testIdentitySha256']).Substring(7, 12)
-        $title = "[DevFlow CI] $($handoff['category']) on $($handoff['platform']) ($testDigestPrefix)"
+        $title = "$([string] $laneProfile['titlePrefix']) $($handoff['category']) on $($handoff['platform']) ($testDigestPrefix)"
         $body = New-IssueBody `
             -Handoff $handoff `
             -Fingerprint $fingerprint `
@@ -1364,7 +1561,7 @@ try {
         }
         Write-PublisherResult (New-PublisherResult `
                 -Status 'created' `
-                -Reason 'qualified-failure-created' `
+                -Reason ([string] $laneProfile['createdReason']) `
                 -Fingerprint $fingerprint `
                 -IssueNumber ([Int32] $created.number))
         return
@@ -1408,7 +1605,7 @@ try {
 
     Write-PublisherResult (New-PublisherResult `
             -Status $(if ($reopened) { 'reopened-and-commented' } else { 'commented' }) `
-            -Reason 'qualified-failure-recurrence' `
+            -Reason ([string] $laneProfile['recurrenceReason']) `
             -Fingerprint $fingerprint `
             -IssueNumber ([Int32] $existingIssue.number))
 }

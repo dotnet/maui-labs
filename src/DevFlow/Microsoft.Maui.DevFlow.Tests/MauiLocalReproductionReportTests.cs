@@ -65,6 +65,7 @@ public sealed class MauiLocalReproductionReportTests
         Assert.Contains("\"brokerBindingPersisted\": false", json, StringComparison.Ordinal);
         Assert.Contains("\"approvalGranted\": false", json, StringComparison.Ordinal);
         Assert.Contains("\"proposalCreated\": false", json, StringComparison.Ordinal);
+        Assert.Contains("\"failureCorrespondence\": \"same-failure\"", json, StringComparison.Ordinal);
         Assert.Contains("\"reviewAction\": \"open-inspector-workbench-repair-review\"", json, StringComparison.Ordinal);
         Assert.Contains("\"relativePath\": \"execution-manifest.json\"", json, StringComparison.Ordinal);
         Assert.DoesNotContain("raw.log", json, StringComparison.Ordinal);
@@ -100,5 +101,54 @@ public sealed class MauiLocalReproductionReportTests
             "\"x-local-reproduction\"",
             JsonSerializer.Serialize(report, MauiTestingJsonContext.Default.MauiLocalReproductionReport),
             StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("failure-correspondence-same", null, "same-failure")]
+    [InlineData("packageDigest-mismatch", null, "indeterminate")]
+    [InlineData("failureCode-mismatch", null, "different-failure")]
+    [InlineData(null, "localFailure", "no-local-failure")]
+    [InlineData(null, "imported.failureStep", "indeterminate")]
+    [InlineData(null, null, "indeterminate")]
+    public void SafeProjection_DerivesFailureCorrespondence(
+        string? reasonCode,
+        string? missingFact,
+        string expected)
+    {
+        var report = new MauiLocalReproductionReport
+        {
+            FailureCorrespondence = "same-failure",
+            ReasonCodes = reasonCode is null ? [] : [reasonCode],
+            MissingFacts = missingFact is null ? [] : [missingFact],
+        };
+
+        var safe = MauiLocalReproductionReportSerializer.CreateSafeProjection(report);
+
+        Assert.Equal(expected, safe.FailureCorrespondence);
+    }
+
+    [Fact]
+    public void SafeProjection_FailureMismatchOverridesCallerSuppliedSameFailure()
+    {
+        var safe = MauiLocalReproductionReportSerializer.CreateSafeProjection(
+            new MauiLocalReproductionReport
+            {
+                FailureCorrespondence = "same-failure",
+                ReasonCodes = ["failureClass-mismatch"],
+            });
+
+        Assert.Equal("different-failure", safe.FailureCorrespondence);
+    }
+
+    [Fact]
+    public void SafeProjection_SameFailureWithIdentityMismatchIsIndeterminate()
+    {
+        var safe = MauiLocalReproductionReportSerializer.CreateSafeProjection(
+            new MauiLocalReproductionReport
+            {
+                ReasonCodes = ["failure-correspondence-same", "flowDigest-mismatch"],
+            });
+
+        Assert.Equal("indeterminate", safe.FailureCorrespondence);
     }
 }

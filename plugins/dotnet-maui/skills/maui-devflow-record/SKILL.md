@@ -9,7 +9,7 @@ description: >-
   and a reset contract; scoring replay quality of a fresh recording. DO NOT USE
   FOR: driving the recording itself (no agent tool records — a human records in
   the Inspector); conversational authoring with no recording involved (use
-  maui-devflow-test); operator CLI execution (use maui-devflow-run-cli); CI
+  maui-devflow-test); operator CLI execution (use `maui devflow flow`); CI
   wiring (use maui-devflow-ci); reading a red CI run (use maui-devflow-ci-triage);
   screen-video capture, which is `maui_recording_start` and unrelated to tests.
 ---
@@ -34,7 +34,7 @@ the capture they produce into a flow a reviewer can approve.
 | Situation | Use instead |
 | --- | --- |
 | Authoring a test from a description, with no recording | `maui-devflow-test` |
-| Running a committed flow from a shell | `maui-devflow-run-cli` |
+| Running a committed flow from a shell | `maui devflow flow` commands |
 | Wiring flow execution into GitHub Actions | `maui-devflow-ci` |
 | Reading a red CI run | `maui-devflow-ci-triage` |
 | Screen-video capture (`maui_recording_start`) | `maui-devflow-debug` |

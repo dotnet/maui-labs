@@ -71,6 +71,7 @@
         <ProjectPath>%(_MauiAppCollectedProjectReference.FullPath)</ProjectPath>
         <TargetFramework Condition="'%(_MauiAppCollectedProjectReference.TargetFramework)' != ''">%(_MauiAppCollectedProjectReference.TargetFramework)</TargetFramework>
         <TargetFramework Condition="'%(_MauiAppCollectedProjectReference.TargetFramework)' == '' and '%(_MauiAppCollectedProjectReference.SetTargetFramework)' != ''">$([System.Text.RegularExpressions.Regex]::Match('%(_MauiAppCollectedProjectReference.SetTargetFramework)', 'TargetFramework=([^;]+)').Groups[1].Value)</TargetFramework>
+        <TargetFramework Condition="'%(_MauiAppCollectedProjectReference.TargetFramework)' == '' and '%(_MauiAppCollectedProjectReference.SetTargetFramework)' == '' and $([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^net[0-9]+\.[0-9]+(?:-[A-Za-z0-9.]+)?$'))">$(TargetFramework)</TargetFramework>
         <Configuration Condition="'%(_MauiAppCollectedProjectReference.Configuration)' != ''">%(_MauiAppCollectedProjectReference.Configuration)</Configuration>
         <Configuration Condition="'%(_MauiAppCollectedProjectReference.Configuration)' == ''">$(Configuration)</Configuration>
         <RuntimeIdentifier>%(_MauiAppCollectedProjectReference.RuntimeIdentifier)</RuntimeIdentifier>
@@ -97,7 +98,8 @@
         <ReferenceName Condition="'%(_MauiAppExplicitReference.ReferenceName)' != ''">%(_MauiAppExplicitReference.ReferenceName)</ReferenceName>
         <ReferenceName Condition="'%(_MauiAppExplicitReference.ReferenceName)' == ''">%(_MauiAppExplicitReference.Filename)</ReferenceName>
         <ProjectPath>%(_MauiAppExplicitReference.FullPath)</ProjectPath>
-        <TargetFramework>%(_MauiAppExplicitReference.TargetFramework)</TargetFramework>
+        <TargetFramework Condition="'%(_MauiAppExplicitReference.TargetFramework)' != ''">%(_MauiAppExplicitReference.TargetFramework)</TargetFramework>
+        <TargetFramework Condition="'%(_MauiAppExplicitReference.TargetFramework)' == '' and $([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^net[0-9]+\.[0-9]+(?:-[A-Za-z0-9.]+)?$'))">$(TargetFramework)</TargetFramework>
         <Configuration Condition="'%(_MauiAppExplicitReference.Configuration)' != ''">%(_MauiAppExplicitReference.Configuration)</Configuration>
         <Configuration Condition="'%(_MauiAppExplicitReference.Configuration)' == ''">$(Configuration)</Configuration>
         <RuntimeIdentifier>%(_MauiAppExplicitReference.RuntimeIdentifier)</RuntimeIdentifier>
@@ -139,9 +141,28 @@
       </_ResolvedMauiAppProjectReference>
     </ItemGroup>
 
+    <!--
+      RestoreProperties is deliberately the build property set minus TargetFramework.
+
+      NuGet walks the whole ProjectReference closure inside one restore and inherits the calling
+      project's global properties (NuGet.targets passes only ExcludeRestorePackageImports to the
+      walk). A global TargetFramework therefore reaches every transitive reference, so a library
+      that does not target it has its project.assets.json rewritten with the app's framework as
+      its only target - the next build of that library fails with NETSDK1005 until the repository
+      is restored again.
+
+      RuntimeIdentifier is still passed because dropping it breaks RID-specific builds (NETSDK1047),
+      and a RID-scoped restore adds RID-specific targets rather than replacing the framework target,
+      so transitive libraries keep building. Restoring every framework of a multi-targeted app is
+      also intentional: this is exactly how `dotnet build` with an explicit framework switch behaves,
+      because it restores without the framework property and only scopes the build itself. The
+      trade-off is that a multi-targeted app now restores frameworks the caller did not ask for, so
+      a machine missing one of their workloads can see NETSDK1147 at restore.
+    -->
     <ItemGroup>
       <_ResolvedMauiAppProjectReference Update="@(_ResolvedMauiAppProjectReference)">
         <AdditionalProperties>%(_ResolvedMauiAppProjectReference._MauiAppUserProperties);%(_ResolvedMauiAppProjectReference._MauiAppUserAdditionalProperties);Configuration=%(_ResolvedMauiAppProjectReference.Configuration);MauiAppRefInnerBuildTarget=%(_ResolvedMauiAppProjectReference.BuildTarget);MauiAppRefOutputRoot=%(_ResolvedMauiAppProjectReference.OutputRoot);MauiAppRefReferenceName=%(_ResolvedMauiAppProjectReference.ReferenceName);MauiAppRefArtifactName=%(_ResolvedMauiAppProjectReference.ArtifactName);MauiAppRefExpectedArtifact=%(_ResolvedMauiAppProjectReference.ExpectedArtifact);MauiAppRefSetPlatformOutputPaths=%(_ResolvedMauiAppProjectReference.SetPlatformOutputPaths);MauiAppRefAppTargetsPath=$(MauiAppRefAppTargetsPath);MauiAppRefPreviousCustomAfterMicrosoftCommonTargets=%(_ResolvedMauiAppProjectReference.PreviousCustomAfterMicrosoftCommonTargets);CustomAfterMicrosoftCommonTargets=$(MauiAppRefCustomAfterMicrosoftCommonTargetsPath)</AdditionalProperties>
+        <RestoreProperties>%(_ResolvedMauiAppProjectReference._MauiAppUserProperties);%(_ResolvedMauiAppProjectReference._MauiAppUserAdditionalProperties);Configuration=%(_ResolvedMauiAppProjectReference.Configuration);MauiAppRefInnerBuildTarget=%(_ResolvedMauiAppProjectReference.BuildTarget);MauiAppRefOutputRoot=%(_ResolvedMauiAppProjectReference.OutputRoot);MauiAppRefReferenceName=%(_ResolvedMauiAppProjectReference.ReferenceName);MauiAppRefArtifactName=%(_ResolvedMauiAppProjectReference.ArtifactName);MauiAppRefExpectedArtifact=%(_ResolvedMauiAppProjectReference.ExpectedArtifact);MauiAppRefSetPlatformOutputPaths=%(_ResolvedMauiAppProjectReference.SetPlatformOutputPaths);MauiAppRefAppTargetsPath=$(MauiAppRefAppTargetsPath);MauiAppRefPreviousCustomAfterMicrosoftCommonTargets=%(_ResolvedMauiAppProjectReference.PreviousCustomAfterMicrosoftCommonTargets);CustomAfterMicrosoftCommonTargets=$(MauiAppRefCustomAfterMicrosoftCommonTargetsPath)</RestoreProperties>
       </_ResolvedMauiAppProjectReference>
 
       <_ResolvedMauiAppProjectReference Update="@(_ResolvedMauiAppProjectReference)"
@@ -152,11 +173,35 @@
       <_ResolvedMauiAppProjectReference Update="@(_ResolvedMauiAppProjectReference)"
                                     Condition="'%(_ResolvedMauiAppProjectReference.RuntimeIdentifier)' != ''">
         <AdditionalProperties>%(_ResolvedMauiAppProjectReference.AdditionalProperties);RuntimeIdentifier=%(_ResolvedMauiAppProjectReference.RuntimeIdentifier)</AdditionalProperties>
+        <RestoreProperties>%(_ResolvedMauiAppProjectReference.RestoreProperties);RuntimeIdentifier=%(_ResolvedMauiAppProjectReference.RuntimeIdentifier)</RestoreProperties>
       </_ResolvedMauiAppProjectReference>
 
       <_ResolvedMauiAppProjectReference Update="@(_ResolvedMauiAppProjectReference)"
                                     Condition="'%(_ResolvedMauiAppProjectReference.Platform)' != ''">
         <AdditionalProperties>%(_ResolvedMauiAppProjectReference.AdditionalProperties);Platform=%(_ResolvedMauiAppProjectReference.Platform)</AdditionalProperties>
+        <RestoreProperties>%(_ResolvedMauiAppProjectReference.RestoreProperties);Platform=%(_ResolvedMauiAppProjectReference.Platform)</RestoreProperties>
+      </_ResolvedMauiAppProjectReference>
+    </ItemGroup>
+
+    <!--
+      The artifact contract promises packages a caller can install and launch on their own.
+
+      A Debug .NET Android build does not produce one by default: Xamarin.Android.Common.targets
+      leaves EmbedAssembliesIntoApk unset in Debug when fast deployment is supported, so the
+      packaged .apk carries no managed assemblies. That package only runs when the build's own
+      deployment step has already pushed the assemblies to the device's __override__ directory.
+
+      Ask the Android build for a self-contained package instead. Only the build pass needs it:
+      the property does not participate in restore, and restore property sets are deliberately
+      kept minimal here. A caller that wants the default behaviour back can set
+      MauiAppRefAndroidEmbedAssembliesIntoApk=false, or pass its own EmbedAssembliesIntoApk value
+      through Properties/AdditionalProperties, which is respected as-is. MSBuild property names
+      are case-insensitive, so the test lowercases the delimited property list.
+    -->
+    <ItemGroup Condition="'$(MauiAppRefAndroidEmbedAssembliesIntoApk)' != 'false'">
+      <_ResolvedMauiAppProjectReference Update="@(_ResolvedMauiAppProjectReference)"
+                                    Condition="$([System.String]::Copy('%(_ResolvedMauiAppProjectReference.TargetFramework)').Contains('-android')) and !$([System.String]::Copy(';%(_ResolvedMauiAppProjectReference.AdditionalProperties)').ToLowerInvariant().Contains(';embedassembliesintoapk='))">
+        <AdditionalProperties>%(_ResolvedMauiAppProjectReference.AdditionalProperties);EmbedAssembliesIntoApk=true</AdditionalProperties>
       </_ResolvedMauiAppProjectReference>
     </ItemGroup>
 
@@ -173,18 +218,44 @@
     <ItemGroup>
       <_MauiAppProjectReferenceForMSBuild Remove="@(_MauiAppProjectReferenceForMSBuild)" />
       <_MauiAppProjectReferenceForMSBuild Include="@(_ResolvedMauiAppProjectReference)"
-                                        KeepMetadata="AdditionalProperties" />
+                                        KeepMetadata="AdditionalProperties;RestoreProperties;TargetFramework;RuntimeIdentifier">
+        <SetTargetFramework Condition="'%(_ResolvedMauiAppProjectReference.TargetFramework)' != ''">TargetFramework=%(_ResolvedMauiAppProjectReference.TargetFramework)</SetTargetFramework>
+        <SetTargetFramework Condition="'%(_ResolvedMauiAppProjectReference.TargetFramework)' == '' and $([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^net[0-9]+\.[0-9]+(?:-[A-Za-z0-9.]+)?$'))">TargetFramework=$(TargetFramework)</SetTargetFramework>
+        <SetRuntimeIdentifier Condition="'%(_ResolvedMauiAppProjectReference.RuntimeIdentifier)' != ''">RuntimeIdentifier=%(_ResolvedMauiAppProjectReference.RuntimeIdentifier)</SetRuntimeIdentifier>
+        <GlobalPropertiesToRemove>TargetFramework;TargetFrameworks;RuntimeIdentifier</GlobalPropertiesToRemove>
+        <GlobalPropertiesToRemove Condition="'%(_ResolvedMauiAppProjectReference.TargetFramework)' != '' and '%(_ResolvedMauiAppProjectReference.RuntimeIdentifier)' == ''">TargetFrameworks;RuntimeIdentifier</GlobalPropertiesToRemove>
+        <GlobalPropertiesToRemove Condition="'%(_ResolvedMauiAppProjectReference.TargetFramework)' == '' and '%(_ResolvedMauiAppProjectReference.RuntimeIdentifier)' != ''">TargetFramework;TargetFrameworks</GlobalPropertiesToRemove>
+        <GlobalPropertiesToRemove Condition="'%(_ResolvedMauiAppProjectReference.TargetFramework)' != '' and '%(_ResolvedMauiAppProjectReference.RuntimeIdentifier)' != ''">TargetFrameworks</GlobalPropertiesToRemove>
+        <RestoreGlobalPropertiesToRemove>TargetFramework;TargetFrameworks;RuntimeIdentifier</RestoreGlobalPropertiesToRemove>
+        <RestoreGlobalPropertiesToRemove Condition="'%(_ResolvedMauiAppProjectReference.RuntimeIdentifier)' != ''">TargetFramework;TargetFrameworks</RestoreGlobalPropertiesToRemove>
+      </_MauiAppProjectReferenceForMSBuild>
+
+      <!--
+        The restore pass gets its own item so its AdditionalProperties carry no TargetFramework:
+        the MSBuild task always merges an item's own %(AdditionalProperties) into the properties it
+        passes, so reusing the build item would depend on KeepMetadata and RemoveProperties to
+        neutralize it. Making the restore property set explicit here keeps that guarantee local.
+      -->
+      <_MauiAppProjectReferenceForRestore Remove="@(_MauiAppProjectReferenceForRestore)" />
+      <_MauiAppProjectReferenceForRestore Include="@(_MauiAppProjectReferenceForMSBuild)"
+                                          KeepMetadata="RestoreProperties;RestoreGlobalPropertiesToRemove;SetRuntimeIdentifier;RuntimeIdentifier">
+        <AdditionalProperties>%(_MauiAppProjectReferenceForMSBuild.RestoreProperties)</AdditionalProperties>
+      </_MauiAppProjectReferenceForRestore>
     </ItemGroup>
 
-    <MSBuild Projects="@(_MauiAppProjectReferenceForMSBuild)"
+    <MSBuild Projects="@(_MauiAppProjectReferenceForRestore)"
              Targets="Restore"
+             Properties="%(_MauiAppProjectReferenceForRestore.RestoreProperties);%(_MauiAppProjectReferenceForRestore.SetRuntimeIdentifier)"
+             RemoveProperties="%(_MauiAppProjectReferenceForRestore.RestoreGlobalPropertiesToRemove)"
              BuildInParallel="$(BuildInParallel)"
              SkipNonexistentProjects="false"
              SkipNonexistentTargets="false"
-             Condition="'@(_MauiAppProjectReferenceForMSBuild)' != ''" />
+             Condition="'@(_MauiAppProjectReferenceForRestore)' != ''" />
 
     <MSBuild Projects="@(_MauiAppProjectReferenceForMSBuild)"
              Targets="_MauiAppRefBuildAndGetArtifacts"
+             Properties="%(_MauiAppProjectReferenceForMSBuild.AdditionalProperties);%(_MauiAppProjectReferenceForMSBuild.SetTargetFramework);%(_MauiAppProjectReferenceForMSBuild.SetRuntimeIdentifier)"
+             RemoveProperties="%(_MauiAppProjectReferenceForMSBuild.GlobalPropertiesToRemove)"
              BuildInParallel="$(BuildInParallel)"
              SkipNonexistentProjects="false"
              SkipNonexistentTargets="false">

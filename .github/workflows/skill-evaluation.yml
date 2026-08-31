@@ -2,23 +2,45 @@
 #
 # Triggers:
 #   - On PR open/sync: posts a commit status (success if no skills changed, pending if changed)
-#   - When a maintainer posts "/evaluate" on the PR: runs full LLM evaluation
+#   - When a maintainer posts "/evaluate <sha>" on the PR: runs full LLM evaluation
 #
-# Security: workflow YAML always runs from the default branch (enforced by issue_comment trigger).
-# For fork PRs, only users with write+ permission can trigger evaluation.
-# NOTE: /evaluate runs untrusted PR content (skill definitions + eval.yaml) with the
-# COPILOT_GITHUB_TOKEN secret. This is acceptable because:
-#   1. Only write+ collaborators can trigger it (permission gate)
-#   2. skill-validator is the only consumer of the token (no arbitrary code execution)
-#   3. persist-credentials: false prevents token reuse after checkout
-# The COPILOT_GITHUB_TOKEN is used by skill-validator to authenticate LLM API calls
-# for pairwise evaluation (with-skill vs without-skill comparison).
+# Security model
+# --------------
+# The workflow YAML always runs from the default branch (issue_comment trigger), and only
+# collaborators with write+ permission can trigger an evaluation. Two further boundaries matter:
+#
+#  1. Privilege split. `evaluate` is the only job that checks out pull-request-controlled content
+#     (skill definitions, eval.yaml). It therefore runs with `permissions: contents: read` and
+#     nothing else: it cannot comment, cannot set a commit status, and cannot write to the repo.
+#     Results travel to the privileged `report` job as an artifact, and only `report` — which never
+#     checks out PR content — holds the write permissions needed to comment and set the status.
+#     `persist-credentials: false` alone is not a boundary: anything in a job's environment is
+#     reachable by whatever that job runs, so the separation has to be between jobs.
+#
+#     `evaluate` still needs COPILOT_GITHUB_TOKEN, because skill-validator authenticates its LLM
+#     API calls with it for the pairwise (with-skill vs without-skill) comparison. That token is
+#     the one secret deliberately kept in the untrusted-content job, and evaluating a skill is by
+#     construction "run an agent against these instructions", so treat it as reachable by the
+#     pull request. It MUST therefore be a token with no repository write permission — a
+#     fine-grained token scoped to model inference only. If it is ever replaced with a classic
+#     repo-scoped PAT, this split stops being a boundary. Do not add any further secret or write
+#     permission to that job.
+#
+#  2. Pinned revision. A fork PR must name the exact commit to evaluate ("/evaluate <sha>"), and
+#     the gate refuses if the branch has moved since. Re-resolving the head at command time let an
+#     author push a new head between the maintainer's review and their comment, and have that new
+#     head evaluated instead.
 name: skill-evaluation
 
 on:
   pull_request:
     paths:
       - 'plugins/**/skills/**'
+      # `.github/skills/**` keeps the required check from getting stuck on a
+      # mirror-only PR. The discovery step below only evaluates
+      # `plugins/<p>/skills` and `tests/<p>`, so such a PR resolves to
+      # needs_eval=false and posts the success status without evaluating.
+      - '.github/skills/**'
       - 'tests/**'
 
   issue_comment:
@@ -34,13 +56,12 @@ concurrency:
         && format('eval-status-{0}', github.event.pull_request.number)
       || github.run_id
     }}
-  cancel-in-progress: true
+  # Never cancel an in-flight evaluation: the concurrency group is computed before the gate runs, so
+  # cancelling on a new comment would let any commenter kill a maintainer-approved run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
-  pull-requests: write
-  statuses: write
-  issues: write
 
 jobs:
   # Post initial commit status so required check is never stuck as "Expected"
@@ -82,7 +103,7 @@ jobs:
         run: |
           if [ "${{ steps.discover.outputs.needs_eval }}" = "true" ]; then
             STATE="pending"
-            DESC="Post /evaluate to trigger evaluation"
+            DESC="Post /evaluate <sha> to trigger evaluation"
           else
             STATE="success"
             DESC="No skills to evaluate"
@@ -94,7 +115,8 @@ jobs:
             -f description="$DESC" \
             -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
-  # Gate: validate /evaluate command and permissions
+  # Gate: validate the /evaluate command, the commenter's permission, and the pinned revision.
+  # Privileged, and deliberately never checks out pull-request content.
   gate:
     if: >-
       github.event_name == 'issue_comment' &&
@@ -106,9 +128,9 @@ jobs:
       pull-requests: write
       issues: write
     outputs:
-      should_run: ${{ steps.check.outputs.should_run }}
+      should_run: ${{ steps.check.outputs.should_run == 'true' && steps.pr-info.outputs.approved == 'true' }}
       pr_number: ${{ github.event.issue.number }}
-      pr_head_sha: ${{ steps.pr-info.outputs.head_sha }}
+      pr_head_sha: ${{ steps.pr-info.outputs.eval_sha }}
       pr_head_repo: ${{ steps.pr-info.outputs.head_repo }}
       is_fork: ${{ steps.pr-info.outputs.is_fork }}
     steps:
@@ -116,50 +138,104 @@ jobs:
         id: check
         env:
           GH_TOKEN: ${{ github.token }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          PR_NUMBER: ${{ github.event.issue.number }}
         run: |
-          PERMISSION=$(gh api "repos/${{ github.repository }}/collaborators/${{ github.event.comment.user.login }}/permission" \
+          PERMISSION=$(gh api "repos/${{ github.repository }}/collaborators/$COMMENTER/permission" \
             --jq '.permission' 2>/dev/null || echo "none")
 
           if [[ "$PERMISSION" == "admin" || "$PERMISSION" == "maintain" || "$PERMISSION" == "write" ]]; then
             echo "should_run=true" >> "$GITHUB_OUTPUT"
-            gh api "repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/reactions" \
+            gh api "repos/${{ github.repository }}/issues/comments/$COMMENT_ID/reactions" \
               -X POST -f content="+1" --silent || true
           else
             echo "should_run=false" >> "$GITHUB_OUTPUT"
-            gh api "repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments" \
+            gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/comments" \
               -X POST -f body="⚠️ Only collaborators with write access can trigger evaluation." --silent || true
           fi
 
-      - name: Get PR info
+      # Resolves which commit gets evaluated. A fork PR has to name it, so the revision that runs is
+      # the revision the maintainer read, not whatever the branch points at by the time this runs.
+      - name: Resolve the reviewed revision
         if: steps.check.outputs.should_run == 'true'
         id: pr-info
         env:
           GH_TOKEN: ${{ github.token }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          PR_NUMBER: ${{ github.event.issue.number }}
         run: |
-          PR_JSON=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}" \
-            --jq '{head_sha: .head.sha, head_repo: .head.repo.full_name, base_repo: .base.repo.full_name}')
-          echo "head_sha=$(echo "$PR_JSON" | jq -r '.head_sha')" >> "$GITHUB_OUTPUT"
-          echo "head_repo=$(echo "$PR_JSON" | jq -r '.head_repo')" >> "$GITHUB_OUTPUT"
-          echo "is_fork=$([ "$(echo "$PR_JSON" | jq -r '.head_repo')" != "$(echo "$PR_JSON" | jq -r '.base_repo')" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
 
-  # Run evaluation
+          PR_JSON=$(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER" \
+            --jq '{head_sha: .head.sha, head_repo: .head.repo.full_name, base_repo: .base.repo.full_name}')
+          HEAD_SHA=$(echo "$PR_JSON" | jq -r '.head_sha')
+          HEAD_REPO=$(echo "$PR_JSON" | jq -r '.head_repo')
+          BASE_REPO=$(echo "$PR_JSON" | jq -r '.base_repo')
+
+          IS_FORK=true
+          if [ "$HEAD_REPO" = "$BASE_REPO" ]; then
+            IS_FORK=false
+          fi
+
+          echo "head_repo=$HEAD_REPO" >> "$GITHUB_OUTPUT"
+          echo "is_fork=$IS_FORK" >> "$GITHUB_OUTPUT"
+
+          # Read the pinned revision from the command body, never from a template expansion.
+          PINNED=$(head -n 1 <<<"$COMMENT_BODY" \
+            | tr -d '\r' \
+            | sed -nE 's#^/evaluate[[:space:]]+([0-9a-fA-F]{40})[[:space:]]*$#\1#p' \
+            | tr 'A-Z' 'a-z')
+
+          refuse() {
+            echo "approved=false" >> "$GITHUB_OUTPUT"
+            gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/comments" \
+              -X POST -f body="$1" --silent || true
+            echo "::error::$1"
+          }
+
+          if [ -n "$PINNED" ]; then
+            if [ "$PINNED" != "$HEAD_SHA" ]; then
+              refuse "⚠️ This pull request moved to \`$HEAD_SHA\` after \`$PINNED\` was named. Re-review the new head and post \`/evaluate $HEAD_SHA\`."
+              exit 0
+            fi
+          elif [ "$IS_FORK" = "true" ]; then
+            refuse "⚠️ Evaluating a fork pull request runs untrusted content, so the command must name the reviewed commit: post \`/evaluate $HEAD_SHA\`."
+            exit 0
+          else
+            PINNED="$HEAD_SHA"
+          fi
+
+          echo "approved=true" >> "$GITHUB_OUTPUT"
+          echo "eval_sha=$PINNED" >> "$GITHUB_OUTPUT"
+
+  # Runs pull-request-controlled content. Read-only, cannot comment, cannot set a commit status, and
+  # holds no secret other than the LLM token skill-validator needs. Do not add permissions here.
   evaluate:
     needs: gate
     if: needs.gate.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
-      statuses: write
-      issues: write
     timeout-minutes: 120
     steps:
-      - name: Checkout PR
+      - name: Checkout the reviewed revision
         uses: actions/checkout@v6
         with:
           repository: ${{ needs.gate.outputs.pr_head_repo }}
           ref: ${{ needs.gate.outputs.pr_head_sha }}
           persist-credentials: false
+
+      - name: Verify the checked-out revision
+        env:
+          EXPECTED_SHA: ${{ needs.gate.outputs.pr_head_sha }}
+        run: |
+          set -euo pipefail
+          ACTUAL_SHA=$(git rev-parse HEAD)
+          if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+            echo "::error::Checked out $ACTUAL_SHA but the gate approved $EXPECTED_SHA."
+            exit 1
+          fi
 
       - name: Download skill-validator
         env:
@@ -171,13 +247,14 @@ jobs:
             --pattern "checksums.sha256" \
             --dir /tmp/skill-validator
 
-          # Verify checksum before extracting
+          # Verify checksum before extracting. This job holds a secret, so a missing checksum is a
+          # refusal rather than a warning.
           cd /tmp/skill-validator
-          if [ -f checksums.sha256 ]; then
-            grep "skill-validator-linux-x64.tar.gz" checksums.sha256 | sha256sum --check --strict
-          else
-            echo "::warning::No checksums.sha256 in release — verify dotnet/skills publishes checksums"
+          if [ ! -f checksums.sha256 ]; then
+            echo "::error::The skill-validator release published no checksums.sha256."
+            exit 1
           fi
+          grep "skill-validator-linux-x64.tar.gz" checksums.sha256 | sha256sum --check --strict
 
           mkdir -p bin
           tar -xzf skill-validator-linux-x64.tar.gz -C bin
@@ -233,54 +310,6 @@ jobs:
           done < <(echo "$ENTRIES" | jq -c '.[]')
           exit $EVAL_FAILED
 
-      - name: Post results to PR
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          PR_NUMBER=${{ needs.gate.outputs.pr_number }}
-          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
-          # Consolidate results if any exist
-          mapfile -t JSON_FILES < <(find artifacts/eval-results -name results.json 2>/dev/null || true)
-          if [ "${#JSON_FILES[@]}" -gt 0 ]; then
-            {
-              echo "## Skill Evaluation Results"
-              echo ""
-              for f in "${JSON_FILES[@]}"; do
-                skill=$(basename "$(dirname "$f")")
-                echo "### $skill"
-                cat "$(dirname "$f")/results.md" 2>/dev/null || echo "_No markdown report_"
-                echo ""
-              done
-              echo "[Full results]($RUN_URL)"
-            } > comment-body.md
-          else
-            echo "ℹ️ No skills with eval.yaml found to evaluate. [View run]($RUN_URL)" > comment-body.md
-          fi
-
-          gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/comments" \
-            -X POST -F "body=@comment-body.md"
-
-      - name: Update commit status
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if [ "${{ job.status }}" = "success" ]; then
-            STATE="success"
-            DESC="Evaluation completed"
-          else
-            STATE="failure"
-            DESC="Evaluation failed"
-          fi
-
-          gh api "repos/${{ github.repository }}/statuses/${{ needs.gate.outputs.pr_head_sha }}" \
-            -f state="$STATE" \
-            -f context="evaluation-status" \
-            -f description="$DESC" \
-            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v7
@@ -289,3 +318,92 @@ jobs:
           path: artifacts/eval-results/
           retention-days: 30
           if-no-files-found: ignore
+
+  # Publishes the outcome. Privileged, and never checks out pull-request content: it only reads the
+  # artifact the unprivileged job produced.
+  report:
+    needs: [gate, evaluate]
+    if: always() && needs.gate.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+      statuses: write
+      issues: write
+    steps:
+      - name: Download results
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: skill-evaluation-results
+          path: artifacts/eval-results
+
+      - name: Post results to PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ needs.gate.outputs.pr_number }}
+          EVAL_SHA: ${{ needs.gate.outputs.pr_head_sha }}
+          EVAL_RESULT: ${{ needs.evaluate.result }}
+        run: |
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          # Everything between the header and the footer is content the pull request controls, and
+          # this job publishes it under the repository's identity. Bound it, and defuse @mentions
+          # with a zero-width space so a report cannot make this bot ping people.
+          sanitize() {
+            head -c 40000 "$1" | sed -E 's/@([A-Za-z0-9])/@\&#8203;\1/g'
+          }
+
+          mapfile -t REPORT_DIRS < <(find artifacts/eval-results -name results.json -printf '%h\n' 2>/dev/null | sort -u || true)
+          {
+            echo "## Skill Evaluation Results"
+            echo ""
+            echo "Evaluated commit: \`$EVAL_SHA\` (job result: \`$EVAL_RESULT\`)"
+            echo ""
+            if [ "${#REPORT_DIRS[@]}" -gt 0 ]; then
+              echo "> [!WARNING]"
+              echo "> The report below is produced from the evaluated pull request and is untrusted content."
+              echo ""
+              for dir in "${REPORT_DIRS[@]}"; do
+                # The directory name comes from a plugin directory the pull request controls.
+                echo "### $(basename "$dir" | tr -cd '[:alnum:]._-' | head -c 100)"
+                if [ -f "$dir/results.md" ]; then
+                  sanitize "$dir/results.md"
+                else
+                  echo "_No markdown report was produced._"
+                fi
+                echo ""
+              done
+            else
+              echo "ℹ️ No evaluation results were produced."
+            fi
+            echo "[Full results]($RUN_URL)"
+          } > full-body.md
+
+          # GitHub rejects comments over 65536 characters, so bound the assembled body too.
+          head -c 60000 full-body.md > comment-body.md
+
+          gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/comments" \
+            -X POST -F "body=@comment-body.md"
+
+      - name: Update commit status
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVAL_SHA: ${{ needs.gate.outputs.pr_head_sha }}
+          EVAL_RESULT: ${{ needs.evaluate.result }}
+        run: |
+          if [ "$EVAL_RESULT" = "success" ]; then
+            STATE="success"
+            DESC="Evaluation completed"
+          else
+            STATE="failure"
+            DESC="Evaluation failed"
+          fi
+
+          gh api "repos/${{ github.repository }}/statuses/$EVAL_SHA" \
+            -f state="$STATE" \
+            -f context="evaluation-status" \
+            -f description="$DESC" \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

@@ -1,0 +1,149 @@
+scenarios:
+  - name: "Take a trusted DevFlow issue through a local uncommitted fix"
+    prompt: |
+      I want to fix this DevFlow CI failure locally, but this is a plan review,
+      so do not execute commands. List the exact ordered actions for
+      https://github.com/contoso/shop/issues/42 locally. It is a
+      bot-authored issue labeled devflow-ci-failure. I have one Android
+      emulator and the Shop MAUI project. Take it from the issue through local
+      reproduction, fix the right file, rerun it, and let me review the diff.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)Resolve-DevFlowCiFailureIssue|issue.{0,40}(validat|resolver)"
+      - type: "output_matches"
+        pattern: "(?i)flow identity.{0,80}--resolve"
+      - type: "output_matches"
+        pattern: "(?i)flow reproduce"
+      - type: "output_matches"
+        pattern: "(?i)(test-drift|app-regression|infrastructure|inconclusive)"
+      - type: "output_matches"
+        pattern: "(?i)flow run.{0,120}(rerun|verify|post-fix)|(rerun|post-fix).{0,120}flow run"
+      - type: "output_matches"
+        pattern: "(?i)(uncommitted|not committed).{0,100}(diff|Source Control)|(diff|Source Control).{0,100}(uncommitted|not committed)"
+      - type: "output_not_matches"
+        pattern: "(?i)(?:I(?:'ll| will)|we(?:'ll| will)) +(commit|push|merge|close the issue)"
+      - type: "output_not_matches"
+        pattern: "(?i)(custom|bespoke).{0,40}(approval|test management|diff).{0,20}(UI|panel)"
+    rubric:
+      - "Validates the publisher-owned issue and exact run before consuming artifact facts."
+      - "Resolves the exact flow, performs a fresh device-backed local reproduction, and classifies before editing."
+      - "Uses ordinary workspace editing, reruns locally, and leaves an uncommitted Source Control diff."
+    timeout: 300
+
+  - name: "Do not edit when the CI failure does not reproduce"
+    prompt: |
+      I am fixing a DevFlow CI failure locally. Do not execute commands in this
+      decision review. A bot-authored devflow-ci-failure issue says the
+      checkout flow had locator-not-found in CI.
+      The fresh local run of the exact current flow passes on the same platform
+      and checkpoint. Update the selector anyway so CI will stop failing.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)(did not|does not|cannot).{0,50}reproduc"
+      - type: "output_matches"
+        pattern: "(?i)(no source change|do not edit|stop without editing)"
+      - type: "output_matches"
+        pattern: "(?i)(diagnostic|CI evidence).{0,80}(not|never).{0,40}(authority|enough)"
+      - type: "output_not_matches"
+        pattern: "(?i)(?:I(?:'ll| will)|we(?:'ll| will)) +(change|update|repair|edit) the selector"
+    rubric:
+      - "Treats the local non-reproduction as a stop rather than repairing from CI alone."
+      - "Does not change the flow or app."
+      - "Reports the evidence mismatch and the next bounded investigation."
+    timeout: 240
+
+  - name: "Fix an app regression without weakening the test"
+    prompt: |
+      Help me fix this DevFlow CI failure locally, but do not execute commands
+      in this decision review. The bot-authored devflow-ci-failure issue
+      resolves to the payment flow. The local run reproduces it: the Pay tap
+      dispatches, the Success label appears, but the required independent
+      receipt oracle fails. State the local fix and rerun path.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)app-regression|application regression"
+      - type: "output_matches"
+        pattern: "(?i)(keep|leave).{0,50}(flow|test).{0,40}(unchanged|intact)|do not change the test"
+      - type: "output_matches"
+        pattern: "(?i)(app|application|domain|payment).{0,80}(source|fix)"
+      - type: "output_matches"
+        pattern: "(?i)independent.{0,40}(oracle|receipt).{0,80}(rerun|verify)"
+      - type: "output_not_matches"
+        pattern: "(?i)(verify.{0,20}false|remove.{0,30}assert|relax.{0,30}expected|add.{0,20}(sleep|retry))"
+    rubric:
+      - "Classifies the failed independent oracle as an app regression, not selector drift."
+      - "Keeps the test contract unchanged and fixes the application path."
+      - "Requires the same oracle to pass on the post-fix rerun."
+    timeout: 240
+
+  - name: "Stop on a superseded flow identity"
+    prompt: |
+      I want to fix this DevFlow CI failure locally. Its bot-authored
+      devflow-ci-failure issue resolves as matched-superseded because the flow
+      changed after the CI run. Pick the closest current flow and fix that one.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)matched-superseded"
+      - type: "output_matches"
+        pattern: "(?i)(stop|cannot proceed|stale)"
+      - type: "output_not_matches"
+        pattern: "(?i)(?:I(?:'ll| will)|we(?:'ll| will)) +(pick|choose|fix).{0,50}(closest|current) flow"
+    rubric:
+      - "Treats matched-superseded as an honest stop."
+      - "Does not guess a replacement flow or edit current source."
+      - "Explains that the current checkout is not the test CI executed."
+    timeout: 180
+
+  - name: "Use normal worktree editing after local selector proof"
+    prompt: |
+      Complete this DevFlow CI-to-local-fix workflow, but do not execute
+      commands in this decision review. A trusted devflow-ci-failure issue
+      resolved to one flow. A fresh local run reproduces a pre-dispatch
+      locator-not-found on a trailing action after the independent business
+      oracle passed. Live inspection finds one unique replacement AutomationId
+      for the same control. State how to apply and verify the local fix.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)test-drift|selector drift"
+      - type: "output_matches"
+        pattern: "(?i)(ordinary|normal).{0,40}(worktree|workspace|file edit)|Source Control"
+      - type: "output_matches"
+        pattern: "(?i)flow commit"
+      - type: "output_matches"
+        pattern: "(?i)flow run"
+      - type: "output_matches"
+        pattern: "(?i)(assertions|expected values|action order).{0,80}(unchanged|preserv)"
+      - type: "output_not_matches"
+        pattern: "(?i)maui_test_patch.{0,60}(apply|approve)"
+      - type: "output_not_matches"
+        pattern: "(?i)(?:I(?:'ll| will)|we(?:'ll| will)) +(commit|push)"
+    rubric:
+      - "Permits a normal uncommitted flow edit only after current local selector proof."
+      - "Rebinds the plan digest and reruns the flow on the same target."
+      - "Preserves assertions and leaves commit/push to the developer."
+    timeout: 240
+
+  - name: "Use explicit failure correspondence when Android trust cannot match"
+    prompt: |
+      I am fixing a DevFlow CI failure locally. The bot-authored
+      devflow-ci-failure run produced an Android local-reproduction report with
+      matched=false because package identity is volatile, but
+      failureCorrespondence is same-failure. There are no flow, source,
+      platform, runtime, evidence, completion, cleanup, or checkpoint blockers.
+      Did it reproduce, and may I continue with ordinary local diagnosis?
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)failureCorrespondence.{0,40}same-failure|same failure"
+      - type: "output_matches"
+        pattern: "(?i)(ordinary|developer).{0,40}(worktree|local).{0,50}(diagnos|edit)"
+      - type: "output_matches"
+        pattern: "(?i)(matched.?false|not locally-reproduced).{0,100}(broker|trust|authority)|(broker|trust|authority).{0,100}(matched.?false|not locally-reproduced)"
+      - type: "output_not_matches"
+        pattern: "(?i)(trustState|trust state).{0,30}locally-reproduced"
+      - type: "output_not_matches"
+        pattern: "(?i)maui_test_patch.{0,60}(apply|approve)"
+    rubric:
+      - "Uses the derived same-failure correspondence rather than treating matched=false as no reproduction."
+      - "Allows only the ordinary developer lane because all separate blockers are absent."
+      - "Does not upgrade artifact trust or claim broker repair authority."
+    timeout: 240

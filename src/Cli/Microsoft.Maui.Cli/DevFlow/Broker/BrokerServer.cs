@@ -17,11 +17,12 @@ namespace Microsoft.Maui.Cli.DevFlow.Broker;
 /// Central broker daemon that manages agent registration and port assignment.
 /// Agents connect via WebSocket; CLI queries via HTTP.
 /// </summary>
-public class BrokerServer : IDisposable
+public partial class BrokerServer : IDisposable
 {
     public const int DefaultPort = 19223;
     public const int PortRangeStart = 10223;
     public const int PortRangeEnd = 10899;
+    private const int MaxRecordingRequestChars = 512 * 1024;
 
     private readonly int _port;
     private readonly TimeSpan _idleTimeout;
@@ -31,9 +32,32 @@ public class BrokerServer : IDisposable
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _agentRouteGates = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _agentStateGates = new(StringComparer.Ordinal);
     private readonly MutationLeaseRegistry _mutationLeases;
+    /// <summary>
+    /// Reads independent business-oracle evidence out of band for a run against an already-running
+    /// app. Null in a broker whose host registered no evaluator, in which case such a run stays
+    /// unverified and repair-ineligible rather than being certified on weaker evidence.
+    /// </summary>
+    private readonly Execution.IAttachedRunOracleEvaluator? _attachedRunOracles;
     private readonly BrokerFlowCoordinator _flows;
     private readonly RouteCheckpointCoordinator _checkpoints;
     private readonly WorkflowRunCoordinator _workflowRuns;
+    private readonly TestAgentSessionService _testAgentSessions;
+
+    // A workflow run mutates the live app, so the broker verifies the human-issued grant itself
+    // instead of trusting the calling client to have done it. Only relaxed by tests that exercise
+    // unrelated endpoint mechanics.
+    private readonly bool _requireWorkflowRunAuthorization;
+    private readonly byte[] _workflowRunDispatchKey = RandomNumberGenerator.GetBytes(32);
+    private readonly ArtifactTrustImportService _artifactTrustImports;
+    private readonly ArtifactTrustStore _artifactTrustStore;
+    private readonly MauiPreviewFeatureFlags _previewFlags;
+    // A production broker supplies a per-process, owner-file-only native host verifier. Internal
+    // construction remains explicitly unavailable unless a test supplies its own verifier.
+    private readonly Func<string?, bool>? _trustedHostApprovalVerifier;
+    private readonly string? _nativeApprovalToken;
+    // Resolves the component that owns the connected app's lifecycle, when one has registered
+    // itself with this broker process. It stays null in an ordinary broker, which is why repair
+    // validation reports itself unavailable rather than promising a reset nobody can perform.
     private readonly HashSet<int> _assignedPorts = new();
     private readonly object _portLock = new();
     private DateTime _lastActivity = DateTime.UtcNow;
@@ -49,13 +73,71 @@ public class BrokerServer : IDisposable
         int port = DefaultPort,
         TimeSpan? idleTimeout = null,
         Action<string>? log = null)
+        : this(port, idleTimeout, log, attachedRunOracles: null)
+    {
+    }
+
+    /// <summary>
+    /// Creates the broker a host runs, supplying the evaluator that reads independent business-
+    /// oracle evidence out of band for runs against an already-running app, and the resolver that
+    /// supplies a lifecycle reset owner for apps which opt into repair validation.
+    /// </summary>
+    internal BrokerServer(
+        int port,
+        TimeSpan? idleTimeout,
+        Action<string>? log,
+        Execution.IAttachedRunOracleEvaluator? attachedRunOracles)
         : this(
             port,
             idleTimeout,
             log,
             checkpointStore: null,
             recordingStorageRoot: null,
-            clock: null)
+            clock: null,
+            previewFlags: null,
+            trustedHostApprovalVerifier: null,
+            nativeApprovalToken: CreateNativeApprovalToken(),
+            attachedRunOracles: attachedRunOracles)
+    {
+    }
+
+    /// <summary>
+    /// Test-only overload for suites that exercise workflow-run endpoint mechanics unrelated to the
+    /// human-approval boundary. Production callers use the public constructor, which requires it.
+    /// </summary>
+    internal BrokerServer(
+        int port,
+        TimeSpan? idleTimeout,
+        bool requireWorkflowRunAuthorization)
+        : this(
+            port,
+            idleTimeout,
+            log: null,
+            checkpointStore: null,
+            recordingStorageRoot: null,
+            clock: null,
+            previewFlags: null,
+            trustedHostApprovalVerifier: null,
+            nativeApprovalToken: CreateNativeApprovalToken(),
+            requireWorkflowRunAuthorization: requireWorkflowRunAuthorization)
+    {
+    }
+
+    internal BrokerServer(
+        int port,
+        TimeSpan? idleTimeout,
+        MauiPreviewFeatureFlags previewFlags,
+        Action<string>? log = null,
+        Func<string?, bool>? trustedHostApprovalVerifier = null)
+        : this(
+            port,
+            idleTimeout,
+            log,
+            checkpointStore: null,
+            recordingStorageRoot: null,
+            clock: null,
+            previewFlags,
+            trustedHostApprovalVerifier)
     {
     }
 
@@ -65,14 +147,30 @@ public class BrokerServer : IDisposable
         Action<string>? log,
         RouteCheckpointStore? checkpointStore,
         string? recordingStorageRoot,
-        TimeProvider? clock)
+        TimeProvider? clock,
+        MauiPreviewFeatureFlags? previewFlags = null,
+        Func<string?, bool>? trustedHostApprovalVerifier = null,
+        string? nativeApprovalToken = null,
+        bool requireWorkflowRunAuthorization = true,
+        Execution.IAttachedRunOracleEvaluator? attachedRunOracles = null)
     {
         _port = port;
         _idleTimeout = idleTimeout ?? TimeSpan.FromMinutes(5);
         _log = log;
+        _requireWorkflowRunAuthorization = requireWorkflowRunAuthorization;
+        _attachedRunOracles = attachedRunOracles;
+        _previewFlags = previewFlags ?? MauiPreviewFeatureFlagConfiguration.FromEnvironment();
+        _nativeApprovalToken = nativeApprovalToken;
+        _trustedHostApprovalVerifier = nativeApprovalToken is null
+            ? trustedHostApprovalVerifier
+            : supplied => FixedTimeApprovalTokenEquals(nativeApprovalToken, supplied);
+        var recordingSpool = new FlowRecordingSpoolStore(
+            recordingStorageRoot,
+            clock,
+            warning => Log("Warning: " + warning));
         _flows = new BrokerFlowCoordinator(
             new FlowRecordingStore(clock),
-            new FlowRecordingSpoolStore(recordingStorageRoot, clock, warning => Log("Warning: " + warning)));
+            recordingSpool);
         _checkpoints = new RouteCheckpointCoordinator(checkpointStore);
         _mutationLeases = new MutationLeaseRegistry();
         _workflowRuns = new WorkflowRunCoordinator(
@@ -80,12 +178,15 @@ public class BrokerServer : IDisposable
             ExecuteWorkflowRunAsync,
             new WorkflowRunCoordinatorOptions
             {
-                ArtifactRoot = string.IsNullOrWhiteSpace(recordingStorageRoot)
-                    ? null
-                    : Path.Combine(recordingStorageRoot, "workflow-runs"),
+                ArtifactRoot = Path.Combine(recordingSpool.StorageRoot, "workflow-runs"),
             },
             clock: clock,
-            controlLedger: ControlWorkflowRunLedgerAsync);
+            controlLedger: ControlWorkflowRunLedgerAsync,
+            authorizeDispatch: AuthorizeWorkflowRunDispatch,
+            beginOracleSession: BeginWorkflowRunOracleSessionAsync);
+        _testAgentSessions = new TestAgentSessionService(clock: clock);
+        _artifactTrustImports = new ArtifactTrustImportService(clock);
+        _artifactTrustStore = new ArtifactTrustStore(clock: clock);
     }
 
     public async Task RunAsync(CancellationToken cancellationToken = default)
@@ -228,6 +329,16 @@ public class BrokerServer : IDisposable
                 await HandleWorkflowRunRoute(context, method, path);
                 return;
             }
+            if (path.StartsWith("/api/test-agent", StringComparison.OrdinalIgnoreCase))
+            {
+                await HandleTestAgentRoute(context, method, path);
+                return;
+            }
+            if (path.StartsWith("/api/artifact-trust", StringComparison.OrdinalIgnoreCase))
+            {
+                await HandleArtifactTrustRoute(context, method, path);
+                return;
+            }
 
             var (statusCode, body) = (method, path) switch
             {
@@ -359,11 +470,17 @@ public class BrokerServer : IDisposable
                 Platform = registration.Platform,
                 AppName = registration.AppName,
                 PackageId = registration.PackageId,
+                DeviceId = registration.DeviceId,
                 Port = assignedPort,
                 Version = registration.Version,
                 SessionId = registration.SessionId,
                 ProcessId = registration.ProcessId,
-                InstanceId = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant(),
+                InstanceId = AgentRegistration.ComputeInstanceId(
+                        registration.PackageId ?? registration.Project,
+                        registration.Tfm,
+                        registration.SessionId,
+                        registration.ProcessId) ??
+                    Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant(),
                 ConnectedAt = DateTime.UtcNow
             };
 
@@ -377,10 +494,17 @@ public class BrokerServer : IDisposable
                     staleInspector.Dispose();
                 if (replaced is not null)
                 {
+                    // A dropped socket loses the delivery evidence an in-flight run depends on, so
+                    // the run is abandoned whether or not the process behind it is the same one.
+                    // Only the wording distinguishes the two, because a same-process reconnect now
+                    // keeps its instance identity and "reconnected with a new instance" would be
+                    // false.
                     _workflowRuns.MarkAgentInstanceUnavailable(
                         replaced.Registration.Id,
                         replaced.Registration.InstanceId,
-                        "The agent reconnected with a new instance.");
+                        string.Equals(replaced.Registration.InstanceId, agent.InstanceId, StringComparison.Ordinal)
+                            ? "The agent connection was replaced, so in-flight command delivery can no longer be proven."
+                            : "The agent reconnected with a new instance.");
                     if (replaced.Registration.Port != assignedPort)
                         ReleasePort(replaced.Registration.Port);
                     try { replaced.WebSocket.Dispose(); } catch { }
@@ -468,7 +592,9 @@ public class BrokerServer : IDisposable
                 try
                 {
                     ReleasePort(connection.Registration.Port);
-                    _mutationLeases.Remove(connection.Registration.Id);
+                    var leaseKey = LeaseKeyForRegistration(connection.Registration);
+                    if (string.Equals(leaseKey, connection.Registration.Id, StringComparison.Ordinal))
+                        _mutationLeases.Remove(leaseKey);
                     _flows.RemoveAgent(connection.Registration.Id);
                     _workflowRuns.MarkAgentInstanceUnavailable(
                         connection.Registration.Id,
@@ -569,16 +695,51 @@ public class BrokerServer : IDisposable
     {
         _idleTimer?.Dispose();
 
-        // Close all agent WebSockets
-        foreach (var agent in _agents.Values)
+        // Tear down agent WebSockets without the graceful close handshake.
+        //
+        // HttpListener's server-side WebSocket takes its SessionHandle lock before its
+        // internal _thisLock, but the close path re-enters that pair while it is still
+        // holding _thisLock. That inverts the order against the receive pump, which holds
+        // SessionHandle and then waits for _thisLock in StartOnCloseReceived while handling
+        // an inbound close frame. When a peer closes at the same moment the broker shuts
+        // down, the two sides deadlock. CloseAsync blocks in Monitor.Enter before its first
+        // await, so the CloseAsync(...).Wait(2s) that used to be here could never time out:
+        // it hung whichever thread cancelled the broker, which on the RunAsync cancellation
+        // path is the caller of Cancel() itself.
+        //
+        // Abort() takes the same locks in the documented order, so it cannot invert them;
+        // dropping the handshake is what removes the deadlock. Each socket is torn down on its
+        // own dedicated thread so a single wedged socket cannot starve the others, and off the
+        // thread pool so a saturated pool cannot delay teardown past the timeout.
+        var sockets = _agents.Values.Select(a => a.WebSocket).ToArray();
+        if (sockets.Length > 0)
         {
-            try
+            var teardowns = new List<Thread>(sockets.Length);
+            foreach (var socket in sockets)
             {
-                agent.WebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Broker shutting down", CancellationToken.None)
-                    .Wait(TimeSpan.FromSeconds(2));
+                var thread = new Thread(() =>
+                {
+                    try { socket.Abort(); } catch { }
+                    try { socket.Dispose(); } catch { }
+                })
+                { IsBackground = true, Name = "devflow-broker-socket-teardown" };
+
+                thread.Start();
+                teardowns.Add(thread);
             }
-            catch { }
-            agent.WebSocket.Dispose();
+
+            // Stopwatch rather than DateTime.UtcNow: the wall clock is not monotonic, and an NTP
+            // step during shutdown would either collapse the budget to zero or extend it.
+            var budget = TimeSpan.FromSeconds(2);
+            var elapsed = System.Diagnostics.Stopwatch.StartNew();
+            foreach (var thread in teardowns)
+            {
+                var remaining = budget - elapsed.Elapsed;
+                if (remaining <= TimeSpan.Zero)
+                    break;
+
+                try { thread.Join(remaining); } catch { }
+            }
         }
         _agents.Clear();
         _mutationLeases.Clear();
@@ -602,8 +763,88 @@ public class BrokerServer : IDisposable
         Log("Broker stopped");
     }
 
+    /// <summary>
+    /// True when this broker may publish itself into the machine-wide broker state file.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="BrokerPaths.StateFile"/> is a single well-known path shared by every broker on the
+    /// machine, and it carries the owner-only native-host approval token. A short-lived broker on an
+    /// ephemeral port must not overwrite the entry belonging to the long-running broker a developer
+    /// is actually using: the test suite starts thousands of brokers, and a second IDE MCP server
+    /// starts its own. Clobbering the entry silently invalidates the running broker's approval token,
+    /// so every later approval fails with no signal beyond a confusing error at approval time.
+    /// The slot is taken over only once the broker that claimed it is gone, which keeps recovery
+    /// automatic after a crash.
+    /// </remarks>
+    private bool ShouldPublishBrokerState()
+    {
+        try
+        {
+            if (!File.Exists(BrokerPaths.StateFile))
+                return true;
+
+            var existing = CliJson.Deserialize<BrokerState>(File.ReadAllText(BrokerPaths.StateFile));
+            return MayPublishBrokerState(existing, _port, IsProcessAlive);
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Decides whether a broker on <paramref name="ourPort"/> may claim the shared state slot
+    /// currently held by <paramref name="existing"/>. Unreadable state cannot yield a usable token,
+    /// so replacing it is the recovering move.
+    /// </summary>
+    internal static bool MayPublishBrokerState(
+        BrokerState? existing,
+        int ourPort,
+        Func<int, bool> isProcessAlive)
+    {
+        if (existing is null || existing.Port == ourPort)
+            return true;
+
+        return !isProcessAlive(existing.Pid);
+    }
+
+    /// <summary>
+    /// Decides whether a broker may retract the shared state slot. Only an exact self-match
+    /// qualifies, so a broker can never delete an entry another broker owns.
+    /// </summary>
+    internal static bool MayDeleteBrokerState(BrokerState? existing, int ourPort, int ourPid)
+        => existing is null || (existing.Port == ourPort && existing.Pid == ourPid);
+
+    private static bool IsProcessAlive(int pid)
+    {
+        if (pid <= 0)
+            return false;
+
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(pid);
+            return !process.HasExited;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch
+        {
+            // Treat an undecidable probe as alive so an unrelated failure never destroys a state
+            // file we could not prove is stale.
+            return true;
+        }
+    }
+
     private void WriteBrokerState()
     {
+        if (!ShouldPublishBrokerState())
+        {
+            Log($"Not publishing broker state: {BrokerPaths.StateFile} belongs to another running broker");
+            return;
+        }
+
         var tmpPath = BrokerPaths.StateFile + ".tmp";
         try
         {
@@ -616,7 +857,8 @@ public class BrokerServer : IDisposable
                 Pid = Environment.ProcessId,
                 Port = _port,
                 StartedAt = DateTime.UtcNow,
-                EmbedToken = _embedToken
+                EmbedToken = _embedToken,
+                NativeApprovalToken = _nativeApprovalToken,
             };
 
             var json = CliJson.SerializeUntyped(state, indented: true);
@@ -630,6 +872,19 @@ public class BrokerServer : IDisposable
             Log($"Warning: failed to write broker state: {ex.Message}");
         }
     }
+
+    private static string CreateNativeApprovalToken()
+        => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+
+    private static bool FixedTimeApprovalTokenEquals(string expected, string? supplied)
+        => supplied is not null &&
+           expected.Length == supplied.Length &&
+           CryptographicOperations.FixedTimeEquals(
+               Encoding.UTF8.GetBytes(expected),
+               Encoding.UTF8.GetBytes(supplied));
 
     private async Task HandleMutationLeaseRoute(HttpListenerContext context, string method, string path)
     {
@@ -690,12 +945,19 @@ public class BrokerServer : IDisposable
         await stateGate.WaitAsync(_cts?.Token ?? CancellationToken.None);
         try
         {
-            if (!_agents.ContainsKey(agentId))
+            if (!_agents.TryGetValue(agentId, out var connection))
             {
                 await WriteJsonResponseAsync(context, 404, new JsonObject { ["error"] = $"Agent '{agentId}' not found" });
                 return;
             }
-            status = _mutationLeases.Control(agentId, action, leaseId, holderKind, label, force, transactionId);
+            status = _mutationLeases.Control(
+                LeaseKeyForRegistration(connection.Registration),
+                action,
+                leaseId,
+                holderKind,
+                label,
+                force,
+                transactionId);
         }
         catch (ArgumentException ex)
         {
@@ -751,7 +1013,7 @@ public class BrokerServer : IDisposable
         }
 
         var agentId = Uri.UnescapeDataString(segments[2]);
-        if (context.Request.ContentLength64 > 128 * 1024)
+        if (context.Request.ContentLength64 > MaxRecordingRequestChars)
         {
             await WriteJsonResponseAsync(context, 413, new JsonObject { ["error"] = "Request body too large" });
             return;
@@ -763,7 +1025,7 @@ public class BrokerServer : IDisposable
             var text = await ReadBoundedBodyAsync(
                 context.Request.InputStream,
                 context.Request.ContentEncoding ?? Encoding.UTF8,
-                128 * 1024);
+                MaxRecordingRequestChars);
             body = string.IsNullOrWhiteSpace(text)
                 ? new JsonObject()
                 : JsonNode.Parse(text)?.AsObject() ?? new JsonObject();
@@ -789,7 +1051,10 @@ public class BrokerServer : IDisposable
         }
         if (!action.Equals("status", StringComparison.Ordinal))
         {
-            var lease = _mutationLeases.Control(agentId, "validate", leaseId, null, null, force: false);
+            var leaseKey = _agents.TryGetValue(agentId, out var recordingConnection)
+                ? LeaseKeyForRegistration(recordingConnection.Registration)
+                : agentId;
+            var lease = _mutationLeases.Control(leaseKey, "validate", leaseId, null, null, force: false);
             if (!lease.Allowed)
             {
                 await WriteJsonResponseAsync(context, 409, new JsonObject
@@ -971,6 +1236,853 @@ public class BrokerServer : IDisposable
         return new RouteCheckpointStatus { Connected = true, HasCheckpoint = false };
     }
 
+    /// <summary>
+    /// Imports foreign diagnostic artifacts into a memory-only, capability-gated quarantine.
+    /// Import is deliberately read-only: no flow is executed, no workspace path is used, and no
+    /// repair history is appended. Attestation facts are not accepted on this browser-facing route;
+    /// imports remain untrusted unless a trusted host calls the provider-neutral policy directly.
+    /// </summary>
+    private async Task HandleArtifactTrustRoute(HttpListenerContext context, string method, string path)
+    {
+        const string capabilityHeader = "X-Maui-Artifact-Capability";
+        var normalizedPath = path.TrimEnd('/');
+
+        if (string.Equals(normalizedPath, "/api/artifact-trust/import", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!method.Equals("POST", StringComparison.OrdinalIgnoreCase))
+            {
+                await WriteTypedJsonResponseAsync(context, 405, ArtifactTrustRouteResponse.Failure("Method not allowed."));
+                return;
+            }
+
+            var kind = HttpUtility.ParseQueryString(context.Request.Url?.Query ?? string.Empty)["kind"];
+            if (!ArtifactTrustImportKinds.IsKnown(kind))
+            {
+                await WriteTypedJsonResponseAsync(context, 400, ArtifactTrustRouteResponse.Failure(
+                    "An explicit supported artifact kind is required."));
+                return;
+            }
+
+            var maximum = string.Equals(kind, ArtifactTrustImportKinds.FlowRun, StringComparison.Ordinal)
+                ? ArtifactTrustImportService.MaxFlowRunBytes
+                : (int)Evidence.EvidenceFormat.MaxBundleFileBytes;
+            var bytes = await ReadArtifactTrustBytesAsync(context, maximum);
+            if (bytes is null)
+                return;
+
+            var imported = _artifactTrustImports.Import(
+                bytes,
+                kind!,
+                policy: null,
+                verifiedProvenance: null,
+                _cts?.Token ?? CancellationToken.None);
+            if (!imported.Ok || imported.Artifact is null)
+            {
+                await WriteTypedJsonResponseAsync(
+                    context,
+                    400,
+                    ArtifactTrustRouteResponse.Failure(imported.Error ?? "The artifact could not be imported."));
+                return;
+            }
+
+            var stored = _artifactTrustStore.Add(imported.Artifact);
+            if (!stored.Ok)
+            {
+                await WriteTypedJsonResponseAsync(
+                    context,
+                    409,
+                    ArtifactTrustRouteResponse.Failure(stored.Error ?? "The artifact could not be retained."));
+                return;
+            }
+
+            await WriteTypedJsonResponseAsync(context, 201, new ArtifactTrustRouteResponse
+            {
+                Ok = true,
+                CapabilityToken = stored.CapabilityToken,
+                Status = stored.Status,
+            });
+            return;
+        }
+
+        var segments = normalizedPath.Trim('/').Split('/');
+        if (segments.Length != 4 ||
+            !segments[0].Equals("api", StringComparison.OrdinalIgnoreCase) ||
+            !segments[1].Equals("artifact-trust", StringComparison.OrdinalIgnoreCase))
+        {
+            await WriteTypedJsonResponseAsync(context, 404, ArtifactTrustRouteResponse.Failure("Not found."));
+            return;
+        }
+
+        var artifactId = Uri.UnescapeDataString(segments[2]);
+        var action = segments[3];
+        var capabilityToken = context.Request.Headers[capabilityHeader];
+        if (string.Equals(action, "status", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!method.Equals("GET", StringComparison.OrdinalIgnoreCase))
+            {
+                await WriteTypedJsonResponseAsync(context, 405, ArtifactTrustRouteResponse.Failure("Method not allowed."));
+                return;
+            }
+
+            var result = _artifactTrustStore.GetStatus(artifactId, capabilityToken);
+            await WriteTypedJsonResponseAsync(
+                context,
+                result.StatusCode,
+                result.StatusCode == 200
+                    ? new ArtifactTrustRouteResponse { Ok = true, Status = result.Status }
+                    : ArtifactTrustRouteResponse.Failure(result.Error ?? "Imported artifact was not found."));
+            return;
+        }
+
+        if (string.Equals(action, "projection", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!method.Equals("GET", StringComparison.OrdinalIgnoreCase))
+            {
+                await WriteTypedJsonResponseAsync(context, 405, ArtifactTrustRouteResponse.Failure("Method not allowed."));
+                return;
+            }
+
+            var result = _artifactTrustStore.GetSafeProjection(artifactId, capabilityToken);
+            await WriteTypedJsonResponseAsync(
+                context,
+                result.StatusCode,
+                result.StatusCode == 200
+                    ? new ArtifactTrustRouteResponse { Ok = true, Projection = result.Projection }
+                    : ArtifactTrustRouteResponse.Failure(result.Error ?? "Imported artifact was not found."));
+            return;
+        }
+
+        if (string.Equals(action, "bind-local-reproduction", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!method.Equals("POST", StringComparison.OrdinalIgnoreCase))
+            {
+                await WriteTypedJsonResponseAsync(context, 405, ArtifactTrustRouteResponse.Failure("Method not allowed."));
+                return;
+            }
+
+            // Validate imported-artifact authority before revealing whether a local run exists.
+            var access = _artifactTrustStore.GetStatus(artifactId, capabilityToken);
+            if (access.StatusCode != 200)
+            {
+                await WriteTypedJsonResponseAsync(
+                    context,
+                    access.StatusCode,
+                    ArtifactTrustRouteResponse.Failure(access.Error ?? "Imported artifact was not found."));
+                return;
+            }
+
+            var request = await ReadArtifactTrustJsonBodyAsync<ArtifactTrustLocalReproductionRequest>(context, 32 * 1024);
+            if (request is null)
+                return;
+            if (string.IsNullOrWhiteSpace(request.LocalRunId) || request.LocalRunId.Length > 128 || request.Current is null)
+            {
+                await WriteTypedJsonResponseAsync(
+                    context,
+                    400,
+                    ArtifactTrustRouteResponse.Failure("localRunId and current reproduction facts are required."));
+                return;
+            }
+
+            var local = _workflowRuns.GetLocalReproductionFacts(request.LocalRunId);
+            if (!local.Ok || local.Facts is null)
+            {
+                await WriteTypedJsonResponseAsync(
+                    context,
+                    409,
+                    ArtifactTrustRouteResponse.Failure(local.Error ?? "The local run cannot establish reproduction facts."));
+                return;
+            }
+
+            var bound = _artifactTrustStore.BindLocalReproduction(
+                artifactId,
+                capabilityToken,
+                local.Facts,
+                request.Current);
+            await WriteTypedJsonResponseAsync(
+                context,
+                bound.StatusCode,
+                bound.StatusCode == 200
+                    ? new ArtifactTrustRouteResponse
+                    {
+                        Ok = true,
+                        Status = bound.Status,
+                        Reproduction = bound.Evaluation,
+                    }
+                    : ArtifactTrustRouteResponse.Failure(bound.Error ?? "The reproduction binding was rejected."));
+            return;
+        }
+
+        await WriteTypedJsonResponseAsync(context, 404, ArtifactTrustRouteResponse.Failure("Not found."));
+    }
+
+    private async Task HandleTestAgentRoute(HttpListenerContext context, string method, string path)
+    {
+        const int maxBodyChars = 1_048_576;
+        var normalizedPath = path.TrimEnd('/');
+        if (!method.Equals("POST", StringComparison.OrdinalIgnoreCase))
+        {
+            await WriteTypedJsonResponseAsync(
+                context,
+                405,
+                new Microsoft.Maui.DevFlow.Testing.MauiTestAgentToolResult
+                {
+                    Error = TestAgentRouteError(
+                        Microsoft.Maui.DevFlow.Testing.MauiTestAgentErrorCodes.UnsupportedOperation,
+                        Microsoft.Maui.DevFlow.Testing.MauiTestAgentErrorCategories.Unsupported,
+                        "Only POST is supported by the restricted test-agent broker protocol.",
+                        retryable: false),
+                });
+            return;
+        }
+        if (!DevFlowPreviewPolicy.IsBrokerTestAgentRouteEnabled(_previewFlags, normalizedPath))
+        {
+            await WriteTypedJsonResponseAsync(
+                context,
+                404,
+                new Microsoft.Maui.DevFlow.Testing.MauiTestAgentToolResult
+                {
+                    Error = TestAgentRouteError(
+                        Microsoft.Maui.DevFlow.Testing.MauiTestAgentErrorCodes.UnsupportedOperation,
+                        Microsoft.Maui.DevFlow.Testing.MauiTestAgentErrorCategories.Unsupported,
+                    "The restricted test-agent preview is disabled by the effective agent-authoring feature policy. " +
+                        "Set DEVFLOW_PREVIEW_AGENT_AUTHORING=true in the environment that starts the broker, then restart " +
+                        "the broker: setting it only in an agent host or a new shell does not change a broker that is " +
+                        "already running. PowerShell: $env:DEVFLOW_PREVIEW_AGENT_AUTHORING = 'true'; maui devflow broker " +
+                        "stop; maui devflow broker start.",
+                        retryable: false),
+                });
+            return;
+        }
+
+        if (string.Equals(normalizedPath, "/api/test-agent/sessions/begin", StringComparison.OrdinalIgnoreCase))
+        {
+            var request = await ReadWorkflowRunBodyAsync<Microsoft.Maui.DevFlow.Testing.MauiTestAgentSessionBeginRequest>(context, maxBodyChars);
+            if (request is null)
+                return;
+            request.TargetState = await GetLiveTestAgentTargetStateAsync(request.Envelope?.Target, request.TargetState);
+            if (request.TargetState is null)
+            {
+                await WriteTypedJsonResponseAsync(context, 409, new Microsoft.Maui.DevFlow.Testing.MauiTestAgentSessionResult
+                {
+                    Error = TestAgentRouteError(
+                        Microsoft.Maui.DevFlow.Testing.MauiTestAgentErrorCodes.TargetStale,
+                        Microsoft.Maui.DevFlow.Testing.MauiTestAgentErrorCategories.Target,
+                        "The explicit target agent and instance are not currently connected.",
+                        retryable: false),
+                });
+                return;
+            }
+            CanonicalizeTestAgentTarget(request.Envelope?.Target, request.TargetState);
+
+            var result = _testAgentSessions.Begin(request);
+            await WriteTypedJsonResponseAsync(context, TestAgentStatusCode(result.Error), result);
+            return;
+        }
+
+        if (string.Equals(normalizedPath, "/api/test-agent/sessions/status", StringComparison.OrdinalIgnoreCase))
+        {
+            var request = await ReadWorkflowRunBodyAsync<Microsoft.Maui.DevFlow.Testing.MauiTestAgentSessionAccessRequest>(context, maxBodyChars);
+            if (request is null)
+                return;
+            var result = _testAgentSessions.Status(request);
+            await WriteTypedJsonResponseAsync(context, TestAgentStatusCode(result.Error), result);
+            return;
+        }
+
+        if (string.Equals(normalizedPath, "/api/test-agent/sessions/abandon", StringComparison.OrdinalIgnoreCase))
+        {
+            var request = await ReadWorkflowRunBodyAsync<Microsoft.Maui.DevFlow.Testing.MauiTestAgentSessionAccessRequest>(context, maxBodyChars);
+            if (request is null)
+                return;
+            var result = _testAgentSessions.Abandon(request);
+            await WriteTypedJsonResponseAsync(context, TestAgentStatusCode(result.Error), result);
+            return;
+        }
+
+        if (string.Equals(normalizedPath, "/api/test-agent/approvals/request", StringComparison.OrdinalIgnoreCase))
+        {
+            if (_trustedHostApprovalVerifier is null)
+            {
+                await WriteTypedJsonResponseAsync(context, 501, new Microsoft.Maui.DevFlow.Testing.MauiTestAgentApprovalResult
+                {
+                    Error = TestAgentRouteError(
+                        Microsoft.Maui.DevFlow.Testing.MauiTestAgentErrorCodes.HumanApprovalRequired,
+                        Microsoft.Maui.DevFlow.Testing.MauiTestAgentErrorCategories.Unsupported,
+                        "Native host approval is unavailable in this broker build. Approval requests are disabled rather than presented as actionable.",
+                        retryable: false),
+                });
+                return;
+            }
+            var request = await ReadWorkflowRunBodyAsync<Microsoft.Maui.DevFlow.Testing.MauiTestAgentApprovalSubmitRequest>(context, maxBodyChars);
+            if (request is null)
+                return;
+            var result = _testAgentSessions.SubmitApprovalRequest(request);
+            await WriteTypedJsonResponseAsync(context, TestAgentStatusCode(result.Error), result);
+            return;
+        }
+
+        if (string.Equals(normalizedPath, "/api/test-agent/grants/issue", StringComparison.OrdinalIgnoreCase))
+        {
+            // Kept as an explicit refusal rather than deleted: the route name appears in earlier
+            // protocol drafts, and a 501 that says why is clearer to a caller than a 404 that
+            // reads like a missing build. There is no direct grant path behind it in any build —
+            // a grant exists only as the outcome of deciding a persisted approval request.
+            await WriteTypedJsonResponseAsync(context, 501, new Microsoft.Maui.DevFlow.Testing.MauiTestAgentGrantIssueResult
+            {
+                Error = TestAgentRouteError(
+                    Microsoft.Maui.DevFlow.Testing.MauiTestAgentErrorCodes.HumanApprovalRequired,
+                    Microsoft.Maui.DevFlow.Testing.MauiTestAgentErrorCategories.Unsupported,
+                    "Direct grant issuance does not exist. Submit an approval request, then have it decided by an owner-token approval host such as 'maui devflow approve <approval-request-id>'.",
+                    retryable: false),
+            });
+            return;
+        }
+
+        if (string.Equals(normalizedPath, "/api/test-agent/mutations/authorize", StringComparison.OrdinalIgnoreCase))
+        {
+            var request = await ReadWorkflowRunBodyAsync<Microsoft.Maui.DevFlow.Testing.MauiTestAgentMutationAuthorizationRequest>(context, maxBodyChars);
+            if (request is null)
+                return;
+            request.CurrentTargetState = await GetLiveTestAgentTargetStateAsync(
+                request.Envelope?.Target,
+                request.CurrentTargetState);
+            if (request.CurrentTargetState is null)
+            {
+                await WriteTypedJsonResponseAsync(context, 409, new Microsoft.Maui.DevFlow.Testing.MauiTestAgentMutationAuthorizationResult
+                {
+                    Error = TestAgentRouteError(
+                        Microsoft.Maui.DevFlow.Testing.MauiTestAgentErrorCodes.TargetStale,
+                        Microsoft.Maui.DevFlow.Testing.MauiTestAgentErrorCategories.Target,
+                        "The explicit target agent and instance are not currently connected.",
+                        retryable: false),
+                });
+                return;
+            }
+
+            var result = _testAgentSessions.AuthorizeMutation(request);
+            await WriteTypedJsonResponseAsync(context, TestAgentStatusCode(result.Error), result);
+            return;
+        }
+
+        if (string.Equals(normalizedPath, "/api/test-agent/exploration/authorize", StringComparison.OrdinalIgnoreCase))
+        {
+            var request = await ReadWorkflowRunBodyAsync<Microsoft.Maui.DevFlow.Testing.MauiTestAgentExplorationRequest>(context, maxBodyChars);
+            if (request is null)
+                return;
+            request.CurrentTargetState = await GetLiveTestAgentTargetStateAsync(
+                request.Envelope?.Target,
+                request.CurrentTargetState);
+            if (request.CurrentTargetState is null)
+            {
+                await WriteTypedJsonResponseAsync(context, 409, new Microsoft.Maui.DevFlow.Testing.MauiTestAgentExplorationResult
+                {
+                    Error = TestAgentRouteError(
+                        Microsoft.Maui.DevFlow.Testing.MauiTestAgentErrorCodes.TargetStale,
+                        Microsoft.Maui.DevFlow.Testing.MauiTestAgentErrorCategories.Target,
+                        "The explicit target agent and instance are not currently connected.",
+                        retryable: false),
+                });
+                return;
+            }
+
+            var result = _testAgentSessions.AuthorizeExploration(request);
+            await WriteTypedJsonResponseAsync(context, TestAgentStatusCode(result.Error), result);
+            return;
+        }
+
+        if (string.Equals(normalizedPath, "/api/test-agent/mutations/complete", StringComparison.OrdinalIgnoreCase))
+        {
+            var request = await ReadWorkflowRunBodyAsync<Microsoft.Maui.DevFlow.Testing.MauiTestAgentMutationCompletion>(context, maxBodyChars);
+            if (request is null)
+                return;
+            var result = _testAgentSessions.CompleteMutation(request);
+            await WriteTypedJsonResponseAsync(context, TestAgentStatusCode(result.Error), result);
+            return;
+        }
+
+        if (string.Equals(normalizedPath, "/api/test-agent/draft/action", StringComparison.OrdinalIgnoreCase))
+        {
+            var request = await ReadWorkflowRunBodyAsync<Microsoft.Maui.DevFlow.Testing.MauiTestAgentActionRequest>(context, maxBodyChars);
+            if (request is null)
+                return;
+            var result = _testAgentSessions.AppendAction(
+                request.Envelope?.Correlation?.AuthoringSessionId,
+                request.AuthorizationId,
+                request);
+            await WriteTypedJsonResponseAsync(context, TestAgentStatusCode(result.Error), result);
+            return;
+        }
+
+        if (string.Equals(normalizedPath, "/api/test-agent/draft/assertion", StringComparison.OrdinalIgnoreCase))
+        {
+            var request = await ReadWorkflowRunBodyAsync<Microsoft.Maui.DevFlow.Testing.MauiTestAgentAssertionRequest>(context, maxBodyChars);
+            if (request is null)
+                return;
+            var result = _testAgentSessions.AddAssertion(
+                request.Envelope?.Correlation?.AuthoringSessionId,
+                request.AuthorizationId,
+                request);
+            await WriteTypedJsonResponseAsync(context, TestAgentStatusCode(result.Error), result);
+            return;
+        }
+
+        if (string.Equals(normalizedPath, "/api/test-agent/draft/commit", StringComparison.OrdinalIgnoreCase))
+        {
+            var request = await ReadWorkflowRunBodyAsync<Microsoft.Maui.DevFlow.Testing.MauiTestAgentSessionAccessRequest>(context, maxBodyChars);
+            if (request is null)
+                return;
+            var result = _testAgentSessions.Commit(request, request.AuthorizationId);
+            await WriteTypedJsonResponseAsync(context, TestAgentStatusCode(result.Error), result);
+            return;
+        }
+
+        if (string.Equals(normalizedPath, "/api/test-agent/draft/migrate-preview", StringComparison.OrdinalIgnoreCase))
+        {
+            var request = await ReadWorkflowRunBodyAsync<Microsoft.Maui.DevFlow.Testing.MauiTestAgentSessionAccessRequest>(context, maxBodyChars);
+            if (request is null)
+                return;
+            var result = _testAgentSessions.MigratePreview(request);
+            await WriteTypedJsonResponseAsync(context, TestAgentStatusCode(result.Error), result);
+            return;
+        }
+
+        if (string.Equals(normalizedPath, "/api/test-agent/patch", StringComparison.OrdinalIgnoreCase))
+        {
+            var request = await ReadWorkflowRunBodyAsync<Microsoft.Maui.DevFlow.Testing.MauiTestAgentPatchRequest>(context, maxBodyChars);
+            if (request is null)
+                return;
+            var result = _testAgentSessions.Patch(request);
+            await WriteTypedJsonResponseAsync(context, TestAgentStatusCode(result.Error), result);
+            return;
+        }
+
+        if (string.Equals(normalizedPath, "/api/test-agent/audit", StringComparison.OrdinalIgnoreCase))
+        {
+            var request = await ReadWorkflowRunBodyAsync<Microsoft.Maui.DevFlow.Testing.MauiTestAgentSessionAccessRequest>(context, maxBodyChars);
+            if (request is null)
+                return;
+            var result = _testAgentSessions.Audit(request);
+            await WriteTypedJsonResponseAsync(context, TestAgentStatusCode(result.Error), result);
+            return;
+        }
+
+        if (string.Equals(normalizedPath, "/api/test-agent/runs/bind", StringComparison.OrdinalIgnoreCase))
+        {
+            var request = await ReadWorkflowRunBodyAsync<Microsoft.Maui.DevFlow.Testing.MauiTestAgentRunBindingRequest>(context, maxBodyChars);
+            if (request is null)
+                return;
+            var result = _testAgentSessions.BindRun(request);
+            await WriteTypedJsonResponseAsync(context, TestAgentStatusCode(result.Error), result);
+            return;
+        }
+
+        if (string.Equals(normalizedPath, "/api/test-agent/runs/validate", StringComparison.OrdinalIgnoreCase))
+        {
+            var request = await ReadWorkflowRunBodyAsync<Microsoft.Maui.DevFlow.Testing.MauiTestAgentRunBindingRequest>(context, maxBodyChars);
+            if (request is null)
+                return;
+            var result = _testAgentSessions.ValidateRunBinding(request);
+            await WriteTypedJsonResponseAsync(context, TestAgentStatusCode(result.Error), result);
+            return;
+        }
+
+        if (string.Equals(normalizedPath, "/api/test-agent/reset-offer", StringComparison.OrdinalIgnoreCase))
+        {
+            await HandleTestAgentResetOfferAsync(context, maxBodyChars);
+            return;
+        }
+
+        await WriteTypedJsonResponseAsync(context, 404, new Microsoft.Maui.DevFlow.Testing.MauiTestAgentToolResult
+        {
+            Error = TestAgentRouteError(
+                Microsoft.Maui.DevFlow.Testing.MauiTestAgentErrorCodes.UnsupportedOperation,
+                Microsoft.Maui.DevFlow.Testing.MauiTestAgentErrorCategories.Unsupported,
+                "The requested restricted test-agent broker operation is not supported.",
+                retryable: false),
+        });
+    }
+
+    /// <summary>
+    /// Reports what the target's lifecycle reset owner would establish, without establishing it.
+    /// </summary>
+    /// <remarks>
+    /// Admission compares a plan's declared seed fingerprint against the one an owner reports, but
+    /// that fingerprint digests owner, strategy, app, device, and build — facts only the broker
+    /// holds. Without this an author can only guess a value that fails closed, or spend a one-shot
+    /// run grant to discover it. The answer is deliberately an offer: it performs no reset, and the
+    /// broker still refuses admission unless an owner later actually attests one.
+    /// </remarks>
+    private async Task HandleTestAgentResetOfferAsync(HttpListenerContext context, int maxBodyChars)
+    {
+        var request = await ReadWorkflowRunBodyAsync<Microsoft.Maui.DevFlow.Testing.MauiTestAgentRunBindingRequest>(
+            context,
+            maxBodyChars);
+        if (request is null)
+            return;
+
+        var target = request.Envelope?.Target;
+        if (target is null ||
+            string.IsNullOrWhiteSpace(target.AgentId) ||
+            !_agents.TryGetValue(target.AgentId, out var connection) ||
+            !string.Equals(connection.Registration.InstanceId, target.AgentInstanceId, StringComparison.Ordinal))
+        {
+            await WriteJsonResponseAsync(context, 409, new JsonObject
+            {
+                ["ok"] = false,
+                ["reason"] = "target-unavailable",
+                ["note"] = "The reset offer requires the exact connected agentId and agentInstanceId.",
+            });
+            return;
+        }
+
+        var owner = CreateAppActionResetOwnerFor(connection.Registration);
+        if (owner is null)
+        {
+            await WriteJsonResponseAsync(context, 200, new JsonObject
+            {
+                ["ok"] = true,
+                ["ownerAvailable"] = false,
+                ["note"] =
+                    "No lifecycle reset owner is registered for this target, so a plan that sets " +
+                    "reset.required=true cannot be admitted. Either add an in-app reset action, or " +
+                    "declare reset.required=false and state that repeated runs are not independent.",
+            });
+            return;
+        }
+
+        // Whether the app still advertises the action is a live fact, so it is probed rather than
+        // assumed: an app can be rebuilt without it while the broker keeps running.
+        var canReset = await owner.CanResetAsync(CancellationToken.None).ConfigureAwait(false);
+        var offer = owner.DescribeOffer();
+
+        await WriteJsonResponseAsync(context, 200, new JsonObject
+        {
+            ["ok"] = true,
+            ["ownerAvailable"] = canReset,
+            ["ownerId"] = offer.OwnerId,
+            ["strategy"] = offer.Strategy,
+            ["resetIdentity"] = offer.ResetIdentity,
+            ["seedFingerprint"] = offer.SeedFingerprint,
+            ["backendStateFingerprint"] = offer.BackendStateFingerprint,
+            ["sideEffectPolicy"] = Microsoft.Maui.DevFlow.Testing.MauiFlowSideEffectPolicies.AppStateResettable,
+            ["note"] = canReset
+                ? "Declare reset.strategy and reset.seedFingerprint exactly as reported, with " +
+                  "sideEffectPolicy app-state-resettable. This owner resets app state only and seeds " +
+                  "no backend, so test-tenant-resettable can never be admitted for it. This is an " +
+                  "offer, not evidence: admission still requires an owner to attest a real reset."
+                : "The app does not currently advertise the reset action this owner needs, so a " +
+                  "reset-requiring plan would fail admission. Ask the human to add it before " +
+                  "declaring reset.required=true.",
+        });
+    }
+
+    /// <summary>
+    /// Builds the app-action reset owner for a registration, or null when the app cannot host one.
+    /// </summary>
+    /// <summary>
+    /// Performs a plan's declared lifecycle reset and records what the owner attested, before
+    /// replay admission is evaluated.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Admission compares a declared reset contract against evidence an owner actually produced,
+    /// and fails closed when that evidence is absent. Describing an offer is not evidence, so
+    /// without this step a plan that correctly declares <c>reset.required</c> is denied on every
+    /// attempt — and because the denial happens after the grant is bound, each attempt silently
+    /// spends a one-shot run approval while executing nothing.
+    /// </para>
+    /// <para>
+    /// The reset runs here rather than inside the coordinator because it is outbound async work
+    /// against the app, and because doing it before <c>Start</c> keeps one attested result visible
+    /// to both admission and the run report. Every failure path leaves the context untouched: a
+    /// missing owner, a refusal, or a thrown client error must all read as "no reset was proven",
+    /// never as a reset that did not happen.
+    /// </para>
+    /// </remarks>
+    private async Task<PreRunResetMutationLease?> EstablishPreRunResetAsync(
+        AgentConnection connection,
+        WorkflowRunStartRequest request)
+    {
+        var declared = request?.Plan?.Reset;
+        if (declared?.Required != true)
+            return null;
+
+        // Only supply evidence that is missing. Overwriting a caller's attestation would let this
+        // step relabel a reset somebody else owns.
+        if (request!.Context?.Reset is not null)
+            return null;
+
+        var owner = CreateAppActionResetOwnerFor(connection.Registration);
+        if (owner is null)
+            return null;
+
+        if (!string.IsNullOrWhiteSpace(declared.Strategy) &&
+            !string.Equals(
+                declared.Strategy.Trim(),
+                Execution.AppActionFlowLifecycleResetOwner.ResetStrategy,
+                StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        if (declared.BackendTestDataSeed is not null ||
+            !await owner.CanResetAsync(CancellationToken.None).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        var resetLease = PreRunResetMutationLease.TryAcquire(
+            _mutationLeases,
+            LeaseKeyForRegistration(connection.Registration));
+        if (resetLease is null)
+            return null;
+
+        owner = CreateAppActionResetOwnerFor(connection.Registration, resetLease.LeaseId);
+        if (owner is null)
+        {
+            resetLease.Dispose();
+            return null;
+        }
+
+        Execution.FlowLifecycleResetOutcome outcome;
+        try
+        {
+            outcome = await owner.ResetAsync(new Execution.FlowLifecycleResetRequest
+            {
+                Reason = "flow-replay-admission",
+                RequiredStrategy = declared.Strategy,
+                ExpectedSeedIdentity = declared.AppStateSeed?.SeedId,
+                RequiresBackendSeed = declared.BackendTestDataSeed is not null,
+            }).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            resetLease.Dispose();
+            return null;
+        }
+
+        if (!outcome.Succeeded || outcome.Applied is null)
+        {
+            resetLease.Dispose();
+            return null;
+        }
+
+        var applied = outcome.Applied;
+        if (!resetLease.PrepareHandoff())
+        {
+            resetLease.Dispose();
+            return null;
+        }
+
+        request.Context ??= new Microsoft.Maui.DevFlow.Testing.MauiFlowRunContext();
+        request.Context.Reset = new Microsoft.Maui.DevFlow.Testing.MauiFlowResetResult
+        {
+            Requested = true,
+            Succeeded = true,
+            AppStateSucceeded = applied.AppStateSucceeded,
+            BackendTestDataSucceeded = applied.BackendTestDataSucceeded,
+            Strategy = applied.Strategy,
+            ResetIdentity = applied.ResetIdentity,
+            SeedFingerprint = applied.SeedFingerprint,
+            BackendStateFingerprint = applied.BackendStateFingerprint,
+        };
+
+        // A plan may also declare the seed as a checkpoint precondition, which admission compares
+        // against an observed value. Live target observation deliberately reports no seed, because
+        // the app cannot be trusted to name its own state, so the only thing that can supply it is
+        // a reset owner that just established it — which is exactly what happened here. Without
+        // this, declaring the same seed the reset offer reports is unsatisfiable: the expected
+        // value is present, the observed one never is, and the run is denied for a precondition
+        // that was in fact met.
+        var seeded = request.Context.Preconditions ??= new Microsoft.Maui.DevFlow.Testing.MauiFlowReplayPreconditions();
+        seeded.Observed ??= new Microsoft.Maui.DevFlow.Testing.MauiFlowCheckpoint();
+        // Only the seeds are attested here. Route, window, and the rest stay whatever the host
+        // observed, because a reset owner establishes state, not where the app is standing.
+        seeded.Observed.SeedFingerprint ??= applied.SeedFingerprint;
+        seeded.Observed.BackendStateFingerprint ??= applied.BackendStateFingerprint;
+        return resetLease;
+    }
+
+    /// <remarks>
+    /// Shared so the offer a caller is told to declare and the reset a run later performs are
+    /// derived from exactly the same identity facts. Computing them apart would let an author
+    /// declare a plausible fingerprint that admission then rejects.
+    /// </remarks>
+    internal static Execution.AppActionFlowLifecycleResetOwner? CreateAppActionResetOwnerFor(
+        AgentRegistration registration,
+        string? preclaimedMutationLeaseId = null)
+    {
+        // The package is the app identity a reset re-establishes. Without it the owner cannot build
+        // a stable reset identity, so it declines rather than digesting an empty string.
+        if (registration is null || registration.Port <= 0 || string.IsNullOrWhiteSpace(registration.PackageId))
+            return null;
+
+        return new Execution.AppActionFlowLifecycleResetOwner(
+            registration.Port,
+            registration.PackageId,
+            registration.DeviceId ?? registration.Platform,
+            $"{registration.AppName}:{registration.Tfm}:{registration.Version}",
+            preclaimedMutationLeaseId);
+    }
+
+    private async Task<Microsoft.Maui.DevFlow.Testing.MauiTestAgentTargetState?> GetLiveTestAgentTargetStateAsync(
+        Microsoft.Maui.DevFlow.Testing.MauiTestAgentTarget? target,
+        Microsoft.Maui.DevFlow.Testing.MauiTestAgentTargetState? supplied = null)
+    {
+        if (target is null ||
+            string.IsNullOrWhiteSpace(target.AgentId) ||
+            string.IsNullOrWhiteSpace(target.AgentInstanceId) ||
+            !_agents.TryGetValue(target.AgentId, out var connection) ||
+            !string.Equals(connection.Registration.InstanceId, target.AgentInstanceId, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return await ReadLiveTestAgentTargetStateAsync(connection.Registration, supplied).ConfigureAwait(false);
+    }
+
+    private async Task<Microsoft.Maui.DevFlow.Testing.MauiTestAgentTargetState?> GetLiveTestAgentTargetStateAsync(
+        Microsoft.Maui.DevFlow.Testing.MauiTestAgentTargetState? supplied)
+    {
+        if (supplied is null ||
+            string.IsNullOrWhiteSpace(supplied.AgentId) ||
+            string.IsNullOrWhiteSpace(supplied.AgentInstanceId) ||
+            !_agents.TryGetValue(supplied.AgentId, out var connection) ||
+            !string.Equals(connection.Registration.InstanceId, supplied.AgentInstanceId, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return await ReadLiveTestAgentTargetStateAsync(connection.Registration, supplied).ConfigureAwait(false);
+    }
+
+    private static async Task<Microsoft.Maui.DevFlow.Testing.MauiTestAgentTargetState?> ReadLiveTestAgentTargetStateAsync(
+        AgentRegistration registration,
+        Microsoft.Maui.DevFlow.Testing.MauiTestAgentTargetState? supplied)
+    {
+        try
+        {
+            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", registration.Port)
+            {
+                AutoAcquireMutationLease = false,
+            };
+            var status = await client.GetStatusAsync().ConfigureAwait(false);
+            if (status is null)
+                return null;
+
+            return new Microsoft.Maui.DevFlow.Testing.MauiTestAgentTargetState
+            {
+                AgentId = registration.Id,
+                AgentInstanceId = registration.InstanceId,
+                AppBuildFingerprint = BuildTestAgentAppFingerprint(status),
+                // These values remain unavailable until the running agent or a trusted reset host
+                // attests them. Never turn caller-echoed values into broker-observed facts.
+                SeedFingerprint = null,
+                BackendStateFingerprint = null,
+                Route = status.Route,
+                Window = status.Window,
+                ObservedAt = DateTimeOffset.UtcNow,
+            };
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+        catch (System.Net.Sockets.SocketException)
+        {
+            return null;
+        }
+    }
+
+    private static string? BuildTestAgentAppFingerprint(Microsoft.Maui.DevFlow.Driver.AgentStatus status)
+    {
+        static string? Normalize(string? value)
+        {
+            var normalized = value?.Trim();
+            return string.IsNullOrWhiteSpace(normalized) ||
+                   string.Equals(normalized, "unknown", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : normalized;
+        }
+
+        var version = Normalize(status.App?.Version);
+        var build = Normalize(status.App?.Build);
+        return version is null && build is null
+            ? null
+            : $"{version ?? "unknown"}:{build ?? "unknown"}";
+    }
+
+    private static bool RequiresWorkflowRunCapabilities(MauiTestPlan? plan)
+        => plan?.Requirements?.RequiredCapabilities.Count > 0 ||
+           plan?.Requirements?.RequiredSemantics.Count > 0;
+
+    private static async Task<MauiFlowCapabilitySet?> ReadWorkflowRunCapabilitiesAsync(AgentRegistration registration)
+    {
+        try
+        {
+            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", registration.Port)
+            {
+                AutoAcquireMutationLease = false,
+            };
+            var status = await client.GetStatusAsync().ConfigureAwait(false);
+            return WorkflowRunCoordinator.BuildAvailableCapabilities(status);
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+        catch (System.Net.Sockets.SocketException)
+        {
+            return null;
+        }
+    }
+
+    private static void CanonicalizeTestAgentTarget(
+        Microsoft.Maui.DevFlow.Testing.MauiTestAgentTarget? target,
+        Microsoft.Maui.DevFlow.Testing.MauiTestAgentTargetState targetState)
+    {
+        if (target is null)
+            return;
+        target.AppBuildFingerprint = targetState.AppBuildFingerprint;
+        target.SeedFingerprint = targetState.SeedFingerprint;
+        target.BackendStateFingerprint = targetState.BackendStateFingerprint;
+    }
+
+    private static int TestAgentStatusCode(Microsoft.Maui.DevFlow.Testing.MauiTestAgentError? error)
+    {
+        if (error is null)
+            return 200;
+        return error.Category switch
+        {
+            Microsoft.Maui.DevFlow.Testing.MauiTestAgentErrorCategories.Authorization => 403,
+            Microsoft.Maui.DevFlow.Testing.MauiTestAgentErrorCategories.Target or
+            Microsoft.Maui.DevFlow.Testing.MauiTestAgentErrorCategories.State or
+            Microsoft.Maui.DevFlow.Testing.MauiTestAgentErrorCategories.Conflict => 409,
+            Microsoft.Maui.DevFlow.Testing.MauiTestAgentErrorCategories.Capability => 429,
+            Microsoft.Maui.DevFlow.Testing.MauiTestAgentErrorCategories.Unsupported => 400,
+            _ => 400,
+        };
+    }
+
+    private static Microsoft.Maui.DevFlow.Testing.MauiTestAgentError TestAgentRouteError(
+        string code,
+        string category,
+        string message,
+        bool retryable)
+        => new()
+        {
+            Code = code,
+            Category = category,
+            Message = message,
+            Retryable = retryable,
+        };
+
+    private static bool FixedTimeEquals(string expected, string? supplied)
+        => !string.IsNullOrEmpty(supplied) &&
+           CryptographicOperations.FixedTimeEquals(
+               Encoding.UTF8.GetBytes(expected),
+               Encoding.UTF8.GetBytes(supplied));
+
     private async Task HandleWorkflowRunRoute(HttpListenerContext context, string method, string path)
     {
         const int maxBodyChars = 1_048_576;
@@ -1033,11 +2145,46 @@ public class BrokerServer : IDisposable
                     return;
                 }
 
+                // A cheap, non-consuming filter so an ungranted caller cannot make the broker do
+                // outbound work on its behalf. It is not the authorization boundary — the coordinator
+                // still takes the single-use decision, so a surface that skips this is still refused.
+                if (_requireWorkflowRunAuthorization &&
+                    !_testAgentSessions.CanDispatchRunAuthorization(
+                        request.AuthorizationId,
+                        request.AgentId,
+                        request.AgentInstanceId,
+                        WorkflowRunCoordinator.DescribeDispatchSteps(request.Flow),
+                        WorkflowRunCoordinator.DescribeDispatchFlowDigest(request.Flow),
+                        out var runAuthorizationError))
+                {
+                    await WriteTypedJsonResponseAsync(
+                        context,
+                        403,
+                        WorkflowRunStartResult.Rejected(403, runAuthorizationError!, null, null));
+                    return;
+                }
+
+                if (RequiresWorkflowRunCapabilities(request.Plan) &&
+                    request.AvailableCapabilities is null)
+                {
+                    request.AvailableCapabilities = await ReadWorkflowRunCapabilitiesAsync(connection.Registration)
+                        .ConfigureAwait(false);
+                }
+
+                // Admission reads attested reset evidence; nothing else in the run path produces
+                // it, so the reset happens here, before admission and before any device work.
+                using var resetLease = await EstablishPreRunResetAsync(connection, request).ConfigureAwait(false);
+
                 var target = CreateWorkflowRunTarget(connection.Registration);
                 var result = _workflowRuns.Start(
                     request,
                     target,
-                    () => IsCurrentAgentConnection(connection));
+                    () => IsCurrentAgentConnection(connection),
+                    new WorkflowRunExecutionOptions
+                    {
+                        ReproductionExpectation = request.ReproductionExpectation,
+                    },
+                    leaseHandoff: resetLease?.Handoff);
                 await WriteTypedJsonResponseAsync(context, result.StatusCode, result);
             }
             finally
@@ -1104,6 +2251,119 @@ public class BrokerServer : IDisposable
         }
 
         await WriteTypedJsonResponseAsync(context, 404, WorkflowRunStatusResponse.Failure("Not found."));
+    }
+
+    private async Task<byte[]?> ReadArtifactTrustBytesAsync(HttpListenerContext context, int maximumBytes)
+    {
+        if (context.Request.ContentLength64 > maximumBytes)
+        {
+            await WriteTypedJsonResponseAsync(
+                context,
+                413,
+                ArtifactTrustRouteResponse.Failure("Request body too large."));
+            return null;
+        }
+
+        try
+        {
+            using var output = new MemoryStream(Math.Min(maximumBytes, 64 * 1024));
+            var buffer = new byte[16 * 1024];
+            var total = 0;
+            while (true)
+            {
+                var read = await context.Request.InputStream.ReadAsync(
+                    buffer.AsMemory(0, buffer.Length),
+                    _cts?.Token ?? CancellationToken.None);
+                if (read == 0)
+                    break;
+
+                total += read;
+                if (total > maximumBytes)
+                {
+                    await WriteTypedJsonResponseAsync(
+                        context,
+                        413,
+                        ArtifactTrustRouteResponse.Failure("Request body too large."));
+                    return null;
+                }
+
+                await output.WriteAsync(buffer.AsMemory(0, read), _cts?.Token ?? CancellationToken.None);
+            }
+
+            return output.ToArray();
+        }
+        catch (OperationCanceledException)
+        {
+            await WriteTypedJsonResponseAsync(
+                context,
+                408,
+                ArtifactTrustRouteResponse.Failure("Artifact import was cancelled."));
+            return null;
+        }
+        catch (IOException)
+        {
+            await WriteTypedJsonResponseAsync(
+                context,
+                400,
+                ArtifactTrustRouteResponse.Failure("The artifact request could not be read."));
+            return null;
+        }
+    }
+
+    private async Task<T?> ReadArtifactTrustJsonBodyAsync<T>(HttpListenerContext context, int maximumChars)
+        where T : class
+    {
+        if (context.Request.ContentLength64 > maximumChars)
+        {
+            await WriteTypedJsonResponseAsync(
+                context,
+                413,
+                ArtifactTrustRouteResponse.Failure("Request body too large."));
+            return null;
+        }
+
+        try
+        {
+            var text = await ReadBoundedBodyAsync(
+                context.Request.InputStream,
+                context.Request.ContentEncoding ?? Encoding.UTF8,
+                maximumChars,
+                _cts?.Token ?? CancellationToken.None);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                await WriteTypedJsonResponseAsync(
+                    context,
+                    400,
+                    ArtifactTrustRouteResponse.Failure("A JSON request body is required."));
+                return null;
+            }
+
+            var value = JsonSerializer.Deserialize<T>(text, WorkflowRunJsonOptions);
+            if (value is null)
+            {
+                await WriteTypedJsonResponseAsync(
+                    context,
+                    400,
+                    ArtifactTrustRouteResponse.Failure("Invalid JSON request body."));
+            }
+            return value;
+        }
+        catch (RequestBodyTooLargeException)
+        {
+            await WriteTypedJsonResponseAsync(
+                context,
+                413,
+                ArtifactTrustRouteResponse.Failure("Request body too large."));
+            return null;
+        }
+        catch (JsonException)
+        {
+            await WriteTypedJsonResponseAsync(
+                context,
+                400,
+                ArtifactTrustRouteResponse.Failure("Invalid JSON request body."));
+            return null;
+        }
     }
 
     private async Task<T?> ReadWorkflowRunBodyAsync<T>(HttpListenerContext context, int maxChars)
@@ -1188,7 +2448,113 @@ public class BrokerServer : IDisposable
             registration.InstanceId,
             registration.Port,
             registration.Platform,
-            registration.AppName);
+            registration.AppName,
+            LeaseKeyForRegistration(registration));
+
+    internal static string LeaseKeyForRegistration(AgentRegistration registration) => registration.Id;
+
+    /// <summary>
+    /// The broker's one authorization boundary for starting a device-mutating workflow run. The
+    /// coordinator refuses to start without a decision from here, so this stays true no matter how
+    /// many surfaces dispatch runs: MCP, the Inspector workbench, the replay bridge, or a future one.
+    /// </summary>
+    internal WorkflowRunDispatchDecision AuthorizeWorkflowRunDispatch(WorkflowRunDispatch dispatch)
+    {
+        var decision = DecideWorkflowRunDispatch(dispatch);
+        if (!decision.Allowed)
+        {
+            // A refusal has no run record to journal against, so the broker log is the only place a
+            // repeated forged or unrecognized dispatch attempt can be noticed at all.
+            Log($"Refused a workflow run dispatch from '{dispatch.Origin}' for " +
+                $"{dispatch.AgentId}/{dispatch.AgentInstanceId}: {decision.Error}");
+        }
+
+        return decision;
+    }
+
+    internal WorkflowRunDispatchDecision DecideWorkflowRunDispatch(WorkflowRunDispatch dispatch)
+    {
+        switch (dispatch.Origin)
+        {
+            // The Inspector is a human at a local, read-token-gated UI rather than an agent acting
+            // for an absent human, so it has no MCP grant to present and deliberately proves
+            // something else: the broker itself created this adapter for this exact agent instance
+            // (a ticket no browser or third route can compute), and it currently holds the app's
+            // single-writer mutation lease, which the coordinator then transfers atomically.
+            case WorkflowRunDispatchOrigin.InspectorWorkbench:
+            case WorkflowRunDispatchOrigin.InspectorReplayBridge:
+                if (!IsBrokerIssuedWorkflowRunDispatchTicket(dispatch))
+                    return WorkflowRunDispatchDecision.Deny(UnticketedDispatchError);
+                return dispatch.LeaseHandoff is null
+                    ? WorkflowRunDispatchDecision.Deny(
+                        "The Inspector must already hold this app's mutation lease to start a workflow run.")
+                    : WorkflowRunDispatchDecision.Allow(
+                        dispatch.Origin == WorkflowRunDispatchOrigin.InspectorWorkbench
+                            ? "inspector-workbench-lease"
+                            : "inspector-replay-bridge-lease");
+
+            // Repair validation replays a reviewer-approved proposal from inside the broker, and the
+            // reviewer's repair grant — not an ordinary run authorization — is what permits it.
+            case WorkflowRunDispatchOrigin.RepairValidation:
+                if (dispatch.HasDeviceExtensions)
+                {
+                    return WorkflowRunDispatchDecision.Deny(
+                        "Repair validation cannot execute devicePreconditions or deviceSteps because the repair grant does not authorize those mutations.");
+                }
+                return IsBrokerIssuedWorkflowRunDispatchTicket(dispatch)
+                    ? WorkflowRunDispatchDecision.Allow("broker-repair-validation")
+                    : WorkflowRunDispatchDecision.Deny(UnticketedDispatchError);
+
+            case WorkflowRunDispatchOrigin.TestAgentGrant:
+                if (!_requireWorkflowRunAuthorization)
+                    return WorkflowRunDispatchDecision.Allow("test-only-authorization-disabled");
+                return _testAgentSessions.TryConsumeRunDispatchAuthorization(
+                        dispatch.AuthorizationId,
+                        dispatch.AgentId,
+                        dispatch.AgentInstanceId,
+                        dispatch.Steps,
+                        dispatch.FlowDigest,
+                        out var error)
+                    ? WorkflowRunDispatchDecision.Allow("test-agent-human-grant")
+                    : WorkflowRunDispatchDecision.Deny(error!);
+
+            default:
+                return WorkflowRunDispatchDecision.Deny(
+                    "The workflow run dispatch origin is not one this broker authorizes.");
+        }
+    }
+
+    private const string UnticketedDispatchError =
+        "A broker-issued dispatch ticket for this exact agent instance is required to start a workflow run.";
+
+    /// <summary>
+    /// Mints the proof a broker-owned dispatch surface presents back to the coordinator. It is
+    /// derived from a per-broker key so nothing outside this process can forge one, and it is bound
+    /// to the exact agent instance and origin it was issued for, so it can be replayed neither
+    /// against another app nor against a different origin's weaker rule. The value is an in-process
+    /// capability with no expiry: never return it to a client, log it, or write it to disk.
+    /// </summary>
+    private string IssueWorkflowRunDispatchTicket(
+        AgentRegistration registration,
+        WorkflowRunDispatchOrigin origin)
+        => ComputeWorkflowRunDispatchTicket(registration.Id, registration.InstanceId, origin);
+
+    internal string ComputeWorkflowRunDispatchTicket(
+        string agentId,
+        string agentInstanceId,
+        WorkflowRunDispatchOrigin origin)
+        => Convert.ToHexString(HMACSHA256.HashData(
+            _workflowRunDispatchKey,
+            Encoding.UTF8.GetBytes($"workflow-run-dispatch\n{origin}\n{agentId}\n{agentInstanceId}")));
+
+    private bool IsBrokerIssuedWorkflowRunDispatchTicket(WorkflowRunDispatch dispatch)
+        => !string.IsNullOrEmpty(dispatch.DispatchTicket) &&
+           CryptographicOperations.FixedTimeEquals(
+               Encoding.UTF8.GetBytes(dispatch.DispatchTicket),
+               Encoding.UTF8.GetBytes(ComputeWorkflowRunDispatchTicket(
+                   dispatch.AgentId,
+                   dispatch.AgentInstanceId,
+                   dispatch.Origin)));
 
     private bool IsCurrentAgentConnection(AgentConnection expected)
         => _agents.TryGetValue(expected.Registration.Id, out var current) &&
@@ -1220,7 +2586,30 @@ public class BrokerServer : IDisposable
             AgentInstanceId = execution.Target.AgentInstanceId,
             AuthorityEpoch = execution.AuthorityEpoch
         });
+        Microsoft.Maui.DevFlow.Driver.AgentStatus? liveStatus = null;
+        try
+        {
+            // Target facts are observed before replay and are report metadata only. They do not
+            // grant reset or source authority, and unavailable facts remain absent rather than
+            // being inferred from a package name or host path.
+            liveStatus = await client.GetStatusAsync().ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or IOException or TaskCanceledException)
+        {
+            // The canonical runner will report the actual transport failure. Keep target facts
+            // capability-honest when the app cannot answer this optional read.
+        }
         var evidenceCapture = execution.Options.EvidenceCaptureFactory?.Invoke(client);
+        AgentRegistration? registration = null;
+        if (_agents.TryGetValue(execution.Target.AgentId, out var currentConnection) &&
+            string.Equals(
+                currentConnection.Registration.InstanceId,
+                execution.Target.AgentInstanceId,
+                StringComparison.Ordinal))
+        {
+            registration = currentConnection.Registration;
+        }
+
         var runner = new MauiFlowRunner(
             client,
             new MauiFlowRunnerOptions
@@ -1231,20 +2620,92 @@ public class BrokerServer : IDisposable
                     TargetId = execution.Target.AgentId,
                     AgentId = execution.Target.AgentId,
                     AgentInstanceId = execution.Target.AgentInstanceId,
-                    Platform = execution.Target.Platform,
-                    AppId = execution.Target.AppName,
+                    Platform = liveStatus?.Device?.Platform ?? execution.Target.Platform,
+                    AppId = liveStatus?.App?.PackageId ?? execution.Target.AppName,
+                    AppBuildFingerprint = liveStatus?.App?.Build,
+                    DeviceProfile = liveStatus?.Device is null ||
+                        string.IsNullOrWhiteSpace(liveStatus.Device.DeviceType) &&
+                        string.IsNullOrWhiteSpace(liveStatus.Device.Idiom)
+                        ? null
+                        : string.Join(
+                            "|",
+                            liveStatus.Device.DeviceType ?? string.Empty,
+                            liveStatus.Device.Idiom ?? string.Empty),
                 },
                 Plan = execution.SafetyRequest.Plan,
                 RunContext = execution.SafetyRequest.Context,
                 ThrowOnCancellation = false,
+                Progress = execution.Options.Progress,
+                StepObservationDelayMs = 900,
+                ExecutionExtension = null,
             },
             evidenceCapture);
         return (await runner.RunWithLegacyAsync(execution.Flow, file: null, cancellationToken)
             .ConfigureAwait(false)).LegacyReport;
     }
 
-    private async Task<WorkflowRunLedgerControlResult> ControlWorkflowRunLedgerAsync(
-        WorkflowRunLedgerControl control,
+    /// <summary>
+    /// Opens an independent business-oracle evaluation for a run against an app the broker attached
+    /// to rather than installed.
+    /// </summary>
+    /// <remarks>
+    /// The evaluator reaches the device out of band, through the same transport the CLI uses, so
+    /// the evidence is produced outside the agent channel the flow itself drove. Returning null
+    /// leaves the run unverified and therefore repair-ineligible, which is the correct outcome
+    /// whenever the plan declares no evaluable oracle or the device cannot be reached.
+    /// </remarks>
+    private async Task<IWorkflowRunOracleSession?> BeginWorkflowRunOracleSessionAsync(
+        RunOracleSessionRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (_attachedRunOracles is null)
+            return null;
+
+        var agent = _agents.Values
+            .Select(static connection => connection.Registration)
+            .FirstOrDefault(registration =>
+                string.Equals(registration.Id, request.Target.AgentId, StringComparison.Ordinal) &&
+                string.Equals(registration.InstanceId, request.Target.AgentInstanceId, StringComparison.Ordinal));
+        if (agent?.PackageId is not { Length: > 0 } packageId)
+            return null;
+        if (!_attachedRunOracles.SupportsAttachedRun(request.Plan, agent.Platform))
+            return null;
+
+        var target = new Execution.AttachedRunOracleTarget
+        {
+            Plan = request.Plan,
+            Platform = agent.Platform ?? string.Empty,
+            PackageId = packageId,
+            DeviceIdentity = agent.DeviceId,
+            Deadline = DateTimeOffset.UtcNow.AddSeconds(30),
+        };
+        var baseline = await _attachedRunOracles
+            .ObserveAttachedBaselineAsync(target, cancellationToken)
+            .ConfigureAwait(false);
+        if (!baseline.Observed)
+        {
+            Log($"Workflow run oracle baseline unavailable: {baseline.UnavailableCode}");
+            return null;
+        }
+
+        return new AttachedRunOracleSession(_attachedRunOracles, target, baseline);
+    }
+
+    /// <summary>Evaluates one run's declared oracles against the baseline taken before it ran.</summary>
+    private sealed class AttachedRunOracleSession(
+        Execution.IAttachedRunOracleEvaluator evaluator,
+        Execution.AttachedRunOracleTarget target,
+        Execution.AttachedRunOracleBaseline baseline) : IWorkflowRunOracleSession
+    {
+        public Task<IReadOnlyList<Microsoft.Maui.DevFlow.Testing.MauiIndependentBusinessOracleResult>> EvaluateAsync(
+            CancellationToken cancellationToken)
+            => evaluator.EvaluateAttachedAsync(
+                target with { Deadline = DateTimeOffset.UtcNow.AddSeconds(30) },
+                baseline,
+                cancellationToken);
+    }
+
+    private async Task<WorkflowRunLedgerControlResult> ControlWorkflowRunLedgerAsync(        WorkflowRunLedgerControl control,
         CancellationToken cancellationToken)
     {
         using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", control.Target.AgentPort)
@@ -1305,9 +2766,25 @@ public class BrokerServer : IDisposable
 
     private sealed class RequestBodyTooLargeException : Exception;
 
-    private static void DeleteBrokerState()
+    /// <summary>
+    /// Retracts this broker's registration, and only this broker's: the state file is shared
+    /// machine-wide, so deleting an entry we do not own would destroy another broker's native-host
+    /// approval token. See <see cref="ShouldPublishBrokerState"/>.
+    /// </summary>
+    private void DeleteBrokerState()
     {
-        try { File.Delete(BrokerPaths.StateFile); } catch { }
+        try
+        {
+            if (!File.Exists(BrokerPaths.StateFile))
+                return;
+
+            var existing = CliJson.Deserialize<BrokerState>(File.ReadAllText(BrokerPaths.StateFile));
+            if (!MayDeleteBrokerState(existing, _port, Environment.ProcessId))
+                return;
+
+            File.Delete(BrokerPaths.StateFile);
+        }
+        catch { }
     }
 
     private void Log(string message)
@@ -1355,7 +2832,6 @@ public class BrokerServer : IDisposable
     // Unguessable per-broker token that lets local host shells (canvas, VS Code) embed the inspector
     // in an iframe. Written to broker.json (local-only) and honored by the inspector via ?embed=.
     private readonly string _embedToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
-
     private async Task HandleInspectorRoute(HttpListenerContext context, string path)
     {
         // Routes:
@@ -1440,7 +2916,8 @@ public class BrokerServer : IDisposable
         if (_inspectors.TryGetValue(connection.Registration.Id, out var inspector))
         {
             // Stale-port detection: the agent reconnected on a different port.
-            if (inspector.AgentPort != agentPort)
+            if (inspector.AgentPort != agentPort ||
+                !string.Equals(inspector.AgentInstanceId, connection.Registration.InstanceId, StringComparison.Ordinal))
             {
                 if (_inspectors.TryRemove(new KeyValuePair<string, InspectorServer>(connection.Registration.Id, inspector)))
                 {
@@ -1452,10 +2929,36 @@ public class BrokerServer : IDisposable
 
         if (inspector == null)
         {
+            var registration = connection.Registration;
             var created = new InspectorServer(
                 0,
                 "localhost",
-                agentPort);
+                agentPort,
+                _embedToken,
+                registration.Id,
+                registration.AppName,
+                registration.Platform,
+                registration.Project,
+                registration.SessionId,
+                checkpoints: _checkpoints,
+                checkpointRegistration: registration,
+                workflowReplay: (flow, evidenceFactory, leaseHandoff, cancellationToken) =>
+                    ReplayInspectorWorkflowAsync(connection, flow, evidenceFactory, leaseHandoff, cancellationToken),
+                agentInstanceId: registration.InstanceId,
+                workflowServices: new InspectorWorkflowServices(
+                    _workflowRuns,
+                    _artifactTrustImports,
+                    _artifactTrustStore,
+                    CreateWorkflowRunTarget(registration),
+                    IssueWorkflowRunDispatchTicket(
+                        registration,
+                        WorkflowRunDispatchOrigin.InspectorWorkbench),
+                    () => IsCurrentAgentConnection(connection),
+                    _cts?.Token ?? CancellationToken.None),
+                testAgentSessions: _testAgentSessions,
+                testAgentTargetStateRefresh: supplied => GetLiveTestAgentTargetStateAsync(supplied),
+                previewFlags: _previewFlags,
+                trustedHostApprovalVerifier: _trustedHostApprovalVerifier);
             inspector = _inspectors.GetOrAdd(connection.Registration.Id, created);
             if (!ReferenceEquals(inspector, created))
             {
@@ -1520,10 +3023,34 @@ public class BrokerServer : IDisposable
         return candidates.Length == 1 ? candidates[0] : null;
     }
 
+    private static MauiTestPlan? RebindPlanToTransientFlow(MauiTestPlan? plan, MauiFlow flow)
+    {
+        if (plan?.Flow is null)
+            return plan;
+
+        var digest = MauiFlowRunReportSerializer.ComputeFlowDigest(flow);
+        if (string.Equals(plan.Flow.Digest, digest, StringComparison.Ordinal))
+            return plan;
+
+        var node = System.Text.Json.JsonSerializer
+            .SerializeToNode(plan, MauiTestingJsonContext.Default.MauiTestPlan)?
+            .AsObject();
+        if (node?["flow"]?.AsObject() is not { } flowNode)
+            return plan;
+
+        flowNode["digest"] = digest;
+        return node.Deserialize(MauiTestingJsonContext.Default.MauiTestPlan) ?? plan;
+    }
+
+    /// <summary>Normalizes an observed status value the same way the Inspector classifies one.</summary>
+    private static string? SafeCheckpointText(string? value, int maximum = 256)
+        => InspectorServer.SafeInspectorText(value, maximum);
+
     private async Task<FlowReplayReport> ReplayInspectorWorkflowAsync(
         AgentConnection connection,
         MauiFlow flow,
         Func<Microsoft.Maui.DevFlow.Driver.AgentClient, IFlowReplayEvidenceCapture?> evidenceCaptureFactory,
+        WorkflowRunLeaseHandoff leaseHandoff,
         CancellationToken _)
     {
         if (!IsCurrentAgentConnection(connection))
@@ -1548,7 +3075,12 @@ public class BrokerServer : IDisposable
             new WorkflowRunExecutionOptions
             {
                 EvidenceCaptureFactory = evidenceCaptureFactory
-            });
+            },
+            leaseHandoff,
+            dispatchOrigin: WorkflowRunDispatchOrigin.InspectorReplayBridge,
+            dispatchTicket: IssueWorkflowRunDispatchTicket(
+                registration,
+                WorkflowRunDispatchOrigin.InspectorReplayBridge));
         if (!started.Ok || started.Run is null || string.IsNullOrWhiteSpace(started.CapabilityToken))
         {
             throw new WorkflowRunRejectedException(
@@ -1562,6 +3094,12 @@ public class BrokerServer : IDisposable
             CancellationToken.None).ConfigureAwait(false);
         if (snapshot.CompatibilityReport is not null)
             return snapshot.CompatibilityReport;
+        if (snapshot.Report is not null)
+        {
+            var compatibility = FlowReplayReportAdapter.ToLegacy(snapshot.Report, flow.Name);
+            compatibility.Total = Math.Max(compatibility.Total, flow.Steps.Count);
+            return compatibility;
+        }
 
         return new FlowReplayReport
         {
@@ -1570,7 +3108,19 @@ public class BrokerServer : IDisposable
             Total = flow.Steps.Count,
             Failed = flow.Steps.Count,
             DivergencePoint = snapshot.FirstDivergence,
-            StoppedEarly = true
+            StoppedEarly = true,
+            Results =
+            [
+                new FlowStepResult
+                {
+                    Seq = snapshot.FirstDivergence ?? 0,
+                    Action = "run",
+                    Label = "Prepare run",
+                    Ok = false,
+                    FailureKind = FlowFailureKinds.Drive,
+                    Error = snapshot.Message ?? "The workflow run failed before the first step."
+                }
+            ]
         };
     }
 
@@ -1606,20 +3156,5 @@ public class BrokerServer : IDisposable
         context.Response.ContentLength64 = bytes.Length;
         await context.Response.OutputStream.WriteAsync(bytes);
         context.Response.Close();
-    }
-
-    internal static Execution.AppActionFlowLifecycleResetOwner? CreateAppActionResetOwnerFor(
-        AgentRegistration registration,
-        string? preclaimedMutationLeaseId = null)
-    {
-        if (registration is null || registration.Port <= 0 || string.IsNullOrWhiteSpace(registration.PackageId))
-            return null;
-
-        return new Execution.AppActionFlowLifecycleResetOwner(
-            registration.Port,
-            registration.PackageId,
-            registration.DeviceId ?? registration.Platform,
-            $"{registration.AppName}:{registration.Tfm}:{registration.Version}",
-            preclaimedMutationLeaseId);
     }
 }

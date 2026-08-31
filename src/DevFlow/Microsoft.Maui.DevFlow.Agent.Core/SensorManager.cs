@@ -202,16 +202,27 @@ public class SensorManager : IDisposable
         }
     }
 
-    private static bool IsSensorSupported(string name) => name.ToLowerInvariant() switch
+    private static bool IsSensorSupported(string name)
     {
-        "accelerometer" => Accelerometer.IsSupported,
-        "barometer" => Barometer.IsSupported,
-        "compass" => Compass.IsSupported,
-        "gyroscope" => Gyroscope.IsSupported,
-        "magnetometer" => Magnetometer.IsSupported,
-        "orientation" => OrientationSensor.IsSupported,
-        _ => false
-    };
+        try
+        {
+            return name.ToLowerInvariant() switch
+            {
+                "accelerometer" => Accelerometer.IsSupported,
+                "barometer" => Barometer.IsSupported,
+                "compass" => Compass.IsSupported,
+                "gyroscope" => Gyroscope.IsSupported,
+                "magnetometer" => Magnetometer.IsSupported,
+                "orientation" => OrientationSensor.IsSupported,
+                _ => false
+            };
+        }
+        catch (Exception ex) when (ex is NotSupportedException or PlatformNotSupportedException ||
+                                   ex.GetType().Name == "NotImplementedInReferenceAssemblyException")
+        {
+            return false;
+        }
+    }
 
     public static SensorSpeed ParseSpeed(string? speed) => speed?.ToLowerInvariant() switch
     {

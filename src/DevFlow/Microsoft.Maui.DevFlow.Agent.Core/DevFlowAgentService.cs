@@ -657,7 +657,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     public async Task StopAsync()
     {
-        await StopProfilerAsync();
+        await StopProfilerAsync(force: true);
         await _server.StopAsync();
     }
 
@@ -666,14 +666,27 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         // Canonical DevFlow v1 routes aligned with the formal spec.
         _server.MapGet("/api/v1/agent/status", HandleStatus);
         _server.MapGet("/api/v1/agent/capabilities", HandleCapabilities);
+        _server.MapPost("/api/v1/agent/lease", HandleMutationLeaseControl, requiresMutationLease: false);
+        _server.MapPost("/api/v1/agent/workflow-runs", HandleWorkflowRunControl, requiresMutationLease: false);
+        _server.MapPost(
+            "/api/v1/agent/recording",
+            HandleMutationRecordingControl,
+            requiresMutationLease: true,
+            mutationLeaseExemption: IsMutationRecordingStatusRequest);
 
         _server.MapGet("/api/v1/ui/tree", HandleTree);
         _server.MapGet("/api/v1/ui/elements", HandleQuery);
         _server.MapGet("/api/v1/ui/elements/{id}", HandleElement);
         _server.MapGet("/api/v1/ui/hit-test", HandleHitTest);
         _server.MapGet("/api/v1/ui/screenshot", HandleScreenshot);
+        _server.MapGet("/api/v1/ui/elements/{id}/properties", HandlePropertyDescriptors);
         _server.MapGet("/api/v1/ui/elements/{id}/properties/{name}", HandleProperty);
         _server.MapPut("/api/v1/ui/elements/{id}/properties/{name}", HandleSetProperty);
+        _server.MapGet("/api/v1/diagnostics/problems", HandleDiagnosticProblems);
+        _server.MapDelete(
+            "/api/v1/diagnostics/problems",
+            HandleDiagnosticProblemsClear,
+            requiresMutationLease: false);
         _server.MapPost("/api/v1/ui/actions/tap", HandleTap);
         _server.MapPost("/api/v1/ui/actions/fill", HandleFill);
         _server.MapPost("/api/v1/ui/actions/clear", HandleClear);
@@ -930,10 +943,36 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         var capabilities = new Dictionary<string, object>();
 
         capabilities["ui.tree"] = new { version = 1, features = new[] { "css-selector", "type", "text", "accessibility-id" } };
-        capabilities["ui.actions"] = new { version = 1, features = new[] { "tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "properties" } };
+        capabilities["ui.selectorHealth"] = new
+        {
+            version = 1,
+            features = new[]
+            {
+                "value-free-fingerprint", "topology", "source-anchor", "native-automation-identity",
+                "recording-observation"
+            }
+        };
+        capabilities["ui.actions"] = new
+        {
+            version = 1,
+            readOnly = _options.ReadOnly,
+            features = _options.ReadOnly
+                ? new[] { "properties", "property-descriptors", "property-source" }
+                : new[] { "tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "properties", "property-descriptors", "property-source", "safe-property-mutations" }
+        };
+        capabilities["ui.events"] = new { version = 1, features = new[] { "stream", "subscribe" } };
         capabilities["ui.screenshot"] = new { version = 1, features = new[] { "element", "fullscreen", "selector" } };
+        capabilities["diagnostics.problems"] = new
+        {
+            version = 1,
+            supported = _options.EnableBindingProblems,
+            diagnosticsEnabled = _options.EnableMauiDiagnostics,
+            features = _options.EnableBindingProblems
+                ? new[] { "binding-failures", "dedupe", "source", "element-correlation", "clear" }
+                : Array.Empty<string>()
+        };
 
-        if (_cdpWebViews.Count > 0)
+        if (GetCdpWebViewsSnapshot().Length > 0)
             capabilities["webview"] = new { version = 1, features = new[] { "evaluate", "contexts", "source", "dom", "dom-query", "network", "console", "screenshot" } };
 
         capabilities["profiler"] = new { version = 1, features = BuildProfilerFeatureList() };

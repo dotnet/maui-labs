@@ -216,6 +216,8 @@ jobs:
             expected_package_ids=(
               Microsoft.Maui.DevFlow.Agent
               Microsoft.Maui.DevFlow.Blazor
+              Microsoft.Maui.DevFlow.Driver
+              Microsoft.Maui.DevFlow.Testing
             )
 
             for package_id in "${expected_package_ids[@]}"; do
@@ -227,6 +229,13 @@ jobs:
           fi
 
           printf '%s\n' "$produced_packages"
+
+      - name: Validate DevFlow Testing package
+        if: inputs.pack && inputs.project-name == 'devflow'
+        shell: pwsh
+        run: |
+          ./tests/DevFlow/PackageConsumer/Validate-TestingPackage.ps1 `
+            -PackageDirectory "${{ github.workspace }}/artifacts/packages"
 
       - name: Upload packages
         if: inputs.pack

@@ -2096,6 +2096,7 @@ P:Microsoft.Maui.DevFlow.Testing.MauiLocalReproductionFacts.StartedAt[]:System.N
 P:Microsoft.Maui.DevFlow.Testing.MauiLocalReproductionReport.ApprovalGranted[]:System.Boolean{get:public;set:public}
 P:Microsoft.Maui.DevFlow.Testing.MauiLocalReproductionReport.BrokerBindingPersisted[]:System.Boolean{get:public;set:public}
 P:Microsoft.Maui.DevFlow.Testing.MauiLocalReproductionReport.ExtensionData[]:System.Collections.Generic.Dictionary`2[System.String,System.Text.Json.JsonElement]{get:public;set:public}
+P:Microsoft.Maui.DevFlow.Testing.MauiLocalReproductionReport.FailureCorrespondence[]:System.String{get:public;set:public}
 P:Microsoft.Maui.DevFlow.Testing.MauiLocalReproductionReport.ImportTrustState[]:System.String{get:public;set:public}
 P:Microsoft.Maui.DevFlow.Testing.MauiLocalReproductionReport.ImportedArtifactDigest[]:System.String{get:public;set:public}
 P:Microsoft.Maui.DevFlow.Testing.MauiLocalReproductionReport.ImportedArtifactKind[]:System.String{get:public;set:public}

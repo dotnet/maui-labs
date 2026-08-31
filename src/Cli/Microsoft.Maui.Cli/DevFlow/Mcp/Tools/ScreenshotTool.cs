@@ -19,7 +19,7 @@ public sealed class ScreenshotTool
 		[Description("Resize screenshot to this max width in pixels (overrides auto-scaling)")] int? maxWidth = null,
 		[Description("Scale mode: 'native' keeps full HiDPI resolution, default auto-scales to 1x logical pixels")] string? scale = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.ScreenshotResultAsync(window, elementId, selector, maxWidth, scale);
 		if (!result.Success || result.Data == null || result.Data.Length == 0)
 		{

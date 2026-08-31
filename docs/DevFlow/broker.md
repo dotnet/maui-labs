@@ -220,6 +220,29 @@ pick the right port.
 4. Single agent connected → auto-select
 5. Multiple agents, ambiguous → print list, fall back to `.mauidevflow` / default
 
+## Imported artifact trust
+
+The broker has a separate, local-only artifact-trust surface for bounded diagnostic imports:
+
+```text
+POST /api/artifact-trust/import?kind=flow-run|mauitrace
+GET  /api/artifact-trust/{imported-artifact-id}/status
+GET  /api/artifact-trust/{imported-artifact-id}/projection
+POST /api/artifact-trust/{imported-artifact-id}/bind-local-reproduction
+```
+
+An import receives a fresh opaque `iat_...` ID and capability token. The token is required in the
+`X-Maui-Artifact-Capability` header for status, projection, and local-reproduction binding. The
+store is memory-only, count/TTL bounded, has no list endpoint, and never returns raw report/ZIP
+bytes. POST import is read-only: it does not execute, replay, write a workspace file, or append
+repair history.
+
+Imports start `untrusted`. Internal report/ZIP hashes establish integrity only. A trusted caller
+can use the provider-neutral Testing policy to verify provenance separately, but an `attested`
+artifact still cannot create a repair/source proposal. Binding requires a newly completed
+broker-owned local run and current flow/app/target/failure expectations; only a matching
+`locally-reproduced` binding passes the future proposal gate.
+
 ## Graceful Fallback
 
 The broker is **optional**. If it can't start or isn't available, everything falls
@@ -289,7 +312,7 @@ online, pass `--device <serial>` or set `ANDROID_SERIAL` so it does not guess.
 
 | File | Purpose |
 |------|---------|
-| `~/.mauidevflow/broker.json` | Broker state (PID, port, start time). Written on start, deleted on stop. |
+| `~/.mauidevflow/broker.json` | Local broker state (PID, port, start time, iframe embed token, and a separate native-host approval token). Written on start, deleted on stop. The approval token must never enter an Inspector URL, DOM, or webview message. |
 | `~/.mauidevflow/broker.log`  | Rolling log file (auto-truncated at 1MB). |
 
 ## Broker HTTP API
@@ -300,6 +323,10 @@ The broker exposes a simple HTTP API on port 19223 for CLI and diagnostic use:
 |----------|--------|-------------|
 | `/api/health` | GET | Health check. Returns `{"status":"ok","agents":N}` |
 | `/api/agents` | GET | List all connected agents with full metadata |
+| `/api/workflow-runs/capabilities` | GET | Discover bounded workflow-run coordination support |
+| `/api/workflow-runs/start` | POST | Start one validated replay for an explicit agent instance |
+| `/api/workflow-runs/{runId}/status` | POST | Read a run using its capability token |
+| `/api/workflow-runs/{runId}/cancel` | POST | Request cancellation using its capability token |
 | `/api/shutdown` | POST | Request graceful shutdown |
 | `/ws/agent` | WebSocket | Agent registration endpoint |
 
@@ -309,6 +336,7 @@ The broker exposes a simple HTTP API on port 19223 for CLI and diagnostic use:
 [
   {
     "id": "7ff0e6fd13d9",
+    "instanceId": "9a0dcb5664d643d3bc49d8ae692c71d6",
     "project": "/Users/dev/MyApp/MyApp.csproj",
     "tfm": "net10.0-maccatalyst",
     "platform": "MacCatalyst",
@@ -318,6 +346,92 @@ The broker exposes a simple HTTP API on port 19223 for CLI and diagnostic use:
   }
 ]
 ```
+
+### Workflow-run API
+
+Workflow runs are broker-owned, bounded replays of a canonical `maui-test` flow. They are
+not a device lifecycle, reset, repair, or source-editing API.
+
+1. Read `GET /api/workflow-runs/capabilities`.
+2. Select an agent from `/api/agents` and send both its `id` and current `instanceId`.
+3. Send `POST /api/workflow-runs/start` with an `idempotencyKey`, one of `markdown` or `flow`,
+   and an optional bounded `timeoutMs`. A safety-aware caller may additionally send a
+   non-executable `plan` and host-observed `context` containing reset, precondition,
+   compensator, and independent-oracle evidence.
+4. Save the returned `capabilityToken`. It is required in the JSON body for status and cancel unless the Inspector restores the run from its server-held journal after a reload or host handoff.
+
+````json
+{
+  "agentId": "7ff0e6fd13d9",
+  "agentInstanceId": "9a0dcb5664d643d3bc49d8ae692c71d6",
+  "idempotencyKey": "caller-generated-opaque-key",
+  "markdown": "# Scenario: smoke\n\n```json maui-test\n{\"schema\":2,\"name\":\"smoke\",\"steps\":[]}\n```",
+  "timeoutMs": 120000
+}
+````
+
+The broker validates the flow and evaluates side-effect admission before taking a lease. A
+successful start returns HTTP 202 with an opaque `runId`, per-run `capabilityToken`, initial
+`queued` state, and an additive `admission` decision. A denied plan/context returns HTTP 409 with
+the same structured reasons and acquires neither a lease nor a mutation path. Repeating the same
+idempotency key and request digest returns the same run and token; the safety context contributes
+to that digest, so using the key with changed evidence returns HTTP 409. One mutating run may
+target an agent instance at a time.
+
+#### Dispatch authorization
+
+Authorization is a precondition of the run coordinator, not of any one HTTP route. Every
+broker-hosted dispatch surface — the MCP route above, the Inspector workbench
+(`POST /api/workbench/run/start`), the Inspector replay bridge, and repair validation — reaches
+the device through the same `Start` call, and that call refuses to proceed without an allowing
+decision from the broker. A coordinator constructed without an authorizer refuses every start, so
+a new dispatch surface inherits the check instead of having to remember it. The decision is taken
+against the broker's own view of the target, not the client-supplied ids, and before any
+validation, lease, capability token, or idempotency state exists.
+
+Each origin proves something appropriate to what it is:
+
+| Origin | What it must present |
+| --- | --- |
+| MCP test agent | A live, single-use, human-issued mutation authorization (`authorizationId`) bound to the same agent instance. Refused with HTTP 403. |
+| Inspector workbench / replay bridge | A broker-issued dispatch ticket for that exact agent instance and origin, plus the app's mutation lease it already holds. The Inspector is a human at the local UI and has no MCP grant to present. |
+| Repair validation | A broker-issued dispatch ticket for that exact agent instance and origin. |
+
+Dispatch tickets are in-process capabilities derived from a per-broker key. They are never
+returned to a client, logged, or persisted. Allowed dispatches record a `dispatch-authorized`
+lifecycle event on the run journal; refusals are written to the broker log.
+
+`none` requires matching declared/observed preconditions. `test-tenant-resettable` additionally
+requires successful app and backend reset evidence with matching seed fingerprints.
+`compensated` requires that reset evidence or a successful declared compensator. `non-replayable`
+rejects automatic replay and repair validation; only a distinct
+`context.manualOneShotAuthorization: true` can admit one human run. Status snapshots and terminal
+reports retain the policy, admission reasons, reset/precondition evidence, oracle results, and
+`repairEligibility`. Legacy schema-2 manual starts remain supported, but report
+`sideEffectPolicy: "unspecified"` and `repairEligibility: false`.
+
+Run states are `queued`, `acquiring-lease`, `preparing`, `running`, `passed`, `failed`,
+`cancelled`, `timed-out`, `lease-lost`, and `infrastructure-error`. Terminal status retains the
+structured flow run report and first divergence. A reconnect changes `instanceId`; a request for
+the old instance is rejected, and an active old-instance run becomes `lease-lost`.
+
+Status and cancellation bodies are deliberately small:
+
+```json
+{ "capabilityToken": "returned-only-by-start" }
+```
+
+The token coordinates access to an individual run; it is not authorization for arbitrary app
+mutation. The broker holds and heartbeats the mutation-lease transaction for the run, disables
+mutating transport retries, and ends/releases the lease on every terminal path.
+
+Status snapshots additionally expose bounded `totalSteps`, `completedSteps`, and `currentStepId`
+facts for progress UIs. A runner reports a current step only when it has safely entered that
+canonical step; a missing or retained prior value never proves that an in-flight mutation did not
+complete. Lifecycle messages remain value-free.
+
+The machine-readable contract is
+[`broker-workflow-runs-v1.yaml`](spec/broker-workflow-runs-v1.yaml).
 
 ## Troubleshooting
 

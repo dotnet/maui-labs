@@ -13,7 +13,7 @@ namespace Microsoft.Maui.DevFlow.Driver;
 /// Direct localhost connection, no special setup needed.
 /// Uses Windows UI Automation (UIA) via COM interop to detect and dismiss native dialogs.
 /// </summary>
-public class WindowsAppDriver : AppDriverBase
+public class WindowsAppDriver : AppDriverBase, IAlertDriver
 {
     public override string Platform => "Windows";
 
@@ -261,19 +261,43 @@ public class WindowsAppDriver : AppDriverBase
     {
         EnsureWindows();
         var windows = ResolveTargetWindows();
-        var buttons = FindDialogButtonsCore(windows);
-        if (buttons.Count == 0)
+        var candidate = FindDialogCandidate(windows);
+        if (candidate is null || candidate.Buttons.Count == 0)
             return Task.FromResult<AlertInfo?>(null);
 
+        var buttons = candidate.Buttons;
         var alertButtons = buttons.Select(ToAlertButton).ToList();
-        var texts = FindDialogTextsCore(windows);
-        var info = new AlertInfo(texts.FirstOrDefault(), alertButtons);
+        var info = new AlertInfo(candidate.Title ?? candidate.Texts.FirstOrDefault(), alertButtons);
 
         var target = PickButton(buttons, buttonLabel);
         if (!UIAutomationInterop.InvokeElement(target.element))
             ClickElementCenter(target.element);
 
         return Task.FromResult<AlertInfo?>(info);
+    }
+
+    public Task<AlertActionResult> HandleAlertAsync(
+        string? buttonLabel = null,
+        string? expectedRevision = null)
+    {
+        EnsureWindows();
+        var windows = ResolveTargetWindows();
+        var candidate = FindDialogCandidate(windows);
+        if (candidate is null || candidate.Buttons.Count == 0)
+            return Task.FromResult(new AlertActionResult(null, MatchesExpected: true, Dismissed: false));
+
+        var info = new AlertInfo(
+            candidate.Title ?? candidate.Texts.FirstOrDefault(),
+            candidate.Buttons.Select(ToAlertButton).ToList());
+        if (!string.IsNullOrEmpty(expectedRevision) &&
+            !string.Equals(expectedRevision, AlertRevision.Create(info), StringComparison.Ordinal))
+        {
+            return Task.FromResult(new AlertActionResult(info, MatchesExpected: false, Dismissed: false));
+        }
+
+        var target = PickButton(candidate.Buttons, buttonLabel);
+        var dismissed = UIAutomationInterop.InvokeElement(target.element) || ClickElementCenter(target.element);
+        return Task.FromResult(new AlertActionResult(info, MatchesExpected: true, Dismissed: dismissed));
     }
 
     public Task<string> GetAccessibilityTreeAsync()
@@ -288,13 +312,13 @@ public class WindowsAppDriver : AppDriverBase
 
     private static AlertInfo? DetectDialog(IReadOnlyList<IUIAutomationElement> windows)
     {
-        var buttons = FindDialogButtonsCore(windows);
-        if (buttons.Count == 0)
+        var candidate = FindDialogCandidate(windows);
+        if (candidate is null || candidate.Buttons.Count == 0)
             return null;
 
+        var buttons = candidate.Buttons;
         var alertButtons = buttons.Select(ToAlertButton).ToList();
-        var texts = FindDialogTextsCore(windows);
-        return new AlertInfo(texts.FirstOrDefault(), alertButtons);
+        return new AlertInfo(candidate.Title ?? candidate.Texts.FirstOrDefault(), alertButtons);
     }
 
     private static List<(IUIAutomationElement element, string name)> FindDialogButtonsCore(IReadOnlyList<IUIAutomationElement> windows)
@@ -303,41 +327,19 @@ public class WindowsAppDriver : AppDriverBase
         return candidate?.Buttons ?? new();
     }
 
-    private static List<string> FindDialogTextsCore(IReadOnlyList<IUIAutomationElement> windows)
-    {
-        var candidate = FindDialogCandidate(windows);
-        return candidate?.Texts ?? new();
-    }
-
     private static DialogCandidate? FindDialogCandidate(IReadOnlyList<IUIAutomationElement> windows)
     {
-        foreach (var window in windows)
-        {
-            var childWindows = UIAutomationInterop.FindChildWindows(window);
-            foreach (var childWindow in childWindows)
-            {
-                var buttons = UIAutomationInterop.FindButtons(childWindow);
-                if (buttons.Count > 0)
-                {
-                    var texts = UIAutomationInterop.FindTexts(childWindow);
-                    if (texts.Count > 0)
-                        return new DialogCandidate(buttons, texts);
-                }
-            }
-        }
-
-        foreach (var window in windows)
-        {
-            var buttons = UIAutomationInterop.FindNamedButtons(window, CommonDialogButtonLabels);
-            if (buttons.Count > 0)
-            {
-                var texts = UIAutomationInterop.FindTexts(window);
-                if (texts.Count > 0)
-                    return new DialogCandidate(buttons, texts);
-            }
-        }
-
-        return null;
+        var candidate = FindDedicatedDialogCandidate(
+            windows,
+            UIAutomationInterop.FindChildWindows,
+            window => UIAutomationInterop.FindButtons(window)
+                .Where(button => !UIAutomationInterop.IsInTitleBar(button.element))
+                .ToArray(),
+            UIAutomationInterop.FindTexts,
+            UIAutomationInterop.GetName);
+        return candidate is null
+            ? null
+            : new DialogCandidate(candidate.Title, candidate.Buttons.ToList(), candidate.Texts.ToList());
     }
 
     private static AlertButton ToAlertButton((IUIAutomationElement element, string name) button)
@@ -349,13 +351,9 @@ public class WindowsAppDriver : AppDriverBase
     }
 
     private sealed record DialogCandidate(
+        string? Title,
         List<(IUIAutomationElement element, string name)> Buttons,
         List<string> Texts);
-
-    private static readonly HashSet<string> CommonDialogButtonLabels = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "OK", "CANCEL", "YES", "NO", "CLOSE", "DISMISS", "RETRY", "ABORT", "IGNORE", "CONTINUE", "ALLOW", "DON'T ALLOW"
-    };
 
     private static (IUIAutomationElement element, string name) PickButton(
         List<(IUIAutomationElement element, string name)> buttons, string? buttonLabel)
@@ -382,8 +380,43 @@ public class WindowsAppDriver : AppDriverBase
     public Task<AlertInfo?> DetectAlertAsync() => throw new PlatformNotSupportedException("Windows operations require Windows.");
     public Task DismissAlertAsync(string? buttonLabel = null) => throw new PlatformNotSupportedException("Windows operations require Windows.");
     public Task<AlertInfo?> HandleAlertIfPresentAsync(string? buttonLabel = null) => throw new PlatformNotSupportedException("Windows operations require Windows.");
+    public Task<AlertActionResult> HandleAlertAsync(string? buttonLabel = null, string? expectedRevision = null) => throw new PlatformNotSupportedException("Windows operations require Windows.");
     public Task<string> GetAccessibilityTreeAsync() => throw new PlatformNotSupportedException("Windows operations require Windows.");
 #endif
+
+    internal static DialogCandidateData<TElement>? FindDedicatedDialogCandidate<TElement>(
+        IReadOnlyList<TElement> rootWindows,
+        Func<TElement, IReadOnlyList<TElement>> findChildWindows,
+        Func<TElement, IReadOnlyList<(TElement element, string name)>> findButtons,
+        Func<TElement, IReadOnlyList<string>> findTexts,
+        Func<TElement, string?>? findTitle = null)
+    {
+        foreach (var rootWindow in rootWindows)
+        {
+            foreach (var childWindow in findChildWindows(rootWindow))
+            {
+                var buttons = findButtons(childWindow);
+                if (buttons.Count == 0)
+                    continue;
+
+                var texts = findTexts(childWindow);
+                if (texts.Count > 0)
+                    return new DialogCandidateData<TElement>(
+                        childWindow,
+                        findTitle?.Invoke(childWindow),
+                        buttons,
+                        texts);
+            }
+        }
+
+        return null;
+    }
+
+    internal sealed record DialogCandidateData<TElement>(
+        TElement Window,
+        string? Title,
+        IReadOnlyList<(TElement element, string name)> Buttons,
+        IReadOnlyList<string> Texts);
 
     private int ResolveProcessId()
     {
