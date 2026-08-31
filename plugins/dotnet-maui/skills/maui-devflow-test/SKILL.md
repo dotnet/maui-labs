@@ -21,25 +21,25 @@ Use this skill for a human-and-agent testing conversation backed by
 the human operator owns the review boundary and owns approval, commit, run,
 and repair decisions.
 **Current availability:** approval is issued by an owner-token approval host.
-Three exist: the `maui devflow approve` CLI, the VS Code Inspector, and the
-GitHub Copilot Canvas Inspector. Each reads the owner-only approval token from
-the local broker state file, shows the exact scope for confirmation, and
-performs the digest-bound single-use confirmation ceremony. The editor hosts
-show a native modal first; the approval inbox they present requires
-`DEVFLOW_PREVIEW_AGENT_AUTHORING`. None of them proves a human rather than a
-local agent decided: an agent running as the same OS user can read the same
-token. Standalone browser tabs and chat are non-authoritative and cannot issue a
-grant at all. If no approval host is running, stop at an inert draft or a
-pending, rejected, or expired request.
+Two exist: the `maui devflow approve` CLI and the VS Code Inspector. The CLI is
+operator convenience rather than a human-attestation boundary. VS Code shows a
+native modal before reading the owner-only token and completing the
+digest-bound single-use confirmation ceremony; its approval inbox requires
+`DEVFLOW_PREVIEW_AGENT_AUTHORING`. Neither proves a human rather than a local
+agent decided because both run as the same OS user. The Copilot Canvas,
+standalone browser tabs, and chat are non-authoritative and cannot issue a
+grant. If no approval host is available, stop at an inert draft or a pending,
+rejected, or expired request.
 
 ## Tool Inventory
 
-The `test-agent` profile exposes exactly these 13 tools, and no others:
+The `test-agent` profile exposes exactly these 14 tools, and no others:
 
 `maui_test_agents`, `maui_test_capabilities`, `maui_test_improvements`,
 `maui_test_explore`, `maui_test_author`, `maui_test_action`,
 `maui_test_assertion`, `maui_test_validate`, `maui_test_status`,
-`maui_test_run`, `maui_test_trace`, `maui_test_failure`, `maui_test_patch`.
+`maui_test_run`, `maui_test_trace`, `maui_test_failure`, `maui_test_patch`,
+`maui_test_layout_diagnostics`.
 
 ### Load the tools before calling one
 

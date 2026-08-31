@@ -1,0 +1,563 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/dotnet/maui-labs/main/docs/DevFlow/spec/schemas/layout-diagnostics.json",
+  "title": "Layout diagnostics",
+  "description": "On-demand report combining managed layout state with capability-gated native and same-origin Blazor evidence. Clipping and truncation require authoritative platform evidence, interaction occlusion is sampled input routing, geometric overlap is not visual occlusion, and unavailable or opaque evidence is incomplete rather than passing.",
+  "type": "object",
+  "required": ["schemaVersion", "ruleSetVersion", "snapshot", "capturedUtc", "platform", "scope", "coverage", "summary", "findings"],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "2.1",
+      "description": "Payload shape version. Incremented when a field is removed or changes meaning. 2.1 removed textEvidence.text and textEvidence.textLength — this layer never read either — and redefined suppressionKey to exclude runtime element ids so a persisted suppression survives a page rebuild or app restart."
+    },
+    "ruleSetVersion": {
+      "type": "string",
+      "description": "Rule semantics version. Incremented when a rule's outcome or threshold changes."
+    },
+    "snapshot": { "$ref": "#/$defs/LayoutSnapshotInfo" },
+    "capturedUtc": {
+      "type": "string",
+      "description": "UTC timestamp of the scan."
+    },
+    "platform": {
+      "type": "string",
+      "description": "Platform the agent is running on."
+    },
+    "scope": { "$ref": "#/$defs/LayoutScope" },
+    "coverage": { "$ref": "#/$defs/LayoutCoverage" },
+    "summary": { "$ref": "#/$defs/LayoutSummary" },
+    "findings": {
+      "type": "array",
+      "description": "Findings in a deterministic order: violations, then observations, then incomplete results; then rule order; then finding id.",
+      "items": { "$ref": "#/$defs/LayoutFinding" }
+    },
+    "systemEvidence": {
+      "$ref": "#/$defs/LayoutSystemEvidence",
+      "description": "Optional correlation with the device's own accessibility tree. It is populated only by a broker that can pair the agent with a managed device; an app-scoped scan omits it, and an absent value never means a system surface was ruled out."
+    }
+  },
+  "$defs": {
+    "LayoutRect": {
+      "type": "object",
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "width": { "type": "number" },
+        "height": { "type": "number" }
+      }
+    },
+    "LayoutSize": {
+      "type": "object",
+      "required": ["width", "height"],
+      "properties": {
+        "width": { "type": "number" },
+        "height": { "type": "number" }
+      }
+    },
+    "LayoutScope": {
+      "type": "object",
+      "required": ["maxElements", "elementsExamined", "truncated"],
+      "properties": {
+        "rootElementId": {
+          "type": "string",
+          "description": "Present when the scan was restricted to one element's subtree."
+        },
+        "window": {
+          "type": "integer",
+          "description": "0-based window index, when the scan targeted a single window."
+        },
+        "maxElements": {
+          "type": "integer",
+          "description": "Element budget applied to this scan (capped at 5000 by the agent)."
+        },
+        "elementsExamined": { "type": "integer" },
+        "truncated": {
+          "type": "boolean",
+          "description": "True when the element budget stopped the walk before the tree was exhausted."
+        },
+        "windowBounds": {
+          "$ref": "#/$defs/LayoutRect",
+          "description": "Window rectangle used by window-relative rules. Absent when the platform could not report a usable window size."
+        }
+      }
+    },
+    "LayoutCoverage": {
+      "type": "object",
+      "required": ["overall", "rules", "opaqueSubtrees", "limitations", "neverCaptured"],
+      "properties": {
+        "overall": {
+          "type": "string",
+          "enum": ["full", "partial", "unavailable"]
+        },
+        "rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/LayoutRuleCoverage" }
+        },
+        "opaqueSubtrees": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/LayoutElementReference" }
+        },
+        "limitations": {
+          "type": "array",
+          "description": "What this report structurally cannot tell you.",
+          "items": { "type": "string" }
+        },
+        "neverCaptured": {
+          "type": "array",
+          "description": "Data classes the subsystem never reads, such as element text and property dictionaries.",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "LayoutRuleCoverage": {
+      "type": "object",
+      "required": ["ruleId", "support", "confidence", "evaluated", "skipped"],
+      "properties": {
+        "ruleId": { "$ref": "#/$defs/LayoutRuleId" },
+        "support": {
+          "type": "string",
+          "enum": ["full", "partial", "unavailable"],
+          "description": "How completely the rule could be evaluated over the captured scope."
+        },
+        "confidence": { "$ref": "#/$defs/LayoutConfidence" },
+        "evaluated": { "type": "integer" },
+        "skipped": {
+          "type": "integer",
+          "description": "Elements the rule could not be evaluated for. These are reported as 'incomplete', never as passing."
+        },
+        "limitations": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "LayoutSummary": {
+      "type": "object",
+      "required": [
+        "violations",
+        "observations",
+        "incomplete",
+        "passes",
+        "notApplicable",
+        "suppressed",
+        "generatedFindings",
+        "filteredFindings",
+        "activeFindings"
+        ,"omittedFindings"
+      ],
+      "properties": {
+        "violations": { "type": "integer" },
+        "observations": { "type": "integer" },
+        "incomplete": { "type": "integer" },
+        "passes": { "type": "integer" },
+        "notApplicable": { "type": "integer" },
+        "suppressed": { "type": "integer" },
+        "generatedFindings": { "type": "integer" },
+        "filteredFindings": { "type": "integer" },
+        "activeFindings": { "type": "integer" },
+        "omittedFindings": { "type": "integer" }
+      }
+    },
+    "LayoutRuleId": {
+      "type": "string",
+      "enum": [
+        "layout.element-clipped",
+        "layout.element-outside-window",
+        "layout.content-overflow",
+        "layout.text-not-fully-rendered",
+        "layout.interaction-occluded",
+        "layout.visual-occluded",
+        "layout.geometric-overlap",
+        "layout.accessibility-visibility-mismatch",
+        "layout.visible-zero-area",
+        "layout.constraint-violation",
+        "layout.desired-size-constrained",
+        "layout.child-outside-parent"
+      ],
+      "description": "Stable identifiers in the v2 catalog. The managed baseline currently evaluates visible-zero-area, constraint-violation, element-outside-window, desired-size-constrained, and child-outside-parent. Other rules remain in the catalog with unavailable support until authoritative platform evidence exists."
+    },
+    "LayoutConfidence": {
+      "type": "string",
+      "enum": ["exact", "high", "medium", "low"]
+    },
+    "LayoutElementReference": {
+      "type": "object",
+      "required": ["id", "type"],
+      "description": "Identity and source location only. Element text, values, and property dictionaries are never included.",
+      "properties": {
+        "id": { "type": "string" },
+        "parentId": { "type": "string" },
+        "type": { "type": "string" },
+        "automationId": { "type": "string" },
+        "role": { "type": "string" },
+        "interactive": { "type": "boolean" },
+        "sourceFile": { "type": "string" },
+        "sourceLine": { "type": "integer" },
+        "sourceColumn": { "type": "integer" }
+      }
+    },
+    "LayoutFindingEvidence": {
+      "type": "object",
+      "description": "The measurements the finding is derived from, so a reader can check the arithmetic.",
+      "properties": {
+        "fullRegion": { "$ref": "#/$defs/LayoutRegionInfo" },
+        "visibleRegion": { "$ref": "#/$defs/LayoutRegionInfo" },
+        "contentRegion": { "$ref": "#/$defs/LayoutRegionInfo" },
+        "lostAreaRatio": { "type": "number", "minimum": 0, "maximum": 1 },
+        "overflowInsetsPhysicalPixels": {
+          "type": "object",
+          "properties": {
+            "left": { "type": "number" },
+            "top": { "type": "number" },
+            "right": { "type": "number" },
+            "bottom": { "type": "number" }
+          }
+        },
+        "clipChain": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "clipperElementId": { "type": "string" },
+              "kind": { "type": "string" },
+              "precision": { "type": "string" },
+              "areaBefore": { "type": "number" },
+              "areaAfter": { "type": "number" },
+              "lostAreaRatio": { "type": "number" },
+              "region": { "$ref": "#/$defs/LayoutRegionInfo" }
+            }
+          }
+        },
+        "text": { "$ref": "#/$defs/LayoutTextEvidence" },
+        "overlap": { "$ref": "#/$defs/LayoutOverlapEvidence" },
+        "frame": { "$ref": "#/$defs/LayoutRect" },
+        "windowBounds": { "$ref": "#/$defs/LayoutRect" },
+        "parentWindowBounds": { "$ref": "#/$defs/LayoutRect" },
+        "desiredSize": { "$ref": "#/$defs/LayoutSize" },
+        "explicitWidth": { "type": "number" },
+        "explicitHeight": { "type": "number" },
+        "constraint": { "type": "string" },
+        "constraintValue": { "type": "number" },
+        "actualValue": { "type": "number" },
+        "overflowWidth": { "type": "number" },
+        "overflowHeight": { "type": "number" },
+        "affectedElements": {
+          "type": "integer",
+          "description": "Set on an aggregate 'incomplete' finding: how many elements the rule could not be evaluated for."
+        },
+        "limitations": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "LayoutPointInfo": {
+      "type": "object",
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" }
+      }
+    },
+    "LayoutRegionInfo": {
+      "type": "object",
+      "required": ["bounds", "points", "area", "precision"],
+      "properties": {
+        "bounds": { "$ref": "#/$defs/LayoutRect" },
+        "points": { "type": "array", "items": { "$ref": "#/$defs/LayoutPointInfo" } },
+        "area": { "type": "number", "minimum": 0 },
+        "precision": {
+          "type": "string",
+          "enum": ["exact", "exactPolygon", "conservativeBounds", "managedBounds", "unknown"]
+        }
+      }
+    },
+    "LayoutTextEvidence": {
+      "type": "object",
+      "description": "Text-shape measurement geometry only. There is no member for text content or text length: this layer never reads element text or values.",
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string" },
+        "isTruncated": { "type": "boolean" },
+        "renderedLineCount": { "type": "integer" },
+        "maximumLines": { "type": "integer" },
+        "ellipsisCount": { "type": "integer" },
+        "contentWidth": { "type": "number" },
+        "contentHeight": { "type": "number" },
+        "availableWidth": { "type": "number" },
+        "availableHeight": { "type": "number" },
+        "autoShrunk": { "type": "boolean" },
+        "measurementSource": { "type": "string" }
+      }
+    },
+    "LayoutOverlapEvidence": {
+      "type": "object",
+      "properties": {
+        "intersectionRegion": { "$ref": "#/$defs/LayoutRegionInfo" },
+        "overlapAreaRatio": { "type": "number", "minimum": 0, "maximum": 1 },
+        "blockedAreaLowerBound": { "type": "number", "minimum": 0, "maximum": 1 },
+        "blockedAreaUpperBound": { "type": "number", "minimum": 0, "maximum": 1 },
+        "sampleCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "LayoutFinding": {
+      "type": "object",
+      "required": ["id", "suppressionKey", "ruleId", "outcome", "confidence", "severity", "actionability", "message", "explanation", "relatedElements", "fixCategories", "limitations", "suppressed"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable within one report; derived from rule, element, and axis."
+        },
+        "suppressionKey": { "type": "string" },
+        "ruleId": { "$ref": "#/$defs/LayoutRuleId" },
+        "subtype": { "type": "string" },
+        "outcome": {
+          "type": "string",
+          "enum": ["violation", "observation", "incomplete", "pass", "notApplicable"],
+          "description": "violation: the reported geometry cannot be correct as authored. observation: worth a human look, may be entirely intentional. incomplete: the rule could not be evaluated because the required geometry was unavailable."
+        },
+        "confidence": { "$ref": "#/$defs/LayoutConfidence" },
+        "severity": {
+          "type": "string",
+          "enum": ["info", "minor", "moderate", "serious", "critical"]
+        },
+        "actionability": {
+          "type": "string",
+          "enum": ["informational", "review", "fix"]
+        },
+        "message": {
+          "type": "string",
+          "description": "The observed fact, stated without inference."
+        },
+        "explanation": {
+          "type": "string",
+          "description": "Why it may or may not be a bug, including the benign explanations that produce the same geometry."
+        },
+        "element": { "$ref": "#/$defs/LayoutElementReference" },
+        "parent": { "$ref": "#/$defs/LayoutElementReference" },
+        "relatedElements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["relation", "element"],
+            "properties": {
+              "relation": { "type": "string" },
+              "element": { "$ref": "#/$defs/LayoutElementReference" }
+            }
+          }
+        },
+        "fixCategories": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "evidence": { "$ref": "#/$defs/LayoutFindingEvidence" },
+        "limitations": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "suppressed": { "type": "boolean" },
+        "wouldSuppress": { "type": "boolean" },
+        "suppressionReason": { "type": "string" }
+      }
+    },
+    "LayoutDiagnosticsRequest": {
+      "type": "object",
+      "description": "Versioned v2 layout inspection request. Every field is optional. maxElements is clamped by the agent to 1 through 5000.",
+      "properties": {
+        "schemaVersion": { "type": "string", "enum": ["1.0", "2.0", "2.1"], "default": "2.0", "description": "Request payload version. Clients send 2.0 — the newest version both 2.0 and 2.1 agents accept — because the agent ships inside the app and rejects an unknown request version with HTTP 400, and 2.1 changed only the response. Responses may declare 2.1." },
+        "scope": { "$ref": "#/$defs/LayoutInspectionScope" },
+        "profile": {
+          "type": "string",
+          "enum": ["agent", "strict", "exhaustive", "ci"],
+          "default": "agent"
+        },
+        "rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/LayoutRuleId" }
+        },
+        "minimumSeverity": {
+          "type": "string",
+          "enum": ["info", "minor", "moderate", "serious", "critical"],
+          "default": "info"
+        },
+        "includeEvidence": { "type": "boolean", "default": true },
+        "includePasses": { "type": "boolean", "default": false },
+        "stability": { "$ref": "#/$defs/LayoutStabilityOptions" },
+        "occlusion": { "$ref": "#/$defs/LayoutOcclusionOptions" },
+        "privacy": { "$ref": "#/$defs/LayoutPrivacyOptions" },
+        "suppressions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/LayoutSuppression" }
+        },
+        "suppressionMode": {
+          "type": "string",
+          "enum": ["report", "ignore", "off"],
+          "default": "report"
+        },
+        "elementId": {
+          "type": "string",
+          "description": "Restrict the scan to this element and its descendants."
+        },
+        "window": {
+          "type": "integer",
+          "description": "0-based window index. Defaults to every window."
+        },
+        "maxElements": {
+          "type": "integer",
+          "default": 2000,
+          "description": "Element budget. Values below 1 are clamped to 1 and values above 5000 are clamped to 5000."
+        }
+      }
+    },
+    "LayoutInspectionScope": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["activePage", "allWindows"],
+          "default": "activePage"
+        },
+        "rootElementId": { "type": "string" },
+        "window": { "type": "integer", "minimum": 0 },
+        "includeDescendants": { "type": "boolean", "default": true },
+        "includeNativeElements": { "type": "boolean", "default": true },
+        "includeBlazorElements": { "type": "boolean", "default": true },
+        "maxDepth": { "type": "integer", "minimum": 0, "default": 0 }
+      }
+    },
+    "LayoutStabilityOptions": {
+      "type": "object",
+      "properties": {
+        "mode": { "type": "string", "enum": ["wait", "immediate"], "default": "wait" },
+        "stableFrames": { "type": "integer", "minimum": 1, "maximum": 10, "default": 2 },
+        "quietPeriodMs": { "type": "integer", "minimum": 0, "maximum": 10000, "default": 100 },
+        "timeoutMs": { "type": "integer", "minimum": 1, "maximum": 60000, "default": 2500 },
+        "allowActiveAnimations": { "type": "boolean", "default": false }
+      }
+    },
+    "LayoutOcclusionOptions": {
+      "type": "object",
+      "properties": {
+        "mode": { "type": "string", "enum": ["none", "interactiveTargets", "all"], "default": "interactiveTargets" },
+        "maxSamplesPerElement": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 81 },
+        "coverageError": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1, "default": 0.05 },
+        "minimumOverlapRatio": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.02 }
+      }
+    },
+    "LayoutPrivacyOptions": {
+      "type": "object",
+      "description": "The only accepted text mode is 'none'. This layer never captures element text or values, so 'length' and 'full' are rejected rather than silently downgraded.",
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string", "enum": ["none"], "default": "none" }
+      }
+    },
+    "LayoutSuppression": {
+      "type": "object",
+      "properties": {
+        "ruleId": { "$ref": "#/$defs/LayoutRuleId" },
+        "elementId": { "type": "string" },
+        "automationId": { "type": "string" },
+        "elementType": { "type": "string" },
+        "relatedElementId": { "type": "string" },
+        "relatedAutomationId": { "type": "string" },
+        "sourceFile": { "type": "string" },
+        "sourceLineStart": { "type": "integer" },
+        "sourceLineEnd": { "type": "integer" },
+        "fingerprint": { "type": "string" },
+        "reason": { "type": "string" }
+      }
+    },
+    "LayoutSnapshotInfo": {
+      "type": "object",
+      "required": ["id", "capturedAt", "platform", "treeRevision", "diagnosticsRevision", "stable", "nodeCount", "windows"],
+      "properties": {
+        "id": { "type": "string" },
+        "capturedAt": { "type": "string" },
+        "platform": { "type": "string" },
+        "treeRevision": { "type": "string" },
+        "diagnosticsRevision": { "type": "string" },
+        "stable": { "type": "boolean" },
+        "stabilityReason": { "type": "string" },
+        "nodeCount": { "type": "integer" },
+        "windows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "logicalUnit", "scale", "origin"],
+            "properties": {
+              "id": { "type": "string" },
+              "logicalUnit": { "type": "string" },
+              "scale": { "type": "number" },
+              "origin": { "type": "string" },
+              "bounds": { "$ref": "#/$defs/LayoutRect" }
+            }
+          }
+        }
+      }
+    },
+    "LayoutRuleCatalog": {
+      "type": "object",
+      "required": ["schemaVersion", "ruleSetVersion", "profiles", "rules"],
+      "properties": {
+        "schemaVersion": { "type": "string", "const": "2.1" },
+        "ruleSetVersion": { "type": "string", "const": "2.1" },
+        "profiles": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["agent", "strict", "exhaustive", "ci"] }
+        },
+        "rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/LayoutRuleCoverage" }
+        }
+      }
+    },
+    "LayoutDiagnosticsError": {
+      "type": "object",
+      "required": ["success", "error"],
+      "properties": {
+        "success": { "type": "boolean", "const": false },
+        "error": { "type": "string" },
+        "reason": { "type": "string" },
+        "details": {}
+      }
+    },
+    "LayoutSystemEvidence": {
+      "type": "object",
+      "required": [
+        "status",
+        "geometryStable",
+        "screenshotCaptured",
+        "elements",
+        "limitations"
+      ],
+      "properties": {
+        "status": { "type": "string", "enum": ["complete", "incomplete", "unavailable"] },
+        "deviceId": { "type": ["string", "null"] },
+        "capturedAt": { "type": ["string", "null"], "format": "date-time" },
+        "captureSkewMs": { "type": ["number", "null"], "minimum": 0 },
+        "geometryStable": { "type": "boolean" },
+        "foregroundOwner": { "type": ["string", "null"] },
+        "keyboardVisible": { "type": ["boolean", "null"] },
+        "screenshotCaptured": { "type": "boolean" },
+        "screenshotDigest": { "type": ["string", "null"] },
+        "elements": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "required": ["id", "interactive"],
+            "properties": {
+              "id": { "type": "string" },
+              "role": { "type": ["string", "null"] },
+              "type": { "type": ["string", "null"] },
+              "packageId": { "type": ["string", "null"] },
+              "interactive": { "type": "boolean" },
+              "bounds": { "$ref": "#/$defs/LayoutRect" }
+            }
+          }
+        },
+        "limitations": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

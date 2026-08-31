@@ -370,6 +370,42 @@ public static class BrokerClient
     }
 
     /// <summary>
+    /// Resolves the project root of the agent registered on <paramref name="agentPort"/>, or null
+    /// when the broker is unreachable, the port is unknown, or the agent reported no usable
+    /// project. Callers must not substitute a working directory for a null result: the point of
+    /// this lookup is that the shell's directory is not evidence of which app is connected.
+    /// </summary>
+    public static async Task<string?> TryResolveAgentProjectRootAsync(int? agentPort)
+    {
+        try
+        {
+            var brokerPort = ReadBrokerPort();
+            if (brokerPort is null)
+                return null;
+            var agents = await ListAgentsAsync(brokerPort.Value);
+            if (agents is null || agents.Length == 0)
+                return null;
+            var agent = agentPort.HasValue
+                ? agents.FirstOrDefault(candidate => candidate.Port == agentPort.Value)
+                : agents.Length == 1 ? agents[0] : null;
+            return agent?.ResolveProjectRoot();
+        }
+        catch (Exception ex)
+        {
+            // Fail soft on every failure: this is an optional lookup that refines policy
+            // resolution, and a broker launch, an HTTP call, or a path operation can fail in ways
+            // that are not worth failing the caller's real work over.
+            //
+            // A catch this broad hides real defects, so it leaves a trace carrying only the
+            // exception's type name. A broker, agent, or path message can contain a filesystem
+            // path or app text, and none of it is surfaced to a caller or an agent.
+            System.Diagnostics.Trace.WriteLine(
+                $"DevFlow agent project root lookup failed with {ex.GetType().Name}.");
+            return null;
+        }
+    }
+
+    /// <summary>
     /// High-level agent resolution: ensure broker running → resolve by project → auto-select → null.
     /// Returns the resolved broker registration when one can be selected unambiguously.
     /// </summary>

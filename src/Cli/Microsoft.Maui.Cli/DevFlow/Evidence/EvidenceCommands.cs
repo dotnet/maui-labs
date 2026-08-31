@@ -80,6 +80,9 @@ internal static class EvidenceCommands
                     NetworkLimit = ctx.GetValue(networkLimitOption),
                     OutputPath = ctx.GetValue(outputOption),
                     Source = "cli",
+                    // The CLI genuinely is the user's shell, so its working directory is the
+                    // explicit, disclosed project root for suppression policy.
+                    LayoutPolicyStartPath = Environment.CurrentDirectory,
                 }, ct);
 
                 if (isJson) output.WriteRawJson(EvidenceJson.Serialize(plan, indented: true));
@@ -166,6 +169,7 @@ internal static class EvidenceCommands
                     LogLimit = ctx.GetValue(logLimitOption),
                     NetworkLimit = ctx.GetValue(networkLimitOption),
                     Source = "cli",
+                    LayoutPolicyStartPath = Environment.CurrentDirectory,
                 }, ct);
 
                 if (!result.Ok)

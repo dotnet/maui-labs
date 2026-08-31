@@ -22,6 +22,7 @@ const REQUEST_BRIDGE_TYPES = new Set([
   "devflow:requestTestProposal",
   "devflow:openSourceDiff",
   "devflow:nativeApproval",
+  "devflow:layoutPolicyMutation",
 ]);
 
 export function requiresBridgeRequestId(type: string | undefined): boolean {

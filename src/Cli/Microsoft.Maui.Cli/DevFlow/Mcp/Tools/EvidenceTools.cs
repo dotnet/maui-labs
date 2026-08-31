@@ -30,6 +30,7 @@ public sealed class EvidenceTools
         CancellationToken cancellationToken = default)
     {
         using var agent = await session.GetAgentClientAsync(agentPort);
+        var appProjectRoot = await session.TryGetAgentProjectRootAsync(agentPort);
         var plan = await EvidenceCapture.PreviewAsync(agent, new EvidenceRequest
         {
             IncludeScreenshot = includeScreenshot,
@@ -38,6 +39,15 @@ public sealed class EvidenceTools
             NetworkLimit = networkLimit ?? EvidenceFormat.DefaultNetworkLimit,
             OutputPath = outputPath,
             Source = "mcp",
+            // The connected app's project root steers the two things that are about the app: which
+            // reviewed suppressions apply, and which root its source paths are rewritten against.
+            // It deliberately does not steer the destination. This server is started by an editor
+            // and routinely runs in a different repository from the app, so the destination stays
+            // exactly where it was — the caller's outputPath, or this process's working directory
+            // — because moving a tool's default output location is a separate, visible behaviour
+            // change that has nothing to do with reading the app's project.
+            LayoutPolicyStartPath = appProjectRoot,
+            SourcePathRoot = appProjectRoot,
         }, cancellationToken);
 
         var text = EvidenceJson.Serialize(plan, indented: true);
@@ -80,6 +90,7 @@ public sealed class EvidenceTools
         }
 
         using var agent = await session.GetAgentClientAsync(agentPort);
+        var appProjectRoot = await session.TryGetAgentProjectRootAsync(agentPort);
         var result = await EvidenceCapture.CaptureAsync(agent, new EvidenceRequest
         {
             IncludeScreenshot = includeScreenshot,
@@ -90,6 +101,10 @@ public sealed class EvidenceTools
             LogLimit = logLimit ?? EvidenceFormat.DefaultLogLimit,
             NetworkLimit = networkLimit ?? EvidenceFormat.DefaultNetworkLimit,
             Source = "mcp",
+            // Policy lookup and source-path rewriting only — see the preview tool above. The
+            // bundle's destination is unchanged by the layout layer.
+            LayoutPolicyStartPath = appProjectRoot,
+            SourcePathRoot = appProjectRoot,
         }, cancellationToken);
 
         return EvidenceJson.Serialize(result, indented: true);

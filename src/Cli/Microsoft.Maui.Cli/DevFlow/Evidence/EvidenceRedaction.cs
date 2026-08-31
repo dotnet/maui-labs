@@ -257,7 +257,11 @@ internal static class EvidenceRedaction
             catch { /* fall through and treat as a plain path */ }
         }
 
-        if (!string.IsNullOrWhiteSpace(projectRoot))
+        // A root is only allowed to relativize paths if it actually describes a checkout. A bare
+        // volume root encloses the whole machine, so accepting one would turn this function from a
+        // redaction into a disclosure: every absolute path on the box becomes "project-relative"
+        // and the bundle publishes the user's home directory layout instead of dropping it.
+        if (IsShareableSourceRoot(projectRoot))
         {
             try
             {
@@ -288,6 +292,61 @@ internal static class EvidenceRedaction
 
         var name = LastSegment(value);
         return string.IsNullOrEmpty(name) ? null : name;
+    }
+
+    /// <summary>
+    /// Whether a root may be used to rewrite absolute source paths into relative ones.
+    ///
+    /// <para>Rejects anything that is not a real directory <em>below</em> a volume: an empty value,
+    /// a POSIX root, a Windows drive designator, and a bare UNC share. Those roots enclose every
+    /// file a machine can address, so relativizing against one publishes the absolute layout
+    /// verbatim minus its leading separator — exactly the disclosure the file-name-only fallback
+    /// exists to prevent. A caller that supplies one is treated as having supplied nothing.</para>
+    ///
+    /// <para>The value is judged both as written and as resolved, so a root that only becomes bare
+    /// after traversal (<c>C:\repo\..</c>) is caught too. Ordinary checkout roots — <c>C:\src\app</c>,
+    /// <c>/home/me/app</c>, <c>\\server\share\app</c> — are unaffected.</para>
+    /// </summary>
+    public static bool IsShareableSourceRoot(string? root)
+    {
+        if (string.IsNullOrWhiteSpace(root))
+            return false;
+        if (IsBareFilesystemRoot(root!))
+            return false;
+        try
+        {
+            return !IsBareFilesystemRoot(Path.GetFullPath(root!));
+        }
+        catch
+        {
+            // A root this process cannot even resolve cannot be shown to be safe.
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Decided lexically and on both separator styles, so the answer does not depend on which OS
+    /// the bundle is produced on: an agent can report Windows paths from a capture driven on Linux
+    /// and vice versa, and a Windows-hosted test must be able to state the POSIX case.
+    /// </summary>
+    private static bool IsBareFilesystemRoot(string value)
+    {
+        var normalized = value.Trim().Replace('\\', '/');
+        if (normalized.Length == 0)
+            return true;
+
+        // "C:", "C:/", "C://" — a drive designator with nothing named under it. Note that "C:" with
+        // no separator is also drive-relative, which is no more shareable than the root itself.
+        if (normalized.Length >= 2 && char.IsAsciiLetter(normalized[0]) && normalized[1] == ':')
+            return normalized[2..].Trim('/').Length == 0;
+
+        var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length == 0)
+            return true; // "/", "//", "\", "\\"
+        // A UNC path needs a server and a share before it names a directory.
+        if (normalized.StartsWith("//", StringComparison.Ordinal))
+            return segments.Length <= 2;
+        return false;
     }
 
     private static bool IsRooted(string value)

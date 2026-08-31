@@ -1476,8 +1476,19 @@ public class DevFlowCommands
                     ctx.GetValue(agentPortOption),
                     emitAgentLabel: !json);
                 var evidenceRequested = ctx.GetResult(evidenceOnFailure) is not null;
+                // Layout suppression policy belongs to the connected app. Prefer the project the
+                // broker recorded for it; fall back to the user's own shell only when the agent
+                // cannot be identified, and never to the flow file's folder.
+                var replayPolicyRoot =
+                    await Broker.BrokerClient.TryResolveAgentProjectRootAsync(ctx.GetValue(agentPortOption))
+                    ?? Environment.CurrentDirectory;
                 var capture = evidenceRequested
-                    ? new Evidence.FlowReplayEvidenceCapture(client, ctx.GetValue(evidenceOnFailure), Path.GetDirectoryName(Path.GetFullPath(file)), "cli")
+                    ? new Evidence.FlowReplayEvidenceCapture(
+                        client,
+                        ctx.GetValue(evidenceOnFailure),
+                        Path.GetDirectoryName(Path.GetFullPath(file)),
+                        replayPolicyRoot,
+                        "cli")
                     : null;
                 var replay = new Testing.FlowReplayer(
                     client,

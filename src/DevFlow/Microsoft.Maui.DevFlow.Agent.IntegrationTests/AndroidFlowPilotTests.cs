@@ -143,6 +143,7 @@ public sealed class AndroidFlowPilotTests
                         fixture.Client,
                         Path.Combine(runDirectory, "failure.mauitrace"),
                         repositoryRoot,
+                        repositoryRoot,
                         "android-flow-pilot");
 
                     var result = await host.RunAsync(

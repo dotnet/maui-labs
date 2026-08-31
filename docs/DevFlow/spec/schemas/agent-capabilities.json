@@ -114,6 +114,60 @@
               "markers"
             ]
           },
+          "diagnostics.layout": {
+            "version": 2,
+            "supported": true,
+            "schemaVersion": "2.1",
+            "ruleSetVersion": "2.1",
+            "maxElements": 5000,
+            "features": [
+              "on-demand",
+              "scoped-root",
+              "window-scope",
+              "coverage",
+              "source-location",
+              "rule-filter",
+              "severity-filter",
+              "evidence-control",
+              "pass-accounting",
+              "suppressions",
+              "suppression-modes",
+              "rule-catalog",
+              "active-page-scope",
+              "stability-sampling",
+              "native-layout-evidence",
+              "blazor-layout-evidence",
+              "interaction-hit-test-sampling",
+              "geometric-overlap"
+            ],
+            "rules": [
+              "layout.element-clipped",
+              "layout.element-outside-window",
+              "layout.content-overflow",
+              "layout.text-not-fully-rendered",
+              "layout.interaction-occluded",
+              "layout.visual-occluded",
+              "layout.geometric-overlap",
+              "layout.accessibility-visibility-mismatch",
+              "layout.visible-zero-area",
+              "layout.constraint-violation",
+              "layout.desired-size-constrained",
+              "layout.child-outside-parent"
+            ],
+            "limitations": [
+              "Native evidence is platform- and control-specific; unsupported nodes remain incomplete.",
+              "Blazor evidence is limited to the same-origin DOM.",
+              "Visual occlusion and accessibility visibility are not inferred.",
+              "Unavailable geometry is reported as incomplete, never as a pass."
+            ]
+          },
+          "ui.layoutDiagnostics": {
+            "version": 2,
+            "supported": true,
+            "schemaVersion": "2.1",
+            "ruleSetVersion": "2.1",
+            "maxElements": 5000
+          },
           "network": {
             "version": 1,
             "features": [

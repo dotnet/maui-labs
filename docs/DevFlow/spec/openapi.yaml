@@ -654,23 +654,192 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [value]
-              properties:
-                value:
-                  description: The value to set.
+              $ref: "./schemas/element-property-descriptors.json#/$defs/PropertyMutationRequest"
       responses:
         "200":
           description: The new property value after setting.
           content:
             application/json:
               schema:
+                $ref: "./schemas/element-property-descriptors.json#/$defs/PropertyMutationResponse"
+        "400":
+          description: Property was missing, read-only, or the value could not be converted.
+          content:
+            application/json:
+              schema:
                 type: object
-                required: [value]
+                required: [success, error, reason, details]
                 properties:
-                  value: {}
+                  success:
+                    type: boolean
+                    const: false
+                  error:
+                    type: string
+                  reason:
+                    type: string
+                    const: property-mutation
+                  details:
+                    $ref: "./schemas/element-property-descriptors.json#/$defs/PropertyMutationResponse"
+        "409":
+          description: The mutation would replace a binding/dynamic resource or is otherwise not proven safe.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, error, reason, details]
+                properties:
+                  success:
+                    type: boolean
+                    const: false
+                  error:
+                    type: string
+                  reason:
+                    type: string
+                    const: property-mutation
+                  details:
+                    $ref: "./schemas/element-property-descriptors.json#/$defs/PropertyMutationResponse"
         "404":
           $ref: "#/components/responses/ElementNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/diagnostics/problems:
+    get:
+      operationId: getDiagnosticProblems
+      tags: [diagnostics]
+      summary: Get bounded runtime UI problems
+      description: >
+        Returns deduplicated, bounded and redacted runtime diagnostics such as MAUI binding
+        failures. Object values and binding source instances are never retained.
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+        - name: elementId
+          in: query
+          schema:
+            type: string
+          description: Restrict returned items to one runtime element id.
+      responses:
+        "200":
+          description: Current diagnostic problem snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/diagnostic-problems.json"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      operationId: clearDiagnosticProblems
+      tags: [diagnostics]
+      summary: Clear retained runtime UI problems
+      responses:
+        "200":
+          description: Problems were cleared and the revision advanced.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success]
+                properties:
+                  success:
+                    type: boolean
+                    const: true
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/ui/diagnostics/layout:
+    get:
+      operationId: getLayoutDiagnostics
+      tags: [ui]
+      summary: Run an on-demand layout diagnostics scan
+      description: >
+        Performs an explicit, read-only scan of the active page or requested scope and returns typed
+        findings with their coverage. The rich POST path can require consecutive stable geometry
+        snapshots and can add capability-gated native and same-origin Blazor evidence.
+
+
+        Clipping requires an authoritative visible region, text truncation requires live platform
+        text-layout state, interaction occlusion reports sampled input routing, and geometric
+        overlap does not imply visual coverage. Visual occlusion and accessibility visibility remain
+        unavailable. Missing, opaque, unstable, or truncated evidence is `incomplete`, never a pass.
+      parameters:
+        - name: elementId
+          in: query
+          required: false
+          description: Restrict the scan to this element and its descendants.
+          schema:
+            type: string
+        - name: window
+          in: query
+          required: false
+          description: 0-based window index. Defaults to every window.
+          schema:
+            type: integer
+        - name: maxElements
+          in: query
+          required: false
+          description: Element budget for the scan. Values below 1 clamp to 1 and values above 5000 clamp to 5000.
+          schema:
+            type: integer
+            default: 2000
+      responses:
+        "200":
+          description: Layout diagnostics report.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/layout-diagnostics.json"
+        "404":
+          $ref: "#/components/responses/LayoutDiagnosticsElementNotFound"
+        "400":
+          $ref: "#/components/responses/LayoutDiagnosticsInvalidRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    post:
+      operationId: runLayoutDiagnostics
+      tags: [ui]
+      summary: Run an on-demand layout diagnostics scan with a request body
+      description: >
+        Accepts the versioned v2 request, including rule and severity filters, evidence and pass
+        controls, and exact suppressions. The scan remains read-only and requires no mutation lease.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/layout-diagnostics.json#/$defs/LayoutDiagnosticsRequest"
+      responses:
+        "200":
+          description: Layout diagnostics report.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/layout-diagnostics.json"
+        "404":
+          $ref: "#/components/responses/LayoutDiagnosticsElementNotFound"
+        "400":
+          $ref: "#/components/responses/LayoutDiagnosticsInvalidRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/ui/diagnostics/layout/rules:
+    get:
+      operationId: getLayoutDiagnosticRules
+      tags: [ui]
+      summary: Get the layout diagnostics rule catalog
+      responses:
+        "200":
+          description: Versioned rules, profiles, and current support levels.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/layout-diagnostics.json#/$defs/LayoutRuleCatalog"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -2256,6 +2425,28 @@ components:
         $ref: "./schemas/common.json#/$defs/ElementId"
 
   responses:
+    LayoutDiagnosticsElementNotFound:
+      description: The requested layout root element was not found.
+      content:
+        application/json:
+          schema:
+            $ref: "./schemas/layout-diagnostics.json#/$defs/LayoutDiagnosticsError"
+          example:
+            success: false
+            error: "Element 'missing' not found"
+            reason: layout-diagnostics-element-not-found
+
+    LayoutDiagnosticsInvalidRequest:
+      description: The layout diagnostics request was invalid.
+      content:
+        application/json:
+          schema:
+            $ref: "./schemas/layout-diagnostics.json#/$defs/LayoutDiagnosticsError"
+          example:
+            success: false
+            error: "window must be zero or greater."
+            reason: layout-diagnostics-validation
+
     ActionSuccess:
       description: Action completed.
       content:

@@ -324,8 +324,9 @@ public sealed class InspectorSourceAuthorityAbsenceTests
     }
 
     /// <summary>
-    /// The browser page must not offer an authority no host can honour. Source apply, the C#
-    /// selection handoff, and the layout suppression policy bridge all belong to later layers.
+    /// The browser page must not offer an authority no host can honour. Source apply and the C#
+    /// selection handoff belong to later layers. The layout suppression policy bridge is served
+    /// here, but only through a trusted native approval host, so it is checked separately below.
     /// </summary>
     [Fact]
     public void TheInspectorPageOffersNoSourceApplyOrLayoutPolicyCapability()
@@ -339,7 +340,6 @@ public sealed class InspectorSourceAuthorityAbsenceTests
                 "applySourceProposal",
                 "applyCSharpSourceProposal",
                 "getCSharpSourceSelection",
-                "layoutPolicyMutation",
             })
             {
                 Assert.False(
@@ -347,6 +347,34 @@ public sealed class InspectorSourceAuthorityAbsenceTests
                     $"{asset} still references '{forbidden}'.");
             }
         }
+    }
+
+    /// <summary>
+    /// A layout suppression is a policy-file write, so the page may only reach it through a trusted
+    /// native approval host. The registry entry must therefore have no in-page fallback: a fallback
+    /// would let a plain browser tab believe it saved a suppression it never wrote. VS Code declares
+    /// the capability; the Canvas shell must not, because Canvas has no approval authority.
+    /// </summary>
+    [Fact]
+    public void TheLayoutPolicyBridgeIsGatedOnATrustedNativeApprovalHost()
+    {
+        var registry = File.ReadAllText(RepositoryPath(
+            "src", "Cli", "Microsoft.Maui.Cli", "DevFlow", "Inspector", "Web", "inspector-host-bridge.js"));
+        var entry = registry[registry.IndexOf("layoutPolicyMutation:", StringComparison.Ordinal)..];
+        entry = entry[..entry.IndexOf("}),", StringComparison.Ordinal)];
+        Assert.Contains("mode: 'request'", entry, StringComparison.Ordinal);
+        Assert.Contains("fallback: null", entry, StringComparison.Ordinal);
+
+        var vscode = RepositoryPath("src", "DevFlow", "js", "vscode-inspector", "src");
+        Assert.Contains(
+            "layoutPolicyMutation",
+            File.ReadAllText(Path.Combine(vscode, "extension.ts")),
+            StringComparison.Ordinal);
+
+        var canvas = RepositoryPath(".github", "extensions", "maui-devflow-canvas", "shell.mjs");
+        Assert.False(
+            File.ReadAllText(canvas).Contains("layoutPolicyMutation", StringComparison.Ordinal),
+            "The Canvas shell advertises the layout policy bridge, but Canvas has no approval authority.");
     }
 
     private static string RepositoryPath(params string[] segments)

@@ -749,7 +749,14 @@ function boundedInspectorQuery(query: InspectorQuery): DevFlowResult<Record<stri
 }
 
 function validateLayoutRequest(request: LayoutInspectionRequest): string | null {
-  if (request.schemaVersion != null && request.schemaVersion !== "2.0") return "schemaVersion must be 2.0.";
+  // The agent accepts 1.0 and 2.0 requests alongside the current 2.1, so the client must not
+  // reject a version the server would have honoured.
+  if (request.schemaVersion != null &&
+      request.schemaVersion !== "1.0" &&
+      request.schemaVersion !== "2.0" &&
+      request.schemaVersion !== "2.1") {
+    return "schemaVersion must be 1.0, 2.0, or 2.1.";
+  }
   if (!boundedOptionalString(request.elementId, MAX_ELEMENT_ID_CHARS) ||
       !boundedOptionalString(request.scope?.rootElementId, MAX_ELEMENT_ID_CHARS)) {
     return `Layout element IDs cannot exceed ${MAX_ELEMENT_ID_CHARS} characters.`;

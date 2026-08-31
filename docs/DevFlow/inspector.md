@@ -86,20 +86,41 @@ properties, screenshots, hit-test and interaction, Data, recorder, video, and th
 With `DEVFLOW_PREVIEW_AGENT_AUTHORING` alone the Tests toggle appears but every guided stage stays
 hidden, so the panel opens directly on Agent requests rather than an empty shell.
 
-Two panels ship their browser code here but stay hidden because this layer serves no route for
-them: layout diagnostics (`/api/diagnostics/*`) and the managed device host (`/api/device/host`).
+One panel ships its browser code here but stays hidden because this layer serves no route for it:
+the managed device host (`/api/device/host`). Layout diagnostics (`/api/diagnostics/*`) is served by
+this layer, so its panel is advertised and visible.
 `InspectorServer.OptionalSurfaces` is the single place that records this, and
 `EveryOptionalSurfaceIsAdvertisedExactlyWhenItsRouteIsServed` probes each route to prove the
 advertisement and the routing agree.
+
+### Layout diagnostics panel (experimental)
+
+The **Layout** panel runs an explicit, read-only scan through `POST /api/diagnostics/layout` and
+renders typed findings with per-rule coverage and explicit limitations. It never watches: a new
+scan happens only when the user asks for one.
+
+Suppressions are proposals, not writes. `/api/diagnostics/suppress` and `/api/diagnostics/unsuppress`
+return a proposal bound to the exact suppression key, diagnostics revision, agent instance, policy
+file digest, and an expiry. `/api/diagnostics/suppression/apply` accepts that proposal only with a
+confirmation capability issued to a trusted native approval host, and the write is a
+compare-and-swap against the recorded digest. VS Code is the only host that can obtain that
+confirmation; the Canvas Inspector and a standalone browser copy the proposal for human review
+instead.
+
+`report.systemEvidence` stays empty in this layer — correlating a finding with the device's own
+accessibility tree needs device capture from the Mobile Device Canvas layer — so the panel never
+claims a keyboard, permission dialog, alert, or share sheet was ruled in or out.
 
 ## Editor hosts and the trusted native approval
 
 Two hosts embed the same page rather than re-implementing it:
 
 - **VS Code** — `src/DevFlow/js/vscode-inspector`. It contributes exactly one command
-  (`MAUI DevFlow: Open Inspector`) and two settings (`mauiDevflow.brokerPort`,
-  `mauiDevflow.openLocation`). It deliberately contributes no chat participant, no language-model
-  tools, and no MCP definition provider, because it registers none of them.
+  (`MAUI DevFlow: Open Inspector`) and three settings (`mauiDevflow.brokerPort`,
+  `mauiDevflow.openLocation`, `mauiDevflow.publishDiagnostics`). It deliberately contributes no chat
+  participant, no language-model tools, and no MCP definition provider, because it registers none of
+  them. With `mauiDevflow.publishDiagnostics` enabled — off by default — it publishes runtime
+  Problems and explicit layout findings into VS Code Diagnostics.
 - **GitHub Copilot Canvas** — `.github/extensions/maui-devflow-canvas`.
 
 Both reach the page through a nonce'd `postMessage` bridge and advertise a capability manifest, so

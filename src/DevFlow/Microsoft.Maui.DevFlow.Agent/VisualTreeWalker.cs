@@ -16,7 +16,7 @@ namespace Microsoft.Maui.DevFlow.Agent;
 /// Platform-specific visual tree walker that provides native view info
 /// for Android, iOS, Mac Catalyst, Windows, and macOS AppKit.
 /// </summary>
-public class PlatformVisualTreeWalker : VisualTreeWalker
+public partial class PlatformVisualTreeWalker : VisualTreeWalker
 {
 #if WINDOWS
     private readonly NativeWindowProbe _nativeProbe = new();

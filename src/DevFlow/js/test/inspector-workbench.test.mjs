@@ -464,15 +464,16 @@ test("host bridge registry covers every negotiated capability", () => {
     // The formerly separate legacy vocabulary now lives in the same registry.
     "selection", "copilot", "copilotContext", "attachData", "openSource", "saveRecording",
     "workflowFilePicker",
+    // This layer serves the layout suppression policy bridge.
+    "layoutPolicyMutation",
   ]) {
     assert.match(bridge, new RegExp(`\\b${capability}: Object\\.freeze\\(`));
   }
   // A capability no host implements must not survive as user-facing copy.
   assert.doesNotMatch(bridge, /attachTestContext/);
-  // Source apply and the layout suppression policy bridge belong to later layers. Advertising
-  // either here would offer the page an authority no host in this layer can honour.
+  // Source apply belongs to a later layer. Advertising it here would offer the page an authority
+  // no host in this layer can honour.
   assert.doesNotMatch(bridge, /applySourceProposal|applyCSharpSourceProposal|getCSharpSourceSelection/);
-  assert.doesNotMatch(bridge, /layoutPolicyMutation/);
   assert.match(bridge, /capability-missing/);
   assert.match(bridge, /testProposalApprovalResult/);
   assert.match(bridge, /grantId/);

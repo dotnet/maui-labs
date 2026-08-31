@@ -97,7 +97,7 @@ try {
 
   const listed = await send('tools/list', {});
   const tools = (listed.result?.tools ?? []).map(t => t.name);
-  step('the restricted profile advertises its 13 tools', tools.length === 13, `${tools.length} advertised`);
+  step('the restricted profile advertises its 14 tools', tools.length === 14, `${tools.length} advertised`);
 
   // Schema size is not cosmetic: hosts virtualise tools once the advertised surface grows, and a
   // virtualised tool has to be discovered before it can be called.

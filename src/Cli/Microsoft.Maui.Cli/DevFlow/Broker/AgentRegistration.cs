@@ -58,6 +58,32 @@ public record AgentRegistration
     public DateTime ConnectedAt { get; init; } = DateTime.UtcNow;
 
     /// <summary>
+    /// Maps this registration's project path — a project file or a directory — to a directory, or
+    /// returns null when the agent reported nothing usable.
+    /// </summary>
+    /// <remarks>
+    /// Policy files that belong to the app under inspection, such as the layout diagnostics
+    /// suppressions in <c>.mauidevflow</c>, must be resolved from this. The broker, the MCP server,
+    /// and the flow runner are all started by an editor or a shell and routinely sit in a different
+    /// directory from the running app, so probing a working directory silently applies one
+    /// project's reviewed policy to another project's results.
+    /// </remarks>
+    public string? ResolveProjectRoot()
+    {
+        if (string.IsNullOrWhiteSpace(Project) || !Path.IsPathFullyQualified(Project))
+            return null;
+        try
+        {
+            var full = Path.GetFullPath(Project);
+            return Directory.Exists(full) ? full : Path.GetDirectoryName(full);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Computes the agent ID from project path and TFM.
     /// </summary>
     public static string ComputeId(string project, string tfm)

@@ -7,6 +7,8 @@ import {
   selectRefreshedAgent,
 } from "../dist-test/agent-identity.js";
 import { requiresBridgeRequestId } from "../dist-test/bridge-contract.js";
+import { BoundedReferenceStore } from "../dist-test/context-store.js";
+import { supportsDiagnosticExplanation } from "../dist-test/diagnostic-actions.js";
 import {
   isNativeApprovalRequest,
   performNativeApproval,
@@ -82,9 +84,9 @@ test("host shell copy stays specific about what is missing", () => {
 test("bridge requests that return a result require a request id", () => {
   assert.equal(requiresBridgeRequestId("devflow:nativeApproval"), true);
   assert.equal(requiresBridgeRequestId("devflow:selectionChanged"), false);
-  // The layout suppression policy bridge belongs to the later layout-diagnostics layer. Accepting
-  // it here would let the page wait forever on a host reply that never comes.
-  assert.equal(requiresBridgeRequestId("devflow:layoutPolicyMutation"), false);
+  // This layer serves the layout suppression policy bridge, and VS Code is the only host that can
+  // obtain the trusted confirmation it needs, so the page must await a real host reply.
+  assert.equal(requiresBridgeRequestId("devflow:layoutPolicyMutation"), true);
   // One-way notifications carry no request id. Requiring one would drop them at the host's guard,
   // so "open source" and "save recording draft" would report success and do nothing.
   for (const notification of [
@@ -245,7 +247,7 @@ test("the manifest advertises only what the extension registers", () => {
   }
   assert.deepEqual(
     Object.keys(packageJson.contributes.configuration.properties).sort(),
-    ["mauiDevflow.brokerPort", "mauiDevflow.openLocation"],
+    ["mauiDevflow.brokerPort", "mauiDevflow.openLocation", "mauiDevflow.publishDiagnostics"],
   );
   for (const setting of Object.keys(packageJson.contributes.configuration.properties)) {
     assert.ok(
@@ -259,4 +261,25 @@ test("the manifest advertises only what the extension registers", () => {
   assert.equal(extensionSource.includes("vscode.lm.registerTool"), false);
   assert.equal(extensionSource.includes("registerUriHandler"), false);
   assert.deepEqual(packageJson.activationEvents, []);
+});
+
+test("VS Code host supports digest-bound layout policy approval", () => {
+  assert.match(extensionSource, /"layoutPolicyMutation"/);
+  assert.match(extensionSource, /action: "layout-policy-mutation"/);
+  assert.match(extensionSource, /expectedPolicyDigest/);
+});
+
+test("bounded references expire and evict without encoding context", () => {
+  const store = new BoundedReferenceStore(1, 1024, 60_000);
+  const first = store.put({ problem: "one" });
+  const second = store.put({ problem: "two" });
+  assert.match(first, /^[A-Za-z0-9_-]+$/);
+  assert.equal(store.get(first), null);
+  assert.deepEqual(store.get(second), { problem: "two" });
+  assert.ok(!second.includes("two"));
+});
+
+test("runtime Problems and layout findings offer bounded explanation actions", () => {
+  assert.equal(supportsDiagnosticExplanation("problem"), true);
+  assert.equal(supportsDiagnosticExplanation("layout"), true);
 });

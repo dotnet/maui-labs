@@ -322,6 +322,9 @@ internal sealed class FlowExecutionCoordinator : IFlowExecutionCoordinator
                     client,
                     Path.Combine(outputDirectory, "failure.mauitrace"),
                     Path.GetDirectoryName(bundle.FlowPath),
+                    // Layout suppression policy belongs to the bound app, not to wherever the flow
+                    // file happens to live.
+                    registration.ResolveProjectRoot(),
                     "flow-run",
                     request.CaptureFailureEvidenceScreenshot);
             }

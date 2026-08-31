@@ -60,6 +60,11 @@
           ],
           "default": "auto",
           "description": "Where to place the MAUI DevFlow Inspector panel when it opens."
+        },
+        "mauiDevflow.publishDiagnostics": {
+          "type": "boolean",
+          "default": false,
+          "description": "Preview: publish current DevFlow runtime Problems and explicit layout findings into VS Code Diagnostics."
         }
       }
     }

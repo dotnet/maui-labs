@@ -71,12 +71,13 @@ This opens a web UI at **http://localhost:6274**.
 3. **Tool invocation** — Select a tool (e.g., `maui_list_agents`) and click **Run** to invoke it. Without a running MAUI app the call will return an error or empty list, which is expected — the goal is to confirm the MCP server responds.
 4. **History** — The History panel at the bottom tracks all MCP protocol messages (`initialize`, `tools/list`, tool calls), which is useful for debugging.
 
-For `--profile test-agent`, verify that the list contains exactly these 13 tools —
+For `--profile test-agent`, verify that the list contains exactly these 14 tools —
 `maui_test_agents`, `maui_test_capabilities`, `maui_test_improvements`, `maui_test_explore`,
 `maui_test_author`, `maui_test_action`, `maui_test_assertion`, `maui_test_validate`,
-`maui_test_status`, `maui_test_run`, `maui_test_trace`, `maui_test_failure`, and
-`maui_test_patch` — and no `maui_secure_storage_*`, `maui_files_*`,
-`maui_cdp_evaluate`, `maui_extension_call`, `maui_invoke_action`, or `maui_set_property`.
+`maui_test_status`, `maui_test_run`, `maui_test_trace`, `maui_test_failure`,
+`maui_test_patch`, and `maui_test_layout_diagnostics` — and no `maui_secure_storage_*`,
+`maui_files_*`, `maui_cdp_evaluate`, `maui_extension_call`, `maui_invoke_action`, or
+`maui_set_property`.
 
 ## Testing with a running MAUI app
 

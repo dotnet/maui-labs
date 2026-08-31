@@ -24,11 +24,36 @@ The restricted profile exposes only:
 - `maui_test_author`, `maui_test_action`, `maui_test_assertion`, and `maui_test_validate`;
 - `maui_test_explore` for bounded, budget-enforced navigation steps;
 - `maui_test_run`, `maui_test_trace`, `maui_test_failure`, and `maui_test_improvements`;
-- `maui_test_patch` for **inert** proposal/preview/reject storage.
+- `maui_test_patch` for **inert** proposal/preview/reject storage;
+- `maui_test_layout_diagnostics` for a bounded, read-only structural layout scan of one exact
+  target. It is **experimental**, and no other tool in this profile depends on it.
 
 It does not expose SecureStorage or preference mutation, files, raw network detail or bodies, CDP
 evaluation/source, generic invoke/extension actions, arbitrary property mutation, shell/process
 access, evidence capture, source proposals, source apply, repair apply, or lease takeover.
+
+### Read authority tiers
+
+Two read tiers exist, and the dividing line is whether a tool reads broker-owned authoring session
+state — not how much it returns.
+
+| Tier | Tools | Requires |
+|------|-------|----------|
+| Pre-capability discovery | `maui_test_agents`, `maui_test_status`, `maui_test_capabilities`, `maui_test_layout_diagnostics` | An exact `agentId` + `agentInstanceId` |
+| Session read | `maui_test_improvements`, `maui_test_validate`, `maui_test_trace`, `maui_test_failure`, and every mutating tool | A complete envelope with the session's read capability |
+
+`maui_test_layout_diagnostics` is intentionally **pre-capability**. It reads only the live app's
+structure, exactly as `maui_test_status` does, so requiring an envelope would force an authoring
+draft to exist before a read-only structural scan — making a pure read create broker session state
+as a side effect and blocking the conversational "look at the screen first, decide what to test
+after" flow. `maui_test_improvements` requires an envelope because it analyses the session's draft
+plan and flow.
+
+What bounds the layout scan is its projection, not a capability: it runs with evidence off,
+suppression matching off, and text privacy at its only accepted value (`none`), and the response
+carries no source paths, control text or values, raw evidence, policy reasons, screenshots, logs,
+network data, system evidence, authoring session state, or mutation authority. The response states
+this tier in a `readAuthority` block so a caller never has to infer it.
 
 ## Explicit targets and envelopes
 

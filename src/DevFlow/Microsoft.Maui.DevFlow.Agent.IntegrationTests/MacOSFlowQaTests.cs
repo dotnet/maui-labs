@@ -363,6 +363,7 @@ public sealed class MacOSFlowQaTests
                                 fixture.Client,
                                 Path.Combine(runDirectory, "failure.mauitrace"),
                                 repositoryRoot,
+                                repositoryRoot,
                                 "appkit-flow-qa"),
                         });
                     manifest.RecordCleanAttempt(flow.Flow, flow.SourcePath, repetition, result.Report);

@@ -70,6 +70,13 @@ export const HOST_OPERATIONS = Object.freeze({
     message: 'devflow:nativeApproval', mode: 'request', timeoutMs: 600000, report: true,
     label: 'obtain a human-confirmed native approval', fallback: null,
   }),
+  layoutPolicyMutation: Object.freeze({
+    // A layout suppression is a policy-file write, so it needs the same human gate as any other
+    // native approval and has no in-page fallback: without a trusted host the page copies the
+    // proposal for review rather than pretending it was saved.
+    message: 'devflow:layoutPolicyMutation', mode: 'request', timeoutMs: 600000, report: true,
+    label: 'obtain a human-confirmed layout policy change', fallback: null,
+  }),
 });
 
 export const HOST_CAPABILITIES = Object.freeze(Object.keys(HOST_OPERATIONS));

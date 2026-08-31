@@ -42,8 +42,16 @@ public sealed class FlowTools
             return ReplayFailure("Flow failed validation: " + string.Join("; ", validation.Errors));
 
         using var agent = await session.GetAgentClientAsync(agentPort);
+        // Layout suppression policy belongs to the app under replay, not to the folder the flow
+        // file happens to sit in.
+        var appProjectRoot = await session.TryGetAgentProjectRootAsync(agentPort);
         Evidence.FlowReplayEvidenceCapture? capture = evidenceOnFailure
-            ? new Evidence.FlowReplayEvidenceCapture(agent, evidenceOutput, Path.GetDirectoryName(read.Path!), "mcp")
+            ? new Evidence.FlowReplayEvidenceCapture(
+                agent,
+                evidenceOutput,
+                Path.GetDirectoryName(read.Path!),
+                appProjectRoot,
+                "mcp")
             : null;
         var replayer = new Testing.FlowReplayer(agent, evidenceCapture: capture);
         var report = await replayer.ReplayAsync(parsed.Flow!, read.Path);

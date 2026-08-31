@@ -108,11 +108,14 @@ function safeElement(element) {
 
 function safeEvidence(evidence) {
   if (!evidence || typeof evidence !== 'object') return null;
+  // Text evidence is projected to its structural members only. `text` and `textLength` were
+  // removed from the report in schema 2.1 and are never surfaced here even when a legacy 2.0
+  // agent still sends them: a length is derived from content this layer must not read, and
+  // carrying one would let a report be misread as evidence that text was captured.
   const textEvidence = evidence.text && typeof evidence.text === 'object'
     ? {
         kind: evidence.text.kind ? String(evidence.text.kind) : null,
         isTruncated: typeof evidence.text.isTruncated === 'boolean' ? evidence.text.isTruncated : null,
-        textLength: finiteNumber(evidence.text.textLength),
         renderedLineCount: finiteNumber(evidence.text.renderedLineCount),
         maximumLines: finiteNumber(evidence.text.maximumLines),
         ellipsisCount: finiteNumber(evidence.text.ellipsisCount),

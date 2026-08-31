@@ -27,6 +27,14 @@ import {
   renderReconnectHost,
   type ReconnectState,
 } from "./host-shells";
+import { DevFlowDiagnosticsController } from "./diagnostics";
+import type {
+  DevFlowActiveApp,
+  DevFlowEvidenceContext,
+  DevFlowHostServices,
+  DevFlowLayoutReport,
+  DevFlowProblemBatch,
+} from "./host-services";
 
 /**
  * MAUI DevFlow Inspector — VS Code host shell.
@@ -36,20 +44,167 @@ import {
  * running app (`http://localhost:{brokerPort}/inspector/{agentId}/`) — the same inspector the
  * browser and Copilot Canvas use, including the rich property grid, visual tree, and record/replay.
  * No UI is re-implemented here; the host contributes the authenticated bridge for relaying
- * Send-to-Copilot into Chat, opening a XAML source file, saving a recorded test, and running the
- * trusted native approval ceremony.
+ * Send-to-Copilot into Chat, opening a XAML source file, saving a recorded test, running the
+ * trusted native approval ceremony, and — behind an off-by-default setting — publishing explicit
+ * layout findings and runtime Problems into VS Code Diagnostics.
  *
  * The manifest advertises exactly what is registered here. A chat participant, language-model
- * tools, an MCP definition provider, and VS Code Diagnostics publishing are deliberately absent:
- * announcing them without registering them would offer the user commands that silently do nothing.
+ * tools, and an MCP definition provider are deliberately absent: announcing them without
+ * registering them would offer the user commands that silently do nothing.
  */
 export function activate(context: vscode.ExtensionContext): void {
+  const services = createHostServices();
   context.subscriptions.push(
     vscode.commands.registerCommand(
       "mauiDevflow.openInspector",
       (startupHints?: InspectorStartupHints) => openInspector(startupHints),
     ),
+    services,
   );
+  services.setDiagnosticsController(new DevFlowDiagnosticsController(context, services));
+}
+
+type HostServicesWithDiagnostics = DevFlowHostServices & vscode.Disposable & {
+  setDiagnosticsController(controller: DevFlowDiagnosticsController): void;
+};
+
+function createHostServices(): HostServicesWithDiagnostics {
+  let session: import("@maui-devflow/client").DevFlowWorkspaceSession | null = null;
+  let sessionKey = "";
+  let diagnostics: DevFlowDiagnosticsController | null = null;
+  let disposed = false;
+  let refreshBusy = false;
+  // One layout scan per minute against the running app, versus a Problems read every 5 seconds.
+  const LAYOUT_REFRESH_TICKS = 12;
+  let ticksSinceLayout = LAYOUT_REFRESH_TICKS;
+
+  const ensureSession = async () => {
+    const state = activePanelState;
+    const config = vscode.workspace.getConfiguration("mauiDevflow");
+    const configured = config.get<number>("brokerPort");
+    const brokerPort = state?.brokerPort ??
+      (typeof configured === "number" && configured > 0 ? configured : undefined);
+    const agent = state?.agent;
+    const key = [
+      brokerPort ?? "",
+      agent?.id ?? "",
+      agent?.instanceId ?? agent?.sessionId ?? "",
+      agent?.port ?? "",
+    ].join("|");
+    if (session && key === sessionKey) return session;
+
+    session?.dispose();
+    const client = await import("@maui-devflow/client");
+    session = new client.DevFlowWorkspaceSession({
+      brokerPort,
+      bootstrapBroker: "never",
+      agent: agent
+        ? {
+            agentId: agent.id,
+            agentInstanceId: agent.instanceId ?? undefined,
+            port: agent.port,
+          }
+        : undefined,
+    });
+    sessionKey = key;
+    return session;
+  };
+
+  const resolveActiveApp = async (): Promise<DevFlowActiveApp | null> => {
+    const state = activePanelState;
+    if (state?.agent && state.brokerPort) {
+      return { agent: state.agent, brokerPort: state.brokerPort };
+    }
+    const workspaceSession = await ensureSession();
+    const connected = await workspaceSession.connect();
+    if (!connected.ok) return null;
+    const identity = connected.value;
+    return {
+      brokerPort: identity.brokerPort,
+      agent: {
+        id: identity.agentId,
+        instanceId: identity.agentInstanceId,
+        sessionId: identity.agentInstanceId,
+        project: identity.project ?? "",
+        tfm: identity.tfm ?? "",
+        platform: identity.platform ?? "unknown",
+        appName: identity.appName ?? identity.agentId,
+        port: identity.port,
+        connectedAt: identity.connectedAt,
+      } as AgentRegistration,
+    };
+  };
+
+  const services: HostServicesWithDiagnostics = {
+    getPanelContext: () => activePanelState,
+    getDataSnapshot: () => activePanelState?.dataSnapshot ?? null,
+    getSelectedElement: () => activePanelState?.selection ?? null,
+    getCurrentEvidence: async (): Promise<DevFlowEvidenceContext | null> => {
+      const snapshot = activePanelState?.dataSnapshot;
+      if (snapshot) return { kind: "dataSnapshot", value: snapshot };
+      const workspaceSession = await ensureSession();
+      const preview = await workspaceSession.previewEvidence({
+        includeScreenshot: false,
+        includeWorkflow: false,
+      });
+      return preview.ok
+        ? { kind: "evidencePreview", value: preview.value.value }
+        : null;
+    },
+    openInspector,
+    resolveActiveApp,
+    getProblems: async (elementId?: string): Promise<DevFlowProblemBatch | null> => {
+      const workspaceSession = await ensureSession();
+      const result = await workspaceSession.getProblems({ limit: 100, elementId });
+      return result.ok ? (result.value.value as DevFlowProblemBatch) : null;
+    },
+    getLayoutDiagnostics: async (): Promise<DevFlowLayoutReport | null> => {
+      const workspaceSession = await ensureSession();
+      // 2.0 is what every shipped agent accepts, and privacy.text is pinned here rather than left
+      // to a default so this host can never ask for text length or content it must not surface.
+      const result = await workspaceSession.analyzeLayout({
+        schemaVersion: "2.0",
+        privacy: { text: "none" },
+        maxElements: 2000,
+      });
+      if (!result.ok) return null;
+      const report = result.value.value as DevFlowLayoutReport;
+      await diagnostics?.publishLayout(report);
+      return report;
+    },
+    setDiagnosticsController: (controller) => {
+      diagnostics = controller;
+    },
+    dispose: () => {
+      disposed = true;
+      session?.dispose();
+      session = null;
+      clearInterval(refreshTimer);
+    },
+  };
+
+  const refreshTimer = setInterval(async () => {
+    if (disposed || refreshBusy || !activePanelState ||
+        !vscode.workspace.getConfiguration("mauiDevflow").get<boolean>("publishDiagnostics", false)) {
+      return;
+    }
+    refreshBusy = true;
+    try {
+      await diagnostics?.refreshProblems();
+      // Layout findings are published too, or the setting would advertise them and only ever
+      // deliver runtime Problems. A layout scan walks the live tree and resolves a workspace file
+      // per finding, so it runs on a slower multiple of this tick than the bounded Problems read.
+      if (++ticksSinceLayout >= LAYOUT_REFRESH_TICKS) {
+        ticksSinceLayout = 0;
+        await services.getLayoutDiagnostics();
+      }
+    } finally {
+      refreshBusy = false;
+    }
+  }, 5000);
+  refreshTimer.unref?.();
+
+  return services;
 }
 
 interface BridgeResult {
@@ -100,7 +255,7 @@ let activePanelState: PanelBridgeState | null = null;
 const VSCODE_HOST_CAPABILITIES = [
   "copilot", "copilotContext", "workflowFilePicker", "attachData", "openSource",
   "saveRecording", "selection", "saveTestBundle", "loadTestBundle", "pickTrace",
-  "requestTestProposal", "openSourceDiff", "nativeApproval",
+  "requestTestProposal", "openSourceDiff", "nativeApproval", "layoutPolicyMutation",
 ] as const;
 
 type InspectorStartupHints = InspectorOpenHints;
@@ -425,6 +580,8 @@ async function handleBridgeMessage(msg: BridgeMessage | undefined, panelState: P
       return await openSourceDiff(msg.diff, msg.fileRelativePath);
     case "devflow:nativeApproval":
       return await approveAgentRequestNatively(msg);
+    case "devflow:layoutPolicyMutation":
+      return await approveLayoutPolicyMutation(msg);
     case "devflow:selectionChanged":
       panelState.selection = msg.element ?? null;
       return { ok: true };
@@ -473,6 +630,132 @@ async function handleBridgeMessage(msg: BridgeMessage | undefined, panelState: P
       brokerPort: panelState.brokerPort ?? 0,
       agentId: panelState.agent?.id ?? "",
     }, readBrokerState);
+  }
+
+  /// Layout suppression is a policy-file write, so VS Code — the only native approval host — asks
+  /// the trusted local Inspector to issue a confirmation bound to the exact policy digest and the
+  /// exact proposal digest it displays. A drifted file or a re-run scan invalidates the digests and
+  /// the write fails closed.
+  async function approveLayoutPolicyMutation(message: BridgeMessage): Promise<BridgeResult> {
+    const proposal = message.proposal as Record<string, unknown> | undefined;
+    const bounded = (value: unknown, maximum: number): value is string =>
+      typeof value === "string" && value.length > 0 && value.length <= maximum;
+    if (!proposal ||
+        !bounded(proposal.proposalId, 256) ||
+        !bounded(proposal.expectedPolicyDigest, 128) ||
+        !bounded(proposal.proposalDigest, 128)) {
+      return { ok: false, error: "The Inspector supplied an invalid layout policy proposal." };
+    }
+
+    const { readBrokerState } = await import("@maui-devflow/client");
+    const state = readBrokerState() as ({ port: number; nativeApprovalToken?: string | null }) | null;
+    const token = state?.nativeApprovalToken;
+    if (!state || state.port !== panelState.brokerPort || !bounded(token, 256))
+      return { ok: false, error: "The trusted broker approval token is unavailable or targets another Inspector." };
+
+    // The human gate runs before the capability is issued. A confirmation is single-use and
+    // short-lived, so issuing it first would burn its lifetime while the modal sits open — and a
+    // declined modal would leave a valid capability behind for the rest of the window.
+    if (!bounded(proposal.policyPath, 4096) ||
+        !bounded(proposal.action, 64) ||
+        !bounded(proposal.findingId, 512) ||
+        !bounded(proposal.suppressionKey, 512) ||
+        !bounded(proposal.reason, 512)) {
+      return { ok: false, error: "The Inspector supplied an invalid layout policy proposal." };
+    }
+    const proposedUri = vscode.Uri.file(proposal.policyPath);
+    const proposedWorkspace = vscode.workspace.getWorkspaceFolder(proposedUri);
+    if (!proposedWorkspace) {
+      return { ok: false, error: "The reviewed layout policy path is outside the current VS Code workspace." };
+    }
+    const proposedRelative = path.relative(proposedWorkspace.uri.fsPath, proposedUri.fsPath);
+    if (proposedRelative === ".." ||
+        proposedRelative.startsWith(`..${path.sep}`) ||
+        path.isAbsolute(proposedRelative)) {
+      return { ok: false, error: "The reviewed layout policy path escapes the current VS Code workspace." };
+    }
+    const action = proposal.action === "remove-exact-suppression"
+      ? "Remove exact suppression"
+      : "Add exact suppression";
+    const choice = await vscode.window.showWarningMessage(
+      [
+        `${action} in ${proposal.policyPath}?`,
+        `Finding: ${proposal.findingId}`,
+        `Suppression key: ${proposal.suppressionKey}`,
+        `Reason: ${proposal.reason}`,
+        "The write will fail if the file or diagnostics revision changed after this review.",
+      ].join("\n"),
+      { modal: true },
+      action,
+    );
+    if (choice !== action)
+      return { ok: false, error: "The VS Code user did not approve the layout policy change." };
+
+    const root = `http://localhost:${state.port}/inspector/${encodeURIComponent(panelState.agent?.id ?? "")}/api/workbench`;
+    const response = await fetch(`${root}/approval-confirmations/issue`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-DevFlow-Host-Approval-Token": token,
+      },
+      body: JSON.stringify({
+        action: "layout-policy-mutation",
+        subjectId: proposal.proposalId,
+        contentDigest: proposal.expectedPolicyDigest,
+        patchDigest: proposal.proposalDigest,
+      }),
+    });
+    const body = await response.json().catch(() => null) as any;
+    if (!response.ok || !bounded(body?.confirmationCapability, 512)) {
+      return {
+        ok: false,
+        error: typeof body?.error === "string"
+          ? body.error
+          : `The trusted host could not confirm the layout policy proposal (HTTP ${response.status}).`,
+      };
+    }
+    // The trusted Inspector must describe the same change the human just read. Anything else means
+    // the page and the broker disagree about what was approved.
+    const review = body?.layoutPolicyReview as Record<string, unknown> | undefined;
+    if (!review ||
+        review.action !== proposal.action ||
+        review.findingId !== proposal.findingId ||
+        review.suppressionKey !== proposal.suppressionKey ||
+        review.reason !== proposal.reason ||
+        review.policyPath !== proposal.policyPath ||
+        !bounded(review.projectFile, 128) ||
+        review.expectedPolicyDigest !== proposal.expectedPolicyDigest ||
+        review.proposalDigest !== proposal.proposalDigest) {
+      return { ok: false, error: "The trusted Inspector returned mismatched layout policy review data." };
+    }
+    // The capability is single-use and digest-bound, and it is the authority the apply route
+    // checks. Spending it here keeps it out of the webview entirely: the page only learns whether
+    // the write succeeded.
+    const applyResponse = await fetch(
+      `http://localhost:${state.port}/inspector/${encodeURIComponent(panelState.agent?.id ?? "")}/api/diagnostics/suppression/apply`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          proposalId: proposal.proposalId,
+          confirmationCapability: body.confirmationCapability,
+        }),
+      });
+    const applyBody = await applyResponse.json().catch(() => null) as any;
+    if (!applyResponse.ok || applyBody?.ok !== true) {
+      return {
+        ok: false,
+        error: typeof applyBody?.error === "string"
+          ? applyBody.error
+          : `The layout suppression could not be written (HTTP ${applyResponse.status}).`,
+      };
+    }
+    return {
+      ok: true,
+      message: proposal.action === "remove-exact-suppression"
+        ? "Removed the exact project layout suppression."
+        : "Saved an exact layout suppression in .mauidevflow.",
+    };
   }
 
 
@@ -1170,7 +1453,7 @@ function renderHost(inspectorUrl: string, appName: string, nonce: string, bridge
         }
         if (!d || d.bridgeId !== bridgeId) return;                // nonce-authenticated
         if (d.type === 'devflow:ready') { announce(); return; }
-        if (d.type === 'devflow:sendToCopilot' || d.type === 'devflow:attachCopilot' || d.type === 'devflow:requestTestProposal' || d.type === 'devflow:pickWorkflow' || d.type === 'devflow:attachData' || d.type === 'devflow:openSource' || d.type === 'devflow:recordingComplete' || d.type === 'devflow:selectionChanged' || d.type === 'devflow:saveTestBundle' || d.type === 'devflow:loadTestBundle' || d.type === 'devflow:pickTrace' || d.type === 'devflow:openSourceDiff' || d.type === 'devflow:nativeApproval') {
+        if (d.type === 'devflow:sendToCopilot' || d.type === 'devflow:attachCopilot' || d.type === 'devflow:requestTestProposal' || d.type === 'devflow:pickWorkflow' || d.type === 'devflow:attachData' || d.type === 'devflow:openSource' || d.type === 'devflow:recordingComplete' || d.type === 'devflow:selectionChanged' || d.type === 'devflow:saveTestBundle' || d.type === 'devflow:loadTestBundle' || d.type === 'devflow:pickTrace' || d.type === 'devflow:openSourceDiff' || d.type === 'devflow:nativeApproval' || d.type === 'devflow:layoutPolicyMutation') {
           vscode.postMessage(d);                                  // relay to the extension host
         }
       });
