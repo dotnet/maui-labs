@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Xml.Linq;
+using Xamarin.Android.Tools;
 
 namespace Microsoft.Maui.DevFlow.Driver;
 
@@ -10,6 +12,24 @@ namespace Microsoft.Maui.DevFlow.Driver;
 /// </summary>
 public class AndroidAppDriver : AppDriverBase, IAlertDriver
 {
+    private readonly Func<string, AdbRunner> _createAdbRunner;
+    private readonly Func<string?> _getDefaultSerial;
+    private AdbRunner? _adbRunner;
+    private string? _adbRunnerPath;
+
+    public AndroidAppDriver()
+        : this(
+            static adbPath => new AdbRunner(adbPath),
+            static () => Environment.GetEnvironmentVariable("ANDROID_SERIAL"))
+    {
+    }
+
+    internal AndroidAppDriver(Func<string, AdbRunner> createAdbRunner, Func<string?>? getDefaultSerial = null)
+    {
+        _createAdbRunner = createAdbRunner;
+        _getDefaultSerial = getDefaultSerial ?? (static () => null);
+    }
+
     /// <summary>
     /// Optional serial number for targeting a specific device/emulator (adb -s).
     /// </summary>
@@ -22,17 +42,24 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
 
     protected override async Task SetupPlatformAsync(string host, int port)
     {
-        await RunAdbAsync($"reverse tcp:{port} tcp:{port}");
+        var serial = await ResolveSerialAsync().ConfigureAwait(false);
+        var portSpec = new AdbPortSpec(AdbProtocol.Tcp, port);
+        await GetAdbRunner().ReversePortAsync(serial, portSpec, portSpec).ConfigureAwait(false);
     }
 
     public override async Task BackAsync()
     {
-        await RunAdbAsync("shell input keyevent KEYCODE_BACK");
+        await RunAdbAsync("shell", "input", "keyevent", "KEYCODE_BACK").ConfigureAwait(false);
     }
 
     public override async Task PressKeyAsync(string key)
     {
-        var keycode = key.ToUpperInvariant() switch
+        ArgumentNullException.ThrowIfNull(key);
+        var normalizedKey = key.ToUpperInvariant();
+        if (normalizedKey.Any(character => !IsKeyCharacter(character)))
+            throw new ArgumentException("Android key names may contain only ASCII letters, digits, and underscores.", nameof(key));
+
+        var keycode = normalizedKey switch
         {
             "ENTER" or "RETURN" => "KEYCODE_ENTER",
             "BACK" => "KEYCODE_BACK",
@@ -40,10 +67,10 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
             "TAB" => "KEYCODE_TAB",
             "ESCAPE" or "ESC" => "KEYCODE_ESCAPE",
             "DELETE" or "BACKSPACE" => "KEYCODE_DEL",
-            _ => $"KEYCODE_{key.ToUpperInvariant()}"
+            _ => $"KEYCODE_{normalizedKey}"
         };
 
-        await RunAdbAsync($"shell input keyevent {keycode}");
+        await RunAdbAsync("shell", "input", "keyevent", keycode).ConfigureAwait(false);
     }
 
     public override async Task<ThemeResult> SetThemeAsync(DevFlowTheme theme, ThemeSetScope scope = ThemeSetScope.Auto)
@@ -76,7 +103,7 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
 
         try
         {
-            var qemu = await RunAdbWithOutputAsync("shell getprop ro.kernel.qemu").ConfigureAwait(false);
+            var qemu = await RunAdbWithOutputAsync("shell", "getprop", "ro.kernel.qemu").ConfigureAwait(false);
             return qemu.Trim().Equals("1", StringComparison.Ordinal);
         }
         catch
@@ -94,7 +121,7 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
             _ => "auto",
         };
 
-        await RunAdbAsync($"shell cmd uimode night {mode}").ConfigureAwait(false);
+        await RunAdbAsync("shell", "cmd", "uimode", "night", mode).ConfigureAwait(false);
 
         return new ThemeResult
         {
@@ -132,7 +159,7 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
         if (alert is null) throw new InvalidOperationException("No alert detected to dismiss");
 
         var btn = FindButtonToTap(alert, buttonLabel);
-        await RunAdbAsync($"shell input tap {btn.CenterX} {btn.CenterY}");
+        await TapAsync(btn).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -144,7 +171,7 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
         if (alert is null) return null;
 
         var btn = FindButtonToTap(alert, buttonLabel);
-        await RunAdbAsync($"shell input tap {btn.CenterX} {btn.CenterY}");
+        await TapAsync(btn).ConfigureAwait(false);
         return alert;
     }
 
@@ -164,8 +191,8 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
     private async Task<XElement?> DumpUiHierarchyAsync()
     {
         const string devicePath = "/sdcard/window_dump.xml";
-        await RunAdbAsync($"shell uiautomator dump {devicePath}");
-        var content = await RunAdbWithOutputAsync($"shell cat {devicePath}");
+        await RunAdbAsync("shell", "uiautomator", "dump", devicePath).ConfigureAwait(false);
+        var content = await RunAdbWithOutputAsync("shell", "cat", devicePath).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(content)) return null;
 
         try { return XElement.Parse(content); }
@@ -349,25 +376,33 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
             effectiveTimeout = AdbMaxTimeLimit;
         }
 
-        var args = Serial is not null ? $"-s {Serial} " : "";
-        args += $"shell screenrecord --time-limit {effectiveTimeout} {DeviceRecordingPath}";
+        var arguments = BuildAdbArguments(
+            Serial,
+            "shell",
+            "screenrecord",
+            "--time-limit",
+            effectiveTimeout.ToString(CultureInfo.InvariantCulture),
+            DeviceRecordingPath);
+        var processStartInfo = CreateAdbProcessStartInfo(AdbPath, arguments);
+        int? recordingPid = null;
+        var recordingTask = ProcessUtils.StartProcess(
+            processStartInfo,
+            TextWriter.Null,
+            TextWriter.Null,
+            CancellationToken.None,
+            process => recordingPid = process.Id);
 
-        var psi = new ProcessStartInfo(AdbPath, args)
+        if (recordingPid is null)
         {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+            await recordingTask.ConfigureAwait(false);
+            throw new InvalidOperationException("Failed to start adb screenrecord");
+        }
 
-        var process = Process.Start(psi)
-            ?? throw new InvalidOperationException("Failed to start adb screenrecord");
-
-        var watchdogPid = SpawnWatchdog(process.Id, effectiveTimeout);
+        var watchdogPid = SpawnWatchdog(recordingPid.Value, effectiveTimeout);
 
         RecordingStateManager.Save(new RecordingState
         {
-            RecordingPid = process.Id,
+            RecordingPid = recordingPid.Value,
             WatchdogPid = watchdogPid,
             OutputFile = Path.GetFullPath(outputFile),
             Platform = "android",
@@ -398,8 +433,8 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
         catch { }
 
         // Pull the file from device
-        await RunAdbAsync($"pull {DeviceRecordingPath} \"{state.OutputFile}\"");
-        try { await RunAdbAsync($"shell rm {DeviceRecordingPath}"); } catch { }
+        await RunAdbAsync("pull", DeviceRecordingPath, state.OutputFile).ConfigureAwait(false);
+        try { await RunAdbAsync("shell", "rm", DeviceRecordingPath).ConfigureAwait(false); } catch { }
 
         RecordingStateManager.Delete();
         return state.OutputFile;
@@ -409,50 +444,106 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
     // adb helpers
     // ──────────────────────────────────────────────
 
-    private async Task RunAdbAsync(string arguments)
+    private AdbRunner GetAdbRunner()
     {
-        var args = Serial is not null ? $"-s {Serial} {arguments}" : arguments;
-        var psi = new ProcessStartInfo(AdbPath, args)
+        if (_adbRunner is null || !string.Equals(_adbRunnerPath, AdbPath, StringComparison.Ordinal))
         {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        using var process = Process.Start(psi);
-        if (process == null) throw new InvalidOperationException("Failed to start adb");
-        await process.WaitForExitAsync();
-
-        if (process.ExitCode != 0)
-        {
-            var error = await process.StandardError.ReadToEndAsync();
-            throw new InvalidOperationException($"adb {arguments} failed: {error}");
-        }
-    }
-
-    private async Task<string> RunAdbWithOutputAsync(string arguments)
-    {
-        var args = Serial is not null ? $"-s {Serial} {arguments}" : arguments;
-        var psi = new ProcessStartInfo(AdbPath, args)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        using var process = Process.Start(psi);
-        if (process == null) throw new InvalidOperationException("Failed to start adb");
-        var output = await process.StandardOutput.ReadToEndAsync();
-        await process.WaitForExitAsync();
-
-        if (process.ExitCode != 0)
-        {
-            var error = await process.StandardError.ReadToEndAsync();
-            throw new InvalidOperationException($"adb {arguments} failed: {error}");
+            _adbRunner = _createAdbRunner(AdbPath);
+            _adbRunnerPath = AdbPath;
         }
 
-        return output;
+        return _adbRunner;
     }
+
+    private async Task<string> ResolveSerialAsync()
+    {
+        if (Serial is not null)
+            return ValidateSerial(Serial);
+
+        var defaultSerial = _getDefaultSerial();
+        if (!string.IsNullOrWhiteSpace(defaultSerial))
+            return ValidateSerial(defaultSerial);
+
+        var devices = await GetAdbRunner().ListDevicesAsync().ConfigureAwait(false);
+        var connected = devices.Where(device => device.Status == AdbDeviceStatus.Online).ToArray();
+        return connected.Length switch
+        {
+            1 => ValidateSerial(connected[0].Serial),
+            0 => throw new InvalidOperationException("No connected Android devices found."),
+            _ => throw new InvalidOperationException("More than one Android device is connected. Set Serial to select a device."),
+        };
+    }
+
+    private Task TapAsync(AlertButton button)
+        => RunAdbAsync(
+            "shell",
+            "input",
+            "tap",
+            button.CenterX.ToString(CultureInfo.InvariantCulture),
+            button.CenterY.ToString(CultureInfo.InvariantCulture));
+
+    private async Task RunAdbAsync(params string[] arguments)
+        => _ = await RunAdbWithOutputAsync(arguments).ConfigureAwait(false);
+
+    private async Task<string> RunAdbWithOutputAsync(params string[] arguments)
+    {
+        var adbArguments = BuildAdbArguments(Serial, arguments);
+        var processStartInfo = CreateAdbProcessStartInfo(AdbPath, adbArguments);
+        using var output = new StringWriter(CultureInfo.InvariantCulture);
+        using var error = new StringWriter(CultureInfo.InvariantCulture);
+
+        var exitCode = await ProcessUtils.StartProcess(
+            processStartInfo,
+            output,
+            error,
+            CancellationToken.None).ConfigureAwait(false);
+
+        if (exitCode != 0)
+            throw new InvalidOperationException($"adb {string.Join(" ", arguments)} failed: {error}");
+
+        return output.ToString();
+    }
+
+    internal static ProcessStartInfo CreateAdbProcessStartInfo(string adbPath, params string[] arguments)
+    {
+        var processStartInfo = ProcessUtils.CreateProcessStartInfo(adbPath);
+        foreach (var argument in arguments)
+            processStartInfo.ArgumentList.Add(argument);
+        return processStartInfo;
+    }
+
+    internal static string[] BuildAdbArguments(string? serial, params string[] arguments)
+    {
+        if (serial is null)
+            return arguments;
+
+        var result = new string[arguments.Length + 2];
+        result[0] = "-s";
+        result[1] = serial;
+        Array.Copy(arguments, 0, result, 2, arguments.Length);
+        return result;
+    }
+
+    private static string ValidateSerial(string serial)
+    {
+        if (string.IsNullOrWhiteSpace(serial) || serial.Any(character => !IsSerialCharacter(character)))
+        {
+            throw new ArgumentException(
+                "Android device serials may contain only ASCII letters, digits, periods, hyphens, underscores, colons, brackets, and percent signs.",
+                nameof(Serial));
+        }
+
+        return serial;
+    }
+
+    private static bool IsKeyCharacter(char character)
+        => character is >= 'A' and <= 'Z'
+            or >= '0' and <= '9'
+            or '_';
+
+    private static bool IsSerialCharacter(char character)
+        => character is >= 'A' and <= 'Z'
+            or >= 'a' and <= 'z'
+            or >= '0' and <= '9'
+            or '.' or '-' or '_' or ':' or '[' or ']' or '%';
 }

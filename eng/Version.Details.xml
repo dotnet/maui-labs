@@ -3,7 +3,7 @@
   <ProductDependencies>
     <!-- dotnet/android-tools: Android SDK tooling (SdkManager, AdbRunner, JdkInstaller, etc.)
          The package is built by dotnet/android which includes android-tools as a submodule. -->
-    <Dependency Name="Xamarin.Android.Tools.AndroidSdk" Version="1.0.189-preview.58">
+    <Dependency Name="Xamarin.Android.Tools.AndroidSdk" Version="1.0.189-preview.59">
       <Uri>https://github.com/dotnet/android</Uri>
       <Sha>2114bc81fed892c4d166aeff637ca2387b0fcd8a</Sha>
     </Dependency>
