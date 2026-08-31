@@ -341,6 +341,13 @@ embedded run/flow/proposal ID. Future repair and source services must call
 `MauiArtifactProposalPolicy.CanCreateProposal` (or the repair/source forwarding gates), which
 fails closed unless the record is `locally-reproduced`.
 
+The serialized `MauiLocalReproductionReport.FailureCorrespondence` separately states whether the
+imported and new local failure code, class, step, and checkpoints were the same, different, absent,
+or indeterminate. It is derived from evaluator reason and omission codes and cannot be upgraded by a
+caller-supplied value. `same-failure` supports an ordinary developer worktree investigation even
+when volatile package identity prevents a full trust-state match; it never satisfies
+`MauiArtifactProposalPolicy` or issues broker repair authority.
+
 The CLI's `maui devflow flow validate <flow.md>` command uses this same parser and validator
 without connecting to or driving an app.
 

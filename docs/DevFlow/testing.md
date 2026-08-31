@@ -513,8 +513,11 @@ The platform, framework, configuration, device, cleanup, agent-wait, and failure
 match `flow run`. `--output` is required and must be new or empty. The directory receives the normal
 `execution-manifest.json`, `flow-run.json`, and `report.junit.xml`, plus the bounded
 `local-reproduction.json`. The latter contains only the imported digest and fresh opaque identity,
-local manifest/report digests, match reason codes, missing-fact codes, failure/step/checkpoint
-fingerprints, and relative local artifact references.
+local manifest/report digests, match reason codes, missing-fact codes, a derived
+`failureCorrespondence` (`same-failure`, `different-failure`, `no-local-failure`, or
+`indeterminate`), failure/step/checkpoint fingerprints, and relative local artifact references.
+Failure correspondence is developer-lane diagnostic evidence only; it never grants broker repair
+or source authority.
 
 Matching is fail-closed. A stale flow/plan binding, unsupported import, flow/app build/app source/
 package/platform/device-profile/failure/checkpoint mismatch, missing comparison fact, infrastructure

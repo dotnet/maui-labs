@@ -34,12 +34,13 @@ selector repair.
 | Reading a whole CI run, its jobs, and its logs | `maui-devflow-ci-triage` |
 | Designing the workflows that publish artifacts | `maui-devflow-ci` |
 | Authoring, committing, or running a flow | `maui-devflow-test` |
-| Executing a committed flow from an operator shell | `maui-devflow-run-cli` |
+| Executing a committed flow from an operator shell | `maui devflow flow` commands |
 | Reviewing a chat transcript rather than an artifact | `maui-devflow-session-review` |
 
-`maui-devflow-ci-triage`, `maui-devflow-ci`, and `maui-devflow-run-cli` ship in
-the `dotnet-maui` marketplace plugin, not in the `maui devflow init` bundle. If
-one is not installed, say so and continue here within the boundaries below
+`maui-devflow-ci-triage` and `maui-devflow-ci` ship in the `dotnet-maui`
+marketplace plugin, not in the `maui devflow init` bundle. Operator-run
+execution uses the `maui devflow flow` command family directly. If a routed
+skill is not installed, say so and continue here within the boundaries below
 rather than silently widening scope.
 
 ## Inputs

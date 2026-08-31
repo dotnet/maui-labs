@@ -137,7 +137,16 @@ internal static class FlowHandoffCommands
                         ? "Local reproduction: exact match"
                         : "Local reproduction: no exact match");
                     Console.WriteLine($"Trust state: {result.Report.TrustState}");
+                    Console.WriteLine($"Failure correspondence: {result.Report.FailureCorrespondence}");
                     Console.WriteLine($"Report: {MauiLocalReproductionReportSerializer.FileName}");
+                    if (string.Equals(
+                            result.Report.FailureCorrespondence,
+                            "same-failure",
+                            StringComparison.Ordinal))
+                    {
+                        Console.WriteLine(
+                            "Developer lane: classify the fresh local failure before editing, rerun with `maui devflow flow run`, and leave the worktree uncommitted for review.");
+                    }
                     if (result.Report.Matched)
                     {
                         Console.WriteLine("Open the Inspector/Test Workbench repair review. No approval or proposal was created.");
