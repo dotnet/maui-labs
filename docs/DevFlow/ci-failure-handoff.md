@@ -413,6 +413,54 @@ producer checks. A PR run
 may retain such a diagnostic artifact, but only a same-repository default-branch
 schedule or workflow dispatch can reach issue publication.
 
+## The demo lane
+
+A third lane, `demo-emulator-showcase`, exists solely to demonstrate the
+CI-to-local-fix route end to end. It is disjoint from the production lane in
+every observable way and can never be mistaken for it:
+
+| Fact | Production | Demo |
+| --- | --- | --- |
+| Producer `-LaneKind` | `physical-device-flow-qa` | `demo-emulator-showcase` |
+| Device evidence | `physical-device`/`real-device`, `realDevice: true` | `emulator`, `realDevice: false` |
+| Qualification status | must be `pass` | must be `not-qualified` or `fail`; published as nonqualified |
+| Source event | `schedule` or `workflow_dispatch` | `workflow_dispatch` only |
+| Archive schemas | `devflow-ci-failure-manifest` / `devflow-ci-failure-handoff` | `devflow-ci-demo-manifest` / `devflow-ci-demo-handoff` |
+| Handoff artifact | `devflow-failure-handoff-<run>-<attempt>` | `devflow-demo-handoff-<run>-<attempt>` |
+| Evidence artifact | `devflow-flow-evidence-<platform>-<run>-<attempt>` | `devflow-demo-evidence-android-<run>-<attempt>` |
+| Publisher `-Lane` | `production` | `demo` |
+| Issue label | `devflow-ci-failure` | `devflow-ci-failure-demo` |
+| Title prefix | `[DevFlow CI]` | `[DevFlow CI DEMO - NOT QUALIFIED]` |
+| Markers | `devflow-ci-failure*:v1` | `devflow-ci-failure-demo*:v1` |
+| First heading | `## Verified handoff` | `## Demo handoff (not qualified)` |
+| Fingerprint domain | none | `demo-emulator-showcase` |
+| Handoff `qualification` | `qualified` | `not-qualified` |
+| Repair authority | none | none |
+
+The demo lane still runs every strict producer check: the same source-manifest
+validation, artifact inventory, selected flow-run and `.mauitrace` binding,
+truncation and omission rules, provenance, ambiguity, and redaction. It bypasses
+nothing. It simply inverts the qualification gate, because a demo that claimed
+qualification would be a lie.
+
+The `android-demo-ci-fix` job in `devflow-integration.yml` runs only for a
+default-branch `workflow_dispatch` with the `demo-ci-fix` input set. It replays
+`samples/DevFlow.Sample/maui-tests/demo-ci-fix-drift.md`, a committed flow that
+is intended to fail with `locator-not-found` on a trailing action selector, and
+then fails the run deliberately so the workflow conclusion is `failure`. It is
+not a member of `devflow-flow-gate.needs`, it holds only `contents: read`, and
+it uses its own concurrency group so an ordinary main run cannot cancel it. The
+ordinary Android Tier-1 pilot never loads a `demo-`-prefixed flow: that requires
+the explicit `DEVFLOW_FLOW_PILOT_DEMO_FLOW` opt-in, which loads exactly the one
+named demo flow.
+
+Enabling `demo-ci-fix` also suppresses every ordinary platform and flow-QA lane
+for that dispatch, regardless of the `platforms` input. Only the cheap planning,
+static qualification, required-gate bookkeeping, and dedicated demo job run.
+
+No demo artifact, issue, comment, or resolver result is production
+qualification, and none of them grants broker or source repair authority.
+
 ## Repository enablement and residual platform limits
 
 GitHub Issues must be enabled in repository settings before publication can
