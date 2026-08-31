@@ -16,6 +16,7 @@ public sealed class AndroidFlowPilotTests
     const string PilotCheckpointRoute = AndroidFlowTestHost.DefaultCheckpointRoute;
     internal const string DemoFlowEnvironmentVariable = "DEVFLOW_FLOW_PILOT_DEMO_FLOW";
     internal const string DemoFlowPrefix = "demo-";
+    internal static readonly string[] DeliberateFailureFlowPrefixes = [DemoFlowPrefix, "drifted-"];
     readonly ITestOutputHelper _output;
 
     public AndroidFlowPilotTests(ITestOutputHelper output)
@@ -40,7 +41,7 @@ public sealed class AndroidFlowPilotTests
         Assert.All(flows, flow => Assert.Equal(MauiFlowSideEffectPolicies.None, flow.Plan!.SideEffectPolicy));
         Assert.DoesNotContain(
             flows,
-            flow => Path.GetFileName(flow.SourcePath).StartsWith(DemoFlowPrefix, StringComparison.Ordinal));
+            flow => IsDeliberateFailureFlow(flow.SourcePath));
     }
 
     [Fact]
@@ -50,6 +51,8 @@ public sealed class AndroidFlowPilotTests
         {
             Path.Combine("flows", "README.md"),
             Path.Combine("flows", "demo-ci-fix-drift.md"),
+            Path.Combine("flows", "drifted-add-todo.md"),
+            Path.Combine("flows", "drifted-assert-after-commit.md"),
             Path.Combine("flows", "native-baseline.md"),
             Path.Combine("flows", "verified-add-todo.md"),
         };
@@ -58,7 +61,9 @@ public sealed class AndroidFlowPilotTests
 
         Assert.Equal(
             ["native-baseline.md", "verified-add-todo.md"],
-            selected.Select(Path.GetFileName).ToArray());
+            selected.Select(static path =>
+                Path.GetFileName(path)
+                ?? throw new InvalidOperationException("A selected flow path had no file name.")).ToArray());
     }
 
     [Fact]
@@ -101,9 +106,15 @@ public sealed class AndroidFlowPilotTests
         Assert.Contains(
             files,
             path => string.Equals(Path.GetFileName(path), "demo-ci-fix-drift.md", StringComparison.Ordinal));
+        Assert.Contains(
+            files,
+            path => string.Equals(Path.GetFileName(path), "drifted-add-todo.md", StringComparison.Ordinal));
+        Assert.Contains(
+            files,
+            path => string.Equals(Path.GetFileName(path), "drifted-assert-after-commit.md", StringComparison.Ordinal));
         Assert.DoesNotContain(
             SelectTierOneFlowFiles(files, demoFlowSelection: null),
-            path => string.Equals(Path.GetFileName(path), "demo-ci-fix-drift.md", StringComparison.Ordinal));
+            IsDeliberateFailureFlow);
         Assert.Equal(
             "demo-ci-fix-drift.md",
             Path.GetFileName(Assert.Single(SelectTierOneFlowFiles(files, "demo-ci-fix-drift.md"))));
@@ -249,10 +260,10 @@ public sealed class AndroidFlowPilotTests
 
     /// <summary>
     /// Selects the flow files the Tier-1 pilot loads. The default is the ordinary Tier-1 corpus and
-    /// never includes a <c>demo-</c>-prefixed flow: those exist only to fail on purpose for the
-    /// manager-facing CI demo, and one of them in the required gate would turn every pull request
-    /// red. Demo mode is a single explicit opt-in file name; it loads that flow and nothing else,
-    /// so a demo run can never quietly widen into the ordinary corpus either.
+    /// never includes a deliberately failing fixture: those document repair scenarios and cannot
+    /// satisfy a gate that requires every loaded flow to pass. Demo mode is a single explicit
+    /// <c>demo-</c>-prefixed file name; it loads that flow and nothing else, so a demo run can never
+    /// quietly widen into the ordinary corpus either.
     /// </summary>
     internal static IReadOnlyList<string> SelectTierOneFlowFiles(
         IEnumerable<string> flowPaths,
@@ -268,7 +279,7 @@ public sealed class AndroidFlowPilotTests
         if (string.IsNullOrEmpty(selection))
         {
             return ordered
-                .Where(static path => !Path.GetFileName(path).StartsWith(DemoFlowPrefix, StringComparison.Ordinal))
+                .Where(static path => !IsDeliberateFailureFlow(path))
                 .ToList();
         }
 
@@ -292,6 +303,10 @@ public sealed class AndroidFlowPilotTests
 
         return matches;
     }
+
+    internal static bool IsDeliberateFailureFlow(string path)
+        => DeliberateFailureFlowPrefixes.Any(prefix =>
+            Path.GetFileName(path).StartsWith(prefix, StringComparison.Ordinal));
 
     internal static async Task<List<FlowPilotFlowSource>> LoadTierOneFlowsAsync(
         string repositoryRoot,
