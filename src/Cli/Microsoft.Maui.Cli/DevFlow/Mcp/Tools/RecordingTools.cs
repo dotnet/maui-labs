@@ -16,7 +16,7 @@ public sealed class RecordingTools
 	{
 		try
 		{
-			var agent = await session.GetAgentClientAsync(agentPort);
+			using var agent = await session.GetAgentClientAsync(agentPort);
 			var status = await agent.GetStatusAsync();
 			var platform = status?.Platform ?? "maccatalyst";
 
@@ -39,7 +39,7 @@ public sealed class RecordingTools
 	{
 		try
 		{
-			var agent = await session.GetAgentClientAsync(agentPort);
+			using var agent = await session.GetAgentClientAsync(agentPort);
 			var status = await agent.GetStatusAsync();
 			var platform = status?.Platform ?? "maccatalyst";
 

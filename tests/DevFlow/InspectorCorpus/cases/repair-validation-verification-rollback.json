@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "id": "repair-validation-verification-rollback",
+  "kind": "repair-negative",
+  "disposition": "no-repair",
+  "provenance": {
+    "labeledBy": "devflow-maintainers",
+    "labeledOn": "2026-08-15",
+    "method": "hand-authored",
+    "sourceKind": "synthetic",
+    "reviewStatus": "unreviewed",
+    "notes": "Post-apply validation/rollback policy case; models no replay failure."
+  },
+  "fixture": {
+    "validation": "independent-oracle-failed",
+    "verification": "one-of-three-failed",
+    "rollback": "write-failed"
+  },
+  "expect": {
+    "diagnosticIds": [
+      "DFSH009"
+    ],
+    "candidateKinds": [],
+    "repairEligible": false,
+    "ineligibilityCodes": [
+      "validation-failed",
+      "verification-failed",
+      "rollback-failed"
+    ]
+  }
+}

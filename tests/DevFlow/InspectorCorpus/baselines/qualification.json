@@ -1,0 +1,792 @@
+{
+  "schema": 1,
+  "kind": "maui-preview-qualification",
+  "contractVersion": "preview-qualification-v1",
+  "generatedAt": "1970-01-01T00:00:00+00:00",
+  "status": "not-qualified",
+  "platform": "android",
+  "fingerprints": {
+    "corpusVersion": "sha256:0547cf42d68c5a03b71b1906a3216f6f4a2ce71d7738f2b479c8453d353fbc4e",
+    "corpusFingerprint": "sha256:31952dd306ed8cecbcd3daa690f39a037fd408d0351d5f5195cf98015fef280d",
+    "repositoryCommit": "unknown",
+    "testingPackageVersion": "sha256:3f4f626fe7078b33a46be0b16dcf0ae64a42af70e61c6d888828c41a4425bace",
+    "packageId": "unknown",
+    "packageFingerprint": "unknown",
+    "toolVersion": "sha256:3f4f626fe7078b33a46be0b16dcf0ae64a42af70e61c6d888828c41a4425bace",
+    "toolFingerprint": "unknown",
+    "policyVersion": "sha256:9023e2e4bd34546ad1d27b8e65fb836a6ae291fce9e3c72557ac1f0ed5f7eb08",
+    "policyFingerprint": "unknown"
+  },
+  "profiles": [
+    {
+      "platform": "android",
+      "scope": "sha256:38858b53d6c1ff0eb5efcaab799181bdc46d0fef1c927399d460afaca46c4ed3",
+      "deviceEvidenceKind": "none",
+      "realDevice": false,
+      "deviceFingerprint": "unknown",
+      "runtimeFingerprint": "unknown",
+      "buildFingerprint": "unknown",
+      "packageFingerprint": "unknown",
+      "seedFingerprint": "unknown",
+      "backendStateFingerprint": "unknown",
+      "firstAttemptMode": "sha256:54cf65ea9a66edaa2ded1499273cd3e87cde7033719843042fe588d5613943f7"
+    }
+  ],
+  "featureFlags": {
+    "schema": 1,
+    "policyVersion": "preview-flags-v1",
+    "workbenchEnabled": false,
+    "agentAuthoringEnabled": false,
+    "repairProposalsEnabled": false,
+    "sourceProposalsEnabled": false,
+    "traceImportExportEnabled": false,
+    "autoApplyRepair": false,
+    "autoApplySource": false,
+    "modelProviderEnabled": false,
+    "telemetryEgressEnabled": false,
+    "requiredPullRequestGate": false,
+    "killSwitches": []
+  },
+  "review": {
+    "planId": "unknown",
+    "planReviewStatus": "missing",
+    "rubberDuckReviewStatus": "missing",
+    "independentReviewStatus": "missing",
+    "reviewerFingerprints": [],
+    "artifactRefs": []
+  },
+  "corpus": {
+    "version": "sha256:0547cf42d68c5a03b71b1906a3216f6f4a2ce71d7738f2b479c8453d353fbc4e",
+    "manifestFingerprint": "sha256:31952dd306ed8cecbcd3daa690f39a037fd408d0351d5f5195cf98015fef280d",
+    "staticOnly": true,
+    "manifestValid": true,
+    "caseSchemaValid": true,
+    "curatedCases": 58,
+    "generatedCases": 300,
+    "deviceBackedCases": 0,
+    "curatedRepairPositiveCases": 31,
+    "curatedDerivedCases": 30,
+    "undeclaredProjectionCollisions": 0,
+    "undeclaredShapeCollisions": 7,
+    "curatedNoRepairCases": 16,
+    "generatedNoRepairCases": 300,
+    "curatedClassificationLabeledCases": 45,
+    "provenanceComplete": true,
+    "provenanceSourceCounts": [
+      {
+        "sourceKind": "synthetic",
+        "count": 58
+      }
+    ],
+    "mutationSeed": 20260802,
+    "generatorVersion": "sha256:39b35a7028472dc4f4400b6ffe9e1b3e3e7b5e65a64008f98a0a5396cb9e540e",
+    "generatedBaseFixtures": 16,
+    "generatedSeedCount": 1,
+    "exercisesShippedAnalyzer": false,
+    "errors": [],
+    "securityCorpus": {
+      "version": "sha256:7420b08a19ac73c2ad94a07f52442bd1a5f28936e9db61fa67f68c36cdea844a",
+      "manifestFingerprint": "sha256:922c0b88ee1761a1cffd0c16d567317bcd17bb4bd27024bf154fa838c9a9a82f",
+      "valid": true,
+      "caseCount": 18,
+      "passedCount": 18,
+      "caseIds": [
+        "sha256:69472384cea460340e50f5c41c837c8a2412901570d0c7e777469f18ba38e00a",
+        "sha256:849a7577fb1b0edd17a476ea4d75440b17f6ba695864e101e6a27ac470f3af53",
+        "sha256:4f4d7aa0c5c2a651bd6ba725cdec2e08b3e7324c8cab11b9376592725c5fba07",
+        "sha256:a47112d4879ef758770e242111d9260971ad8ea16824158524d8068677844b79",
+        "sha256:04f44463088ab45f04671ba3d7d710d0f04ef5c40a0002dc0fb24efdede6244e",
+        "sha256:e8fd8f58d62af6d4c8722fe6704b79d2d3d74922386e2e4462c479cf8991e6f7",
+        "sha256:046ea924d8c205ade42030460affca95ef4c66ff4bfac82a74cb9d015ef63d40",
+        "sha256:1ef6fd4b0d2fbd1c408f0c386de3d2b435f624a3ea6a27653a48133e64735b4c",
+        "sha256:b97fea4c6cd3f21a832c4e2b774deaf7c6d60cdb61d5cd5ef03a3f8cd0de6383",
+        "sha256:039b608517da5d269cdf89a66a44c5e519d90b4b5f0708201abf64c721850e9b",
+        "sha256:18fd29fe50b1b3d9c6e1d2c08dcb2630a4220f239da5ddbe38319ff9cc1c1a90",
+        "sha256:6f52990c7db54ecb0679256696df0cce6d95a6b1dea8952edfe7421b76a7485d",
+        "sha256:5688ad335bff7172fe2fa548e44cf71e805646476644a99afb7856431ef432eb",
+        "sha256:cdeda22f7cb08868444def899bfdbf3ea8a2cae116ba9c55dac0e28f8c440f61",
+        "sha256:6a17e98e5336a27a14c8d406b7f89dbcd2c7edebc1836c00f023849feb4c7512",
+        "sha256:8caa58a26cf46bdce92a8b8b041ec961b0537e50f13d0cfee4744a4251f1a829",
+        "sha256:5727fe7fb4c4da1108bf8f964dd1a55e2b68b93dd2e1de28e11929f51e6cd1ce",
+        "sha256:2cd7a95dae70de74b97b924c3a03794c9791d2afe23e9818f36d80ad222885bb"
+      ],
+      "errors": []
+    }
+  },
+  "metrics": {
+    "recordingValidity": {
+      "state": "missing",
+      "numerator": 0,
+      "denominator": 0,
+      "sampleSources": [],
+      "sourceCounts": [],
+      "independentEvaluations": 0,
+      "independentNumerator": 0,
+      "exclusions": []
+    },
+    "selectorStability": {
+      "state": "missing",
+      "numerator": 0,
+      "denominator": 0,
+      "sampleSources": [],
+      "sourceCounts": [],
+      "independentEvaluations": 0,
+      "independentNumerator": 0,
+      "exclusions": []
+    },
+    "repairPrecision": {
+      "state": "measured",
+      "numerator": 31,
+      "denominator": 31,
+      "value": 1,
+      "confidenceInterval": {
+        "method": "wilson-95",
+        "confidenceLevel": 0.95,
+        "lower": 0.889744604539564,
+        "upper": 1
+      },
+      "sampleSources": [
+        "curated",
+        "curated-derived"
+      ],
+      "sourceCounts": [
+        {
+          "source": "curated",
+          "numerator": 1,
+          "denominator": 1,
+          "independentEvaluations": 1
+        },
+        {
+          "source": "curated-derived",
+          "numerator": 30,
+          "denominator": 30,
+          "independentEvaluations": 0
+        }
+      ],
+      "independentEvaluations": 1,
+      "independentNumerator": 1,
+      "independentConfidenceInterval": {
+        "method": "wilson-95",
+        "confidenceLevel": 0.95,
+        "lower": 0.20654931437723745,
+        "upper": 1
+      },
+      "independentDeviceRuns": false,
+      "exclusions": [],
+      "exercises": {
+        "component": "MauiPreviewQualificationCorpusRunner.EvaluateRepairFixture",
+        "kind": "harness-local-rules",
+        "note": "Harness rules scored against expectations authored beside them. Not evidence about MauiSelectorHealthAnalyzer, which the corpus never calls. The component names the code that scores corpus samples; a sample supplied from a results file under a static source is described the same way, because nothing here can tell them apart. Describes the 1 judged sample(s); 30 further sample(s) sit in the pooled denominator the baseline diff compares."
+      }
+    },
+    "repairRecall": {
+      "state": "measured",
+      "numerator": 31,
+      "denominator": 31,
+      "value": 1,
+      "confidenceInterval": {
+        "method": "wilson-95",
+        "confidenceLevel": 0.95,
+        "lower": 0.889744604539564,
+        "upper": 1
+      },
+      "sampleSources": [
+        "curated",
+        "curated-derived"
+      ],
+      "sourceCounts": [
+        {
+          "source": "curated",
+          "numerator": 1,
+          "denominator": 1,
+          "independentEvaluations": 1
+        },
+        {
+          "source": "curated-derived",
+          "numerator": 30,
+          "denominator": 30,
+          "independentEvaluations": 0
+        }
+      ],
+      "independentEvaluations": 1,
+      "independentNumerator": 1,
+      "independentConfidenceInterval": {
+        "method": "wilson-95",
+        "confidenceLevel": 0.95,
+        "lower": 0.20654931437723745,
+        "upper": 1
+      },
+      "independentDeviceRuns": false,
+      "exclusions": [],
+      "exercises": {
+        "component": "MauiPreviewQualificationCorpusRunner.EvaluateRepairFixture",
+        "kind": "harness-local-rules",
+        "note": "Harness rules scored against expectations authored beside them. Not evidence about MauiSelectorHealthAnalyzer, which the corpus never calls. The component names the code that scores corpus samples; a sample supplied from a results file under a static source is described the same way, because nothing here can tell them apart. Describes the 1 judged sample(s); 30 further sample(s) sit in the pooled denominator the baseline diff compares."
+      }
+    },
+    "classificationAccuracy": {
+      "state": "measured",
+      "numerator": 42,
+      "denominator": 45,
+      "value": 0.9333333333333333,
+      "confidenceInterval": {
+        "method": "wilson-95",
+        "confidenceLevel": 0.95,
+        "lower": 0.8214339803640811,
+        "upper": 0.977067967400749
+      },
+      "sampleSources": [
+        "curated",
+        "curated-derived"
+      ],
+      "sourceCounts": [
+        {
+          "source": "curated",
+          "numerator": 12,
+          "denominator": 15,
+          "independentEvaluations": 8
+        },
+        {
+          "source": "curated-derived",
+          "numerator": 30,
+          "denominator": 30,
+          "independentEvaluations": 0
+        }
+      ],
+      "independentEvaluations": 8,
+      "independentNumerator": 8,
+      "independentConfidenceInterval": {
+        "method": "wilson-95",
+        "confidenceLevel": 0.95,
+        "lower": 0.6755924351161198,
+        "upper": 1
+      },
+      "independentDeviceRuns": false,
+      "exclusions": [],
+      "exercises": {
+        "component": "MauiFlowFailureClassifier.Classify",
+        "kind": "shipped-analyzer",
+        "note": "The same classifier entry point MauiFlowRunner and WorkflowRunCoordinator call at runtime. The expected label is corpus ground truth; the observed label is the product's answer to replay facts the harness derived, so the harness still chooses the classifier's input. Most static cases reach the classifier through a legacy-kind constant table, which exercises far less of it than cases that require precedence resolution. Describes the 8 judged sample(s); 37 further sample(s) sit in the pooled denominator the baseline diff compares."
+      }
+    },
+    "classificationMatrix": {
+      "state": "measured",
+      "method": "expected-versus-observed-failure-class",
+      "sampleCount": 45,
+      "correct": 42,
+      "labelCount": 6,
+      "inferredSampleCount": 8,
+      "inferredCorrect": 8,
+      "stampHonouredSampleCount": 37,
+      "stampHonouredCorrect": 34,
+      "cells": [
+        {
+          "expected": "assertion-failed",
+          "observed": "assertion-failed",
+          "count": 1
+        },
+        {
+          "expected": "locator-ambiguous",
+          "observed": "locator-ambiguous",
+          "count": 1
+        },
+        {
+          "expected": "locator-ambiguous",
+          "observed": "locator-not-found",
+          "count": 1
+        },
+        {
+          "expected": "locator-not-found",
+          "observed": "locator-not-found",
+          "count": 38
+        },
+        {
+          "expected": "precondition-unsatisfied",
+          "observed": "locator-not-found",
+          "count": 1
+        },
+        {
+          "expected": "route-state-drift",
+          "observed": "locator-not-found",
+          "count": 1
+        },
+        {
+          "expected": "route-state-drift",
+          "observed": "route-state-drift",
+          "count": 1
+        },
+        {
+          "expected": "unknown-completion",
+          "observed": "unknown-completion",
+          "count": 1
+        }
+      ],
+      "perClass": [
+        {
+          "failureClass": "assertion-failed",
+          "support": 1,
+          "predicted": 1,
+          "correct": 1,
+          "precision": 1,
+          "recall": 1
+        },
+        {
+          "failureClass": "locator-ambiguous",
+          "support": 2,
+          "predicted": 1,
+          "correct": 1,
+          "precision": 1,
+          "recall": 0.5
+        },
+        {
+          "failureClass": "locator-not-found",
+          "support": 38,
+          "predicted": 41,
+          "correct": 38,
+          "precision": 0.926829268292683,
+          "recall": 1
+        },
+        {
+          "failureClass": "precondition-unsatisfied",
+          "support": 1,
+          "predicted": 0,
+          "correct": 0,
+          "recall": 0
+        },
+        {
+          "failureClass": "route-state-drift",
+          "support": 2,
+          "predicted": 1,
+          "correct": 1,
+          "precision": 1,
+          "recall": 0.5
+        },
+        {
+          "failureClass": "unknown-completion",
+          "support": 1,
+          "predicted": 1,
+          "correct": 1,
+          "precision": 1,
+          "recall": 1
+        }
+      ]
+    },
+    "falseHeals": {
+      "state": "measured",
+      "numerator": 0,
+      "denominator": 316,
+      "value": 0,
+      "confidenceInterval": {
+        "method": "wilson-95",
+        "confidenceLevel": 0.95,
+        "lower": 0,
+        "upper": 0.012010509315640912
+      },
+      "sampleSources": [
+        "curated",
+        "generated"
+      ],
+      "sourceCounts": [
+        {
+          "source": "curated",
+          "numerator": 0,
+          "denominator": 16,
+          "independentEvaluations": 16
+        },
+        {
+          "source": "generated",
+          "numerator": 0,
+          "denominator": 300,
+          "independentEvaluations": 0
+        }
+      ],
+      "independentEvaluations": 16,
+      "independentNumerator": 0,
+      "independentConfidenceInterval": {
+        "method": "wilson-95",
+        "confidenceLevel": 0.95,
+        "lower": 0,
+        "upper": 0.1936076805344365
+      },
+      "independentDeviceRuns": false,
+      "exclusions": [],
+      "exercises": {
+        "component": "MauiPreviewQualificationCorpusRunner.EvaluateFixture",
+        "kind": "harness-local-rules",
+        "note": "Harness rules scored against expectations authored beside them. Not evidence about MauiSelectorHealthAnalyzer, which the corpus never calls. The component names the code that scores corpus samples; a sample supplied from a results file under a static source is described the same way, because nothing here can tell them apart. Describes the 16 judged sample(s); 300 further sample(s) sit in the pooled denominator the baseline diff compares. The zero-false-heals gate (accumulated-zero-false-heals in a merged report) compares this metric's whole pooled numerator, judged and pooled alike, but only once independentEvaluations reaches the no-repair minimum; below it the gate is not-qualified on the count alone and the pooled numerator is enforced only by the baseline diff."
+      }
+    },
+    "abstention": {
+      "state": "measured",
+      "numerator": 316,
+      "denominator": 316,
+      "value": 1,
+      "confidenceInterval": {
+        "method": "wilson-95",
+        "confidenceLevel": 0.95,
+        "lower": 0.9879894906843592,
+        "upper": 1
+      },
+      "sampleSources": [
+        "curated",
+        "generated"
+      ],
+      "sourceCounts": [
+        {
+          "source": "curated",
+          "numerator": 16,
+          "denominator": 16,
+          "independentEvaluations": 16
+        },
+        {
+          "source": "generated",
+          "numerator": 300,
+          "denominator": 300,
+          "independentEvaluations": 0
+        }
+      ],
+      "independentEvaluations": 16,
+      "independentNumerator": 16,
+      "independentConfidenceInterval": {
+        "method": "wilson-95",
+        "confidenceLevel": 0.95,
+        "lower": 0.8063923194655637,
+        "upper": 1
+      },
+      "independentDeviceRuns": false,
+      "exclusions": [],
+      "exercises": {
+        "component": "MauiPreviewQualificationCorpusRunner.EvaluateFixture",
+        "kind": "harness-local-rules",
+        "note": "Harness rules scored against expectations authored beside them. Not evidence about MauiSelectorHealthAnalyzer, which the corpus never calls. The component names the code that scores corpus samples; a sample supplied from a results file under a static source is described the same way, because nothing here can tell them apart. Describes the 16 judged sample(s); 300 further sample(s) sit in the pooled denominator the baseline diff compares."
+      }
+    },
+    "humanDecisionOutcomes": {
+      "approved": 0,
+      "rejected": 0,
+      "expired": 0,
+      "abstained": 0,
+      "unresolved": 0
+    },
+    "calibration": {
+      "state": "not-applicable",
+      "probabilityLikeConfidenceDisplayed": false,
+      "sampleCount": 0,
+      "buckets": []
+    },
+    "timeToDiagnosis": {
+      "state": "missing",
+      "operation": "time-to-diagnosis",
+      "sampleCount": 0,
+      "missingReason": "No recorded samples were supplied."
+    },
+    "traceReportSize": {
+      "state": "missing",
+      "expectedReportCount": 0,
+      "reportPresent": 0,
+      "reportSchemaValid": 0,
+      "reportComplete": 0,
+      "traceSampleCount": 0,
+      "missingReason": "No flow report size or completeness evidence was supplied."
+    },
+    "runtimeOverhead": {
+      "hostOperations": [
+        {
+          "state": "measured",
+          "operation": "flow-markdown-parse",
+          "sampleCount": 10,
+          "p50Ms": 0.1089,
+          "p95Ms": 0.14260999999999996,
+          "maxMs": 0.167
+        },
+        {
+          "state": "measured",
+          "operation": "flow-validate",
+          "sampleCount": 10,
+          "p50Ms": 0.0021000000000000003,
+          "p95Ms": 0.013244999999999998,
+          "maxMs": 0.0141
+        },
+        {
+          "state": "measured",
+          "operation": "report-serialize-redaction",
+          "sampleCount": 10,
+          "p50Ms": 0.09440000000000001,
+          "p95Ms": 0.1663499999999999,
+          "maxMs": 0.2172
+        },
+        {
+          "state": "measured",
+          "operation": "fingerprint",
+          "sampleCount": 10,
+          "p50Ms": 0.0127,
+          "p95Ms": 0.017304999999999997,
+          "maxMs": 0.0178
+        },
+        {
+          "state": "measured",
+          "operation": "candidate-generation",
+          "sampleCount": 10,
+          "p50Ms": 0.02995,
+          "p95Ms": 0.04273499999999999,
+          "maxMs": 0.048
+        },
+        {
+          "state": "measured",
+          "operation": "candidate-ranking",
+          "sampleCount": 10,
+          "p50Ms": 0.0091,
+          "p95Ms": 0.03386499999999996,
+          "maxMs": 0.0511
+        },
+        {
+          "state": "measured",
+          "operation": "qualification-gate",
+          "sampleCount": 10,
+          "p50Ms": 0.1414,
+          "p95Ms": 0.24659999999999993,
+          "maxMs": 0.2691
+        }
+      ],
+      "deviceOverhead": {
+        "state": "missing",
+        "operation": "android-device-overhead",
+        "sampleCount": 0,
+        "missingReason": "measurement-evidence-missing"
+      }
+    },
+    "flakeFirstAttemptStability": {
+      "state": "missing",
+      "stability": {
+        "state": "missing",
+        "numerator": 0,
+        "denominator": 0,
+        "sampleSources": [],
+        "sourceCounts": [],
+        "independentEvaluations": 0,
+        "independentNumerator": 0,
+        "exclusions": []
+      },
+      "flows": [],
+      "diagnosticRerunsIgnored": 0,
+      "infrastructureExclusions": []
+    },
+    "privacySecurityEscapes": {
+      "state": "measured",
+      "testCount": 18,
+      "escapeCount": 0,
+      "canaryScanPassed": true,
+      "caseIds": [
+        "sha256:69472384cea460340e50f5c41c837c8a2412901570d0c7e777469f18ba38e00a",
+        "sha256:849a7577fb1b0edd17a476ea4d75440b17f6ba695864e101e6a27ac470f3af53",
+        "sha256:4f4d7aa0c5c2a651bd6ba725cdec2e08b3e7324c8cab11b9376592725c5fba07",
+        "sha256:a47112d4879ef758770e242111d9260971ad8ea16824158524d8068677844b79",
+        "sha256:04f44463088ab45f04671ba3d7d710d0f04ef5c40a0002dc0fb24efdede6244e",
+        "sha256:e8fd8f58d62af6d4c8722fe6704b79d2d3d74922386e2e4462c479cf8991e6f7",
+        "sha256:046ea924d8c205ade42030460affca95ef4c66ff4bfac82a74cb9d015ef63d40",
+        "sha256:1ef6fd4b0d2fbd1c408f0c386de3d2b435f624a3ea6a27653a48133e64735b4c",
+        "sha256:b97fea4c6cd3f21a832c4e2b774deaf7c6d60cdb61d5cd5ef03a3f8cd0de6383",
+        "sha256:039b608517da5d269cdf89a66a44c5e519d90b4b5f0708201abf64c721850e9b",
+        "sha256:18fd29fe50b1b3d9c6e1d2c08dcb2630a4220f239da5ddbe38319ff9cc1c1a90",
+        "sha256:6f52990c7db54ecb0679256696df0cce6d95a6b1dea8952edfe7421b76a7485d",
+        "sha256:5688ad335bff7172fe2fa548e44cf71e805646476644a99afb7856431ef432eb",
+        "sha256:cdeda22f7cb08868444def899bfdbf3ea8a2cae116ba9c55dac0e28f8c440f61",
+        "sha256:6a17e98e5336a27a14c8d406b7f89dbcd2c7edebc1836c00f023849feb4c7512",
+        "sha256:8caa58a26cf46bdce92a8b8b041ec961b0537e50f13d0cfee4744a4251f1a829",
+        "sha256:5727fe7fb4c4da1108bf8f964dd1a55e2b68b93dd2e1de28e11929f51e6cd1ce",
+        "sha256:2cd7a95dae70de74b97b924c3a03794c9791d2afe23e9818f36d80ad222885bb"
+      ]
+    }
+  },
+  "thresholds": {
+    "policyVersion": "sha256:9023e2e4bd34546ad1d27b8e65fb836a6ae291fce9e3c72557ac1f0ed5f7eb08",
+    "confidenceLevel": 0.95,
+    "minimumRepairPrecision": 0.95,
+    "minimumRepairEvaluations": 100,
+    "minimumNoRepairEvaluations": 300,
+    "maximumFalseHeals": 0,
+    "minimumSelectorStability": 0.99,
+    "minimumSelectorObservations": 100,
+    "minimumClassificationAccuracy": 0.9,
+    "minimumClassificationEvaluations": 100,
+    "maximumCalibrationEce": 0.05,
+    "minimumCleanFirstAttemptsPerTier1Flow": 100,
+    "minimumFirstAttemptStability": 0.99,
+    "hostOperationP95BudgetMs": 250,
+    "requireRealAndroidDeviceEvidence": true,
+    "requireRecordedReviews": true
+  },
+  "gates": [
+    {
+      "gateId": "corpus-contract",
+      "status": "pass",
+      "message": "The deterministic corpus manifest and case schemas are valid.",
+      "reasonCodes": [],
+      "artifactRefs": []
+    },
+    {
+      "gateId": "preview-safety-flags",
+      "status": "pass",
+      "message": "Preview flags retain proposal-only, no-provider, no-egress, advisory behavior.",
+      "reasonCodes": [],
+      "artifactRefs": []
+    },
+    {
+      "gateId": "independent-review",
+      "status": "not-qualified",
+      "message": "Recorded approved plan, rubber-duck, and independent review evidence is required.",
+      "reasonCodes": [
+        "plan-review-status-missing-or-not-approved",
+        "rubber-duck-review-status-missing-or-not-approved",
+        "independent-review-status-missing-or-not-approved"
+      ],
+      "artifactRefs": []
+    },
+    {
+      "gateId": "required-evidence",
+      "status": "not-qualified",
+      "message": "Required report/schema/first-attempt/artifact evidence is missing or invalid.",
+      "reasonCodes": [
+        "report-schema-evidence-missing",
+        "recording-validity-evidence-missing",
+        "first-attempt-evidence-missing",
+        "artifact-manifest-evidence-missing",
+        "artifact-reference-evidence-missing"
+      ],
+      "artifactRefs": []
+    },
+    {
+      "gateId": "repair-precision",
+      "status": "not-qualified",
+      "message": "Repair precision lacks enough evaluations or misses the conservative lower-bound threshold.",
+      "reasonCodes": [
+        "repair-evaluation-count-insufficient"
+      ],
+      "artifactRefs": []
+    },
+    {
+      "gateId": "classification-accuracy",
+      "status": "not-qualified",
+      "message": "Failure-class accuracy lacks enough labeled evaluations or misses the conservative lower-bound threshold.",
+      "reasonCodes": [
+        "classification-evaluation-count-insufficient"
+      ],
+      "artifactRefs": []
+    },
+    {
+      "gateId": "zero-false-heals",
+      "status": "not-qualified",
+      "message": "No-repair evidence is insufficient or includes a false heal.",
+      "reasonCodes": [
+        "no-repair-evaluation-count-insufficient"
+      ],
+      "artifactRefs": []
+    },
+    {
+      "gateId": "product-analyzer-coverage",
+      "status": "not-qualified",
+      "message": "Not produced by the shipped analyzer — scored by harness-local rules: abstention, falseHeals, repairPrecision, repairRecall. These measure agreement between the harness and its own expectations, not product behaviour.",
+      "reasonCodes": [
+        "corpus-does-not-exercise-shipped-analyzer"
+      ],
+      "artifactRefs": []
+    },
+    {
+      "gateId": "selector-stability",
+      "status": "not-qualified",
+      "message": "Declared-platform real-device selector-stability evidence is insufficient or below threshold.",
+      "reasonCodes": [
+        "selector-stability-device-evidence-insufficient"
+      ],
+      "artifactRefs": []
+    },
+    {
+      "gateId": "confidence-calibration",
+      "status": "pass",
+      "message": "No probability-like confidence is displayed; calibration is not applicable.",
+      "reasonCodes": [],
+      "artifactRefs": []
+    },
+    {
+      "gateId": "privacy-security-escapes",
+      "status": "pass",
+      "message": "No privacy or security escape was observed by the adversarial corpus.",
+      "reasonCodes": [],
+      "artifactRefs": []
+    },
+    {
+      "gateId": "deterministic-host-performance",
+      "status": "pass",
+      "message": "Measured deterministic host operations remain within the p95 budget.",
+      "reasonCodes": [],
+      "artifactRefs": []
+    },
+    {
+      "gateId": "android-device-overhead",
+      "status": "not-qualified",
+      "message": "Android device-overhead evidence remains missing until real pilot artifacts are supplied.",
+      "reasonCodes": [
+        "android-device-overhead-evidence-missing"
+      ],
+      "artifactRefs": []
+    },
+    {
+      "gateId": "android-tier1-first-attempts",
+      "status": "not-qualified",
+      "message": "Android qualification requires at least 100 clean real-device first attempts per declared Tier-1 flow.",
+      "reasonCodes": [
+        "tier1-flow-declaration-missing"
+      ],
+      "artifactRefs": []
+    }
+  ],
+  "reasons": [
+    {
+      "code": "gate-independent-review-not-qualified",
+      "severity": "warning",
+      "message": "Recorded approved plan, rubber-duck, and independent review evidence is required."
+    },
+    {
+      "code": "gate-required-evidence-not-qualified",
+      "severity": "warning",
+      "message": "Required report/schema/first-attempt/artifact evidence is missing or invalid."
+    },
+    {
+      "code": "gate-repair-precision-not-qualified",
+      "severity": "warning",
+      "message": "Repair precision lacks enough evaluations or misses the conservative lower-bound threshold."
+    },
+    {
+      "code": "gate-classification-accuracy-not-qualified",
+      "severity": "warning",
+      "message": "Failure-class accuracy lacks enough labeled evaluations or misses the conservative lower-bound threshold."
+    },
+    {
+      "code": "gate-zero-false-heals-not-qualified",
+      "severity": "warning",
+      "message": "No-repair evidence is insufficient or includes a false heal."
+    },
+    {
+      "code": "gate-product-analyzer-coverage-not-qualified",
+      "severity": "warning",
+      "message": "Not produced by the shipped analyzer — scored by harness-local rules: abstention, falseHeals, repairPrecision, repairRecall. These measure agreement between the harness and its own expectations, not product behaviour."
+    },
+    {
+      "code": "gate-selector-stability-not-qualified",
+      "severity": "warning",
+      "message": "Declared-platform real-device selector-stability evidence is insufficient or below threshold."
+    },
+    {
+      "code": "gate-android-device-overhead-not-qualified",
+      "severity": "warning",
+      "message": "Android device-overhead evidence remains missing until real pilot artifacts are supplied."
+    },
+    {
+      "code": "gate-android-tier1-first-attempts-not-qualified",
+      "severity": "warning",
+      "message": "Android qualification requires at least 100 clean real-device first attempts per declared Tier-1 flow."
+    }
+  ],
+  "artifactRefs": [],
+  "exclusions": []
+}

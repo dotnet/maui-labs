@@ -2,17 +2,23 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text.Json;
+using Microsoft.Maui.DevFlow.Driver;
+using Microsoft.Maui.DevFlow.Testing;
 
 namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 
 /// <summary>
 /// Fixture that builds and launches the DevFlow sample app on an Android emulator.
 /// </summary>
-public sealed class AndroidEmulatorFixture : AppFixtureBase
+public sealed class AndroidEmulatorFixture : AppFixtureBase, IPlatformFlowTestLifecycle
 {
     const string PackageId = "com.companyname.mauitodo";
 
+    readonly IPlatformProcessRunner _processRunner;
     Process? _emulatorProcess;
+    AndroidDeviceLifecycleOperations? _deviceLifecycle;
     CancellationTokenSource? _appMonitorCts;
     Task? _appMonitorTask;
     bool _weStartedEmulator;
@@ -22,8 +28,27 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
     string? _serialNumber;
     int _apiLevel;
     string _sdkRoot = null!;
+    PlatformBuildResult? _build;
+    MauiFlowResetResult? _reset;
+    PlatformSeedResult? _seed;
+    PlatformLaunchResult? _launch;
+    PlatformAgentIdentity? _agent;
+    bool _requiresReinstall;
 
     public override string Platform => "android";
+    public override bool SupportsFlowLifecycle => true;
+    internal override IPlatformFlowTestLifecycle FlowLifecycle => this;
+    protected override bool CanReuseExistingAgent => false;
+
+    internal AndroidFlowTestHost CreateFlowTestHost() => new(this);
+
+    public AndroidEmulatorFixture()
+        : this(new SystemPlatformProcessRunner())
+    {
+    }
+
+    internal AndroidEmulatorFixture(IPlatformProcessRunner processRunner)
+        => _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
 
     protected override async Task InitializePlatformAsync()
     {
@@ -40,28 +65,41 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
             await EnsureAvdExistsAsync(avdName, _apiLevel);
 
         _serialNumber = await EnsureEmulatorRunningAsync(avdName);
+        _deviceLifecycle = new AndroidDeviceLifecycleOperations(
+            _processRunner,
+            AdbPath(),
+            _serialNumber,
+            PackageId,
+            AgentPort);
 
-        await WithBuildLockAsync(async () =>
+        try
         {
-            try
-            {
-                // Start with a clean log buffer so crash dumps are focused on this run.
-                await RunProcessAsync(AdbPath(), $"-s {_serialNumber} logcat -c", timeoutSeconds: 10);
-            }
-            catch
-            {
-                // Best-effort only; some emulator states reject logcat clear briefly.
-            }
+            // Start with a clean log buffer so crash dumps are focused on this run.
+            await RunProcessAsync(AdbPath(), $"-s {_serialNumber} logcat -c", timeoutSeconds: 10);
+        }
+        catch
+        {
+            // Best-effort only; some emulator states reject logcat clear briefly.
+        }
 
-            var projectPath = GetSampleProjectPath();
-            await BuildSampleAsync(projectPath, "net10.0-android",
-                $"-p:EmbedAssembliesIntoApk=true -p:MauiDevFlowPort={AgentPort}");
-
-            var apkPath = FindApk();
-            await InstallApkAsync(apkPath);
-
-            await AdbCheckedAsync($"forward tcp:{AgentPort} tcp:{AgentPort}", timeoutSeconds: 15);
-            await LaunchAppAsync();
+        await BuildAsync();
+        await InstallAsync();
+        await HardResetAsync(new PlatformFlowResetRequest());
+        if (_requiresReinstall)
+            await InstallAsync();
+        await LaunchAsync();
+        await WaitForExpectedAgentAsync(new PlatformAgentExpectation
+        {
+            PackageId = PackageId,
+            ExpectedProcessId = _launch?.ProcessId,
+            PreviousAgent = _launch?.PreviousAgent,
+        });
+        await SeedAsync(new PlatformFlowSeedRequest());
+        await VerifyCheckpointAsync(new PlatformCheckpointRequest
+        {
+            Expected = new MauiFlowCheckpoint { Route = "//native" },
+            Reset = _reset!,
+            Seed = _seed!,
         });
 
         StartAppMonitor();
@@ -102,8 +140,7 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
 
         if (_serialNumber != null)
         {
-            try { await AdbAsync($"shell am force-stop {PackageId}", timeoutSeconds: 5); } catch { }
-            try { await RunProcessAsync(AdbPath(), $"-s {_serialNumber} forward --remove tcp:{AgentPort}", timeoutSeconds: 5); } catch { }
+            try { await StopAsync(); } catch { }
         }
 
         if (_weStartedEmulator && _emulatorProcess is { HasExited: false })
@@ -121,6 +158,463 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
         }
 
         _emulatorProcess?.Dispose();
+    }
+
+    internal async Task<PlatformBuildResult> BuildAsync(CancellationToken cancellationToken = default)
+    {
+        // Clean pilot repetitions reset/install/seed the app; rebuilding the unchanged APK for
+        // every repetition only extends device time and does not strengthen that contract.
+        if (_build is { } cached && File.Exists(cached.ArtifactPath))
+            return cached;
+
+        PlatformBuildResult? build = null;
+        await WithBuildLockAsync(async () =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var projectPath = GetSampleProjectPath();
+            await BuildSampleAsync(
+                projectPath,
+                "net10.0-android",
+                $"-p:EmbedAssembliesIntoApk=true -p:MauiDevFlowPort={AgentPort} -p:DevFlowIntegrationTest=true");
+            var apkPath = FindApk();
+            build = new PlatformBuildResult
+            {
+                ArtifactPath = apkPath,
+                AppBuildFingerprint = await ComputeFileFingerprintAsync(apkPath, cancellationToken),
+                PackageId = PackageId,
+            };
+        });
+
+        _build = build ?? throw PlatformFlowLifecycleException.Infrastructure("Android build did not produce an APK.");
+        return _build;
+    }
+
+    internal async Task<PlatformInstallResult> InstallAsync(CancellationToken cancellationToken = default)
+    {
+        var build = _build ?? await BuildAsync(cancellationToken);
+        var lifecycle = RequireDeviceLifecycle();
+        await lifecycle.InstallAsync(build.ArtifactPath, replaceExisting: !_requiresReinstall, cancellationToken);
+        var result = new PlatformInstallResult
+        {
+            PackageId = PackageId,
+            ArtifactPath = build.ArtifactPath,
+            Reinstalled = _requiresReinstall,
+        };
+        _requiresReinstall = false;
+        return result;
+    }
+
+    internal async Task<MauiFlowResetResult> HardResetAsync(
+        PlatformFlowResetRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        _agent ??= await TryGetAgentIdentityAsync(cancellationToken);
+        var strategy = ParseResetStrategy(request.Strategy ?? request.Requirement?.Strategy);
+        _reset = await RequireDeviceLifecycle()
+            .HardResetAsync(strategy, request.Requirement, cancellationToken)
+            .ConfigureAwait(false);
+        _requiresReinstall = strategy == AndroidResetStrategy.UninstallReinstall;
+        return _reset;
+    }
+
+    internal async Task<PlatformSeedResult> SeedAsync(
+        PlatformFlowSeedRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var retries = Client.TransientFailureRetryCount;
+        var retryMutations = Client.RetryMutatingRequests;
+        Client.TransientFailureRetryCount = 0;
+        Client.RetryMutatingRequests = false;
+        try
+        {
+            var state = await new SampleIntegrationTestControlClient(Client)
+                .SeedAsync(request.SeedId, cancellationToken)
+                .ConfigureAwait(false);
+            EnsureExpectedFingerprint("seed", request.ExpectedSeedFingerprint, state.SeedFingerprint);
+            EnsureExpectedFingerprint("backend state", request.ExpectedBackendStateFingerprint, state.BackendStateFingerprint);
+
+            _seed = new PlatformSeedResult
+            {
+                SeedId = state.SeedId,
+                SeedFingerprint = state.SeedFingerprint,
+                BackendStateFingerprint = state.BackendStateFingerprint,
+                StateFingerprint = state.StateFingerprint,
+                ProcessInstanceId = state.ProcessInstanceId,
+                AppStateSeed = new MauiFlowAppStateSeedFingerprint
+                {
+                    SeedId = state.SeedId,
+                    Fingerprint = state.SeedFingerprint,
+                    Version = "1",
+                    Source = "sample-integration-test-extension",
+                },
+                BackendTestDataSeed = new MauiFlowBackendTestDataSeedFingerprint
+                {
+                    SeedId = state.SeedId,
+                    Fingerprint = state.BackendStateFingerprint,
+                    Dataset = "none",
+                    Version = "1",
+                    Source = "sample-no-external-backend",
+                },
+                StateOracle = new MauiIndependentBusinessOracleResult
+                {
+                    OracleId = "sample-integration-state",
+                    Succeeded = true,
+                    Independent = true,
+                    ObservedAt = DateTimeOffset.UtcNow,
+                    EvidenceReference = "sample-test-state",
+                    Message = "A separate test-only state endpoint returned the deterministic sample fingerprint.",
+                },
+            };
+
+            if (_reset is not null)
+            {
+                _reset.SeedFingerprint = _seed.SeedFingerprint;
+                _reset.BackendStateFingerprint = _seed.BackendStateFingerprint;
+                _reset.AppStateSeed = _seed.AppStateSeed;
+                _reset.BackendTestDataSeed = _seed.BackendTestDataSeed;
+            }
+
+            return _seed;
+        }
+        finally
+        {
+            Client.TransientFailureRetryCount = retries;
+            Client.RetryMutatingRequests = retryMutations;
+        }
+    }
+
+    internal async Task<PlatformLaunchResult> LaunchAsync(CancellationToken cancellationToken = default)
+    {
+        var previous = _agent ?? await TryGetAgentIdentityAsync(cancellationToken).ConfigureAwait(false);
+        var lifecycle = RequireDeviceLifecycle();
+        await lifecycle.EnsureAgentPortForwardAsync(cancellationToken).ConfigureAwait(false);
+        var processId = await lifecycle.LaunchAsync(cancellationToken).ConfigureAwait(false);
+        _launch = new PlatformLaunchResult
+        {
+            PackageId = PackageId,
+            ProcessId = processId,
+            PreviousAgent = previous,
+        };
+        return _launch;
+    }
+
+    internal async Task<PlatformAgentReadyResult> WaitForExpectedAgentAsync(
+        PlatformAgentExpectation expectation,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(expectation);
+        var ready = await PlatformAgentReadiness.WaitForExpectedAsync(
+            _ => Client.GetStatusAsync(),
+            expectation,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        _agent = ready.Agent;
+        return ready;
+    }
+
+    internal async Task<PlatformCheckpointVerification> VerifyCheckpointAsync(
+        PlatformCheckpointRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var build = _build ?? throw PlatformFlowLifecycleException.Precondition("The Android app has not been built.");
+        var seed = _seed ?? request.Seed;
+        var agent = _agent ?? throw PlatformFlowLifecycleException.Precondition("A process-scoped Android agent has not been verified.");
+
+        var status = await Client.GetStatusAsync().ConfigureAwait(false)
+            ?? throw PlatformFlowLifecycleException.Infrastructure("The DevFlow agent stopped responding during checkpoint verification.");
+        if (!string.Equals(status.App?.PackageId, PackageId, StringComparison.Ordinal))
+        {
+            throw PlatformFlowLifecycleException.Precondition(
+                $"Expected package '{PackageId}', observed '{status.App?.PackageId ?? "<none>"}'.");
+        }
+        if (status.App?.ProcessId != agent.ProcessId)
+        {
+            throw PlatformFlowLifecycleException.Precondition(
+                $"The agent process changed before replay. Expected {agent.ProcessId}, observed {status.App?.ProcessId?.ToString() ?? "<none>"}.");
+        }
+
+        var installed = await RequireDeviceLifecycle().GetInstalledPackageInfoAsync(cancellationToken).ConfigureAwait(false);
+        EnsureExpectedFingerprint("installed APK", build.AppBuildFingerprint, installed.ApkFingerprint);
+        EnsureEqual("installed app version", installed.VersionName, status.App?.Version);
+        EnsureEqual("installed app build", installed.VersionCode, status.App?.Build);
+
+        var state = await new SampleIntegrationTestControlClient(Client).GetStateAsync(cancellationToken).ConfigureAwait(false);
+        if (!string.Equals(seed.ProcessInstanceId, state.ProcessInstanceId, StringComparison.Ordinal))
+        {
+            throw PlatformFlowLifecycleException.Precondition(
+                "The test-only state endpoint belongs to a different app process than the seeded instance.");
+        }
+        EnsureExpectedFingerprint("seed", seed.SeedFingerprint, state.SeedFingerprint);
+        EnsureExpectedFingerprint("backend state", seed.BackendStateFingerprint, state.BackendStateFingerprint);
+
+        var theme = await Client.GetThemeAsync().ConfigureAwait(false);
+        var observed = new MauiFlowCheckpoint
+        {
+            AppBuildFingerprint = build.AppBuildFingerprint,
+            AgentInstanceId = agent.StableId,
+            SeedFingerprint = state.SeedFingerprint,
+            BackendStateFingerprint = state.BackendStateFingerprint,
+            Route = status.Route,
+            // A plan may declare window/modal as clean-state preconditions. Admission compares the
+            // declared value against what the host observed, so a host that never reports them makes
+            // any plan that declares them permanently unsatisfiable rather than merely mismatched.
+            Window = status.Window,
+            Modal = status.Modal,
+            Locale = status.Locale ??
+                await RequireDeviceLifecycle().GetLocaleAsync(cancellationToken).ConfigureAwait(false),
+            Theme = status.Theme?.ToLowerInvariant() ??
+                theme?.Theme.ToString().ToLowerInvariant(),
+            Orientation = status.Orientation ??
+                await RequireDeviceLifecycle().GetOrientationAsync(cancellationToken).ConfigureAwait(false),
+            DisplayProfile = status.DisplayProfile ??
+                await RequireDeviceLifecycle().GetDisplayProfileAsync(cancellationToken).ConfigureAwait(false),
+        };
+        EnsureObserved("route", observed.Route);
+        EnsureObserved("locale", observed.Locale);
+        EnsureObserved("theme", observed.Theme);
+        EnsureObserved("orientation", observed.Orientation);
+        EnsureObserved("display profile", observed.DisplayProfile);
+        var expected = MergeCheckpoint(request.Expected, observed);
+        var mismatches = CompareCheckpoint(expected, observed);
+        if (mismatches.Count > 0)
+        {
+            throw PlatformFlowLifecycleException.Precondition(
+                $"Android replay preconditions did not match: {string.Join("; ", mismatches)}");
+        }
+
+        var target = new MauiFlowRunTarget
+        {
+            TargetId = agent.StableId,
+            Platform = Platform,
+            DeviceId = _serialNumber,
+            DeviceProfile = observed.DisplayProfile,
+            AppId = PackageId,
+            AppBuildFingerprint = build.AppBuildFingerprint,
+            AgentId = status.Agent?.Name,
+            AgentInstanceId = agent.StableId,
+            Locale = observed.Locale,
+            Theme = observed.Theme,
+            Orientation = observed.Orientation,
+            DisplayProfile = observed.DisplayProfile,
+        };
+        var context = new MauiFlowRunContext
+        {
+            Intent = MauiFlowReplayIntents.OrdinaryReplay,
+            Preconditions = new MauiFlowReplayPreconditions
+            {
+                Expected = expected,
+                Observed = observed,
+                CheckedAt = DateTimeOffset.UtcNow,
+                EvidenceReference = "android-lifecycle-preflight",
+            },
+            Reset = request.Reset,
+            BusinessOracles = seed.StateOracle is null ? [] : [seed.StateOracle],
+        };
+
+        return new PlatformCheckpointVerification
+        {
+            Expected = expected,
+            Observed = observed,
+            Target = target,
+            RunContext = context,
+        };
+    }
+
+    internal async Task<PlatformHostDiagnostics> CaptureHostDiagnosticsAsync(
+        PlatformDiagnosticsRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var fullRoot = Path.GetFullPath(request.ArtifactRoot);
+        var runDirectory = Path.Combine(fullRoot, SanitizeFileName(request.RunId));
+        Directory.CreateDirectory(runDirectory);
+
+        var facts = await RequireDeviceLifecycle().CollectHostFactsAsync(cancellationToken).ConfigureAwait(false);
+        facts["reason"] = AndroidLifecycleDiagnosticRedactor.Sanitize(
+            request.Reason,
+            AndroidFixtureInitializationDiagnostics.MaxSafeErrorTextCharacters,
+            _serialNumber);
+        facts["capturedAtUtc"] = DateTimeOffset.UtcNow.ToString("O");
+        facts["buildFingerprint"] = _build?.AppBuildFingerprint ?? string.Empty;
+        facts["agentInstanceId"] = _agent?.StableId ?? string.Empty;
+        facts["seedFingerprint"] = _seed?.SeedFingerprint ?? string.Empty;
+        facts["backendStateFingerprint"] = _seed?.BackendStateFingerprint ?? string.Empty;
+
+        var path = Path.Combine(runDirectory, "android-host-diagnostics.json");
+        await File.WriteAllTextAsync(
+            path,
+            JsonSerializer.Serialize(facts, new JsonSerializerOptions { WriteIndented = true }),
+            cancellationToken).ConfigureAwait(false);
+
+        var diagnostics = new PlatformHostDiagnostics();
+        diagnostics.Artifacts.Add(new MauiFlowArtifactReference
+        {
+            ArtifactId = $"android-host-diagnostics-{SanitizeFileName(request.RunId)}",
+            Kind = "android-host-diagnostics",
+            Path = path,
+            Digest = await ComputeFileFingerprintAsync(path, cancellationToken).ConfigureAwait(false),
+            MediaType = "application/json",
+            Redacted = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        return diagnostics;
+    }
+
+    internal async Task StopAsync(CancellationToken cancellationToken = default)
+    {
+        if (_deviceLifecycle is not null)
+            await _deviceLifecycle.StopAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    Task<PlatformBuildResult> IPlatformFlowTestLifecycle.BuildAsync(CancellationToken cancellationToken)
+        => BuildAsync(cancellationToken);
+
+    Task<PlatformInstallResult> IPlatformFlowTestLifecycle.InstallAsync(CancellationToken cancellationToken)
+        => InstallAsync(cancellationToken);
+
+    Task<MauiFlowResetResult> IPlatformFlowTestLifecycle.HardResetAsync(
+        PlatformFlowResetRequest request,
+        CancellationToken cancellationToken)
+        => HardResetAsync(request, cancellationToken);
+
+    Task<PlatformSeedResult> IPlatformFlowTestLifecycle.SeedAsync(
+        PlatformFlowSeedRequest request,
+        CancellationToken cancellationToken)
+        => SeedAsync(request, cancellationToken);
+
+    Task<PlatformLaunchResult> IPlatformFlowTestLifecycle.LaunchAsync(CancellationToken cancellationToken)
+        => LaunchAsync(cancellationToken);
+
+    Task<PlatformAgentReadyResult> IPlatformFlowTestLifecycle.WaitForExpectedAgentAsync(
+        PlatformAgentExpectation expectation,
+        CancellationToken cancellationToken)
+        => WaitForExpectedAgentAsync(expectation, cancellationToken);
+
+    Task<PlatformCheckpointVerification> IPlatformFlowTestLifecycle.VerifyCheckpointAsync(
+        PlatformCheckpointRequest request,
+        CancellationToken cancellationToken)
+        => VerifyCheckpointAsync(request, cancellationToken);
+
+    Task<PlatformHostDiagnostics> IPlatformFlowTestLifecycle.CaptureHostDiagnosticsAsync(
+        PlatformDiagnosticsRequest request,
+        CancellationToken cancellationToken)
+        => CaptureHostDiagnosticsAsync(request, cancellationToken);
+
+    Task IPlatformFlowTestLifecycle.StopAsync(CancellationToken cancellationToken)
+        => StopAsync(cancellationToken);
+
+    async ValueTask IAsyncDisposable.DisposeAsync()
+        => await StopAsync().ConfigureAwait(false);
+
+    AndroidDeviceLifecycleOperations RequireDeviceLifecycle()
+        => _deviceLifecycle ?? throw PlatformFlowLifecycleException.Infrastructure(
+            "Android device lifecycle has not been initialized.");
+
+    async Task<PlatformAgentIdentity?> TryGetAgentIdentityAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return PlatformAgentIdentity.FromStatus(await Client.GetStatusAsync().ConfigureAwait(false));
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    static AndroidResetStrategy ParseResetStrategy(string? value)
+        => value?.Trim().ToLowerInvariant() switch
+        {
+            null or "" or "pm-clear" or "clear" or "app-private-state" => AndroidResetStrategy.PmClear,
+            "uninstall-reinstall" or "uninstall" => AndroidResetStrategy.UninstallReinstall,
+            _ => throw PlatformFlowLifecycleException.Precondition(
+                $"Unsupported Android reset strategy '{value}'. Use 'pm-clear' or 'uninstall-reinstall'."),
+        };
+
+    static void EnsureExpectedFingerprint(string kind, string? expected, string? observed)
+    {
+        if (!string.IsNullOrWhiteSpace(expected) &&
+            !string.Equals(expected, observed, StringComparison.Ordinal))
+        {
+            throw PlatformFlowLifecycleException.Precondition(
+                $"Expected {kind} fingerprint '{expected}', observed '{observed ?? "<none>"}'.");
+        }
+    }
+
+    static void EnsureEqual(string kind, string? expected, string? observed)
+    {
+        if (!string.IsNullOrWhiteSpace(expected) &&
+            !string.Equals(expected, observed, StringComparison.Ordinal))
+        {
+            throw PlatformFlowLifecycleException.Precondition(
+                $"Expected {kind} '{expected}', observed '{observed ?? "<none>"}'.");
+        }
+    }
+
+    static void EnsureObserved(string kind, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw PlatformFlowLifecycleException.Precondition($"Android checkpoint did not provide {kind}.");
+    }
+
+    static MauiFlowCheckpoint MergeCheckpoint(MauiFlowCheckpoint requested, MauiFlowCheckpoint observed)
+        => new()
+        {
+            AppBuildFingerprint = requested.AppBuildFingerprint ?? observed.AppBuildFingerprint,
+            AgentInstanceId = requested.AgentInstanceId ?? observed.AgentInstanceId,
+            SeedFingerprint = requested.SeedFingerprint ?? observed.SeedFingerprint,
+            BackendStateFingerprint = requested.BackendStateFingerprint ?? observed.BackendStateFingerprint,
+            Route = requested.Route ?? observed.Route,
+            Window = requested.Window ?? observed.Window,
+            Modal = requested.Modal ?? observed.Modal,
+            Locale = requested.Locale ?? observed.Locale,
+            Theme = requested.Theme ?? observed.Theme,
+            Orientation = requested.Orientation ?? observed.Orientation,
+            DisplayProfile = requested.DisplayProfile ?? observed.DisplayProfile,
+            CollectionItemKey = requested.CollectionItemKey ?? observed.CollectionItemKey,
+        };
+
+    static List<string> CompareCheckpoint(MauiFlowCheckpoint expected, MauiFlowCheckpoint observed)
+    {
+        var mismatches = new List<string>();
+        AddMismatch(mismatches, "app build", expected.AppBuildFingerprint, observed.AppBuildFingerprint);
+        AddMismatch(mismatches, "agent instance", expected.AgentInstanceId, observed.AgentInstanceId);
+        AddMismatch(mismatches, "seed", expected.SeedFingerprint, observed.SeedFingerprint);
+        AddMismatch(mismatches, "backend state", expected.BackendStateFingerprint, observed.BackendStateFingerprint);
+        AddMismatch(mismatches, "route", expected.Route, observed.Route);
+        AddMismatch(mismatches, "locale", expected.Locale, observed.Locale);
+        AddMismatch(mismatches, "theme", expected.Theme, observed.Theme);
+        AddMismatch(mismatches, "orientation", expected.Orientation, observed.Orientation);
+        AddMismatch(mismatches, "display", expected.DisplayProfile, observed.DisplayProfile);
+        return mismatches;
+    }
+
+    static void AddMismatch(List<string> mismatches, string name, string? expected, string? observed)
+    {
+        if (!string.IsNullOrWhiteSpace(expected) &&
+            !string.Equals(expected, observed, StringComparison.Ordinal))
+        {
+            mismatches.Add($"{name} expected '{expected}', observed '{observed ?? "<none>"}'");
+        }
+    }
+
+    static async Task<string> ComputeFileFingerprintAsync(string path, CancellationToken cancellationToken)
+    {
+        await using var stream = File.OpenRead(path);
+        var hash = await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false);
+        return $"sha256:{Convert.ToHexString(hash).ToLowerInvariant()}";
+    }
+
+    static string SanitizeFileName(string value)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var sanitized = new string(value.Select(character => invalid.Contains(character) ? '_' : character).ToArray());
+        return string.IsNullOrWhiteSpace(sanitized) ? "run" : sanitized[..Math.Min(sanitized.Length, 96)];
     }
 
     void StartAppMonitor()
@@ -195,6 +689,13 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
     {
         if (string.IsNullOrWhiteSpace(_serialNumber))
             return;
+
+        if (_deviceLifecycle is not null)
+        {
+            if (!await _deviceLifecycle.IsAgentPortForwardEstablishedAsync())
+                await _deviceLifecycle.EnsureAgentPortForwardAsync();
+            return;
+        }
 
         if (await IsAgentForwardEstablishedAsync())
             return;
@@ -627,6 +1128,18 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
 
         _emulatorProcess = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start emulator for AVD {avdName}");
+        _emulatorProcess.OutputDataReceived += static (_, e) =>
+        {
+            if (!string.IsNullOrWhiteSpace(e.Data))
+                Console.WriteLine($"[AndroidEmulator] {e.Data}");
+        };
+        _emulatorProcess.ErrorDataReceived += static (_, e) =>
+        {
+            if (!string.IsNullOrWhiteSpace(e.Data))
+                Console.WriteLine($"[AndroidEmulator] {e.Data}");
+        };
+        _emulatorProcess.BeginOutputReadLine();
+        _emulatorProcess.BeginErrorReadLine();
         _weStartedEmulator = true;
 
         var newSerial = await WaitForEmulatorSerialAsync(adb, expectedSerial, avdName, timeoutSeconds: 120);

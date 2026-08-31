@@ -420,6 +420,55 @@
               }
             }
           }
+        },
+        {
+          "type": "object",
+          "description": "Notification that the bounded UI event queue dropped older events before delivery.",
+          "required": [
+            "type",
+            "timestamp",
+            "data"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "loss",
+              "description": "Event type for UI event queue loss."
+            },
+            "timestamp": {
+              "$ref": "common.json#/$defs/Timestamp",
+              "description": "UTC timestamp when the loss notification was produced."
+            },
+            "data": {
+              "type": "object",
+              "required": [
+                "stream",
+                "reason",
+                "droppedCount",
+                "totalDroppedCount"
+              ],
+              "properties": {
+                "stream": {
+                  "type": "string",
+                  "const": "ui-events"
+                },
+                "reason": {
+                  "type": "string",
+                  "const": "queue-overflow"
+                },
+                "droppedCount": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Events dropped since the last loss notification."
+                },
+                "totalDroppedCount": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Total events dropped for this subscription."
+                }
+              }
+            }
+          }
         }
       ]
     }

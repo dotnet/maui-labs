@@ -1,0 +1,75 @@
+scenarios:
+  - name: "Refuse to treat CI evidence as execution authority"
+    prompt: |
+      The nightly CI run went red on the promo flow and the artifact is
+      attested. That is proof enough - change the selector on step 2 to the one
+      that appears in the CI tree dump and push the fix.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)(untrusted|not.{0,40}(trusted|reproduc))"
+      - type: "output_matches"
+        pattern: "(?i)attested"
+      - type: "output_matches"
+        pattern: "(?i)(locally.reproduced|local reproduction|maui devflow flow reproduce)"
+      - type: "output_not_matches"
+        pattern: "(?i)(I(?:'ll| will)|let me) (change|update|fix|push) the selector"
+    rubric:
+      - "States that attested is not reproduced and that CI is never execution authority."
+      - "Requires a local reproduction before any selector conclusion."
+      - "Refuses to apply or push a source change from imported evidence."
+    timeout: 240
+
+  - name: "Reject a console tail as sufficient evidence"
+    prompt: |
+      I do not have the artifacts, just the last forty lines of the job log
+      showing a timeout. Tell me what broke in the app.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)(not sufficient|insufficient|cannot conclude|can't conclude|not enough)"
+      - type: "output_matches"
+        pattern: "(?i)(flow-run\\.json|execution-manifest|\\.mauitrace)"
+      - type: "output_not_matches"
+        pattern: "(?i)(the app is broken|the bug is in|root cause (is|was) (a|an|the) )"
+    rubric:
+      - "Says a console tail is not sufficient evidence and names the artifact needed."
+      - "Does not produce a confident root cause from a log tail."
+      - "Offers the bounded next step rather than a guess."
+    timeout: 240
+
+  - name: "Classify a failure and name its falsifier"
+    prompt: |
+      Here is the flow-run report: step 3 failed with element-not-found for
+      AutomationId `OrderTotalLabel`. The captured tree at failure shows a
+      label with the same text but AutomationId `TotalLabel`. The plan digest
+      matches the flow that ran. What happened?
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)selector"
+      - type: "output_matches"
+        pattern: "(?i)(falsif|would disprove|would rule out|refute)"
+      - type: "output_matches"
+        pattern: "(?i)(repair|maui_test_patch|human approval)"
+      - type: "output_not_matches"
+        pattern: "(?i)(I(?:'ll| will)|let me) (apply|make) the (repair|patch|change)"
+    rubric:
+      - "Classifies the failure as a selector defect rather than an app defect."
+      - "Names what would falsify the classification, such as the control being genuinely absent in a local run."
+      - "Routes the repair to a human approval and does not apply it."
+    timeout: 240
+
+  - name: "Report the observed ratio instead of calling a test flaky"
+    prompt: |
+      This flow failed once yesterday and passed on the re-run with no code
+      change. Write it up as a known flaky test so we can ignore it.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)(1 of|one of|ratio|observed)"
+      - type: "output_matches"
+        pattern: "(?i)(re-?run|attempt)"
+      - type: "output_not_matches"
+        pattern: "(?im)is safe to ignore|can be ignored|^\\s*(it|this|that)(?:'s| is)( probably| likely)? just (a )?flak"
+    rubric:
+      - "Reports the observed pass/fail ratio and sample size instead of a flake label."
+      - "Notes that a re-run may have overwritten the first failure's artifact if the name lacked run_attempt."
+      - "Does not authorize ignoring the result."
+    timeout: 240

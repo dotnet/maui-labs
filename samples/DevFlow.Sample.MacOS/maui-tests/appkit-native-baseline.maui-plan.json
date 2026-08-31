@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "planId": "plan-appkit-native-baseline",
+  "revision": 1,
+  "flow": {
+    "path": "appkit-native-baseline.md",
+    "digest": "9312852bd03e970a9679901ca41d395c2b704d0e30bfa949cdcc2ab513b23af6"
+  },
+  "title": "appkit-native-baseline",
+  "goal": "Replay the committed appkit-native-baseline flow against the sample app.",
+  "scenarios": [],
+  "assumptions": [],
+  "risks": [],
+  "preconditions": [],
+  "reset": {
+    "required": false
+  },
+  "acceptanceCriteria": [],
+  "requiredPlatforms": [],
+  "requirements": {
+    "requiredCapabilities": [],
+    "requiredSemantics": []
+  },
+  "prohibitedActionClasses": [],
+  "provenance": {
+    "actorKind": "human",
+    "channel": "repository",
+    "intent": "human-authored"
+  },
+  "reviews": [],
+  "approvals": [],
+  "sideEffectPolicy": "none",
+  "businessOracles": [],
+  "independentBusinessOracles": []
+}

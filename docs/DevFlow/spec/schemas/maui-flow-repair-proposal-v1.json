@@ -1,0 +1,457 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/dotnet/maui-labs/main/docs/DevFlow/spec/schemas/maui-flow-repair-proposal-v1.json",
+  "title": "MAUI Flow Repair Proposal v1",
+  "description": "A reviewable selector repair proposal. It is not an instruction to replay, write, or apply a patch.",
+  "type": "object",
+  "required": [
+    "schema",
+    "proposalId",
+    "baseFlow",
+    "oldSelector",
+    "proposedSelector"
+  ],
+  "properties": {
+    "schema": {
+      "const": 1
+    },
+    "proposalId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "state": {
+      "enum": [
+        "proposed",
+        "previewed",
+        "approved",
+        "applying",
+        "applied",
+        "verified",
+        "rejected",
+        "stale",
+        "approval-expired",
+        "verification-failed",
+        "rollback-required",
+        "reverted",
+        "rollback-failed"
+      ]
+    },
+    "createdAt": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "sourceRunId": {
+      "type": "string"
+    },
+    "sourceStepId": {
+      "type": "string"
+    },
+    "sourceFailureId": {
+      "type": "string"
+    },
+    "sourceFailureCode": {
+      "const": "locator-not-found"
+    },
+    "preDispatch": {
+      "const": true
+    },
+    "baseFlow": {
+      "$ref": "#/$defs/FlowReference"
+    },
+    "oldSelector": {
+      "$ref": "maui-flow-v2.json#/$defs/FlowSelector"
+    },
+    "proposedSelector": {
+      "$ref": "maui-flow-v2.json#/$defs/FlowSelector"
+    },
+    "candidate": {
+      "$ref": "#/$defs/SelectorCandidate"
+    },
+    "uniquenessProof": {
+      "$ref": "#/$defs/UniquenessProof"
+    },
+    "validationRunIds": {
+      "$ref": "#/$defs/StringList"
+    },
+    "patch": {
+      "$ref": "#/$defs/FlowPatch"
+    },
+    "patchDigest": {
+      "type": "string"
+    },
+    "diff": {
+      "$ref": "#/$defs/SelectorDiff"
+    },
+    "unchangedAssertionsProof": {
+      "$ref": "#/$defs/AssertionProof"
+    },
+    "approval": {
+      "$ref": "#/$defs/RepairApproval"
+    },
+    "trust": {
+      "enum": [
+        "current-local-run",
+        "locally-reproduced"
+      ]
+    },
+    "expiresAt": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "reviewer": {
+      "type": "string"
+    },
+    "grantDigest": {
+      "type": "string"
+    },
+    "verificationRunIds": {
+      "$ref": "#/$defs/StringList"
+    },
+    "riskFlags": {
+      "$ref": "#/$defs/StringList"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "StringList": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "FlowReference": {
+      "type": "object",
+      "required": [
+        "digest"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "flowId": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "digest": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "SelectorCandidate": {
+      "type": "object",
+      "properties": {
+        "candidateId": {
+          "type": "string"
+        },
+        "selector": {
+          "$ref": "maui-flow-v2.json#/$defs/FlowSelector"
+        },
+        "scope": {
+          "$ref": "maui-flow-run-report-v1.json#/$defs/Checkpoint"
+        },
+        "originCodes": {
+          "$ref": "#/$defs/StringList"
+        },
+        "rationaleCodes": {
+          "$ref": "#/$defs/StringList"
+        },
+        "riskFlags": {
+          "$ref": "#/$defs/StringList"
+        },
+        "score": {
+          "type": "number"
+        },
+        "scoreComponents": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "unique": {
+          "type": "boolean"
+        },
+        "platformValidated": {
+          "type": "boolean"
+        },
+        "calibrationStatus": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "$ref": "#/$defs/ElementFingerprint"
+        },
+        "evidenceArtifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "maui-flow-run-report-v1.json#/$defs/ArtifactReference"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "ElementFingerprint": {
+      "type": "object",
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "buildFingerprint": {
+          "type": "string"
+        },
+        "platform": {
+          "type": "string"
+        },
+        "route": {
+          "type": "string"
+        },
+        "window": {
+          "type": "string"
+        },
+        "modal": {
+          "type": "string"
+        },
+        "managedType": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "automationId": {
+          "type": "string"
+        },
+        "nativeAutomationId": {
+          "type": "string"
+        },
+        "sourceAnchor": {
+          "type": "string"
+        },
+        "sourceHash": {
+          "type": "string"
+        },
+        "ancestorTopologyHash": {
+          "type": "string"
+        },
+        "siblingTopologyHash": {
+          "type": "string"
+        },
+        "collectionKey": {
+          "type": "string"
+        },
+        "itemKey": {
+          "type": "string"
+        },
+        "normalizedBounds": {
+          "$ref": "#/$defs/NormalizedBounds"
+        },
+        "observedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "capabilityVersion": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "NormalizedBounds": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": true
+    },
+    "UniquenessProof": {
+      "type": "object",
+      "properties": {
+        "matchCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "validatedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "platform": {
+          "type": "string"
+        },
+        "evidenceArtifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "maui-flow-run-report-v1.json#/$defs/ArtifactReference"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "FlowPatch": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "string"
+        },
+        "selectorOnly": {
+          "const": true
+        },
+        "beforeDigest": {
+          "type": "string"
+        },
+        "afterDigest": {
+          "type": "string"
+        },
+        "operations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchOperation"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "PatchOperation": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "value": true
+      },
+      "additionalProperties": true
+    },
+    "AssertionProof": {
+      "type": "object",
+      "properties": {
+        "unchanged": {
+          "type": "boolean"
+        },
+        "assertionDigest": {
+          "type": "string"
+        },
+        "actionsUnchanged": {
+          "const": true
+        },
+        "actionDigest": {
+          "type": "string"
+        },
+        "valuesUnchanged": {
+          "const": true
+        },
+        "valueDigest": {
+          "type": "string"
+        },
+        "orderUnchanged": {
+          "const": true
+        },
+        "orderDigest": {
+          "type": "string"
+        },
+        "method": {
+          "type": "string"
+        },
+        "verificationRunIds": {
+          "$ref": "#/$defs/StringList"
+        }
+      },
+      "additionalProperties": true
+    },
+    "SelectorDiff": {
+      "type": "object",
+      "properties": {
+        "json": {
+          "type": "string"
+        },
+        "markdown": {
+          "type": "string"
+        },
+        "stepId": {
+          "type": "string"
+        },
+        "selectorPath": {
+          "type": "string"
+        },
+        "assertionsUnchanged": {
+          "const": true
+        },
+        "actionsUnchanged": {
+          "const": true
+        },
+        "valuesUnchanged": {
+          "const": true
+        },
+        "orderUnchanged": {
+          "const": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "RepairApproval": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "type": "string"
+        },
+        "reviewer": {
+          "type": "string"
+        },
+        "approvedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "Provenance": {
+      "type": "object",
+      "properties": {
+        "actorKind": {
+          "type": "string"
+        },
+        "actorId": {
+          "type": "string"
+        },
+        "channel": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "intent": {
+          "type": "string"
+        },
+        "recordedAt": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

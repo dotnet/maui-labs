@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "planId": "plan-native-baseline",
+  "revision": 1,
+  "flow": {
+    "path": "native-baseline.md",
+    "digest": "e7e914528edd59b029e39d44b2a8f42054d2fab31b06607d3d1d1ff58dfb1c45"
+  },
+  "title": "seeded-native-baseline",
+  "goal": "Replay the committed seeded-native-baseline flow against the sample app.",
+  "scenarios": [],
+  "assumptions": [],
+  "risks": [],
+  "preconditions": [],
+  "reset": {
+    "required": false
+  },
+  "acceptanceCriteria": [],
+  "requiredPlatforms": [],
+  "requirements": {
+    "requiredCapabilities": [],
+    "requiredSemantics": []
+  },
+  "prohibitedActionClasses": [],
+  "provenance": {
+    "actorKind": "human",
+    "channel": "repository",
+    "intent": "human-authored"
+  },
+  "reviews": [],
+  "approvals": [],
+  "sideEffectPolicy": "none",
+  "businessOracles": [],
+  "independentBusinessOracles": []
+}

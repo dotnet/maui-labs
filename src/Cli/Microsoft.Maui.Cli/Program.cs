@@ -52,6 +52,16 @@ public class Program
 			return 0;
 
 		var parseResult = rootCommand.Parse(args);
+		if (parseResult.Errors.Count > 0 &&
+			parseResult.GetValue(GlobalOptions.JsonOption))
+		{
+			var message = string.Join(
+				"; ",
+				parseResult.Errors.Select(static error => error.Message));
+			new JsonOutputFormatter(Console.Error).WriteError(
+				new ArgumentException(message));
+			return 1;
+		}
 
 		try
 		{

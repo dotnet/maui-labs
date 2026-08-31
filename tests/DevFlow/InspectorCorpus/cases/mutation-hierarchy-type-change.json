@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "id": "mutation-hierarchy-type-change",
+  "kind": "mutation",
+  "disposition": "diagnostic-only",
+  "expectedFailureClass": "locator-not-found",
+  "provenance": {
+    "labeledBy": "devflow-maintainers",
+    "labeledOn": "2026-08-15",
+    "method": "hand-authored",
+    "sourceKind": "synthetic",
+    "reviewStatus": "unreviewed",
+    "notes": "Recorded control type no longer exists live."
+  },
+  "fixture": {
+    "recorded": {
+      "type": "Button",
+      "ancestor": "toolbar"
+    },
+    "live": {
+      "type": "ImageButton",
+      "ancestor": "toolbar"
+    }
+  },
+  "expect": {
+    "diagnosticIds": [
+      "DFSH003"
+    ],
+    "candidateKinds": [
+      "role-type-ancestor"
+    ]
+  }
+}

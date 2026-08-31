@@ -73,6 +73,29 @@ dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Tests/
 - Test results: `artifacts/TestResults/**/*.xml`
 - No quarantine or outerloop test attributes are used in this repo
 
+### DevFlow test-agent end-to-end smoke test
+
+Unit tests cover the pieces; this covers the loop the product actually ships,
+spoken over the same MCP protocol an editor uses:
+
+```bash
+node eng/smoke-tests/devflow-test-agent-smoke-test.mjs --maui <path-to-maui>
+```
+
+It authors a plan and flow, validates them live, copies the broker's reset
+offer, commits, runs, and drives a drifted trailing selector all the way to an
+accepted selector repair proposal — 18 checks, exit code 0 only if every one
+passes. It needs no editor, no chat model, and no human, which is the point:
+editors have repeatedly failed to dispatch these tools, and from the outside
+that is indistinguishable from the product being broken. Run this before
+believing an editor-side report that the workflow is broken.
+
+Requires a connected **Debug** DevFlow agent whose app registers the
+`devflow-reset` action (the `DevFlow.Sample` MauiTodo app does), a broker
+started with `DEVFLOW_PREVIEW_AGENT_AUTHORING=true` and
+`DEVFLOW_PREVIEW_REPAIR_PROPOSALS=true`, and an approval host to decide the two
+native approval requests.
+
 ## Code Conventions
 
 - **ImplicitUsings**: enabled repo-wide
@@ -103,6 +126,7 @@ maui-labs/
 │   │   ├── Microsoft.Maui.DevFlow.Analyzers/     # Roslyn analyzers
 │   │   ├── Microsoft.Maui.DevFlow.Blazor/        # Blazor WebView CDP bridge
 │   │   ├── Microsoft.Maui.DevFlow.Blazor.Gtk/    # WebKitGTK CDP bridge
+│   │   ├── Microsoft.Maui.DevFlow.Devices/       # Device layer (emulators/simulators around the app)
 │   │   ├── Microsoft.Maui.DevFlow.Driver/        # Cross-platform driver (AgentClient)
 │   │   ├── Microsoft.Maui.DevFlow.Logging/       # JSONL file logger
 │   │   ├── Microsoft.Maui.DevFlow.Tests/         # xUnit tests
@@ -215,13 +239,13 @@ Each product requires source setup **and** CI/CD configuration across two system
 ### CI/CD Setup
 
 7. **GitHub Actions**: Create `.github/workflows/ci-{newproduct}.yml` calling the reusable `_build.yml` workflow. Must include `pull_request.types: [opened, synchronize, reopened, edited]` and path filters scoped to the product source plus shared build files.
-8. **Azure DevOps**: Edit `eng/pipelines/devflow-official.yml` — add a publish parameter, a build job in the `build` stage, and a conditional publish stage for NuGet.org. For SDK provisioning, prefer the Arcade bootstrap pattern (`eng\common\dotnet.cmd --info` then `.dotnet\dotnet workload install ...`) which ensures workloads are installed against the same SDK that `cibuild.cmd` uses. If using `UseDotNet@2` instead, set an explicit `version:` matching `global.json` (not `useGlobalJson: true`). Pin workloads with `--version` matching `_build.yml`. Pure managed Apple products can build on Windows (workload provides reference assemblies). Products with native code (e.g. Swift) need a two-stage build: macOS compiles native + Windows packs/signs. See `EssentialsAI_macOS`/`EssentialsAI` for the native pattern, `MacOS` for the managed pattern.
+8. **Azure DevOps**: Edit `eng/pipelines/devflow-official.yml` — add a publish parameter, a build job in the `build` stage, and a conditional publish stage for NuGet.org. Run workload installation through Arcade's SDK wrapper (`eng\common\dotnet.cmd workload install ...`) so it uses the same SDK that `cibuild.cmd` selects without assuming a repo-local `.dotnet` directory exists. For commands with quoted arguments or paths containing spaces, invoke `eng/common/dotnet.ps1` from a `pwsh` step instead of the CMD shim. If using `UseDotNet@2` instead, set an explicit `version:` matching `global.json` (not `useGlobalJson: true`). Pin workloads with `--version` matching `_build.yml`. Pure managed Apple products can build on Windows (workload provides reference assemblies). Products with native code (e.g. Swift) need a two-stage build: macOS compiles native + Windows packs/signs. See `EssentialsAI_macOS`/`EssentialsAI` for the native pattern, `MacOS` for the managed pattern.
 
 > **Complete copy-paste templates** for both the GitHub Actions workflow and all three Azure DevOps blocks (parameter, build job, publish stage) are in `.github/copilot-instructions.md` under **"CI/CD — New Product Checklist"**.
 
 ## DevFlow MCP Tools
 
-DevFlow exposes 67 MCP tools for AI agent integration (in `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/`):
+DevFlow exposes 83 MCP tools for AI agent integration (in `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/`):
 
 | Tool | Purpose |
 |------|---------|
@@ -238,8 +262,14 @@ DevFlow exposes 67 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_clear` | Clear text from an element |
 | `maui_connectivity` | Network access and connection profiles |
 | `maui_device_info` | Device manufacturer, model, OS |
+| `maui_device_boot` | Boot an emulator/simulator and wait until it is ready |
+| `maui_device_list` | List emulators/simulators, each paired with the app running inside it |
+| `maui_device_shutdown` | Power an emulator/simulator off without erasing it |
+| `maui_device_tap` | Tap a physical device point, for UI the app's visual tree cannot reach |
 | `maui_display_info` | Screen density, size, orientation |
 | `maui_element` | Get full element details |
+| `maui_evidence_capture` | Write a redacted `.mauitrace` evidence bundle for the running app |
+| `maui_evidence_preview` | Preview exactly what an evidence bundle would contain, without writing it |
 | `maui_extension_call` | Call an extension tool on the connected DevFlow agent |
 | `maui_extension_list` | List all extensions registered on the connected DevFlow agent |
 | `maui_files_delete` | Delete a file from an advertised app storage root |
@@ -257,6 +287,7 @@ DevFlow exposes 67 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_jobs_list` | List background jobs registered on the device |
 | `maui_jobs_run` | Trigger a supported background job by identifier |
 | `maui_key` | Send a key press to an element |
+| `maui_layout_diagnostics` | Run a one-shot, read-only layout scan and return typed findings with coverage |
 | `maui_list_actions` | List all registered DevFlow Actions |
 | `maui_list_agents` | List connected MAUI DevFlow agents (running apps) |
 | `maui_logs` | Retrieve app logs (ILogger + WebView console) |
@@ -264,17 +295,26 @@ DevFlow exposes 67 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_network` | List captured HTTP requests |
 | `maui_network_clear` | Clear captured request buffer |
 | `maui_network_detail` | Full request/response details |
+| `maui_performance_snapshot` | Summarize the running performance triage session without stopping it |
+| `maui_performance_start` | Start a bounded performance triage session (triage, not a profiler) |
+| `maui_performance_stop` | Stop the performance triage session and return the final summary |
 | `maui_preferences_clear` | Clear all preferences |
 | `maui_preferences_delete` | Delete a preference |
 | `maui_preferences_get` | Read a preference value |
 | `maui_preferences_list` | List preference keys |
 | `maui_preferences_set` | Write a preference value |
+| `maui_problems` | List deduplicated runtime UI problems such as MAUI binding failures |
+| `maui_problems_clear` | Clear the agent's bounded diagnostic Problems list |
 | `maui_query` | Query elements by type, AutomationId, or text |
 | `maui_query_css` | Query elements by CSS selector |
 | `maui_recording_start` | Start screen recording |
 | `maui_recording_status` | Check recording status |
 | `maui_recording_stop` | Stop screen recording |
 | `maui_resize` | Resize the app window |
+| `maui_resume_clear` | Clear the broker-owned Shell route checkpoint |
+| `maui_resume_restore` | Restore the saved Shell route checkpoint |
+| `maui_resume_save` | Save a broker-owned Shell route checkpoint |
+| `maui_resume_status` | Inspect the saved Shell route checkpoint |
 | `maui_screenshot` | Capture screenshot (page, element, or fullscreen) |
 | `maui_scroll` | Scroll by delta, item index, or into view |
 | `maui_secure_storage_clear` | Clear all secure storage |

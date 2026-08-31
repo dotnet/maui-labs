@@ -1,0 +1,20 @@
+{
+  "outcome": "passed",
+  "terminal": true,
+  "failure": null,
+  "divergence": null,
+  "steps": [
+    {
+      "Sequence": 1,
+      "Action": "assert",
+      "FailureClass": null,
+      "assertions": [
+        {
+          "Kind": "exists",
+          "Passed": true,
+          "Skipped": null
+        }
+      ]
+    }
+  ]
+}

@@ -32,12 +32,21 @@ tags:
     description: Network request monitoring
   - name: logs
     description: Application logs
+  - name: diagnostics
+    description: Bounded runtime Problems and on-demand diagnostics
   - name: device
     description: Device info, sensors, jobs, permissions, geolocation
   - name: storage
     description: Preferences, secure storage, and sandboxed app files
   - name: extensions
     description: Third-party extension routes
+
+x-workflow-command-envelope:
+  description: >
+    Every mutation dispatched while an AgentClient workflow-run scope is active carries these
+    headers. The agent records prepared, dispatched, and bounded completed receipts; exact
+    duplicates return the stored receipt and incomplete commands remain unknown-completion.
+  $ref: "./schemas/workflow-command-ledger.json#/$defs/WorkflowCommandEnvelopeHeaders"
 
 paths:
   # ─────────────────────────────── Agent ───────────────────────────────
@@ -74,6 +83,37 @@ paths:
                 $ref: "./schemas/agent-capabilities.json"
         "500":
           $ref: "#/components/responses/InternalError"
+
+  /api/v1/agent/workflow-runs:
+    post:
+      operationId: controlWorkflowRunLedger
+      tags: [agent]
+      summary: Begin, end, or abandon an in-process workflow command ledger
+      description: >
+        Broker-owned workflow runs use this control endpoint before and after canonical replay.
+        The active ledger is bound to the exact broker-assigned agent instance and authority epoch;
+        it is not durable across a new app process.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/workflow-command-ledger.json#/$defs/WorkflowRunControlRequest"
+      responses:
+        "200":
+          description: Ledger control completed.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/workflow-command-ledger.json#/$defs/WorkflowRunControlStatus"
+        "400":
+          $ref: "#/components/responses/InvalidArgument"
+        "409":
+          description: The run, agent instance, sequence authority, or terminal state conflicts.
+        "429":
+          description: The bounded ledger capacity was reached.
+        "503":
+          description: Broker authority is unavailable. Workflow commands fail closed.
 
   # ─────────────────────────── UI Inspection ───────────────────────────
   /api/v1/ui/tree:
@@ -909,7 +949,9 @@ paths:
       tags: [profiler]
       summary: Start profiler session
       description: >
-        Starts a new profiling session with the given sample interval.
+        Starts a new profiling session with the given sample interval. Returns 409 instead of
+        adopting a session that another caller already started. The response includes an opaque
+        creator stop token that is not exposed by status or read-only attachment APIs.
       requestBody:
         required: true
         content:
@@ -927,7 +969,29 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "./schemas/profiler.json#/$defs/ProfilerSessionInfo"
+                $ref: "./schemas/profiler.json#/$defs/ProfilerStartResponse"
+        "409":
+          description: A profiler session is already active; attach to its id instead.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, error, reason, details]
+                properties:
+                  success:
+                    type: boolean
+                    const: false
+                  error:
+                    type: string
+                  reason:
+                    type: string
+                    const: profiler-active
+                  details:
+                    type: object
+                    required: [sessionId]
+                    properties:
+                      sessionId:
+                        type: string
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -937,7 +1001,8 @@ paths:
       tags: [profiler]
       summary: Stop profiler session
       description: >
-        Stops an active profiling session.
+        Stops an active profiling session, captures a final boundary sample, and returns the final
+        retained batch and hotspot summary atomically with the stopped session.
       parameters:
         - name: id
           in: path
@@ -945,15 +1010,41 @@ paths:
           description: Profiler session ID.
           schema:
             type: string
+        - name: X-DevFlow-Profiler-Stop-Token
+          in: header
+          required: true
+          description: Opaque creator capability returned by the successful start response.
+          schema:
+            type: string
+        - name: sampleLimit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20000
+            default: 20000
+        - name: hotspotLimit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 20
       responses:
         "200":
           description: Session stopped.
           content:
             application/json:
               schema:
-                $ref: "./schemas/profiler.json#/$defs/ProfilerSessionInfo"
+                $ref: "./schemas/profiler.json#/$defs/ProfilerStopResponse"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          description: Missing or invalid profiler creator stop token.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/common.json#/$defs/ProblemDetails"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -965,7 +1056,8 @@ paths:
       description: >
         Returns profiling samples, markers, and spans collected since the given
         cursors. Use cursor values from the previous response to poll for new
-        data.
+        data. Each cursor is the last item returned; stream metadata reports
+        retained ranges and overwrite loss.
       parameters:
         - name: id
           in: path
@@ -997,6 +1089,7 @@ paths:
           schema:
             type: integer
             minimum: 1
+            maximum: 20000
       responses:
         "200":
           description: Profiler batch of samples, markers, and spans.
@@ -1086,6 +1179,11 @@ paths:
           description: Filter by hotspot kind.
           schema:
             type: string
+        - name: sessionId
+          in: query
+          description: Require this profiler session to still be current.
+          schema:
+            type: string
       responses:
         "200":
           description: Array of hotspots.
@@ -1095,6 +1193,8 @@ paths:
                 type: array
                 items:
                   $ref: "./schemas/profiler.json#/$defs/ProfilerHotspot"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
 

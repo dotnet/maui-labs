@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "id": "repair-positive-unique-locator-drift",
+  "kind": "repair-positive",
+  "disposition": "repair-eligible",
+  "expectedFailureClass": "locator-not-found",
+  "provenance": {
+    "labeledBy": "devflow-maintainers",
+    "labeledOn": "2026-08-15",
+    "method": "hand-authored",
+    "sourceKind": "synthetic",
+    "reviewStatus": "unreviewed",
+    "notes": "Single unique repair candidate with a fully matching checkpoint."
+  },
+  "fixture": {
+    "failure": "locator-not-found",
+    "phase": "pre-dispatch",
+    "trust": "current-local-run",
+    "oldSelector": "save-order",
+    "candidate": "confirm-order",
+    "unique": true,
+    "checkpoint": "all-match",
+    "oracle": "independent-success"
+  },
+  "expect": {
+    "diagnosticIds": [],
+    "candidateKinds": [
+      "automation-id"
+    ],
+    "repairEligible": true
+  }
+}

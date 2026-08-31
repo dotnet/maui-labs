@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "id": "repair-no-imported-untrusted-attested",
+  "kind": "repair-negative",
+  "disposition": "no-repair",
+  "expectedFailureClass": "locator-not-found",
+  "provenance": {
+    "labeledBy": "devflow-maintainers",
+    "labeledOn": "2026-08-15",
+    "method": "hand-authored",
+    "sourceKind": "synthetic",
+    "reviewStatus": "unreviewed",
+    "notes": "Locator drift observed only in an imported, untrusted artifact."
+  },
+  "fixture": {
+    "failure": "locator-not-found",
+    "trustStates": [
+      "untrusted",
+      "attested"
+    ]
+  },
+  "expect": {
+    "diagnosticIds": [],
+    "candidateKinds": [],
+    "repairEligible": false,
+    "ineligibilityCodes": [
+      "artifact-not-locally-reproduced"
+    ]
+  }
+}

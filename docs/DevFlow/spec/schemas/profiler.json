@@ -20,7 +20,7 @@
             "number",
             "null"
           ],
-          "description": "Frames per second at the time of sampling.",
+          "description": "Value produced by a native frame provider. It is authoritative rendered FPS only when frameQuality is 'native.exact'; 'native.cadence' is a display-callback estimate and must not be presented as rendered FPS.",
           "minimum": 0
         },
         "frameTimeMsP50": {
@@ -28,7 +28,7 @@
             "number",
             "null"
           ],
-          "description": "Median (P50) frame time in milliseconds.",
+          "description": "Median interval from the native provider. Interpret as rendered-frame time only when frameQuality is 'native.exact'; 'native.cadence' is display-callback timing.",
           "minimum": 0
         },
         "frameTimeMsP95": {
@@ -36,7 +36,7 @@
             "number",
             "null"
           ],
-          "description": "95th percentile (P95) frame time in milliseconds.",
+          "description": "95th-percentile interval from the native provider. Interpret as rendered-frame time only when frameQuality is 'native.exact'; 'native.cadence' is display-callback timing.",
           "minimum": 0
         },
         "worstFrameTimeMs": {
@@ -44,7 +44,7 @@
             "number",
             "null"
           ],
-          "description": "Worst (maximum) frame time in milliseconds during the sample interval.",
+          "description": "Worst interval from the native provider. Interpret as rendered-frame time only when frameQuality is 'native.exact'; 'native.cadence' is display-callback timing.",
           "minimum": 0
         },
         "managedBytes": {
@@ -84,7 +84,7 @@
             "integer",
             "null"
           ],
-          "description": "Native (unmanaged) memory usage in bytes.",
+          "description": "Native-heap-specific memory usage in bytes. Process resident or physical footprint is reported separately.",
           "minimum": 0
         },
         "nativeMemoryKind": {
@@ -92,7 +92,22 @@
             "string",
             "null"
           ],
-          "description": "Kind of native memory measurement (e.g. 'resident', 'virtual', 'private')."
+          "description": "Kind of native-heap-specific measurement (for example android.native-heap)."
+        },
+        "processMemoryBytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Total process resident or physical footprint in bytes. This includes managed pages and must not be interpreted as native heap.",
+          "minimum": 0
+        },
+        "processMemoryKind": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Kind of process memory measurement (for example process.working-set or apple.phys-footprint)."
         },
         "cpuPercent": {
           "type": [
@@ -116,7 +131,7 @@
             "integer",
             "null"
           ],
-          "description": "Number of janky (dropped/slow) frames since last sample.",
+          "description": "Number of janky native frames since the last sample. Zero when jank events are unsupported.",
           "minimum": 0
         },
         "uiThreadStallCount": {
@@ -124,7 +139,12 @@
             "integer",
             "null"
           ],
-          "description": "Number of UI thread stalls since last sample.",
+          "description": "Number of native UI thread stalls since the last sample. Zero when stall events are unsupported.",
+          "minimum": 0
+        },
+        "frameDataLossCount": {
+          "type": "integer",
+          "description": "Native frame callback records dropped by the platform or the provider's bounded accumulator since the previous sample.",
           "minimum": 0
         },
         "frameSource": {
@@ -132,14 +152,14 @@
             "string",
             "null"
           ],
-          "description": "Source of frame timing data (e.g. 'choreographer', 'displayLink', 'estimated')."
+          "description": "Source of native frame timing data, or 'unavailable' when no provider supplied a frame sample."
         },
         "frameQuality": {
           "type": [
             "string",
             "null"
           ],
-          "description": "Qualitative assessment of frame quality (e.g. 'smooth', 'mild-jank', 'severe-jank')."
+          "description": "Quality of native frame timing data, or 'unavailable' when no provider supplied a frame sample."
         }
       }
     },
@@ -311,22 +331,66 @@
         },
         "sampleCursor": {
           "type": "integer",
-          "description": "Cursor position for the next page of samples.",
+          "description": "Next cursor for samples. It equals the sequence of the last sample returned, not the latest retained sample.",
           "minimum": 0
         },
         "markerCursor": {
           "type": "integer",
-          "description": "Cursor position for the next page of markers.",
+          "description": "Next cursor for markers. It equals the sequence of the last marker returned, not the latest retained marker.",
           "minimum": 0
         },
         "spanCursor": {
           "type": "integer",
-          "description": "Cursor position for the next page of spans.",
+          "description": "Next cursor for spans. It equals the sequence of the last span returned, not the latest retained span.",
           "minimum": 0
+        },
+        "sampleMetadata": {
+          "$ref": "#/$defs/ProfilerStreamReadMetadata",
+          "description": "Retained range and loss metadata for the sample stream."
+        },
+        "markerMetadata": {
+          "$ref": "#/$defs/ProfilerStreamReadMetadata",
+          "description": "Retained range and loss metadata for the marker stream."
+        },
+        "spanMetadata": {
+          "$ref": "#/$defs/ProfilerStreamReadMetadata",
+          "description": "Retained range and loss metadata for the span stream."
         },
         "isActive": {
           "type": "boolean",
           "description": "Whether the profiler session is still actively collecting data."
+        }
+      }
+    },
+    "ProfilerStreamReadMetadata": {
+      "type": "object",
+      "description": "The sequence range retained for one profiler stream. A positive lostCount means the supplied cursor fell behind data overwritten by the bounded buffer.",
+      "required": [
+        "oldestCursor",
+        "latestCursor",
+        "lostCount",
+        "availableCount"
+      ],
+      "properties": {
+        "oldestCursor": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Oldest sequence currently retained, or 0 when the stream is empty."
+        },
+        "latestCursor": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Latest sequence currently retained, or 0 when the stream is empty."
+        },
+        "lostCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of items overwritten after the supplied cursor and before oldestCursor."
+        },
+        "availableCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of retained items available after the supplied cursor before applying the response limit."
         }
       }
     },
@@ -424,9 +488,13 @@
       "type": "object",
       "description": "Describes the profiler capabilities available on the current platform and agent.",
       "required": [
+        "available",
+        "supportedInBuild",
+        "featureEnabled",
         "platform",
         "managedMemorySupported",
         "nativeMemorySupported",
+        "processMemorySupported",
         "gcSupported",
         "cpuPercentSupported",
         "fpsSupported",
@@ -437,6 +505,18 @@
         "threadCountSupported"
       ],
       "properties": {
+        "available": {
+          "type": "boolean",
+          "description": "Whether profiler endpoints are currently available in this agent."
+        },
+        "supportedInBuild": {
+          "type": "boolean",
+          "description": "Whether profiler support is present in this build."
+        },
+        "featureEnabled": {
+          "type": "boolean",
+          "description": "Whether profiling is enabled by AgentOptions."
+        },
         "platform": {
           "type": "string",
           "description": "Platform identifier (e.g. 'ios', 'android', 'maccatalyst')."
@@ -447,7 +527,11 @@
         },
         "nativeMemorySupported": {
           "type": "boolean",
-          "description": "Whether native memory measurement is supported."
+          "description": "Whether a native-heap-specific memory measurement is supported."
+        },
+        "processMemorySupported": {
+          "type": "boolean",
+          "description": "Whether process resident/physical memory measurement is supported."
         },
         "gcSupported": {
           "type": "boolean",
@@ -463,7 +547,7 @@
         },
         "frameTimingsEstimated": {
           "type": "boolean",
-          "description": "Whether frame timings are estimated rather than measured directly."
+          "description": "Whether a native provider supplies cadence estimates rather than exact frame timings. False when frame timing is unavailable."
         },
         "nativeFrameTimingsSupported": {
           "type": "boolean",
@@ -481,6 +565,59 @@
           "type": "boolean",
           "description": "Whether thread count reporting is supported."
         }
+      }
+    },
+    "ProfilerStartResponse": {
+        "type": "object",
+        "required": [
+          "session",
+          "stopToken",
+          "capabilities"
+        ],
+        "properties": {
+          "session": {
+            "$ref": "#/$defs/ProfilerSessionInfo"
+          },
+          "stopToken": {
+            "type": "string",
+            "description": "Opaque creator capability required to stop this profiler session. It is returned only by start."
+          },
+          "capabilities": {
+            "$ref": "#/$defs/ProfilerCapabilities"
+          }
+        }
+      },
+    "ProfilerStopResponse": {
+        "type": "object",
+        "required": [
+          "session",
+          "batch",
+          "hotspots",
+          "stoppedAtUtc"
+        ],
+        "properties": {
+          "session": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ProfilerSessionInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "batch": {
+            "$ref": "#/$defs/ProfilerBatch"
+          },
+          "hotspots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ProfilerHotspot"
+            }
+          },
+          "stoppedAtUtc": {
+            "$ref": "common.json#/$defs/Timestamp"
+          }
       }
     }
   }

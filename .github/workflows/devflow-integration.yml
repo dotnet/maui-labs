@@ -4,13 +4,30 @@ name: DevFlow Integration Tests
 # The DevFlow integration suite builds the sample app, boots a simulator/emulator,
 # installs and launches it, then runs real HTTP round-trips against the agent.
 # A full platform run takes ~20-30 min. To save CI minutes we keep this off the
-# default PR pipeline — it runs on demand via workflow_dispatch or when a PR is
-# labeled `integration-tests`. Additional PR updates can be re-run manually.
+# default PR pipeline — ordinary integration runs on demand via workflow_dispatch or
+# the `integration-tests` label. Every label-gated lane is additionally required to touch a
+# DevFlow path, so a label on an unrelated PR cannot start a paid lane.
+#
+# Exactly one flow lane is promoted to an unlabeled PR lane: `android-flow-pilot`. It runs on
+# every pull_request event whose diff touches a DevFlow path (the list now lives in the `plan`
+# job), and `devflow-flow-gate` aggregates its result into a single stable check name that
+# is safe to require in branch protection. It is deliberately not narrowed to head-changing
+# actions: the gate reports a conclusion on every run and the last conclusion for a check name
+# wins, so a run that skipped the lane would overwrite a real red with green on the same commit.
+# Android is the only promoted lane on purpose: it is the
+# sole flow lane that runs on `ubuntu-latest` (1x billing) instead of macOS (10x) or Windows (2x),
+# and it is the only lane that installs and launches a real app on a real device surface without
+# paid runner minutes. The remaining lanes (ios, maccatalyst, macos-appkit, windows) stay label-
+# or schedule-gated.
+#
+# Adding `devflow-flow-gate` to the repository's required status checks is a repository-settings
+# change that must be made by a human with admin rights; no workflow file can do it.
 #
 # Entry points per platform fixture:
 #   Android   -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/AndroidEmulatorFixture.cs
 #   iOS       -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/iOSSimulatorFixture.cs
 #   Mac Catalyst -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/MacCatalystFixture.cs
+#   AppKit (experimental only) -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/MacOSFixture.cs
 #   Windows   -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/WindowsFixture.cs
 
 on:
@@ -26,6 +43,18 @@ on:
           - ios
           - maccatalyst
           - windows
+          - windows-flow-qa
+          - flow-pilot
+          - apple-flow-qa
+          - macos-appkit-flow-qa
+      apple-flow-qa:
+        description: Run advisory iOS Simulator and Mac Catalyst XCTest flow QA after the capability spike
+        default: false
+        type: boolean
+      appkit-flow-qa:
+        description: Run the separately labeled experimental AppKit flow-QA lane (never an official Mac Catalyst gate)
+        default: false
+        type: boolean
       android-api:
         description: Android API level
         default: "35"
@@ -34,17 +63,34 @@ on:
         description: iOS runtime version filter (e.g. 17.5). Leave blank for newest available.
         default: ""
         type: string
+  schedule:
+    # Advisory Android and Apple flow-QA canaries. GitHub schedules run from the default branch.
+    - cron: '17 3 * * *'
   pull_request:
-    types: [labeled]
+    # `edited` is required so the lane re-runs when GitHub auto-retargets a PR after a stacked
+    # branch merges. A required check that never re-reports would block the retargeted PR forever.
+    types: [opened, synchronize, reopened, labeled, edited]
     branches: [main]
-    paths:
-      - 'src/DevFlow/**'
-      - 'samples/DevFlow.Sample/**'
-      - '.github/workflows/devflow-integration.yml'
+    # There is deliberately no `paths:` filter here. A path-filtered workflow never reports its
+    # checks at all, so a required `devflow-flow-gate` would sit at "Expected" forever on every
+    # PR that does not touch DevFlow, and the documented workaround — a second workflow with the
+    # same check name — is fail-open, because the last report for a check name wins and a dummy
+    # "always green" job can overwrite a real failure. The same path list is applied inside the
+    # `plan` job instead, so the gate always reports while every expensive lane stays path-gated.
+    # The two jobs that run unconditionally (`plan` and `devflow-flow-gate`) are seconds of
+    # ubuntu-latest time; everything costly is gated behind the path decision or a label.
 
 concurrency:
   group: devflow-integration-${{ github.ref }}
+  # This bounds the cost of re-selecting the promoted lane on every pull_request action, but it is
+  # not only a cost control: a title or body edit during the Android lane cancels the in-flight run
+  # on the *same* commit, and the cancelled run reports devflow-flow-gate as `cancelled`. That
+  # blocks merge until the restarted run finishes, which is the fail-closed direction.
   cancel-in-progress: true
+
+# Least privilege by default. These jobs execute pull-request-author-controlled code from
+# samples/** and eng/devflow/**, so no job may hold a write scope.
+permissions: {}
 
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
@@ -53,23 +99,164 @@ env:
   TEST_PROJECT: src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Microsoft.Maui.DevFlow.Agent.IntegrationTests.csproj
 
 jobs:
-  # Decide which platforms to run based on the trigger.
-  # For pull_request runs we require the `integration-tests` label.
+  # This is deliberately advisory: it validates deterministic static corpus/security/performance
+  # evidence and publishes a not-qualified report until real Android device evidence exists.
+  static-qualification:
+    needs: plan
+    # `always()` is required: without a status function GitHub prepends an implicit `success()`,
+    # so a transient failure in the plan job's changed-file lookup would turn this job into a
+    # *skipped* one — which GitHub reports as a passing check. devflow-flow-gate grades this
+    # job's result, so the skip is caught either way, but a failed plan must not read as
+    # "nothing to qualify".
+    if: always() && needs.plan.result == 'success' && (github.event_name != 'pull_request' || needs.plan.outputs.devflow-paths-changed == 'true')
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Run static preview qualification gate
+        run: >
+          dotnet run --project src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj
+          -f net10.0 --configuration Release --
+          devflow flow qualify --platform android
+          --corpus tests/DevFlow/InspectorCorpus
+          --output artifacts/devflow/qualification/static-qualification.json
+          --json
+
+      # The flow-QA script contract, including the shell entry point, is covered here rather than
+      # only on the label-gated Windows lane. Those parity tests skip silently where bash is
+      # absent, so without a lane that every DevFlow pull request selects the shell entry point
+      # could stop being covered anywhere without a single red check. This runner always has bash,
+      # DEVFLOW_REQUIRE_SHELL_TESTS turns a skip into a failure, and devflow-flow-gate grades this
+      # job. It reuses the Release build the qualification step above already produced.
+      - name: Run flow-QA script contract tests
+        env:
+          DEVFLOW_REQUIRE_SHELL_TESTS: 1
+        run: >
+          dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Microsoft.Maui.DevFlow.Agent.IntegrationTests.csproj
+          --configuration Release
+          --filter "FullyQualifiedName~FlowQaScriptTests"
+          --logger "trx;LogFileName=devflow-flow-qa-scripts.trx"
+          --results-directory ./artifacts/TestResults/devflow-flow-qa-scripts
+
+      - name: Upload flow-QA script contract results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: devflow-flow-qa-scripts-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ./artifacts/TestResults/devflow-flow-qa-scripts/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload static qualification report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: devflow-static-qualification-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ./artifacts/devflow/qualification/static-qualification.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  # Existing integration jobs retain their explicit-label behavior. Apple XCTest flow QA remains an
+  # advisory canary until its external evidence gate is accepted; the Android pilot is the promoted
+  # unlabeled PR lane and is aggregated by devflow-flow-gate.
   plan:
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.label.name == 'integration-tests')
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'pull_request'
+    permissions:
+      pull-requests: read
     runs-on: ubuntu-latest
     outputs:
+      devflow-paths-changed: ${{ steps.paths.outputs.changed }}
       run-android: ${{ steps.decide.outputs.android }}
       run-ios: ${{ steps.decide.outputs.ios }}
       run-maccatalyst: ${{ steps.decide.outputs.maccatalyst }}
       run-windows: ${{ steps.decide.outputs.windows }}
+      run-windows-flow-qa: ${{ steps.decide.outputs.windows-flow-qa }}
+      run-android-flow-pilot: ${{ steps.decide.outputs.android-flow-pilot }}
+      run-ios-flow-qa: ${{ steps.decide.outputs.ios-flow-qa }}
+      run-maccatalyst-flow-qa: ${{ steps.decide.outputs.maccatalyst-flow-qa }}
+      run-macos-appkit-flow-qa: ${{ steps.decide.outputs.macos-appkit-flow-qa }}
     steps:
+      # The path filter that used to live on the `pull_request` trigger. It is applied here so the
+      # workflow always starts and `devflow-flow-gate` always reports. If the API call fails the
+      # step fails, which fails `plan`, which fails the gate — an unreadable file list must never
+      # be read as "nothing to test".
+      - id: paths
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          patterns=(
+            'src/DevFlow/*'
+            'src/Cli/Microsoft.Maui.Cli/DevFlow/*'
+            'tests/DevFlow/*'
+            'samples/DevFlow.Sample/*'
+            'samples/DevFlow.Sample.MacOS/*'
+            'platforms/MacOS/*'
+            'docs/DevFlow/spec/schemas/*'
+            'eng/devflow/*'
+            'eng/smoke-tests/mobile-canvas-companion-smoke-test.mjs'
+            'Directory.Build.props'
+            'Directory.Build.targets'
+            'Directory.Packages.props'
+            'global.json'
+            'NuGet.config'
+            '.github/workflows/devflow-integration.yml'
+          )
+          # A rename reports only the new path, so a file moved *out* of a DevFlow directory would
+          # otherwise look like "nothing to test". The previous path is matched too.
+          files=$(gh api "repos/$REPO/pulls/$PR_NUMBER/files" --paginate --jq '.[] | .filename, (.previous_filename // empty)')
+          # Counted separately from "$files": that list carries an extra line per rename, so using
+          # it would read a heavily-renamed diff as larger than it is and trip the cap early.
+          count=$(gh api "repos/$REPO/pulls/$PR_NUMBER/files" --paginate --jq '.[].filename' | grep -c '' || true)
+          changed=false
+          # The pull-request files API stops at 3000 files. A diff that large may hide a DevFlow
+          # file past the cap. An empty list is equally suspect: a real pull request always changes
+          # at least one file. Guessing "nothing to test" in either case would be fail-open.
+          if (( count == 0 || count >= 3000 )); then
+            echo "The changed-file list was unusable ($count files); treating this as a DevFlow change."
+            changed=true
+          fi
+          while [[ "$changed" == "false" ]] && IFS= read -r file; do
+            [[ -n "$file" ]] || continue
+            for pattern in "${patterns[@]}"; do
+              # shellcheck disable=SC2053
+              if [[ "$file" == $pattern ]]; then
+                changed=true
+                break 2
+              fi
+            done
+          done <<< "$files"
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+          echo "DevFlow paths changed: $changed"
+
       - id: decide
         shell: bash
         env:
           EVENT: ${{ github.event_name }}
           PLATFORMS: ${{ inputs.platforms }}
-          LABELED: ${{ github.event_name == 'pull_request' && github.event.label.name == 'integration-tests' || 'false' }}
+          INTEGRATION_LABEL: ${{ github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'integration-tests' || 'false' }}
+          FLOW_PILOT_LABEL: ${{ github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'flow-pilot' || 'false' }}
+          WINDOWS_FLOW_QA_LABEL: ${{ github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'windows-flow-qa' || 'false' }}
+          APPLE_FLOW_QA_LABEL: ${{ github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'apple-flow-qa' || 'false' }}
+          APPLE_FLOW_QA_INPUT: ${{ inputs.apple-flow-qa || 'false' }}
+          APPKIT_FLOW_QA_LABEL: ${{ github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'appkit-flow-qa' || 'false' }}
+          APPKIT_FLOW_QA_INPUT: ${{ inputs.appkit-flow-qa || 'false' }}
+          # The promoted lane runs on any pull_request event that touched a DevFlow path.
+          # Every pull_request decision below is ANDed with this, exactly as the trigger-level
+          # `paths:` filter used to be, so a label on an unrelated PR cannot start a paid lane.
+          PATH_CANARY: ${{ steps.paths.outputs.changed || 'false' }}
         run: |
           set -e
           should_run() {
@@ -77,8 +264,57 @@ jobs:
             if [[ "$EVENT" == "workflow_dispatch" ]]; then
               [[ "$PLATFORMS" == "all" || "$PLATFORMS" == "$p" ]] && echo true || echo false
             elif [[ "$EVENT" == "pull_request" ]]; then
-              [[ "$LABELED" == "true" ]] && echo true || echo false
+              [[ "$PATH_CANARY" == "true" && "$INTEGRATION_LABEL" == "true" ]] && echo true || echo false
             else
+              echo false
+            fi
+          }
+          should_run_flow_pilot() {
+            if [[ "$EVENT" == "workflow_dispatch" ]]; then
+              [[ "$PLATFORMS" == "flow-pilot" ]] && echo true || echo false
+            elif [[ "$EVENT" == "schedule" ]]; then
+              echo true
+            elif [[ "$EVENT" == "pull_request" ]]; then
+              # Deliberately NOT narrowed to head-changing actions. devflow-flow-gate reports a
+              # conclusion on every run, and the last conclusion for a check name wins, so a run
+              # that skipped the lane would overwrite a real red with green on the same commit.
+              # The lane must therefore be selected on every pull_request event that touched a
+              # DevFlow path, including `edited` and `labeled`. cancel-in-progress bounds the cost,
+              # and this is the only lane promoted this way.
+              [[ "$PATH_CANARY" == "true" ]] && echo true || echo false
+            else
+              echo false
+            fi
+          }
+          should_run_apple_flow_qa() {
+            if [[ "$EVENT" == "workflow_dispatch" ]]; then
+              [[ "$APPLE_FLOW_QA_INPUT" == "true" || "$PLATFORMS" == "apple-flow-qa" ]] && echo true || echo false
+            elif [[ "$EVENT" == "schedule" ]]; then
+              echo true
+            elif [[ "$EVENT" == "pull_request" ]]; then
+              [[ "$PATH_CANARY" == "true" && "$APPLE_FLOW_QA_LABEL" == "true" ]] && echo true || echo false
+            else
+              echo false
+            fi
+          }
+          should_run_windows_flow_qa() {
+            if [[ "$EVENT" == "workflow_dispatch" ]]; then
+              [[ "$PLATFORMS" == "windows" || "$PLATFORMS" == "windows-flow-qa" ]] && echo true || echo false
+            elif [[ "$EVENT" == "schedule" ]]; then
+              echo true
+            elif [[ "$EVENT" == "pull_request" ]]; then
+              [[ "$PATH_CANARY" == "true" && "$WINDOWS_FLOW_QA_LABEL" == "true" ]] && echo true || echo false
+            else
+              echo false
+            fi
+          }
+          should_run_appkit_flow_qa() {
+            if [[ "$EVENT" == "workflow_dispatch" ]]; then
+              [[ "$APPKIT_FLOW_QA_INPUT" == "true" || "$PLATFORMS" == "macos-appkit-flow-qa" ]] && echo true || echo false
+            elif [[ "$EVENT" == "pull_request" ]]; then
+              [[ "$PATH_CANARY" == "true" && "$APPKIT_FLOW_QA_LABEL" == "true" ]] && echo true || echo false
+            else
+              # AppKit remains an explicitly requested experimental lane, including on nightly.
               echo false
             fi
           }
@@ -87,11 +323,18 @@ jobs:
             echo "ios=$(should_run ios)"
             echo "maccatalyst=$(should_run maccatalyst)"
             echo "windows=$(should_run windows)"
+            echo "windows-flow-qa=$(should_run_windows_flow_qa)"
+            echo "android-flow-pilot=$(should_run_flow_pilot)"
+            echo "ios-flow-qa=$(should_run_apple_flow_qa)"
+            echo "maccatalyst-flow-qa=$(should_run_apple_flow_qa)"
+            echo "macos-appkit-flow-qa=$(should_run_appkit_flow_qa)"
           } >> "$GITHUB_OUTPUT"
 
   android:
     needs: plan
     if: needs.plan.outputs.run-android == 'true'
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -133,19 +376,23 @@ jobs:
 
       - name: Warm up AVD snapshot
         if: steps.avd-cache.outputs.cache-hit != 'true'
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           avd-name: ${{ env.DEVFLOW_TEST_ANDROID_AVD }}
           api-level: ${{ env.DEVFLOW_TEST_ANDROID_API }}
           arch: x86_64
           target: google_apis
-          force-avd-creation: false
+          # This step only runs when the cache missed, which is exactly when the AVD does not
+          # exist yet, so it has to be allowed to create one. Refusing creation here made the
+          # step impossible to satisfy: it booted an AVD that was never created and timed out.
+          # A repository with a warm cache never noticed, because the step was skipped.
+          force-avd-creation: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: echo "Generated AVD snapshot."
 
       - name: Run DevFlow integration tests (android)
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           avd-name: ${{ env.DEVFLOW_TEST_ANDROID_AVD }}
           api-level: ${{ env.DEVFLOW_TEST_ANDROID_API }}
@@ -170,9 +417,235 @@ jobs:
           path: ./artifacts/TestResults/devflow-integration/android/
           retention-days: 30
 
+  # Promoted PR lane. It runs unlabeled on every pull_request event whose diff touches a
+  # DevFlow path, and it has no continue-on-error: Run-DevFlowFlowQa.sh exits 4 on a flow
+  # failure, so a real replay failure fails this job. devflow-flow-gate turns that into the single
+  # stable check name a human can add to branch protection.
+  android-flow-pilot:
+    needs: plan
+    if: needs.plan.outputs.run-android-flow-pilot == 'true'
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      DEVFLOW_TEST_PLATFORM: android
+      DEVFLOW_TEST_ANDROID_API: ${{ inputs.android-api || '35' }}
+      DEVFLOW_TEST_ANDROID_AVD: devflow-tests-api${{ inputs.android-api || '35' }}
+      DEVFLOW_RUN_ANDROID_FLOW_PILOT: "1"
+      DEVFLOW_FLOW_PILOT_ARTIFACT_ROOT: ./artifacts/devflow/${{ github.run_id }}-${{ github.run_attempt }}/android
+      DEVFLOW_FLOW_PILOT_RESULTS_ROOT: ./artifacts/TestResults/devflow-flow/android
+      DEVFLOW_FLOW_PILOT_WORKFLOW_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+      DEVFLOW_FLOW_PILOT_REPOSITORY_COMMIT: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v6
+
+      # Android emulator needs KVM on Linux runners.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Install MAUI workloads
+        run: dotnet workload install maui-android android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Publish CLI for Mobile Canvas companion smoke test
+        run: >
+          dotnet publish src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj
+          -f net10.0 -c Release
+          -o ./artifacts/mobile-canvas-cli
+          --nologo
+
+      - name: Cache AVD
+        uses: actions/cache@v4
+        id: flow-pilot-avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-${{ env.DEVFLOW_TEST_ANDROID_API }}-x86_64
+
+      # Creating an AVD needs about 7.4 GB for its userdata partition, and a runner that has just
+      # installed the .NET SDK and MAUI workloads has less than that left, so creation aborts with
+      # "Not enough space to create userdata partition". A repository with a warm cache never
+      # creates one, so this only bites the first run in a new repository or fork, which is exactly
+      # the adoption path. Only toolchains this job does not use are removed.
+      - name: Reclaim runner disk for AVD creation
+        if: steps.flow-pilot-avd-cache.outputs.cache-hit != 'true'
+        run: |
+          df -h / | tail -1
+          sudo rm -rf /opt/hostedtoolcache/CodeQL /usr/local/lib/android/sdk/ndk /usr/share/swift /usr/local/.ghcup || true
+          df -h / | tail -1
+
+      - name: Warm up AVD snapshot
+        if: steps.flow-pilot-avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          avd-name: ${{ env.DEVFLOW_TEST_ANDROID_AVD }}
+          api-level: ${{ env.DEVFLOW_TEST_ANDROID_API }}
+          arch: x86_64
+          target: google_apis
+          # See the integration lane's warm-up: creation has to be permitted on a cache miss,
+          # which is the only condition under which this step runs at all.
+          force-avd-creation: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: echo "Generated AVD snapshot."
+
+      - name: Run Android Tier-1 flow pilot
+        id: flow-run
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          avd-name: ${{ env.DEVFLOW_TEST_ANDROID_AVD }}
+          api-level: ${{ env.DEVFLOW_TEST_ANDROID_API }}
+          arch: x86_64
+          target: google_apis
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            # One command on one line, deliberately. The emulator-runner action hands this script
+            # to the shell a line at a time, each in its own `sh -c`, so an `export` on an earlier
+            # line is gone by the next one and backslash continuations do not survive at all. The
+            # lane previously did both: it exported the serial into a shell that then exited, and
+            # passed a literal "\" through as an argument, which the entry point refused with
+            # "Unknown option '\'" before anything was built, installed, or replayed. Assigning the
+            # variable as a prefix of the same command is what actually reaches the script.
+            DEVFLOW_TEST_ANDROID_SERIAL="$(adb devices | awk '/^emulator-[0-9]+[[:space:]]+device$/ { print $1; exit }')" bash ./eng/devflow/Run-DevFlowFlowQa.sh --platform android --repeat 3 --configuration Debug --results-root "$DEVFLOW_FLOW_PILOT_RESULTS_ROOT"
+
+      - name: Run pinned Mobile Canvas companion smoke test (android)
+        if: always()
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          avd-name: ${{ env.DEVFLOW_TEST_ANDROID_AVD }}
+          api-level: ${{ env.DEVFLOW_TEST_ANDROID_API }}
+          arch: x86_64
+          target: google_apis
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: >
+            node ./eng/smoke-tests/mobile-canvas-companion-smoke-test.mjs
+            --maui "$GITHUB_WORKSPACE/artifacts/mobile-canvas-cli/maui"
+            --platform android
+            --require-device
+            --restart-host
+            ${{ github.event_name == 'schedule' && '--crash-host' || '' }}
+
+      # The emulator manifest remains not-qualified for the real-device gate. This read-only
+      # step publishes the exact missing evidence rather than treating the pilot as a pass.
+      - name: Evaluate Android flow-pilot qualification
+        if: always()
+        run: >
+          dotnet run --project src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj
+          -f net10.0 --configuration Debug --
+          devflow flow qualify --platform android
+          --corpus tests/DevFlow/InspectorCorpus
+          --artifact-manifest "${DEVFLOW_FLOW_PILOT_ARTIFACT_ROOT}/manifest.json"
+          --output "${DEVFLOW_FLOW_PILOT_ARTIFACT_ROOT}/qualification.json"
+          --json
+
+      # This pilot is an emulator lane, so the handoff producer intentionally no-ops today.
+      # Future physical-device lanes may emit diagnostic handoffs, but the privileged publisher
+      # accepts only same-repository default-branch schedule/workflow_dispatch runs, never PR runs.
+      - name: Produce bounded DevFlow failure handoff
+        if: always()
+        shell: pwsh
+        env:
+          DEVFLOW_FAILURE_HANDOFF_REPOSITORY: ${{ github.repository }}
+          DEVFLOW_FAILURE_HANDOFF_WORKFLOW_NAME: ${{ github.workflow }}
+          DEVFLOW_FAILURE_HANDOFF_WORKFLOW_PATH: .github/workflows/devflow-integration.yml
+          DEVFLOW_FAILURE_HANDOFF_SOURCE_EVENT: ${{ github.event_name }}
+          DEVFLOW_FAILURE_HANDOFF_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          DEVFLOW_FAILURE_HANDOFF_HEAD_REF: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          DEVFLOW_FAILURE_HANDOFF_RUN_ID: ${{ github.run_id }}
+          DEVFLOW_FAILURE_HANDOFF_RUN_ATTEMPT: ${{ github.run_attempt }}
+          DEVFLOW_FAILURE_HANDOFF_COMMIT_SHA: ${{ github.sha }}
+          DEVFLOW_FAILURE_HANDOFF_PR_NUMBER: ${{ github.event.pull_request.number || 0 }}
+        run: |
+          & ./eng/devflow/New-DevFlowFailureHandoff.ps1 `
+            -SourceManifestPath "${env:DEVFLOW_FLOW_PILOT_ARTIFACT_ROOT}/manifest.json" `
+            -QualificationPath "${env:DEVFLOW_FLOW_PILOT_ARTIFACT_ROOT}/qualification.json" `
+            -OutputDirectory ./artifacts/devflow/failure-handoff `
+            -Repository $env:DEVFLOW_FAILURE_HANDOFF_REPOSITORY `
+            -WorkflowName $env:DEVFLOW_FAILURE_HANDOFF_WORKFLOW_NAME `
+            -WorkflowPath $env:DEVFLOW_FAILURE_HANDOFF_WORKFLOW_PATH `
+            -SourceEvent $env:DEVFLOW_FAILURE_HANDOFF_SOURCE_EVENT `
+            -HeadRepository $env:DEVFLOW_FAILURE_HANDOFF_HEAD_REPOSITORY `
+            -HeadRef $env:DEVFLOW_FAILURE_HANDOFF_HEAD_REF `
+            -RunId ([Int64] $env:DEVFLOW_FAILURE_HANDOFF_RUN_ID) `
+            -RunAttempt ([Int32] $env:DEVFLOW_FAILURE_HANDOFF_RUN_ATTEMPT) `
+            -CommitSha $env:DEVFLOW_FAILURE_HANDOFF_COMMIT_SHA `
+            -PullRequestNumber ([Int32] $env:DEVFLOW_FAILURE_HANDOFF_PR_NUMBER) `
+            -LaneKind android-emulator-pilot
+
+      # Upload the canonical JSON entry bytes. GitHub creates the outer artifact ZIP, so only
+      # manifest.json and handoff.json bytes—not the service-generated ZIP container—are stable.
+      - name: Upload canonical DevFlow failure handoff entries
+        if: ${{ always() && hashFiles(format('artifacts/devflow/failure-handoff/devflow-failure-handoff-{0}-{1}.zip', github.run_id, github.run_attempt)) != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: devflow-failure-handoff-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ./artifacts/devflow/failure-handoff/devflow-failure-handoff-${{ github.run_id }}-${{ github.run_attempt }}/manifest.json
+            ./artifacts/devflow/failure-handoff/devflow-failure-handoff-${{ github.run_id }}-${{ github.run_attempt }}/handoff.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Summarize Android flow runs
+        if: always()
+        shell: pwsh
+        run: >
+          ./eng/devflow/Write-DevFlowFlowRunSummary.ps1
+          -ResultsRoot "${env:DEVFLOW_FLOW_PILOT_ARTIFACT_ROOT}"
+          -Lane android-flow-pilot
+
+      # A lane that publishes no flow-run.json is not a green lane, so this upload fails loudly
+      # instead of warning. The evidence paths are explicit and never include raw device logs.
+      - name: Upload Android flow evidence
+        if: ${{ always() && steps.flow-run.conclusion != 'skipped' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: devflow-flow-evidence-android-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ./artifacts/devflow/${{ github.run_id }}-${{ github.run_attempt }}/android/**/flow-run.json
+            ./artifacts/devflow/${{ github.run_id }}-${{ github.run_attempt }}/android/**/*.mauitrace
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Android flow-pilot artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: devflow-flow-android-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ./artifacts/TestResults/devflow-flow/android/*.trx
+            ./artifacts/devflow/${{ github.run_id }}-${{ github.run_attempt }}/android/
+          if-no-files-found: warn
+          retention-days: 30
+
   ios:
     needs: plan
     if: needs.plan.outputs.run-ios == 'true'
+    permissions:
+      contents: read
     runs-on: macos-15
     timeout-minutes: 90
     env:
@@ -215,8 +688,20 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
       - name: Install Apple MAUI workloads
         run: dotnet workload install maui ios macos maccatalyst tvos android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+
+      - name: Publish CLI for Mobile Canvas companion smoke test
+        run: >
+          dotnet publish src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj
+          -f net10.0 -c Release
+          -o ./artifacts/mobile-canvas-cli
+          --nologo
 
       - name: List available iOS simulators
         run: xcrun simctl list devices available
@@ -229,6 +714,14 @@ jobs:
           --logger "console;verbosity=normal"
           --results-directory ./artifacts/TestResults/devflow-integration/ios
 
+      - name: Run pinned Mobile Canvas companion smoke test (ios)
+        run: >
+          node ./eng/smoke-tests/mobile-canvas-companion-smoke-test.mjs
+          --maui "$GITHUB_WORKSPACE/artifacts/mobile-canvas-cli/maui"
+          --platform ios
+          --require-device
+          --restart-host
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v7
@@ -240,6 +733,8 @@ jobs:
   maccatalyst:
     needs: plan
     if: needs.plan.outputs.run-maccatalyst == 'true'
+    permissions:
+      contents: read
     runs-on: macos-15
     timeout-minutes: 60
     env:
@@ -300,13 +795,307 @@ jobs:
           path: ./artifacts/TestResults/devflow-integration/maccatalyst/
           retention-days: 30
 
+  # These are advisory evidence lanes. They remain separate from normal integration coverage
+  # until returned macOS artifacts satisfy the external Apple qualification gate.
+  ios-flow-qa:
+    needs: plan
+    if: needs.plan.outputs.run-ios-flow-qa == 'true'
+    permissions:
+      contents: read
+    runs-on: macos-15
+    continue-on-error: true
+    timeout-minutes: 120
+    env:
+      DEVFLOW_TEST_PLATFORM: ios
+      DEVFLOW_TEST_IOS_VERSION: ${{ inputs.ios-runtime }}
+      DEVFLOW_FLOW_QA_ARTIFACT_ROOT: ./artifacts/devflow/${{ github.run_id }}-${{ github.run_attempt }}/ios
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Select Xcode
+        run: |
+          SELECTED="$(ls -1d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)"
+          if [[ -n "$SELECTED" ]]; then
+            sudo xcode-select -s "$SELECTED/Contents/Developer"
+          fi
+          sudo xcodebuild -runFirstLaunch
+          xcodebuild -version
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Install Apple MAUI workloads
+        run: dotnet workload install maui ios macos maccatalyst tvos android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+
+      - name: Select and boot iOS Simulator
+        id: simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          SIMULATOR_ID="$(python3 - <<'PY'
+          import json, os, subprocess
+          devices = json.loads(subprocess.check_output(["xcrun", "simctl", "list", "devices", "available", "--json"]))
+          selector = os.environ.get("DEVFLOW_TEST_IOS_VERSION", "").lower().replace("x", "").rstrip(".")
+          candidates = []
+          for runtime, values in devices["devices"].items():
+              if "iOS" in runtime:
+                  if selector and selector not in runtime.lower().replace("-", "."):
+                      continue
+                  for value in values:
+                      if value.get("isAvailable", True) and "iPhone" in value.get("name", ""):
+                          candidates.append((value.get("state") == "Booted", value["udid"]))
+          print(sorted(candidates, reverse=True)[0][1])
+          PY
+          )"
+          xcrun simctl boot "$SIMULATOR_ID" || true
+          xcrun simctl bootstatus "$SIMULATOR_ID" -b
+          echo "id=$SIMULATOR_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Run advisory iOS XCTest flow QA
+        id: flow-run
+        continue-on-error: true
+        run: |
+          bash ./eng/devflow/Run-DevFlowFlowQa.sh \
+            --platform ios \
+            --apple-spike \
+            --simulator-id "${{ steps.simulator.outputs.id }}" \
+            --target-bundle-id com.companyname.mauitodo \
+            --safe-action-id AddButton \
+            --repeat 3 \
+            --results-root ./artifacts/TestResults/devflow-flow/ios
+
+      - name: Evaluate iOS qualification evidence
+        if: always()
+        continue-on-error: true
+        run: >
+          dotnet run --project src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj
+          -f net10.0 --configuration Debug --
+          devflow flow qualify --platform ios
+          --corpus tests/DevFlow/InspectorCorpus
+          --artifact-manifest "${DEVFLOW_FLOW_QA_ARTIFACT_ROOT}/manifest.json"
+          --output "${DEVFLOW_FLOW_QA_ARTIFACT_ROOT}/qualification.json"
+          --json
+
+      - name: Summarize iOS flow runs
+        if: always()
+        shell: pwsh
+        run: >
+          ./eng/devflow/Write-DevFlowFlowRunSummary.ps1
+          -ResultsRoot "${env:DEVFLOW_FLOW_QA_ARTIFACT_ROOT}"
+          -Lane ios-flow-qa
+
+      - name: Upload iOS flow evidence
+        if: ${{ always() && steps.flow-run.conclusion != 'skipped' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: devflow-flow-evidence-ios-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ./artifacts/devflow/${{ github.run_id }}-${{ github.run_attempt }}/ios/**/flow-run.json
+            ./artifacts/devflow/${{ github.run_id }}-${{ github.run_attempt }}/ios/**/*.mauitrace
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload iOS flow QA artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: devflow-flow-ios-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ./artifacts/TestResults/devflow-flow/ios/
+            ./artifacts/devflow/${{ github.run_id }}-${{ github.run_attempt }}/ios/
+          if-no-files-found: warn
+          retention-days: 30
+
+  maccatalyst-flow-qa:
+    needs: plan
+    if: needs.plan.outputs.run-maccatalyst-flow-qa == 'true'
+    permissions:
+      contents: read
+    runs-on: macos-15
+    continue-on-error: true
+    timeout-minutes: 120
+    env:
+      DEVFLOW_TEST_PLATFORM: maccatalyst
+      DEVFLOW_FLOW_QA_ARTIFACT_ROOT: ./artifacts/devflow/${{ github.run_id }}-${{ github.run_attempt }}/maccatalyst
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Select Xcode
+        run: |
+          SELECTED="$(ls -1d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)"
+          if [[ -n "$SELECTED" ]]; then
+            sudo xcode-select -s "$SELECTED/Contents/Developer"
+          fi
+          sudo xcodebuild -runFirstLaunch
+          xcodebuild -version
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Install Apple MAUI workloads
+        run: dotnet workload install maui ios macos maccatalyst tvos android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+
+      - name: Run advisory Mac Catalyst XCTest flow QA
+        id: flow-run
+        continue-on-error: true
+        run: |
+          bash ./eng/devflow/Run-DevFlowFlowQa.sh \
+            --platform maccatalyst \
+            --apple-spike \
+            --target-bundle-id com.companyname.mauitodo \
+            --safe-action-id AddButton \
+            --repeat 3 \
+            --results-root ./artifacts/TestResults/devflow-flow/maccatalyst
+
+      - name: Evaluate Mac Catalyst qualification evidence
+        if: always()
+        continue-on-error: true
+        run: >
+          dotnet run --project src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj
+          -f net10.0 --configuration Debug --
+          devflow flow qualify --platform maccatalyst
+          --corpus tests/DevFlow/InspectorCorpus
+          --artifact-manifest "${DEVFLOW_FLOW_QA_ARTIFACT_ROOT}/manifest.json"
+          --output "${DEVFLOW_FLOW_QA_ARTIFACT_ROOT}/qualification.json"
+          --json
+
+      - name: Summarize Mac Catalyst flow runs
+        if: always()
+        shell: pwsh
+        run: >
+          ./eng/devflow/Write-DevFlowFlowRunSummary.ps1
+          -ResultsRoot "${env:DEVFLOW_FLOW_QA_ARTIFACT_ROOT}"
+          -Lane maccatalyst-flow-qa
+
+      - name: Upload Mac Catalyst flow evidence
+        if: ${{ always() && steps.flow-run.conclusion != 'skipped' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: devflow-flow-evidence-maccatalyst-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ./artifacts/devflow/${{ github.run_id }}-${{ github.run_attempt }}/maccatalyst/**/flow-run.json
+            ./artifacts/devflow/${{ github.run_id }}-${{ github.run_attempt }}/maccatalyst/**/*.mauitrace
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Mac Catalyst flow QA artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: devflow-flow-maccatalyst-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ./artifacts/TestResults/devflow-flow/maccatalyst/
+            ./artifacts/devflow/${{ github.run_id }}-${{ github.run_attempt }}/maccatalyst/
+          if-no-files-found: warn
+          retention-days: 30
+
+  # This is a separately labeled experimental AppKit/AppKit backend signal. It is deliberately
+  # advisory and never participates in the official Mac Catalyst or all-platform MAUI gate.
+  macos-appkit-flow-qa:
+    needs: plan
+    if: needs.plan.outputs.run-macos-appkit-flow-qa == 'true'
+    permissions:
+      contents: read
+    runs-on: macos-15
+    continue-on-error: true
+    timeout-minutes: 120
+    env:
+      DEVFLOW_TEST_PLATFORM: macos
+      DEVFLOW_FLOW_QA_ARTIFACT_ROOT: ./artifacts/devflow/${{ github.run_id }}-${{ github.run_attempt }}/macos
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Select Xcode
+        run: |
+          SELECTED="$(ls -1d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)"
+          if [[ -n "$SELECTED" ]]; then
+            sudo xcode-select -s "$SELECTED/Contents/Developer"
+          fi
+          sudo xcodebuild -runFirstLaunch
+          xcodebuild -version
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Install AppKit MAUI workloads
+        run: dotnet workload install maui macos maccatalyst ios tvos android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+
+      - name: Run advisory experimental AppKit flow QA
+        id: flow-run
+        continue-on-error: true
+        run: |
+          bash ./eng/devflow/Run-DevFlowFlowQa.sh \
+            --platform macos \
+            --experimental \
+            --apple-spike \
+            --target-bundle-id com.companyname.mauitodo.appkit \
+            --safe-action-id AddButton \
+            --repeat 3 \
+            --results-root ./artifacts/TestResults/devflow-flow/macos
+
+      # This consumes the same versioned Apple manifest adapter as iOS and Mac Catalyst, but the
+      # result remains a separately labeled advisory AppKit evidence projection.
+      - name: Evaluate experimental AppKit evidence mapping
+        if: always()
+        continue-on-error: true
+        run: >
+          dotnet run --project src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj
+          -f net10.0 --configuration Debug --
+          devflow flow qualify --platform macos
+          --corpus tests/DevFlow/InspectorCorpus
+          --artifact-manifest "${DEVFLOW_FLOW_QA_ARTIFACT_ROOT}/manifest.json"
+          --output "${DEVFLOW_FLOW_QA_ARTIFACT_ROOT}/qualification.json"
+          --json
+
+      - name: Summarize experimental AppKit flow runs
+        if: always()
+        shell: pwsh
+        run: >
+          ./eng/devflow/Write-DevFlowFlowRunSummary.ps1
+          -ResultsRoot "${env:DEVFLOW_FLOW_QA_ARTIFACT_ROOT}"
+          -Lane macos-appkit-flow-qa
+
+      - name: Upload experimental AppKit flow evidence
+        if: ${{ always() && steps.flow-run.conclusion != 'skipped' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: devflow-flow-evidence-macos-appkit-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ./artifacts/devflow/${{ github.run_id }}-${{ github.run_attempt }}/macos/**/flow-run.json
+            ./artifacts/devflow/${{ github.run_id }}-${{ github.run_attempt }}/macos/**/*.mauitrace
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload experimental AppKit flow QA artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: devflow-flow-macos-appkit-experimental-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ./artifacts/TestResults/devflow-flow/macos/
+            ./artifacts/devflow/${{ github.run_id }}-${{ github.run_attempt }}/macos/
+          if-no-files-found: warn
+          retention-days: 30
+
   windows:
     needs: plan
     if: needs.plan.outputs.run-windows == 'true'
+    permissions:
+      contents: read
     runs-on: windows-latest
     timeout-minutes: 90
     env:
       DEVFLOW_TEST_PLATFORM: windows
+      # This is the lane that covers the shell entry point from Windows: the runner image ships
+      # Git for Windows, so its bash is expected. Without this the parity tests would skip and the
+      # lane would report green while asserting nothing about Run-DevFlowFlowQa.sh.
+      DEVFLOW_REQUIRE_SHELL_TESTS: 1
     steps:
       - uses: actions/checkout@v6
 
@@ -327,10 +1116,205 @@ jobs:
           --logger "console;verbosity=normal"
           --results-directory .\artifacts\TestResults\devflow-integration\windows
 
+      - name: Run live inspector Playwright tests (windows)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $cliProject = 'src\Cli\Microsoft.Maui.Cli\Microsoft.Maui.Cli.csproj'
+          $sampleProject = 'samples\DevFlow.Sample\DevFlow.Sample.csproj'
+          $inspectorTests = 'src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests\Microsoft.Maui.DevFlow.Inspector.Tests.csproj'
+          $app = $null
+          try {
+            dotnet build $cliProject -c Debug -f net10.0 --nologo -v minimal
+            dotnet build $sampleProject -c Debug -f net10.0-windows10.0.19041.0 --nologo -v minimal
+            dotnet build $inspectorTests -c Debug --nologo -v minimal
+
+            $cli = Get-ChildItem 'artifacts\bin\Microsoft.Maui.Cli\Debug\net10.0\maui.dll' |
+              Select-Object -First 1 -ExpandProperty FullName
+            dotnet $cli devflow broker stop 2>$null
+            dotnet $cli devflow broker start
+
+            $exe = Get-ChildItem 'artifacts\bin\DevFlow.Sample\Debug' -Filter 'DevFlow.Sample.exe' -Recurse |
+              Select-Object -First 1 -ExpandProperty FullName
+            $env:DEVFLOW_TEST_PORT = '9223'
+            $app = Start-Process $exe -WorkingDirectory (Split-Path $exe) -PassThru
+
+            $deadline = (Get-Date).AddSeconds(45)
+            $agents = $null
+            do {
+              Start-Sleep -Milliseconds 500
+              try {
+                $agents = Invoke-RestMethod 'http://localhost:19223/api/agents'
+                if ($null -ne $agents -and @($agents).Count -gt 0) { break }
+              } catch {
+              }
+            } while ((Get-Date) -lt $deadline)
+            if ($null -eq $agents -or @($agents).Count -eq 0) {
+              throw 'DevFlow sample did not register with the broker.'
+            }
+
+            $playwright = Get-ChildItem 'artifacts\bin\Microsoft.Maui.DevFlow.Inspector.Tests\Debug\net10.0\playwright.ps1' |
+              Select-Object -First 1 -ExpandProperty FullName
+            & $playwright install chromium
+
+            $env:MAUI_INSPECTOR_LIVE_TESTS = '1'
+            $env:INSPECTOR_URL = 'http://localhost:19223/inspector/default/'
+            dotnet test $inspectorTests -c Debug --no-build `
+              --logger 'trx;LogFileName=devflow-inspector-windows.trx' `
+              --logger 'console;verbosity=normal' `
+              --results-directory '.\artifacts\TestResults\devflow-integration\windows'
+          }
+          finally {
+            if ($app -and -not $app.HasExited) {
+              Stop-Process -Id $app.Id
+              $app.WaitForExit(5000)
+            }
+            if ($cli) { dotnet $cli devflow broker stop 2>$null }
+          }
+
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: devflow-integration-windows-results
           path: .\artifacts\TestResults\devflow-integration\windows\
           retention-days: 30
+
+  # Second-platform contract: a distinct MAUI WinUI lane, never WPF evidence.
+  # The lane is no longer advisory-only: it fails the run when the Tier-1 flow QA fails or when it
+  # publishes no flow evidence. Branch protection must add it to the required checks separately.
+  windows-flow-qa:
+    needs: plan
+    if: needs.plan.outputs.run-windows-flow-qa == 'true'
+    permissions:
+      contents: read
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      DEVFLOW_TEST_PLATFORM: windows
+      DEVFLOW_FLOW_QA_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+      DEVFLOW_FLOW_QA_ARTIFACT_ROOT: .\artifacts\devflow\${{ github.run_id }}-${{ github.run_attempt }}\windows
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Install MAUI workloads
+        shell: pwsh
+        run: dotnet workload install maui ios macos maccatalyst tvos android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+
+      - name: Run Windows Tier-1 flow QA
+        id: flow-run
+        shell: pwsh
+        run: |
+          .\eng\devflow\Run-DevFlowFlowQa.ps1 `
+            --platform windows `
+            --repeat 3 `
+            --configuration Debug `
+            --results-root .\artifacts\TestResults\devflow-flow\windows `
+            --qualification
+
+      - name: Summarize Windows flow runs
+        if: always()
+        shell: pwsh
+        run: >
+          .\eng\devflow\Write-DevFlowFlowRunSummary.ps1
+          -ResultsRoot "${env:DEVFLOW_FLOW_QA_ARTIFACT_ROOT}"
+          -Lane windows-flow-qa
+
+      - name: Upload Windows flow evidence
+        if: ${{ always() && steps.flow-run.conclusion != 'skipped' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: devflow-flow-evidence-windows-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .\artifacts\devflow\${{ github.run_id }}-${{ github.run_attempt }}\windows\**\flow-run.json
+            .\artifacts\devflow\${{ github.run_id }}-${{ github.run_attempt }}\windows\**\*.mauitrace
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Windows flow QA artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: devflow-flow-windows-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .\artifacts\TestResults\devflow-flow\windows\
+            .\artifacts\devflow\${{ github.run_id }}-${{ github.run_attempt }}\windows\
+          if-no-files-found: warn
+          retention-days: 30
+
+  # The single stable check name intended for branch protection. It is a separate job so the
+  # required-check entry never has to change when a lane is renamed or another lane is promoted,
+  # and so the two ways a lane can silently "pass" are both closed:
+  #   * plan itself failing or being cancelled, and
+  #   * the pilot being skipped while the plan said it should run.
+  # GitHub reports a skipped job as a passing required check, so the gate must never be skipped:
+  # it runs with `if: always()` and decides the verdict from the upstream results instead.
+  devflow-flow-gate:
+    name: devflow-flow-gate
+    needs: [plan, static-qualification, android-flow-pilot]
+    if: always()
+    permissions: {}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      EVENT: ${{ github.event_name }}
+      PLAN_RESULT: ${{ needs.plan.result }}
+      PATHS_CHANGED: ${{ needs.plan.outputs.devflow-paths-changed }}
+      STATIC_RESULT: ${{ needs.static-qualification.result }}
+      PILOT_EXPECTED: ${{ needs.plan.outputs.run-android-flow-pilot }}
+      PILOT_RESULT: ${{ needs.android-flow-pilot.result }}
+    steps:
+      - name: Evaluate the promoted DevFlow flow lane
+        shell: bash
+        run: |
+          set -uo pipefail
+          {
+            printf '## DevFlow flow gate\n\n'
+            printf '| Fact | Value |\n| --- | --- |\n'
+            printf '| plan | %s |\n' "$PLAN_RESULT"
+            printf '| DevFlow paths changed | %s |\n' "${PATHS_CHANGED:-n/a}"
+            printf '| static-qualification | %s |\n' "$STATIC_RESULT"
+            printf '| android-flow-pilot selected | %s |\n' "${PILOT_EXPECTED:-unknown}"
+            printf '| android-flow-pilot | %s |\n' "$PILOT_RESULT"
+            printf '\n'
+          } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+
+          if [[ "$PLAN_RESULT" != "success" ]]; then
+            echo "::error::The lane plan concluded '$PLAN_RESULT', so the gate cannot confirm the promoted flow lane ran."
+            exit 1
+          fi
+          # A skipped job reports as a passing check, so the gate grades static qualification
+          # rather than trusting its own conclusion to be visible.
+          if [[ "$STATIC_RESULT" == "failure" || "$STATIC_RESULT" == "cancelled" ]]; then
+            echo "::error::Static qualification concluded '$STATIC_RESULT'."
+            exit 1
+          fi
+          if [[ "$PILOT_EXPECTED" != "true" ]]; then
+            # Defence in depth for the "last conclusion wins" hazard: if the diff touched DevFlow
+            # but the lane was not selected, this run has nothing to grade and must not publish a
+            # green conclusion that could overwrite a real red on the same commit.
+            if [[ "$EVENT" == "pull_request" && "${PATHS_CHANGED:-false}" == "true" ]]; then
+              echo "::error::DevFlow paths changed but the promoted flow lane was not selected for this run, so the gate cannot confirm it. Re-run the workflow."
+              exit 1
+            fi
+            if [[ "$EVENT" == "pull_request" ]]; then
+              echo "No DevFlow paths changed. Nothing to gate."
+            else
+              echo "The promoted flow lane was not requested for this $EVENT run. Nothing to gate."
+            fi
+            exit 0
+          fi
+          if [[ "$STATIC_RESULT" != "success" ]]; then
+            echo "::error::DevFlow paths changed but static qualification concluded '$STATIC_RESULT'."
+            exit 1
+          fi
+          if [[ "$PILOT_RESULT" != "success" ]]; then
+            echo "::error::The Android flow pilot concluded '$PILOT_RESULT'. A promoted flow lane that does not pass is not a green gate."
+            exit 1
+          fi
+          echo "Static qualification and the Android flow pilot passed."

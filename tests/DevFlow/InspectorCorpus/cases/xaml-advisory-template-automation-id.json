@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "id": "xaml-advisory-template-automation-id",
+  "kind": "no-repair",
+  "disposition": "no-repair",
+  "provenance": {
+    "labeledBy": "devflow-maintainers",
+    "labeledOn": "2026-08-15",
+    "method": "hand-authored",
+    "sourceKind": "synthetic",
+    "reviewStatus": "unreviewed",
+    "notes": "Source advisory; models no runtime failure."
+  },
+  "fixture": {
+    "xaml": "<ContentPage><CollectionView><CollectionView.ItemTemplate><DataTemplate><Button AutomationId=\"SaveButton\" /></DataTemplate></CollectionView.ItemTemplate></CollectionView></ContentPage>",
+    "scope": "template"
+  },
+  "expect": {
+    "diagnosticIds": [
+      "DFXAML003"
+    ],
+    "repairEligible": false,
+    "ineligibilityCodes": [
+      "template-or-style",
+      "repeater-or-virtualized"
+    ]
+  }
+}

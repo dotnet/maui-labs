@@ -41,7 +41,7 @@ public class DevFlowHttpHandler : DelegatingHandler
         var entry = NetworkRequestEntry.BeginCapture(request);
 
         // Capture request body
-        if (request.Content != null)
+        if (request.Content != null && _maxBodySize > 0)
         {
             try
             {
@@ -53,6 +53,10 @@ public class DevFlowHttpHandler : DelegatingHandler
             }
             catch { /* Don't fail the request if body capture fails */ }
         }
+        else if (request.Content != null)
+        {
+            entry.RequestSize = request.Content.Headers.ContentLength;
+        }
 
         try
         {
@@ -60,7 +64,7 @@ public class DevFlowHttpHandler : DelegatingHandler
             entry.CompleteCapture(response);
 
             // Capture response body
-            if (response.Content != null)
+            if (response.Content != null && _maxBodySize > 0)
             {
                 try
                 {
@@ -71,6 +75,10 @@ public class DevFlowHttpHandler : DelegatingHandler
                     entry.ResponseBodyTruncated = truncated;
                 }
                 catch { /* Don't fail the response if body capture fails */ }
+            }
+            else if (response.Content != null)
+            {
+                entry.ResponseSize = response.Content.Headers.ContentLength;
             }
 
             _store.Add(entry);

@@ -1,6 +1,7 @@
 using Microsoft.Maui;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.DevFlow.Agent.Core.Css;
+using Microsoft.Maui.DevFlow.Agent.Core.SourceMapping;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 
@@ -17,7 +18,56 @@ public class VisualTreeWalker
     // Per-walk state — fully rebuilt on each WalkTree call
     private readonly HashSet<string> _usedIds = new();
     private readonly Dictionary<Guid, string> _elementIdToExternalId = new();
+    private readonly ConditionalWeakTable<IVisualTreeElement, GeneratedElementId> _objectToExternalId = new();
     private readonly ConcurrentDictionary<string, (BoundsInfo Bounds, object Marker)> _syntheticBounds = new();
+    private readonly Dictionary<string, object> _walkElements = new(StringComparer.Ordinal);
+    private readonly HashSet<Page> _activePages = new(ReferenceEqualityComparer.Instance);
+    private int _walkMaxElements;
+    private int _walkElementCount;
+
+    /// <summary>
+    /// Opt-in capture of the <c>id → runtime object</c> map for the current walk. Off by default:
+    /// it holds strong references to live MAUI elements, so a caller must enable it, read
+    /// <see cref="WalkElements"/> on the same UI-thread pass, and call
+    /// <see cref="ClearWalkElements"/> when finished.
+    /// </summary>
+    /// <remarks>
+    /// The map exists so a diagnostic can read managed layout state for a whole tree from a single
+    /// walk instead of calling <see cref="GetElementById"/> once per element (which re-walks the
+    /// tree every time). It is never serialized and never leaves the agent process.
+    /// </remarks>
+    internal bool CaptureWalkElements { get; set; }
+
+    /// <summary>
+    /// Restricts the current walk to layout-safe structural data. This mode deliberately skips
+    /// text, values, item sources, Comet property dictionaries, and platform property probes.
+    /// </summary>
+    internal bool CaptureLayoutOnly { get; set; }
+
+    /// <summary>
+    /// Runtime objects recorded during the most recent walk, keyed by the id in the returned
+    /// <see cref="ElementInfo"/> tree. Empty unless <see cref="CaptureWalkElements"/> was set
+    /// before the walk. Cleared at the start of every walk.
+    /// </summary>
+    internal IReadOnlyDictionary<string, object> WalkElements => _walkElements;
+
+    /// <summary>Drops the captured runtime references so live elements are not retained.</summary>
+    internal void ClearWalkElements() => _walkElements.Clear();
+
+    internal void PopulateLayoutSnapshot(
+        LayoutDiagnostics.LayoutElementSnapshot snapshot,
+        object runtimeElement,
+        LayoutDiagnostics.LayoutInspectionRequest request)
+        => PopulatePlatformLayoutSnapshot(snapshot, runtimeElement, request);
+
+    protected virtual void PopulatePlatformLayoutSnapshot(
+        LayoutDiagnostics.LayoutElementSnapshot snapshot,
+        object runtimeElement,
+        LayoutDiagnostics.LayoutInspectionRequest request)
+    {
+    }
+
+    internal bool WalkWasTruncated { get; private set; }
 
     /// <summary>
     /// Marker object representing the navigation back button in Shell or NavigationPage.
@@ -33,21 +83,143 @@ public class VisualTreeWalker
     /// Returns IVisualTreeElement, ToolbarItem, or other mapped objects.
     /// </summary>
     public object? GetElementById(string id, Application? app)
+        => GetElementById(id, app, windowIndex: null);
+
+    internal object? GetElementById(string id, Application? app, int? windowIndex)
     {
         if (app == null || string.IsNullOrEmpty(id)) return null;
 
         // Walk tree fresh, searching for matching ID
         _usedIds.Clear();
         _elementIdToExternalId.Clear();
+        _objectToExternalId.Clear();
         _syntheticBounds.Clear();
+        _walkElements.Clear();
+        _activePages.Clear();
+        _walkMaxElements = 0;
+        _walkElementCount = 0;
+        WalkWasTruncated = false;
+
+        if (windowIndex is not null)
+        {
+            if (windowIndex.Value < 0 || windowIndex.Value >= app.Windows.Count)
+                return null;
+            return app.Windows[windowIndex.Value] is IVisualTreeElement windowElement
+                ? FindByIdRecursive(windowElement, id, null)
+                : null;
+        }
 
         if (app is not IVisualTreeElement appElement) return null;
-        foreach (var child in appElement.GetVisualChildren())
+        foreach (var child in GetTraversalChildren(appElement))
         {
             var result = FindByIdRecursive(child, id, null);
             if (result != null) return result;
         }
         return null;
+    }
+
+    internal List<ElementInfo> WalkSubtree(
+        Application app,
+        string rootElementId,
+        int maxDepth = 0,
+        int maxElements = 0,
+        int? windowIndex = null)
+    {
+        var runtime = GetElementById(rootElementId, app, windowIndex);
+        if (runtime is not IVisualTreeElement root)
+            return [];
+
+        _walkElements.Clear();
+        _activePages.Clear();
+        _walkMaxElements = Math.Max(0, maxElements);
+        _walkElementCount = 0;
+        WalkWasTruncated = false;
+        PopulateActivePages(app, windowIndex);
+        try
+        {
+            var info = WalkElement(root, null, 1, maxDepth);
+            if (info is null)
+                return [];
+            info.IsVisible &= AncestorsAreEffectivelyVisible(root);
+            var results = new List<ElementInfo> { info };
+            ApplySourceMap(results);
+            return results;
+        }
+        finally
+        {
+            _walkMaxElements = 0;
+            _activePages.Clear();
+        }
+    }
+
+    internal List<ElementInfo> WalkRoot(
+        IVisualTreeElement root,
+        int maxDepth = 0,
+        int maxElements = 0)
+    {
+        _usedIds.Clear();
+        _elementIdToExternalId.Clear();
+        _objectToExternalId.Clear();
+        _syntheticBounds.Clear();
+        _walkElements.Clear();
+        _activePages.Clear();
+        _walkMaxElements = Math.Max(0, maxElements);
+        _walkElementCount = 0;
+        WalkWasTruncated = false;
+        try
+        {
+            var info = WalkElement(root, null, 1, maxDepth);
+            if (info is null)
+                return [];
+            info.IsVisible &= AncestorsAreEffectivelyVisible(root);
+            var results = new List<ElementInfo> { info };
+            ApplySourceMap(results);
+            return results;
+        }
+        finally
+        {
+            _walkMaxElements = 0;
+            _activePages.Clear();
+        }
+    }
+
+    private void PopulateActivePages(Application app, int? windowIndex)
+    {
+        _activePages.Clear();
+
+        if (windowIndex is not null)
+        {
+            if (windowIndex.Value >= 0 && windowIndex.Value < app.Windows.Count)
+            {
+                foreach (var activePage in ActivePageResolver.ResolveVisiblePages(app.Windows[windowIndex.Value]))
+                    _activePages.Add(activePage);
+            }
+            return;
+        }
+
+        var windows = app.Windows.Count > 0
+            ? app.Windows
+            : app is IVisualTreeElement appElement
+                ? GetTraversalChildren(appElement).OfType<Window>().ToList()
+                : [];
+        foreach (var window in windows)
+        {
+            foreach (var activePage in ActivePageResolver.ResolveVisiblePages(window))
+                _activePages.Add(activePage);
+        }
+    }
+
+    private static bool AncestorsAreEffectivelyVisible(IVisualTreeElement element)
+    {
+        for (var parent = element.GetVisualParent(); parent is not null; parent = parent.GetVisualParent())
+        {
+            if (parent is VisualElement visual &&
+                (!visual.IsVisible || (double.IsFinite(visual.Opacity) && visual.Opacity <= 0)))
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     /// <summary>
@@ -128,7 +300,7 @@ public class VisualTreeWalker
 
         if (element is IVisualTreeElement vte)
         {
-            foreach (var child in vte.GetVisualChildren())
+            foreach (var child in GetTraversalChildren(vte))
             {
                 if (child is Element childEl)
                     HitTestByBoundsRecursive(childEl, x, y, hits);
@@ -287,37 +459,368 @@ public class VisualTreeWalker
     /// Walks the visual tree starting from the application's windows.
     /// When windowIndex is null, walks all windows. Otherwise walks only the specified window.
     /// </summary>
-    public List<ElementInfo> WalkTree(Application app, int maxDepth = 0, int? windowIndex = null)
+    public List<ElementInfo> WalkTree(
+        Application app,
+        int maxDepth = 0,
+        int? windowIndex = null)
+        => WalkTree(app, maxDepth, windowIndex, maxElements: 0);
+
+    internal List<ElementInfo> WalkTree(
+        Application app,
+        int maxDepth,
+        int? windowIndex,
+        int maxElements)
     {
         _usedIds.Clear();
         _elementIdToExternalId.Clear();
+        _objectToExternalId.Clear();
         _syntheticBounds.Clear();
-        var results = new List<ElementInfo>();
-        if (app is not IVisualTreeElement appElement)
-            return results;
-
-        if (windowIndex != null)
+        _walkElements.Clear();
+        _activePages.Clear();
+        _walkMaxElements = Math.Max(0, maxElements);
+        _walkElementCount = 0;
+        WalkWasTruncated = false;
+        PopulateActivePages(app, windowIndex);
+        try
         {
-            if (windowIndex.Value < 0 || windowIndex.Value >= app.Windows.Count)
+            var results = new List<ElementInfo>();
+            if (app is not IVisualTreeElement appElement)
                 return results;
-            var window = app.Windows[windowIndex.Value];
-            if (window is IVisualTreeElement windowElement)
+
+            if (windowIndex != null)
             {
-                var info = WalkElement(windowElement, null, 1, maxDepth);
+                if (windowIndex.Value < 0 || windowIndex.Value >= app.Windows.Count)
+                    return results;
+                var window = app.Windows[windowIndex.Value];
+                if (window is IVisualTreeElement windowElement)
+                {
+                    var info = WalkElement(windowElement, null, 1, maxDepth);
+                    if (info != null)
+                        results.Add(info);
+                }
+                ApplySourceMap(results);
+                return results;
+            }
+
+            foreach (var child in GetTraversalChildren(appElement))
+            {
+                var info = WalkElement(child, null, 1, maxDepth);
                 if (info != null)
                     results.Add(info);
+                if (WalkWasTruncated)
+                    break;
             }
+
+            ApplySourceMap(results);
             return results;
         }
-
-        foreach (var child in appElement.GetVisualChildren())
+        finally
         {
-            var info = WalkElement(child, null, 1, maxDepth);
-            if (info != null)
-                results.Add(info);
+            _walkMaxElements = 0;
+            _activePages.Clear();
+        }
+    }
+
+    /// <summary>
+    /// Optional provider of XAML source maps. When set, <see cref="WalkTree"/> attaches
+    /// sourceFile/sourceLine/sourceColumn to statically-declared elements. When null (default),
+    /// source mapping is skipped entirely (no behavior change).
+    /// </summary>
+    public IXamlSourceMapProvider? SourceMapProvider { get; set; }
+
+    /// <summary>
+    /// True when source mapping can actually produce results — a provider is set and, if it is the
+    /// shared <see cref="XamlSourceMapRegistry"/>, at least one provider has registered. Lets callers
+    /// skip a full mapped walk in the common (no maps) case.
+    /// </summary>
+    internal bool HasActiveSourceMaps => SourceMapProvider switch
+    {
+        null => false,
+        XamlSourceMapRegistry registry => registry.HasProviders,
+        _ => true,
+    };
+
+    /// <summary>
+    /// Collects <c>id → (file, line, column, hash)</c> from a source-mapped ElementInfo tree (as
+    /// produced by <see cref="WalkTree"/>). Used to transfer source onto a separately-built,
+    /// depth-limited element-detail subtree whose nodes lack the parent-path context to map directly.
+    /// </summary>
+    internal static Dictionary<string, (string File, int Line, int Column, string? Hash)> CollectSourceById(IReadOnlyList<ElementInfo> roots)
+    {
+        var map = new Dictionary<string, (string, int, int, string?)>(StringComparer.Ordinal);
+        foreach (var root in roots)
+            CollectSourceByIdCore(root, map);
+        return map;
+    }
+
+    private static void CollectSourceByIdCore(ElementInfo node, Dictionary<string, (string, int, int, string?)> map)
+    {
+        if (node.Id is { } id && node.SourceFile is { } file && node.SourceLine is { } line)
+            map[id] = (file, line, node.SourceColumn ?? 0, node.SourceHash);
+        if (node.Children is { } children)
+            foreach (var child in children)
+                CollectSourceByIdCore(child, map);
+    }
+
+    /// <summary>Copies collected source locations onto a detail subtree, matching nodes by id.</summary>
+    internal static void ApplySourceById(ElementInfo detail, IReadOnlyDictionary<string, (string File, int Line, int Column, string? Hash)> sources)
+    {
+        if (detail.Id is { } id && sources.TryGetValue(id, out var s))
+        {
+            detail.SourceFile = s.File;
+            detail.SourceLine = s.Line;
+            detail.SourceColumn = s.Column;
+            detail.SourceHash = s.Hash;
+        }
+        if (detail.Children is { } children)
+            foreach (var child in children)
+                ApplySourceById(child, sources);
+    }
+
+    /// <summary>
+    /// Identity-checked post-pass that attaches XAML source locations to a built ElementInfo tree.
+    /// Source is attached only where mapped content children have exactly one order-preserving
+    /// alignment with the runtime children. Alignment uses the resolved full CLR type (from a
+    /// <c>clr-namespace</c> xmlns) or short type name, plus a sibling-unique AutomationId when the
+    /// XAML declared one (<see cref="IdentityMatches"/>). Runtime-only children such as toolbar
+    /// items, applied shapes, and DevFlow synthetics are skipped without shifting XAML paths, while
+    /// ambiguous same-type insertions, removals, reorders, and identity mismatches resolve to null.
+    /// <para>
+    /// Siblings with identical static identities are left unmapped because runtime order cannot
+    /// prove which declaration they came from. Add sibling-unique AutomationIds for precise
+    /// tooling. Short-name type collisions are only resolved for
+    /// <c>clr-namespace</c> custom controls (not <c>XmlnsDefinition</c>/URI namespaces).
+    /// </para>
+    /// </summary>
+    public void ApplySourceMap(IReadOnlyList<ElementInfo>? roots)
+    {
+        if (SourceMapProvider is null || roots is null) return;
+        foreach (var root in roots)
+            ApplySourceMapToNode(root, default);
+    }
+
+    private void ApplySourceMapToNode(ElementInfo info, XamlSourceContext ctx)
+    {
+        var childContext = AttachSource(info, ctx);
+        if (info.Children is null) return;
+
+        var alignment = AlignSourceChildren(info.Children, childContext);
+        for (var i = 0; i < info.Children.Count; i++)
+        {
+            var child = info.Children[i];
+            ApplySourceMapToNode(
+                child,
+                alignment is not null && alignment[i] >= 0
+                    ? childContext.ForChild(alignment[i])
+                    : default);
+        }
+    }
+
+    private XamlSourceContext AttachSource(ElementInfo info, XamlSourceContext ctx)
+    {
+        XamlSourceMap? childMap = null;
+        var childBasePath = string.Empty;
+        var expectedChildCount = -1;
+
+        // 1) "Usage" location from the parent XAML at this path — only when the element's identity
+        // (resolved CLR type and/or unique AutomationId) matches what was declared there.
+        var attached = false;
+        if (ctx.Matched && ctx.Map is not null && ctx.Map.TryGet(ctx.Path, out var entry)
+            && IdentityMatches(entry, info))
+        {
+            AttachLocation(info, ctx.Map, entry);
+            attached = true;
+            childMap = ctx.Map;
+            childBasePath = ctx.Path;
+            expectedChildCount = entry.ChildCount;
         }
 
-        return results;
+        // 2) If this element is itself a XAML file root, its descendants use that file's map.
+        // Keyed by the element's runtime FullType, so a returned map means the element genuinely IS
+        // that type: attaching its own root definition is precise even when the parent "usage" path
+        // above did not match. Hence SourceFile means "usage line in the parent XAML" when (1)
+        // attached, otherwise "definition line of this element's own XAML" — both precise, never a
+        // guessed line.
+        var ownMap = info.FullType is not null ? SourceMapProvider!.GetMap(info.FullType) : null;
+        if (ownMap is not null && ownMap.TryGet(string.Empty, out var rootEntry))
+        {
+            if (!attached)
+                AttachLocation(info, ownMap, rootEntry);
+            childMap = ownMap;
+            childBasePath = string.Empty;
+            expectedChildCount = rootEntry.ChildCount;
+        }
+        else if (!attached)
+        {
+            // No source for this element and no own map → break the chain (subtree stays null).
+            return default;
+        }
+
+        if (childMap is null)
+            return default;
+
+        return new XamlSourceContext(childMap, childBasePath, matched: true, expectedChildCount);
+    }
+
+    /// <summary>
+    /// Finds the unique order-preserving alignment from parsed XAML content children to runtime
+    /// children. Unmatched runtime children are framework extras and receive no parent source
+    /// context. Zero or multiple alignments are rejected so source is precise or null.
+    /// </summary>
+    private static int[]? AlignSourceChildren(IReadOnlyList<ElementInfo> children, XamlSourceContext ctx)
+    {
+        if (!ctx.Matched || ctx.Map is null || ctx.ExpectedChildCount < 0)
+            return null;
+
+        var expected = new XamlSourceEntry[ctx.ExpectedChildCount];
+        for (var i = 0; i < expected.Length; i++)
+        {
+            if (!ctx.Map.TryGet(ctx.ChildPath(i), out expected[i]))
+                return null;
+        }
+
+        var ambiguousExpected = new bool[expected.Length];
+        for (var i = 0; i < expected.Length; i++)
+        {
+            for (var j = i + 1; j < expected.Length; j++)
+            {
+                if (!HasSameStaticIdentity(expected[i], expected[j]))
+                    continue;
+
+                ambiguousExpected[i] = true;
+                ambiguousExpected[j] = true;
+            }
+        }
+
+        var runtime = new List<(int OriginalIndex, ElementInfo Info)>();
+        for (var i = 0; i < children.Count; i++)
+        {
+            if (!IsSyntheticElement(children[i]))
+                runtime.Add((i, children[i]));
+        }
+
+        // Count order-preserving embeddings, saturating at 2 because only uniqueness matters.
+        var ways = new byte[expected.Length + 1, runtime.Count + 1];
+        for (var j = 0; j <= runtime.Count; j++)
+            ways[expected.Length, j] = 1;
+
+        for (var i = expected.Length - 1; i >= 0; i--)
+        {
+            for (var j = runtime.Count - 1; j >= 0; j--)
+            {
+                var count = ways[i, j + 1];
+                if (IdentityMatches(expected[i], runtime[j].Info))
+                    count = (byte)Math.Min(2, count + ways[i + 1, j + 1]);
+                ways[i, j] = count;
+            }
+        }
+
+        if (ways[0, 0] != 1)
+            return null;
+
+        var alignment = Enumerable.Repeat(-1, children.Count).ToArray();
+        var expectedIndex = 0;
+        var runtimeIndex = 0;
+        while (expectedIndex < expected.Length)
+        {
+            if (runtimeIndex >= runtime.Count)
+                return null;
+
+            var skipWays = ways[expectedIndex, runtimeIndex + 1];
+            var takeWays = IdentityMatches(expected[expectedIndex], runtime[runtimeIndex].Info)
+                ? ways[expectedIndex + 1, runtimeIndex + 1]
+                : 0;
+
+            if (takeWays == 1 && skipWays == 0)
+            {
+                if (!ambiguousExpected[expectedIndex])
+                    alignment[runtime[runtimeIndex].OriginalIndex] = expectedIndex;
+                expectedIndex++;
+                runtimeIndex++;
+            }
+            else if (skipWays == 1 && takeWays == 0)
+            {
+                runtimeIndex++;
+            }
+            else
+            {
+                return null;
+            }
+        }
+
+        return alignment;
+    }
+
+    private static bool HasSameStaticIdentity(XamlSourceEntry left, XamlSourceEntry right)
+        => string.Equals(left.TypeName, right.TypeName, StringComparison.Ordinal)
+            && string.Equals(left.FullTypeName, right.FullTypeName, StringComparison.Ordinal)
+            && string.Equals(left.AutomationId, right.AutomationId, StringComparison.Ordinal);
+
+    private static void AttachLocation(ElementInfo info, XamlSourceMap map, XamlSourceEntry entry)
+    {
+        info.SourceFile = map.File;
+        info.SourceLine = entry.Line;
+        info.SourceColumn = entry.Column;
+        info.SourceHash = map.ContentHash;
+        info.SourceConfidence = "mapped";
+    }
+
+    /// <summary>
+    /// Matches a parsed entry to a runtime element by identity: the resolved full CLR type when the
+    /// XAML namespace gave one (closing short-name collisions like <c>maui:Label</c> vs
+    /// <c>local:Label</c>), otherwise the short type name; PLUS, when the entry carries a
+    /// (sibling-unique) AutomationId, the runtime element must carry the same one. The AutomationId
+    /// check makes a same-type, same-count sibling reorder resolve to null rather than a wrong line.
+    /// </summary>
+    private static bool IdentityMatches(XamlSourceEntry entry, ElementInfo info)
+    {
+        if (entry.FullTypeName is { Length: > 0 } fullType)
+        {
+            if (!string.Equals(fullType, info.FullType, StringComparison.Ordinal))
+                return false;
+        }
+        else if (!TypeMatches(entry.TypeName, info.Type))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrEmpty(entry.AutomationId) &&
+            !string.Equals(entry.AutomationId, info.AutomationId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TypeMatches(string expected, string? actual)
+        => !string.IsNullOrEmpty(actual) && string.Equals(expected, actual, StringComparison.Ordinal);
+
+    private static bool IsSyntheticElement(ElementInfo info)
+        => info.FullType is { } ft && ft.StartsWith("Microsoft.Maui.DevFlow.Agent.Core.", StringComparison.Ordinal);
+
+    private readonly struct XamlSourceContext
+    {
+        public readonly XamlSourceMap? Map;
+        public readonly string Path;
+        public readonly bool Matched;
+        public readonly int ExpectedChildCount;
+
+        public XamlSourceContext(XamlSourceMap? map, string path, bool matched, int expectedChildCount)
+        {
+            Map = map;
+            Path = path;
+            Matched = matched;
+            ExpectedChildCount = expectedChildCount;
+        }
+
+        public XamlSourceContext ForChild(int index)
+            => Map is null || !Matched
+                ? default
+                : new XamlSourceContext(Map, ChildPath(index), true, expectedChildCount: -1);
+
+        public string ChildPath(int index)
+            => Path.Length == 0 ? index.ToString() : $"{Path}/{index}";
     }
 
     /// <summary>
@@ -446,73 +949,81 @@ public class VisualTreeWalker
     /// </summary>
     public ElementInfo? WalkElement(IVisualTreeElement element, string? parentId, int currentDepth, int maxDepth)
     {
+        if (_walkMaxElements > 0 && _walkElementCount >= _walkMaxElements)
+        {
+            WalkWasTruncated = true;
+            return null;
+        }
+        _walkElementCount++;
+
         var id = GenerateId(element);
         var info = CreateElementInfo(element, id, parentId);
+
+        if (CaptureWalkElements)
+            _walkElements[id] = element;
 
         if (maxDepth > 0 && currentDepth >= maxDepth)
             return info;
 
         info.Children ??= new List<ElementInfo>();
 
-        var children = element.GetVisualChildren();
+        var children = GetTraversalChildren(element);
         foreach (var child in children)
         {
             var childInfo = WalkElement(child, id, currentDepth + 1, maxDepth);
             if (childInfo != null)
                 info.Children.Add(childInfo);
-        }
-
-        // ShellContent-specific: ensure content page is included even if
-        // GetVisualChildren() doesn't expose it (common on GTK/Linux after navigation).
-        if (element is ShellContent sc && sc.Content is IVisualTreeElement scPage
-            && !children.Contains(scPage))
-        {
-            var pageInfo = WalkElement(scPage, id, currentDepth + 1, maxDepth);
-            if (pageInfo != null)
-                info.Children.Add(pageInfo);
+            if (WalkWasTruncated)
+                break;
         }
 
         // Add ToolbarItems as synthetic children of Pages
-        if (element is Page page)
+        if (!CaptureLayoutOnly && !WalkWasTruncated && element is Page page)
         {
             // NavBarTitle — inject page title as synthetic element
             AddNavBarTitle(page, id, info);
 
             foreach (var toolbarItem in page.ToolbarItems)
             {
+                if (!TryReserveSyntheticElement())
+                    break;
                 var tiInfo = CreateToolbarItemInfo(toolbarItem, id);
                 info.Children.Add(tiInfo);
             }
 
             // Add synthetic back button when there's a navigation stack
-            var backInfo = CreateBackButtonInfo(page, id);
-            if (backInfo != null)
-                info.Children.Add(backInfo);
+            if (!WalkWasTruncated)
+            {
+                var backInfo = CreateBackButtonInfo(page, id);
+                if (backInfo != null && TryReserveSyntheticElement())
+                    info.Children.Add(backInfo);
+            }
 
             // SearchHandler (Shell only)
-            AddSearchHandler(page, id, info);
+            if (!WalkWasTruncated)
+                AddSearchHandler(page, id, info);
         }
 
         // Shell-level synthetics: flyout button, flyout items, tab bar
-        if (element is Shell shell)
+        if (!CaptureLayoutOnly && !WalkWasTruncated && element is Shell shell)
         {
             AddShellSynthetics(shell, id, info);
         }
 
         // NavigationPage-level synthetics
-        if (element is NavigationPage navPage2)
+        if (!CaptureLayoutOnly && !WalkWasTruncated && element is NavigationPage navPage2)
         {
             AddNavigationPageSynthetics(navPage2, id, info);
         }
 
         // FlyoutPage-level synthetics
-        if (element is FlyoutPage flyoutPage)
+        if (!CaptureLayoutOnly && !WalkWasTruncated && element is FlyoutPage flyoutPage)
         {
             AddFlyoutPageSynthetics(flyoutPage, id, info);
         }
 
         // TabbedPage-level synthetics
-        if (element is TabbedPage tabbedPage)
+        if (!CaptureLayoutOnly && !WalkWasTruncated && element is TabbedPage tabbedPage)
         {
             AddTabbedPageSynthetics(tabbedPage, id, info);
         }
@@ -528,63 +1039,13 @@ public class VisualTreeWalker
     /// </summary>
     public List<ElementInfo> Query(Application app, string? type = null, string? automationId = null, string? text = null)
     {
-        var results = new List<ElementInfo>();
-        if (app is not IVisualTreeElement appElement)
-            return results;
-
-        QueryRecursive(appElement, type, automationId, text, null, results);
+        var elements = FlattenElementInfos(WalkTree(app)).ToList();
+        var results = elements
+            .Where(info => MatchesElementInfo(info, type, automationId, text))
+            .ToList();
+        foreach (var result in results)
+            result.Children = null;
         return results;
-    }
-
-    private void QueryRecursive(IVisualTreeElement element, string? type, string? automationId, string? text, string? parentId, List<ElementInfo> results)
-    {
-        var id = GenerateId(element);
-        var info = CreateElementInfo(element, id, parentId);
-
-        MatchAndAdd(info, type, automationId, text, results);
-
-        var children = element.GetVisualChildren();
-        foreach (var child in children)
-            QueryRecursive(child, type, automationId, text, id, results);
-
-        // ShellContent-specific: include content page if not already traversed
-        if (element is ShellContent sc && sc.Content is IVisualTreeElement scPage
-            && !children.Contains(scPage))
-        {
-            QueryRecursive(scPage, type, automationId, text, id, results);
-        }
-
-        // Also query ToolbarItems and back button on Pages
-        if (element is Page page)
-        {
-            foreach (var toolbarItem in page.ToolbarItems)
-            {
-                var tiInfo = CreateToolbarItemInfo(toolbarItem, id);
-                MatchAndAdd(tiInfo, type, automationId, text, results);
-            }
-
-            var backInfo = CreateBackButtonInfo(page, id);
-            if (backInfo != null)
-                MatchAndAdd(backInfo, type, automationId, text, results);
-        }
-    }
-
-    private static void MatchAndAdd(ElementInfo info, string? type, string? automationId, string? text, List<ElementInfo> results)
-    {
-        bool matches = true;
-
-        if (type != null && !info.Type.Equals(type, StringComparison.OrdinalIgnoreCase)
-            && !info.FullType.Equals(type, StringComparison.OrdinalIgnoreCase))
-            matches = false;
-
-        if (automationId != null && !string.Equals(info.AutomationId, automationId, StringComparison.OrdinalIgnoreCase))
-            matches = false;
-
-        if (text != null && (info.Text == null || !info.Text.Contains(text, StringComparison.OrdinalIgnoreCase)))
-            matches = false;
-
-        if (matches && (type != null || automationId != null || text != null))
-            results.Add(info);
     }
 
     /// <summary>
@@ -592,6 +1053,9 @@ public class VisualTreeWalker
     /// </summary>
     private string GenerateId(IVisualTreeElement element)
     {
+        if (_objectToExternalId.TryGetValue(element, out var objectCachedId))
+            return objectCachedId.Value;
+
         // Check if we've already generated an ID for this Element.Id in this walk
         if (element is Element el && _elementIdToExternalId.TryGetValue(el.Id, out var cachedId))
             return cachedId;
@@ -645,10 +1109,24 @@ public class VisualTreeWalker
         }
 
         _usedIds.Add(id);
+        _objectToExternalId.Add(element, new GeneratedElementId(id));
         if (element is Element elFinal)
             _elementIdToExternalId[elFinal.Id] = id;
         return id;
     }
+
+    private bool TryReserveSyntheticElement()
+    {
+        if (_walkMaxElements > 0 && _walkElementCount >= _walkMaxElements)
+        {
+            WalkWasTruncated = true;
+            return false;
+        }
+        _walkElementCount++;
+        return true;
+    }
+
+    private sealed record GeneratedElementId(string Value);
 
     /// <summary>
     /// Generates a stable ID for a synthetic/non-visual element.
@@ -737,7 +1215,7 @@ public class VisualTreeWalker
         var id = GenerateId(element);
         if (id == targetId) return element;
 
-        var children = element.GetVisualChildren();
+        var children = GetTraversalChildren(element);
 
         // Check synthetics on Pages
         if (element is Page page)
@@ -749,7 +1227,7 @@ public class VisualTreeWalker
             // ToolbarItems
             foreach (var toolbarItem in page.ToolbarItems)
             {
-                var tiId = GenerateObjectId(toolbarItem, toolbarItem.AutomationId);
+                var tiId = GetToolbarItemId(toolbarItem);
                 if (tiId == targetId) return toolbarItem;
             }
 
@@ -797,15 +1275,45 @@ public class VisualTreeWalker
             if (result != null) return result;
         }
 
-        // ShellContent special case
-        if (element is ShellContent sc && sc.Content is IVisualTreeElement scPage
-            && !children.Contains(scPage))
+        return null;
+    }
+
+    private static IReadOnlyList<IVisualTreeElement> GetTraversalChildren(IVisualTreeElement element)
+    {
+        var children = element.GetVisualChildren();
+        List<IVisualTreeElement>? expanded = null;
+
+        void Add(IVisualTreeElement? child)
         {
-            var result = FindByIdRecursive(scPage, targetId, id);
-            if (result != null) return result;
+            if (child is null)
+                return;
+
+            var current = expanded ?? children;
+            if (current.Any(existing => ReferenceEquals(existing, child)))
+                return;
+
+            expanded ??= children.ToList();
+            expanded.Add(child);
         }
 
-        return null;
+        switch (element)
+        {
+            case ShellContent shellContent:
+                Add(shellContent.Content as IVisualTreeElement);
+                break;
+            case NavigationPage navigationPage:
+                Add(navigationPage.CurrentPage);
+                break;
+            case FlyoutPage flyoutPage:
+                Add(flyoutPage.Flyout);
+                Add(flyoutPage.Detail);
+                break;
+            case TabbedPage tabbedPage:
+                Add(tabbedPage.CurrentPage);
+                break;
+        }
+
+        return expanded ?? children;
     }
 
     private object? FindNavBarTitleById(Page page, string parentId, string targetId)
@@ -848,7 +1356,7 @@ public class VisualTreeWalker
             var handler = Shell.GetSearchHandler(page);
             if (handler == null) return null;
 
-            var marker = new SearchHandlerMarker { Handler = handler };
+            var marker = new SearchHandlerMarker { Handler = handler, Page = page };
             var id = GenerateObjectId(marker, $"SearchHandler_{parentId}");
             return id == targetId ? marker : null;
         }
@@ -965,6 +1473,7 @@ public class VisualTreeWalker
 
         var title = page.Title;
         if (string.IsNullOrEmpty(title)) return;
+        if (!TryReserveSyntheticElement()) return;
 
         var marker = new NavBarTitleMarker { Title = title, Page = page };
         var id = GenerateObjectId(marker, $"NavBarTitle_{parentId}");
@@ -989,8 +1498,9 @@ public class VisualTreeWalker
         {
             var handler = Shell.GetSearchHandler(page);
             if (handler == null) return;
+            if (!TryReserveSyntheticElement()) return;
 
-            var marker = new SearchHandlerMarker { Handler = handler };
+            var marker = new SearchHandlerMarker { Handler = handler, Page = page };
             var id = GenerateObjectId(marker, $"SearchHandler_{parentId}");
             parentInfo.Children ??= new List<ElementInfo>();
             var shInfo = new ElementInfo
@@ -1022,6 +1532,7 @@ public class VisualTreeWalker
         // Flyout button
         if (shell.FlyoutBehavior != FlyoutBehavior.Disabled)
         {
+            if (!TryReserveSyntheticElement()) return;
             var flyoutMarker = new FlyoutButtonMarker { Shell = shell };
             var flyoutId = GenerateObjectId(flyoutMarker, "FlyoutButton");
             var flyoutBtnInfo = new ElementInfo
@@ -1046,6 +1557,8 @@ public class VisualTreeWalker
             {
                 if (item is BaseShellItem bsi && bsi.FlyoutItemIsVisible)
                 {
+                    if (!TryReserveSyntheticElement())
+                        break;
                     var isSelected = shell.CurrentItem == item;
                     var fiMarker = new ShellFlyoutItemMarker { Item = item, Shell = shell };
                     var fiId = GenerateObjectId(fiMarker, $"FlyoutItem_{bsi.Route ?? bsi.Title}");
@@ -1086,6 +1599,8 @@ public class VisualTreeWalker
                 {
                     foreach (var section in currentItem.Items)
                     {
+                        if (!TryReserveSyntheticElement())
+                            break;
                         var isSelected = currentItem.CurrentItem == section;
                         var tabMarker = new ShellTabMarker { Section = section, Shell = shell };
                         var tabId = GenerateObjectId(tabMarker, $"Tab_{section.Route ?? section.Title}");
@@ -1126,7 +1641,8 @@ public class VisualTreeWalker
                     parentInfo.Children.Add(headerInfo);
                 }
             }
-            if (shell.FlyoutFooter is View footerView && footerView is IVisualTreeElement footerVte)
+            if (!WalkWasTruncated &&
+                shell.FlyoutFooter is View footerView && footerView is IVisualTreeElement footerVte)
             {
                 var footerInfo = WalkElement(footerVte, parentId, 1, 3);
                 if (footerInfo != null)
@@ -1147,6 +1663,7 @@ public class VisualTreeWalker
             if (currentPage != null && !string.IsNullOrEmpty(currentPage.Title)
                 && NavigationPage.GetHasNavigationBar(currentPage))
             {
+                if (!TryReserveSyntheticElement()) return;
                 var marker = new NavBarTitleMarker { Title = currentPage.Title, Page = currentPage };
                 var id = GenerateObjectId(marker, $"NavBarTitle_{parentId}");
                 parentInfo.Children ??= new List<ElementInfo>();
@@ -1169,6 +1686,7 @@ public class VisualTreeWalker
 
     private void AddFlyoutPageSynthetics(FlyoutPage flyoutPage, string parentId, ElementInfo parentInfo)
     {
+        if (!TryReserveSyntheticElement()) return;
         var marker = new FlyoutToggleMarker { FlyoutPage = flyoutPage };
         var id = GenerateObjectId(marker, "FlyoutToggle");
         parentInfo.Children ??= new List<ElementInfo>();
@@ -1196,6 +1714,8 @@ public class VisualTreeWalker
             {
                 if (child is Page tabPage)
                 {
+                    if (!TryReserveSyntheticElement())
+                        break;
                     var isSelected = tabbedPage.CurrentPage == tabPage;
                     var marker = new TabbedPageTabMarker { Page = tabPage, TabbedPage = tabbedPage };
                     var tabId = GenerateObjectId(marker, $"Tab_{tabPage.AutomationId ?? tabPage.Title}");
@@ -1225,7 +1745,11 @@ public class VisualTreeWalker
     // ── Marker types for synthetic elements ──
 
     public class NavBarTitleMarker { public string Title { get; init; } = ""; public Page Page { get; init; } = null!; }
-    public class SearchHandlerMarker { public SearchHandler Handler { get; init; } = null!; }
+    public class SearchHandlerMarker
+    {
+        public SearchHandler Handler { get; init; } = null!;
+        public Page Page { get; init; } = null!;
+    }
     public class FlyoutButtonMarker { public Shell Shell { get; init; } = null!; }
     public class ShellFlyoutItemMarker { public ShellItem Item { get; init; } = null!; public Shell Shell { get; init; } = null!; }
     public class ShellTabMarker { public ShellSection Section { get; init; } = null!; public Shell Shell { get; init; } = null!; }
@@ -1252,7 +1776,8 @@ public class VisualTreeWalker
 
     private ElementInfo CreateToolbarItemInfo(ToolbarItem item, string parentId)
     {
-        var id = GenerateObjectId(item, item.AutomationId);
+        var id = GetToolbarItemId(item);
+        _usedIds.Add(id);
         var tiInfo = new ElementInfo
         {
             Id = id,
@@ -1266,6 +1791,14 @@ public class VisualTreeWalker
         };
         TryPopulateSyntheticBounds(id, item, tiInfo);
         return tiInfo;
+    }
+
+    internal static string GetToolbarItemId(ToolbarItem item)
+    {
+        var suffix = item.Id.ToString("N")[..8];
+        return string.IsNullOrWhiteSpace(item.AutomationId)
+            ? $"ToolbarItem_{suffix}"
+            : $"{item.AutomationId}_{suffix}";
     }
 
     private ElementInfo? CreateBackButtonInfo(Page page, string parentId)
@@ -1341,7 +1874,9 @@ public class VisualTreeWalker
     private ElementInfo CreateElementInfo(IVisualTreeElement element, string id, string? parentId)
     {
         // Try to resolve Comet view type first (if Comet is loaded)
-        var cometResolved = CometViewResolver.TryResolveCometView(element);
+        var cometResolved = CaptureLayoutOnly
+            ? null
+            : CometViewResolver.TryResolveCometView(element);
 
         var info = new ElementInfo
         {
@@ -1349,11 +1884,37 @@ public class VisualTreeWalker
             ParentId = parentId,
             Type = cometResolved?.Type ?? element.GetType().Name,
             FullType = cometResolved?.FullType ?? element.GetType().FullName ?? element.GetType().Name,
+            // Window and Shell item nodes are structural rather than IView instances, but their
+            // descendants are the live rendered tree. Preserve their structural visibility so
+            // effective-visibility consumers do not incorrectly hide every control beneath them.
+            IsVisible = element switch
+            {
+                Window => true,
+                BaseShellItem shellItem => IsActiveShellItem(shellItem),
+                _ => false,
+            },
+            IsEnabled = element switch
+            {
+                Window => true,
+                BaseShellItem shellItem => shellItem.IsEnabled,
+                _ => false,
+            },
         };
+
+        if (element is Page page)
+        {
+            info.Role = "page";
+            info.IsSelected = _activePages.Contains(page);
+        }
 
         if (element is VisualElement ve)
         {
             info.AutomationId = ve.AutomationId;
+            if (!CaptureLayoutOnly)
+            {
+                info.StableItemKey = FindStableItemKey(ve);
+                info.CollectionScope = FindCollectionScope(ve);
+            }
             info.IsVisible = ve.IsVisible;
             info.IsEnabled = ve.IsEnabled;
             info.IsFocused = ve.IsFocused;
@@ -1367,11 +1928,14 @@ public class VisualTreeWalker
             };
 
             // Populate style classes
-            if (ve is NavigableElement ne && ne.StyleClass is { Count: > 0 } sc)
+            if (!CaptureLayoutOnly &&
+                ve is NavigableElement ne &&
+                ne.StyleClass is { Count: > 0 } sc)
                 info.StyleClass = sc.ToList();
 
             // Populate native view info from handler
-            PopulateNativeInfo(info, ve);
+            if (!CaptureLayoutOnly)
+                PopulateNativeInfo(info, ve);
 
             // Resolve window-absolute bounds via platform-native APIs
             info.WindowBounds = ResolveWindowBounds(ve);
@@ -1397,48 +1961,56 @@ public class VisualTreeWalker
             }
 
             // Try to extract text from Comet views via IText interface
-            if (element is IText iText && !string.IsNullOrEmpty(iText.Text))
+            if (!CaptureLayoutOnly &&
+                element is IText iText &&
+                !string.IsNullOrEmpty(iText.Text))
                 info.Text = iText.Text;
         }
 
-        // Extract text from common controls (including Shell elements)
-        info.Text ??= element switch
+        if (!CaptureLayoutOnly)
         {
-            Label l => l.Text,
-            Button b => b.Text,
-            Entry e => e.Text,
-            Editor ed => ed.Text,
-            SearchBar sb => sb.Text,
-            Span s => s.Text,
-            BaseShellItem si => si.Title,
-            // Fallback to IText interface for non-Controls types (e.g. Comet views)
-            IText it when info.Text == null => it.Text,
-            _ => null
-        };
+            // Extract text from common controls (including Shell elements)
+            info.Text ??= element switch
+            {
+                Label l => l.Text,
+                Button b => b.Text,
+                Entry e => e.Text,
+                Editor ed => ed.Text,
+                SearchBar sb => sb.Text,
+                Span s => s.Text,
+                BaseShellItem si => si.Title,
+                // Fallback to IText interface for non-Controls types (e.g. Comet views)
+                IText it when info.Text == null => it.Text,
+                _ => null
+            };
 
-        // Extract value/state from stateful controls
-        info.Value = element switch
-        {
-            Switch sw => sw.IsToggled.ToString(),
-            CheckBox cb => cb.IsChecked.ToString(),
-            Slider sl => sl.Value.ToString("F2"),
-            Stepper st => st.Value.ToString("F2"),
-            ProgressBar pb => pb.Progress.ToString("F2"),
-            Picker pk => pk.SelectedItem?.ToString(),
-            DatePicker dp => dp.Date.ToString(),
-            TimePicker tp => tp.Time.ToString(),
-            RadioButton rb => rb.IsChecked.ToString(),
-            _ => null
-        };
+            // Extract value/state from stateful controls
+            info.Value = element switch
+            {
+                Switch sw => sw.IsToggled.ToString(),
+                CheckBox cb => cb.IsChecked.ToString(),
+                Slider sl => sl.Value.ToString("F2"),
+                Stepper st => st.Value.ToString("F2"),
+                ProgressBar pb => pb.Progress.ToString("F2"),
+                Picker pk => pk.SelectedItem?.ToString(),
+                DatePicker dp => dp.Date.ToString(),
+                TimePicker tp => tp.Time.ToString(),
+                RadioButton rb => rb.IsChecked.ToString(),
+                _ => null
+            };
+        }
 
-        info.IsSelected = element switch
+        if (!CaptureLayoutOnly)
         {
-            CheckBox cb => cb.IsChecked,
-            RadioButton rb => rb.IsChecked,
-            Switch sw => sw.IsToggled,
-            Picker pk => pk.SelectedIndex >= 0,
-            _ => info.IsSelected
-        };
+            info.IsSelected = element switch
+            {
+                CheckBox cb => cb.IsChecked,
+                RadioButton rb => rb.IsChecked,
+                Switch sw => sw.IsToggled,
+                Picker pk => pk.SelectedIndex >= 0,
+                _ => info.IsSelected
+            };
+        }
 
         // Populate gesture recognizer metadata
         if (element is View view && view.GestureRecognizers.Count > 0)
@@ -1465,7 +2037,7 @@ public class VisualTreeWalker
         }
 
         // Populate ItemsView metadata (item count for CollectionView/ListView/CarouselView)
-        if (element is ItemsView itemsView)
+        if (!CaptureLayoutOnly && element is ItemsView itemsView)
         {
             info.NativeProperties ??= new Dictionary<string, string?>();
             try
@@ -1484,7 +2056,7 @@ public class VisualTreeWalker
         }
 
         // Add Comet-specific properties if this is a Comet view
-        if (cometResolved != null)
+        if (!CaptureLayoutOnly && cometResolved != null)
         {
             info.NativeProperties ??= new Dictionary<string, string?>();
             foreach (var kvp in cometResolved.Value.Properties)
@@ -1501,6 +2073,63 @@ public class VisualTreeWalker
         }
 
         return info;
+    }
+
+    private static bool IsActiveShellItem(BaseShellItem item)
+    {
+        if (!item.IsVisible)
+            return false;
+
+        var shell = Shell.Current;
+        if (shell is null)
+            return true;
+
+        return item switch
+        {
+            ShellItem shellItem => ReferenceEquals(shell.CurrentItem, shellItem),
+            ShellSection section => ReferenceEquals(shell.CurrentItem?.CurrentItem, section),
+            ShellContent content => ReferenceEquals(
+                shell.CurrentItem?.CurrentItem?.CurrentItem,
+                content),
+            _ => true,
+        };
+    }
+
+    private static string? FindStableItemKey(Element? element)
+    {
+        for (var current = element; current is not null; current = current.Parent)
+        {
+            if (current is BindableObject bindable)
+            {
+                var key = DevFlowTest.GetStableItemKey(bindable)?.Trim();
+                if (string.IsNullOrWhiteSpace(key) &&
+                    bindable.BindingContext is IDevFlowStableItemKey provider)
+                {
+                    key = provider.DevFlowStableItemKey?.Trim();
+                }
+                if (!string.IsNullOrWhiteSpace(key))
+                {
+                    if (key.Length > 256)
+                        return null;
+                    var digest = System.Security.Cryptography.SHA256.HashData(
+                        System.Text.Encoding.UTF8.GetBytes(key));
+                    return "sha256:" + Convert.ToHexString(digest).ToLowerInvariant();
+                }
+            }
+            if (current is CollectionView or CarouselView || current.GetType().Name == "ListView")
+                break;
+        }
+        return null;
+    }
+
+    private static string? FindCollectionScope(Element? element)
+    {
+        for (var current = element?.Parent; current is not null; current = current.Parent)
+        {
+            if (current is CollectionView or CarouselView || current.GetType().Name == "ListView")
+                return (current as VisualElement)?.AutomationId;
+        }
+        return null;
     }
 
     protected virtual void PopulateNativeInfo(ElementInfo info, VisualElement ve)
@@ -1535,6 +2164,8 @@ public class VisualTreeWalker
     {
         _usedIds.Clear();
         _elementIdToExternalId.Clear();
+        _objectToExternalId.Clear();
         _syntheticBounds.Clear();
+        _walkElements.Clear();
     }
 }

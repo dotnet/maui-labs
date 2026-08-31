@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/dotnet/maui-labs/main/tests/DevFlow/InspectorCorpus/schemas/selector-health-corpus-v1.json",
+  "title": "DevFlow Inspector selector-health corpus case v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "id",
+    "kind",
+    "disposition",
+    "provenance",
+    "fixture",
+    "expect"
+  ],
+  "properties": {
+    "schema": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "enum": [
+        "baseline",
+        "mutation",
+        "no-repair",
+        "product-regression",
+        "repair-positive",
+        "repair-negative"
+      ]
+    },
+    "disposition": {
+      "enum": [
+        "diagnostic-only",
+        "no-repair",
+        "repair-eligible"
+      ]
+    },
+    "expectedFailureClass": {
+      "description": "Hand-assigned ground-truth failure class from MauiFlowFailureClasses. Present only for cases that model a runtime replay failure; authoring and source advisories are deliberately unlabeled and are excluded from the classification denominator.",
+      "enum": [
+        "flow-invalid",
+        "schema-unsupported",
+        "capability-missing",
+        "lease-conflict",
+        "lease-lost",
+        "cancelled",
+        "timeout",
+        "reset-failed",
+        "precondition-unsatisfied",
+        "route-state-drift",
+        "locator-not-found",
+        "locator-ambiguous",
+        "not-visible",
+        "disabled",
+        "unstable-bounds",
+        "action-rejected",
+        "drive-failed",
+        "unknown-completion",
+        "workflow-command-conflict",
+        "secret-unavailable",
+        "unsafe-value",
+        "assertion-failed",
+        "transport",
+        "agent-disconnected",
+        "infrastructure"
+      ]
+    },
+    "provenance": {
+      "description": "Who labeled this case, when, how, and from what kind of source. Required so a curated denominator is never mistaken for a set of independent observed trials.",
+      "type": "object",
+      "required": [
+        "labeledBy",
+        "labeledOn",
+        "method",
+        "sourceKind",
+        "reviewStatus"
+      ],
+      "properties": {
+        "labeledBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "labeledOn": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "method": {
+          "enum": [
+            "hand-authored",
+            "adapted-from-case",
+            "derived-from-replay",
+            "derived-from-incident"
+          ]
+        },
+        "sourceKind": {
+          "enum": [
+            "synthetic",
+            "observed-local-run",
+            "observed-ci-run",
+            "reported-issue"
+          ]
+        },
+        "reviewStatus": {
+          "enum": [
+            "unreviewed",
+            "peer-reviewed"
+          ]
+        },
+        "derivedFrom": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 512
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "adapted-from-case"
+              }
+            },
+            "required": [
+              "method"
+            ]
+          },
+          "then": {
+            "required": [
+              "derivedFrom"
+            ]
+          }
+        }
+      ]
+    },
+    "fixture": {
+      "type": "object"
+    },
+    "expect": {
+      "type": "object",
+      "required": [
+        "diagnosticIds"
+      ],
+      "properties": {
+        "diagnosticIds": {
+          "type": "array",
+          "items": {
+            "pattern": "^(?:DFSH|DFXAML|DFCS)[0-9]{3}$"
+          }
+        },
+        "candidateKinds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "repairEligible": {
+          "type": "boolean"
+        },
+        "ineligibilityCodes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

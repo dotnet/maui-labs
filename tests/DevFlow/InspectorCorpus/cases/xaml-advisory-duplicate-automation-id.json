@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "id": "xaml-advisory-duplicate-automation-id",
+  "kind": "no-repair",
+  "disposition": "diagnostic-only",
+  "provenance": {
+    "labeledBy": "devflow-maintainers",
+    "labeledOn": "2026-08-15",
+    "method": "hand-authored",
+    "sourceKind": "synthetic",
+    "reviewStatus": "unreviewed",
+    "notes": "Source advisory; models no runtime failure."
+  },
+  "fixture": {
+    "xaml": "<ContentPage><Button AutomationId=\"SaveButton\" /><Button AutomationId=\"SaveButton\" /></ContentPage>",
+    "scope": "project"
+  },
+  "expect": {
+    "diagnosticIds": [
+      "DFXAML002"
+    ],
+    "repairEligible": false,
+    "ineligibilityCodes": [
+      "automation-id-duplicate-project"
+    ]
+  }
+}

@@ -1,0 +1,641 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/dotnet/maui-labs/main/docs/DevFlow/spec/schemas/maui-flow-v2.json",
+  "title": "MAUI Executable Flow v2",
+  "description": "The authoritative JSON payload embedded in a Markdown ```json maui-test fenced block. Unknown properties are extensions and must survive compatible readers and writers.",
+  "type": "object",
+  "required": [
+    "schema",
+    "name",
+    "steps"
+  ],
+  "properties": {
+    "schema": {
+      "const": 2,
+      "default": 2,
+      "description": "Executable flow schema version."
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable scenario name."
+    },
+    "app": {
+      "$ref": "#/$defs/NullableString"
+    },
+    "platform": {
+      "$ref": "#/$defs/NullableString"
+    },
+    "recordedAt": {
+      "$ref": "#/$defs/NullableString"
+    },
+    "preconditions": {
+      "$ref": "#/$defs/NullableString"
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/FlowStep"
+      }
+    },
+    "expectedEvidence": {
+      "$ref": "#/$defs/NullableFlowExpectedEvidenceList",
+      "description": "Artifacts this flow declares a run is expected to produce. Declaring an expectation records whether the artifact was produced; it never compares artifact content and never causes the artifact to be captured."
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "NullableString": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "NullableInteger": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "NullableNumber": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "NullableBoolean": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "NullableStringList": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "NullableFlowSelector": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FlowSelector"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "NullableFlowTypeIndex": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FlowTypeIndex"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "NullableFlowStepArgs": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FlowStepArgs"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "NullableFlowAssertList": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/FlowAssert"
+      }
+    },
+    "NullableFlowExpectedEvidenceList": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "maxItems": 16,
+      "items": {
+        "$ref": "#/$defs/FlowExpectedEvidence"
+      }
+    },
+    "FlowExpectedEvidence": {
+      "type": "object",
+      "description": "A declaration that a run is expected to produce a named artifact. This is a production check only: it records whether the artifact exists, never what it contains. It is not a golden image, not a screenshot diff, and not a visual assertion.",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/NullableString",
+          "description": "Optional stable identity for this declaration. Must be unique within its flow or step."
+        },
+        "kind": {
+          "type": "string",
+          "description": "The artifact class expected. 'business-oracle' additionally requires 'reference' naming the oracle id.",
+          "enum": [
+            "screenshot",
+            "visual-tree",
+            "logs",
+            "failure-evidence",
+            "device-recording",
+            "run-report",
+            "business-oracle"
+          ]
+        },
+        "reference": {
+          "$ref": "#/$defs/NullableString",
+          "description": "The named target the expectation points at. Required for 'business-oracle', where it is the oracle id."
+        },
+        "note": {
+          "$ref": "#/$defs/NullableString",
+          "description": "Reviewer-facing note explaining why this evidence is expected."
+        }
+      },
+      "additionalProperties": true
+    },
+    "FlowSelector": {
+      "type": "object",
+      "description": "A durable selector. AutomationId is preferred; raw runtime IDs and type-index selectors are fragile.",
+      "properties": {
+        "automationId": {
+          "$ref": "#/$defs/NullableString"
+        },
+        "stableItemKey": {
+          "$ref": "#/$defs/NullableString",
+          "description": "App-supplied stable item identity. Valid only with automationId and collectionScope."
+        },
+        "collectionScope": {
+          "$ref": "#/$defs/NullableString",
+          "description": "AutomationId of the collection that scopes stableItemKey."
+        },
+        "text": {
+          "$ref": "#/$defs/NullableString"
+        },
+        "id": {
+          "$ref": "#/$defs/NullableString"
+        },
+        "typeIndex": {
+          "$ref": "#/$defs/NullableFlowTypeIndex"
+        },
+        "type": {
+          "$ref": "#/$defs/NullableString"
+        },
+        "index": {
+          "$ref": "#/$defs/NullableInteger"
+        },
+        "selectorKind": {
+          "$ref": "#/$defs/NullableString"
+        },
+        "matchCount": {
+          "$ref": "#/$defs/NullableInteger"
+        },
+        "quality": {
+          "$ref": "#/$defs/NullableString"
+        },
+        "fragilityReasons": {
+          "$ref": "#/$defs/NullableStringList"
+        }
+      },
+      "anyOf": [
+        {
+          "properties": {
+            "automationId": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "automationId"
+          ]
+        },
+        {
+          "properties": {
+            "text": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "text"
+          ]
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "id"
+          ]
+        },
+        {
+          "properties": {
+            "typeIndex": {
+              "$ref": "#/$defs/FlowTypeIndex"
+            }
+          },
+          "required": [
+            "typeIndex"
+          ]
+        },
+        {
+          "properties": {
+            "selectorKind": {
+              "const": "typeIndex"
+            },
+            "type": {
+              "type": "string",
+              "minLength": 1
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "selectorKind",
+            "type",
+            "index"
+          ]
+        }
+      ],
+      "additionalProperties": true
+    },
+    "FlowTypeIndex": {
+      "type": "object",
+      "required": [
+        "type",
+        "index"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    },
+    "FlowAssert": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Unknown kinds are retained as warnings when verify is false. A kind that cannot be evaluated on replay fails the step when verify is true."
+        },
+        "selector": {
+          "$ref": "#/$defs/NullableFlowSelector"
+        },
+        "name": {
+          "$ref": "#/$defs/NullableString"
+        },
+        "expected": {
+          "$ref": "#/$defs/NullableString"
+        },
+        "verify": {
+          "type": "boolean",
+          "default": false
+        },
+        "note": {
+          "$ref": "#/$defs/NullableString"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "verify": {
+                "const": true
+              }
+            },
+            "required": [
+              "verify"
+            ]
+          },
+          "then": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "propEquals",
+                  "exists",
+                  "notExists",
+                  "routeIs"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "verify": {
+                "const": true
+              },
+              "kind": {
+                "const": "propEquals"
+              }
+            },
+            "required": [
+              "verify",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "selector": {
+                "$ref": "#/$defs/FlowSelector"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "selector",
+              "name"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "verify": {
+                "const": true
+              },
+              "kind": {
+                "const": "notExists"
+              }
+            },
+            "required": [
+              "verify",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "selector": {
+                "$ref": "#/$defs/FlowSelector"
+              }
+            },
+            "required": [
+              "selector"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "verify": {
+                "const": true
+              },
+              "kind": {
+                "const": "exists"
+              }
+            },
+            "required": [
+              "verify",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "selector": {
+                "$ref": "#/$defs/FlowSelector"
+              }
+            },
+            "required": [
+              "selector"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "verify": {
+                "const": true
+              },
+              "kind": {
+                "const": "routeIs"
+              }
+            },
+            "required": [
+              "verify",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "expected": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "expected"
+            ]
+          }
+        }
+      ],
+      "additionalProperties": true
+    },
+    "FlowStepArgs": {
+      "type": "object",
+      "properties": {
+        "selector": {
+          "$ref": "#/$defs/NullableFlowSelector"
+        },
+        "text": {
+          "$ref": "#/$defs/NullableString"
+        },
+        "name": {
+          "$ref": "#/$defs/NullableString"
+        },
+        "value": {
+          "$ref": "#/$defs/NullableString"
+        },
+        "route": {
+          "$ref": "#/$defs/NullableString"
+        },
+        "theme": {
+          "$ref": "#/$defs/NullableString"
+        },
+        "valueSource": {
+          "$ref": "#/$defs/NullableString"
+        },
+        "secretEnvironmentVariable": {
+          "$ref": "#/$defs/NullableString"
+        },
+        "element": {
+          "$ref": "#/$defs/NullableString",
+          "description": "A stale runtime ID retained for recording compatibility; replay resolves selector instead."
+        },
+        "dx": {
+          "$ref": "#/$defs/NullableNumber"
+        },
+        "dy": {
+          "$ref": "#/$defs/NullableNumber"
+        },
+        "itemIndex": {
+          "$ref": "#/$defs/NullableInteger"
+        },
+        "position": {
+          "$ref": "#/$defs/NullableString"
+        },
+        "animated": {
+          "$ref": "#/$defs/NullableBoolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "FlowStep": {
+      "type": "object",
+      "required": [
+        "seq",
+        "action"
+      ],
+      "properties": {
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "stepId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^(?![0-9]+$)[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional unique stable step identity. Numeric values are reserved for legacy seq lookup; sequence-shaped IDs use the recorder's canonical step-NNNN form for their own seq."
+        },
+        "action": {
+          "enum": [
+            "tap",
+            "fill",
+            "scroll",
+            "navigate",
+            "back",
+            "setTheme",
+            "setProperty",
+            "assert"
+          ]
+        },
+        "target": {
+          "$ref": "#/$defs/NullableFlowSelector"
+        },
+        "value": {
+          "$ref": "#/$defs/NullableString"
+        },
+        "args": {
+          "$ref": "#/$defs/NullableFlowStepArgs"
+        },
+        "page": {
+          "$ref": "#/$defs/NullableString"
+        },
+        "navigated": {
+          "type": "boolean",
+          "default": false
+        },
+        "fragile": {
+          "type": "boolean",
+          "default": false
+        },
+        "screenshot": {
+          "$ref": "#/$defs/NullableString",
+          "description": "Legacy shorthand for a step-scoped screenshot expectation. Read as an expectedEvidence declaration of kind 'screenshot'; prefer expectedEvidence for new flows."
+        },
+        "asserts": {
+          "$ref": "#/$defs/NullableFlowAssertList"
+        },
+        "expectedEvidence": {
+          "$ref": "#/$defs/NullableFlowExpectedEvidenceList",
+          "description": "Artifacts this step declares a run is expected to produce. Production check only; never a content comparison."
+        },
+        "acceptanceCriterionIds": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "enum": [
+                  "tap",
+                  "fill",
+                  "setProperty"
+                ]
+              }
+            },
+            "required": [
+              "action"
+            ]
+          },
+          "then": {
+            "anyOf": [
+              {
+                "properties": {
+                  "target": {
+                    "$ref": "#/$defs/FlowSelector"
+                  }
+                },
+                "required": [
+                  "target"
+                ]
+              },
+              {
+                "properties": {
+                  "args": {
+                    "type": "object",
+                    "required": [
+                      "selector"
+                    ],
+                    "properties": {
+                      "selector": {
+                        "$ref": "#/$defs/FlowSelector"
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "args"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "additionalProperties": true
+    }
+  }
+}

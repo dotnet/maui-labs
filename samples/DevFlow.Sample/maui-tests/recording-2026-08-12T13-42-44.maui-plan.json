@@ -1,0 +1,54 @@
+{
+  "acceptanceCriteria": [],
+  "approvals": [],
+  "assumptions": [],
+  "businessOracles": [],
+  "checkpoint": {},
+  "explorationBudget": {
+    "allowedScopes": [],
+    "maxActions": 0,
+    "maxDurationSeconds": 0
+  },
+  "flow": {
+    "digest": "4ff061d33afbf40169764c94b543d583086a590c219f89cc54c7eacecd93a0b0",
+    "path": "recording-2026-08-12T13-42-44.md"
+  },
+  "goal": "Verify that Show Modal opens the modal and Close returns to the main todo page.\u00A0",
+  "independentBusinessOracles": [],
+  "planId": "plan_35m2fwejmx",
+  "preconditions": [],
+  "prohibitedActionClasses": [],
+  "provenance": {
+    "actorKind": "human",
+    "channel": "inspector",
+    "intent": "human-authored",
+    "provider": "",
+    "recordedAt": "2026-08-12T13:42:35.989Z"
+  },
+  "requiredPlatforms": [],
+  "requirements": {
+    "requiredCapabilities": [],
+    "requiredSemantics": []
+  },
+  "reset": {
+    "backendStateFingerprint": "",
+    "required": true,
+    "resetIdentity": "",
+    "seedFingerprint": "",
+    "strategy": ""
+  },
+  "reviews": [],
+  "revision": 1,
+  "risks": [],
+  "scenarios": [
+    {
+      "acceptanceCriterionIds": [],
+      "description": "",
+      "risks": [],
+      "scenarioId": "scenario-1"
+    }
+  ],
+  "schema": 1,
+  "sideEffectPolicy": "none",
+  "title": ""
+}

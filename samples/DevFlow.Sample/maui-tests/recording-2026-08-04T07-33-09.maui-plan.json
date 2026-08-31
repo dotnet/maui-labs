@@ -1,0 +1,54 @@
+{
+  "acceptanceCriteria": [],
+  "approvals": [],
+  "assumptions": [],
+  "businessOracles": [],
+  "checkpoint": {},
+  "explorationBudget": {
+    "allowedScopes": [],
+    "maxActions": 0,
+    "maxDurationSeconds": 0
+  },
+  "flow": {
+    "digest": "841c160f5d0396bf7ac46dd80187b96d096fffe9d0c0b6bb004c0bef25ee99e1",
+    "path": "recording-2026-08-04T07-33-09.md"
+  },
+  "goal": "This is a test",
+  "independentBusinessOracles": [],
+  "planId": "plan_4n5iofyx0z",
+  "preconditions": [],
+  "prohibitedActionClasses": [],
+  "provenance": {
+    "actorKind": "human",
+    "channel": "inspector",
+    "intent": "human-authored",
+    "provider": "",
+    "recordedAt": "2026-08-04T07:32:17.081Z"
+  },
+  "requiredPlatforms": [],
+  "requirements": {
+    "requiredCapabilities": [],
+    "requiredSemantics": []
+  },
+  "reset": {
+    "backendStateFingerprint": "",
+    "required": true,
+    "resetIdentity": "",
+    "seedFingerprint": "",
+    "strategy": ""
+  },
+  "reviews": [],
+  "revision": 2,
+  "risks": [],
+  "scenarios": [
+    {
+      "acceptanceCriterionIds": [],
+      "description": "",
+      "risks": [],
+      "scenarioId": "scenario-1"
+    }
+  ],
+  "schema": 1,
+  "sideEffectPolicy": "none",
+  "title": "scenario"
+}

@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "id": "repair-no-nonreplayable-external-side-effect",
+  "kind": "repair-negative",
+  "disposition": "no-repair",
+  "expectedFailureClass": "locator-not-found",
+  "provenance": {
+    "labeledBy": "devflow-maintainers",
+    "labeledOn": "2026-08-15",
+    "method": "hand-authored",
+    "sourceKind": "synthetic",
+    "reviewStatus": "unreviewed",
+    "notes": "Locator drift on a step with a non-replayable external effect."
+  },
+  "fixture": {
+    "failure": "locator-not-found",
+    "sideEffectPolicy": "non-replayable",
+    "externalEffect": "payment-submit"
+  },
+  "expect": {
+    "diagnosticIds": [
+      "DFSH009"
+    ],
+    "candidateKinds": [],
+    "repairEligible": false,
+    "ineligibilityCodes": [
+      "side-effect-policy-repair-prohibited"
+    ]
+  }
+}

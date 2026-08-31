@@ -1,1 +1,8 @@
 .github/workflows/*.lock.yml linguist-generated=true merge=ours
+
+# The qualification corpus is hashed into corpus.manifestFingerprint, which --accumulate uses to
+# decide that two runs read the same static evidence. That hash folds CRLF to LF, so this rule is
+# belt-and-braces rather than the defence: it keeps the working tree matching the index, so a diff,
+# a review, and a hash all describe the same bytes.
+tests/DevFlow/InspectorCorpus/** text eol=lf
+src/DevFlow/Microsoft.Maui.DevFlow.Testing/MauiPreviewQualificationAccumulator.cs text eol=lf

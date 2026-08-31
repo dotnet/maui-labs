@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "id": "no-repair-localized-text",
+  "kind": "no-repair",
+  "disposition": "no-repair",
+  "expectedFailureClass": "locator-not-found",
+  "provenance": {
+    "labeledBy": "devflow-maintainers",
+    "labeledOn": "2026-08-15",
+    "method": "hand-authored",
+    "sourceKind": "synthetic",
+    "reviewStatus": "unreviewed",
+    "notes": "Text selector no longer matches under another locale."
+  },
+  "fixture": {
+    "locale": "fr-FR",
+    "selector": {
+      "text": "Save"
+    },
+    "liveText": "Enregistrer"
+  },
+  "expect": {
+    "diagnosticIds": [
+      "DFSH004"
+    ],
+    "candidateKinds": []
+  }
+}

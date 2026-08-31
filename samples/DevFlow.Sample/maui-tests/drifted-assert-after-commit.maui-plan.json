@@ -1,0 +1,75 @@
+{
+  "schema": 1,
+  "planId": "plan-drifted-assert-after-commit",
+  "revision": 1,
+  "flow": {
+    "path": "drifted-assert-after-commit.md",
+    "digest": "aa2a4caf79ba8fbf7b7e5d3bec7a7322a3d98dbadfc7058f888b5c74eb1b5d3f"
+  },
+  "title": "drifted-assert-after-commit",
+  "goal": "Produce a failing run whose business outcome is independently verified and whose only defect is an unresolved assertion selector, so the selector repair pipeline has a valid input.",
+  "scenarios": [
+    {
+      "scenarioId": "add-todo-is-committed",
+      "description": "A user adds a todo from the native page and the app commits it, but the count assertion addresses a renamed control.",
+      "acceptanceCriterionIds": [
+        "todo-committed"
+      ]
+    }
+  ],
+  "assumptions": [],
+  "risks": [
+    "The final assertion deliberately addresses an AutomationId the app does not expose."
+  ],
+  "preconditions": [],
+  "checkpoint": {
+    "route": "//native",
+    "window": "window-0"
+  },
+  "reset": {
+    "required": false
+  },
+  "acceptanceCriteria": [
+    {
+      "criterionId": "todo-committed",
+      "description": "The added todo is committed to the app's durable ledger, not merely rendered in the list.",
+      "required": true,
+      "businessOracleId": "todo-ledger-record"
+    }
+  ],
+  "requiredPlatforms": [
+    "android"
+  ],
+  "requirements": {
+    "requiredCapabilities": [],
+    "requiredSemantics": []
+  },
+  "prohibitedActionClasses": [],
+  "provenance": {
+    "actorKind": "human",
+    "channel": "repository",
+    "intent": "human-authored"
+  },
+  "reviews": [],
+  "approvals": [],
+  "sideEffectPolicy": "none",
+  "businessOracles": [],
+  "independentBusinessOracles": [
+    {
+      "oracleId": "todo-ledger-record",
+      "description": "Read the app's private todo ledger over adb and confirm it holds the exact record for the todo the flow added, and no removal. The ledger is written by the domain layer and read by no page, so this evidence is produced outside the UI the flow drove.",
+      "required": true,
+      "independent": true,
+      "evidenceKind": "android-app-storage",
+      "reference": "files/todo-ledger.jsonl",
+      "expect": {
+        "contains": [
+          "{\"event\":\"todo-added\",\"id\":\"todo-0001\",\"title\":\"Ledger verified item\",\"completed\":false}"
+        ],
+        "absent": [
+          "{\"event\":\"todo-removed\""
+        ]
+      }
+    }
+  ]
+}

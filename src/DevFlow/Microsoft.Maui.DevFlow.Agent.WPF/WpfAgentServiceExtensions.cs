@@ -23,9 +23,16 @@ public static class WpfAgentServiceExtensions
     {
         var options = new AgentOptions();
         configure?.Invoke(options);
+        options.ApplyBuildMetadata(
+            ReadAssemblyMetadata("Microsoft.Maui.DevFlowEnabled"),
+            ReadAssemblyMetadata("Microsoft.Maui.DevFlowMode"));
+        options.ApplyPortMetadata(ReadAssemblyMetadataPort());
+        options.ValidateForRegistration();
 
         var project = ReadAssemblyMetadata("Microsoft.Maui.DevFlowProject") ?? "unknown";
         var tfm = ReadAssemblyMetadata("Microsoft.Maui.DevFlowTfm") ?? "unknown";
+        var sessionId = ReadAssemblyMetadata("Microsoft.Maui.DevFlowSessionId");
+        var packageId = ReadAssemblyMetadata("Microsoft.Maui.DevFlowPackageId");
 
         BrokerRegistration? brokerReg = null;
         bool hasCustomPort = options.Port != AgentOptions.DefaultPort;
@@ -33,7 +40,8 @@ public static class WpfAgentServiceExtensions
         {
             var platform = "WPF";
             var appName = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name ?? "unknown";
-            brokerReg = new BrokerRegistration(project, tfm, platform, appName);
+            brokerReg = new BrokerRegistration(
+                project, tfm, platform, appName, sessionId, packageId);
             if (hasCustomPort)
                 brokerReg.CurrentPort = options.Port;
             var assignedPort = Task.Run(() => brokerReg.TryRegisterAsync(TimeSpan.FromSeconds(5))).GetAwaiter().GetResult();
@@ -50,14 +58,10 @@ public static class WpfAgentServiceExtensions
             brokerReg = null;
         }
 
-        if (!hasCustomPort && brokerReg?.AssignedPort == null)
-        {
-            var metaPort = ReadAssemblyMetadataPort();
-            if (metaPort.HasValue)
-                options.Port = metaPort.Value;
-        }
+        options.ValidateForRegistration();
 
         var service = new WpfAgentService(options);
+        service.SetSessionId(sessionId);
         if (brokerReg != null)
         {
             brokerReg.CurrentPort = options.Port;
@@ -154,8 +158,5 @@ public static class WpfAgentServiceExtensions
     }
 
     private static int? ReadAssemblyMetadataPort()
-    {
-        var value = ReadAssemblyMetadata("Microsoft.Maui.DevFlowPort");
-        return value != null && int.TryParse(value, out var port) ? port : null;
-    }
+        => AgentOptions.ParsePortMetadata(ReadAssemblyMetadata("Microsoft.Maui.DevFlowPort"));
 }

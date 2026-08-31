@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "id": "repair-positive-search-submit-rename",
+  "kind": "repair-positive",
+  "disposition": "repair-eligible",
+  "expectedFailureClass": "locator-not-found",
+  "provenance": {
+    "labeledBy": "devflow-maintainers",
+    "labeledOn": "2026-08-15",
+    "method": "adapted-from-case",
+    "sourceKind": "synthetic",
+    "reviewStatus": "unreviewed",
+    "derivedFrom": "repair-positive-unique-locator-drift",
+    "notes": "Hand-authored locator-drift variant. Not an observed device run and not an independent trial."
+  },
+  "fixture": {
+    "failure": "locator-not-found",
+    "phase": "pre-dispatch",
+    "trust": "current-local-run",
+    "route": "/search",
+    "oldSelector": "search-go",
+    "candidate": "search-submit",
+    "unique": true,
+    "checkpoint": "all-match",
+    "oracle": "independent-success"
+  },
+  "expect": {
+    "diagnosticIds": [],
+    "candidateKinds": [
+      "automation-id"
+    ],
+    "repairEligible": true
+  }
+}

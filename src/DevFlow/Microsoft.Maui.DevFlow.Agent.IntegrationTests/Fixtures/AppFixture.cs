@@ -8,7 +8,7 @@ namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 /// xUnit collection fixture wrapper that selects a platform-specific
 /// fixture based on DEVFLOW_TEST_PLATFORM.
 /// </summary>
-public sealed class AppFixture : IAppFixture, IAsyncLifetime
+public sealed class AppFixture : IAppFixture, IFlowLifecycleFixture, IAsyncLifetime
 {
     readonly IAppFixture _inner;
     readonly SemaphoreSlim _blazorReadyGate = new(1, 1);
@@ -24,6 +24,9 @@ public sealed class AppFixture : IAppFixture, IAsyncLifetime
     public int AgentPort => _inner.AgentPort;
     public string AgentBaseUrl => _inner.AgentBaseUrl;
     public string Platform => _inner.Platform;
+    public bool SupportsFlowLifecycle => _inner.SupportsFlowLifecycle;
+    internal IPlatformFlowTestLifecycle? FlowLifecycle => (_inner as IFlowLifecycleFixture)?.FlowLifecycle;
+    IPlatformFlowTestLifecycle? IFlowLifecycleFixture.FlowLifecycle => FlowLifecycle;
 
     public Task InitializeAsync() => _inner.InitializeAsync();
     public Task DisposeAsync() => _inner.DisposeAsync();

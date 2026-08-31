@@ -111,6 +111,18 @@ public class ElementInfo
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? NativeType { get; set; }
 
+    /// <summary>
+    /// A platform-provided accessibility identity, emitted only when it is authoritative rather
+    /// than an ephemeral native object or generated runtime id.
+    /// </summary>
+    [JsonPropertyName("nativeAutomationIdentity")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? NativeAutomationIdentity { get; set; }
+
+    [JsonPropertyName("nativeAutomationIdentityKind")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? NativeAutomationIdentityKind { get; set; }
+
     [JsonPropertyName("nativeProperties")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Dictionary<string, string?>? NativeProperties { get; set; }
@@ -136,6 +148,58 @@ public class ElementInfo
     [JsonPropertyName("frameworkProperties")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Dictionary<string, string?>? FrameworkProperties { get; set; }
+
+    /// <summary>
+    /// Absolute path to the .xaml file where this element is statically declared, or null when
+    /// it has no static XAML source (synthetic DevFlow elements, code-created elements, or
+    /// template-realized rows). When populated, points at the element's "usage" line in its parent
+    /// XAML, or — for an element that is itself a XAML root (e.g. a nested user control) — its own
+    /// definition line. Populated only when a XAML source map is available. Additive.
+    /// </summary>
+    [JsonPropertyName("sourceFile")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceFile { get; set; }
+
+    [JsonPropertyName("sourceLine")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? SourceLine { get; set; }
+
+    [JsonPropertyName("sourceColumn")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? SourceColumn { get; set; }
+
+    /// <summary>
+    /// Short hash of the source <c>.xaml</c> at build time (when a source map is available). A
+    /// click-to-source consumer can hash the current file and, on mismatch, show source as stale
+    /// rather than navigating to a line that may have moved. Additive.
+    /// </summary>
+    [JsonPropertyName("sourceHash")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceHash { get; set; }
+
+    [JsonPropertyName("sourceConfidence")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceConfidence { get; set; }
+
+    /// <summary>
+    /// Optional app-provided stable collection item key. DevFlow does not infer this from bound
+    /// values because those values can be user data.
+    /// </summary>
+    [JsonPropertyName("stableItemKey")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? StableItemKey { get; set; }
+
+    [JsonPropertyName("collectionScope")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CollectionScope { get; set; }
+
+    [JsonPropertyName("templateKind")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TemplateKind { get; set; }
+
+    [JsonPropertyName("isVirtualized")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsVirtualized { get; set; }
 
     [JsonPropertyName("children")]
     public List<ElementInfo>? Children { get; set; }

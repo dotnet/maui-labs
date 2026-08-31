@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "planId": "plan-appkit-modal-roundtrip",
+  "revision": 1,
+  "flow": {
+    "path": "appkit-modal-roundtrip.md",
+    "digest": "396df6158cde84e91187851c4d1aaa658107ea4bd89d84b0f7445530a91818a2"
+  },
+  "title": "appkit-modal-roundtrip",
+  "goal": "Replay the committed appkit-modal-roundtrip flow against the sample app.",
+  "scenarios": [],
+  "assumptions": [],
+  "risks": [],
+  "preconditions": [],
+  "reset": {
+    "required": false
+  },
+  "acceptanceCriteria": [],
+  "requiredPlatforms": [],
+  "requirements": {
+    "requiredCapabilities": [],
+    "requiredSemantics": []
+  },
+  "prohibitedActionClasses": [],
+  "provenance": {
+    "actorKind": "human",
+    "channel": "repository",
+    "intent": "human-authored"
+  },
+  "reviews": [],
+  "approvals": [],
+  "sideEffectPolicy": "none",
+  "businessOracles": [],
+  "independentBusinessOracles": []
+}

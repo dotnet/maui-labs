@@ -1,0 +1,1421 @@
+{
+  "schema": 1,
+  "runId": "run-20260818130410704-d373f993",
+  "flowId": "sha256:aa2a4caf79ba8fbf7b7e5d3bec7a7322a3d98dbadfc7058f888b5c74eb1b5d3f",
+  "flowDigest": "aa2a4caf79ba8fbf7b7e5d3bec7a7322a3d98dbadfc7058f888b5c74eb1b5d3f",
+  "legacyFlowIdentity": "drifted-assert-after-commit.md",
+  "target": {
+    "targetId": "ecd0158e5415",
+    "platform": "android",
+    "deviceId": "sha256:1f62693be5a95a247d01220664ab9a594e282c75ee75adaf57e446187448dc38",
+    "deviceProfile": "emulator",
+    "appId": "com.companyname.mauitodo",
+    "appBuildFingerprint": "sha256:81df552c5bc6120fe8a57bc44cb3eb8cf0bc6ea6b627dfeb6896908c8599b252",
+    "packageDigest": "sha256:1d5084046355ace167a17855417d445a475729d1f9843c4d4e3a84471d40f1ba",
+    "normalizedPayloadDigest": "sha256:f188571760af44601bd681465b1d4b4c891b994a22eccc373debc4a40aa7c6ae",
+    "agentId": "ecd0158e5415",
+    "agentInstanceId": "1faf4f306d4e17a2ae9bbc42f4ca77dc",
+    "locale": "en-US",
+    "theme": "Light",
+    "orientation": "Portrait"
+  },
+  "preconditions": {
+    "expected": {
+      "route": "//native",
+      "window": "window-0"
+    },
+    "observed": {
+      "appBuildFingerprint": "1.0:1",
+      "agentInstanceId": "1faf4f306d4e17a2ae9bbc42f4ca77dc",
+      "route": "//native",
+      "window": "window-0",
+      "locale": "en-US",
+      "theme": "Light",
+      "orientation": "Portrait"
+    },
+    "checkedAt": "2026-08-18T13:08:01.4174885+00:00"
+  },
+  "sideEffectPolicy": "none",
+  "businessOracles": [
+    {
+      "oracleId": "todo-ledger-record",
+      "succeeded": true,
+      "independent": true,
+      "observedAt": "2026-08-18T13:08:07.3970342+00:00",
+      "evidenceReference": "android-app-storage:todo-ledger-record",
+      "message": "The app committed the declared business record to its private storage."
+    }
+  ],
+  "replayEligibility": {
+    "sideEffectPolicy": "none",
+    "ordinaryReplayAllowed": true,
+    "diagnosticReplayAllowed": true,
+    "repairValidationAllowed": true,
+    "downstreamContinuationAllowed": true,
+    "repairEligibility": true,
+    "runVerificationAllowed": true,
+    "requiresManualOneShotAuthorization": false,
+    "reasons": []
+  },
+  "verification": {
+    "verified": false,
+    "reason": "The execution did not pass, so it was not independently verified.",
+    "checkedAt": "2026-08-18T13:08:07.3999575+00:00"
+  },
+  "startedAt": "2026-08-18T13:08:01.4274495+00:00",
+  "endedAt": "2026-08-18T13:08:07.1012281+00:00",
+  "outcome": {
+    "status": "failed",
+    "summary": "Flow replay reported a divergence.",
+    "terminal": true,
+    "verified": false,
+    "verificationReason": "The execution did not pass, so it was not independently verified."
+  },
+  "divergenceStepId": "3",
+  "events": [
+    {
+      "sequence": 1,
+      "at": "2026-08-18T13:08:01.4305552+00:00",
+      "kind": "started",
+      "message": "Canonical flow run started."
+    },
+    {
+      "sequence": 2,
+      "at": "2026-08-18T13:08:01.5402464+00:00",
+      "kind": "step-started",
+      "message": "Started fill.",
+      "stepId": "1"
+    },
+    {
+      "sequence": 3,
+      "at": "2026-08-18T13:08:02.9398675+00:00",
+      "kind": "step-passed",
+      "message": "Step completed.",
+      "stepId": "1"
+    },
+    {
+      "sequence": 4,
+      "at": "2026-08-18T13:08:02.9669065+00:00",
+      "kind": "step-started",
+      "message": "Started tap.",
+      "stepId": "2"
+    },
+    {
+      "sequence": 5,
+      "at": "2026-08-18T13:08:03.9443299+00:00",
+      "kind": "step-passed",
+      "message": "Step completed.",
+      "stepId": "2"
+    },
+    {
+      "sequence": 6,
+      "at": "2026-08-18T13:08:03.9709583+00:00",
+      "kind": "step-started",
+      "message": "Started tap.",
+      "stepId": "3"
+    },
+    {
+      "sequence": 7,
+      "at": "2026-08-18T13:08:07.097824+00:00",
+      "kind": "step-failed",
+      "message": "Step diverged.",
+      "stepId": "3"
+    },
+    {
+      "sequence": 8,
+      "at": "2026-08-18T13:08:07.1024904+00:00",
+      "kind": "terminal",
+      "message": "Flow replay reported a divergence.",
+      "stepId": "3"
+    }
+  ],
+  "steps": [
+    {
+      "stepId": "1",
+      "sequence": 1,
+      "action": "fill",
+      "intent": "Fill target with a value descriptor.",
+      "startedAt": "2026-08-18T13:08:01.4816621+00:00",
+      "endedAt": "2026-08-18T13:08:02.8982102+00:00",
+      "durationMs": 1416,
+      "selector": {
+        "automationId": "NewTodoEntry"
+      },
+      "selectorRequest": {
+        "kind": "automationId",
+        "value": {
+          "state": "redacted",
+          "type": "string",
+          "length": 12,
+          "digest": "sha256:693343c6fa4e7f23bc7097f9f6821017822c593e817b91786ec24e3abdba0806"
+        }
+      },
+      "candidateCount": 1,
+      "candidateSummary": {
+        "count": 1,
+        "types": [
+          "Entry"
+        ],
+        "final": "Entry[NewTodoEntry]"
+      },
+      "targetResolution": {
+        "status": "resolved",
+        "matchCount": 1,
+        "elementId": "sha256:693343c6fa4e7f23",
+        "finalResolution": "Entry[NewTodoEntry]"
+      },
+      "actionability": [
+        {
+          "sequence": 1,
+          "attempt": 1,
+          "at": "2026-08-18T13:08:02.2145123+00:00",
+          "kind": "resolution",
+          "passed": true,
+          "resolved": true,
+          "visible": true,
+          "enabled": true,
+          "hasBounds": true,
+          "waitDurationMs": 664,
+          "outcome": "resolved"
+        }
+      ],
+      "assertions": [],
+      "expectedCheckpoint": {
+        "route": "//native",
+        "window": "window-0"
+      },
+      "observedCheckpoint": {
+        "appBuildFingerprint": "1.0:1",
+        "agentInstanceId": "1faf4f306d4e17a2ae9bbc42f4ca77dc",
+        "route": "//native",
+        "window": "window-0",
+        "locale": "en-US",
+        "theme": "Light",
+        "orientation": "Portrait"
+      },
+      "fingerprint": {
+        "schema": 1,
+        "fingerprintId": "fp1_4210e740747cc61055045ba5",
+        "appId": "com.companyname.mauitodo",
+        "buildFingerprint": "sha256:81df552c5bc6120fe8a57bc44cb3eb8cf0bc6ea6b627dfeb6896908c8599b252",
+        "platform": "android",
+        "route": "//native",
+        "window": "window-0",
+        "managedType": "Entry",
+        "fullType": "Microsoft.Maui.Controls.Entry",
+        "role": "textbox",
+        "traits": [
+          "focusable",
+          "interactive"
+        ],
+        "automationId": "NewTodoEntry",
+        "sourceAnchor": "C:\\Users\\t-dotitl\\Projects\\worktrees\\devflow-explain-evidence\\maui-labs\\samples\\DevFlow.Sample\\MainPage.xaml:85",
+        "sourceHash": "892fb6b7bfeb543d",
+        "sourceConfidence": "mapped",
+        "ancestorTopologyHash": "fa5111c64a0b9f2d8ebb2be2",
+        "siblingTopologyHash": "6ece21cde4bce69191a6a8dd",
+        "normalizedBounds": {
+          "x": -0.1016,
+          "y": -18.1339,
+          "width": 1,
+          "height": 1
+        },
+        "observedAt": "2026-08-18T13:08:02.908747+00:00",
+        "capabilityVersion": "flow-run-selector-evidence-v1",
+        "locale": "en-US",
+        "theme": "Light",
+        "orientation": "Portrait",
+        "displayProfile": "411.4286x914.2857@2.625",
+        "context": {
+          "appId": "com.companyname.mauitodo",
+          "appBuild": "sha256:81df552c5bc6120fe8a57bc44cb3eb8cf0bc6ea6b627dfeb6896908c8599b252",
+          "platform": "android",
+          "route": "//native",
+          "window": "window-0",
+          "locale": "en-US",
+          "theme": "Light",
+          "orientation": "Portrait"
+        },
+        "managed": {
+          "type": "Entry",
+          "fullType": "sha256:9d38a8cf80db8eededbc7461a55800ddd711f31aaec4e0a6bb0130f096776688",
+          "framework": "maui",
+          "role": "textbox",
+          "traits": [
+            "focusable",
+            "interactive"
+          ],
+          "automationId": "NewTodoEntry"
+        },
+        "source": {
+          "line": 85,
+          "column": 18,
+          "buildHash": "892fb6b7bfeb543d",
+          "state": "current",
+          "confidence": "mapped"
+        },
+        "topology": {
+          "ancestorHash": "fa5111c64a0b9f2d8ebb2be2",
+          "siblingHash": "6ece21cde4bce69191a6a8dd",
+          "childHash": "e3b0c44298fc1c149afbf4c8",
+          "stableAncestorAutomationId": "AddTodoBorder"
+        },
+        "evidenceRefs": [
+          "fingerprint:fp1_4210e740747cc61055045ba5",
+          "source:current",
+          "topology:fa5111c64a0b9f2d8ebb2be2"
+        ]
+      },
+      "selectorCandidates": [
+        {
+          "schema": 1,
+          "candidateId": "sc1_2f1e876bca6324908d850e86",
+          "rank": 1,
+          "priority": 1,
+          "selector": {
+            "automationId": "NewTodoEntry"
+          },
+          "selectorDescriptor": {
+            "kind": "automation-id",
+            "automationId": "NewTodoEntry"
+          },
+          "scope": {
+            "route": "//native",
+            "window": "window-0"
+          },
+          "scopeDescriptor": {
+            "route": "//native",
+            "window": "window-0"
+          },
+          "origin": "app-automation-id",
+          "originCodes": [
+            "app-automation-id"
+          ],
+          "rationaleCodes": [
+            "unique-app-owned-automation-id"
+          ],
+          "riskFlags": [],
+          "score": 0.94,
+          "scoreComponents": {
+            "appOwnedIdentifier": 1,
+            "scopeMatch": 1,
+            "managedNativeAgreement": 0.5,
+            "sourceAnchorMatch": 1,
+            "topologySimilarity": 1,
+            "normalizedGeometryCorroboration": 1,
+            "localizationPenalty": 0,
+            "virtualizationPenalty": 0,
+            "staleSourcePenalty": 0,
+            "platformDivergencePenalty": 0,
+            "ambiguityPenalty": 0,
+            "deterministicRankScore": 0.94
+          },
+          "unique": true,
+          "calibrationStatus": "uncalibrated",
+          "scores": {
+            "ruleVersion": "selector-ranker-v1",
+            "appOwnedIdentifier": 1,
+            "scopeMatch": 1,
+            "managedNativeAgreement": 0.5,
+            "sourceAnchorMatch": 1,
+            "topologySimilarity": 1,
+            "normalizedGeometryCorroboration": 1,
+            "localizationPenalty": 0,
+            "virtualizationPenalty": 0,
+            "staleSourcePenalty": 0,
+            "platformDivergencePenalty": 0,
+            "ambiguityPenalty": 0,
+            "deterministicRankScore": 0.94
+          },
+          "validation": {
+            "unique": true,
+            "matchCount": 1,
+            "platformState": "not-validated",
+            "sourceState": "current",
+            "accepted": true
+          },
+          "calibration": {
+            "state": "uncalibrated",
+            "ruleVersion": "selector-ranker-v1"
+          },
+          "fingerprint": {
+            "schema": 1,
+            "fingerprintId": "fp1_4210e740747cc61055045ba5",
+            "appId": "com.companyname.mauitodo",
+            "buildFingerprint": "sha256:81df552c5bc6120fe8a57bc44cb3eb8cf0bc6ea6b627dfeb6896908c8599b252",
+            "platform": "android",
+            "route": "//native",
+            "window": "window-0",
+            "managedType": "Entry",
+            "fullType": "Microsoft.Maui.Controls.Entry",
+            "role": "textbox",
+            "traits": [
+              "focusable",
+              "interactive"
+            ],
+            "automationId": "NewTodoEntry",
+            "sourceAnchor": "C:\\Users\\t-dotitl\\Projects\\worktrees\\devflow-explain-evidence\\maui-labs\\samples\\DevFlow.Sample\\MainPage.xaml:85",
+            "sourceHash": "892fb6b7bfeb543d",
+            "sourceConfidence": "mapped",
+            "ancestorTopologyHash": "fa5111c64a0b9f2d8ebb2be2",
+            "siblingTopologyHash": "6ece21cde4bce69191a6a8dd",
+            "normalizedBounds": {
+              "x": -0.1016,
+              "y": -18.1339,
+              "width": 1,
+              "height": 1
+            },
+            "observedAt": "2026-08-18T13:08:02.908747+00:00",
+            "capabilityVersion": "flow-run-selector-evidence-v1",
+            "locale": "en-US",
+            "theme": "Light",
+            "orientation": "Portrait",
+            "displayProfile": "411.4286x914.2857@2.625",
+            "context": {
+              "appId": "com.companyname.mauitodo",
+              "appBuild": "sha256:81df552c5bc6120fe8a57bc44cb3eb8cf0bc6ea6b627dfeb6896908c8599b252",
+              "platform": "android",
+              "route": "//native",
+              "window": "window-0",
+              "locale": "en-US",
+              "theme": "Light",
+              "orientation": "Portrait"
+            },
+            "managed": {
+              "type": "Entry",
+              "fullType": "sha256:9d38a8cf80db8eededbc7461a55800ddd711f31aaec4e0a6bb0130f096776688",
+              "framework": "maui",
+              "role": "textbox",
+              "traits": [
+                "focusable",
+                "interactive"
+              ],
+              "automationId": "NewTodoEntry"
+            },
+            "source": {
+              "line": 85,
+              "column": 18,
+              "buildHash": "892fb6b7bfeb543d",
+              "state": "current",
+              "confidence": "mapped"
+            },
+            "topology": {
+              "ancestorHash": "fa5111c64a0b9f2d8ebb2be2",
+              "siblingHash": "6ece21cde4bce69191a6a8dd",
+              "childHash": "e3b0c44298fc1c149afbf4c8",
+              "stableAncestorAutomationId": "AddTodoBorder"
+            },
+            "evidenceRefs": [
+              "fingerprint:fp1_4210e740747cc61055045ba5",
+              "source:current",
+              "topology:fa5111c64a0b9f2d8ebb2be2"
+            ]
+          },
+          "evidenceRefs": [
+            "fingerprint:fp1_4210e740747cc61055045ba5",
+            "source:current",
+            "topology:fa5111c64a0b9f2d8ebb2be2",
+            "candidate:sc1_2f1e876bca6324908d850e86"
+          ],
+          "evidenceArtifacts": []
+        },
+        {
+          "schema": 1,
+          "candidateId": "sc1_2b42f52b8ce4f8c720370c56",
+          "rank": 2,
+          "priority": 5,
+          "selectorDescriptor": {
+            "kind": "source-topology",
+            "sourceAnchor": "\u003Cpath\u003E"
+          },
+          "scope": {
+            "route": "//native",
+            "window": "window-0"
+          },
+          "scopeDescriptor": {
+            "route": "//native",
+            "window": "window-0"
+          },
+          "origin": "source-topology",
+          "originCodes": [
+            "source-topology"
+          ],
+          "rationaleCodes": [
+            "current-source-anchor",
+            "topology-corroborated"
+          ],
+          "riskFlags": [],
+          "score": 0.49,
+          "scoreComponents": {
+            "appOwnedIdentifier": 0,
+            "scopeMatch": 1,
+            "managedNativeAgreement": 0.5,
+            "sourceAnchorMatch": 1,
+            "topologySimilarity": 1,
+            "normalizedGeometryCorroboration": 1,
+            "localizationPenalty": 0,
+            "virtualizationPenalty": 0,
+            "staleSourcePenalty": 0,
+            "platformDivergencePenalty": 0,
+            "ambiguityPenalty": 0,
+            "deterministicRankScore": 0.49
+          },
+          "unique": true,
+          "calibrationStatus": "uncalibrated",
+          "scores": {
+            "ruleVersion": "selector-ranker-v1",
+            "appOwnedIdentifier": 0,
+            "scopeMatch": 1,
+            "managedNativeAgreement": 0.5,
+            "sourceAnchorMatch": 1,
+            "topologySimilarity": 1,
+            "normalizedGeometryCorroboration": 1,
+            "localizationPenalty": 0,
+            "virtualizationPenalty": 0,
+            "staleSourcePenalty": 0,
+            "platformDivergencePenalty": 0,
+            "ambiguityPenalty": 0,
+            "deterministicRankScore": 0.49
+          },
+          "validation": {
+            "unique": true,
+            "matchCount": 1,
+            "platformState": "not-validated",
+            "sourceState": "current",
+            "accepted": true
+          },
+          "calibration": {
+            "state": "uncalibrated",
+            "ruleVersion": "selector-ranker-v1"
+          },
+          "fingerprint": {
+            "schema": 1,
+            "fingerprintId": "fp1_4210e740747cc61055045ba5",
+            "appId": "com.companyname.mauitodo",
+            "buildFingerprint": "sha256:81df552c5bc6120fe8a57bc44cb3eb8cf0bc6ea6b627dfeb6896908c8599b252",
+            "platform": "android",
+            "route": "//native",
+            "window": "window-0",
+            "managedType": "Entry",
+            "fullType": "Microsoft.Maui.Controls.Entry",
+            "role": "textbox",
+            "traits": [
+              "focusable",
+              "interactive"
+            ],
+            "automationId": "NewTodoEntry",
+            "sourceAnchor": "C:\\Users\\t-dotitl\\Projects\\worktrees\\devflow-explain-evidence\\maui-labs\\samples\\DevFlow.Sample\\MainPage.xaml:85",
+            "sourceHash": "892fb6b7bfeb543d",
+            "sourceConfidence": "mapped",
+            "ancestorTopologyHash": "fa5111c64a0b9f2d8ebb2be2",
+            "siblingTopologyHash": "6ece21cde4bce69191a6a8dd",
+            "normalizedBounds": {
+              "x": -0.1016,
+              "y": -18.1339,
+              "width": 1,
+              "height": 1
+            },
+            "observedAt": "2026-08-18T13:08:02.908747+00:00",
+            "capabilityVersion": "flow-run-selector-evidence-v1",
+            "locale": "en-US",
+            "theme": "Light",
+            "orientation": "Portrait",
+            "displayProfile": "411.4286x914.2857@2.625",
+            "context": {
+              "appId": "com.companyname.mauitodo",
+              "appBuild": "sha256:81df552c5bc6120fe8a57bc44cb3eb8cf0bc6ea6b627dfeb6896908c8599b252",
+              "platform": "android",
+              "route": "//native",
+              "window": "window-0",
+              "locale": "en-US",
+              "theme": "Light",
+              "orientation": "Portrait"
+            },
+            "managed": {
+              "type": "Entry",
+              "fullType": "sha256:9d38a8cf80db8eededbc7461a55800ddd711f31aaec4e0a6bb0130f096776688",
+              "framework": "maui",
+              "role": "textbox",
+              "traits": [
+                "focusable",
+                "interactive"
+              ],
+              "automationId": "NewTodoEntry"
+            },
+            "source": {
+              "line": 85,
+              "column": 18,
+              "buildHash": "892fb6b7bfeb543d",
+              "state": "current",
+              "confidence": "mapped"
+            },
+            "topology": {
+              "ancestorHash": "fa5111c64a0b9f2d8ebb2be2",
+              "siblingHash": "6ece21cde4bce69191a6a8dd",
+              "childHash": "e3b0c44298fc1c149afbf4c8",
+              "stableAncestorAutomationId": "AddTodoBorder"
+            },
+            "evidenceRefs": [
+              "fingerprint:fp1_4210e740747cc61055045ba5",
+              "source:current",
+              "topology:fa5111c64a0b9f2d8ebb2be2"
+            ]
+          },
+          "evidenceRefs": [
+            "fingerprint:fp1_4210e740747cc61055045ba5",
+            "source:current",
+            "topology:fa5111c64a0b9f2d8ebb2be2",
+            "candidate:sc1_2b42f52b8ce4f8c720370c56"
+          ],
+          "evidenceArtifacts": []
+        }
+      ],
+      "selectorCandidateOmissions": [
+        {
+          "kind": "role-type-ancestor",
+          "reason": "Role/type is not unique under the stable ancestor (2 matches).",
+          "count": 2
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "stepId": "2",
+      "sequence": 2,
+      "action": "tap",
+      "intent": "Tap target.",
+      "startedAt": "2026-08-18T13:08:02.9399818+00:00",
+      "endedAt": "2026-08-18T13:08:03.9408828+00:00",
+      "durationMs": 1000,
+      "selector": {
+        "automationId": "AddButton"
+      },
+      "selectorRequest": {
+        "kind": "automationId",
+        "value": {
+          "state": "redacted",
+          "type": "string",
+          "length": 9,
+          "digest": "sha256:baacea93a540075956dd5448b95613b4fd2eee3cb3655bb39091d0346634dbe9"
+        }
+      },
+      "candidateCount": 1,
+      "candidateSummary": {
+        "count": 1,
+        "types": [
+          "Button"
+        ],
+        "final": "Button[AddButton]"
+      },
+      "targetResolution": {
+        "status": "resolved",
+        "matchCount": 1,
+        "elementId": "sha256:baacea93a5400759",
+        "finalResolution": "Button[AddButton]"
+      },
+      "actionability": [
+        {
+          "sequence": 1,
+          "attempt": 1,
+          "at": "2026-08-18T13:08:03.0250323+00:00",
+          "kind": "resolution",
+          "passed": true,
+          "resolved": true,
+          "visible": true,
+          "enabled": true,
+          "hasBounds": true,
+          "waitDurationMs": 58,
+          "outcome": "resolved"
+        },
+        {
+          "sequence": 2,
+          "attempt": 1,
+          "at": "2026-08-18T13:08:03.2533544+00:00",
+          "kind": "bounds",
+          "passed": true,
+          "resolved": true,
+          "visible": true,
+          "enabled": true,
+          "hasBounds": true,
+          "boundsStable": true,
+          "waitDurationMs": 228,
+          "outcome": "stable"
+        }
+      ],
+      "assertions": [
+        {
+          "kind": "propEquals",
+          "passed": true,
+          "skipped": false,
+          "expectedDisclosure": {
+            "state": "redacted",
+            "type": "string",
+            "length": 20,
+            "digest": "sha256:56cc5aabccf410ff15e2df6274bd2dd6f864d743738691b599234c12aca4a2e1"
+          },
+          "actualDisclosure": {
+            "state": "redacted",
+            "type": "string",
+            "length": 20,
+            "digest": "sha256:56cc5aabccf410ff15e2df6274bd2dd6f864d743738691b599234c12aca4a2e1"
+          },
+          "targetResolution": {
+            "status": "resolved",
+            "matchCount": 1
+          }
+        }
+      ],
+      "expectedCheckpoint": {
+        "route": "//native",
+        "window": "window-0"
+      },
+      "observedCheckpoint": {
+        "appBuildFingerprint": "1.0:1",
+        "agentInstanceId": "1faf4f306d4e17a2ae9bbc42f4ca77dc",
+        "route": "//native",
+        "window": "window-0",
+        "locale": "en-US",
+        "theme": "Light",
+        "orientation": "Portrait"
+      },
+      "fingerprint": {
+        "schema": 1,
+        "fingerprintId": "fp1_674b7c84eaee231671ebaebe",
+        "appId": "com.companyname.mauitodo",
+        "buildFingerprint": "sha256:81df552c5bc6120fe8a57bc44cb3eb8cf0bc6ea6b627dfeb6896908c8599b252",
+        "platform": "android",
+        "route": "//native",
+        "window": "window-0",
+        "managedType": "Button",
+        "fullType": "Microsoft.Maui.Controls.Button",
+        "role": "button",
+        "traits": [
+          "focusable",
+          "interactive"
+        ],
+        "automationId": "AddButton",
+        "sourceAnchor": "C:\\Users\\t-dotitl\\Projects\\worktrees\\devflow-explain-evidence\\maui-labs\\samples\\DevFlow.Sample\\MainPage.xaml:113",
+        "sourceHash": "892fb6b7bfeb543d",
+        "sourceConfidence": "mapped",
+        "ancestorTopologyHash": "fa5111c64a0b9f2d8ebb2be2",
+        "siblingTopologyHash": "6ece21cde4bce69191a6a8dd",
+        "normalizedBounds": {
+          "x": -0.5203,
+          "y": -41.4617,
+          "width": 1,
+          "height": 1
+        },
+        "observedAt": "2026-08-18T13:08:03.9432562+00:00",
+        "capabilityVersion": "flow-run-selector-evidence-v1",
+        "locale": "en-US",
+        "theme": "Light",
+        "orientation": "Portrait",
+        "displayProfile": "411.4286x914.2857@2.625",
+        "context": {
+          "appId": "com.companyname.mauitodo",
+          "appBuild": "sha256:81df552c5bc6120fe8a57bc44cb3eb8cf0bc6ea6b627dfeb6896908c8599b252",
+          "platform": "android",
+          "route": "//native",
+          "window": "window-0",
+          "locale": "en-US",
+          "theme": "Light",
+          "orientation": "Portrait"
+        },
+        "managed": {
+          "type": "Button",
+          "fullType": "sha256:9bb91103f09f5eaaed9b782b15be9daa5ef756ef8f48c09f81bd2504f6733d95",
+          "framework": "maui",
+          "role": "button",
+          "traits": [
+            "focusable",
+            "interactive"
+          ],
+          "automationId": "AddButton"
+        },
+        "source": {
+          "line": 113,
+          "column": 18,
+          "buildHash": "892fb6b7bfeb543d",
+          "state": "current",
+          "confidence": "mapped"
+        },
+        "topology": {
+          "ancestorHash": "fa5111c64a0b9f2d8ebb2be2",
+          "siblingHash": "6ece21cde4bce69191a6a8dd",
+          "childHash": "e3b0c44298fc1c149afbf4c8",
+          "stableAncestorAutomationId": "AddTodoBorder"
+        },
+        "evidenceRefs": [
+          "fingerprint:fp1_674b7c84eaee231671ebaebe",
+          "source:current",
+          "topology:fa5111c64a0b9f2d8ebb2be2"
+        ]
+      },
+      "selectorCandidates": [
+        {
+          "schema": 1,
+          "candidateId": "sc1_cd2926c57739e6bd44e8783c",
+          "rank": 1,
+          "priority": 1,
+          "selector": {
+            "automationId": "AddButton"
+          },
+          "selectorDescriptor": {
+            "kind": "automation-id",
+            "automationId": "AddButton"
+          },
+          "scope": {
+            "route": "//native",
+            "window": "window-0"
+          },
+          "scopeDescriptor": {
+            "route": "//native",
+            "window": "window-0"
+          },
+          "origin": "app-automation-id",
+          "originCodes": [
+            "app-automation-id"
+          ],
+          "rationaleCodes": [
+            "unique-app-owned-automation-id"
+          ],
+          "riskFlags": [],
+          "score": 0.94,
+          "scoreComponents": {
+            "appOwnedIdentifier": 1,
+            "scopeMatch": 1,
+            "managedNativeAgreement": 0.5,
+            "sourceAnchorMatch": 1,
+            "topologySimilarity": 1,
+            "normalizedGeometryCorroboration": 1,
+            "localizationPenalty": 0,
+            "virtualizationPenalty": 0,
+            "staleSourcePenalty": 0,
+            "platformDivergencePenalty": 0,
+            "ambiguityPenalty": 0,
+            "deterministicRankScore": 0.94
+          },
+          "unique": true,
+          "calibrationStatus": "uncalibrated",
+          "scores": {
+            "ruleVersion": "selector-ranker-v1",
+            "appOwnedIdentifier": 1,
+            "scopeMatch": 1,
+            "managedNativeAgreement": 0.5,
+            "sourceAnchorMatch": 1,
+            "topologySimilarity": 1,
+            "normalizedGeometryCorroboration": 1,
+            "localizationPenalty": 0,
+            "virtualizationPenalty": 0,
+            "staleSourcePenalty": 0,
+            "platformDivergencePenalty": 0,
+            "ambiguityPenalty": 0,
+            "deterministicRankScore": 0.94
+          },
+          "validation": {
+            "unique": true,
+            "matchCount": 1,
+            "platformState": "not-validated",
+            "sourceState": "current",
+            "accepted": true
+          },
+          "calibration": {
+            "state": "uncalibrated",
+            "ruleVersion": "selector-ranker-v1"
+          },
+          "fingerprint": {
+            "schema": 1,
+            "fingerprintId": "fp1_674b7c84eaee231671ebaebe",
+            "appId": "com.companyname.mauitodo",
+            "buildFingerprint": "sha256:81df552c5bc6120fe8a57bc44cb3eb8cf0bc6ea6b627dfeb6896908c8599b252",
+            "platform": "android",
+            "route": "//native",
+            "window": "window-0",
+            "managedType": "Button",
+            "fullType": "Microsoft.Maui.Controls.Button",
+            "role": "button",
+            "traits": [
+              "focusable",
+              "interactive"
+            ],
+            "automationId": "AddButton",
+            "sourceAnchor": "C:\\Users\\t-dotitl\\Projects\\worktrees\\devflow-explain-evidence\\maui-labs\\samples\\DevFlow.Sample\\MainPage.xaml:113",
+            "sourceHash": "892fb6b7bfeb543d",
+            "sourceConfidence": "mapped",
+            "ancestorTopologyHash": "fa5111c64a0b9f2d8ebb2be2",
+            "siblingTopologyHash": "6ece21cde4bce69191a6a8dd",
+            "normalizedBounds": {
+              "x": -0.5203,
+              "y": -41.4617,
+              "width": 1,
+              "height": 1
+            },
+            "observedAt": "2026-08-18T13:08:03.9432562+00:00",
+            "capabilityVersion": "flow-run-selector-evidence-v1",
+            "locale": "en-US",
+            "theme": "Light",
+            "orientation": "Portrait",
+            "displayProfile": "411.4286x914.2857@2.625",
+            "context": {
+              "appId": "com.companyname.mauitodo",
+              "appBuild": "sha256:81df552c5bc6120fe8a57bc44cb3eb8cf0bc6ea6b627dfeb6896908c8599b252",
+              "platform": "android",
+              "route": "//native",
+              "window": "window-0",
+              "locale": "en-US",
+              "theme": "Light",
+              "orientation": "Portrait"
+            },
+            "managed": {
+              "type": "Button",
+              "fullType": "sha256:9bb91103f09f5eaaed9b782b15be9daa5ef756ef8f48c09f81bd2504f6733d95",
+              "framework": "maui",
+              "role": "button",
+              "traits": [
+                "focusable",
+                "interactive"
+              ],
+              "automationId": "AddButton"
+            },
+            "source": {
+              "line": 113,
+              "column": 18,
+              "buildHash": "892fb6b7bfeb543d",
+              "state": "current",
+              "confidence": "mapped"
+            },
+            "topology": {
+              "ancestorHash": "fa5111c64a0b9f2d8ebb2be2",
+              "siblingHash": "6ece21cde4bce69191a6a8dd",
+              "childHash": "e3b0c44298fc1c149afbf4c8",
+              "stableAncestorAutomationId": "AddTodoBorder"
+            },
+            "evidenceRefs": [
+              "fingerprint:fp1_674b7c84eaee231671ebaebe",
+              "source:current",
+              "topology:fa5111c64a0b9f2d8ebb2be2"
+            ]
+          },
+          "evidenceRefs": [
+            "fingerprint:fp1_674b7c84eaee231671ebaebe",
+            "source:current",
+            "topology:fa5111c64a0b9f2d8ebb2be2",
+            "candidate:sc1_cd2926c57739e6bd44e8783c"
+          ],
+          "evidenceArtifacts": []
+        },
+        {
+          "schema": 1,
+          "candidateId": "sc1_8ec573c0c45d8b6bec7f9730",
+          "rank": 2,
+          "priority": 4,
+          "selectorDescriptor": {
+            "kind": "role-type-ancestor",
+            "role": "button",
+            "type": "Button",
+            "ancestorAutomationId": "AddTodoBorder"
+          },
+          "scope": {
+            "route": "//native",
+            "window": "window-0"
+          },
+          "scopeDescriptor": {
+            "route": "//native",
+            "window": "window-0"
+          },
+          "origin": "role-type-ancestor",
+          "originCodes": [
+            "role-type-ancestor"
+          ],
+          "rationaleCodes": [
+            "role-type-with-unique-stable-ancestor"
+          ],
+          "riskFlags": [],
+          "score": 0.49,
+          "scoreComponents": {
+            "appOwnedIdentifier": 0,
+            "scopeMatch": 1,
+            "managedNativeAgreement": 0.5,
+            "sourceAnchorMatch": 1,
+            "topologySimilarity": 1,
+            "normalizedGeometryCorroboration": 1,
+            "localizationPenalty": 0,
+            "virtualizationPenalty": 0,
+            "staleSourcePenalty": 0,
+            "platformDivergencePenalty": 0,
+            "ambiguityPenalty": 0,
+            "deterministicRankScore": 0.49
+          },
+          "unique": true,
+          "calibrationStatus": "uncalibrated",
+          "scores": {
+            "ruleVersion": "selector-ranker-v1",
+            "appOwnedIdentifier": 0,
+            "scopeMatch": 1,
+            "managedNativeAgreement": 0.5,
+            "sourceAnchorMatch": 1,
+            "topologySimilarity": 1,
+            "normalizedGeometryCorroboration": 1,
+            "localizationPenalty": 0,
+            "virtualizationPenalty": 0,
+            "staleSourcePenalty": 0,
+            "platformDivergencePenalty": 0,
+            "ambiguityPenalty": 0,
+            "deterministicRankScore": 0.49
+          },
+          "validation": {
+            "unique": true,
+            "matchCount": 1,
+            "platformState": "not-validated",
+            "sourceState": "current",
+            "accepted": true
+          },
+          "calibration": {
+            "state": "uncalibrated",
+            "ruleVersion": "selector-ranker-v1"
+          },
+          "fingerprint": {
+            "schema": 1,
+            "fingerprintId": "fp1_674b7c84eaee231671ebaebe",
+            "appId": "com.companyname.mauitodo",
+            "buildFingerprint": "sha256:81df552c5bc6120fe8a57bc44cb3eb8cf0bc6ea6b627dfeb6896908c8599b252",
+            "platform": "android",
+            "route": "//native",
+            "window": "window-0",
+            "managedType": "Button",
+            "fullType": "Microsoft.Maui.Controls.Button",
+            "role": "button",
+            "traits": [
+              "focusable",
+              "interactive"
+            ],
+            "automationId": "AddButton",
+            "sourceAnchor": "C:\\Users\\t-dotitl\\Projects\\worktrees\\devflow-explain-evidence\\maui-labs\\samples\\DevFlow.Sample\\MainPage.xaml:113",
+            "sourceHash": "892fb6b7bfeb543d",
+            "sourceConfidence": "mapped",
+            "ancestorTopologyHash": "fa5111c64a0b9f2d8ebb2be2",
+            "siblingTopologyHash": "6ece21cde4bce69191a6a8dd",
+            "normalizedBounds": {
+              "x": -0.5203,
+              "y": -41.4617,
+              "width": 1,
+              "height": 1
+            },
+            "observedAt": "2026-08-18T13:08:03.9432562+00:00",
+            "capabilityVersion": "flow-run-selector-evidence-v1",
+            "locale": "en-US",
+            "theme": "Light",
+            "orientation": "Portrait",
+            "displayProfile": "411.4286x914.2857@2.625",
+            "context": {
+              "appId": "com.companyname.mauitodo",
+              "appBuild": "sha256:81df552c5bc6120fe8a57bc44cb3eb8cf0bc6ea6b627dfeb6896908c8599b252",
+              "platform": "android",
+              "route": "//native",
+              "window": "window-0",
+              "locale": "en-US",
+              "theme": "Light",
+              "orientation": "Portrait"
+            },
+            "managed": {
+              "type": "Button",
+              "fullType": "sha256:9bb91103f09f5eaaed9b782b15be9daa5ef756ef8f48c09f81bd2504f6733d95",
+              "framework": "maui",
+              "role": "button",
+              "traits": [
+                "focusable",
+                "interactive"
+              ],
+              "automationId": "AddButton"
+            },
+            "source": {
+              "line": 113,
+              "column": 18,
+              "buildHash": "892fb6b7bfeb543d",
+              "state": "current",
+              "confidence": "mapped"
+            },
+            "topology": {
+              "ancestorHash": "fa5111c64a0b9f2d8ebb2be2",
+              "siblingHash": "6ece21cde4bce69191a6a8dd",
+              "childHash": "e3b0c44298fc1c149afbf4c8",
+              "stableAncestorAutomationId": "AddTodoBorder"
+            },
+            "evidenceRefs": [
+              "fingerprint:fp1_674b7c84eaee231671ebaebe",
+              "source:current",
+              "topology:fa5111c64a0b9f2d8ebb2be2"
+            ]
+          },
+          "evidenceRefs": [
+            "fingerprint:fp1_674b7c84eaee231671ebaebe",
+            "source:current",
+            "topology:fa5111c64a0b9f2d8ebb2be2",
+            "candidate:sc1_8ec573c0c45d8b6bec7f9730"
+          ],
+          "evidenceArtifacts": []
+        },
+        {
+          "schema": 1,
+          "candidateId": "sc1_9153ccdd824e047914f7c1ef",
+          "rank": 3,
+          "priority": 5,
+          "selectorDescriptor": {
+            "kind": "source-topology",
+            "sourceAnchor": "\u003Cpath\u003E"
+          },
+          "scope": {
+            "route": "//native",
+            "window": "window-0"
+          },
+          "scopeDescriptor": {
+            "route": "//native",
+            "window": "window-0"
+          },
+          "origin": "source-topology",
+          "originCodes": [
+            "source-topology"
+          ],
+          "rationaleCodes": [
+            "current-source-anchor",
+            "topology-corroborated"
+          ],
+          "riskFlags": [],
+          "score": 0.49,
+          "scoreComponents": {
+            "appOwnedIdentifier": 0,
+            "scopeMatch": 1,
+            "managedNativeAgreement": 0.5,
+            "sourceAnchorMatch": 1,
+            "topologySimilarity": 1,
+            "normalizedGeometryCorroboration": 1,
+            "localizationPenalty": 0,
+            "virtualizationPenalty": 0,
+            "staleSourcePenalty": 0,
+            "platformDivergencePenalty": 0,
+            "ambiguityPenalty": 0,
+            "deterministicRankScore": 0.49
+          },
+          "unique": true,
+          "calibrationStatus": "uncalibrated",
+          "scores": {
+            "ruleVersion": "selector-ranker-v1",
+            "appOwnedIdentifier": 0,
+            "scopeMatch": 1,
+            "managedNativeAgreement": 0.5,
+            "sourceAnchorMatch": 1,
+            "topologySimilarity": 1,
+            "normalizedGeometryCorroboration": 1,
+            "localizationPenalty": 0,
+            "virtualizationPenalty": 0,
+            "staleSourcePenalty": 0,
+            "platformDivergencePenalty": 0,
+            "ambiguityPenalty": 0,
+            "deterministicRankScore": 0.49
+          },
+          "validation": {
+            "unique": true,
+            "matchCount": 1,
+            "platformState": "not-validated",
+            "sourceState": "current",
+            "accepted": true
+          },
+          "calibration": {
+            "state": "uncalibrated",
+            "ruleVersion": "selector-ranker-v1"
+          },
+          "fingerprint": {
+            "schema": 1,
+            "fingerprintId": "fp1_674b7c84eaee231671ebaebe",
+            "appId": "com.companyname.mauitodo",
+            "buildFingerprint": "sha256:81df552c5bc6120fe8a57bc44cb3eb8cf0bc6ea6b627dfeb6896908c8599b252",
+            "platform": "android",
+            "route": "//native",
+            "window": "window-0",
+            "managedType": "Button",
+            "fullType": "Microsoft.Maui.Controls.Button",
+            "role": "button",
+            "traits": [
+              "focusable",
+              "interactive"
+            ],
+            "automationId": "AddButton",
+            "sourceAnchor": "C:\\Users\\t-dotitl\\Projects\\worktrees\\devflow-explain-evidence\\maui-labs\\samples\\DevFlow.Sample\\MainPage.xaml:113",
+            "sourceHash": "892fb6b7bfeb543d",
+            "sourceConfidence": "mapped",
+            "ancestorTopologyHash": "fa5111c64a0b9f2d8ebb2be2",
+            "siblingTopologyHash": "6ece21cde4bce69191a6a8dd",
+            "normalizedBounds": {
+              "x": -0.5203,
+              "y": -41.4617,
+              "width": 1,
+              "height": 1
+            },
+            "observedAt": "2026-08-18T13:08:03.9432562+00:00",
+            "capabilityVersion": "flow-run-selector-evidence-v1",
+            "locale": "en-US",
+            "theme": "Light",
+            "orientation": "Portrait",
+            "displayProfile": "411.4286x914.2857@2.625",
+            "context": {
+              "appId": "com.companyname.mauitodo",
+              "appBuild": "sha256:81df552c5bc6120fe8a57bc44cb3eb8cf0bc6ea6b627dfeb6896908c8599b252",
+              "platform": "android",
+              "route": "//native",
+              "window": "window-0",
+              "locale": "en-US",
+              "theme": "Light",
+              "orientation": "Portrait"
+            },
+            "managed": {
+              "type": "Button",
+              "fullType": "sha256:9bb91103f09f5eaaed9b782b15be9daa5ef756ef8f48c09f81bd2504f6733d95",
+              "framework": "maui",
+              "role": "button",
+              "traits": [
+                "focusable",
+                "interactive"
+              ],
+              "automationId": "AddButton"
+            },
+            "source": {
+              "line": 113,
+              "column": 18,
+              "buildHash": "892fb6b7bfeb543d",
+              "state": "current",
+              "confidence": "mapped"
+            },
+            "topology": {
+              "ancestorHash": "fa5111c64a0b9f2d8ebb2be2",
+              "siblingHash": "6ece21cde4bce69191a6a8dd",
+              "childHash": "e3b0c44298fc1c149afbf4c8",
+              "stableAncestorAutomationId": "AddTodoBorder"
+            },
+            "evidenceRefs": [
+              "fingerprint:fp1_674b7c84eaee231671ebaebe",
+              "source:current",
+              "topology:fa5111c64a0b9f2d8ebb2be2"
+            ]
+          },
+          "evidenceRefs": [
+            "fingerprint:fp1_674b7c84eaee231671ebaebe",
+            "source:current",
+            "topology:fa5111c64a0b9f2d8ebb2be2",
+            "candidate:sc1_9153ccdd824e047914f7c1ef"
+          ],
+          "evidenceArtifacts": []
+        }
+      ],
+      "selectorCandidateOmissions": [],
+      "artifacts": []
+    },
+    {
+      "stepId": "3",
+      "sequence": 3,
+      "action": "tap",
+      "intent": "Tap target.",
+      "startedAt": "2026-08-18T13:08:03.9443891+00:00",
+      "endedAt": "2026-08-18T13:08:07.0918392+00:00",
+      "durationMs": 3153,
+      "selector": {},
+      "selectorRequest": {
+        "kind": "automationId",
+        "value": {
+          "state": "omitted"
+        }
+      },
+      "candidateCount": 0,
+      "candidateSummary": {
+        "count": 0,
+        "types": []
+      },
+      "targetResolution": {
+        "status": "not-found",
+        "matchCount": 0,
+        "message": "AutomationId selector found no elements."
+      },
+      "actionability": [
+        {
+          "sequence": 1,
+          "attempt": 1,
+          "at": "2026-08-18T13:08:04.027703+00:00",
+          "kind": "resolution",
+          "passed": false,
+          "resolved": false,
+          "hasBounds": false,
+          "waitDurationMs": 56,
+          "outcome": "not-found",
+          "message": "AutomationId selector found no elements."
+        },
+        {
+          "sequence": 2,
+          "attempt": 2,
+          "at": "2026-08-18T13:08:04.3575402+00:00",
+          "kind": "resolution",
+          "passed": false,
+          "resolved": false,
+          "hasBounds": false,
+          "waitDurationMs": 48,
+          "outcome": "not-found",
+          "message": "AutomationId selector found no elements."
+        },
+        {
+          "sequence": 3,
+          "attempt": 3,
+          "at": "2026-08-18T13:08:04.8710311+00:00",
+          "kind": "resolution",
+          "passed": false,
+          "resolved": false,
+          "hasBounds": false,
+          "waitDurationMs": 264,
+          "outcome": "not-found",
+          "message": "AutomationId selector found no elements."
+        },
+        {
+          "sequence": 4,
+          "attempt": 4,
+          "at": "2026-08-18T13:08:05.1620805+00:00",
+          "kind": "resolution",
+          "passed": false,
+          "resolved": false,
+          "hasBounds": false,
+          "waitDurationMs": 36,
+          "outcome": "not-found",
+          "message": "AutomationId selector found no elements."
+        },
+        {
+          "sequence": 5,
+          "attempt": 5,
+          "at": "2026-08-18T13:08:05.5097602+00:00",
+          "kind": "resolution",
+          "passed": false,
+          "resolved": false,
+          "hasBounds": false,
+          "waitDurationMs": 87,
+          "outcome": "not-found",
+          "message": "AutomationId selector found no elements."
+        },
+        {
+          "sequence": 6,
+          "attempt": 6,
+          "at": "2026-08-18T13:08:05.8380365+00:00",
+          "kind": "resolution",
+          "passed": false,
+          "resolved": false,
+          "hasBounds": false,
+          "waitDurationMs": 68,
+          "outcome": "not-found",
+          "message": "AutomationId selector found no elements."
+        },
+        {
+          "sequence": 7,
+          "attempt": 7,
+          "at": "2026-08-18T13:08:06.1487582+00:00",
+          "kind": "resolution",
+          "passed": false,
+          "resolved": false,
+          "hasBounds": false,
+          "waitDurationMs": 49,
+          "outcome": "not-found",
+          "message": "AutomationId selector found no elements."
+        },
+        {
+          "sequence": 8,
+          "attempt": 8,
+          "at": "2026-08-18T13:08:06.4723412+00:00",
+          "kind": "resolution",
+          "passed": false,
+          "resolved": false,
+          "hasBounds": false,
+          "waitDurationMs": 74,
+          "outcome": "not-found",
+          "message": "AutomationId selector found no elements."
+        },
+        {
+          "sequence": 9,
+          "attempt": 9,
+          "at": "2026-08-18T13:08:06.7869337+00:00",
+          "kind": "resolution",
+          "passed": false,
+          "resolved": false,
+          "hasBounds": false,
+          "waitDurationMs": 59,
+          "outcome": "not-found",
+          "message": "AutomationId selector found no elements."
+        },
+        {
+          "sequence": 10,
+          "attempt": 10,
+          "at": "2026-08-18T13:08:07.0910773+00:00",
+          "kind": "resolution",
+          "passed": false,
+          "resolved": false,
+          "hasBounds": false,
+          "waitDurationMs": 50,
+          "outcome": "not-found",
+          "message": "AutomationId selector found no elements."
+        }
+      ],
+      "assertions": [],
+      "expectedCheckpoint": {
+        "route": "//native",
+        "window": "window-0"
+      },
+      "observedCheckpoint": {
+        "appBuildFingerprint": "1.0:1",
+        "agentInstanceId": "1faf4f306d4e17a2ae9bbc42f4ca77dc",
+        "route": "//native",
+        "window": "window-0",
+        "locale": "en-US",
+        "theme": "Light",
+        "orientation": "Portrait"
+      },
+      "failureClass": "locator-not-found",
+      "selectorCandidates": [],
+      "selectorCandidateOmissions": [],
+      "artifacts": []
+    }
+  ],
+  "failure": {
+    "failureId": "failure-run-20260818130410704-d373f993",
+    "class": "locator-not-found",
+    "code": "locator-not-found",
+    "category": "selector",
+    "phase": "resolution",
+    "retryable": false,
+    "repairEligible": false,
+    "legacyKind": "not-found",
+    "message": "tap target could not be resolved: AutomationId selector found no elements.",
+    "stepId": "3",
+    "at": "2026-08-18T13:08:07.0918392+00:00",
+    "artifacts": []
+  },
+  "appProcess": {
+    "probed": true,
+    "source": "android-adb",
+    "processExited": false
+  },
+  "artifacts": [
+    {
+      "artifactId": "flow-run-run-20260818130410704-d373f993",
+      "kind": "flow-run-report",
+      "path": "flow-run.json",
+      "digest": "2e7bdaf4bca2c0e2b6bea316587922498a817f446cffeeeb6552202923db519f",
+      "mediaType": "application/json",
+      "redacted": true,
+      "createdAt": "2026-08-18T13:08:07.1012281+00:00"
+    }
+  ],
+  "selectorHealth": {
+    "ruleVersion": "selector-health-v1",
+    "rankerRuleVersion": "selector-ranker-v1",
+    "calibrationState": "uncalibrated",
+    "capturedSteps": 2,
+    "candidateCount": 5,
+    "omissionCount": 1
+  },
+  "reportDigest": "2e7bdaf4bca2c0e2b6bea316587922498a817f446cffeeeb6552202923db519f",
+  "reportPath": "flow-run.json",
+  "omissions": [],
+  "exitCategory": "test-failure"
+}

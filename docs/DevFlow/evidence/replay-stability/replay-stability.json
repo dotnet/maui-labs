@@ -1,0 +1,50 @@
+{
+  "metric": "replay-stability",
+  "flow": "samples\\DevFlow.Sample\\maui-tests\\verified-add-todo.md",
+  "platform": "android",
+  "device": "emulator-5554",
+  "runs": 5,
+  "firstAttemptPasses": 5,
+  "verifiedRuns": 5,
+  "passSource": "legacy:exitCategory",
+  "passSourceNote": "Recorded before this script read a run's structured outcome. The per-run detail below carries only the CLI envelope (Ok/ExitCategory), which the current script reports as legacy:exitCategory. Re-measure before quoting this value under the current outcome.status rule.",
+  "value": 1.0,
+  "confidenceInterval": {
+    "method": "wilson-95",
+    "lower": 0.5655,
+    "upper": 1.0
+  },
+  "measuredAtUtc": "2026-08-18T07:46:13.0856202Z",
+  "runs_detail": [
+    {
+      "Run": 1,
+      "Ok": true,
+      "ExitCategory": "pass",
+      "Verified": true
+    },
+    {
+      "Run": 2,
+      "Ok": true,
+      "ExitCategory": "pass",
+      "Verified": true
+    },
+    {
+      "Run": 3,
+      "Ok": true,
+      "ExitCategory": "pass",
+      "Verified": true
+    },
+    {
+      "Run": 4,
+      "Ok": true,
+      "ExitCategory": "pass",
+      "Verified": true
+    },
+    {
+      "Run": 5,
+      "Ok": true,
+      "ExitCategory": "pass",
+      "Verified": true
+    }
+  ]
+}

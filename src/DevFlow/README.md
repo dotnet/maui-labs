@@ -36,13 +36,26 @@ public static MauiApp CreateMauiApp()
     var builder = MauiApp.CreateBuilder();
     builder.UseMauiApp<App>();
 
-    #if DEBUG
+    #if MAUI_DEVFLOW
     builder.AddMauiDevFlowAgent();
     #endif
 
     return builder.Build();
 }
 ```
+
+`MAUI_DEVFLOW` is defined by the package only when `MauiDevFlowEnabled=true`. Debug builds enable
+it by default. For an explicit optimized, read-only diagnostics build:
+
+```bash
+dotnet build -c Release -p:MauiDevFlowProfileMode=true
+```
+
+Profile mode also defines `MAUI_DEVFLOW`, so the same registration block is compiled without
+requiring `DEBUG`; accidental optimized inclusion without profile mode remains a build error.
+Profile mode disables network monitoring entirely so streaming/large HTTP bodies cannot perturb or
+block the diagnostic run. The same build contract and runtime defaults ship in the standard,
+GTK, and WPF agent packages.
 
 ### 3. Install the unified CLI tool
 
@@ -179,7 +192,7 @@ dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Tests/
 
 ### Real app integration tests
 
-The simulator/emulator-driven suite is kept separate from the fast PR test pass and is intended to be run explicitly. Set `DEVFLOW_TEST_PLATFORM` to one of: `maccatalyst` (or `mac`/`catalyst`), `ios`, `android`, `windows`. Defaults to `maccatalyst` on macOS, `windows` on Windows.
+The simulator/emulator-driven suite is kept separate from the fast PR test pass and is intended to be run explicitly. Set `DEVFLOW_TEST_PLATFORM` to one of: `maccatalyst` (or `mac`/`catalyst`), `macos` (experimental AppKit only), `ios`, `android`, `windows`. Defaults to `maccatalyst` on macOS, `windows` on Windows.
 
 ```bash
 # Mac Catalyst
@@ -193,11 +206,22 @@ DEVFLOW_TEST_PLATFORM=android DEVFLOW_TEST_ANDROID_API=35 DEVFLOW_TEST_ANDROID_A
 
 # Windows (run on a Windows machine)
 DEVFLOW_TEST_PLATFORM=windows dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/
+
+# Experimental native AppKit (run only on macOS; never Mac Catalyst coverage)
+DEVFLOW_TEST_PLATFORM=macos DEVFLOW_RUN_APPKIT_FLOW_QA=1 dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/ --filter Category=AppKitFlowQa
 ```
 
 For local reliability, prefer running one platform suite at a time from a given repo worktree. Android fixture selection can be pinned with `DEVFLOW_TEST_ANDROID_AVD` and `DEVFLOW_TEST_ANDROID_SERIAL` when you want the harness to use a known emulator instance.
 
 There is also a manual GitHub Actions workflow at `.github/workflows/devflow-integration.yml` for running the same suite in CI.
+
+### Independent Appium black-box smoke tests
+
+The opt-in `Microsoft.Maui.DevFlow.Appium.SmokeTests` project is a separate external lane for
+release-like/uninstrumented apps, native compatibility, and optional Android/iOS system permission
+dialogs. It does not use the in-app DevFlow agent, broker, semantic flow runner, repair services,
+or qualification gates. See [Appium black-box smoke tests](../../docs/DevFlow/appium-smoke-testing.md)
+for driver setup, environment configuration, platform limitations, and artifact retention.
 
 ## Version
 

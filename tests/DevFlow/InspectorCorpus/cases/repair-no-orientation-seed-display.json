@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "id": "repair-no-orientation-seed-display",
+  "kind": "repair-negative",
+  "disposition": "no-repair",
+  "expectedFailureClass": "precondition-unsatisfied",
+  "provenance": {
+    "labeledBy": "devflow-maintainers",
+    "labeledOn": "2026-08-15",
+    "method": "hand-authored",
+    "sourceKind": "synthetic",
+    "reviewStatus": "unreviewed",
+    "notes": "Seed, backend-state, orientation, and display preconditions all diverge."
+  },
+  "fixture": {
+    "failure": "locator-not-found",
+    "checkpointMismatches": [
+      "seed",
+      "backend-state",
+      "orientation",
+      "display"
+    ]
+  },
+  "expect": {
+    "diagnosticIds": [],
+    "candidateKinds": [],
+    "repairEligible": false,
+    "ineligibilityCodes": [
+      "checkpoint-seed-mismatch",
+      "checkpoint-backend-state-mismatch",
+      "checkpoint-orientation-mismatch",
+      "checkpoint-display-mismatch"
+    ]
+  }
+}

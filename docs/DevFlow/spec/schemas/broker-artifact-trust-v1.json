@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/dotnet/maui-labs/main/docs/DevFlow/spec/schemas/broker-artifact-trust-v1.json",
+  "title": "DevFlow Broker Artifact Trust v1",
+  "description": "Local broker routes for bounded imported diagnostic artifacts. POST /api/artifact-trust/import?kind=flow-run|mauitrace accepts bytes only, always defaults to untrusted, and returns a capability token. GET status/projection and POST bind-local-reproduction require X-Maui-Artifact-Capability. No route returns raw imported bytes.",
+  "$defs": {
+    "CapabilityToken": {
+      "type": "string",
+      "minLength": 32,
+      "maxLength": 128
+    },
+    "Status": {
+      "type": "object",
+      "required": [
+        "identity",
+        "artifactKind",
+        "importedAt",
+        "expiresAt",
+        "verification",
+        "rawContentRetained",
+        "hasSafeProjection"
+      ],
+      "properties": {
+        "identity": {
+          "$ref": "./maui-artifact-trust-v1.json#/$defs/ImportedIdentity"
+        },
+        "artifactKind": {
+          "enum": [
+            "flow-run",
+            "mauitrace"
+          ]
+        },
+        "importedAt": {
+          "$ref": "./maui-artifact-trust-v1.json#/$defs/Timestamp"
+        },
+        "expiresAt": {
+          "$ref": "./maui-artifact-trust-v1.json#/$defs/Timestamp"
+        },
+        "verification": {
+          "$ref": "./maui-artifact-trust-v1.json#/$defs/Verification"
+        },
+        "rawContentRetained": {
+          "const": false
+        },
+        "hasSafeProjection": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "ImportResponse": {
+      "type": "object",
+      "required": [
+        "ok",
+        "capabilityToken",
+        "status"
+      ],
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "capabilityToken": {
+          "$ref": "#/$defs/CapabilityToken"
+        },
+        "status": {
+          "$ref": "#/$defs/Status"
+        }
+      },
+      "additionalProperties": false
+    },
+    "LocalReproductionRequest": {
+      "type": "object",
+      "required": [
+        "localRunId",
+        "current"
+      ],
+      "properties": {
+        "localRunId": {
+          "type": "string"
+        },
+        "current": {
+          "$ref": "./broker-workflow-run-v1.json#/$defs/ReproductionExpectation"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

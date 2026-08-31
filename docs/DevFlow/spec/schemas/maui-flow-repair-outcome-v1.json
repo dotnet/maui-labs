@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/dotnet/maui-labs/main/docs/DevFlow/spec/schemas/maui-flow-repair-outcome-v1.json",
+  "title": "MAUI Flow Repair Outcome v1",
+  "description": "An immutable audit record for the review, application, verification, or rollback of a repair proposal.",
+  "type": "object",
+  "required": [
+    "schema",
+    "proposalId",
+    "state"
+  ],
+  "properties": {
+    "schema": {
+      "const": 1
+    },
+    "proposalId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "state": {
+      "enum": [
+        "proposed",
+        "previewed",
+        "approved",
+        "applying",
+        "rejected",
+        "stale",
+        "approval-expired",
+        "applied",
+        "verified",
+        "verification-failed",
+        "rollback-required",
+        "reverted",
+        "rollback-failed"
+      ]
+    },
+    "newFlowRevision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "verificationRunIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "rollbackRevision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "reviewer": {
+      "type": "string"
+    },
+    "recordedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "safeAuditDigest": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "replayEligibility": {
+      "$ref": "./maui-flow-run-report-v1.json#/$defs/ReplayEligibility"
+    },
+    "verification": {
+      "$ref": "./maui-flow-run-report-v1.json#/$defs/Verification"
+    }
+  },
+  "additionalProperties": true
+}

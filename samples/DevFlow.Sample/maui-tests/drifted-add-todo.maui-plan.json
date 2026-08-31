@@ -1,0 +1,73 @@
+{
+  "schema": 1,
+  "planId": "plan-drifted-add-todo",
+  "revision": 1,
+  "flow": {
+    "path": "drifted-add-todo.md",
+    "digest": "72c011f81d1624a03a79ed03fa4795baf3ca2872f0d5762e07eed2a6c646fb24"
+  },
+  "title": "drifted-add-todo",
+  "goal": "Prove that adding a todo through the UI is actually committed to the app's durable ledger, and report the run as independently verified.",
+  "scenarios": [
+    {
+      "scenarioId": "add-todo-is-committed",
+      "description": "A user adds a todo from the native page and the app commits it.",
+      "acceptanceCriterionIds": [
+        "todo-committed"
+      ]
+    }
+  ],
+  "assumptions": [],
+  "risks": [],
+  "preconditions": [],
+  "checkpoint": {
+    "route": "//native",
+    "window": "window-0"
+  },
+  "reset": {
+    "required": false
+  },
+  "acceptanceCriteria": [
+    {
+      "criterionId": "todo-committed",
+      "description": "The added todo is committed to the app's durable ledger, not merely rendered in the list.",
+      "required": true,
+      "businessOracleId": "todo-ledger-record"
+    }
+  ],
+  "requiredPlatforms": [
+    "android"
+  ],
+  "requirements": {
+    "requiredCapabilities": [],
+    "requiredSemantics": []
+  },
+  "prohibitedActionClasses": [],
+  "provenance": {
+    "actorKind": "human",
+    "channel": "repository",
+    "intent": "human-authored"
+  },
+  "reviews": [],
+  "approvals": [],
+  "sideEffectPolicy": "none",
+  "businessOracles": [],
+  "independentBusinessOracles": [
+    {
+      "oracleId": "todo-ledger-record",
+      "description": "Read the app's private todo ledger over adb and confirm it holds the exact record for the todo the flow added, and no removal. The ledger is written by the domain layer and read by no page, so this evidence is produced outside the UI the flow drove.",
+      "required": true,
+      "independent": true,
+      "evidenceKind": "android-app-storage",
+      "reference": "files/todo-ledger.jsonl",
+      "expect": {
+        "contains": [
+          "{\"event\":\"todo-added\",\"id\":\"todo-0001\",\"title\":\"Ledger verified item\",\"completed\":false}"
+        ],
+        "absent": [
+          "{\"event\":\"todo-removed\""
+        ]
+      }
+    }
+  ]
+}

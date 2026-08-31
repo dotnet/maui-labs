@@ -1,0 +1,142 @@
+openapi: 3.1.0
+info:
+  title: DevFlow Broker Workflow Runs
+  version: 1.0.0
+  description: >
+    Local-only broker protocol for starting, monitoring, and cancelling one bounded canonical
+    MAUI flow replay against an explicit connected agent instance.
+servers:
+  - url: http://localhost:{port}
+    description: Local DevFlow broker
+    variables:
+      port:
+        default: "19223"
+paths:
+  /api/workflow-runs/capabilities:
+    get:
+      operationId: getWorkflowRunCapabilities
+      summary: Get broker workflow-run capabilities
+      responses:
+        "200":
+          description: Supported coordinator capabilities and limits.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/broker-workflow-run-v1.json#/$defs/CapabilitiesResponse"
+  /api/workflow-runs/start:
+    post:
+      operationId: startWorkflowRun
+      summary: Start a bounded canonical flow replay
+      description: >
+        The caller must provide an exact current agent ID and broker instance ID. The broker validates
+        the flow and side-effect/reset/oracle admission before acquiring a mutation lease. Optional
+        plan/context evidence is included in the request digest. The same idempotency key and request
+        digest returns the original run; a different digest conflicts. A denied admission never
+        acquires a lease or sends a mutation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/broker-workflow-run-v1.json#/$defs/StartRequest"
+      responses:
+        "200":
+          description: Existing result for a matching idempotent start request.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/broker-workflow-run-v1.json#/$defs/StartResponse"
+        "202":
+          description: New queued workflow run and its per-run capability token.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/broker-workflow-run-v1.json#/$defs/StartResponse"
+        "400":
+          description: Invalid JSON, invalid flow, or invalid bounded timeout.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/broker-workflow-run-v1.json#/$defs/ErrorResponse"
+        "409":
+          description: Stale agent instance, active run conflict, or idempotency digest conflict.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/broker-workflow-run-v1.json#/$defs/ErrorResponse"
+  /api/workflow-runs/{runId}/status:
+    post:
+      operationId: getWorkflowRunStatus
+      summary: Get one workflow run
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/broker-workflow-run-v1.json#/$defs/AccessRequest"
+      responses:
+        "200":
+          description: >
+            Current lifecycle state and, when terminal, the retained flow-run-report-v1. If the
+            broker has an artifact root, the snapshot also exposes the atomically written
+            flow-run.json path and digest.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/broker-workflow-run-v1.json#/$defs/StatusResponse"
+        "403":
+          description: Missing or invalid capability token.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/broker-workflow-run-v1.json#/$defs/ErrorResponse"
+        "404":
+          description: Run not retained or not found.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/broker-workflow-run-v1.json#/$defs/ErrorResponse"
+  /api/workflow-runs/{runId}/cancel:
+    post:
+      operationId: cancelWorkflowRun
+      summary: Request cancellation of one workflow run
+      description: >
+        Cancellation prevents future flow steps but cannot claim that an in-flight device action did
+        not complete.
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/broker-workflow-run-v1.json#/$defs/AccessRequest"
+      responses:
+        "200":
+          description: Cancellation accepted or terminal state returned unchanged.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/broker-workflow-run-v1.json#/$defs/CancelResponse"
+        "403":
+          description: Missing or invalid capability token.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/broker-workflow-run-v1.json#/$defs/ErrorResponse"
+        "404":
+          description: Run not retained or not found.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/broker-workflow-run-v1.json#/$defs/ErrorResponse"

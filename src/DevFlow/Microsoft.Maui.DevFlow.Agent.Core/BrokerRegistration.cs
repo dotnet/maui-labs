@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Reflection;
 using System.Security.Cryptography;
@@ -20,15 +22,32 @@ public class BrokerRegistration : IDisposable
     private CancellationTokenSource? _cts;
     private Timer? _reconnectTimer;
     private bool _disposed;
+    private readonly object _lifecycleGate = new();
     private readonly string _project;
     private readonly string _tfm;
     private readonly string _platform;
     private readonly string _appName;
     private readonly string? _sessionId;
+    private readonly string? _packageId;
+    private readonly string? _deviceId;
+    private string _agentId;
+    private string? _instanceId;
     private int _brokerPort;
     private int? _assignedPort;
     private ILogger? _logger;
     private static ILogger? _staticLogger;
+    private static readonly HttpClient _brokerHttp = new(new SocketsHttpHandler
+    {
+        ConnectCallback = ConnectBrokerLoopbackAsync
+    })
+    {
+        Timeout = TimeSpan.FromSeconds(2)
+    };
+    private static readonly JsonSerializerOptions _leaseJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
 
     /// <summary>
     /// The port assigned by the broker, or null if not registered.
@@ -45,6 +64,19 @@ public class BrokerRegistration : IDisposable
     /// Whether the agent is currently connected to the broker.
     /// </summary>
     public bool IsConnected => _ws?.State == WebSocketState.Open;
+    internal bool HasBrokerAuthority =>
+        !_disposed &&
+        IsConnected &&
+        _assignedPort.HasValue &&
+        !string.IsNullOrWhiteSpace(_instanceId);
+    internal string AgentId => _agentId;
+    internal string? InstanceId => _instanceId;
+    internal int BrokerPort => _brokerPort;
+    private static readonly string[] _brokerHttpHosts = ["127.0.0.1", "localhost"];
+    internal static IReadOnlyList<string> BrokerHttpHosts => _brokerHttpHosts;
+
+    internal static bool ShouldTryAlternateBrokerHost(HttpStatusCode statusCode)
+        => statusCode is HttpStatusCode.BadRequest or HttpStatusCode.NotFound;
 
     /// <summary>
     /// Sets the static logger to be used by all BrokerRegistration instances that don't have an instance logger.
@@ -55,19 +87,54 @@ public class BrokerRegistration : IDisposable
     /// Backward-compatible constructor preserving the old signature for external consumers.
     /// </summary>
     public BrokerRegistration(string project, string tfm, string platform, string appName, int brokerPort = DefaultBrokerPort, ILogger? logger = null)
-        : this(project, tfm, platform, appName, sessionId: null, brokerPort, logger)
+        : this(project, tfm, platform, appName, sessionId: null, packageId: null, brokerPort, logger)
     {
     }
 
     public BrokerRegistration(string project, string tfm, string platform, string appName, string? sessionId, int brokerPort = DefaultBrokerPort, ILogger? logger = null)
+        : this(project, tfm, platform, appName, sessionId, packageId: null, brokerPort, logger)
+    {
+    }
+
+    public BrokerRegistration(
+        string project,
+        string tfm,
+        string platform,
+        string appName,
+        string? sessionId,
+        string? packageId,
+        int brokerPort = DefaultBrokerPort,
+        ILogger? logger = null)
+        : this(project, tfm, platform, appName, sessionId, packageId, deviceId: null, brokerPort, logger)
+    {
+    }
+
+    /// <param name="deviceId">
+    /// Identity of the virtual device this app is running on, in
+    /// <see cref="DeviceIdentityProvider"/>'s wire form. Lets the broker pair the app with the
+    /// device around it. Null when the app is not on a recognisable virtual device.
+    /// </param>
+    public BrokerRegistration(
+        string project,
+        string tfm,
+        string platform,
+        string appName,
+        string? sessionId,
+        string? packageId,
+        string? deviceId,
+        int brokerPort = DefaultBrokerPort,
+        ILogger? logger = null)
     {
         _project = project;
         _tfm = tfm;
         _platform = platform;
         _appName = appName;
         _sessionId = sessionId;
+        _packageId = packageId;
+        _deviceId = deviceId ?? DeviceIdentityProvider.Resolve();
         _brokerPort = brokerPort;
         _logger = logger;
+        _agentId = ComputeId(packageId ?? project, tfm, sessionId, Environment.ProcessId);
     }
 
     /// <summary>
@@ -101,6 +168,10 @@ public class BrokerRegistration : IDisposable
 
             if (response?.Type == "registered" && response.Port > 0)
             {
+                if (!string.IsNullOrWhiteSpace(response.Id))
+                    _agentId = response.Id;
+                if (!string.IsNullOrWhiteSpace(response.InstanceId))
+                    _instanceId = response.InstanceId;
                 _assignedPort = response.Port;
                 logger?.LogInformation("DevFlow agent registered. Broker assigned port: {Port}", _assignedPort);
 
@@ -158,38 +229,54 @@ public class BrokerRegistration : IDisposable
         var delays = new[] { 2000, 5000, 10000, 15000 };
         var attempt = 0;
         var logger = _logger ?? _staticLogger;
+        var lifetimeToken = _cts?.Token ?? CancellationToken.None;
 
         _reconnectTimer = new Timer(async _ =>
         {
-            if (_disposed) return;
+            if (_disposed || lifetimeToken.IsCancellationRequested) return;
 
             attempt++;
             logger?.LogDebug("DevFlow agent reconnection attempt {Attempt} to broker...", attempt);
 
+            ClientWebSocket? candidate = null;
             try
             {
-                _ws?.Dispose();
-                _ws = new ClientWebSocket();
+                candidate = new ClientWebSocket();
 
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                await _ws.ConnectAsync(new Uri($"ws://localhost:{_brokerPort}/ws/agent"), cts.Token);
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(lifetimeToken);
+                cts.CancelAfter(TimeSpan.FromSeconds(2));
+                await candidate.ConnectAsync(new Uri($"ws://localhost:{_brokerPort}/ws/agent"), cts.Token);
 
                 // Re-register
                 var registration = BuildRegistrationJson();
-                await _ws.SendAsync(Encoding.UTF8.GetBytes(registration), WebSocketMessageType.Text, true, cts.Token);
+                await candidate.SendAsync(Encoding.UTF8.GetBytes(registration), WebSocketMessageType.Text, true, cts.Token);
 
                 var buffer = new byte[1024];
-                var result = await _ws.ReceiveAsync(buffer, cts.Token);
+                var result = await candidate.ReceiveAsync(buffer, cts.Token);
                 var response = JsonSerializer.Deserialize<RegistrationResponse>(
                     Encoding.UTF8.GetString(buffer, 0, result.Count));
 
                 if (response?.Type == "registered")
                 {
-                    _assignedPort = response.Port;
+                    ClientWebSocket? previous = null;
+                    lock (_lifecycleGate)
+                    {
+                        if (_disposed || lifetimeToken.IsCancellationRequested)
+                            return;
+                        previous = _ws;
+                        _ws = candidate;
+                        candidate = null;
+                        if (!string.IsNullOrWhiteSpace(response.Id))
+                            _agentId = response.Id;
+                        if (!string.IsNullOrWhiteSpace(response.InstanceId))
+                            _instanceId = response.InstanceId;
+                        _assignedPort = response.Port;
+                    }
+                    previous?.Dispose();
                     logger?.LogInformation("DevFlow agent reconnected to broker after {Attempt} attempts", attempt);
                     _reconnectTimer?.Dispose();
                     _reconnectTimer = null;
-                    _ = Task.Run(() => MonitorConnectionAsync(_cts?.Token ?? CancellationToken.None));
+                    _ = Task.Run(() => MonitorConnectionAsync(lifetimeToken));
                     return;
                 }
             }
@@ -197,8 +284,13 @@ public class BrokerRegistration : IDisposable
             {
                 logger?.LogDebug("DevFlow agent reconnection attempt {Attempt} failed — retrying: {Message}", attempt, ex.Message);
             }
+            finally
+            {
+                candidate?.Dispose();
+            }
 
             // Keep retrying with backoff up to 15s, indefinitely
+            if (_disposed || lifetimeToken.IsCancellationRequested) return;
             var delay = delays[Math.Min(attempt, delays.Length - 1)];
             try { _reconnectTimer?.Change(delay, Timeout.Infinite); } catch { }
         }, null, 2000, Timeout.Infinite);
@@ -210,24 +302,172 @@ public class BrokerRegistration : IDisposable
     public static string ComputeId(string project, string tfm)
     {
         var input = $"{project}|{tfm}";
+        return ComputeId(input);
+    }
+
+    /// <summary>
+    /// Computes a process-specific agent identity while preserving the legacy identity
+    /// for registrations that do not provide a process ID.
+    /// </summary>
+    public static string ComputeId(string project, string tfm, string? sessionId, int processId)
+    {
+        if (processId <= 0)
+            return ComputeId(project, tfm);
+
+        var input = $"{project}|{tfm}|{sessionId ?? ""}|{processId}";
+        return ComputeId(input);
+    }
+
+    private static string ComputeId(string input)
+    {
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(input));
         return Convert.ToHexString(hash)[..12].ToLowerInvariant();
     }
 
-    public void Dispose()
+    internal async Task<MutationLeaseStatus?> ControlMutationLeaseAsync(MutationLeaseRequest request)
     {
-        if (_disposed) return;
-        _disposed = true;
-        _reconnectTimer?.Dispose();
-        _cts?.Cancel();
+        if (!HasBrokerAuthority)
+            return null;
+
         try
         {
-            _ws?.CloseAsync(WebSocketCloseStatus.NormalClosure, "Agent shutting down", CancellationToken.None)
+            var json = JsonSerializer.Serialize(request, _leaseJsonOptions);
+            using var response = await PostBrokerAsync(
+                $"/api/leases/{Uri.EscapeDataString(_agentId)}",
+                json).ConfigureAwait(false);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return null;
+            var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(body))
+                return MutationLeaseStatus.Failure("The DevFlow broker did not return a lease response.");
+
+            var result = JsonSerializer.Deserialize<MutationLeaseStatus>(body, _leaseJsonOptions);
+            if (result is null)
+                return MutationLeaseStatus.Failure("The DevFlow broker returned an invalid lease response.");
+            if (result is not null && !response.IsSuccessStatusCode)
+                result.Ok = false;
+            return result;
+        }
+        catch (Exception ex)
+        {
+            (_logger ?? _staticLogger)?.LogDebug(
+                "DevFlow broker lease request failed: {Message}", ex.Message);
+            return MutationLeaseStatus.Failure("The DevFlow broker lease authority is temporarily unavailable.");
+        }
+    }
+
+    internal async Task<MutationRecordingStatus?> ControlMutationRecordingAsync(MutationRecordingRequest request)
+    {
+        if (!HasBrokerAuthority)
+            return null;
+
+        try
+        {
+            var json = JsonSerializer.Serialize(request, _leaseJsonOptions);
+            using var response = await PostBrokerAsync(
+                $"/api/recordings/{Uri.EscapeDataString(_agentId)}",
+                json).ConfigureAwait(false);
+            var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(body))
+                return null;
+            var result = JsonSerializer.Deserialize<MutationRecordingStatus>(body, _leaseJsonOptions);
+            if (result is not null && !response.IsSuccessStatusCode)
+                result.Ok = false;
+            return result;
+        }
+        catch (Exception ex)
+        {
+            (_logger ?? _staticLogger)?.LogDebug(
+                "DevFlow broker recording request failed: {Message}", ex.Message);
+            return null;
+        }
+    }
+
+    private async Task<HttpResponseMessage> PostBrokerAsync(string path, string json)
+    {
+        for (var index = 0; index < _brokerHttpHosts.Length; index++)
+        {
+            var host = _brokerHttpHosts[index];
+            try
+            {
+                using var content = new StringContent(json, Encoding.UTF8, "application/json");
+                var response = await _brokerHttp.PostAsync(
+                    $"http://{host}:{_brokerPort}{path}",
+                    content).ConfigureAwait(false);
+                if (index == _brokerHttpHosts.Length - 1 ||
+                    !ShouldTryAlternateBrokerHost(response.StatusCode))
+                {
+                    return response;
+                }
+
+                (_logger ?? _staticLogger)?.LogDebug(
+                    "DevFlow broker rejected Host {Host} with status {StatusCode}; retrying alternate loopback host.",
+                    host,
+                    (int)response.StatusCode);
+                response.Dispose();
+            }
+            catch (HttpRequestException ex) when (index < _brokerHttpHosts.Length - 1)
+            {
+                (_logger ?? _staticLogger)?.LogDebug(
+                    "DevFlow broker request through Host {Host} failed; retrying alternate loopback host: {Message}",
+                    host,
+                    ex.Message);
+            }
+        }
+
+        throw new HttpRequestException("The DevFlow broker was unavailable on all loopback hosts.");
+    }
+
+    private static async ValueTask<Stream> ConnectBrokerLoopbackAsync(
+        SocketsHttpConnectionContext context,
+        CancellationToken cancellationToken)
+    {
+        // The callback always dials IPv4 loopback. PostBrokerAsync varies the HTTP Host header
+        // independently so it can match either literal-IP or localhost-only broker prefixes.
+        var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
+        {
+            NoDelay = true
+        };
+        try
+        {
+            await socket.ConnectAsync(IPAddress.Loopback, context.DnsEndPoint.Port, cancellationToken)
+                .ConfigureAwait(false);
+            return new NetworkStream(socket, ownsSocket: true);
+        }
+        catch
+        {
+            socket.Dispose();
+            throw;
+        }
+    }
+
+    public void Dispose()
+    {
+        ClientWebSocket? socket;
+        Timer? reconnectTimer;
+        CancellationTokenSource? lifetimeCts;
+        lock (_lifecycleGate)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            reconnectTimer = _reconnectTimer;
+            _reconnectTimer = null;
+            lifetimeCts = _cts;
+            socket = _ws;
+            _ws = null;
+            _assignedPort = null;
+            _instanceId = null;
+        }
+        reconnectTimer?.Dispose();
+        lifetimeCts?.Cancel();
+        try
+        {
+            socket?.CloseAsync(WebSocketCloseStatus.NormalClosure, "Agent shutting down", CancellationToken.None)
                 .Wait(TimeSpan.FromSeconds(1));
         }
         catch { }
-        _ws?.Dispose();
-        _cts?.Dispose();
+        socket?.Dispose();
+        lifetimeCts?.Dispose();
     }
 
     private string BuildRegistrationJson() => JsonSerializer.Serialize(new
@@ -237,10 +477,13 @@ public class BrokerRegistration : IDisposable
         tfm = _tfm,
         platform = _platform,
         appName = _appName,
+        packageId = _packageId,
+        deviceId = _deviceId,
         currentPort = CurrentPort,
         version = typeof(BrokerRegistration).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
-        sessionId = _sessionId
+        sessionId = _sessionId,
+        processId = Environment.ProcessId
     });
 
     private record RegistrationResponse
@@ -253,5 +496,8 @@ public class BrokerRegistration : IDisposable
 
         [JsonPropertyName("port")]
         public int Port { get; init; }
+
+        [JsonPropertyName("instanceId")]
+        public string? InstanceId { get; init; }
     }
 }

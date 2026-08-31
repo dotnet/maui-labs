@@ -38,7 +38,7 @@ public class ProfilerTests : IntegrationTestBase
         Assert.NotNull(batch);
         Assert.Equal(session.SessionId, batch!.SessionId);
 
-        var stopped = await Client.StopProfilerAsync(session.SessionId);
+        var stopped = await Client.StopProfilerAsync(session.SessionId, session.StopToken);
         Assert.NotNull(stopped);
         Assert.False(stopped!.IsActive);
     }
@@ -51,7 +51,7 @@ public class ProfilerTests : IntegrationTestBase
         Assert.NotNull(session!.SessionId);
 
         if (session.IsActive)
-            await Client.StopProfilerAsync(session.SessionId);
+            await Client.StopProfilerAsync(session.SessionId, session.StopToken);
     }
 
     [Fact]
@@ -74,7 +74,7 @@ public class ProfilerTests : IntegrationTestBase
         if (batch!.Samples.Count > 0)
             Assert.True(batch.Samples[0].TsUtc > DateTime.MinValue);
 
-        await Client.StopProfilerAsync(session.SessionId);
+        await Client.StopProfilerAsync(session.SessionId, session.StopToken);
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public class ProfilerTests : IntegrationTestBase
         Assert.True(result);
 
         if (session!.IsActive)
-            await Client.StopProfilerAsync(session.SessionId);
+            await Client.StopProfilerAsync(session.SessionId, session.StopToken);
     }
 
     [Fact]
@@ -111,7 +111,7 @@ public class ProfilerTests : IntegrationTestBase
         Assert.True(response.IsSuccessStatusCode);
 
         if (session!.IsActive)
-            await Client.StopProfilerAsync(session.SessionId);
+            await Client.StopProfilerAsync(session.SessionId, session.StopToken);
     }
 
     [Fact]
@@ -125,7 +125,7 @@ public class ProfilerTests : IntegrationTestBase
     [Fact]
     public async Task StopSession_InvalidId_HandlesGracefully()
     {
-        var result = await Client.StopProfilerAsync("nonexistent-session-id");
+        var result = await Client.StopProfilerAsync("nonexistent-session-id", "invalid-stop-token");
         Output.WriteLine($"Stop nonexistent session result: {(result == null ? "null" : "not null")}");
     }
 }

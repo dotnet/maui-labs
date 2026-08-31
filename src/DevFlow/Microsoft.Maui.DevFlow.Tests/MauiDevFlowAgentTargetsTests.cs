@@ -221,8 +221,13 @@ public sealed class MauiDevFlowAgentTargetsTests : IDisposable
         using var process = Process.Start(startInfo);
         Assert.NotNull(process);
 
-        var output = process.StandardOutput.ReadToEnd();
-        var error = process.StandardError.ReadToEnd();
+        // Both pipes are drained at once. Reading one to the end first deadlocks as soon as the
+        // other fills its buffer, which a verbose MSBuild failure does.
+        var outputTask = process.StandardOutput.ReadToEndAsync();
+        var errorTask = process.StandardError.ReadToEndAsync();
+        Task.WaitAll(outputTask, errorTask);
+        var output = outputTask.Result;
+        var error = errorTask.Result;
 
         process.WaitForExit();
 

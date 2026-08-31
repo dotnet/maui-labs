@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "planId": "plan-appkit-native-add-todo",
+  "revision": 1,
+  "flow": {
+    "path": "appkit-native-add-todo.md",
+    "digest": "3e14fdb9e54919e694207c17c4cf133db9721786c694713e6695c8cab1e5c25b"
+  },
+  "title": "appkit-native-add-todo",
+  "goal": "Replay the committed appkit-native-add-todo flow against the sample app.",
+  "scenarios": [],
+  "assumptions": [],
+  "risks": [],
+  "preconditions": [],
+  "reset": {
+    "required": false
+  },
+  "acceptanceCriteria": [],
+  "requiredPlatforms": [],
+  "requirements": {
+    "requiredCapabilities": [],
+    "requiredSemantics": []
+  },
+  "prohibitedActionClasses": [],
+  "provenance": {
+    "actorKind": "human",
+    "channel": "repository",
+    "intent": "human-authored"
+  },
+  "reviews": [],
+  "approvals": [],
+  "sideEffectPolicy": "none",
+  "businessOracles": [],
+  "independentBusinessOracles": []
+}

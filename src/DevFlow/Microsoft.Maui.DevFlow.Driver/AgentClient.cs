@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -31,9 +32,26 @@ public class AgentClient : IDisposable
 
     private readonly HttpClient _http;
     private readonly string _baseUrl;
+    private readonly AsyncLocal<MutationLeaseIdentity?> _mutationLeaseOverride = new();
+    private readonly AsyncLocal<WorkflowRunScopeState?> _workflowRunOverride = new();
+    private readonly ConcurrentDictionary<string, string> _ownedProfilerStopTokens =
+        new(StringComparer.Ordinal);
+    private string? _lastOwnedProfilerSessionId;
     private bool _disposed;
 
     public string BaseUrl => _baseUrl;
+
+    /// <summary>Stable identity used to coordinate mutating calls from this client.</summary>
+    public string MutationLeaseId { get; set; } = Guid.NewGuid().ToString("N");
+
+    /// <summary>Caller kind shown to other DevFlow hosts when this client holds the lease.</summary>
+    public string MutationLeaseHolderKind { get; set; } = "driver";
+
+    /// <summary>Human-readable holder label shown by inspector hosts.</summary>
+    public string? MutationLeaseLabel { get; set; }
+
+    /// <summary>Automatically claim the mutation lease before non-GET requests. Default: true.</summary>
+    public bool AutoAcquireMutationLease { get; set; } = true;
 
     /// <summary>
     /// Additional attempts for transient transport failures such as a dropped ADB port
@@ -73,32 +91,315 @@ public class AgentClient : IDisposable
     public AgentClient(string host = "localhost", int port = 9223)
     {
         _baseUrl = $"http://{host}:{port}";
-        _http = CreateHttpClient(host);
+        _http = CreateHttpClient(host, GetCurrentMutationLease, GetCurrentWorkflowRun);
+    }
+
+    /// <summary>
+    /// Temporarily uses a caller-provided mutation lease identity for all asynchronous calls made
+    /// within the returned scope. Used by shared proxy hosts that serve multiple browser sessions.
+    /// </summary>
+    public IDisposable UseMutationLease(string leaseId, string holderKind, string? label = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(leaseId);
+        var previous = _mutationLeaseOverride.Value;
+        _mutationLeaseOverride.Value = new MutationLeaseIdentity(leaseId, holderKind, label);
+        return new MutationLeaseScope(_mutationLeaseOverride, previous);
+    }
+
+    /// <summary>
+    /// Attaches a broker-issued workflow command envelope to every mutating request made in this
+    /// asynchronous scope. Read requests are unchanged and mutating transport retries are disabled.
+    /// </summary>
+    public IDisposable UseWorkflowRun(WorkflowRunContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        context.Validate();
+
+        var previous = _workflowRunOverride.Value;
+        _workflowRunOverride.Value = new WorkflowRunScopeState(context.Clone());
+        return new WorkflowRunScope(_workflowRunOverride, previous);
+    }
+
+    /// <summary>
+    /// The latest command receipt issued by the active workflow scope, if any. The receipt contains
+    /// metadata only and never retains action request or response bodies.
+    /// </summary>
+    public WorkflowCommandReceipt? LastWorkflowCommandReceipt
+        => _workflowRunOverride.Value?.LastReceipt;
+
+    /// <summary>
+    /// Begins, ends, or abandons the agent-side in-process ledger for a broker-owned workflow run.
+    /// This control request is deliberately sent without retries.
+    /// </summary>
+    public async Task<WorkflowRunControlStatus> ControlWorkflowRunAsync(
+        string action,
+        WorkflowRunContext context,
+        string? reason = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(action);
+        ArgumentNullException.ThrowIfNull(context);
+        context.Validate();
+
+        var body = new JsonObject
+        {
+            ["action"] = action,
+            ["runId"] = context.RunId,
+            ["agentInstanceId"] = context.AgentInstanceId,
+            ["authorityEpoch"] = context.AuthorityEpoch,
+            ["approvalDigest"] = context.ApprovalDigest,
+            ["reason"] = reason
+        };
+
+        try
+        {
+            using var content = DriverJson.CreateJsonContent(body);
+            using var response = await _http.PostAsync($"{_baseUrl}{AgentApi}/workflow-runs", content)
+                .ConfigureAwait(false);
+            var responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            var status = DriverJson.Deserialize<WorkflowRunControlStatus>(responseBody) ??
+                new WorkflowRunControlStatus
+                {
+                    Error = $"Workflow ledger control failed with HTTP {(int)response.StatusCode}.",
+                    Reason = "workflow-control"
+                };
+            status.Ok &= response.IsSuccessStatusCode;
+            return status;
+        }
+        catch (Exception ex) when (IsExpectedClientException(ex))
+        {
+            return new WorkflowRunControlStatus
+            {
+                Error = "The agent workflow ledger could not be reached.",
+                Reason = "workflow-transport"
+            };
+        }
+    }
+
+    /// <summary>Claim, query, heartbeat, or release this caller's mutation lease.</summary>
+    public Task<MutationLeaseStatus> ControlMutationLeaseAsync(
+        string action,
+        bool force = false,
+        string? leaseId = null,
+        string? holderKind = null,
+        string? label = null)
+        => ControlMutationLeaseAsync(action, force, leaseId, holderKind, label, transactionId: null);
+
+    public async Task<MutationLeaseStatus> ControlMutationLeaseAsync(
+        string action,
+        bool force,
+        string? leaseId,
+        string? holderKind,
+        string? label,
+        string? transactionId)
+    {
+        var current = GetCurrentMutationLease();
+        var id = string.IsNullOrWhiteSpace(leaseId) ? current?.LeaseId : leaseId;
+        var kind = string.IsNullOrWhiteSpace(holderKind) ? current?.HolderKind : holderKind;
+        var display = label ?? current?.Label;
+        var body = new JsonObject
+        {
+            ["action"] = action,
+            ["leaseId"] = id,
+            ["holderKind"] = kind,
+            ["label"] = display,
+            ["force"] = force,
+            ["transactionId"] = transactionId
+        };
+
+        using var content = DriverJson.CreateJsonContent(body);
+        using var response = await _http.PostAsync($"{_baseUrl}{AgentApi}/lease", content);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            // Rolling-upgrade compatibility: older agents predate mutation leases. They remain
+            // usable during a public-preview upgrade, while current agents enforce the lease.
+            return new MutationLeaseStatus
+            {
+                Ok = true,
+                Allowed = true,
+                YouHold = true,
+                Authority = "unsupported"
+            };
+        }
+        var responseBody = await response.Content.ReadAsStringAsync();
+        var status = DriverJson.Deserialize<MutationLeaseStatus>(responseBody) ?? new MutationLeaseStatus
+        {
+            Ok = false,
+            Error = $"Mutation lease request failed with HTTP {(int)response.StatusCode}."
+        };
+        status.Ok &= response.IsSuccessStatusCode;
+        return status;
+    }
+
+    public Task<MutationRecordingStatus> ControlMutationRecordingAsync(
+        string action,
+        string? name = null,
+        string? app = null,
+        string? platform = null,
+        string? preconditions = null)
+        => ControlMutationRecordingAsync(action, name, app, platform, preconditions, recordingId: null);
+
+    public async Task<MutationRecordingStatus> ControlMutationRecordingAsync(
+        string action,
+        string? name,
+        string? app,
+        string? platform,
+        string? preconditions,
+        string? recordingId)
+    {
+        var body = new JsonObject
+        {
+            ["action"] = action,
+            ["recordingId"] = recordingId,
+            ["name"] = name,
+            ["app"] = app,
+            ["platform"] = platform,
+            ["preconditions"] = preconditions
+        };
+        using var response = string.Equals(action, "status", StringComparison.OrdinalIgnoreCase)
+            ? await SendRecordingRequestAsync(body)
+            : await SendWithTransientRetriesAsync(HttpMethod.Post, () => SendRecordingRequestAsync(body));
+        return await ReadMutationRecordingResponseAsync(response);
+    }
+
+    public Task<MutationRecordingStatus> ObserveMutationRecordingAsync(MutationRecordingObservation observation)
+        => ObserveMutationRecordingAsync(observation, recordingId: null);
+
+    public async Task<MutationRecordingStatus> ObserveMutationRecordingAsync(
+        MutationRecordingObservation observation,
+        string? recordingId)
+    {
+        ArgumentNullException.ThrowIfNull(observation);
+        if (string.IsNullOrWhiteSpace(observation.Action))
+            throw new ArgumentException("A recording observation action is required.", nameof(observation));
+
+        var observationBody = new JsonObject
+        {
+            ["action"] = observation.Action,
+            ["automationId"] = observation.AutomationId,
+            ["text"] = observation.Text,
+            ["type"] = observation.Type,
+            ["index"] = observation.Index,
+            ["id"] = observation.Id,
+            ["value"] = observation.Value,
+            ["name"] = observation.Name,
+            ["dx"] = observation.Dx,
+            ["dy"] = observation.Dy,
+            ["itemIndex"] = observation.ItemIndex,
+            ["position"] = observation.Position,
+            ["page"] = observation.Page,
+            ["navigated"] = observation.Navigated,
+            ["assertsJson"] = observation.AssertsJson,
+            ["sensitive"] = observation.Sensitive,
+            ["selectorObservation"] = observation.SelectorObservation is null
+                ? null
+                : JsonSerializer.SerializeToNode(
+                    observation.SelectorObservation,
+                    DevFlowDriverJsonContext.Default.MauiSelectorObservation)
+        };
+        var body = new JsonObject
+        {
+            ["action"] = "observe",
+            ["recordingId"] = recordingId,
+            ["observation"] = observationBody
+        };
+        using var response = await SendWithTransientRetriesAsync(
+            HttpMethod.Post,
+            () => SendRecordingRequestAsync(body));
+        return await ReadMutationRecordingResponseAsync(response);
+    }
+
+    private static async Task<MutationRecordingStatus> ReadMutationRecordingResponseAsync(
+        HttpResponseMessage response)
+    {
+        var responseBody = await response.Content.ReadAsStringAsync();
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return new MutationRecordingStatus
+            {
+                Ok = false,
+                Error = "The connected agent does not support coordinated workflow recording."
+            };
+        }
+        return DriverJson.Deserialize<MutationRecordingStatus>(responseBody) ?? new MutationRecordingStatus
+        {
+            Ok = false,
+            Error = $"Recording request failed with HTTP {(int)response.StatusCode}."
+        };
+    }
+
+    private async Task<HttpResponseMessage> SendRecordingRequestAsync(JsonObject body)
+    {
+        using var content = DriverJson.CreateJsonContent(body);
+        return await _http.PostAsync($"{_baseUrl}{AgentApi}/recording", content);
+    }
+
+    private MutationLeaseIdentity? GetCurrentMutationLease()
+    {
+        var current = _mutationLeaseOverride.Value;
+        if (current is not null)
+            return current;
+        if (string.IsNullOrWhiteSpace(MutationLeaseId))
+            return null;
+        return new MutationLeaseIdentity(
+            MutationLeaseId,
+            string.IsNullOrWhiteSpace(MutationLeaseHolderKind) ? "driver" : MutationLeaseHolderKind,
+            MutationLeaseLabel);
+    }
+
+    private WorkflowRunScopeState? GetCurrentWorkflowRun() => _workflowRunOverride.Value;
+
+    private async Task EnsureMutationLeaseAsync()
+    {
+        if (!AutoAcquireMutationLease)
+            return;
+
+        var identity = GetCurrentMutationLease();
+        if (identity is null)
+            throw new MutationLeaseException(new MutationLeaseStatus
+            {
+                Ok = false,
+                Error = "No DevFlow mutation lease identity is configured."
+            });
+
+        var status = await ControlMutationLeaseAsync(
+            "claim",
+            force: false,
+            identity.LeaseId,
+            identity.HolderKind,
+            identity.Label);
+        if (!status.YouHold)
+            throw new MutationLeaseException(status);
     }
 
     /// <summary>
     /// Builds the underlying <see cref="HttpClient"/>. When <paramref name="host"/> is the
-    /// <c>localhost</c> alias, a custom connect callback attempts both the IPv4 (<c>127.0.0.1</c>)
-    /// and IPv6 (<c>::1</c>) loopback addresses and uses whichever accepts the connection first.
+    /// <c>localhost</c> alias, a custom connect callback prefers the IPv4 (<c>127.0.0.1</c>)
+    /// loopback used by the built-in agent and falls back to IPv6 (<c>::1</c>).
     /// </summary>
     /// <remarks>
     /// The DevFlow agent binds IPv4 loopback only, but .NET's default <see cref="HttpClient"/>
     /// may resolve <c>localhost</c> to IPv6 <c>::1</c> first and fail with "connection refused"
-    /// without falling back to IPv4 (see dotnet/maui-labs#341). Rather than forcing a single
-    /// address family — which has caused target-specific problems — this honors the OS-preferred
-    /// resolution order and falls back to the other loopback family on refusal. Explicit hosts
-    /// (a literal IP or a real hostname) are left on the default connect path unchanged.
+    /// without falling back to IPv4 (see dotnet/maui-labs#341). Trying the server's known address
+    /// first avoids paying an OS-level IPv6 connect timeout on every request while retaining IPv6
+    /// fallback for custom agents. Explicit hosts (a literal IP or a real hostname) are left on the
+    /// default connect path unchanged.
     /// </remarks>
-    private static HttpClient CreateHttpClient(string host)
+    private static HttpClient CreateHttpClient(
+        string host,
+        Func<MutationLeaseIdentity?> mutationLeaseProvider,
+        Func<WorkflowRunScopeState?> workflowRunProvider)
     {
-        if (!IsLoopbackAlias(host))
-            return new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-
-        var handler = new SocketsHttpHandler
+        HttpMessageHandler transport = !IsLoopbackAlias(host)
+            ? new HttpClientHandler()
+            : new SocketsHttpHandler
         {
             ConnectCallback = ConnectLoopbackAsync
         };
-        return new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
+        var leaseHandler = new MutationLeaseHeaderHandler(mutationLeaseProvider, workflowRunProvider)
+        {
+            InnerHandler = transport
+        };
+        return new HttpClient(leaseHandler) { Timeout = TimeSpan.FromSeconds(30) };
     }
 
     private static bool IsLoopbackAlias(string host)
@@ -151,14 +452,25 @@ public class AgentClient : IDisposable
             : new SocketException((int)SocketError.ConnectionRefused);
     }
 
-    private static async Task<List<IPAddress>> ResolveLoopbackCandidatesAsync(string host, CancellationToken cancellationToken)
+    internal static async Task<List<IPAddress>> ResolveLoopbackCandidatesAsync(
+        string host,
+        CancellationToken cancellationToken,
+        Func<string, CancellationToken, Task<IPAddress[]>>? resolveHostAddressesAsync = null)
     {
+        if (IsLoopbackAlias(host))
+        {
+            var loopbackOnly = new List<IPAddress> { IPAddress.Loopback };
+            if (Socket.OSSupportsIPv6)
+                loopbackOnly.Add(IPAddress.IPv6Loopback);
+            return loopbackOnly;
+        }
+
+        resolveHostAddressesAsync ??= Dns.GetHostAddressesAsync;
         var ordered = new List<IPAddress>();
 
         try
         {
-            // Honor the OS-preferred resolution order (e.g. macOS commonly yields ::1 first).
-            foreach (var address in await Dns.GetHostAddressesAsync(host, cancellationToken).ConfigureAwait(false))
+            foreach (var address in await resolveHostAddressesAsync(host, cancellationToken).ConfigureAwait(false))
             {
                 if ((address.AddressFamily == AddressFamily.InterNetwork
                         || address.AddressFamily == AddressFamily.InterNetworkV6)
@@ -168,18 +480,18 @@ public class AgentClient : IDisposable
         }
         catch (Exception ex) when (ex is (SocketException or OperationCanceledException) && !cancellationToken.IsCancellationRequested)
         {
-            // DNS lookup failed (unusual for "localhost") — fall through to the explicit loopbacks below.
+            // DNS lookup failed (unusual for non-loopback hosts) — fall through to the explicit loopbacks below.
         }
 
-        // Guarantee both loopback families are attempted, regardless of hosts-file quirks.
-        if (!ordered.Contains(IPAddress.Loopback))
-            ordered.Add(IPAddress.Loopback);
+        // The built-in agent listens on IPv4 loopback. Keep all resolved candidates as fallbacks,
+        // but avoid an OS-level IPv6 timeout on every request when localhost resolves to ::1 first.
+        ordered.Remove(IPAddress.Loopback);
+        ordered.Insert(0, IPAddress.Loopback);
         if (Socket.OSSupportsIPv6 && !ordered.Contains(IPAddress.IPv6Loopback))
             ordered.Add(IPAddress.IPv6Loopback);
 
         return ordered;
     }
-
     private static string BuildLoopbackFailureMessage(List<Exception> failures)
         => "Could not connect to the DevFlow agent on any loopback address. "
             + string.Join("; ", failures.Select(f => f.Message));
@@ -538,10 +850,39 @@ public class AgentClient : IDisposable
         return null;
     }
 
+    /// <summary>Get curated editable property descriptors and current values for an element.</summary>
+    public Task<JsonElement> GetPropertyDescriptorsAsync(string elementId)
+        => GetJsonAsync($"{UiApi}/elements/{elementId}/properties");
+
+    /// <summary>Get typed property descriptors, value-source metadata, and mutation safety.</summary>
+    public Task<ElementPropertyDescriptorSet?> GetPropertyDescriptorSetAsync(string elementId)
+        => GetAsync<ElementPropertyDescriptorSet>($"{UiApi}/elements/{elementId}/properties");
+
     /// <summary>
     /// Set a property value on an element.
     /// </summary>
     public async Task<bool> SetPropertyAsync(string elementId, string propertyName, string value)
+        => (await SetPropertyDetailedAsync(elementId, propertyName, value)).Success;
+
+    /// <summary>
+    /// Set a property value, optionally allowing a destructive session-only override of a binding
+    /// or dynamic resource. Prefer the safe overload unless the caller has explicit user consent.
+    /// </summary>
+    public async Task<bool> SetPropertyAsync(
+        string elementId,
+        string propertyName,
+        string value,
+        bool allowUnsafe)
+        => (await SetPropertyDetailedAsync(elementId, propertyName, value, allowUnsafe)).Success;
+
+    /// <summary>
+    /// Set a property value and return structured mutation-safety information.
+    /// </summary>
+    public async Task<PropertyMutationResponse> SetPropertyDetailedAsync(
+        string elementId,
+        string propertyName,
+        string value,
+        bool allowUnsafe = false)
     {
         try
         {
@@ -549,13 +890,73 @@ public class AgentClient : IDisposable
             {
                 using var content = DriverJson.CreateJsonContent(new JsonObject
                 {
-                    ["value"] = value
+                    ["value"] = value,
+                    ["allowUnsafe"] = allowUnsafe
                 });
                 return await _http.PutAsync($"{_baseUrl}{UiApi}/elements/{elementId}/properties/{propertyName}", content);
             });
-            return response.IsSuccessStatusCode;
+
+            await ThrowIfWorkflowCommandFailureAsync(response).ConfigureAwait(false);
+            var responseBody = await response.Content.ReadAsStringAsync();
+            if (response.IsSuccessStatusCode)
+            {
+                return DriverJson.Deserialize<PropertyMutationResponse>(responseBody)
+                    ?? new PropertyMutationResponse
+                    {
+                        Success = true,
+                        Id = elementId,
+                        Property = propertyName,
+                        Value = value
+                    };
+            }
+
+            try
+            {
+                using var document = JsonDocument.Parse(responseBody);
+                var root = document.RootElement;
+                PropertyMutationResponse? result = null;
+                if (root.TryGetProperty("details", out var details)
+                    && details.ValueKind == JsonValueKind.Object)
+                {
+                    result = DriverJson.Deserialize<PropertyMutationResponse>(details.GetRawText());
+                }
+
+                result ??= new PropertyMutationResponse
+                {
+                    Id = elementId,
+                    Property = propertyName
+                };
+                result.Success = false;
+                if (root.TryGetProperty("error", out var error)
+                    && error.ValueKind == JsonValueKind.String)
+                {
+                    result.Error = error.GetString();
+                }
+                return result;
+            }
+            catch (JsonException)
+            {
+                return new PropertyMutationResponse
+                {
+                    Success = false,
+                    Id = elementId,
+                    Property = propertyName,
+                    Error = string.IsNullOrWhiteSpace(responseBody)
+                        ? $"Property mutation failed with HTTP {(int)response.StatusCode}."
+                        : responseBody
+                };
+            }
         }
-        catch (Exception ex) when (IsExpectedClientException(ex)) { return false; }
+        catch (Exception ex) when (IsExpectedClientException(ex))
+        {
+            return new PropertyMutationResponse
+            {
+                Success = false,
+                Id = elementId,
+                Property = propertyName,
+                Error = ex.Message
+            };
+        }
     }
 
     /// <summary>
@@ -726,14 +1127,169 @@ public class AgentClient : IDisposable
         if (sampleIntervalMs.HasValue)
             payload["sampleIntervalMs"] = sampleIntervalMs.Value;
 
-        var response = await PostJsonAsync<ProfilerSessionEnvelope>($"{ProfilerApi}/sessions", payload);
+        using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
+        {
+            using var content = DriverJson.CreateJsonContent(payload);
+            return await _http.PostAsync($"{_baseUrl}{ProfilerApi}/sessions", content);
+        });
+        var responseBody = await response.Content.ReadAsStringAsync();
+        if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+            throw new InvalidOperationException("A profiler session is already active. Attach to it instead.");
+        if (!response.IsSuccessStatusCode || string.IsNullOrWhiteSpace(responseBody))
+            return null;
+        var envelope = DriverJson.Deserialize<ProfilerSessionEnvelope>(responseBody);
+        if (envelope?.Session is not null)
+        {
+            envelope.Session.StopToken = envelope.StopToken ?? "";
+            if (envelope.Session.IsActive &&
+                !string.IsNullOrWhiteSpace(envelope.Session.SessionId) &&
+                string.IsNullOrWhiteSpace(envelope.Session.StopToken))
+            {
+                var stopped = await StopLegacyProfilerSessionAsync(envelope.Session.SessionId);
+                throw new InvalidOperationException(stopped
+                    ? "The connected app uses the legacy profiler protocol without creator stop tokens. "
+                      + "The new session was stopped; upgrade the DevFlow Agent package and try again."
+                    : "The connected app uses the legacy profiler protocol without creator stop tokens, "
+                      + "and the new session could not be stopped. Close the app and upgrade the DevFlow Agent package.");
+            }
+            if (envelope.Session.IsActive &&
+                !string.IsNullOrWhiteSpace(envelope.Session.SessionId) &&
+                !string.IsNullOrWhiteSpace(envelope.Session.StopToken))
+            {
+                _ownedProfilerStopTokens.Clear();
+                _ownedProfilerStopTokens[envelope.Session.SessionId] = envelope.Session.StopToken;
+                Volatile.Write(ref _lastOwnedProfilerSessionId, envelope.Session.SessionId);
+            }
+        }
+        return envelope?.Session;
+    }
+
+    private async Task<bool> StopLegacyProfilerSessionAsync(string sessionId)
+    {
+        try
+        {
+            using var response = await SendWithTransientRetriesAsync(
+                HttpMethod.Delete,
+                () => _http.DeleteAsync(
+                    $"{_baseUrl}{ProfilerApi}/sessions/{Uri.EscapeDataString(sessionId)}"));
+            return response.IsSuccessStatusCode ||
+                response.StatusCode == System.Net.HttpStatusCode.NotFound;
+        }
+        catch (Exception ex) when (IsExpectedClientException(ex))
+        {
+            return false;
+        }
+    }
+
+    public Task<ProfilerSessionInfo?> StopProfilerAsync(string? sessionId = null)
+        => StopOwnedProfilerAsync(sessionId);
+
+    public async Task<ProfilerSessionInfo?> StopProfilerAsync(
+        string sessionId,
+        string stopToken)
+    {
+        var response = await StopProfilerEnvelopeAsync(
+            sessionId,
+            stopToken,
+            sampleLimit: 20_000,
+            hotspotLimit: 20,
+            throwOnSessionMismatch: false);
         return response?.Session;
     }
 
-    public async Task<ProfilerSessionInfo?> StopProfilerAsync(string? sessionId = null)
+    private async Task<ProfilerSessionEnvelope?> StopProfilerEnvelopeAsync(
+        string? sessionId,
+        string stopToken,
+        int sampleLimit,
+        int hotspotLimit,
+        bool throwOnSessionMismatch)
     {
-        var response = await DeleteJsonAsync<ProfilerSessionEnvelope>($"{ProfilerApi}/sessions/{Uri.EscapeDataString(sessionId ?? "current")}");
-        return response?.Session;
+        if (string.IsNullOrWhiteSpace(sessionId) ||
+            string.IsNullOrWhiteSpace(stopToken))
+        {
+            throw new InvalidOperationException(
+                "Profiler session id and creator stop token are required.");
+        }
+        var path =
+            $"{ProfilerApi}/sessions/{Uri.EscapeDataString(sessionId)}" +
+            $"?sampleLimit={Math.Clamp(sampleLimit, 1, 20_000)}" +
+            $"&hotspotLimit={Math.Clamp(hotspotLimit, 1, 200)}";
+        try
+        {
+            using var response = await SendWithTransientRetriesAsync(
+                HttpMethod.Delete,
+                async () =>
+                {
+                    using var request = new HttpRequestMessage(
+                        HttpMethod.Delete,
+                        $"{_baseUrl}{path}");
+                    request.Headers.TryAddWithoutValidation(
+                        "X-DevFlow-Profiler-Stop-Token",
+                        stopToken);
+                    return await _http.SendAsync(request);
+                });
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound &&
+                !string.IsNullOrWhiteSpace(sessionId))
+            {
+                ForgetOwnedProfilerSession(sessionId);
+                if (throwOnSessionMismatch)
+                    throw new ProfilerSessionMismatchException(sessionId);
+                return null;
+            }
+            if (!response.IsSuccessStatusCode)
+                return null;
+            var responseBody = await response.Content.ReadAsStringAsync();
+            var envelope = DriverJson.Deserialize<ProfilerSessionEnvelope>(responseBody);
+            if (envelope?.Session?.IsActive == false)
+                ForgetOwnedProfilerSession(sessionId);
+            return envelope;
+        }
+        catch (Exception ex) when (IsExpectedClientException(ex))
+        {
+            return null;
+        }
+    }
+
+    private async Task<ProfilerSessionInfo?> StopOwnedProfilerAsync(string? sessionId)
+    {
+        if (!TryResolveOwnedProfilerSession(sessionId, out var ownedSessionId, out var stopToken))
+        {
+            throw new InvalidOperationException(
+                "This AgentClient did not create the requested profiler session. "
+                + "Use the overload that supplies the creator stop token.");
+        }
+
+        var stopped = await StopProfilerAsync(ownedSessionId, stopToken);
+        if (stopped is null)
+        {
+            throw new InvalidOperationException(
+                $"Profiler session '{ownedSessionId}' could not be stopped.");
+        }
+        return stopped;
+    }
+
+    private bool TryResolveOwnedProfilerSession(
+        string? sessionId,
+        out string ownedSessionId,
+        out string stopToken)
+    {
+        ownedSessionId = string.IsNullOrWhiteSpace(sessionId)
+            ? Volatile.Read(ref _lastOwnedProfilerSessionId) ?? ""
+            : sessionId;
+        stopToken = "";
+        if (ownedSessionId.Length == 0 ||
+            !_ownedProfilerStopTokens.TryGetValue(ownedSessionId, out var cachedStopToken))
+        {
+            return false;
+        }
+        stopToken = cachedStopToken;
+        return true;
+    }
+
+    private void ForgetOwnedProfilerSession(string sessionId)
+    {
+        _ownedProfilerStopTokens.TryRemove(sessionId, out _);
+        Interlocked.CompareExchange(ref _lastOwnedProfilerSessionId, null, sessionId);
     }
 
     public async Task<ProfilerBatch?> GetProfilerSamplesAsync(
@@ -771,7 +1327,8 @@ public class AgentClient : IDisposable
     public async Task<List<ProfilerHotspot>> GetProfilerHotspotsAsync(
         int limit = 20,
         int minDurationMs = 16,
-        string? kind = null)
+        string? kind = null,
+        string? sessionId = null)
     {
         limit = Math.Clamp(limit, 1, 200);
         minDurationMs = Math.Clamp(minDurationMs, 0, 60_000);
@@ -779,7 +1336,168 @@ public class AgentClient : IDisposable
         var path = $"{ProfilerApi}/hotspots?limit={limit}&minDurationMs={minDurationMs}";
         if (!string.IsNullOrWhiteSpace(kind))
             path += $"&kind={Uri.EscapeDataString(kind)}";
+        if (!string.IsNullOrWhiteSpace(sessionId))
+            path += $"&sessionId={Uri.EscapeDataString(sessionId)}";
         return await GetAsync<List<ProfilerHotspot>>(path) ?? new();
+    }
+
+    /// <summary>Get bounded, deduplicated runtime diagnostic problems.</summary>
+    public async Task<DiagnosticProblemBatch> GetDiagnosticProblemsAsync(
+        int limit = 100,
+        string? elementId = null)
+    {
+        limit = Math.Clamp(limit, 1, 1000);
+        var path = $"{ApiV1}/diagnostics/problems?limit={limit}";
+        if (!string.IsNullOrWhiteSpace(elementId))
+            path += $"&elementId={Uri.EscapeDataString(elementId)}";
+        return await GetAsync<DiagnosticProblemBatch>(path) ?? new DiagnosticProblemBatch();
+    }
+
+    /// <summary>Clear the agent's retained diagnostic problems.</summary>
+    public async Task<bool> ClearDiagnosticProblemsAsync()
+    {
+        try
+        {
+            using var response = await _http.DeleteAsync($"{_baseUrl}{ApiV1}/diagnostics/problems");
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex) when (IsExpectedClientException(ex))
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Collects a performance triage summary from the agent's current profiler session.
+    /// </summary>
+    /// <remarks>
+    /// This is a triage read, not a profiler: it aggregates the bounded sampling the app is already
+    /// doing. Aggregation runs in <see cref="PerformanceAggregator"/> so the CLI, MCP tools, and the
+    /// Inspector all report identical analysis. Hand off to a native profiler for call-stack
+    /// attribution.
+    /// </remarks>
+    public async Task<PerformanceSummary> GetPerformanceSummaryAsync(
+        string? sessionId = null,
+        int sampleLimit = 2000,
+        int hotspotLimit = 10)
+    {
+        sampleLimit = Math.Clamp(sampleLimit, 1, 20_000);
+        hotspotLimit = Math.Clamp(hotspotLimit, 1, 200);
+
+        var capabilities = await GetProfilerCapabilitiesAsync();
+        var status = await GetStatusAsync();
+
+        if (capabilities is not null && !capabilities.Available)
+            return PerformanceAggregator.Aggregate(capabilities, null, null, null, status);
+
+        var batch = await GetProfilerSamplesAsync(sessionId, 0, 0, 0, sampleLimit);
+        var sessionStatus = await GetProfilerSessionStatusAsync();
+        var session = sessionStatus.Session;
+        if (!string.IsNullOrWhiteSpace(sessionId))
+        {
+            if (!sessionStatus.Success)
+                throw new InvalidOperationException("The profiler session status could not be read.");
+            if (session is null || !string.Equals(session.SessionId, sessionId, StringComparison.Ordinal))
+                throw new ProfilerSessionMismatchException(sessionId);
+            if (batch is null)
+                throw new InvalidOperationException($"Profiler session '{sessionId}' could not be read.");
+        }
+        var hotspots = await GetProfilerHotspotsAsync(hotspotLimit, sessionId: sessionId);
+        if (!string.IsNullOrWhiteSpace(sessionId))
+        {
+            sessionStatus = await GetProfilerSessionStatusAsync();
+            session = sessionStatus.Session;
+            if (!sessionStatus.Success)
+                throw new InvalidOperationException("The profiler session status could not be read.");
+            if (session is null || !string.Equals(session.SessionId, sessionId, StringComparison.Ordinal))
+                throw new ProfilerSessionMismatchException(sessionId);
+        }
+        return PerformanceAggregator.Aggregate(capabilities, session, batch, hotspots, status);
+    }
+
+    /// <summary>Reads the agent's current profiler session descriptor, if any.</summary>
+    public async Task<ProfilerSessionInfo?> GetProfilerSessionAsync()
+        => (await GetProfilerSessionStatusAsync()).Session;
+
+    private async Task<(bool Success, ProfilerSessionInfo? Session)> GetProfilerSessionStatusAsync()
+    {
+        try
+        {
+            var response = await GetStringWithTransientRetriesAsync($"{_baseUrl}{AgentApi}/status");
+            var status = DriverJson.Deserialize<ProfilerSessionStatusEnvelope>(response);
+            return (true, status?.ProfilerSession);
+        }
+        catch (Exception ex) when (IsExpectedClientException(ex))
+        {
+            return (false, null);
+        }
+    }
+
+    /// <summary>Starts a profiler session and returns the triage view of the fresh session.</summary>
+    public async Task<PerformanceSummary> StartPerformanceSessionAsync(int? sampleIntervalMs = null)
+    {
+        var session = await StartProfilerAsync(sampleIntervalMs);
+        var capabilities = await GetProfilerCapabilitiesAsync();
+        var status = await GetStatusAsync();
+        if (session is null && capabilities?.Available == true)
+            throw new InvalidOperationException("The profiler is available, but the agent did not start a session.");
+        if (session is null && capabilities is null)
+            throw new InvalidOperationException("Could not start a profiler session or read profiler capabilities.");
+        return PerformanceAggregator.Aggregate(capabilities, session, null, null, status);
+    }
+
+    /// <summary>Stops the profiler session and returns the final triage summary for the window.</summary>
+    public Task<PerformanceSummary> StopPerformanceSessionAsync(
+        string? sessionId = null,
+        int sampleLimit = 20_000,
+        int hotspotLimit = 10)
+    {
+        if (!TryResolveOwnedProfilerSession(sessionId, out var ownedSessionId, out var stopToken))
+        {
+            return Task.FromException<PerformanceSummary>(new InvalidOperationException(
+                "This AgentClient did not create the requested profiler session. "
+                + "Use the overload that supplies the creator stop token."));
+        }
+        return StopPerformanceSessionAsync(
+            ownedSessionId,
+            stopToken,
+            sampleLimit,
+            hotspotLimit);
+    }
+
+    public async Task<PerformanceSummary> StopPerformanceSessionAsync(
+        string sessionId,
+        string stopToken,
+        int sampleLimit = 20_000,
+        int hotspotLimit = 10)
+    {
+        sampleLimit = Math.Clamp(sampleLimit, 1, 20_000);
+        hotspotLimit = Math.Clamp(hotspotLimit, 1, 200);
+
+        var stopped = await StopProfilerEnvelopeAsync(
+            sessionId,
+            stopToken,
+            sampleLimit,
+            hotspotLimit,
+            throwOnSessionMismatch: true);
+        var session = stopped?.Session;
+        if (!string.IsNullOrWhiteSpace(sessionId) && session is null)
+            throw new InvalidOperationException($"Profiler session '{sessionId}' could not be stopped.");
+        var capabilities = await GetProfilerCapabilitiesAsync();
+        var status = await GetStatusAsync();
+        return PerformanceAggregator.Aggregate(
+            capabilities,
+            session,
+            stopped?.Batch,
+            stopped?.Hotspots,
+            status);
+    }
+
+    /// <summary>Only the profiler session field of the status document is needed here.</summary>
+    internal sealed class ProfilerSessionStatusEnvelope
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("profilerSession")]
+        public ProfilerSessionInfo? ProfilerSession { get; set; }
     }
 
     private async Task<T?> GetAsync<T>(string path) where T : class
@@ -815,6 +1533,7 @@ public class AgentClient : IDisposable
                 using var content = DriverJson.CreateJsonContent(body);
                 return await _http.PostAsync($"{_baseUrl}{path}", content);
             });
+            await ThrowIfWorkflowCommandFailureAsync(response).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode) return false;
 
             var responseBody = await response.Content.ReadAsStringAsync();
@@ -833,6 +1552,7 @@ public class AgentClient : IDisposable
                 using var content = DriverJson.CreateJsonContent(body);
                 return await _http.PostAsync($"{_baseUrl}{path}", content);
             });
+            await ThrowIfWorkflowCommandFailureAsync(response).ConfigureAwait(false);
             var responseBody = await response.Content.ReadAsStringAsync();
             if (string.IsNullOrWhiteSpace(responseBody))
                 return null;
@@ -848,8 +1568,12 @@ public class AgentClient : IDisposable
     {
         try
         {
-            using var content = DriverJson.CreateJsonContent(body);
-            var response = await _http.PutAsync($"{_baseUrl}{path}", content);
+            using var response = await SendWithTransientRetriesAsync(HttpMethod.Put, async () =>
+            {
+                using var content = DriverJson.CreateJsonContent(body);
+                return await _http.PutAsync($"{_baseUrl}{path}", content);
+            });
+            await ThrowIfWorkflowCommandFailureAsync(response).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
                 return null;
 
@@ -858,7 +1582,7 @@ public class AgentClient : IDisposable
                 return null;
             return DriverJson.Deserialize<T>(responseBody);
         }
-        catch
+        catch (Exception ex) when (IsExpectedClientException(ex))
         {
             return null;
         }
@@ -869,6 +1593,7 @@ public class AgentClient : IDisposable
         try
         {
             using var response = await SendWithTransientRetriesAsync(HttpMethod.Delete, () => _http.DeleteAsync($"{_baseUrl}{path}"));
+            await ThrowIfWorkflowCommandFailureAsync(response).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
                 return null;
             var responseBody = await response.Content.ReadAsStringAsync();
@@ -885,6 +1610,7 @@ public class AgentClient : IDisposable
         try
         {
             using var response = await SendWithTransientRetriesAsync(HttpMethod.Delete, () => _http.DeleteAsync($"{_baseUrl}{path}"));
+            await ThrowIfWorkflowCommandFailureAsync(response).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
                 return false;
 
@@ -901,6 +1627,34 @@ public class AgentClient : IDisposable
     private Task<string> GetStringWithTransientRetriesAsync(string url)
         => SendWithTransientRetriesAsync(() => _http.GetStringAsync(url));
 
+    private async Task ThrowIfWorkflowCommandFailureAsync(HttpResponseMessage response)
+    {
+        var workflow = GetCurrentWorkflowRun();
+        if (workflow is null || response.IsSuccessStatusCode)
+            return;
+
+        string? reason = null;
+        try
+        {
+            var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(body))
+            {
+                using var document = JsonDocument.Parse(body);
+                if (document.RootElement.TryGetProperty("reason", out var reasonElement) &&
+                    reasonElement.ValueKind == JsonValueKind.String)
+                {
+                    reason = reasonElement.GetString();
+                }
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        if (reason?.StartsWith("workflow-", StringComparison.Ordinal) == true)
+            throw new WorkflowCommandException(reason, receipt: workflow.LastReceipt);
+    }
+
     private Task<T> SendWithTransientRetriesAsync<T>(Func<Task<T>> send)
         => SendWithTransientRetriesAsync(HttpMethod.Get, send);
 
@@ -908,7 +1662,10 @@ public class AgentClient : IDisposable
     {
         var retryCount = Math.Max(0, TransientFailureRetryCount);
         var isMutating = method != HttpMethod.Get;
-        if (isMutating && !RetryMutatingRequests)
+        var workflowRun = GetCurrentWorkflowRun();
+        if (isMutating)
+            await EnsureMutationLeaseAsync();
+        if (isMutating && (!RetryMutatingRequests || workflowRun is not null))
             retryCount = 0;
 
         for (var attempt = 0; ; attempt++)
@@ -936,8 +1693,9 @@ public class AgentClient : IDisposable
     }
 
     private static bool IsExpectedClientException(Exception ex)
-        => ex is HttpRequestException or TaskCanceledException or IOException or JsonException
-            || (ex.InnerException is not null && IsExpectedClientException(ex.InnerException));
+        => ex is not WorkflowCommandException &&
+           (ex is HttpRequestException or TaskCanceledException or IOException or JsonException ||
+            (ex.InnerException is not null && IsExpectedClientException(ex.InnerException)));
 
     private static bool IsTransientTransportException(Exception ex)
     {
@@ -1099,11 +1857,16 @@ public class AgentClient : IDisposable
         return await GetJsonAsync($"{DeviceApi}/sensors");
     }
 
-    public async Task<bool> StartSensorAsync(string sensor, string? speed = null)
+    public Task<bool> StartSensorAsync(string sensor, string? speed = null)
+        => StartSensorAsync(sensor, speed, throttleMs: null);
+
+    public async Task<bool> StartSensorAsync(string sensor, string? speed, int? throttleMs)
     {
         var path = $"{DeviceApi}/sensors/{Uri.EscapeDataString(sensor)}/start";
-        if (!string.IsNullOrEmpty(speed))
-            path += $"?speed={Uri.EscapeDataString(speed)}";
+        var query = new List<string>();
+        if (!string.IsNullOrEmpty(speed)) query.Add($"speed={Uri.EscapeDataString(speed)}");
+        if (throttleMs is >= 0) query.Add($"throttleMs={throttleMs.Value}");
+        if (query.Count > 0) path += "?" + string.Join("&", query);
         return await PostActionAsync(path, new JsonObject());
     }
 
@@ -1200,6 +1963,8 @@ public class AgentClient : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _ownedProfilerStopTokens.Clear();
+        Volatile.Write(ref _lastOwnedProfilerSessionId, null);
         _http.Dispose();
     }
 
@@ -1248,12 +2013,187 @@ public class AgentClient : IDisposable
     {
         [System.Text.Json.Serialization.JsonPropertyName("session")]
         public ProfilerSessionInfo? Session { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("stopToken")]
+        public string? StopToken { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("batch")]
+        public ProfilerBatch? Batch { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("hotspots")]
+        public List<ProfilerHotspot>? Hotspots { get; set; }
     }
 
     internal sealed class ActionResponse
     {
         [System.Text.Json.Serialization.JsonPropertyName("success")]
         public bool Success { get; set; }
+    }
+
+    private sealed record MutationLeaseIdentity(string LeaseId, string HolderKind, string? Label);
+
+    private sealed class MutationLeaseScope : IDisposable
+    {
+        private readonly AsyncLocal<MutationLeaseIdentity?> _slot;
+        private readonly MutationLeaseIdentity? _previous;
+        private bool _disposed;
+
+        public MutationLeaseScope(
+            AsyncLocal<MutationLeaseIdentity?> slot,
+            MutationLeaseIdentity? previous)
+        {
+            _slot = slot;
+            _previous = previous;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _slot.Value = _previous;
+        }
+    }
+
+    private sealed class WorkflowRunScope : IDisposable
+    {
+        private readonly AsyncLocal<WorkflowRunScopeState?> _slot;
+        private readonly WorkflowRunScopeState? _previous;
+        private bool _disposed;
+
+        public WorkflowRunScope(
+            AsyncLocal<WorkflowRunScopeState?> slot,
+            WorkflowRunScopeState? previous)
+        {
+            _slot = slot;
+            _previous = previous;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _slot.Value = _previous;
+        }
+    }
+
+    private sealed class WorkflowRunScopeState
+    {
+        private readonly object _receiptGate = new();
+        private long _nextSequence;
+        private WorkflowCommandReceipt? _lastReceipt;
+
+        public WorkflowRunScopeState(WorkflowRunContext context)
+        {
+            Context = context;
+        }
+
+        public WorkflowRunContext Context { get; }
+
+        public WorkflowCommandReceipt? LastReceipt
+        {
+            get
+            {
+                lock (_receiptGate)
+                    return _lastReceipt;
+            }
+        }
+
+        public async Task<WorkflowCommandReceipt> CreateReceiptAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var sequence = Interlocked.Increment(ref _nextSequence);
+            var actionDigest = await WorkflowCommandDigest.ComputeAsync(request, cancellationToken).ConfigureAwait(false);
+            return new WorkflowCommandReceipt
+            {
+                RunId = Context.RunId,
+                Sequence = sequence,
+                CommandId = WorkflowCommandDigest.CreateCommandId(Context.RunId, sequence, actionDigest),
+                ActionDigest = actionDigest,
+                AuthorityEpoch = Context.AuthorityEpoch,
+                AcknowledgementState = "prepared"
+            };
+        }
+
+        public void Record(WorkflowCommandReceipt receipt, string acknowledgementState, int? statusCode = null)
+        {
+            receipt.AcknowledgementState = acknowledgementState;
+            receipt.HttpStatusCode = statusCode;
+            lock (_receiptGate)
+                _lastReceipt = receipt;
+        }
+    }
+
+    private sealed class MutationLeaseHeaderHandler : DelegatingHandler
+    {
+        private readonly Func<MutationLeaseIdentity?> _leaseProvider;
+        private readonly Func<WorkflowRunScopeState?> _workflowRunProvider;
+
+        public MutationLeaseHeaderHandler(
+            Func<MutationLeaseIdentity?> leaseProvider,
+            Func<WorkflowRunScopeState?> workflowRunProvider)
+        {
+            _leaseProvider = leaseProvider;
+            _workflowRunProvider = workflowRunProvider;
+        }
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var lease = _leaseProvider();
+            if (lease is not null)
+            {
+                request.Headers.Remove("X-DevFlow-Lease");
+                request.Headers.TryAddWithoutValidation("X-DevFlow-Lease", lease.LeaseId);
+                request.Headers.Remove("X-DevFlow-Holder");
+                request.Headers.TryAddWithoutValidation("X-DevFlow-Holder", lease.HolderKind);
+                if (!string.IsNullOrWhiteSpace(lease.Label))
+                {
+                    request.Headers.Remove("X-DevFlow-Label");
+                    request.Headers.TryAddWithoutValidation("X-DevFlow-Label", lease.Label);
+                }
+            }
+
+            var workflow = _workflowRunProvider();
+            if (workflow is null ||
+                request.Method == HttpMethod.Get ||
+                request.RequestUri?.AbsolutePath.StartsWith(AgentApi + "/", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            }
+
+            var receipt = await workflow.CreateReceiptAsync(request, cancellationToken).ConfigureAwait(false);
+            AddHeader(request, "X-DevFlow-Workflow-Run", receipt.RunId);
+            AddHeader(request, "X-DevFlow-Workflow-Agent-Instance", workflow.Context.AgentInstanceId);
+            AddHeader(request, "X-DevFlow-Workflow-Sequence", receipt.Sequence.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            AddHeader(request, "X-DevFlow-Workflow-Command", receipt.CommandId);
+            AddHeader(request, "X-DevFlow-Workflow-Digest", receipt.ActionDigest);
+            AddHeader(request, "X-DevFlow-Workflow-Epoch", receipt.AuthorityEpoch.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            if (!string.IsNullOrWhiteSpace(workflow.Context.ApprovalDigest))
+                AddHeader(request, "X-DevFlow-Workflow-Approval", workflow.Context.ApprovalDigest!);
+
+            try
+            {
+                var response = await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                workflow.Record(
+                    receipt,
+                    response.IsSuccessStatusCode ? "completed" : "rejected",
+                    (int)response.StatusCode);
+                return response;
+            }
+            catch (Exception ex)
+            {
+                workflow.Record(receipt, "unknown-completion");
+                throw new WorkflowCommandException(
+                    "workflow-unknown-completion",
+                    receipt: receipt,
+                    innerException: ex);
+            }
+        }
+
+        private static void AddHeader(HttpRequestMessage request, string name, string value)
+        {
+            request.Headers.Remove(name);
+            request.Headers.TryAddWithoutValidation(name, value);
+        }
     }
 }
 
@@ -1273,6 +2213,21 @@ public class AgentStatus
     public string? Timestamp { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("running")]
     public bool Running { get; set; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("route")]
+    public string? Route { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("window")]
+    public string? Window { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("modal")]
+    public string? Modal { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("locale")]
+    public string? Locale { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("theme")]
+    public string? Theme { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("orientation")]
+    public string? Orientation { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("displayProfile")]
+    public string? DisplayProfile { get; set; }
 
     [System.Text.Json.Serialization.JsonIgnore]
     public string? Version => Agent?.Version;
@@ -1296,6 +2251,12 @@ public class AgentDescriptor
     public string? Framework { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("frameworkVersion")]
     public string? FrameworkVersion { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("instanceId")]
+    public string? InstanceId { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("mode")]
+    public string? Mode { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("readOnly")]
+    public bool ReadOnly { get; set; }
 }
 
 public class DeviceDescriptor
@@ -1314,12 +2275,15 @@ public class DeviceDescriptor
     public double? WindowHeight { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("windowCount")]
     public int? WindowCount { get; set; }
+
 }
 
 public class AppDescriptor
 {
     [System.Text.Json.Serialization.JsonPropertyName("name")]
     public string? Name { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("processId")]
+    public int? ProcessId { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("packageId")]
     public string? PackageId { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("version")]
@@ -1350,6 +2314,10 @@ public class AgentCapabilities
     public bool Jobs { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("theme")]
     public bool Theme { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("mutations")]
+    public bool Mutations { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("workflowCommandLedger")]
+    public bool WorkflowCommandLedger { get; set; }
 }
 
 public class NetworkRequest
@@ -1400,6 +2368,17 @@ public class NetworkRequest
     public bool ResponseBodyTruncated { get; set; }
 }
 
+public sealed class ProfilerSessionMismatchException : InvalidOperationException
+{
+    public ProfilerSessionMismatchException(string sessionId)
+        : base($"Profiler session '{sessionId}' is no longer current.")
+    {
+        SessionId = sessionId;
+    }
+
+    public string SessionId { get; }
+}
+
 public class ProfilerSessionInfo
 {
     [System.Text.Json.Serialization.JsonPropertyName("sessionId")]
@@ -1410,6 +2389,8 @@ public class ProfilerSessionInfo
     public int SampleIntervalMs { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("isActive")]
     public bool IsActive { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string StopToken { get; set; } = "";
 }
 
 public class ProfilerSample
@@ -1436,6 +2417,10 @@ public class ProfilerSample
     public long? NativeMemoryBytes { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("nativeMemoryKind")]
     public string? NativeMemoryKind { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("processMemoryBytes")]
+    public long? ProcessMemoryBytes { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("processMemoryKind")]
+    public string? ProcessMemoryKind { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("cpuPercent")]
     public double? CpuPercent { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("threadCount")]
@@ -1444,6 +2429,8 @@ public class ProfilerSample
     public int JankFrameCount { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("uiThreadStallCount")]
     public int UiThreadStallCount { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("frameDataLossCount")]
+    public int FrameDataLossCount { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("frameSource")]
     public string FrameSource { get; set; } = "";
     [System.Text.Json.Serialization.JsonPropertyName("frameQuality")]
@@ -1478,8 +2465,26 @@ public class ProfilerBatch
     public long MarkerCursor { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("spanCursor")]
     public long SpanCursor { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("sampleMetadata")]
+    public ProfilerStreamReadMetadata SampleMetadata { get; set; } = new();
+    [System.Text.Json.Serialization.JsonPropertyName("markerMetadata")]
+    public ProfilerStreamReadMetadata MarkerMetadata { get; set; } = new();
+    [System.Text.Json.Serialization.JsonPropertyName("spanMetadata")]
+    public ProfilerStreamReadMetadata SpanMetadata { get; set; } = new();
     [System.Text.Json.Serialization.JsonPropertyName("isActive")]
     public bool IsActive { get; set; }
+}
+
+public class ProfilerStreamReadMetadata
+{
+    [System.Text.Json.Serialization.JsonPropertyName("oldestCursor")]
+    public long OldestCursor { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("latestCursor")]
+    public long LatestCursor { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("lostCount")]
+    public long LostCount { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("availableCount")]
+    public int AvailableCount { get; set; }
 }
 
 public class ProfilerSpan
@@ -1548,6 +2553,8 @@ public class ProfilerCapabilities
     public bool ManagedMemorySupported { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("nativeMemorySupported")]
     public bool NativeMemorySupported { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("processMemorySupported")]
+    public bool ProcessMemorySupported { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("gcSupported")]
     public bool GcSupported { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("cpuPercentSupported")]

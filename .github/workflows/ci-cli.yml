@@ -6,7 +6,10 @@ on:
     paths:
       - '.claude/skills/**'
       - 'src/Cli/**'
+      - 'src/DevFlow/Microsoft.Maui.DevFlow.Devices/**'
       - 'src/DevFlow/Microsoft.Maui.DevFlow.Driver/**'
+      - 'src/DevFlow/Microsoft.Maui.DevFlow.Testing/**'
+      - 'tests/DevFlow/PackageConsumer/**'
       - 'src/Go/**'
       - 'eng/**'
       - 'Directory.Build.props'
@@ -20,7 +23,10 @@ on:
     paths:
       - '.claude/skills/**'
       - 'src/Cli/**'
+      - 'src/DevFlow/Microsoft.Maui.DevFlow.Devices/**'
       - 'src/DevFlow/Microsoft.Maui.DevFlow.Driver/**'
+      - 'src/DevFlow/Microsoft.Maui.DevFlow.Testing/**'
+      - 'tests/DevFlow/PackageConsumer/**'
       - 'src/Go/**'
       - 'eng/**'
       - 'Directory.Build.props'

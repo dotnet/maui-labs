@@ -25,4 +25,9 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\Microsoft.Maui.DevFlow.Agent.IntegrationTests\FlowQaLaneGate.cs"
+             Link="FlowQaLaneGate.cs" />
+  </ItemGroup>
+
 </Project>

@@ -1,0 +1,1247 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/dotnet/maui-labs/main/docs/DevFlow/spec/schemas/maui-flow-run-report-v1.json",
+  "title": "MAUI Flow Run Report v1",
+  "description": "A bounded, redaction-aware report of one canonical flow run. Optional target and checkpoint fields are emitted only when observed; terminal lifecycle, ordered events, steps, and artifacts are always explicit.",
+  "type": "object",
+  "required": [
+    "schema",
+    "runId",
+    "startedAt",
+    "endedAt",
+    "outcome",
+    "events",
+    "steps",
+    "artifacts"
+  ],
+  "properties": {
+    "schema": {
+      "const": 1
+    },
+    "runId": {
+      "type": "string"
+    },
+    "flowId": {
+      "type": "string"
+    },
+    "flowRevision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "flowDigest": {
+      "type": "string"
+    },
+    "legacyFlowIdentity": {
+      "type": "string"
+    },
+    "target": {
+      "$ref": "#/$defs/RunTarget"
+    },
+    "reset": {
+      "$ref": "#/$defs/ResetResult"
+    },
+    "preconditions": {
+      "$ref": "#/$defs/ReplayPreconditions"
+    },
+    "sideEffectPolicy": {
+      "enum": [
+        "unspecified",
+        "none",
+        "app-state-resettable",
+        "test-tenant-resettable",
+        "compensated",
+        "non-replayable"
+      ]
+    },
+    "compensator": {
+      "$ref": "#/$defs/CompensatorOutcome"
+    },
+    "businessOracles": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/IndependentBusinessOracleResult"
+      }
+    },
+    "replayEligibility": {
+      "$ref": "#/$defs/ReplayEligibility"
+    },
+    "verification": {
+      "$ref": "#/$defs/Verification"
+    },
+    "startedAt": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "endedAt": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "outcome": {
+      "$ref": "#/$defs/Outcome"
+    },
+    "divergenceStepId": {
+      "type": "string"
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RunEvent"
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/StepAttempt"
+      }
+    },
+    "failure": {
+      "$ref": "#/$defs/Failure"
+    },
+    "appProcess": {
+      "$ref": "#/$defs/AppProcessEvidence"
+    },
+    "expectedEvidence": {
+      "$ref": "#/$defs/ExpectedEvidenceReport"
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ArtifactReference"
+      }
+    },
+    "selectorHealth": {
+      "$ref": "#/$defs/SelectorHealthSummary"
+    },
+    "reportDigest": {
+      "type": "string"
+    },
+    "reportPath": {
+      "type": "string",
+      "pattern": "^(?![/\\\\])(?![A-Za-z]:)(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+$"
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "truncationReason": {
+      "type": "string"
+    },
+    "omissions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Omission"
+      }
+    },
+    "secondaryFailures": {
+      "type": "array",
+      "maxItems": 4,
+      "description": "Host-owned failures observed around the run rather than in it, such as owned platform teardown or removal of the build output this invocation created. They never displace `outcome`, `failure`, or `verification`: a run that passed and then failed to tear down is a pass with a cleanup problem. One entry is retained per phase, keeping the first code listed for it, and the two known phases (`cleanup`, `artifact-cleanup`) are ordered first so the `maxItems` cap can only ever drop a phase an artifact invented; the remainder follow in ascending phase order. Consumers must treat an empty or absent array as \"nothing failed after the run\", not as \"cleanup succeeded\" for a producer that predates the field.",
+      "items": {
+        "$ref": "#/$defs/SecondaryFailure"
+      }
+    },
+    "primaryExecutionOutcome": {
+      "$ref": "#/$defs/PrimaryExecutionOutcome"
+    },
+    "exitCategory": {
+      "type": "string",
+      "description": "The category the whole command exited with. It composes the run's own verdict with any owned cleanup failure, so a passing run whose cleanup failed reports `infrastructure-failure` here while `outcome.status` stays `passed`."
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "SecondaryFailure": {
+      "type": "object",
+      "properties": {
+        "phase": {
+          "type": "string",
+          "description": "The owned cleanup phase that failed. This producer emits `cleanup` (platform teardown) or `artifact-cleanup` (removal of the invocation-owned build root). The value is deliberately not closed: a reader retains an unrecognized phase rather than dropping it, because dropping it would report a run whose host never tore down as clean."
+        },
+        "code": { "type": "string" },
+        "class": {
+          "type": "string",
+          "const": "infrastructure",
+          "description": "Cleanup runs after the flow reached its own terminal state, so it can never be evidence about the app under test. Producers and readers both restate this value, so a malformed artifact cannot claim otherwise."
+        },
+        "retryable": { "type": "boolean" }
+      },
+      "required": ["phase", "code"],
+      "additionalProperties": false
+    },
+    "PrimaryExecutionOutcome": {
+      "type": "object",
+      "description": "The verdict a restatement displaced. It is present only when a later, non-cleanup stage of the invocation — a post-run oracle fault, or a cancellation after the replay reached a terminal state — forced `outcome`/`failure` to be restated to the category the command exited with, and it names what was there before. `displacedBy` discriminates it from the older meaning of this object: producers before the two-axis contract wrote it to hold the verdict an owned cleanup failure had overwritten, and wrote no `displacedBy`. Cleanup never displaces the primary verdict now, so a cleanup-failed run records `secondaryFailures` and no `primaryExecutionOutcome` at all.",
+      "properties": {
+        "displacedBy": {
+          "type": "string",
+          "const": "restatement",
+          "description": "Absent on an artifact written before the two-axis contract, where this object held the pre-cleanup verdict instead. Readers must not infer the difference from `secondaryFailures`, which is absent and empty interchangeably."
+        },
+        "exitCategory": { "type": "string" },
+        "status": { "type": "string" },
+        "verified": { "type": "boolean" },
+        "failureClass": { "type": "string" },
+        "failureCode": { "type": "string" },
+        "failurePhase": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "RunTarget": {
+      "type": "object",
+      "properties": {
+        "targetId": {
+          "type": "string"
+        },
+        "platform": {
+          "type": "string"
+        },
+        "deviceId": {
+          "type": "string"
+        },
+        "deviceProfile": {
+          "type": "string"
+        },
+        "appId": {
+          "type": "string"
+        },
+        "appBuildFingerprint": {
+          "type": "string"
+        },
+        "appSourceFingerprint": {
+          "type": "string"
+        },
+        "packageDigest": {
+          "type": "string"
+        },
+        "normalizedPayloadDigest": {
+          "type": "string",
+          "description": "Optional signing-insensitive digest of the deployed package payload, published as a diagnostic fact. It covers entry names, uncompressed lengths and content hashes only, so ZIP timestamps and extra fields are outside it by construction and are not the reason it fails to agree. Two flow-run invocations of one flow on one device against one clean commit still produced different values because the payload entry set itself drifts: .NET Android packaging contributes or omits Kotlin metadata entries depending on whether referenced Android class libraries re-extract their AAR imports, and those entries are real payload that cannot be excluded. It is also comparable only between builds that share an agent session id, that is one project path on one machine. It has therefore not been established as a cross-occurrence identity on any platform and does not rescue a packageDigest mismatch. Producers that cannot compute one omit the field, and consumers that require it keep refusing."
+        },
+        "agentId": {
+          "type": "string"
+        },
+        "agentInstanceId": {
+          "type": "string"
+        },
+        "locale": {
+          "type": "string"
+        },
+        "theme": {
+          "type": "string"
+        },
+        "orientation": {
+          "type": "string"
+        },
+        "displayProfile": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "ResetResult": {
+      "type": "object",
+      "properties": {
+        "requested": {
+          "type": "boolean"
+        },
+        "succeeded": {
+          "type": "boolean"
+        },
+        "appStateSucceeded": {
+          "type": "boolean"
+        },
+        "backendTestDataSucceeded": {
+          "type": "boolean"
+        },
+        "strategy": {
+          "type": "string"
+        },
+        "resetIdentity": {
+          "type": "string"
+        },
+        "seedFingerprint": {
+          "type": "string"
+        },
+        "backendStateFingerprint": {
+          "type": "string"
+        },
+        "reference": {
+          "$ref": "#/$defs/ResetReference"
+        },
+        "appStateSeed": {
+          "$ref": "#/$defs/AppStateSeed"
+        },
+        "backendTestDataSeed": {
+          "$ref": "#/$defs/BackendTestDataSeed"
+        },
+        "outcome": {
+          "$ref": "#/$defs/ResetOutcome"
+        },
+        "message": {
+          "type": "string"
+        },
+        "finalResolution": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "ResetReference": {
+      "type": "object",
+      "properties": {
+        "strategy": {
+          "type": "string"
+        },
+        "resetId": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "evidenceReference": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "AppStateSeed": {
+      "type": "object",
+      "properties": {
+        "seedId": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "BackendTestDataSeed": {
+      "type": "object",
+      "properties": {
+        "seedId": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "type": "string"
+        },
+        "dataset": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "ResetOutcome": {
+      "type": "object",
+      "properties": {
+        "requested": {
+          "type": "boolean"
+        },
+        "succeeded": {
+          "type": "boolean"
+        },
+        "appStateSucceeded": {
+          "type": "boolean"
+        },
+        "backendTestDataSucceeded": {
+          "type": "boolean"
+        },
+        "completedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "evidenceReference": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "ReplayPreconditions": {
+      "type": "object",
+      "properties": {
+        "expected": {
+          "$ref": "#/$defs/Checkpoint"
+        },
+        "observed": {
+          "$ref": "#/$defs/Checkpoint"
+        },
+        "checkedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "observationDeferredUntilLaunch": {
+          "type": "boolean",
+          "description": "Optional. True while a host that cannot observe clean state before launch still owes the observation. Replay is admitted provisionally, and run verification, repair validation, repair eligibility and downstream continuation stay closed until the observation is supplied. Cleared once the observation is made."
+        },
+        "evidenceReference": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "CompensatorReference": {
+      "type": "object",
+      "properties": {
+        "compensatorId": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "evidenceKind": {
+          "type": "string"
+        },
+        "reference": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "CompensatorOutcome": {
+      "type": "object",
+      "properties": {
+        "compensator": {
+          "$ref": "#/$defs/CompensatorReference"
+        },
+        "succeeded": {
+          "type": "boolean"
+        },
+        "completedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "evidenceReference": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "IndependentBusinessOracleResult": {
+      "type": "object",
+      "properties": {
+        "oracleId": {
+          "type": "string"
+        },
+        "succeeded": {
+          "type": "boolean"
+        },
+        "independent": {
+          "type": "boolean"
+        },
+        "observedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "evidenceReference": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "ReplayEligibilityReason": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "blocking": {
+          "type": "boolean"
+        },
+        "scope": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "ReplayEligibility": {
+      "type": "object",
+      "properties": {
+        "sideEffectPolicy": {
+          "enum": [
+            "unspecified",
+            "none",
+            "app-state-resettable",
+            "test-tenant-resettable",
+            "compensated",
+            "non-replayable"
+          ]
+        },
+        "ordinaryReplayAllowed": {
+          "type": "boolean"
+        },
+        "diagnosticReplayAllowed": {
+          "type": "boolean"
+        },
+        "repairValidationAllowed": {
+          "type": "boolean"
+        },
+        "downstreamContinuationAllowed": {
+          "type": "boolean"
+        },
+        "repairEligibility": {
+          "type": "boolean"
+        },
+        "runVerificationAllowed": {
+          "type": "boolean"
+        },
+        "requiresManualOneShotAuthorization": {
+          "type": "boolean"
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ReplayEligibilityReason"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "Verification": {
+      "type": "object",
+      "properties": {
+        "verified": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "checkedAt": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      },
+      "additionalProperties": true
+    },
+    "Outcome": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "enum": [
+            "passed",
+            "failed",
+            "cancelled",
+            "timed-out",
+            "lease-lost",
+            "infrastructure-error",
+            "unknown-completion",
+            "orphaned"
+          ]
+        },
+        "summary": {
+          "type": "string"
+        },
+        "terminal": {
+          "type": "boolean"
+        },
+        "verified": {
+          "type": "boolean"
+        },
+        "verificationReason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "RunEvent": {
+      "type": "object",
+      "properties": {
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "stepId": {
+          "type": "string"
+        },
+        "data": true
+      },
+      "additionalProperties": true
+    },
+    "StepAttempt": {
+      "type": "object",
+      "properties": {
+        "stepId": {
+          "type": "string"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "action": {
+          "type": "string"
+        },
+        "intent": {
+          "type": "string"
+        },
+        "startedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "endedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "selector": {
+          "$ref": "maui-flow-v2.json#/$defs/FlowSelector"
+        },
+        "selectorRequest": {
+          "$ref": "#/$defs/SelectorRequest"
+        },
+        "candidateCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "candidateSummary": {
+          "$ref": "#/$defs/CandidateSummary"
+        },
+        "targetResolution": {
+          "$ref": "#/$defs/TargetResolution"
+        },
+        "actionability": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ActionabilityAttempt"
+          }
+        },
+        "dispatch": {
+          "$ref": "#/$defs/DispatchReceipt"
+        },
+        "assertions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AssertionResult"
+          }
+        },
+        "expectedCheckpoint": {
+          "$ref": "#/$defs/Checkpoint"
+        },
+        "observedCheckpoint": {
+          "$ref": "#/$defs/Checkpoint"
+        },
+        "seedFingerprint": {
+          "type": "string"
+        },
+        "backendStateFingerprint": {
+          "type": "string"
+        },
+        "commandId": {
+          "type": "string"
+        },
+        "commandSequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "actionDigest": {
+          "type": "string"
+        },
+        "authorityEpoch": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "acknowledgementState": {
+          "type": "string"
+        },
+        "completionCertainty": {
+          "enum": [
+            "completed",
+            "unknown"
+          ]
+        },
+        "failureClass": {
+          "$ref": "#/$defs/FailureClass"
+        },
+        "fingerprint": {
+          "$ref": "#/$defs/ElementFingerprint"
+        },
+        "selectorCandidates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SelectorCandidate"
+          }
+        },
+        "selectorCandidateOmissions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Omission"
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ArtifactReference"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "TargetResolution": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string"
+        },
+        "matchCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "elementId": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "SelectorRequest": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/ValueDisclosure"
+        },
+        "scope": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "CandidateSummary": {
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "final": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "ActionabilityAttempt": {
+      "type": "object",
+      "properties": {
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "resolved": {
+          "type": "boolean"
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "hasBounds": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "boundsStable": {
+          "type": "boolean"
+        },
+        "waitDurationMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "outcome": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "DispatchReceipt": {
+      "type": "object",
+      "properties": {
+        "commandId": {
+          "type": "string"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "actionDigest": {
+          "type": "string"
+        },
+        "authorityEpoch": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "acknowledgementState": {
+          "type": "string"
+        },
+        "completionCertainty": {
+          "type": "string"
+        },
+        "receivedAt": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      },
+      "additionalProperties": true
+    },
+    "AssertionResult": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "skipped": {
+          "type": "boolean"
+        },
+        "expected": {
+          "type": "string"
+        },
+        "actual": {
+          "type": "string"
+        },
+        "expectedDisclosure": {
+          "$ref": "#/$defs/ValueDisclosure"
+        },
+        "actualDisclosure": {
+          "$ref": "#/$defs/ValueDisclosure"
+        },
+        "targetResolution": {
+          "$ref": "#/$defs/TargetResolution"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "ValueDisclosure": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "enum": [
+            "disclosed",
+            "redacted",
+            "omitted"
+          ]
+        },
+        "type": {
+          "type": "string"
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "digest": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "Checkpoint": {
+      "type": "object",
+      "properties": {
+        "appBuildFingerprint": {
+          "type": "string"
+        },
+        "agentInstanceId": {
+          "type": "string"
+        },
+        "seedFingerprint": {
+          "type": "string"
+        },
+        "backendStateFingerprint": {
+          "type": "string"
+        },
+        "route": {
+          "type": "string"
+        },
+        "window": {
+          "type": "string"
+        },
+        "modal": {
+          "type": "string"
+        },
+        "locale": {
+          "type": "string"
+        },
+        "theme": {
+          "type": "string"
+        },
+        "orientation": {
+          "type": "string"
+        },
+        "displayProfile": {
+          "type": "string"
+        },
+        "collectionItemKey": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "Failure": {
+      "type": "object",
+      "properties": {
+        "failureId": {
+          "type": "string"
+        },
+        "class": {
+          "$ref": "#/$defs/FailureClass"
+        },
+        "code": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "repairEligible": {
+          "type": "boolean",
+          "description": "Whether this failure may be repaired automatically. It is the conjunction of classifierRepairEligible and replayEligibility.repairEligibility, so it is false whenever either half withholds permission."
+        },
+        "classifierRepairEligible": {
+          "type": "boolean",
+          "description": "What the failure classifier concluded from the symptom alone, before replay safety was consulted. It differs from repairEligible exactly when the symptom is repairable but the run was not a safe basis to repair from, which is a property of the run rather than a classifier defect."
+        },
+        "legacyKind": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "stepId": {
+          "type": "string"
+        },
+        "at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ArtifactReference"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "AppProcessEvidence": {
+      "type": "object",
+      "description": "What the host observed about the application process itself after the run ended. Absent members mean the host did not look or could not tell; they never mean the app was healthy.",
+      "properties": {
+        "probed": {
+          "type": "boolean",
+          "description": "Whether the host attempted to observe the app process at all."
+        },
+        "source": {
+          "type": "string",
+          "description": "How the observation was made, for example 'process-handle' or 'adb'."
+        },
+        "processExited": {
+          "type": "boolean",
+          "description": "Whether the app process under test was observed to be gone."
+        },
+        "exitCode": {
+          "type": "integer"
+        },
+        "exitReason": {
+          "$ref": "#/$defs/AppExitReason"
+        },
+        "crashLogPresent": {
+          "type": "boolean",
+          "description": "Whether the platform held a crash record bound to the app process under test."
+        },
+        "crashSignature": {
+          "type": "string",
+          "description": "Redacted single-line summary of the crash, when one was found."
+        },
+        "crashExcerpt": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "type": "string"
+          },
+          "description": "Redacted, bounded excerpt of the crash record. Each element is one line."
+        },
+        "probeError": {
+          "type": "string",
+          "description": "Why the probe could not answer. Present only when the answer is unknown."
+        }
+      },
+      "additionalProperties": true
+    },
+    "AppExitReason": {
+      "enum": [
+        "crash",
+        "crash-native",
+        "anr",
+        "user-requested",
+        "signaled",
+        "exit-self",
+        "low-memory",
+        "unknown"
+      ]
+    },
+    "ExpectedEvidenceReport": {
+      "type": "object",
+      "description": "Whether each artifact the flow declared as expected was produced by this run. This records production only: it never compares artifact content, so it is not a golden-image or screenshot-diff result, and it never changes the run outcome.",
+      "properties": {
+        "declared": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "satisfied": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unsatisfied": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "notApplicable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "allSatisfied": {
+          "type": "boolean",
+          "description": "True only when every applicable declaration was satisfied."
+        },
+        "checks": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/ExpectedEvidenceCheck"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "ExpectedEvidenceCheck": {
+      "type": "object",
+      "properties": {
+        "expectationId": {
+          "type": "string"
+        },
+        "scope": {
+          "enum": [
+            "flow",
+            "step"
+          ]
+        },
+        "stepId": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "reference": {
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "satisfied",
+            "unsatisfied",
+            "not-applicable"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "FailureClass": {
+      "enum": [
+        "flow-invalid",
+        "schema-unsupported",
+        "capability-missing",
+        "lease-conflict",
+        "lease-lost",
+        "cancelled",
+        "timeout",
+        "reset-failed",
+        "precondition-unsatisfied",
+        "route-state-drift",
+        "locator-not-found",
+        "locator-ambiguous",
+        "not-visible",
+        "disabled",
+        "unstable-bounds",
+        "action-rejected",
+        "drive-failed",
+        "unknown-completion",
+        "workflow-command-conflict",
+        "secret-unavailable",
+        "unsafe-value",
+        "assertion-failed",
+        "transport",
+        "agent-disconnected",
+        "app-crash",
+        "infrastructure"
+      ]
+    },
+    "ArtifactReference": {
+      "type": "object",
+      "properties": {
+        "artifactId": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^(?![/\\\\])(?![A-Za-z]:)(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+$"
+        },
+        "digest": {
+          "type": "string"
+        },
+        "mediaType": {
+          "type": "string"
+        },
+        "redacted": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      },
+      "additionalProperties": true
+    },
+    "Omission": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    },
+    "SelectorHealthSummary": {
+      "type": "object",
+      "properties": {
+        "ruleVersion": { "type": "string" },
+        "rankerRuleVersion": { "type": "string" },
+        "calibrationState": { "const": "uncalibrated" },
+        "capturedSteps": { "type": "integer", "minimum": 0 },
+        "candidateCount": { "type": "integer", "minimum": 0 },
+        "omissionCount": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "ElementFingerprint": {
+      "type": "object",
+      "properties": {
+        "schema": { "const": 1 },
+        "fingerprintId": { "type": "string" },
+        "context": { "type": "object" },
+        "managed": { "type": "object" },
+        "native": { "type": "object" },
+        "source": { "type": "object" },
+        "topology": { "type": "object" },
+        "collection": { "type": "object" },
+        "normalizedBounds": { "type": "object" },
+        "observedAt": { "$ref": "#/$defs/Timestamp" },
+        "capabilityVersion": { "type": "string" },
+        "evidenceRefs": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    },
+    "SelectorCandidate": {
+      "type": "object",
+      "properties": {
+        "schema": { "const": 1 },
+        "candidateId": { "type": "string" },
+        "rank": { "type": "integer", "minimum": 1 },
+        "priority": { "type": "integer", "minimum": 1 },
+        "selectorDescriptor": { "type": "object" },
+        "scopeDescriptor": { "type": "object" },
+        "origin": { "type": "string" },
+        "rationaleCodes": { "type": "array", "items": { "type": "string" } },
+        "riskFlags": { "type": "array", "items": { "type": "string" } },
+        "scores": { "type": "object" },
+        "validation": { "type": "object" },
+        "calibration": {
+          "type": "object",
+          "properties": { "state": { "const": "uncalibrated" } },
+          "additionalProperties": true
+        },
+        "evidenceRefs": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    }
+  }
+}

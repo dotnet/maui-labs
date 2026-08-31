@@ -11,4 +11,5 @@ public interface IAppFixture : IAsyncLifetime
     int AgentPort { get; }
     string AgentBaseUrl { get; }
     string Platform { get; }
+    bool SupportsFlowLifecycle => false;
 }

@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "id": "csharp-advisory-missing-automation-id",
+  "kind": "no-repair",
+  "disposition": "diagnostic-only",
+  "provenance": {
+    "labeledBy": "devflow-maintainers",
+    "labeledOn": "2026-08-15",
+    "method": "hand-authored",
+    "sourceKind": "synthetic",
+    "reviewStatus": "unreviewed",
+    "notes": "Source advisory; models no runtime failure."
+  },
+  "fixture": {
+    "language": "CSharp",
+    "source": "var save = new Button { Text = \"Save\" };",
+    "scope": "static-direct-object-initializer"
+  },
+  "expect": {
+    "diagnosticIds": [
+      "DFCS001"
+    ],
+    "repairEligible": false,
+    "ineligibilityCodes": [
+      "source-proposal-required"
+    ]
+  }
+}

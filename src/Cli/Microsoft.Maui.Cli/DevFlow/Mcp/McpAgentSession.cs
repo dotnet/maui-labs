@@ -1,13 +1,18 @@
 using Microsoft.Maui.Cli.DevFlow.Broker;
 using Microsoft.Maui.Cli.DevFlow.Android;
 using Microsoft.Maui.DevFlow.Driver;
+using Microsoft.Maui.DevFlow.Testing;
 using ModelContextProtocol;
+using Microsoft.Maui.Cli.DevFlow.Inspector;
 
 namespace Microsoft.Maui.Cli.DevFlow.Mcp;
 
 public class McpAgentSession
 {
 	int? _defaultAgentPort;
+	readonly string _mutationLeaseId = Guid.NewGuid().ToString("N");
+	readonly object _testRunGate = new();
+	readonly Dictionary<string, string> _testRunCapabilities = new(StringComparer.Ordinal);
 
 	public int? DefaultAgentPort
 	{
@@ -22,13 +27,19 @@ public class McpAgentSession
 	public string DefaultAgentHost { get; set; } = "localhost";
 	AgentRegistration? DefaultAgent { get; set; }
 
+	/// <summary>Creates an agent client owned by the caller. Dispose it after the tool call completes.</summary>
 	public async Task<AgentClient> GetAgentClientAsync(int? agentPort = null)
 	{
 		var selectedPort = agentPort ?? DefaultAgentPort;
 		var port = selectedPort ?? await ResolveAgentPortAsync();
 		if (selectedPort.HasValue && DefaultAgentHost.Equals("localhost", StringComparison.OrdinalIgnoreCase))
 			await TryEnsureAndroidForwardingForAgentPortAsync(port, ensureBrokerReverse: false);
-		return new AgentClient(DefaultAgentHost, port);
+		return new AgentClient(DefaultAgentHost, port)
+		{
+			MutationLeaseId = _mutationLeaseId,
+			MutationLeaseHolderKind = "mcp",
+			MutationLeaseLabel = "MCP client"
+		};
 	}
 
 	public void SetDefaultAgent(AgentRegistration agent)
@@ -53,6 +64,20 @@ public class McpAgentSession
 	{
 		var brokerPort = await GetBrokerPortAsync();
 		return await BrokerClient.ListAgentsAsync(brokerPort);
+	}
+
+	/// <summary>Resolves the broker registration selected by an MCP tool without using its port as state.</summary>
+	public async Task<AgentRegistration> GetSelectedBrokerAgentAsync(int? agentPort = null)
+	{
+		var brokerPort = await GetBrokerPortAsync();
+		var agents = await BrokerClient.ListAgentsAsync(brokerPort);
+		var selectedPort = agentPort ?? DefaultAgentPort;
+		var agent = selectedPort.HasValue
+			? agents?.FirstOrDefault(candidate => candidate.Port == selectedPort.Value)
+			: agents is null ? null : BrokerClient.ResolveAgent(agents);
+		if (agent is null)
+			throw new McpException("Select exactly one connected agent with agentPort before using this tool.");
+		return agent;
 	}
 
 	private async Task<int> ResolveAgentPortAsync()
