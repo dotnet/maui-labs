@@ -14,6 +14,8 @@ public sealed class AndroidFlowPilotTests
 {
     const int DefaultCleanRepetitions = 3;
     const string PilotCheckpointRoute = AndroidFlowTestHost.DefaultCheckpointRoute;
+    internal const string DemoFlowEnvironmentVariable = "DEVFLOW_FLOW_PILOT_DEMO_FLOW";
+    internal const string DemoFlowPrefix = "demo-";
     readonly ITestOutputHelper _output;
 
     public AndroidFlowPilotTests(ITestOutputHelper output)
@@ -36,6 +38,75 @@ public sealed class AndroidFlowPilotTests
 
         Assert.All(flows, flow => Assert.NotNull(flow.Plan));
         Assert.All(flows, flow => Assert.Equal(MauiFlowSideEffectPolicies.None, flow.Plan!.SideEffectPolicy));
+        Assert.DoesNotContain(
+            flows,
+            flow => Path.GetFileName(flow.SourcePath).StartsWith(DemoFlowPrefix, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void SelectTierOneFlowFiles_DefaultSelection_ExcludesDemoFlows()
+    {
+        var paths = new[]
+        {
+            Path.Combine("flows", "README.md"),
+            Path.Combine("flows", "demo-ci-fix-drift.md"),
+            Path.Combine("flows", "native-baseline.md"),
+            Path.Combine("flows", "verified-add-todo.md"),
+        };
+
+        var selected = SelectTierOneFlowFiles(paths, demoFlowSelection: null);
+
+        Assert.Equal(
+            ["native-baseline.md", "verified-add-todo.md"],
+            selected.Select(Path.GetFileName).ToArray());
+    }
+
+    [Fact]
+    public void SelectTierOneFlowFiles_DemoSelection_LoadsExactlyTheNamedDemoFlow()
+    {
+        var paths = new[]
+        {
+            Path.Combine("flows", "demo-ci-fix-drift.md"),
+            Path.Combine("flows", "native-baseline.md"),
+        };
+
+        var selected = SelectTierOneFlowFiles(paths, "demo-ci-fix-drift.md");
+
+        Assert.Equal("demo-ci-fix-drift.md", Path.GetFileName(Assert.Single(selected)));
+    }
+
+    [Theory]
+    [InlineData("native-baseline.md")]
+    [InlineData("../demo-ci-fix-drift.md")]
+    [InlineData("demo-ci-fix-drift")]
+    [InlineData("demo-missing.md")]
+    public void SelectTierOneFlowFiles_UnsafeOrUnknownDemoSelection_IsRefused(string selection)
+    {
+        var paths = new[]
+        {
+            Path.Combine("flows", "demo-ci-fix-drift.md"),
+            Path.Combine("flows", "native-baseline.md"),
+        };
+
+        Assert.Throws<InvalidOperationException>(() => SelectTierOneFlowFiles(paths, selection));
+    }
+
+    [Fact]
+    public void TierOneFlowCorpus_ContainsTheCommittedDemoFlowOutsideTheDefaultSelection()
+    {
+        var directory = Path.Combine(
+            AppFixtureBase.FindRepoRoot(), "samples", "DevFlow.Sample", "maui-tests");
+        var files = Directory.GetFiles(directory, "*.md");
+
+        Assert.Contains(
+            files,
+            path => string.Equals(Path.GetFileName(path), "demo-ci-fix-drift.md", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            SelectTierOneFlowFiles(files, demoFlowSelection: null),
+            path => string.Equals(Path.GetFileName(path), "demo-ci-fix-drift.md", StringComparison.Ordinal));
+        Assert.Equal(
+            "demo-ci-fix-drift.md",
+            Path.GetFileName(Assert.Single(SelectTierOneFlowFiles(files, "demo-ci-fix-drift.md"))));
     }
 
     [AndroidFlowPilotFact]
@@ -176,6 +247,52 @@ public sealed class AndroidFlowPilotTests
             ? value
             : DefaultCleanRepetitions;
 
+    /// <summary>
+    /// Selects the flow files the Tier-1 pilot loads. The default is the ordinary Tier-1 corpus and
+    /// never includes a <c>demo-</c>-prefixed flow: those exist only to fail on purpose for the
+    /// manager-facing CI demo, and one of them in the required gate would turn every pull request
+    /// red. Demo mode is a single explicit opt-in file name; it loads that flow and nothing else,
+    /// so a demo run can never quietly widen into the ordinary corpus either.
+    /// </summary>
+    internal static IReadOnlyList<string> SelectTierOneFlowFiles(
+        IEnumerable<string> flowPaths,
+        string? demoFlowSelection)
+    {
+        ArgumentNullException.ThrowIfNull(flowPaths);
+
+        var ordered = flowPaths
+            .Where(static path => !string.Equals(Path.GetFileName(path), "README.md", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(static path => path, StringComparer.Ordinal)
+            .ToList();
+        var selection = demoFlowSelection?.Trim();
+        if (string.IsNullOrEmpty(selection))
+        {
+            return ordered
+                .Where(static path => !Path.GetFileName(path).StartsWith(DemoFlowPrefix, StringComparison.Ordinal))
+                .ToList();
+        }
+
+        if (!string.Equals(Path.GetFileName(selection), selection, StringComparison.Ordinal) ||
+            !selection.StartsWith(DemoFlowPrefix, StringComparison.Ordinal) ||
+            !selection.EndsWith(".md", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"{DemoFlowEnvironmentVariable} must name a single '{DemoFlowPrefix}' prefixed Markdown flow file, " +
+                $"not '{selection}'.");
+        }
+
+        var matches = ordered
+            .Where(path => string.Equals(Path.GetFileName(path), selection, StringComparison.Ordinal))
+            .ToList();
+        if (matches.Count != 1)
+        {
+            throw new InvalidOperationException(
+                $"{DemoFlowEnvironmentVariable} selected '{selection}', but {matches.Count} matching flows were found.");
+        }
+
+        return matches;
+    }
+
     internal static async Task<List<FlowPilotFlowSource>> LoadTierOneFlowsAsync(
         string repositoryRoot,
         CancellationToken cancellationToken = default)
@@ -183,9 +300,9 @@ public sealed class AndroidFlowPilotTests
         var directory = Path.Combine(repositoryRoot, "samples", "DevFlow.Sample", "maui-tests");
         var loader = new CommittedFlowBundleLoader();
         var sources = new List<FlowPilotFlowSource>();
-        foreach (var path in Directory.GetFiles(directory, "*.md")
-                     .Where(static path => !string.Equals(Path.GetFileName(path), "README.md", StringComparison.OrdinalIgnoreCase))
-                     .OrderBy(static path => path, StringComparer.Ordinal))
+        var demoSelection = Environment.GetEnvironmentVariable(DemoFlowEnvironmentVariable);
+        var demoMode = !string.IsNullOrWhiteSpace(demoSelection);
+        foreach (var path in SelectTierOneFlowFiles(Directory.GetFiles(directory, "*.md"), demoSelection))
         {
             var bundle = await loader.LoadAsync(path, planPath: null, cancellationToken);
 
@@ -211,6 +328,13 @@ public sealed class AndroidFlowPilotTests
             }
 
             sources.Add(new FlowPilotFlowSource(path, bundle.Flow, bundle.Plan));
+        }
+
+        if (demoMode)
+        {
+            if (sources.Count != 1)
+                throw new InvalidOperationException($"Expected exactly 1 demo flow, found {sources.Count}.");
+            return sources;
         }
 
         if (sources.Count is < 6 or > 12)

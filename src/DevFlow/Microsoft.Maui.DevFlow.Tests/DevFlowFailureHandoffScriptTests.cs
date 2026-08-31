@@ -4,6 +4,8 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Maui.Cli.DevFlow.Flows;
+using Microsoft.Maui.DevFlow.Testing;
 using YamlDotNet.RepresentationModel;
 
 namespace Microsoft.Maui.DevFlow.Tests;
@@ -24,12 +26,14 @@ public sealed partial class DevFlowFailureHandoffScriptTests : IDisposable
     [
         "android-device-overhead",
         "android-tier1-first-attempts",
+        "classification-accuracy",
         "confidence-calibration",
         "corpus-contract",
         "deterministic-host-performance",
         "independent-review",
         "preview-safety-flags",
         "privacy-security-escapes",
+        "product-analyzer-coverage",
         "repair-precision",
         "required-evidence",
         "selector-stability",
@@ -381,6 +385,29 @@ public sealed partial class DevFlowFailureHandoffScriptTests : IDisposable
     }
 
     [Fact]
+    public async Task PassingProductAnalyzerGate_RequiresTheSelfReportedProvenanceDisclosure()
+    {
+        var inputs = CreateInputs("product-analyzer-disclosure");
+        MutateJson(
+            inputs.QualificationPath,
+            root =>
+            {
+                var gate = root["gates"]!.AsArray()
+                    .Single(static node =>
+                        node!["gateId"]!.GetValue<string>() == "product-analyzer-coverage");
+                gate!["reasonCodes"] = new JsonArray();
+            });
+
+        var result = await RunProducerAsync(
+            inputs.ManifestPath,
+            inputs.QualificationPath,
+            "product-analyzer-disclosure");
+
+        Assert.Equal("skipped", result.Json.GetProperty("status").GetString());
+        Assert.Equal("qualification-gates-invalid", result.Json.GetProperty("reason").GetString());
+    }
+
+    [Fact]
     public async Task ForcedRedactedFlagWithoutSelectedEvidenceBinding_IsRejected()
     {
         var inputs = CreateInputs("forced-redacted");
@@ -486,6 +513,306 @@ public sealed partial class DevFlowFailureHandoffScriptTests : IDisposable
     }
 
     [Fact]
+    public async Task DemoLane_NotQualifiedEmulatorFailure_CreatesDistinctDemoArchive()
+    {
+        var inputs = DemoInputs("demo");
+
+        var result = await RunProducerAsync(
+            inputs.ManifestPath,
+            inputs.QualificationPath,
+            "demo",
+            laneKind: "demo-emulator-showcase");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("created", result.Json.GetProperty("status").GetString());
+        Assert.Equal("demo-incident", result.Json.GetProperty("reason").GetString());
+        Assert.False(File.Exists(ArchivePath("demo")));
+        var archivePath = DemoArchivePath("demo");
+        Assert.True(File.Exists(archivePath));
+        Assert.Equal(
+            ["handoff.json", "manifest.json"],
+            Directory.GetFiles(DemoStagingPath("demo"))
+                .Select(static path => Path.GetFileName(path)!)
+                .OrderBy(static name => name, StringComparer.Ordinal)
+                .ToArray());
+
+        using var archive = ZipFile.OpenRead(archivePath);
+        Assert.Equal(
+            ["manifest.json", "handoff.json"],
+            archive.Entries.Select(static entry => entry.FullName).ToArray());
+        using var manifest = JsonDocument.Parse(ReadEntry(archive, "manifest.json"));
+        using var handoff = JsonDocument.Parse(ReadEntry(archive, "handoff.json"));
+        Assert.Equal("devflow-ci-demo-manifest", manifest.RootElement.GetProperty("schema").GetString());
+        Assert.Equal("devflow-ci-demo-handoff", handoff.RootElement.GetProperty("schema").GetString());
+        Assert.True(handoff.RootElement.GetProperty("demo").GetBoolean());
+        Assert.Equal("demo-emulator-showcase", handoff.RootElement.GetProperty("laneKind").GetString());
+        Assert.Equal("emulator", handoff.RootElement.GetProperty("deviceEvidenceKind").GetString());
+        Assert.Equal("none", handoff.RootElement.GetProperty("repairAuthority").GetString());
+        Assert.Equal("not-qualified", handoff.RootElement.GetProperty("qualificationStatus").GetString());
+        Assert.Equal("not-qualified", handoff.RootElement.GetProperty("qualification").GetString());
+        Assert.Equal("failure", handoff.RootElement.GetProperty("outcome").GetString());
+        Assert.Equal("android", handoff.RootElement.GetProperty("platform").GetString());
+        Assert.Equal("test-failure", handoff.RootElement.GetProperty("category").GetString());
+    }
+
+    [Fact]
+    public async Task DemoLane_RealCliQualification_CreatesDistinctDemoArchive()
+    {
+        var inputs = CreateInputs(
+            "demo-real-cli",
+            platform: "android",
+            deviceKind: "emulator",
+            realDevice: false,
+            qualificationStatus: "not-qualified");
+        File.Delete(inputs.QualificationPath);
+        var qualification = await RunQualificationAsync(
+            inputs.ManifestPath,
+            inputs.QualificationPath);
+        Assert.True(
+            qualification.ExitCode == 0,
+            $"Qualification failed. stdout={qualification.StandardOutput}; stderr={qualification.StandardError}");
+        Assert.True(File.Exists(inputs.QualificationPath));
+
+        var result = await RunProducerAsync(
+            inputs.ManifestPath,
+            inputs.QualificationPath,
+            "demo-real-cli",
+            laneKind: "demo-emulator-showcase");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(
+            result.Json.GetProperty("status").GetString() == "created",
+            $"{result.Json.GetProperty("status").GetString()}/{result.Json.GetProperty("reason").GetString()}");
+        Assert.True(File.Exists(DemoArchivePath("demo-real-cli")));
+    }
+
+    [Fact]
+    public async Task DemoLane_ProducesDeterministicArchiveBytesAndHashes()
+    {
+        var inputs = DemoInputs("demo-deterministic");
+
+        var first = await RunProducerAsync(
+            inputs.ManifestPath, inputs.QualificationPath, "demo-deterministic-one", "demo-emulator-showcase");
+        var second = await RunProducerAsync(
+            inputs.ManifestPath, inputs.QualificationPath, "demo-deterministic-two", "demo-emulator-showcase");
+
+        Assert.Equal("created", first.Json.GetProperty("status").GetString());
+        Assert.Equal("created", second.Json.GetProperty("status").GetString());
+        Assert.Equal(
+            first.Json.GetProperty("archiveSha256").GetString(),
+            second.Json.GetProperty("archiveSha256").GetString());
+        Assert.Equal(
+            File.ReadAllBytes(DemoArchivePath("demo-deterministic-one")),
+            File.ReadAllBytes(DemoArchivePath("demo-deterministic-two")));
+    }
+
+    [Fact]
+    public async Task DemoLane_RealDeviceEvidence_IsRefused()
+    {
+        var inputs = CreateInputs(
+            "demo-real-device",
+            deviceKind: "physical-device",
+            realDevice: true,
+            qualificationStatus: "not-qualified");
+
+        var result = await RunProducerAsync(
+            inputs.ManifestPath,
+            inputs.QualificationPath,
+            "demo-real-device",
+            laneKind: "demo-emulator-showcase");
+
+        Assert.Equal("skipped", result.Json.GetProperty("status").GetString());
+        Assert.Equal("demo-lane-not-qualifying", result.Json.GetProperty("reason").GetString());
+        Assert.False(File.Exists(DemoArchivePath("demo-real-device")));
+    }
+
+    [Fact]
+    public async Task DemoLane_PassingQualification_IsRefused()
+    {
+        var inputs = CreateInputs(
+            "demo-passing",
+            deviceKind: "emulator",
+            realDevice: false,
+            qualificationStatus: "pass");
+
+        var result = await RunProducerAsync(
+            inputs.ManifestPath,
+            inputs.QualificationPath,
+            "demo-passing",
+            laneKind: "demo-emulator-showcase");
+
+        Assert.Equal("skipped", result.Json.GetProperty("status").GetString());
+        Assert.Equal("demo-lane-not-qualifying", result.Json.GetProperty("reason").GetString());
+        Assert.False(File.Exists(DemoArchivePath("demo-passing")));
+    }
+
+    [Fact]
+    public async Task DemoLane_FailingQualification_RemainsANonqualifiedDemo()
+    {
+        var inputs = CreateInputs(
+            "demo-failing-qualification",
+            deviceKind: "emulator",
+            realDevice: false,
+            qualificationStatus: "fail");
+
+        var result = await RunProducerAsync(
+            inputs.ManifestPath,
+            inputs.QualificationPath,
+            "demo-failing-qualification",
+            laneKind: "demo-emulator-showcase");
+
+        Assert.Equal("created", result.Json.GetProperty("status").GetString());
+        using var archive = ZipFile.OpenRead(DemoArchivePath("demo-failing-qualification"));
+        using var handoff = JsonDocument.Parse(ReadEntry(archive, "handoff.json"));
+        Assert.Equal("not-qualified", handoff.RootElement.GetProperty("qualification").GetString());
+        Assert.Equal("fail", handoff.RootElement.GetProperty("qualificationStatus").GetString());
+        Assert.Equal("none", handoff.RootElement.GetProperty("repairAuthority").GetString());
+    }
+
+    [Fact]
+    public async Task DemoLane_NonDispatchSourceEvent_IsRefused()
+    {
+        var inputs = DemoInputs("demo-schedule");
+
+        var result = await RunProducerAsync(
+            inputs.ManifestPath,
+            inputs.QualificationPath,
+            "demo-schedule",
+            laneKind: "demo-emulator-showcase",
+            sourceEvent: "schedule");
+
+        Assert.Equal("skipped", result.Json.GetProperty("status").GetString());
+        Assert.Equal("demo-lane-not-qualifying", result.Json.GetProperty("reason").GetString());
+        Assert.False(File.Exists(DemoArchivePath("demo-schedule")));
+    }
+
+    [Fact]
+    public async Task ProductionLane_EmulatorEvidence_IsStillRefused()
+    {
+        var inputs = CreateInputs(
+            "production-emulator",
+            deviceKind: "emulator",
+            realDevice: false,
+            qualificationStatus: "pass");
+
+        var result = await RunProducerAsync(
+            inputs.ManifestPath,
+            inputs.QualificationPath,
+            "production-emulator");
+
+        Assert.Equal("skipped", result.Json.GetProperty("status").GetString());
+        Assert.Equal("source-lane-not-qualifying", result.Json.GetProperty("reason").GetString());
+        Assert.False(File.Exists(ArchivePath("production-emulator")));
+        Assert.False(File.Exists(DemoArchivePath("production-emulator")));
+    }
+
+    [Fact]
+    public async Task ProductionLane_NotQualifiedEvidence_IsStillRefused()
+    {
+        var inputs = DemoInputs("production-not-qualified");
+
+        var result = await RunProducerAsync(
+            inputs.ManifestPath,
+            inputs.QualificationPath,
+            "production-not-qualified");
+
+        Assert.Equal("skipped", result.Json.GetProperty("status").GetString());
+        Assert.Equal("qualification-not-qualified", result.Json.GetProperty("reason").GetString());
+        Assert.False(File.Exists(ArchivePath("production-not-qualified")));
+    }
+
+    [Fact]
+    public async Task DemoLane_UnboundSelectedEvidence_IsStillRefused()
+    {
+        var inputs = DemoInputs("demo-unbound");
+        MutateJson(
+            inputs.QualificationPath,
+            root =>
+            {
+                var refs = root["artifactRefs"]!.AsArray();
+                for (var index = refs.Count - 1; index >= 0; index--)
+                {
+                    if (refs[index]!["kind"]!.GetValue<string>() == "mauitrace")
+                        refs.RemoveAt(index);
+                }
+            });
+
+        var result = await RunProducerAsync(
+            inputs.ManifestPath,
+            inputs.QualificationPath,
+            "demo-unbound",
+            laneKind: "demo-emulator-showcase");
+
+        Assert.Equal("skipped", result.Json.GetProperty("status").GetString());
+        Assert.Equal("qualification-evidence-unbound", result.Json.GetProperty("reason").GetString());
+        Assert.False(File.Exists(DemoArchivePath("demo-unbound")));
+    }
+
+    private (string ManifestPath, string QualificationPath) DemoInputs(string directoryName)
+    {
+        var inputs = CreateInputs(
+            directoryName,
+            platform: "android",
+            deviceKind: "emulator",
+            realDevice: false,
+            qualificationStatus: "not-qualified");
+        var parsed = MauiPreviewQualificationArtifactManifestReader.ParseJson(
+            File.ReadAllText(inputs.ManifestPath));
+        Assert.True(parsed.Ok, string.Join(", ", parsed.Errors));
+        var qualification = MauiPreviewQualificationGateEvaluator.Evaluate(parsed.Input);
+        MutateJson(
+            inputs.QualificationPath,
+            root => root["artifactRefs"] = JsonSerializer.SerializeToNode(qualification.ArtifactRefs));
+        return inputs;
+    }
+
+    [Fact]
+    public void QualificationGateContract_MatchesTheRealEvaluator()
+    {
+        var inputs = CreateInputs(
+            "qualification-gate-contract",
+            platform: "android",
+            deviceKind: "emulator",
+            realDevice: false,
+            qualificationStatus: "not-qualified");
+        var parsed = MauiPreviewQualificationArtifactManifestReader.ParseJson(
+            File.ReadAllText(inputs.ManifestPath));
+
+        Assert.True(parsed.Ok, string.Join(", ", parsed.Errors));
+        var qualification = MauiPreviewQualificationGateEvaluator.Evaluate(parsed.Input);
+        Assert.DoesNotContain(
+            qualification.Gates,
+            static gate => gate.GateId == "input-contract");
+        Assert.Equal(
+            QualificationGateIds.OrderBy(static gate => gate, StringComparer.Ordinal),
+            qualification.Gates
+                .Select(static gate => gate.GateId)
+                .OrderBy(static gate => gate, StringComparer.Ordinal));
+
+        var productCoverage = MauiPreviewQualificationGateEvaluator.BuildProductAnalyzerCoverageGate(
+            new[]
+            {
+                ProductMetric("repairPrecision"),
+                ProductMetric("repairRecall"),
+                ProductMetric("falseHeals"),
+                ProductMetric("abstention"),
+            });
+        Assert.Equal("pass", productCoverage.Status);
+        Assert.Equal(["provenance-self-reported"], productCoverage.ReasonCodes);
+
+        static (string Name, int Denominator, MauiQualificationMetricProvenance? Exercises) ProductMetric(
+            string name) =>
+            (
+                name,
+                1,
+                new MauiQualificationMetricProvenance
+                {
+                    Component = "MauiSelectorHealthAnalyzer",
+                    Kind = MauiQualificationMetricProvenanceKinds.ShippedAnalyzer,
+                });
+    }
+
+    [Fact]
     public void IntegrationWorkflow_WiresNoOpEmulatorProducerAndExactArtifactName()
     {
         var workflowPath = Path.Combine(_repositoryRoot, ".github", "workflows", "devflow-integration.yml");
@@ -503,7 +830,7 @@ public sealed partial class DevFlowFailureHandoffScriptTests : IDisposable
         Assert.Contains("if: always()", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("reactivecircus/android-emulator-runner@v2", workflow, StringComparison.Ordinal);
         Assert.Equal(
-            5,
+            7,
             workflow.Split(
                     "reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0",
                     StringSplitOptions.None)
@@ -524,6 +851,118 @@ public sealed partial class DevFlowFailureHandoffScriptTests : IDisposable
             "devflow-failure-handoff-${{ github.run_id }}-${{ github.run_attempt }}/handoff.json",
             workflow,
             StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The demo lane has to be selectable, disjoint from the production lane, and incapable of
+    /// touching the required flow gate. Its artifact names, its lane kind, its opt-in flow filter,
+    /// its deliberate final failure, and its exclusion from <c>devflow-flow-gate.needs</c> are all
+    /// load-bearing, so they are asserted from the committed workflow rather than assumed.
+    /// </summary>
+    [Fact]
+    public void IntegrationWorkflow_IsolatesTheDemoCiFixLaneFromTheRequiredGate()
+    {
+        var workflowPath = Path.Combine(_repositoryRoot, ".github", "workflows", "devflow-integration.yml");
+        var workflow = File.ReadAllText(workflowPath);
+        var yaml = new YamlStream();
+        using (var reader = new StringReader(workflow))
+            yaml.Load(reader);
+        var root = (YamlMappingNode)Assert.Single(yaml.Documents).RootNode;
+        var jobs = (YamlMappingNode)root.Children[new YamlScalarNode("jobs")];
+        var demo = (YamlMappingNode)jobs.Children[new YamlScalarNode("android-demo-ci-fix")];
+
+        var gate = (YamlMappingNode)jobs.Children[new YamlScalarNode("devflow-flow-gate")];
+        var needs = ((YamlSequenceNode)gate.Children[new YamlScalarNode("needs")])
+            .Children.Select(node => ((YamlScalarNode)node).Value)
+            .ToArray();
+        Assert.DoesNotContain("android-demo-ci-fix", needs);
+
+        var permissions = (YamlMappingNode)demo.Children[new YamlScalarNode("permissions")];
+        Assert.Equal(
+            ["contents"],
+            permissions.Children.Keys.Select(key => ((YamlScalarNode)key).Value).ToArray());
+        Assert.Equal("read", ((YamlScalarNode)permissions.Children[new YamlScalarNode("contents")]).Value);
+
+        var condition = ((YamlScalarNode)demo.Children[new YamlScalarNode("if")]).Value ?? string.Empty;
+        Assert.Contains("github.event_name == 'workflow_dispatch'", condition, StringComparison.Ordinal);
+        Assert.Contains("inputs.demo-ci-fix", condition, StringComparison.Ordinal);
+        Assert.Contains(
+            "github.ref == format('refs/heads/{0}', github.event.repository.default_branch)",
+            condition,
+            StringComparison.Ordinal);
+
+        // A separate concurrency group, so an ordinary main run cannot cancel the demo mid-flight.
+        var demoConcurrency = (YamlMappingNode)demo.Children[new YamlScalarNode("concurrency")];
+        Assert.Contains(
+            "android-demo-ci-fix",
+            ((YamlScalarNode)demoConcurrency.Children[new YamlScalarNode("group")]).Value!,
+            StringComparison.Ordinal);
+        Assert.Contains("'-demo-ci-fix'", workflow, StringComparison.Ordinal);
+
+        var demoEnv = (YamlMappingNode)demo.Children[new YamlScalarNode("env")];
+        Assert.Equal(
+            "demo-ci-fix-drift.md",
+            ((YamlScalarNode)demoEnv.Children[new YamlScalarNode("DEVFLOW_FLOW_PILOT_DEMO_FLOW")]).Value);
+        Assert.Equal(
+            "./artifacts/TestResults/devflow-flow/android",
+            ((YamlScalarNode)demoEnv.Children[new YamlScalarNode("DEVFLOW_FLOW_PILOT_RESULTS_ROOT")]).Value);
+
+        Assert.Contains("-LaneKind demo-emulator-showcase", workflow, StringComparison.Ordinal);
+        Assert.Contains("--repeat 1", workflow, StringComparison.Ordinal);
+        Assert.Contains("id: verify-demo-failure", workflow, StringComparison.Ordinal);
+        Assert.Contains("$report.failure.repairEligible -ne $true", workflow, StringComparison.Ordinal);
+        Assert.Contains("$report.replayEligibility.repairEligibility -ne $true", workflow, StringComparison.Ordinal);
+        Assert.Contains("Expected exactly 1 redacted demo .mauitrace", workflow, StringComparison.Ordinal);
+        Assert.Contains("Suppressing ordinary platform lanes for the demo-ci-fix dispatch", workflow, StringComparison.Ordinal);
+        Assert.Contains("steps.verify-demo-failure.outcome == 'success'", workflow, StringComparison.Ordinal);
+        Assert.Contains("steps.demo-handoff.outcome == 'success'", workflow, StringComparison.Ordinal);
+        Assert.Contains("$producer.status -cne 'created'", workflow, StringComparison.Ordinal);
+        Assert.Contains(
+            "Where-Object { [System.IO.Path]::GetFullPath($_.DirectoryName) -ne $root }",
+            workflow,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "name: devflow-demo-handoff-${{ github.run_id }}-${{ github.run_attempt }}",
+            workflow,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "name: devflow-demo-evidence-android-${{ github.run_id }}-${{ github.run_attempt }}",
+            workflow,
+            StringComparison.Ordinal);
+        Assert.Contains("Fail the demo run on purpose", workflow, StringComparison.Ordinal);
+        Assert.Contains("locator-not-found", workflow, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Both publisher jobs carry the identical workflow_run provenance condition. The demo lane
+    /// must never be a weaker path to a repository token than the production lane.
+    /// </summary>
+    [Fact]
+    public void PublisherWorkflow_RunsBothLanesUnderTheSameProvenanceCondition()
+    {
+        var workflowPath = Path.Combine(
+            _repositoryRoot, ".github", "workflows", "devflow-failure-publisher.yml");
+        var workflow = File.ReadAllText(workflowPath);
+        var yaml = new YamlStream();
+        using (var reader = new StringReader(workflow))
+            yaml.Load(reader);
+        var root = (YamlMappingNode)Assert.Single(yaml.Documents).RootNode;
+        var jobs = (YamlMappingNode)root.Children[new YamlScalarNode("jobs")];
+
+        var production = (YamlMappingNode)jobs.Children[new YamlScalarNode("publish")];
+        var demo = (YamlMappingNode)jobs.Children[new YamlScalarNode("publish-demo")];
+        Assert.Equal(
+            ((YamlScalarNode)production.Children[new YamlScalarNode("if")]).Value,
+            ((YamlScalarNode)demo.Children[new YamlScalarNode("if")]).Value);
+
+        Assert.Contains("-Lane production", workflow, StringComparison.Ordinal);
+        Assert.Contains("-Lane demo", workflow, StringComparison.Ordinal);
+        Assert.Equal(
+            2,
+            workflow.Split(
+                    "ref: ${{ github.event.repository.default_branch }}",
+                    StringSplitOptions.None)
+                .Length - 1);
     }
 
     public void Dispose()
@@ -708,9 +1147,11 @@ public sealed partial class DevFlowFailureHandoffScriptTests : IDisposable
                 gateId = gate,
                 status = index == 0 ? gateStatus : "pass",
                 message = "Deterministic qualification gate result.",
-                reasonCodes = index == 0 && gateStatus != "pass"
-                    ? new[] { "qualification-not-passed" }
-                    : Array.Empty<string>(),
+                reasonCodes = gate == "product-analyzer-coverage"
+                    ? new[] { "provenance-self-reported" }
+                    : index == 0 && gateStatus != "pass"
+                        ? new[] { "qualification-not-passed" }
+                        : Array.Empty<string>(),
                 artifactRefs = Array.Empty<string>(),
             })
             .ToArray();
@@ -1032,7 +1473,8 @@ public sealed partial class DevFlowFailureHandoffScriptTests : IDisposable
         string manifestPath,
         string qualificationPath,
         string outputName,
-        string laneKind = "physical-device-flow-qa")
+        string laneKind = "physical-device-flow-qa",
+        string sourceEvent = SourceEvent)
     {
         var outputDirectory = Path.Combine(_testRoot, outputName, "output");
         var script = Path.Combine(_repositoryRoot, "eng", "devflow", "New-DevFlowFailureHandoff.ps1");
@@ -1063,7 +1505,7 @@ public sealed partial class DevFlowFailureHandoffScriptTests : IDisposable
         AddArgument("-WorkflowPath");
         AddArgument(WorkflowPath);
         AddArgument("-SourceEvent");
-        AddArgument(SourceEvent);
+        AddArgument(sourceEvent);
         AddArgument("-HeadRepository");
         AddArgument(Repository);
         AddArgument("-HeadRef");
@@ -1100,6 +1542,45 @@ public sealed partial class DevFlowFailureHandoffScriptTests : IDisposable
         void AddArgument(string value) => process.StartInfo.ArgumentList.Add(value);
     }
 
+    private async Task<(int ExitCode, string StandardOutput, string StandardError)> RunQualificationAsync(
+        string manifestPath,
+        string qualificationPath)
+    {
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo("dotnet")
+            {
+                WorkingDirectory = _repositoryRoot,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            },
+        };
+        process.StartInfo.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
+        AddArgument(typeof(FlowQualificationCommands).Assembly.Location);
+        AddArgument("devflow");
+        AddArgument("flow");
+        AddArgument("qualify");
+        AddArgument("--platform");
+        AddArgument("android");
+        AddArgument("--corpus");
+        AddArgument(Path.Combine(_repositoryRoot, "tests", "DevFlow", "InspectorCorpus"));
+        AddArgument("--artifact-manifest");
+        AddArgument(manifestPath);
+        AddArgument("--output");
+        AddArgument(qualificationPath);
+        AddArgument("--json");
+
+        process.Start();
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
+        await Task.WhenAll(stdoutTask, stderrTask);
+        await process.WaitForExitAsync();
+        return (process.ExitCode, await stdoutTask, await stderrTask);
+
+        void AddArgument(string value) => process.StartInfo.ArgumentList.Add(value);
+    }
+
     private string ArchivePath(string outputName) =>
         Path.Combine(
             _testRoot,
@@ -1113,6 +1594,20 @@ public sealed partial class DevFlowFailureHandoffScriptTests : IDisposable
             outputName,
             "output",
             $"devflow-failure-handoff-{RunId}-{RunAttempt}");
+
+    private string DemoArchivePath(string outputName) =>
+        Path.Combine(
+            _testRoot,
+            outputName,
+            "output",
+            $"devflow-demo-handoff-{RunId}-{RunAttempt}.zip");
+
+    private string DemoStagingPath(string outputName) =>
+        Path.Combine(
+            _testRoot,
+            outputName,
+            "output",
+            $"devflow-demo-handoff-{RunId}-{RunAttempt}");
 
     private static string ReadEntry(ZipArchive archive, string name)
     {

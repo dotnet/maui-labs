@@ -341,6 +341,191 @@ public sealed class DevFlowCiFixIssueResolverScriptTests : IDisposable
     }
 
     [Fact]
+    public async Task Resolver_DemoLabelledIssue_ResolvesAsNonqualifiedDemo()
+    {
+        var fixture = WriteFixture(lane: "demo");
+
+        var result = await RunResolverAsync(fixture);
+
+        Assert.True(result.ExitCode == 0, result.Json.ToString());
+        Assert.True(result.Json.GetProperty("ok").GetBoolean());
+        Assert.Equal("demo", result.Json.GetProperty("lane").GetString());
+        Assert.True(result.Json.GetProperty("demo").GetBoolean());
+        Assert.Equal("not-qualified", result.Json.GetProperty("qualification").GetString());
+        Assert.Equal("none", result.Json.GetProperty("repairAuthority").GetString());
+        Assert.Equal("workflow_dispatch", result.Json.GetProperty("sourceEvent").GetString());
+        Assert.Equal(
+            $"devflow-demo-handoff-{RunId}-{RunAttempt}",
+            result.Json.GetProperty("handoffArtifactName").GetString());
+        Assert.Equal(
+            $"devflow-demo-evidence-android-{RunId}-{RunAttempt}",
+            result.Json.GetProperty("evidenceArtifactName").GetString());
+        Assert.True(result.Json.GetProperty("evidenceAvailable").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Resolver_ProductionIssue_ReportsTheProductionLane()
+    {
+        var fixture = WriteFixture();
+
+        var result = await RunResolverAsync(fixture);
+
+        Assert.True(result.ExitCode == 0, result.Json.ToString());
+        Assert.Equal("production", result.Json.GetProperty("lane").GetString());
+        Assert.False(result.Json.GetProperty("demo").GetBoolean());
+        Assert.Equal("qualified", result.Json.GetProperty("qualification").GetString());
+    }
+
+    [Fact]
+    public async Task Resolver_AcceptsDemoIssueBodyProducedByPublisher()
+    {
+        var publisherBody = await CreatePublisherIssueBodyAsync("demo");
+        var fixture = WriteFixture(lane: "demo", issueTransform: issue => issue["body"] = publisherBody);
+
+        var result = await RunResolverAsync(fixture);
+
+        Assert.True(result.ExitCode == 0, result.Json.ToString());
+        Assert.True(result.Json.GetProperty("demo").GetBoolean());
+        Assert.Equal(Fingerprint, result.Json.GetProperty("fingerprint").GetString());
+        Assert.Equal(TestIdentity, result.Json.GetProperty("testIdentity").GetString());
+    }
+
+    [Fact]
+    public async Task Resolver_BothLaneLabels_RefusesRatherThanGuessing()
+    {
+        var fixture = WriteFixture(lane: "demo", issueTransform: issue =>
+        {
+            issue["labels"] = JsonSerializer.SerializeToNode(new[]
+            {
+                new { name = "devflow-ci-failure" },
+                new { name = "devflow-ci-failure-demo" },
+            });
+        });
+
+        var result = await RunResolverAsync(fixture);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Equal("issue-label-ambiguous", result.Json.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task Resolver_NoLaneLabel_RefusesRatherThanGuessing()
+    {
+        var fixture = WriteFixture(issueTransform: issue =>
+        {
+            issue["labels"] = JsonSerializer.SerializeToNode(new[] { new { name = "bug" } });
+        });
+
+        var result = await RunResolverAsync(fixture);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Equal("issue-label-missing", result.Json.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task Resolver_DemoLabelWithProductionBody_IsRefused()
+    {
+        var production = WriteFixture();
+        var productionBody = JsonNode.Parse(File.ReadAllText(production.IssueJsonPath))!
+            .AsObject()["body"]!.GetValue<string>();
+        var fixture = WriteFixture(lane: "demo", issueTransform: issue => issue["body"] = productionBody);
+
+        var result = await RunResolverAsync(fixture);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Equal("issue-marker-invalid", result.Json.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task Resolver_ProductionLabelWithDemoBody_IsRefused()
+    {
+        var demo = WriteFixture(lane: "demo");
+        var demoBody = JsonNode.Parse(File.ReadAllText(demo.IssueJsonPath))!
+            .AsObject()["body"]!.GetValue<string>();
+        var fixture = WriteFixture(issueTransform: issue => issue["body"] = demoBody);
+
+        var result = await RunResolverAsync(fixture);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Equal("issue-marker-invalid", result.Json.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task Resolver_TamperedDemoIssueBody_RefusesBeforeUsingRunFacts()
+    {
+        var fixture = WriteFixture(lane: "demo", issueTransform: issue =>
+        {
+            issue["body"] = issue["body"]!.GetValue<string>() + "\nuntrusted addition";
+        });
+
+        var result = await RunResolverAsync(fixture);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Equal("issue-body-digest-mismatch", result.Json.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task Resolver_DemoIssueWithProductionArtifactNames_IsRefused()
+    {
+        var fixture = WriteFixture(lane: "demo", artifactsTransform: artifacts =>
+        {
+            artifacts["artifacts"] = JsonSerializer.SerializeToNode(new[]
+            {
+                new
+                {
+                    id = HandoffArtifactId,
+                    name = $"devflow-failure-handoff-{RunId}-{RunAttempt}",
+                    expired = false,
+                },
+                new
+                {
+                    id = EvidenceArtifactId,
+                    name = $"devflow-flow-evidence-android-{RunId}-{RunAttempt}",
+                    expired = false,
+                },
+            });
+        });
+
+        var result = await RunResolverAsync(fixture);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Equal("artifact-match-invalid", result.Json.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task Resolver_DemoIssueFromANonDispatchRun_IsRefused()
+    {
+        var fixture = WriteFixture(lane: "demo", runTransform: run => run["event"] = "schedule");
+
+        var result = await RunResolverAsync(fixture);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Equal("workflow-run-metadata-mismatch", result.Json.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public void Resolver_MirrorsAreByteIdentical()
+    {
+        var canonical = Path.Combine(
+            _repositoryRoot,
+            "plugins",
+            "dotnet-maui",
+            "skills",
+            "maui-devflow-ci-fix",
+            "scripts",
+            "Resolve-DevFlowCiFailureIssue.ps1");
+        var mirror = Path.Combine(
+            _repositoryRoot,
+            ".github",
+            "skills",
+            "maui-devflow-ci-fix",
+            "scripts",
+            "Resolve-DevFlowCiFailureIssue.ps1");
+
+        Assert.Equal(File.ReadAllBytes(canonical), File.ReadAllBytes(mirror));
+    }
+
+    [Fact]
     public void Resolver_ValidatesTheReferencedWorkflowAttempt()
     {
         var script = File.ReadAllText(Path.Combine(
@@ -373,17 +558,34 @@ public sealed class DevFlowCiFixIssueResolverScriptTests : IDisposable
         Action<System.Text.Json.Nodes.JsonObject>? runTransform = null,
         Action<System.Text.Json.Nodes.JsonObject>? artifactsTransform = null,
         Action<System.Text.Json.Nodes.JsonArray>? commentsTransform = null,
-        string platform = "android")
+        string platform = "android",
+        string lane = "production")
     {
+        var demo = lane == "demo";
+        var markerPrefix = demo ? "devflow-ci-failure-demo" : "devflow-ci-failure";
+        var titlePrefix = demo ? "[DevFlow CI DEMO - NOT QUALIFIED]" : "[DevFlow CI]";
+        var firstHeading = demo ? "## Demo handoff (not qualified)" : "## Verified handoff";
+        var label = demo ? "devflow-ci-failure-demo" : "devflow-ci-failure";
+        var sourceEvent = demo ? "workflow_dispatch" : "schedule";
+        var dataSuffix = demo
+            ? " lane=demo-emulator-showcase device=emulator qualification=not-qualified"
+            : string.Empty;
+        var handoffArtifactName = demo
+            ? $"devflow-demo-handoff-{RunId}-{RunAttempt}"
+            : $"devflow-failure-handoff-{RunId}-{RunAttempt}";
+        var evidenceArtifactName = demo
+            ? $"devflow-demo-evidence-android-{RunId}-{RunAttempt}"
+            : $"devflow-flow-evidence-{EvidenceArtifactPlatform(platform)}-{RunId}-{RunAttempt}";
+
         var payload = string.Join(
             "\n",
-            $"<!-- devflow-ci-failure-occurrence:v1 run={RunId} attempt={RunAttempt} -->",
-            $"<!-- devflow-ci-failure-data:v1 category=test-failure platform={platform} testIdentity={TestIdentity} evidence=sufficient -->",
+            $"<!-- {markerPrefix}-occurrence:v1 run={RunId} attempt={RunAttempt} -->",
+            $"<!-- {markerPrefix}-data:v1 category=test-failure platform={platform} testIdentity={TestIdentity} evidence=sufficient{dataSuffix} -->",
             "",
-            "## Verified handoff",
+            firstHeading,
             "",
             $"Run {RunId}.",
-            "- Source event: `schedule`",
+            $"- Source event: `{sourceEvent}`",
             $"- Commit: `{CommitSha}`",
             "",
             "## Evidence",
@@ -399,8 +601,8 @@ public sealed class DevFlowCiFixIssueResolverScriptTests : IDisposable
             "Use the fixed local workflow.");
         var bodyDigest = Hash(payload);
         var body =
-            $"<!-- devflow-ci-failure:v1 fingerprint={Fingerprint} body={bodyDigest} -->\n{payload}";
-        var title = $"[DevFlow CI] test-failure on {platform} ({TestIdentity.Substring(7, 12)})";
+            $"<!-- {markerPrefix}:v1 fingerprint={Fingerprint} body={bodyDigest} -->\n{payload}";
+        var title = $"{titlePrefix} test-failure on {platform} ({TestIdentity.Substring(7, 12)})";
 
         var issue = JsonSerializer.SerializeToNode(new
         {
@@ -409,7 +611,7 @@ public sealed class DevFlowCiFixIssueResolverScriptTests : IDisposable
             body,
             state = "open",
             user = new { login = "github-actions[bot]", type = "Bot" },
-            labels = new[] { new { name = "devflow-ci-failure" } },
+            labels = new[] { new { name = label } },
         })!.AsObject();
         issueTransform?.Invoke(issue);
 
@@ -425,7 +627,7 @@ public sealed class DevFlowCiFixIssueResolverScriptTests : IDisposable
             run_attempt = RunAttempt,
             name = "DevFlow Integration Tests",
             path = ".github/workflows/devflow-integration.yml",
-            @event = "schedule",
+            @event = sourceEvent,
             head_branch = "main",
             head_sha = CommitSha,
             head_repository = new { full_name = Repository },
@@ -442,13 +644,13 @@ public sealed class DevFlowCiFixIssueResolverScriptTests : IDisposable
                 new
                 {
                     id = HandoffArtifactId,
-                    name = $"devflow-failure-handoff-{RunId}-{RunAttempt}",
+                    name = handoffArtifactName,
                     expired = false,
                 },
                 new
                 {
                     id = EvidenceArtifactId,
-                    name = $"devflow-flow-evidence-{EvidenceArtifactPlatform(platform)}-{RunId}-{RunAttempt}",
+                    name = evidenceArtifactName,
                     expired = false,
                 },
             },
@@ -457,12 +659,13 @@ public sealed class DevFlowCiFixIssueResolverScriptTests : IDisposable
         var comments = new System.Text.Json.Nodes.JsonArray();
         commentsTransform?.Invoke(comments);
 
+        var suffix = demo ? "-demo" : string.Empty;
         return new ResolverFixture(
-            WriteJson("issue.json", issue),
-            WriteJson("repository.json", repository),
-            WriteJson("run.json", run),
-            WriteJson("artifacts.json", artifacts),
-            WriteJson("comments.json", comments));
+            WriteJson($"issue{suffix}.json", issue),
+            WriteJson($"repository{suffix}.json", repository),
+            WriteJson($"run{suffix}.json", run),
+            WriteJson($"artifacts{suffix}.json", artifacts),
+            WriteJson($"comments{suffix}.json", comments));
     }
 
     private string WriteJson(
@@ -563,9 +766,9 @@ public sealed class DevFlowCiFixIssueResolverScriptTests : IDisposable
         void AddArgument(string value) => process.StartInfo.ArgumentList.Add(value);
     }
 
-    private async Task<string> CreatePublisherIssueBodyAsync()
+    private async Task<string> CreatePublisherIssueBodyAsync(string lane = "production")
     {
-        var probePath = Path.Combine(_testRoot, "publisher-body.ps1");
+        var probePath = Path.Combine(_testRoot, $"publisher-body-{lane}.ps1");
         var publisherPath = Path.Combine(
             _repositoryRoot,
             "eng",
@@ -574,7 +777,7 @@ public sealed class DevFlowCiFixIssueResolverScriptTests : IDisposable
         File.WriteAllText(
             probePath,
             """
-            param([string] $PublisherPath)
+            param([string] $PublisherPath, [string] $Lane)
 
             Set-StrictMode -Version Latest
             $ErrorActionPreference = 'Stop'
@@ -585,6 +788,7 @@ public sealed class DevFlowCiFixIssueResolverScriptTests : IDisposable
                 [ref] $tokens,
                 [ref] $errors)
             $wanted = @(
+                'Get-LanePublisherProfile',
                 'Get-Sha256Bytes',
                 'Get-Sha256Text',
                 'Get-RunUrl',
@@ -602,7 +806,7 @@ public sealed class DevFlowCiFixIssueResolverScriptTests : IDisposable
             $Repository = 'dotnet/maui-labs'
             $WorkflowName = 'DevFlow Integration Tests'
             $WorkflowPath = '.github/workflows/devflow-integration.yml'
-            $SourceEvent = 'schedule'
+            $SourceEvent = if ($Lane -eq 'demo') { 'workflow_dispatch' } else { 'schedule' }
             $HeadRepository = $Repository
             $HeadRef = 'main'
             $DefaultBranch = 'main'
@@ -611,11 +815,19 @@ public sealed class DevFlowCiFixIssueResolverScriptTests : IDisposable
             [Int32] $RunAttempt = 1
             $CommitSha = '0123456789abcdef0123456789abcdef01234567'
             [Int32] $PullRequestNumber = 0
+            $laneProfile = Get-LanePublisherProfile $Lane
+            $markerPrefix = [string] $laneProfile['markerPrefix']
             $handoff = [ordered]@{
                 category = 'test-failure'
                 platform = 'android'
                 testIdentitySha256 = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
                 evidenceSufficiency = 'sufficient'
+            }
+            if ($laneProfile['demo']) {
+                $handoff['qualification'] = 'not-qualified'
+                $handoff['laneKind'] = 'demo-emulator-showcase'
+                $handoff['deviceEvidenceKind'] = 'emulator'
+                $handoff['repairAuthority'] = 'none'
             }
             $body = New-IssueBody `
                 -Handoff $handoff `
@@ -645,6 +857,8 @@ public sealed class DevFlowCiFixIssueResolverScriptTests : IDisposable
                      probePath,
                      "-PublisherPath",
                      publisherPath,
+                     "-Lane",
+                     lane,
                  })
         {
             process.StartInfo.ArgumentList.Add(argument);

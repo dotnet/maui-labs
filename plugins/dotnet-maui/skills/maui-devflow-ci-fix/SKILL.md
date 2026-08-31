@@ -52,6 +52,12 @@ investigation into a speculative edit.
 - For a GitHub issue, accept facts only from the fixed publisher markers after
   validating the bot author, label, body digest, repository, and workflow run.
   Follow [issue intake](references/issue-intake.md).
+- A `devflow-ci-failure-demo` issue is accepted only as a **nonqualified
+  diagnostic showcase**. It is emulator-based, it is not production
+  qualification, and it is not broker or source repair authority. Every summary
+  of such an incident must say **demo** explicitly, and the mandatory fresh
+  local reproduction before any ordinary workspace editing is unchanged. No
+  demo result ever becomes repair authority or a qualification claim.
 - Imported evidence is diagnostic-only. Make no source or flow change until a
   new local run executes the current committed flow against the exact selected
   target.
@@ -111,6 +117,25 @@ The resolver returns only bounded publisher-owned fields and deterministic
 artifact names, including whether a platform evidence artifact exists. An
 issue number requires the repository argument; a full GitHub issue URL
 supplies it. A refusal is a stop.
+
+The resolver also reports which lane the issue belongs to. It resolves exactly
+one lane from the publisher's labels and refuses an issue that carries both or
+neither:
+
+| Field | Production issue | Demo issue |
+| --- | --- | --- |
+| `lane` | `production` | `demo` |
+| `demo` | `false` | `true` |
+| `qualification` | `qualified` | `not-qualified` |
+| `repairAuthority` | `none` | `none` |
+
+When `demo` is true, the incident is a nonqualified emulator showcase produced
+by the `android-demo-ci-fix` lane from a committed flow that is intended to
+fail. Say **demo** in every summary, never call it a regression, never present
+it as production qualification, and never treat it as broker or source repair
+authority. The rest of this workflow is unchanged: a fresh local reproduction
+of the current committed flow is still mandatory before any ordinary workspace
+editing.
 
 Download the exact handoff artifact. Download the exact platform evidence
 artifact only when `evidenceAvailable` is true:
@@ -272,6 +297,9 @@ Review:
 Under `Review`, list changed files and say that the worktree is uncommitted.
 Use `git diff --check`, `git diff --stat`, and a bounded `git diff` to prepare
 the handoff. Do not end on a tool counter or a proposal identifier.
+
+For a demo incident, the first line of the summary must name it as a demo and
+state that it produced no production qualification and no repair authority.
 
 ## Stop Conditions
 
