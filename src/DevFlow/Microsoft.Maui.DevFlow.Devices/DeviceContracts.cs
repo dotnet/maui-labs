@@ -20,6 +20,7 @@ public static class DeviceStates
     public const string Unknown = "unknown";
     public const string Shutdown = "shutdown";
     public const string Booting = "booting";
+    public const string ShuttingDown = "shutting-down";
     public const string Booted = "booted";
 }
 
@@ -59,6 +60,8 @@ public sealed record DeviceCapabilities
     [JsonPropertyName("screenshot")] public bool Screenshot { get; init; }
     [JsonPropertyName("liveStream")] public bool LiveStream { get; init; }
     [JsonPropertyName("recording")] public bool Recording { get; init; }
+    [JsonPropertyName("uiHierarchy")] public bool UiHierarchy { get; init; }
+    [JsonPropertyName("foregroundOwner")] public bool ForegroundOwner { get; init; }
 
     /// <summary>Everything unavailable. The honest answer when no device backend is present.</summary>
     public static readonly DeviceCapabilities None = new();
@@ -106,6 +109,12 @@ public static class DeviceOrientations
     public const string LandscapeLeft = "landscapeLeft";
     public const string LandscapeRight = "landscapeRight";
 
+    public static bool IsSupported(string? orientation) =>
+        string.Equals(orientation, Portrait, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(orientation, PortraitUpsideDown, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(orientation, LandscapeLeft, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(orientation, LandscapeRight, StringComparison.OrdinalIgnoreCase);
+
     public static bool IsLandscape(string? orientation) =>
         string.Equals(orientation, LandscapeLeft, StringComparison.OrdinalIgnoreCase)
         || string.Equals(orientation, LandscapeRight, StringComparison.OrdinalIgnoreCase);
@@ -116,6 +125,7 @@ public static class DeviceOrientations
 /// </summary>
 public sealed record DeviceTarget
 {
+    [JsonPropertyName("schemaVersion")] public string SchemaVersion { get; init; } = MobileCanvasProtocol.ValidatedProtocolVersion;
     [JsonPropertyName("id")] public string Id { get; init; } = "";
     [JsonPropertyName("platform")] public string Platform { get; init; } = "";
     [JsonPropertyName("provider")] public string Provider { get; init; } = "";
@@ -131,8 +141,15 @@ public sealed record DeviceTarget
     [JsonPropertyName("name")] public string Name { get; init; } = "";
     [JsonPropertyName("state")] public string State { get; init; } = DeviceStates.Unknown;
     [JsonPropertyName("isAvailable")] public bool IsAvailable { get; init; }
+    [JsonPropertyName("isVirtual")] public bool IsVirtual { get; init; } = true;
+    [JsonPropertyName("runtimeId")] public string? RuntimeId { get; init; }
     [JsonPropertyName("runtimeName")] public string? RuntimeName { get; init; }
     [JsonPropertyName("osVersion")] public string? OsVersion { get; init; }
+    [JsonPropertyName("deviceTypeId")] public string? DeviceTypeId { get; init; }
+    [JsonPropertyName("deviceTypeName")] public string? DeviceTypeName { get; init; }
+    [JsonPropertyName("modelIdentifier")] public string? ModelIdentifier { get; init; }
+    [JsonPropertyName("architecture")] public string? Architecture { get; init; }
+    [JsonPropertyName("deviceSet")] public string? DeviceSet { get; init; }
 
     /// <summary>The AVD name on Android; null elsewhere. A secondary join key.</summary>
     [JsonPropertyName("avdName")] public string? AvdName { get; init; }
@@ -145,19 +162,192 @@ public sealed record DeviceTarget
     public bool IsBooted => string.Equals(State, DeviceStates.Booted, StringComparison.OrdinalIgnoreCase);
 }
 
+public sealed record DeviceRuntime
+{
+    [JsonPropertyName("id")] public string Id { get; init; } = "";
+    [JsonPropertyName("name")] public string Name { get; init; } = "";
+    [JsonPropertyName("version")] public string Version { get; init; } = "";
+    [JsonPropertyName("platform")] public string Platform { get; init; } = "";
+    [JsonPropertyName("isAvailable")] public bool IsAvailable { get; init; }
+    [JsonPropertyName("supportedArchitectures")] public string[] SupportedArchitectures { get; init; } = [];
+    [JsonPropertyName("supportedDeviceTypeIds")] public string[] SupportedDeviceTypeIds { get; init; } = [];
+}
+
+public sealed record DeviceType
+{
+    [JsonPropertyName("id")] public string Id { get; init; } = "";
+    [JsonPropertyName("name")] public string Name { get; init; } = "";
+    [JsonPropertyName("platform")] public string Platform { get; init; } = "";
+    [JsonPropertyName("productFamily")] public string? ProductFamily { get; init; }
+    [JsonPropertyName("modelIdentifier")] public string? ModelIdentifier { get; init; }
+    [JsonPropertyName("minimumRuntimeVersion")] public string? MinimumRuntimeVersion { get; init; }
+    [JsonPropertyName("maximumRuntimeVersion")] public string? MaximumRuntimeVersion { get; init; }
+}
+
+public sealed record DeviceDiagnosticAction
+{
+    [JsonPropertyName("type")] public string Type { get; init; } = "";
+    [JsonPropertyName("target")] public string Target { get; init; } = "";
+    [JsonPropertyName("label")] public string Label { get; init; } = "";
+}
+
+public sealed record DeviceDependencyCheck
+{
+    [JsonPropertyName("name")] public string Name { get; init; } = "";
+    [JsonPropertyName("status")] public string Status { get; init; } = "";
+    [JsonPropertyName("message")] public string Message { get; init; } = "";
+    [JsonPropertyName("path")] public string? Path { get; init; }
+    [JsonPropertyName("version")] public string? Version { get; init; }
+    [JsonPropertyName("actions")] public DeviceDiagnosticAction[] Actions { get; init; } = [];
+}
+
+public sealed record DeviceHostDiagnostics
+{
+    [JsonPropertyName("platform")] public string Platform { get; init; } = "";
+    [JsonPropertyName("ready")] public bool Ready { get; init; }
+    [JsonPropertyName("checks")] public DeviceDependencyCheck[] Checks { get; init; } = [];
+}
+
+public sealed record DeviceCatalog
+{
+    [JsonPropertyName("schemaVersion")] public string SchemaVersion { get; init; } = MobileCanvasProtocol.ValidatedProtocolVersion;
+    [JsonPropertyName("devices")] public DeviceTarget[] Devices { get; init; } = [];
+    [JsonPropertyName("runtimes")] public DeviceRuntime[] Runtimes { get; init; } = [];
+    [JsonPropertyName("deviceTypes")] public DeviceType[] DeviceTypes { get; init; } = [];
+    [JsonPropertyName("diagnostics")] public DeviceHostDiagnostics[] Diagnostics { get; init; } = [];
+}
+
+public sealed record DeviceCreateRequest
+{
+    [JsonPropertyName("platform")] public string Platform { get; init; } = DevicePlatforms.Ios;
+    [JsonPropertyName("name")] public string Name { get; init; } = "";
+    [JsonPropertyName("runtimeId")] public string RuntimeId { get; init; } = "";
+    [JsonPropertyName("deviceTypeId")] public string DeviceTypeId { get; init; } = "";
+}
+
+public sealed record DeviceSwipe
+{
+    [JsonPropertyName("startX")] public double StartX { get; init; }
+    [JsonPropertyName("startY")] public double StartY { get; init; }
+    [JsonPropertyName("endX")] public double EndX { get; init; }
+    [JsonPropertyName("endY")] public double EndY { get; init; }
+    [JsonPropertyName("duration")] public double Duration { get; init; } = 0.35;
+}
+
+public sealed record DeviceRecordingStatus
+{
+    [JsonPropertyName("deviceId")] public string DeviceId { get; init; } = "";
+    [JsonPropertyName("isRecording")] public bool IsRecording { get; init; }
+    [JsonPropertyName("outputPath")] public string? OutputPath { get; init; }
+    [JsonPropertyName("startedAt")] public DateTimeOffset? StartedAt { get; init; }
+    [JsonPropertyName("timeoutSeconds")] public int? TimeoutSeconds { get; init; }
+}
+
+public sealed record DeviceUiElement
+{
+    [JsonPropertyName("id")] public string Id { get; init; } = "";
+    [JsonPropertyName("parentId")] public string? ParentId { get; init; }
+    [JsonPropertyName("role")] public string? Role { get; init; }
+    [JsonPropertyName("type")] public string? Type { get; init; }
+    [JsonPropertyName("packageId")] public string? PackageId { get; init; }
+    [JsonPropertyName("isSystem")] public bool IsSystem { get; init; }
+    [JsonPropertyName("interactive")] public bool Interactive { get; init; }
+    [JsonPropertyName("bounds")] public DeviceRect? Bounds { get; init; }
+}
+
+public sealed record DeviceUiSnapshot
+{
+    [JsonPropertyName("deviceId")] public string DeviceId { get; init; } = "";
+    [JsonPropertyName("capturedAt")] public DateTimeOffset CapturedAt { get; init; }
+    [JsonPropertyName("orientation")] public string? Orientation { get; init; }
+    [JsonPropertyName("scale")] public double? Scale { get; init; }
+    [JsonPropertyName("foregroundOwner")] public string? ForegroundOwner { get; init; }
+    [JsonPropertyName("keyboardVisible")] public bool? KeyboardVisible { get; init; }
+    [JsonPropertyName("elements")] public DeviceUiElement[] Elements { get; init; } = [];
+    [JsonPropertyName("limitations")] public string[] Limitations { get; init; } = [];
+}
+
+/// <summary>
+/// Why a device host is or is not usable.
+/// <para>
+/// These are kept distinct because collapsing them is actively harmful: an incompatible or
+/// unauthenticated host that reports as "absent" looks exactly like a machine with no device
+/// layer installed, so a real, fixable integration failure silently presents as a missing
+/// feature and nobody ever investigates it.
+/// </para>
+/// </summary>
+public enum DeviceHostAvailability
+{
+    /// <summary>No host is installed or running. The ordinary case on most machines.</summary>
+    Absent = 0,
+
+    /// <summary>A state file exists but the host did not answer. Usually a stale file.</summary>
+    NotResponding = 1,
+
+    /// <summary>The host answered but rejected our credentials.</summary>
+    Unauthorized = 2,
+
+    /// <summary>The host speaks a protocol version this build does not support.</summary>
+    Incompatible = 3,
+
+    /// <summary>The host is present, authenticated, and usable.</summary>
+    Available = 4,
+}
+
 /// <summary>
 /// Health of the external device host backing an <see cref="IDeviceSurface"/>.
 /// </summary>
 public sealed record DeviceHostHealth
 {
-    /// <summary>True when a device host was discovered and answered.</summary>
-    public bool Available { get; init; }
+    /// <summary>Why the host is or is not usable.</summary>
+    public DeviceHostAvailability Availability { get; init; } = DeviceHostAvailability.Absent;
 
-    /// <summary>Human-readable reason the host is unavailable, for surfacing in diagnostics.</summary>
+    /// <summary>True only when the host is fully usable.</summary>
+    public bool Available => Availability == DeviceHostAvailability.Available;
+
+    /// <summary>
+    /// What a human should do about it. Present for every state except <see cref="DeviceHostAvailability.Available"/>.
+    /// </summary>
     public string? Reason { get; init; }
 
     public string? Version { get; init; }
 
-    public static readonly DeviceHostHealth Unavailable =
-        new() { Available = false, Reason = "No device host is installed." };
+    /// <summary>The protocol version the host reported, when it got far enough to say.</summary>
+    public string? ProtocolVersion { get; init; }
+
+    public static readonly DeviceHostHealth Unavailable = new()
+    {
+        Availability = DeviceHostAvailability.Absent,
+        Reason = "No device host is installed or running.",
+    };
+
+    public static DeviceHostHealth NotResponding(string reason) =>
+        new() { Availability = DeviceHostAvailability.NotResponding, Reason = reason };
+
+    public static DeviceHostHealth Unauthorized() =>
+        new()
+        {
+            Availability = DeviceHostAvailability.Unauthorized,
+            Reason = "The device host rejected DevFlow's control token. It was most likely restarted; "
+                   + "retry, or restart the device host to reissue one.",
+        };
+
+    public static DeviceHostHealth Incompatible(string? reported, string? hostVersion = null) =>
+        new()
+        {
+            Availability = DeviceHostAvailability.Incompatible,
+            ProtocolVersion = reported,
+            Version = hostVersion,
+            Reason = $"The device host reports protocol '{reported ?? "unknown"}' and version "
+                   + $"'{hostVersion ?? "unknown"}', which this build of DevFlow does not support "
+                   + $"(it requires protocol {MobileCanvasProtocol.ValidatedProtocolVersion} and host "
+                   + $"{MobileCanvasProtocol.ValidatedHostVersion} or newer).",
+        };
+}
+
+/// <summary>A simulated geographic position.</summary>
+public sealed record DeviceLocation
+{
+    [JsonPropertyName("latitude")] public double Latitude { get; init; }
+    [JsonPropertyName("longitude")] public double Longitude { get; init; }
 }

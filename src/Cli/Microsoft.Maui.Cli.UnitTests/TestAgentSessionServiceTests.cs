@@ -1161,6 +1161,57 @@ public class TestAgentSessionServiceTests
     }
 
     [Fact]
+    public void ApprovalRequest_RunProjectsExactDigestBoundDeviceEffects()
+    {
+        var flow = new MauiFlow
+        {
+            Name = "device review",
+            ExpectedEvidence =
+            [
+                new FlowExpectedEvidence { Kind = MauiFlowEvidenceKinds.DeviceRecording },
+            ],
+            Steps =
+            [
+                new FlowStep
+                {
+                    Seq = 1,
+                    Action = FlowActions.Tap,
+                    Args = new FlowStepArgs { Selector = new FlowSelector { AutomationId = "open" } },
+                },
+            ],
+            ExtensionData = new Dictionary<string, JsonElement>
+            {
+                ["devicePreconditions"] = JsonDocument.Parse(
+                    """{"permissions":{"camera":"denied"},"battery":5}""").RootElement.Clone(),
+                ["deviceSteps"] = JsonDocument.Parse(
+                    """[{"afterStep":1,"action":"tap","x":10,"y":20,"nativeId":"allow"}]""").RootElement.Clone(),
+            },
+        };
+        var fixture = BeginFixture(flow: flow);
+        var submitted = fixture.Service.SubmitApprovalRequest(new MauiTestAgentApprovalSubmitRequest
+        {
+            Envelope = fixture.Envelope("run-device-effects", grantId: null),
+            Kind = MauiTestAgentApprovalKinds.Run,
+            Scope = new MauiTestAgentMutationScope
+            {
+                AllowedActions = [MauiTestAgentActions.Run],
+                AllowedSideEffectClasses = ["run"],
+                MaxActionCount = 1,
+                MaxValueBytes = 0,
+            },
+        });
+
+        Assert.True(submitted.Ok, submitted.Error?.Message);
+        Assert.Equal(4, submitted.Request!.DeviceEffects.Count);
+        Assert.Contains(submitted.Request.DeviceEffects, effect => effect.Contains("surrounding device screen", StringComparison.Ordinal));
+        Assert.Contains(submitted.Request.DeviceEffects, effect => effect.Contains("camera", StringComparison.Ordinal));
+        Assert.Contains(submitted.Request.DeviceEffects, effect => effect.Contains("Battery", StringComparison.Ordinal));
+        Assert.Contains(submitted.Request.DeviceEffects, effect => effect.Contains("native id", StringComparison.Ordinal));
+        Assert.Equal(64, submitted.Request.DeviceEffectsDigest!.Length);
+        Assert.Equal(fixture.Correlation().FlowDigest, submitted.Request.Correlation!.FlowDigest);
+    }
+
+    [Fact]
     public void RunGrant_AuthorizesExactlyOneDispatch()
     {
         var fixture = BeginFixture();

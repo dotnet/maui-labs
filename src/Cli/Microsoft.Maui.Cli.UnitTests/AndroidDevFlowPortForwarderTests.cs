@@ -1,6 +1,7 @@
 using Microsoft.Maui.Cli.DevFlow.Android;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.UnitTests.Fakes;
+using Xamarin.Android.Tools;
 using Xunit;
 
 namespace Microsoft.Maui.Cli.UnitTests;
@@ -170,6 +171,41 @@ public class AndroidDevFlowPortForwarderTests
 	}
 
 	[Fact]
+	public async Task EnsureAsync_WithForeignMappings_RefusesReplacement()
+	{
+		var provider = CreateProvider(Device("emulator-5554"));
+		var runner = new FakeAdbRunner(
+			forwardRules:
+			[
+				new AdbPortRule(
+					new AdbPortSpec(AdbProtocol.Tcp, 8123),
+					new AdbPortSpec(AdbProtocol.Tcp, 9223)),
+			],
+			reverseRules:
+			[
+				new AdbPortRule(
+					new AdbPortSpec(AdbProtocol.Tcp, 19224),
+					new AdbPortSpec(AdbProtocol.Tcp, 19223)),
+			]);
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", runner);
+
+		var report = await forwarder.EnsureAsync(new AndroidDevFlowForwardingRequest
+		{
+			AgentPorts = [9223],
+			EnsureBrokerReverse = true,
+			Repair = true,
+		});
+
+		Assert.Equal(AndroidDevFlowForwardingStatus.Error, report.Status);
+		Assert.Contains("Refusing to replace existing adb reverse", report.Message);
+		Assert.Contains("Refusing to replace existing adb forward", report.Message);
+		Assert.DoesNotContain(runner.Commands, command =>
+			command == "-s emulator-5554 reverse tcp:19223 tcp:19223");
+		Assert.DoesNotContain(runner.Commands, command =>
+			command == "-s emulator-5554 forward tcp:9223 tcp:9223");
+	}
+
+	[Fact]
 	public async Task EnsureAsync_WithoutRepair_ReportsMissingMappings()
 	{
 		var provider = CreateProvider(Device("emulator-5554"));
@@ -249,6 +285,63 @@ public class AndroidDevFlowPortForwarderTests
 		Assert.False(report.BrokerReverseChecked);
 		Assert.False(report.BrokerReversePresent);
 		Assert.DoesNotContain("-s emulator-5554 reverse --list", runner.Commands);
+	}
+
+	[Fact]
+	public async Task ResolveDeviceForForwardedPortAsync_ReturnsTheUniqueOwningDevice()
+	{
+		var provider = CreateProvider(Device("emulator-5554"), Device("RZ8T123456A", isEmulator: false));
+		var runner = new FakeAdbRunner(forwardPortsBySerial: new Dictionary<string, HashSet<int>>
+		{
+			["emulator-5554"] = [10223],
+			["RZ8T123456A"] = [10224]
+		});
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", runner);
+
+		var resolution = await forwarder.ResolveDeviceForForwardedPortAsync(10224);
+
+		Assert.True(resolution.IsResolved);
+		Assert.Equal("RZ8T123456A", resolution.Serial);
+	}
+
+	[Fact]
+	public async Task ResolveDeviceForForwardedPortAsync_RefusesMissingOrAmbiguousOwnership()
+	{
+		var provider = CreateProvider(Device("emulator-5554"), Device("RZ8T123456A", isEmulator: false));
+		var runner = new FakeAdbRunner(forwardPortsBySerial: new Dictionary<string, HashSet<int>>
+		{
+			["emulator-5554"] = [10223],
+			["RZ8T123456A"] = [10223]
+		});
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", runner);
+
+		var ambiguous = await forwarder.ResolveDeviceForForwardedPortAsync(10223);
+		var missing = await forwarder.ResolveDeviceForForwardedPortAsync(10224);
+
+		Assert.False(ambiguous.IsResolved);
+		Assert.Contains("multiple Android devices", ambiguous.Error);
+		Assert.False(missing.IsResolved);
+		Assert.Contains("No online Android device owns", missing.Error);
+	}
+
+	[Fact]
+	public async Task ResolveDeviceForForwardedPortAsync_RefusesPartialDeviceInspection()
+	{
+		var provider = CreateProvider(Device("emulator-5554"), Device("RZ8T123456A", isEmulator: false));
+		var runner = new FakeAdbRunner(
+			forwardPortsBySerial: new Dictionary<string, HashSet<int>>
+			{
+				["emulator-5554"] = [10223],
+				["RZ8T123456A"] = []
+			},
+			forwardListFailures: new HashSet<string> { "RZ8T123456A" });
+		var forwarder = new AndroidDevFlowPortForwarder(provider, "/android-sdk/platform-tools/adb", runner);
+
+		var resolution = await forwarder.ResolveDeviceForForwardedPortAsync(10223);
+
+		Assert.False(resolution.IsResolved);
+		Assert.Contains("Could not identify", resolution.Error);
+		Assert.Contains("RZ8T123456A", resolution.Error);
 	}
 
 	static FakeAndroidProvider CreateProvider(params Device[] devices)

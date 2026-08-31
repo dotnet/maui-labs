@@ -28,6 +28,7 @@ import {
   type ReconnectState,
 } from "./host-shells";
 import { DevFlowDiagnosticsController } from "./diagnostics";
+import { registerMobileCanvasMcpProvider } from "./mcp-provider";
 import type {
   DevFlowActiveApp,
   DevFlowEvidenceContext,
@@ -48,9 +49,11 @@ import type {
  * trusted native approval ceremony, and — behind an off-by-default setting — publishing explicit
  * layout findings and runtime Problems into VS Code Diagnostics.
  *
- * The manifest advertises exactly what is registered here. A chat participant, language-model
- * tools, and an MCP definition provider are deliberately absent: announcing them without
- * registering them would offer the user commands that silently do nothing.
+ * The manifest advertises exactly what is registered here. A chat participant and language-model
+ * tools are deliberately absent: announcing them without registering them would offer the user
+ * commands that silently do nothing. The one MCP definition provider registered here offers only
+ * the optional, off-by-default Mobile Canvas device server — it never offers the full DevFlow
+ * automation surface and never changes the `maui_*` tool inventory.
  */
 export function activate(context: vscode.ExtensionContext): void {
   const services = createHostServices();
@@ -61,6 +64,7 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
     services,
   );
+  registerMobileCanvasMcpProvider(context);
   services.setDiagnosticsController(new DevFlowDiagnosticsController(context, services));
 }
 

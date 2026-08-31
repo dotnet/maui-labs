@@ -7,6 +7,7 @@ using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Providers.Android;
 using Microsoft.Maui.Cli.Providers.Apple;
 using Microsoft.Maui.Cli.Utils;
+using Microsoft.Maui.DevFlow.Devices;
 
 namespace Microsoft.Maui.Cli.Services;
 
@@ -53,6 +54,9 @@ public class DoctorService : IDoctorService
 		{
 			checks.Add(await CheckWindowsSdkAsync(cancellationToken));
 		}
+
+		// The device layer is optional, so this reports rather than gates.
+		checks.Add(await CheckDeviceLayerAsync(CreateDeviceSurface(), cancellationToken));
 
 		return CreateReport(checks);
 	}
@@ -327,8 +331,65 @@ public class DoctorService : IDoctorService
 		};
 	}
 
-	async Task<HealthCheck> CheckWindowsSdkAsync(CancellationToken cancellationToken)
+	/// <summary>
+	/// Chooses a device backend for diagnostics. File-based discovery only: running
+	/// <c>maui doctor</c> must never start a background daemon as a side effect of looking.
+	/// </summary>
+	static IDeviceSurface CreateDeviceSurface() =>
+		MobileCanvasHost.IsPresent() ? new MobileCanvasDeviceSurface() : new NullDeviceSurface();
+
+	/// <summary>
+	/// Reports the device layer's availability.
+	/// <para>
+	/// This check reports rather than fails: the device layer is optional, and most machines
+	/// legitimately do not have it. What it must never do is let a broken integration look like an
+	/// absent one, so an unauthenticated or version-mismatched host is a warning with a fix, while
+	/// a genuinely absent host is merely information.
+	/// </para>
+	/// </summary>
+	internal static async Task<HealthCheck> CheckDeviceLayerAsync(
+		IDeviceSurface surface,
+		CancellationToken cancellationToken = default)
 	{
+		var health = await surface.GetHealthAsync(cancellationToken);
+
+		var status = health.Availability switch
+		{
+			DeviceHostAvailability.Available => CheckStatus.Ok,
+			// Absence is normal and is not a problem to be fixed.
+			DeviceHostAvailability.Absent => CheckStatus.Skipped,
+			// Everything else is a host that exists but cannot be driven, which is worth surfacing
+			// because the symptom otherwise looks identical to having nothing installed.
+			_ => CheckStatus.Warning,
+		};
+
+		return new HealthCheck
+		{
+			Category = "devflow",
+			Name = "Device layer",
+			Status = status,
+			Message = health.Availability switch
+			{
+				DeviceHostAvailability.Available =>
+					$"Emulator and simulator control is available{(health.Version is null ? "" : $" (host {health.Version})")}",
+				DeviceHostAvailability.Absent =>
+					"No device host is running, so emulator and simulator control is unavailable",
+				_ => health.Reason ?? "The device host is present but unusable",
+			},
+			Fix = status == CheckStatus.Warning
+				? new FixInfo
+				{
+					IssueId = "DEVFLOW_DEVICE_HOST_UNUSABLE",
+					Description = health.Availability == DeviceHostAvailability.Incompatible
+						? "Update DevFlow or the device host so their protocol versions match"
+						: "Restart the device host so it reissues a control token",
+					AutoFixable = false,
+				}
+				: null,
+		};
+	}
+
+	async Task<HealthCheck> CheckWindowsSdkAsync(CancellationToken cancellationToken)	{
 		// Check for Windows SDK in common locations
 		var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
 		var sdkPath = Path.Combine(programFiles, "Windows Kits", "10");

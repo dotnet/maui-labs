@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+
 namespace Microsoft.Maui.DevFlow.Devices;
 
 /// <summary>
@@ -87,6 +90,60 @@ public enum DeviceMatchConfidence
 }
 
 /// <summary>
+/// Stable broker lease keys derived independently from an app's self-reported identity or the
+/// companion host's device record. Pairing changes therefore do not move the lock namespace.
+/// </summary>
+public static class DeviceLeaseKeys
+{
+    public static string? FromIdentity(DeviceIdentity identity)
+    {
+        if (identity.IsEmpty)
+            return null;
+
+        var platform = Normalize(identity.Platform);
+        if (string.Equals(platform, DevicePlatforms.Android, StringComparison.Ordinal) &&
+            NormalizeName(identity.AvdName) is { Length: > 0 } avd)
+        {
+            return Hash($"{platform}|avd|{avd}");
+        }
+        if (Normalize(identity.Udid) is { Length: > 0 } udid)
+            return Hash($"{platform}|udid|{udid}");
+        if (Normalize(identity.Serial) is { Length: > 0 } serial)
+            return Hash($"{platform}|native|{serial}");
+        return null;
+    }
+
+    public static string? FromTarget(DeviceTarget target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        var platform = Normalize(target.Platform);
+        if (string.Equals(platform, DevicePlatforms.Android, StringComparison.Ordinal) &&
+            NormalizeName(target.AvdName) is { Length: > 0 } avd)
+        {
+            return Hash($"{platform}|avd|{avd}");
+        }
+        if (Normalize(target.Udid) is { Length: > 0 } udid)
+            return Hash($"{platform}|udid|{udid}");
+        if (Normalize(target.NativeId) is { Length: > 0 } native)
+            return Hash($"{platform}|native|{native}");
+        return null;
+    }
+
+    private static string Hash(string material) =>
+        "device:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(material)))
+            .ToLowerInvariant()[..32];
+
+    private static string Normalize(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "" : value.Trim().ToLowerInvariant();
+
+    private static string NormalizeName(string? value)
+    {
+        var normalized = Normalize(value);
+        return new string(normalized.Where(char.IsLetterOrDigit).ToArray());
+    }
+}
+
+/// <summary>
 /// Joins an app's self-reported <see cref="DeviceIdentity"/> to a <see cref="DeviceTarget"/>.
 /// <para>
 /// Kept as pure, testable logic separate from any transport because getting this wrong is
@@ -103,6 +160,16 @@ public static class DeviceIdentityMatcher
 
         if (identity.IsEmpty)
             return DeviceMatchConfidence.None;
+
+        // Identifiers and user-chosen names are only meaningful inside one platform's device
+        // namespace. A coincidental cross-platform match must never pair an app to the wrong
+        // simulator or emulator.
+        if (!string.IsNullOrWhiteSpace(identity.Platform) &&
+            !string.IsNullOrWhiteSpace(device.Platform) &&
+            !Same(identity.Platform, device.Platform))
+        {
+            return DeviceMatchConfidence.None;
+        }
 
         // A UDID or serial is what the platform's own tooling uses to address the device, so an
         // equal value here is as strong as identity gets.

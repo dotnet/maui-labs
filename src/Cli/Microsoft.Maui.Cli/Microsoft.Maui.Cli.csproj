@@ -108,6 +108,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="DevFlow\Devices\mobile-canvas-runtime-v0.1.16.json"
+                      LogicalName="Microsoft.Maui.Cli.DevFlow.Devices.mobile-canvas-runtime.json">
+      <WithCulture>false</WithCulture>
+    </EmbeddedResource>
     <EmbeddedResource Include="DevFlow\Inspector\Web\**\*" LogicalName="Microsoft.Maui.Cli.DevFlow.Inspector.Web.%(Filename)%(Extension)">
       <WithCulture>false</WithCulture>
     </EmbeddedResource>

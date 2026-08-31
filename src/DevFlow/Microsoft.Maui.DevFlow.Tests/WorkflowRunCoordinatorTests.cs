@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Microsoft.Maui.Cli.DevFlow.Broker;
 using Microsoft.Maui.DevFlow.Testing;
+using Devices = Microsoft.Maui.DevFlow.Devices;
 
 namespace Microsoft.Maui.DevFlow.Tests;
 
@@ -496,17 +497,21 @@ public class WorkflowRunCoordinatorTests
     public async Task Run_DeviceRecordingIsRetainedBesideTheBrokerOwnedReport()
     {
         var root = Path.Combine(Path.GetTempPath(), $"devflow-run-recording-{Guid.NewGuid():N}");
-        var source = Path.Combine(Path.GetTempPath(), $"devflow-source-recording-{Guid.NewGuid():N}.mp4");
+        var sourceRoot = Path.Combine(Path.GetTempPath(), $"devflow-source-recording-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(sourceRoot);
+        var source = Path.Combine(sourceRoot, "run.mp4");
         var bytes = new byte[] { 0, 0, 0, 24, 102, 116, 121, 112, 109, 112, 52, 50 };
         await File.WriteAllBytesAsync(source, bytes);
-        string? callbackPath = null;
+        var captured = Devices.DeviceRecordingCapture.ForOwnedCopy(source, sourceRoot);
+        Assert.NotNull(captured);
+        Devices.DeviceRecordingCapture? callback = null;
         try
         {
             var coordinator = TestCoordinator(
                 new RecordingLeaseRegistry(),
                 (execution, _) =>
                 {
-                    execution.Options.DeviceRecordingCaptured?.Invoke(execution.RunId, source);
+                    execution.Options.DeviceRecordingCaptured?.Invoke(execution.RunId, captured!);
                     return Task.FromResult(PassingReport(execution.Flow));
                 },
                 new WorkflowRunCoordinatorOptions { ArtifactRoot = root });
@@ -518,7 +523,7 @@ public class WorkflowRunCoordinatorTests
                 new WorkflowRunExecutionOptions
                 {
                     RecordDeviceRun = true,
-                    DeviceRecordingCaptured = (_, path) => callbackPath = path,
+                    DeviceRecordingCaptured = (_, capture) => callback = capture,
                 });
             var terminal = await WaitForTerminalAsync(coordinator, start);
 
@@ -527,14 +532,140 @@ public class WorkflowRunCoordinatorTests
                 terminal.RunId,
                 "artifacts",
                 "device-recording.mp4");
-            Assert.Equal(retained, callbackPath);
+            // The capture carries the guard's canonical spelling, which differs from the lexical
+            // path wherever the temp directory is reached through a link — macOS resolves /var to
+            // /private/var — so the expectation has to be canonical too.
+            var canonicalRetained = Devices.DeviceRecordingPathGuard.ResolveFinalPath(retained);
+            Assert.Equal(canonicalRetained, callback?.Path);
             Assert.Equal(bytes, await File.ReadAllBytesAsync(retained));
+            // The capture handed onwards is anchored on the artifact root the coordinator owns, so
+            // the next hop re-validates against where the bytes now are rather than where they came
+            // from — and the surface's original root no longer vouches for this copy at all.
+            Assert.Equal(canonicalRetained, callback?.ResolveForRead());
+            Assert.Null(captured!.Authority.ResolveContainedRecordingPath(retained));
         }
         finally
         {
-            File.Delete(source);
+            if (Directory.Exists(sourceRoot))
+                Directory.Delete(sourceRoot, recursive: true);
             if (Directory.Exists(root))
                 Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Retention re-proves containment through the capture's own authority at the moment it opens
+    /// the bytes. A capture whose authority has stopped vouching — the file was swapped for a link
+    /// out of the root between hops — retains nothing, and the run's callback is left with the
+    /// original capture rather than a path nothing stands behind.
+    /// </summary>
+    [Fact]
+    public async Task Run_DeviceRecordingIsNotRetainedWhenItsAuthorityNoLongerVouchesForIt()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"devflow-run-recording-{Guid.NewGuid():N}");
+        var sourceRoot = Path.Combine(Path.GetTempPath(), $"devflow-source-recording-{Guid.NewGuid():N}");
+        var nested = Path.Combine(sourceRoot, "nested");
+        var elsewhere = Path.Combine(Path.GetTempPath(), $"devflow-elsewhere-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(nested);
+        Directory.CreateDirectory(elsewhere);
+        var source = Path.Combine(nested, "run.mp4");
+        await File.WriteAllBytesAsync(source, [1, 2, 3, 4]);
+        await File.WriteAllBytesAsync(Path.Combine(elsewhere, "run.mp4"), [9, 9, 9, 9]);
+        var captured = Devices.DeviceRecordingCapture.ForOwnedCopy(source, sourceRoot);
+        Assert.NotNull(captured);
+
+        // The directory the recording sat in becomes a link out of the root between the capture and
+        // the run that publishes it, which is exactly what re-validating at the copy is for.
+        Directory.Delete(nested, recursive: true);
+        FileSystemLinks.CreateDirectoryLink(nested, elsewhere);
+        Assert.Null(captured!.ResolveForRead());
+
+        Devices.DeviceRecordingCapture? callback = null;
+        try
+        {
+            var coordinator = TestCoordinator(
+                new RecordingLeaseRegistry(),
+                (execution, _) =>
+                {
+                    execution.Options.DeviceRecordingCaptured?.Invoke(execution.RunId, captured!);
+                    return Task.FromResult(PassingReport(execution.Flow));
+                },
+                new WorkflowRunCoordinatorOptions { ArtifactRoot = root });
+
+            var start = coordinator.Start(
+                Request("recording-unvouched", "recording-unvouched-key"),
+                Target(),
+                static () => true,
+                new WorkflowRunExecutionOptions
+                {
+                    RecordDeviceRun = true,
+                    DeviceRecordingCaptured = (_, capture) => callback = capture,
+                });
+            var terminal = await WaitForTerminalAsync(coordinator, start);
+
+            // Nothing was copied, and the run is left with the original capture rather than a path
+            // in the artifact root that nothing stands behind.
+            Assert.Same(captured, callback);
+            Assert.False(File.Exists(Path.Combine(
+                root,
+                terminal.RunId,
+                "artifacts",
+                "device-recording.mp4")));
+        }
+        finally
+        {
+            try { Directory.Delete(sourceRoot, recursive: true); } catch { }
+            try { Directory.Delete(elsewhere, recursive: true); } catch { }
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    /// <summary>
+    /// Retention refuses a destination the artifact root will not vouch for, and refuses it before
+    /// it has created anything. The check used to run after the copy, where it could only ever
+    /// report a mistake that had already been made: a mis-derived root, or a link planted at the
+    /// run's own directory, put the recording outside the root first and refused it second — the
+    /// bytes were then sitting somewhere nothing owns, nothing serves, and no retention sweep will
+    /// ever reach. A refusal with a side effect is not a refusal.
+    /// </summary>
+    [Fact]
+    public void Retention_RefusesAnEscapingDestinationWithoutWritingAnything()
+    {
+        var parent = Path.Combine(Path.GetTempPath(), $"devflow-retain-orphan-{Guid.NewGuid():N}");
+        var root = Path.Combine(parent, "artifact-root");
+        var escape = Path.Combine(parent, "escape");
+        var sourceRoot = Path.Combine(parent, "source");
+        const string runId = "run-escaping-destination";
+        var runDirectory = Path.Combine(root, runId);
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(escape);
+        Directory.CreateDirectory(sourceRoot);
+        try
+        {
+            var source = Path.Combine(sourceRoot, "run.mp4");
+            File.WriteAllBytes(source, [1, 2, 3, 4]);
+            var captured = Devices.DeviceRecordingCapture.ForOwnedCopy(source, sourceRoot);
+            Assert.NotNull(captured);
+
+            // The run's own directory inside the artifact root is a link out of it, so every
+            // destination derived under it resolves outside the root it is checked against.
+            FileSystemLinks.CreateDirectoryLink(runDirectory, escape);
+
+            var coordinator = TestCoordinator(
+                new RecordingLeaseRegistry(),
+                static (execution, _) => Task.FromResult(PassingReport(execution.Flow)),
+                new WorkflowRunCoordinatorOptions { ArtifactRoot = root });
+
+            Assert.Null(coordinator.RetainDeviceRecording(runId, captured!));
+
+            // No directory, no temporary file, no copy: the refusal left the filesystem exactly as
+            // it found it, so there is no orphaned recording outside the root.
+            Assert.Empty(Directory.GetFileSystemEntries(escape));
+        }
+        finally
+        {
+            try { Directory.Delete(runDirectory); } catch { }
+            try { Directory.Delete(parent, recursive: true); } catch { }
         }
     }
 

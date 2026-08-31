@@ -1,0 +1,107 @@
+{
+  "schema": 1,
+  "version": "0.1.16",
+  "validatedRevision": "0f0d7806a08d41b3b0b932c05b313686486f75ca",
+  "repository": "Redth/mobile-canvas-ghcp",
+  "tag": "v0.1.16",
+  "runtimes": {
+    "darwin-arm64": {
+      "rid": "osx-arm64",
+      "id": "ef7f5fc6de41e9da9eb1deb8c05fe06c821de2c0996c210dab6a509d0e23588f",
+      "executable": "mobile-canvas",
+      "files": {
+        "mobile-canvas": {
+          "asset": "mobile-canvas-v0.1.16-osx-arm64.gz",
+          "compressedSha256": "5b6e6875ac6fdb6756f115bc16277159d990dd3c00f9a332095553b35a986df6",
+          "compressedSize": 12941148,
+          "sha256": "ef7f5fc6de41e9da9eb1deb8c05fe06c821de2c0996c210dab6a509d0e23588f",
+          "size": 31962016
+        },
+        "mobile-screencap": {
+          "asset": "mobile-screencap-v0.1.16-osx-arm64.gz",
+          "compressedSha256": "7245861d59198380c3ab221b8f547963a44244aad693b6277a7d3681af4de19c",
+          "compressedSize": 228256,
+          "sha256": "bbd45c0e7a85ce7d6590ab2fadc170e959e2ae60d8430b6d7484626fe7372b8b",
+          "size": 656960
+        }
+      }
+    },
+    "darwin-x64": {
+      "rid": "osx-x64",
+      "id": "2c12e21fde804f8e5a8de227e144f8d81401aed7ad92373562a4a2dc38fe1ada",
+      "executable": "mobile-canvas",
+      "files": {
+        "mobile-canvas": {
+          "asset": "mobile-canvas-v0.1.16-osx-x64.gz",
+          "compressedSha256": "c11d73666450666ce64f9024184478bbd1b0848330b09ebd0dd14c96996bfda2",
+          "compressedSize": 14502684,
+          "sha256": "2c12e21fde804f8e5a8de227e144f8d81401aed7ad92373562a4a2dc38fe1ada",
+          "size": 33707936
+        },
+        "mobile-screencap": {
+          "asset": "mobile-screencap-v0.1.16-osx-x64.gz",
+          "compressedSha256": "7245861d59198380c3ab221b8f547963a44244aad693b6277a7d3681af4de19c",
+          "compressedSize": 228256,
+          "sha256": "bbd45c0e7a85ce7d6590ab2fadc170e959e2ae60d8430b6d7484626fe7372b8b",
+          "size": 656960
+        }
+      }
+    },
+    "linux-arm64": {
+      "rid": "linux-arm64",
+      "id": "beabd9ec69f7495d4f389fb5e434c769f6364f3798da688123eed3582471e57f",
+      "executable": "mobile-canvas",
+      "files": {
+        "mobile-canvas": {
+          "asset": "mobile-canvas-v0.1.16-linux-arm64.gz",
+          "compressedSha256": "d0dcf117c961feade564ec42dc87efd020f31adc0dc7de870a0bcf19428c368e",
+          "compressedSize": 13506621,
+          "sha256": "beabd9ec69f7495d4f389fb5e434c769f6364f3798da688123eed3582471e57f",
+          "size": 34084760
+        }
+      }
+    },
+    "linux-x64": {
+      "rid": "linux-x64",
+      "id": "454feea8fb2bf942cf2ce1ba4c4a5ae6ee9608e7cadeccbba5ac5940a71c04a9",
+      "executable": "mobile-canvas",
+      "files": {
+        "mobile-canvas": {
+          "asset": "mobile-canvas-v0.1.16-linux-x64.gz",
+          "compressedSha256": "cf75f1218c37023709fa851a9f2c65521a532587c0e68933782adbceda0a16ab",
+          "compressedSize": 14303919,
+          "sha256": "454feea8fb2bf942cf2ce1ba4c4a5ae6ee9608e7cadeccbba5ac5940a71c04a9",
+          "size": 33388208
+        }
+      }
+    },
+    "win32-arm64": {
+      "rid": "win-arm64",
+      "id": "a505b238c28e0f4833e12bc7ef32cd1a6173c547e4d8f0c925f7090cc0528820",
+      "executable": "mobile-canvas.exe",
+      "files": {
+        "mobile-canvas.exe": {
+          "asset": "mobile-canvas-v0.1.16-win-arm64.gz",
+          "compressedSha256": "d5acaaef3dcdb83f7e8833383722e7fdc34829038e292c231d35be23830a6871",
+          "compressedSize": 12786611,
+          "sha256": "a505b238c28e0f4833e12bc7ef32cd1a6173c547e4d8f0c925f7090cc0528820",
+          "size": 37677568
+        }
+      }
+    },
+    "win32-x64": {
+      "rid": "win-x64",
+      "id": "7ca3734fd79c162d29d4e20c62f8d466cb33225d0f4b510033223201c2c8d90e",
+      "executable": "mobile-canvas.exe",
+      "files": {
+        "mobile-canvas.exe": {
+          "asset": "mobile-canvas-v0.1.16-win-x64.gz",
+          "compressedSha256": "3e5499596844852c1d6b1215870868a37cbad6251aa37d09365d1dd7ef35cd87",
+          "compressedSize": 13440678,
+          "sha256": "7ca3734fd79c162d29d4e20c62f8d466cb33225d0f4b510033223201c2c8d90e",
+          "size": 36996096
+        }
+      }
+    }
+  }
+}

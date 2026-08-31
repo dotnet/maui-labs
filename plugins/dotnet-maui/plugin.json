@@ -1,6 +1,6 @@
 {
   "name": "dotnet-maui",
-  "version": "0.6.0",
-  "description": "MAUI specialist skills for DevFlow automation, local CI failure repair, session review, slim platform bindings, and workload diagnostics.",
+  "version": "0.7.0",
+  "description": "MAUI specialist skills for DevFlow automation, local CI failure repair, session review, slim platform bindings, workload diagnostics, and the experimental optional device layer.",
   "skills": ["./skills/"]
 }

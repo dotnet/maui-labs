@@ -354,6 +354,8 @@ public class DevFlowCommands
         themeCommand.Add(themeSetCmd);
 
         devflowCommand.Add(themeCommand);
+
+        devflowCommand.Add(DeviceCommands.Create(jsonOption, noJsonOption, output));
         
         // ===== UI commands =====
 

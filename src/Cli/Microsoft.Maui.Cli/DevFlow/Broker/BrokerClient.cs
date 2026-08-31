@@ -1,9 +1,12 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
+using System.Net.Http.Json;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using Microsoft.Maui.DevFlow.Driver;
 
 namespace Microsoft.Maui.Cli.DevFlow.Broker;
 
@@ -14,6 +17,7 @@ namespace Microsoft.Maui.Cli.DevFlow.Broker;
 public static class BrokerClient
 {
     private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(5) };
+    private static readonly HttpClient _deviceHttp = new() { Timeout = TimeSpan.FromMinutes(3) };
 
     /// <summary>
     /// Ensures the broker daemon is running. Starts it if needed.
@@ -64,6 +68,256 @@ public static class BrokerClient
             return null;
         }
     }
+
+    /// <summary>
+    /// Lists the devices the broker knows about, each paired with the app agent running inside it.
+    /// <para>
+    /// Routed through the broker rather than a device host directly, so there is a single front
+    /// door and one shared idea of which devices exist.
+    /// </para>
+    /// </summary>
+    public static async Task<string?> ListDevicesAsync(int brokerPort)
+    {
+        try
+        {
+            return await _http.GetStringAsync($"http://localhost:{brokerPort}/api/devices");
+        }
+        catch
+        {
+            // A broker that is not running is an ordinary state for a device query.
+            return null;
+        }
+    }
+
+    internal static async Task<string?> GetDeviceCatalogAsync(
+        int brokerPort,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await _deviceHttp.GetStringAsync(
+                $"http://localhost:{brokerPort}/api/devices/catalog",
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (
+            exception is HttpRequestException or IOException or TaskCanceledException)
+        {
+            return null;
+        }
+    }
+
+    internal static async Task<(int StatusCode, string ContentType, byte[] Body)> GetDeviceResourceAsync(
+        int brokerPort,
+        string deviceId,
+        string resource,
+        string? embedToken = null,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var url = $"http://localhost:{brokerPort}/api/devices/{Uri.EscapeDataString(deviceId)}/{resource}";
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            if (!string.IsNullOrWhiteSpace(embedToken))
+                request.Headers.TryAddWithoutValidation("X-DevFlow-Embed-Token", embedToken);
+            using var response = await _deviceHttp.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            return (
+                (int)response.StatusCode,
+                response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream",
+                await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false));
+        }
+        catch (Exception exception) when (
+            exception is HttpRequestException or IOException or TaskCanceledException)
+        {
+            return (
+                503,
+                "application/json",
+                Encoding.UTF8.GetBytes("{\"ok\":false,\"error\":\"The DevFlow broker could not be reached.\"}"));
+        }
+    }
+
+    internal static async Task<(int StatusCode, string Body)> ControlManagedDeviceAsync(
+        int brokerPort,
+        string body,
+        string leaseId,
+        string holderKind,
+        string holderLabel,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var url = $"http://localhost:{brokerPort}/api/devices/control" +
+                $"?leaseId={Uri.EscapeDataString(leaseId)}" +
+                $"&holderKind={Uri.EscapeDataString(holderKind)}" +
+                $"&label={Uri.EscapeDataString(holderLabel)}";
+            using var content = new StringContent(body, Encoding.UTF8, "application/json");
+            using var response = await _deviceHttp.PostAsync(url, content, cancellationToken).ConfigureAwait(false);
+            return (
+                (int)response.StatusCode,
+                await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+        }
+        catch (Exception exception) when (
+            exception is HttpRequestException or IOException or TaskCanceledException)
+        {
+            return (503, "{\"success\":false,\"reason\":\"The DevFlow broker could not be reached.\"}");
+        }
+    }
+
+    /// <summary>
+    /// Runs a device operation through the broker.
+    /// <para>
+    /// A refusal comes back as a described result rather than an exception: on most machines
+    /// "no device host" or "this platform cannot do that" is the expected answer, and the caller
+    /// needs the reason to choose another approach.
+    /// </para>
+    /// </summary>
+    public static async Task<DeviceControlResult> ControlDeviceAsync(
+        int brokerPort,
+        string deviceId,
+        string action,
+        double? x = null,
+        double? y = null,
+        string? leaseId = null,
+        string? holderKind = null,
+        string? holderLabel = null)
+    {
+        try
+        {
+            leaseId = string.IsNullOrWhiteSpace(leaseId)
+                ? $"broker-device-{Guid.NewGuid():N}"
+                : leaseId;
+            holderKind = string.IsNullOrWhiteSpace(holderKind) ? "devflow-client" : holderKind;
+            holderLabel = string.IsNullOrWhiteSpace(holderLabel) ? "maui devflow device control" : holderLabel;
+            var url = $"http://localhost:{brokerPort}/api/devices/{Uri.EscapeDataString(deviceId)}/{action}";
+            var query = new List<string>();
+            if (x is not null && y is not null)
+            {
+                var invariant = System.Globalization.CultureInfo.InvariantCulture;
+                query.Add($"x={x.Value.ToString(invariant)}");
+                query.Add($"y={y.Value.ToString(invariant)}");
+            }
+
+            // A caller that supplies no lease identity gets a fresh one per call. That still
+            // contends correctly against another holder, but it cannot prove continuity across
+            // calls, so it must not be read as "the broker verified this caller held the lease
+            // already" — only a caller-supplied leaseId carries that meaning.
+            query.Add($"leaseId={Uri.EscapeDataString(leaseId)}");
+            query.Add($"holderKind={Uri.EscapeDataString(holderKind)}");
+            query.Add($"label={Uri.EscapeDataString(holderLabel)}");
+
+            if (query.Count > 0)
+                url += "?" + string.Join("&", query);
+
+            using var response = await _http.PostAsync(url, content: null);
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+                return new DeviceControlResult(false, $"The broker refused {action} with {(int)response.StatusCode}.");
+
+            return CliJson.Deserialize<DeviceControlResult>(body)
+                ?? new DeviceControlResult(false, "The broker returned an unreadable response.");
+        }
+        catch
+        {
+            return new DeviceControlResult(false, "The DevFlow broker could not be reached.");
+        }
+    }
+
+    internal static async Task<DeviceMutationLeaseResult> ControlDeviceMutationLeaseAsync(
+        int brokerPort,
+        string action,
+        string leaseId,
+        string? transactionId = null,
+        string? deviceId = null,
+        bool catalog = false,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var content = JsonContent.Create(new DeviceMutationLeaseRequest
+            {
+                Action = action,
+                LeaseId = leaseId,
+                TransactionId = transactionId,
+                DeviceId = deviceId,
+                Catalog = catalog,
+                Force = false,
+            }, DevFlowCliJsonContext.Default.DeviceMutationLeaseRequest);
+            using var response = await _http.PostAsync(
+                $"http://localhost:{brokerPort}/api/device-leases",
+                content,
+                cancellationToken).ConfigureAwait(false);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                var message = TryReadBrokerError(body) ??
+                    $"The broker refused the device lease with HTTP {(int)response.StatusCode}.";
+                return DeviceMutationLeaseResult.Failed(message);
+            }
+
+            return CliJson.Deserialize<DeviceMutationLeaseResult>(body)
+                ?? DeviceMutationLeaseResult.Failed("The broker returned an unreadable device lease response.");
+        }
+        catch (Exception exception) when (
+            exception is HttpRequestException or IOException or TaskCanceledException)
+        {
+            return DeviceMutationLeaseResult.Failed("The DevFlow broker could not coordinate the device lease.");
+        }
+    }
+
+    private static string? TryReadBrokerError(string body)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            return document.RootElement.TryGetProperty("error", out var error)
+                ? error.GetString()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Resolves the device an agent is running inside, returning the full device node so callers
+    /// can read its capabilities. <c>null</c> when it is not paired with one.
+    /// </summary>
+    public static async Task<System.Text.Json.Nodes.JsonNode?> ResolveDeviceNodeForAgentAsync(int brokerPort, string? agentId)
+    {
+        if (string.IsNullOrWhiteSpace(agentId))
+            return null;
+
+        var payload = await ListDevicesAsync(brokerPort);
+        if (payload is null)
+            return null;
+
+        try
+        {
+            var root = System.Text.Json.Nodes.JsonNode.Parse(payload);
+            if (root?["devices"] is not System.Text.Json.Nodes.JsonArray devices)
+                return null;
+
+            foreach (var device in devices)
+            {
+                if (string.Equals(device?["agentId"]?.GetValue<string>(), agentId, StringComparison.Ordinal))
+                    return device;
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // A broker we cannot parse simply means no device layer for this caller.
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves the device id an agent is running inside, or <c>null</c> when it is not paired
+    /// with one. Reads through the broker so there is a single view of pairing.
+    /// </summary>
+    public static async Task<string?> ResolveDeviceForAgentAsync(int brokerPort, string? agentId) =>
+        (await ResolveDeviceNodeForAgentAsync(brokerPort, agentId))?["id"]?.GetValue<string>();
 
     public static AgentRegistration[]? ListAgents(int brokerPort)
     {

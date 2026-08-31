@@ -2095,6 +2095,7 @@ P:Microsoft.Maui.DevFlow.Testing.MauiPreviewFeatureFlags.AutoApplyRepair[]:Syste
 P:Microsoft.Maui.DevFlow.Testing.MauiPreviewFeatureFlags.AutoApplySource[]:System.Boolean{get:public;set:public}
 P:Microsoft.Maui.DevFlow.Testing.MauiPreviewFeatureFlags.ExtensionData[]:System.Collections.Generic.Dictionary`2[System.String,System.Text.Json.JsonElement]{get:public;set:public}
 P:Microsoft.Maui.DevFlow.Testing.MauiPreviewFeatureFlags.KillSwitches[]:System.Collections.Generic.List`1[System.String]{get:public;set:public}
+P:Microsoft.Maui.DevFlow.Testing.MauiPreviewFeatureFlags.MobileCanvasEnabled[]:System.Boolean{get:public;set:public}
 P:Microsoft.Maui.DevFlow.Testing.MauiPreviewFeatureFlags.ModelProviderEnabled[]:System.Boolean{get:public;set:public}
 P:Microsoft.Maui.DevFlow.Testing.MauiPreviewFeatureFlags.PolicyVersion[]:System.String{get:public;set:public}
 P:Microsoft.Maui.DevFlow.Testing.MauiPreviewFeatureFlags.RepairProposalsEnabled[]:System.Boolean{get:public;set:public}

@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Maui.DevFlow.Driver;
+using DeviceLayer = Microsoft.Maui.DevFlow.Devices;
 using Testing = Microsoft.Maui.DevFlow.Testing;
 
 namespace Microsoft.Maui.Cli.DevFlow.Broker;
@@ -702,12 +703,17 @@ internal sealed class WorkflowRunCoordinator : IDisposable
             var recordingCaptured = run.ExecutionOptions.DeviceRecordingCaptured;
             if (!string.IsNullOrWhiteSpace(_options.ArtifactRoot))
             {
-                recordingCaptured = (runId, sourcePath) =>
+                recordingCaptured = (runId, capture) =>
                 {
-                    var retainedPath = RetainDeviceRecording(runId, sourcePath);
+                    // Retention re-homes the file into a root this coordinator owns, so the capture
+                    // handed onwards carries that root's authority. Forwarding the surface's
+                    // original capture after copying would point the next hop at a path that only
+                    // the device surface's root would ever vouch for; forwarding a bare retained
+                    // path would leave it with nothing to validate against at all.
+                    var retained = RetainDeviceRecording(runId, capture);
                     run.ExecutionOptions.DeviceRecordingCaptured?.Invoke(
                         runId,
-                        retainedPath ?? sourcePath);
+                        retained ?? capture);
                 };
             }
             var executionOptions = new WorkflowRunExecutionOptions
@@ -1500,35 +1506,70 @@ internal sealed class WorkflowRunCoordinator : IDisposable
         }
     }
 
-    private string? RetainDeviceRecording(string runId, string sourcePath)
+    /// <summary>
+    /// Copies a vouched recording into this coordinator's own artifact root and returns a capture
+    /// for the copy, so the next hop re-validates against the directory the bytes now live in.
+    /// Returns <c>null</c> when nothing was retained, which leaves the caller forwarding the
+    /// original capture rather than a path nobody can vouch for.
+    /// </summary>
+    internal DeviceLayer.DeviceRecordingCapture? RetainDeviceRecording(
+        string runId,
+        DeviceLayer.DeviceRecordingCapture capture)
     {
         var safeRunId = Testing.MauiFlowReportRedactor.SafeFileSegment(runId);
-        if (string.IsNullOrWhiteSpace(_options.ArtifactRoot) ||
-            safeRunId is null ||
-            string.IsNullOrWhiteSpace(sourcePath))
-        {
+        if (string.IsNullOrWhiteSpace(_options.ArtifactRoot) || safeRunId is null)
             return null;
-        }
+
+        // Re-prove containment through the capture's own authority at the moment the bytes are
+        // opened: this is a read of a file an untrusted host named, and the check that happened one
+        // hop ago says nothing about what the path points at now.
+        var source = capture.ResolveForRead();
+        if (source is null)
+            return null;
 
         string? temporary = null;
         try
         {
-            var source = Path.GetFullPath(sourcePath);
             var info = new FileInfo(source);
             if (!info.Exists || info.Length <= 0 || info.Length > 2L * 1024 * 1024 * 1024)
                 return null;
 
-            var destination = Path.Combine(
-                Path.GetFullPath(_options.ArtifactRoot),
+            var artifactRoot = Path.GetFullPath(_options.ArtifactRoot);
+            var authority = new DeviceLayer.TrustedRootRecordingPathAuthority(artifactRoot);
+
+            // The destination is vouched for *before* anything is created. The check that used to
+            // happen after the copy could only ever report a mistake that had already been made: a
+            // mis-derived artifact root — an empty configured directory collapsing to a drive
+            // letter is the usual way — or a link planted at the run's own directory would have the
+            // recording written outside the root first and refused second, leaving a copy of the
+            // bytes somewhere nothing owns and nothing will ever sweep. Refusal here touches the
+            // filesystem not at all: no directory, no temporary file, no orphan.
+            var vouched = authority.ResolveContainedRecordingPath(Path.Combine(
+                artifactRoot,
                 safeRunId,
                 "artifacts",
-                "device-recording.mp4");
-            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-            temporary = destination + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                "device-recording.mp4"));
+            if (vouched is null)
+                return null;
+
+            Directory.CreateDirectory(Path.GetDirectoryName(vouched)!);
+            temporary = vouched + "." + Guid.NewGuid().ToString("N") + ".tmp";
             File.Copy(source, temporary, overwrite: false);
-            File.Move(temporary, destination, overwrite: true);
+            File.Move(temporary, vouched, overwrite: true);
             temporary = null;
-            return destination;
+
+            // Asked again on the file that now exists: between the check above and the move, the
+            // path could have become a link out of the root. A copy that no longer sits where it
+            // was vouched for is deleted rather than published, because leaving it is the same
+            // orphan by a slower route.
+            var retained = DeviceLayer.DeviceRecordingCapture.TryCreate(vouched, authority);
+            if (retained is null)
+            {
+                try { File.Delete(vouched); } catch { }
+                return null;
+            }
+
+            return retained;
         }
         catch (Exception exception) when (
             exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
@@ -2796,7 +2837,7 @@ internal sealed class WorkflowRunExecutionOptions
     public Testing.MauiLocalReproductionExpectation? ReproductionExpectation { get; init; }
     public bool RecordDeviceRun { get; init; }
     public int DeviceRecordingTimeoutSeconds { get; init; }
-    public Action<string, string>? DeviceRecordingCaptured { get; init; }
+    public Action<string, DeviceLayer.DeviceRecordingCapture>? DeviceRecordingCaptured { get; init; }
     public Action<Testing.MauiFlowRunProgress>? Progress { get; init; }
 }
 

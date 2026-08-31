@@ -161,6 +161,60 @@ internal sealed class BrokerFlowCoordinator
             return ObserveCore(agentId, observation, expectedRecordingId);
     }
 
+    public BrokerFlowResult ObserveDeviceTap(
+        string agentId,
+        double x,
+        double y,
+        string? nativeId = null,
+        string? nativeText = null)
+    {
+        lock (Gate(agentId))
+        {
+            if (!_active.TryGetValue(agentId, out var active))
+                return new BrokerFlowResult { Ok = true, Recording = false, Steps = 0 };
+            if (active.DurabilityError is not null)
+                return DurabilityFailure(active, "The active recording is not durable");
+            if (!_recordings.TryGet(active.RecordingId, out var recorder))
+                return BrokerFlowResult.Failure("The active recording no longer exists.");
+
+            var step = new DeviceStep
+            {
+                AfterStep = recorder.StepCount,
+                Action = "tap",
+                X = x,
+                Y = y,
+                NativeId = nativeId,
+                NativeText = nativeText,
+            };
+            var itemCount = recorder.AppendExtensionArrayItem(
+                DeviceStep.ExtensionKey,
+                step.ToJsonElement());
+            if (itemCount < 0)
+                return BrokerFlowResult.Failure("The device step could not be appended to the recording.");
+
+            var persistenceError = Persist(agentId, active, recorder);
+            if (persistenceError is not null)
+            {
+                recorder.TryRollbackLastExtensionArrayItem(DeviceStep.ExtensionKey, itemCount);
+                active.DurabilityError = persistenceError;
+                PersistDurabilityFailure(agentId, active, recorder, persistenceError);
+                return BrokerFlowResult.Failure(
+                    $"The device tap succeeded, but its workflow step was not durably recorded: {persistenceError}");
+            }
+
+            return new BrokerFlowResult
+            {
+                Ok = true,
+                Recording = true,
+                RecordingId = active.RecordingId,
+                Name = recorder.Name,
+                Steps = recorder.StepCount,
+                Seq = step.AfterStep,
+                Fragile = step.IsFragile,
+            };
+        }
+    }
+
     private BrokerFlowResult ObserveCore(string agentId, FlowObservation observation, string? expectedRecordingId)
     {
         if (!_active.TryGetValue(agentId, out var active))

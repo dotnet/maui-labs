@@ -107,9 +107,12 @@ compare-and-swap against the recorded digest. VS Code is the only host that can 
 confirmation; the Canvas Inspector and a standalone browser copy the proposal for human review
 instead.
 
-`report.systemEvidence` stays empty in this layer — correlating a finding with the device's own
-accessibility tree needs device capture from the Mobile Device Canvas layer — so the panel never
-claims a keyboard, permission dialog, alert, or share sheet was ruled in or out.
+`report.systemEvidence` is filled only when the scan came through the broker's optional composite
+route and a device was paired with this agent at exact confidence. In every other case — no device
+host, no pairing, an ambiguous pairing, or no hierarchy from the host — the panel shows an
+app-scoped scan and never claims a keyboard, permission dialog, alert, or share sheet was ruled in
+or out. When the section is shown, its `status` is shown with it: `incomplete` means the capture
+could not be aligned with these findings, and its element list is deliberately empty.
 
 ## Editor hosts and the trusted native approval
 

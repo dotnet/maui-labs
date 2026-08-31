@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/dotnet/maui-labs/main/docs/DevFlow/spec/schemas/device-surface-v1.json",
+  "title": "Device surface",
+  "description": "The device a MAUI app is running inside, as observed from outside the app process. This is deliberately a separate vantage point from the in-app agent: everything the agent reports arrives through a process living inside the app, so it goes blind when the app crashes, is backgrounded, is covered by a system dialog, or has not launched yet. Capabilities are negotiated rather than inferred from the platform, because iOS control is macOS-only, iOS input additionally requires idb, and hardware video encoding is not available on every host.",
+  "type": "object",
+  "required": ["schemaVersion", "id", "platform", "nativeId", "state", "capabilities"],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "description": "Payload shape version. Incremented when a field is removed or changes meaning."
+    },
+    "id": {
+      "type": "string",
+      "description": "Provider-qualified device identifier, unique within one host."
+    },
+    "platform": {
+      "type": "string",
+      "enum": ["ios", "android"],
+      "description": "Device platform provider."
+    },
+    "provider": {
+      "type": "string",
+      "description": "Backend that produced this record."
+    },
+    "nativeId": {
+      "type": "string",
+      "description": "The identifier the platform's own tooling addresses this device by, such as an adb serial or a simulator UDID. This is the primary join key for pairing a running app to the device around it: an app can observe this value about itself, which is what allows one selection to mean both an app and a device."
+    },
+    "udid": {
+      "type": ["string", "null"],
+      "description": "Simulator UDID where the platform has one."
+    },
+    "avdName": {
+      "type": ["string", "null"],
+      "description": "Android virtual device name. A secondary join key only: it is user-chosen and unique only within one machine's AVD set, so a match on it is never treated as proof of identity."
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-facing device name."
+    },
+    "state": {
+      "type": "string",
+      "enum": ["unknown", "shutdown", "booting", "shutting-down", "booted"],
+      "description": "Lifecycle state. Only a booted device can be driven."
+    },
+    "isAvailable": {
+      "type": "boolean",
+      "description": "Whether the device's runtime is installed and usable."
+    },
+    "isVirtual": {
+      "type": "boolean",
+      "description": "Whether this target is an emulator or simulator."
+    },
+    "runtimeId": { "type": ["string", "null"] },
+    "runtimeName": { "type": ["string", "null"] },
+    "osVersion": { "type": ["string", "null"] },
+    "deviceTypeId": { "type": ["string", "null"] },
+    "deviceTypeName": { "type": ["string", "null"] },
+    "modelIdentifier": { "type": ["string", "null"] },
+    "architecture": { "type": ["string", "null"] },
+    "deviceSet": { "type": ["string", "null"] },
+    "display": { "$ref": "#/$defs/displayGeometry" },
+    "capabilities": { "$ref": "#/$defs/deviceCapabilities" }
+  },
+  "$defs": {
+    "displayGeometry": {
+      "type": "object",
+      "description": "Physical geometry of the device display. Both a pixel size and a point size are carried because different layers work in different spaces: video frames arrive in pixels while app coordinates are in points. Deriving one from the other with an assumed density is the classic cause of an overlay that is correct on one device and subtly offset on another.",
+      "required": ["pixelWidth", "pixelHeight", "scale", "orientation"],
+      "properties": {
+        "pixelWidth": { "type": "integer", "minimum": 1 },
+        "pixelHeight": { "type": "integer", "minimum": 1 },
+        "pointWidth": { "type": "number", "exclusiveMinimum": 0 },
+        "pointHeight": { "type": "number", "exclusiveMinimum": 0 },
+        "scale": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Device pixels per point. Reported rather than derived so a backend can correct it."
+        },
+        "orientation": {
+          "type": "string",
+          "enum": ["portrait", "portraitUpsideDown", "landscapeLeft", "landscapeRight"],
+          "description": "The orientation the display currently presents. This describes the display, not the rotation that must be applied to a video frame: see frameQuarterTurns on the coordinate space for that, which is a separate concern because a backend may deliver frames already rotated."
+        },
+        "cornerRadius": {
+          "type": ["number", "null"],
+          "description": "Corner radius in points, or null when the platform did not report one. Zero is a meaningful answer meaning the display really is square-cornered, and MUST NOT be conflated with null."
+        },
+        "cornerCurve": {
+          "type": "string",
+          "enum": ["circular", "continuous"],
+          "description": "How the corner radius is drawn."
+        }
+      }
+    },
+    "deviceCapabilities": {
+      "type": "object",
+      "description": "What this device can actually do on this host. Consumers MUST gate on these rather than inferring from the platform, so that a partial backend degrades visibly instead of erroring. Every field defaults to false: a device whose host did not report capabilities MUST read as incapable, never as capable-by-default.",
+      "properties": {
+        "boot": { "type": "boolean" },
+        "shutdown": { "type": "boolean" },
+        "restart": { "type": "boolean" },
+        "erase": { "type": "boolean" },
+        "delete": { "type": "boolean" },
+        "reveal": { "type": "boolean" },
+        "tap": { "type": "boolean" },
+        "longPress": { "type": "boolean" },
+        "swipe": { "type": "boolean" },
+        "scroll": { "type": "boolean" },
+        "text": { "type": "boolean" },
+        "key": { "type": "boolean" },
+        "button": { "type": "boolean" },
+        "rotate": { "type": "boolean" },
+        "screenshot": { "type": "boolean" },
+        "liveStream": {
+          "type": "boolean",
+          "description": "Whether a live video stream is available. False on hosts without hardware encoding, where consumers fall back to screenshot polling."
+        },
+        "recording": { "type": "boolean" },
+        "uiHierarchy": { "type": "boolean" },
+        "foregroundOwner": { "type": "boolean" }
+      }
+    },
+    "uiSnapshot": {
+      "type": "object",
+      "required": ["deviceId", "capturedAt", "elements", "limitations"],
+      "properties": {
+        "deviceId": { "type": "string" },
+        "capturedAt": { "type": "string", "format": "date-time" },
+        "orientation": { "type": ["string", "null"] },
+        "scale": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "foregroundOwner": { "type": ["string", "null"] },
+        "keyboardVisible": { "type": ["boolean", "null"] },
+        "elements": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "type": "object",
+            "required": ["id", "isSystem", "interactive"],
+            "properties": {
+              "id": { "type": "string" },
+              "parentId": { "type": ["string", "null"] },
+              "role": { "type": ["string", "null"] },
+              "type": { "type": ["string", "null"] },
+              "packageId": { "type": ["string", "null"] },
+              "isSystem": { "type": "boolean" },
+              "interactive": { "type": "boolean" },
+              "bounds": {
+                "type": ["object", "null"],
+                "properties": {
+                  "x": { "type": "number" },
+                  "y": { "type": "number" },
+                  "width": { "type": "number", "minimum": 0 },
+                  "height": { "type": "number", "minimum": 0 }
+                }
+              }
+            }
+          }
+        },
+        "limitations": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

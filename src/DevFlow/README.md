@@ -156,10 +156,17 @@ Inspector suppressions are exact project
 entries under `layoutDiagnostics.suppressions` in `.mauidevflow`; user-wide suppressions can be
 placed in `~/.mauidevflow/layout-diagnostics.json`.
 
-`report.systemEvidence` is not populated by this layer. Correlating a finding with the device's own
-accessibility tree needs device capture, which arrives with the Mobile Device Canvas layer, so every
-scan here is app-scoped and never rules a keyboard, permission dialog, alert, or share sheet in or
-out.
+`report.systemEvidence` is populated only by the optional device layer, through
+`POST /api/layout-diagnostics/composite` on the broker. The analyzer itself never fills it, so an
+ordinary scan — and every scan on a machine with no device host — stays app-scoped and rules no
+keyboard, permission dialog, alert, or share sheet in or out. When the device layer does fill it,
+`status` is the first thing to read: `complete` means the device hierarchy was captured on the
+device paired with this agent at exact confidence, in the same orientation and scale, from the same
+agent instance, and within the allowed capture skew. Anything else is `incomplete` or
+`unavailable`, carries no elements, and states in `limitations` which of those conditions failed.
+The composite route never adds, removes, or rewrites a finding and never recomputes the agent's
+diagnostics revision: the agent holds the reviewed suppression policy for the scan, so evidence the
+broker adds stays evidence rather than becoming a finding nobody can suppress.
 
 Inspector suppression persistence is reviewed by a trusted VS Code host — the only native approval
 host; the Canvas Inspector has no approval authority. Proposals bind the exact suppression key,

@@ -4,11 +4,18 @@ using Microsoft.Maui.DevFlow.Agent.Core.LayoutDiagnostics;
 namespace Microsoft.Maui.DevFlow.Tests;
 
 /// <summary>
-/// Layout diagnostics ships before the Mobile Device Canvas, so it must stand alone. If any layout
-/// type or file reaches for a device companion, a device UI snapshot, or a device route, the layer
-/// silently acquires a dependency it cannot satisfy — and every host that advertises a layout scan
-/// starts promising evidence no broker in this layer can produce. These assertions fail on the
-/// dependency rather than at run time in front of a user.
+/// The layout engine must stand alone. If any layout type or file reaches for a device companion,
+/// a device UI snapshot, or a device route, an app-scoped structural scan silently acquires a
+/// dependency on emulator/simulator capture, and every host that advertises a layout scan starts
+/// promising evidence the engine cannot produce on a machine with no device host.
+/// <para>
+/// The device layer may still correlate a finished report with what the device saw — that is what
+/// <c>systemEvidence</c> is for — but it does so from the device side, in
+/// <c>Microsoft.Maui.Cli/DevFlow/Devices</c> and the broker's composite route. Keeping the
+/// producer out of the engine directories is what makes the correlation additive and optional
+/// rather than a hidden requirement, so these assertions fail on the dependency rather than at run
+/// time in front of a user.
+/// </para>
 /// </summary>
 public sealed class LayoutDiagnosticsIndependenceTests
 {
@@ -57,7 +64,8 @@ public sealed class LayoutDiagnosticsIndependenceTests
     /// <summary>
     /// Reflection cannot see a route string or a using directive that never resolves to a type, so
     /// the shipped layout sources are read directly. A composite broker route or a device capture
-    /// call named here would be a claim this layer cannot honour.
+    /// call named here would move the correlation inside the engine, where it could no longer be
+    /// skipped on a machine with no device host.
     /// </summary>
     [Fact]
     public void LayoutSourceFiles_NameNoDeviceCompanionOrCanvasRoute()
@@ -77,10 +85,10 @@ public sealed class LayoutDiagnosticsIndependenceTests
     }
 
     /// <summary>
-    /// The report type keeps a <c>SystemEvidence</c> slot so a later device-correlating layer can
-    /// fill it without a schema break, but nothing here may populate it. A non-null value would
-    /// tell a reader that a keyboard, dialog, or share sheet was ruled in or out using evidence
-    /// this layer never captured.
+    /// The report type keeps a <c>SystemEvidence</c> slot, and the device layer's composite
+    /// producer is the only thing allowed to fill it. The analyzer never may: a non-null value
+    /// straight out of analysis would tell a reader that a keyboard, dialog, or share sheet was
+    /// ruled in or out using evidence the analyzer never captured.
     /// </summary>
     [Fact]
     public void AnalyzedReport_LeavesSystemEvidenceUnpopulated()

@@ -2434,6 +2434,17 @@ public class DeviceDescriptor
     [System.Text.Json.Serialization.JsonPropertyName("windowCount")]
     public int? WindowCount { get; set; }
 
+    /// <summary>
+    /// Where the app window sits on the physical display, in device-independent points from the
+    /// top-left of the screen. Null when the platform cannot report it, or when there is no
+    /// device frame to align with (desktop).
+    /// </summary>
+    [System.Text.Json.Serialization.JsonPropertyName("windowScreenX")]
+    public double? WindowScreenX { get; set; }
+
+    /// <inheritdoc cref="WindowScreenX"/>
+    [System.Text.Json.Serialization.JsonPropertyName("windowScreenY")]
+    public double? WindowScreenY { get; set; }
 }
 
 public class AppDescriptor

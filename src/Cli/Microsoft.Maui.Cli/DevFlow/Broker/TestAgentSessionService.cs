@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Maui.DevFlow.Testing;
+using DeviceFlowReview = Microsoft.Maui.Cli.DevFlow.Flows.DeviceFlowReview;
 
 namespace Microsoft.Maui.Cli.DevFlow.Broker;
 
@@ -287,6 +288,18 @@ internal sealed class TestAgentSessionService
                     retryable: false));
             }
 
+            var deviceReview = kind == MauiTestAgentApprovalKinds.Run
+                ? DeviceFlowReview.Describe(session.Flow)
+                : new DeviceFlowReview([], string.Empty);
+            if (!deviceReview.Valid)
+            {
+                return ApprovalFailure(Error(
+                    MauiTestAgentErrorCodes.InvalidRequest,
+                    MauiTestAgentErrorCategories.Validation,
+                    deviceReview.Error ?? "The flow's device mutations are invalid.",
+                    retryable: false));
+            }
+
             var requestDigest = DigestApprovalRequest(request);
             if (_idempotency.TryGetValue(envelope.IdempotencyKey!, out var previous))
             {
@@ -361,6 +374,8 @@ internal sealed class TestAgentSessionService
                 session.Actor,
                 SnapshotCorrelation(session),
                 request.Scope!,
+                deviceReview.Effects,
+                deviceReview.Effects.Count > 0 ? deviceReview.Digest : null,
                 now,
                 expiresAt);
             _approvalRequests.Add(approvalRequestId, record);
@@ -1211,7 +1226,7 @@ internal sealed class TestAgentSessionService
     /// <summary>
     /// Answers the same question without spending the grant, so a caller can refuse an obviously
     /// unauthorized request early. This is a filter, never the authorization itself: the single-use
-    /// decision stays with <see cref="TryConsumeRunDispatchAuthorization(string?, string?, string?, IReadOnlyList{FlowStep}?, out string?)"/>.
+    /// decision stays with <see cref="TryConsumeRunDispatchAuthorization(string?, string?, string?, IReadOnlyList{FlowStep}?, string?, out string?)"/>.
     /// </summary>
     internal bool CanDispatchRunAuthorization(
         string? authorizationId,
@@ -3483,6 +3498,8 @@ internal sealed class TestAgentSessionService
             },
             RequestedScope = CloneScope(source.RequestedScope),
             ApprovedScope = source.ApprovedScope is null ? null : CloneScope(source.ApprovedScope),
+            DeviceEffects = source.DeviceEffects.ToList(),
+            DeviceEffectsDigest = source.DeviceEffectsDigest,
             CreatedAt = source.CreatedAt,
             ExpiresAt = source.ExpiresAt,
             DecidedAt = source.DecidedAt,
@@ -3664,6 +3681,8 @@ internal sealed class TestAgentSessionService
             MauiActorProvenance provenance,
             MauiTestAgentCorrelation correlation,
             MauiTestAgentMutationScope requestedScope,
+            IReadOnlyList<string> deviceEffects,
+            string? deviceEffectsDigest,
             DateTimeOffset createdAt,
             DateTimeOffset expiresAt)
         {
@@ -3677,6 +3696,8 @@ internal sealed class TestAgentSessionService
             Provenance = CloneProvenance(provenance)!;
             Correlation = correlation;
             RequestedScope = CloneScope(requestedScope);
+            DeviceEffects = deviceEffects.Take(256).ToArray();
+            DeviceEffectsDigest = BoundedDigest(deviceEffectsDigest);
             CreatedAt = createdAt;
             ExpiresAt = expiresAt;
         }
@@ -3691,6 +3712,8 @@ internal sealed class TestAgentSessionService
         public MauiActorProvenance Provenance { get; }
         public MauiTestAgentCorrelation Correlation { get; set; }
         public MauiTestAgentMutationScope RequestedScope { get; }
+        public IReadOnlyList<string> DeviceEffects { get; }
+        public string? DeviceEffectsDigest { get; }
         public DateTimeOffset CreatedAt { get; }
         public DateTimeOffset ExpiresAt { get; }
         public string State { get; set; } = MauiTestAgentApprovalStates.Pending;

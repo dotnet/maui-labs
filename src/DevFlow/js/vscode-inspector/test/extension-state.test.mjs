@@ -27,6 +27,13 @@ const extensionSource = await readFile(
   new URL("../src/extension.ts", import.meta.url),
   "utf8",
 );
+const mcpProviderSource = await readFile(
+  new URL("../src/mcp-provider.ts", import.meta.url),
+  "utf8",
+);
+// Every setting and registration the manifest promises must be honoured by one of the shipped
+// entry points, not only by extension.ts.
+const registeredSource = extensionSource + mcpProviderSource;
 
 const current = {
   id: "a",
@@ -234,7 +241,10 @@ test("native approval refuses a broker state that targets another Inspector", as
 });
 
 test("the manifest advertises only what the extension registers", () => {
-  assert.deepEqual(Object.keys(packageJson.contributes).sort(), ["commands", "configuration"]);
+  assert.deepEqual(
+    Object.keys(packageJson.contributes).sort(),
+    ["commands", "configuration", "mcpServerDefinitionProviders"],
+  );
   assert.deepEqual(
     packageJson.contributes.commands.map((command) => command.command),
     ["mauiDevflow.openInspector"],
@@ -247,19 +257,42 @@ test("the manifest advertises only what the extension registers", () => {
   }
   assert.deepEqual(
     Object.keys(packageJson.contributes.configuration.properties).sort(),
-    ["mauiDevflow.brokerPort", "mauiDevflow.openLocation", "mauiDevflow.publishDiagnostics"],
+    [
+      "mauiDevflow.brokerPort",
+      "mauiDevflow.openLocation",
+      "mauiDevflow.publishDiagnostics",
+      "mauiDevflow.registerMobileCanvasMcpServer",
+    ],
   );
   for (const setting of Object.keys(packageJson.contributes.configuration.properties)) {
     assert.ok(
-      extensionSource.includes(`"${setting.replace("mauiDevflow.", "")}"`),
+      registeredSource.includes(`"${setting.replace("mauiDevflow.", "")}"`),
       `${setting} is advertised but never read`,
     );
   }
-  // Nothing here contributes a chat participant, language-model tools, an MCP definition provider,
-  // or a URI handler, so the manifest must not promise them.
+  // Nothing here contributes a chat participant, language-model tools, or a URI handler, so the
+  // manifest must not promise them. The one MCP definition provider that is registered offers only
+  // the optional device server behind an off-by-default setting: it never offers the full DevFlow
+  // automation surface, so the `maui_*` inventory is unchanged either way.
   assert.equal(extensionSource.includes("vscode.chat"), false);
   assert.equal(extensionSource.includes("vscode.lm.registerTool"), false);
   assert.equal(extensionSource.includes("registerUriHandler"), false);
+  assert.match(extensionSource, /registerMobileCanvasMcpProvider\(context\)/);
+  assert.match(mcpProviderSource, /registerMcpServerDefinitionProvider/);
+  // VS Code throws when the provider id is not declared, and that throw would abort activation of
+  // the only trusted native approval host. The declaration and the code must agree, and the
+  // registration must be guarded.
+  assert.deepEqual(
+    packageJson.contributes.mcpServerDefinitionProviders.map((provider) => provider.id),
+    ["mauiDevflow.mobileCanvasMcp"],
+  );
+  assert.match(mcpProviderSource, /const PROVIDER_ID = "mauiDevflow\.mobileCanvasMcp"/);
+  assert.match(mcpProviderSource, /try \{[\s\S]*registerMcpServerDefinitionProvider[\s\S]*\} catch/);
+  assert.equal(mcpProviderSource.includes("\"mcp\", \"--profile\", \"full\""), false);
+  assert.equal(
+    packageJson.contributes.configuration.properties["mauiDevflow.registerMobileCanvasMcpServer"].default,
+    false,
+  );
   assert.deepEqual(packageJson.activationEvents, []);
 });
 
