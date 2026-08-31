@@ -14,6 +14,26 @@
       <_MauiAppRefReferenceName Condition="'$(_MauiAppRefReferenceName)' == ''">$(MSBuildProjectName)</_MauiAppRefReferenceName>
       <_MauiAppAppBundleDirFullPath Condition="'$(AppBundleDir)' != ''">$([MSBuild]::EnsureTrailingSlash($([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(AppBundleDir)'))))</_MauiAppAppBundleDirFullPath>
       <_MauiAppPublishDirFullPath Condition="'$(PublishDir)' != ''">$([MSBuild]::EnsureTrailingSlash($([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(PublishDir)'))))</_MauiAppPublishDirFullPath>
+      <_MauiAppRuntimeIdentifierLower>$([System.String]::Copy('$(RuntimeIdentifier)').ToLowerInvariant())</_MauiAppRuntimeIdentifierLower>
+      <!--
+        Android emits a signed and an unsigned package side by side. Classify them from the
+        Android SDK's own package properties rather than from a file name suffix, so the
+        artifact contract states signing as a fact the producing SDK declared. The properties
+        are defined by _ValidateAndroidPackageProperties during the app build, which always
+        runs before this target in the same project instance.
+      -->
+      <_MauiAppAndroidUnsignedApkFullPath Condition="'$(ApkFile)' != ''">$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(ApkFile)'))</_MauiAppAndroidUnsignedApkFullPath>
+      <_MauiAppAndroidSignedApkFullPath Condition="'$(ApkFileSigned)' != ''">$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(ApkFileSigned)'))</_MauiAppAndroidSignedApkFullPath>
+      <_MauiAppAndroidUnsignedAabFullPath Condition="'$(_AabFile)' != ''">$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(_AabFile)'))</_MauiAppAndroidUnsignedAabFullPath>
+      <_MauiAppAndroidSignedAabFullPath Condition="'$(_AabFileSigned)' != ''">$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(_AabFileSigned)'))</_MauiAppAndroidSignedAabFullPath>
+      <_MauiAppTargetRuntimeKind>unknown</_MauiAppTargetRuntimeKind>
+      <_MauiAppTargetRuntimeKind Condition="'$(_MauiAppTargetPlatform)' == 'android'">android</_MauiAppTargetRuntimeKind>
+      <_MauiAppTargetRuntimeKind Condition="'$(_MauiAppTargetPlatform)' == 'ios'">ios</_MauiAppTargetRuntimeKind>
+      <_MauiAppTargetRuntimeKind Condition="'$(_MauiAppTargetPlatform)' == 'ios' and $([System.String]::Copy('$(_MauiAppRuntimeIdentifierLower)').StartsWith('iossimulator'))">ios-simulator</_MauiAppTargetRuntimeKind>
+      <_MauiAppTargetRuntimeKind Condition="'$(_MauiAppTargetPlatform)' == 'ios' and $([System.String]::Copy('$(_MauiAppRuntimeIdentifierLower)').StartsWith('ios-'))">ios-device</_MauiAppTargetRuntimeKind>
+      <_MauiAppTargetRuntimeKind Condition="'$(_MauiAppTargetPlatform)' == 'maccatalyst'">mac-catalyst</_MauiAppTargetRuntimeKind>
+      <_MauiAppTargetRuntimeKind Condition="'$(_MauiAppTargetPlatform)' == 'macos'">macos-appkit</_MauiAppTargetRuntimeKind>
+      <_MauiAppTargetRuntimeKind Condition="'$(_MauiAppTargetPlatform)' == 'windows'">windows</_MauiAppTargetRuntimeKind>
     </PropertyGroup>
 
     <ItemGroup>
@@ -65,12 +85,65 @@
         <ArtifactType Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.exe'">exe</ArtifactType>
         <ArtifactType Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.dll'">dll</ArtifactType>
         <ArtifactType Condition="'$(_MauiAppPublishDirFullPath)' != '' and '%(_MauiAppArtifactCandidate._MauiAppFullPathWithTrailingSlash)' == '$(_MauiAppPublishDirFullPath)'">publish-directory</ArtifactType>
+        <ArtifactContractVersion>1</ArtifactContractVersion>
+        <SigningState>not-applicable</SigningState>
+        <SigningState Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.apk' or '%(_MauiAppArtifactCandidate.Extension)' == '.aab'">unknown</SigningState>
+        <SigningState Condition="'$(_MauiAppAndroidUnsignedApkFullPath)' != '' and '%(_MauiAppArtifactCandidate.FullPath)' == '$(_MauiAppAndroidUnsignedApkFullPath)'">unsigned</SigningState>
+        <SigningState Condition="'$(_MauiAppAndroidUnsignedAabFullPath)' != '' and '%(_MauiAppArtifactCandidate.FullPath)' == '$(_MauiAppAndroidUnsignedAabFullPath)'">unsigned</SigningState>
+        <SigningState Condition="'$(_MauiAppAndroidSignedApkFullPath)' != '' and '%(_MauiAppArtifactCandidate.FullPath)' == '$(_MauiAppAndroidSignedApkFullPath)'">signed</SigningState>
+        <SigningState Condition="'$(_MauiAppAndroidSignedAabFullPath)' != '' and '%(_MauiAppArtifactCandidate.FullPath)' == '$(_MauiAppAndroidSignedAabFullPath)'">signed</SigningState>
+        <ArtifactRole>unknown</ArtifactRole>
+        <TargetRuntimeKind>$(_MauiAppTargetRuntimeKind)</TargetRuntimeKind>
+        <DeploymentModel>unknown</DeploymentModel>
+        <LaunchIdentityKind>none</LaunchIdentityKind>
+        <LaunchIdentity></LaunchIdentity>
+        <ArtifactRole Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.apk'">deployable</ArtifactRole>
+        <DeploymentModel Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.apk'">package</DeploymentModel>
+        <LaunchIdentityKind Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.apk'">android-package-name</LaunchIdentityKind>
+        <LaunchIdentity Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.apk'">$(ApplicationId)</LaunchIdentity>
+        <ArtifactRole Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.aab'">distribution</ArtifactRole>
+        <DeploymentModel Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.aab'">store-bundle</DeploymentModel>
+        <LaunchIdentityKind Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.aab'">android-package-name</LaunchIdentityKind>
+        <LaunchIdentity Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.aab'">$(ApplicationId)</LaunchIdentity>
+        <ArtifactRole Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.ipa'">distribution</ArtifactRole>
+        <DeploymentModel Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.ipa'">physical-device-archive</DeploymentModel>
+        <LaunchIdentityKind Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.ipa'">apple-bundle-id</LaunchIdentityKind>
+        <LaunchIdentity Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.ipa'">$(ApplicationId)</LaunchIdentity>
+        <ArtifactRole Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.msix'">deployable</ArtifactRole>
+        <DeploymentModel Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.msix'">package</DeploymentModel>
+        <ArtifactRole Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.appinstaller'">distribution</ArtifactRole>
+        <DeploymentModel Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.appinstaller'">descriptor</DeploymentModel>
+        <ArtifactRole Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.exe'">launcher</ArtifactRole>
+        <DeploymentModel Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.exe'">executable</DeploymentModel>
+        <LaunchIdentityKind Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.exe'">file-path</LaunchIdentityKind>
+        <LaunchIdentity Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.exe'">%(_MauiAppArtifactCandidate.FullPath)</LaunchIdentity>
+        <ArtifactRole Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.dll'">supporting</ArtifactRole>
+        <DeploymentModel Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.dll'">library</DeploymentModel>
+        <ArtifactRole Condition="'$(_MauiAppPublishDirFullPath)' != '' and '%(_MauiAppArtifactCandidate._MauiAppFullPathWithTrailingSlash)' == '$(_MauiAppPublishDirFullPath)'">supporting</ArtifactRole>
+        <DeploymentModel Condition="'$(_MauiAppPublishDirFullPath)' != '' and '%(_MauiAppArtifactCandidate._MauiAppFullPathWithTrailingSlash)' == '$(_MauiAppPublishDirFullPath)'">directory</DeploymentModel>
         <Installable>false</Installable>
         <Installable Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.apk' or '%(_MauiAppArtifactCandidate.Extension)' == '.aab' or '%(_MauiAppArtifactCandidate.Extension)' == '.app' or '%(_MauiAppArtifactCandidate.Extension)' == '.ipa' or '%(_MauiAppArtifactCandidate.Extension)' == '.msix'">true</Installable>
         <Installable Condition="'$(_MauiAppAppBundleDirFullPath)' != '' and '%(_MauiAppArtifactCandidate._MauiAppFullPathWithTrailingSlash)' == '$(_MauiAppAppBundleDirFullPath)'">true</Installable>
         <Launchable>false</Launchable>
         <Launchable Condition="'%(_MauiAppArtifactCandidate.Extension)' == '.apk' or '%(_MauiAppArtifactCandidate.Extension)' == '.app' or '%(_MauiAppArtifactCandidate.Extension)' == '.exe' or '%(_MauiAppArtifactCandidate.Extension)' == '.msix'">true</Launchable>
         <Launchable Condition="'$(_MauiAppAppBundleDirFullPath)' != '' and '%(_MauiAppArtifactCandidate._MauiAppFullPathWithTrailingSlash)' == '$(_MauiAppAppBundleDirFullPath)'">true</Launchable>
+      </MauiAppArtifact>
+    </ItemGroup>
+
+    <ItemGroup>
+      <MauiAppArtifact Update="@(MauiAppArtifact)"
+                       Condition="'%(MauiAppArtifact.ArtifactType)' == 'app'">
+        <ArtifactRole>unknown</ArtifactRole>
+        <DeploymentModel>bundle</DeploymentModel>
+        <LaunchIdentityKind>apple-bundle-id</LaunchIdentityKind>
+        <LaunchIdentity>$(ApplicationId)</LaunchIdentity>
+        <DeploymentModel Condition="'%(MauiAppArtifact.TargetRuntimeKind)' == 'ios'">apple-bundle</DeploymentModel>
+        <ArtifactRole Condition="'%(MauiAppArtifact.TargetRuntimeKind)' == 'ios-simulator'">deployable</ArtifactRole>
+        <DeploymentModel Condition="'%(MauiAppArtifact.TargetRuntimeKind)' == 'ios-simulator'">simulator-bundle</DeploymentModel>
+        <ArtifactRole Condition="'%(MauiAppArtifact.TargetRuntimeKind)' == 'ios-device'">deployable</ArtifactRole>
+        <DeploymentModel Condition="'%(MauiAppArtifact.TargetRuntimeKind)' == 'ios-device'">physical-device-bundle</DeploymentModel>
+        <ArtifactRole Condition="'%(MauiAppArtifact.TargetRuntimeKind)' == 'mac-catalyst' or '%(MauiAppArtifact.TargetRuntimeKind)' == 'macos-appkit'">launcher</ArtifactRole>
+        <DeploymentModel Condition="'%(MauiAppArtifact.TargetRuntimeKind)' == 'mac-catalyst' or '%(MauiAppArtifact.TargetRuntimeKind)' == 'macos-appkit'">desktop-bundle</DeploymentModel>
       </MauiAppArtifact>
     </ItemGroup>
 
