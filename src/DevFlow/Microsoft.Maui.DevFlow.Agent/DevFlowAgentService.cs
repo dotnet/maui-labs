@@ -396,7 +396,11 @@ public class PlatformAgentService : DevFlowAgentService
         get
         {
 #if IOS || MACCATALYST
-            return true;
+            // Triggering a BGTask needs a private selector that is compiled out of Release
+            // builds (see TrySimulateBgTaskLaunch), so a Release agent can list and schedule
+            // but never run. Advertising "run" there would hand callers a feature-detect that
+            // is guaranteed to fail.
+            return BgTaskRunSupported;
 #elif ANDROID
             return false;
 #else
@@ -554,13 +558,13 @@ public class PlatformAgentService : DevFlowAgentService
                         earliestBeginDate = req.EarliestBeginDate?.ToString() ?? ""
                     });
                 }
-                tcs.TrySetResult(new { platform = "iOS", type = "BGTaskScheduler", supported = true, runSupported = true, jobs });
+                tcs.TrySetResult(new { platform = "iOS", type = "BGTaskScheduler", supported = true, runSupported = IsJobRunSupported, jobs });
             });
             return await tcs.Task;
         }
         catch (Exception ex)
         {
-            return new { platform = "iOS", type = "BGTaskScheduler", supported = true, runSupported = true, error = ex.Message, jobs = Array.Empty<object>() };
+            return new { platform = "iOS", type = "BGTaskScheduler", supported = true, runSupported = IsJobRunSupported, error = ex.Message, jobs = Array.Empty<object>() };
         }
 #else
         return await base.GetPlatformJobsAsync();
@@ -654,6 +658,17 @@ public class PlatformAgentService : DevFlowAgentService
     }
 
 #if IOS || MACCATALYST
+    /// <summary>
+    /// Whether this build can actually trigger a BGTask. The only way to run one on demand is a
+    /// private selector, which is compiled out of Release builds, so the advertised capability
+    /// and <see cref="TrySimulateBgTaskLaunch"/> must be gated on the same condition.
+    /// </summary>
+#if DEBUG
+    private const bool BgTaskRunSupported = true;
+#else
+    private const bool BgTaskRunSupported = false;
+#endif
+
     /// <summary>
     /// Turns a BGTaskSchedulerErrorDomain code into the thing you actually need to go fix.
     /// The three codes have completely different causes and conflating them sends people
