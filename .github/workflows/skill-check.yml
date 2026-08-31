@@ -38,7 +38,7 @@ jobs:
       - name: Verify .github/skills mirrors plugins/dotnet-maui/skills
         run: |
           status=0
-          for s in maui-devflow-test maui-devflow-debug maui-devflow-onboard maui-devflow-session-review maui-devflow-artifact maui-devflow-ci-triage; do
+          for s in maui-devflow-test maui-devflow-debug maui-devflow-onboard maui-devflow-session-review maui-devflow-artifact maui-devflow-ci-triage maui-devflow-ci-fix; do
             if ! diff -r --strip-trailing-cr "plugins/dotnet-maui/skills/$s" ".github/skills/$s"; then
               echo "::error::$s drifted between plugins/dotnet-maui/skills and .github/skills; plugins/ is canonical."
               status=1

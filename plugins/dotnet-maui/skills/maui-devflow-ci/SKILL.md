@@ -7,7 +7,7 @@ description: >-
   device jobs; artifact naming and retention for flow-run and .mauitrace
   evidence; splitting untrusted execution from a trusted `workflow_run`
   publisher. DO NOT USE FOR: diagnosing an already-red CI run (use
-  maui-devflow-ci-triage); running flows locally (use maui-devflow-run-cli);
+  maui-devflow-ci-triage); running flows locally (use `maui devflow flow`);
   authoring or repairing flows (use maui-devflow-test); promoting a recording
   (use maui-devflow-record); or general repository CI unrelated to DevFlow.
 ---
@@ -33,7 +33,7 @@ without handing a PR author a write token.
 | Situation | Use instead |
 | --- | --- |
 | Diagnosing an already-red run | `maui-devflow-ci-triage` |
-| Running flows locally | `maui-devflow-run-cli` |
+| Running flows locally | `maui devflow flow` commands |
 | Authoring or repairing flows | `maui-devflow-test` |
 | Promoting a recording | `maui-devflow-record` |
 | Repository CI unrelated to DevFlow | none of these skills |

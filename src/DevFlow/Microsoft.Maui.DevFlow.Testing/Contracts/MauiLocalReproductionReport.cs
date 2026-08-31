@@ -20,6 +20,7 @@ public sealed class MauiLocalReproductionReport
     [JsonPropertyName("localReportDigest")] public string? LocalReportDigest { get; set; }
     [JsonPropertyName("matched")] public bool Matched { get; set; }
     [JsonPropertyName("trustState")] public string TrustState { get; set; } = MauiArtifactTrustStates.Untrusted;
+    [JsonPropertyName("failureCorrespondence")] public string FailureCorrespondence { get; set; } = "indeterminate";
     [JsonPropertyName("reasonCodes")] public List<string> ReasonCodes { get; set; } = [];
     [JsonPropertyName("missingFacts")] public List<string> MissingFacts { get; set; } = [];
     [JsonPropertyName("importedFailureFingerprint")] public string? ImportedFailureFingerprint { get; set; }
@@ -72,6 +73,8 @@ public static class MauiLocalReproductionReportSerializer
                 : requestedTrust;
         var artifacts = MauiTestExecutionManifestSerializer.CreateSafeProjection(
             new MauiTestExecutionManifest { Artifacts = report.LocalArtifacts ?? [] }).Artifacts;
+        var reasonCodes = SafeCodes(report.ReasonCodes);
+        var missingFacts = SafeCodes(report.MissingFacts);
 
         return new MauiLocalReproductionReport
         {
@@ -102,8 +105,9 @@ public static class MauiLocalReproductionReportSerializer
                 "local-report"),
             Matched = matched,
             TrustState = trust,
-            ReasonCodes = SafeCodes(report.ReasonCodes),
-            MissingFacts = SafeCodes(report.MissingFacts),
+            FailureCorrespondence = GetFailureCorrespondence(reasonCodes, missingFacts),
+            ReasonCodes = reasonCodes,
+            MissingFacts = missingFacts,
             ImportedFailureFingerprint = SafeFingerprint(
                 report.ImportedFailureFingerprint,
                 "imported-failure"),
@@ -168,4 +172,46 @@ public static class MauiLocalReproductionReportSerializer
 
     private static string? SafeFingerprint(string? value, string domain)
         => MauiTestingContractRedactor.Fingerprint(value, domain);
+
+    private static string GetFailureCorrespondence(
+        IReadOnlyCollection<string> reasonCodes,
+        IReadOnlyCollection<string> missingFacts)
+    {
+        var same = reasonCodes.Contains("locally-reproduced", StringComparer.Ordinal) ||
+            reasonCodes.Contains("failure-correspondence-same", StringComparer.Ordinal);
+        var different = reasonCodes.Any(static code => code is
+            "failureCode-mismatch" or
+            "failureClass-mismatch" or
+            "failureStep-mismatch" or
+            "expectedCheckpoint-mismatch" or
+            "observedCheckpoint-mismatch");
+        var noLocalFailure = missingFacts.Contains("localFailure", StringComparer.Ordinal);
+        var identityMismatch = reasonCodes.Any(static code => code is
+            "flowDigest-mismatch" or
+            "appSourceFingerprint-mismatch" or
+            "platform-mismatch" or
+            "runtimeProfile-mismatch");
+        var missingFailureFact = missingFacts.Any(static fact =>
+            fact.Equals("failure", StringComparison.Ordinal) ||
+            fact.StartsWith("imported.failure", StringComparison.Ordinal) ||
+            fact.StartsWith("local.failure", StringComparison.Ordinal) ||
+            fact.StartsWith("imported.expectedCheckpoint", StringComparison.Ordinal) ||
+            fact.StartsWith("local.expectedCheckpoint", StringComparison.Ordinal) ||
+            fact.StartsWith("imported.observedCheckpoint", StringComparison.Ordinal) ||
+            fact.StartsWith("local.observedCheckpoint", StringComparison.Ordinal));
+        var missingIdentityFact = missingFacts.Any(static fact =>
+            fact.EndsWith("flowDigest", StringComparison.Ordinal) ||
+            fact.EndsWith("appSourceFingerprint", StringComparison.Ordinal) ||
+            fact.EndsWith("platform", StringComparison.Ordinal) ||
+            fact.EndsWith("runtimeProfile", StringComparison.Ordinal));
+
+        var states = (same ? 1 : 0) + (different ? 1 : 0) + (noLocalFailure ? 1 : 0);
+        if (states != 1 || missingFailureFact || identityMismatch || missingIdentityFact)
+            return "indeterminate";
+        if (different)
+            return "different-failure";
+        if (noLocalFailure)
+            return "no-local-failure";
+        return "same-failure";
+    }
 }

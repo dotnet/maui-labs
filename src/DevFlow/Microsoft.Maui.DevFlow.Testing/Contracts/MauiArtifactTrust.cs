@@ -826,7 +826,15 @@ public static class MauiArtifactTrustEvaluator
             current.RuntimeProfileFingerprint,
             localRun.RuntimeProfileFingerprint,
             result);
-        matched &= MatchesFailure(projection.Failure, localRun.Failure, result);
+        var failureMatched = MatchesFailure(projection.Failure, localRun.Failure, result);
+        matched &= failureMatched;
+        if (failureMatched)
+        {
+            result.Reasons.Add(Reason(
+                "failure-correspondence-same",
+                "The imported and local failure code, class, step, and checkpoints matched.",
+                blocking: false));
+        }
         if (!matched)
         {
             binding.Verification = result;
