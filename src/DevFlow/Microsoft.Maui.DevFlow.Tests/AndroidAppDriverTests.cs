@@ -99,6 +99,20 @@ public class AndroidAppDriverAdbTests
         Assert.Equal("emulator-5556", Assert.Single(adbRunner.ReversePortCalls).Serial);
     }
 
+    [Fact]
+    public async Task SetupPlatformAsync_UnsafeAndroidSerial_ReportsEnvironmentVariable()
+    {
+        var adbRunner = new RecordingAdbRunner();
+        using var driver = new TestAndroidAppDriver(
+            _ => adbRunner,
+            () => "emulator-5554\" shell rm /sdcard/victim \"");
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => driver.SetupAsync(19223));
+
+        Assert.Equal("ANDROID_SERIAL", exception.ParamName);
+        Assert.Empty(adbRunner.ReversePortCalls);
+    }
+
     private sealed class TestAndroidAppDriver(
         Func<string, AdbRunner> createAdbRunner,
         Func<string?>? getDefaultSerial = null)

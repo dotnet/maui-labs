@@ -458,17 +458,17 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
     private async Task<string> ResolveSerialAsync()
     {
         if (Serial is not null)
-            return ValidateSerial(Serial);
+            return ValidateSerial(Serial, nameof(Serial));
 
         var defaultSerial = _getDefaultSerial();
         if (!string.IsNullOrWhiteSpace(defaultSerial))
-            return ValidateSerial(defaultSerial);
+            return ValidateSerial(defaultSerial, "ANDROID_SERIAL");
 
         var devices = await GetAdbRunner().ListDevicesAsync().ConfigureAwait(false);
         var connected = devices.Where(device => device.Status == AdbDeviceStatus.Online).ToArray();
         return connected.Length switch
         {
-            1 => ValidateSerial(connected[0].Serial),
+            1 => ValidateSerial(connected[0].Serial, "deviceSerial"),
             0 => throw new InvalidOperationException("No connected Android devices found."),
             _ => throw new InvalidOperationException("More than one Android device is connected. Set Serial to select a device."),
         };
@@ -524,13 +524,13 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
         return result;
     }
 
-    private static string ValidateSerial(string serial)
+    private static string ValidateSerial(string serial, string paramName)
     {
         if (string.IsNullOrWhiteSpace(serial) || serial.Any(character => !IsSerialCharacter(character)))
         {
             throw new ArgumentException(
                 "Android device serials may contain only ASCII letters, digits, periods, hyphens, underscores, colons, brackets, and percent signs.",
-                nameof(Serial));
+                paramName);
         }
 
         return serial;
