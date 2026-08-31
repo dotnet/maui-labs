@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
 
 namespace Microsoft.Maui.Build.AppProjectReference.Tests;
 
@@ -148,6 +149,88 @@ public sealed class BuildTargetsTests
 
         var artifactsText = File.ReadAllText(Path.Combine(workspace.TestProjectDirectory, "maui-test-app-artifacts.txt"));
         Assert.DoesNotContain($"{Path.DirectorySeparatorChar}{Path.DirectorySeparatorChar}bin", artifactsText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task NestedBuild_RemovesHostTargetFrameworkAndRuntimeIdentifierFromAppGraph()
+    {
+        using var workspace = TestWorkspace.Create();
+        var isolation = workspace.WriteGlobalPropertyIsolationProjects();
+
+        var result = await RunDotNetAsync(
+            workspace.Root,
+            "msbuild",
+            isolation.HostProject,
+            "-t:BuildAppProjectReferences",
+            "-v:minimal",
+            "-p:RestorePackagesPath=" + Path.Combine(workspace.Root, "packages"));
+
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.Equal("net10.0|", File.ReadAllText(isolation.AppFacts).Trim());
+        Assert.Equal("net10.0|", File.ReadAllText(isolation.LibraryFacts).Trim());
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("win-x64")]
+    public async Task NestedBuild_DoesNotRewriteSharedRestoreStateOfTransitiveReferences(string? runtimeIdentifier)
+    {
+        if (runtimeIdentifier is not null && !OperatingSystem.IsWindows())
+            return;
+
+        using var workspace = TestWorkspace.Create();
+        var isolation = workspace.WriteSharedRestoreStateProjects(runtimeIdentifier);
+
+        var result = await RunDotNetAsync(
+            workspace.Root,
+            "msbuild",
+            isolation.HostProject,
+            "-t:BuildAppProjectReferences",
+            "-v:minimal",
+            // A caller-supplied global TargetFramework has to be removed for restore too,
+            // otherwise it reaches the whole ProjectReference closure.
+            "-p:TargetFramework=net10.0",
+            "-p:RestorePackagesPath=" + Path.Combine(workspace.Root, "packages"));
+
+        Assert.True(result.ExitCode == 0, result.Output);
+
+        var libraryAssets = Path.Combine(isolation.SharedIntermediateRoot, "Library", "project.assets.json");
+        Assert.True(File.Exists(libraryAssets), result.Output);
+        using var assets = JsonDocument.Parse(File.ReadAllText(libraryAssets));
+        var targets = assets.RootElement
+            .GetProperty("targets")
+            .EnumerateObject()
+            .Select(static target => target.Name)
+            .ToArray();
+        // Building an app reference must not rewrite a transitive library's restore assets with
+        // the app's framework: doing so breaks the next plain build with NETSDK1005. A RID-scoped
+        // restore may add a RID target, but the library's own framework target has to survive.
+        Assert.Contains(targets, static target => target.StartsWith("netstandard2.0", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(targets, static target => target.Contains("net10.0", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task MultiTargetAppReference_PreservesExplicitChildTargetFramework()
+    {
+        using var workspace = TestWorkspace.Create();
+        workspace.WriteProjects(
+            """
+            <MauiAppProjectReference Include="..\App\App.csproj"
+                                     TargetFramework="net10.0"
+                                     ReferenceName="MultiTargetApp" />
+            """,
+            appTargetFrameworks: "net9.0;net10.0");
+
+        var result = await RunDotNetAsync(
+            workspace.TestProjectDirectory,
+            "msbuild",
+            workspace.TestProjectPath,
+            "-t:BuildAppProjectReferences",
+            "-v:minimal",
+            "-p:RestorePackagesPath=" + Path.Combine(workspace.Root, "packages"));
+
+        Assert.True(result.ExitCode == 0, result.Output);
+        AssertArtifactItem(workspace, expectedName: "MultiTargetApp", expectedTargetFramework: "net10.0");
     }
 
     [Fact]
@@ -405,7 +488,8 @@ public sealed class BuildTargetsTests
         bool expectedInstallable = false,
         bool expectedLaunchable = false,
         bool expectSingleArtifact = true,
-        bool expectedArtifactIsDirectory = false)
+        bool expectedArtifactIsDirectory = false,
+        string expectedTargetFramework = "net10.0")
     {
         var artifactsPath = Path.Combine(workspace.TestProjectDirectory, "maui-test-app-artifacts.txt");
         Assert.True(File.Exists(artifactsPath), "Expected artifact capture at " + artifactsPath);
@@ -429,7 +513,7 @@ public sealed class BuildTargetsTests
             Assert.True(File.Exists(parts[1]), "Expected app artifact file at " + parts[1]);
 
         Assert.Equal(Path.GetFullPath(workspace.AppProjectPath), Path.GetFullPath(parts[2]));
-        Assert.Equal("net10.0", parts[3]);
+        Assert.Equal(expectedTargetFramework, parts[3]);
         Assert.Equal(expectedArtifactType, parts[4]);
         Assert.Equal("com.example.testapp", parts[5]);
         Assert.Equal(expectedInstallable.ToString().ToLowerInvariant(), parts[6]);
@@ -545,17 +629,21 @@ public sealed class BuildTargetsTests
             return new TestWorkspace(root);
         }
 
-        public void WriteProjects(string projectReferenceXml, string? customAfterTargetsXml = null, bool setOutputRoot = true)
+        public void WriteProjects(
+            string projectReferenceXml,
+            string? customAfterTargetsXml = null,
+            bool setOutputRoot = true,
+            string appTargetFrameworks = "net10.0")
         {
             Directory.CreateDirectory(AppProjectDirectory);
             Directory.CreateDirectory(TestProjectDirectory);
 
             File.WriteAllText(
                 AppProjectPath,
-                """
+                $$"""
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
-                    <TargetFramework>net10.0</TargetFramework>
+                    <TargetFrameworks>{{appTargetFrameworks}}</TargetFrameworks>
                     <OutputType>Exe</OutputType>
                     <ApplicationId>com.example.testapp</ApplicationId>
                   </PropertyGroup>
@@ -626,6 +714,161 @@ public sealed class BuildTargetsTests
                   <Import Project="{{XmlEscape(targetsPath)}}" />
                 </Project>
                 """);
+        }
+
+        public (string HostProject, string AppFacts, string LibraryFacts) WriteGlobalPropertyIsolationProjects()
+        {
+            var libraryDirectory = Path.Combine(Root, "Library");
+            var hostDirectory = Path.Combine(Root, "Host");
+            Directory.CreateDirectory(AppProjectDirectory);
+            Directory.CreateDirectory(libraryDirectory);
+            Directory.CreateDirectory(hostDirectory);
+
+            var appFacts = Path.Combine(AppProjectDirectory, "build-facts.txt");
+            var libraryFacts = Path.Combine(libraryDirectory, "build-facts.txt");
+            var libraryProject = Path.Combine(libraryDirectory, "Library.csproj");
+            File.WriteAllText(
+                libraryProject,
+                $$"""
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net10.0</TargetFramework>
+                  </PropertyGroup>
+                  <Target Name="CaptureBuildFacts" AfterTargets="Build">
+                    <WriteLinesToFile File="{{XmlEscape(libraryFacts)}}"
+                                      Lines="$(TargetFramework)|$(RuntimeIdentifier)"
+                                      Overwrite="true" />
+                  </Target>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(libraryDirectory, "Class1.cs"), "public sealed class Class1 { }");
+
+            File.WriteAllText(
+                AppProjectPath,
+                $$"""
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net10.0</TargetFramework>
+                    <OutputType>Exe</OutputType>
+                    <ApplicationId>com.example.isolation</ApplicationId>
+                  </PropertyGroup>
+                  <ItemGroup>
+                    <ProjectReference Include="{{XmlEscape(libraryProject)}}" />
+                  </ItemGroup>
+                  <Target Name="CaptureBuildFacts" AfterTargets="Build">
+                    <WriteLinesToFile File="{{XmlEscape(appFacts)}}"
+                                      Lines="$(TargetFramework)|$(RuntimeIdentifier)"
+                                      Overwrite="true" />
+                  </Target>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(AppProjectDirectory, "Program.cs"), "System.Console.WriteLine(typeof(Class1).Name);");
+
+            var repoRoot = FindRepoRoot();
+            var propsPath = Path.Combine(repoRoot, "src", "AppProjectReference", "Microsoft.Maui.Build.AppProjectReference", "build", "Microsoft.Maui.Build.AppProjectReference.props");
+            var targetsPath = Path.Combine(repoRoot, "src", "AppProjectReference", "Microsoft.Maui.Build.AppProjectReference", "build", "Microsoft.Maui.Build.AppProjectReference.targets");
+            var hostProject = Path.Combine(hostDirectory, "Host.proj");
+            File.WriteAllText(
+                hostProject,
+                $$"""
+                <Project>
+                  <Import Project="{{XmlEscape(propsPath)}}" />
+                  <PropertyGroup>
+                    <TargetFramework>root-tfm-must-not-flow</TargetFramework>
+                    <TargetFrameworks>root-tfm-a;root-tfm-b</TargetFrameworks>
+                    <RuntimeIdentifier>root-rid-must-not-flow</RuntimeIdentifier>
+                    <Configuration>Debug</Configuration>
+                    <MauiAppRefOutputRoot>{{XmlEscape(Path.Combine(Root, "isolated-output") + Path.DirectorySeparatorChar)}}</MauiAppRefOutputRoot>
+                  </PropertyGroup>
+                  <ItemGroup>
+                    <MauiAppProjectReference Include="{{XmlEscape(AppProjectPath)}}"
+                                             TargetFramework="net10.0"
+                                             SetPlatformOutputPaths="false" />
+                  </ItemGroup>
+                  <Import Project="{{XmlEscape(targetsPath)}}" />
+                </Project>
+                """);
+
+            return (hostProject, appFacts, libraryFacts);
+        }
+
+        public (string HostProject, string SharedIntermediateRoot) WriteSharedRestoreStateProjects(
+            string? runtimeIdentifier = null)
+        {
+            var libraryDirectory = Path.Combine(Root, "Library");
+            var hostDirectory = Path.Combine(Root, "Host");
+            Directory.CreateDirectory(AppProjectDirectory);
+            Directory.CreateDirectory(libraryDirectory);
+            Directory.CreateDirectory(hostDirectory);
+
+            var sharedIntermediateRoot = Path.Combine(Root, "shared-obj");
+            // Mirrors a repository that centralizes intermediate output (for example Arcade's
+            // artifacts/obj): every project in the graph restores into one shared location.
+            File.WriteAllText(
+                Path.Combine(Root, "Directory.Build.props"),
+                """
+                <Project>
+                  <PropertyGroup>
+                    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)shared-obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+                    <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
+                  </PropertyGroup>
+                </Project>
+                """.Replace('\\', Path.DirectorySeparatorChar));
+
+            var libraryProject = Path.Combine(libraryDirectory, "Library.csproj");
+            File.WriteAllText(
+                libraryProject,
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>netstandard2.0</TargetFramework>
+                  </PropertyGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(libraryDirectory, "Class1.cs"), "public sealed class Class1 { }");
+
+            File.WriteAllText(
+                AppProjectPath,
+                $$"""
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net10.0</TargetFramework>
+                    <OutputType>Exe</OutputType>
+                    <ApplicationId>com.example.sharedrestore</ApplicationId>
+                  </PropertyGroup>
+                  <ItemGroup>
+                    <ProjectReference Include="{{XmlEscape(libraryProject)}}" />
+                  </ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(AppProjectDirectory, "Program.cs"), "System.Console.WriteLine(typeof(Class1).Name);");
+
+            var repoRoot = FindRepoRoot();
+            var propsPath = Path.Combine(repoRoot, "src", "AppProjectReference", "Microsoft.Maui.Build.AppProjectReference", "build", "Microsoft.Maui.Build.AppProjectReference.props");
+            var targetsPath = Path.Combine(repoRoot, "src", "AppProjectReference", "Microsoft.Maui.Build.AppProjectReference", "build", "Microsoft.Maui.Build.AppProjectReference.targets");
+            var hostProject = Path.Combine(hostDirectory, "Host.proj");
+            var runtimeIdentifierMetadata = runtimeIdentifier is null
+                ? ""
+                : $"{Environment.NewLine}                                             RuntimeIdentifier=\"{XmlEscape(runtimeIdentifier)}\"";
+            File.WriteAllText(
+                hostProject,
+                $$"""
+                <Project>
+                  <Import Project="{{XmlEscape(propsPath)}}" />
+                  <PropertyGroup>
+                    <Configuration>Debug</Configuration>
+                    <MauiAppRefOutputRoot>{{XmlEscape(Path.Combine(Root, "shared-restore-output") + Path.DirectorySeparatorChar)}}</MauiAppRefOutputRoot>
+                  </PropertyGroup>
+                  <ItemGroup>
+                    <MauiAppProjectReference Include="{{XmlEscape(AppProjectPath)}}"
+                                             TargetFramework="net10.0"{{runtimeIdentifierMetadata}}
+                                             SetPlatformOutputPaths="false" />
+                  </ItemGroup>
+                  <Import Project="{{XmlEscape(targetsPath)}}" />
+                </Project>
+                """);
+
+            return (hostProject, sharedIntermediateRoot);
         }
 
         public void Dispose()
