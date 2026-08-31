@@ -226,6 +226,7 @@ public sealed class TestAgentFailureTool
         var admissionRefused = !nonReplayable && Bool(admission, "repairEligibility") == false;
         var admissionReasons = Array(admission, "reasons")
             .Select(reason => String(reason, "code"))
+            .OfType<string>()
             .Where(static code => !string.IsNullOrWhiteSpace(code))
             .Distinct(StringComparer.Ordinal)
             .Take(6)
