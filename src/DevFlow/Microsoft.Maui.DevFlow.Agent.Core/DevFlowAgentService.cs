@@ -2839,7 +2839,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             return HttpResponse.Error("value is required");
 
         var startedAtUtc = DateTime.UtcNow;
-        var result = await DispatchAsync(async () =>
+        var result = await DispatchAsync(() =>
         {
             var el = _treeWalker.GetElementById(id, _app);
             if (el == null)
@@ -3188,7 +3188,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                 default:
                     return $"Unhandled type: {el.GetType().FullName}";
             }
-        });
+        }) ?? "Tap failed without a result.";
 
         PublishUiOperationSpan(
             "action.tap",
@@ -3546,7 +3546,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             return nativeResult == "ok" ? HttpResponse.Ok("Text set") : HttpResponse.Error(nativeResult);
         }
 
-        var result = await DispatchAsync(async () =>
+        var result = await DispatchAsync(() =>
         {
             var el = _treeWalker.GetElementById(body.ElementId, _app);
             if (el == null) return "Element not found";
@@ -3801,7 +3801,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
         var startedAtUtc = DateTime.UtcNow;
         var windowIndex = ParseWindowIndex(request);
-        var result = await DispatchAsync(async () =>
+        var result = await DispatchAsync(() =>
         {
             var window = GetWindow(windowIndex);
             if (window?.Handler?.PlatformView == null)
