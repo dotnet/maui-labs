@@ -154,6 +154,22 @@ public sealed partial class DevFlowFailureHandoffScriptTests
         Assert.Contains("loopback-test-api-requires-verify-only", script, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Publisher_RoutesQualifiedIssuesToTheLocalCiFixSkill()
+    {
+        var script = File.ReadAllText(
+            Path.Combine(_repositoryRoot, "eng", "devflow", "Publish-DevFlowFailureIssue.ps1"));
+
+        Assert.Contains("use the `maui-devflow-ci-fix` skill", script, StringComparison.Ordinal);
+        Assert.Contains("maui devflow init --scope project --target github", script, StringComparison.Ordinal);
+        Assert.Contains("leaves the worktree uncommitted for developer review", script, StringComparison.Ordinal);
+        Assert.Contains("reproduces before editing", script, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "assign it to Copilot and select the `devflow-ci-repair` agent",
+            script,
+            StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// The header builder is loaded from the shipped script source and asked to build a header for
     /// a sentinel credential. The comparison happens inside the probe so the assertion can prove

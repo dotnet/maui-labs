@@ -33,6 +33,7 @@ public sealed class DevFlowSkillOutputTests
         Assert.Contains("Next prompt for your AI agent", output);
         Assert.Contains("maui-devflow-onboard", output);
         Assert.Contains("maui-devflow-debug", output);
+        Assert.Contains("maui-devflow-ci-fix", output);
         Assert.Contains("maui-devflow-session-review", output);
         Assert.DoesNotContain("maui-devflow-test", output);
         Assert.DoesNotContain("maui-devflow-artifact", output);

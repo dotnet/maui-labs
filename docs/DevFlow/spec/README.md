@@ -62,9 +62,11 @@ intentionally about the contract, not device qualification.
   actions, stable fingerprints, fixed-code explanation, and a safe execution-manifest projection.
   It never copies arbitrary exception, log, prompt, app, or device text into trusted output.
 - [Local reproduction v1](schemas/maui-local-reproduction-v1.json) — the imported artifact digest
-  and broker-minted opaque identity, local manifest/report digests, failure and checkpoint
-  fingerprints, exact-match reasons, and confined local artifact references. It explicitly records
-  that no broker binding, proposal, approval, apply, validation, or rollback authority was persisted.
+  and broker-minted opaque identity, local manifest/report digests, derived failure correspondence,
+  failure and checkpoint fingerprints, exact-match reasons, and confined local artifact references.
+  It explicitly records that no broker binding, proposal, approval, apply, validation, or rollback
+  authority was persisted. Failure correspondence may guide ordinary developer worktree diagnosis
+  but never upgrades artifact trust or authorizes broker repair.
 - [Artifact trust v1](schemas/maui-artifact-trust-v1.json) — provider-neutral imported-artifact
   identity namespace, integrity-only facts, provenance policy/verification outcomes, safe
   projection, and local-reproduction binding. It defines `untrusted`, `attested`, and

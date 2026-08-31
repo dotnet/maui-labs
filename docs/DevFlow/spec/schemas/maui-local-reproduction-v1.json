@@ -9,6 +9,7 @@
     "importTrustState",
     "matched",
     "trustState",
+    "failureCorrespondence",
     "reasonCodes",
     "missingFacts",
     "localArtifacts",
@@ -60,6 +61,15 @@
         "untrusted",
         "attested",
         "locally-reproduced"
+      ]
+    },
+    "failureCorrespondence": {
+      "description": "Whether the imported and fresh local failure code, class, step, and checkpoints correspond. This is developer-lane evidence only and grants no broker repair authority.",
+      "enum": [
+        "same-failure",
+        "different-failure",
+        "no-local-failure",
+        "indeterminate"
       ]
     },
     "reasonCodes": {

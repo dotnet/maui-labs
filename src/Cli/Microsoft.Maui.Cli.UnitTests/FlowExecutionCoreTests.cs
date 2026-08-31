@@ -2818,6 +2818,19 @@ public sealed class FlowExecutionCoreTests
             Assert.Equal(FlowExecutionCleanupPolicies.Uninstall, fake.Request?.Execution.CleanupPolicy);
             Assert.True(result.ParseJsonOutput().GetProperty("matched").GetBoolean());
             Assert.False(result.ParseJsonOutput().GetProperty("approvalGranted").GetBoolean());
+
+            var human = await cli.InvokeRawAsync(
+                "devflow", "flow", "reproduce", "maui-tests\\checkout.md",
+                "--import", "downloaded\\flow-run.json",
+                "--project", "src\\App\\App.csproj",
+                "--device", "emulator-5554",
+                "--output", "artifacts\\reproduction-human",
+                "--no-json");
+
+            Assert.Equal(0, human.ExitCode);
+            Assert.Contains("Failure correspondence: same-failure", human.StdOut, StringComparison.Ordinal);
+            Assert.Contains("Developer lane:", human.StdOut, StringComparison.Ordinal);
+            Assert.Contains("leave the worktree uncommitted", human.StdOut, StringComparison.Ordinal);
         }
         finally
         {
