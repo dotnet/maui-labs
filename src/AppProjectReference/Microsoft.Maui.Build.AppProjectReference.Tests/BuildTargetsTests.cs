@@ -234,6 +234,110 @@ public sealed class BuildTargetsTests
     }
 
     [Fact]
+    public async Task AndroidReference_RequestsSelfContainedPackage()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var properties = await ResolveAppProjectReferencePropertiesAsync(
+            workspace,
+            """
+            <MauiAppProjectReference Include="..\App\App.csproj"
+                                     TargetFramework="net10.0-android"
+                                     ReferenceName="AndroidApp" />
+            """);
+
+        Assert.Contains("EmbedAssembliesIntoApk=true", properties, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task NonAndroidReference_DoesNotRequestSelfContainedPackage()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var properties = await ResolveAppProjectReferencePropertiesAsync(
+            workspace,
+            """
+            <MauiAppProjectReference Include="..\App\App.csproj"
+                                     TargetFramework="net10.0"
+                                     ReferenceName="DesktopApp" />
+            """);
+
+        Assert.DoesNotContain("EmbedAssembliesIntoApk", properties, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("EmbedAssembliesIntoApk=false")]
+    [InlineData("embedassembliesintoapk=false")]
+    public async Task AndroidReference_KeepsCallerSuppliedEmbedAssembliesValue(string property)
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var properties = await ResolveAppProjectReferencePropertiesAsync(
+            workspace,
+            $$"""
+            <MauiAppProjectReference Include="..\App\App.csproj"
+                                     TargetFramework="net10.0-android"
+                                     ReferenceName="AndroidApp"
+                                     Properties="{{property}}" />
+            """);
+
+        Assert.Contains(property, properties, StringComparison.Ordinal);
+        Assert.DoesNotContain("EmbedAssembliesIntoApk=true", properties, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AndroidReference_SimilarlyNamedProperty_DoesNotSuppressSelfContainedPackage()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var properties = await ResolveAppProjectReferencePropertiesAsync(
+            workspace,
+            """
+            <MauiAppProjectReference Include="..\App\App.csproj"
+                                     TargetFramework="net10.0-android"
+                                     ReferenceName="AndroidApp"
+                                     Properties="MyEmbedAssembliesIntoApkOverride=true" />
+            """);
+
+        Assert.Contains("EmbedAssembliesIntoApk=true", properties, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AndroidReference_HonorsGlobalSelfContainedPackageOptOut()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var properties = await ResolveAppProjectReferencePropertiesAsync(
+            workspace,
+            """
+            <MauiAppProjectReference Include="..\App\App.csproj"
+                                     TargetFramework="net10.0-android"
+                                     ReferenceName="AndroidApp" />
+            """,
+            "-p:MauiAppRefAndroidEmbedAssembliesIntoApk=false");
+
+        Assert.DoesNotContain("EmbedAssembliesIntoApk", properties, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AppTargets_DeclareTypedAndroidSigningState()
+    {
+        var appTargets = File.ReadAllText(Path.Combine(
+            TestWorkspace.FindRepoRoot(),
+            "src",
+            "AppProjectReference",
+            "Microsoft.Maui.Build.AppProjectReference",
+            "build",
+            "Microsoft.Maui.Build.AppProjectReference.App.targets"));
+
+        Assert.Contains("<_MauiAppAndroidUnsignedApkFullPath", appTargets, StringComparison.Ordinal);
+        Assert.Contains("<_MauiAppAndroidSignedApkFullPath", appTargets, StringComparison.Ordinal);
+        Assert.Contains("<SigningState>not-applicable</SigningState>", appTargets, StringComparison.Ordinal);
+        Assert.Contains(">unsigned</SigningState>", appTargets, StringComparison.Ordinal);
+        Assert.Contains(">signed</SigningState>", appTargets, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ProjectReferenceWithAppBundleDirectory_ExposesAppArtifactItem()
     {
         using var workspace = TestWorkspace.Create();
@@ -481,6 +585,30 @@ public sealed class BuildTargetsTests
             "-p:RestorePackagesPath=" + Path.Combine(workspace.Root, "packages"));
     }
 
+    private static async Task<string> ResolveAppProjectReferencePropertiesAsync(
+        TestWorkspace workspace,
+        string projectReferenceXml,
+        params string[] additionalArguments)
+    {
+        workspace.WriteProjects(projectReferenceXml);
+
+        var arguments = new List<string>
+        {
+            "msbuild",
+            workspace.TestProjectPath,
+            "-t:ProbeResolvedAppProjectReferenceProperties",
+            "-v:minimal",
+            "-p:RestorePackagesPath=" + Path.Combine(workspace.Root, "packages"),
+        };
+        arguments.AddRange(additionalArguments);
+
+        var result = await RunDotNetAsync(workspace.Root, [.. arguments]);
+        Assert.True(result.ExitCode == 0, result.Output);
+
+        return File.ReadAllText(
+            Path.Combine(workspace.TestProjectDirectory, "maui-test-app-resolved-properties.txt"));
+    }
+
     private static void AssertArtifactItem(
         TestWorkspace workspace,
         string expectedName,
@@ -711,6 +839,13 @@ public sealed class BuildTargetsTests
                                       Overwrite="true" />
                   </Target>
 
+                  <Target Name="ProbeResolvedAppProjectReferenceProperties"
+                          DependsOnTargets="ResolveAppProjectReferences">
+                    <WriteLinesToFile File="$(MSBuildProjectDirectory)\maui-test-app-resolved-properties.txt"
+                                      Lines="@(_ResolvedMauiAppProjectReference->'%(AdditionalProperties)')"
+                                      Overwrite="true" />
+                  </Target>
+
                   <Import Project="{{XmlEscape(targetsPath)}}" />
                 </Project>
                 """);
@@ -886,7 +1021,7 @@ public sealed class BuildTargetsTests
             }
         }
 
-        private static string FindRepoRoot()
+        public static string FindRepoRoot()
         {
             var directory = new DirectoryInfo(AppContext.BaseDirectory);
             while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "MauiLabs.slnx")))
