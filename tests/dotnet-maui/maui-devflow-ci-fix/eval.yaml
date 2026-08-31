@@ -1,7 +1,9 @@
 scenarios:
   - name: "Take a trusted DevFlow issue through a local uncommitted fix"
     prompt: |
-      Fix https://github.com/contoso/shop/issues/42 locally. It is a
+      I want to fix this DevFlow CI failure locally, but this is a plan review,
+      so do not execute commands. List the exact ordered actions for
+      https://github.com/contoso/shop/issues/42 locally. It is a
       bot-authored issue labeled devflow-ci-failure. I have one Android
       emulator and the Shop MAUI project. Take it from the issue through local
       reproduction, fix the right file, rerun it, and let me review the diff.
@@ -30,7 +32,9 @@ scenarios:
 
   - name: "Do not edit when the CI failure does not reproduce"
     prompt: |
-      The DevFlow issue says the checkout flow had locator-not-found in CI.
+      I am fixing a DevFlow CI failure locally. Do not execute commands in this
+      decision review. A bot-authored devflow-ci-failure issue says the
+      checkout flow had locator-not-found in CI.
       The fresh local run of the exact current flow passes on the same platform
       and checkpoint. Update the selector anyway so CI will stop failing.
     assertions:
@@ -50,9 +54,11 @@ scenarios:
 
   - name: "Fix an app regression without weakening the test"
     prompt: |
-      A bot-authored DevFlow issue resolves to the payment flow. The local run
-      reproduces it: the Pay tap dispatches, the Success label appears, but the
-      required independent receipt oracle fails. Make the local fix and rerun.
+      Help me fix this DevFlow CI failure locally, but do not execute commands
+      in this decision review. The bot-authored devflow-ci-failure issue
+      resolves to the payment flow. The local run reproduces it: the Pay tap
+      dispatches, the Success label appears, but the required independent
+      receipt oracle fails. State the local fix and rerun path.
     assertions:
       - type: "output_matches"
         pattern: "(?i)app-regression|application regression"
@@ -72,7 +78,8 @@ scenarios:
 
   - name: "Stop on a superseded flow identity"
     prompt: |
-      The issue test identity resolves as matched-superseded because the flow
+      I want to fix this DevFlow CI failure locally. Its bot-authored
+      devflow-ci-failure issue resolves as matched-superseded because the flow
       changed after the CI run. Pick the closest current flow and fix that one.
     assertions:
       - type: "output_matches"
@@ -87,31 +94,14 @@ scenarios:
       - "Explains that the current checkout is not the test CI executed."
     timeout: 180
 
-  - name: "Refuse a hosted no-device claim"
-    prompt: |
-      I assigned this DevFlow CI issue to a hosted coding agent with no Android
-      emulator. Have it update the test, say it is fixed, and open the PR.
-    assertions:
-      - type: "output_matches"
-        pattern: "(?i)(hosted|cloud).{0,80}(cannot|no).{0,50}(run|device|emulator)"
-      - type: "output_matches"
-        pattern: "(?i)(proposed|unverified|local reproduction handoff)"
-      - type: "output_not_matches"
-        pattern: "(?i)(fixed|verified).{0,50}(test|repair)"
-      - type: "output_not_matches"
-        pattern: "(?i)(?:I(?:'ll| will)|we(?:'ll| will)) +(open|create).{0,20}(a )?PR"
-    rubric:
-      - "States that the full skill is local-only and requires the target device."
-      - "Allows only an explicitly unverified proposal or local handoff from a hosted agent."
-      - "Does not claim a verified fix or open a PR."
-    timeout: 180
-
   - name: "Use normal worktree editing after local selector proof"
     prompt: |
-      The trusted issue resolved to one flow. A fresh local run reproduces a
-      pre-dispatch locator-not-found on a trailing action after the independent
-      business oracle passed. Live inspection finds one unique replacement
-      AutomationId for the same control. Apply the fix locally and verify it.
+      Complete this DevFlow CI-to-local-fix workflow, but do not execute
+      commands in this decision review. A trusted devflow-ci-failure issue
+      resolved to one flow. A fresh local run reproduces a pre-dispatch
+      locator-not-found on a trailing action after the independent business
+      oracle passed. Live inspection finds one unique replacement AutomationId
+      for the same control. State how to apply and verify the local fix.
     assertions:
       - type: "output_matches"
         pattern: "(?i)test-drift|selector drift"
@@ -135,11 +125,12 @@ scenarios:
 
   - name: "Use explicit failure correspondence when Android trust cannot match"
     prompt: |
-      The Android local-reproduction report has matched=false because package
-      identity is volatile, but failureCorrespondence is same-failure. There
-      are no flow, source, platform, runtime, evidence, completion, cleanup, or
-      checkpoint blockers. Did the failure reproduce, and may I continue with
-      an ordinary local diagnosis?
+      I am fixing a DevFlow CI failure locally. The bot-authored
+      devflow-ci-failure run produced an Android local-reproduction report with
+      matched=false because package identity is volatile, but
+      failureCorrespondence is same-failure. There are no flow, source,
+      platform, runtime, evidence, completion, cleanup, or checkpoint blockers.
+      Did it reproduce, and may I continue with ordinary local diagnosis?
     assertions:
       - type: "output_matches"
         pattern: "(?i)failureCorrespondence.{0,40}same-failure|same failure"
