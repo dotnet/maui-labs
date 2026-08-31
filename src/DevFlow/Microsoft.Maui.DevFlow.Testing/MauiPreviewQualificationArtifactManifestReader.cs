@@ -78,7 +78,7 @@ public static class MauiPreviewQualificationArtifactManifestReader
 
             var manifestValid = !HasNonEmptyArray(root, "validationErrors");
             input.Evidence.ArtifactManifestValid = manifestValid;
-            input.Evidence.ArtifactReferencesComplete = ValidateArtifacts(root);
+            input.Evidence.ArtifactReferencesComplete = ReadArtifactReferences(root, input, result.Errors);
             var fixtureInitializationDiagnostic = ReadFixtureInitializationDiagnostic(root, input, result.Errors);
             ReadFlows(
                 root,
@@ -147,6 +147,19 @@ public static class MauiPreviewQualificationArtifactManifestReader
             var tier = ReadString(flow, "tier");
             var reportPresent = !string.IsNullOrWhiteSpace(ReadString(firstAttempt, "reportDigest")) ||
                 !string.IsNullOrWhiteSpace(ReadString(firstAttempt, "reportPath"));
+            var reportDigest = ReadString(firstAttempt, "reportDigest");
+            var reportPath = ReadString(firstAttempt, "reportPath");
+            if (!string.IsNullOrWhiteSpace(reportDigest) &&
+                !string.IsNullOrWhiteSpace(reportPath))
+            {
+                input.ArtifactRefs.Add(new MauiQualificationArtifactReference
+                {
+                    Kind = "report",
+                    Digest = reportDigest,
+                    Reference = reportPath,
+                    Redacted = true,
+                });
+            }
             input.Samples.Add(new MauiQualificationExecutionSample
             {
                 SampleId = MauiQualificationSanitizer.Fingerprint(ReadString(firstAttempt, "runId") ?? digest),
@@ -236,24 +249,51 @@ public static class MauiPreviewQualificationArtifactManifestReader
         return true;
     }
 
-    private static bool? ValidateArtifacts(JsonElement root)
+    private static bool? ReadArtifactReferences(
+        JsonElement root,
+        MauiPreviewQualificationInput input,
+        List<string> errors)
     {
         if (!root.TryGetProperty("artifacts", out var artifacts) || artifacts.ValueKind != JsonValueKind.Array)
             return null;
         if (artifacts.GetArrayLength() == 0)
             return false;
+        var complete = true;
         foreach (var artifact in artifacts.EnumerateArray())
         {
             if (artifact.ValueKind != JsonValueKind.Object ||
-                !TryGetString(artifact, "kind", out _) ||
-                !TryGetString(artifact, "sha256", out _) ||
+                !TryGetString(artifact, "kind", out var kind) ||
+                !TryGetString(artifact, "sha256", out var digest) ||
                 !artifact.TryGetProperty("sizeBytes", out var size) ||
                 size.ValueKind != JsonValueKind.Number)
             {
-                return false;
+                complete = false;
+                continue;
             }
+
+            if (kind is not ("flow-run-report" or "mauitrace"))
+                continue;
+
+            var path = ReadString(artifact, "path");
+            var redacted = ReadBoolean(artifact, "redacted");
+            if (string.IsNullOrWhiteSpace(path) ||
+                string.IsNullOrWhiteSpace(digest) ||
+                redacted != true)
+            {
+                complete = false;
+                errors.Add("artifact-manifest-evidence-reference-invalid");
+                continue;
+            }
+
+            input.ArtifactRefs.Add(new MauiQualificationArtifactReference
+            {
+                Kind = kind,
+                Digest = digest,
+                Reference = path,
+                Redacted = true,
+            });
         }
-        return true;
+        return complete;
     }
 
     private static string? NormalizeOutcome(string? value) => value switch

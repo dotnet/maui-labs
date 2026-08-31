@@ -37,7 +37,7 @@ param(
 
     [Int32] $PullRequestNumber = 0,
 
-    [ValidateSet('android-emulator-pilot', 'physical-device-flow-qa')]
+    [ValidateSet('android-emulator-pilot', 'demo-emulator-showcase', 'physical-device-flow-qa')]
     [string] $LaneKind = 'android-emulator-pilot',
 
     [switch] $VerifyOnly
@@ -62,17 +62,20 @@ $maximumArtifacts = 256
 $requiredQualificationGates = @(
     'android-device-overhead',
     'android-tier1-first-attempts',
+    'classification-accuracy',
     'confidence-calibration',
     'corpus-contract',
     'deterministic-host-performance',
     'independent-review',
     'preview-safety-flags',
     'privacy-security-escapes',
+    'product-analyzer-coverage',
     'repair-precision',
     'required-evidence',
     'selector-stability',
     'zero-false-heals'
 )
+$knownQualificationGates = @($requiredQualificationGates) + @('input-contract')
 $safeQualificationArtifactKinds = @(
     'android-host-diagnostics',
     'artifact',
@@ -120,6 +123,47 @@ $safeFailureValues = @(
     'unstable-bounds',
     'workflow-command-conflict'
 )
+
+# Exactly one lane profile is resolved for this invocation, and every lane-specific fact the
+# producer emits is read from it. The production lane is the only one that can ever emit a
+# qualified handoff; the demo lane exists to showcase the local CI-fix route from a deliberately
+# nonqualified Android emulator run and carries no repair authority at all. A lane with no profile
+# (the ordinary Android emulator pilot) never produces an archive.
+$laneProfiles = [ordered]@{
+    'physical-device-flow-qa' = [ordered]@{
+        laneKind = 'physical-device-flow-qa'
+        demo = $false
+        manifestSchema = 'devflow-ci-failure-manifest'
+        handoffSchema = 'devflow-ci-failure-handoff'
+        artifactBaseName = 'devflow-failure-handoff'
+        qualification = 'qualified'
+        requireQualificationPass = $true
+        requiredDeviceKinds = @('physical-device', 'real-device')
+        requiredRealDevice = $true
+        requiredPlatforms = $null
+        requiredSourceEvents = $null
+        requiredQualificationStatuses = $null
+        createdReason = 'qualified-incident'
+        rejectedReason = 'source-lane-not-qualifying'
+    }
+    'demo-emulator-showcase' = [ordered]@{
+        laneKind = 'demo-emulator-showcase'
+        demo = $true
+        manifestSchema = 'devflow-ci-demo-manifest'
+        handoffSchema = 'devflow-ci-demo-handoff'
+        artifactBaseName = 'devflow-demo-handoff'
+        qualification = 'not-qualified'
+        requireQualificationPass = $false
+        requiredDeviceKinds = @('emulator')
+        requiredRealDevice = $false
+        requiredPlatforms = @('android')
+        requiredSourceEvents = @('workflow_dispatch')
+        requiredQualificationStatuses = @('not-qualified', 'fail')
+        createdReason = 'demo-incident'
+        rejectedReason = 'demo-lane-not-qualifying'
+    }
+}
+$laneProfile = if ($laneProfiles.Contains($LaneKind)) { $laneProfiles[$LaneKind] } else { $null }
 
 function New-ProducerResult {
     param(
@@ -1043,7 +1087,7 @@ function Test-RateMetric {
     }
     foreach ($source in [System.Array] $Metric['sampleSources']) {
         if ($source -isnot [string] -or
-            [string] $source -cnotin @('curated', 'generated', 'device-backed')) {
+            [string] $source -cnotin @('curated', 'curated-derived', 'generated', 'device-backed')) {
             return $false
         }
     }
@@ -1106,8 +1150,8 @@ function Test-DurationMetric {
         -not (Test-RequiredString $Metric 'operation' 128) -or
         -not $Metric.Contains('sampleCount') -or
         -not (Test-JsonIntegerRange $Metric['sampleCount'] 0 $maximumMetricCount) -or
-        -not $Metric.Contains('missingReason') -or
-        ($null -ne $Metric['missingReason'] -and
+        ($Metric.Contains('missingReason') -and
+            $null -ne $Metric['missingReason'] -and
             ($Metric['missingReason'] -isnot [string] -or
                 ([string] $Metric['missingReason']).Length -gt 256))) {
         return $false
@@ -1128,6 +1172,11 @@ function Test-DurationMetric {
         }
     }
     elseif ($RequireMeasured) {
+        return $false
+    }
+    elseif (-not $Metric.Contains('missingReason') -or
+        $Metric['missingReason'] -isnot [string] -or
+        [string]::IsNullOrWhiteSpace([string] $Metric['missingReason'])) {
         return $false
     }
     return $true
@@ -1231,9 +1280,9 @@ function Test-QualificationMetrics {
             'reportP95Bytes',
             'traceP50Bytes',
             'traceP95Bytes')) {
-        if (-not $trace.Contains($field) -or
-            ($null -ne $trace[$field] -and
-                -not (Test-JsonNumberRange $trace[$field] 0 $maximumDeclaredArtifactBytes))) {
+        if ($trace.Contains($field) -and
+            $null -ne $trace[$field] -and
+            -not (Test-JsonNumberRange $trace[$field] 0 $maximumDeclaredArtifactBytes)) {
             return $false
         }
     }
@@ -1241,8 +1290,9 @@ function Test-QualificationMetrics {
         -not (Test-JsonNumberRange $trace['reportCompleteness'] 0 1)) {
         return $false
     }
-    if (-not $trace.Contains('missingReason') -or
-        ($null -ne $trace['missingReason'] -and $trace['missingReason'] -isnot [string])) {
+    if ($trace.Contains('missingReason') -and
+        $null -ne $trace['missingReason'] -and
+        $trace['missingReason'] -isnot [string]) {
         return $false
     }
 
@@ -1324,8 +1374,9 @@ function Test-QualificationMetrics {
             return $false
         }
     }
-    if (-not $privacy.Contains('missingReason') -or
-        ($null -ne $privacy['missingReason'] -and $privacy['missingReason'] -isnot [string])) {
+    if ($privacy.Contains('missingReason') -and
+        $null -ne $privacy['missingReason'] -and
+        $privacy['missingReason'] -isnot [string]) {
         return $false
     }
 
@@ -1664,7 +1715,7 @@ function Test-Qualification {
     foreach ($gate in [System.Array] $Qualification['gates']) {
         if (-not (Test-JsonObject $gate) -or
             -not (Test-RequiredString $gate 'gateId' 128) -or
-            [string] $gate['gateId'] -cnotin $requiredQualificationGates -or
+            [string] $gate['gateId'] -cnotin $knownQualificationGates -or
             $gateStates.ContainsKey([string] $gate['gateId']) -or
             -not (Test-RequiredString $gate 'status' 32) -or
             [string] $gate['status'] -cnotin @('pass', 'fail', 'not-qualified') -or
@@ -1686,13 +1737,26 @@ function Test-Qualification {
                 return [ordered]@{ ok = $false; reason = 'qualification-gates-invalid' }
             }
         }
-        if ([string] $gate['status'] -ceq 'pass' -and
-            ([System.Array] $gate['reasonCodes']).Count -ne 0) {
-            return [ordered]@{ ok = $false; reason = 'qualification-gates-invalid' }
+        if ([string] $gate['status'] -ceq 'pass') {
+            $passingReasons = [System.Array] $gate['reasonCodes']
+            if ([string] $gate['gateId'] -ceq 'product-analyzer-coverage') {
+                if ($passingReasons.Count -ne 1 -or
+                    [string] $passingReasons[0] -cne 'provenance-self-reported') {
+                    return [ordered]@{ ok = $false; reason = 'qualification-gates-invalid' }
+                }
+            }
+            elseif ($passingReasons.Count -ne 0) {
+                return [ordered]@{ ok = $false; reason = 'qualification-gates-invalid' }
+            }
         }
         $gateStates[[string] $gate['gateId']] = [string] $gate['status']
     }
-    if ($gateStates.Count -ne $requiredQualificationGates.Count) {
+    foreach ($requiredGate in $requiredQualificationGates) {
+        if (-not $gateStates.ContainsKey($requiredGate)) {
+            return [ordered]@{ ok = $false; reason = 'qualification-gates-invalid' }
+        }
+    }
+    if ($gateStates.ContainsKey('input-contract')) {
         return [ordered]@{ ok = $false; reason = 'qualification-gates-invalid' }
     }
     $nonPassingGateStates = @($gateStates.Values | Where-Object { $_ -cne 'pass' })
@@ -1761,6 +1825,7 @@ function Test-Qualification {
             return [ordered]@{
                 ok = $true
                 qualified = $false
+                status = 'not-qualified'
                 reason = 'qualification-not-qualified'
                 artifactRefs = $artifactRefs
             }
@@ -1769,6 +1834,7 @@ function Test-Qualification {
             return [ordered]@{
                 ok = $true
                 qualified = $false
+                status = 'fail'
                 reason = 'qualification-not-qualified'
                 artifactRefs = $artifactRefs
             }
@@ -1777,6 +1843,7 @@ function Test-Qualification {
             return [ordered]@{
                 ok = $true
                 qualified = $true
+                status = 'pass'
                 reason = 'qualification-passed'
                 artifactRefs = $artifactRefs
                 profile = $matchingProfiles[0]
@@ -1916,17 +1983,34 @@ if (-not $qualificationResult.ok) {
     Write-ProducerResult (New-ProducerResult -Status 'skipped' -Reason $qualificationResult.reason)
     exit 0
 }
-if (-not $qualificationResult.qualified) {
-    Write-ProducerResult (New-ProducerResult -Status 'skipped' -Reason $qualificationResult.reason)
-    exit 0
+
+# The production lane is unchanged: it emits only for a passing qualification on real-device,
+# officially covered, nonexperimental evidence. The demo lane is the mirror image and is never a
+# substitute for it: it emits only when qualification explicitly did not pass, the evidence is an
+# Android emulator, and the run was an operator-triggered default-branch workflow_dispatch.
+if ($null -eq $laneProfile -or $laneProfile['requireQualificationPass']) {
+    if (-not $qualificationResult.qualified) {
+        Write-ProducerResult (New-ProducerResult -Status 'skipped' -Reason $qualificationResult.reason)
+        exit 0
+    }
 }
 
-if ($LaneKind -ne 'physical-device-flow-qa' -or
-    $manifestResult.deviceKind -cnotin @('physical-device', 'real-device') -or
-    -not $manifestResult.realDevice -or
-    $manifestResult.experimental -or
-    -not $manifestResult.officialCoverage) {
+if ($null -eq $laneProfile) {
     Write-ProducerResult (New-ProducerResult -Status 'skipped' -Reason 'source-lane-not-qualifying')
+    exit 0
+}
+if ($manifestResult.deviceKind -cnotin ([string[]] $laneProfile['requiredDeviceKinds']) -or
+    [bool] $manifestResult.realDevice -ne [bool] $laneProfile['requiredRealDevice'] -or
+    $manifestResult.experimental -or
+    -not $manifestResult.officialCoverage -or
+    ($null -ne $laneProfile['requiredPlatforms'] -and
+        $manifestResult.platform -cnotin ([string[]] $laneProfile['requiredPlatforms'])) -or
+    ($null -ne $laneProfile['requiredSourceEvents'] -and
+        $SourceEvent -cnotin ([string[]] $laneProfile['requiredSourceEvents'])) -or
+    ($null -ne $laneProfile['requiredQualificationStatuses'] -and
+        [string] $qualificationResult.status -cnotin
+            ([string[]] $laneProfile['requiredQualificationStatuses']))) {
+    Write-ProducerResult (New-ProducerResult -Status 'skipped' -Reason ([string] $laneProfile['rejectedReason']))
     exit 0
 }
 
@@ -1966,11 +2050,15 @@ if ($candidates.Count -eq 0) {
 }
 
 $candidate = $candidates[0]
-$profile = $qualificationResult.profile
-if ([string] $profile['seedFingerprint'] -cne (Get-Fingerprint ([string] $candidate.attempt['seedFingerprint'])) -or
-    [string] $profile['backendStateFingerprint'] -cne (Get-Fingerprint ([string] $candidate.attempt['backendStateFingerprint']))) {
-    Write-ProducerResult (New-ProducerResult -Status 'skipped' -Reason 'qualification-profiles-mismatch')
-    exit 0
+# Only a passing qualification carries a matched profile, so only the production lane can bind the
+# selected incident to it. The demo lane still runs the full selected-evidence binding below.
+if ($laneProfile['requireQualificationPass']) {
+    $profile = $qualificationResult.profile
+    if ([string] $profile['seedFingerprint'] -cne (Get-Fingerprint ([string] $candidate.attempt['seedFingerprint'])) -or
+        [string] $profile['backendStateFingerprint'] -cne (Get-Fingerprint ([string] $candidate.attempt['backendStateFingerprint']))) {
+        Write-ProducerResult (New-ProducerResult -Status 'skipped' -Reason 'qualification-profiles-mismatch')
+        exit 0
+    }
 }
 
 $evidenceResult = Test-SelectedEvidence `
@@ -1983,7 +2071,7 @@ if (-not $evidenceResult.ok) {
 }
 
 $handoff = [ordered]@{
-    schema = 'devflow-ci-failure-handoff'
+    schema = [string] $laneProfile['handoffSchema']
     version = 1
     provenance = [ordered]@{
         repository = $Repository
@@ -1998,16 +2086,27 @@ $handoff = [ordered]@{
         pullRequestNumber = $PullRequestNumber
     }
     outcome = 'failure'
-    qualification = 'qualified'
+    qualification = [string] $laneProfile['qualification']
     category = $candidate.category
     platform = $manifestResult.platform
     testIdentitySha256 = Get-TestIdentity -Platform $manifestResult.platform -Tier $candidate.tier -FlowDigest $candidate.digest
     evidenceSufficiency = 'sufficient'
 }
+# Demo facts are appended after the shared fields, so the production handoff bytes are exactly the
+# bytes this producer has always written. Every one of these fields is a refusal the demo publisher
+# and the local resolver check: a demo handoff can never be read as production qualification and
+# never grants broker or source repair authority.
+if ($laneProfile['demo']) {
+    $handoff['demo'] = $true
+    $handoff['laneKind'] = [string] $laneProfile['laneKind']
+    $handoff['deviceEvidenceKind'] = [string] $manifestResult.deviceKind
+    $handoff['repairAuthority'] = 'none'
+    $handoff['qualificationStatus'] = [string] $qualificationResult.status
+}
 $handoffBytes = [System.Text.UTF8Encoding]::new($false).GetBytes(($handoff | ConvertTo-Json -Compress -Depth 8))
 $handoffSha256 = Get-Sha256Bytes $handoffBytes
 $archiveManifest = [ordered]@{
-    schema = 'devflow-ci-failure-manifest'
+    schema = [string] $laneProfile['manifestSchema']
     version = 1
     entries = @(
         [ordered]@{
@@ -2017,9 +2116,11 @@ $archiveManifest = [ordered]@{
         })
 }
 $archiveManifestBytes = [System.Text.UTF8Encoding]::new($false).GetBytes(($archiveManifest | ConvertTo-Json -Compress -Depth 6))
+$laneReason = [string] $laneProfile['createdReason']
+$archiveBaseName = "$([string] $laneProfile['artifactBaseName'])-$RunId-$RunAttempt"
 
 if ($VerifyOnly) {
-    Write-ProducerResult (New-ProducerResult -Status 'verified' -Reason 'qualified-incident' -HandoffSha256 $handoffSha256)
+    Write-ProducerResult (New-ProducerResult -Status 'verified' -Reason $laneReason -HandoffSha256 $handoffSha256)
     exit 0
 }
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
@@ -2027,19 +2128,19 @@ if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     exit 0
 }
 
-$archivePath = Join-Path $OutputDirectory "devflow-failure-handoff-$RunId-$RunAttempt.zip"
+$archivePath = Join-Path $OutputDirectory "$archiveBaseName.zip"
 $stagingPath = $null
 if (-not $PSCmdlet.ShouldProcess($archivePath, 'Create deterministic DevFlow CI failure handoff')) {
-    Write-ProducerResult (New-ProducerResult -Status 'would-create' -Reason 'qualified-incident' -HandoffSha256 $handoffSha256)
+    Write-ProducerResult (New-ProducerResult -Status 'would-create' -Reason $laneReason -HandoffSha256 $handoffSha256)
     exit 0
 }
 
 try {
-    $stagingPath = Join-Path $OutputDirectory "devflow-failure-handoff-$RunId-$RunAttempt"
+    $stagingPath = Join-Path $OutputDirectory $archiveBaseName
     Write-HandoffStagingDirectory -Path $stagingPath -ManifestBytes $archiveManifestBytes -HandoffBytes $handoffBytes
     Write-DeterministicArchive -Path $archivePath -ManifestBytes $archiveManifestBytes -HandoffBytes $handoffBytes
     $archiveSha256 = "sha256:$((Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant())"
-    Write-ProducerResult (New-ProducerResult -Status 'created' -Reason 'qualified-incident' -ArchiveSha256 $archiveSha256 -HandoffSha256 $handoffSha256)
+    Write-ProducerResult (New-ProducerResult -Status 'created' -Reason $laneReason -ArchiveSha256 $archiveSha256 -HandoffSha256 $handoffSha256)
 }
 catch {
     if ($null -ne $stagingPath -and (Test-Path -LiteralPath $stagingPath)) {
