@@ -59,6 +59,16 @@ on:
         description: Android API level
         default: "35"
         type: string
+      demo-ci-fix:
+        description: >-
+          WARNING - demo only. Runs the dedicated android-demo-ci-fix job, which replays a
+          committed flow that is INTENDED TO FAIL and then ends the run with a deliberate
+          failure so the whole workflow is red. It exists solely to drive the manager-facing
+          CI-to-local-fix demo. It is not a product test, it is not part of the required
+          devflow-flow-gate, it never produces production qualification, and nothing it
+          publishes grants broker or source repair authority.
+        default: false
+        type: boolean
       ios-runtime:
         description: iOS runtime version filter (e.g. 17.5). Leave blank for newest available.
         default: ""
@@ -81,7 +91,11 @@ on:
     # ubuntu-latest time; everything costly is gated behind the path decision or a label.
 
 concurrency:
-  group: devflow-integration-${{ github.ref }}
+  # The demo lane gets its own group. It is a long, deliberately red, operator-triggered run on the
+  # default branch, and the ordinary main-branch group cancels in progress, so without this suffix a
+  # scheduled run would cancel the demo mid-flight and the demo would never reach its evidence
+  # upload. Every non-demo run keeps exactly the group it has always had: the suffix is empty.
+  group: devflow-integration-${{ github.ref }}${{ (github.event_name == 'workflow_dispatch' && inputs.demo-ci-fix) && '-demo-ci-fix' || '' }}
   # This bounds the cost of re-selecting the promoted lane on every pull_request action, but it is
   # not only a cost control: a title or body edit during the Android lane cancels the in-flight run
   # on the *same* commit, and the cancelled run reports devflow-flow-gate as `cancelled`. That
@@ -253,12 +267,19 @@ jobs:
           APPLE_FLOW_QA_INPUT: ${{ inputs.apple-flow-qa || 'false' }}
           APPKIT_FLOW_QA_LABEL: ${{ github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'appkit-flow-qa' || 'false' }}
           APPKIT_FLOW_QA_INPUT: ${{ inputs.appkit-flow-qa || 'false' }}
+          DEMO_CI_FIX_INPUT: ${{ inputs.demo-ci-fix || 'false' }}
           # The promoted lane runs on any pull_request event that touched a DevFlow path.
           # Every pull_request decision below is ANDed with this, exactly as the trigger-level
           # `paths:` filter used to be, so a label on an unrelated PR cannot start a paid lane.
           PATH_CANARY: ${{ steps.paths.outputs.changed || 'false' }}
         run: |
           set -e
+          if [[ "$EVENT" == "workflow_dispatch" && "$DEMO_CI_FIX_INPUT" == "true" ]]; then
+            echo "Suppressing ordinary platform lanes for the demo-ci-fix dispatch."
+            PLATFORMS=demo
+            APPLE_FLOW_QA_INPUT=false
+            APPKIT_FLOW_QA_INPUT=false
+          fi
           should_run() {
             local p=$1
             if [[ "$EVENT" == "workflow_dispatch" ]]; then
@@ -640,6 +661,252 @@ jobs:
             ./artifacts/devflow/${{ github.run_id }}-${{ github.run_attempt }}/android/
           if-no-files-found: warn
           retention-days: 30
+
+  # DEMO ONLY. This job replays one committed flow that is intended to fail
+  # (samples/DevFlow.Sample/maui-tests/demo-ci-fix-drift.md) and then fails the run on purpose, so a
+  # manager-facing walkthrough can show a real red CI run, a real bounded redacted evidence upload,
+  # a real nonqualified demo issue filed by the trusted workflow_run publisher, and the local
+  # `maui-devflow-ci-fix` route. It is deliberately NOT in devflow-flow-gate.needs, so it can never
+  # turn the required check red, and it never produces production qualification or repair authority.
+  android-demo-ci-fix:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.demo-ci-fix &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    # A second, job-scoped group so a queued demo dispatch never cancels a running one.
+    concurrency:
+      group: devflow-integration-android-demo-ci-fix-${{ github.run_id }}
+      cancel-in-progress: false
+    env:
+      DEVFLOW_TEST_PLATFORM: android
+      DEVFLOW_TEST_ANDROID_API: ${{ inputs.android-api || '35' }}
+      DEVFLOW_TEST_ANDROID_AVD: devflow-tests-api${{ inputs.android-api || '35' }}
+      DEVFLOW_RUN_ANDROID_FLOW_PILOT: "1"
+      # The explicit opt-in filter. Without it the Tier-1 pilot never loads a demo- prefixed flow;
+      # with it the pilot loads exactly this one flow and nothing else.
+      DEVFLOW_FLOW_PILOT_DEMO_FLOW: demo-ci-fix-drift.md
+      DEVFLOW_FLOW_PILOT_ARTIFACT_ROOT: ./artifacts/devflow/${{ github.run_id }}-${{ github.run_attempt }}/android
+      DEVFLOW_FLOW_PILOT_RESULTS_ROOT: ./artifacts/TestResults/devflow-flow/android
+      DEVFLOW_FLOW_PILOT_WORKFLOW_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+      DEVFLOW_FLOW_PILOT_REPOSITORY_COMMIT: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v6
+
+      # Android emulator needs KVM on Linux runners.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Install MAUI workloads
+        run: dotnet workload install maui-android android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+
+      - name: Cache AVD
+        uses: actions/cache@v4
+        id: demo-avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-${{ env.DEVFLOW_TEST_ANDROID_API }}-x86_64
+
+      - name: Reclaim runner disk for AVD creation
+        if: steps.demo-avd-cache.outputs.cache-hit != 'true'
+        run: |
+          df -h / | tail -1
+          sudo rm -rf /opt/hostedtoolcache/CodeQL /usr/local/lib/android/sdk/ndk /usr/share/swift /usr/local/.ghcup || true
+          df -h / | tail -1
+
+      - name: Warm up AVD snapshot
+        if: steps.demo-avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          avd-name: ${{ env.DEVFLOW_TEST_ANDROID_AVD }}
+          api-level: ${{ env.DEVFLOW_TEST_ANDROID_API }}
+          arch: x86_64
+          target: google_apis
+          force-avd-creation: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: echo "Generated AVD snapshot."
+
+      # The expected outcome of this step is failure. `continue-on-error` keeps the job walking to
+      # the classification check, the qualification, the handoff producer, and the uploads; the job
+      # still ends red because of the deliberate final step.
+      - name: Run the demo CI-fix flow (expected to fail)
+        id: demo-flow-run
+        continue-on-error: true
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          avd-name: ${{ env.DEVFLOW_TEST_ANDROID_AVD }}
+          api-level: ${{ env.DEVFLOW_TEST_ANDROID_API }}
+          arch: x86_64
+          target: google_apis
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            DEVFLOW_TEST_ANDROID_SERIAL="$(adb devices | awk '/^emulator-[0-9]+[[:space:]]+device$/ { print $1; exit }')" DEVFLOW_FLOW_PILOT_DEMO_FLOW=demo-ci-fix-drift.md bash ./eng/devflow/Run-DevFlowFlowQa.sh --platform android --repeat 1 --configuration Debug --results-root "$DEVFLOW_FLOW_PILOT_RESULTS_ROOT"
+
+      # A demo is only honest if the failure it shows is the failure it claims. This refuses an
+      # infrastructure, harness, crash, or timeout failure outright: those would make the rest of
+      # the lane a fabricated story rather than a demonstration.
+      - name: Verify the demo failure is the intended repair-eligible selector failure
+        id: verify-demo-failure
+        if: always()
+        shell: pwsh
+        run: |
+          $root = [System.IO.Path]::GetFullPath("$env:DEVFLOW_FLOW_PILOT_ARTIFACT_ROOT")
+          if (-not (Test-Path -LiteralPath $root -PathType Container)) {
+            throw "The demo artifact root '$root' does not exist; the demo flow never produced evidence."
+          }
+          $reports = @(Get-ChildItem -LiteralPath $root -Filter flow-run.json -Recurse -File |
+            Where-Object { [System.IO.Path]::GetFullPath($_.DirectoryName) -ne $root } |
+            Sort-Object -Property FullName)
+          if ($reports.Count -ne 1) {
+            throw "Expected exactly 1 demo flow-run.json, found $($reports.Count)."
+          }
+          $traces = @(Get-ChildItem -LiteralPath $reports[0].DirectoryName -Filter *.mauitrace -File)
+          if ($traces.Count -ne 1) {
+            throw "Expected exactly 1 redacted demo .mauitrace beside the selected report, found $($traces.Count)."
+          }
+          $report = Get-Content -LiteralPath $reports[0].FullName -Raw | ConvertFrom-Json -Depth 32
+          $status = [string] $report.outcome.status
+          $failureClass = [string] $report.failure.class
+          $failureCode = [string] $report.failure.code
+          $category = [string] $report.failure.category
+          Write-Output "demo outcome=$status class=$failureClass code=$failureCode category=$category repairEligible=$($report.failure.repairEligible)"
+          if ($status -cne 'failed') {
+            throw "The demo flow reported outcome '$status'; the demo requires a completed test failure."
+          }
+          if ($report.outcome.terminal -ne $true) {
+            throw "The demo flow did not report a terminal outcome."
+          }
+          if ($failureClass -cne 'locator-not-found' -or $failureCode -cne 'locator-not-found') {
+            throw "The demo flow failed as '$failureClass/$failureCode'; the demo requires locator-not-found."
+          }
+          if ($category -ceq 'infrastructure') {
+            throw "The demo flow failed as infrastructure; that is a broken lane, not a demonstration."
+          }
+          if ($report.failure.repairEligible -ne $true -or
+              $report.replayEligibility.repairEligibility -ne $true) {
+            throw "The demo selector failure is not repair-eligible."
+          }
+          if ($report.truncated -eq $true) {
+            throw "The demo flow report is truncated."
+          }
+          if (@($report.secondaryFailures).Count -ne 0) {
+            throw "The demo flow reported owned cleanup failures."
+          }
+
+      # A real, honest, not-qualified emulator qualification. It is the input the demo lane needs
+      # and it is never a production qualification result.
+      - name: Evaluate the demo emulator qualification
+        id: demo-qualification
+        if: ${{ !cancelled() && steps.verify-demo-failure.outcome == 'success' }}
+        run: >
+          dotnet run --project src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj
+          -f net10.0 --configuration Debug --
+          devflow flow qualify --platform android
+          --corpus tests/DevFlow/InspectorCorpus
+          --artifact-manifest "${DEVFLOW_FLOW_PILOT_ARTIFACT_ROOT}/manifest.json"
+          --output "${DEVFLOW_FLOW_PILOT_ARTIFACT_ROOT}/qualification.json"
+          --json
+
+      - name: Produce the bounded DevFlow demo handoff
+        id: demo-handoff
+        if: >-
+          !cancelled() &&
+          steps.verify-demo-failure.outcome == 'success' &&
+          steps.demo-qualification.outcome == 'success'
+        shell: pwsh
+        env:
+          DEVFLOW_FAILURE_HANDOFF_REPOSITORY: ${{ github.repository }}
+          DEVFLOW_FAILURE_HANDOFF_WORKFLOW_NAME: ${{ github.workflow }}
+          DEVFLOW_FAILURE_HANDOFF_WORKFLOW_PATH: .github/workflows/devflow-integration.yml
+          DEVFLOW_FAILURE_HANDOFF_SOURCE_EVENT: ${{ github.event_name }}
+          DEVFLOW_FAILURE_HANDOFF_HEAD_REPOSITORY: ${{ github.repository }}
+          DEVFLOW_FAILURE_HANDOFF_HEAD_REF: ${{ github.ref_name }}
+          DEVFLOW_FAILURE_HANDOFF_RUN_ID: ${{ github.run_id }}
+          DEVFLOW_FAILURE_HANDOFF_RUN_ATTEMPT: ${{ github.run_attempt }}
+          DEVFLOW_FAILURE_HANDOFF_COMMIT_SHA: ${{ github.sha }}
+        run: |
+          $result = @(& ./eng/devflow/New-DevFlowFailureHandoff.ps1 `
+            -SourceManifestPath "${env:DEVFLOW_FLOW_PILOT_ARTIFACT_ROOT}/manifest.json" `
+            -QualificationPath "${env:DEVFLOW_FLOW_PILOT_ARTIFACT_ROOT}/qualification.json" `
+            -OutputDirectory ./artifacts/devflow/demo-handoff `
+            -Repository $env:DEVFLOW_FAILURE_HANDOFF_REPOSITORY `
+            -WorkflowName $env:DEVFLOW_FAILURE_HANDOFF_WORKFLOW_NAME `
+            -WorkflowPath $env:DEVFLOW_FAILURE_HANDOFF_WORKFLOW_PATH `
+            -SourceEvent $env:DEVFLOW_FAILURE_HANDOFF_SOURCE_EVENT `
+            -HeadRepository $env:DEVFLOW_FAILURE_HANDOFF_HEAD_REPOSITORY `
+            -HeadRef $env:DEVFLOW_FAILURE_HANDOFF_HEAD_REF `
+            -RunId ([Int64] $env:DEVFLOW_FAILURE_HANDOFF_RUN_ID) `
+            -RunAttempt ([Int32] $env:DEVFLOW_FAILURE_HANDOFF_RUN_ATTEMPT) `
+            -CommitSha $env:DEVFLOW_FAILURE_HANDOFF_COMMIT_SHA `
+            -PullRequestNumber 0 `
+            -LaneKind demo-emulator-showcase)
+          $result | Write-Output
+          $jsonLine = @($result | Where-Object {
+              $_ -is [string] -and $_.TrimStart().StartsWith('{', [StringComparison]::Ordinal)
+            } | Select-Object -Last 1)
+          if ($jsonLine.Count -ne 1) {
+            throw "The demo handoff producer returned no JSON result."
+          }
+          $producer = $jsonLine[0] | ConvertFrom-Json -Depth 8
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "Demo handoff producer: status=$($producer.status), reason=$($producer.reason)"
+          if ([string] $producer.status -cne 'created') {
+            throw "The demo handoff producer returned '$($producer.status)/$($producer.reason)' instead of creating an archive."
+          }
+
+      - name: Upload canonical DevFlow demo handoff entries
+        if: >-
+          !cancelled() &&
+          steps.demo-handoff.outcome == 'success' &&
+          hashFiles(format('artifacts/devflow/demo-handoff/devflow-demo-handoff-{0}-{1}.zip', github.run_id, github.run_attempt)) != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: devflow-demo-handoff-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ./artifacts/devflow/demo-handoff/devflow-demo-handoff-${{ github.run_id }}-${{ github.run_attempt }}/manifest.json
+            ./artifacts/devflow/demo-handoff/devflow-demo-handoff-${{ github.run_id }}-${{ github.run_attempt }}/handoff.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload bounded redacted demo evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: devflow-demo-evidence-android-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ./artifacts/devflow/${{ github.run_id }}-${{ github.run_attempt }}/android/**/flow-run.json
+            ./artifacts/devflow/${{ github.run_id }}-${{ github.run_attempt }}/android/**/*.mauitrace
+          if-no-files-found: error
+          retention-days: 30
+
+      # The unmistakable, deliberate end of the demo lane. The workflow conclusion has to be
+      # `failure` for the trusted workflow_run publisher to consider the demo handoff at all.
+      - name: Fail the demo run on purpose
+        if: always()
+        run: |
+          echo "::error title=DevFlow CI demo::This run failed on purpose. The android-demo-ci-fix job replays a committed demo flow that is intended to fail so the CI-to-local-fix demo has a real red run. It is not a product regression, it is not production qualification, and it grants no repair authority."
+          exit 1
 
   ios:
     needs: plan

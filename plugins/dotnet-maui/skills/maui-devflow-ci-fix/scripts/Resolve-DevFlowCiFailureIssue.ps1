@@ -29,8 +29,57 @@ $ErrorActionPreference = 'Stop'
 $maximumJsonBytes = 1MB
 $expectedWorkflowName = 'DevFlow Integration Tests'
 $expectedWorkflowPath = '.github/workflows/devflow-integration.yml'
-$issueLabel = 'devflow-ci-failure'
+$productionIssueLabel = 'devflow-ci-failure'
+$demoIssueLabel = 'devflow-ci-failure-demo'
 $publisherLogin = 'github-actions[bot]'
+
+# Exactly one lane profile is resolved, from the labels the trusted publisher applied. The two
+# lanes are disjoint: distinct labels, markers, title prefixes, first headings, data fields, and
+# artifact prefixes. A production issue can never be read through the demo profile and a demo issue
+# can never be read through the production profile, and an issue carrying both labels is refused
+# rather than guessed at.
+function Get-LaneResolverProfile {
+    param([Parameter(Mandatory)] [string] $Name)
+
+    switch ($Name) {
+        'demo' {
+            return [ordered]@{
+                lane = 'demo'
+                demo = $true
+                issueLabel = $demoIssueLabel
+                markerPrefix = 'devflow-ci-failure-demo'
+                titlePrefix = '[DevFlow CI DEMO - NOT QUALIFIED]'
+                firstHeading = '## Demo handoff (not qualified)'
+                dataSuffix = ' lane=(demo-emulator-showcase) device=(emulator) qualification=(not-qualified)'
+                sourceEventPattern = '(workflow_dispatch)'
+                allowedSourceEvents = @('workflow_dispatch')
+                handoffArtifactPrefix = 'devflow-demo-handoff'
+                evidenceArtifactPrefix = 'devflow-demo-evidence'
+                allowedPlatforms = @('android')
+                qualification = 'not-qualified'
+                repairAuthority = 'none'
+            }
+        }
+        default {
+            return [ordered]@{
+                lane = 'production'
+                demo = $false
+                issueLabel = $productionIssueLabel
+                markerPrefix = 'devflow-ci-failure'
+                titlePrefix = '[DevFlow CI]'
+                firstHeading = '## Verified handoff'
+                dataSuffix = ''
+                sourceEventPattern = '(schedule|workflow_dispatch)'
+                allowedSourceEvents = @('schedule', 'workflow_dispatch')
+                handoffArtifactPrefix = 'devflow-failure-handoff'
+                evidenceArtifactPrefix = 'devflow-flow-evidence'
+                allowedPlatforms = $null
+                qualification = 'qualified'
+                repairAuthority = 'none'
+            }
+        }
+    }
+}
 
 function Write-ResolverResult {
     param([Parameter(Mandatory)] [System.Collections.IDictionary] $Result)
@@ -414,6 +463,7 @@ function Get-TrustedRecurrenceCandidates {
     $candidates = [Collections.Generic.List[object]]::new()
     $multiline = [Text.RegularExpressions.RegexOptions]::Multiline -bor
         [Text.RegularExpressions.RegexOptions]::CultureInvariant
+    $escapedPrefix = [regex]::Escape([string] $script:laneProfile['markerPrefix'])
     foreach ($commentValue in $Comments) {
         if ($commentValue -isnot [System.Collections.IDictionary]) {
             continue
@@ -434,12 +484,12 @@ function Get-TrustedRecurrenceCandidates {
         }
 
         $body = [string] $comment['body']
-        if ([regex]::Matches($body, '<!-- devflow-ci-failure-occurrence:v1 ').Count -ne 1) {
+        if ([regex]::Matches($body, "<!-- $escapedPrefix-occurrence:v1 ").Count -ne 1) {
             continue
         }
         $marker = [regex]::Match(
             $body,
-            '\A<!-- devflow-ci-failure-occurrence:v1 run=([1-9][0-9]*) attempt=([1-9][0-9]*) body=(sha256:[0-9a-f]{64}) -->\n',
+            "\A<!-- $escapedPrefix-occurrence:v1 run=([1-9][0-9]*) attempt=([1-9][0-9]*) body=(sha256:[0-9a-f]{64}) -->\n",
             [Text.RegularExpressions.RegexOptions]::CultureInvariant)
         if (-not $marker.Success) {
             continue
@@ -593,7 +643,7 @@ function Get-ValidatedRunMetadata {
     }
 
     $runSourceEvent = Get-RequiredString $RunRecord 'event' 64
-    if ($runSourceEvent -cnotin @('schedule', 'workflow_dispatch') -or
+    if ($runSourceEvent -cnotin ([string[]] $script:laneProfile['allowedSourceEvents']) -or
         (-not [string]::IsNullOrWhiteSpace($ExpectedSourceEvent) -and
             -not [string]::Equals(
                 $runSourceEvent,
@@ -696,17 +746,25 @@ try {
                 [string] $_['name']
             }
         })
-    if ($issueLabel -cnotin $labelNames) {
+    $hasProductionLabel = $productionIssueLabel -cin $labelNames
+    $hasDemoLabel = $demoIssueLabel -cin $labelNames
+    if ($hasProductionLabel -and $hasDemoLabel) {
+        Stop-Resolver 'issue-label-ambiguous'
+    }
+    if (-not $hasProductionLabel -and -not $hasDemoLabel) {
         Stop-Resolver 'issue-label-missing'
     }
+    $script:laneProfile = Get-LaneResolverProfile $(if ($hasDemoLabel) { 'demo' } else { 'production' })
+    $laneProfile = $script:laneProfile
+    $markerPrefix = [regex]::Escape([string] $laneProfile['markerPrefix'])
 
     $body = Get-RequiredString $issueRecord 'body' 65000
-    if ([regex]::Matches($body, '<!-- devflow-ci-failure:v1 ').Count -ne 1) {
+    if ([regex]::Matches($body, "<!-- $markerPrefix`:v1 ").Count -ne 1) {
         Stop-Resolver 'issue-marker-invalid'
     }
     $outer = [regex]::Match(
         $body,
-        '\A<!-- devflow-ci-failure:v1 fingerprint=(sha256:[0-9a-f]{64}) body=(sha256:[0-9a-f]{64}) -->\n',
+        "\A<!-- $markerPrefix`:v1 fingerprint=(sha256:[0-9a-f]{64}) body=(sha256:[0-9a-f]{64}) -->\n",
         [Text.RegularExpressions.RegexOptions]::CultureInvariant)
     if (-not $outer.Success) {
         Stop-Resolver 'issue-marker-invalid'
@@ -722,18 +780,27 @@ try {
     $multiline = [Text.RegularExpressions.RegexOptions]::Multiline -bor
         [Text.RegularExpressions.RegexOptions]::CultureInvariant
     $occurrence = Get-SingleMatch $payload `
-        '^<!-- devflow-ci-failure-occurrence:v1 run=([1-9][0-9]*) attempt=([1-9][0-9]*) -->$' `
+        "^<!-- $markerPrefix-occurrence:v1 run=([1-9][0-9]*) attempt=([1-9][0-9]*) -->`$" `
         'issue-occurrence-invalid' $multiline
+    $platformPattern = if ($null -eq $laneProfile['allowedPlatforms']) {
+        '(android|ios|maccatalyst|macos|windows|cross-platform|unknown)'
+    }
+    else {
+        "($(([string[]] $laneProfile['allowedPlatforms']) -join '|'))"
+    }
     $data = Get-SingleMatch $payload `
-        '^<!-- devflow-ci-failure-data:v1 category=(test-failure|app-crash|timeout|device-failure|harness-failure|infrastructure|unknown) platform=(android|ios|maccatalyst|macos|windows|cross-platform|unknown) testIdentity=(sha256:[0-9a-f]{64}) evidence=(sufficient|partial|insufficient) -->$' `
+        ("^<!-- $markerPrefix-data:v1 category=(test-failure|app-crash|timeout|device-failure|harness-failure|infrastructure|unknown) " +
+            "platform=$platformPattern testIdentity=(sha256:[0-9a-f]{64}) evidence=(sufficient|partial|insufficient)" +
+            "$([string] $laneProfile['dataSuffix']) -->`$") `
         'issue-data-invalid' $multiline
+    $firstHeading = [string] $laneProfile['firstHeading']
     if (-not $payload.StartsWith(
-            "$($occurrence.Value)`n$($data.Value)`n`n## Verified handoff`n",
+            "$($occurrence.Value)`n$($data.Value)`n`n$firstHeading`n",
             [StringComparison]::Ordinal)) {
         Stop-Resolver 'issue-template-invalid'
     }
 
-    $headings = @('## Verified handoff', '## Evidence', '## Artifact handoff', '## Local handoff')
+    $headings = @($firstHeading, '## Evidence', '## Artifact handoff', '## Local handoff')
     $previousIndex = -1
     foreach ($heading in $headings) {
         if ([regex]::Matches(
@@ -762,14 +829,15 @@ try {
     $evidenceSufficiency = $data.Groups[4].Value
 
     $title = Get-RequiredString $issueRecord 'title' 512
-    $expectedTitle = "[DevFlow CI] $category on $platform ($($testIdentity.Substring(7, 12)))"
+    $expectedTitle = "$([string] $laneProfile['titlePrefix']) $category on $platform ($($testIdentity.Substring(7, 12)))"
     if (-not [string]::Equals($title, $expectedTitle, [StringComparison]::Ordinal)) {
         Stop-Resolver 'issue-title-invalid'
     }
 
     $commit = Get-SingleMatch $payload '^- Commit: `([0-9a-f]{40})`$' `
         'issue-commit-invalid' $multiline
-    $sourceEvent = Get-SingleMatch $payload '^- Source event: `(schedule|workflow_dispatch)`$' `
+    $sourceEvent = Get-SingleMatch $payload `
+        "^- Source event: ``$([string] $laneProfile['sourceEventPattern'])```$" `
         'issue-source-event-invalid' $multiline
     $artifactPattern =
         '^- Download: \[retained workflow artifact\]\(https://github\.com/' +
@@ -853,7 +921,7 @@ try {
                 $candidateArtifacts = Get-ArtifactArray $candidateArtifactsRecord
                 [void] (Get-Artifact `
                         $candidateArtifacts `
-                        "devflow-failure-handoff-$candidateRunId-$candidateRunAttempt" `
+                        "$([string] $laneProfile['handoffArtifactPrefix'])-$candidateRunId-$candidateRunAttempt" `
                         ([Int64] $candidate['handoffArtifactId']))
                 $selectedOccurrence = $candidate
                 $prefetchedRunRecord = $candidateRunRecord
@@ -917,20 +985,31 @@ try {
             -RunAttempt $runAttempt
     }
     $artifacts = Get-ArtifactArray $artifactsRecord
-    $handoffArtifactName = "devflow-failure-handoff-$runId-$runAttempt"
-    $evidenceArtifactPrefix = switch ($platform) {
-        'android' { 'android' }
-        'ios' { 'ios' }
-        'maccatalyst' { 'maccatalyst' }
-        'macos' { 'macos-appkit' }
-        'windows' { 'windows' }
-        default { $null }
-    }
-    $evidenceArtifactName = if ($null -eq $evidenceArtifactPrefix) {
-        $null
+    $handoffArtifactName = "$([string] $laneProfile['handoffArtifactPrefix'])-$runId-$runAttempt"
+    # Demo evidence never maps to a production evidence artifact name, and vice versa.
+    $evidenceArtifactName = if ($laneProfile['demo']) {
+        if ($platform -ceq 'android') {
+            "$([string] $laneProfile['evidenceArtifactPrefix'])-android-$runId-$runAttempt"
+        }
+        else {
+            $null
+        }
     }
     else {
-        "devflow-flow-evidence-$evidenceArtifactPrefix-$runId-$runAttempt"
+        $evidenceArtifactPlatform = switch ($platform) {
+            'android' { 'android' }
+            'ios' { 'ios' }
+            'maccatalyst' { 'maccatalyst' }
+            'macos' { 'macos-appkit' }
+            'windows' { 'windows' }
+            default { $null }
+        }
+        if ($null -eq $evidenceArtifactPlatform) {
+            $null
+        }
+        else {
+            "$([string] $laneProfile['evidenceArtifactPrefix'])-$evidenceArtifactPlatform-$runId-$runAttempt"
+        }
     }
     $handoffArtifact = Get-Artifact $artifacts $handoffArtifactName $handoffArtifactId
     $evidenceArtifact = if ($null -eq $evidenceArtifactName) {
@@ -942,6 +1021,10 @@ try {
 
     Write-ResolverResult ([ordered]@{
             ok = $true
+            lane = [string] $laneProfile['lane']
+            demo = [bool] $laneProfile['demo']
+            qualification = [string] $laneProfile['qualification']
+            repairAuthority = [string] $laneProfile['repairAuthority']
             repository = $resolvedRepository
             issueNumber = $issueNumber
             issueUrl = "https://github.com/$resolvedRepository/issues/$issueNumber"
