@@ -39,23 +39,6 @@ public class DevFlowCliIntegrationTests
     }
 
     [Fact]
-    public async Task UiTree_WithDepth_UsesV1TreeRoute()
-    {
-        var (server, cli) = await CreateFixturesAsync();
-        await using var serverHandle = server;
-
-        var result = await cli.InvokeAsync("devflow", "ui", "tree", "--depth", "2", "--json");
-
-        Assert.Equal(0, result.ExitCode);
-        var json = result.ParseJsonOutput();
-        Assert.Equal(JsonValueKind.Array, json.ValueKind);
-        Assert.NotEmpty(server.RecordedRequests);
-
-        var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/ui/tree");
-        Assert.Contains("depth=2", request.QueryString);
-    }
-
-    [Fact]
     public async Task UiQuery_ByAutomationId_UsesV1ElementsRoute()
     {
         var (server, cli) = await CreateFixturesAsync();

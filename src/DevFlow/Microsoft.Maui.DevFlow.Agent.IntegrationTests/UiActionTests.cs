@@ -147,7 +147,19 @@ public class UiActionTests : IntegrationTestBase
 
         await NavigateToMainPageAsync();
     }
+    [Fact]
+    public async Task Tap_ShellItem_NavigatesLikeRoute()
+    {
+        await NavigateToMainPageAsync();
+        await SettleAsync();
 
+        var dialogsItem = (await Client.QueryAsync(type: "FlyoutItem", text: "Dialogs")).Single();
+        Assert.True(await Client.TapAsync(dialogsItem.Id));
+
+        await WaitForAsync(async () => await TryFindElementAsync("DialogStatusLabel") is not null, timeoutMs: 5000);
+
+        await NavigateToMainPageAsync();
+    }
     [Fact]
     public async Task Back_Action_GoesBack()
     {

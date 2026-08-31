@@ -1,0 +1,83 @@
+{
+  "name": "maui-devflow-inspector",
+  "displayName": "MAUI DevFlow Inspector",
+  "description": "MAUI DevFlow Inspector host for VS Code — embeds the existing DevFlow Web Inspector for a running .NET MAUI app.",
+  "version": "0.1.0",
+  "publisher": "maui-labs",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dotnet/maui-labs.git",
+    "directory": "src/DevFlow/js/vscode-inspector"
+  },
+  "homepage": "https://github.com/dotnet/maui-labs/tree/main/src/DevFlow/js/vscode-inspector",
+  "bugs": {
+    "url": "https://github.com/dotnet/maui-labs/issues"
+  },
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false
+    }
+  },
+  "engines": {
+    "vscode": "^1.125.0"
+  },
+  "categories": [
+    "Debuggers",
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "mauiDevflow.openInspector",
+        "title": "MAUI DevFlow: Open Inspector"
+      }
+    ],
+    "configuration": {
+      "title": "MAUI DevFlow",
+      "properties": {
+        "mauiDevflow.brokerPort": {
+          "type": "number",
+          "default": 0,
+          "description": "Explicit DevFlow broker port. 0 = auto-discover via ~/.mauidevflow/broker.json."
+        },
+        "mauiDevflow.openLocation": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "beside",
+            "active"
+          ],
+          "enumDescriptions": [
+            "Open beside the active editor when one is open, otherwise in the active editor group.",
+            "Always open in a new column beside the active editor.",
+            "Always open in the currently active editor group."
+          ],
+          "default": "auto",
+          "description": "Where to place the MAUI DevFlow Inspector panel when it opens."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build:test": "tsc -p tsconfig.test.json",
+    "build": "tsc -p tsconfig.json --noEmit && esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node18 --external:vscode --outfile=dist/extension.js",
+    "test": "tsc -p tsconfig.test.json && node --test \"test/**/*.test.mjs\"",
+    "watch": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node18 --external:vscode --outfile=dist/extension.js --watch",
+    "package:vsix": "tsc -p tsconfig.json --noEmit && esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node18 --external:vscode --outfile=dist/extension.js && vsce package --pre-release --no-dependencies --out dist/maui-devflow-inspector.vsix"
+  },
+  "devDependencies": {
+    "@maui-devflow/client": "0.1.0-preview.12",
+    "@types/node": "^20.16.0",
+    "@types/vscode": "^1.125.0",
+    "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.6.3"
+  }
+}

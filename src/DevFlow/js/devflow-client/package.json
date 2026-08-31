@@ -1,0 +1,34 @@
+{
+  "name": "@maui-devflow/client",
+  "version": "0.1.0-preview.12",
+  "description": "Shared Node client for the MAUI DevFlow broker + in-app agent: broker discovery, agent HTTP API, and the live event stream. Foundation for the DevFlow Copilot Canvas and VS Code host shells.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "build:test": "tsc -p tsconfig.test.json",
+    "watch": "tsc -p tsconfig.json --watch",
+    "test": "npm run build:test && node --test \"dist-test/test/**/*.test.js\"",
+    "clean": "node -e \"const fs=require('fs');for(const d of ['dist','dist-test'])fs.rmSync(d,{recursive:true,force:true})\""
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.0",
+    "typescript": "^5.6.3"
+  }
+}

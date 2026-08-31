@@ -28,6 +28,27 @@ public class AgentClientLoopbackTests
     }
 
     [Fact]
+    public async Task ResolveLoopbackCandidates_LocalhostBypassesDns()
+    {
+        var dnsCalled = false;
+        var candidates = await AgentClient.ResolveLoopbackCandidatesAsync(
+            "localhost",
+            CancellationToken.None,
+            (_, _) =>
+            {
+                dnsCalled = true;
+                throw new InvalidOperationException("DNS should not be queried for localhost.");
+            });
+
+        Assert.False(dnsCalled);
+        Assert.Equal(IPAddress.Loopback, candidates[0]);
+        if (Socket.OSSupportsIPv6)
+            Assert.Contains(IPAddress.IPv6Loopback, candidates);
+        else
+            Assert.Single(candidates);
+    }
+
+    [Fact]
     public async Task GetStatus_LocalhostReachesIPv6OnlyAgent()
     {
         if (!Socket.OSSupportsIPv6)

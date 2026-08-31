@@ -1,21 +1,216 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>DevFlow Inspector</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MAUI DevFlow Inspector</title>
   <!-- Base tag ensures relative URLs resolve correctly even when the page is
        opened at /inspector/{id} without a trailing slash. Without this, the
        browser would resolve devflow.css as /inspector/devflow.css (treating
        {id} as a filename) instead of /inspector/{id}/devflow.css. -->
   <base href="./">
   <link rel="stylesheet" href="devflow.css">
+  <link rel="stylesheet" href="inspector-workbench.css">
 </head>
 <body>
-  <div id="app-viewport" data-width="{{VIEWPORT_WIDTH}}" data-height="{{VIEWPORT_HEIGHT}}" style="width:{{VIEWPORT_WIDTH}}px; height:{{VIEWPORT_HEIGHT}}px;">
-    {{SCREENSHOT}}
-    {{ELEMENTS}}
+  <!-- Inline SVG icon sprite (stroke = currentColor so every icon inherits the button's themed
+       text color). Referenced via <use href="#i-*">. Replaces emoji/geometric glyphs. -->
+  <svg width="0" height="0" class="df-sprite" aria-hidden="true" focusable="false"
+       fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <symbol id="i-tree" viewBox="0 0 24 24"><path d="M21 12h-8"/><path d="M21 6H8"/><path d="M21 18h-8"/><path d="M3 6v4c0 1.1.9 2 2 2h3"/><path d="M3 10v6c0 1.1.9 2 2 2h3"/></symbol>
+    <symbol id="i-bounds" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="4 4"/></symbol>
+    <symbol id="i-fit" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></symbol>
+    <symbol id="i-record" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="12" r="7"/></symbol>
+    <symbol id="i-assert" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-replay" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M6 3v18l14-9z"/></symbol>
+    <symbol id="i-route" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+    <symbol id="i-source" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 3h12l4 4v14H3V3z"/><path d="M7 3v6h8V3"/><path d="M7 21v-8h10v8"/></symbol>
+    <symbol id="i-copilot" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15v4"/><path d="M21 17h-4"/></symbol>
+    <symbol id="i-data" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M10.85 12.15 19 4"/><path d="m18 5 2 2"/><path d="m15 8 2 2"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="i-pointer" viewBox="0 0 24 24"><path d="m5 3 14 9-6 2-3 6z"/></symbol>
+    <symbol id="i-inspect" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m16 16 5 5"/><path d="M11 8v6M8 11h6"/></symbol>
+    <symbol id="i-location" viewBox="0 0 24 24"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0z"/><circle cx="12" cy="10" r="2"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></symbol>
+    <symbol id="i-attach" viewBox="0 0 24 24"><path d="m21.4 11.6-8.9 8.9a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></symbol>
+    <symbol id="i-evidence" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-tests" viewBox="0 0 24 24"><path d="M9 4h6"/><path d="M9 20h6"/><path d="M12 4v16"/><path d="m5 9 2 2 4-4"/><path d="m13 15 2 2 4-4"/></symbol>
+    <!-- Element-type icons for the visual tree (mapped by type in devflow.js). -->
+    <symbol id="i-window" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 8h20"/><path d="M6 6h.01"/></symbol>
+    <symbol id="i-layout" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></symbol>
+    <symbol id="i-button" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="8" rx="4"/></symbol>
+    <symbol id="i-input" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10v4"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></symbol>
+    <symbol id="i-text" viewBox="0 0 24 24"><path d="M4 7V5h16v2"/><path d="M9 19h6"/><path d="M12 5v14"/></symbol>
+    <symbol id="i-node" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/></symbol>
+  </svg>
+
+  <div id="df-app">
+    <h1 class="df-sr-only">DevFlow Inspector</h1>
+    <div id="df-toolbar" role="toolbar" aria-label="Inspector controls">
+      <div class="df-modes" role="radiogroup" aria-label="Interaction mode">
+        <button id="df-mode-interact" class="df-mode-btn df-active" role="radio" aria-label="Interact" aria-describedby="df-mode-interact-help" title="Click drives the app (tap, scroll, gestures). Alt/Shift+Click selects." aria-checked="true" tabindex="0"><svg class="df-ic"><use href="#i-pointer"/></svg><span class="df-btn-label">Interact</span></button>
+        <button id="df-mode-inspect" class="df-mode-btn" role="radio" aria-label="Inspect" aria-describedby="df-mode-inspect-help" title="Click selects an element (does not tap the app)" aria-checked="false" tabindex="-1"><svg class="df-ic"><use href="#i-inspect"/></svg><span class="df-btn-label">Inspect</span></button>
+        <span id="df-mode-interact-help" class="df-sr-only">Click drives the app with taps, scrolling, and gestures. Alt or Shift click selects.</span>
+        <span id="df-mode-inspect-help" class="df-sr-only">Click selects an element without tapping the app.</span>
+      </div>
+      <span class="df-sep"></span>
+      <div id="df-toolbar-secondary" class="df-toolbar-secondary" aria-label="Inspector actions">
+        <button id="df-toggle-workbench" class="df-tool-btn df-destination df-workbench-entry" type="button" title="Open Tests (Ctrl/Cmd+Alt+T)" aria-label="Open Tests" aria-controls="df-workbench" aria-expanded="false" aria-pressed="false" aria-keyshortcuts="Control+Alt+T Meta+Alt+T"><svg class="df-ic"><use href="#i-tests"/></svg><span class="df-btn-label">Tests</span><span id="df-test-agent-request-badge" class="df-agent-request-badge" hidden></span></button>
+        <button id="df-toggle-dock" class="df-tool-btn df-destination" aria-label="Open Data" title="Show app data: Problems, Layout, Performance, Logs, Network, Preferences, Device, Sensors, Files" aria-pressed="false"><svg class="df-ic"><use href="#i-data"/></svg><span class="df-btn-label">Data</span><span id="df-data-status" class="df-tool-status" hidden></span></button>
+        <button id="df-toggle-tree" class="df-tool-btn df-toggle-control df-active" aria-label="Tree" title="Show/hide the element tree" aria-expanded="true" aria-pressed="true" aria-controls="df-tree"><svg class="df-ic"><use href="#i-tree"/></svg><span class="df-btn-label">Tree</span></button>
+        <button id="df-toggle-fit" class="df-tool-btn df-toggle-control df-active" aria-label="Fit" title="Fit the app view to the available space (toggle to see it at 1:1 actual size)" aria-pressed="true"><svg class="df-ic"><use href="#i-fit"/></svg><span class="df-btn-label">Fit</span></button>
+        <button id="df-toggle-bounds" class="df-tool-btn df-toggle-control" aria-label="Bounds" title="Outline every element" aria-pressed="false"><svg class="df-ic"><use href="#i-bounds"/></svg><span class="df-btn-label">Bounds</span></button>
+        <button id="df-open-source" class="df-tool-btn df-context-action" aria-label="Source" aria-disabled="true" title="Open the selected element's XAML source in your editor. Enabled when the selected element is defined in XAML with source mapping available." hidden><svg class="df-ic"><use href="#i-source"/></svg><span class="df-btn-label">Source</span></button>
+        <button id="df-send-copilot" class="df-tool-btn df-context-action" aria-label="Add to Copilot" aria-disabled="true" aria-haspopup="menu" aria-expanded="false" aria-controls="df-copilot-menu" title="Choose specific Inspector context to add to Copilot" hidden><svg class="df-ic"><use href="#i-copilot"/></svg><span class="df-btn-label">Add to Copilot</span><svg class="df-ic-xs df-menu-chevron"><use href="#i-chevron"/></svg></button>
+        <button id="df-evidence" class="df-tool-btn df-export-action" aria-label="Evidence" title="Capture a shareable, redacted evidence bundle (.mauitrace). You review exactly what it contains before it downloads."><svg class="df-ic"><use href="#i-evidence"/></svg><span class="df-btn-label">Evidence</span></button>
+      </div>
+      <button id="df-more" class="df-tool-btn df-more-btn df-hidden" aria-label="More inspector actions" title="More inspector actions" aria-haspopup="menu" aria-expanded="false" aria-controls="df-toolbar-overflow"><svg class="df-ic"><use href="#i-more"/></svg><span class="df-btn-label">More</span></button>
+      <div id="df-toolbar-overflow" class="df-toolbar-overflow df-hidden" role="menu" aria-label="More inspector actions"></div>
+      <span class="df-spacer"></span>
+      <span id="df-presence" class="df-presence" role="status" aria-live="polite" aria-atomic="true" title="Who can drive this app right now"></span>
+      <button id="df-take-control" class="df-tool-btn df-hidden" aria-label="Take control" title="Another session is driving this app, click to take control"><svg class="df-ic"><use href="#i-key"/></svg><span class="df-btn-label">Take control</span></button>
+    </div>
+    <div id="df-status" class="df-status" role="status" aria-live="polite"></div>
+    <div id="df-body">
+      <button id="df-pane-scrim" class="df-pane-scrim df-hidden" aria-hidden="true" tabindex="-1"></button>
+      <aside id="df-tree-pane" class="df-pane" aria-label="Visual tree">
+        <div class="df-pane-header"><h2 class="df-pane-title">Visual tree</h2><span id="df-tree-count" class="df-pane-count"></span></div>
+        <div id="df-tree" role="tree" aria-label="Element tree"></div>
+      </aside>
+      <section id="df-view-pane" class="df-pane df-pane-grow" role="main" aria-label="Live app preview">
+        <div class="df-pane-header"><h2 class="df-pane-title">Screenshot</h2></div>
+        <div id="df-disconnected-overlay" class="df-connection-overlay df-hidden" aria-hidden="true">
+          <div class="df-connection-card">
+            <svg class="df-connection-icon"><use href="#i-refresh"/></svg>
+            <h2>App disconnected</h2>
+            <p>Showing the last captured frame while DevFlow reconnects.</p>
+            <button id="df-retry-connection" class="df-tool-btn" type="button"><svg class="df-ic"><use href="#i-refresh"/></svg><span>Retry now</span></button>
+          </div>
+        </div>
+        <div id="df-hit-candidates" class="df-hit-candidates df-hidden" role="group" aria-label="Elements at selected point"></div>
+        <div id="df-viewport-wrap" role="region" aria-label="Live app viewport">
+          <div id="df-stage">
+            <div id="app-viewport" data-width="{{VIEWPORT_WIDTH}}" data-height="{{VIEWPORT_HEIGHT}}" data-root-offset-x="{{ROOT_OFFSET_X}}" data-root-offset-y="{{ROOT_OFFSET_Y}}" style="width:{{VIEWPORT_WIDTH}}px; height:{{VIEWPORT_HEIGHT}}px;">
+              {{SCREENSHOT}}
+              {{ELEMENTS}}
+              <div id="df-layout-overlays" aria-hidden="true"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <aside id="df-props-pane" class="df-pane df-hidden" aria-label="Properties" tabindex="-1">
+        <div class="df-pane-header"><h2 class="df-pane-title">Properties</h2><span id="df-props-el" class="df-pane-el"></span><button id="df-props-close" class="df-icon-btn df-pane-close" title="Close properties"><svg class="df-ic"><use href="#i-close"/></svg></button></div>
+        <div id="df-props" aria-label="Properties"></div>
+      </aside>
+    </div>
+    <div id="df-timeline" class="df-hidden" aria-label="Workflow">
+      <span class="df-tl-title"><svg class="df-ic"><use href="#i-route"/></svg><span id="df-timeline-title-text">Workflow</span></span>
+      <div id="df-timeline-steps" class="df-tl-steps"></div>
+      <span id="df-timeline-meta" class="df-tl-meta"></span>
+      <input id="df-workflow-file-input" class="df-sr-only" type="file" accept=".md,text/markdown" tabindex="-1" aria-hidden="true">
+      <button id="df-record-cancel" class="df-tool-btn df-tl-discard df-hidden" title="Discard the active recording without saving" aria-label="Discard active recording"><svg class="df-ic"><use href="#i-close"/></svg><span>Discard</span></button>
+      <button id="df-timeline-close" class="df-icon-btn" title="Dismiss timeline"><svg class="df-ic"><use href="#i-close"/></svg></button>
+    </div>
+    <section id="df-workbench" class="df-hidden" aria-label="Tests" aria-labelledby="df-workbench-title" aria-describedby="df-workbench-description" aria-hidden="true" tabindex="-1">
+      <div id="df-workbench-resize" role="separator" aria-label="Resize DevFlow Test Workbench" aria-orientation="horizontal" aria-valuemin="240" aria-valuemax="1000" aria-valuenow="240" tabindex="0"></div>
+      <header class="df-workbench-header">
+        <div class="df-workbench-heading">
+          <h2 id="df-workbench-title" class="df-workbench-title">Tests</h2>
+          <p class="df-workbench-subtitle">Create, run, and improve app journeys</p>
+        </div>
+        <span id="df-workbench-description" class="df-sr-only">Create, review, run, repair, and improve tests for the connected app. App-driving actions and agent requests require explicit review.</span>
+        <span class="df-workbench-header-spacer"></span>
+        <span id="df-workbench-strip" class="df-workbench-strip" role="status" aria-live="polite" aria-atomic="true"></span>
+        <button id="df-workbench-close" class="df-icon-btn df-workbench-close" type="button" title="Close Tests" aria-label="Close Tests"><svg class="df-ic"><use href="#i-close"/></svg></button>
+      </header>
+      <div id="df-workbench-tabs" class="df-workbench-tabs">
+        <nav class="df-workbench-journey" aria-label="Test workflow">
+          <span class="df-workbench-nav-label">Test flow</span>
+          <div class="df-panel-tab-list df-workbench-stage-list" role="tablist" aria-label="Test workflow">
+            <button id="df-workbench-stage-goal" class="df-panel-tab df-workbench-tab df-workbench-stage-tab df-active" type="button" role="tab" data-workbench-tab="plan" data-workbench-stage="goal" aria-keyshortcuts="Control+Alt+1 Meta+Alt+1" aria-selected="true" aria-controls="df-workbench-panel-plan" tabindex="0"><span class="df-stage-number">1</span><span class="df-stage-label">Goal</span><span class="df-stage-state" aria-hidden="true"></span></button>
+            <button id="df-workbench-stage-record" class="df-panel-tab df-workbench-tab df-workbench-stage-tab" type="button" role="tab" data-workbench-tab="steps" data-workbench-stage="record" aria-keyshortcuts="Control+Alt+2 Meta+Alt+2" aria-selected="false" aria-controls="df-workbench-panel-steps" aria-disabled="true" title="Add a Goal to unlock Steps." tabindex="-1" disabled><span class="df-stage-number">2</span><span class="df-stage-label">Steps</span><span class="df-stage-state" aria-hidden="true"></span></button>
+            <button id="df-workbench-stage-review" class="df-panel-tab df-workbench-tab df-workbench-stage-tab" type="button" role="tab" data-workbench-tab="review" data-workbench-stage="review" aria-keyshortcuts="Control+Alt+3 Meta+Alt+3" aria-selected="false" aria-controls="df-workbench-panel-review" aria-disabled="true" title="Record at least one step to unlock Review." tabindex="-1" disabled><span class="df-stage-number">3</span><span class="df-stage-label">Review</span><span class="df-stage-state" aria-hidden="true"></span></button>
+            <button id="df-workbench-stage-run" class="df-panel-tab df-workbench-tab df-workbench-stage-tab" type="button" role="tab" data-workbench-tab="run" data-workbench-stage="run" aria-keyshortcuts="Control+Alt+4 Meta+Alt+4" aria-selected="false" aria-controls="df-workbench-panel-run" aria-disabled="true" title="Save a reviewed test with an expected result to unlock Run." tabindex="-1" disabled><span class="df-stage-number">4</span><span class="df-stage-label">Run</span><span class="df-stage-state" aria-hidden="true"></span></button>
+            <button id="df-workbench-stage-results" class="df-panel-tab df-workbench-tab df-workbench-stage-tab" type="button" role="tab" data-workbench-tab="trace" data-workbench-stage="results" aria-keyshortcuts="Control+Alt+5 Meta+Alt+5" aria-selected="false" aria-controls="df-workbench-panel-trace" aria-disabled="true" title="Review a local result or import diagnostic output from another run." tabindex="-1" disabled><span class="df-stage-number">5</span><span class="df-stage-label">Results &amp; import</span><span class="df-stage-state" aria-hidden="true"></span></button>
+          </div>
+        </nav>
+        <div id="df-workbench-advanced-tools" class="df-workbench-tools" hidden>
+          <span class="df-workbench-nav-label">Tools</span>
+          <div class="df-panel-tab-list df-workbench-tool-list" role="tablist" aria-label="Test tools">
+            <button id="df-workbench-tab-requests" class="df-panel-tab df-workbench-tab df-workbench-tool-tab" type="button" role="tab" data-workbench-tab="requests" data-available="false" aria-label="Agent requests" aria-selected="false" aria-controls="df-agent-requests" aria-disabled="true" title="Agent requests appear here after your agent prepares a test or asks to run it." tabindex="-1" disabled hidden><svg class="df-ic-xs"><use href="#i-copilot"/></svg><span>Requests</span><span id="df-agent-requests-badge" class="df-agent-request-badge" hidden></span></button>
+            <button id="df-workbench-tab-repair" class="df-panel-tab df-workbench-tab df-workbench-tool-tab" type="button" role="tab" data-workbench-tab="repair" aria-selected="false" aria-controls="df-workbench-panel-repair" aria-disabled="true" title="Open a failed local result to unlock Repair." tabindex="-1" disabled hidden><svg class="df-ic-xs"><use href="#i-refresh"/></svg><span>Repair</span></button>
+            <button id="df-workbench-tab-improve" class="df-panel-tab df-workbench-tab df-workbench-tool-tab" type="button" role="tab" data-workbench-tab="improve" aria-selected="false" aria-controls="df-workbench-panel-improve" aria-disabled="true" title="Record or open a test to unlock Improve." tabindex="-1" disabled hidden><svg class="df-ic-xs"><use href="#i-assert"/></svg><span>Improve</span></button>
+            <button id="df-workbench-tab-source" class="df-panel-tab df-workbench-tab df-workbench-tool-tab" type="button" role="tab" data-workbench-tab="source" aria-selected="false" aria-controls="df-workbench-panel-source" aria-disabled="true" title="Select a source-mapped control to unlock Source." tabindex="-1" disabled hidden><svg class="df-ic-xs"><use href="#i-source"/></svg><span>Source</span></button>
+          </div>
+        </div>
+      </div>
+      <div id="df-workbench-content" class="df-workbench-content">
+        <section id="df-workbench-panel-plan" class="df-workbench-view df-workbench-panel" role="tabpanel" aria-labelledby="df-workbench-stage-goal" tabindex="0"><div class="df-workbench-panel-body"></div></section>
+        <section id="df-workbench-panel-steps" class="df-workbench-view df-workbench-panel" role="tabpanel" aria-labelledby="df-workbench-stage-record" tabindex="0" hidden><div class="df-workbench-panel-body"></div></section>
+        <section id="df-workbench-panel-review" class="df-workbench-view df-workbench-panel" role="tabpanel" aria-labelledby="df-workbench-stage-review" tabindex="0" hidden><div class="df-workbench-panel-body"></div></section>
+        <section id="df-workbench-panel-run" class="df-workbench-view df-workbench-panel" role="tabpanel" aria-labelledby="df-workbench-stage-run" tabindex="0" hidden><div class="df-workbench-panel-body"></div></section>
+        <section id="df-workbench-panel-trace" class="df-workbench-view df-workbench-panel" role="tabpanel" aria-labelledby="df-workbench-stage-results" tabindex="0" hidden><div class="df-workbench-panel-body"></div></section>
+        <section id="df-agent-requests" class="df-workbench-view df-agent-requests" role="tabpanel" aria-labelledby="df-workbench-tab-requests" tabindex="0" hidden>
+          <div class="df-agent-requests-heading">
+            <h3>Agent requests</h3>
+            <p>Review agent requests. They remain read-only unless both this broker and embedding host advertise trusted native approval.</p>
+          </div>
+          <div id="df-agent-requests-body"></div>
+        </section>
+        <section id="df-workbench-panel-repair" class="df-workbench-view df-workbench-panel" role="tabpanel" aria-labelledby="df-workbench-tab-repair" tabindex="0" hidden><div class="df-workbench-panel-body"></div></section>
+        <section id="df-workbench-panel-improve" class="df-workbench-view df-workbench-panel" role="tabpanel" aria-labelledby="df-workbench-tab-improve" tabindex="0" hidden><div class="df-workbench-panel-body"></div></section>
+        <section id="df-workbench-panel-source" class="df-workbench-view df-workbench-panel" role="tabpanel" aria-labelledby="df-workbench-tab-source" tabindex="0" hidden><div class="df-workbench-panel-body"></div></section>
+      </div>
+      <div id="df-workbench-status" class="df-workbench-status" role="status" aria-live="polite" aria-atomic="true"></div>
+      <div id="df-workbench-alert" class="df-sr-only" role="alert" aria-live="assertive" aria-atomic="true"></div>
+    </section>
+    <div id="df-copilot-menu" class="df-context-menu df-hidden" role="menu" aria-label="Add context to Copilot">
+      <button type="button" class="df-context-menu-item" role="menuitem" data-copilot-context="selection"><svg class="df-ic"><use href="#i-inspect"/></svg><span><strong>Selected element</strong><small>Type, AutomationId, text, and element id</small></span></button>
+      <button type="button" class="df-context-menu-item" role="menuitem" data-copilot-context="workflow"><svg class="df-ic"><use href="#i-route"/></svg><span><strong>Workflow</strong><small>The loaded or recorded replay steps</small></span></button>
+      <button type="button" class="df-context-menu-item" role="menuitem" data-copilot-context="combined"><svg class="df-ic"><use href="#i-copilot"/></svg><span><strong>Selection + workflow</strong><small>Both focused UI and replay context</small></span></button>
+      <button type="button" class="df-context-menu-item" role="menuitem" data-copilot-context="data"><svg class="df-ic"><use href="#i-data"/></svg><span><strong>Current Data view</strong><small>The bounded, redacted snapshot currently open</small></span></button>
+    </div>
+    <div id="df-dock" class="df-hidden" aria-label="App data">
+      <div id="df-dock-tabs">
+        <div class="df-dock-tab-list" role="tablist" aria-label="App data">
+          <button id="df-tab-problems" class="df-dock-tab df-active" data-tab="problems" role="tab" aria-selected="true" aria-controls="df-dock-panel" tabindex="0">Problems</button>
+          <button id="df-tab-layout" class="df-dock-tab" data-tab="layout" role="tab" aria-selected="false" aria-controls="df-dock-panel" tabindex="-1">Layout</button>
+          <button id="df-tab-performance" class="df-dock-tab" data-tab="performance" role="tab" aria-selected="false" aria-controls="df-dock-panel" tabindex="-1">Performance</button>
+          <button id="df-tab-logs" class="df-dock-tab" data-tab="logs" role="tab" aria-selected="false" aria-controls="df-dock-panel" tabindex="-1">Logs</button>
+          <button id="df-tab-network" class="df-dock-tab" data-tab="network" role="tab" aria-selected="false" aria-controls="df-dock-panel" tabindex="-1">Network</button>
+          <button id="df-tab-preferences" class="df-dock-tab" data-tab="preferences" role="tab" aria-selected="false" aria-controls="df-dock-panel" tabindex="-1">Preferences</button>
+          <button id="df-tab-device" class="df-dock-tab" data-tab="device" role="tab" aria-selected="false" aria-controls="df-dock-panel" tabindex="-1">Device</button>
+          <button id="df-tab-sensors" class="df-dock-tab" data-tab="sensors" role="tab" aria-selected="false" aria-controls="df-dock-panel" tabindex="-1">Sensors</button>
+          <button id="df-tab-files" class="df-dock-tab" data-tab="files" role="tab" aria-selected="false" aria-controls="df-dock-panel" tabindex="-1">Files</button>
+          <button id="df-tab-alerts" class="df-dock-tab" data-tab="alerts" role="tab" aria-selected="false" aria-controls="df-dock-panel" tabindex="-1">Alerts</button>
+          <button id="df-tab-webview" class="df-dock-tab" data-tab="webview" role="tab" aria-selected="false" aria-controls="df-dock-panel" tabindex="-1">WebView</button>
+        </div>
+        <span id="df-problems-status" class="df-sr-only" role="status" aria-live="polite" aria-atomic="true"></span>
+        <span id="df-dock-meta" class="df-dock-meta"></span>
+        <span id="df-dock-meta-note" class="df-dock-meta"></span>
+        <button id="df-attach-data" class="df-icon-btn" title="Add the current Data context to Copilot" aria-label="Add current Data context to Copilot" disabled><svg class="df-ic"><use href="#i-attach"/></svg></button>
+        <button id="df-dock-collapse" class="df-icon-btn" title="Collapse data panel" aria-expanded="true"><svg class="df-ic"><use href="#i-chevron"/></svg></button>
+        <button id="df-dock-refresh" class="df-icon-btn" title="Refresh this tab"><svg class="df-ic"><use href="#i-refresh"/></svg></button>
+        <button id="df-dock-close" class="df-icon-btn" title="Hide the data dock"><svg class="df-ic"><use href="#i-close"/></svg></button>
+      </div>
+      <div id="df-dock-panel" role="tabpanel" aria-labelledby="df-tab-problems">
+        <div id="df-dock-action-strip" class="df-hidden" role="group"></div>
+        <div id="df-dock-body" role="region" aria-label="Problems data"></div>
+      </div>
+    </div>
   </div>
 
-  <script src="devflow.js"></script>
+  <script type="module" src="devflow.js"></script>
 </body>
 </html>

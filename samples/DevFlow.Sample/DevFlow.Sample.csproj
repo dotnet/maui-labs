@@ -43,7 +43,16 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj" />
         <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Blazor\Microsoft.Maui.DevFlow.Blazor.csproj" />
+        <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Analyzers\Microsoft.Maui.DevFlow.Analyzers.csproj"
+                          ReferenceOutputAssembly="false"
+                          OutputItemType="Analyzer" />
     </ItemGroup>
+
+    <!-- ProjectReference builds do not import a referenced NuGet package's buildTransitive assets.
+         Import the same source-map targets explicitly so the repository sample exercises the exact
+         click-to-XAML behavior that package consumers receive. -->
+    <Import Project="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Core\buildTransitive\Microsoft.Maui.DevFlow.Agent.Core.props" />
+    <Import Project="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Core\buildTransitive\Microsoft.Maui.DevFlow.Agent.Core.targets" />
 
     <!-- During project-to-project references, Microsoft.Maui.DevFlow.Blazor's WebView dependency
          leaks static web assets (blazor.modules.json, blazor.webview.js) that conflict

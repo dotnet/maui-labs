@@ -40,6 +40,102 @@ maui devflow broker start
 
 > The standalone `maui devflow inspector` command (with `--port`, `--agent-port`, `--device` flags) shown in earlier drafts is **future work**; today the inspector lives inside the broker.
 
+`maui devflow inspect` resolves the connected agent, starts the broker if it is not already
+running, and opens the authenticated per-agent Inspector URL. Pass `--agent <agent-id>` when more
+than one app is connected, and `--no-launch` to print the URL instead of opening a browser.
+
+## Browser modules
+
+The page is one document assembled from focused ES modules. Every module is an embedded resource
+under `DevFlow/Inspector/Web/` and is routed explicitly by `InspectorServer.Routes.cs`; the
+`AssetRoutesAndEmbeddedBrowserResourcesMatchExactly` test asserts the route table and the embedded
+set are the same set, in both directions.
+
+| Module | Responsibility |
+|---|---|
+| `devflow.js` | Orchestration: live state refresh, interaction, recording/replay, Data dock, layout, theme. |
+| `inspector-api.js` | Token-aware JSON POST/GET wrapper used by every feature controller. |
+| `inspector-dialog.js` | Host-independent accessible confirmation dialog. |
+| `inspector-tree.js` | Visual-tree rendering, expansion, selection, keyboard navigation. |
+| `inspector-properties.js` | Property descriptors, typed editors, live updates, XAML persistence controls. |
+| `inspector-data-context.js` / `-data-controller.js` / `-data-ui.js` | Bounded, redacted Data snapshots and their rendering. |
+| `inspector-diagnostics.js` | Problems and performance presentation. |
+| `inspector-evidence.js` | Evidence bundle preview, confirmation, download. |
+| `inspector-video.js` | Live video surface for hosts that can stream. |
+| `inspector-host-bridge.js` | The negotiated capability registry for embedding hosts. |
+| `inspector-workbench.js` / `-plan` / `-steps` / `-run` / `-trace` / `-repair` / `-improve` / `-source` | Preview-gated Test Workbench surfaces. |
+| `inspector-agent-requests.js` | Agent approval inbox and the native approval ceremony. |
+| `inspector-study.js` | Authoring-time study instrumentation. |
+
+## Preview flags and optional surfaces
+
+The server publishes what it enabled as `<meta>` tags; the page hides everything it is not told
+about. This is presentation only — every preview route re-checks the same flags server-side, so a
+forged meta buys nothing but a 404.
+
+| Meta | Environment variable | Reveals |
+|---|---|---|
+| `devflow-preview-workbench` | `DEVFLOW_PREVIEW_WORKBENCH` | The guided Goal → Record → Review → Run → Results journey. |
+| `devflow-preview-agent-authoring` | `DEVFLOW_PREVIEW_AGENT_AUTHORING` | The Agent requests approval inbox. |
+| `devflow-preview-repair` | `DEVFLOW_PREVIEW_REPAIR_PROPOSALS` | The reviewed selector-repair panel. |
+| `devflow-preview-source` | `DEVFLOW_PREVIEW_SOURCE_PROPOSALS` | The reviewed XAML/C# source proposal panel (review-only — see below). |
+| `devflow-preview-trace-import` | `DEVFLOW_PREVIEW_TRACE_IMPORT_EXPORT` | Trace import/export. |
+
+With no flags set the product presents only the durable specialized surface: visual tree,
+properties, screenshots, hit-test and interaction, Data, recorder, video, and the Blazor bridge.
+With `DEVFLOW_PREVIEW_AGENT_AUTHORING` alone the Tests toggle appears but every guided stage stays
+hidden, so the panel opens directly on Agent requests rather than an empty shell.
+
+Two panels ship their browser code here but stay hidden because this layer serves no route for
+them: layout diagnostics (`/api/diagnostics/*`) and the managed device host (`/api/device/host`).
+`InspectorServer.OptionalSurfaces` is the single place that records this, and
+`EveryOptionalSurfaceIsAdvertisedExactlyWhenItsRouteIsServed` probes each route to prove the
+advertisement and the routing agree.
+
+## Editor hosts and the trusted native approval
+
+Two hosts embed the same page rather than re-implementing it:
+
+- **VS Code** — `src/DevFlow/js/vscode-inspector`. It contributes exactly one command
+  (`MAUI DevFlow: Open Inspector`) and two settings (`mauiDevflow.brokerPort`,
+  `mauiDevflow.openLocation`). It deliberately contributes no chat participant, no language-model
+  tools, and no MCP definition provider, because it registers none of them.
+- **GitHub Copilot Canvas** — `.github/extensions/maui-devflow-canvas`.
+
+Both reach the page through a nonce'd `postMessage` bridge and advertise a capability manifest, so
+the page only offers what its host can actually do.
+
+**VS Code is the only trusted native approval host.** Approving an agent request is the one place a
+host mints authority, and it is a two-step ceremony neither the page nor chat can perform:
+
+1. The extension shows a real modal — `showWarningMessage(…, { modal: true })` in the *extension*
+   process, not in the webview — describing the exact request, scope, and grant length.
+2. Only after the human confirms does the extension read the owner-only native approval token from
+   the local broker state and `POST /api/workbench/approval-confirmations/issue`.
+3. The broker returns a single-use capability bound to this target, subject, and a digest of the
+   reviewed scope. The extension immediately redeems it on
+   `POST /api/workbench/agent-requests/{id}/approve` **without** the owner token.
+
+The owner token never reaches browser JavaScript, the capability is consumed on first use, and a
+replay of the same capability is refused. `humanConfirmed` travels with the approve call, but it is
+not the authority: it is a caller-supplied boolean, and the broker issues the grant only against the
+capability. A browser or chat message can never substitute for either step.
+
+Canvas carries **no** approval authority in this layer. It may inspect, interact, and record, but it
+advertises no `nativeApproval` capability, holds no owner token, and serves no approval route — a
+`window.confirm()` in a canvas webview is a surface the embedded page can reach, so it is not
+evidence that the local human agreed.
+
+## Reviewed source proposals are inert here
+
+`DEVFLOW_PREVIEW_SOURCE_PROPOSALS` reveals the reviewed XAML/C# AutomationId proposal panel, and in
+this layer that panel is **read-only**. The broker serves `analyze`, `propose`, `status`, `preview`
+and `reject`; there is no grant, approve, apply, host-apply handoff, verification, or rollback route
+for either language, and no host advertises a source-apply capability. Rejecting a proposal only
+discards a review object, so the browser read token is enough for it; approving or narrowing one
+would need a trusted native host capability, which nothing here offers. Source *apply* — and the
+build/replay verification that must accompany it — lands in its own dedicated branch.
+
 ## Generated HTML Structure
 
 The inspector server generates an interactive HTML page with two layers:

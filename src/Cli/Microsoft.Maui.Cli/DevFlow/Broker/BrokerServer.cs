@@ -50,6 +50,9 @@ public partial class BrokerServer : IDisposable
     private readonly byte[] _workflowRunDispatchKey = RandomNumberGenerator.GetBytes(32);
     private readonly ArtifactTrustImportService _artifactTrustImports;
     private readonly ArtifactTrustStore _artifactTrustStore;
+    private readonly WorkflowRepairProposalStore _workflowRepairs;
+    private readonly WorkflowXamlSourceProposalStore _workflowXamlSources;
+    private readonly WorkflowCSharpSourceProposalStore _workflowCSharpSources;
     private readonly MauiPreviewFeatureFlags _previewFlags;
     // A production broker supplies a per-process, owner-file-only native host verifier. Internal
     // construction remains explicitly unavailable unless a test supplies its own verifier.
@@ -58,6 +61,7 @@ public partial class BrokerServer : IDisposable
     // Resolves the component that owns the connected app's lifecycle, when one has registered
     // itself with this broker process. It stays null in an ordinary broker, which is why repair
     // validation reports itself unavailable rather than promising a reset nobody can perform.
+    private readonly Func<AgentRegistration, IWorkflowRepairResetAttester?>? _repairResetAttesterResolver;
     private readonly HashSet<int> _assignedPorts = new();
     private readonly object _portLock = new();
     private DateTime _lastActivity = DateTime.UtcNow;
@@ -86,7 +90,8 @@ public partial class BrokerServer : IDisposable
         int port,
         TimeSpan? idleTimeout,
         Action<string>? log,
-        Execution.IAttachedRunOracleEvaluator? attachedRunOracles)
+        Execution.IAttachedRunOracleEvaluator? attachedRunOracles,
+        Func<AgentRegistration, IWorkflowRepairResetAttester?>? repairResetAttesterResolver = null)
         : this(
             port,
             idleTimeout,
@@ -97,6 +102,7 @@ public partial class BrokerServer : IDisposable
             previewFlags: null,
             trustedHostApprovalVerifier: null,
             nativeApprovalToken: CreateNativeApprovalToken(),
+            repairResetAttesterResolver: repairResetAttesterResolver,
             attachedRunOracles: attachedRunOracles)
     {
     }
@@ -152,12 +158,14 @@ public partial class BrokerServer : IDisposable
         Func<string?, bool>? trustedHostApprovalVerifier = null,
         string? nativeApprovalToken = null,
         bool requireWorkflowRunAuthorization = true,
+        Func<AgentRegistration, IWorkflowRepairResetAttester?>? repairResetAttesterResolver = null,
         Execution.IAttachedRunOracleEvaluator? attachedRunOracles = null)
     {
         _port = port;
         _idleTimeout = idleTimeout ?? TimeSpan.FromMinutes(5);
         _log = log;
         _requireWorkflowRunAuthorization = requireWorkflowRunAuthorization;
+        _repairResetAttesterResolver = repairResetAttesterResolver;
         _attachedRunOracles = attachedRunOracles;
         _previewFlags = previewFlags ?? MauiPreviewFeatureFlagConfiguration.FromEnvironment();
         _nativeApprovalToken = nativeApprovalToken;
@@ -187,6 +195,9 @@ public partial class BrokerServer : IDisposable
         _testAgentSessions = new TestAgentSessionService(clock: clock);
         _artifactTrustImports = new ArtifactTrustImportService(clock);
         _artifactTrustStore = new ArtifactTrustStore(clock: clock);
+        _workflowRepairs = new WorkflowRepairProposalStore(clock: clock);
+        _workflowXamlSources = new WorkflowXamlSourceProposalStore(clock: clock);
+        _workflowCSharpSources = new WorkflowCSharpSourceProposalStore(clock: clock);
     }
 
     public async Task RunAsync(CancellationToken cancellationToken = default)
@@ -2949,12 +2960,16 @@ public partial class BrokerServer : IDisposable
                     _workflowRuns,
                     _artifactTrustImports,
                     _artifactTrustStore,
+                    _workflowRepairs,
+                    _workflowXamlSources,
+                    _workflowCSharpSources,
                     CreateWorkflowRunTarget(registration),
                     IssueWorkflowRunDispatchTicket(
                         registration,
                         WorkflowRunDispatchOrigin.InspectorWorkbench),
                     () => IsCurrentAgentConnection(connection),
                     _cts?.Token ?? CancellationToken.None),
+                repairValidationHost: CreateRepairValidationHost(connection),
                 testAgentSessions: _testAgentSessions,
                 testAgentTargetStateRefresh: supplied => GetLiveTestAgentTargetStateAsync(supplied),
                 previewFlags: _previewFlags,
@@ -3023,6 +3038,214 @@ public partial class BrokerServer : IDisposable
         return candidates.Length == 1 ? candidates[0] : null;
     }
 
+    /// <summary>
+    /// Builds the broker-side lifecycle host for bounded transient repair validation, or returns
+    /// null when no component can attest a hard reset. It only composes primitives the broker
+    /// already owns: live checkpoint observation, route restore, and one retained workflow run. No
+    /// source file, flow, or plan is written. Returning a host that cannot reset would flip the
+    /// workbench's <c>repairValidationAvailable</c> flag to true and replace an honest
+    /// "no lifecycle host is connected" answer with a validation that can never pass.
+    /// </summary>
+    private BrokerWorkflowRepairValidationHost? CreateRepairValidationHost(AgentConnection connection)
+    {
+        if (CreateRepairResetAttester(connection.Registration) is not { } resetAttester)
+            return null;
+
+        return new BrokerWorkflowRepairValidationHost(
+            observeCheckpoint: cancellationToken =>
+                ObserveRepairCheckpointAsync(connection, cancellationToken),
+            restoreRoute: (route, cancellationToken) =>
+                RestoreRepairRouteAsync(connection, route, cancellationToken),
+            replay: (flow, plan, context, cancellationToken) =>
+                ReplayTransientRepairFlowAsync(connection, flow, plan, context, cancellationToken),
+            resetAttester: resetAttester);
+    }
+
+    /// <summary>
+    /// Resolves the component that can attest a hard reset for this exact agent. Seed, backend-state,
+    /// and collection-item facts require a host that installed, wiped, and seeded the app itself, so
+    /// only a registered lifecycle owner can supply one. Without a registration the broker returns
+    /// null and never fabricates a reset attestation from what a running app reports.
+    /// </summary>
+    private IWorkflowRepairResetAttester? CreateRepairResetAttester(AgentRegistration registration)
+        => _repairResetAttesterResolver?.Invoke(registration);
+
+    private async Task<MauiFlowCheckpoint?> ObserveRepairCheckpointAsync(
+        AgentConnection connection,
+        CancellationToken cancellationToken)
+    {
+        if (!IsCurrentAgentConnection(connection))
+            return null;
+
+        try
+        {
+            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(
+                "localhost",
+                connection.Registration.Port)
+            {
+                AutoAcquireMutationLease = false,
+            };
+            var status = await client.GetStatusAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+            if (status is null)
+                return null;
+
+            return new MauiFlowCheckpoint
+            {
+                AppBuildFingerprint = SafeCheckpointText(status.App?.Build),
+                // The broker's own registration record, not the app's self-report.
+                AgentInstanceId = SafeCheckpointText(connection.Registration.InstanceId),
+                Route = SafeCheckpointText(status.Route),
+                Window = SafeCheckpointText(status.Window),
+                Modal = SafeCheckpointText(status.Modal),
+                Locale = SafeCheckpointText(status.Locale),
+                Theme = SafeCheckpointText(status.Theme),
+                Orientation = SafeCheckpointText(status.Orientation),
+                DisplayProfile = SafeCheckpointText(status.DisplayProfile),
+            };
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException or System.Net.Sockets.SocketException)
+        {
+            return null;
+        }
+    }
+
+    private async Task<bool> RestoreRepairRouteAsync(
+        AgentConnection connection,
+        string route,
+        CancellationToken cancellationToken)
+    {
+        if (!IsCurrentAgentConnection(connection) || string.IsNullOrWhiteSpace(route))
+            return false;
+
+        var leaseId = $"repair-validation-{Guid.NewGuid():N}";
+        try
+        {
+            // The implicit lease is disabled so the claim is explicit and, above all, released:
+            // an auto-acquired lease is never released and would collide with the paired replay
+            // run for the whole 10s lease duration.
+            using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient(
+                "localhost",
+                connection.Registration.Port)
+            {
+                AutoAcquireMutationLease = false,
+            };
+            using var leaseScope = client.UseMutationLease(leaseId, "repair-validation", "route-restore");
+            var claim = await client
+                .ControlMutationLeaseAsync("claim", false, leaseId, "repair-validation", "route-restore")
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (!claim.YouHold)
+                return false;
+
+            try
+            {
+                if (!await client.NavigateAsync(route).WaitAsync(cancellationToken).ConfigureAwait(false))
+                    return false;
+                var observed = await client.GetStatusAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+                return string.Equals(SafeCheckpointText(observed?.Route), route, StringComparison.Ordinal);
+            }
+            finally
+            {
+                await client
+                    .ControlMutationLeaseAsync("release", false, leaseId, "repair-validation", "route-restore")
+                    .ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Microsoft.Maui.DevFlow.Driver.MutationLeaseException)
+        {
+            return false;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException or System.Net.Sockets.SocketException)
+        {
+            return false;
+        }
+    }
+
+    private async Task<WorkflowRepairTransientReplayOutcome?> ReplayTransientRepairFlowAsync(
+        AgentConnection connection,
+        MauiFlow flow,
+        MauiTestPlan? plan,
+        MauiFlowRunContext context,
+        CancellationToken cancellationToken)
+    {
+        if (!IsCurrentAgentConnection(connection))
+            return new WorkflowRepairTransientReplayOutcome { FailureCode = "agent-instance-replaced" };
+
+        var registration = connection.Registration;
+        // The plan is the one the proposal was reviewed against — the Inspector re-verifies its
+        // digest, revision, and side-effect policy before validation. Only its flow binding is
+        // rebound, to the verified selector-only patch actually being replayed.
+        var transientPlan = RebindPlanToTransientFlow(plan, flow);
+        var capabilities = RequiresWorkflowRunCapabilities(transientPlan)
+            ? await ReadWorkflowRunCapabilitiesAsync(registration).ConfigureAwait(false)
+            : null;
+        // This run is authorized by the reviewer's repair grant, which the Inspector re-checks
+        // before any device-visible work, rather than by the ordinary workflow-run authorization.
+        var started = _workflowRuns.Start(
+            new WorkflowRunStartRequest
+            {
+                AgentId = registration.Id,
+                AgentInstanceId = registration.InstanceId,
+                IdempotencyKey = $"repair-validation-{Guid.NewGuid():N}",
+                Flow = flow,
+                Plan = transientPlan,
+                Context = context,
+                AvailableCapabilities = capabilities,
+                TimeoutMs = 120_000,
+            },
+            CreateWorkflowRunTarget(registration),
+            () => IsCurrentAgentConnection(connection),
+            executionOptions: null,
+            leaseHandoff: null,
+            dispatchOrigin: WorkflowRunDispatchOrigin.RepairValidation,
+            dispatchTicket: IssueWorkflowRunDispatchTicket(
+                registration,
+                WorkflowRunDispatchOrigin.RepairValidation));
+        if (!started.Ok || started.Run is null || string.IsNullOrWhiteSpace(started.CapabilityToken))
+        {
+            return new WorkflowRepairTransientReplayOutcome
+            {
+                FailureCode = string.IsNullOrWhiteSpace(started.Error)
+                    ? "transient-replay-rejected"
+                    : $"transient-replay-rejected: {started.Error}",
+            };
+        }
+
+        WorkflowRunSnapshot snapshot;
+        try
+        {
+            snapshot = await _workflowRuns
+                .WaitForTerminalAsync(started.Run.RunId, started.CapabilityToken, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Never abandon a still-running device-mutating run to a cancelled caller.
+            _workflowRuns.Cancel(started.Run.RunId, started.CapabilityToken);
+            throw;
+        }
+
+        return new WorkflowRepairTransientReplayOutcome
+        {
+            RunId = snapshot.RunId,
+            Report = snapshot.Report,
+            EvidenceId = snapshot.ReportPath ?? snapshot.ReportDigest,
+            FailureCode = snapshot.Report is null ? "transient-replay-unavailable" : null,
+        };
+    }
+
+    /// <summary>
+    /// Rebinds a reviewed plan onto the transient patched flow. The coordinator refuses a plan whose
+    /// flow digest is stale, and the selector-only patch necessarily changes that digest.
+    /// </summary>
     private static MauiTestPlan? RebindPlanToTransientFlow(MauiTestPlan? plan, MauiFlow flow)
     {
         if (plan?.Flow is null)

@@ -20,8 +20,8 @@ Treat chat approval as intent only. Require the operator's current,
 exact-scope broker grants for commit, run, validation, or apply. Restricted
 `maui_test_*` authoring is inert; only a committed flow with a separate
 human-approved run grant can execute. Approval is available when an owner-token approval host is
-running; this layer ships `maui devflow approve`. With such a host, request and await the exact
-commit/run grant.
+running: the `maui devflow approve` CLI, the VS Code Inspector, or the GitHub Copilot Canvas
+Inspector. With such a host, request and await the exact commit/run grant.
 Standalone browser tabs and chat remain non-authoritative; stop safely when the
 trusted capability is absent.
 Keep CI/imported evidence diagnostic-only, and hand selector repair or source

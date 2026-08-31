@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/dotnet/maui-labs/main/docs/DevFlow/spec/schemas/maui-xaml-source-proposal-v1.json",
   "title": "MAUI XAML Source Proposal v1",
-  "description": "A reviewable, local-host-only proposal to add or replace one static literal AutomationId. It never approves a flow repair or authorizes automatic source writes.",
+  "description": "A reviewable proposal to add or replace one static literal AutomationId. It never approves a flow repair or authorizes source writes.",
   "type": "object",
   "required": [
     "schema",
@@ -30,17 +30,8 @@
       "enum": [
         "proposed",
         "previewed",
-        "approved",
-        "awaiting-host-apply",
-        "applying",
-        "applied",
-        "verification-failed",
-        "rollback-required",
-        "verified",
         "stale",
-        "rejected",
-        "reverted",
-        "rollback-failed"
+        "rejected"
       ]
     },
     "operation": {
@@ -81,18 +72,6 @@
       "items": {
         "$ref": "#/$defs/PlatformVerification"
       }
-    },
-    "approval": {
-      "$ref": "#/$defs/Approval"
-    },
-    "apply": {
-      "$ref": "#/$defs/Apply"
-    },
-    "verification": {
-      "$ref": "#/$defs/Verification"
-    },
-    "rollback": {
-      "$ref": "#/$defs/Rollback"
     }
   },
   "additionalProperties": true,
@@ -329,73 +308,6 @@
         },
         "oracleState": {
           "type": "string"
-        }
-      },
-      "additionalProperties": true
-    },
-    "Approval": {
-      "type": "object",
-      "properties": {
-        "state": {
-          "type": "string"
-        },
-        "reviewer": {
-          "type": "string"
-        },
-        "expiresAt": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "grantDigest": {
-          "$ref": "#/$defs/Digest"
-        }
-      },
-      "additionalProperties": true
-    },
-    "Apply": {
-      "type": "object",
-      "properties": {
-        "state": {
-          "type": "string"
-        },
-        "hostKind": {
-          "type": "string"
-        },
-        "appliedContentDigest": {
-          "$ref": "#/$defs/Digest"
-        }
-      },
-      "additionalProperties": true
-    },
-    "Verification": {
-      "type": "object",
-      "properties": {
-        "state": {
-          "type": "string"
-        },
-        "verificationRunIds": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "platforms": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/PlatformVerification"
-          }
-        }
-      },
-      "additionalProperties": true
-    },
-    "Rollback": {
-      "type": "object",
-      "properties": {
-        "state": {
-          "type": "string"
-        },
-        "contentDigest": {
-          "$ref": "#/$defs/Digest"
         }
       },
       "additionalProperties": true

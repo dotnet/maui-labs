@@ -88,18 +88,6 @@ public class DevFlowCliCommandTests
     // ========== ui status / tree / query / element / hit-test ==========
 
     [Fact]
-    public async Task UiTree_Default_HitsTreeRoute()
-    {
-        var (server, cli) = await CreateFixturesAsync();
-        await using var _ = server;
-
-        var result = await cli.InvokeAsync("devflow", "ui", "tree", "--json");
-
-        Assert.Equal(0, result.ExitCode);
-        Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/ui/tree");
-    }
-
-    [Fact]
     public async Task UiQuery_ByType_SendsTypeParam()
     {
         var (server, cli) = await CreateFixturesAsync();

@@ -21,12 +21,16 @@ Use this skill for a human-and-agent testing conversation backed by
 the human operator owns the review boundary and owns approval, commit, run,
 and repair decisions.
 **Current availability:** approval is issued by an owner-token approval host.
-This layer ships exactly one: the `maui devflow approve` CLI, which reads the
-owner-only approval token from the local broker state file and performs the
-digest-bound confirmation ceremony. Editor-embedded approval clients are not
-part of this layer. Standalone browser tabs and chat are non-authoritative. If
-no approval host is running, stop at an inert draft or a pending, rejected, or
-expired request.
+Three exist: the `maui devflow approve` CLI, the VS Code Inspector, and the
+GitHub Copilot Canvas Inspector. Each reads the owner-only approval token from
+the local broker state file, shows the exact scope for confirmation, and
+performs the digest-bound single-use confirmation ceremony. The editor hosts
+show a native modal first; the approval inbox they present requires
+`DEVFLOW_PREVIEW_AGENT_AUTHORING`. None of them proves a human rather than a
+local agent decided: an agent running as the same OS user can read the same
+token. Standalone browser tabs and chat are non-authoritative and cannot issue a
+grant at all. If no approval host is running, stop at an inert draft or a
+pending, rejected, or expired request.
 
 ## Tool Inventory
 
