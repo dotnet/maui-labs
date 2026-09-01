@@ -1313,15 +1313,15 @@ public sealed class FlowExecutionCoreTests
         Assert.Equal(FlowExecutionExitCategories.Unverified, result.PrimaryExitCategory);
         Assert.Equal(
             [MauiFlowSecondaryFailurePhases.ArtifactCleanup, MauiFlowSecondaryFailurePhases.Cleanup],
-            result.Report!.SecondaryFailures.Select(static failure => failure.Phase).ToArray());
+            result.Report!.SecondaryFailures.Select(static failure => failure.Phase!).ToArray());
         // The manifest is a redacted projection, not the report's own list, so it is compared on
         // values rather than by reference.
         Assert.Equal(
             [MauiFlowSecondaryFailurePhases.ArtifactCleanup, MauiFlowSecondaryFailurePhases.Cleanup],
-            result.Manifest!.Outcome!.SecondaryFailures.Select(static failure => failure.Phase).ToArray());
+            result.Manifest!.Outcome!.SecondaryFailures.Select(static failure => failure.Phase!).ToArray());
         Assert.Equal(
             ["artifact-cleanup-failed", "fake-cleanup-failed"],
-            result.Manifest.Outcome.SecondaryFailures.Select(static failure => failure.Code).ToArray());
+            result.Manifest.Outcome.SecondaryFailures.Select(static failure => failure.Code!).ToArray());
         Assert.Contains(
             result.Manifest.Lifecycle!.Stages,
             stage => stage.Name == "artifact-cleanup" && stage.Status == "failed");

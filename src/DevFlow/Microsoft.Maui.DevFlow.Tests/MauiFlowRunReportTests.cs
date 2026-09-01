@@ -442,7 +442,7 @@ public sealed class MauiFlowRunReportTests : IDisposable
     {
         var driver = new FakeDriver { PropertyValue = "hunter2", ElementAutomationId = "LoginField" };
         var flow = AssertTextFlow("Text", expected: "other", automationId: "LoginField");
-        flow.Steps[0].Asserts[0].Selector!.Type = "PasswordEntry";
+        flow.Steps[0].Asserts![0].Selector!.Type = "PasswordEntry";
 
         var result = await new MauiFlowRunner(driver, new MauiFlowRunnerOptions
         {

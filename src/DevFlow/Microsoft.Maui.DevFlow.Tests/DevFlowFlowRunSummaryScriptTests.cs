@@ -180,10 +180,10 @@ public sealed class DevFlowFlowRunSummaryScriptTests : IDisposable
 
         Assert.Equal(0, result.ExitCode);
         var row = Assert.Single(
-            result.Summary.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Where(static line => line.StartsWith("| ", StringComparison.Ordinal)
-                    && !line.StartsWith("| ---", StringComparison.Ordinal)
-                    && !line.StartsWith("| Flow", StringComparison.Ordinal)));
+            result.Summary.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+            static line => line.StartsWith("| ", StringComparison.Ordinal)
+                && !line.StartsWith("| ---", StringComparison.Ordinal)
+                && !line.StartsWith("| Flow", StringComparison.Ordinal));
         Assert.Equal(12, row.Split('|').Length);
         Assert.DoesNotContain("<img", row, StringComparison.Ordinal);
         Assert.DoesNotContain("](", row, StringComparison.Ordinal);
