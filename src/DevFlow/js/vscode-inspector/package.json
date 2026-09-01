@@ -68,6 +68,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build:test": "tsc -p tsconfig.test.json",
     "build": "tsc -p tsconfig.json --noEmit && esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node18 --external:vscode --outfile=dist/extension.js",
+    "pretest": "npm run build -w @maui-devflow/client",
     "test": "tsc -p tsconfig.test.json && node --test \"test/**/*.test.mjs\"",
     "watch": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node18 --external:vscode --outfile=dist/extension.js --watch",
     "package:vsix": "tsc -p tsconfig.json --noEmit && esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node18 --external:vscode --outfile=dist/extension.js && vsce package --pre-release --no-dependencies --out dist/maui-devflow-inspector.vsix"
