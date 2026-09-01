@@ -352,32 +352,33 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase, IPlatformFlowTestLi
         EnsureExpectedFingerprint("backend state", seed.BackendStateFingerprint, state.BackendStateFingerprint);
 
         var theme = await Client.GetThemeAsync().ConfigureAwait(false);
-        var observed = new MauiFlowCheckpoint
+        // Step-level replay observes checkpoints through MauiFlowRunner.CreateCheckpoint. Use the
+        // same projection here so preflight cannot approve a package-hash identity that the live
+        // agent later reports as its version/build pair and misclassify selector drift as state drift.
+        // The installed APK digest was already verified above and remains on the run target.
+        var observed = MauiFlowRunner.CreateCheckpoint(status);
+        observed.SeedFingerprint = state.SeedFingerprint;
+        observed.BackendStateFingerprint = state.BackendStateFingerprint;
+        observed.Locale ??=
+            await RequireDeviceLifecycle().GetLocaleAsync(cancellationToken).ConfigureAwait(false);
+        observed.Theme ??= theme?.Theme.ToString().ToLowerInvariant();
+        observed.Orientation ??=
+            await RequireDeviceLifecycle().GetOrientationAsync(cancellationToken).ConfigureAwait(false);
+        var targetDisplayProfile = observed.DisplayProfile;
+        if (targetDisplayProfile is null)
         {
-            AppBuildFingerprint = build.AppBuildFingerprint,
-            AgentInstanceId = agent.StableId,
-            SeedFingerprint = state.SeedFingerprint,
-            BackendStateFingerprint = state.BackendStateFingerprint,
-            Route = status.Route,
-            // A plan may declare window/modal as clean-state preconditions. Admission compares the
-            // declared value against what the host observed, so a host that never reports them makes
-            // any plan that declares them permanently unsatisfiable rather than merely mismatched.
-            Window = status.Window,
-            Modal = status.Modal,
-            Locale = status.Locale ??
-                await RequireDeviceLifecycle().GetLocaleAsync(cancellationToken).ConfigureAwait(false),
-            Theme = status.Theme?.ToLowerInvariant() ??
-                theme?.Theme.ToString().ToLowerInvariant(),
-            Orientation = status.Orientation ??
-                await RequireDeviceLifecycle().GetOrientationAsync(cancellationToken).ConfigureAwait(false),
-            DisplayProfile = status.DisplayProfile ??
-                await RequireDeviceLifecycle().GetDisplayProfileAsync(cancellationToken).ConfigureAwait(false),
-        };
+            targetDisplayProfile = MauiFlowRunner.CreateCheckpoint(new AgentStatus
+            {
+                DisplayProfile = await RequireDeviceLifecycle()
+                    .GetDisplayProfileAsync(cancellationToken)
+                    .ConfigureAwait(false),
+            }).DisplayProfile;
+        }
         EnsureObserved("route", observed.Route);
         EnsureObserved("locale", observed.Locale);
         EnsureObserved("theme", observed.Theme);
         EnsureObserved("orientation", observed.Orientation);
-        EnsureObserved("display profile", observed.DisplayProfile);
+        EnsureObserved("display profile", targetDisplayProfile);
         var expected = MergeCheckpoint(request.Expected, observed);
         var mismatches = CompareCheckpoint(expected, observed);
         if (mismatches.Count > 0)
@@ -391,7 +392,7 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase, IPlatformFlowTestLi
             TargetId = agent.StableId,
             Platform = Platform,
             DeviceId = _serialNumber,
-            DeviceProfile = observed.DisplayProfile,
+            DeviceProfile = targetDisplayProfile,
             AppId = PackageId,
             AppBuildFingerprint = build.AppBuildFingerprint,
             AgentId = status.Agent?.Name,
@@ -399,7 +400,7 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase, IPlatformFlowTestLi
             Locale = observed.Locale,
             Theme = observed.Theme,
             Orientation = observed.Orientation,
-            DisplayProfile = observed.DisplayProfile,
+            DisplayProfile = targetDisplayProfile,
         };
         var context = new MauiFlowRunContext
         {

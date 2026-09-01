@@ -419,6 +419,15 @@ internal sealed class FlowPilotArtifactManifest
             IsUnderDirectory(Path.GetFullPath(report.ReportPath), _repositoryRoot))
         {
             attempt.ReportPath = ToRepositoryRelativePath(report.ReportPath);
+            _artifactReferences.Add(new MauiFlowArtifactReference
+            {
+                Kind = "flow-run-report",
+                Path = report.ReportPath,
+                Digest = report.ReportDigest,
+                MediaType = "application/json",
+                Redacted = true,
+                CreatedAt = report.EndedAt ?? DateTimeOffset.UtcNow,
+            });
         }
 
         var target = report.Target;
@@ -439,7 +448,19 @@ internal sealed class FlowPilotArtifactManifest
         attempt.AgentInstanceId = target?.AgentInstanceId;
 
         foreach (var artifact in report.Artifacts)
-            _artifactReferences.Add(artifact);
+        {
+            if (!string.IsNullOrWhiteSpace(artifact.Path))
+            {
+                _artifactReferences.Add(artifact);
+            }
+            else if (artifact.Kind is not ("flow-run-report" or "mauitrace" or
+                     "android-host-diagnostics" or "host-diagnostics"))
+            {
+                AddOmission(
+                    "artifact-path",
+                    "A pathless artifact reference with no host-owned recovery path was omitted.");
+            }
+        }
 
         if (!report.Artifacts.Any(static artifact =>
                 string.Equals(artifact.Kind, "android-host-diagnostics", StringComparison.Ordinal) ||
