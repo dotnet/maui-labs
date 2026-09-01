@@ -21,20 +21,50 @@ the report did not.
 
 Use `failureCorrespondence` rather than comparing the imported and local
 failure fingerprints; those opaque fingerprints are intentionally occurrence
-bound and are not equality keys.
+bound and are not equality keys. This field controls the CI-linkage claim; it
+is not the only possible basis for an ordinary local workspace edit.
 
 - `same-failure`: code, class, step, and expected/observed checkpoints agree.
 - `different-failure`: at least one of those facts differs.
 - `no-local-failure`: the new local run did not produce failure facts.
 - `indeterminate`: a required failure-comparison fact was unavailable.
 
-Only `same-failure` can continue toward classification, and only when the
-report has no separate flow, source, platform, runtime, evidence, completion,
-or cleanup blocker.
+`different-failure` and `no-local-failure` stop the issue-driven edit. With
+`indeterminate`, do not claim that CI was reproduced. Classification may
+continue only when the independent local edit gate below passes in full and
+the unresolved reason codes concern imported or cross-environment comparison
+facts rather than the integrity of the local run.
 
 The current local run must be terminal, complete, bound to its manifest, and
 free of cleanup failures that would leave the next run on an unknown target.
 Truncated evidence or unknown completion is a stop.
+
+## Independent local edit gate
+
+A fresh local failure may independently justify the ordinary uncommitted edit
+even when CI correspondence is `indeterminate`. Require every item:
+
+- the relevant flow and app-source paths were clean before the local run;
+- the resolved current flow digest is exact and the issue commit is an
+  ancestor with no relevant flow or app-source change since that commit;
+- `outcome.status` is `failed`, `outcome.terminal` is true, and the manifest
+  exit category is `test-failure`;
+- the report is not truncated, has no secondary failures, and has no local
+  infrastructure, lifecycle, completion, evidence, or cleanup refusal;
+- `failure.repairEligible` and `replayEligibility.repairEligibility` are true;
+- the local expected and observed checkpoints agree for the state relevant to
+  the failed step;
+- every required independent business oracle has a reported
+  `succeeded: true` outcome; declaration without an outcome is not enough;
+- current app source or live inspection proves one minimal app-or-test
+  correction without weakening actions, assertions, expected values, reset,
+  or oracle requirements.
+
+Persist the pre-edit local run ID, report digest, failure code/class/step,
+oracle outcomes, and the `local-reproduction.json` reason codes before the
+first write. Do not reinterpret `indeterminate` as `same-failure`. The final
+handoff must say that the edit is justified by the fresh local run and that
+strict CI correspondence remains unproven.
 
 ## Classify
 

@@ -27,6 +27,8 @@ public sealed class DevFlowSkillReferenceTests
         Assert.DoesNotMatch(@"\bmaui_test_[a-z_]+\b", skill);
         Assert.Contains("ordinary worktree edit", skill, StringComparison.Ordinal);
         Assert.Contains("failureCorrespondence", skill, StringComparison.Ordinal);
+        Assert.Contains("independent local edit gate", skill, StringComparison.Ordinal);
+        Assert.Contains("keep the CI linkage unproven", skill, StringComparison.Ordinal);
         Assert.Contains("Never weaken a test", skill, StringComparison.Ordinal);
         Assert.Contains("Never stage, commit, push", skill, StringComparison.Ordinal);
     }
