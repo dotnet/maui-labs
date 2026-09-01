@@ -980,10 +980,22 @@ function Test-HandoffArchive {
     }
     finally {
         if ($null -ne $archive) {
-            $archive.Dispose()
+            $script:publisherOperation = 'artifact-verification-archive-dispose'
+            try {
+                $archive.Dispose()
+            }
+            catch [System.IO.IOException] {
+                Write-Warning 'The ZIP reader reported an I/O error while releasing verified archive resources.'
+            }
         }
         if ($null -ne $stream) {
-            $stream.Dispose()
+            $script:publisherOperation = 'artifact-verification-stream-dispose'
+            try {
+                $stream.Dispose()
+            }
+            catch [System.IO.IOException] {
+                Write-Warning 'The archive buffer reported an I/O error while releasing verified archive resources.'
+            }
         }
     }
 }
