@@ -737,6 +737,18 @@ public sealed class MauiFlowRunReportTests : IDisposable
         Assert.Equal("unknown", result.Report.Steps[0].Dispatch!.CompletionCertainty);
     }
 
+    [Theory]
+    [InlineData("411.4286x914.2857@2.625", "411.4286x914.2857:2.625")]
+    [InlineData("Physical size: 1080x2400;Physical density: 420", "1080x2400:420")]
+    [InlineData("phone", "phone")]
+    [InlineData("someone@contoso.com", null)]
+    public void CreateCheckpoint_CanonicalizesOnlySafeDisplayProfiles(string input, string? expected)
+    {
+        var checkpoint = MauiFlowRunner.CreateCheckpoint(new AgentStatus { DisplayProfile = input });
+
+        Assert.Equal(expected, checkpoint.DisplayProfile);
+    }
+
     [Fact]
     public void FailureClassifier_OnlyMarksVerifiedPreDispatchLocatorFailureRepairEligible()
     {
