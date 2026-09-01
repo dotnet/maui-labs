@@ -715,7 +715,7 @@ public static class MauiFlowRunReportSerializer
             fingerprint.Context.Locale = MauiFlowReportRedactor.SafeIdentifier(fingerprint.Context.Locale);
             fingerprint.Context.Theme = MauiFlowReportRedactor.SafeIdentifier(fingerprint.Context.Theme);
             fingerprint.Context.Orientation = MauiFlowReportRedactor.SafeIdentifier(fingerprint.Context.Orientation);
-            fingerprint.Context.DisplayProfile = MauiFlowReportRedactor.SafeIdentifier(fingerprint.Context.DisplayProfile);
+            fingerprint.Context.DisplayProfile = MauiFlowReportRedactor.SafeDisplayProfile(fingerprint.Context.DisplayProfile);
             fingerprint.Managed.Type = SafeManagedTypeName(fingerprint.Managed.Type);
             fingerprint.Managed.FullType = SafeManagedTypeName(fingerprint.Managed.FullType);
             fingerprint.Managed.Framework = MauiFlowReportRedactor.SafeIdentifier(fingerprint.Managed.Framework);
@@ -826,7 +826,7 @@ public static class MauiFlowRunReportSerializer
         target.Locale = MauiFlowReportRedactor.SafeIdentifier(target.Locale);
         target.Theme = MauiFlowReportRedactor.SafeIdentifier(target.Theme);
         target.Orientation = MauiFlowReportRedactor.SafeIdentifier(target.Orientation);
-        target.DisplayProfile = MauiFlowReportRedactor.SafeIdentifier(target.DisplayProfile);
+        target.DisplayProfile = MauiFlowReportRedactor.SafeDisplayProfile(target.DisplayProfile);
     }
 
     private static void SanitizeCheckpoint(MauiFlowResetResult? reset)
@@ -869,7 +869,7 @@ public static class MauiFlowRunReportSerializer
         checkpoint.Locale = MauiFlowReportRedactor.SafeIdentifier(checkpoint.Locale);
         checkpoint.Theme = MauiFlowReportRedactor.SafeIdentifier(checkpoint.Theme);
         checkpoint.Orientation = MauiFlowReportRedactor.SafeIdentifier(checkpoint.Orientation);
-        checkpoint.DisplayProfile = MauiFlowReportRedactor.SafeIdentifier(checkpoint.DisplayProfile);
+        checkpoint.DisplayProfile = MauiFlowReportRedactor.SafeDisplayProfile(checkpoint.DisplayProfile);
         checkpoint.CollectionItemKey = MauiFlowReportRedactor.SafeIdentifier(checkpoint.CollectionItemKey);
     }
 
@@ -1311,6 +1311,14 @@ public static class MauiFlowReportRedactor
         @"(?i)\b[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+\.[a-z]{2,}\b",
         RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
+    private static readonly Regex LogicalDisplayProfile = new(
+        @"\A(?<width>\d+(?:\.\d+)?)x(?<height>\d+(?:\.\d+)?)[@:](?<density>\d+(?:\.\d+)?)\z",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static readonly Regex PhysicalDisplayProfile = new(
+        @"\A(?:physical|override) size:\s*(?<width>\d+)x(?<height>\d+);(?:physical|override) density:\s*(?<density>\d+)\z",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     public static MauiFlowValueDisclosure DescribeValue(string? value, bool allowPlain = false)
         => DescribeValue(value, allowPlain, allowSafeText: false);
 
@@ -1433,6 +1441,25 @@ public static class MauiFlowReportRedactor
             return null;
         }
         return normalized;
+    }
+
+    internal static string? SafeDisplayProfile(string? value)
+    {
+        var safe = SafeIdentifier(value);
+        if (safe is not null || string.IsNullOrWhiteSpace(value))
+            return safe;
+
+        var normalized = RemoveControls(value.Trim());
+        if (normalized.Length > 128 || LooksOpaqueSecret(normalized))
+            return null;
+
+        var match = LogicalDisplayProfile.Match(normalized);
+        if (!match.Success)
+            match = PhysicalDisplayProfile.Match(normalized);
+        if (!match.Success)
+            return null;
+
+        return $"{match.Groups["width"].Value}x{match.Groups["height"].Value}:{match.Groups["density"].Value}";
     }
 
     public static string? SafeFileSegment(string? value)

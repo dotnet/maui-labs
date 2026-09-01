@@ -1360,7 +1360,7 @@ internal sealed class MsBuildAppArtifactResolver : IAppArtifactResolver
             Path.GetFullPath(second).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
             OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
-    private static string? EmptyToNull(string value)
+    private static string? EmptyToNull(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     internal static bool TryDeleteDirectory(string? path)
