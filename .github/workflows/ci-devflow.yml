@@ -48,6 +48,7 @@ jobs:
       project-name: devflow
       run-tests: true
       pack: true
+      pack-driver: true
       os: '["windows-latest"]'
 
   # The device layer ships two JavaScript hosts and a shared client that the .NET job never
