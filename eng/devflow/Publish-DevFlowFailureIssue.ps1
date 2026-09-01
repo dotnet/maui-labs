@@ -501,7 +501,7 @@ function Save-GitHubArtifactArchive {
 
     $response = $null
     $source = $null
-    $destination = $null
+    $memory = $null
     $succeeded = $false
     try {
         $uri = Get-GitHubUri "/repos/$Repository/actions/artifacts/$ArtifactId/zip"
@@ -528,11 +528,7 @@ function Save-GitHubArtifactArchive {
         }
 
         $source = $response.Content.ReadAsStream()
-        $destination = [System.IO.File]::Open(
-            $DestinationPath,
-            [System.IO.FileMode]::Create,
-            [System.IO.FileAccess]::Write,
-            [System.IO.FileShare]::None)
+        $memory = [System.IO.MemoryStream]::new()
         $buffer = [byte[]]::new(81920)
         [Int64] $total = 0
         while (($read = $source.Read($buffer, 0, $buffer.Length)) -gt 0) {
@@ -540,19 +536,26 @@ function Save-GitHubArtifactArchive {
             if ($total -gt $maximumArchiveBytes) {
                 throw 'archive-download-too-large'
             }
-            $destination.Write($buffer, 0, $read)
+            $memory.Write($buffer, 0, $read)
         }
         if ($total -le 0) {
             throw 'archive-download-empty'
         }
+        if ($null -ne $contentLength -and [Int64] $contentLength -ne $total) {
+            throw 'archive-download-size-mismatch'
+        }
+
+        $source.Dispose()
+        $source = $null
+        [System.IO.File]::WriteAllBytes($DestinationPath, $memory.ToArray())
         $succeeded = $true
     }
     finally {
-        if ($null -ne $destination) {
-            $destination.Dispose()
-        }
         if ($null -ne $source) {
             $source.Dispose()
+        }
+        if ($null -ne $memory) {
+            $memory.Dispose()
         }
         if ($null -ne $response) {
             $response.Dispose()
