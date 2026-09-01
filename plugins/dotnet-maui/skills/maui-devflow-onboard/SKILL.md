@@ -39,10 +39,33 @@ feedback. Do not run it automatically.
 7. Verify with:
 
    ```bash
-   maui devflow diagnose
+   maui doctor                # environment health check (supports --json)
+   maui devflow diagnose      # connectivity diagnostic
    maui devflow wait
    maui devflow ui tree --depth 1
    ```
+
+   Both commands support `--json`, but their schemas differ:
+   - `maui doctor --json` emits a `DoctorReport`: read the top-level `status`
+     (`Healthy`/`Degraded`/`Unhealthy`) and iterate `checks[]`, running
+     `fix.command` for any check that carries a `fix` with `auto_fixable: true`.
+     Key off `fix.auto_fixable`, **not** `status`: auto-fixable fixes appear on
+     both `Error` and `Warning` checks (e.g. Android SDK licenses surface as a
+     `Warning` with an auto-fixable `maui android sdk accept-licenses`). Doctor
+     status enums are PascalCase (`Ok`/`Warning`/`Error`/`Skipped`/
+     `NotApplicable`), distinct from the lowercase error envelope below.
+   - `maui devflow diagnose --json` writes a health report to **stdout** on
+     success — `cli_version`, `broker_running`, `agent_count`, `agents`,
+     `projects`, plus optional `broker_port` (when the broker is up) and
+     `android` (emulator forwarding status). It only emits DevFlow's error
+     shape (`{ "error", "type", "retryable", "suggestions" }`) on **stderr**
+     when the command itself fails.
+
+   The flat `code` / `remediation` envelope (no `error` wrapper; `snake_case`;
+   lowercase `remediation.type`, e.g. `autofixable`) applies to the other `maui`
+   groups — `maui android`, `maui apple`, `maui device`. See `maui-devflow-debug`
+   references/troubleshooting.md for the full code taxonomy (E1xxx tool, E2xxx
+   platform/SDK, E3xxx user action, etc.).
 
 If verification fails after integration, switch to `maui-devflow-debug` for connectivity recovery.
 

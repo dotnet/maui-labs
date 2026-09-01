@@ -15,13 +15,44 @@ Complete guide for integrating MAUI DevFlow into a .NET MAUI app.
 
 ## 1. Install CLI Tools
 
+The unified `maui` CLI is the only required global tool:
+
 ```bash
 dotnet tool install --global Microsoft.Maui.Cli --prerelease
-dotnet tool install --global androidsdk.tool               # android (Android only)
-dotnet tool install --global appledev.tools                # apple (iOS/Mac only)
 ```
 
-Verify: `maui devflow version`
+Verify: `maui devflow version` and `maui doctor` (with optional `--json`).
+
+### Optional standalone tools (rarely needed)
+
+The unified `maui` CLI now wraps the common Android and Apple operations —
+including `maui apple simulator privacy/openurl/push/location/appearance` and
+the `maui android sdk`/`jdk` managers. These predecessor standalone tools stay
+available for occasional edge cases but are optional; raw `xcrun simctl` and
+`adb` cover the rest without an extra global tool.
+
+```bash
+dotnet tool install --global androidsdk.tool               # `android` (Android only)
+dotnet tool install --global appledev.tools                # `apple` (iOS/Mac only)
+```
+
+### Guided environment setup
+
+For first-time setup or when `maui doctor` reports missing components, the CLI
+provides guided installers for each platform:
+
+```bash
+maui android install              # Android SDK, JDK, platform-tools, accept licenses
+maui apple install --platform iOS # Xcode CLT and iOS simulator runtime (macOS only)
+maui apple install --platform all # Install runtimes for every available Apple platform
+```
+
+If your SDKs live in non-default locations, every `maui android` subcommand
+accepts global path overrides (no env-var change required):
+
+```bash
+maui android --sdk /opt/android-sdk --jdk /opt/openjdk-17 sdk check
+```
 
 ## 2. Add NuGet Packages
 
@@ -249,20 +280,23 @@ instead of the home directory root. This path is not TCC-protected.
 
 ## 6. Android: Port Forwarding
 
-After deploying to an Android emulator, set up port forwarding for the broker and agent:
+After deploying to an Android emulator, broker registration and CLI-to-agent
+traffic need opposite forwarding directions. The `maui` CLI sets up **both**
+automatically — you normally don't run `adb` by hand:
 
 ```bash
-adb reverse tcp:19223 tcp:19223  # Broker (lets agent register with host broker)
-adb forward tcp:<port> tcp:<port> # Agent (lets CLI reach agent — get port from `maui devflow list`)
+maui devflow wait --wait-platform android  # sets up broker reverse + agent forward
+maui devflow list                     # re-establishes (repairs) the agent forward
+maui devflow diagnose                 # reports broker reverse + agent forward status
 ```
 
-The broker reverse (`tcp:19223`) is needed so the agent inside the emulator can connect to
-the host's broker daemon. Set this up once per emulator session.
+The broker reverse (`tcp:19223`) lets the agent inside the emulator reach the
+host's broker daemon; `maui devflow wait` establishes it before polling. The
+agent forward uses the port shown in `maui devflow list` after the agent
+registers (range 10223–10899). Add `--device <serial>` for multiple emulators.
 
-The agent forward uses the port shown in `maui devflow list` after the agent registers
-(range 10223–10899).
-
-**Fallback (no broker):** If using direct mode with a `.mauidevflow` config file:
+**Fallback (no broker):** the direct `.mauidevflow` port is the one path the CLI
+does **not** auto-forward — forward it yourself:
 ```bash
 adb forward tcp:9223 tcp:9223    # Direct agent port (single port for Agent + CDP)
 ```
@@ -272,6 +306,8 @@ adb forward tcp:9223 tcp:9223    # Direct agent port (single port for Agent + CD
 After building and running the app:
 
 ```bash
+maui doctor                       # Environment health check (--json supported)
+maui devflow diagnose             # Connectivity diagnostic
 maui devflow list                 # Should show registered agents (via broker)
 maui devflow ui status            # Should show agent info, platform, app name
 maui devflow webview status       # Should show "Connected" (Blazor Hybrid only)
@@ -282,12 +318,13 @@ If status commands fail:
 - **Agent not registered?** `maui devflow list` — wait a few seconds for the agent to register
 - **Mac Catalyst:** Check entitlements (Step 5)
 - **macOS (AppKit):** Ensure `AddMacOSEssentials()` is called — see [references/macos.md](macos.md)
-- **Android:** Check port forwarding (Step 6) — need both `adb reverse tcp:19223` and `adb forward tcp:<port>`
+- **Android:** `maui devflow wait --wait-platform android` (or `list`) sets up the broker reverse + agent forward automatically; `maui devflow diagnose` reports mapping status. Drop to raw `adb reverse`/`adb forward` only to manually repair (Step 6).
 - **iOS Simulator:** Should work without extra config
 - **Linux/GTK:** Should work without extra config — runs directly on localhost
 - **All platforms:** Ensure the app is running and the `#if DEBUG` block is active
-- **Port conflict:** Check if another process holds the port: `lsof -i :9223` (or your configured port)
+- **Port conflict:** Check if another process holds the port: `lsof -i :9223` (raw; not yet wrapped by `maui`)
 - **Wrong port:** Use `maui devflow list` to find the assigned port, or ensure CLI is run from the project directory
+- **Reading errors:** For `maui android`/`apple`/`device` commands, pass `--json` and inspect the top-level `code` / `remediation` fields (no `error` wrapper). `maui doctor --json` emits a `DoctorReport` (`status` + `checks[]`), and `maui devflow …` emits `{error,type,retryable}` on stderr. See [troubleshooting.md](troubleshooting.md#reading-machine-readable-output-and-errors)
 
 ## Quick Checklist
 
