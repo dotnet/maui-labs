@@ -2393,7 +2393,7 @@ public class TestAgentSessionServiceTests
         var explore = fixture.Explore("explore-1", grant.GrantId, selector: new FlowSelector { AutomationId = "save" });
 
         Assert.False(explore.Ok);
-        Assert.NotEqual(true, explore.DispatchAllowed);
+        Assert.False(explore.DispatchAllowed == true);
         Assert.Null(explore.AuthorizationId);
         Assert.Equal(MauiTestAgentErrorCodes.ExplorationBudgetRequired, explore.Error?.Code);
         Assert.False(fixture.Budget().Declared);

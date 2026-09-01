@@ -1211,7 +1211,7 @@ internal sealed class TestAgentSessionService
     /// <summary>
     /// Answers the same question without spending the grant, so a caller can refuse an obviously
     /// unauthorized request early. This is a filter, never the authorization itself: the single-use
-    /// decision stays with <see cref="TryConsumeRunDispatchAuthorization(string?, string?, string?, IReadOnlyList{FlowStep}?, out string?)"/>.
+    /// decision stays with <see cref="TryConsumeRunDispatchAuthorization"/>.
     /// </summary>
     internal bool CanDispatchRunAuthorization(
         string? authorizationId,
