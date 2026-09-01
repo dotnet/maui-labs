@@ -753,11 +753,14 @@ function Test-ArchivePathName {
 function Test-HandoffArchive {
     param([Parameter(Mandatory)] [string] $Path)
 
+    $script:publisherOperation = 'artifact-verification-path-check'
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
         return [ordered]@{ ok = $false; kind = 'malformed'; reason = 'archive-missing' }
     }
 
+    $script:publisherOperation = 'artifact-verification-metadata-read'
     $archiveFile = Get-Item -LiteralPath $Path
+    $script:publisherOperation = 'artifact-verification-metadata-check'
     if ($archiveFile.Length -le 0 -or $archiveFile.Length -gt $maximumArchiveBytes) {
         return [ordered]@{ ok = $false; kind = 'malformed'; reason = 'archive-size-out-of-range' }
     }
@@ -765,11 +768,13 @@ function Test-HandoffArchive {
     $stream = $null
     $archive = $null
     try {
+        $script:publisherOperation = 'artifact-verification-archive-read'
         $archiveBytes = [System.IO.File]::ReadAllBytes($archiveFile.FullName)
         if ($archiveBytes.LongLength -ne $archiveFile.Length -or
             $archiveBytes.LongLength -gt $maximumArchiveBytes) {
             return [ordered]@{ ok = $false; kind = 'malformed'; reason = 'archive-size-out-of-range' }
         }
+        $script:publisherOperation = 'artifact-verification-archive-open'
         $stream = [System.IO.MemoryStream]::new($archiveBytes, $false)
         $archive = [System.IO.Compression.ZipArchive]::new(
             $stream,

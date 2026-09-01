@@ -298,6 +298,10 @@ public sealed partial class DevFlowFailureHandoffScriptTests
         Assert.Contains("loopback-test-api-requires-verify-only", script, StringComparison.Ordinal);
         Assert.Contains("$publisherOperation = 'issue-create'", script, StringComparison.Ordinal);
         Assert.Contains(
+            "$script:publisherOperation = 'artifact-verification-archive-open'",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
             "with exception type '$($_.Exception.GetType().Name)'",
             script,
             StringComparison.Ordinal);
