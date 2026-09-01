@@ -1,0 +1,14 @@
+<Project>
+  <ItemGroup Condition="'$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)'))' == 'ios' Or '$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)'))' == 'maccatalyst'">
+    <NativeReference Include="$(MSBuildThisFileDirectory)..\native\ContosoSdk.xcframework">
+      <Kind>Framework</Kind>
+      <ForceLoad>true</ForceLoad>
+      <SmartLink>true</SmartLink>
+      <Frameworks>Foundation UIKit</Frameworks>
+    </NativeReference>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)'))' == 'android'">
+    <AndroidMavenLibrary Include="com.contoso:sdk" Version="1.2.3" Bind="false" />
+  </ItemGroup>
+</Project>

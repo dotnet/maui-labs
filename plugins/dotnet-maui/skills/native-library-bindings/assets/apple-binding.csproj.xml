@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>true</ImplicitUsings>
+    <IsBindingProject>true</IsBindingProject>
+    <IsPackable>true</IsPackable>
+    <PackageId>Contoso.NativeSdk.Apple</PackageId>
+    <Description>.NET bindings for Contoso Native SDK on Apple platforms.</Description>
+    <PackageTags>maui;ios;maccatalyst;binding;native</PackageTags>
+
+    <!-- Single source of truth for the vendor SDK version; bump this to update the binding. -->
+    <VendorSdkVersion>2.4.0</VendorSdkVersion>
+
+    <!-- Optional: enable API versioning attributes ([Introduced]/[Deprecated]/[Obsoleted])
+         for the bound surface. Uncomment when tracking platform availability across updates. -->
+    <!-- <EnableVersioning>true</EnableVersioning> -->
+
+    <!-- Optional: compress bundled binding resource packages to reduce package size. -->
+    <!-- <CompressBindingResourcePackage>true</CompressBindingResourcePackage> -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ObjcBindingApiDefinition Include="ApiDefinition.cs" />
+    <ObjcBindingCoreSource Include="StructsAndEnums.cs" />
+  </ItemGroup>
+
+  <!-- Use XcodeProject when this binding builds a native wrapper project. -->
+  <ItemGroup>
+    <XcodeProject Include="../native/ContosoBinding/ContosoBinding.xcodeproj">
+      <SchemeName>ContosoBinding</SchemeName>
+      <Configuration>Release</Configuration>
+    </XcodeProject>
+  </ItemGroup>
+
+  <!-- Use NativeReference when binding a prebuilt native artifact. -->
+  <ItemGroup>
+    <NativeReference Include="native/ContosoSdk.xcframework">
+      <Kind>Framework</Kind>
+      <ForceLoad>true</ForceLoad>
+      <SmartLink>true</SmartLink>
+      <Frameworks>Foundation UIKit</Frameworks>
+      <Pack>true</Pack>
+    </NativeReference>
+  </ItemGroup>
+
+  <!-- Optional: download and unzip a versioned xcframework release asset before build.
+       See references/apple-acquisition.md for the full pattern. -->
+  <!--
+  <PropertyGroup>
+    <VendorSdkDownloadUrl>https://github.com/vendor/ContosoSdk/releases/download/$(VendorSdkVersion)/ContosoSdk.xcframework.zip</VendorSdkDownloadUrl>
+    <VendorSdkDownloadDir>$(MSBuildProjectDirectory)/native/download</VendorSdkDownloadDir>
+  </PropertyGroup>
+  <Target Name="DownloadVendorSdk" BeforeTargets="BeforeBuild"
+          Condition="!Exists('$(VendorSdkDownloadDir)/ContosoSdk.xcframework')">
+    <DownloadFile SourceUrl="$(VendorSdkDownloadUrl)" DestinationFolder="$(VendorSdkDownloadDir)" />
+    <Unzip SourceFiles="$(VendorSdkDownloadDir)/ContosoSdk.xcframework.zip" DestinationFolder="$(VendorSdkDownloadDir)" />
+  </Target>
+  -->
+</Project>
