@@ -766,11 +766,12 @@ function Test-HandoffArchive {
     $stream = $null
     $archive = $null
     try {
-        $stream = [System.IO.File]::Open(
-            $archiveFile.FullName,
-            [System.IO.FileMode]::Open,
-            [System.IO.FileAccess]::Read,
-            [System.IO.FileShare]::Read)
+        $archiveBytes = [System.IO.File]::ReadAllBytes($archiveFile.FullName)
+        if ($archiveBytes.LongLength -ne $archiveFile.Length -or
+            $archiveBytes.LongLength -gt $maximumArchiveBytes) {
+            return [ordered]@{ ok = $false; kind = 'malformed'; reason = 'archive-size-out-of-range' }
+        }
+        $stream = [System.IO.MemoryStream]::new($archiveBytes, $false)
         $archive = [System.IO.Compression.ZipArchive]::new(
             $stream,
             [System.IO.Compression.ZipArchiveMode]::Read,
@@ -966,7 +967,7 @@ function Test-HandoffArchive {
             return [ordered]@{ ok = $false; kind = 'malformed'; reason = 'handoff-lane-fields-unexpected' }
         }
 
-        $archiveHash = "sha256:$((Get-FileHash -LiteralPath $archiveFile.FullName -Algorithm SHA256).Hash.ToLowerInvariant())"
+        $archiveHash = Get-Sha256Bytes $archiveBytes
         return [ordered]@{
             ok = $true
             handoff = $handoff
