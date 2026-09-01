@@ -40,6 +40,37 @@ public sealed class CSharpWorkspaceMSBuildRegistrationTests
         Assert.True(referenced, $"Microsoft.Maui.Cli.csproj must reference {package}.");
     }
 
+    [Fact]
+    public void NativeAotPublishKeepsPublishGlobalsLocalToTheCliProject()
+    {
+        var csproj = XDocument.Load(Path.Combine(CliDirectory, "Microsoft.Maui.Cli.csproj"));
+        var publishProperties = Assert.Single(
+            csproj.Descendants(),
+            element => element.Name.LocalName == "PropertyGroup" &&
+                string.Equals(
+                    element.Attribute("Condition")?.Value,
+                    "'$(MauiCliNativeAotPublish)' == 'true'",
+                    StringComparison.Ordinal));
+        foreach (var propertyName in new[]
+                 {
+                     "PublishAot",
+                     "PublishTrimmed",
+                     "InvariantGlobalization",
+                     "SelfContained",
+                 })
+        {
+            Assert.Equal(
+                "true",
+                publishProperties.Elements()
+                    .Single(element => element.Name.LocalName == propertyName)
+                    .Value);
+        }
+
+        var workflow = File.ReadAllText(Path.Combine(RepoRoot, ".github", "workflows", "_build.yml"));
+        Assert.Contains("-p:MauiCliNativeAotPublish=true", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("-p:PublishAot=true", workflow, StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// Exactly one registration, guarded by <c>IsRegistered</c>, and reached before the first
     /// <c>MSBuildWorkspace.Create()</c>. A second unguarded call throws

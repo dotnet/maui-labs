@@ -564,7 +564,9 @@ jobs:
           arch: x86_64
           target: google_apis
           force-avd-creation: false
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          # Mobile Canvas joins the AVD to its adb serial through the emulator's gRPC discovery
+          # file. Emulator 37 does not create that file unless the bridge is explicitly enabled.
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -grpc 8554
           disable-animations: true
           script: >
             node ./eng/smoke-tests/mobile-canvas-companion-smoke-test.mjs

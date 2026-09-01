@@ -26,6 +26,14 @@
     <RollForward>Major</RollForward>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(MauiCliNativeAotPublish)' == 'true'">
+    <!-- Keep AOT and trimming local so they do not flow into the netstandard analyzer project. -->
+    <PublishAot>true</PublishAot>
+    <PublishTrimmed>true</PublishTrimmed>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SelfContained>true</SelfContained>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="System.CommandLine" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />

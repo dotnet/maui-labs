@@ -162,9 +162,7 @@ jobs:
             -c Release \
             -f net10.0 \
             -r "$rid" \
-            -p:PublishAot=true \
-            -p:PublishTrimmed=true \
-            -p:InvariantGlobalization=true \
+            -p:MauiCliNativeAotPublish=true \
             -p:TreatWarningsAsErrors=true \
             --self-contained true
 

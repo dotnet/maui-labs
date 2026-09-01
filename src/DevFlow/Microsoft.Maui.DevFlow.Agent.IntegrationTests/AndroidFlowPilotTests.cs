@@ -730,6 +730,7 @@ public sealed class FlowPilotArtifactManifestTests
         Assert.Contains("--repeat 3", workflow, StringComparison.Ordinal);
         Assert.Contains("id: mobile-canvas-smoke", workflow, StringComparison.Ordinal);
         Assert.Contains("continue-on-error: true", workflow, StringComparison.Ordinal);
+        Assert.Contains("-grpc 8554", workflow, StringComparison.Ordinal);
         Assert.Contains(
             "mobile-canvas-smoke-outcome: ${{ steps.mobile-canvas-smoke.outcome }}",
             workflow,
