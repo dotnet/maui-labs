@@ -296,6 +296,15 @@ public sealed partial class DevFlowFailureHandoffScriptTests
             Path.Combine(_repositoryRoot, "eng", "devflow", "Publish-DevFlowFailureIssue.ps1"));
         Assert.StartsWith("#Requires -Version 7.3", script, StringComparison.Ordinal);
         Assert.Contains("loopback-test-api-requires-verify-only", script, StringComparison.Ordinal);
+        Assert.Contains("$publisherOperation = 'issue-create'", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "with exception type '$($_.Exception.GetType().Name)'",
+            script,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "with exception message '$exceptionMessage'",
+            script,
+            StringComparison.Ordinal);
     }
 
     [Fact]

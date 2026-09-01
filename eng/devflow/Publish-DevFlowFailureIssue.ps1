@@ -1447,6 +1447,7 @@ function Get-OccurrencePublicationState {
 
 $downloadedArchive = $false
 $resolvedArchivePath = $ArchivePath
+$publisherOperation = 'trusted-input-validation'
 try {
     $trustedInputError = Test-TrustedInputs
     if ($trustedInputError) {
@@ -1454,6 +1455,7 @@ try {
         return
     }
 
+    $publisherOperation = 'publication-trust-validation'
     $publicationTrustError = Test-PublicationTrust
     if (-not $VerifyOnly -and $publicationTrustError) {
         Write-PublisherResult (New-PublisherResult -Status 'ignored-untrusted-source' -Reason $publicationTrustError)
@@ -1467,6 +1469,7 @@ try {
             return
         }
 
+        $publisherOperation = 'repository-metadata-read'
         $repositoryMetadata = Invoke-GitHubJson -Method GET -Path "/repos/$Repository"
         $repositoryMetadataResult = Test-RepositoryMetadata $repositoryMetadata
         if (-not $repositoryMetadataResult['ok']) {
@@ -1478,6 +1481,7 @@ try {
             return
         }
 
+        $publisherOperation = 'workflow-run-metadata-read'
         $apiRun = Invoke-GitHubJson -Method GET -Path "/repos/$Repository/actions/runs/$RunId"
         $apiRunError = Test-ApiRun $apiRun
         if ($apiRunError) {
@@ -1485,6 +1489,7 @@ try {
             return
         }
 
+        $publisherOperation = 'artifact-discovery'
         $artifactResult = Get-ExpectedArtifact
         switch ($artifactResult['status']) {
             'missing' {
@@ -1505,6 +1510,7 @@ try {
         if ([string]::IsNullOrWhiteSpace($resolvedArchivePath)) {
             $resolvedArchivePath = Join-Path (Get-Location) ".devflow-failure-handoff-$RunId-$RunAttempt.zip"
         }
+        $publisherOperation = 'artifact-download'
         Save-GitHubArtifactArchive -ArtifactId $artifactId -DestinationPath $resolvedArchivePath
         $downloadedArchive = $true
     }
@@ -1513,6 +1519,7 @@ try {
         return
     }
 
+    $publisherOperation = 'artifact-verification'
     $verification = Test-HandoffArchive $resolvedArchivePath
     if (-not $verification['ok']) {
         $status = if ($verification['kind'] -eq 'unverifiable') { 'ignored-unverifiable' } else { 'ignored-malformed' }
@@ -1521,12 +1528,14 @@ try {
     }
 
     $handoff = $verification['handoff']
+    $publisherOperation = 'publication-disposition'
     $disposition = Get-PublicationDisposition $handoff
     if (-not $disposition['publish']) {
         Write-PublisherResult (New-PublisherResult -Status ([string] $disposition['status']) -Reason ([string] $disposition['reason']))
         return
     }
 
+    $publisherOperation = 'fingerprint-computation'
     $fingerprint = Get-Fingerprint $handoff
     if ($VerifyOnly) {
         $status = if ($publicationTrustError) { 'verified-diagnostic-only' } else { 'verified' }
@@ -1535,7 +1544,9 @@ try {
         return
     }
 
+    $publisherOperation = 'issue-label-ensure'
     Ensure-DedicatedIssueLabel
+    $publisherOperation = 'issue-search'
     $issueResult = Find-FingerprintIssue $fingerprint
     if ($issueResult['status'] -in @('untrusted', 'ambiguous')) {
         Write-PublisherResult (New-PublisherResult `
@@ -1554,6 +1565,7 @@ try {
             -ArchiveSha256 ([string] $verification['archiveSha256']) `
             -HandoffSha256 ([string] $verification['handoffSha256']) `
             -ArtifactId $artifactId
+        $publisherOperation = 'issue-create'
         $created = Invoke-GitHubJson -Method POST -Path "/repos/$Repository/issues" -Body @{
             title = $title
             body = $body
@@ -1588,6 +1600,7 @@ try {
 
     $reopened = $false
     if ([string]::Equals([string] $existingIssue.state, 'closed', [StringComparison]::Ordinal)) {
+        $publisherOperation = 'issue-reopen'
         [void] (Invoke-GitHubJson -Method PATCH -Path "/repos/$Repository/issues/$($existingIssue.number)" -Body @{
                 state = 'open'
             })
@@ -1599,6 +1612,7 @@ try {
         -ArchiveSha256 ([string] $verification['archiveSha256']) `
         -HandoffSha256 ([string] $verification['handoffSha256']) `
         -ArtifactId $artifactId
+    $publisherOperation = 'issue-recurrence-comment'
     [void] (Invoke-GitHubJson -Method POST -Path "/repos/$Repository/issues/$($existingIssue.number)/comments" -Body @{
             body = $commentBody
         })
@@ -1611,6 +1625,7 @@ try {
 }
 catch {
     $exceptionMessage = [string] $_.Exception.Message
+    Write-Error "DevFlow publisher failed during '$publisherOperation' with exception type '$($_.Exception.GetType().Name)'."
     $reason = switch ($exceptionMessage) {
         'github-api-unauthorized' { 'github-api-unauthorized'; break }
         'github-api-label-invalid' { 'github-api-label-invalid'; break }
