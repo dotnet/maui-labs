@@ -297,7 +297,7 @@ public static class AgentServiceExtensions
             if (!string.IsNullOrWhiteSpace(avd))
                 parts.Add($"avd={Sanitize(avd)}");
 
-            var serial = global::Android.OS.Build.Serial;
+            var serial = GetAndroidSystemProperty("ro.serialno");
             if (!string.IsNullOrWhiteSpace(serial) && !serial.Equals("unknown", StringComparison.OrdinalIgnoreCase))
                 parts.Add($"serial={Sanitize(serial)}");
 

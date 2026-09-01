@@ -880,7 +880,7 @@ public sealed partial class DevFlowFailureHandoffScriptTests : IDisposable
         var permissions = (YamlMappingNode)demo.Children[new YamlScalarNode("permissions")];
         Assert.Equal(
             ["contents"],
-            permissions.Children.Keys.Select(key => ((YamlScalarNode)key).Value).ToArray());
+            permissions.Children.Keys.Select(key => ((YamlScalarNode)key).Value!).ToArray());
         Assert.Equal("read", ((YamlScalarNode)permissions.Children[new YamlScalarNode("contents")]).Value);
 
         var condition = ((YamlScalarNode)demo.Children[new YamlScalarNode("if")]).Value ?? string.Empty;
