@@ -16,6 +16,9 @@ namespace Microsoft.Maui.Cli.UnitTests;
 [Collection("CLI")]
 public sealed class FlowExecutionPlatformAdapterTests
 {
+    private static readonly string MacCatalystBundlePath =
+        Path.Combine(Path.GetTempPath(), "build", "App.app");
+
     [Fact]
     public void WindowsAdapter_NonWindowsHost_IsTypedUnsupported()
     {
@@ -972,7 +975,7 @@ public sealed class FlowExecutionPlatformAdapterTests
         var processes = new FakeProcessController();
         var bundleInspector = new FakeAppleBundleInspector(
             "com.example.app",
-            @"C:\build\App.app\Contents\MacOS\App");
+            Path.Combine(MacCatalystBundlePath, "Contents", "MacOS", "App"));
         var adapter = new MacCatalystFlowExecutionAdapter(host, bundleInspector, processes);
         var artifact = MacCatalystArtifact();
         var preflight = await adapter.PreflightAsync(new FlowExecutionPlatformPreflightRequest
@@ -995,7 +998,7 @@ public sealed class FlowExecutionPlatformAdapterTests
         Assert.True(cleanup.Succeeded);
         Assert.Same(processes.StartedProcess, processes.StoppedProcess);
         Assert.Equal(
-            Path.GetFullPath(@"C:\build\App.app\Contents\MacOS\App"),
+            Path.GetFullPath(Path.Combine(MacCatalystBundlePath, "Contents", "MacOS", "App")),
             processes.LastStartRequest?.ExecutablePath);
     }
 
@@ -1275,7 +1278,7 @@ public sealed class FlowExecutionPlatformAdapterTests
 
     private static ResolvedAppArtifact MacCatalystArtifact() => new()
     {
-        Path = @"C:\build\App.app",
+        Path = MacCatalystBundlePath,
         ProjectPath = @"C:\src\App.csproj",
         AgentSessionId = "flowsession",
         TargetFramework = "net10.0-maccatalyst",

@@ -1603,7 +1603,7 @@ public sealed class MauiFlowRunner
             Locale = MauiFlowReportRedactor.SafeIdentifier(status.Locale),
             Theme = MauiFlowReportRedactor.SafeIdentifier(status.Theme),
             Orientation = MauiFlowReportRedactor.SafeIdentifier(status.Orientation),
-            DisplayProfile = MauiFlowReportRedactor.SafeIdentifier(status.DisplayProfile),
+            DisplayProfile = MauiFlowReportRedactor.SafeDisplayProfile(status.DisplayProfile),
         };
     }
 
@@ -1721,15 +1721,16 @@ public sealed class MauiFlowRunner
     {
         if (expected is null || observed is null)
             return null;
+        // Seed, backend-state, and collection-item facts are supplied by host-owned providers and
+        // remain on the recorded expected checkpoint for repair review. AgentStatus cannot observe
+        // them per step, so comparing them here would turn every provider-backed locator failure
+        // into precondition drift even after preflight verified those facts.
         return Matches(expected.AppBuildFingerprint, observed.AppBuildFingerprint) &&
             Matches(expected.AgentInstanceId, observed.AgentInstanceId) &&
-            Matches(expected.SeedFingerprint, observed.SeedFingerprint) &&
-            Matches(expected.BackendStateFingerprint, observed.BackendStateFingerprint) &&
             Matches(expected.Locale, observed.Locale) &&
             Matches(expected.Theme, observed.Theme) &&
             Matches(expected.Orientation, observed.Orientation) &&
-            Matches(expected.DisplayProfile, observed.DisplayProfile) &&
-            Matches(expected.CollectionItemKey, observed.CollectionItemKey);
+            Matches(expected.DisplayProfile, observed.DisplayProfile);
     }
 
     private static bool? RoutesMatch(MauiFlowCheckpoint? expected, MauiFlowCheckpoint? observed)

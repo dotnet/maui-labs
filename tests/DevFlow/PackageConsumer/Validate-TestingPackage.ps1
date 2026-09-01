@@ -38,7 +38,7 @@ function Get-Package {
 
     $escapedId = [regex]::Escape($PackageId)
     $packages = @(
-        Get-ChildItem -Path $Directory -File -Filter '*.nupkg' |
+        Get-ChildItem -Path $Directory -File -Recurse -Filter '*.nupkg' |
             Where-Object {
                 $_.Name -notlike '*.symbols.nupkg' -and
                 $_.Name -match "^$escapedId\.(?<version>.+)\.nupkg$"

@@ -86,6 +86,28 @@ public sealed class AndroidDeviceLifecycleOperationsTests
     }
 
     [Fact]
+    public async Task EnsureAgentPortForward_DelayedVisibility_RetriesUntilMappingAppears()
+    {
+        var runner = new ScriptedProcessRunner(
+            new PlatformProcessResult("", "", 1),
+            Success(),
+            Success(),
+            Success("emulator-5554 tcp:49152 tcp:49152\n"));
+        var operations = CreateOperations(runner);
+
+        await operations.EnsureAgentPortForwardAsync();
+
+        Assert.Equal(
+            [
+                "-s emulator-5554 forward --remove tcp:49152",
+                "-s emulator-5554 forward tcp:49152 tcp:49152",
+                "-s emulator-5554 forward --list",
+                "-s emulator-5554 forward --list",
+            ],
+            runner.Arguments);
+    }
+
+    [Fact]
     public async Task Install_AdbExitFailure_RetainsSafeActionAndExitContext()
     {
         const string secret = "ANDROID-ADB-SECRET-SENTINEL";
@@ -172,6 +194,27 @@ public sealed class AndroidFlowTestHostTests
         Assert.Equal(MauiFlowFailureClasses.PreconditionUnsatisfied, result.Report.Failure?.Code);
         Assert.Equal(0, driver.MutationCalls);
         Assert.Contains("verify", lifecycle.Calls);
+    }
+
+    [Fact]
+    public async Task MissingSelector_UsesLiveComparableCheckpointAfterVerifiedPreflight()
+    {
+        var lifecycle = new FakeLifecycle();
+        var driver = new FakeFlowDriver();
+        var flow = TapFlow("missing");
+        await using var host = new AndroidFlowTestHost(lifecycle, driver);
+
+        var result = await host.RunAsync(flow, Plan(flow: flow));
+
+        Assert.Equal(MauiFlowRunOutcomes.Failed, result.Report.Outcome?.Status);
+        Assert.Equal(MauiFlowFailureClasses.LocatorNotFound, result.Report.Failure?.Code);
+        Assert.Equal("seed", result.Report.Preconditions?.Expected?.SeedFingerprint);
+        Assert.Equal("backend", result.Report.Preconditions?.Expected?.BackendStateFingerprint);
+        var failedStep = Assert.Single(result.Report.Steps);
+        Assert.Equal("seed", failedStep.ExpectedCheckpoint?.SeedFingerprint);
+        Assert.Equal("backend", failedStep.ExpectedCheckpoint?.BackendStateFingerprint);
+        Assert.True(result.Report.Failure?.ClassifierRepairEligible);
+        Assert.Equal(0, driver.MutationCalls);
     }
 
     [Theory]
@@ -324,7 +367,7 @@ public sealed class AndroidFlowTestHostTests
         Assert.True(lifecycle.Disposed);
     }
 
-    static MauiFlow TapFlow() => new()
+    static MauiFlow TapFlow(string automationId = "submit") => new()
     {
         Name = "android-host-tap",
         Steps =
@@ -333,14 +376,16 @@ public sealed class AndroidFlowTestHostTests
             {
                 Seq = 1,
                 Action = FlowActions.Tap,
-                Args = new FlowStepArgs { Selector = new FlowSelector { AutomationId = "submit" } },
+                Args = new FlowStepArgs { Selector = new FlowSelector { AutomationId = automationId } },
             },
         ],
     };
 
-    static MauiTestPlan Plan(string policy = MauiFlowSideEffectPolicies.None)
+    static MauiTestPlan Plan(
+        string policy = MauiFlowSideEffectPolicies.None,
+        MauiFlow? flow = null)
     {
-        var flow = TapFlow();
+        flow ??= TapFlow();
         return new()
         {
             PlanId = "android-test-plan",
@@ -688,7 +733,7 @@ internal sealed class FakeLifecycle : IPlatformFlowTestLifecycle
 
         var observed = new MauiFlowCheckpoint
         {
-            AppBuildFingerprint = "sha256:build",
+            AppBuildFingerprint = "1.0:1",
             AgentInstanceId = "new",
             SeedFingerprint = "seed",
             BackendStateFingerprint = "backend",
@@ -845,8 +890,18 @@ internal sealed class FakeFlowDriver : IMauiFlowDriver
         => Task.FromResult<AgentStatus?>(new AgentStatus
         {
             Agent = new AgentDescriptor { InstanceId = "new" },
-            App = new AppDescriptor { PackageId = "com.companyname.mauitodo", ProcessId = 42 },
+            App = new AppDescriptor
+            {
+                PackageId = "com.companyname.mauitodo",
+                ProcessId = 42,
+                Version = "1.0",
+                Build = "1",
+            },
             Route = "//native",
+            Locale = "en-US",
+            Theme = "light",
+            Orientation = "0",
+            DisplayProfile = "1080x1920",
             Running = true,
         });
 }

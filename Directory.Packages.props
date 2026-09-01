@@ -59,11 +59,15 @@
     <PackageVersion Include="ModelContextProtocol" Version="$(ModelContextProtocolVersion)" />
     <PackageVersion Include="Interop.UIAutomationClient" Version="$(InteropUIAutomationClientVersion)" />
     <PackageVersion Include="AathifMahir.Maui.MauiIcons.Cupertino" Version="$(AathifMahirMauiIconsCupertinoVersion)" />
+    <PackageVersion Include="Microsoft.Maui.DevFlow.Testing"
+                    Version="$(DevFlowTestingPackageVersion)"
+                    Condition="'$(DevFlowTestingPackageVersion)' != ''" />
   </ItemGroup>
 
   <!-- MAUI Cli Tool dependencies -->
   <ItemGroup Label="Cli">
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="$(MicrosoftExtensionsDependencyInjectionVersion)" />
+    <PackageVersion Include="System.Drawing.Common" Version="9.0.0" />
     <PackageVersion Include="Xamarin.Android.Tools.AndroidSdk" Version="$(XamarinAndroidToolsAndroidSdkVersion)" />
     <PackageVersion Include="Xamarin.Apple.Tools.MaciOS" Version="$(XamarinAppleToolsMaciOSVersion)" />
   </ItemGroup>

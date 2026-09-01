@@ -40,6 +40,63 @@ public sealed class CSharpWorkspaceMSBuildRegistrationTests
         Assert.True(referenced, $"Microsoft.Maui.Cli.csproj must reference {package}.");
     }
 
+    [Fact]
+    public void NativeAotPublishKeepsPublishGlobalsLocalToTheCliProject()
+    {
+        var csproj = XDocument.Load(Path.Combine(CliDirectory, "Microsoft.Maui.Cli.csproj"));
+        var publishProperties = Assert.Single(
+            csproj.Descendants(),
+            element => element.Name.LocalName == "PropertyGroup" &&
+                string.Equals(
+                    element.Attribute("Condition")?.Value,
+                    "'$(MauiCliNativeAotPublish)' == 'true'",
+                    StringComparison.Ordinal));
+        foreach (var propertyName in new[]
+                 {
+                     "PublishAot",
+                     "PublishTrimmed",
+                     "InvariantGlobalization",
+                     "SelfContained",
+                 })
+        {
+            Assert.Equal(
+                "true",
+                publishProperties.Elements()
+                    .Single(element => element.Name.LocalName == propertyName)
+                    .Value);
+        }
+        Assert.Contains(
+            "IL3000",
+            publishProperties.Elements()
+                .Single(element => element.Name.LocalName == "WarningsNotAsErrors")
+                .Value,
+            StringComparison.Ordinal);
+
+        var workflow = File.ReadAllText(Path.Combine(RepoRoot, ".github", "workflows", "_build.yml"));
+        Assert.Contains("-p:MauiCliNativeAotPublish=true", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("-p:PublishAot=true", workflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BundledRoslynAndMSBuildDependenciesRemainUpstreamSigned()
+    {
+        var signing = XDocument.Load(Path.Combine(RepoRoot, "eng", "Signing.props"));
+        var dependencies = signing.Descendants()
+            .Where(element => element.Name.LocalName == "FileSignInfo")
+            .Where(element =>
+            {
+                var include = element.Attribute("Include")?.Value;
+                return include?.StartsWith("Microsoft.Build", StringComparison.Ordinal) == true ||
+                    include?.StartsWith("Microsoft.CodeAnalysis", StringComparison.Ordinal) == true;
+            })
+            .ToArray();
+
+        Assert.NotEmpty(dependencies);
+        Assert.All(
+            dependencies,
+            dependency => Assert.Equal("None", dependency.Attribute("CertificateName")?.Value));
+    }
+
     /// <summary>
     /// Exactly one registration, guarded by <c>IsRegistered</c>, and reached before the first
     /// <c>MSBuildWorkspace.Create()</c>. A second unguarded call throws
@@ -50,8 +107,8 @@ public sealed class CSharpWorkspaceMSBuildRegistrationTests
     {
         var source = File.ReadAllText(ProposalServicePath);
 
-        Assert.Equal(1, Regex.Matches(source, @"MSBuildLocator\.RegisterDefaults\(\)").Count);
-        Assert.Equal(1, Regex.Matches(source, @"MSBuildLocator\.IsRegistered").Count);
+        Assert.Single(Regex.Matches(source, @"MSBuildLocator\.RegisterDefaults\(\)"));
+        Assert.Single(Regex.Matches(source, @"MSBuildLocator\.IsRegistered"));
 
         var guard = source.IndexOf("MSBuildLocator.IsRegistered", StringComparison.Ordinal);
         var register = source.IndexOf("MSBuildLocator.RegisterDefaults()", StringComparison.Ordinal);

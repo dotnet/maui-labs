@@ -190,7 +190,7 @@ public sealed class ApprovalCommandsRouteTests
                     string.Equals(supplied, HostToken, StringComparison.Ordinal));
             inspector.Start();
 
-            var fixture = new Fixture(inspector, sessions, submitted.Request!.ApprovalRequestId, FreePort());
+            var fixture = new Fixture(inspector, sessions, submitted.Request!.ApprovalRequestId!, FreePort());
             fixture.StartProxy();
             return await Task.FromResult(fixture);
         }
@@ -262,6 +262,7 @@ public sealed class ApprovalCommandsRouteTests
         private void StartProxy()
         {
             _listener.Prefixes.Add($"http://127.0.0.1:{ProxyPort}/");
+            _listener.Prefixes.Add($"http://localhost:{ProxyPort}/");
             _listener.Start();
             _pump = Task.Run(async () =>
             {

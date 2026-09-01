@@ -544,14 +544,18 @@ public class DeviceFlowObserverTests
     }
 
     [Fact]
-    public void TheSeamDefaultsToDoingNothing()
+    public async Task TheSeamDefaultsToDoingNothing()
     {
         // An existing implementer that predates these members must keep compiling and keep
         // behaving identically, which is why they are defaulted rather than required.
         IFlowReplayEvidenceCapture legacy = new LegacyCapture();
 
-        Assert.Null(legacy.BeginRunAsync(new MauiFlow(), CancellationToken.None).Result);
-        Assert.Null(legacy.ExplainFailureAsync(new MauiFlow(), new FlowStep(), Failed("not_visible"), CancellationToken.None).Result);
+        Assert.Null(await legacy.BeginRunAsync(new MauiFlow(), CancellationToken.None));
+        Assert.Null(await legacy.ExplainFailureAsync(
+            new MauiFlow(),
+            new FlowStep(),
+            Failed("not_visible"),
+            CancellationToken.None));
     }
 
     private sealed class LegacyCapture : IFlowReplayEvidenceCapture

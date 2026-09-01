@@ -26,6 +26,21 @@
     <RollForward>Major</RollForward>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(MauiCliNativeAotPublish)' == 'true'">
+    <!-- Keep AOT and trimming local so they do not flow into the netstandard analyzer project. -->
+    <PublishAot>true</PublishAot>
+    <PublishTrimmed>true</PublishTrimmed>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SelfContained>true</SelfContained>
+    <!-- Roslyn locates its optional MSBuild host with Assembly.Location, which NativeAOT cannot provide. -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);IL3000</WarningsNotAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(MauiCliNativeAotPublish)' == 'true' and $([MSBuild]::IsOSPlatform('OSX'))">
+    <!-- Work around the Apple linker crash tracked by dotnet/runtime#119380. -->
+    <CustomLinkerArg Include="-ld_classic" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="System.CommandLine" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />

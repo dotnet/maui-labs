@@ -1471,6 +1471,8 @@ public sealed class FlowQaScriptTests
         var artifactRoot = Path.Combine(runRoot, "android");
         var shimDirectory = Path.Combine(
             RepositoryRoot, "artifacts", "TestResults", "devflow-flow-qa-probe", $"shims-{Guid.NewGuid():N}");
+        var dotnetShimMarker = Path.Combine(shimDirectory, "dotnet-invoked");
+        var pwshShimMarker = Path.Combine(shimDirectory, "pwsh-invoked");
         Directory.CreateDirectory(shimDirectory);
         const string pilotManifest =
             """{"schema":1,"kind":"devflow-flow-pilot","flows":[{"name":"pilot"}],"artifacts":[]}""";
@@ -1488,17 +1490,18 @@ public sealed class FlowQaScriptTests
             // The test host writes the pilot manifest the way the real one does and then fails,
             // and the finalizer cannot run at all. That is exactly the condition this covers: a
             // shared manifest that exists but could not be finalized.
-            File.WriteAllText(
+            WriteExecutableShim(
                 Path.Combine(shimDirectory, "dotnet"),
                 "#!/bin/sh\n" +
+                ": > \"$FLOW_QA_TEST_DOTNET_SHIM_MARKER\"\n" +
                 "mkdir -p \"$FLOW_QA_TEST_ARTIFACT_ROOT\"\n" +
                 "printf '%s' '" + pilotManifest + "' > \"$FLOW_QA_TEST_ARTIFACT_ROOT/manifest.json\"\n" +
-                "exit 1\n",
-                new System.Text.UTF8Encoding(false));
-            File.WriteAllText(
+                "exit 1\n");
+            WriteExecutableShim(
                 Path.Combine(shimDirectory, "pwsh"),
-                "#!/bin/sh\nexit 1\n",
-                new System.Text.UTF8Encoding(false));
+                "#!/bin/sh\n" +
+                ": > \"$FLOW_QA_TEST_PWSH_SHIM_MARKER\"\n" +
+                "exit 1\n");
 
             var result = RunProcess(
                 bash,
@@ -1506,12 +1509,17 @@ public sealed class FlowQaScriptTests
                 {
                     ["DEVFLOW_FLOW_QA_RUN_ID"] = runId,
                     ["FLOW_QA_TEST_ARTIFACT_ROOT"] = artifactRoot,
+                    ["FLOW_QA_TEST_DOTNET_SHIM_MARKER"] = dotnetShimMarker,
+                    ["FLOW_QA_TEST_PWSH_SHIM_MARKER"] = pwshShimMarker,
                     ["PATH"] = shimDirectory + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH"),
                 },
                 "eng/devflow/Run-DevFlowFlowQa.sh",
                 "--platform", "android",
                 "--results-root", "./artifacts/TestResults/devflow-flow/android");
             Assert.NotEqual(0, result.ExitCode);
+            Assert.True(
+                File.Exists(dotnetShimMarker) && File.Exists(pwshShimMarker),
+                "Both PATH shims must execute; otherwise the real toolchain can replace the test host.");
 
             var manifestPath = Path.Combine(artifactRoot, "manifest.json");
             var flowRunPath = Path.Combine(artifactRoot, "flow-run.json");
@@ -2131,6 +2139,18 @@ public sealed class FlowQaScriptTests
         Console.WriteLine(
             "bash was not found, so the shell entry point could not be exercised on this host.");
         return false;
+    }
+
+    /// <summary>Writes a PATH shim and makes it executable on POSIX hosts.</summary>
+    static void WriteExecutableShim(string path, string script)
+    {
+        File.WriteAllText(path, script, new System.Text.UTF8Encoding(false));
+        if (OperatingSystem.IsWindows())
+            return;
+
+        File.SetUnixFileMode(
+            path,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
     }
 
     static ProcessResult RunProcess(string fileName, params string[] arguments)

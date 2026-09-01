@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Xml.Linq;
@@ -37,6 +36,26 @@ public class McpAppsCompatibilitySpikeTests
                 .Attribute("Version")?.Value);
         Assert.Equal(new Version(1, 1, 0, 0), typeof(McpServerTool).Assembly.GetName().Version);
         Assert.Equal(new Version(1, 1, 0, 0), typeof(CallToolResult).Assembly.GetName().Version);
+    }
+
+    [Fact]
+    public void NativeAotMacPublishUsesClassicLinkerForKnownAppleCrash()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        var project = XDocument.Load(Path.Combine(
+            repositoryRoot,
+            "src",
+            "Cli",
+            "Microsoft.Maui.Cli",
+            "Microsoft.Maui.Cli.csproj"));
+        var linkerArgument = Assert.Single(
+            project.Descendants(),
+            element => element.Name.LocalName == "CustomLinkerArg" &&
+                string.Equals(element.Attribute("Include")?.Value, "-ld_classic", StringComparison.Ordinal));
+        var condition = linkerArgument.Parent?.Attribute("Condition")?.Value ?? "";
+
+        Assert.Contains("MauiCliNativeAotPublish", condition, StringComparison.Ordinal);
+        Assert.Contains("IsOSPlatform('OSX')", condition, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -291,12 +310,18 @@ public class McpAppsCompatibilitySpikeTests
         [Description("Theme requested by the MCP host")] string theme)
         => $"<!doctype html><body data-theme=\"{theme}\"></body>";
 
-    private static string GetRepositoryRoot([CallerFilePath] string sourceFile = "")
-        => Path.GetFullPath(Path.Combine(
-            Path.GetDirectoryName(sourceFile)!,
-            "..",
-            "..",
-            ".."));
+    private static string GetRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "MauiLabs.slnx")))
+                return directory.FullName;
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not find the maui-labs repository root.");
+    }
 
     private sealed record PhaseZeroSurface(
         bool IsNegotiated,

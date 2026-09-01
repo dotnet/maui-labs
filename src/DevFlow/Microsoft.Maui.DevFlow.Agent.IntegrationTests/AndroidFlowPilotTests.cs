@@ -14,8 +14,11 @@ public sealed class AndroidFlowPilotTests
 {
     const int DefaultCleanRepetitions = 3;
     const string PilotCheckpointRoute = AndroidFlowTestHost.DefaultCheckpointRoute;
+    const string FragileFlowExclusionReason =
+        "The committed flow contains a fragile selector and is not admissible in the required passing corpus.";
     internal const string DemoFlowEnvironmentVariable = "DEVFLOW_FLOW_PILOT_DEMO_FLOW";
     internal const string DemoFlowPrefix = "demo-";
+    internal static readonly string[] DeliberateFailureFlowPrefixes = [DemoFlowPrefix, "drifted-"];
     readonly ITestOutputHelper _output;
 
     public AndroidFlowPilotTests(ITestOutputHelper output)
@@ -34,13 +37,20 @@ public sealed class AndroidFlowPilotTests
     [Fact]
     public async Task TierOneFlows_LoadCommittedPlanBundles()
     {
-        var flows = await LoadTierOneFlowsAsync(AppFixtureBase.FindRepoRoot());
+        var exclusions = new List<(string Path, string Reason)>();
+        var flows = await LoadTierOneFlowsAsync(
+            AppFixtureBase.FindRepoRoot(),
+            (path, reason) => exclusions.Add((path, reason)));
 
         Assert.All(flows, flow => Assert.NotNull(flow.Plan));
         Assert.All(flows, flow => Assert.Equal(MauiFlowSideEffectPolicies.None, flow.Plan!.SideEffectPolicy));
+        Assert.All(flows, flow => Assert.False(ContainsFragileSelector(flow.Flow)));
         Assert.DoesNotContain(
             flows,
-            flow => Path.GetFileName(flow.SourcePath).StartsWith(DemoFlowPrefix, StringComparison.Ordinal));
+            flow => IsDeliberateFailureFlow(flow.SourcePath));
+        var exclusion = Assert.Single(exclusions);
+        Assert.Equal("recording-2026-08-04T07-33-09.md", exclusion.Path);
+        Assert.Equal(FragileFlowExclusionReason, exclusion.Reason);
     }
 
     [Fact]
@@ -50,6 +60,8 @@ public sealed class AndroidFlowPilotTests
         {
             Path.Combine("flows", "README.md"),
             Path.Combine("flows", "demo-ci-fix-drift.md"),
+            Path.Combine("flows", "drifted-add-todo.md"),
+            Path.Combine("flows", "drifted-assert-after-commit.md"),
             Path.Combine("flows", "native-baseline.md"),
             Path.Combine("flows", "verified-add-todo.md"),
         };
@@ -58,7 +70,9 @@ public sealed class AndroidFlowPilotTests
 
         Assert.Equal(
             ["native-baseline.md", "verified-add-todo.md"],
-            selected.Select(Path.GetFileName).ToArray());
+            selected.Select(static path =>
+                Path.GetFileName(path)
+                ?? throw new InvalidOperationException("A selected flow path had no file name.")).ToArray());
     }
 
     [Fact]
@@ -101,9 +115,15 @@ public sealed class AndroidFlowPilotTests
         Assert.Contains(
             files,
             path => string.Equals(Path.GetFileName(path), "demo-ci-fix-drift.md", StringComparison.Ordinal));
+        Assert.Contains(
+            files,
+            path => string.Equals(Path.GetFileName(path), "drifted-add-todo.md", StringComparison.Ordinal));
+        Assert.Contains(
+            files,
+            path => string.Equals(Path.GetFileName(path), "drifted-assert-after-commit.md", StringComparison.Ordinal));
         Assert.DoesNotContain(
             SelectTierOneFlowFiles(files, demoFlowSelection: null),
-            path => string.Equals(Path.GetFileName(path), "demo-ci-fix-drift.md", StringComparison.Ordinal));
+            IsDeliberateFailureFlow);
         Assert.Equal(
             "demo-ci-fix-drift.md",
             Path.GetFileName(Assert.Single(SelectTierOneFlowFiles(files, "demo-ci-fix-drift.md"))));
@@ -124,7 +144,13 @@ public sealed class AndroidFlowPilotTests
 
         try
         {
-            flows = await LoadTierOneFlowsAsync(repositoryRoot);
+            flows = await LoadTierOneFlowsAsync(
+                repositoryRoot,
+                (path, reason) =>
+                {
+                    _output.WriteLine($"Android flow-pilot excluded {path}: {reason}");
+                    manifest.AddOmission("tier1-flow-excluded", $"{path}: {reason}");
+                });
             fixture = new AndroidEmulatorFixture();
             await fixture.InitializeAsync();
             host = fixture.CreateFlowTestHost();
@@ -161,6 +187,24 @@ public sealed class AndroidFlowPilotTests
                         });
 
                     manifest.RecordCleanAttempt(flow.Flow, flow.SourcePath, repetition, result.Report);
+                    foreach (var artifact in result.Artifacts.Where(static artifact =>
+                                 !string.IsNullOrWhiteSpace(artifact.Path)))
+                    {
+                        manifest.RecordArtifact(artifact);
+                    }
+
+                    var failureEvidencePath = Path.Combine(runDirectory, "failure.mauitrace");
+                    if (File.Exists(failureEvidencePath))
+                    {
+                        manifest.RecordArtifact(new MauiFlowArtifactReference
+                        {
+                            Kind = "mauitrace",
+                            Path = failureEvidencePath,
+                            Redacted = true,
+                            CreatedAt = result.Report.EndedAt ?? DateTimeOffset.UtcNow,
+                        });
+                    }
+
                     if (!string.Equals(result.Report.Outcome?.Status, MauiFlowRunOutcomes.Passed, StringComparison.Ordinal))
                     {
                         failures.Add(
@@ -249,10 +293,10 @@ public sealed class AndroidFlowPilotTests
 
     /// <summary>
     /// Selects the flow files the Tier-1 pilot loads. The default is the ordinary Tier-1 corpus and
-    /// never includes a <c>demo-</c>-prefixed flow: those exist only to fail on purpose for the
-    /// manager-facing CI demo, and one of them in the required gate would turn every pull request
-    /// red. Demo mode is a single explicit opt-in file name; it loads that flow and nothing else,
-    /// so a demo run can never quietly widen into the ordinary corpus either.
+    /// never includes a deliberately failing fixture: those document repair scenarios and cannot
+    /// satisfy a gate that requires every loaded flow to pass. Demo mode is a single explicit
+    /// <c>demo-</c>-prefixed file name; it loads that flow and nothing else, so a demo run can never
+    /// quietly widen into the ordinary corpus either.
     /// </summary>
     internal static IReadOnlyList<string> SelectTierOneFlowFiles(
         IEnumerable<string> flowPaths,
@@ -268,7 +312,7 @@ public sealed class AndroidFlowPilotTests
         if (string.IsNullOrEmpty(selection))
         {
             return ordered
-                .Where(static path => !Path.GetFileName(path).StartsWith(DemoFlowPrefix, StringComparison.Ordinal))
+                .Where(static path => !IsDeliberateFailureFlow(path))
                 .ToList();
         }
 
@@ -293,8 +337,19 @@ public sealed class AndroidFlowPilotTests
         return matches;
     }
 
+    internal static bool IsDeliberateFailureFlow(string path)
+        => DeliberateFailureFlowPrefixes.Any(prefix =>
+            Path.GetFileName(path).StartsWith(prefix, StringComparison.Ordinal));
+
+    internal static bool ContainsFragileSelector(MauiFlow flow)
+        => flow.Steps.Any(static step =>
+            step.Fragile ||
+            FlowSelector.IsFragile(step.Target) ||
+            FlowSelector.IsFragile(step.Args?.Selector));
+
     internal static async Task<List<FlowPilotFlowSource>> LoadTierOneFlowsAsync(
         string repositoryRoot,
+        Action<string, string>? reportExclusion = null,
         CancellationToken cancellationToken = default)
     {
         var directory = Path.Combine(repositoryRoot, "samples", "DevFlow.Sample", "maui-tests");
@@ -325,6 +380,12 @@ public sealed class AndroidFlowPilotTests
                 throw new InvalidOperationException(
                     $"{Path.GetFileName(path)} declares checkpoint route '{declaredRoute}', " +
                     $"but the Android flow pilot verifies '{PilotCheckpointRoute}'.");
+            }
+
+            if (!demoMode && ContainsFragileSelector(bundle.Flow))
+            {
+                reportExclusion?.Invoke(Path.GetFileName(path), FragileFlowExclusionReason);
+                continue;
             }
 
             sources.Add(new FlowPilotFlowSource(path, bundle.Flow, bundle.Plan));
@@ -429,6 +490,72 @@ public sealed class FlowPilotArtifactManifestTests
                 "screenshots",
                 rootElement.GetProperty("privacy").GetProperty("excludedByDefault").EnumerateArray()
                     .Select(static item => item.GetString()));
+        }
+        finally
+        {
+            DeleteArtifactRoot(root);
+        }
+    }
+
+    [Fact]
+    public void WriteAtomic_UsesReportPathWhenSerializedArtifactPathsWereRedacted()
+    {
+        var root = CreateArtifactRoot();
+        try
+        {
+            var manifest = CreateManifest(root);
+            var report = Report(root, "attempt-1", MauiFlowRunOutcomes.Passed, null);
+            report.Artifacts.Clear();
+            report.Artifacts.Add(new MauiFlowArtifactReference
+            {
+                Kind = "flow-run-report",
+                Redacted = true,
+            });
+
+            manifest.RecordCleanAttempt(Flow(), SourcePath(), 1, report);
+            var write = manifest.WriteAtomic();
+
+            Assert.True(write.Ok, write.Error);
+            using var document = JsonDocument.Parse(File.ReadAllText(write.Path!));
+            var artifact = Assert.Single(
+                document.RootElement.GetProperty("artifacts").EnumerateArray(),
+                entry => entry.GetProperty("kind").GetString() == "flow-run-report");
+            Assert.EndsWith(
+                "attempt-1/flow-run.json",
+                artifact.GetProperty("path").GetString(),
+                StringComparison.Ordinal);
+            Assert.True(artifact.GetProperty("redacted").GetBoolean());
+            Assert.DoesNotContain(
+                document.RootElement.GetProperty("omissions").EnumerateArray(),
+                entry => entry.GetProperty("kind").GetString() == "artifact-path");
+        }
+        finally
+        {
+            DeleteArtifactRoot(root);
+        }
+    }
+
+    [Fact]
+    public void WriteAtomic_PathlessUnknownArtifactIsReportedAsAnOmission()
+    {
+        var root = CreateArtifactRoot();
+        try
+        {
+            var manifest = CreateManifest(root);
+            var report = Report(root, "attempt-1", MauiFlowRunOutcomes.Passed, null);
+            report.Artifacts.Add(new MauiFlowArtifactReference
+            {
+                Kind = "custom-diagnostic",
+                Redacted = true,
+            });
+
+            manifest.RecordCleanAttempt(Flow(), SourcePath(), 1, report);
+            var write = manifest.WriteAtomic();
+
+            Assert.True(write.Ok, write.Error);
+            Assert.Contains(
+                manifest.Omissions,
+                omission => omission.Kind == "artifact-path");
         }
         finally
         {
@@ -587,7 +714,10 @@ public sealed class FlowPilotArtifactManifestTests
         Assert.Contains("'samples/DevFlow.Sample/*'", workflow, StringComparison.Ordinal);
 
         var jobs = RequireMapping(root, "jobs");
-        Assert.NotNull(RequireNode(jobs, "android-flow-pilot"));
+        var pilot = RequireMapping(jobs, "android-flow-pilot");
+        var companionSmoke = RequireMapping(jobs, "android-mobile-canvas-smoke");
+        Assert.NotNull(pilot);
+        Assert.NotNull(companionSmoke);
         Assert.Contains("run-android-flow-pilot", workflow, StringComparison.Ordinal);
         Assert.Contains("integration-tests", workflow, StringComparison.Ordinal);
         Assert.Contains("flow-pilot", workflow, StringComparison.Ordinal);
@@ -598,6 +728,19 @@ public sealed class FlowPilotArtifactManifestTests
         Assert.Contains("Run-DevFlowFlowQa.sh", workflow, StringComparison.Ordinal);
         Assert.Contains("--platform android", workflow, StringComparison.Ordinal);
         Assert.Contains("--repeat 3", workflow, StringComparison.Ordinal);
+        Assert.Contains("id: mobile-canvas-smoke", workflow, StringComparison.Ordinal);
+        Assert.Contains("continue-on-error: true", workflow, StringComparison.Ordinal);
+        Assert.Contains("-grpc 8554", workflow, StringComparison.Ordinal);
+        Assert.Contains(
+            "mobile-canvas-smoke-outcome: ${{ steps.mobile-canvas-smoke.outcome }}",
+            workflow,
+            StringComparison.Ordinal);
+        var gate = RequireMapping(jobs, "devflow-flow-gate");
+        Assert.DoesNotContain(
+            "android-mobile-canvas-smoke",
+            RequireSequence(gate, "needs").Children
+                .OfType<YamlScalarNode>()
+                .Select(static node => node.Value));
         Assert.Contains("retention-days: 30", workflow, StringComparison.Ordinal);
 
         var finalizerPath = Path.Combine(

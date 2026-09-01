@@ -149,13 +149,14 @@ public static class MauiPreviewQualificationArtifactManifestReader
                 !string.IsNullOrWhiteSpace(ReadString(firstAttempt, "reportPath"));
             var reportDigest = ReadString(firstAttempt, "reportDigest");
             var reportPath = ReadString(firstAttempt, "reportPath");
-            if (!string.IsNullOrWhiteSpace(reportDigest) &&
+            var normalizedReportDigest = NormalizeSha256(reportDigest);
+            if (!string.IsNullOrWhiteSpace(normalizedReportDigest) &&
                 !string.IsNullOrWhiteSpace(reportPath))
             {
                 input.ArtifactRefs.Add(new MauiQualificationArtifactReference
                 {
                     Kind = "report",
-                    Digest = reportDigest,
+                    Digest = normalizedReportDigest,
                     Reference = reportPath,
                     Redacted = true,
                 });
@@ -294,6 +295,16 @@ public static class MauiPreviewQualificationArtifactManifestReader
             });
         }
         return complete;
+    }
+
+    private static string? NormalizeSha256(string? value)
+    {
+        var normalized = value?.Trim().ToLowerInvariant();
+        if (normalized?.StartsWith("sha256:", StringComparison.Ordinal) == true)
+            normalized = normalized[7..];
+        return normalized is { Length: 64 } && normalized.All(Uri.IsHexDigit)
+            ? $"sha256:{normalized}"
+            : null;
     }
 
     private static string? NormalizeOutcome(string? value) => value switch

@@ -48,7 +48,8 @@ public sealed class TestAgentReadAuthorityTests
     public void LayoutDiagnostics_RequiresAnExactTargetAndNothingElseAuthoritative()
     {
         var method = Assert.Single(
-            ToolMethods().Where(entry => entry.Name == "maui_test_layout_diagnostics")).Method;
+            ToolMethods(),
+            entry => entry.Name == "maui_test_layout_diagnostics").Method;
         var parameters = method.GetParameters();
 
         Assert.Equal(typeof(McpAgentSession), parameters[0].ParameterType);
@@ -63,7 +64,8 @@ public sealed class TestAgentReadAuthorityTests
     public void Improvements_StillRequiresTheSessionEnvelopeBecauseItReadsTheDraft()
     {
         var method = Assert.Single(
-            ToolMethods().Where(entry => entry.Name == "maui_test_improvements")).Method;
+            ToolMethods(),
+            entry => entry.Name == "maui_test_improvements").Method;
 
         Assert.Contains(
             typeof(MauiTestAgentRequestEnvelope),
@@ -74,7 +76,8 @@ public sealed class TestAgentReadAuthorityTests
     public void LayoutDiagnostics_DeclaresItsTierInTheToolDescription()
     {
         var method = Assert.Single(
-            ToolMethods().Where(entry => entry.Name == "maui_test_layout_diagnostics")).Method;
+            ToolMethods(),
+            entry => entry.Name == "maui_test_layout_diagnostics").Method;
         var description = method
             .GetCustomAttribute<System.ComponentModel.DescriptionAttribute>()!
             .Description;

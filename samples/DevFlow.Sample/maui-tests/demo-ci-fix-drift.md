@@ -19,8 +19,8 @@ The shape is copied from `drifted-assert-after-commit.md`, the repository's work
 - The flow asserts the real `CountLabel`, so the assertion is intact and unchanged.
 - The independent `android-app-storage` oracle reads the app's private todo ledger over adb, so
   the outcome is verified outside the UI the flow drove.
-- Only the trailing **action** addresses `DemoMissingTrailingActionButton`, an AutomationId the
-  app deliberately does not expose.
+- Only the trailing **action** addresses `ShowModalButtonRenamed`, a drifted AutomationId whose
+  real counterpart is the app's `ShowModalButton`.
 
 Business outcome independently verified, assertion intact, one trailing **action** selector
 unresolved: that is a `locator-not-found` failure the selector self-repair pipeline is meant to
@@ -67,7 +67,7 @@ point. If this file ever stops failing, the demo lane stops demonstrating anythi
       "seq": 3,
       "action": "tap",
       "args": {
-        "selector": { "automationId": "DemoMissingTrailingActionButton" }
+        "selector": { "automationId": "ShowModalButtonRenamed" }
       }
     }
   ]
