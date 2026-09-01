@@ -9,8 +9,9 @@ public sealed class MauiPreviewQualificationArtifactManifestReaderTests
         "artifacts/devflow/123-1/android/demo-ci-fix-drift-attempt-1/flow-run.json";
     private const string TracePath =
         "artifacts/devflow/123-1/android/demo-ci-fix-drift-attempt-1/failure.mauitrace";
-    private const string ReportIdentityDigest =
-        "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+    private const string ReportIdentityHex =
+        "1111111111111111111111111111111111111111111111111111111111111111";
+    private const string ReportIdentityDigest = $"sha256:{ReportIdentityHex}";
     private const string ReportBytesDigest =
         "sha256:2222222222222222222222222222222222222222222222222222222222222222";
     private const string TraceBytesDigest =
@@ -132,7 +133,7 @@ public sealed class MauiPreviewQualificationArtifactManifestReaderTests
                 "outcome": "failed",
                 "verified": false,
                 "reportPath": "{{ReportPath}}",
-                "reportDigest": "{{ReportIdentityDigest}}",
+                "reportDigest": "{{ReportIdentityHex}}",
                 "failureClass": "locator-not-found",
                 "failureCode": "locator-not-found"
               },
