@@ -190,7 +190,7 @@ public sealed class ApprovalCommandsRouteTests
                     string.Equals(supplied, HostToken, StringComparison.Ordinal));
             inspector.Start();
 
-            var fixture = new Fixture(inspector, sessions, submitted.Request!.ApprovalRequestId, FreePort());
+            var fixture = new Fixture(inspector, sessions, submitted.Request!.ApprovalRequestId!, FreePort());
             fixture.StartProxy();
             return await Task.FromResult(fixture);
         }

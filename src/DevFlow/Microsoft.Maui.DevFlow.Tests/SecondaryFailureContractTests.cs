@@ -50,10 +50,10 @@ public sealed class SecondaryFailureContractTests
 
         Assert.Equal(
             [MauiFlowSecondaryFailurePhases.ArtifactCleanup, MauiFlowSecondaryFailurePhases.Cleanup],
-            report.SecondaryFailures.Select(static failure => failure.Phase).ToArray());
+            report.SecondaryFailures.Select(static failure => failure.Phase!).ToArray());
         Assert.Equal(
             ["artifact-cleanup-failed", "cleanup-failed"],
-            report.SecondaryFailures.Select(static failure => failure.Code).ToArray());
+            report.SecondaryFailures.Select(static failure => failure.Code!).ToArray());
         Assert.All(
             report.SecondaryFailures,
             failure => Assert.Equal(MauiFlowFailureClasses.Infrastructure, failure.Class));
@@ -162,14 +162,14 @@ public sealed class SecondaryFailureContractTests
         Assert.Equal(MauiFlowSecondaryFailurePhases.MaxRetained, normalized.Count);
         Assert.Equal(
             [MauiFlowSecondaryFailurePhases.ArtifactCleanup, MauiFlowSecondaryFailurePhases.Cleanup],
-            normalized.Take(2).Select(static failure => failure.Phase).ToArray());
+            normalized.Take(2).Select(static failure => failure.Phase!).ToArray());
         Assert.Equal(
             ["artifact-cleanup-failed", "cleanup-failed"],
-            normalized.Take(2).Select(static failure => failure.Code).ToArray());
+            normalized.Take(2).Select(static failure => failure.Code!).ToArray());
         // The invented phases are still bounded, and the ones that survive are deterministic.
         Assert.Equal(
             ["aaa-first", "aab-second"],
-            normalized.Skip(2).Select(static failure => failure.Phase).ToArray());
+            normalized.Skip(2).Select(static failure => failure.Phase!).ToArray());
     }
 
     /// <summary>
@@ -205,7 +205,7 @@ public sealed class SecondaryFailureContractTests
                 "aaa-invented",
                 "zzz-invented",
             ],
-            forward.Select(static failure => failure.Phase).ToArray());
+            forward.Select(static failure => failure.Phase!).ToArray());
     }
 
     /// <summary>
@@ -407,7 +407,7 @@ public sealed class SecondaryFailureContractTests
         Assert.True(projection.Outcome?.Verified);
         Assert.Equal(
             [MauiFlowSecondaryFailurePhases.ArtifactCleanup, MauiFlowSecondaryFailurePhases.Cleanup],
-            projection.Outcome!.SecondaryFailures.Select(static failure => failure.Phase).ToArray());
+            projection.Outcome!.SecondaryFailures.Select(static failure => failure.Phase!).ToArray());
     }
 
     [Fact]

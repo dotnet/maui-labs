@@ -17,7 +17,7 @@ namespace Microsoft.Maui.Cli.UnitTests;
 public class DetachedDaemonProcessTests
 {
     [Fact]
-    public void Start_DoesNotLeakAnInheritablePipeIntoTheDaemon()
+    public async Task Start_DoesNotLeakAnInheritablePipeIntoTheDaemon()
     {
         if (!OperatingSystem.IsWindows())
             return;
@@ -34,9 +34,11 @@ public class DetachedDaemonProcessTests
             // daemon inherited it, this blocks until the daemon exits — which is the defect.
             var read = Task.Run(pipe.ReadByte);
             Assert.True(
-                read.Wait(TimeSpan.FromSeconds(20)),
+                ReferenceEquals(
+                    read,
+                    await Task.WhenAny(read, Task.Delay(TimeSpan.FromSeconds(20)))),
                 "The daemon inherited the caller's pipe handle, so the pipeline never closed.");
-            Assert.Equal(-1, read.Result);
+            Assert.Equal(-1, await read);
 
             // Without this the test would also pass if the stand-in daemon had simply died.
             Assert.False(daemon!.HasExited, "The stand-in daemon exited early, so the read proved nothing.");

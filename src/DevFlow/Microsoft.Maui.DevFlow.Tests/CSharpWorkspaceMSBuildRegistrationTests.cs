@@ -50,8 +50,8 @@ public sealed class CSharpWorkspaceMSBuildRegistrationTests
     {
         var source = File.ReadAllText(ProposalServicePath);
 
-        Assert.Equal(1, Regex.Matches(source, @"MSBuildLocator\.RegisterDefaults\(\)").Count);
-        Assert.Equal(1, Regex.Matches(source, @"MSBuildLocator\.IsRegistered").Count);
+        Assert.Single(Regex.Matches(source, @"MSBuildLocator\.RegisterDefaults\(\)"));
+        Assert.Single(Regex.Matches(source, @"MSBuildLocator\.IsRegistered"));
 
         var guard = source.IndexOf("MSBuildLocator.IsRegistered", StringComparison.Ordinal);
         var register = source.IndexOf("MSBuildLocator.RegisterDefaults()", StringComparison.Ordinal);

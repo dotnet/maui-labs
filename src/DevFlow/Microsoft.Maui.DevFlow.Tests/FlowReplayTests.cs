@@ -723,7 +723,7 @@ public class FlowReplayTests
 
         // 6. Nothing was applied: not to the flow, not to the app, and no extra evidence taken.
         Assert.Equal("submit", flow.Steps[0].Args?.Selector?.AutomationId);
-        Assert.Equal("submit", flow.Steps[0].Asserts[0].Selector?.AutomationId);
+        Assert.Equal("submit", flow.Steps[0].Asserts![0].Selector?.AutomationId);
         Assert.Equal(new[] { "btn" }, agentSrv.Taps.ToArray());
 
         // Replaying the untouched flow fails the same way, and evidence capture is per run: this
