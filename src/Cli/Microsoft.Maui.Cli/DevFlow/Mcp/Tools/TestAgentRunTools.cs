@@ -81,9 +81,17 @@ public sealed class TestAgentValidationTool
                         string.Equals(match.StableItemKey, selector.StableItemKey, StringComparison.Ordinal) &&
                         string.Equals(match.CollectionScope, selector.CollectionScope, StringComparison.Ordinal)).ToArray()
                     : matches.ToArray();
-                var key = MauiTestAgentSelectorScopeKey.FromSelector(selector)
-                    ?? throw new InvalidOperationException(
-                        "An AutomationId selector did not produce a canonical scope key.");
+                var key = MauiTestAgentSelectorScopeKey.FromSelector(selector);
+                if (key is null)
+                {
+                    return TestAgentToolSupport.Failure(
+                        request.Envelope.RequestId,
+                        TestAgentToolSupport.Error(
+                            MauiTestAgentErrorCodes.InvalidRequest,
+                            MauiTestAgentErrorCategories.Validation,
+                            "An AutomationId selector did not produce a canonical scope key.",
+                            retryable: false));
+                }
                 var verdict = ClassifySelectorResolution(resolved.Length);
                 if (resolved.Length == 0)
                     unresolved.Add(key);
