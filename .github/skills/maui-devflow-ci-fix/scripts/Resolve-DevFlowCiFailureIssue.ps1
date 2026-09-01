@@ -93,6 +93,17 @@ function Stop-Resolver {
     throw [InvalidOperationException]::new($Code)
 }
 
+function Close-GitHubProcess {
+    param([Parameter(Mandatory)] [Diagnostics.Process] $Process)
+
+    try {
+        $Process.Dispose()
+    }
+    catch [IO.IOException] {
+        Write-Warning 'The GitHub CLI process reported an I/O error during cleanup after its response was captured.'
+    }
+}
+
 function Read-BoundedJsonFile {
     param([Parameter(Mandatory)] [string] $Path)
 
@@ -202,7 +213,7 @@ function Invoke-GitHubApiJson {
         return $value
     }
     finally {
-        $process.Dispose()
+        Close-GitHubProcess $process
     }
 }
 
@@ -354,7 +365,7 @@ function Invoke-GitHubApiJsonArray {
         return ,([System.Array] $value)
     }
     finally {
-        $process.Dispose()
+        Close-GitHubProcess $process
     }
 }
 
@@ -693,14 +704,16 @@ function Get-ValidatedRunMetadata {
 
 try {
     $fixtureInputs = @(
-        $IssueJsonPath,
-        $RepositoryJsonPath,
-        $RunJsonPath,
-        $ArtifactsJsonPath,
-        $CommentsJsonPath,
-        $RunJsonDirectory,
-        $ArtifactsJsonDirectory) |
-        Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        @(
+            $IssueJsonPath,
+            $RepositoryJsonPath,
+            $RunJsonPath,
+            $ArtifactsJsonPath,
+            $CommentsJsonPath,
+            $RunJsonDirectory,
+            $ArtifactsJsonDirectory) |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    )
     if ($fixtureInputs.Count -gt 0 -and
         (-not $OfflineFixture -or $env:DEVFLOW_CI_FIX_TEST_FIXTURES -ne '1')) {
         Stop-Resolver 'offline-fixture-not-enabled'
