@@ -119,6 +119,7 @@ jobs:
           -prepareMachine
           -projects %CD%\${{ inputs.project-path }}
           /p:VersionSuffix=%CI_PACKAGE_VERSION_SUFFIX%
+          ${{ inputs.pack-driver && '/p:PackDriverNuGet=true' || '' }}
         shell: cmd
 
       - name: Build and Test (macOS)
@@ -129,6 +130,7 @@ jobs:
           --prepareMachine
           --projects $(pwd)/${{ inputs.project-path }}
           /p:VersionSuffix=$CI_PACKAGE_VERSION_SUFFIX
+          ${{ inputs.pack-driver && '/p:PackDriverNuGet=true' || '' }}
 
       - name: Build and Test (Linux)
         if: startsWith(matrix.os, 'ubuntu')
@@ -138,6 +140,7 @@ jobs:
           --prepareMachine
           --projects $(pwd)/${{ inputs.project-path }}
           /p:VersionSuffix=$CI_PACKAGE_VERSION_SUFFIX
+          ${{ inputs.pack-driver && '/p:PackDriverNuGet=true' || '' }}
 
       - name: NativeAOT publish smoke test (macOS)
         if: matrix.os == 'macos-latest' && inputs.project-name == 'cli'
