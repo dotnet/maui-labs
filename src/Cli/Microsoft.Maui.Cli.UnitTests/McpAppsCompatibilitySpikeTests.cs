@@ -39,6 +39,26 @@ public class McpAppsCompatibilitySpikeTests
     }
 
     [Fact]
+    public void NativeAotMacPublishUsesClassicLinkerForKnownAppleCrash()
+    {
+        var repositoryRoot = GetRepositoryRoot();
+        var project = XDocument.Load(Path.Combine(
+            repositoryRoot,
+            "src",
+            "Cli",
+            "Microsoft.Maui.Cli",
+            "Microsoft.Maui.Cli.csproj"));
+        var linkerArgument = Assert.Single(
+            project.Descendants(),
+            element => element.Name.LocalName == "CustomLinkerArg" &&
+                string.Equals(element.Attribute("Include")?.Value, "-ld_classic", StringComparison.Ordinal));
+        var condition = linkerArgument.Parent?.Attribute("Condition")?.Value ?? "";
+
+        Assert.Contains("MauiCliNativeAotPublish", condition, StringComparison.Ordinal);
+        Assert.Contains("IsOSPlatform('OSX')", condition, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TypedToolResult_CanAdvertiseStructuredContentAndRetainTextFallback()
     {
         var tool = McpServerTool.Create((Func<PhaseZeroViewModel>)CreateViewModel);
