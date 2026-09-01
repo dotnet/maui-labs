@@ -181,7 +181,7 @@ public sealed class FlowExecutionOutputTests
             [MauiFlowSecondaryFailurePhases.ArtifactCleanup, MauiFlowSecondaryFailurePhases.Cleanup],
             document.Descendants("testcase")
                 .Where(element => (string?)element.Attribute("classname") == "maui.devflow.cleanup")
-                .Select(element => (string?)element.Attribute("name"))
+                .Select(element => (string)element.Attribute("name")!)
                 .ToArray());
     }
 

@@ -970,6 +970,9 @@ public sealed class DevFlowFlowPilotManifestFinalizerScriptTests : IDisposable
 
     private static bool TryDenyDirectoryRead(string directory)
     {
+        if (OperatingSystem.IsWindows())
+            return false;
+
         try
         {
             File.SetUnixFileMode(directory, UnixFileMode.None);
