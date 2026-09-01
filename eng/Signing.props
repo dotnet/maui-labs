@@ -12,25 +12,29 @@
     <UseDotNetCertificate>true</UseDotNetCertificate>
   </PropertyGroup>
 
+  <!-- Microsoft-authored dependencies are already Authenticode-signed upstream. -->
+  <ItemGroup Label="Upstream-signed Microsoft Assemblies">
+    <FileSignInfo Include="Microsoft.Build.dll" CertificateName="None" />
+    <FileSignInfo Include="Microsoft.Build.Framework.dll" CertificateName="None" />
+    <FileSignInfo Include="Microsoft.Build.Locator.dll" CertificateName="None" />
+    <FileSignInfo Include="Microsoft.Build.Tasks.Core.dll" CertificateName="None" />
+    <FileSignInfo Include="Microsoft.Build.Utilities.Core.dll" CertificateName="None" />
+    <FileSignInfo Include="Microsoft.CodeAnalysis.dll" CertificateName="None" />
+    <FileSignInfo Include="Microsoft.CodeAnalysis.CSharp.dll" CertificateName="None" />
+    <FileSignInfo Include="Microsoft.CodeAnalysis.CSharp.Workspaces.dll" CertificateName="None" />
+    <FileSignInfo Include="Microsoft.CodeAnalysis.ExternalAccess.RazorCompiler.dll" CertificateName="None" />
+    <FileSignInfo Include="Microsoft.CodeAnalysis.Workspaces.dll" CertificateName="None" />
+    <FileSignInfo Include="Microsoft.CodeAnalysis.Workspaces.MSBuild.dll" CertificateName="None" />
+    <FileSignInfo Include="Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.dll" CertificateName="None" />
+    <FileSignInfo Include="Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.exe" CertificateName="None" />
+  </ItemGroup>
+
   <!-- Third-party assemblies that ship inside our NuGet packages -->
   <ItemGroup Label="Third Party Assemblies">
     <FileSignInfo Include="Fizzler.dll" CertificateName="3PartySHA2" />
     <FileSignInfo Include="Interop.UIAutomationClient.dll" CertificateName="3PartySHA2" />
     <FileSignInfo Include="ModelContextProtocol.Core.dll" CertificateName="3PartySHA2" />
     <FileSignInfo Include="ModelContextProtocol.dll" CertificateName="3PartySHA2" />
-    <FileSignInfo Include="Microsoft.Build.dll" CertificateName="3PartySHA2" />
-    <FileSignInfo Include="Microsoft.Build.Framework.dll" CertificateName="3PartySHA2" />
-    <FileSignInfo Include="Microsoft.Build.Locator.dll" CertificateName="3PartySHA2" />
-    <FileSignInfo Include="Microsoft.Build.Tasks.Core.dll" CertificateName="3PartySHA2" />
-    <FileSignInfo Include="Microsoft.Build.Utilities.Core.dll" CertificateName="3PartySHA2" />
-    <FileSignInfo Include="Microsoft.CodeAnalysis.dll" CertificateName="3PartySHA2" />
-    <FileSignInfo Include="Microsoft.CodeAnalysis.CSharp.dll" CertificateName="3PartySHA2" />
-    <FileSignInfo Include="Microsoft.CodeAnalysis.CSharp.Workspaces.dll" CertificateName="3PartySHA2" />
-    <FileSignInfo Include="Microsoft.CodeAnalysis.ExternalAccess.RazorCompiler.dll" CertificateName="3PartySHA2" />
-    <FileSignInfo Include="Microsoft.CodeAnalysis.Workspaces.dll" CertificateName="3PartySHA2" />
-    <FileSignInfo Include="Microsoft.CodeAnalysis.Workspaces.MSBuild.dll" CertificateName="3PartySHA2" />
-    <FileSignInfo Include="Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.dll" CertificateName="3PartySHA2" />
-    <FileSignInfo Include="Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.exe" CertificateName="3PartySHA2" />
     <FileSignInfo Include="QRCoder.dll" CertificateName="3PartySHA2" />
     <FileSignInfo Include="Spectre.Console.dll" CertificateName="3PartySHA2" />
     <FileSignInfo Include="Wcwidth.dll" CertificateName="3PartySHA2" />

@@ -71,6 +71,26 @@ public sealed class CSharpWorkspaceMSBuildRegistrationTests
         Assert.DoesNotContain("-p:PublishAot=true", workflow, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void BundledRoslynAndMSBuildDependenciesRemainUpstreamSigned()
+    {
+        var signing = XDocument.Load(Path.Combine(RepoRoot, "eng", "Signing.props"));
+        var dependencies = signing.Descendants()
+            .Where(element => element.Name.LocalName == "FileSignInfo")
+            .Where(element =>
+            {
+                var include = element.Attribute("Include")?.Value;
+                return include?.StartsWith("Microsoft.Build", StringComparison.Ordinal) == true ||
+                    include?.StartsWith("Microsoft.CodeAnalysis", StringComparison.Ordinal) == true;
+            })
+            .ToArray();
+
+        Assert.NotEmpty(dependencies);
+        Assert.All(
+            dependencies,
+            dependency => Assert.Equal("None", dependency.Attribute("CertificateName")?.Value));
+    }
+
     /// <summary>
     /// Exactly one registration, guarded by <c>IsRegistered</c>, and reached before the first
     /// <c>MSBuildWorkspace.Create()</c>. A second unguarded call throws
