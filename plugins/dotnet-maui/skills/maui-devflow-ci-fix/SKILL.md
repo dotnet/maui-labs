@@ -214,19 +214,27 @@ deciding the command itself failed; distinguish a completed test failure from
 build, device, harness, or unknown-completion errors.
 
 `local-reproduction.json` is not source authority. Read its derived
-`failureCorrespondence`:
+`failureCorrespondence` as the limit on what can be claimed about the CI
+incident:
 
 - `same-failure`: the imported and local failure code, class, step, and
-  checkpoints correspond. This may support ordinary coding work only when no
-  flow, source, platform, runtime, evidence, completion, or cleanup blocker
-  remains.
-- `different-failure`, `no-local-failure`, or `indeterminate`: stop without an
-  edit and report the mismatch or missing fact.
+  checkpoints correspond. The local run may proceed to the edit gate below.
+- `different-failure` or `no-local-failure`: stop without an edit and report
+  the mismatch or missing failure.
+- `indeterminate`: do not claim that CI was reproduced. Continue only when the
+  independent local edit gate in
+  [diagnose, edit, and verify](references/diagnose-edit-verify.md) passes in
+  full; otherwise stop without an edit.
 
 On platforms where package identity prevents `matched: true`,
 `failureCorrespondence: same-failure` can still state that the same current
 failure occurred locally. It is developer-lane evidence, not a
 `locally-reproduced` trust upgrade or broker repair grant.
+
+An `indeterminate` CI comparison never becomes `same-failure` by argument. A
+fresh local run may independently justify an ordinary workspace edit, but the
+final explanation must keep the CI linkage unproven and list the imported or
+cross-environment facts that did not match.
 
 ### 6. Classify before choosing a file to edit
 
@@ -245,9 +253,10 @@ An agent disconnect alone is not proof of an app crash.
 ### 7. Edit through ordinary Copilot workspace tools
 
 This is intentionally not the restricted test-agent patch-apply route and not
-an Inspector source proposal. Once a fresh local run supports the
-classification and the developer asked for a fix, use normal file editing so
-the result appears in the standard Source Control view.
+an Inspector source proposal. Once a fresh local run passes the independent
+local edit gate, supports the classification, and the developer asked for a
+fix, use normal file editing so the result appears in the standard Source
+Control view.
 
 For `test-drift`, change only the selector, precondition, or other fact proven
 stale by the current local evidence. After changing the JSON fence in a flow,
@@ -308,7 +317,8 @@ Stop without a source edit when:
 - issue validation, workflow-run validation, or artifact retrieval fails;
 - the test identity is unresolved, ambiguous, or superseded;
 - no exact local project/device can be selected;
-- the current flow does not reproduce the relevant failure;
+- neither exact CI correspondence nor the independent local edit gate is
+  established;
 - the run has unknown completion, incomplete cleanup, truncated evidence, or
   failed required business oracles that make the diagnosis unsafe;
 - the classification is infrastructure or inconclusive;
