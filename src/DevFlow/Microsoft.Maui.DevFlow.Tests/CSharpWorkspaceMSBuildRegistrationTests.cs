@@ -65,6 +65,12 @@ public sealed class CSharpWorkspaceMSBuildRegistrationTests
                     .Single(element => element.Name.LocalName == propertyName)
                     .Value);
         }
+        Assert.Contains(
+            "IL3000",
+            publishProperties.Elements()
+                .Single(element => element.Name.LocalName == "WarningsNotAsErrors")
+                .Value,
+            StringComparison.Ordinal);
 
         var workflow = File.ReadAllText(Path.Combine(RepoRoot, ".github", "workflows", "_build.yml"));
         Assert.Contains("-p:MauiCliNativeAotPublish=true", workflow, StringComparison.Ordinal);

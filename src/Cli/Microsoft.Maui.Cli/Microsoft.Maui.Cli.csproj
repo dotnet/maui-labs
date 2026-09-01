@@ -32,6 +32,8 @@
     <PublishTrimmed>true</PublishTrimmed>
     <InvariantGlobalization>true</InvariantGlobalization>
     <SelfContained>true</SelfContained>
+    <!-- Roslyn locates its optional MSBuild host with Assembly.Location, which NativeAOT cannot provide. -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);IL3000</WarningsNotAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
