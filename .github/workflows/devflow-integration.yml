@@ -449,6 +449,8 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    outputs:
+      mobile-canvas-smoke-outcome: ${{ steps.mobile-canvas-smoke.outcome }}
     env:
       DEVFLOW_TEST_PLATFORM: android
       DEVFLOW_TEST_ANDROID_API: ${{ inputs.android-api || '35' }}
@@ -552,7 +554,9 @@ jobs:
             DEVFLOW_TEST_ANDROID_SERIAL="$(adb devices | awk '/^emulator-[0-9]+[[:space:]]+device$/ { print $1; exit }')" bash ./eng/devflow/Run-DevFlowFlowQa.sh --platform android --repeat 3 --configuration Debug --results-root "$DEVFLOW_FLOW_PILOT_RESULTS_ROOT"
 
       - name: Run pinned Mobile Canvas companion smoke test (android)
+        id: mobile-canvas-smoke
         if: always()
+        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           avd-name: ${{ env.DEVFLOW_TEST_ANDROID_AVD }}
@@ -661,6 +665,27 @@ jobs:
             ./artifacts/devflow/${{ github.run_id }}-${{ github.run_attempt }}/android/
           if-no-files-found: warn
           retention-days: 30
+
+  # The companion shares the warmed emulator with the flow pilot, but it owns a separate product
+  # contract. Report its result under a separate check so a companion defect cannot make a fully
+  # passing flow lane look red to devflow-flow-gate.
+  android-mobile-canvas-smoke:
+    name: android-mobile-canvas-smoke
+    needs: [plan, android-flow-pilot]
+    if: always() && needs.plan.result == 'success' && needs.plan.outputs.run-android-flow-pilot == 'true'
+    permissions: {}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SMOKE_OUTCOME: ${{ needs.android-flow-pilot.outputs.mobile-canvas-smoke-outcome }}
+    steps:
+      - name: Report Mobile Canvas companion smoke result
+        run: |
+          if [[ "$SMOKE_OUTCOME" != "success" ]]; then
+            echo "::error title=Mobile Canvas companion smoke::The pinned companion smoke test concluded '$SMOKE_OUTCOME'."
+            exit 1
+          fi
+          echo "The pinned Mobile Canvas companion smoke test passed."
 
   # DEMO ONLY. This job replays one committed flow that is intended to fail
   # (samples/DevFlow.Sample/maui-tests/demo-ci-fix-drift.md) and then fails the run on purpose, so a

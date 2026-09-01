@@ -714,7 +714,10 @@ public sealed class FlowPilotArtifactManifestTests
         Assert.Contains("'samples/DevFlow.Sample/*'", workflow, StringComparison.Ordinal);
 
         var jobs = RequireMapping(root, "jobs");
-        Assert.NotNull(RequireNode(jobs, "android-flow-pilot"));
+        var pilot = RequireMapping(jobs, "android-flow-pilot");
+        var companionSmoke = RequireMapping(jobs, "android-mobile-canvas-smoke");
+        Assert.NotNull(pilot);
+        Assert.NotNull(companionSmoke);
         Assert.Contains("run-android-flow-pilot", workflow, StringComparison.Ordinal);
         Assert.Contains("integration-tests", workflow, StringComparison.Ordinal);
         Assert.Contains("flow-pilot", workflow, StringComparison.Ordinal);
@@ -725,6 +728,18 @@ public sealed class FlowPilotArtifactManifestTests
         Assert.Contains("Run-DevFlowFlowQa.sh", workflow, StringComparison.Ordinal);
         Assert.Contains("--platform android", workflow, StringComparison.Ordinal);
         Assert.Contains("--repeat 3", workflow, StringComparison.Ordinal);
+        Assert.Contains("id: mobile-canvas-smoke", workflow, StringComparison.Ordinal);
+        Assert.Contains("continue-on-error: true", workflow, StringComparison.Ordinal);
+        Assert.Contains(
+            "mobile-canvas-smoke-outcome: ${{ steps.mobile-canvas-smoke.outcome }}",
+            workflow,
+            StringComparison.Ordinal);
+        var gate = RequireMapping(jobs, "devflow-flow-gate");
+        Assert.DoesNotContain(
+            "android-mobile-canvas-smoke",
+            RequireSequence(gate, "needs").Children
+                .OfType<YamlScalarNode>()
+                .Select(static node => node.Value));
         Assert.Contains("retention-days: 30", workflow, StringComparison.Ordinal);
 
         var finalizerPath = Path.Combine(
