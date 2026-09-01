@@ -762,7 +762,6 @@ function Test-HandoffArchive {
         return [ordered]@{ ok = $false; kind = 'malformed'; reason = 'archive-size-out-of-range' }
     }
 
-    Add-Type -AssemblyName System.IO.Compression
     $stream = $null
     $archive = $null
     try {
