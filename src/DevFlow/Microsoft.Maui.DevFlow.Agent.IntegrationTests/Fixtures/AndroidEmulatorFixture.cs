@@ -712,12 +712,26 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase, IPlatformFlowTestLi
         // Verify the mapping actually landed - `adb forward` can return 0 while
         // the daemon is in an inconsistent state, and silently failing here
         // amplifies into a slow, opaque retry storm in the agent client.
-        if (!await IsAgentForwardEstablishedAsync())
+        if (!await WaitForAgentForwardEstablishedAsync())
         {
             throw new InvalidOperationException(
                 $"adb forward tcp:{AgentPort} tcp:{AgentPort} reported success on '{_serialNumber}' " +
                 "but the mapping is not visible in `adb forward --list`.");
         }
+    }
+
+    async Task<bool> WaitForAgentForwardEstablishedAsync()
+    {
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            if (await IsAgentForwardEstablishedAsync())
+                return true;
+
+            if (attempt < 4)
+                await Task.Delay(TimeSpan.FromMilliseconds(100));
+        }
+
+        return false;
     }
 
     async Task<bool> IsAgentForwardEstablishedAsync()

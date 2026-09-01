@@ -86,6 +86,28 @@ public sealed class AndroidDeviceLifecycleOperationsTests
     }
 
     [Fact]
+    public async Task EnsureAgentPortForward_DelayedVisibility_RetriesUntilMappingAppears()
+    {
+        var runner = new ScriptedProcessRunner(
+            new PlatformProcessResult("", "", 1),
+            Success(),
+            Success(),
+            Success("emulator-5554 tcp:49152 tcp:49152\n"));
+        var operations = CreateOperations(runner);
+
+        await operations.EnsureAgentPortForwardAsync();
+
+        Assert.Equal(
+            [
+                "-s emulator-5554 forward --remove tcp:49152",
+                "-s emulator-5554 forward tcp:49152 tcp:49152",
+                "-s emulator-5554 forward --list",
+                "-s emulator-5554 forward --list",
+            ],
+            runner.Arguments);
+    }
+
+    [Fact]
     public async Task Install_AdbExitFailure_RetainsSafeActionAndExitContext()
     {
         const string secret = "ANDROID-ADB-SECRET-SENTINEL";

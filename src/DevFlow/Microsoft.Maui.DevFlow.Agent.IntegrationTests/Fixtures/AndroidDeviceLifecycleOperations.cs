@@ -97,6 +97,8 @@ internal sealed class AndroidInstalledPackageInfo
 internal sealed class AndroidDeviceLifecycleOperations
 {
     const string Success = "Success";
+    const int ForwardVerificationAttempts = 5;
+    static readonly TimeSpan ForwardVerificationDelay = TimeSpan.FromMilliseconds(100);
     readonly IPlatformProcessRunner _processRunner;
     readonly string _adbPath;
     readonly string _serialNumber;
@@ -173,7 +175,7 @@ internal sealed class AndroidDeviceLifecycleOperations
             30,
             cancellationToken).ConfigureAwait(false);
 
-        if (!await IsAgentPortForwardEstablishedAsync(cancellationToken).ConfigureAwait(false))
+        if (!await WaitForAgentPortForwardAsync(cancellationToken).ConfigureAwait(false))
         {
             throw CreateAdbFailure(
                 "verify the DevFlow ADB forward",
@@ -184,6 +186,20 @@ internal sealed class AndroidDeviceLifecycleOperations
                 cancellationRequested: false,
                 errorText: "The requested DevFlow port forward was not visible after creation.");
         }
+    }
+
+    async Task<bool> WaitForAgentPortForwardAsync(CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < ForwardVerificationAttempts; attempt++)
+        {
+            if (await IsAgentPortForwardEstablishedAsync(cancellationToken).ConfigureAwait(false))
+                return true;
+
+            if (attempt + 1 < ForwardVerificationAttempts)
+                await Task.Delay(ForwardVerificationDelay, cancellationToken).ConfigureAwait(false);
+        }
+
+        return false;
     }
 
     public async Task<bool> IsAgentPortForwardEstablishedAsync(CancellationToken cancellationToken = default)
