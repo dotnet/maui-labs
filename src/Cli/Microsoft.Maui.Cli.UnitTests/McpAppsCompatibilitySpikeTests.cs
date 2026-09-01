@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Xml.Linq;
@@ -291,12 +290,18 @@ public class McpAppsCompatibilitySpikeTests
         [Description("Theme requested by the MCP host")] string theme)
         => $"<!doctype html><body data-theme=\"{theme}\"></body>";
 
-    private static string GetRepositoryRoot([CallerFilePath] string sourceFile = "")
-        => Path.GetFullPath(Path.Combine(
-            Path.GetDirectoryName(sourceFile)!,
-            "..",
-            "..",
-            ".."));
+    private static string GetRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "MauiLabs.slnx")))
+                return directory.FullName;
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not find the maui-labs repository root.");
+    }
 
     private sealed record PhaseZeroSurface(
         bool IsNegotiated,

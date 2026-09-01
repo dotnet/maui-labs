@@ -262,6 +262,7 @@ public sealed class ApprovalCommandsRouteTests
         private void StartProxy()
         {
             _listener.Prefixes.Add($"http://127.0.0.1:{ProxyPort}/");
+            _listener.Prefixes.Add($"http://localhost:{ProxyPort}/");
             _listener.Start();
             _pump = Task.Run(async () =>
             {
