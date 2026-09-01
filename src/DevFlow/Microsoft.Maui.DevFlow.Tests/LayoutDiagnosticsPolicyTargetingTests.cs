@@ -245,7 +245,8 @@ public sealed class LayoutDiagnosticsPolicyTargetingTests : IDisposable
         var constructor = Assert.Single(typeof(FlowReplayEvidenceCapture).GetConstructors());
         var parameters = constructor.GetParameters();
         var policy = Assert.Single(
-            parameters.Where(parameter => parameter.Name == "layoutPolicyStartPath"));
+            parameters,
+            parameter => parameter.Name == "layoutPolicyStartPath");
 
         Assert.False(policy.IsOptional);
         // It must not be positionally confusable with the flow-file hint, which is a different
