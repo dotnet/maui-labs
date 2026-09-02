@@ -4,7 +4,8 @@
     "projects": [
       "src\\MacOS\\MacOS.csproj",
       "src\\MacOS.Essentials\\MacOS.Essentials.csproj",
-      "src\\MacOS.BlazorWebView\\MacOS.BlazorWebView.csproj"
+      "src\\MacOS.BlazorWebView\\MacOS.BlazorWebView.csproj",
+      "templates\\MacOS.Templates.csproj"
     ]
   }
 }

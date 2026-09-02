@@ -384,6 +384,7 @@ This stage filters the product's `.nupkg` files from the shared `PackageArtifact
 
 #### Key conventions
 
+- **Adding a package to an existing product**: update the exact `.slnf` or `.slnx` used by that product's build job in this pipeline, not only the product's main solution. Then verify the publish stage's `Copy-Item` glob matches the new `<PackageId>`. A shipping project omitted from the official build input does not produce a package for release.
 - **Package glob pattern**: example: `Microsoft.Maui.{Product}.*.nupkg` — use the actual `<PackageId>` prefix from your `.csproj` files (e.g., Linux GTK4 uses `Microsoft.Maui.Platforms.Linux.Gtk4.*.nupkg`).
 - **`dependsOn: [Validate, publish_using_darc]`**: these stages come from the Arcade post-build template (`eng/common/templates-official/post-build/post-build.yml`) and must always be listed.
 - **Signing**: All shipped NuGet packages must build on Windows so MicroBuild/ESRP can sign the DLLs. If the product is Linux-only, build *and pack* on Windows (signing), then optionally add a separate Linux verification job (see the `LinuxGtk4_LinuxVerify` job for the pattern).
