@@ -1,0 +1,6 @@
+{
+  "name": "dotnet-maui-tooling",
+  "version": "0.1.0",
+  "description": "Specialist .NET MAUI tooling skills for DevFlow automation, session review, slim platform bindings, and workload/version diagnostics.",
+  "skills": ["./skills/"]
+}
