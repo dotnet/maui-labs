@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.CommandLine.Parsing;
+using System.Globalization;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
@@ -21,6 +22,7 @@ public class DevFlowCommands
 {
     private static Command? _devflowCommand;
     private static bool _errorOccurred;
+    private static int? _requestedExitCode;
     private static bool _agentLabelEmitted;
 
     /// <summary>
@@ -28,6 +30,9 @@ public class DevFlowCommands
     /// translate swallowed command failures into a non-zero process exit code.
     /// </summary>
     internal static bool ErrorOccurred => _errorOccurred;
+    internal static int? RequestedExitCode => _requestedExitCode;
+    internal static void RequestExitCode(int exitCode)
+        => _requestedExitCode = exitCode;
 
     private static IDevFlowOutputWriter? s_output;
     internal static Func<Task<int?>> ResolveRunningBrokerPortAsync { get; set; } = Broker.BrokerClient.GetRunningBrokerPortAsync;
@@ -44,6 +49,7 @@ public class DevFlowCommands
         CreateAndroidPortForwarder = AndroidDevFlowPortForwarder.CreateDefault;
         IsAndroidAdbLikelyAvailable = AndroidDevFlowPortForwarder.IsAdbLikelyAvailable;
         _errorOccurred = false;
+        _requestedExitCode = null;
         _agentLabelEmitted = false;
     }
 
@@ -372,6 +378,55 @@ public class DevFlowCommands
         });
         mauiCommand.Add(mauiTreeCmd);
 
+        // MAUI layout diagnostics
+        var diagnosticsProfileOption = new Option<string>("--profile") { Description = "Inspection profile: agent, strict, exhaustive, or ci", DefaultValueFactory = _ => "agent" };
+        var diagnosticsRootOption = new Option<string?>("--root") { Description = "Root element ID to inspect" };
+        var diagnosticsChecksOption = new Option<string?>("--checks") { Description = "Comma-separated layout diagnostic rule IDs" };
+        var diagnosticsSeverityOption = new Option<string>("--minimum-severity") { Description = "Minimum severity: info, minor, moderate, serious, or critical", DefaultValueFactory = _ => "minor" };
+        var diagnosticsEvidenceOption = new Option<bool>("--include-evidence") { Description = "Include geometry, clip-chain, text, and overlap evidence", DefaultValueFactory = _ => true };
+        var diagnosticsPassesOption = new Option<bool>("--include-passes") { Description = "Include pass accounting" };
+        var diagnosticsWatchOption = new Option<bool>("--watch") { Description = "Continuously inspect and emit updated results" };
+        var diagnosticsFailOnOption = new Option<string?>("--fail-on") { Description = "Set a failing exit code for violations at or above this severity, or for 'incomplete'" };
+        var diagnosticsTimeoutOption = new Option<int>("--stability-timeout") { Description = "Geometry stability timeout in milliseconds", DefaultValueFactory = _ => 2500 };
+        var diagnosticsImmediateOption = new Option<bool>("--immediate") { Description = "Inspect immediately without waiting for stable geometry" };
+        var mauiDiagnosticsCmd = new Command("diagnostics", "Detect clipping, overflow, text truncation, overlap, and occlusion")
+        {
+            diagnosticsProfileOption,
+            diagnosticsRootOption,
+            diagnosticsChecksOption,
+            diagnosticsSeverityOption,
+            diagnosticsEvidenceOption,
+            diagnosticsPassesOption,
+            diagnosticsWatchOption,
+            diagnosticsFailOnOption,
+            diagnosticsTimeoutOption,
+            diagnosticsImmediateOption,
+            windowOption
+        };
+        mauiDiagnosticsCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var isJson = output.ResolveJsonMode(ctx.GetValue(jsonOption), ctx.GetValue(noJsonOption));
+            await MauiLayoutDiagnosticsAsync(
+                host,
+                port,
+                isJson,
+                ctx.GetValue(diagnosticsProfileOption)!,
+                ctx.GetValue(diagnosticsRootOption),
+                ctx.GetValue(diagnosticsChecksOption),
+                ctx.GetValue(diagnosticsSeverityOption)!,
+                ctx.GetValue(diagnosticsEvidenceOption),
+                ctx.GetValue(diagnosticsPassesOption),
+                ctx.GetValue(diagnosticsWatchOption),
+                ctx.GetValue(diagnosticsFailOnOption),
+                ctx.GetValue(diagnosticsTimeoutOption),
+                ctx.GetValue(diagnosticsImmediateOption),
+                ctx.GetValue(windowOption),
+                ct);
+        });
+        mauiCommand.Add(mauiDiagnosticsCmd);
+
         // MAUI query
         var queryTypeOption = new Option<string?>("--type") { Description = "Filter by element type" };
         var queryAutoIdOption = new Option<string?>("--automationId") { Description = "Filter by AutomationId" };
@@ -403,7 +458,9 @@ public class DevFlowCommands
 
         // MAUI hittest
         var hitTestXArg = new Argument<double>("x") { Description = "X coordinate" };
+        hitTestXArg.CustomParser = result => ParseInvariantCoordinate(result, "x");
         var hitTestYArg = new Argument<double>("y") { Description = "Y coordinate" };
+        hitTestYArg.CustomParser = result => ParseInvariantCoordinate(result, "y");
         var mauiHitTestCmd = new Command("hit-test", "Find elements at a point") { hitTestXArg, hitTestYArg, windowOption };
         mauiHitTestCmd.Aliases.Add("hittest");
         mauiHitTestCmd.SetAction(async (ctx, ct) =>
@@ -446,16 +503,26 @@ public class DevFlowCommands
             var hasAndScreenshot = ctx.GetResult(andScreenshotOption) != null;
             var andTree = ctx.GetValue(andTreeOption);
             var andTreeDepth = ctx.GetValue(andTreeDepthOption);
-            var resolvedId = await ResolveElementIdAsync(host, port, isJson, id, autoId, type, text, index);
-            if (resolvedId == null) return;
-            await MauiTapAsync(host, port, isJson, resolvedId);
+            var target = await ResolveElementTargetAsync(
+                host,
+                port,
+                isJson,
+                id,
+                autoId,
+                type,
+                text,
+                index,
+                ElementActionKind.Tap,
+                preferActionable: ctx.GetResult(resolveIndexOption)?.Tokens.Count == 0);
+            if (target == null) return;
+            await MauiTapAsync(host, port, isJson, target);
             await HandlePostActionFlags(host, port, isJson, hasAndScreenshot, andScreenshot, andTree, andTreeDepth);
         });
         mauiCommand.Add(mauiTapCmd);
 
         // MAUI fill
         var fillIdArg = new Argument<string?>("elementId") { Description = "Element ID (optional if --automationId, --type, or --text is used)", DefaultValueFactory = _ => null };
-        var fillTextArg2 = new Argument<string>("text") { Description = "Text to fill" };
+        var fillTextArg2 = new Argument<string?>("text") { Description = "Text to fill", DefaultValueFactory = _ => null };
         var mauiFillCmd = new Command("fill", "Fill text into element") { fillIdArg, fillTextArg2, resolveAutoIdOption, resolveTypeOption, resolveTextOption, resolveIndexOption, andScreenshotOption, andTreeOption, andTreeDepthOption };
         mauiFillCmd.SetAction(async (ctx, ct) =>
         {
@@ -463,18 +530,43 @@ public class DevFlowCommands
             var port = ctx.GetValue(agentPortOption);
             var isJson = output.ResolveJsonMode(ctx.GetValue(jsonOption), ctx.GetValue(noJsonOption));
             var id = ctx.GetValue(fillIdArg);
-            var fillText = ctx.GetValue(fillTextArg2)!;
+            var fillText = ctx.GetValue(fillTextArg2);
             var autoId = ctx.GetValue(resolveAutoIdOption);
             var type = ctx.GetValue(resolveTypeOption);
             var text = ctx.GetValue(resolveTextOption);
             var index = ctx.GetValue(resolveIndexOption);
+            if (fillText is null
+                && id is not null
+                && (!string.IsNullOrWhiteSpace(autoId)
+                    || !string.IsNullOrWhiteSpace(type)
+                    || !string.IsNullOrWhiteSpace(text)))
+            {
+                fillText = id;
+                id = null;
+            }
+            if (fillText is null)
+            {
+                Output.WriteError("Text to fill is required", isJson, "InvocationError");
+                _errorOccurred = true;
+                return;
+            }
             var andScreenshot = ctx.GetValue(andScreenshotOption);
             var hasAndScreenshot = ctx.GetResult(andScreenshotOption) != null;
             var andTree = ctx.GetValue(andTreeOption);
             var andTreeDepth = ctx.GetValue(andTreeDepthOption);
-            var resolvedId = await ResolveElementIdAsync(host, port, isJson, id, autoId, type, text, index);
-            if (resolvedId == null) return;
-            await MauiFillAsync(host, port, isJson, resolvedId, fillText);
+            var target = await ResolveElementTargetAsync(
+                host,
+                port,
+                isJson,
+                id,
+                autoId,
+                type,
+                text,
+                index,
+                ElementActionKind.TextInput,
+                preferActionable: ctx.GetResult(resolveIndexOption)?.Tokens.Count == 0);
+            if (target == null) return;
+            await MauiFillAsync(host, port, isJson, target, fillText);
             await HandlePostActionFlags(host, port, isJson, hasAndScreenshot, andScreenshot, andTree, andTreeDepth);
         });
         mauiCommand.Add(mauiFillCmd);
@@ -496,9 +588,19 @@ public class DevFlowCommands
             var hasAndScreenshot = ctx.GetResult(andScreenshotOption) != null;
             var andTree = ctx.GetValue(andTreeOption);
             var andTreeDepth = ctx.GetValue(andTreeDepthOption);
-            var resolvedId = await ResolveElementIdAsync(host, port, isJson, id, autoId, type, text, index);
-            if (resolvedId == null) return;
-            await MauiClearAsync(host, port, isJson, resolvedId);
+            var target = await ResolveElementTargetAsync(
+                host,
+                port,
+                isJson,
+                id,
+                autoId,
+                type,
+                text,
+                index,
+                ElementActionKind.TextInput,
+                preferActionable: ctx.GetResult(resolveIndexOption)?.Tokens.Count == 0);
+            if (target == null) return;
+            await MauiClearAsync(host, port, isJson, target);
             await HandlePostActionFlags(host, port, isJson, hasAndScreenshot, andScreenshot, andTree, andTreeDepth);
         });
         mauiCommand.Add(mauiClearCmd);
@@ -648,6 +750,75 @@ public class DevFlowCommands
         });
         mauiCommand.Add(mauiScrollCmd);
 
+        // MAUI gesture — the gesture kind is a positional argument because --type is
+        // already taken by element resolution.
+        var gestureTypeArg = new Argument<string>("gestureType")
+        {
+            Description = "Gesture: pinch, rotate, pan, swipe, doubletap, longpress, or tap"
+        };
+        var gestureElementOption = new Option<string?>("--element") { Description = "Target element ID (required for tap; other gestures default to the current page)" };
+        var gestureDirectionOption = new Option<string?>("--direction") { Description = "Direction for swipe/pan: up, down, left, right" };
+        var gestureDistanceOption = new Option<double?>("--distance") { Description = "Swipe/pan distance in device-independent pixels (default: 120)" };
+        var gestureScaleOption = new Option<double?>("--scale") { Description = "Pinch factor: 2.0 zooms in 2x, 0.5 zooms out (default: 1.5)" };
+        var gestureRotationOption = new Option<double?>("--rotation") { Description = "Rotation in degrees, positive = clockwise (default: 90)" };
+        var gestureDxOption = new Option<double?>("--dx") { Description = "Explicit horizontal pan distance; overrides --direction" };
+        var gestureDyOption = new Option<double?>("--dy") { Description = "Explicit vertical pan distance; overrides --direction" };
+        var gestureOriginXOption = new Option<double?>("--origin-x") { Description = "Focal point X, element-relative 0..1 (default: 0.5)" };
+        var gestureOriginYOption = new Option<double?>("--origin-y") { Description = "Focal point Y, element-relative 0..1 (default: 0.5)" };
+        var gestureDurationOption = new Option<int?>("--duration") { Description = "Gesture duration in milliseconds (default: 200)" };
+        var gestureStepsOption = new Option<int?>("--steps") { Description = "Interpolation steps between start and end (default: 10)" };
+        var mauiGestureCmd = new Command("gesture", "Perform a gesture: pinch, rotate, pan, swipe, doubletap, longpress, tap")
+        {
+            gestureTypeArg, gestureElementOption, resolveAutoIdOption, resolveTextOption, resolveIndexOption,
+            gestureDirectionOption, gestureDistanceOption, gestureScaleOption, gestureRotationOption,
+            gestureDxOption, gestureDyOption, gestureOriginXOption, gestureOriginYOption,
+            gestureDurationOption, gestureStepsOption
+        };
+        mauiGestureCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var isJson = output.ResolveJsonMode(ctx.GetValue(jsonOption), ctx.GetValue(noJsonOption));
+
+            var elementId = ctx.GetValue(gestureElementOption);
+            var autoId = ctx.GetValue(resolveAutoIdOption);
+            var text = ctx.GetValue(resolveTextOption);
+            var index = ctx.GetValue(resolveIndexOption);
+            ElementInfo? target = null;
+
+            // Non-tap gestures may omit a target and aim at the current page.
+            if (elementId != null || autoId != null || text != null)
+            {
+                target = await ResolveElementTargetAsync(
+                    host,
+                    port,
+                    isJson,
+                    elementId,
+                    autoId,
+                    type: null,
+                    text,
+                    index,
+                    ElementActionKind.Gesture,
+                    preferActionable: ctx.GetResult(resolveIndexOption)?.Tokens.Count == 0);
+                if (target == null) return;
+            }
+
+            await MauiGestureAsync(host, port, isJson,
+                ctx.GetValue(gestureTypeArg)!,
+                target,
+                ctx.GetValue(gestureDirectionOption),
+                ctx.GetValue(gestureDistanceOption),
+                ctx.GetValue(gestureDurationOption),
+                ctx.GetValue(gestureScaleOption),
+                ctx.GetValue(gestureRotationOption),
+                ctx.GetValue(gestureDxOption),
+                ctx.GetValue(gestureDyOption),
+                ctx.GetValue(gestureOriginXOption),
+                ctx.GetValue(gestureOriginYOption),
+                ctx.GetValue(gestureStepsOption));
+        });
+        mauiCommand.Add(mauiGestureCmd);
+
         // MAUI focus
         var focusIdArg = new Argument<string?>("elementId") { Description = "Element ID to focus (optional if --automationId, --type, or --text is used)", DefaultValueFactory = _ => null };
         var mauiFocusCmd = new Command("focus", "Set focus to element") { focusIdArg, resolveAutoIdOption, resolveTypeOption, resolveTextOption, resolveIndexOption };
@@ -661,9 +832,19 @@ public class DevFlowCommands
             var type = ctx.GetValue(resolveTypeOption);
             var text = ctx.GetValue(resolveTextOption);
             var index = ctx.GetValue(resolveIndexOption);
-            var resolvedId = await ResolveElementIdAsync(host, port, isJson, id, autoId, type, text, index);
-            if (resolvedId == null) return;
-            await MauiFocusAsync(host, port, isJson, resolvedId);
+            var target = await ResolveElementTargetAsync(
+                host,
+                port,
+                isJson,
+                id,
+                autoId,
+                type,
+                text,
+                index,
+                ElementActionKind.Focus,
+                preferActionable: ctx.GetResult(resolveIndexOption)?.Tokens.Count == 0);
+            if (target == null) return;
+            await MauiFocusAsync(host, port, isJson, target);
         });
         mauiCommand.Add(mauiFocusCmd);
 
@@ -684,16 +865,17 @@ public class DevFlowCommands
         });
         mauiCommand.Add(mauiResizeCmd);
 
-        // MAUI alert subcommands — supports iOS simulator (apple CLI) and Mac Catalyst (macOS AX API)
+        // System/app alert subcommands — platform drivers cover Android, iOS simulator,
+        // Mac Catalyst, and Windows.
         var alertCommand = new Command("alert", "Detect and dismiss system/app dialogs");
 
         // detect
-        var detectUdid = new Option<string?>("--udid") { Description = "Simulator UDID (auto-detects booted simulator if omitted)" };
+        var detectUdid = new Option<string?>("--udid") { Description = "iOS simulator UDID or Android serial (also accepts global --device)" };
         var detectPid = new Option<int?>("--pid") { Description = "Mac Catalyst app PID (auto-detects if omitted)" };
         var alertDetectCmd = new Command("detect", "Check if an alert/dialog is visible") { detectUdid, detectPid };
         alertDetectCmd.SetAction(async (ctx, ct) =>
         {
-            var udid = ctx.GetValue(detectUdid);
+            var udid = ctx.GetValue(detectUdid) ?? ctx.GetValue(deviceOption);
             var pid = ctx.GetValue(detectPid);
             var host = ctx.GetValue(agentHostOption)!;
             var port = ctx.GetValue(agentPortOption);
@@ -704,13 +886,13 @@ public class DevFlowCommands
         alertCommand.Add(alertDetectCmd);
 
         // dismiss
-        var dismissUdid = new Option<string?>("--udid") { Description = "Simulator UDID (auto-detects booted simulator if omitted)" };
+        var dismissUdid = new Option<string?>("--udid") { Description = "iOS simulator UDID or Android serial (also accepts global --device)" };
         var dismissPid = new Option<int?>("--pid") { Description = "Mac Catalyst app PID (auto-detects if omitted)" };
         var dismissButtonArg = new Argument<string?>("button") { Description = "Button label to tap (default: first accept-style button)", DefaultValueFactory = _ => null };
         var alertDismissCmd = new Command("dismiss", "Dismiss the current alert/dialog") { dismissButtonArg, dismissUdid, dismissPid };
         alertDismissCmd.SetAction(async (ctx, ct) =>
         {
-            var udid = ctx.GetValue(dismissUdid);
+            var udid = ctx.GetValue(dismissUdid) ?? ctx.GetValue(deviceOption);
             var pid = ctx.GetValue(dismissPid);
             var host = ctx.GetValue(agentHostOption)!;
             var port = ctx.GetValue(agentPortOption);
@@ -722,12 +904,12 @@ public class DevFlowCommands
         alertCommand.Add(alertDismissCmd);
 
         // tree
-        var treeUdid = new Option<string?>("--udid") { Description = "Simulator UDID (auto-detects booted simulator if omitted)" };
+        var treeUdid = new Option<string?>("--udid") { Description = "iOS simulator UDID or Android serial (also accepts global --device)" };
         var treePid = new Option<int?>("--pid") { Description = "Mac Catalyst app PID (auto-detects if omitted)" };
         var alertTreeCmd = new Command("tree", "Show raw accessibility tree") { treeUdid, treePid };
         alertTreeCmd.SetAction(async (ctx, ct) =>
         {
-            var udid = ctx.GetValue(treeUdid);
+            var udid = ctx.GetValue(treeUdid) ?? ctx.GetValue(deviceOption);
             var pid = ctx.GetValue(treePid);
             var host = ctx.GetValue(agentHostOption)!;
             var port = ctx.GetValue(agentPortOption);
@@ -1718,6 +1900,8 @@ public class DevFlowCommands
     
     // ===== CDP Helper: Send command via AgentClient =====
 
+    private static readonly string s_cliMutationLeaseId = Guid.NewGuid().ToString("N");
+
     private static async Task<Microsoft.Maui.DevFlow.Driver.AgentClient> CreateAgentClientAsync(string host, int port)
     {
         EnsureAgentPortResolved(port);
@@ -1736,7 +1920,12 @@ public class DevFlowCommands
             }
         }
 
-        return new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port);
+        return new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port)
+        {
+            MutationLeaseId = s_cliMutationLeaseId,
+            MutationLeaseHolderKind = "cli",
+            MutationLeaseLabel = "MAUI CLI"
+        };
     }
 
     private static async Task<JsonElement?> SendCdpCommandAsync(string host, int port, string method, JsonNode? parameters = null, string? webview = null)
@@ -2371,8 +2560,16 @@ public class DevFlowCommands
         EnsureAgentPortResolved(port);
         try
         {
+            using var agent = new AgentClient(host, port);
+            if (!await agent.StartSensorAsync(sensor, speed, throttleMs))
+            {
+                Output.WriteError($"Failed to start sensor '{sensor}'.", json);
+                _errorOccurred = true;
+                return;
+            }
+
             using var client = new System.Net.WebSockets.ClientWebSocket();
-            var uri = new Uri($"ws://{host}:{port}/ws/v1/sensors?sensor={Uri.EscapeDataString(sensor)}&speed={Uri.EscapeDataString(speed)}&throttleMs={throttleMs}");
+            var uri = new Uri($"ws://{host}:{port}/ws/v1/sensors?sensor={Uri.EscapeDataString(sensor)}");
             using var cts = duration > 0
                 ? new CancellationTokenSource(TimeSpan.FromSeconds(duration))
                 : new CancellationTokenSource();
@@ -2405,18 +2602,47 @@ public class DevFlowCommands
 
     // ===== Element Resolution Helper =====
 
+    private enum ElementActionKind
+    {
+        Tap,
+        TextInput,
+        Focus,
+        Gesture
+    }
+
     /// <summary>
     /// Resolve an element ID from either a direct ID or query options (--automationId, --type, --text).
     /// Returns null and writes error if resolution fails.
     /// </summary>
     private static async Task<string?> ResolveElementIdAsync(string host, int port, bool json,
         string? elementId, string? automationId, string? type, string? text, int index)
+        => (await ResolveElementTargetAsync(
+            host,
+            port,
+            json,
+            elementId,
+            automationId,
+            type,
+            text,
+            index))?.Id;
+
+    private static async Task<ElementInfo?> ResolveElementTargetAsync(
+        string host,
+        int port,
+        bool json,
+        string? elementId,
+        string? automationId,
+        string? type,
+        string? text,
+        int index,
+        ElementActionKind? actionKind = null,
+        bool preferActionable = false)
     {
         // Direct ID takes priority
         if (!string.IsNullOrWhiteSpace(elementId))
         {
             ValidateElementId(elementId, json);
-            return elementId;
+            return new ElementInfo { Id = elementId };
         }
 
         // Need at least one resolution option
@@ -2452,7 +2678,29 @@ public class DevFlowCommands
                 return null;
             }
 
-            return results[index].Id;
+            if (!preferActionable || actionKind is null)
+                return results[index];
+
+            var selected = results[index];
+            if (GetActionTargetScore(selected, actionKind.Value) > 0)
+                return selected;
+
+            return results
+                .Select((element, resultIndex) => new
+                {
+                    Element = element,
+                    ResultIndex = resultIndex,
+                    Score = GetActionTargetScore(element, actionKind.Value)
+                })
+                .Where(candidate =>
+                    candidate.ResultIndex != index
+                    && candidate.Score > 0
+                    && IsRelatedElementRepresentation(selected, candidate.Element))
+                .OrderByDescending(candidate => candidate.Score)
+                .ThenBy(candidate => candidate.ResultIndex)
+                .Select(candidate => candidate.Element)
+                .FirstOrDefault()
+                ?? selected;
         }
         catch (Exception ex)
         {
@@ -2461,6 +2709,106 @@ public class DevFlowCommands
             return null;
         }
     }
+
+    private static int GetActionTargetScore(ElementInfo element, ElementActionKind actionKind)
+    {
+        var score = 0;
+        var capabilities = element.Capabilities ?? [];
+        var traits = element.Traits ?? [];
+        var gestures = element.Gestures ?? [];
+
+        switch (actionKind)
+        {
+            case ElementActionKind.Tap:
+                if (capabilities.Any(capability => capability.Equals("invoke", StringComparison.OrdinalIgnoreCase)))
+                    score += 100;
+                if (element.Role is "button" or "link" or "menuitem" or "tab" or "checkbox" or "radio" or "switch")
+                    score += 60;
+                if (element.Type is "Button" or "ImageButton" or "CheckBox" or "Switch" or "RadioButton"
+                    or "ToolbarItem" or "BackButton" or "FlyoutButton" or "FlyoutItem" or "FlyoutToggle"
+                    or "Tab" or "MenuItem" or "Picker" or "DatePicker" or "TimePicker"
+                    or "ShellContent" or "ShellSection")
+                {
+                    score += 50;
+                }
+                if (gestures.Any(gesture => gesture.Contains("tap", StringComparison.OrdinalIgnoreCase)))
+                    score += 40;
+                break;
+
+            case ElementActionKind.TextInput:
+                if (capabilities.Any(capability => capability.Equals("set-value", StringComparison.OrdinalIgnoreCase)))
+                    score += 100;
+                if (element.Role is "textbox" or "searchbox")
+                    score += 60;
+                if (element.Type is "Entry" or "Editor" or "SearchBar" or "SearchHandler"
+                    or "TextField" or "TextBox" or "TextArea" or "TextView"
+                    or "UITextField" or "UITextView" or "EditText" or "NSTextField")
+                {
+                    score += 50;
+                }
+                break;
+
+            case ElementActionKind.Focus:
+                if (capabilities.Any(capability => capability.Equals("focus", StringComparison.OrdinalIgnoreCase)))
+                    score += 100;
+                if (traits.Any(trait => trait.Equals("focusable", StringComparison.OrdinalIgnoreCase)))
+                    score += 60;
+                if (element.Type is "Entry" or "Editor" or "SearchBar" or "SearchHandler"
+                    or "Picker" or "DatePicker" or "TimePicker")
+                {
+                    score += 50;
+                }
+                break;
+
+            case ElementActionKind.Gesture:
+                if (gestures.Count > 0)
+                    score += 100;
+                if (traits.Any(trait => trait.Equals("scrollable", StringComparison.OrdinalIgnoreCase)))
+                    score += 40;
+                break;
+        }
+
+        if (score == 0)
+            return 0;
+        if (element.IsVisible)
+            score += 4;
+        if (element.IsEnabled)
+            score += 4;
+        if (element.Id.StartsWith("native:registered:", StringComparison.Ordinal))
+            score += 20;
+        if (element.FullType.StartsWith("Microsoft.Maui.DevFlow.Agent.Core.", StringComparison.Ordinal))
+            score += 15;
+
+        return score;
+    }
+
+    private static bool IsRelatedElementRepresentation(ElementInfo selected, ElementInfo candidate)
+    {
+        if (string.Equals(candidate.OwnerId, selected.Id, StringComparison.Ordinal)
+            || string.Equals(selected.OwnerId, candidate.Id, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return !string.IsNullOrWhiteSpace(selected.AutomationId)
+            && string.Equals(
+                selected.AutomationId,
+                candidate.AutomationId,
+                StringComparison.Ordinal)
+            && IsNativeOrSynthetic(candidate);
+    }
+
+    private static bool IsNativeOrSynthetic(ElementInfo element)
+        => string.Equals(element.Origin, "native", StringComparison.OrdinalIgnoreCase)
+            || element.Id.StartsWith("native:", StringComparison.Ordinal)
+            || element.FullType.StartsWith(
+                "Microsoft.Maui.DevFlow.Agent.Core.",
+                StringComparison.Ordinal);
+
+    private static (long? CaptureEpoch, long? RegistryGeneration) GetCaptureMetadata(ElementInfo element)
+        => element.CaptureEpoch > 0
+            ? (element.CaptureEpoch, element.RegistryGeneration)
+            : (null, null);
 
     /// <summary>
     /// Validate element ID for common agent mistakes (control chars, embedded query params).
@@ -2775,6 +3123,209 @@ public class DevFlowCommands
         catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
     }
 
+    private static async Task MauiLayoutDiagnosticsAsync(
+        string host,
+        int port,
+        bool json,
+        string profile,
+        string? rootElementId,
+        string? checks,
+        string minimumSeverity,
+        bool includeEvidence,
+        bool includePasses,
+        bool watch,
+        string? failOn,
+        int stabilityTimeoutMs,
+        bool immediate,
+        int? window,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            failOn = ResolveLayoutDiagnosticsFailOn(profile, failOn);
+            var failOnIncomplete = profile.Equals(
+                    "ci",
+                    StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(
+                    failOn,
+                    "none",
+                    StringComparison.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(failOn)
+                && !failOn.Equals("none", StringComparison.OrdinalIgnoreCase)
+                && !failOn.Equals("incomplete", StringComparison.OrdinalIgnoreCase)
+                && LayoutSeverityRank(failOn) < 0)
+            {
+                _errorOccurred = true;
+                Output.WriteError(
+                    "--fail-on must be one of: none, incomplete, info, minor, moderate, serious, critical",
+                    json,
+                    "InvalidArgument");
+                return;
+            }
+
+            var policy = LayoutDiagnosticsPolicyLoader.Load();
+            using var client = await CreateAgentClientAsync(host, port);
+            do
+            {
+                var request = new LayoutInspectionRequest
+                {
+                    Profile = profile,
+                    MinimumSeverity = minimumSeverity,
+                    IncludeEvidence = includeEvidence,
+                    IncludePasses = includePasses,
+                    Scope = new LayoutInspectionScope
+                    {
+                        RootElementId = rootElementId,
+                        Window = window
+                    },
+                    Stability = new LayoutStabilityOptions
+                    {
+                        Mode = immediate ? "immediate" : "wait",
+                        TimeoutMs = stabilityTimeoutMs
+                    },
+                    Rules = string.IsNullOrWhiteSpace(checks)
+                        ? null
+                        : checks.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
+                    Suppressions = policy.Suppressions.ToList()
+                };
+                var result = await client.AnalyzeLayoutAsync(
+                    request,
+                    cancellationToken);
+                if (result is null)
+                {
+                    _errorOccurred = true;
+                    Output.WriteError(
+                        "Layout diagnostics failed. Verify that the connected agent advertises ui.layoutDiagnostics.",
+                        json,
+                        "UnsupportedCapability",
+                        suggestions: ["Run 'maui devflow agent capabilities' and update the in-app DevFlow agent package."]);
+                    return;
+                }
+
+                if (json && watch)
+                {
+                    Output.WriteJsonLine(result);
+                }
+                else
+                {
+                    Output.WriteResult(result, json, static data =>
+                    {
+                        Console.WriteLine(
+                            $"Layout diagnostics: {data.Summary.Violations} violation(s), "
+                            + $"{data.Summary.Observations} observation(s), "
+                            + $"{data.Summary.Incomplete} incomplete, "
+                            + $"{data.Summary.Suppressed} suppressed.");
+                        Console.WriteLine(
+                            $"Snapshot {data.Snapshot.Id} ({data.Snapshot.Platform}, "
+                            + $"{data.Snapshot.NodeCount} nodes, stable={data.Snapshot.Stable.ToString().ToLowerInvariant()})");
+                        foreach (var finding in data.Findings.Where(finding => !finding.Suppressed).Take(50))
+                        {
+                            Console.WriteLine(
+                                $"[{finding.Severity.ToUpperInvariant()}] {finding.RuleId} "
+                                + $"{finding.Element.Type}#{finding.Element.AutomationId ?? finding.Element.Id}: "
+                                + finding.Message);
+                        }
+                        foreach (var limitation in data.Coverage.Limitations.Take(20))
+                            Console.WriteLine($"Coverage: {limitation}");
+                    });
+                }
+
+                if (ShouldFailLayoutDiagnostics(
+                    result,
+                    failOn,
+                    failOnIncomplete))
+                {
+                    _errorOccurred = true;
+                    Environment.ExitCode = 1;
+                }
+
+                if (!watch)
+                    return;
+                await Task.Delay(1000, cancellationToken);
+            }
+            while (!cancellationToken.IsCancellationRequested);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _errorOccurred = true;
+            RequestExitCode(130);
+            Output.WriteError(
+                "Layout diagnostics was cancelled.",
+                json,
+                "Cancelled",
+                retryable: true);
+        }
+        catch (LayoutDiagnosticsException ex)
+        {
+            _errorOccurred = true;
+            var errorType = ex.ErrorType switch
+            {
+                "layout-diagnostics-validation" => "InvalidArgument",
+                "layout-diagnostics-busy" => "LayoutDiagnosticsBusy",
+                "layout-diagnostics-unavailable"
+                    or "layout-diagnostics-not-ready" => "AgentUnavailable",
+                "layout-diagnostics-server-error" => "LayoutDiagnosticsServerError",
+                _ => "LayoutDiagnosticsRequestError"
+            };
+            Output.WriteError(
+                ex.Message,
+                json,
+                errorType,
+                retryable: ex.Retryable,
+                suggestions: ex.ErrorType switch
+                {
+                    "layout-diagnostics-busy" =>
+                        ["Retry after the current layout scan completes."],
+                    "layout-diagnostics-unavailable"
+                        or "layout-diagnostics-not-ready" =>
+                        ["Verify the app is running and the DevFlow agent port is reachable."],
+                    _ => null
+                });
+        }
+        catch (Exception ex)
+        {
+            _errorOccurred = true;
+            Output.WriteError(ex.Message, json);
+        }
+    }
+
+    internal static bool ShouldFailLayoutDiagnostics(
+        LayoutInspectionResult result,
+        string? failOn,
+        bool failOnIncomplete = false)
+    {
+        if (failOnIncomplete && result.Summary.Incomplete > 0)
+            return true;
+        if (string.IsNullOrWhiteSpace(failOn) || failOn.Equals("none", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (failOn.Equals("incomplete", StringComparison.OrdinalIgnoreCase))
+            return result.Summary.Incomplete > 0;
+
+        var threshold = LayoutSeverityRank(failOn);
+        return result.Findings.Any(finding =>
+            !finding.Suppressed
+            && finding.Outcome == "violation"
+            && LayoutSeverityRank(finding.Severity) >= threshold);
+    }
+
+    internal static string? ResolveLayoutDiagnosticsFailOn(
+        string profile,
+        string? failOn)
+        => string.IsNullOrWhiteSpace(failOn)
+            && profile.Equals("ci", StringComparison.OrdinalIgnoreCase)
+                ? "serious"
+                : failOn;
+
+    private static int LayoutSeverityRank(string severity) => severity.ToLowerInvariant() switch
+    {
+        "info" => 0,
+        "minor" => 1,
+        "moderate" => 2,
+        "serious" => 3,
+        "critical" => 4,
+        _ => -1
+    };
+
     private static async Task MauiQueryAsync(string host, int port, bool json, string? type, string? autoId, string? text, string? selector, string? fields, string? format, string? waitUntil, int timeout)
     {
         try
@@ -2857,6 +3408,21 @@ public class DevFlowCommands
         }
     }
 
+    /// <summary>
+    /// Parses a hit-test coordinate using invariant culture so dot-decimal input (e.g. "1240.5")
+    /// is accepted regardless of the host's current culture (some locales use ',' as the
+    /// decimal separator, which would otherwise reject valid CLI input or misparse it).
+    /// </summary>
+    private static double ParseInvariantCoordinate(ArgumentResult result, string name)
+    {
+        var token = result.Tokens.Count > 0 ? result.Tokens[0].Value : null;
+        if (token != null && double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+            return value;
+
+        result.AddError($"Invalid {name} coordinate '{token}'. Provide a number using '.' as the decimal separator (e.g. 1240.5).");
+        return default;
+    }
+
     private static async Task MauiHitTestAsync(string host, int port, bool json, double x, double y, int? window)
     {
         try
@@ -2871,40 +3437,43 @@ public class DevFlowCommands
         catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
     }
 
-    private static async Task MauiTapAsync(string host, int port, bool json, string elementId)
+    private static async Task MauiTapAsync(string host, int port, bool json, ElementInfo element)
     {
         try
         {
             using var client = await CreateAgentClientAsync(host, port);
-            var success = await client.TapAsync(elementId);
-            Output.WriteActionResult(success, "Tapped", elementId, json,
-                success ? $"Tapped: {elementId}" : $"Failed to tap: {elementId}");
+            var (captureEpoch, registryGeneration) = GetCaptureMetadata(element);
+            var success = await client.TapAsync(element.Id, captureEpoch, registryGeneration);
+            Output.WriteActionResult(success, "Tapped", element.Id, json,
+                success ? $"Tapped: {element.Id}" : $"Failed to tap: {element.Id}");
             if (!success) _errorOccurred = true;
         }
         catch (Exception ex) { Output.WriteError(ex.Message, json, suggestions: new[] { "Run 'ui tree' to refresh element IDs" }); _errorOccurred = true; }
     }
 
-    private static async Task MauiFillAsync(string host, int port, bool json, string elementId, string text)
+    private static async Task MauiFillAsync(string host, int port, bool json, ElementInfo element, string text)
     {
         try
         {
             using var client = await CreateAgentClientAsync(host, port);
-            var success = await client.FillAsync(elementId, text);
-            Output.WriteActionResult(success, "Filled", elementId, json,
-                success ? $"Filled: {elementId}" : $"Failed to fill: {elementId}");
+            var (captureEpoch, registryGeneration) = GetCaptureMetadata(element);
+            var success = await client.FillAsync(element.Id, text, captureEpoch, registryGeneration);
+            Output.WriteActionResult(success, "Filled", element.Id, json,
+                success ? $"Filled: {element.Id}" : $"Failed to fill: {element.Id}");
             if (!success) _errorOccurred = true;
         }
         catch (Exception ex) { Output.WriteError(ex.Message, json, suggestions: new[] { "Run 'ui tree' to refresh element IDs" }); _errorOccurred = true; }
     }
 
-    private static async Task MauiClearAsync(string host, int port, bool json, string elementId)
+    private static async Task MauiClearAsync(string host, int port, bool json, ElementInfo element)
     {
         try
         {
             using var client = await CreateAgentClientAsync(host, port);
-            var success = await client.ClearAsync(elementId);
-            Output.WriteActionResult(success, "Cleared", elementId, json,
-                success ? $"Cleared: {elementId}" : $"Failed to clear: {elementId}");
+            var (captureEpoch, registryGeneration) = GetCaptureMetadata(element);
+            var success = await client.ClearAsync(element.Id, captureEpoch, registryGeneration);
+            Output.WriteActionResult(success, "Cleared", element.Id, json,
+                success ? $"Cleared: {element.Id}" : $"Failed to clear: {element.Id}");
             if (!success) _errorOccurred = true;
         }
         catch (Exception ex) { Output.WriteError(ex.Message, json, suggestions: new[] { "Run 'ui tree' to refresh element IDs" }); _errorOccurred = true; }
@@ -3157,17 +3726,29 @@ public class DevFlowCommands
         try
         {
             using var client = await CreateAgentClientAsync(host, port);
-            var success = await client.SetPropertyAsync(elementId, propertyName, value);
-            if (success)
+            var result = await client.SetPropertyResultAsync(
+                elementId,
+                propertyName,
+                value,
+                captureEpoch: null,
+                registryGeneration: null);
+            if (result.Success)
             {
                 Output.WriteActionResult(true, "SetProperty", elementId, json,
                     $"Set {propertyName} = {value}");
+                return;
             }
-            else
-            {
-                Output.WriteError($"Failed to set {propertyName}", json);
-                _errorOccurred = true;
-            }
+
+            var message = !string.IsNullOrWhiteSpace(result.Error)
+                ? result.Error!
+                : $"Failed to set {propertyName}";
+            if (!string.IsNullOrWhiteSpace(result.Reason))
+                message += $" (reason: {result.Reason})";
+            if (result.TransportFailure)
+                message += " The DevFlow agent could not be reached.";
+
+            Output.WriteError(message, json, retryable: result.Retryable);
+            _errorOccurred = true;
         }
         catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
     }
@@ -3227,14 +3808,111 @@ public class DevFlowCommands
         catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
     }
 
-    private static async Task MauiFocusAsync(string host, int port, bool json, string elementId)
+    private static readonly string[] GestureTypes = ["tap", "doubletap", "longpress", "swipe", "pan", "pinch", "rotate"];
+
+    private static async Task MauiGestureAsync(
+        string host, int port, bool json, string gestureType, ElementInfo? element,
+        string? direction, double? distance, int? durationMs, double? scale, double? rotation,
+        double? deltaX, double? deltaY, double? originX, double? originY, int? steps)
+    {
+        var normalizedType = gestureType.Trim().ToLowerInvariant().Replace("-", "").Replace("_", "");
+        if (normalizedType == "zoom") normalizedType = "pinch";
+        if (normalizedType == "drag") normalizedType = "pan";
+
+        if (Array.IndexOf(GestureTypes, normalizedType) < 0)
+        {
+            Output.WriteError(
+                $"Unsupported gesture type '{gestureType}'. Supported: {string.Join(", ", GestureTypes)}.",
+                json, "ValidationError");
+            _errorOccurred = true;
+            return;
+        }
+
+        if (normalizedType == "swipe" && string.IsNullOrWhiteSpace(direction))
+        {
+            Output.WriteError("Swipe requires --direction (up, down, left, right).", json, "ValidationError");
+            _errorOccurred = true;
+            return;
+        }
+
+        if (normalizedType == "tap" && element is null)
+        {
+            Output.WriteError(
+                "Tap requires --element, --automationId, or --text to resolve a target.",
+                json,
+                "ValidationError");
+            _errorOccurred = true;
+            return;
+        }
+
+        if (normalizedType == "pan" && string.IsNullOrWhiteSpace(direction) && deltaX is null && deltaY is null)
+        {
+            Output.WriteError("Pan requires --direction, or an explicit --dx/--dy vector.", json, "ValidationError");
+            _errorOccurred = true;
+            return;
+        }
+
+        try
+        {
+            using var client = await CreateAgentClientAsync(host, port);
+            var (captureEpoch, registryGeneration) = element is null
+                ? (null, null)
+                : GetCaptureMetadata(element);
+            var result = await client.GestureDetailedAsync(
+                normalizedType, element?.Id, direction, distance, durationMs,
+                scale, rotation, deltaX, deltaY, originX, originY, steps,
+                captureEpoch, registryGeneration);
+
+            if (json)
+            {
+                Output.WriteRawJson(CliJson.SerializeUntyped(new JsonObject
+                {
+                    ["success"] = result.Success,
+                    ["action"] = "gesture",
+                    ["type"] = result.Type ?? normalizedType,
+                    ["elementId"] = element?.Id,
+                    ["handledBy"] = result.HandledBy,
+                    ["platform"] = result.Platform,
+                    ["detail"] = result.Detail,
+                    ["error"] = result.Error
+                }, indented: false));
+            }
+            else
+            {
+                var target = element != null ? $" on {element.Id}" : "";
+                if (result.Success)
+                {
+                    // Say which tier ran: a recognizer hit proves the app's own handler fired,
+                    // native means the platform control absorbed the gesture instead.
+                    var how = result.HandledBy switch
+                    {
+                        "recognizer" => $"MAUI recognizer — {result.Detail}",
+                        "native" => $"native {result.Platform} — {result.Detail}",
+                        "scroll" => $"scroll fallback — {result.Detail}",
+                        _ => result.Detail ?? "ok"
+                    };
+                    Console.WriteLine($"Performed {normalizedType}{target} ({how})");
+                }
+                else
+                {
+                    Console.WriteLine($"Failed to perform {normalizedType}{target}: {result.Error}");
+                }
+            }
+
+            if (!result.Success) _errorOccurred = true;
+        }
+        catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
+    }
+
+    private static async Task MauiFocusAsync(string host, int port, bool json, ElementInfo element)
     {
         try
         {
             using var client = await CreateAgentClientAsync(host, port);
-            var success = await client.FocusAsync(elementId);
-            Output.WriteActionResult(success, "Focused", elementId, json,
-                success ? $"Focused: {elementId}" : $"Failed to focus: {elementId}");
+            var (captureEpoch, registryGeneration) = GetCaptureMetadata(element);
+            var success = await client.FocusAsync(element.Id, captureEpoch, registryGeneration);
+            Output.WriteActionResult(success, "Focused", element.Id, json,
+                success ? $"Focused: {element.Id}" : $"Failed to focus: {element.Id}");
             if (!success) _errorOccurred = true;
         }
         catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
@@ -4634,8 +5312,8 @@ public class DevFlowCommands
         }
         else
         {
-            Console.WriteLine($"{"ID",-14} {"App",-20} {"Platform",-14} {"TFM",-24} {"Port",-6} {"Version",-12} {"Uptime"}");
-            Console.WriteLine(new string('-', 102));
+            Console.WriteLine($"{"ID",-14} {"App",-20} {"Platform",-14} {"UI",-14} {"TFM",-24} {"Port",-6} {"Version",-12} {"Uptime"}");
+            Console.WriteLine(new string('-', 117));
             foreach (var a in agents)
             {
                 var uptime = DateTime.UtcNow - a.ConnectedAt;
@@ -4643,7 +5321,9 @@ public class DevFlowCommands
                     ? $"{uptime.Hours}h {uptime.Minutes}m"
                     : $"{uptime.Minutes}m {uptime.Seconds}s";
                 var version = a.Version ?? "-";
-                Console.WriteLine($"{a.Id,-14} {a.AppName,-20} {a.Platform,-14} {a.Tfm,-24} {a.Port,-6} {version,-12} {uptimeStr}");
+                // Agents built before the framework fields existed report nothing; they are MAUI.
+                var ui = a.UiFramework ?? "maui-controls";
+                Console.WriteLine($"{a.Id,-14} {a.AppName,-20} {a.Platform,-14} {ui,-14} {a.Tfm,-24} {a.Port,-6} {version,-12} {uptimeStr}");
             }
         }
     }
@@ -4920,6 +5600,7 @@ public class DevFlowCommands
                 Console.SetError(errCapture);
 
                 _errorOccurred = false;
+                _requestedExitCode = null;
                 int exitCode;
                 try
                 {

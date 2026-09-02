@@ -13,6 +13,11 @@
     <Project Path="samples/AIExtensions.Sample.DIParameters/AIExtensions.Sample.DIParameters.csproj" />
     <Project Path="samples/DevFlow.Sample.Linux/DevFlow.Sample.Linux.csproj" />
     <Project Path="samples/DevFlow.Sample.MacOS/DevFlow.Sample.MacOS.csproj" />
+    <Project Path="samples/DevFlow.Sample.Native/Android/DevFlow.Sample.Native.Android.csproj" />
+    <Project Path="samples/DevFlow.Sample.Native/iOS/DevFlow.Sample.Native.iOS.csproj" />
+    <Project Path="samples/DevFlow.Sample.Native/MacCatalyst/DevFlow.Sample.Native.MacCatalyst.csproj" />
+    <Project Path="samples/DevFlow.Sample.Native/MacOS/DevFlow.Sample.Native.MacOS.csproj" />
+    <Project Path="samples/DevFlow.Sample.WPF/DevFlow.Sample.WPF.csproj" />
     <Project Path="samples/DevFlow.Sample/DevFlow.Sample.csproj" />
     <Project Path="samples/EssentialsAISample/EssentialsAISample.csproj" />
   </Folder>
@@ -42,13 +47,19 @@
     <Project Path="src/Cli/Microsoft.Maui.ProfilingHelper/Microsoft.Maui.ProfilingHelper.csproj" />
   </Folder>
   <Folder Name="/src/DevFlow/">
+    <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent.Abstractions/Microsoft.Maui.DevFlow.Agent.Abstractions.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent.Core/Microsoft.Maui.DevFlow.Agent.Core.csproj" />
+    <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent.Native/Microsoft.Maui.DevFlow.Agent.Native.csproj" />
+    <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent.Native.Essentials/Microsoft.Maui.DevFlow.Agent.Native.Essentials.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Analyzers/Microsoft.Maui.DevFlow.Analyzers.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent.Gtk/Microsoft.Maui.DevFlow.Agent.Gtk.csproj" />
+    <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent.WPF/Microsoft.Maui.DevFlow.Agent.WPF.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent/Microsoft.Maui.DevFlow.Agent.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Microsoft.Maui.DevFlow.Agent.IntegrationTests.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Blazor.Gtk/Microsoft.Maui.DevFlow.Blazor.Gtk.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Blazor/Microsoft.Maui.DevFlow.Blazor.csproj" />
+    <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Client/Microsoft.Maui.DevFlow.Client.csproj" />
+    <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Client.Tests/Microsoft.Maui.DevFlow.Client.Tests.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Driver/Microsoft.Maui.DevFlow.Driver.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Logging/Microsoft.Maui.DevFlow.Logging.csproj" />
     <Project Path="src/DevFlow/Microsoft.Maui.DevFlow.Tests/Microsoft.Maui.DevFlow.Tests.csproj" />

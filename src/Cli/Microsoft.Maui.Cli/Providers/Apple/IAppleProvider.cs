@@ -191,8 +191,23 @@ public interface IAppleProvider
 	Task<AppleInstallResult> InstallEnvironmentAsync(IEnumerable<string>? platforms = null, bool dryRun = false, CancellationToken cancellationToken = default);
 
 	/// <summary>
+	/// The platforms <see cref="GetDevices"/> can currently produce devices for.
+	/// </summary>
+	/// <remarks>
+	/// Declared by the provider rather than by its callers so the two cannot drift: a device
+	/// manager uses this to decide whether to query this provider at all, and then filters the
+	/// results on the same platform. If an implementation starts tagging devices with a new
+	/// platform it must list it here, otherwise those devices are never asked for.
+	/// </remarks>
+	IReadOnlyList<string> SupportedPlatforms { get; }
+
+	/// <summary>
 	/// Lists simulator devices as <see cref="Device"/> models for device manager integration.
 	/// </summary>
+	/// <remarks>
+	/// Every returned device must be tagged with a platform listed in
+	/// <see cref="SupportedPlatforms"/>, or it will be filtered out downstream.
+	/// </remarks>
 	List<Device> GetDevices();
 }
 

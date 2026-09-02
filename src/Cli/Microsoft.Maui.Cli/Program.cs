@@ -53,17 +53,21 @@ public class Program
 
 		var parseResult = rootCommand.Parse(args);
 
+		// Providers are resolved from DI and cannot see the parse result, so publish the
+		// verbosity they need before any command runs.
+		Providers.Apple.StandardErrorToolsLogger.DefaultVerbose = IsVerbose(parseResult);
+
 		try
 		{
 			var exitCode = await parseResult.InvokeAsync();
 
 			// DevFlow command handlers swallow exceptions and signal failure via a flag
 			// instead of a non-zero return; translate that into a non-zero process exit.
-			if (exitCode == 0 && Microsoft.Maui.Cli.DevFlow.DevFlowCommands.ErrorOccurred)
-				exitCode = 1;
+			exitCode = ResolveDevFlowExitCode(exitCode);
 
 			return exitCode;
 		}
+
 		catch (Exception exception)
 		{
 			var formatter = GetFormatter(parseResult);
@@ -77,6 +81,15 @@ public class Program
 
 			return exitCode;
 		}
+	}
+
+	internal static int ResolveDevFlowExitCode(int invocationExitCode)
+	{
+		if (Microsoft.Maui.Cli.DevFlow.DevFlowCommands.RequestedExitCode is { } requestedExitCode)
+			return requestedExitCode;
+		if (invocationExitCode == 0 && Microsoft.Maui.Cli.DevFlow.DevFlowCommands.ErrorOccurred)
+			return 1;
+		return invocationExitCode;
 	}
 
 	internal static int HandleCommandException(IOutputFormatter formatter, Exception exception)

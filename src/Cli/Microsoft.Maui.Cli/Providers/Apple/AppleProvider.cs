@@ -30,7 +30,9 @@ public class AppleProvider : IAppleProvider
 		if (!PlatformDetector.IsMacOS)
 			return;
 
-		var logger = ConsoleLogger.Instance;
+		// Deliberately not ConsoleLogger.Instance: it writes Info/Debug/Warning to stdout,
+		// which corrupts --json output. See StandardErrorToolsLogger.
+		var logger = new StandardErrorToolsLogger();
 		_xcodeManager = new XcodeManager(logger);
 		_simulatorService = new SimulatorService(logger);
 		_runtimeService = new RuntimeService(logger);
@@ -304,6 +306,13 @@ public class AppleProvider : IAppleProvider
 		if (result.Xcode is not null)
 			checks.Add(MapXcodeLicenseCheck());
 
+		// Xcode compatibility check for SDK packs
+		if (result.Xcode is not null)
+		{
+			var compatibilityChecker = new XcodeCompatibilityChecker(_xcodeManager);
+			checks.Add(compatibilityChecker.CheckXcodeCompatibility());
+		}
+
 		checks.Add(MapRuntimesCheck(result));
 
 		if (result.Platforms.Count > 0)
@@ -502,6 +511,15 @@ public class AppleProvider : IAppleProvider
 			};
 		}, cancellationToken);
 	}
+
+	/// <inheritdoc />
+	/// <remarks>
+	/// Scoped to iOS because <see cref="GetDevices"/> tags every simulator with
+	/// <see cref="Platforms.iOS"/>. tvOS/watchOS/visionOS simulators are returned by
+	/// <c>simctl</c> but are not yet recognized in the shared Platforms model; when they are,
+	/// add them both here and to the tagging below.
+	/// </remarks>
+	public IReadOnlyList<string> SupportedPlatforms { get; } = [Platforms.iOS];
 
 	public List<Device> GetDevices()
 	{

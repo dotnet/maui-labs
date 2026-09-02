@@ -19,7 +19,7 @@ public sealed class QueryTools
         if (type == null && automationId == null && text == null)
             return "At least one filter must be specified: type, automationId, or text.";
 
-        var agent = await session.GetAgentClientAsync(agentPort);
+        using var agent = await session.GetAgentClientAsync(agentPort);
         var results = await agent.QueryAsync(type, automationId, text);
         if (results == null || results.Count == 0)
             return "No matching elements found.";
@@ -33,7 +33,7 @@ public sealed class QueryTools
         [Description("CSS selector (e.g., '.my-class', '#myId', 'button.primary')")] string selector,
         [Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
     {
-        var agent = await session.GetAgentClientAsync(agentPort);
+        using var agent = await session.GetAgentClientAsync(agentPort);
         var results = await agent.QueryCssAsync(selector);
         if (results == null || results.Count == 0)
             return $"No elements matching selector '{selector}'.";
@@ -47,7 +47,7 @@ public sealed class QueryTools
         [Description("Element ID from the visual tree")] string elementId,
         [Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
     {
-        var agent = await session.GetAgentClientAsync(agentPort);
+        using var agent = await session.GetAgentClientAsync(agentPort);
         var element = await agent.GetElementAsync(elementId);
         if (element == null)
             return $"Element '{elementId}' not found.";
@@ -63,7 +63,7 @@ public sealed class QueryTools
         [Description("Window index for multi-window apps")] int? window = null,
         [Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
     {
-        var agent = await session.GetAgentClientAsync(agentPort);
+        using var agent = await session.GetAgentClientAsync(agentPort);
         var elementId = await agent.HitTestAsync(x, y, window);
         if (string.IsNullOrEmpty(elementId))
             return $"No element found at ({x}, {y}).";

@@ -1,12 +1,15 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
+using Microsoft.Maui.DevFlow.Driver;
 using Xunit.Abstractions;
 
 namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests;
 
 [Collection("AgentIntegration")]
 [Trait("Category", "WebView")]
+// Requires the MAUI sample: BlazorWebView is a MAUI control. Native runs filter this out.
+[Trait(TestFramework.Trait, TestFramework.Maui)]
 public class WebViewTests : IntegrationTestBase
 {
     public WebViewTests(AppFixture app, ITestOutputHelper output)
@@ -259,6 +262,46 @@ public class WebViewTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task LayoutDiagnostics_DetectsBlazorTextOverflow()
+    {
+        await EnsureOnBlazorPageAsync();
+        const string fixtureId = "DevFlowBlazorOverflowFixture";
+        var createFixture = JsonNode.Parse(
+            $$"""
+            {
+              "expression": "(() => { const old = document.getElementById('{{fixtureId}}'); if (old) old.remove(); const element = document.createElement('div'); element.id = '{{fixtureId}}'; element.textContent = 'This text is deliberately too wide for the fixture'; element.style.cssText = 'width:60px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:fixed;left:10px;top:10px;'; document.body.appendChild(element); return true; })()"
+            }
+            """);
+        _ = await Client.SendCdpCommandAsync("Runtime.evaluate", createFixture);
+
+        try
+        {
+            var result = await Client.AnalyzeLayoutAsync(new LayoutInspectionRequest
+            {
+                Profile = "strict",
+                MinimumSeverity = "info",
+                Scope = new LayoutInspectionScope
+                {
+                    IncludeBlazorElements = true,
+                    IncludeNativeElements = false
+                },
+                Stability = new LayoutStabilityOptions { Mode = "immediate" }
+            });
+
+            Assert.NotNull(result);
+            Assert.Contains(result!.Findings, finding =>
+                finding.RuleId == LayoutDiagnosticRules.TextNotFullyRendered
+                && finding.Element.AutomationId == fixtureId);
+        }
+        finally
+        {
+            var removeFixture = JsonNode.Parse(
+                $$"""{"expression":"document.getElementById('{{fixtureId}}')?.remove()"}""");
+            _ = await Client.SendCdpCommandAsync("Runtime.evaluate", removeFixture);
+        }
+    }
+
+    [Fact]
     public async Task Source_ReturnsHtmlContent()
     {
         await EnsureOnBlazorPageAsync();
@@ -483,6 +526,72 @@ public class WebViewTests : IntegrationTestBase
                 $"Expected at least 2 WebView contexts on the multi-Blazor page, got {contextCount}. Last response: {lastJson}");
             Assert.True(anyReady,
                 $"Expected at least one ready WebView context on the multi-Blazor page. Last response: {lastJson}");
+        }
+        finally
+        {
+            await NavigateToMainPageAsync();
+            App.InvalidateBlazorReady();
+        }
+    }
+
+    [Fact]
+    public async Task DefaultContext_FollowsActiveShellPage_AfterMultiBlazor()
+    {
+        App.InvalidateBlazorReady();
+        try
+        {
+            await NavigateToPageAsync("//multiblazor", "BlazorLeft");
+
+            var timeoutMs = Platform switch
+            {
+                "ios" => 60000,
+                "android" or "windows" => 90000,
+                _ => 45000,
+            };
+            var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            JsonElement contexts = default;
+            while (DateTime.UtcNow < deadline)
+            {
+                contexts = await Client.GetCdpWebViewsAsync();
+                var items = EnumerateContexts(contexts).ToList();
+                if (items.Count >= 2 && items.Count(IsReadyContext) >= 2)
+                    break;
+                await Task.Delay(500);
+            }
+
+            Assert.True(
+                EnumerateContexts(contexts).Count(IsReadyContext) >= 2,
+                $"Expected both multi-Blazor contexts to be ready. Last response: {contexts}");
+
+            await Client.SendCdpCommandAsync(
+                "Runtime.evaluate",
+                JsonNode.Parse("""{"expression":"window.__devflowContext = 'right'"}"""),
+                "BlazorRight");
+
+            await Client.NavigateAsync("//blazor");
+            App.InvalidateBlazorReady();
+            await EnsureOnBlazorPageAsync();
+
+            await Client.SendCdpCommandAsync(
+                "Runtime.evaluate",
+                JsonNode.Parse("""{"expression":"window.__devflowContext = 'main'"}"""),
+                "BlazorWebView");
+            var defaultResult = await Client.SendCdpCommandAsync(
+                "Runtime.evaluate",
+                JsonNode.Parse("""{"expression":"window.__devflowContext"}"""));
+
+            Assert.Contains("\"value\":\"main\"", defaultResult.ToString());
+
+            contexts = await Client.GetCdpWebViewsAsync();
+            var active = EnumerateContexts(contexts)
+                .Where(context =>
+                    context.TryGetProperty("active", out var activeProperty) &&
+                    activeProperty.ValueKind == JsonValueKind.True)
+                .ToList();
+            var activeContext = Assert.Single(active);
+            Assert.Equal(
+                "BlazorWebView",
+                activeContext.GetProperty("automationId").GetString());
         }
         finally
         {

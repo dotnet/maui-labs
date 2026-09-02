@@ -10,6 +10,52 @@ namespace Microsoft.Maui.DevFlow.Tests;
 
 public class ProtocolSpecTests
 {
+    private static readonly string[] BackendOptionalOperationIds =
+    [
+        "getUiTree",
+        "getElement",
+        "queryElements",
+        "hitTest",
+        "captureScreenshot",
+        "tapElement",
+        "fillElement",
+        "clearElement",
+        "focusElement",
+        "scrollElement",
+        "navigateRoute",
+        "resizeWindow",
+        "goBack",
+        "pressKey",
+        "performGesture",
+        "batchActions",
+        "getElementProperty",
+        "setElementProperty",
+        "getDeviceInfo",
+        "getDisplayInfo",
+        "getBatteryInfo",
+        "getConnectivityInfo",
+        "getAppInfo",
+        "getAppTheme",
+        "setAppTheme",
+        "listSensors",
+        "startSensor",
+        "stopSensor",
+        "listDeviceJobs",
+        "runDeviceJob",
+        "listPermissions",
+        "checkPermission",
+        "getGeolocation",
+        "listPreferences",
+        "clearPreferences",
+        "getPreference",
+        "setPreference",
+        "deletePreference",
+        "clearSecureStorage",
+        "getSecureValue",
+        "setSecureValue",
+        "deleteSecureValue",
+    ];
+
     private static readonly IDeserializer YamlDeserializer = new DeserializerBuilder().Build();
     private static readonly YamlDotNet.Serialization.ISerializer JsonCompatibleYamlSerializer = new SerializerBuilder()
         .JsonCompatible()
@@ -111,12 +157,12 @@ public class ProtocolSpecTests
             repoRoot,
             "src",
             "DevFlow",
-            "Microsoft.Maui.DevFlow.Agent.Core",
-            "DevFlowAgentService.cs");
+            "Microsoft.Maui.DevFlow.Agent.Abstractions",
+            "DevFlowAgentService.Handlers.cs");
         var serviceSource = File.ReadAllText(servicePath);
         var routePattern = new Regex(
-            "_server\\.Map(?<method>Get|Post|Put|Delete|WebSocket)\\(\"(?<path>[^\"]+)\"",
-            RegexOptions.CultureInvariant);
+            "_server\\.Map(?<method>Get|Post|Put|Delete|WebSocket)\\s*\\(\\s*\"(?<path>[^\"]+)\"",
+            RegexOptions.CultureInvariant | RegexOptions.Singleline);
 
         var registeredHttpRoutes = new HashSet<string>(StringComparer.Ordinal);
         var registeredWebSocketRoutes = new HashSet<string>(StringComparer.Ordinal);
@@ -156,6 +202,40 @@ public class ProtocolSpecTests
 
         Assert.Empty(registeredHttpRoutes.Except(documentedHttpRoutes));
         Assert.Empty(registeredWebSocketRoutes.Except(documentedWebSocketRoutes));
+    }
+
+    [Fact]
+    public void BackendOptionalOperations_DocumentUniformNotSupportedResponse()
+    {
+        var openApiPath = Path.Combine(SpecRoot.Value, "openapi.yaml");
+        var document = LoadDocument(openApiPath).AsObject();
+        var operations = document["paths"]!.AsObject()
+            .SelectMany(path => path.Value!.AsObject())
+            .Where(entry => entry.Value is JsonObject operation
+                && operation.ContainsKey("operationId"))
+            .Select(entry => entry.Value!.AsObject())
+            .ToDictionary(
+                operation => operation["operationId"]!.GetValue<string>(),
+                StringComparer.Ordinal);
+
+        foreach (var operationId in BackendOptionalOperationIds)
+        {
+            Assert.True(
+                operations.TryGetValue(operationId, out var operation),
+                $"OpenAPI operation '{operationId}' is missing.");
+            Assert.Equal(
+                "#/components/responses/BackendNotSupported",
+                operation!["responses"]?["501"]?["$ref"]?.GetValue<string>());
+        }
+
+        var schema = document["components"]!["schemas"]!["BackendNotSupported"]!.AsObject();
+        Assert.Equal("object", schema["type"]!.GetValue<string>());
+        Assert.Equal(
+            "not_supported",
+            schema["properties"]!["error"]!["const"]!.GetValue<string>());
+        Assert.Equal(
+            ["error", "capability", "reason"],
+            schema["required"]!.AsArray().Select(value => value!.GetValue<string>()));
     }
 
     [Fact]

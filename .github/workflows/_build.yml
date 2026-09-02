@@ -111,10 +111,16 @@ jobs:
         if: inputs.install-workloads && matrix.os == 'macos-latest'
         run: ./eng/common/dotnet.sh build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="$ANDROID_HOME" -p:AcceptAndroidSDKLicenses=true ${{ inputs.android-project }}
 
+      # cibuild.cmd/.sh hardcode -pack -publish, and Arcade's publish step errors out with
+      # "ItemsToPush is not specified" when a filter contains nothing packable (e.g. sample
+      # app heads). Expanded here so those flags can follow the `pack` input. For pack: true
+      # callers this is the exact command cibuild runs.
       - name: Build, Test and Pack (Windows)
         if: matrix.os == 'windows-latest'
         run: >
-          eng\common\cibuild.cmd
+          eng\common\build.cmd
+          -restore -build -test -ci
+          ${{ inputs.pack && '-sign -pack -publish' || '' }}
           -configuration Release
           -prepareMachine
           -projects %CD%\${{ inputs.project-path }}
@@ -124,7 +130,9 @@ jobs:
       - name: Build and Test (macOS)
         if: matrix.os == 'macos-latest'
         run: >
-          ./eng/common/cibuild.sh
+          ./eng/common/build.sh
+          --restore --build --test --ci
+          ${{ inputs.pack && '--pack --publish' || '' }}
           --configuration Release
           --prepareMachine
           --projects $(pwd)/${{ inputs.project-path }}
@@ -133,7 +141,9 @@ jobs:
       - name: Build and Test (Linux)
         if: startsWith(matrix.os, 'ubuntu')
         run: >
-          ./eng/common/cibuild.sh
+          ./eng/common/build.sh
+          --restore --build --test --ci
+          ${{ inputs.pack && '--pack --publish' || '' }}
           --configuration Release
           --prepareMachine
           --projects $(pwd)/${{ inputs.project-path }}
