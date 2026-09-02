@@ -306,6 +306,13 @@ public class AppleProvider : IAppleProvider
 		if (result.Xcode is not null)
 			checks.Add(MapXcodeLicenseCheck());
 
+		// Xcode compatibility check for SDK packs
+		if (result.Xcode is not null)
+		{
+			var compatibilityChecker = new XcodeCompatibilityChecker(_xcodeManager);
+			checks.Add(compatibilityChecker.CheckXcodeCompatibility());
+		}
+
 		checks.Add(MapRuntimesCheck(result));
 
 		if (result.Platforms.Count > 0)
