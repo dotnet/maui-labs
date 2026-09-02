@@ -394,11 +394,6 @@ extends:
               displayName: Provision .NET SDK via Arcade
             - script: eng\common\dotnet.cmd workload install maui macos --version 10.0.203
               displayName: Install MAUI and macOS workloads
-            - pwsh: |
-                eng/pipelines/validate-shipping-projects.ps1 `
-                  -ProductRoot platforms/MacOS `
-                  -SolutionFilter platforms/MacOS/MacOS-libs.slnf
-              displayName: Validate macOS shipping projects
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine

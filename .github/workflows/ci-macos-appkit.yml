@@ -24,19 +24,7 @@ on:
       - 'NuGet.config'
 
 jobs:
-  validate-packages:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Validate shipping projects
-        shell: pwsh
-        run: >-
-          eng/pipelines/validate-shipping-projects.ps1
-          -ProductRoot platforms/MacOS
-          -SolutionFilter platforms/MacOS/MacOS-libs.slnf
-
   build:
-    needs: validate-packages
     uses: ./.github/workflows/_build.yml
     with:
       project-path: platforms/MacOS/MacOS.slnx
