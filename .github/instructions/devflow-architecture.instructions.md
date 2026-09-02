@@ -119,7 +119,7 @@ so source stays compatible. Label such PRs `breaking-change` and say so in the d
 
 1. Add route in `Agent.Abstractions/DevFlowAgentService.Handlers.cs` → `RegisterRoutes()`:
    ```csharp
-   _server.MapGet("/api/myfeature", HandleMyFeature);
+   _server.MapGet("/api/v1/myfeature", HandleMyFeature);
    ```
 2. Implement the handler in `Agent.Abstractions` if it is framework-neutral. If it needs a UI
    framework, declare it virtual there returning `NotSupported(...)`, then override it in
@@ -127,9 +127,15 @@ so source stays compatible. Label such PRs `breaking-change` and say so in the d
    ```csharp
    protected virtual async Task<HttpResponse> HandleMyFeature(HttpRequest request) { ... }
    ```
-3. Add DTO class at bottom of the owning file if needed
-4. Add client method in `Client/AgentClient.cs`
-5. Optionally expose as MCP tool and/or CLI command
+3. Add DTO class at the bottom of the owning file if needed.
+4. Add client method in `Client/AgentClient.cs`.
+5. Update the canonical protocol contract in `docs/DevFlow/spec/openapi.yaml`,
+   including exact query parameters, request/response schemas, status codes, and
+   examples. Update `asyncapi.yaml` for any `/ws/v1/*` channel. Route and
+   protocol changes must be made in the same PR.
+6. Run `ProtocolSpecTests`; registered routes must be represented in OpenAPI or
+   AsyncAPI.
+7. Optionally expose as MCP tool and/or CLI command
 
 ### Adding a New MCP Tool
 
