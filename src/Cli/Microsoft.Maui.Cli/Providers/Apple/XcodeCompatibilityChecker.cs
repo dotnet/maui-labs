@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Text.Json.Nodes;
+using System.Xml;
 using System.Xml.Linq;
 using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
@@ -10,278 +11,396 @@ using Xamarin.MacDev;
 namespace Microsoft.Maui.Cli.Providers.Apple;
 
 /// <summary>
-/// Detects and fixes Xcode version mismatches with installed iOS/macOS SDK packs.
-/// Reads MSBuild metadata to determine required Xcode versions and compares with installed versions.
+/// Compares the selected Xcode with the Apple SDK packs installed for the current .NET runtime.
 /// </summary>
-public class XcodeCompatibilityChecker
+public sealed class XcodeCompatibilityChecker
 {
-	readonly XcodeManager? _xcodeManager;
+	const string CheckCategory = "apple";
+	const string CheckName = "Xcode Compatibility";
+
+	readonly IXcodeCompatibilityEnvironment? _environment;
 
 	public XcodeCompatibilityChecker(XcodeManager? xcodeManager = null)
 	{
-		_xcodeManager = xcodeManager;
+		_environment = xcodeManager is null
+			? null
+			: new XcodeCompatibilityEnvironment(xcodeManager);
+	}
+
+	internal XcodeCompatibilityChecker(IXcodeCompatibilityEnvironment environment)
+	{
+		_environment = environment;
 	}
 
 	/// <summary>
-	/// Analyzes installed Apple SDK packs and checks Xcode compatibility.
-	/// Returns a HealthCheck with any detected mismatches and auto-fix recommendations.
+	/// Checks whether the selected Xcode matches the requirements from installed Apple SDK packs.
 	/// </summary>
 	public HealthCheck CheckXcodeCompatibility()
 	{
-		if (_xcodeManager is null)
-		{
-			return new HealthCheck
-			{
-				Category = "apple",
-				Name = "Xcode Compatibility",
-				Status = CheckStatus.Skipped,
-				Message = "Xcode compatibility check not available on this platform"
-			};
-		}
+		if (_environment is null)
+			return CreateCheck(CheckStatus.Skipped, "Xcode compatibility check not available on this platform");
 
 		var sdkRequirements = DetectSdkRequirements();
 		if (sdkRequirements.Count == 0)
-		{
-			return new HealthCheck
-			{
-				Category = "apple",
-				Name = "Xcode Compatibility",
-				Status = CheckStatus.Skipped,
-				Message = "No Apple SDK packs detected"
-			};
-		}
+			return CreateCheck(CheckStatus.Skipped, "No Apple SDK packs detected for the current .NET runtime");
 
-		var selectedXcode = _xcodeManager.GetSelected();
-		var selectedVersion = ExtractMajorMinor(selectedXcode?.Version.ToString());
-
+		var selectedXcode = _environment.GetSelectedXcode();
+		var selectedVersion = ExtractMajorMinor(selectedXcode?.Version);
 		var incompatibleSdks = sdkRequirements
-			.Where(r => r.RequiredVersion != selectedVersion)
+			.Where(requirement => requirement.RequiredVersion != selectedVersion)
+			.OrderBy(requirement => requirement.Platform, StringComparer.Ordinal)
 			.ToList();
 
 		if (incompatibleSdks.Count == 0)
 		{
-			return new HealthCheck
-			{
-				Category = "apple",
-				Name = "Xcode Compatibility",
-				Status = CheckStatus.Ok,
-				Message = $"All SDK packs compatible with Xcode {selectedVersion}",
-				Details = new JsonObject
-				{
-					["selected_xcode_version"] = selectedVersion ?? "unknown",
-					["sdk_count"] = sdkRequirements.Count,
-					["compatible"] = true
-				}
-			};
+			return CreateCheck(
+				CheckStatus.Ok,
+				$"All SDK packs compatible with Xcode {selectedVersion}",
+				CreateDetails(selectedVersion, sdkRequirements, compatible: true));
 		}
 
-		var incompatibleSdksList = string.Join(", ", incompatibleSdks.Select(s => $"{s.Platform} {s.Version} (requires {s.RequiredVersion})"));
+		var requiredVersions = sdkRequirements
+			.Select(requirement => requirement.RequiredVersion)
+			.Distinct(StringComparer.Ordinal)
+			.OrderBy(version => ParseVersion(version))
+			.ThenBy(version => version, StringComparer.Ordinal)
+			.ToList();
 
-		// Check if any installed Xcode matches the required version
-		var availableXcodes = _xcodeManager.List();
-		var recommendedVersion = incompatibleSdks.First().RequiredVersion;
-		var matchingXcode = availableXcodes.FirstOrDefault(x =>
-			ExtractMajorMinor(x.Version.ToString()) == recommendedVersion);
+		if (requiredVersions.Count > 1)
+			return CreateConflictingRequirementsCheck(selectedVersion, sdkRequirements, requiredVersions);
 
-		if (matchingXcode != null)
-		{
-			return new HealthCheck
-			{
-				Category = "apple",
-				Name = "Xcode Compatibility",
-				Status = CheckStatus.Error,
-				Message = $"SDK packs require Xcode {recommendedVersion}, but {selectedVersion} is selected. Incompatible: {incompatibleSdksList}",
-				Details = new JsonObject
-				{
-					["selected_xcode_version"] = selectedVersion ?? "unknown",
-					["required_xcode_version"] = recommendedVersion ?? "unknown",
-					["incompatible_sdks"] = new JsonArray(incompatibleSdks.Select(s =>
-						new JsonObject
-						{
-							["platform"] = s.Platform,
-							["version"] = s.Version,
-							["required_xcode"] = s.RequiredVersion
-						}).Cast<JsonNode>().ToArray()),
-					["compatible"] = false
-				},
-				Fix = new FixInfo
-				{
-					IssueId = ErrorCodes.AppleXcodeVersionMismatch,
-					Description = $"Switch to Xcode {recommendedVersion}",
-					AutoFixable = true,
-					Command = $"xcode-select -s {matchingXcode.Path}"
-				}
-			};
-		}
+		var requiredVersion = requiredVersions[0];
+		var matchingXcode = _environment.GetInstalledXcodes()
+			.Where(xcode => ExtractMajorMinor(xcode.Version) == requiredVersion)
+			.OrderBy(xcode => xcode.Path, StringComparer.Ordinal)
+			.FirstOrDefault();
 
-		return new HealthCheck
-		{
-			Category = "apple",
-			Name = "Xcode Compatibility",
-			Status = CheckStatus.Error,
-			Message = $"SDK packs require Xcode {recommendedVersion}, but {selectedVersion} is selected. Incompatible: {incompatibleSdksList}",
-			Details = new JsonObject
-			{
-				["selected_xcode_version"] = selectedVersion ?? "unknown",
-				["required_xcode_version"] = recommendedVersion ?? "unknown",
-				["incompatible_sdks"] = new JsonArray(incompatibleSdks.Select(s =>
-					new JsonObject
-					{
-						["platform"] = s.Platform,
-						["version"] = s.Version,
-						["required_xcode"] = s.RequiredVersion
-					}).Cast<JsonNode>().ToArray()),
-				["compatible"] = false
-			},
-			Fix = new FixInfo
-			{
-				IssueId = ErrorCodes.AppleXcodeVersionMismatch,
-				Description = $"Install or select Xcode {recommendedVersion}",
-				AutoFixable = false,
-				ManualSteps = new[]
-				{
-					$"Install Xcode {recommendedVersion} from the Mac App Store",
-					$"Or select an installed version: xcode-select -s /Applications/Xcode-{recommendedVersion}.app"
-				}
-			}
-		};
+		return matchingXcode is null
+			? CreateManualFixCheck(selectedVersion, sdkRequirements, incompatibleSdks, requiredVersion)
+			: CreateAutoFixCheck(selectedVersion, sdkRequirements, incompatibleSdks, requiredVersion, matchingXcode);
 	}
 
-	/// <summary>
-	/// Detects all installed Apple SDK packs and their required Xcode versions.
-	/// Scans /usr/local/share/dotnet/packs/ for Microsoft.*.Sdk.net* patterns.
-	/// </summary>
+	HealthCheck CreateAutoFixCheck(
+		string? selectedVersion,
+		IReadOnlyList<SdkRequirement> sdkRequirements,
+		IReadOnlyList<SdkRequirement> incompatibleSdks,
+		string requiredVersion,
+		XcodeInstallation matchingXcode)
+	{
+		var selectedDisplay = selectedVersion ?? "no Xcode";
+		var command = $"sudo xcode-select --switch \"{matchingXcode.Path}\"";
+
+		return CreateCheck(
+			CheckStatus.Warning,
+			$"SDK packs require Xcode {requiredVersion}, but {selectedDisplay} is selected. Incompatible: {FormatRequirements(incompatibleSdks)}",
+			CreateDetails(selectedVersion, sdkRequirements, compatible: false, requiredVersion),
+			new FixInfo
+			{
+				IssueId = ErrorCodes.AppleXcodeVersionMismatch,
+				Description = $"Switch to Xcode {requiredVersion} (requires administrator permission)",
+				AutoFixable = true,
+				Command = command
+			});
+	}
+
+	HealthCheck CreateManualFixCheck(
+		string? selectedVersion,
+		IReadOnlyList<SdkRequirement> sdkRequirements,
+		IReadOnlyList<SdkRequirement> incompatibleSdks,
+		string requiredVersion)
+	{
+		var selectedDisplay = selectedVersion ?? "no Xcode";
+
+		return CreateCheck(
+			CheckStatus.Warning,
+			$"SDK packs require Xcode {requiredVersion}, but {selectedDisplay} is selected. Incompatible: {FormatRequirements(incompatibleSdks)}",
+			CreateDetails(selectedVersion, sdkRequirements, compatible: false, requiredVersion),
+			new FixInfo
+			{
+				IssueId = ErrorCodes.AppleXcodeVersionMismatch,
+				Description = $"Install or select Xcode {requiredVersion}",
+				AutoFixable = false,
+				ManualSteps =
+				[
+					$"Install Xcode {requiredVersion} from the Mac App Store or Apple Developer downloads",
+					$"Select it with: sudo xcode-select --switch \"/Applications/Xcode-{requiredVersion}.app\""
+				]
+			});
+	}
+
+	HealthCheck CreateConflictingRequirementsCheck(
+		string? selectedVersion,
+		IReadOnlyList<SdkRequirement> incompatibleSdks,
+		IReadOnlyList<string> requiredVersions)
+	{
+		var details = CreateDetails(selectedVersion, incompatibleSdks, compatible: false);
+		details["required_xcode_versions"] = new JsonArray(
+			requiredVersions.Select(version => (JsonNode)JsonValue.Create(version)!).ToArray());
+
+		return CreateCheck(
+			CheckStatus.Warning,
+			$"Installed Apple SDK packs require different Xcode versions ({string.Join(", ", requiredVersions)}). Incompatible: {FormatRequirements(incompatibleSdks)}",
+			details,
+			new FixInfo
+			{
+				IssueId = ErrorCodes.AppleXcodeVersionMismatch,
+				Description = "Align the installed Apple workloads before selecting Xcode",
+				AutoFixable = false,
+				ManualSteps =
+				[
+					"Update or repair the installed Apple workloads so their SDK packs require the same Xcode version",
+					"Run 'dotnet workload list' to inspect the active workloads"
+				]
+			});
+	}
+
 	List<SdkRequirement> DetectSdkRequirements()
 	{
 		var requirements = new List<SdkRequirement>();
-		var packsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-			".dotnet", "packs");
 
-		if (!Directory.Exists(packsDir))
+		foreach (var packsRoot in _environment!.GetPackRoots()
+			.Where(Directory.Exists)
+			.Distinct(StringComparer.Ordinal))
 		{
-			packsDir = "/usr/local/share/dotnet/packs";
-		}
-
-		if (!Directory.Exists(packsDir))
-		{
-			return requirements;
-		}
-
-		try
-		{
-			var sdkDirs = Directory.GetDirectories(packsDir)
-				.Where(d => Path.GetFileName(d).Contains(".Sdk.net"))
-				.ToList();
-
-			foreach (var sdkDir in sdkDirs)
+			foreach (var sdkDirectory in EnumerateDirectories(packsRoot))
 			{
-				var sdkName = Path.GetFileName(sdkDir);
-
-				// Extract platform name (e.g., "iOS" from "Microsoft.iOS.Sdk.net10.0_17.6")
-				var platform = ExtractPlatformFromSdkName(sdkName);
-				if (string.IsNullOrEmpty(platform))
+				var sdkName = Path.GetFileName(sdkDirectory);
+				if (!TryGetSdkPackInfo(sdkName, out var platform, out var targetFramework))
 					continue;
 
-				// Find the versions directory (each SDK version is in a subdirectory)
-				var versionDirs = Directory.GetDirectories(sdkDir);
-				foreach (var versionDir in versionDirs)
+				if (targetFramework is not null &&
+					!string.Equals(targetFramework, _environment.TargetFramework, StringComparison.OrdinalIgnoreCase))
 				{
-					var versionDirName = Path.GetFileName(versionDir);
-					var requiredXcodeVersion = ExtractXcodeRequirementFromSdk(versionDir);
+					continue;
+				}
 
-					if (requiredXcodeVersion != null)
-					{
-						requirements.Add(new SdkRequirement
-						{
-							Platform = platform,
-							Version = versionDirName,
-							RequiredVersion = requiredXcodeVersion
-						});
-					}
+				foreach (var versionDirectory in EnumerateDirectories(sdkDirectory))
+				{
+					var requiredXcodeVersion = ExtractXcodeRequirementFromSdk(versionDirectory);
+					if (requiredXcodeVersion is null)
+						continue;
+
+					requirements.Add(new SdkRequirement(
+						platform,
+						Path.GetFileName(versionDirectory),
+						requiredXcodeVersion));
 				}
 			}
 		}
-		catch
-		{
-			// If SDK detection fails, return empty list (non-fatal)
-		}
 
-		return requirements;
+		return requirements
+			.Distinct()
+			.GroupBy(requirement => requirement.Platform, StringComparer.OrdinalIgnoreCase)
+			.Select(group => group
+				.OrderByDescending(requirement => ParseVersion(requirement.Version))
+				.ThenByDescending(requirement => requirement.Version, StringComparer.Ordinal)
+				.First())
+			.OrderBy(requirement => requirement.Platform, StringComparer.Ordinal)
+			.ToList();
 	}
 
-	/// <summary>
-	/// Extracts the required Xcode version from an SDK's MSBuild properties.
-	/// Looks for Microsoft.*.Sdk.Versions.props files with _RecommendedXcodeVersion property.
-	/// </summary>
-	string? ExtractXcodeRequirementFromSdk(string versionDir)
+	static IEnumerable<string> EnumerateDirectories(string path)
 	{
 		try
 		{
-			var targetsDir = Path.Combine(versionDir, "targets");
-			if (!Directory.Exists(targetsDir))
-				return null;
-
-			var propsFile = Directory.GetFiles(targetsDir, "*.Versions.props")
-				.FirstOrDefault();
-
-			if (propsFile == null)
-				return null;
-
-			var doc = XDocument.Load(propsFile);
-			var xcodeVersionElement = doc.Descendants()
-				.FirstOrDefault(e => e.Name.LocalName == "_RecommendedXcodeVersion");
-
-			if (xcodeVersionElement?.Value != null)
-			{
-				return ExtractMajorMinor(xcodeVersionElement.Value);
-			}
+			return Directory.EnumerateDirectories(path).ToArray();
 		}
-		catch
+		catch (IOException)
 		{
-			// If parsing fails, return null (non-fatal)
+			return [];
 		}
-
-		return null;
+		catch (UnauthorizedAccessException)
+		{
+			return [];
+		}
 	}
 
-	/// <summary>
-	/// Extracts platform name from SDK directory name.
-	/// Example: "Microsoft.iOS.Sdk.net10.0_17.6" → "iOS"
-	/// </summary>
-	static string? ExtractPlatformFromSdkName(string sdkName)
+	static string? ExtractXcodeRequirementFromSdk(string versionDirectory)
 	{
-		// Pattern: Microsoft.{Platform}.Sdk.net{TFM}_{Version}
-		var parts = sdkName.Split('.');
-		if (parts.Length >= 3 && parts[0] == "Microsoft" && parts[2] == "Sdk")
-		{
-			return parts[1]; // iOS, macOS, tvOS, watchOS
-		}
+		var targetsDirectory = Path.Combine(versionDirectory, "targets");
+		if (!Directory.Exists(targetsDirectory))
+			return null;
 
-		return null;
+		try
+		{
+			var propsFile = Directory.EnumerateFiles(targetsDirectory, "*.Versions.props")
+				.OrderBy(path => path, StringComparer.Ordinal)
+				.FirstOrDefault();
+			if (propsFile is null)
+				return null;
+
+			var document = XDocument.Load(propsFile);
+			var recommendedVersion = document.Descendants()
+				.FirstOrDefault(element => element.Name.LocalName == "_RecommendedXcodeVersion")
+				?.Value;
+
+			return ExtractMajorMinor(recommendedVersion);
+		}
+		catch (IOException)
+		{
+			return null;
+		}
+		catch (UnauthorizedAccessException)
+		{
+			return null;
+		}
+		catch (XmlException)
+		{
+			return null;
+		}
 	}
 
-	/// <summary>
-	/// Extracts major.minor version from a version string.
-	/// Example: "26.5.1" → "26.5"
-	/// </summary>
-	static string? ExtractMajorMinor(string? version)
+	static bool TryGetSdkPackInfo(string sdkName, out string platform, out string? targetFramework)
+	{
+		platform = string.Empty;
+		targetFramework = null;
+
+		const string prefix = "Microsoft.";
+		const string sdkMarker = ".Sdk";
+		if (!sdkName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+			return false;
+
+		var sdkMarkerIndex = sdkName.IndexOf(sdkMarker, prefix.Length, StringComparison.OrdinalIgnoreCase);
+		if (sdkMarkerIndex < 0)
+			return false;
+
+		var platformName = sdkName[prefix.Length..sdkMarkerIndex];
+		platform = platformName.ToLowerInvariant() switch
+		{
+			"ios" => "iOS",
+			"macos" => "macOS",
+			"maccatalyst" => "MacCatalyst",
+			"tvos" => "tvOS",
+			"watchos" => "watchOS",
+			_ => string.Empty
+		};
+		if (platform.Length == 0)
+			return false;
+
+		var suffix = sdkName[(sdkMarkerIndex + sdkMarker.Length)..];
+		if (!suffix.StartsWith(".net", StringComparison.OrdinalIgnoreCase))
+			return suffix.Length == 0;
+
+		var separatorIndex = suffix.IndexOf('_');
+		targetFramework = separatorIndex < 0 ? suffix[1..] : suffix[1..separatorIndex];
+		return true;
+	}
+
+	internal static string? ExtractMajorMinor(string? version)
 	{
 		if (string.IsNullOrWhiteSpace(version))
 			return null;
 
 		var parts = version.Split('.');
-		if (parts.Length >= 2)
-		{
-			return $"{parts[0]}.{parts[1]}";
-		}
-
-		return version;
+		return parts.Length >= 2 ? $"{parts[0]}.{parts[1]}" : version;
 	}
 
-	record SdkRequirement
+	static Version ParseVersion(string version)
 	{
-		public required string Platform { get; init; }
-		public required string Version { get; init; }
-		public required string RequiredVersion { get; init; }
+		var stableVersion = version.Split('-', 2)[0];
+		return Version.TryParse(stableVersion, out var parsedVersion)
+			? parsedVersion
+			: new Version();
+	}
+
+	static string FormatRequirements(IEnumerable<SdkRequirement> requirements) =>
+		string.Join(", ", requirements.Select(requirement =>
+			$"{requirement.Platform} {requirement.Version} (requires {requirement.RequiredVersion})"));
+
+	static JsonObject CreateDetails(
+		string? selectedVersion,
+		IReadOnlyList<SdkRequirement> requirements,
+		bool compatible,
+		string? requiredVersion = null)
+	{
+		var details = new JsonObject
+		{
+			["selected_xcode_version"] = selectedVersion ?? "unknown",
+			["sdk_count"] = requirements.Count,
+			["compatible"] = compatible,
+			["sdk_requirements"] = new JsonArray(requirements.Select(requirement =>
+				new JsonObject
+				{
+					["platform"] = requirement.Platform,
+					["version"] = requirement.Version,
+					["required_xcode"] = requirement.RequiredVersion
+				}).Cast<JsonNode>().ToArray())
+		};
+
+		if (requiredVersion is not null)
+			details["required_xcode_version"] = requiredVersion;
+
+		return details;
+	}
+
+	static HealthCheck CreateCheck(
+		CheckStatus status,
+		string message,
+		JsonObject? details = null,
+		FixInfo? fix = null) =>
+		new()
+		{
+			Category = CheckCategory,
+			Name = CheckName,
+			Status = status,
+			Message = message,
+			Details = details,
+			Fix = fix
+		};
+
+	readonly record struct SdkRequirement(string Platform, string Version, string RequiredVersion);
+}
+
+internal interface IXcodeCompatibilityEnvironment
+{
+	string TargetFramework { get; }
+	XcodeInstallation? GetSelectedXcode();
+	IReadOnlyList<XcodeInstallation> GetInstalledXcodes();
+	IReadOnlyList<string> GetPackRoots();
+}
+
+sealed class XcodeCompatibilityEnvironment(XcodeManager xcodeManager) : IXcodeCompatibilityEnvironment
+{
+	public string TargetFramework => $"net{Environment.Version.Major}.0";
+
+	public XcodeInstallation? GetSelectedXcode()
+	{
+		var selected = xcodeManager.GetSelected();
+		return selected is null
+			? null
+			: new XcodeInstallation
+			{
+				Path = selected.Path,
+				Version = selected.Version.ToString(),
+				Build = selected.Build,
+				IsSelected = true
+			};
+	}
+
+	public IReadOnlyList<XcodeInstallation> GetInstalledXcodes() =>
+		xcodeManager.List()
+			.Select(xcode => new XcodeInstallation
+			{
+				Path = xcode.Path,
+				Version = xcode.Version.ToString(),
+				Build = xcode.Build,
+				IsSelected = xcode.IsSelected
+			})
+			.ToList();
+
+	public IReadOnlyList<string> GetPackRoots()
+	{
+		var roots = new List<string>();
+		var homeDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+		if (!string.IsNullOrWhiteSpace(homeDirectory))
+			roots.Add(Path.Combine(homeDirectory, ".dotnet", "packs"));
+
+		var dotnetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT");
+		if (!string.IsNullOrWhiteSpace(dotnetRoot))
+			roots.Add(Path.Combine(dotnetRoot, "packs"));
+
+		roots.Add("/usr/local/share/dotnet/packs");
+		roots.Add("/usr/share/dotnet/packs");
+		return roots.Distinct(StringComparer.Ordinal).ToList();
 	}
 }
