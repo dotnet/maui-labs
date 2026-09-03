@@ -2,8 +2,9 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.AI;
 
-namespace Microsoft.Extensions.AI;
+namespace Microsoft.Maui.Essentials.AI;
 
 /// <summary>Represents a normalized image classification result.</summary>
 public sealed class ImageClassificationResult
@@ -22,13 +23,10 @@ public sealed class ImageClassificationResult
 			throw new ArgumentException("The predictions collection must not contain null items.", nameof(predictions));
 		}
 
-		Predictions = Array.AsReadOnly(
-			snapshot
-				.OrderByDescending(static prediction => prediction.Confidence)
-				.ToArray());
+		Predictions = Array.AsReadOnly(snapshot);
 	}
 
-	/// <summary>Gets the predictions, ordered from highest to lowest confidence.</summary>
+	/// <summary>Gets the predictions in the order supplied by the implementation.</summary>
 	public IReadOnlyList<ImageClassificationPrediction> Predictions { get; }
 
 	/// <summary>Gets or initializes the model identifier that produced this result, when known.</summary>

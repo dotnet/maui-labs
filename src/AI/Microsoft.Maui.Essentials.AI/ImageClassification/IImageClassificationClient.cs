@@ -1,7 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-namespace Microsoft.Extensions.AI;
+namespace Microsoft.Maui.Essentials.AI;
 
 /// <summary>Represents a client that classifies encoded images.</summary>
 /// <remarks>
@@ -14,9 +14,13 @@ namespace Microsoft.Extensions.AI;
 /// implementations must not dispose the stream or retain it after the returned task completes.
 /// </para>
 /// <para>
-/// The media type supplied to <see cref="ClassifyAsync"/> must identify an image media type, such as <c>image/jpeg</c> or
+/// The media type supplied to <see cref="ClassifyImageAsync"/> must identify an image media type, such as <c>image/jpeg</c> or
 /// <c>image/png</c>. Implementations should throw <see cref="ArgumentException"/> for malformed input and
 /// <see cref="NotSupportedException"/> when the media type is valid but unsupported.
+/// </para>
+/// <para>
+/// Implementations that cannot provide confidence values must throw <see cref="NotSupportedException"/> when
+/// <see cref="ImageClassificationOptions.MinimumConfidence"/> is not <see langword="null"/>.
 /// </para>
 /// </remarks>
 public interface IImageClassificationClient : IDisposable
@@ -41,7 +45,7 @@ public interface IImageClassificationClient : IDisposable
 	/// The image media type is valid but unsupported by the implementation.
 	/// </exception>
 	/// <exception cref="OperationCanceledException">The operation was canceled.</exception>
-	Task<ImageClassificationResult> ClassifyAsync(
+	Task<ImageClassificationResult> ClassifyImageAsync(
 		Stream imageStream,
 		string imageMediaType,
 		ImageClassificationOptions? options = null,

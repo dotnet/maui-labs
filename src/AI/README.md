@@ -41,12 +41,14 @@ Image classification providers implement `IImageClassificationClient`; consumer 
 ```csharp
 await using Stream image = File.OpenRead("photo.jpg");
 ImageClassificationResult result =
-    await classifier.ClassifyAsync(image, "image/jpeg");
+    await classifier.ClassifyImageAsync(image, "image/jpeg");
 
 ImageClassificationPrediction? best = result.Predictions.FirstOrDefault();
 ```
 
-Provider identity is exposed through `ImageClassificationClientMetadata`; individual results retain model provenance and optional raw or additional response metadata.
+`MaximumPredictions` is an at-most constraint. Confidence is optional, and providers without confidence support reject a non-null `MinimumConfidence`. `ChatClientImageClassificationClient` adapts a dedicated vision-capable `IChatClient` to a snapshotted label allowlist while preserving response ranking and the original `ChatResponse`.
+
+Provider identity is exposed through `ImageClassificationClientMetadata`; individual results retain model provenance and optional raw or additional response metadata. Callers retain ownership of input streams and of any chat client passed to the adapter.
 
 ## Packages
 

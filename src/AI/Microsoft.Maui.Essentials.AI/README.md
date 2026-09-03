@@ -71,12 +71,14 @@ var embeddings = await generator.GenerateAsync(["sunset beach", "mountain hiking
 Applications depend on the contract and receive a provider from dependency injection:
 
 ```csharp
+using Microsoft.Maui.Essentials.AI;
+
 public static async Task<ImageClassificationPrediction?> ClassifyAsync(
     IImageClassificationClient classifier,
     Stream image,
     CancellationToken cancellationToken = default)
 {
-    ImageClassificationResult result = await classifier.ClassifyAsync(
+    ImageClassificationResult result = await classifier.ClassifyImageAsync(
         image,
         "image/jpeg",
         new ImageClassificationOptions { MaximumPredictions = 3 },
@@ -85,6 +87,22 @@ public static async Task<ImageClassificationPrediction?> ClassifyAsync(
     return result.Predictions.FirstOrDefault();
 }
 ```
+
+`MaximumPredictions` is an upper bound, so providers may return fewer results. Prediction confidence is optional. Providers that cannot produce confidence values throw `NotSupportedException` when `MinimumConfidence` is set.
+
+To classify against a fixed label set with a dedicated vision-capable `IChatClient`, use the built-in adapter:
+
+```csharp
+IImageClassificationClient classifier =
+    new ChatClientImageClassificationClient(
+        visionChatClient,
+        ["cat", "dog", "bird"]);
+
+ImageClassificationResult result =
+    await classifier.ClassifyImageAsync(image, "image/jpeg");
+```
+
+The adapter snapshots the non-empty label allowlist, requests structured output, rejects labels outside the allowlist, and preserves the model's ranking. Its predictions have `null` confidence, and the original `ChatResponse` is available through `RawRepresentation`. Disposing the adapter does not dispose the injected chat client.
 
 The stream remains owned by the caller. Clients read one encoded image from its current position and must not dispose or retain the stream. A provider should throw `NotSupportedException` for a valid image media type it cannot decode.
 

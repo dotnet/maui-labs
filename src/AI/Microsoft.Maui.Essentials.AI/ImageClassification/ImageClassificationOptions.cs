@@ -1,7 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-namespace Microsoft.Extensions.AI;
+namespace Microsoft.Maui.Essentials.AI;
 
 /// <summary>Represents options that constrain an image classification response.</summary>
 public class ImageClassificationOptions
@@ -30,8 +30,11 @@ public class ImageClassificationOptions
 		MinimumConfidence = other.MinimumConfidence;
 	}
 
-	/// <summary>Gets or sets the maximum number of predictions to return.</summary>
-	/// <value><see langword="null"/> to use the implementation default; otherwise, a value greater than zero.</value>
+	/// <summary>Gets or sets the maximum number of predictions that may be returned.</summary>
+	/// <value>
+	/// <see langword="null"/> to use the implementation default; otherwise, a value greater than zero.
+	/// Implementations may return fewer predictions.
+	/// </value>
 	public int? MaximumPredictions
 	{
 		get => _maximumPredictions;
@@ -48,6 +51,10 @@ public class ImageClassificationOptions
 
 	/// <summary>Gets or sets the minimum confidence required for a prediction.</summary>
 	/// <value><see langword="null"/> to use the implementation default; otherwise, a finite value from 0 through 1.</value>
+	/// <remarks>
+	/// Implementations that cannot provide confidence values must throw <see cref="NotSupportedException"/> when this
+	/// property is not <see langword="null"/>.
+	/// </remarks>
 	public float? MinimumConfidence
 	{
 		get => _minimumConfidence;

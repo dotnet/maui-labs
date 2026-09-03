@@ -1,7 +1,9 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-namespace Microsoft.Extensions.AI;
+using Microsoft.Extensions.AI;
+
+namespace Microsoft.Maui.Essentials.AI;
 
 /// <summary>Provides extension methods for <see cref="IImageClassificationClient"/>.</summary>
 public static class ImageClassificationClientExtensions
@@ -40,7 +42,7 @@ public static class ImageClassificationClientExtensions
 	/// This overload snapshots the image bytes before invoking the client. The caller retains ownership of
 	/// <paramref name="image"/>; the temporary stream is disposed after the operation completes.
 	/// </remarks>
-	public static async Task<ImageClassificationResult> ClassifyAsync(
+	public static async Task<ImageClassificationResult> ClassifyImageAsync(
 		this IImageClassificationClient client,
 		DataContent image,
 		ImageClassificationOptions? options = null,
@@ -61,7 +63,7 @@ public static class ImageClassificationClientExtensions
 
 		using var imageStream = new MemoryStream(image.Data.ToArray(), writable: false);
 		return await client
-			.ClassifyAsync(imageStream, image.MediaType, options, cancellationToken)
+			.ClassifyImageAsync(imageStream, image.MediaType, options, cancellationToken)
 			.ConfigureAwait(false);
 	}
 }
