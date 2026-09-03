@@ -34,7 +34,7 @@ using Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding
 
 using IImageClassificationClient classifier =
     new AzureContentUnderstandingImageClassificationClient(
-        new Uri("https://example.cognitiveservices.azure.com/"),
+        new Uri("https://<resource-name>.services.ai.azure.com/"),
         new DefaultAzureCredential(),
         new AzureContentUnderstandingImageClassificationOptions
         {
@@ -62,16 +62,14 @@ The adapter buffers no more than `MaximumInputBytes` from the caller-owned
 stream before invoking Azure. It does not dispose or rewind the stream.
 Disposing the adapter does not dispose the supplied credential.
 
-## Platform support
+## Target and validation
 
-| Platform | Supported |
-|---|---|
-| Android | Yes |
-| iOS | Yes |
-| Mac Catalyst | Yes |
-| macOS | Yes |
-| Windows | Yes |
+The managed provider targets portable .NET 10. This package has been validated
+with a Release `net10.0` build, package creation, local package consumption, and
+an Android Release full-link/AOT compile of the provider dependency graph. These
+checks are compile-time evidence, not Android device validation. This PR does
+not include a live Azure call or runtime validation on iOS, Mac Catalyst, macOS,
+or Windows.
 
-The managed provider targets .NET 10 and is designed for trimming and native
-AOT. Runtime use requires an Azure Content Understanding resource, a configured
+Runtime use requires an Azure Content Understanding resource, a configured
 classifier analyzer, network access, and a credential authorized to invoke it.
