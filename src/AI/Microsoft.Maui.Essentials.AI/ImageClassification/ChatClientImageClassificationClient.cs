@@ -12,7 +12,8 @@ namespace Microsoft.Maui.Essentials.AI;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The injected chat client must support image <see cref="DataContent"/> and structured JSON output. The label
+/// The injected chat client must support image <see cref="DataContent"/>. The adapter prefers structured JSON output,
+/// but also accepts a top-level JSON string array when a client ignores the requested response format. The label
 /// allowlist is snapshotted during construction and matched using ordinal comparison.
 /// </para>
 /// <para>
@@ -79,12 +80,14 @@ public sealed class ChatClientImageClassificationClient : IImageClassificationCl
 		ArgumentNullException.ThrowIfNull(imageStream);
 		ArgumentNullException.ThrowIfNull(imageMediaType);
 
+		ImageClassificationOptions? optionsSnapshot = options?.Clone();
+
 		if (!imageStream.CanRead)
 		{
 			throw new ArgumentException("The image stream must be readable.", nameof(imageStream));
 		}
 
-		if (options?.MinimumConfidence is not null)
+		if (optionsSnapshot?.MinimumConfidence is not null)
 		{
 			throw new NotSupportedException(
 				$"{nameof(ChatClientImageClassificationClient)} does not produce confidence values.");
@@ -125,25 +128,28 @@ public sealed class ChatClientImageClassificationClient : IImageClassificationCl
 			.GetResponseAsync(messages, chatOptions, cancellationToken)
 			.ConfigureAwait(false);
 
-		ChatClientImageClassificationResponse? structuredResponse;
+		string[] labels;
 		try
 		{
-			structuredResponse = JsonSerializer.Deserialize(
-				response.Text,
-				ChatClientImageClassificationJsonContext.Default.ChatClientImageClassificationResponse);
+			using JsonDocument document = JsonDocument.Parse(response.Text);
+			labels = document.RootElement.ValueKind switch
+			{
+				JsonValueKind.Object when HasExactLabelsEnvelope(document.RootElement) => JsonSerializer.Deserialize(
+					response.Text,
+					ChatClientImageClassificationJsonContext.Default.ChatClientImageClassificationResponse)?.Labels,
+				JsonValueKind.Array => JsonSerializer.Deserialize(
+					response.Text,
+					ChatClientImageClassificationJsonContext.Default.StringArray),
+				_ => null
+			} ?? throw new JsonException("The response must be a labels object or a string array.");
 		}
 		catch (JsonException exception)
 		{
 			throw new InvalidOperationException("The chat client returned a malformed image classification response.", exception);
 		}
 
-		if (structuredResponse?.Labels is null)
-		{
-			throw new InvalidOperationException("The chat client returned a malformed image classification response.");
-		}
-
 		var seenLabels = new HashSet<string>(StringComparer.Ordinal);
-		foreach (string? label in structuredResponse.Labels)
+		foreach (string? label in labels)
 		{
 			if (label is null || !_labelSet.Contains(label) || !seenLabels.Add(label))
 			{
@@ -152,8 +158,8 @@ public sealed class ChatClientImageClassificationClient : IImageClassificationCl
 			}
 		}
 
-		IEnumerable<string> selectedLabels = structuredResponse.Labels;
-		if (options?.MaximumPredictions is int maximumPredictions)
+		IEnumerable<string> selectedLabels = labels;
+		if (optionsSnapshot?.MaximumPredictions is int maximumPredictions)
 		{
 			selectedLabels = selectedLabels.Take(maximumPredictions);
 		}
@@ -165,6 +171,14 @@ public sealed class ChatClientImageClassificationClient : IImageClassificationCl
 			RawRepresentation = response,
 			AdditionalProperties = response.AdditionalProperties
 		};
+	}
+
+	private static bool HasExactLabelsEnvelope(JsonElement root)
+	{
+		JsonElement.ObjectEnumerator properties = root.EnumerateObject();
+		return properties.MoveNext() &&
+			properties.Current.NameEquals("labels") &&
+			!properties.MoveNext();
 	}
 
 	/// <inheritdoc />
@@ -210,8 +224,8 @@ public sealed class ChatClientImageClassificationClient : IImageClassificationCl
 	}
 
 	private string CreatePrompt()
-		=> "Classify the attached image. Return labels in descending relevance order. " +
-			"Use each label at most once and use only labels from this allowlist: " +
+		=> "Classify the attached image. Return only a JSON object exactly matching {\"labels\":[...]}, " +
+			"with labels in descending relevance order. Use each label at most once and use only labels from this allowlist: " +
 			JsonSerializer.Serialize(_labels, ChatClientImageClassificationJsonContext.Default.StringArray);
 }
 

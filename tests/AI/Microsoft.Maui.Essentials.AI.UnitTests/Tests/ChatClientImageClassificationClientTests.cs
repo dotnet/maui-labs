@@ -92,7 +92,7 @@ public class ChatClientImageClassificationClientTests
 		TextContent prompt = Assert.IsType<TextContent>(
 			Assert.Single(chatClient.Messages).Contents[0]);
 		Assert.Equal(
-			"Classify the attached image. Return labels in descending relevance order. Use each label at most once and use only labels from this allowlist: [\"cat\",\"dog\"]",
+			"Classify the attached image. Return only a JSON object exactly matching {\"labels\":[...]}, with labels in descending relevance order. Use each label at most once and use only labels from this allowlist: [\"cat\",\"dog\"]",
 			prompt.Text);
 		Assert.DoesNotContain("fox", prompt.Text, StringComparison.Ordinal);
 	}
@@ -141,7 +141,7 @@ public class ChatClientImageClassificationClientTests
 			{
 				TextContent text = Assert.IsType<TextContent>(content);
 				Assert.Equal(
-					"Classify the attached image. Return labels in descending relevance order. Use each label at most once and use only labels from this allowlist: [\"cat\",\"dog\"]",
+					"Classify the attached image. Return only a JSON object exactly matching {\"labels\":[...]}, with labels in descending relevance order. Use each label at most once and use only labels from this allowlist: [\"cat\",\"dog\"]",
 					text.Text);
 			},
 			content =>
@@ -172,16 +172,32 @@ public class ChatClientImageClassificationClientTests
 	}
 
 	[Fact]
-	public async Task ClassifyImageAsync_MalformedJson_IsRejected()
+	public async Task ClassifyImageAsync_IgnoredResponseFormatTopLevelArray_PreservesRanking()
 	{
-		var chatClient = new RecordingChatClient(CreateResponse("{not-json"));
+		var chatClient = new RecordingChatClient(CreateResponse("""["dog","cat"]"""));
+		using var client = new ChatClientImageClassificationClient(chatClient, ["cat", "dog"]);
+
+		ImageClassificationResult result = await ClassifyAsync(client);
+
+		Assert.Equal(["dog", "cat"], result.Predictions.Select(prediction => prediction.Label));
+		Assert.All(result.Predictions, prediction => Assert.Null(prediction.Confidence));
+		Assert.IsType<ChatResponseFormatJson>(Assert.IsType<ChatOptions>(chatClient.Options).ResponseFormat);
+	}
+
+	[Theory]
+	[InlineData("{not-json")]
+	[InlineData("The labels are [\"cat\"].")]
+	[InlineData("```json\n{\"labels\":[\"cat\"]}\n```")]
+	public async Task ClassifyImageAsync_MalformedProseOrFencedJson_IsRejected(string responseText)
+	{
+		var chatClient = new RecordingChatClient(CreateResponse(responseText));
 		using var client = new ChatClientImageClassificationClient(chatClient, ["cat"]);
 
 		InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
 			() => ClassifyAsync(client));
 
 		Assert.Equal("The chat client returned a malformed image classification response.", exception.Message);
-		Assert.IsType<JsonException>(exception.InnerException);
+		Assert.IsAssignableFrom<JsonException>(exception.InnerException);
 		Assert.Equal(1, chatClient.CallCount);
 	}
 
@@ -215,9 +231,26 @@ public class ChatClientImageClassificationClientTests
 	}
 
 	[Fact]
-	public async Task ClassifyImageAsync_UnknownLabel_IsRejected()
+	public async Task ClassifyImageAsync_DuplicateLabelsProperty_IsRejected()
 	{
-		var chatClient = new RecordingChatClient(CreateResponse("""{"labels":["lynx"]}"""));
+		var chatClient = new RecordingChatClient(
+			CreateResponse("""{"labels":["lynx"],"labels":["cat"]}"""));
+		using var client = new ChatClientImageClassificationClient(chatClient, ["cat"]);
+
+		InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
+			() => ClassifyAsync(client));
+
+		Assert.Equal("The chat client returned a malformed image classification response.", exception.Message);
+		Assert.IsType<JsonException>(exception.InnerException);
+		Assert.Equal(1, chatClient.CallCount);
+	}
+
+	[Theory]
+	[InlineData("""{"labels":["lynx"]}""")]
+	[InlineData("""["lynx"]""")]
+	public async Task ClassifyImageAsync_UnknownLabel_IsRejected(string responseText)
+	{
+		var chatClient = new RecordingChatClient(CreateResponse(responseText));
 		using var client = new ChatClientImageClassificationClient(chatClient, ["cat"]);
 
 		InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
@@ -293,6 +326,39 @@ public class ChatClientImageClassificationClientTests
 		Assert.Equal(["dog", "cat"], result.Predictions.Select(prediction => prediction.Label));
 		Assert.All(result.Predictions, prediction => Assert.Null(prediction.Confidence));
 		Assert.Equal(1, chatClient.CallCount);
+	}
+
+	[Fact]
+	public async Task ClassifyImageAsync_OptionsMutatedDuringPendingRequest_UsesEntrySnapshot()
+	{
+		var responseSource = new TaskCompletionSource<ChatResponse>(
+			TaskCreationOptions.RunContinuationsAsynchronously);
+		var chatClient = new RecordingChatClient
+		{
+			ResponseTask = responseSource.Task
+		};
+		using var client = new ChatClientImageClassificationClient(
+			chatClient,
+			["cat", "dog", "bird"]);
+		var options = new ImageClassificationOptions
+		{
+			MaximumPredictions = 1,
+			MinimumConfidence = null
+		};
+		using var imageStream = new MemoryStream([1, 2, 3]);
+
+		Task<ImageClassificationResult> classificationTask =
+			client.ClassifyImageAsync(imageStream, "image/png", options);
+		Assert.Equal(1, chatClient.CallCount);
+
+		options.MaximumPredictions = 3;
+		options.MinimumConfidence = 0.5f;
+		responseSource.SetResult(CreateResponse("""{"labels":["dog","cat","bird"]}"""));
+
+		ImageClassificationResult result = await classificationTask;
+
+		Assert.Equal("dog", Assert.Single(result.Predictions).Label);
+		Assert.Null(result.Predictions[0].Confidence);
 	}
 
 	[Fact]
@@ -549,6 +615,8 @@ public class ChatClientImageClassificationClientTests
 
 		public ChatResponse Response { get; set; }
 
+		public Task<ChatResponse>? ResponseTask { get; init; }
+
 		public ChatClientMetadata? Metadata { get; }
 
 		public int CallCount { get; private set; }
@@ -579,7 +647,7 @@ public class ChatClientImageClassificationClientTests
 			Messages = messages.ToArray();
 			Options = options;
 			CancellationToken = cancellationToken;
-			return Task.FromResult(Response);
+			return ResponseTask ?? Task.FromResult(Response);
 		}
 
 		public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(

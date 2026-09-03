@@ -36,3 +36,16 @@ Microsoft.Maui.Essentials.AI.ImageClassificationResult.RawRepresentation.set -> 
 static Microsoft.Maui.Essentials.AI.ImageClassificationClientExtensions.ClassifyImageAsync(this Microsoft.Maui.Essentials.AI.IImageClassificationClient! client, Microsoft.Extensions.AI.DataContent! image, Microsoft.Maui.Essentials.AI.ImageClassificationOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Maui.Essentials.AI.ImageClassificationResult!>!
 static Microsoft.Maui.Essentials.AI.ImageClassificationClientExtensions.GetService<TService>(this Microsoft.Maui.Essentials.AI.IImageClassificationClient! client, object? serviceKey = null) -> TService?
 virtual Microsoft.Maui.Essentials.AI.ImageClassificationOptions.Clone() -> Microsoft.Maui.Essentials.AI.ImageClassificationOptions!
+Microsoft.Extensions.AI.NLEmbeddingExtensions
+Microsoft.Maui.Essentials.AI.AppleIntelligenceChatClient
+Microsoft.Maui.Essentials.AI.AppleIntelligenceChatClient.AppleIntelligenceChatClient() -> void
+Microsoft.Maui.Essentials.AI.AppleIntelligenceChatClient.AppleIntelligenceChatClient(Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory = null, System.IServiceProvider? functionInvocationServices = null) -> void
+Microsoft.Maui.Essentials.AI.AppleIntelligenceChatClient.GetResponseAsync(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages, Microsoft.Extensions.AI.ChatOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.ChatResponse!>!
+Microsoft.Maui.Essentials.AI.AppleIntelligenceChatClient.GetStreamingResponseAsync(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages, Microsoft.Extensions.AI.ChatOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
+Microsoft.Maui.Essentials.AI.NLEmbeddingGenerator
+Microsoft.Maui.Essentials.AI.NLEmbeddingGenerator.Dispose() -> void
+Microsoft.Maui.Essentials.AI.NLEmbeddingGenerator.GenerateAsync(System.Collections.Generic.IEnumerable<string!>! values, Microsoft.Extensions.AI.EmbeddingGenerationOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.GeneratedEmbeddings<Microsoft.Extensions.AI.Embedding<float>!>!>!
+Microsoft.Maui.Essentials.AI.NLEmbeddingGenerator.NLEmbeddingGenerator() -> void
+Microsoft.Maui.Essentials.AI.NLEmbeddingGenerator.NLEmbeddingGenerator(NaturalLanguage.NLEmbedding! embedding) -> void
+Microsoft.Maui.Essentials.AI.NLEmbeddingGenerator.NLEmbeddingGenerator(NaturalLanguage.NLLanguage language) -> void
+static Microsoft.Extensions.AI.NLEmbeddingExtensions.AsIEmbeddingGenerator(this NaturalLanguage.NLEmbedding! embedding) -> Microsoft.Extensions.AI.IEmbeddingGenerator<string!, Microsoft.Extensions.AI.Embedding<float>!>!

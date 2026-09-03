@@ -102,7 +102,7 @@ ImageClassificationResult result =
     await classifier.ClassifyImageAsync(image, "image/jpeg");
 ```
 
-The adapter snapshots the non-empty label allowlist, requests structured output, rejects labels outside the allowlist, and preserves the model's ranking. Its predictions have `null` confidence, and the original `ChatResponse` is available through `RawRepresentation`. Disposing the adapter does not dispose the injected chat client.
+The adapter snapshots the non-empty label allowlist, prefers structured output, rejects malformed responses and labels outside the allowlist, and preserves the model's ranking. If a chat client ignores the requested response format, the adapter also accepts a top-level JSON string array, but never extracts JSON from prose or Markdown fences. Its predictions have `null` confidence, and the original `ChatResponse` is available through `RawRepresentation`. Disposing the adapter does not dispose the injected chat client.
 
 The stream remains owned by the caller. Clients read one encoded image from its current position and must not dispose or retain the stream. A provider should throw `NotSupportedException` for a valid image media type it cannot decode.
 
