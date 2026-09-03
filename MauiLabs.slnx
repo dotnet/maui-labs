@@ -23,6 +23,7 @@
   </Folder>
   <Folder Name="/src/" />
   <Folder Name="/src/AI/">
+    <Project Path="src/AI/DocumentExtraction.ContractProposal/Microsoft.Extensions.DocumentExtraction.Abstractions.csproj" />
     <Project Path="src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj" />
   </Folder>
   <Folder Name="/src/AIExtensions/">
@@ -71,6 +72,7 @@
   </Folder>
   <Folder Name="/tests/" />
   <Folder Name="/tests/AI/">
+    <Project Path="tests/AI/Microsoft.Maui.DocumentExtraction.ContractProposal.Tests/Microsoft.Maui.DocumentExtraction.ContractProposal.Tests.csproj" />
     <Project Path="tests/AI/Microsoft.Maui.Essentials.AI.Benchmarks/Microsoft.Maui.Essentials.AI.Benchmarks.csproj" />
     <Project Path="tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj" />
     <Project Path="tests/AI/Microsoft.Maui.Essentials.AI.UnitTests/Microsoft.Maui.Essentials.AI.UnitTests.csproj" />
