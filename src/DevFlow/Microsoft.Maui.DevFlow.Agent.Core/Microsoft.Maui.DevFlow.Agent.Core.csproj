@@ -6,7 +6,7 @@
     <IsShipping>true</IsShipping>
 
     <PackageId>Microsoft.Maui.DevFlow.Agent.Core</PackageId>
-    <Description>Core agent infrastructure for Microsoft.Maui.DevFlow. HTTP server, visual tree walking, logging, and element interaction — platform-agnostic.</Description>
+    <Description>The .NET MAUI backend for Microsoft.Maui.DevFlow. Implements visual tree walking, element interaction, screenshots, storage and device endpoints on top of Microsoft.Maui.DevFlow.Agent.Abstractions.</Description>
     <PackageTags>maui;automation;testing;agent;core</PackageTags>
   </PropertyGroup>
 
@@ -17,11 +17,43 @@
     <PackageReference Include="SkiaSharp" />
   </ItemGroup>
 
+  <!-- Essentials endpoint implementations, shared with the optional add-on for plain .NET apps. -->
   <ItemGroup>
+    <Compile Include="..\Shared.Essentials\**\*.cs" LinkBase="Essentials" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Microsoft.Maui.DevFlow.Agent.Abstractions\Microsoft.Maui.DevFlow.Agent.Abstractions.csproj" />
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Logging\Microsoft.Maui.DevFlow.Logging.csproj" />
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Analyzers\Microsoft.Maui.DevFlow.Analyzers.csproj"
                       ReferenceOutputAssembly="false"
                       OutputItemType="Analyzer" />
+  </ItemGroup>
+
+  <!-- Pack the DevFlow analyzers/source generators into the analyzers folder so NuGet consumers
+       (MAUI apps) run the XAML source-map generator against their own .xaml files. -->
+  <PropertyGroup>
+    <GetTargetPathDependsOn>$(GetTargetPathDependsOn);_ResolveDevFlowAnalyzerPath</GetTargetPathDependsOn>
+  </PropertyGroup>
+
+  <Target Name="_ResolveDevFlowAnalyzerPath" AfterTargets="ResolveProjectReferences">
+    <ItemGroup>
+      <None Include="@(Analyzer)"
+            Condition="'%(Analyzer.NuGetPackageId)' == '' and '%(Filename)' == 'Microsoft.Maui.DevFlow.Analyzers'"
+            Pack="true"
+            PackagePath="analyzers/dotnet/cs"
+            Visible="false" />
+    </ItemGroup>
+  </Target>
+
+  <!-- Ship the buildTransitive props/targets that promote @(MauiXaml) -> @(AdditionalFiles) for the
+       generator (gated on $(DevFlowXamlSourceMapsEnabled)). Remove-then-Include so we never collide
+       with the SDK's default None glob. -->
+
+  <ItemGroup>
+    <None Remove="buildTransitive\**" />
+    <None Include="buildTransitive\Microsoft.Maui.DevFlow.Agent.Core.props" Pack="true" PackagePath="buildTransitive\" />
+    <None Include="buildTransitive\Microsoft.Maui.DevFlow.Agent.Core.targets" Pack="true" PackagePath="buildTransitive\" />
   </ItemGroup>
 
 </Project>

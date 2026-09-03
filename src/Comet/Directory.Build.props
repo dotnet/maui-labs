@@ -18,7 +18,7 @@
          MAUI 10. Until the repo finishes its net11 migration, override
          MauiVersion here so only the Comet subtree pulls preview packages.
          TODO: drop this override when eng/Versions.props moves to MAUI 11. -->
-    <MauiVersion Condition="'$(MauiVersion)' == ''">11.0.0-preview.5.26304.4</MauiVersion>
+    <MauiVersion Condition="'$(MauiVersion)' == ''">11.0.0-preview.7.26406.9</MauiVersion>
   </PropertyGroup>
 
   <PropertyGroup>

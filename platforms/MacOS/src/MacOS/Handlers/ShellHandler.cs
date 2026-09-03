@@ -58,6 +58,7 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 	SidebarOutlineViewDelegate? _outlineDelegate;
 	// Maps leaf MacOSSidebarItem → (ShellItem, ShellSection, ShellContent)
 	Dictionary<MacOSSidebarItem, (ShellItem, ShellSection, ShellContent)>? _itemNavMap;
+	readonly HashSet<NSObject> _registeredNativeElements = new();
 	bool _isUpdatingSelection;
 
 	public ShellHandler() : base(Mapper, CommandMapper)
@@ -202,6 +203,7 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 
 	protected override void DisconnectHandler(NSView platformView)
 	{
+		UnregisterNativeElements();
 		if (_shell != null)
 		{
 			((INotifyCollectionChanged)_shell.Items).CollectionChanged -= OnShellItemsChanged;
@@ -342,6 +344,7 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 		if (_shell == null || MauiContext == null)
 			return;
 
+		UnregisterNativeElements();
 		if (_useNativeSidebar)
 			BuildNativeSidebar();
 		else
@@ -416,7 +419,10 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 		}
 
 		_outlineDataSource = new SidebarOutlineViewDataSource(sidebarItems);
-		_outlineDelegate = new SidebarOutlineViewDelegate(_outlineDataSource, OnNativeSidebarItemSelected);
+		_outlineDelegate = new SidebarOutlineViewDelegate(
+			_outlineDataSource,
+			OnNativeSidebarItemSelected,
+			OnNativeSidebarItemRealized);
 
 		_outlineView.DataSource = _outlineDataSource;
 		_outlineView.Delegate = _outlineDelegate;
@@ -510,6 +516,7 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 		if (_sidebarContent == null || _shell == null || MauiContext == null)
 			return;
 
+		UnregisterNativeElements();
 		// Clear existing sidebar items
 		foreach (var subview in _sidebarContent.Subviews)
 			subview.RemoveFromSuperview();
@@ -568,7 +575,30 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 			itemView.SetSelected(true);
 		}
 
+		RegisterNativeElement(content, itemView, "ShellFlyout");
 		_sidebarContent!.AddSubview(itemView);
+	}
+
+	void OnNativeSidebarItemRealized(MacOSSidebarItem sidebarItem, NSView nativeView)
+	{
+		if (_itemNavMap != null &&
+			_itemNavMap.TryGetValue(sidebarItem, out var navigation))
+		{
+			RegisterNativeElement(navigation.Item3, nativeView, "ShellFlyout");
+		}
+	}
+
+	void RegisterNativeElement(object owner, NSObject nativeElement, string role)
+	{
+		NativeElementDiagnosticsBridge.Register(owner, nativeElement, role);
+		_registeredNativeElements.Add(nativeElement);
+	}
+
+	void UnregisterNativeElements()
+	{
+		foreach (var nativeElement in _registeredNativeElements)
+			NativeElementDiagnosticsBridge.Unregister(nativeElement);
+		_registeredNativeElements.Clear();
 	}
 
 	internal void ShowCurrentPage()

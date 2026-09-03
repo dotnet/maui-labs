@@ -22,19 +22,34 @@
   </ItemGroup>
   <ItemGroup>
     <!-- Kotlin stdlib (IFunctionN ACWs, Kotlin.Unit) -->
-    <PackageReference Include="Xamarin.Kotlin.StdLib" Version="2.4.0" />
+    <PackageReference Include="Xamarin.Kotlin.StdLib" Version="2.4.0.1" />
     <!-- AndroidX core / activity / lifecycle -->
-    <PackageReference Include="Xamarin.AndroidX.Activity" Version="1.13.0" />
+    <PackageReference Include="Xamarin.AndroidX.Activity" Version="1.13.0.1" />
     <PackageReference Include="Xamarin.AndroidX.Activity.Compose" Version="1.13.0" />
-    <PackageReference Include="Xamarin.AndroidX.Core" Version="1.19.0" />
-    <PackageReference Include="Xamarin.AndroidX.Core.Core.Ktx" Version="1.19.0" />
+    <PackageReference Include="Xamarin.AndroidX.Core" Version="1.19.0.1" />
+    <PackageReference Include="Xamarin.AndroidX.Core.Core.Ktx" Version="1.19.0.1" />
     <PackageReference Include="Xamarin.AndroidX.Lifecycle.Runtime.Compose" Version="2.10.0.2" />
     <PackageReference Include="Xamarin.AndroidX.Lifecycle.Runtime.Compose.Android" Version="2.10.0.3" />
+    <!--
+      Preview 7 compatibility exceptions: MAUI and Navigation 2.9.8 require Lifecycle
+      Runtime 2.11, but the latest Compose bindings still declare 2.10 upper bounds.
+      NavigationEvent 1.1.2 also conflicts with the 1.0.2 Compose bindings below.
+      These known NU1608 families are accepted until compatible Lifecycle and
+      NavigationEvent Compose bindings are available; remove the direct pins then.
+    -->
+    <PackageReference Include="Xamarin.AndroidX.Lifecycle.Runtime.Android" Version="2.11.0.1" />
+    <PackageReference Include="Xamarin.AndroidX.Lifecycle.Runtime.Ktx.Android" Version="2.11.0.1" />
     <!-- AndroidX Compose -->
     <PackageReference Include="Xamarin.AndroidX.Compose.Animation" Version="1.11.2" />
     <PackageReference Include="Xamarin.AndroidX.Compose.Animation.Android" Version="1.11.2.1" />
     <PackageReference Include="Xamarin.AndroidX.Compose.Animation.Core" Version="1.11.2" />
     <PackageReference Include="Xamarin.AndroidX.Compose.Animation.Core.Android" Version="1.11.2.1" />
+    <!--
+      NavigationEvent 1.1.2 requires annotation 1.11.3 while Compose Runtime 1.11.2
+      declares an upper bound below 1.11.3. Remove these pins with compatible bindings.
+    -->
+    <PackageReference Include="Xamarin.AndroidX.Compose.Runtime.Annotation" Version="1.11.3.1" />
+    <PackageReference Include="Xamarin.AndroidX.Compose.Runtime.Annotation.Android" Version="1.11.3.1" />
     <PackageReference Include="Xamarin.AndroidX.Compose.Runtime" Version="1.11.2.1" />
     <PackageReference Include="Xamarin.AndroidX.Compose.Runtime.Android" Version="1.11.2.1" />
     <PackageReference Include="Xamarin.AndroidX.Compose.Runtime.Saveable" Version="1.11.2" />

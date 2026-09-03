@@ -7,7 +7,6 @@ using Android.OS;
 using Android.Views;
 #if DEBUG
 using Microsoft.Maui.DevFlow.Agent.Core;
-using Microsoft.Maui.Dispatching;
 #endif
 #pragma warning disable CA1416
 
@@ -97,7 +96,7 @@ namespace CometComposeProbe
 			}
 		}
 
-		protected override Task<byte[]?> CaptureFullScreenAsync()
+		Task<byte[]?> CaptureFullScreenAsync()
 		{
 			var tcs = new TaskCompletionSource<byte[]?>();
 
@@ -170,12 +169,11 @@ namespace CometComposeProbe
 		}
 	}
 
-	sealed class ActivityDispatcher : IDispatcher
+	sealed class ActivityDispatcher : IAgentDispatcher
 	{
 		readonly Handler _handler = new(Looper.MainLooper!);
 
 		public bool IsDispatchRequired => Looper.MyLooper() != Looper.MainLooper;
-		public IDispatcherTimer CreateTimer() => throw new NotSupportedException();
 		public bool Dispatch(Action action) { _handler.Post(action); return true; }
 		public bool DispatchDelayed(TimeSpan delay, Action action)
 		{

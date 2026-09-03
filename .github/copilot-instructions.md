@@ -6,7 +6,8 @@ These instructions guide GitHub Copilot and other AI code generation tools when 
 
 DevFlow targets multiple platforms via multi-targeting. The pattern:
 
-- **`Microsoft.Maui.DevFlow.Agent.Core`** targets `net10.0` — all platform-agnostic code lives here.
+- **`Microsoft.Maui.DevFlow.Agent.Abstractions`** targets `net10.0` — all platform-agnostic code lives here (HTTP server, routing, `DevFlowAgentService` base class). No MAUI dependency.
+- **`Microsoft.Maui.DevFlow.Agent.Core`** targets `net10.0` — MAUI UI backend (`MauiDevFlowAgentService`, `VisualTreeWalker`). Depends on `Agent.Abstractions`.
 - **`Microsoft.Maui.DevFlow.Agent`** targets `net10.0-android`, `net10.0-ios`, `net10.0-maccatalyst`, `net10.0-macos`, `net10.0-windows10.0.19041.0` — platform-specific overrides.
 - **`Microsoft.Maui.DevFlow.Agent.Gtk`** targets `net10.0` — Linux/GTK-specific code.
 
@@ -27,17 +28,18 @@ Use `#if` directives for platform code in multi-targeting projects:
 
 **Important**: Both `.ios.cs` and `.maccatalyst.cs` files compile for Mac Catalyst. Use `#if IOS || MACCATALYST` when code applies to both.
 
-## Agent Architecture (Core/Platform Pattern)
+## Agent Architecture (Abstractions/Core/Platform Pattern)
 
 When adding new features to the DevFlow agent:
 
-1. **Add the virtual method in `Agent.Core/DevFlowAgentService.cs`** — this is the platform-agnostic base
-2. **Override in `Agent/DevFlowAgentService.cs`** with `#if` directives for platform-specific behavior
-3. **Override in `Agent.Gtk/GtkAgentService.cs`** for Linux/GTK if needed
+1. **Add the virtual method in `Agent.Abstractions/DevFlowAgentService.cs`** — this is the platform-agnostic base
+2. **Override in `Agent.Core/MauiDevFlowAgentService.cs`** for MAUI-specific behavior
+3. **Override in `Agent/DevFlowAgentService.cs`** with `#if` directives for platform-specific behavior
+4. **Override in `Agent.Gtk/GtkAgentService.cs`** for Linux/GTK if needed
 
 Example:
 ```csharp
-// In Agent.Core/DevFlowAgentService.cs
+// In Agent.Abstractions/DevFlowAgentService.cs
 protected virtual Task<byte[]?> CaptureFullScreenAsync() => Task.FromResult<byte[]?>(null);
 
 // In Agent/DevFlowAgentService.cs
@@ -82,12 +84,12 @@ public sealed class MyNewTool
 
 ## HTTP Endpoint Conventions
 
-Agent HTTP endpoints are defined in `DevFlowAgentService.cs` (in Agent.Core). When adding new endpoints:
+Agent HTTP endpoints are defined in `DevFlowAgentService.cs` (in Agent.Abstractions). When adding new endpoints:
 
-1. Register the route in the `ConfigureRoutes()` method: `_server.MapGet("/api/myendpoint", HandleMyEndpoint);`
+1. Register the route in the `RegisterRoutes()` method: `_server.MapGet("/api/myendpoint", HandleMyEndpoint);`
 2. Implement the handler as `protected virtual async Task<HttpResponse> HandleMyEndpoint(HttpRequest request)`
 3. For POST endpoints that accept JSON bodies, define a DTO class at the bottom of the file
-4. **Add a corresponding method in `AgentClient`** (in `Microsoft.Maui.DevFlow.Driver`) — this is the public API
+4. **Add a corresponding method in `AgentClient`** (in `Microsoft.Maui.DevFlow.Client`) — this is the public API
 
 ```csharp
 // In DevFlowAgentService.cs — handler
@@ -106,12 +108,28 @@ CLI commands use **System.CommandLine** in `Program.cs`:
 - Use `SetHandler` with `InvocationContext` for commands with many options
 - Post-action flags: `--and-screenshot`, `--and-tree`, `--and-tree-depth` for verification after mutations
 
-## Driver Library (AgentClient)
+## Client and Driver Libraries (AgentClient)
 
-`Microsoft.Maui.DevFlow.Driver/AgentClient.cs` is the **public API for NuGet consumers**. Changes to method signatures are:
+`Microsoft.Maui.DevFlow.Client/AgentClient.cs` is the **public API for NuGet consumers**. It lives
+in the portable `Microsoft.Maui.DevFlow.Client` package (`netstandard2.0` + modern .NET) so .NET
+Framework harnesses share the exact protocol behavior; `Microsoft.Maui.DevFlow.Driver` references it
+and keeps the platform/native concerns (app process management, UI Automation, Skia, recording).
+Changes to method signatures are:
 
 - **Binary breaking** — existing compiled code stops working
 - **Source breaking** — existing source code fails to compile
+
+Rules when working in this area:
+
+- Protocol DTOs are defined **once**, in Client. Never re-declare one in Driver or a test harness.
+- Everything in Client must compile for `netstandard2.0`. Where a modern API has no portable
+  equivalent (e.g. `SocketsHttpHandler.ConnectCallback`), guard it with `#if DEVFLOW_NETSTANDARD`
+  and supply a portable path — do not fork the DTOs or the client surface.
+- Missing BCL overloads belong in `Client/Compatibility/NetStandardCompat.cs` as extension methods
+  with the exact framework signature, so shared sources stay free of `#if`.
+- Types keep the `Microsoft.Maui.DevFlow.Driver` namespace and are re-exported from the Driver
+  assembly via `Driver/TypeForwards.cs`. Adding a new public type to Client means adding a forward.
+- Anything platform-specific or native stays in Driver. Do not grow the portable surface with it.
 
 The repo is at 0.1.0-preview so breaking changes are acceptable, but:
 - Document breaking changes in the PR description
@@ -284,9 +302,10 @@ The official pipeline is **`eng/pipelines/devflow-official.yml`**. It handles Ar
                 useGlobalJson: true
             # CUSTOMIZE: If the product needs MAUI workloads, add these steps
             # before the build (copy from the DevFlow job):
-            #   - Provision .NET SDK via Arcade (eng\common\dotnet.cmd --info)
-            #   - Install MAUI workloads (.dotnet\dotnet workload install maui ...)
-            #   - Install Android SDK dependencies
+            #   - Install MAUI workloads through Arcade's wrapper
+            #     (eng\common\dotnet.cmd workload install maui ...)
+            #   - Install Android SDK dependencies through eng/common/dotnet.ps1
+            #     in a pwsh step so quoted paths remain a single argument
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -365,6 +384,7 @@ This stage filters the product's `.nupkg` files from the shared `PackageArtifact
 
 #### Key conventions
 
+- **Adding a package to an existing product**: update the exact `.slnf` or `.slnx` used by that product's build job in this pipeline, not only the product's main solution. Then verify the publish stage's `Copy-Item` glob matches the new `<PackageId>`. A shipping project omitted from the official build input does not produce a package for release.
 - **Package glob pattern**: example: `Microsoft.Maui.{Product}.*.nupkg` — use the actual `<PackageId>` prefix from your `.csproj` files (e.g., Linux GTK4 uses `Microsoft.Maui.Platforms.Linux.Gtk4.*.nupkg`).
 - **`dependsOn: [Validate, publish_using_darc]`**: these stages come from the Arcade post-build template (`eng/common/templates-official/post-build/post-build.yml`) and must always be listed.
 - **Signing**: All shipped NuGet packages must build on Windows so MicroBuild/ESRP can sign the DLLs. If the product is Linux-only, build *and pack* on Windows (signing), then optionally add a separate Linux verification job (see the `LinuxGtk4_LinuxVerify` job for the pattern).

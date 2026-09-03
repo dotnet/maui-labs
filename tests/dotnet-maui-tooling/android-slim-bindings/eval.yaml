@@ -1,0 +1,34 @@
+scenarios:
+  - name: "Avoid Kotlin coroutines and lambdas in wrapper"
+    prompt: |
+      I'm creating a Kotlin wrapper for an Android SDK that has async APIs.
+      The native SDK uses Kotlin coroutines (suspend functions) and Flow.
+      Here's my wrapper attempt:
+
+      ```kotlin
+      object DotnetMySDK {
+          suspend fun fetchData(url: String): Result<String> {
+              return MySdk.fetchData(url)
+          }
+
+          fun observeChanges(): Flow<DataUpdate> {
+              return MySdk.changes
+          }
+      }
+      ```
+
+      Will this work with the C# binding? If not, what should I change?
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)won.?t work|will not work|not.{0,10}(work|support|marshal|bind)"
+      - type: "output_matches"
+        pattern: "(?i)callback|interface|listener"
+      - type: "output_contains"
+        value: "@JvmStatic"
+    rubric:
+      - "Identifies that suspend functions and Flow cannot be bound to C# through the binding generator"
+      - "Recommends converting to callback interfaces (Java-style listener pattern) instead of coroutines"
+      - "Shows a corrected wrapper using a callback interface with onSuccess/onError methods"
+      - "Adds @JvmStatic annotation on methods for static access from C#"
+      - "Uses simple marshallable types (String, boolean, int) not Kotlin-specific types (Result, Flow)"
+    timeout: 240

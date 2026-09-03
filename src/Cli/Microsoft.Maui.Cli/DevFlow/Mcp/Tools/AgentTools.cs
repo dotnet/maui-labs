@@ -41,7 +41,7 @@ public sealed class AgentTools
         [Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null,
         [Description("Window index for multi-window apps")] int? window = null)
     {
-        var agent = await session.GetAgentClientAsync(agentPort);
+        using var agent = await session.GetAgentClientAsync(agentPort);
         var status = await agent.GetStatusAsync(window);
         if (status == null)
             return "Agent not responding. Is the app running?";
@@ -93,7 +93,7 @@ public sealed class AgentTools
         McpAgentSession session,
         [Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
     {
-        var agent = await session.GetAgentClientAsync(agentPort);
+        using var agent = await session.GetAgentClientAsync(agentPort);
         var capabilities = await agent.GetCapabilitiesAsync();
         if (capabilities.ValueKind == System.Text.Json.JsonValueKind.Undefined)
             return "Unable to retrieve capabilities. The agent may not be running, or may not support this feature (older version).";

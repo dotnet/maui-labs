@@ -38,8 +38,12 @@
       <_MauiDevFlowMetadata></_MauiDevFlowMetadata>
       <_MauiDevFlowMetadata Condition="'$(MauiDevFlowPort)' != ''">$(_MauiDevFlowMetadata)[assembly: System.Reflection.AssemblyMetadataAttribute("Microsoft.Maui.DevFlowPort", "$(MauiDevFlowPort)")]
 </_MauiDevFlowMetadata>
-      <_MauiDevFlowProjectPath>$([MSBuild]::ValueOrDefault('$(MSBuildProjectFullPath)','').Replace('\','\\'))</_MauiDevFlowProjectPath>
-      <_MauiDevFlowMetadata>$(_MauiDevFlowMetadata)[assembly: System.Reflection.AssemblyMetadataAttribute("Microsoft.Maui.DevFlowProject", "$(_MauiDevFlowProjectPath)")]
+      <!-- Avoid embedding developer-machine paths in app binaries by default. Full paths remain
+           available as an explicit local-debug opt-in for project-root disambiguation. -->
+      <MauiDevFlowProject Condition="'$(MauiDevFlowProject)' == '' and '$(MauiDevFlowIncludeProjectPath)' == 'true'">$(MSBuildProjectFullPath)</MauiDevFlowProject>
+      <MauiDevFlowProject Condition="'$(MauiDevFlowProject)' == ''">$(MSBuildProjectFile)</MauiDevFlowProject>
+      <_MauiDevFlowProjectIdentity>$([MSBuild]::ValueOrDefault('$(MauiDevFlowProject)','').Replace('\','\\'))</_MauiDevFlowProjectIdentity>
+      <_MauiDevFlowMetadata>$(_MauiDevFlowMetadata)[assembly: System.Reflection.AssemblyMetadataAttribute("Microsoft.Maui.DevFlowProject", "$(_MauiDevFlowProjectIdentity)")]
 [assembly: System.Reflection.AssemblyMetadataAttribute("Microsoft.Maui.DevFlowTfm", "$(TargetFramework)")]</_MauiDevFlowMetadata>
       <_MauiDevFlowMetadata Condition="'$(MauiDevFlowSessionId)' != ''">$(_MauiDevFlowMetadata)
 [assembly: System.Reflection.AssemblyMetadataAttribute("Microsoft.Maui.DevFlowSessionId", "$(MauiDevFlowSessionId)")]</_MauiDevFlowMetadata>

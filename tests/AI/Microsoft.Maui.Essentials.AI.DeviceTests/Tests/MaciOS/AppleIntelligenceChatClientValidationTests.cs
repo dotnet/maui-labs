@@ -39,6 +39,7 @@ public class AppleIntelligenceChatClientValidationTests
 	/// passes through content filtering to the native API without throwing.
 	/// </summary>
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithOnlyNullTextContent_DoesNotThrow()
 	{
 		var client = new AppleIntelligenceChatClient();
@@ -69,6 +70,7 @@ public class AppleIntelligenceChatClientValidationTests
 	/// FunctionCallContent is handled gracefully (empty tool name, no exception).
 	/// </summary>
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithOrphanedFunctionResult_DoesNotThrow()
 	{
 		var client = new AppleIntelligenceChatClient();
@@ -92,6 +94,7 @@ public class AppleIntelligenceChatClientValidationTests
 	/// is handled gracefully (empty tool name, no exception). This covers the null CallId path too.
 	/// </summary>
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithFunctionResultOrphanedCallId_DoesNotThrow()
 	{
 		var client = new AppleIntelligenceChatClient();
@@ -121,6 +124,7 @@ public class AppleIntelligenceChatClientValidationTests
 	/// FunctionCallContent validates name is not null in its constructor.
 	/// </summary>
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithFunctionCallEmptyName_DoesNotThrow()
 	{
 		var client = new AppleIntelligenceChatClient();
@@ -142,6 +146,7 @@ public class AppleIntelligenceChatClientValidationTests
 	/// The Instructions string is prepended as a system message internally.
 	/// </summary>
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithInstructions_Succeeds()
 	{
 		var client = new AppleIntelligenceChatClient();

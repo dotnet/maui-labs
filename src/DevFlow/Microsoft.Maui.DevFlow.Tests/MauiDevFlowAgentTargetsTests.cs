@@ -8,6 +8,63 @@ public sealed class MauiDevFlowAgentTargetsTests : IDisposable
     private static readonly string RepoRoot = FindRepoRoot();
     private readonly string _projectDirectory;
 
+    [Fact]
+    public void CoreSourceMapTarget_UsesPublicMauiXamlItems()
+    {
+        var targetPath = Path.Combine(
+            RepoRoot,
+            "src",
+            "DevFlow",
+            "Microsoft.Maui.DevFlow.Agent.Core",
+            "buildTransitive",
+            "Microsoft.Maui.DevFlow.Agent.Core.targets");
+        var target = File.ReadAllText(targetPath);
+
+        Assert.Contains("@(MauiXaml)", target);
+        Assert.Contains("_DevFlowXamlPrepareTargets", target);
+        Assert.DoesNotContain(
+            "DependsOnTargets=\"_MauiInjectXamlCssAdditionalFiles\"",
+            target);
+    }
+
+    [Fact]
+    public void CoreSourceMapTarget_ImportsWithoutPrivateMauiTargets()
+    {
+        var targetPath = Path.Combine(
+            RepoRoot,
+            "src",
+            "DevFlow",
+            "Microsoft.Maui.DevFlow.Agent.Core",
+            "buildTransitive",
+            "Microsoft.Maui.DevFlow.Agent.Core.targets");
+        var escapedTargetPath = SecurityElement.Escape(targetPath) ?? targetPath;
+        File.WriteAllText(
+            Path.Combine(_projectDirectory, "Test.xaml"),
+            "<ContentPage />");
+        File.WriteAllText(
+            ProjectFilePath,
+            $$"""
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0</TargetFramework>
+                <DevFlowXamlSourceMapsEnabled>true</DevFlowXamlSourceMapsEnabled>
+              </PropertyGroup>
+              <ItemGroup>
+                <MauiXaml Include="Test.xaml" />
+              </ItemGroup>
+              <Import Project="{{escapedTargetPath}}" />
+              <Target Name="VerifySourceMaps" DependsOnTargets="_DevFlowPromoteXamlSourceMaps">
+                <Error Condition="'@(AdditionalFiles)' == ''"
+                       Text="MauiXaml was not promoted to AdditionalFiles." />
+                <Error Condition="'%(AdditionalFiles.DevFlowXaml)' != 'true'"
+                       Text="DevFlowXaml metadata was not applied." />
+              </Target>
+            </Project>
+            """);
+
+        RunMsBuildTarget("VerifySourceMaps");
+    }
+
     public MauiDevFlowAgentTargetsTests()
     {
         _projectDirectory = Path.Combine(Path.GetTempPath(), $"mauidevflow-msbuild-{Guid.NewGuid():N}");
@@ -122,6 +179,33 @@ public sealed class MauiDevFlowAgentTargetsTests : IDisposable
     [Theory]
     [InlineData("build/Microsoft.Maui.DevFlow.Agent.targets")]
     [InlineData("buildTransitive/Microsoft.Maui.DevFlow.Agent.targets")]
+    public void SetMauiDevFlowPort_DoesNotEmbedFullProjectPath_ByDefault(string relativeTargetPath)
+    {
+        CreateTestProject(relativeTargetPath);
+
+        RunSetMauiDevFlowPortTarget();
+
+        var contents = File.ReadAllText(GeneratedFilePath);
+        Assert.Contains("\"Microsoft.Maui.DevFlowProject\", \"Test.csproj\"", contents);
+        Assert.DoesNotContain(_projectDirectory, contents, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("build/Microsoft.Maui.DevFlow.Agent.targets")]
+    [InlineData("buildTransitive/Microsoft.Maui.DevFlow.Agent.targets")]
+    public void SetMauiDevFlowPort_EmbedsFullProjectPath_WhenExplicitlyEnabled(string relativeTargetPath)
+    {
+        CreateTestProject(relativeTargetPath);
+
+        RunSetMauiDevFlowPortTarget("/p:MauiDevFlowIncludeProjectPath=true");
+
+        var escapedPath = ProjectFilePath.Replace("\\", "\\\\", StringComparison.Ordinal);
+        Assert.Contains($"\"Microsoft.Maui.DevFlowProject\", \"{escapedPath}\"", File.ReadAllText(GeneratedFilePath));
+    }
+
+    [Theory]
+    [InlineData("build/Microsoft.Maui.DevFlow.Agent.targets")]
+    [InlineData("buildTransitive/Microsoft.Maui.DevFlow.Agent.targets")]
     public void SetMauiDevFlowPort_EmitsSessionId_ForReleaseBuilds(string relativeTargetPath)
     {
         CreateTestProject(relativeTargetPath);
@@ -224,6 +308,32 @@ public sealed class MauiDevFlowAgentTargetsTests : IDisposable
         var output = process.StandardOutput.ReadToEnd();
         var error = process.StandardError.ReadToEnd();
 
+        process.WaitForExit();
+
+        Assert.True(
+            process.ExitCode == 0,
+            $"dotnet msbuild failed with exit code {process.ExitCode}.{Environment.NewLine}{output}{error}");
+    }
+
+    private void RunMsBuildTarget(string target)
+    {
+        var startInfo = new ProcessStartInfo("dotnet")
+        {
+            WorkingDirectory = _projectDirectory,
+            RedirectStandardError = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false
+        };
+        startInfo.ArgumentList.Add("msbuild");
+        startInfo.ArgumentList.Add(ProjectFilePath);
+        startInfo.ArgumentList.Add($"/t:{target}");
+        startInfo.ArgumentList.Add("/nologo");
+        startInfo.ArgumentList.Add("/v:minimal");
+
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Failed to start dotnet msbuild.");
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
         process.WaitForExit();
 
         Assert.True(

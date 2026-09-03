@@ -46,7 +46,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Comet\Comet.csproj" />
     <!-- ComponentActivity host for ComposeView. -->
-    <PackageReference Include="Xamarin.AndroidX.Activity" Version="1.13.0" />
+    <PackageReference Include="Xamarin.AndroidX.Activity" Version="1.13.0.1" />
     <!-- Google's Material 3 dynamic-color algorithm (HCT -> tonal palettes -> roles), in C#,
          so the SAME M3 scheme is generated from a seed on both platforms (Apache-2.0). -->
     <PackageReference Include="MaterialColorUtilities" Version="0.3.0" />

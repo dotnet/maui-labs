@@ -1,0 +1,29 @@
+scenarios:
+  - name: "Keep native platform types out of shared handler files"
+    prompt: |
+      I am adding a MAUI MeterView custom visual handler. My shared handler file
+      currently inherits ViewHandler<MeterView, Android.Widget.FrameLayout>, which
+      breaks iOS builds because Android namespaces leak into shared code. Show the
+      corrected shared partial handler plus Android partial file shape, including
+      the PropertyMapper, partial MapValue method, CreatePlatformView, and
+      ConfigureMauiHandlers registration.
+    assertions:
+      - type: "output_contains"
+        value: "PropertyMapper"
+      - type: "output_contains"
+        value: "partial"
+      - type: "output_matches"
+        pattern: "ConfigureMauiHandlers|AddHandler"
+      - type: "output_matches"
+        pattern: "CreatePlatformView|ViewHandler"
+      - type: "output_matches"
+        pattern: "Platforms/Android|\\.android\\.cs|ANDROID"
+      - type: "output_matches"
+        pattern: "Android\\.Widget\\.FrameLayout"
+    rubric:
+      - "Keeps the shared handler partial free of Android/iOS/Windows native namespaces"
+      - "Places the ViewHandler<TVirtualView,TPlatformView> base class on the platform partial implementation"
+      - "Uses PropertyMapper entries and a partial MapValue mapper for the bindable property"
+      - "Implements CreatePlatformView in the Android partial file"
+      - "Shows handler registration through ConfigureMauiHandlers"
+    timeout: 240

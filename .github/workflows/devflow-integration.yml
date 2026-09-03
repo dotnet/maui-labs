@@ -11,7 +11,10 @@ name: DevFlow Integration Tests
 #   Android   -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/AndroidEmulatorFixture.cs
 #   iOS       -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/iOSSimulatorFixture.cs
 #   Mac Catalyst -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/MacCatalystFixture.cs
+#   macOS     -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/MacOSFixture.cs
+#   GTK       -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/GtkFixture.cs
 #   Windows   -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/WindowsFixture.cs
+#   WPF       -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/WpfFixture.cs
 
 on:
   workflow_dispatch:
@@ -25,7 +28,18 @@ on:
           - android
           - ios
           - maccatalyst
+          - macos
+          - gtk
           - windows
+          - wpf
+      framework:
+        description: App framework to drive (native runs the plain .NET samples)
+        default: maui
+        type: choice
+        options:
+          - maui
+          - native
+          - both
       android-api:
         description: Android API level
         default: "35"
@@ -40,6 +54,13 @@ on:
     paths:
       - 'src/DevFlow/**'
       - 'samples/DevFlow.Sample/**'
+      - 'samples/DevFlow.Sample.Linux/**'
+      - 'samples/DevFlow.Sample.MacOS/**'
+      - 'samples/DevFlow.Sample.Native/**'
+      - 'samples/DevFlow.Sample.WPF/**'
+      - 'platforms/Linux.Gtk4/**'
+      - 'platforms/MacOS/**'
+      - 'platforms/Windows.WPF/**'
       - '.github/workflows/devflow-integration.yml'
 
 concurrency:
@@ -62,13 +83,20 @@ jobs:
       run-android: ${{ steps.decide.outputs.android }}
       run-ios: ${{ steps.decide.outputs.ios }}
       run-maccatalyst: ${{ steps.decide.outputs.maccatalyst }}
+      run-macos: ${{ steps.decide.outputs.macos }}
+      run-gtk: ${{ steps.decide.outputs.gtk }}
       run-windows: ${{ steps.decide.outputs.windows }}
+      run-wpf: ${{ steps.decide.outputs.wpf }}
+      # JSON array consumed as a matrix axis by the platform jobs. Windows, WPF, and GTK have no
+      # plain .NET heads, so those jobs run only when the matrix includes maui.
+      frameworks: ${{ steps.decide.outputs.frameworks }}
     steps:
       - id: decide
         shell: bash
         env:
           EVENT: ${{ github.event_name }}
           PLATFORMS: ${{ inputs.platforms }}
+          FRAMEWORK: ${{ inputs.framework }}
           LABELED: ${{ github.event_name == 'pull_request' && github.event.label.name == 'integration-tests' || 'false' }}
         run: |
           set -e
@@ -82,20 +110,41 @@ jobs:
               echo false
             fi
           }
+          # `framework` is a workflow_dispatch-only input, so it is empty for label-triggered PR
+          # runs. Those default to `both`: the label is an explicit opt-in to the expensive suite,
+          # and the native axis is the newer, less-proven one — defaulting it to `maui` there meant
+          # the plain .NET heads were never exercised automatically at all.
+          DEFAULT_FRAMEWORK=maui
+          [[ "$EVENT" == "pull_request" ]] && DEFAULT_FRAMEWORK=both
           {
             echo "android=$(should_run android)"
             echo "ios=$(should_run ios)"
             echo "maccatalyst=$(should_run maccatalyst)"
+            echo "macos=$(should_run macos)"
+            echo "gtk=$(should_run gtk)"
             echo "windows=$(should_run windows)"
+            echo "wpf=$(should_run wpf)"
+            case "${FRAMEWORK:-$DEFAULT_FRAMEWORK}" in
+              native) echo 'frameworks=["native"]' ;;
+              both)   echo 'frameworks=["maui","native"]' ;;
+              *)      echo 'frameworks=["maui"]' ;;
+            esac
           } >> "$GITHUB_OUTPUT"
 
   android:
     needs: plan
     if: needs.plan.outputs.run-android == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        framework: ${{ fromJSON(needs.plan.outputs.frameworks) }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
       DEVFLOW_TEST_PLATFORM: android
+      DEVFLOW_TEST_FRAMEWORK: ${{ matrix.framework }}
+      # Shell navigation, AppTheme, Essentials storage/sensors and WebView CDP are MAUI-only.
+      TEST_FILTER: ${{ matrix.framework == 'native' && '--filter framework!=maui' || '' }}
       DEVFLOW_TEST_ANDROID_API: ${{ inputs.android-api || '35' }}
       DEVFLOW_TEST_ANDROID_AVD: devflow-tests-api${{ inputs.android-api || '35' }}
     steps:
@@ -158,25 +207,33 @@ jobs:
             export DEVFLOW_TEST_ANDROID_SERIAL="$(adb devices | awk '/^emulator-[0-9]+[[:space:]]+device$/ { print $1; exit }')";
             echo "Using Android emulator serial: ${DEVFLOW_TEST_ANDROID_SERIAL:-<none found>}";
             dotnet test $TEST_PROJECT -c Debug
-            --logger "trx;LogFileName=devflow-integration-android.trx"
+            --logger "trx;LogFileName=devflow-integration-android-${{ matrix.framework }}.trx"
             --logger "console;verbosity=normal"
             --results-directory ./artifacts/TestResults/devflow-integration/android
+            $TEST_FILTER
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: devflow-integration-android-results
+          name: devflow-integration-android-${{ matrix.framework }}-results
           path: ./artifacts/TestResults/devflow-integration/android/
           retention-days: 30
 
   ios:
     needs: plan
     if: needs.plan.outputs.run-ios == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        framework: ${{ fromJSON(needs.plan.outputs.frameworks) }}
     runs-on: macos-15
     timeout-minutes: 90
     env:
       DEVFLOW_TEST_PLATFORM: ios
+      DEVFLOW_TEST_FRAMEWORK: ${{ matrix.framework }}
+      # Shell navigation, AppTheme, Essentials storage/sensors and WebView CDP are MAUI-only.
+      TEST_FILTER: ${{ matrix.framework == 'native' && '--filter framework!=maui' || '' }}
       DEVFLOW_TEST_IOS_VERSION: ${{ inputs.ios-runtime }}
     steps:
       - uses: actions/checkout@v6
@@ -216,7 +273,10 @@ jobs:
           global-json-file: global.json
 
       - name: Install Apple MAUI workloads
-        run: dotnet workload install maui ios macos maccatalyst tvos android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+        # Keep this list to workloads the repo actually targets. DOTNET_WORKLOAD_VERSION is pinned,
+        # so requesting a workload nothing builds still hard-fails the job the day its runtime packs
+        # rotate out of the feeds -- which is exactly how tvos broke the Windows job.
+        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
 
       - name: List available iOS simulators
         run: xcrun simctl list devices available
@@ -225,25 +285,33 @@ jobs:
         run: >
           dotnet test $TEST_PROJECT
           -c Debug
-          --logger "trx;LogFileName=devflow-integration-ios.trx"
+          --logger "trx;LogFileName=devflow-integration-ios-${{ matrix.framework }}.trx"
           --logger "console;verbosity=normal"
           --results-directory ./artifacts/TestResults/devflow-integration/ios
+          $TEST_FILTER
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: devflow-integration-ios-results
+          name: devflow-integration-ios-${{ matrix.framework }}-results
           path: ./artifacts/TestResults/devflow-integration/ios/
           retention-days: 30
 
   maccatalyst:
     needs: plan
     if: needs.plan.outputs.run-maccatalyst == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        framework: ${{ fromJSON(needs.plan.outputs.frameworks) }}
     runs-on: macos-15
     timeout-minutes: 60
     env:
       DEVFLOW_TEST_PLATFORM: maccatalyst
+      DEVFLOW_TEST_FRAMEWORK: ${{ matrix.framework }}
+      # Shell navigation, AppTheme, Essentials storage/sensors and WebView CDP are MAUI-only.
+      TEST_FILTER: ${{ matrix.framework == 'native' && '--filter framework!=maui' || '' }}
     steps:
       - uses: actions/checkout@v6
 
@@ -282,27 +350,158 @@ jobs:
           global-json-file: global.json
 
       - name: Install Apple MAUI workloads
-        run: dotnet workload install maui ios macos maccatalyst tvos android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+        # Keep this list to workloads the repo actually targets. DOTNET_WORKLOAD_VERSION is pinned,
+        # so requesting a workload nothing builds still hard-fails the job the day its runtime packs
+        # rotate out of the feeds -- which is exactly how tvos broke the Windows job.
+        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
 
       - name: Run DevFlow integration tests (maccatalyst)
         run: >
           dotnet test $TEST_PROJECT
           -c Debug
-          --logger "trx;LogFileName=devflow-integration-maccatalyst.trx"
+          --logger "trx;LogFileName=devflow-integration-maccatalyst-${{ matrix.framework }}.trx"
           --logger "console;verbosity=normal"
           --results-directory ./artifacts/TestResults/devflow-integration/maccatalyst
+          $TEST_FILTER
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: devflow-integration-maccatalyst-results
+          name: devflow-integration-maccatalyst-${{ matrix.framework }}-results
           path: ./artifacts/TestResults/devflow-integration/maccatalyst/
+          retention-days: 30
+
+  macos:
+    needs: plan
+    if: needs.plan.outputs.run-macos == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        framework: ${{ fromJSON(needs.plan.outputs.frameworks) }}
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      DEVFLOW_TEST_PLATFORM: macos
+      DEVFLOW_TEST_FRAMEWORK: ${{ matrix.framework }}
+      # The custom AppKit backend does not yet provide Blazor CDP, generic gestures/list scrolling,
+      # or every Essentials API. Keep those known platform gaps explicit while still running the
+      # full UI tree/action/property suite, including the registered native-element bridge.
+      TEST_FILTER: >-
+        ${{ matrix.framework == 'native'
+          && 'framework!=maui'
+          || 'Category!=WebView&FullyQualifiedName!~UiActionTests.Gesture_ReturnsExpectedResponse&FullyQualifiedName!~UiActionTests.Scroll_Element_Succeeds&FullyQualifiedName!~SensorTests.List_ReturnsSensors&FullyQualifiedName!~SecureStorageTests.Clear_RemovesAll&FullyQualifiedName!~DeviceTests.Display_ReturnsMetrics&FullyQualifiedName!~DeviceTests.AppInfo_NameMatchesSample&FullyQualifiedName!~DeviceTests.AppInfo_ReturnsValidInfo' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Select Xcode
+        run: |
+          # Keep Xcode aligned with DOTNET_WORKLOAD_VERSION; newer Apple workloads can require newer Xcode.
+          COMPATIBLE="${COMPATIBLE:-}"
+          for candidate in /Applications/Xcode_26.3.app /Applications/Xcode_26.3.0.app; do
+            if [[ -d "$candidate" ]]; then
+              COMPATIBLE="$candidate"
+              break
+            fi
+          done
+          SELECTED="${COMPATIBLE:-$(ls -1d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)}"
+          if [[ -n "$SELECTED" ]]; then
+            echo "Using $SELECTED"
+            sudo xcode-select -s "$SELECTED/Contents/Developer"
+            ACTOOL_PATH="$(xcrun --find actool)"
+            DEVELOPER_ROOT="$(cd "$(dirname "$ACTOOL_PATH")/../.." && pwd)"
+            XCODE_APP="$(cd "$DEVELOPER_ROOT/../.." && pwd)"
+            export DEVELOPER_DIR="$DEVELOPER_ROOT"
+            export MD_APPLE_SDK_ROOT="$XCODE_APP"
+            echo "DEVELOPER_DIR=$DEVELOPER_ROOT" >> "$GITHUB_ENV"
+            echo "MD_APPLE_SDK_ROOT=$XCODE_APP" >> "$GITHUB_ENV"
+          fi
+          sudo xcodebuild -runFirstLaunch
+          xcodebuild -version
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Install Apple MAUI workloads
+        # Keep this list to workloads the repo actually targets. DOTNET_WORKLOAD_VERSION is pinned,
+        # so requesting a workload nothing builds still hard-fails the job the day its runtime packs
+        # rotate out of the feeds -- which is exactly how tvos broke the Windows job.
+        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+
+      - name: Run DevFlow integration tests (macos)
+        run: >
+          dotnet test $TEST_PROJECT
+          -c Debug
+          --logger "trx;LogFileName=devflow-integration-macos-${{ matrix.framework }}.trx"
+          --logger "console;verbosity=normal"
+          --results-directory ./artifacts/TestResults/devflow-integration/macos
+          --filter "$TEST_FILTER"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: devflow-integration-macos-${{ matrix.framework }}-results
+          path: ./artifacts/TestResults/devflow-integration/macos/
+          retention-days: 30
+
+  gtk:
+    needs: plan
+    if: needs.plan.outputs.run-gtk == 'true' && contains(needs.plan.outputs.frameworks, 'maui')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      DEVFLOW_TEST_PLATFORM: gtk
+      DEVFLOW_TEST_FRAMEWORK: maui
+      GDK_BACKEND: x11
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Install GTK integration dependencies
+        run: >
+          sudo apt-get update &&
+          sudo apt-get install -y
+          libgtk-4-dev
+          libwebkitgtk-6.0-dev
+          gobject-introspection
+          libgirepository1.0-dev
+          gir1.2-gtk-4.0
+          gir1.2-webkit-6.0
+          pkg-config
+          xvfb
+          xauth
+          dbus-x11
+
+      - name: Run DevFlow integration tests (GTK)
+        run: >
+          dbus-run-session --
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24"
+          dotnet test $TEST_PROJECT
+          -c Debug
+          --filter "Category!=Device&Category!=Sensors&Category!=SecureStorage"
+          --logger "trx;LogFileName=devflow-integration-gtk-maui.trx"
+          --logger "console;verbosity=normal"
+          --results-directory ./artifacts/TestResults/devflow-integration/gtk
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: devflow-integration-gtk-maui-results
+          path: ./artifacts/TestResults/devflow-integration/gtk/
           retention-days: 30
 
   windows:
     needs: plan
-    if: needs.plan.outputs.run-windows == 'true'
+    # No plain .NET Windows head exists, so this job only has anything to say about MAUI.
+    if: needs.plan.outputs.run-windows == 'true' && contains(needs.plan.outputs.frameworks, 'maui')
     runs-on: windows-latest
     timeout-minutes: 90
     env:
@@ -316,7 +515,10 @@ jobs:
           global-json-file: global.json
 
       - name: Install MAUI workloads
-        run: dotnet workload install maui ios macos maccatalyst tvos android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+        # Keep this list to workloads the repo actually targets. DOTNET_WORKLOAD_VERSION is pinned,
+        # so requesting a workload nothing builds still hard-fails the job the day its runtime packs
+        # rotate out of the feeds -- which is exactly how tvos broke the Windows job.
+        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --version ${{ env.DOTNET_WORKLOAD_VERSION }}
 
       - name: Run DevFlow integration tests (windows)
         shell: pwsh
@@ -327,10 +529,103 @@ jobs:
           --logger "console;verbosity=normal"
           --results-directory .\artifacts\TestResults\devflow-integration\windows
 
+      - name: Run live inspector Playwright tests (windows)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $cliProject = 'src\Cli\Microsoft.Maui.Cli\Microsoft.Maui.Cli.csproj'
+          $sampleProject = 'samples\DevFlow.Sample\DevFlow.Sample.csproj'
+          $inspectorTests = 'src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests\Microsoft.Maui.DevFlow.Inspector.Tests.csproj'
+          $app = $null
+          try {
+            dotnet build $cliProject -c Debug -f net10.0 --nologo -v minimal
+            dotnet build $sampleProject -c Debug -f net10.0-windows10.0.19041.0 --nologo -v minimal
+            dotnet build $inspectorTests -c Debug --nologo -v minimal
+
+            $cli = Get-ChildItem 'artifacts\bin\Microsoft.Maui.Cli\Debug\net10.0\maui.dll' |
+              Select-Object -First 1 -ExpandProperty FullName
+            dotnet $cli devflow broker stop 2>$null
+            dotnet $cli devflow broker start
+
+            $exe = Get-ChildItem 'artifacts\bin\DevFlow.Sample\Debug' -Filter 'DevFlow.Sample.exe' -Recurse |
+              Select-Object -First 1 -ExpandProperty FullName
+            $env:DEVFLOW_TEST_PORT = '9223'
+            $app = Start-Process $exe -WorkingDirectory (Split-Path $exe) -PassThru
+
+            $deadline = (Get-Date).AddSeconds(45)
+            $agents = $null
+            do {
+              Start-Sleep -Milliseconds 500
+              try {
+                $agents = Invoke-RestMethod 'http://localhost:19223/api/agents'
+                if ($null -ne $agents -and @($agents).Count -gt 0) { break }
+              } catch {
+              }
+            } while ((Get-Date) -lt $deadline)
+            if ($null -eq $agents -or @($agents).Count -eq 0) {
+              throw 'DevFlow sample did not register with the broker.'
+            }
+
+            $playwright = Get-ChildItem 'artifacts\bin\Microsoft.Maui.DevFlow.Inspector.Tests\Debug\net10.0\playwright.ps1' |
+              Select-Object -First 1 -ExpandProperty FullName
+            & $playwright install chromium
+
+            $env:MAUI_INSPECTOR_LIVE_TESTS = '1'
+            $env:INSPECTOR_URL = 'http://localhost:19223/inspector/default/'
+            dotnet test $inspectorTests -c Debug --no-build `
+              --logger 'trx;LogFileName=devflow-inspector-windows.trx' `
+              --logger 'console;verbosity=normal' `
+              --results-directory '.\artifacts\TestResults\devflow-integration\windows'
+          }
+          finally {
+            if ($app -and -not $app.HasExited) {
+              Stop-Process -Id $app.Id
+              $app.WaitForExit(5000)
+            }
+            if ($cli) { dotnet $cli devflow broker stop 2>$null }
+          }
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: devflow-integration-windows-results
           path: .\artifacts\TestResults\devflow-integration\windows\
+          retention-days: 30
+
+  wpf:
+    needs: plan
+    if: needs.plan.outputs.run-wpf == 'true' && contains(needs.plan.outputs.frameworks, 'maui')
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      DEVFLOW_TEST_PLATFORM: wpf
+      DEVFLOW_TEST_FRAMEWORK: maui
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Install MAUI workload
+        run: dotnet workload install maui --version ${{ env.DOTNET_WORKLOAD_VERSION }}
+
+      - name: Run DevFlow integration tests (WPF)
+        shell: pwsh
+        run: >
+          dotnet test $env:TEST_PROJECT
+          -c Debug
+          --filter "Category!=WebView&Category!=Device&Category!=Sensors&Category!=SecureStorage"
+          --logger "trx;LogFileName=devflow-integration-wpf-maui.trx"
+          --logger "console;verbosity=normal"
+          --results-directory .\artifacts\TestResults\devflow-integration\wpf
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: devflow-integration-wpf-maui-results
+          path: .\artifacts\TestResults\devflow-integration\wpf\
           retention-days: 30

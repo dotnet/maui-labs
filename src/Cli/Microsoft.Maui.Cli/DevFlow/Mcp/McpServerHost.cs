@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol;
 using Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
+using Microsoft.Maui.DevFlow.Driver;
 
 namespace Microsoft.Maui.Cli.DevFlow.Mcp;
 
@@ -29,8 +30,24 @@ public static class McpServerHost
 				options.ServerInfo = new() { Name = "maui", Version = version };
 			})
 			.WithStdioServerTransport()
+			.WithRequestFilters(filters => filters.AddCallToolFilter(next => async (context, cancellationToken) =>
+			{
+				// A native (non-MAUI) agent answers 501 for capabilities its backend does not
+				// implement. Surface that as an actionable tool error instead of letting the SDK
+				// swallow it behind a generic "an error occurred" message.
+				try
+				{
+					return await next(context, cancellationToken);
+				}
+				catch (NotSupportedByAgentException ex)
+				{
+					throw new McpException(
+						$"{ex.Message} Call maui_capabilities to see what this agent supports.");
+				}
+			}))
 			.WithTools<ScreenshotTool>()
 			.WithTools<TreeTool>()
+			.WithTools<LayoutDiagnosticsTool>()
 			.WithTools<LogsTool>()
 			.WithTools<NetworkTool>()
 			.WithTools<InteractionTools>()
@@ -49,7 +66,9 @@ public static class McpServerHost
 			.WithTools<FileTools>()
 			.WithTools<BatchTools>()
 			.WithTools<InvokeTools>()
-			.WithTools<ExtensionTools>();
+			.WithTools<ExtensionTools>()
+			.WithTools<Flows.FlowTools>()
+			.WithTools<Flows.FlowRecordTools>();
 
 		await builder.Build().RunAsync();
 	}

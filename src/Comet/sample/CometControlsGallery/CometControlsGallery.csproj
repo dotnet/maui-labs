@@ -7,7 +7,6 @@
 		<OutputType>Exe</OutputType>
 		<RootNamespace>CometControlsGallery</RootNamespace>
 		<UseMaui Condition="!$(TargetFramework.Contains('-macos'))">true</UseMaui>
-		<MauiVersion Condition="$(TargetFramework.Contains('-macos')) AND '$(MauiVersion)' == ''">11.0.0-preview.5.26304.4</MauiVersion>
 		<SingleProject>true</SingleProject>
 		<ImplicitUsings>disable</ImplicitUsings>
 		<Nullable>enable</Nullable>

@@ -19,6 +19,7 @@ namespace Comet.DevTools
 	{
 		/// <summary>The port the DevFlow CLI defaults to (AgentClient host=localhost port=9223).</summary>
 		public const int DevFlowPort = 9223;
+		const int MaxDragDurationMs = 10_000;
 
 		string RouteDevFlow(string method, string rawPath, string body)
 		{
@@ -123,19 +124,47 @@ namespace Comet.DevTools
 			}
 		}
 
-		static string DragAction(string body)
+		internal static string DragAction(string body)
 		{
 			var inject = CometDevRegistry.DragInjector;
 			if (inject is null)
 				return "{\"success\":false,\"error\":\"drag is not supported on this platform (no injector registered)\"}";
 
-			float x1 = (float)GetDouble(body, "x1");
-			float y1 = (float)GetDouble(body, "y1");
-			float x2 = (float)GetDouble(body, "x2");
-			float y2 = (float)GetDouble(body, "y2");
-			int durationMs = 300;
-			try { durationMs = (int)GetDouble(body, "durationMs"); } catch { /* optional */ }
-			if (durationMs < 1) durationMs = 1;
+			var x1Value = GetDouble(body, "x1");
+			var y1Value = GetDouble(body, "y1");
+			var x2Value = GetDouble(body, "x2");
+			var y2Value = GetDouble(body, "y2");
+			if (!double.IsFinite(x1Value) || !double.IsFinite(y1Value) ||
+				!double.IsFinite(x2Value) || !double.IsFinite(y2Value) ||
+				x1Value < -float.MaxValue || x1Value > float.MaxValue ||
+				y1Value < -float.MaxValue || y1Value > float.MaxValue ||
+				x2Value < -float.MaxValue || x2Value > float.MaxValue ||
+				y2Value < -float.MaxValue || y2Value > float.MaxValue)
+			{
+				return "{\"success\":false,\"error\":\"drag coordinates must be finite single-precision values\"}";
+			}
+
+			var durationValue = 300d;
+			using (var document = JsonDocument.Parse(body))
+			{
+				if (document.RootElement.TryGetProperty("durationMs", out var durationElement) &&
+					(durationElement.ValueKind != JsonValueKind.Number ||
+						!durationElement.TryGetDouble(out durationValue)))
+				{
+					return $"{{\"success\":false,\"error\":\"durationMs must be an integer from 1 to {MaxDragDurationMs}\"}}";
+				}
+			}
+			if (!double.IsFinite(durationValue) || durationValue != System.Math.Truncate(durationValue) ||
+				durationValue < 1 || durationValue > MaxDragDurationMs)
+			{
+				return $"{{\"success\":false,\"error\":\"durationMs must be an integer from 1 to {MaxDragDurationMs}\"}}";
+			}
+
+			var x1 = (float)x1Value;
+			var y1 = (float)y1Value;
+			var x2 = (float)x2Value;
+			var y2 = (float)y2Value;
+			var durationMs = (int)durationValue;
 
 			return inject(x1, y1, x2, y2, durationMs)
 				? ActionOk()

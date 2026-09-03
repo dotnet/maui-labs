@@ -1,6 +1,7 @@
 #nullable enable
 #if ANDROID
 using System;
+using System.Diagnostics;
 using System.Threading;
 using Android.OS;
 using Android.Views;
@@ -70,49 +71,124 @@ namespace Comet.Platform.Compose
 			// short flings, without flooding the main looper.
 			int steps = Math.Max(2, durationMs / 12);
 			long downTime = 0;
-			bool ok = true;
 
-			void Dispatch(MotionEventActions action, float x, float y)
+			bool Dispatch(
+				MotionEventActions action,
+				float x,
+				float y,
+				int timeoutMs,
+				bool cancelIfQueued,
+				bool waitIfStarted)
 			{
-				using var done = new ManualResetEventSlim();
+				var completion = new TaskCompletionSource<bool>(
+					TaskCreationOptions.RunContinuationsAsynchronously);
+				var dispatchState = 0; // 0 = queued, 1 = running, 2 = canceled
 				activity.RunOnUiThread(() =>
 				{
+					if (Interlocked.CompareExchange(ref dispatchState, 1, 0) != 0)
+					{
+						completion.TrySetResult(false);
+						return;
+					}
+
+					var dispatched = true;
 					try
 					{
 						long now = SystemClock.UptimeMillis();
 						if (action == MotionEventActions.Down)
 							downTime = now;
 						var ev = MotionEvent.Obtain(downTime, now, action, x, y, 0);
-						if (ev is null) { ok = false; return; }
+						if (ev is null) { dispatched = false; return; }
 						try
 						{
 							ev.SetSource(InputSourceType.Touchscreen);
 							if (!decor.DispatchTouchEvent(ev))
-								ok &= action != MotionEventActions.Down; // nobody claimed the down → nothing will track the drag
+								dispatched = action != MotionEventActions.Down; // nobody claimed the down → nothing will track the drag
 						}
 						finally { ev.Recycle(); }
 					}
-					catch { ok = false; }
-					finally { done.Set(); }
+					catch { dispatched = false; }
+					finally { completion.TrySetResult(dispatched); }
 				});
-				if (!done.Wait(2000))
-					ok = false;
+
+				if (completion.Task.Wait(timeoutMs))
+					return completion.Task.Result;
+
+				if (!cancelIfQueued)
+					return false;
+
+				if (Interlocked.CompareExchange(ref dispatchState, 2, 0) == 0)
+					return false;
+
+				if (!waitIfStarted)
+					return false;
+
+				// A started Down must finish so the caller knows whether it needs a terminal event.
+				completion.Task.Wait();
+				return completion.Task.Result;
 			}
 
-			Dispatch(MotionEventActions.Down, x1, y1);
-			if (!ok)
+			if (!Dispatch(
+				MotionEventActions.Down,
+				x1,
+				y1,
+				timeoutMs: 2000,
+				cancelIfQueued: true,
+				waitIfStarted: true))
 				return false;
 
-			int interval = Math.Max(1, durationMs / steps);
-			for (int i = 1; i <= steps && ok; i++)
+			var timer = Stopwatch.StartNew();
+			var deadlineMs = durationMs + 2000L;
+			var ok = true;
+			var lastX = x1;
+			var lastY = y1;
+			for (int i = 1; i <= steps; i++)
 			{
-				Thread.Sleep(interval);
+				var targetElapsedMs = durationMs * i / steps;
+				var delayMs = targetElapsedMs - timer.ElapsedMilliseconds;
+				if (delayMs > 0)
+					Thread.Sleep((int)delayMs);
+				if (timer.ElapsedMilliseconds > deadlineMs)
+				{
+					ok = false;
+					break;
+				}
+
 				float t = i / (float)steps;
-				Dispatch(MotionEventActions.Move, x1 + (x2 - x1) * t, y1 + (y2 - y1) * t);
+				var x = x1 + (x2 - x1) * t;
+				var y = y1 + (y2 - y1) * t;
+				var remainingBudgetMs = deadlineMs - timer.ElapsedMilliseconds;
+				if (remainingBudgetMs <= 0 ||
+					!Dispatch(
+						MotionEventActions.Move,
+						x,
+						y,
+						timeoutMs: (int)Math.Min(2000L, remainingBudgetMs),
+						cancelIfQueued: true,
+						waitIfStarted: false) ||
+					timer.ElapsedMilliseconds > deadlineMs)
+				{
+					ok = false;
+					break;
+				}
+				lastX = x;
+				lastY = y;
 			}
 
-			Dispatch(MotionEventActions.Up, x2, y2);
-			return ok;
+			// Once Down is delivered, the terminal event cannot be canceled while queued.
+			// It must close the native gesture when the UI thread becomes responsive.
+			var terminalAction = ok ? MotionEventActions.Up : MotionEventActions.Cancel;
+			var terminalX = ok ? x2 : lastX;
+			var terminalY = ok ? y2 : lastY;
+			var terminalBudgetMs = (int)Math.Max(0L, deadlineMs - timer.ElapsedMilliseconds);
+			var terminated = Dispatch(
+				terminalAction,
+				terminalX,
+				terminalY,
+				timeoutMs: terminalBudgetMs,
+				cancelIfQueued: false,
+				waitIfStarted: false);
+			return ok && terminated;
 		}
 	}
 }

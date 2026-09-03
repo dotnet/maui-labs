@@ -92,8 +92,8 @@ fi
 
 # --- Test 4: Simulator Start ---
 echo "Test 4: maui apple simulator start (boot a simulator)"
-# Find the first available iPhone simulator name
-SIM_NAME=$(echo "$SIM_OUTPUT" | python3 -c "
+# Find the first available iPhone simulator (name<TAB>udid)
+SIM_INFO=$(echo "$SIM_OUTPUT" | python3 -c "
 import sys, json
 
 text = sys.stdin.read()
@@ -114,10 +114,12 @@ for i, ch in enumerate(json_text):
 data = json.loads(json_text[:end])
 for d in data:
     if d.get('is_available') and not d.get('is_booted') and 'iPhone' in d.get('name', ''):
-        print(d['name'])
+        print(d['name'] + '\t' + d.get('udid', ''))
         sys.exit(0)
 sys.exit(1)
-" 2>/dev/null) || SIM_NAME=""
+" 2>/dev/null) || SIM_INFO=""
+SIM_NAME="${SIM_INFO%%$'\t'*}"
+SIM_UDID="${SIM_INFO##*$'\t'}"
 
 if [[ -z "$SIM_NAME" ]]; then
     skip "Simulator start" "No available iPhone simulator found to boot"
@@ -125,6 +127,35 @@ else
     START_OUTPUT=$($MAUI apple simulator start "$SIM_NAME" --json 2>&1) || true
     if echo "$START_OUTPUT" | grep -q '"success"' || echo "$START_OUTPUT" | grep -q '"status": "success"'; then
         pass "Simulator '$SIM_NAME' booted"
+
+        # --- Test 4a: Appearance get (round-trip read) ---
+        echo "Test 4a: maui apple simulator appearance get (booted sim)"
+        APPEARANCE_OUTPUT=$($MAUI apple simulator appearance get "$SIM_UDID" --json 2>&1) || true
+        if echo "$APPEARANCE_OUTPUT" | grep -q '"appearance"'; then
+            pass "Appearance read for '$SIM_UDID'"
+        else
+            fail "Appearance get" "No appearance value in JSON output: $APPEARANCE_OUTPUT"
+        fi
+
+        # --- Test 4b: OpenUrl (deep-link smoke test) ---
+        echo "Test 4b: maui apple simulator openurl (booted sim)"
+        OPENURL_OUTPUT=$($MAUI apple simulator openurl "$SIM_UDID" "https://example.com" --json 2>&1) || true
+        if echo "$OPENURL_OUTPUT" | grep -q '"success"'; then
+            pass "openurl succeeded for '$SIM_UDID'"
+        else
+            fail "openurl" "Expected success in JSON output: $OPENURL_OUTPUT"
+        fi
+
+        # --- Test 4c: Screenshot round-trip ---
+        echo "Test 4c: maui apple simulator screenshot (round-trip)"
+        SHOT_PATH="$(mktemp -d)/smoke-screenshot.png"
+        SHOT_OUTPUT=$($MAUI apple simulator screenshot "$SIM_UDID" "$SHOT_PATH" --format png --json 2>&1) || true
+        if echo "$SHOT_OUTPUT" | grep -q '"success"' && [[ -s "$SHOT_PATH" ]]; then
+            pass "Screenshot written to '$SHOT_PATH'"
+        else
+            fail "Screenshot" "No screenshot file produced: $SHOT_OUTPUT"
+        fi
+        rm -f "$SHOT_PATH" 2>/dev/null || true
 
         # --- Test 5: Simulator Stop ---
         echo "Test 5: maui apple simulator stop (shut down simulator)"
@@ -182,6 +213,30 @@ if echo "$SIM_CONTAINER_OUTPUT" | grep -q 'E2204'; then
     pass "Simulator get-app-container correctly returns E2204 for invalid UDID"
 else
     fail "Simulator get-app-container error handling" "Expected E2204 in output"
+fi
+
+echo "Test 11: maui apple simulator appearance get (invalid UDID, expects E2204)"
+APPEARANCE_ERR=$($MAUI apple simulator appearance get "INVALID-UDID" --json 2>&1) || true
+if echo "$APPEARANCE_ERR" | grep -q 'E2204'; then
+    pass "Simulator appearance correctly returns E2204 for invalid UDID"
+else
+    fail "Simulator appearance error handling" "Expected E2204 in output"
+fi
+
+echo "Test 12: maui apple simulator privacy grant (invalid service, expects E1004)"
+PRIVACY_ERR=$($MAUI apple simulator privacy grant "INVALID-UDID" "not-a-service" --json 2>&1) || true
+if echo "$PRIVACY_ERR" | grep -q 'E1004'; then
+    pass "Simulator privacy correctly returns E1004 for unknown service"
+else
+    fail "Simulator privacy error handling" "Expected E1004 in output"
+fi
+
+echo "Test 13: maui apple simulator openurl (invalid UDID, expects E2204)"
+OPENURL_ERR=$($MAUI apple simulator openurl "INVALID-UDID" "https://example.com" --json 2>&1) || true
+if echo "$OPENURL_ERR" | grep -q 'E2204'; then
+    pass "Simulator openurl correctly returns E2204 for invalid UDID"
+else
+    fail "Simulator openurl error handling" "Expected E2204 in output"
 fi
 
 # --- Summary ---

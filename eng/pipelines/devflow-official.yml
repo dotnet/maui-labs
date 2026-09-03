@@ -109,9 +109,19 @@ extends:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
             # DevFlow packages are built on Windows, including Apple library TFMs.
-            - script: .dotnet\dotnet workload install maui maui-android ios maccatalyst macos maui-tizen --version 10.0.203
+            - script: eng\common\dotnet.cmd workload install maui maui-android ios maccatalyst macos maui-tizen --version 10.0.203
               displayName: Install MAUI and Apple workloads
-            - script: .dotnet\dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj
+            - pwsh: |
+                $arguments = @(
+                  'build'
+                  '-t:InstallAndroidDependencies'
+                  '-f'
+                  'net10.0-android'
+                  "-p:AndroidSdkDirectory=$env:ANDROID_HOME"
+                  '-p:AcceptAndroidSDKLicenses=true'
+                  'src/DevFlow/Microsoft.Maui.DevFlow.Agent/Microsoft.Maui.DevFlow.Agent.csproj'
+                )
+                & eng/common/dotnet.ps1 @arguments
               displayName: Install Android SDK dependencies
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
@@ -134,10 +144,7 @@ extends:
                     /p:TeamName=$(_TeamName)
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
-            - task: UseDotNet@2
-              displayName: Install .NET SDK
-              inputs:
-                version: 10.0.105
+            - template: /eng/pipelines/install-dotnet-sdk.yml@self
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -158,10 +165,7 @@ extends:
                     /p:TeamName=$(_TeamName)
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
-            - task: UseDotNet@2
-              displayName: Install .NET SDK
-              inputs:
-                version: 10.0.105
+            - template: /eng/pipelines/install-dotnet-sdk.yml@self
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -182,10 +186,7 @@ extends:
                     /p:TeamName=$(_TeamName)
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
-            - task: UseDotNet@2
-              displayName: Install .NET SDK
-              inputs:
-                version: 10.0.105
+            - template: /eng/pipelines/install-dotnet-sdk.yml@self
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -210,10 +211,7 @@ extends:
                     /p:TeamName=$(_TeamName)
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
-            - task: UseDotNet@2
-              displayName: Install .NET SDK
-              inputs:
-                version: 10.0.105
+            - template: /eng/pipelines/install-dotnet-sdk.yml@self
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -241,6 +239,11 @@ extends:
             - script: |
                 eng/common/dotnet.sh --info
               displayName: Provision .NET SDK via Arcade
+              env:
+                # Hosted macOS sets DOTNET_INSTALL_DIR to /Users/runner/.dotnet.
+                # Force Arcade to provision repo-local .dotnet because the next
+                # step invokes .dotnet/dotnet directly.
+                DOTNET_INSTALL_DIR: $(Build.SourcesDirectory)/.dotnet
             - script: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
               displayName: Select Xcode 26.3
             - script: .dotnet/dotnet workload install maui ios maccatalyst macos maui-tizen --version 10.0.203
@@ -254,6 +257,9 @@ extends:
                   --ci \
                   --projects $(Build.SourcesDirectory)/src/AI/EssentialsAI.slnf
               displayName: Build EssentialsAI (macOS)
+              env:
+                # Use the same SDK root that received the workload installation.
+                DOTNET_INSTALL_DIR: $(Build.SourcesDirectory)/.dotnet
             - task: CopyFiles@2
               displayName: Copy Native Binaries
               inputs:
@@ -283,9 +289,19 @@ extends:
                 path: '$(Build.SourcesDirectory)/artifacts/bin'
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - script: .dotnet\dotnet workload install maui maui-android macos maui-tizen --version 10.0.203
+            - script: eng\common\dotnet.cmd workload install maui maui-android macos maui-tizen --version 10.0.203
               displayName: Install MAUI workloads
-            - script: .dotnet\dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj
+            - pwsh: |
+                $arguments = @(
+                  'build'
+                  '-t:InstallAndroidDependencies'
+                  '-f'
+                  'net10.0-android'
+                  "-p:AndroidSdkDirectory=$env:ANDROID_HOME"
+                  '-p:AcceptAndroidSDKLicenses=true'
+                  'src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj'
+                )
+                & eng/common/dotnet.ps1 @arguments
               displayName: Install Android SDK dependencies
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
@@ -311,10 +327,7 @@ extends:
                 Release:
                   _BuildConfig: Release
             steps:
-            - task: UseDotNet@2
-              displayName: Install .NET SDK
-              inputs:
-                version: 10.0.105
+            - template: /eng/pipelines/install-dotnet-sdk.yml@self
             - script: |
                 sudo apt-get update
                 sudo apt-get install -y \
@@ -352,7 +365,7 @@ extends:
             steps:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - script: .dotnet\dotnet workload install maui --version 10.0.203
+            - script: eng\common\dotnet.cmd workload install maui --version 10.0.203
               displayName: Install MAUI workload
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
@@ -379,7 +392,7 @@ extends:
             steps:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - script: .dotnet\dotnet workload install maui macos --version 10.0.203
+            - script: eng\common\dotnet.cmd workload install maui macos --version 10.0.203
               displayName: Install MAUI and macOS workloads
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
@@ -477,7 +490,7 @@ extends:
           - powershell: |
               New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/CliPackages'
               Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.Cli.*.nupkg' '$(Pipeline.Workspace)/CliPackages/' -Verbose
-              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.StartupProfiling.*.nupkg' '$(Pipeline.Workspace)/CliPackages/' -Verbose -ErrorAction Stop
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.ProfilingHelper.*.nupkg' '$(Pipeline.Workspace)/CliPackages/' -Verbose -ErrorAction Stop
             displayName: Filter Cli packages
 
         - job: PublishNuGet

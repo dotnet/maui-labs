@@ -38,7 +38,24 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj" />
         <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Blazor\Microsoft.Maui.DevFlow.Blazor.csproj" />
+        <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Analyzers\Microsoft.Maui.DevFlow.Analyzers.csproj"
+                          ReferenceOutputAssembly="false"
+                          OutputItemType="Analyzer" />
     </ItemGroup>
+
+    <ItemGroup>
+        <CompilerVisibleItemMetadata Include="AdditionalFiles" MetadataName="DevFlowXaml" />
+    </ItemGroup>
+
+    <Target Name="_SamplePromoteDevFlowXamlSourceMaps"
+            DependsOnTargets="_MauiInjectXamlCssAdditionalFiles"
+            AfterTargets="_MauiInjectXamlCssAdditionalFiles"
+            BeforeTargets="GenerateMSBuildEditorConfigFileCore">
+        <ItemGroup>
+            <AdditionalFiles DevFlowXaml="true"
+                             Condition="'%(AdditionalFiles.GenKind)' == 'Xaml'" />
+        </ItemGroup>
+    </Target>
 
     <!-- During project-to-project references, Microsoft.Maui.DevFlow.Blazor's WebView dependency
          leaks static web assets (blazor.modules.json, blazor.webview.js) that conflict
