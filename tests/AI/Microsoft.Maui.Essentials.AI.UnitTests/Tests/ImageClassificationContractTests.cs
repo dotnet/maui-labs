@@ -10,33 +10,65 @@ namespace Microsoft.Maui.Essentials.AI.UnitTests;
 public class ImageClassificationContractTests
 {
 	[Fact]
-	public async Task ClassifyImageAsync_DataContent_ForwardsSnapshotMediaTypeOptionsAndCancellation()
+	public async Task ClassifyImageAsync_DataContent_AcceptedPathUsesEntrySnapshot()
 	{
 		byte[] imageBytes = [1, 2, 3, 4];
 		var image = new DataContent(imageBytes, "image/png");
 		var options = new ImageClassificationOptions
 		{
+			MaximumInputBytes = 4,
 			MaximumPredictions = 2,
 			MinimumConfidence = 0.25f
 		};
 		using var cancellationSource = new CancellationTokenSource();
-		var client = new RecordingClient();
+		var responseSource = new TaskCompletionSource(
+			TaskCreationOptions.RunContinuationsAsynchronously);
+		var client = new RecordingClient { ResponseTask = responseSource.Task };
 
-		ImageClassificationResult result = await client.ClassifyImageAsync(
+		Task<ImageClassificationResult> classificationTask = client.ClassifyImageAsync(
 			image,
 			options,
 			cancellationSource.Token);
+		Assert.Equal(1, client.CallCount);
 
 		imageBytes[0] = 99;
+		options.MaximumInputBytes = 1;
+		options.MaximumPredictions = 1;
+		options.MinimumConfidence = null;
+		responseSource.SetResult();
+
+		ImageClassificationResult result = await classificationTask;
 
 		Assert.Same(client.Result, result);
-		Assert.Equal(1, client.CallCount);
 		Assert.Equal([1, 2, 3, 4], client.ImageBytes);
 		Assert.Equal("image/png", client.MediaType);
-		Assert.Same(options, client.Options);
+		ImageClassificationOptions forwardedOptions =
+			Assert.IsType<ImageClassificationOptions>(client.Options);
+		Assert.NotSame(options, forwardedOptions);
+		Assert.Equal(4, forwardedOptions.MaximumInputBytes);
+		Assert.Equal(2, forwardedOptions.MaximumPredictions);
+		Assert.Equal(0.25f, forwardedOptions.MinimumConfidence);
 		Assert.Equal(cancellationSource.Token, client.CancellationToken);
 		Assert.NotNull(client.InputStream);
 		Assert.False(client.InputStream.CanRead);
+	}
+
+	[Fact]
+	public async Task ClassifyImageAsync_DataContentOverMaximum_RejectsBeforeClientInvocation()
+	{
+		var image = new DataContent(new byte[] { 1, 2, 3, 4 }, "image/png");
+		var options = new ImageClassificationOptions { MaximumInputBytes = 3 };
+		var client = new RecordingClient();
+
+		ArgumentException exception = await Assert.ThrowsAsync<ArgumentException>(
+			() => client.ClassifyImageAsync(image, options));
+
+		Assert.Equal("image", exception.ParamName);
+		Assert.Contains("configured maximum of 3 bytes", exception.Message, StringComparison.Ordinal);
+		Assert.Contains("MaximumInputBytes", exception.Message, StringComparison.Ordinal);
+		Assert.Equal(0, client.CallCount);
+		Assert.Null(client.InputStream);
+		Assert.Null(client.ImageBytes);
 	}
 
 	[Theory]
@@ -535,6 +567,8 @@ public class ImageClassificationContractTests
 
 		public Stream? InputStream { get; private set; }
 
+		public Task? ResponseTask { get; init; }
+
 		public async Task<ImageClassificationResult> ClassifyImageAsync(
 			Stream imageStream,
 			string imageMediaType,
@@ -550,6 +584,11 @@ public class ImageClassificationContractTests
 			using var copy = new MemoryStream();
 			await imageStream.CopyToAsync(copy, cancellationToken);
 			ImageBytes = copy.ToArray();
+
+			if (ResponseTask is not null)
+			{
+				await ResponseTask.WaitAsync(cancellationToken);
+			}
 
 			return Result;
 		}

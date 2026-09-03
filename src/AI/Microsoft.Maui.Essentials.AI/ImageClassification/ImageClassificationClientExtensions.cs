@@ -51,6 +51,8 @@ public static class ImageClassificationClientExtensions
 		ArgumentNullException.ThrowIfNull(client);
 		ArgumentNullException.ThrowIfNull(image);
 
+		ImageClassificationOptions optionsSnapshot = options?.Clone() ?? new();
+
 		if (!image.HasTopLevelMediaType("image"))
 		{
 			throw new ArgumentException("The content media type must be an image media type.", nameof(image));
@@ -61,9 +63,16 @@ public static class ImageClassificationClientExtensions
 			throw new ArgumentException("The image content must not be empty.", nameof(image));
 		}
 
+		if (image.Data.Length > optionsSnapshot.MaximumInputBytes)
+		{
+			throw ImageClassificationInput.CreateTooLargeException(
+				optionsSnapshot.MaximumInputBytes,
+				nameof(image));
+		}
+
 		using var imageStream = new MemoryStream(image.Data.ToArray(), writable: false);
 		return await client
-			.ClassifyImageAsync(imageStream, image.MediaType, options, cancellationToken)
+			.ClassifyImageAsync(imageStream, image.MediaType, optionsSnapshot, cancellationToken)
 			.ConfigureAwait(false);
 	}
 }

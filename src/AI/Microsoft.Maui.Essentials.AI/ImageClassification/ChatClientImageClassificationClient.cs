@@ -197,7 +197,7 @@ public sealed class ChatClientImageClassificationClient : IImageClassificationCl
 			long remainingLength = position >= length ? 0 : length - position;
 			if (remainingLength > maximumInputBytes)
 			{
-				throw CreateImageTooLargeException(maximumInputBytes);
+				throw ImageClassificationInput.CreateTooLargeException(maximumInputBytes, nameof(imageStream));
 			}
 		}
 
@@ -223,18 +223,12 @@ public sealed class ChatClientImageClassificationClient : IImageClassificationCl
 			totalBytesRead += bytesRead;
 			if (totalBytesRead > maximumInputBytes)
 			{
-				throw CreateImageTooLargeException(maximumInputBytes);
+				throw ImageClassificationInput.CreateTooLargeException(maximumInputBytes, nameof(imageStream));
 			}
 
 			imageBuffer.Write(buffer, 0, bytesRead);
 		}
 	}
-
-	private static ArgumentException CreateImageTooLargeException(long maximumInputBytes) =>
-		new(
-			$"The image stream exceeds the configured maximum of {maximumInputBytes} bytes. " +
-			$"Reduce the image size or increase {nameof(ImageClassificationOptions)}.{nameof(ImageClassificationOptions.MaximumInputBytes)}.",
-			"imageStream");
 
 	/// <inheritdoc />
 	public object? GetService(Type serviceType, object? serviceKey = null)
