@@ -76,19 +76,50 @@ public class ImageClassificationContractTests
 	{
 		var options = new ImageClassificationOptions
 		{
+			MaximumInputBytes = 1024,
 			MaximumPredictions = 3,
 			MinimumConfidence = 0.5f
 		};
 
 		ImageClassificationOptions clone = options.Clone();
+		options.MaximumInputBytes = 2048;
 		options.MaximumPredictions = 5;
 		options.MinimumConfidence = 0.75f;
 
 		Assert.NotSame(options, clone);
+		Assert.Equal(1024, clone.MaximumInputBytes);
 		Assert.Equal(3, clone.MaximumPredictions);
 		Assert.Equal(0.5f, clone.MinimumConfidence);
+		Assert.Equal(2048, options.MaximumInputBytes);
 		Assert.Equal(5, options.MaximumPredictions);
 		Assert.Equal(0.75f, options.MinimumConfidence);
+	}
+
+	[Fact]
+	public void Options_MaximumInputBytes_DefaultsToExactlyTwentyMiBAndAcceptsExplicitValue()
+	{
+		var options = new ImageClassificationOptions();
+
+		Assert.Equal(20L * 1024 * 1024, options.MaximumInputBytes);
+
+		options.MaximumInputBytes = 1234;
+
+		Assert.Equal(1234, options.MaximumInputBytes);
+	}
+
+	[Theory]
+	[InlineData(0L)]
+	[InlineData(-1L)]
+	public void Options_MaximumInputBytes_RejectsNonPositiveValues(long maximumInputBytes)
+	{
+		var options = new ImageClassificationOptions();
+
+		ArgumentOutOfRangeException exception = Assert.Throws<ArgumentOutOfRangeException>(
+			() => options.MaximumInputBytes = maximumInputBytes);
+
+		Assert.Equal("value", exception.ParamName);
+		Assert.Equal(maximumInputBytes, Assert.IsType<long>(exception.ActualValue));
+		Assert.Equal(20L * 1024 * 1024, options.MaximumInputBytes);
 	}
 
 	[Theory]
@@ -233,6 +264,7 @@ public class ImageClassificationContractTests
 	{
 		var options = new ImageClassificationOptions();
 
+		Assert.Equal(20L * 1024 * 1024, options.MaximumInputBytes);
 		Assert.Null(options.MaximumPredictions);
 		Assert.Null(options.MinimumConfidence);
 	}

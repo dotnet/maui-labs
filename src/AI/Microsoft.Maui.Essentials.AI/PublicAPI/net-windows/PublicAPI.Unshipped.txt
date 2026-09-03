@@ -16,6 +16,8 @@ Microsoft.Maui.Essentials.AI.ImageClassificationClientMetadata.ProviderUri.get -
 Microsoft.Maui.Essentials.AI.ImageClassificationOptions
 Microsoft.Maui.Essentials.AI.ImageClassificationOptions.ImageClassificationOptions() -> void
 Microsoft.Maui.Essentials.AI.ImageClassificationOptions.ImageClassificationOptions(Microsoft.Maui.Essentials.AI.ImageClassificationOptions? other) -> void
+Microsoft.Maui.Essentials.AI.ImageClassificationOptions.MaximumInputBytes.get -> long
+Microsoft.Maui.Essentials.AI.ImageClassificationOptions.MaximumInputBytes.set -> void
 Microsoft.Maui.Essentials.AI.ImageClassificationOptions.MaximumPredictions.get -> int?
 Microsoft.Maui.Essentials.AI.ImageClassificationOptions.MaximumPredictions.set -> void
 Microsoft.Maui.Essentials.AI.ImageClassificationOptions.MinimumConfidence.get -> float?

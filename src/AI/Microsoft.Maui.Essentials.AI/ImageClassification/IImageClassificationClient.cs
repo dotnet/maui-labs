@@ -39,7 +39,7 @@ public interface IImageClassificationClient : IDisposable
 	/// </exception>
 	/// <exception cref="ArgumentException">
 	/// <paramref name="imageStream"/> is unreadable or empty, or <paramref name="imageMediaType"/> is not an
-	/// image media type.
+	/// image media type, or the remaining image data exceeds <see cref="ImageClassificationOptions.MaximumInputBytes"/>.
 	/// </exception>
 	/// <exception cref="NotSupportedException">
 	/// The image media type is valid but unsupported by the implementation.

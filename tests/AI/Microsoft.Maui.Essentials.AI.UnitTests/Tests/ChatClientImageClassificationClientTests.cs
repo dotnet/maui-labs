@@ -331,34 +331,112 @@ public class ChatClientImageClassificationClientTests
 	[Fact]
 	public async Task ClassifyImageAsync_OptionsMutatedDuringPendingRequest_UsesEntrySnapshot()
 	{
-		var responseSource = new TaskCompletionSource<ChatResponse>(
-			TaskCreationOptions.RunContinuationsAsynchronously);
-		var chatClient = new RecordingChatClient
-		{
-			ResponseTask = responseSource.Task
-		};
+		var chatClient = new RecordingChatClient(
+			CreateResponse("""{"labels":["dog","cat","bird"]}"""));
 		using var client = new ChatClientImageClassificationClient(
 			chatClient,
 			["cat", "dog", "bird"]);
 		var options = new ImageClassificationOptions
 		{
+			MaximumInputBytes = 3,
 			MaximumPredictions = 1,
 			MinimumConfidence = null
 		};
-		using var imageStream = new MemoryStream([1, 2, 3]);
+		using var imageStream = new PendingReadStream([1, 2, 3]);
 
 		Task<ImageClassificationResult> classificationTask =
 			client.ClassifyImageAsync(imageStream, "image/png", options);
-		Assert.Equal(1, chatClient.CallCount);
+		await imageStream.ReadStarted;
+		Assert.Equal(0, chatClient.CallCount);
 
+		options.MaximumInputBytes = 1;
 		options.MaximumPredictions = 3;
 		options.MinimumConfidence = 0.5f;
-		responseSource.SetResult(CreateResponse("""{"labels":["dog","cat","bird"]}"""));
+		imageStream.ReleaseRead();
 
 		ImageClassificationResult result = await classificationTask;
 
 		Assert.Equal("dog", Assert.Single(result.Predictions).Label);
 		Assert.Null(result.Predictions[0].Confidence);
+		Assert.Equal(3, imageStream.BytesRead);
+		Assert.Equal(1, chatClient.CallCount);
+	}
+
+	[Fact]
+	public async Task ClassifyImageAsync_ExactMaximumInputBytes_Succeeds()
+	{
+		byte[] imageBytes = [1, 2, 3];
+		var chatClient = new RecordingChatClient(CreateResponse("""{"labels":["cat"]}"""));
+		using var client = new ChatClientImageClassificationClient(chatClient, ["cat"]);
+		using var imageStream = new MemoryStream(imageBytes);
+		var options = new ImageClassificationOptions { MaximumInputBytes = imageBytes.Length };
+
+		ImageClassificationResult result =
+			await client.ClassifyImageAsync(imageStream, "image/png", options);
+
+		DataContent image = Assert.IsType<DataContent>(
+			Assert.Single(chatClient.Messages).Contents[1]);
+		Assert.Equal(imageBytes, image.Data.ToArray());
+		Assert.Equal("cat", Assert.Single(result.Predictions).Label);
+		Assert.Equal(1, chatClient.CallCount);
+	}
+
+	[Fact]
+	public async Task ClassifyImageAsync_SeekableInputExceedsMaximum_RejectsBeforeReading()
+	{
+		var chatClient = new RecordingChatClient();
+		using var client = new ChatClientImageClassificationClient(chatClient, ["cat"]);
+		using var imageStream = new MemoryStream([1, 2, 3, 4]);
+		var options = new ImageClassificationOptions { MaximumInputBytes = 3 };
+
+		ArgumentException exception = await Assert.ThrowsAsync<ArgumentException>(
+			() => client.ClassifyImageAsync(imageStream, "image/png", options));
+
+		Assert.Equal("imageStream", exception.ParamName);
+		Assert.Contains("configured maximum of 3 bytes", exception.Message, StringComparison.Ordinal);
+		Assert.Contains("MaximumInputBytes", exception.Message, StringComparison.Ordinal);
+		Assert.Equal(0, imageStream.Position);
+		Assert.Equal(0, chatClient.CallCount);
+	}
+
+	[Fact]
+	public async Task ClassifyImageAsync_NonSeekableInputExceedsMaximum_ReadsAtMostLimitPlusOne()
+	{
+		var chatClient = new RecordingChatClient();
+		using var client = new ChatClientImageClassificationClient(chatClient, ["cat"]);
+		using var imageStream = new NonSeekableReadStream([1, 2, 3, 4, 5]);
+		var options = new ImageClassificationOptions { MaximumInputBytes = 3 };
+
+		ArgumentException exception = await Assert.ThrowsAsync<ArgumentException>(
+			() => client.ClassifyImageAsync(imageStream, "image/png", options));
+
+		Assert.Equal("imageStream", exception.ParamName);
+		Assert.Equal(4, imageStream.BytesRead);
+		Assert.False(imageStream.IsDisposed);
+		Assert.Equal(0, chatClient.CallCount);
+	}
+
+	[Fact]
+	public async Task ClassifyImageAsync_CancellationDuringChunkedRead_StopsWithoutCallingClient()
+	{
+		var chatClient = new RecordingChatClient();
+		using var client = new ChatClientImageClassificationClient(chatClient, ["cat"]);
+		using var imageStream = new CancellableChunkedStream();
+		using var cancellationSource = new CancellationTokenSource();
+
+		Task<ImageClassificationResult> classificationTask = client.ClassifyImageAsync(
+			imageStream,
+			"image/png",
+			new ImageClassificationOptions { MaximumInputBytes = 10 },
+			cancellationSource.Token);
+		await imageStream.FirstReadCompleted;
+
+		cancellationSource.Cancel();
+
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => classificationTask);
+		Assert.Equal(1, imageStream.BytesRead);
+		Assert.False(imageStream.IsDisposed);
+		Assert.Equal(0, chatClient.CallCount);
 	}
 
 	[Fact]
@@ -701,5 +779,116 @@ public class ChatClientImageClassificationClientTests
 
 		public override void Write(byte[] buffer, int offset, int count) =>
 			throw new NotSupportedException();
+	}
+
+	private class NonSeekableReadStream(byte[] bytes) : Stream
+	{
+		private int _position;
+
+		public int BytesRead { get; private set; }
+
+		public bool IsDisposed { get; private set; }
+
+		public override bool CanRead => !IsDisposed;
+
+		public override bool CanSeek => false;
+
+		public override bool CanWrite => false;
+
+		public override long Length => throw new NotSupportedException();
+
+		public override long Position
+		{
+			get => throw new NotSupportedException();
+			set => throw new NotSupportedException();
+		}
+
+		public override int Read(byte[] buffer, int offset, int count)
+		{
+			int bytesRead = Math.Min(count, bytes.Length - _position);
+			bytes.AsSpan(_position, bytesRead).CopyTo(buffer.AsSpan(offset, bytesRead));
+			_position += bytesRead;
+			BytesRead += bytesRead;
+			return bytesRead;
+		}
+
+		public override Task<int> ReadAsync(
+			byte[] buffer,
+			int offset,
+			int count,
+			CancellationToken cancellationToken)
+		{
+			cancellationToken.ThrowIfCancellationRequested();
+			return Task.FromResult(Read(buffer, offset, count));
+		}
+
+		protected override void Dispose(bool disposing)
+		{
+			IsDisposed = true;
+			base.Dispose(disposing);
+		}
+
+		public override void Flush() => throw new NotSupportedException();
+
+		public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+		public override void SetLength(long value) => throw new NotSupportedException();
+
+		public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+	}
+
+	private sealed class CancellableChunkedStream : NonSeekableReadStream
+	{
+		private int _readCount;
+
+		public CancellableChunkedStream()
+			: base([1])
+		{
+		}
+
+		public Task FirstReadCompleted => _firstReadCompleted.Task;
+
+		private readonly TaskCompletionSource _firstReadCompleted =
+			new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+		public override async Task<int> ReadAsync(
+			byte[] buffer,
+			int offset,
+			int count,
+			CancellationToken cancellationToken)
+		{
+			if (_readCount++ == 0)
+			{
+				int bytesRead = await base.ReadAsync(buffer, offset, Math.Min(count, 1), cancellationToken);
+				_firstReadCompleted.SetResult();
+				return bytesRead;
+			}
+
+			await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+			return 0;
+		}
+	}
+
+	private sealed class PendingReadStream(byte[] bytes) : NonSeekableReadStream(bytes)
+	{
+		private readonly TaskCompletionSource _readStarted =
+			new(TaskCreationOptions.RunContinuationsAsynchronously);
+		private readonly TaskCompletionSource _releaseRead =
+			new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+		public Task ReadStarted => _readStarted.Task;
+
+		public void ReleaseRead() => _releaseRead.TrySetResult();
+
+		public override async Task<int> ReadAsync(
+			byte[] buffer,
+			int offset,
+			int count,
+			CancellationToken cancellationToken)
+		{
+			_readStarted.TrySetResult();
+			await _releaseRead.Task.WaitAsync(cancellationToken);
+			return await base.ReadAsync(buffer, offset, count, cancellationToken);
+		}
 	}
 }

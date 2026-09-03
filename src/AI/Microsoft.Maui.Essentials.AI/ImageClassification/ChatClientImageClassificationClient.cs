@@ -23,6 +23,8 @@ namespace Microsoft.Maui.Essentials.AI;
 /// </remarks>
 public sealed class ChatClientImageClassificationClient : IImageClassificationClient
 {
+	private const int StreamCopyBufferSize = 81920;
+
 	private readonly IChatClient _chatClient;
 	private readonly string[] _labels;
 	private readonly HashSet<string> _labelSet;
@@ -80,14 +82,14 @@ public sealed class ChatClientImageClassificationClient : IImageClassificationCl
 		ArgumentNullException.ThrowIfNull(imageStream);
 		ArgumentNullException.ThrowIfNull(imageMediaType);
 
-		ImageClassificationOptions? optionsSnapshot = options?.Clone();
+		ImageClassificationOptions optionsSnapshot = options?.Clone() ?? new();
 
 		if (!imageStream.CanRead)
 		{
 			throw new ArgumentException("The image stream must be readable.", nameof(imageStream));
 		}
 
-		if (optionsSnapshot?.MinimumConfidence is not null)
+		if (optionsSnapshot.MinimumConfidence is not null)
 		{
 			throw new NotSupportedException(
 				$"{nameof(ChatClientImageClassificationClient)} does not produce confidence values.");
@@ -99,15 +101,17 @@ public sealed class ChatClientImageClassificationClient : IImageClassificationCl
 			throw new ArgumentException("The content media type must be an image media type.", nameof(imageMediaType));
 		}
 
-		using var imageBuffer = new MemoryStream();
-		await imageStream.CopyToAsync(imageBuffer, cancellationToken).ConfigureAwait(false);
+		byte[] imageBytes = await ReadImageBytesAsync(
+			imageStream,
+			optionsSnapshot.MaximumInputBytes,
+			cancellationToken).ConfigureAwait(false);
 
-		if (imageBuffer.Length == 0)
+		if (imageBytes.Length == 0)
 		{
 			throw new ArgumentException("The image stream must not be empty.", nameof(imageStream));
 		}
 
-		image = new DataContent(imageBuffer.ToArray(), imageMediaType);
+		image = new DataContent(imageBytes, imageMediaType);
 
 		var messages = new[]
 		{
@@ -159,7 +163,7 @@ public sealed class ChatClientImageClassificationClient : IImageClassificationCl
 		}
 
 		IEnumerable<string> selectedLabels = labels;
-		if (optionsSnapshot?.MaximumPredictions is int maximumPredictions)
+		if (optionsSnapshot.MaximumPredictions is int maximumPredictions)
 		{
 			selectedLabels = selectedLabels.Take(maximumPredictions);
 		}
@@ -180,6 +184,57 @@ public sealed class ChatClientImageClassificationClient : IImageClassificationCl
 			properties.Current.NameEquals("labels") &&
 			!properties.MoveNext();
 	}
+
+	private static async Task<byte[]> ReadImageBytesAsync(
+		Stream imageStream,
+		long maximumInputBytes,
+		CancellationToken cancellationToken)
+	{
+		if (imageStream.CanSeek)
+		{
+			long length = imageStream.Length;
+			long position = imageStream.Position;
+			long remainingLength = position >= length ? 0 : length - position;
+			if (remainingLength > maximumInputBytes)
+			{
+				throw CreateImageTooLargeException(maximumInputBytes);
+			}
+		}
+
+		using var imageBuffer = new MemoryStream();
+		var buffer = new byte[StreamCopyBufferSize];
+		long totalBytesRead = 0;
+
+		while (true)
+		{
+			long remainingAllowance = maximumInputBytes - totalBytesRead;
+			int requestedBytes = remainingAllowance >= buffer.Length
+				? buffer.Length
+				: (int)remainingAllowance + 1;
+			int bytesRead = await imageStream
+				.ReadAsync(buffer, 0, requestedBytes, cancellationToken)
+				.ConfigureAwait(false);
+
+			if (bytesRead == 0)
+			{
+				return imageBuffer.ToArray();
+			}
+
+			totalBytesRead += bytesRead;
+			if (totalBytesRead > maximumInputBytes)
+			{
+				throw CreateImageTooLargeException(maximumInputBytes);
+			}
+
+			imageBuffer.Write(buffer, 0, bytesRead);
+		}
+	}
+
+	private static ArgumentException CreateImageTooLargeException(long maximumInputBytes) =>
+		new(
+			$"The image stream exceeds the configured maximum of {maximumInputBytes} bytes. " +
+			$"Reduce the image size or increase {nameof(ImageClassificationOptions)}.{nameof(ImageClassificationOptions.MaximumInputBytes)}.",
+			"imageStream");
 
 	/// <inheritdoc />
 	public object? GetService(Type serviceType, object? serviceKey = null)

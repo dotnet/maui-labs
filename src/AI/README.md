@@ -46,7 +46,7 @@ ImageClassificationResult result =
 ImageClassificationPrediction? best = result.Predictions.FirstOrDefault();
 ```
 
-`MaximumPredictions` is an at-most constraint. Confidence is optional, and providers without confidence support reject a non-null `MinimumConfidence`. `ChatClientImageClassificationClient` adapts a dedicated vision-capable `IChatClient` to a snapshotted label allowlist while preserving response ranking and the original `ChatResponse`. It prefers structured output and narrowly falls back to a top-level JSON string array when a client ignores the requested format.
+`MaximumPredictions` is an at-most constraint. `MaximumInputBytes` defaults to exactly 20 MiB (`20 * 1024 * 1024` bytes) and bounds how much image data a provider may read. Confidence is optional, and providers without confidence support reject a non-null `MinimumConfidence`. `ChatClientImageClassificationClient` adapts a dedicated vision-capable `IChatClient` to a snapshotted label allowlist while preserving response ranking and the original `ChatResponse`. It prefers structured output and narrowly falls back to a top-level JSON string array when a client ignores the requested format.
 
 Provider identity is exposed through `ImageClassificationClientMetadata`; individual results retain model provenance and optional raw or additional response metadata. Callers retain ownership of input streams and of any chat client passed to the adapter.
 

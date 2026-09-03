@@ -88,7 +88,7 @@ public static async Task<ImageClassificationPrediction?> ClassifyAsync(
 }
 ```
 
-`MaximumPredictions` is an upper bound, so providers may return fewer results. Prediction confidence is optional. Providers that cannot produce confidence values throw `NotSupportedException` when `MinimumConfidence` is set.
+`MaximumPredictions` is an upper bound, so providers may return fewer results. `MaximumInputBytes` limits the image bytes a provider may read and defaults to exactly 20 MiB (`20 * 1024 * 1024` bytes). Prediction confidence is optional. Providers that cannot produce confidence values throw `NotSupportedException` when `MinimumConfidence` is set.
 
 To classify against a fixed label set with a dedicated vision-capable `IChatClient`, use the built-in adapter:
 

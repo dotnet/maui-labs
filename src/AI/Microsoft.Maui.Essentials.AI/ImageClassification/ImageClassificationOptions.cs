@@ -6,6 +6,9 @@ namespace Microsoft.Maui.Essentials.AI;
 /// <summary>Represents options that constrain an image classification response.</summary>
 public class ImageClassificationOptions
 {
+	private const long DefaultMaximumInputBytes = 20 * 1024 * 1024;
+
+	private long _maximumInputBytes = DefaultMaximumInputBytes;
 	private int? _maximumPredictions;
 	private float? _minimumConfidence;
 
@@ -26,8 +29,25 @@ public class ImageClassificationOptions
 			return;
 		}
 
+		MaximumInputBytes = other.MaximumInputBytes;
 		MaximumPredictions = other.MaximumPredictions;
 		MinimumConfidence = other.MinimumConfidence;
+	}
+
+	/// <summary>Gets or sets the maximum number of image bytes that may be read from the input stream.</summary>
+	/// <value>The positive input limit in bytes. The default is 20 MiB (20 * 1024 * 1024 bytes).</value>
+	public long MaximumInputBytes
+	{
+		get => _maximumInputBytes;
+		set
+		{
+			if (value <= 0)
+			{
+				throw new ArgumentOutOfRangeException(nameof(value), value, "The maximum input size must be greater than zero.");
+			}
+
+			_maximumInputBytes = value;
+		}
 	}
 
 	/// <summary>Gets or sets the maximum number of predictions that may be returned.</summary>
