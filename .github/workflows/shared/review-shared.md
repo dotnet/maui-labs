@@ -86,7 +86,7 @@ task(
   description="Reviewer 1: deep reasoning review",
   agent_type="general-purpose",
   mode="background",
-  model="claude-opus-4.8",
+  model="gpt-5.6-terra",
   prompt="<full diff + PR description + instruction to follow .github/agents/expert-reviewer.agent.md>"
 )
 
@@ -95,7 +95,7 @@ task(
   description="Reviewer 2: pattern matching review",
   agent_type="general-purpose",
   mode="background",
-  model="claude-sonnet-4.6",
+  model="gemini-3.7-flash",
   prompt="<same diff + same PR description + same instruction>"
 )
 
@@ -104,7 +104,7 @@ task(
   description="Reviewer 3: alternative perspective review",
   agent_type="general-purpose",
   mode="background",
-  model="gpt-5.3-codex",
+  model="gpt-5.6-sol",
   prompt="<same diff + same PR description + same instruction>"
 )
 ```
