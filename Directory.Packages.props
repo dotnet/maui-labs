@@ -76,6 +76,7 @@
 
   <!-- EssentialsAI dependencies -->
   <ItemGroup Label="EssentialsAI">
+    <PackageVersion Include="Azure.AI.ContentUnderstanding" Version="$(AzureAIContentUnderstandingVersion)" />
     <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="$(MicrosoftExtensionsAIAbstractionsVersion)" />
     <!-- Sample app: Microsoft Agents AI -->
     <PackageVersion Include="Microsoft.Agents.AI" Version="$(MicrosoftAgentsAIVersion)" />
