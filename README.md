@@ -17,7 +17,7 @@ At a glance:
 | [AI Extensions](#ai-extensions) | Source-generated `Microsoft.Extensions.AI` tool bindings for MAUI and .NET apps. |
 | [macOS AppKit Backend](#macos-appkit-backend) | Native AppKit backend for running MAUI apps as macOS apps without Mac Catalyst. |
 | [WPF Backend](#wpf-backend) | WPF-based Windows desktop backend for .NET MAUI apps. |
-| [Essentials.AI](#essentialsai) | On-device AI APIs for chat completion, embeddings, and tool calling in MAUI apps. |
+| [Essentials.AI](#essentialsai) | AI APIs for chat, embeddings, and image classification, with on-device implementations and an optional Azure provider. |
 | [AppProjectReference](#appprojectreference) | MSBuild package for referencing MAUI app projects and consuming their platform artifacts. |
 
 ### Cli
@@ -134,7 +134,7 @@ A WPF-based alternative to the official WinUI backend for .NET MAUI. Run MAUI ap
 
 ### Essentials.AI
 
-On-device AI capabilities for .NET MAUI via `Microsoft.Extensions.AI` abstractions. On Apple platforms, wraps Apple Intelligence (Foundation Models) for chat completion with streaming and tool calling, and Apple NaturalLanguage APIs for on-device embeddings.
+AI capabilities for .NET MAUI via `Microsoft.Extensions.AI` abstractions. On Apple platforms, the core package wraps Apple Intelligence (Foundation Models) for chat completion with streaming and tool calling, and Apple NaturalLanguage APIs for on-device embeddings. An optional Azure Content Understanding package connects the provider-neutral image-classification contract to custom cloud classifier analyzers.
 
 - **`IChatClient`** backed by Apple Intelligence on iOS, macOS, and Mac Catalyst
 - **Streaming infrastructure** — progressive JSON deserialization of LLM responses
@@ -144,6 +144,7 @@ On-device AI capabilities for .NET MAUI via `Microsoft.Extensions.AI` abstractio
 | Package | Description |
 |---------|-------------|
 | [![NuGet: Microsoft.Maui.Essentials.AI](https://img.shields.io/nuget/v/Microsoft.Maui.Essentials.AI.svg?label=Microsoft.Maui.Essentials.AI)](https://www.nuget.org/packages/Microsoft.Maui.Essentials.AI/) | On-device AI APIs for MAUI |
+| [![NuGet: Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding](https://img.shields.io/nuget/v/Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding.svg?label=Azure%20Content%20Understanding)](https://www.nuget.org/packages/Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding/) | Azure Content Understanding image-classification provider |
 
 ### AppProjectReference
 

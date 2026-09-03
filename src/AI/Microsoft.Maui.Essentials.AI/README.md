@@ -108,6 +108,10 @@ The stream remains owned by the caller. Clients read one encoded image from its 
 
 Provider identity is available from `ImageClassificationClientMetadata` through `GetService`. Each result retains its `ModelId` and can preserve provider-native response data through `RawRepresentation` and `AdditionalProperties`.
 
+For custom cloud classifiers, install
+[`Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding`](https://www.nuget.org/packages/Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding/)
+and configure an Azure Content Understanding analyzer with `EnableSegment=false`.
+
 ## Requirements
 
 - .NET 10

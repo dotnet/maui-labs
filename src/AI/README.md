@@ -1,6 +1,6 @@
 # Microsoft.Maui.Essentials.AI
 
-On-device AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://www.nuget.org/packages/Microsoft.Extensions.AI.Abstractions) abstractions.
+AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://www.nuget.org/packages/Microsoft.Extensions.AI.Abstractions) abstractions, with on-device implementations and an optional Azure image-classification provider.
 
 > **Note:** This is the contributor/repo-browsing README. The NuGet consumer README with install instructions and full usage examples is at [`Microsoft.Maui.Essentials.AI/README.md`](Microsoft.Maui.Essentials.AI/README.md).
 
@@ -8,6 +8,7 @@ On-device AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://
 
 - **`IChatClient`** — backed by Apple Intelligence (Foundation Models) on iOS, macOS, and Mac Catalyst
 - **`IImageClassificationClient`** — provider-neutral contracts for classifying encoded images
+- **Azure Content Understanding classifier** — optional cloud provider for custom whole-image classifier analyzers
 - **Streaming** — progressive JSON deserialization of LLM responses via `JsonStreamChunker` and `PlainTextStreamChunker`
 - **Tool calling** — function-calling support for on-device models
 - **NL embeddings** — on-device semantic search via Apple's NaturalLanguage framework (`NLEmbeddingGenerator`)
@@ -55,6 +56,7 @@ Provider identity is exposed through `ImageClassificationClientMetadata`; indivi
 | Package | Description |
 |---------|-------------|
 | `Microsoft.Maui.Essentials.AI` | On-device AI APIs for MAUI |
+| `Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding` | Azure Content Understanding image-classification provider |
 
 ## Building
 
@@ -74,6 +76,7 @@ The CI pipeline handles the macOS → Windows artifact flow automatically. See `
 - **Native Swift bindings** (`AppleNative/EssentialsAI/`) compiled via Xcode, producing `.xcframework` bundles
 - **`AppleBindings.targets`** — MSBuild targets for cross-platform native artifact flow
 - **Streaming infrastructure** — `JsonStreamChunker`, `PlainTextStreamChunker`, `StreamingResponseHandler` for progressive deserialization
+- **Azure provider** — independently installable managed adapter over `Azure.AI.ContentUnderstanding`
 
 ## Documentation
 

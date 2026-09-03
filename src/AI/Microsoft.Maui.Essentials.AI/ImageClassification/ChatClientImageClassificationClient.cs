@@ -23,8 +23,6 @@ namespace Microsoft.Maui.Essentials.AI;
 /// </remarks>
 public sealed class ChatClientImageClassificationClient : IImageClassificationClient
 {
-	private const int StreamCopyBufferSize = 81920;
-
 	private readonly IChatClient _chatClient;
 	private readonly string[] _labels;
 	private readonly HashSet<string> _labelSet;
@@ -101,10 +99,11 @@ public sealed class ChatClientImageClassificationClient : IImageClassificationCl
 			throw new ArgumentException("The content media type must be an image media type.", nameof(imageMediaType));
 		}
 
-		byte[] imageBytes = await ReadImageBytesAsync(
+		byte[] imageBytes = await ImageClassificationInput.ReadBytesAsync(
 			imageStream,
 			optionsSnapshot.MaximumInputBytes,
-			cancellationToken).ConfigureAwait(false);
+			cancellationToken,
+			nameof(imageStream)).ConfigureAwait(false);
 
 		if (imageBytes.Length == 0)
 		{
@@ -183,51 +182,6 @@ public sealed class ChatClientImageClassificationClient : IImageClassificationCl
 		return properties.MoveNext() &&
 			properties.Current.NameEquals("labels") &&
 			!properties.MoveNext();
-	}
-
-	private static async Task<byte[]> ReadImageBytesAsync(
-		Stream imageStream,
-		long maximumInputBytes,
-		CancellationToken cancellationToken)
-	{
-		if (imageStream.CanSeek)
-		{
-			long length = imageStream.Length;
-			long position = imageStream.Position;
-			long remainingLength = position >= length ? 0 : length - position;
-			if (remainingLength > maximumInputBytes)
-			{
-				throw ImageClassificationInput.CreateTooLargeException(maximumInputBytes, nameof(imageStream));
-			}
-		}
-
-		using var imageBuffer = new MemoryStream();
-		var buffer = new byte[StreamCopyBufferSize];
-		long totalBytesRead = 0;
-
-		while (true)
-		{
-			long remainingAllowance = maximumInputBytes - totalBytesRead;
-			int requestedBytes = remainingAllowance >= buffer.Length
-				? buffer.Length
-				: (int)remainingAllowance + 1;
-			int bytesRead = await imageStream
-				.ReadAsync(buffer, 0, requestedBytes, cancellationToken)
-				.ConfigureAwait(false);
-
-			if (bytesRead == 0)
-			{
-				return imageBuffer.ToArray();
-			}
-
-			totalBytesRead += bytesRead;
-			if (totalBytesRead > maximumInputBytes)
-			{
-				throw ImageClassificationInput.CreateTooLargeException(maximumInputBytes, nameof(imageStream));
-			}
-
-			imageBuffer.Write(buffer, 0, bytesRead);
-		}
 	}
 
 	/// <inheritdoc />
