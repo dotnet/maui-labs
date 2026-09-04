@@ -9,6 +9,7 @@
              BackgroundColor="{StaticResource Primary}">
 
     <Grid RowDefinitions="Auto,*"
+          ColumnDefinitions="*,Auto"
           BackgroundColor="{AppThemeBinding Light={StaticResource ModalBackgroundLight}, Dark={StaticResource ModalBackgroundDark}}">
         <!-- Header: [back] [icon] [title] -->
         <Border Grid.Row="0"
@@ -37,6 +38,8 @@
         </Border>
 
         <views:CatalogView Grid.Row="1" />
+        <views:ChatSidebar Grid.Column="1"
+                           Grid.RowSpan="2" />
     </Grid>
 
 </ContentPage>
