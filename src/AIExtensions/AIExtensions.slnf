@@ -4,8 +4,10 @@
     "projects": [
       "src\\AIExtensions\\Microsoft.Maui.AI.Attributes\\Microsoft.Maui.AI.Attributes.csproj",
       "src\\AIExtensions\\Microsoft.Maui.AI.Attributes.Generators\\Microsoft.Maui.AI.Attributes.Generators.csproj",
+      "src\\AIExtensions\\Microsoft.Maui.AI.Navigation\\Microsoft.Maui.AI.Navigation.csproj",
       "tests\\AIExtensions\\Microsoft.Maui.AI.Attributes.Tests\\Microsoft.Maui.AI.Attributes.Tests.csproj",
-      "tests\\AIExtensions\\Microsoft.Maui.AI.Attributes.Generators.Tests\\Microsoft.Maui.AI.Attributes.Generators.Tests.csproj"
+      "tests\\AIExtensions\\Microsoft.Maui.AI.Attributes.Generators.Tests\\Microsoft.Maui.AI.Attributes.Generators.Tests.csproj",
+      "tests\\AIExtensions\\Microsoft.Maui.AI.Navigation.Tests\\Microsoft.Maui.AI.Navigation.Tests.csproj"
     ]
   }
 }
