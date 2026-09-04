@@ -19,6 +19,7 @@ At a glance:
 | [WPF Backend](#wpf-backend) | WPF-based Windows desktop backend for .NET MAUI apps. |
 | [Essentials.AI](#essentialsai) | On-device AI APIs for chat completion, embeddings, and tool calling in MAUI apps. |
 | [AppProjectReference](#appprojectreference) | MSBuild package for referencing MAUI app projects and consuming their platform artifacts. |
+| [MAUI Testing](#maui-testing) | MTP-based Android, iOS, and Mac Catalyst test lifecycle and single-project template. |
 
 ### Cli
 
@@ -158,6 +159,22 @@ Built artifacts are exposed as `@(MauiAppArtifact)` items with `ArtifactType`, `
 | Package | Description |
 |---------|-------------|
 | [![NuGet: Microsoft.Maui.Build.AppProjectReference](https://img.shields.io/nuget/v/Microsoft.Maui.Build.AppProjectReference.svg?label=Microsoft.Maui.Build.AppProjectReference)](https://www.nuget.org/packages/Microsoft.Maui.Build.AppProjectReference/) | Build-time app project reference with artifact discovery |
+
+### MAUI Testing
+
+Framework-neutral Microsoft.Testing.Platform lifecycle support for device tests, with a `mauitest` single-project template modeled after `dotnet new maui`.
+
+- Shared `MauiProgram.CreateMauiTestApp()` and dependency-injection builder
+- Android instrumentation and native Apple status UI
+- MSTest by default, with an NUnit configuration path and framework-neutral builder
+- Requires .NET 11
+
+| Package | Description |
+|---------|-------------|
+| [![NuGet: Microsoft.Maui.Testing](https://img.shields.io/nuget/v/Microsoft.Maui.Testing.svg?label=Microsoft.Maui.Testing)](https://www.nuget.org/packages/Microsoft.Maui.Testing/) | Runtime builder and platform lifecycle |
+| [![NuGet: Microsoft.Maui.Testing.Templates](https://img.shields.io/nuget/v/Microsoft.Maui.Testing.Templates.svg?label=Microsoft.Maui.Testing.Templates)](https://www.nuget.org/packages/Microsoft.Maui.Testing.Templates/) | `dotnet new mauitest` template pack |
+
+See [src/Testing/README.md](src/Testing/README.md) for installation, execution, and framework conversion instructions.
 
 ## Agent Skills
 

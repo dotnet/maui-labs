@@ -44,6 +44,10 @@ parameters:
   displayName: 'Publish EssentialsAI packages to NuGet.org'
   type: boolean
   default: false
+- name: publishTestingNuget
+  displayName: 'Publish MAUI Testing packages to NuGet.org'
+  type: boolean
+  default: false
 
 variables:
 - template: /eng/pipelines/common-variables.yml@self
@@ -400,6 +404,37 @@ extends:
                 -projects $(Build.SourcesDirectory)\platforms\MacOS\MacOS-libs.slnf
                 $(_OfficialBuildArgs)
               displayName: Build, Test and Pack macOS AppKit
+
+          - job: Testing
+            displayName: MAUI Testing - Windows
+            pool:
+              name: NetCore1ESPool-Internal
+              demands: ImageOverride -equals windows.vs2026.amd64
+            strategy:
+              matrix:
+                Release:
+                  _BuildConfig: Release
+                  _OfficialBuildArgs: /p:DotNetSignType=$(_SignType)
+                    /p:TeamName=$(_TeamName)
+                    /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
+            steps:
+            - task: UseDotNet@2
+              displayName: Install .NET 11 SDK
+              inputs:
+                version: 11.0.x
+                includePreviewVersions: true
+            - powershell: |
+                dotnet workload install maui
+                if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+              displayName: Install MAUI workload
+              workingDirectory: $(Build.SourcesDirectory)\src\Testing
+            - script: $(Build.SourcesDirectory)\eng\common\cibuild.cmd
+                -configuration $(_BuildConfig)
+                -prepareMachine
+                -projects $(Build.SourcesDirectory)\src\Testing\Testing.slnx
+                $(_OfficialBuildArgs)
+              displayName: Build, Test and Pack MAUI Testing
+              workingDirectory: $(Build.SourcesDirectory)\src\Testing
        
     - template: /eng/common/templates-official/post-build/post-build.yml@self
       parameters:
@@ -845,5 +880,60 @@ extends:
               useDotNetTask: false
               packagesToPush: '$(Pipeline.Workspace)/MacOSPackages/*.nupkg'
               packageParentPath: '$(Pipeline.Workspace)/MacOSPackages'
+              nuGetFeedType: external
+              publishFeedCredentials: 'nuget.org (dotnetframework)'
+
+    # Publish MAUI Testing packages to NuGet.org
+    - ${{ if eq(parameters.publishTestingNuget, true) }}:
+      - stage: publish_testing_nuget
+        displayName: 'Publish MAUI Testing to NuGet.org'
+        dependsOn:
+        - Validate
+        - publish_using_darc
+        jobs:
+        - job: PrepareArtifacts
+          displayName: 'Prepare MAUI Testing Artifacts'
+          timeoutInMinutes: 15
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026.amd64
+            os: windows
+          templateContext:
+            outputs:
+            - output: pipelineArtifact
+              displayName: Publish MAUI Testing Packages
+              targetPath: '$(Pipeline.Workspace)/TestingPackages'
+              artifactName: TestingPackagesForNuGet
+          steps:
+          - download: current
+            artifact: PackageArtifacts
+            displayName: Download PackageArtifacts
+          - powershell: |
+              New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/TestingPackages'
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.Testing*.nupkg' '$(Pipeline.Workspace)/TestingPackages/' -Verbose -ErrorAction Stop
+            displayName: Filter MAUI Testing packages
+
+        - job: PublishNuGet
+          displayName: 'Push MAUI Testing to NuGet.org'
+          dependsOn: PrepareArtifacts
+          timeoutInMinutes: 30
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026.amd64
+            os: windows
+          templateContext:
+            type: releaseJob
+            isProduction: true
+            inputs:
+            - input: pipelineArtifact
+              artifactName: TestingPackagesForNuGet
+              targetPath: '$(Pipeline.Workspace)/TestingPackages'
+          steps:
+          - task: 1ES.PublishNuget@1
+            displayName: 'Push MAUI Testing to NuGet.org'
+            inputs:
+              useDotNetTask: false
+              packagesToPush: '$(Pipeline.Workspace)/TestingPackages/*.nupkg'
+              packageParentPath: '$(Pipeline.Workspace)/TestingPackages'
               nuGetFeedType: external
               publishFeedCredentials: 'nuget.org (dotnetframework)'
