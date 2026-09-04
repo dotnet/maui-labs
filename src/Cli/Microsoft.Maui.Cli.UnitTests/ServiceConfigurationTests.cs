@@ -29,6 +29,7 @@ public class ServiceConfigurationTests
 		Assert.NotNull(provider.GetService<IDevFlowOutputWriter>());
 		Assert.NotNull(provider.GetService<IMauiVersionFeedService>());
 		Assert.NotNull(provider.GetService<IMauiProjectVersionService>());
+		Assert.NotNull(provider.GetService<IMauiPrArtifactService>());
 	}
 
 	[Fact]
