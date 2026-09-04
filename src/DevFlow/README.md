@@ -137,7 +137,6 @@ dotnet tool install -g Microsoft.Maui.Cli --prerelease
 ```bash
 # Install DevFlow skills for AI agent integration (auto-detects target directory;
 # defaults to .claude/skills/ — configurable via --target: claude, github, agent, agents, or auto)
-# (configurable via --target: claude, github, agent, agents, or auto)
 maui devflow init
 
 # Visual tree
@@ -147,16 +146,15 @@ maui devflow ui tree
 maui devflow ui diagnostics --profile agent
 
 # Take a screenshot
-maui devflow ui screenshot -o screenshot.png
+maui devflow ui screenshot --output screenshot.png
 
 # Tap an element
-maui devflow ui tap --automationid "MyButton"
+maui devflow ui tap --automationId "MyButton"
 
 # Start MCP server for AI agent integration
 maui devflow mcp
 
-# Open the DevFlow Web Inspector
-# http://localhost:19223/inspector/
+# Start the Inspector, then open http://localhost:19223/inspector/
 maui devflow broker start
 ```
 
@@ -351,7 +349,8 @@ These options apply to all `maui devflow` subcommands:
 
 ## Documentation
 
-- [DevFlow Web Inspector and MAUI DevFlow Inspector hosts](../../docs/DevFlow/inspector.md)
+- [MAUI DevFlow Inspector setup and host selection](../../docs/DevFlow/inspector.md)
+- [MAUI DevFlow Inspector internals](../../docs/DevFlow/inspector-internals.md)
 - [Broker Architecture](../../docs/DevFlow/broker.md)
 - [Agent API / Protocol Spec](../../docs/DevFlow/spec/README.md)
 - [Android Setup](../../docs/DevFlow/setup-guides/android-setup.md)

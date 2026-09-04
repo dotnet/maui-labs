@@ -1,208 +1,253 @@
-# DevFlow Web Inspector
+# MAUI DevFlow Inspector
 
-The DevFlow Web Inspector mirrors a running .NET MAUI app as a screenshot plus an interactive
-visual-tree overlay. It is served directly at `http://localhost:19223/inspector/`.
+> **Experimental preview**: The Inspector and its host integrations may change between releases.
 
-The MAUI DevFlow Inspector host integrations embed that existing page in:
+The MAUI DevFlow Inspector shows a running app's screenshot, visual tree, properties, diagnostics,
+data, and workflow tools. The same broker-hosted Inspector can be opened in:
 
-- MAUI DevFlow Inspector for VS Code;
-- MAUI DevFlow Inspector for GitHub Copilot Canvas.
+- a browser;
+- Visual Studio Code;
+- the GitHub Copilot desktop app as a side canvas; or
+- GitHub Copilot CLI as a canvas.
 
-The broker-hosted page remains the **DevFlow Web Inspector**. **MAUI DevFlow Inspector** is the
-public name for the host integrations added around it; all hosts embed the same page.
+Set up the app once, then choose the host that fits your workflow.
 
-## Start the inspector
+## Choose a host
 
-Add and start the DevFlow agent in a Debug build, launch the app, then:
+| Host | Open it | Best for | Availability |
+|---|---|---|---|
+| Browser | Start the broker and open `http://localhost:19223/inspector/` | Fastest first run and the complete shared Inspector UI | Included with `Microsoft.Maui.Cli` |
+| VS Code | Run **MAUI DevFlow: Open Inspector** | Source navigation, workflow files, and Copilot context tools | Source-built preview VSIX |
+| GitHub Copilot desktop | Ask Copilot to open the MAUI DevFlow Inspector canvas | A side canvas shared by the human and Copilot | Repository-scoped source preview |
+| GitHub Copilot CLI | Ask Copilot to open the MAUI DevFlow Inspector canvas | Terminal-first work with the same live canvas | Repository-scoped source preview |
+
+The Copilot extension folder is named `maui-devflow-canvas`; it registers the Canvas ID
+`maui-live-canvas`.
+
+## Set up the app once
+
+### 1. Install the CLI
+
+```bash
+dotnet tool install --global Microsoft.Maui.Cli --prerelease
+```
+
+If it is already installed:
+
+```bash
+dotnet tool update --global Microsoft.Maui.Cli --prerelease
+```
+
+Confirm the command and version:
+
+```bash
+maui devflow version
+```
+
+On PowerShell, use `Get-Command maui`; on bash or zsh, use `command -v maui` if you need to confirm
+which installation is running.
+
+### 2. Add the in-app agent
+
+For a standard .NET MAUI app:
+
+```bash
+dotnet add path/to/MyApp.csproj package Microsoft.Maui.DevFlow.Agent --prerelease
+```
+
+Replace `path/to/MyApp.csproj` with the app project's actual path.
+
+For a Blazor Hybrid app, also add:
+
+```bash
+dotnet add path/to/MyApp.csproj package Microsoft.Maui.DevFlow.Blazor --prerelease
+```
+
+Linux/GTK apps use `Microsoft.Maui.DevFlow.Agent.Gtk` and, for Blazor Hybrid,
+`Microsoft.Maui.DevFlow.Blazor.Gtk`. For plain .NET Android, iOS, Mac Catalyst, or macOS apps, see
+the [DevFlow quick start](../../src/DevFlow/README.md#2b-or-in-a-plain-net-app-no-maui).
+
+### 3. Register DevFlow
+
+In `MauiProgram.cs`:
+
+```csharp
+using Microsoft.Maui.DevFlow.Agent;
+
+// For Blazor Hybrid:
+// using Microsoft.Maui.DevFlow.Blazor;
+
+public static MauiApp CreateMauiApp()
+{
+    var builder = MauiApp.CreateBuilder();
+    builder.UseMauiApp<App>();
+
+#if DEBUG
+    builder.AddMauiDevFlowAgent();
+    // Blazor Hybrid only:
+    // builder.AddMauiBlazorDevFlowTools();
+#endif
+
+    return builder.Build();
+}
+```
+
+Keep the registration inside `#if DEBUG` so Release builds do not start the development agent.
+
+### 4. Start and verify
+
+Start the broker before launching the app:
 
 ```bash
 maui devflow broker start
 ```
 
-Open the broker URL above, run **MAUI DevFlow: Open Inspector** in VS Code, or open the MAUI
-DevFlow Inspector in GitHub Copilot Canvas.
-
-## Features
-
-- screenshot and visual-tree inspection with hover, selection, and searchable hierarchy;
-- a prominent disconnected-state overlay that preserves and clearly labels the last captured frame
-  while DevFlow waits for the app to reconnect;
-- tap, fill, scroll, named gestures (pinch, rotate, pan, swipe, double-tap, long-press, tap),
-  navigation, theme, and live property mutation, with explicit
-  **Apply to XAML** persistence for existing direct-literal attributes and runtime-owned property
-  editor metadata;
-- logs, live-updating network, preferences, device, sensor, native Alerts, read-only file browsing,
-  and WebView/CDP data docks;
-- click-to-XAML source navigation for Debug source maps;
-- one integrated Workflow panel for recording, loading project `maui-tests` files or local Markdown
-  files, replaying them, and reviewing per-step results;
-- an **Add to Copilot** context menu for the selected element, loaded workflow, both together, or
-  the current bounded and redacted Data snapshot, including alert metadata;
-- responsive light, dark, and high-contrast host theming.
-
-## Architecture
-
-```text
-Browser / VS Code / Canvas
-          |
-          v
-DevFlow broker-hosted inspector
-          |
-          v
-In-app DevFlow agent
-```
-
-The broker discovers agents and serves the HTML/CSS/JavaScript bundle. Inspector mutations are
-proxied to the selected in-app agent. VS Code and Canvas embed the same page and add an
-authenticated host bridge for source navigation, recording persistence, and Copilot context.
-
-## Host-adaptive layout
-
-The shared inspector keeps one interaction model while adapting its chrome to the host viewport:
-
-- **Wide browser/editor:** tree, screenshot, and properties are docked as three panes.
-- **Compact editor:** the tree remains available while properties open as a drawer, preserving
-  screenshot width.
-- **Narrow Canvas/editor:** the screenshot is primary; tree and properties become coordinated
-  full-height drawers with a scrim.
-- **Short host:** drawers and overlay Data/timeline sheets protect the screenshot's vertical budget.
-
-The toolbar keeps interaction mode, tree, fit, and recording visible. Secondary actions remain
-inline for as long as they fit; only the non-fitting actions move into the **More** menu. More can
-open over an active Data or properties surface, and Copilot choices open as a nested submenu.
-Host bridges also supply their color palette, font metadata, contrast mode, and reduced-motion
-preference. VS Code placement is configurable with
-`mauiDevflow.openLocation` (`auto`, `beside`, or `active`).
-
-## Coordinated frames and coordinates
-
-Each inspector refresh creates an immutable frame containing:
-
-- the visual tree used for the overlay;
-- the exact screenshot bytes;
-- screenshot dimensions;
-- the screenshotted root page and its window offset;
-- rendered element HTML.
-
-The screenshot URL includes the frame ID. Expired frame screenshots return `404`, causing the
-client to refresh state instead of pairing a new screenshot with stale bounds. When a modal or
-sheet is screenshotted, only that page subtree is rendered, preventing underlying window chrome
-from producing negative offsets.
-
-Browser coordinates are converted from the fit-scaled viewport back to screenshot coordinates,
-then translated to window coordinates with the frame's root offset before hit testing.
-
-## Global mutation lease
-
-All state-changing calls use one lease per running app. Browser tabs, VS Code, Canvas, MCP, and CLI
-therefore cannot drive the app concurrently.
-
-- The first mutating host claims the lease.
-- Read-only inspection remains available to other hosts.
-- A host can release or explicitly take over the lease.
-- Lease release or takeover hands an active app-scoped recording to the next valid lease holder.
-- Closing Canvas releases its lease; abandoned leases also expire automatically.
-
-The lease coordinates writers; it is not an authentication boundary.
-
-## Workflow recording
-
-Recording is owned by the broker and scoped to the current app. The current valid mutation lease
-holder controls it. The agent observes successful supported mutations from every host, so a
-workflow can begin in the browser, continue through Canvas or MCP after lease handoff, and stop in
-VS Code without separate local recorders.
-
-The Workflow panel can also load an existing test from the registered app project's top-level
-`maui-tests` directory or from an OS-selected `.md` file. Project files are confined to that
-directory, capped at 1 MB, and parsed and validated before Inspector makes them replayable.
-Replay results stay in the same Workflow panel instead of opening a separate report surface.
-
-Currently normalized actions include tap, fill, scroll, navigate, back, theme changes, and property
-changes. The result is a Markdown file with an authoritative `json maui-test` block for replay.
-Replay is blocked while recording is active.
-
-## Click-to-XAML
-
-The Agent.Core package supplies a build-transitive source generator. In Debug builds it maps XAML
-elements to source file, line, column, and a build-time content hash. VS Code compares the current
-file hash before opening the recorded line and warns when the file changed after the app was built.
-
-Source locations are emitted only when the runtime element can be matched conservatively to its
-XAML declaration. Repeated same-type siblings need sibling-unique `AutomationId` values; otherwise
-their source actions are withheld rather than risk opening or editing the wrong declaration.
-
-Source maps are disabled outside Debug by default because they embed XAML text and source paths.
-They can be disabled explicitly:
-
-```xml
-<DevFlowXamlSourceMapsEnabled>false</DevFlowXamlSourceMapsEnabled>
-```
-
-### Apply property values to XAML
-
-For source-mapped elements, each supported property row includes an **Apply to XAML** button. Live
-editing remains runtime-only until this button is selected. The broker then updates only an
-existing direct-literal attribute in the registered app project while preserving the rest of the
-file, its encoding, and line endings.
-
-The write is rejected when the property comes from a binding, resource, markup extension, style,
-property element, template, or code-created element. It is also rejected when the source changed
-outside Inspector after the app was built or after the previous Inspector write. Rebuild the app
-to refresh stale source maps.
-
-The broker validates the value against the running element before writing and restricts edits to
-the agent-advertised property grid. Current agents describe editor kind, current value, writability,
-enum choices, and numeric constraints from the runtime control. It binds relative project names to the build's default path-derived
-DevFlow session identity; builds using a custom `MauiDevFlowSessionId` should also set
-`MauiDevFlowIncludeProjectPath=true` to provide an unambiguous project root.
-
-## Platform boundaries
-
-The WebView data tab lists attached Blazor WebViews, displays page source, and evaluates JavaScript
-through the existing CDP bridge. Every expression requires confirmation because arbitrary
-JavaScript can read or change live application data. A bundled Chrome DevTools frontend is
-intentionally outside the Inspector scope; use external browser platform tools when the
-full DOM, console, network, and debugger experience is required.
-
-System dialogs and MAUI alerts are outside the in-app MAUI visual tree. The **Alerts** data tab uses
-the existing platform drivers to detect and dismiss them without pretending they are selectable
-MAUI elements. Detection remains read-only. Dismissal requires the mutation lease and is blocked
-while workflow replay is driving the app.
-
-- Android actions target only the online device whose existing ADB forward owns the selected
-  agent port. Missing or ambiguous ownership is rejected.
-- Windows and Mac Catalyst actions refresh and use the exact app process ID reported by the agent.
-- Linux actions connect the platform driver to the exact selected agent.
-- iOS alert control remains CLI-only because Inspector registration does not carry a simulator
-  UDID. Use the platform alert driver explicitly:
+Launch the app in Debug, then verify the connection:
 
 ```bash
-maui devflow ui alert detect --device <simulator-udid>
-maui devflow ui alert dismiss "OK" --device <simulator-udid>
+maui devflow list
+maui devflow ui status
+maui devflow ui tree --depth 1
 ```
 
-DevFlow Action request bodies are passed to the registered action. A generic
-`include: ["screenshot", "tree"]` field does not add post-action captures; use the CLI/MCP
-post-action options or request the screenshot and tree explicitly.
+Platform notes:
 
-## Compatibility
+- **Android**: On a fresh emulator/device session, run
+  `maui devflow wait --wait-platform Android --device <serial>` while launching the app. The
+  command prepares the broker reverse before waiting and then prepares the agent-port forward.
+  `maui devflow diagnose --device <serial>` reports the current forwarding state without changing
+  it.
+- **Mac Catalyst**: A sandboxed Debug build needs the
+  `com.apple.security.network.server` entitlement.
+- **GTK**: Start the agent after app activation with `app.StartDevFlowAgent()`.
 
-Current clients remain read/write compatible with older agents that do not expose the lease
-endpoint. Older clients cannot mutate current agents because they do not send a lease identity.
-Inspector falls back to its legacy static property table when an older agent does not expose
-runtime descriptors. The Node client negotiates `ui.events`; unsupported agents enter a stable
-`polling-only` state and recheck the capability every 60 seconds so an in-place upgrade recovers
-without reconnect churn. Upgrade the agent packages and host tooling together.
+## Open in a browser
 
-## Implementation
+Run:
 
-| Area | Location |
+```bash
+maui devflow broker start
+```
+
+Then open:
+
+```text
+http://localhost:19223/inspector/
+```
+
+The page lists every connected app. Select the app and platform you want to inspect. The per-agent
+URL is `http://localhost:19223/inspector/{agent-id}/`.
+
+## Open in Visual Studio Code
+
+The VS Code extension is currently a source-built preview and is not published to the Marketplace.
+
+### Build and install the VSIX
+
+Requirements:
+
+- Node.js 20 or later;
+- VS Code 1.98 or later; and
+- a trusted workspace.
+
+From a `maui-labs` checkout:
+
+```bash
+cd src/DevFlow/js
+npm ci
+npm run build -w @maui-devflow/client
+npm run package:vsix
+code --install-extension vscode-inspector/dist/maui-devflow-inspector.vsix --force
+```
+
+Reload the VS Code window after reinstalling the VSIX.
+
+On Windows, both `node --version` and `cmd /c node --version` must work. If only PowerShell can
+find Node, npm lifecycle scripts cannot run; add the Node installation directory to `PATH` and
+open a new terminal.
+
+### Open the Inspector
+
+1. Start the broker and launch the Debug app.
+2. Open the app workspace in VS Code.
+3. Open the Command Palette.
+4. Run **MAUI DevFlow: Open Inspector**.
+
+If no app is connected, VS Code shows a warning; launch the app and run the command again. If
+several apps are connected, select the intended app from the picker.
+
+The extension also exposes the selected element and the current bounded Data snapshot to Copilot
+through its two language-model tools.
+
+See the [VS Code host README](../../src/DevFlow/js/vscode-inspector/README.md) for configuration and
+host features.
+
+## Open in GitHub Copilot
+
+The GitHub Copilot desktop app and Copilot CLI use the same repository-scoped extension at
+`.github/extensions/maui-devflow-canvas`. It is currently a source preview in `maui-labs`, not a
+package for arbitrary app repositories.
+
+### Prepare the Canvas extension
+
+Use Node.js 20.19 or later, or Node.js 22.12 or later:
+
+```bash
+cd src/DevFlow/js
+npm ci
+npm run build -w @maui-devflow/client
+cd ../../../.github/extensions/maui-devflow-canvas
+npm ci
+```
+
+Do not run `npm start`; the Copilot host starts `extension.mjs`.
+
+If a user extension exists at `~/.copilot/extensions/maui-live-canvas` or
+`~/.copilot/extensions/maui-devflow-canvas`, temporarily move it outside
+`~/.copilot/extensions` or rename its `extension.mjs` entry point. This removes ambiguity between
+the user and repository copies.
+
+### GitHub Copilot desktop app
+
+1. Open the `maui-labs` repository folder and start a new signed-in Copilot session.
+2. Start the broker and launch the Debug app.
+3. Ask: **Open the MAUI DevFlow Inspector canvas.**
+
+### GitHub Copilot CLI
+
+1. Start Copilot CLI from the `maui-labs` repository root.
+2. Start a new session, or run `/clear` after preparing or changing the extension.
+3. Run `/env` and confirm `maui-devflow-canvas` resolves from this repository's
+   `.github/extensions` directory.
+4. Start the broker and launch the Debug app.
+5. Ask: **Open the MAUI DevFlow Inspector canvas.**
+
+When several apps are connected, ask Copilot to list the agents and select the intended app or
+platform before making changes.
+
+See the [Canvas host README](../../.github/extensions/maui-devflow-canvas/README.md) for
+capabilities, safety boundaries, and contributor tests.
+
+## Troubleshooting
+
+| Symptom | What to do |
 |---|---|
-| Inspector server and proxy | `src/Cli/Microsoft.Maui.Cli/DevFlow/Inspector/` |
-| Shared web UI | `src/Cli/Microsoft.Maui.Cli/DevFlow/Inspector/Web/` |
-| Broker routing and coordination | `src/Cli/Microsoft.Maui.Cli/DevFlow/Broker/` |
-| XAML source maps | `src/DevFlow/Microsoft.Maui.DevFlow.Agent.Core/SourceMapping/` |
-| Shared Node client | `src/DevFlow/js/devflow-client/` |
-| VS Code host | `src/DevFlow/js/vscode-inspector/` |
-| Copilot Canvas host | `.github/extensions/maui-devflow-canvas/` |
-| Playwright tests | `src/DevFlow/Microsoft.Maui.DevFlow.Inspector.Tests/` |
+| `maui devflow list` shows no app | Confirm the package and `AddMauiDevFlowAgent()` registration, start the broker, and launch a Debug build. |
+| The browser page does not open | Run `maui devflow broker status`, then `maui devflow broker start`. |
+| More than one app is connected | Browser: choose from the agent list. VS Code: use the picker. Canvas: ask Copilot to list and select an agent. |
+| Android app does not register or cannot be inspected | Run `maui devflow wait --wait-platform Android --device <serial>` while launching the app. Use `maui devflow diagnose --device <serial>` for a read-only forwarding report. |
+| VS Code command is missing | Install the generated VSIX, confirm VS Code 1.98 or later, trust the workspace, and reload the window. |
+| `npm ci` child scripts cannot find Node on Windows | Run `node --version` and `cmd /c node --version`; fix `PATH` if the second command fails. |
+| Copilot Canvas is missing or uses the wrong copy | Disable same-purpose user extensions, start a new session, and use `/env` in Copilot CLI to confirm the repository extension path. |
+
+For broker lifecycle, logs, and detailed connectivity recovery, see
+[Broker daemon](broker.md#troubleshooting).
+
+## Related documentation
+
+- [Inspector internals](inspector-internals.md)
+- [DevFlow overview and package quick start](../../src/DevFlow/README.md)
+- [Broker daemon](broker.md)
+- [VS Code Inspector host](../../src/DevFlow/js/vscode-inspector/README.md)
+- [GitHub Copilot Canvas host](../../.github/extensions/maui-devflow-canvas/README.md)
+- [DevFlow HTTP and WebSocket specification](spec/README.md)

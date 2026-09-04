@@ -67,6 +67,8 @@ Single-file Comet apps server + companion app for rapid prototyping (alpha; sist
 A comprehensive testing, automation, and debugging toolkit for .NET MAUI apps — and for plain .NET Android, iOS, Mac Catalyst and macOS apps with no MAUI reference at all. The DevFlow CLI is integrated into the `maui` CLI as `maui devflow` — see [Cli](#cli) above.
 
 - **In-app HTTP agent** for visual tree inspection, element interaction, and screenshots
+- **[MAUI DevFlow Inspector](docs/DevFlow/inspector.md)** in a browser, VS Code, the GitHub Copilot
+  desktop app, or Copilot CLI
 - **Works without MAUI** — the same agent, CLI, and MCP tools drive plain .NET apps via Android views, UIKit, and AppKit backends
 - **Blazor CDP bridge** for Chrome DevTools Protocol on Blazor WebViews
 - **MCP server** for AI agent integration (via `maui devflow mcp`)
@@ -198,6 +200,9 @@ These are CI builds from `main` only — PR builds are not published. Use wildca
 See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions and development setup.
 
 For the formal DevFlow HTTP and WebSocket contract, see [`docs/DevFlow/spec`](docs/DevFlow/spec/README.md).
+
+For live app inspection and host setup, see the
+[MAUI DevFlow Inspector guide](docs/DevFlow/inspector.md).
 
 For AI Extensions usage and samples, see [`src/AIExtensions/README.md`](src/AIExtensions/README.md) and [`samples/AIExtensions.Sample.Garden`](samples/AIExtensions.Sample.Garden/README.md).
 
