@@ -1,14 +1,15 @@
+using System.Text.Json.Serialization;
 using Microsoft.Maui.Cli.DevFlow.Android;
 using Microsoft.Maui.DevFlow.Driver;
 
 namespace Microsoft.Maui.Cli.DevFlow.Inspector;
 
 internal sealed record InspectorAlertResult(
-    bool Ok,
-    bool Supported,
-    AlertInfo? Alert = null,
-    string? Error = null,
-    bool Dismissed = false);
+    [property: JsonPropertyName("ok")] bool Ok,
+    [property: JsonPropertyName("supported")] bool Supported,
+    [property: JsonPropertyName("alert")] AlertInfo? Alert = null,
+    [property: JsonPropertyName("error")] string? Error = null,
+    [property: JsonPropertyName("dismissed")] bool Dismissed = false);
 
 internal sealed class InspectorAlertController
 {
