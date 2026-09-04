@@ -4,7 +4,7 @@ using Microsoft.Maui.Layouts;
 
 namespace Comet
 {
-	public class HStack : AbstractLayout, IStackLayout
+	public partial class HStack : AbstractLayout, IStackLayout
 	{
 		private readonly LayoutAlignment alignment;
 		private readonly float? spacing;

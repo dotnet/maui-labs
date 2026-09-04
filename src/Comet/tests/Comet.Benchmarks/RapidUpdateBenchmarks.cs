@@ -1,3 +1,4 @@
+using Comet.Reactive;
 using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -85,12 +86,11 @@ namespace Comet.Benchmarks
 		{
 			for (int i = 0; i < Iterations; i++)
 			{
-				StateManager.BeginBatch();
 				_animView._x.Value = (float)(i * 0.1);
 				_animView._y.Value = (float)(i * 0.2);
 				_animView._opacity.Value = (float)((i % 100) / 100.0);
 				_animView._scale.Value = (float)(1.0 + (i % 50) * 0.01);
-				StateManager.EndBatch();
+				ReactiveScheduler.FlushSync();
 			}
 		}
 
@@ -115,7 +115,7 @@ namespace Comet.Benchmarks
 
 	public class RapidCounterCometView : Comet.View
 	{
-		public readonly State<int> _value = new State<int>(0);
+		public readonly Signal<int> _value = new Signal<int>(0);
 		public RapidCounterCometView()
 		{
 			Body = () => new Text(() => $"Value: {_value.Value}");
@@ -124,10 +124,10 @@ namespace Comet.Benchmarks
 
 	public class AnimationCometView : Comet.View
 	{
-		public readonly State<float> _x = new State<float>(0);
-		public readonly State<float> _y = new State<float>(0);
-		public readonly State<float> _opacity = new State<float>(1);
-		public readonly State<float> _scale = new State<float>(1);
+		public readonly Signal<float> _x = new Signal<float>(0);
+		public readonly Signal<float> _y = new Signal<float>(0);
+		public readonly Signal<float> _opacity = new Signal<float>(1);
+		public readonly Signal<float> _scale = new Signal<float>(1);
 
 		public AnimationCometView()
 		{
@@ -137,7 +137,7 @@ namespace Comet.Benchmarks
 
 	public class StringHeavyCometView : Comet.View
 	{
-		public readonly State<string> _content = new State<string>("");
+		public readonly Signal<string> _content = new Signal<string>("");
 		public StringHeavyCometView()
 		{
 			Body = () => new Text(() => _content.Value);

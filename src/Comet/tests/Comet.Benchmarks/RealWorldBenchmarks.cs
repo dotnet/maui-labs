@@ -1,3 +1,4 @@
+using Comet.Reactive;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -152,16 +153,16 @@ namespace Comet.Benchmarks
 
 	public class TodoCometView : Comet.View
 	{
-		readonly State<bool>[] _done;
+		readonly Signal<bool>[] _done;
 		readonly string[] _titles;
 
 		public TodoCometView(int count)
 		{
-			_done = new State<bool>[count];
+			_done = new Signal<bool>[count];
 			_titles = new string[count];
 			for (int i = 0; i < count; i++)
 			{
-				_done[i] = new State<bool>(i % 3 == 0);
+				_done[i] = new Signal<bool>(i % 3 == 0);
 				_titles[i] = $"Task {i}";
 			}
 
@@ -214,17 +215,17 @@ namespace Comet.Benchmarks
 
 	public class FormCometView : Comet.View
 	{
-		readonly State<string>[] _values;
-		readonly State<string>[] _errors;
+		readonly Signal<string>[] _values;
+		readonly Signal<string>[] _errors;
 
 		public FormCometView(int count)
 		{
-			_values = new State<string>[count];
-			_errors = new State<string>[count];
+			_values = new Signal<string>[count];
+			_errors = new Signal<string>[count];
 			for (int i = 0; i < count; i++)
 			{
-				_values[i] = new State<string>("");
-				_errors[i] = new State<string>("");
+				_values[i] = new Signal<string>("");
+				_errors[i] = new Signal<string>("");
 			}
 
 			Body = () =>
@@ -233,7 +234,7 @@ namespace Comet.Benchmarks
 				for (int i = 0; i < _values.Length; i++)
 				{
 					var idx = i;
-					children.Add(new TextField((Func<string>)(() => _values[idx].Value), $"Field {idx}"));
+					children.Add(new TextField(() => _values[idx].Value, () => $"Field {idx}"));
 					if (!string.IsNullOrEmpty(_errors[idx].Value))
 						children.Add(new Text(() => _errors[idx].Value));
 				}

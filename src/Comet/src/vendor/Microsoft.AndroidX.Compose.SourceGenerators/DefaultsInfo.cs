@@ -1,0 +1,188 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Microsoft.CodeAnalysis;
+
+namespace AndroidX.Compose.SourceGenerators;
+
+/// <summary>
+/// Parsed view of a declarative <c>[assembly: ComposeDefaults("EnumName",
+/// "p0", "!p1", ...)]</c> attribute. Each slot maps a Kotlin parameter
+/// name to its bit position in the <c>$default</c> bitmask; <c>!</c>-
+/// prefixed names are consumed by the attribute (they occupy a bit) but
+/// are omitted from the generated enum. Shared by
+/// <see cref="ComposeBridgeGenerator"/> and
+/// <see cref="ComposeFacadeGenerator"/>.
+/// </summary>
+internal readonly struct DefaultsInfo
+{
+    public string EnumName { get; }
+    public IReadOnlyList<DefaultsSlot> Slots { get; }
+
+    public DefaultsInfo(string enumName, IReadOnlyList<DefaultsSlot> slots)
+    {
+        EnumName = enumName;
+        Slots = slots;
+    }
+
+    public DefaultsSlot? FindByKotlinName(string kotlinName)
+    {
+        foreach (var s in Slots)
+            if (string.Equals(s.KotlinName, kotlinName, StringComparison.Ordinal))
+                return s;
+        return null;
+    }
+
+    /// <summary>
+    /// Look up a slot whose generated <see cref="DefaultsSlot.EnumMember"/>
+    /// matches <paramref name="propertyName"/> (case-insensitive). Used
+    /// when a facade has renamed a slot via <c>[Slot]</c>: the property
+    /// name is the user-facing name, but the underlying enum member is
+    /// still the Kotlin name PascalCased.
+    /// </summary>
+    public DefaultsSlot? FindByEnumMember(string propertyName)
+    {
+        foreach (var s in Slots)
+            if (s.EnumMember is { } em &&
+                string.Equals(em, propertyName, StringComparison.OrdinalIgnoreCase))
+                return s;
+        return null;
+    }
+
+    public static DefaultsInfo? TryRead(Compilation compilation, INamedTypeSymbol declarativeAttr, string enumName)
+    {
+        var match = compilation.Assembly.GetAttributes()
+            .FirstOrDefault(a =>
+                SymbolEqualityComparer.Default.Equals(a.AttributeClass, declarativeAttr) &&
+                a.ConstructorArguments.Length >= 1 &&
+                a.ConstructorArguments[0].Value is string s &&
+                s == enumName);
+        if (match is null) return null;
+
+        var arr = match.ConstructorArguments[1];
+        var names = arr.Kind == TypedConstantKind.Array
+            ? arr.Values.Select(v => v.Value as string ?? string.Empty).ToArray()
+            : Array.Empty<string>();
+
+        var slots = new List<DefaultsSlot>(names.Length);
+        for (int i = 0; i < names.Length; i++)
+        {
+            var raw = names[i];
+            bool suppressed = raw.StartsWith("!", StringComparison.Ordinal);
+            var kotlin = suppressed ? raw.Substring(1) : raw;
+            slots.Add(new DefaultsSlot(
+                kotlinName: kotlin,
+                bit: i,
+                enumMember: suppressed ? null : Pascal(kotlin)));
+        }
+        return new DefaultsInfo(enumName, slots);
+    }
+
+    /// <summary>
+    /// Read slot info directly from the generated enum's members. Used as
+    /// a fallback when the enum was declared via the generic form
+    /// (<c>[assembly: ComposeDefaults&lt;T&gt;("Method", "EnumName")]</c>),
+    /// which doesn't leave a declarative attribute behind for
+    /// <see cref="TryRead"/> to parse. Each non-<c>All</c> enum member's
+    /// constant value is treated as a single-bit mask and decoded via
+    /// log2; the member name (PascalCased) maps back to a camelCase
+    /// Kotlin parameter name.
+    /// </summary>
+    public static DefaultsInfo? TryReadFromEnum(INamedTypeSymbol enumType)
+    {
+        if (enumType.TypeKind != TypeKind.Enum) return null;
+
+        var slots = new List<DefaultsSlot>();
+        foreach (var member in enumType.GetMembers().OfType<IFieldSymbol>())
+        {
+            if (!member.IsConst) continue;
+            if (member.Name == "All") continue;
+            if (member.ConstantValue is not int raw || raw == 0) continue;
+            // Treat the value as an unsigned bitmask so bit 31 (which is
+            // negative when read as `int`) is decoded correctly. Single-bit
+            // masks only — the All sentinel is filtered above and any
+            // composite values are skipped.
+            uint v = unchecked((uint)raw);
+            if ((v & (v - 1)) != 0) continue;
+            int bit = 0;
+            for (uint x = v; x > 1; x >>= 1) bit++;
+            var kotlin = char.ToLowerInvariant(member.Name[0]) + member.Name.Substring(1);
+            slots.Add(new DefaultsSlot(kotlin, bit, member.Name));
+        }
+        if (slots.Count == 0) return null;
+        slots.Sort((a, b) => a.Bit.CompareTo(b.Bit));
+        return new DefaultsInfo(enumType.Name, slots);
+    }
+
+    /// <summary>
+    /// Reconstruct slot info from an
+    /// <c>[assembly: ComposeDefaults&lt;T&gt;("Method", "EnumName")]</c>
+    /// attribute when the enum type generated by
+    /// <see cref="ComposeDefaultsGenerator"/> isn't yet visible in the
+    /// current compilation snapshot. Walks <paramref name="compilation"/>'s
+    /// assembly attributes, locates the generic-form attribute whose
+    /// second positional argument matches <paramref name="enumName"/>,
+    /// finds the named static method on its <c>T</c> type argument, and
+    /// extracts slot names via <see cref="ComposeDefaultsEmitter.SlotsFromSymbol"/>.
+    /// Returns <c>null</c> when no matching attribute exists.
+    /// </summary>
+    public static DefaultsInfo? TryReadFromGenericAttribute(Compilation compilation,
+        INamedTypeSymbol? genericAttr, string enumName)
+    {
+        if (genericAttr is null) return null;
+
+        foreach (var a in compilation.Assembly.GetAttributes())
+        {
+            if (a.AttributeClass is not { TypeArguments.Length: 1 } cls) continue;
+            if (!SymbolEqualityComparer.Default.Equals(cls.ConstructedFrom, genericAttr)) continue;
+            if (a.ConstructorArguments.Length < 2) continue;
+            if (a.ConstructorArguments[0].Value is not string methodName) continue;
+            if (a.ConstructorArguments[1].Value is not string name) continue;
+            if (!string.Equals(name, enumName, StringComparison.Ordinal)) continue;
+            if (cls.TypeArguments[0] is not INamedTypeSymbol containingType) continue;
+
+            var candidates = containingType.GetMembers(methodName).OfType<IMethodSymbol>()
+                .Where(m => m.IsStatic).ToList();
+            if (candidates.Count == 0) return null;
+            var method = candidates.OrderByDescending(m => m.Parameters.Length).First();
+
+            int composerIndex = -1;
+            for (int i = 0; i < method.Parameters.Length; i++)
+            {
+                if (ComposeDefaultsGenerator.IsComposer(method.Parameters[i].Type))
+                {
+                    composerIndex = i;
+                    break;
+                }
+            }
+            if (composerIndex < 0) return null;
+
+            var slots = ComposeDefaultsEmitter.SlotsFromSymbol(method, composerIndex);
+            var infoSlots = slots.Select(s => new DefaultsSlot(s.RawName, s.Bit, s.EnumMember)).ToList();
+            return new DefaultsInfo(enumName, infoSlots);
+        }
+
+        return null;
+    }
+
+    static string Pascal(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return s;
+        return char.ToUpperInvariant(s[0]) + s.Substring(1);
+    }
+}
+
+internal readonly struct DefaultsSlot
+{
+    public string KotlinName { get; }
+    public int Bit { get; }
+    /// <summary>Null when the entry was <c>!</c>-suppressed.</summary>
+    public string? EnumMember { get; }
+
+    public DefaultsSlot(string kotlinName, int bit, string? enumMember)
+    {
+        KotlinName = kotlinName;
+        Bit = bit;
+        EnumMember = enumMember;
+    }
+}

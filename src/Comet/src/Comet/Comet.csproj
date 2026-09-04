@@ -1,10 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+	<!-- Windows/macOS heads are parked with the legacy render path (Phase 5); the
+	     maccatalyst head stays for the host test suite. -->
 	<TargetFrameworks>net11.0-android;net11.0-ios;net11.0-maccatalyst</TargetFrameworks>
-	<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net11.0-windows10.0.19041.0</TargetFrameworks>
-	<!-- net11.0-macos workload not yet available in .NET 11 preview; re-enable when shipped -->
-	<!-- <TargetFrameworks>$(TargetFrameworks);net11.0-macos</TargetFrameworks> -->
 	<UseMaui>true</UseMaui>
 	<Nullable>disable</Nullable>
 	<!-- CS0649: unassigned fields, CS0618: obsolete APIs, CS0108: hides inherited member -->
@@ -26,13 +25,14 @@
 	<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
   </ItemGroup>
 
-  <!-- Platform.Maui.MacOS provides the AppKit handler bridge for net11.0-macos. -->
-  <ItemGroup Condition="$(TargetFramework.Contains('-macos'))">
-	<ProjectReference Include="..\..\..\mauiplatforms\src\Platform.Maui.MacOS\Platform.Maui.MacOS.csproj" />
-  </ItemGroup>
-
-  <Import Project="..\..\..\mauiplatforms\src\Platform.Maui.MacOS\build\Platform.Maui.MacOS.targets"
-          Condition="$(TargetFramework.Contains('-macos'))" />
+  <!--
+    Phase 5 (2026-07-01): the legacy MAUI ViewHandler render path — per-control
+    ViewHandlers, the CometViewHandler host, UseCometHandlers/UseCometApp, and the
+    native CUI*/Comet* platform views — is DELETED. The Compose/SwiftUI node
+    backend is the only render path; Windows and the AppKit macOS head (which
+    rendered through it) are parked with it. The last commit with the legacy path
+    is tagged `comet-pre-phase5-delete`.
+  -->
 
   <ItemGroup>
 	<ProjectReference Include="..\Comet.SourceGenerator\Comet.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false">
@@ -40,6 +40,27 @@
 	  </ReferenceSourceTarget>
 	</ProjectReference>
 	<ProjectReference Include="..\Comet.Layout.Yoga\Comet.Layout.Yoga.csproj" />
+  </ItemGroup>
+
+  <!-- Jetpack Compose backend (Android only) renders through the vendored
+       Microsoft.AndroidX.Compose bridge layer. See src/vendor/VENDORED.md. -->
+  <ItemGroup Condition="$(TargetFramework.Contains('-android'))">
+	<ProjectReference Include="..\vendor\Microsoft.AndroidX.Compose\Microsoft.AndroidX.Compose.csproj" />
+  </ItemGroup>
+
+  <!-- SwiftUI backend (iOS only) renders through the CometSwiftUIShim @objc binding. -->
+  <ItemGroup Condition="$(TargetFramework.Contains('-ios'))">
+	<ProjectReference Include="..\Comet.SwiftUI.Binding\Comet.SwiftUI.Binding.csproj" />
+  </ItemGroup>
+
+  <!-- Packaging: ship the SwiftUI shim xcframework + a build/net11.0-ios/Comet.targets so a
+       package-referencing iOS app gets the SmartLink=False NativeReference the static
+       registrar needs (see PackAssets/Comet.targets). Pack-only; harmless at build time. -->
+  <ItemGroup>
+	<None Include="..\Comet.SwiftUI.Shim\CometSwiftUIShim.xcframework\**"
+	      Pack="true" PackagePath="build\CometSwiftUIShim.xcframework" />
+	<None Include="PackAssets\Comet.targets"
+	      Pack="true" PackagePath="build\Comet.targets" />
   </ItemGroup>
 
 </Project>

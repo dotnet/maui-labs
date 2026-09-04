@@ -1,0 +1,75 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Phase 1 gate: a PURE Android app (no MAUI, no UseMaui) that renders a Comet
+    view tree as a full Jetpack Compose composition via Comet's ICometBackendNode
+    backend. Proves the end-to-end retained↔composition bridge on-device.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net11.0-android</TargetFramework>
+    <SupportedOSPlatformVersion>24</SupportedOSPlatformVersion>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>CometComposeProbe</RootNamespace>
+    <ApplicationId>com.comet.composeprobe</ApplicationId>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <!-- Size benches: -p:CometSingleRid=true publishes arm64-only (a raw
+         -p:RuntimeIdentifiers flows to every referenced project and breaks the
+         netstandard2.0 source generator's copy step). -->
+    <RuntimeIdentifiers Condition="'$(CometSingleRid)' == 'true'">android-arm64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <!-- Standalone per-sample apps: -p:CometSample=reply (or jetchat) builds this probe as
+       its OWN app — unique id + launcher name + isolated obj/bin — so samples install side
+       by side instead of replacing each other. MainActivity defaults the screen from the
+       package name (com.comet.sample.<name>); the plain probe id stays for the smokes. -->
+  <PropertyGroup Condition="'$(CometSample)' != ''">
+    <ApplicationId>com.comet.sample.$(CometSample)</ApplicationId>
+    <ApplicationTitle>Comet $(CometSample.Substring(0,1).ToUpperInvariant())$(CometSample.Substring(1))</ApplicationTitle>
+    <IntermediateOutputPath>obj/sample-$(CometSample)/</IntermediateOutputPath>
+    <OutputPath>bin/sample-$(CometSample)/</OutputPath>
+  </PropertyGroup>
+
+  <!-- Launcher icon: per-variant art linked in as @mipmap/appicon (the Activity attribute
+       references it). Probe = the Comet mark; samples = their gold app's launcher art. -->
+  <PropertyGroup>
+    <CometIconVariant>probe</CometIconVariant>
+    <CometIconVariant Condition="'$(CometSample)' != ''">$(CometSample)</CometIconVariant>
+  </PropertyGroup>
+  <ItemGroup>
+    <AndroidResource Include="Icons\$(CometIconVariant)\appicon.png" Link="Resources\mipmap-xxxhdpi\appicon.png" />
+    <AndroidResource Include="Icons\$(CometIconVariant)\strings.xml" Link="Resources\values\comet_app_name.xml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Comet\Comet.csproj" />
+    <!-- ComponentActivity host for ComposeView. -->
+    <PackageReference Include="Xamarin.AndroidX.Activity" Version="1.13.0.1" />
+    <!-- Google's Material 3 dynamic-color algorithm (HCT -> tonal palettes -> roles), in C#,
+         so the SAME M3 scheme is generated from a seed on both platforms (Apache-2.0). -->
+    <PackageReference Include="MaterialColorUtilities" Version="0.3.0" />
+    <!-- Shared faithful Jetchat sample (identical tree on both backends). -->
+    <Compile Include="..\Shared\Jetchat\*.cs" Link="Shared\Jetchat\%(Filename)%(Extension)" />
+    <!-- Shared Reply sample (M1). -->
+    <Compile Include="..\Shared\Reply\*.cs" Link="Shared\Reply\%(Filename)%(Extension)" />
+    <!-- Shared JetNews sample (M2). -->
+    <Compile Include="..\Shared\JetNews\*.cs" Link="Shared\JetNews\%(Filename)%(Extension)" />
+    <!-- Shared Jetsnack sample (M3). -->
+    <Compile Include="..\Shared\Jetsnack\*.cs" Link="Shared\Jetsnack\%(Filename)%(Extension)" />
+    <!-- Shared Jetcaster sample (M4): fixture feed snapshots ride as assets
+         (streamed by JetcasterFixtures.Load), artwork as drawable resources. -->
+    <Compile Include="..\Shared\Jetcaster\*.cs" Link="Shared\Jetcaster\%(Filename)%(Extension)" />
+    <AndroidAsset Include="..\Shared\Jetcaster\fixtures\*.rss" Link="Assets\jetcaster\%(Filename)%(Extension)" />
+    <AndroidResource Include="..\Shared\Jetcaster\fixtures\*_art.jpg" Link="Resources\drawable-nodpi\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!-- DevFlow agent for maui devflow screenshot/tap/list — Debug only.
+       Agent.Core is pure .NET (no UseMaui required): broker registration + HTTP server.
+       ComposeProbeAgentService subclass provides Android PixelCopy screenshot. -->
+  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+    <ProjectReference Include="..\..\..\DevFlow\Microsoft.Maui.DevFlow.Agent.Core\Microsoft.Maui.DevFlow.Agent.Core.csproj" />
+  </ItemGroup>
+
+</Project>

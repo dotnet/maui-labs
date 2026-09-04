@@ -73,6 +73,133 @@ dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Tests/
 - Test results: `artifacts/TestResults/**/*.xml`
 - No quarantine or outerloop test attributes are used in this repo
 
+## Comet node-backend (Compose/SwiftUI) development
+
+Comet is being refactored off MAUI handlers onto a retained **node backend**
+(Jetpack Compose on Android, SwiftUI on iOS). This path uses **.NET 11 preview**,
+pinned by `src/Comet/global.json` — NOT the repo-root .NET 10.
+
+- **Run Comet builds from inside `src/Comet`.** Bare `dotnet` at the repo root
+  resolves the .NET 10 SDK (root `global.json`) and fails net11 targets with
+  NETSDK1045.
+- **Host tests link Comet via a HintPath**, so rebuild it first:
+  `dotnet build src/Comet/src/Comet/Comet.csproj -f net11.0-maccatalyst`
+  before `dotnet test tests/Comet.Tests` — otherwise tests run a stale DLL.
+- **Facade edits no longer need clean rebuilds** (fixed 2026-07-03). The old
+  `ComposableLambda2: no Java peer` crash after editing `src/Comet/src/vendor/`
+  was a .NET Android SDK incremental bug: `_BuildApkFastDev` didn't list
+  `libxamarin-app.so` (MVID-keyed debug typemaps) in its Inputs, so the APK kept
+  stale typemaps while fast deploy pushed the new assembly. Worked around in
+  `src/Comet/Directory.Build.targets` (`_CometFixFastDevApkInputs`); upstream
+  issue draft: `src/Comet/docs/research/upstream-issue-fastdev-typemap-staleness.md`.
+  If the crash ever reappears (SDK update changing target names), fall back to
+  `src/Comet/tools/clean-android.sh`. iOS: after a `Comet.SwiftUI.Shim` change,
+  re-run `build-xcframework.sh` AND rm the probe `obj`/`bin` (incremental build
+  won't relink the NativeReference xcframework).
+- **Probe apps**: `sample/CometComposeProbe` (Android),
+  `sample/CometSwiftUIProbe` (iOS). Android deploy:
+  `dotnet build -t:Run -p:AndroidPackageFormat=apk`.
+- **Standalone per-sample apps**: add `-p:CometSample=reply` (or `jetchat`) to
+  either probe build — unique app id `com.comet.sample.<name>`, launcher name
+  "Comet Reply"/"Comet Jetchat", isolated `obj|bin/sample-<name>/`, and the
+  screen defaults from the app id — so samples install SIDE BY SIDE instead of
+  replacing each other. The plain probe ids (`com.comet.composeprobe`,
+  `com.comet.swiftuiprobe`, Jetchat default + `--es screen` / `COMET_SCREEN`
+  switch) are what the smoke scripts drive — leave them installed.
+- **Two devices are usually attached** — always target explicitly with
+  `adb -s 13041FDD4007MT` (the physical Pixel 5). Don't use left-edge swipes to
+  open drawers (triggers the system back/home gesture).
+- **A black `adb screencap` usually means the display is off or the lock screen
+  is up, NOT a render bug** — check `dumpsys display | grep mScreenState` and
+  `keyguardShowing` before touching code. (Same lesson on the iOS simulator: its
+  GPU state degrades after a couple of launches — verify on a physical device.)
+- **Screenshots come scaled** ("multiply by N"); compute tap targets in the FULL
+  resolution (1080-wide), not the displayed size.
+- **Gold standard is local**: `~/work/compose-samples` (android/compose-samples —
+  Jetchat/JetNews/Reply). Read the Kotlin directly; don't WebFetch GitHub.
+
+### Matching the gold standard (fidelity rules) — TOP PRIORITY
+The point of the Comet sample work is proving Comet drives the **EXACT native
+control** the sample uses — the real Jetpack Compose widget on Android AND the
+real native SwiftUI control on iOS. The sample is the proof, not the goal.
+**A styled look-alike is a DEFECT even when it looks and behaves identically.**
+- **Before building/claiming any control, open the gold `.kt` and read which
+  composable it actually uses** (`grep -n "<Control>" <component>.kt`), then drive
+  that exact widget — a `Button` is a `Button` (not a styled `Text`/`HStack`), a
+  FAB is a `FloatingActionButton`, a confirm is a `TextButton`. Don't assume which
+  control; VERIFY in source (the gold may hand-roll a row rather than use a Material
+  item — only the source tells you).
+- If the facade lacks the control or a needed param (e.g. FAB `containerColor`),
+  **EXTEND the facade** — that's the "fill out Comet" work, not a license to ship a
+  look-alike. Reproduce real modifiers too (`baselineHeight`, `clip(CircleShape)`).
+- **Same standard on iOS/SwiftUI** — drive the native SwiftUI control, never leave a
+  stub/placeholder where a native control exists.
+- Don't report "faithful / pixel-exact / done" without a side-by-side against the
+  gold image; state what you verified and on which device.
+- Never assert an environment fact (device locked, network up, the cause of a
+  black/blank shot) you haven't checked — verify first, then claim.
+
+### DevFlow integration in CometComposeProbe
+
+CometComposeProbe has a built-in DevFlow agent (`sample/CometComposeProbe/DevFlowHelper.cs`)
+that enables `maui devflow screenshot`, `maui devflow list`, and tap/inspect from the CLI.
+**Use DevFlow by default when doing Android Comet work** — it gives direct screenshot
+feedback without needing `adb screencap` + Read each time.
+
+#### Architecture (no UseMaui needed)
+
+- `DevFlowAgentService.StartServerOnly(IAgentDispatcher)` — designed for Comet apps where
+  `Application.Current` is unavailable; starts HTTP server + broker registration, no MAUI runtime.
+- `ComposeProbeAgentService` overrides `HandleScreenshot` and uses Android
+  `PixelCopy.Request` to capture GPU-rendered Compose content faithfully.
+- `PixelCopyListener` **must live outside `#if DEBUG`** — Xamarin.Android's JNI typemap
+  generator only registers `Java.Lang.Object` subclasses it sees in every build; a type
+  hidden behind `#if DEBUG` is skipped in the Release codegen pass → "no Java peer type found"
+  at runtime even on Debug builds after a clean deploy.
+- All `PixelCopy.Request` calls must be dispatched via `activity.RunOnUiThread(...)` — the
+  HTTP handler thread pool is not JNI-registered so `new PixelCopyListener(...)` would throw.
+
+#### ADB setup (required after every app restart — port changes each launch)
+
+The broker runs on the Mac; the agent runs on the device. Two tunnels are needed:
+
+```bash
+# 1. Device → Mac broker (reverse — device connects outward to Mac port 19223)
+adb -s 13041FDD4007MT reverse tcp:19223 tcp:19223
+
+# 2. Mac CLI → device agent (forward — Mac connects inward to device's assigned port)
+# Get the port first:
+adb -s 13041FDD4007MT logcat -d | grep "DevFlow agent started"
+# Then forward that port (e.g. 10227):
+adb -s 13041FDD4007MT forward tcp:10227 tcp:10227
+```
+
+Or read the port from the broker automatically:
+```bash
+PORT=$(maui devflow list | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['port']) if d else None")
+adb -s 13041FDD4007MT forward tcp:$PORT tcp:$PORT
+```
+
+#### Typical workflow
+
+```bash
+# After deploy, set up tunnels (see above), then:
+maui devflow list                              # confirm agent registered
+maui devflow ui screenshot --output /tmp/s.png  # grab screenshot
+```
+
+#### Incremental deploy vs clean deploy
+
+After editing only `DevFlowHelper.cs` (not the facade), incremental deploy is fine.
+After adding or moving a `Java.Lang.Object` subclass (including `PixelCopyListener`),
+**do a clean rebuild** — incremental deploy replaces the managed DLL but not the APK's
+embedded Java proxy classes:
+
+```bash
+dotnet build sample/CometComposeProbe/CometComposeProbe.csproj -f net11.0-android -c Debug -t:Clean
+dotnet build sample/CometComposeProbe/CometComposeProbe.csproj -f net11.0-android -c Debug -t:Run "-p:AdbTarget=-s 13041FDD4007MT"
+```
+
 ## Code Conventions
 
 - **ImplicitUsings**: enabled repo-wide
