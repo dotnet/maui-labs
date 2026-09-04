@@ -1,15 +1,89 @@
 # MAUI DevFlow Inspector for GitHub Copilot Canvas
 
-A **live, interactive view of a running .NET MAUI app** inside a GitHub Copilot canvas: the
-app's real screenshot with a visual-tree overlay and an editable property grid. Both the
-human and Copilot inspect, select, edit, and **drive the same running app** — backed by the
-DevFlow broker + in-app agent, through the shared [`@maui-devflow/client`](../../../src/DevFlow/js/devflow-client).
+> **Source-repository preview**: This Canvas extension is project-scoped to the `maui-labs`
+> checkout. It is not currently packaged for installation into arbitrary MAUI app repositories.
 
-This is the project-scoped (auto-discovered, committed) home for the extension, per GitHub's
-`.github/extensions/<name>/` convention. It replaces the earlier user-scoped extension at
-`~/.copilot/extensions/maui-live-canvas`.
+A live, interactive view of a running .NET MAUI app inside a GitHub Copilot canvas: the app's real
+screenshot with a visual-tree overlay and an editable property grid. Both the human and Copilot
+inspect, select, edit, and drive the same running app through the DevFlow broker and in-app agent.
 
-## Shared inspector architecture
+The GitHub Copilot desktop app and GitHub Copilot CLI use this same extension. The source folder is
+named `maui-devflow-canvas`; it registers the Canvas ID `maui-live-canvas`.
+
+Start with the
+[MAUI DevFlow Inspector setup guide](../../../docs/DevFlow/inspector.md) for app integration and a
+comparison of all Inspector hosts.
+
+## Open the Canvas
+
+### Prepare the source extension
+
+Requirements:
+
+- Node.js 20.19 or later, or Node.js 22.12 or later;
+- a `maui-labs` source checkout; and
+- a running MAUI app configured with the DevFlow agent.
+
+From the repository root:
+
+```bash
+cd src/DevFlow/js
+npm ci
+npm run build -w @maui-devflow/client
+cd ../../../.github/extensions/maui-devflow-canvas
+npm ci
+```
+
+Do not run `npm start`; the Copilot host launches `extension.mjs`.
+
+### GitHub Copilot desktop app
+
+1. Install or update to a GitHub Copilot desktop build that supports Canvas extensions, then sign
+   in.
+2. Use **Open Folder** to open the `maui-labs` repository root after preparing the extension.
+3. Start a new Copilot session.
+4. Launch the DevFlow-enabled MAUI app.
+5. Ask: **Open the MAUI DevFlow Inspector canvas.**
+
+### GitHub Copilot CLI
+
+1. Start an up-to-date Copilot CLI from the `maui-labs` repository root.
+2. Start a new session, or run `/clear` after preparing or changing the extension.
+3. Run `/env` and confirm `maui-devflow-canvas` resolves from this repository's
+   `.github/extensions` directory, not `~/.copilot/extensions`.
+4. Launch the DevFlow-enabled MAUI app.
+5. Ask: **Open the MAUI DevFlow Inspector canvas.**
+
+When several apps are running, ask Copilot to list the connected agents and select the intended app
+or platform before making changes.
+
+### Legacy user extension
+
+This repository-scoped extension replaces earlier user-scoped copies at
+`~/.copilot/extensions/maui-live-canvas` and
+`~/.copilot/extensions/maui-devflow-canvas`. Move either directory outside
+`~/.copilot/extensions` or rename its `extension.mjs` entry point before opening `maui-labs`;
+otherwise a same-name user copy can be selected instead of the project copy in some host/session
+combinations, while the older differently named extension can coexist and register the same Canvas
+ID.
+
+Copilot scans each immediate extension directory under `~/.copilot/extensions`, so renaming a
+directory in place does not disable it. Temporarily rename the entry point for whichever path
+exists:
+
+```powershell
+Rename-Item "$HOME\.copilot\extensions\maui-devflow-canvas\extension.mjs" "extension.mjs.disabled"
+```
+
+```bash
+mv ~/.copilot/extensions/maui-devflow-canvas/extension.mjs \
+   ~/.copilot/extensions/maui-devflow-canvas/extension.mjs.disabled
+```
+
+Use `maui-live-canvas` for the older directory name. Restore the original `extension.mjs` name to
+re-enable the user extension.
+
+## Shared Inspector architecture
 
 The Canvas host embeds the existing DevFlow Web Inspector also used by the browser and VS Code. It
 adds selected-element and redacted Data-snapshot context attachment, project-local workflow
@@ -50,30 +124,15 @@ Copilot Canvas ──► extension.mjs ──► broker-hosted shared inspector
 | `replay.mjs` | Legacy offline replay fixture; not used by the production Canvas |
 | `selftest*.mjs`, `test/device.test.mjs` | Live smoke checks and offline contract tests |
 
-## Migration from the old user extension
+## Contributor tests
 
-The repo-scoped extension replaces `~/.copilot/extensions/maui-live-canvas`. Remove or rename that
-old directory before opening this repository; otherwise Copilot can discover two extensions with
-overlapping capabilities.
-
-```powershell
-Remove-Item -Recurse -Force "$HOME\.copilot\extensions\maui-live-canvas"
-```
+From `.github/extensions/maui-devflow-canvas`:
 
 ```bash
-rm -rf ~/.copilot/extensions/maui-live-canvas
-```
-
-Then reopen the repository so Copilot discovers
-`.github/extensions/maui-devflow-canvas`.
-
-## Install / test / run
-
-```bash
-# 1) Build the shared client first (the file: dependency packs its dist/).
+# Build the shared client first (the file: dependency packs its dist/).
 cd ../../../src/DevFlow/js && npm ci && npm run build -w @maui-devflow/client
 
-# 2) Install + test the extension.
+# Install and test the extension.
 cd ../../../.github/extensions/maui-devflow-canvas
 npm ci
 npm test                 # adapter contract tests (offline, fake agent)
@@ -86,9 +145,6 @@ npm run selftest
 # it when the selftest finishes:
 MAUI_DEVFLOW_FORCE_LEASE=1 npm run selftest
 ```
-
-`npm start` (`node extension.mjs`) is launched by the Copilot canvas host — it calls
-`joinSession()` and won't run standalone.
 
 ## Capabilities
 
@@ -121,6 +177,15 @@ MAUI_DEVFLOW_FORCE_LEASE=1 npm run selftest
 ## Requirements
 
 - Node 20.19+ or 22.12+, `@github/copilot-sdk` 1.x, and a built `@maui-devflow/client`.
+- An up-to-date, signed-in GitHub Copilot desktop app or Copilot CLI with Canvas extension support.
+- No same-purpose user extension shadowing this repository-scoped extension.
 - A running .NET MAUI app with the DevFlow agent, discoverable via the DevFlow broker
   (`maui devflow` / `~/.mauidevflow/broker.json`). The adapter auto-starts the broker
   (`bootstrapBroker: "once"`).
+
+## Related documentation
+
+- [Inspector setup and host selection](../../../docs/DevFlow/inspector.md)
+- [Inspector internals](../../../docs/DevFlow/inspector-internals.md)
+- [VS Code Inspector host](../../../src/DevFlow/js/vscode-inspector/README.md)
+- [Broker daemon](../../../docs/DevFlow/broker.md)

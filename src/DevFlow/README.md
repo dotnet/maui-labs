@@ -37,7 +37,7 @@ public static MauiApp CreateMauiApp()
     var builder = MauiApp.CreateBuilder();
     builder.UseMauiApp<App>();
 
-    #if MAUI_DEVFLOW
+    #if DEBUG
     builder.AddMauiDevFlowAgent();
     #endif
 
@@ -45,18 +45,7 @@ public static MauiApp CreateMauiApp()
 }
 ```
 
-`MAUI_DEVFLOW` is defined by the package only when `MauiDevFlowEnabled=true`. Debug builds enable
-it by default. For an explicit optimized, read-only diagnostics build:
-
-```bash
-dotnet build -c Release -p:MauiDevFlowProfileMode=true
-```
-
-Profile mode also defines `MAUI_DEVFLOW`, so the same registration block is compiled without
-requiring `DEBUG`; accidental optimized inclusion without profile mode remains a build error.
-Profile mode disables network monitoring entirely so streaming/large HTTP bodies cannot perturb or
-block the diagnostic run. The same build contract and runtime defaults ship in the standard,
-GTK, and WPF agent packages.
+Keep the registration inside `#if DEBUG` so Release builds do not start the development agent.
 
 ### 3. Install the unified CLI tool
 
@@ -69,17 +58,19 @@ dotnet tool install -g Microsoft.Maui.Cli --prerelease
 ```bash
 # Install DevFlow skills for AI agent integration (auto-detects target directory;
 # defaults to .claude/skills/ — configurable via --target: claude, github, agent, agents, or auto)
-# (configurable via --target: claude, github, agent, agents, or auto)
 maui devflow init
+
+# Open the live Inspector after launching the app
+maui devflow inspect
 
 # Visual tree
 maui devflow ui tree
 
 # Take a screenshot
-maui devflow ui screenshot -o screenshot.png
+maui devflow ui screenshot --output screenshot.png
 
 # Tap an element
-maui devflow ui tap --automationid "MyButton"
+maui devflow ui tap --automationId "MyButton"
 
 # Start MCP server for AI agent integration
 maui devflow mcp
@@ -181,6 +172,8 @@ connected agent does not support it.
 ## Features
 
 - **Visual Tree Inspection** — query the full MAUI visual tree via HTTP API or CLI
+- **MAUI DevFlow Inspector** — inspect and drive the same running app from a browser, VS Code,
+  GitHub Copilot desktop canvas, or Copilot CLI canvas
 - **Element Interaction** — tap, fill, scroll, navigate, focus, resize, and mutate properties
 - **Screenshots** — capture PNG screenshots from any platform (full window or per-element)
 - **Screen Recording** — start/stop video recording of app sessions
@@ -188,7 +181,7 @@ connected agent does not support it.
 - **Performance Profiling** — CPU, memory, GC, and jank detection with markers and spans
 - **Layout Diagnostics** (experimental) — an on-demand, read-only scan of managed MAUI layout state (`maui devflow diagnostics layout`) with typed findings, per-rule coverage, and explicit limitations
 - **Blazor CDP Bridge** — Chrome DevTools Protocol for Blazor WebViews (DOM, JS eval, navigation, input)
-- **MCP Server** — 69 structured tools for AI agent integration (Claude, etc.)
+- **MCP Server** — structured tools for AI agent integration (Copilot, Claude, etc.)
 - **Logging** — buffered JSONL file logging with WebView JS console capture
 - **Real-time Streaming** — WebSocket channels for logs, network, sensors, profiler, and UI events
 - **Storage Access** — read/write app preferences, secure storage, discover file storage roots, and manage sandboxed app files remotely
@@ -204,6 +197,7 @@ All DevFlow commands are available under `maui devflow`. Run `maui devflow <comm
 
 | Command Group | Description |
 |---------------|-------------|
+| `inspect` | Open the shared MAUI DevFlow Inspector for one connected app |
 | `ui` | Visual tree, element interaction, screenshots, alerts, assertions |
 | `recording` | Start, stop, and manage screen recordings of app sessions |
 | `webview` | Blazor WebView automation — DOM, JS eval, navigation, input, screenshots |
@@ -256,16 +250,17 @@ a qualification pass.
 
 ## Documentation
 
-- [DevFlow Web Inspector and MAUI DevFlow Inspector hosts](../../docs/DevFlow/inspector.md)
+- [MAUI DevFlow Inspector setup and host selection](../../docs/DevFlow/inspector.md)
+- [MAUI DevFlow Inspector internals](../../docs/DevFlow/inspector-internals.md)
 - [Broker Architecture](../../docs/DevFlow/broker.md)
 - [Protocol Spec](../../docs/DevFlow/spec/README.md)
 - [Human-authored Testing and platform qualification](../../docs/DevFlow/testing.md)
 - [Restricted test-agent protocol](../../docs/DevFlow/test-agent.md)
 - [Evidence privacy and artifact trust](../../docs/DevFlow/evidence.md)
 - [Preview API and contract compatibility policy](../../docs/DevFlow/compatibility.md)
-- [Android Setup](../../docs/DevFlow/setup-guides/android-setup.md)
-- [Apple Platforms Setup](../../docs/DevFlow/setup-guides/apple-platforms-setup.md)
-- [Windows Setup](../../docs/DevFlow/setup-guides/windows-setup.md)
+- [Android WebView/WebDriver setup](../../docs/DevFlow/setup-guides/android-setup.md)
+- [Apple WebView/Appium setup](../../docs/DevFlow/setup-guides/apple-platforms-setup.md)
+- [Windows WebView/WebDriver setup](../../docs/DevFlow/setup-guides/windows-setup.md)
 - [Independent Appium black-box smoke tests](../../docs/DevFlow/appium-smoke-testing.md)
 
 ## Development

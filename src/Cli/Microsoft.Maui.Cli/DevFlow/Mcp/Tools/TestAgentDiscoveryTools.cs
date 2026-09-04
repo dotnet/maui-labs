@@ -386,7 +386,7 @@ public sealed class TestAgentDiscoveryTools
 public sealed class TestAgentCapabilitiesTool
 {
     [McpServerTool(Name = "maui_test_capabilities"),
-     System.ComponentModel.Description("Describe the restricted typed test-authoring/run protocol for one explicit target. Mutation requires a human-issued scope-bound grant; pause and continue are reported unsupported rather than simulated.")]
+     System.ComponentModel.Description("Describe the restricted typed test-authoring/run protocol for one explicit target. Mutation requires an owner-token-backed, scope-bound broker grant; pause and continue are reported unsupported rather than simulated.")]
     public static async Task<string> GetCapabilities(
         [System.ComponentModel.Description("MCP session injected by the server and used only to resolve the exact target")] McpAgentSession session,
         [System.ComponentModel.Description("Exact stable agent ID and process instance ID returned by maui_test_agents")] MauiTestAgentTarget target)
@@ -399,7 +399,7 @@ public sealed class TestAgentCapabilitiesTool
         var capabilities = await agent.GetCapabilitiesAsync().ConfigureAwait(false);
         var agentSupportsWorkflowLedger = capabilities.ValueKind == System.Text.Json.JsonValueKind.Object &&
             capabilities.TryGetProperty("agent.workflowCommandLedger", out _);
-        var nativeHostApprovalAvailable = BrokerClient.HasNativeHostApprovalAuthority();
+        var approvalRouteAvailable = BrokerClient.HasNativeHostApprovalAuthority();
 
         return TestAgentToolSupport.Success(null, new
         {
@@ -408,9 +408,15 @@ public sealed class TestAgentCapabilitiesTool
             target = resolved.State,
             requiresExplicitTarget = true,
             requiresReadCapability = true,
+            requiresMutationGrant = true,
+            humanAttestationProvided = false,
+            approvalRouteAvailable,
+            nativeHostPresenceKnown = false,
+            // Backward-compatible field names: these mean the broker token/route is available,
+            // not that VS Code is running or that a human made the decision.
             requiresHumanMutationGrant = true,
-            nativeHostApprovalAvailable,
-            mutationGrantIssuanceAvailable = nativeHostApprovalAvailable,
+            nativeHostApprovalAvailable = approvalRouteAvailable,
+            mutationGrantIssuanceAvailable = approvalRouteAvailable,
             supports = new
             {
                 authoring = true,
@@ -433,14 +439,14 @@ public sealed class TestAgentCapabilitiesTool
                 repairApply = false,
                 workflowCommandLedger = agentSupportsWorkflowLedger,
             },
-            limitations = nativeHostApprovalAvailable
+            limitations = approvalRouteAvailable
                 ? new[]
                 {
-                    "Approval still requires a trusted VS Code or Copilot Canvas native host and an explicit human confirmation. Browser and chat text are non-authoritative.",
+                    "The broker approval route is available, but this does not prove that the designated VS Code review host is running or that a human made the decision. The explicit 'maui devflow approve' CLI is operator convenience, not a human-attestation boundary. Copilot Canvas, browser tabs, and chat text are non-authoritative.",
                 }
                 : new[]
                 {
-                    "Native host approval is unavailable for the current broker. Grant-gated mutations fail closed.",
+                    "The broker approval route is unavailable. Grant-gated mutations fail closed.",
                 },
             prohibited = new[]
             {

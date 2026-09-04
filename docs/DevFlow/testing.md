@@ -7,6 +7,9 @@ For an agent-facing, ambiguity-aware conversation layer over this lifecycle, see
 [conversational collaborative testing](conversational-testing.md). It does not
 expand the restricted test-agent profile or replace human grants.
 
+For common app integration and browser, VS Code, or GitHub Copilot host setup, see the
+[MAUI DevFlow Inspector guide](inspector.md).
+
 For release-like/uninstrumented builds and OS-owned UI, use the separate
 [Appium black-box smoke lane](appium-smoke-testing.md). It is not a DevFlow flow executor and
 cannot qualify or repair a semantic flow.
@@ -578,9 +581,9 @@ maui devflow inspect --test maui-tests\checkout.md --trace downloaded\flow-run.j
 ```
 
 2. Import the original diagnostic through the Workbench **Trace** path.
-3. Choose **Reproduce locally** to prepare the broker-owned run check. Approve it only through a
-   trusted VS Code or Copilot Canvas native host when `nativeApproval` is available; otherwise keep
-   it inert and do not promise that it can run.
+3. Choose **Reproduce locally** to prepare the broker-owned run check. Use the designated VS Code
+   native review ceremony or the explicit `maui devflow approve` operator convenience; neither is
+   a human-attestation boundary. Otherwise keep the request inert and do not promise it can run.
 4. Verify that the broker-owned reproduction matches the current flow, app, target, failure, and
    checkpoint facts.
 5. Only then open **Repair** review.
@@ -593,12 +596,13 @@ maui devflow inspect --test maui-tests\checkout.md --trace downloaded\flow-run.j
 `maui devflow mcp --profile test-agent` can create broker-owned drafts through a restricted typed
 protocol. It never receives broad app automation, SecureStorage, raw files/network/CDP/source
 access, generic action invocation, or repair/source apply authority. Every effectful request names
-the exact agent process and uses a human-issued grant bound to the target/build/seed and current
-plan/flow revision/digest. The agent may request bounded exploration, but the trusted native-host
-approval backend/client required to issue a usable grant is currently unavailable. Until it exists,
-the agent can only produce inert drafts, diagnostics, and pending/rejected/expired requests. A
-trusted VS Code or Copilot Canvas host can complete the explicit native confirmation; browser and
-chat cannot. See [test-agent.md](test-agent.md).
+the exact agent process and uses an owner-token-backed, scope-bound broker grant tied to the
+target/build/seed and current plan/flow revision/digest. Broker route availability does not prove
+that the designated VS Code review host is running or that a human made the decision. The
+`maui devflow approve` CLI remains operator convenience rather than a human-attestation boundary;
+Copilot Canvas, browser tabs, and chat cannot issue a grant. Without one of the explicit operator
+paths, the agent can only produce inert drafts, diagnostics, and pending/rejected/expired requests.
+See [test-agent.md](test-agent.md).
 
 ## Selector health
 
@@ -716,9 +720,13 @@ secrets. Repair never changes assertions, expected values, actions, order, app X
 
 ## Reviewed XAML and C# AutomationId source proposals
 
+> **Current status**: This layer supports source analysis, proposal creation, preview, status, and
+> rejection only. It has no source grant, approval, apply, acknowledgement, verification, or
+> rollback route. Grant/apply behavior described below is retained future design.
+
 In the Inspector, Source first asks for a selected mapped control. **Check source** validates the
-new AutomationId before **Create source proposal** appears; preview, approval, and apply/download
-are shown sequentially. Technical source, build, host, and safety facts stay collapsed.
+new AutomationId before **Create source proposal** appears. The current UI can preview or reject
+the inert proposal. Technical source, build, host, and safety facts stay collapsed.
 
 XAML source proposals are not flow repairs. The only preview operation is adding or replacing a
 static literal `AutomationId` on one exact direct element declaration. The pure eligibility
@@ -734,10 +742,9 @@ or dynamically derived values. Advisory analyzer IDs `DFXAML001` (missing static
 they never offer an automatic code fix.
 
 The source proposal carries an exact diff and digests, but history stores only redacted,
-hash-linked IDs/digests/state. A human-issued single-use source grant binds the proposal, patch,
-file hash, project identity, affected flow references, host, and expiry. Only an explicit local
-host action can compare-and-swap atomically; there is no force apply, commit, merge, C# edit, or
-automatic selector update.
+hash-linked IDs/digests/state. A future apply layer would bind any single-use source grant to the
+proposal, patch, file hash, project identity, affected flow references, host, and expiry. The
+current layer performs no source write.
 
 ## Prototype-study research assessment (local only)
 
@@ -813,7 +820,8 @@ configuration always forces auto-repair apply, auto-source apply, model-provider
 egress, and required-PR-gate state to `false`; a qualification report records the effective
 state.
 
-After source apply, every affected official target TFM buildable on the host must build. The host
+Future source-apply design requires every affected official target TFM buildable on the host to
+build. The host
 then rebuilds/relaunches, confirms source remap and runtime uniqueness, replays affected flows,
 and verifies an independent oracle. iOS and Mac Catalyst verification unavailable on Windows is
 recorded as `pending-external-qa`; it is never reported as passed. The optional experimental
@@ -839,11 +847,10 @@ conditional/preprocessor branches, reflection/dynamic construction, Shell/native
 and computed/bound/localized/user-derived or duplicate IDs. `DFCS001`, `DFCS002`, and `DFCS003`
 are advisory diagnostics only and never provide auto-apply.
 
-The broker never writes C# source. After a human grant it records `awaiting-host-apply`; VS Code
-opens a native diff, applies the exact patch through the IDE, and acknowledges pre/post hashes and
-patch digest. Browser hosts download a patch only, Canvas reports C# apply unsupported, and MCP
-cannot approve, apply, acknowledge, or source-write. Failed verification requires a separately
-granted IDE-mediated inverse-patch acknowledgment and a new redacted history event.
+The broker never writes C# source. In the retained future host-apply design, VS Code would open a
+native diff, apply the exact patch through the IDE, and acknowledge pre/post hashes and patch
+digest. The current browser, Canvas, VS Code, and MCP surfaces cannot approve, apply, acknowledge,
+or source-write.
 
 ## Required platform completion matrix
 

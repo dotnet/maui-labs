@@ -4,6 +4,9 @@ Microsoft.Maui.DevFlow includes a **broker daemon** that coordinates port assign
 discovery across multiple running apps. It eliminates port collisions when debugging
 several MAUI apps (or the same app on different platforms) simultaneously.
 
+For the user-facing browser, VS Code, and GitHub Copilot setup, see the
+[MAUI DevFlow Inspector guide](inspector.md).
+
 ## Overview
 
 The broker is a lightweight background process that:
@@ -11,7 +14,8 @@ The broker is a lightweight background process that:
 - **Assigns unique ports** to each MAUI agent from a shared pool (10223–10899)
 - **Tracks running agents** so the CLI can discover them without manual `--agent-port` flags
 - **Detects disconnections instantly** via persistent WebSocket connections
-- **Starts and stops automatically** — you rarely need to manage it directly
+- **Starts on demand from broker-dependent hosts and stops automatically** — you rarely need to
+  manage it directly
 
 ```
                     ┌──────────────────────────────────┐
@@ -137,13 +141,17 @@ This means:
 
 ### Automatic Start
 
-The broker starts transparently — you don't need to launch it manually. Both the CLI
-and the agent call `EnsureBrokerRunningAsync()` which:
+Broker-dependent CLI commands such as `maui devflow list` and `inspect` call
+`EnsureBrokerRunningAsync()`:
 
 1. **Read state file** (`~/.mauidevflow/broker.json`) for the broker's port hint
 2. **TCP connect** to `localhost:{port}` (500ms timeout, <1ms if refused)
 3. If alive → use it
 4. If not → clean up stale PID, fork a new broker process, poll until ready (5s timeout)
+
+The app does not spawn the broker. Its in-app agent retries registration with bounded backoff until
+a CLI command, the Canvas host, or an explicit `maui devflow broker start` makes the broker
+available. The VS Code host also does not start it.
 
 The state file looks like:
 ```json
@@ -393,8 +401,8 @@ Each origin proves something appropriate to what it is:
 
 | Origin | What it must present |
 | --- | --- |
-| MCP test agent | A live, single-use, human-issued mutation authorization (`authorizationId`) bound to the same agent instance. Refused with HTTP 403. |
-| Inspector workbench / replay bridge | A broker-issued dispatch ticket for that exact agent instance and origin, plus the app's mutation lease it already holds. The Inspector is a human at the local UI and has no MCP grant to present. |
+| MCP test agent | A live, single-use, owner-token-backed mutation authorization (`authorizationId`) bound to the same agent instance. Refused with HTTP 403. |
+| Inspector workbench / replay bridge | A broker-issued dispatch ticket for that exact agent instance and origin, plus the app's mutation lease it already holds. The Inspector is a local operator UI and has no MCP grant to present. |
 | Repair validation | A broker-issued dispatch ticket for that exact agent instance and origin. |
 
 Dispatch tickets are in-process capabilities derived from a per-broker key. They are never
@@ -462,8 +470,8 @@ The machine-readable contract is
   Run `maui devflow list` to see actual port assignments.
 - **Agent crashed after registration?** The broker may show the agent briefly
   before detecting the disconnect. Wait a moment and check again.
-- **Android?** `maui devflow list`, `maui devflow wait`, auto-resolved agent commands,
-  and `maui devflow diagnose` check/repair ADB forwarding when possible. Manually, use
+- **Android?** `maui devflow list`, `maui devflow wait`, and auto-resolved agent commands repair ADB
+  forwarding when possible; `maui devflow diagnose` reports the state without changing it. Manually, use
   `adb reverse tcp:19223 tcp:19223` for broker registration and
   `adb forward tcp:{port} tcp:{port}` for the CLI-to-agent HTTP path.
 
