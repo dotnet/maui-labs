@@ -1,5 +1,8 @@
 name: CI - Comet
 
+env:
+  COMET_WORKLOAD_VERSION: 11.0.100-preview.7.26410.2
+
 on:
   push:
     branches: [main]
@@ -30,7 +33,7 @@ jobs:
           global-json-file: src/Comet/global.json
 
       - name: Install MAUI workload
-        run: dotnet workload install maui
+        run: dotnet workload install maui --version ${{ env.COMET_WORKLOAD_VERSION }}
 
       - name: Build Comet
         run: dotnet build src/Comet/Comet.csproj -c Release
@@ -65,7 +68,7 @@ jobs:
           global-json-file: src/Comet/global.json
 
       - name: Install MAUI workload
-        run: dotnet workload install maui
+        run: dotnet workload install maui --version ${{ env.COMET_WORKLOAD_VERSION }}
 
       - name: Pack Comet
         run: dotnet pack src/Comet/Comet.csproj -c Release -o ../../artifacts/packages
