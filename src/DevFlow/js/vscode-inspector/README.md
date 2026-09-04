@@ -1,37 +1,70 @@
 # MAUI DevFlow Inspector for VS Code
 
-Live-inspect and drive a running .NET MAUI app from VS Code. This MAUI DevFlow Inspector host
-embeds the existing DevFlow Web Inspector, including the visual tree, screenshot overlay, property
-editing, workflow recording, and click-to-XAML navigation.
+> **Source preview**: This extension is not currently published to the VS Code Marketplace.
 
-## Requirements
+The extension embeds the shared broker-hosted DevFlow Web Inspector in VS Code. It adds
+click-to-XAML navigation, workflow file selection, and bounded Copilot context for the selected
+element and current Data snapshot.
 
-1. Install the preview `Microsoft.Maui.Cli` global tool and DevFlow agent packages.
-2. Add and start the DevFlow agent in a Debug build of your MAUI app.
-3. Launch the app so it registers with the local DevFlow broker.
-4. Run **MAUI DevFlow: Open Inspector** from the Command Palette.
+Start with the
+[MAUI DevFlow Inspector guide](../../../../docs/DevFlow/inspector.md) for app setup and a comparison
+of the browser, VS Code, GitHub Copilot desktop, and Copilot CLI hosts.
 
-The extension requires VS Code 1.98 or later. It runs in the workspace extension host so local,
-Remote, and WSL workspaces connect to the broker beside the app tooling.
+## Install from source
+
+Requirements:
+
+- Node.js 20 or later;
+- VS Code 1.98 or later; and
+- a trusted VS Code workspace.
+
+From the `maui-labs` repository root:
+
+```bash
+cd src/DevFlow/js
+npm ci
+npm run build -w @maui-devflow/client
+npm run package:vsix
+code --install-extension vscode-inspector/dist/maui-devflow-inspector.vsix --force
+```
+
+Reload the VS Code window after reinstalling the VSIX.
+
+On Windows, both `node --version` and `cmd /c node --version` must work. If only PowerShell can
+find Node, npm lifecycle scripts cannot run; add the Node installation directory to `PATH` and
+open a new terminal.
+
+## Open the Inspector
+
+1. Follow the [common app setup](../../../../docs/DevFlow/inspector.md#set-up-the-app-once).
+2. Start the broker with `maui devflow broker start`.
+3. Launch the app in Debug.
+4. Open the app workspace in VS Code.
+5. Run **MAUI DevFlow: Open Inspector** from the Command Palette.
+
+If no app is connected, the extension shows a warning; launch the app and run the command again.
+If several apps are connected, select the intended app from the picker.
+
+The extension runs in the workspace extension host, so local, Remote, and WSL workspaces connect
+to the broker beside the app tooling.
 
 ## Configuration
 
-- `mauiDevflow.brokerPort` — explicit DevFlow broker port; `0` auto-discovers via
+- `mauiDevflow.brokerPort` — explicit broker port; `0` auto-discovers through
   `~/.mauidevflow/broker.json`.
-- `mauiDevflow.openLocation` — where the Inspector panel opens: `auto` (default, opens beside the
-  active editor when one is open, otherwise in the active group), `beside`, or `active`.
+- `mauiDevflow.openLocation` — `auto`, `beside`, or `active`.
 
-## Copilot and source integration
+## Copilot, source, and workflow integration
 
-- **Copilot** opens a context menu for the selected MAUI element, the loaded workflow, both
-  together, or the current Data snapshot. Selected elements use the
-  `maui-devflow_getSelectedElement` language-model tool.
-- The Data paperclip adds a bounded, redacted Logs, Network, Preferences, Device, Sensors, file
-  metadata, or native Alerts snapshot through `maui-devflow_getDataSnapshot`; Copilot can use the
-  included DevFlow MCP tool names for fresher or deeper follow-up.
+- `maui-devflow_getSelectedElement` returns the MAUI element currently selected in the Inspector.
+- `maui-devflow_getDataSnapshot` returns the bounded, redacted Data snapshot added by the user.
 - **Open source** navigates to generated XAML source locations when Debug source maps are enabled.
-- **Record** creates a portable Markdown workflow that can be replayed by DevFlow.
-- **Workflow** loads saved tests from the project's `maui-tests` directory or an OS-selected
-  Markdown file and shows replay results in the shared Inspector panel.
+- **Record** creates a portable Markdown workflow.
+- **Workflow** loads project `maui-tests` files or an OS-selected Markdown file and shows replay
+  results in the shared Inspector panel.
 
-See the [DevFlow Web Inspector documentation](https://github.com/dotnet/maui-labs/blob/main/docs/DevFlow/inspector.md).
+## Related documentation
+
+- [Inspector setup and host selection](../../../../docs/DevFlow/inspector.md)
+- [Inspector internals](../../../../docs/DevFlow/inspector-internals.md)
+- [Broker daemon](../../../../docs/DevFlow/broker.md)
