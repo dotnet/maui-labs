@@ -30,6 +30,7 @@ A command-line tool for .NET MAUI development environment setup, device manageme
 - **Apple platform management** (`maui apple`) — Xcode, simulator, and runtime management (macOS)
 - **Device listing** (`maui device list`) across all connected platforms
 - **DevFlow app automation** (`maui devflow`) — visual tree inspection, element interaction, screenshots, WebView/CDP automation, network monitoring, profiling, storage access, real-time log/sensor streaming, and MCP server for AI agents
+- **AI-powered development bootstrap** (`maui ai init`) — install MAUI Copilot skills, DevFlow skills, Copilot agents, and MCP configuration for the current project
 - **MAUI Go** (`maui go`) — create, serve, and upgrade single-file Comet Go projects for rapid prototyping
 - **Version info** (`maui version`)
 - **Global options** — `--json` for CI pipelines, `--verbose`, `--dry-run`, `--ci`
@@ -161,14 +162,27 @@ Built artifacts are exposed as `@(MauiAppArtifact)` items with `ArtifactType`, `
 
 ## Agent Skills
 
-This repository is also a marketplace for distributable agent skills for .NET MAUI development. Skills are organized as plugins compatible with Copilot CLI, Claude Code, and VS Code.
+This repository is also a marketplace for distributable agent skills for .NET MAUI development. The recommended one-stop setup is `maui ai init`, which installs the relevant MAUI skills, bundled DevFlow skills, Copilot agent definitions, and MCP configuration for detected agent environments.
 
 | Plugin | Description |
 |--------|-------------|
 | [`dotnet-maui`](plugins/dotnet-maui/) | MAUI development: DevFlow automation, profiling, accessibility, platform bindings, diagnostics, session review |
 
 ```bash
-# Install via Copilot CLI
+# Preview what will be installed and configured
+maui ai init --dry-run
+
+# Bootstrap this project for AI-powered MAUI development
+maui ai init
+
+# Check and refresh installed AI development assets
+maui ai status --check-updates
+maui ai update
+```
+
+Direct plugin installation remains available for agent runtimes that support plugin marketplaces:
+
+```bash
 /plugin marketplace add dotnet/maui-labs
 /plugin install dotnet-maui@dotnet-maui-labs
 ```
