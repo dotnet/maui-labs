@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<chat:ChatContentView
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:chat="clr-namespace:Microsoft.Maui.Chat.Controls;assembly=Microsoft.Maui.Chat.Controls"
+    x:Class="ChatControls.Sample.GardenTaskView">
+    <Border Padding="14"
+            Margin="0,4"
+            MaximumWidthRequest="440"
+            HorizontalOptions="Start"
+            BackgroundColor="{AppThemeBinding Light=#FFFBEB, Dark=#302D20}"
+            Stroke="{AppThemeBinding Light=#D5B65A, Dark=#8F7A38}"
+            StrokeThickness="1"
+            StrokeShape="RoundRectangle 14">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto"
+              ColumnDefinitions="Auto,*"
+              ColumnSpacing="11"
+              RowSpacing="4">
+            <Border Grid.RowSpan="4"
+                    WidthRequest="34"
+                    HeightRequest="34"
+                    StrokeThickness="0"
+                    StrokeShape="RoundRectangle 17"
+                    BackgroundColor="#1A0F766E"
+                    VerticalOptions="Start">
+                <Label Text="&#x2713;"
+                       FontSize="18"
+                       FontAttributes="Bold"
+                       TextColor="{StaticResource ChatBrand}"
+                       HorizontalOptions="Center"
+                       VerticalOptions="Center" />
+            </Border>
+            <Label x:Name="SharedByLabel"
+                   Grid.Column="1"
+                   FontSize="11"
+                   Opacity="0.65" />
+            <Label x:Name="TitleLabel"
+                   Grid.Row="1"
+                   Grid.Column="1"
+                   FontAttributes="Bold"
+                   FontSize="15" />
+            <Label x:Name="AssigneeLabel"
+                   Grid.Row="2"
+                   Grid.Column="1"
+                   FontSize="12"
+                   Opacity="0.75" />
+            <HorizontalStackLayout Grid.Row="3"
+                                   Grid.Column="1"
+                                   Spacing="6">
+                <Label x:Name="PriorityLabel"
+                       FontSize="11"
+                       FontAttributes="Bold"
+                       TextColor="#B45309" />
+                <Label x:Name="DueLabel"
+                       FontSize="11"
+                       TextColor="{StaticResource ChatBrand}" />
+            </HorizontalStackLayout>
+        </Grid>
+    </Border>
+</chat:ChatContentView>

@@ -65,14 +65,27 @@ jobs:
           HEAD="${{ github.event.pull_request.head.sha }}"
           MERGE_BASE=$(git merge-base "$BASE" "$HEAD")
 
-          HAS_SKILL_CHANGES=$(git diff --name-only --diff-filter=ACMR "$MERGE_BASE" "$HEAD" | \
-            grep -E '^(plugins/[^/]+/skills|tests/[^/]+)/[^/]+/' | head -1 || true)
+          CHANGED=$(git diff --name-only --diff-filter=ACMR "$MERGE_BASE" "$HEAD")
 
-          if [ -n "$HAS_SKILL_CHANGES" ]; then
-            echo "needs_eval=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "needs_eval=false" >> "$GITHUB_OUTPUT"
-          fi
+          # Only evaluate when a real skills plugin changed: either its skill
+          # definitions (plugins/<plugin>/skills/<skill>/...) or its evaluation
+          # tests (tests/<plugin>/<skill>/...). Product unit tests also live under
+          # tests/<Product>/ (e.g. tests/AIExtensions, tests/AI), so match against
+          # actual plugin names instead of any tests/*/*/ path — otherwise a
+          # product-test-only PR is misclassified and its evaluation-status commit
+          # status is stuck "pending" forever, permanently blocking the PR.
+          NEEDS_EVAL=false
+          for plugin_dir in plugins/*/; do
+            [ -d "${plugin_dir}skills" ] || continue
+            plugin=$(basename "$plugin_dir")
+            if printf '%s\n' "$CHANGED" | grep -qE "^plugins/${plugin}/skills/[^/]+/" || \
+               printf '%s\n' "$CHANGED" | grep -qE "^tests/${plugin}/[^/]+/"; then
+              NEEDS_EVAL=true
+              break
+            fi
+          done
+
+          echo "needs_eval=$NEEDS_EVAL" >> "$GITHUB_OUTPUT"
 
       - name: Post evaluation commit status
         # Skip on fork PRs — restricted GITHUB_TOKEN can't write commit statuses

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                    xmlns:chat="clr-namespace:Microsoft.Maui.Chat.Controls"
+                    x:Class="Microsoft.Maui.Chat.Controls.Themes.ChatMessagesTheme">
+
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <!-- ControlTemplate: ChatMessagesView                               -->
+    <!--                                                                 -->
+    <!-- One part, PART_Messages, a CollectionView bound to the flat row -->
+    <!-- projection. Replace this key in your resources to redesign the  -->
+    <!-- list; keep the part name so scrolling and the load-earlier seam -->
+    <!-- keep working.                                                   -->
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <ControlTemplate x:Key="MauiChat.ChatMessagesViewTemplate">
+        <CollectionView x:Name="PART_Messages"
+                        x:DataType="chat:ChatMessagesView"
+                        AutomationId="ChatMessages"
+                        SemanticProperties.Description="Conversation messages"
+                        ItemsSource="{TemplateBinding Items}"
+                        ItemTemplate="{TemplateBinding ItemTemplateSelector}"
+                        ItemsUpdatingScrollMode="KeepLastItemInView"
+                        SelectionMode="None"
+                        VerticalScrollBarVisibility="Default">
+            <CollectionView.ItemsLayout>
+                <LinearItemsLayout Orientation="Vertical" />
+            </CollectionView.ItemsLayout>
+        </CollectionView>
+    </ControlTemplate>
+
+</ResourceDictionary>

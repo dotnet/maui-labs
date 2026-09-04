@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                    x:Class="Microsoft.Maui.AI.Chat.Controls.Themes.ChatColors">
+
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <!-- Shared design tokens (colors + sizes).                          -->
+    <!-- Every key is prefixed "MauiAIChat." so it never collides with   -->
+    <!-- the host app's own resources once this dictionary is merged      -->
+    <!-- into Application.Resources. Override any key in your App to      -->
+    <!-- restyle the chat controls.                                       -->
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+
+    <!-- AI-specific message bodies -->
+    <Color x:Key="MauiAIChat.FunctionCall.Background">#E8E0D4</Color>
+    <Color x:Key="MauiAIChat.FunctionCall.TextColor">#7A7062</Color>
+    <Color x:Key="MauiAIChat.FunctionResult.Background">#EDF6EC</Color>
+    <Color x:Key="MauiAIChat.FunctionResult.TextColor">#7A7062</Color>
+    <Color x:Key="MauiAIChat.Default.TextColor">#7A7062</Color>
+    <Color x:Key="MauiAIChat.Approval.Background">#FFFBF0</Color>
+    <Color x:Key="MauiAIChat.Approval.Border">#E8D9B5</Color>
+    <Color x:Key="MauiAIChat.Approval.HeaderColor">#8B7340</Color>
+    <Color x:Key="MauiAIChat.Button.Approve">#5B8C5A</Color>
+    <Color x:Key="MauiAIChat.Button.Reject">#C75050</Color>
+
+</ResourceDictionary>
