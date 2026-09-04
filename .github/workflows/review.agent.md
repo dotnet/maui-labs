@@ -30,7 +30,7 @@ permissions:
 
 engine:
   id: copilot
-  model: claude-opus-4.8
+  model: gpt-5.6-sol
 
 network:
   allowed:
