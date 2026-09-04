@@ -10,16 +10,18 @@ On-device AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://
 - **Streaming** — progressive JSON deserialization of LLM responses via `JsonStreamChunker` and `PlainTextStreamChunker`
 - **Tool calling** — function-calling support for on-device models
 - **NL embeddings** — on-device semantic search via Apple's NaturalLanguage framework (`NLEmbeddingGenerator`)
+- **Document extraction** — structured on-device recognition through Apple Vision, including paragraphs, tables, nested cells, lists, and barcodes
+- **PDF extraction** — explicit PDFKit page rendering composed with the Apple Vision document client
 
 ### Platform Support
 
-| Platform | Chat (IChatClient) | Embeddings (IEmbeddingGenerator) |
-|----------|-------------------|----------------------------------|
-| iOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
-| Mac Catalyst 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
-| macOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
-| Android | 🔜 Coming soon | 🔜 Coming soon |
-| Windows | 🔜 Coming soon | 🔜 Coming soon |
+| Platform | Chat (`IChatClient`) | Embeddings (`IEmbeddingGenerator`) | Documents (`IDocumentExtractionClient`) |
+|----------|----------------------|------------------------------------|-----------------------------------------|
+| iOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings | ✅ Apple Vision + PDFKit |
+| Mac Catalyst 26+ | ✅ Apple Intelligence | ✅ NL Embeddings | ✅ Apple Vision + PDFKit |
+| macOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings | ✅ Apple Vision + PDFKit |
+| Android | 🔜 Coming soon | 🔜 Coming soon | 🔜 Coming soon |
+| Windows | 🔜 Coming soon | 🔜 Coming soon | 🔜 Coming soon |
 
 ## Quick Start
 
@@ -33,6 +35,20 @@ builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
 // Use via DI
 var client = serviceProvider.GetRequiredService<IChatClient>();
 var response = await client.GetResponseAsync("Plan a weekend trip to Portland");
+```
+
+```csharp
+using Microsoft.Extensions.DocumentExtraction;
+using Microsoft.Maui.Essentials.AI;
+
+using IDocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
+await using var image = File.OpenRead("receipt.png");
+var document = await client.ExtractAsync(image, "image/png");
+
+foreach (var table in document.Pages[0].Elements.OfType<DocumentTable>())
+{
+    Console.WriteLine($"{table.RowCount} rows x {table.ColumnCount} columns");
+}
 ```
 
 ## Packages
@@ -63,6 +79,8 @@ The CI pipeline handles the macOS → Windows artifact flow automatically. See `
 ## Documentation
 
 - [JSON Stream Chunker Design](../../docs/ai/json-stream-chunker-design.md)
+- [Apple Document Recognizer Implementation](../../docs/ai/apple-document-recognizer-implementation.md)
+- [Apple Document Extraction Feedback](../../docs/ai/apple-document-extraction-feedback.md)
 
 ## Requirements
 

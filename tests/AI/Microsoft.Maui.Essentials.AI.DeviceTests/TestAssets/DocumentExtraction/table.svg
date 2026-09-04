@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1200" viewBox="0 0 1600 1200">
+  <rect width="1600" height="1200" fill="white"/>
+  <text x="120" y="120" fill="#111111" font-family="Helvetica, Arial, sans-serif" font-size="64" font-weight="700">QUARTERLY INVENTORY</text>
+
+  <g fill="none" stroke="#111111" stroke-width="4">
+    <rect x="110" y="245" width="1380" height="700"/>
+    <line x1="760" y1="245" x2="760" y2="945"/>
+    <line x1="1110" y1="245" x2="1110" y2="945"/>
+    <line x1="110" y1="405" x2="1490" y2="405"/>
+    <line x1="110" y1="585" x2="1490" y2="585"/>
+    <line x1="110" y1="765" x2="1490" y2="765"/>
+  </g>
+
+  <g fill="#111111" font-family="Helvetica, Arial, sans-serif" font-size="44">
+    <text x="155" y="345" font-weight="700">Product</text>
+    <text x="805" y="345" font-weight="700">Quantity</text>
+    <text x="1155" y="345" font-weight="700">Status</text>
+    <text x="155" y="515">Notebook</text>
+    <text x="860" y="515">24</text>
+    <text x="1155" y="515">Available</text>
+    <text x="155" y="695">Marker</text>
+    <text x="860" y="695">12</text>
+    <text x="1155" y="695">Low stock</text>
+    <text x="155" y="875">Envelope</text>
+    <text x="860" y="875">50</text>
+    <text x="1155" y="875">Available</text>
+  </g>
+</svg>

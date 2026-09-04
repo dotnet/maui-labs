@@ -28,6 +28,7 @@
     <PackageTags>$(DefaultPackageTags);essentials;ai</PackageTags>
     <Description>.NET Multi-platform App UI (.NET MAUI) is a cross-platform framework for creating native mobile and desktop apps with C# and XAML. This package contains a collection of cross-platform APIs for working with device AI and local models.</Description>
     <PackRepoRootReadme>false</PackRepoRootReadme>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
@@ -38,6 +39,30 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Vendored Microsoft.Extensions.DocumentExtraction(.Abstractions) from dotnet/extensions PR #7588
+         (src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions and
+         src/Libraries/Microsoft.Extensions.DocumentExtraction). Both are non-shipping/non-packable
+         internal dependencies (not published from this repo). PrivateAssets="all" stops `dotnet pack`
+         from adding a NuGet dependency on their (unpublished) package IDs; the
+         CopyProjectReferencesToPackage target below merges their build output directly into this
+         package's lib folder instead, so consumers still get working assemblies at run time. -->
+    <ProjectReference Include="..\..\Libraries\Microsoft.Extensions.DocumentExtraction.Abstractions\Microsoft.Extensions.DocumentExtraction.Abstractions.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\Libraries\Microsoft.Extensions.DocumentExtraction\Microsoft.Extensions.DocumentExtraction.csproj" PrivateAssets="all" />
+  </ItemGroup>
+  <!-- Merge the (PrivateAssets="all") DocumentExtraction project references' build output into this
+       package instead of just discarding them, per the documented NuGet pattern for bundling
+       non-packable project-to-project references: https://learn.microsoft.com/nuget/reference/msbuild-targets#targetsfortfmspecificbuildoutput -->
+  <PropertyGroup>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);CopyProjectReferencesToPackage</TargetsForTfmSpecificBuildOutput>
+  </PropertyGroup>
+  <Target Name="CopyProjectReferencesToPackage" DependsOnTargets="ResolveReferences">
+    <ItemGroup>
+      <BuildOutputInPackage
+        Include="@(ReferenceCopyLocalPaths)"
+        Condition="'%(ReferenceCopyLocalPaths.ReferenceSourceTarget)' == 'ProjectReference' And '%(ReferenceCopyLocalPaths.Extension)' == '.dll'" />
+    </ItemGroup>
+  </Target>
   <!-- Exclude Apple-only files from non-Apple TFMs (including net10.0 base) -->
   <ItemGroup Condition="!$(TargetFramework.Contains('-ios')) AND !$(TargetFramework.Contains('-maccatalyst')) AND !$(TargetFramework.Contains('-macos'))">
     <Compile Remove="Platform\MaciOS\**\*.cs" />
