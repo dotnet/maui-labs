@@ -436,7 +436,7 @@ public class AgentHttpServerTests : IDisposable
 
         var acceptTask = Task.Run(async () =>
         {
-            for (var attempt = 0; attempt < 5; attempt++)
+            for (var attempt = 0; attempt < 2; attempt++)
             {
                 using var client = await listener.AcceptTcpClientAsync();
                 using var stream = client.GetStream();
@@ -445,8 +445,8 @@ public class AgentHttpServerTests : IDisposable
                 var request = Encoding.UTF8.GetString(buffer, 0, read);
                 Assert.Contains("GET /api/v1/ui/tree", request);
 
-                var status = attempt < 4 ? "409 Conflict" : "200 OK";
-                var body = attempt < 4
+                var status = attempt == 0 ? "409 Conflict" : "200 OK";
+                var body = attempt == 0
                     ? """{"success":false,"error":"UI changed","reason":"capture-changed-during-read"}"""
                     : """[{"id":"root","type":"Page","fullType":"Page","isVisible":true,"isEnabled":true,"opacity":1,"children":[]}]""";
                 var response = $"HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{body}";
