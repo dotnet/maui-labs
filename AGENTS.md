@@ -20,6 +20,7 @@ This repository hosts experimental .NET MAUI packages. It is a **multi-product m
 | **Linux GTK4** | `Microsoft.Maui.Platforms.Linux.Gtk4` + associated packages | .NET MAUI platform backend for Linux using GTK4 — handler, Essentials, BlazorWebView, and project templates. |
 | **macOS AppKit** | `Microsoft.Maui.Platforms.MacOS` + associated packages | .NET MAUI platform backend for macOS AppKit — handler, Essentials, BlazorWebView, and project templates. |
 | **WPF** | `Microsoft.Maui.Platforms.Windows.WPF` + associated packages | .NET MAUI platform backend for WPF — handler, Essentials, and project templates. |
+| **Browser Essentials** | `Microsoft.Maui.Platforms.Browser.Essentials` | MAUI Essentials implementations for the browser (WebAssembly) using web APIs via `[JSImport]` interop — works in Blazor WebAssembly and plain wasm browser apps. |
 
 ### Technology Stack
 
@@ -260,6 +261,7 @@ maui-labs/
 │       ├── CompanionApp/                 # Comet Go companion MAUI app
 │       └── Shared/                       # Shared Comet Go code
 ├── platforms/                            # Platform backend products
+│   ├── Browser/                          # Browser (WebAssembly) Essentials
 │   ├── Linux.Gtk4/                       # Linux GTK4 platform backend
 │   ├── MacOS/                            # macOS AppKit platform backend
 │   └── Windows.WPF/                      # WPF platform backend
@@ -310,7 +312,7 @@ Each product has its own workflow file: `.github/workflows/ci-{product}.yml`, ca
 - **`pull_request.types`**: Must always include `[opened, synchronize, reopened, edited]` — the `edited` type ensures CI re-runs when GitHub auto-retargets a PR after a stacked branch merges
 - Steps: restore → build → test → upload test results + packages
 
-Existing workflows: `ci-ai.yml`, `ci-cli.yml`, `ci-comet.yml`, `ci-devflow.yml`, `ci-essentialsai.yml`, `ci-appprojectreference.yml`, `ci-linux-gtk4.yml`, `ci-macos-appkit.yml`, `ci-wpf.yml`
+Existing workflows: `ci-ai.yml`, `ci-browser.yml`, `ci-cli.yml`, `ci-comet.yml`, `ci-devflow.yml`, `ci-essentialsai.yml`, `ci-appprojectreference.yml`, `ci-linux-gtk4.yml`, `ci-macos-appkit.yml`, `ci-wpf.yml`
 
 ### Azure DevOps (official builds)
 
