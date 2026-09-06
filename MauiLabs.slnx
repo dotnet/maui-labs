@@ -20,6 +20,7 @@
     <Project Path="samples/DevFlow.Sample.WPF/DevFlow.Sample.WPF.csproj" />
     <Project Path="samples/DevFlow.Sample/DevFlow.Sample.csproj" />
     <Project Path="samples/EssentialsAISample/EssentialsAISample.csproj" />
+    <Project Path="samples/CopilotSdkSample/CopilotSdkSample.csproj" />
   </Folder>
   <Folder Name="/src/" />
   <Folder Name="/src/AI/">
@@ -68,6 +69,12 @@
   <Folder Name="/src/AppProjectReference/">
     <Project Path="src/AppProjectReference/Microsoft.Maui.Build.AppProjectReference/Microsoft.Maui.Build.AppProjectReference.csproj" />
     <Project Path="src/AppProjectReference/Microsoft.Maui.Build.AppProjectReference.Tests/Microsoft.Maui.Build.AppProjectReference.Tests.csproj" />
+  </Folder>
+  <Folder Name="/src/CopilotSdk/">
+    <Project Path="src/CopilotSdk/Microsoft.Maui.CopilotSdk/Microsoft.Maui.CopilotSdk.csproj" />
+  </Folder>
+  <Folder Name="/tests/CopilotSdk/">
+    <Project Path="tests/CopilotSdk/Microsoft.Maui.CopilotSdk.Tests/Microsoft.Maui.CopilotSdk.Tests.csproj" />
   </Folder>
   <Folder Name="/tests/" />
   <Folder Name="/tests/AI/">

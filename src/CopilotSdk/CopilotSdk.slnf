@@ -1,0 +1,10 @@
+{
+  "solution": {
+    "path": "../../MauiLabs.slnx",
+    "projects": [
+      "src\\CopilotSdk\\Microsoft.Maui.CopilotSdk\\Microsoft.Maui.CopilotSdk.csproj",
+      "tests\\CopilotSdk\\Microsoft.Maui.CopilotSdk.Tests\\Microsoft.Maui.CopilotSdk.Tests.csproj",
+      "samples\\CopilotSdkSample\\CopilotSdkSample.csproj"
+    ]
+  }
+}
