@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:controls="clr-namespace:Microsoft.Maui.AI.Chat.Controls;assembly=Microsoft.Maui.AI.Chat.Controls"
+             xmlns:chat="clr-namespace:Microsoft.Maui.AI.Chat.Controls;assembly=Microsoft.Maui.AI.Chat.Controls"
+             x:Class="AiControlsSample.HaikuPage"
+             x:Name="ThisPage"
+             Title="Haiku Generator">
+
+    <Grid ColumnDefinitions="*,*" ColumnSpacing="0">
+
+        <!-- LEFT: Haiku Display -->
+        <Grid Grid.Column="0" x:Name="HaikuPanel" RowDefinitions="*,Auto"
+              BackgroundColor="#6366F1">
+
+            <!-- Haiku content (visible when haikus exist) -->
+            <ScrollView Grid.Row="0" x:Name="HaikuContent" IsVisible="False"
+                        VerticalOptions="Center" Padding="32">
+                <VerticalStackLayout Spacing="16" HorizontalOptions="Center">
+                    <VerticalStackLayout x:Name="JapaneseLines" Spacing="6" HorizontalOptions="Center" />
+                    <BoxView HeightRequest="1" BackgroundColor="White" Opacity="0.3"
+                             HorizontalOptions="Center" WidthRequest="200" Margin="0,8" />
+                    <VerticalStackLayout x:Name="EnglishLines" Spacing="6" HorizontalOptions="Center" />
+                </VerticalStackLayout>
+            </ScrollView>
+
+            <!-- Empty state -->
+            <VerticalStackLayout x:Name="EmptyState" Grid.Row="0"
+                                 VerticalOptions="Center" HorizontalOptions="Center"
+                                 Spacing="12" Padding="24">
+                <Label Text="🎋" FontSize="64" HorizontalOptions="Center" />
+                <Label Text="Ask for a haiku to get started"
+                       FontSize="16" TextColor="White" Opacity="0.8"
+                       HorizontalOptions="Center" />
+            </VerticalStackLayout>
+
+            <!-- Prev/Next navigation -->
+            <Grid x:Name="NavBar" Grid.Row="1" ColumnDefinitions="Auto,*,Auto"
+                  Margin="16,8" IsVisible="False">
+                <Button x:Name="PrevButton" Grid.Column="0" Text="◀"
+                        BackgroundColor="Transparent" TextColor="White" FontSize="18"
+                        Padding="12,8" Clicked="OnPrevClicked" />
+                <Label x:Name="HaikuPosition" Grid.Column="1"
+                       HorizontalTextAlignment="Center" VerticalOptions="Center"
+                       TextColor="White" FontSize="14" />
+                <Button x:Name="NextButton" Grid.Column="2" Text="▶"
+                        BackgroundColor="Transparent" TextColor="White" FontSize="18"
+                        Padding="12,8" Clicked="OnNextClicked" />
+            </Grid>
+        </Grid>
+
+        <!-- RIGHT: Chat Panel -->
+        <controls:CopilotChatView Grid.Column="1"
+            Session="{Binding Source={x:Reference ThisPage}, Path=Session}"
+            WelcomeMessage="I'll compose haiku poetry in both Japanese and English! Each one appears on the left."
+            WelcomeIcon="🎋">
+            <controls:CopilotChatView.SuggestionPrompts>
+                <x:String>Write a haiku about the ocean</x:String>
+                <x:String>A haiku about cherry blossoms</x:String>
+                <x:String>Something about a quiet mountain morning</x:String>
+            </controls:CopilotChatView.SuggestionPrompts>
+            <controls:CopilotChatView.ContentTemplates>
+                <chat:TextContentTemplate Role="User" />
+                <chat:TextContentTemplate Role="Assistant" />
+                <chat:FunctionCallTemplate />
+                <chat:FunctionResultTemplate />
+                <chat:ErrorContentTemplate />
+                <chat:DefaultContentTemplate />
+            </controls:CopilotChatView.ContentTemplates>
+        </controls:CopilotChatView>
+    </Grid>
+</ContentPage>

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:controls="clr-namespace:Microsoft.Maui.AI.Chat.Controls;assembly=Microsoft.Maui.AI.Chat.Controls"
+             xmlns:chat="clr-namespace:Microsoft.Maui.AI.Chat.Controls;assembly=Microsoft.Maui.AI.Chat.Controls"
+             x:Class="AiControlsSample.AgenticChatPage"
+             x:Name="ThisPage"
+             Title="Agentic Chat">
+
+    <Grid x:Name="PageRoot"
+          BackgroundColor="{AppThemeBinding Light=White, Dark=#1E1E2E}">
+        <controls:CopilotChatView Session="{Binding Source={x:Reference ThisPage}, Path=Session}"
+            WelcomeMessage="Ask me to change the page background color! I can pick creative colors for any mood."
+            WelcomeIcon="🎨">
+            <controls:CopilotChatView.SuggestionPrompts>
+                <x:String>Make the background a warm sunset orange</x:String>
+                <x:String>Something calming and peaceful</x:String>
+                <x:String>Surprise me with a bold color</x:String>
+            </controls:CopilotChatView.SuggestionPrompts>
+            <controls:CopilotChatView.ContentTemplates>
+                <chat:TextContentTemplate Role="User" />
+                <chat:TextContentTemplate Role="Assistant" />
+                <chat:FunctionCallTemplate />
+                <chat:FunctionResultTemplate />
+                <chat:ErrorContentTemplate />
+                <chat:DefaultContentTemplate />
+            </controls:CopilotChatView.ContentTemplates>
+        </controls:CopilotChatView>
+    </Grid>
+</ContentPage>

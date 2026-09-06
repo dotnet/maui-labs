@@ -8,6 +8,7 @@
     <Project Path="playground/DevFlow.Console/DevFlow.Console.csproj" />
   </Folder>
   <Folder Name="/samples/">
+    <Project Path="samples/AiControlsSample/AiControlsSample.csproj" />
     <Project Path="samples/AIExtensions.Sample.Garden/AIExtensions.Sample.Garden.csproj" />
     <Project Path="samples/AIExtensions.Sample.Hello/AIExtensions.Sample.Hello.csproj" />
     <Project Path="samples/AIExtensions.Sample.DIParameters/AIExtensions.Sample.DIParameters.csproj" />
@@ -24,6 +25,11 @@
   <Folder Name="/src/" />
   <Folder Name="/src/AI/">
     <Project Path="src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj" />
+  </Folder>
+  <Folder Name="/src/AIControls/">
+    <Project Path="src/AIControls/Microsoft.Maui.AI.Chat.Controls/Microsoft.Maui.AI.Chat.Controls.csproj" />
+    <Project Path="src/AIControls/Microsoft.AspNetCore.Components.AI.Core/Microsoft.AspNetCore.Components.AI.Core.csproj" />
+    <Project Path="src/AIControls/Microsoft.AspNetCore.Components.AI.SourceGenerators/Microsoft.AspNetCore.Components.AI.SourceGenerators.csproj" />
   </Folder>
   <Folder Name="/src/AIExtensions/">
     <Project Path="src/AIExtensions/Microsoft.Maui.AI.Attributes/Microsoft.Maui.AI.Attributes.csproj" />
@@ -70,6 +76,7 @@
     <Project Path="src/AppProjectReference/Microsoft.Maui.Build.AppProjectReference.Tests/Microsoft.Maui.Build.AppProjectReference.Tests.csproj" />
   </Folder>
   <Folder Name="/tests/" />
+
   <Folder Name="/tests/AI/">
     <Project Path="tests/AI/Microsoft.Maui.Essentials.AI.Benchmarks/Microsoft.Maui.Essentials.AI.Benchmarks.csproj" />
     <Project Path="tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj" />

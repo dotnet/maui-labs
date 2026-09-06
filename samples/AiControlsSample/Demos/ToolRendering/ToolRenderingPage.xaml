@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:controls="clr-namespace:Microsoft.Maui.AI.Chat.Controls;assembly=Microsoft.Maui.AI.Chat.Controls"
+             xmlns:chat="clr-namespace:Microsoft.Maui.AI.Chat.Controls;assembly=Microsoft.Maui.AI.Chat.Controls"
+             xmlns:local="clr-namespace:AiControlsSample"
+             x:Class="AiControlsSample.ToolRenderingPage"
+             x:Name="ThisPage"
+             Title="Tool Rendering">
+
+    <controls:CopilotChatView Session="{Binding Source={x:Reference ThisPage}, Path=Session}"
+            WelcomeMessage="Ask me about weather, math, facts, or app info. Weather results show a rich card!"
+            WelcomeIcon="🔧">
+            <controls:CopilotChatView.SuggestionPrompts>
+                <x:String>What's the weather in Tokyo?</x:String>
+                <x:String>Calculate (42 * 3) + 7</x:String>
+                <x:String>Tell me a random fact</x:String>
+            </controls:CopilotChatView.SuggestionPrompts>
+        <controls:CopilotChatView.ContentTemplates>
+            <chat:TextContentTemplate Role="User" />
+            <chat:TextContentTemplate Role="Assistant" />
+            <chat:FunctionCallTemplate />
+            <local:WeatherResultTemplate ToolName="GetCurrentWeather" ViewType="{x:Type local:WeatherResultView}" />
+            <chat:FunctionResultTemplate />
+            <chat:ErrorContentTemplate />
+            <chat:DefaultContentTemplate />
+        </controls:CopilotChatView.ContentTemplates>
+    </controls:CopilotChatView>
+</ContentPage>
