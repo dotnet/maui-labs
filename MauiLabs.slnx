@@ -22,6 +22,10 @@
     <Project Path="samples/EssentialsAISample/EssentialsAISample.csproj" />
   </Folder>
   <Folder Name="/src/" />
+  <Folder Name="/src/HotReload/">
+    <Project Path="src/HotReload/Microsoft.Maui.HotReload/Microsoft.Maui.HotReload.csproj" />
+    <Project Path="src/HotReload/Microsoft.Maui.HotReload.SourceGen/Microsoft.Maui.HotReload.SourceGen.csproj" />
+  </Folder>
   <Folder Name="/src/AI/">
     <Project Path="src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj" />
   </Folder>

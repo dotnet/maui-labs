@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks>
+    <AssemblyName>Microsoft.Maui.Labs.HotReload</AssemblyName>
+    <RootNamespace>Microsoft.Maui.Labs.HotReload</RootNamespace>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="..\Microsoft.Maui.HotReload.SourceGen\**" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <!-- NuGet package information -->
+    <IsShipping>true</IsShipping>
+    <IsPackable>true</IsPackable>
+    <PackageId>Microsoft.Maui.Labs.HotReload</PackageId>
+    <Description>Provides a MetadataUpdateHandler for .NET MAUI hot reload. Register any IHotReloadable instance to receive OnHotReload() callbacks when their type is hot-reloaded.</Description>
+    <PackageTags>$(DefaultPackageTags);hotreload;developer-tools</PackageTags>
+    <SuppressFinalPackageVersion>true</SuppressFinalPackageVersion>
+  </PropertyGroup>
+
+  <!-- Microsoft.Maui.Core is only available for net10.0+, not netstandard -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <PackageReference Include="Microsoft.Maui.Core" />
+  </ItemGroup>
+
+  <!-- Reference the source generator as an analyzer/generator -->
+  <ItemGroup>
+    <ProjectReference Include="..\Microsoft.Maui.HotReload.SourceGen\Microsoft.Maui.HotReload.SourceGen.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!-- Pack the source generator DLL into the correct NuGet analyzers path.
+       Uses Build target (not GetTargetPath) to ensure the generator is up-to-date before packing.
+       Path must be roslyn4.0/cs/ (not the generic dotnet/cs/) because SDKs with
+       SupportsRoslynComponentVersioning=true only load from versioned paths. -->
+  <Target Name="IncludeSourceGenInPackage" BeforeTargets="_GetPackageFiles">
+    <MSBuild Projects="..\Microsoft.Maui.HotReload.SourceGen\Microsoft.Maui.HotReload.SourceGen.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration)">
+      <Output TaskParameter="TargetOutputs" ItemName="_SourceGenDll" />
+    </MSBuild>
+    <ItemGroup>
+      <None Include="@(_SourceGenDll)" Pack="true" PackagePath="analyzers/dotnet/roslyn4.0/cs/" Visible="false" />
+    </ItemGroup>
+  </Target>
+
+</Project>

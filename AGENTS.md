@@ -13,6 +13,7 @@ This repository hosts experimental .NET MAUI packages. It is a **multi-product m
 | **Cli** | `Microsoft.Maui.Cli` (global tool: `maui`), `Microsoft.Maui.ProfilingHelper` | Unified MAUI command-line tool: environment diagnostics (`maui doctor`), Android SDK/JDK/emulator management, Apple platform management, device listing, `maui go` for rapid prototyping, `maui profile startup` for performance tracing, `maui project version` for project version management, `maui port check` for TCP port diagnostics, and the `maui devflow` automation surface. `Microsoft.Maui.ProfilingHelper` is a lightweight helper library injected by the CLI to drive the startup profiling exit-control handshake; it can also be referenced directly to mark startup completion via `MauiProfilingMarker.Complete()`. |
 | **DevFlow** | `Microsoft.Maui.DevFlow.*` packages plus the unified `maui devflow` CLI surface | Runtime MAUI automation toolkit. In-app agent with HTTP API, visual tree inspection, CDP bridge for Blazor WebViews, MCP server for AI agents, cross-platform driver library. |
 | **Comet** | `Comet`, `Comet.SourceGenerator`, `Comet.Layout.Yoga` | Experimental MVU UI framework for .NET MAUI — C# fluent UI, signals/reactive state, Yoga layout. |
+| **HotReload** | `Microsoft.Maui.HotReload` | MetadataUpdateHandler for .NET MAUI hot reload — `IHotReloadable` interface with per-instance `OnHotReload()` callbacks, backed by a Roslyn source generator. |
 | **Go** | `Microsoft.Maui.Go.Server` + Comet Go companion app | Single-file Comet apps server and companion app for rapid prototyping (alpha; sister to Comet). |
 | **Essentials.AI** | `Microsoft.Maui.Essentials.AI` | On-device AI for .NET MAUI — semantic search, chat completion, embeddings, and tool use against local models. |
 | **AIExtensions** | `Microsoft.Maui.AI.Attributes` | Source-generated AI tool bindings — turns decorated C# methods into `Microsoft.Extensions.AI`-callable tools using Roslyn, with DI parameter binding and AOT support. |
@@ -263,6 +264,11 @@ maui-labs/
 │   ├── Linux.Gtk4/                       # Linux GTK4 platform backend
 │   ├── MacOS/                            # macOS AppKit platform backend
 │   └── Windows.WPF/                      # WPF platform backend
+├── src/
+│   └── HotReload/                        # HotReload product
+│       ├── Microsoft.Maui.HotReload/     # Shipping package (IHotReloadable, registry, handler)
+│       ├── Microsoft.Maui.HotReload.SourceGen/ # Roslyn source generator (bundled as analyzer)
+│       └── HotReload.slnf               # Solution filter
 ├── samples/                              # Sample MAUI apps (not shipped)
 ├── playground/                           # Manual test/scratch apps
 ├── eng/                                  # Shared build infrastructure

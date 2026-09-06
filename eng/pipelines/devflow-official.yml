@@ -44,6 +44,10 @@ parameters:
   displayName: 'Publish EssentialsAI packages to NuGet.org'
   type: boolean
   default: false
+- name: publishHotReloadNuget
+  displayName: 'Publish HotReload packages to NuGet.org'
+  type: boolean
+  default: false
 
 variables:
 - template: /eng/pipelines/common-variables.yml@self
@@ -400,7 +404,33 @@ extends:
                 -projects $(Build.SourcesDirectory)\platforms\MacOS\MacOS-libs.slnf
                 $(_OfficialBuildArgs)
               displayName: Build, Test and Pack macOS AppKit
-       
+
+          # HotReload targets netstandard2.0 + net10.0 with no MAUI workloads.
+          # Builds and packs on Windows for MicroBuild/ESRP signing.
+          - job: HotReload
+            displayName: HotReload - Windows
+            pool:
+              name: NetCore1ESPool-Internal
+              demands: ImageOverride -equals windows.vs2026preview.scout.amd64
+            strategy:
+              matrix:
+                Release:
+                  _BuildConfig: Release
+                  _OfficialBuildArgs: /p:DotNetSignType=$(_SignType)
+                    /p:TeamName=$(_TeamName)
+                    /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
+            steps:
+            - task: UseDotNet@2
+              displayName: Install .NET SDK
+              inputs:
+                version: 10.0.105
+            - script: eng\common\cibuild.cmd
+                -configuration $(_BuildConfig)
+                -prepareMachine
+                -projects $(Build.SourcesDirectory)\src\HotReload\HotReload.slnf
+                $(_OfficialBuildArgs)
+              displayName: Build and Pack HotReload
+
     - template: /eng/common/templates-official/post-build/post-build.yml@self
       parameters:
         enableSourceLinkValidation: false
@@ -845,5 +875,60 @@ extends:
               useDotNetTask: false
               packagesToPush: '$(Pipeline.Workspace)/MacOSPackages/*.nupkg'
               packageParentPath: '$(Pipeline.Workspace)/MacOSPackages'
+              nuGetFeedType: external
+              publishFeedCredentials: 'nuget.org (dotnetframework)'
+
+    # Publish HotReload packages to NuGet.org
+    - ${{ if eq(parameters.publishHotReloadNuget, true) }}:
+      - stage: publish_hotreload_nuget
+        displayName: 'Publish HotReload to NuGet.org'
+        dependsOn:
+        - Validate
+        - publish_using_darc
+        jobs:
+        - job: PrepareArtifacts
+          displayName: 'Prepare HotReload Artifacts'
+          timeoutInMinutes: 15
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026preview.scout.amd64
+            os: windows
+          templateContext:
+            outputs:
+            - output: pipelineArtifact
+              displayName: Publish HotReload Packages
+              targetPath: '$(Pipeline.Workspace)/HotReloadPackages'
+              artifactName: HotReloadPackagesForNuGet
+          steps:
+          - download: current
+            artifact: PackageArtifacts
+            displayName: Download PackageArtifacts
+          - powershell: |
+              New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/HotReloadPackages'
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.HotReload.*.nupkg' '$(Pipeline.Workspace)/HotReloadPackages/' -Verbose
+            displayName: Filter HotReload packages
+
+        - job: PublishNuGet
+          displayName: 'Push HotReload to NuGet.org'
+          dependsOn: PrepareArtifacts
+          timeoutInMinutes: 30
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026preview.scout.amd64
+            os: windows
+          templateContext:
+            type: releaseJob
+            isProduction: true
+            inputs:
+            - input: pipelineArtifact
+              artifactName: HotReloadPackagesForNuGet
+              targetPath: '$(Pipeline.Workspace)/HotReloadPackages'
+          steps:
+          - task: 1ES.PublishNuget@1
+            displayName: 'Push HotReload to NuGet.org'
+            inputs:
+              useDotNetTask: false
+              packagesToPush: '$(Pipeline.Workspace)/HotReloadPackages/*.nupkg'
+              packageParentPath: '$(Pipeline.Workspace)/HotReloadPackages'
               nuGetFeedType: external
               publishFeedCredentials: 'nuget.org (dotnetframework)'
