@@ -291,7 +291,7 @@ maui android emulator start Pixel8 --json   # retry original
 Other `E2106` throw sites (e.g., "no AVD with that name") emit the same code **without** a `remediation` block — surface `message` and stop retrying.
 
 > For agent-facing usage examples and remediation patterns used by AI coding agents, see
-> [`plugins/dotnet-maui/skills/maui-devflow-debug/references/troubleshooting.md`](../../plugins/dotnet-maui/skills/maui-devflow-debug/references/troubleshooting.md).
+> [`maui-devflow-debug troubleshooting`](https://github.com/dotnet/maui-labs/blob/main/plugins/dotnet-maui-tooling/skills/maui-devflow-debug/references/troubleshooting.md).
 
 ## Platform Support
 

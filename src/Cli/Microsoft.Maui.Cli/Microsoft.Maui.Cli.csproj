@@ -11,6 +11,9 @@
     <ToolCommandName>maui</ToolCommandName>
     <PackageId>Microsoft.Maui.Cli</PackageId>
     <Description>CLI for .NET MAUI development environment setup and device management</Description>
+    <PackageTags>maui;dotnet;cli;android;apple;devflow;diagnostics;tool</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackRepoRootReadme>false</PackRepoRootReadme>
     <IsPackable>true</IsPackable>
     <IsShipping>true</IsShipping>
     <IsAotCompatible>true</IsAotCompatible>
@@ -74,16 +77,17 @@
     <Compile Remove="Build\MauiProfilingHelper.AutoInitialize.cs" />
     <Content Include="Build\MauiProfilingHelperInjection.targets" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="Build\MauiProfilingHelper.AutoInitialize.cs" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\README.md" Link="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="..\..\..\plugins\dotnet-maui\skills\maui-devflow-onboard\**\*" LogicalName="devflow.skills/maui-devflow-onboard/%(RecursiveDir)%(Filename)%(Extension)">
+    <EmbeddedResource Include="..\..\..\plugins\dotnet-maui-tooling\skills\maui-devflow-onboard\**\*" LogicalName="devflow.skills/maui-devflow-onboard/%(RecursiveDir)%(Filename)%(Extension)">
       <WithCulture>false</WithCulture>
     </EmbeddedResource>
-    <EmbeddedResource Include="..\..\..\plugins\dotnet-maui\skills\maui-devflow-debug\**\*" LogicalName="devflow.skills/maui-devflow-debug/%(RecursiveDir)%(Filename)%(Extension)">
+    <EmbeddedResource Include="..\..\..\plugins\dotnet-maui-tooling\skills\maui-devflow-debug\**\*" LogicalName="devflow.skills/maui-devflow-debug/%(RecursiveDir)%(Filename)%(Extension)">
       <WithCulture>false</WithCulture>
     </EmbeddedResource>
-    <EmbeddedResource Include="..\..\..\plugins\dotnet-maui\skills\maui-devflow-session-review\**\*" LogicalName="devflow.skills/maui-devflow-session-review/%(RecursiveDir)%(Filename)%(Extension)">
+    <EmbeddedResource Include="..\..\..\plugins\dotnet-maui-tooling\skills\maui-devflow-session-review\**\*" LogicalName="devflow.skills/maui-devflow-session-review/%(RecursiveDir)%(Filename)%(Extension)">
       <WithCulture>false</WithCulture>
     </EmbeddedResource>
   </ItemGroup>
