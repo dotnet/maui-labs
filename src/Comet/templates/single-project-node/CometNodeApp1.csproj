@@ -22,7 +22,6 @@
 
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">17.0</SupportedOSPlatformVersion>
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24</SupportedOSPlatformVersion>
-		<RestoreAdditionalProjectSources>COMET_PACKAGE_SOURCE</RestoreAdditionalProjectSources>
 	</PropertyGroup>
 
 	<!-- Compile the native head per-TF so Android doesn't try to build the iOS AppDelegate
@@ -37,9 +36,10 @@
 		<Compile Include="Platforms\iOS\**\*.cs" />
 	</ItemGroup>
 
-	<!-- Comet: the shared view tree + node backends (Compose/SwiftUI). The package pulls in
-	     Yoga, the Compose facade (Android), the SwiftUI binding + shim xcframework (iOS),
-	     and the iOS NativeReference/static-registrar wiring automatically. -->
+	<!-- Comet: the shared view tree + node backends (Compose/SwiftUI). Restored from the
+	     local feed in nuget.config; the package pulls in Yoga, the Compose facade (Android),
+	     the SwiftUI binding + shim xcframework (iOS), and the iOS NativeReference/static-
+	     registrar wiring automatically. -->
 	<ItemGroup>
 		<PackageReference Include="Comet" Version="COMET_PACKAGE_VERSION" />
 	</ItemGroup>
