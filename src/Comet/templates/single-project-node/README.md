@@ -21,8 +21,7 @@ transitively:
   `build/Comet.targets` that adds the `SmartLink=False` `NativeReference` the iOS
   static registrar needs (so `_OBJC_CLASS_$_CometSwiftUIHost` resolves at link time)
 
-The generated `nuget.config` points at the local feed. Edit it if your
-`Comet.*.nupkg` files live elsewhere. Produce/refresh the packages with:
+Pass the local feed when creating the project. Produce/refresh the packages with:
 
 ```
 # Comet.Layout.Yoga, the Compose facade, the SwiftUI binding
@@ -46,7 +45,7 @@ packing Comet:
 # from repo root
 dotnet new install src/Comet/templates/single-project-node
 
-dotnet new cometnode -n MyApp
+dotnet new cometnode -n MyApp --cometPackageSource "$HOME/work/LocalNugets"
 cd MyApp
 
 # Android
@@ -57,7 +56,8 @@ dotnet build MyApp.csproj -f net11.0-ios -c Debug -p:RuntimeIdentifier=iossimula
 ```
 
 Options: `--applicationId <id>` (app id / bundle id),
-`--cometPackageVersion <version>` (which Comet package version to reference).
+`--cometPackageVersion <version>` (which Comet package version to reference), and
+`--cometPackageSource <path-or-feed>` (where that package can be restored).
 
 ## Developing against Comet source instead of the package
 
