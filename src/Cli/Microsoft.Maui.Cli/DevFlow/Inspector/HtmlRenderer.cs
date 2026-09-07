@@ -193,6 +193,11 @@ public static class HtmlRenderer
         attrs.Append($" data-isVisible=\"{element.IsVisible.ToString().ToLowerInvariant()}\"");
         attrs.Append($" data-isEnabled=\"{element.IsEnabled.ToString().ToLowerInvariant()}\"");
         attrs.Append($" data-isFocused=\"{element.IsFocused.ToString().ToLowerInvariant()}\"");
+        if (element.FrameworkProperties?.TryGetValue("IsReadOnly", out var readOnlyValue) == true &&
+            bool.TryParse(readOnlyValue, out var isReadOnly))
+        {
+            attrs.Append($" data-isReadOnly=\"{isReadOnly.ToString().ToLowerInvariant()}\"");
+        }
         attrs.Append(CultureInfo.InvariantCulture, $" data-opacity=\"{element.Opacity:0.###}\"");
 
         var traits = element.Traits;
