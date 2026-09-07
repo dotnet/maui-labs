@@ -74,6 +74,17 @@ Host bridges also supply their color palette, font metadata, contrast mode, and 
 preference. VS Code placement is configurable with
 `mauiDevflow.openLocation` (`auto`, `beside`, or `active`).
 
+VS Code and Canvas keep their Inspector panels open while the broker or app restarts. Their
+reconnecting shells distinguish broker, app, selected-target, and multiple-app states, poll for
+recovery, and expose an immediate **Retry** action instead of requiring the user to close and reopen
+the Inspector. VS Code opens an app picker when several agents are available; Canvas directs
+Copilot to its existing list/select-agent controls. Neither host silently substitutes an unrelated
+app when the selected process exits.
+Registrations with project-relative paths require an explicit app choice after a process restart:
+their default session IDs can be shared by different worktrees. The same registered process
+reconnects automatically; a replacement process can also reconnect automatically when a unique
+full project path, framework, platform, app name, and session identity match.
+
 ## Coordinated frames and coordinates
 
 Each inspector refresh creates an immutable frame containing:
@@ -102,6 +113,10 @@ therefore cannot drive the app concurrently.
 - A host can release or explicitly take over the lease.
 - Lease release or takeover hands an active app-scoped recording to the next valid lease holder.
 - Closing Canvas releases its lease; abandoned leases also expire automatically.
+- Copilot and other MCP clients can inspect the current holder with
+  `maui_control_status`, request an available lease with `maui_take_control`, and
+  release it with `maui_release_control`. A forced takeover requires explicit
+  user approval because it interrupts the current driving Inspector or automation session.
 
 The lease coordinates writers; it is not an authentication boundary.
 
@@ -130,6 +145,21 @@ file hash before opening the recorded line and warns when the file changed after
 Source locations are emitted only when the runtime element can be matched conservatively to its
 XAML declaration. Repeated same-type siblings need sibling-unique `AutomationId` values; otherwise
 their source actions are withheld rather than risk opening or editing the wrong declaration.
+The broker resolves privacy-preserving project-relative entries before returning them to a host.
+The plain-browser fallback therefore copies an absolute local path plus line number that can be
+pasted directly into local tooling.
+For project-relative metadata, the broker captures its source-search workspace when it starts.
+Launch it from the app's workspace, or set `MAUI_DEVFLOW_PROJECT_ROOT` to that workspace before
+starting the broker when an editor or MCP host launches processes from elsewhere. This local
+setting is not embedded in the app. Android and iOS use this workspace rather than treating a
+device process ID as a host process. Multiple matches or an incomplete bounded search still
+refuse to open or write a source file; an absolute registered project path is another option for
+explicit local-debug targeting.
+
+An invalid, missing, or unsupported source workspace is reported without stopping the broker.
+Workspace-based source discovery stays unavailable rather than falling back to another working
+directory; ordinary runtime inspection and independently resolvable local source paths remain
+usable. Network, UNC, and Windows device paths are not supported for local XAML source access.
 
 Source maps are disabled outside Debug by default because they embed XAML text and source paths.
 They can be disabled explicitly:

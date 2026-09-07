@@ -356,7 +356,7 @@ Each product requires source setup **and** CI/CD configuration across two system
 
 ## DevFlow MCP Tools
 
-DevFlow exposes 68 MCP tools for AI agent integration (in `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/`):
+DevFlow exposes 71 MCP tools for AI agent integration (in `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/`):
 
 | Tool | Purpose |
 |------|---------|
@@ -372,6 +372,7 @@ DevFlow exposes 68 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_cdp_webviews` | List available WebViews |
 | `maui_clear` | Clear text from an element |
 | `maui_connectivity` | Network access and connection profiles |
+| `maui_control_status` | Inspect the current app-wide mutation lease holder |
 | `maui_device_info` | Device manufacturer, model, OS |
 | `maui_display_info` | Screen density, size, orientation |
 | `maui_element` | Get full element details |
@@ -410,6 +411,7 @@ DevFlow exposes 68 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_recording_start` | Start screen recording |
 | `maui_recording_status` | Check recording status |
 | `maui_recording_stop` | Stop screen recording |
+| `maui_release_control` | Release this MCP session's mutation lease |
 | `maui_resize` | Resize the app window |
 | `maui_screenshot` | Capture screenshot (page, element, or fullscreen) |
 | `maui_scroll` | Scroll by delta, item index, or into view |
@@ -426,6 +428,7 @@ DevFlow exposes 68 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_status` | Agent connection status, platform, app name |
 | `maui_storage_roots` | List file storage roots advertised by the app |
 | `maui_tap` | Tap a UI element |
+| `maui_take_control` | Claim or explicitly take over the app-wide mutation lease |
 | `maui_tree` | Inspect visual tree — structured JSON hierarchy with IDs, types, bounds |
 | `maui_wait` | Wait for an agent to connect |
 

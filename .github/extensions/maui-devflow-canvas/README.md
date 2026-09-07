@@ -31,9 +31,13 @@ Copilot Canvas ──► extension.mjs ──► broker-hosted shared inspector
 - **`store.mjs`** (`LiveStore`) — fallback live model and agent-action state.
 - **`devflow.mjs`** (`DevflowDevice`) — adapter over `@maui-devflow/client`.
 - **`shell.mjs`** — embeds the shared broker-hosted inspector in an iframe (`renderShell`) and
-  renders the lightweight disconnected/loading status shell (`renderDisconnected`) shown while no
-  broker/agent has resolved yet; both share the hybrid `--df-*` theme-token language with the VS
-  Code host shell.
+  renders the lightweight reconnecting shell (`renderDisconnected`) shown while no broker/agent
+  has resolved yet. It distinguishes a missing broker, a missing selected app, and ambiguous
+  multiple-app discovery, retries automatically, and offers an explicit **Retry** action. The
+  connected shell also detects process restarts. A project-relative identity requires explicit
+  reselection because it can be shared by other worktrees; a full project path allows unique
+  replacement-process matching. Both states share the hybrid `--df-*` theme-token
+  language with the VS Code host shell.
 - **`recorder.mjs` / `replay.mjs`** — workflow persistence and replay. Active recording is owned
   by the broker and observes successful mutations from every DevFlow host.
 - **`selftest.mjs`** — online bridge smoke test.
