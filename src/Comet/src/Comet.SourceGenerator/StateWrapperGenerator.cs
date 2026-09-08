@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
@@ -10,7 +11,7 @@ using Stubble.Core.Builders;
 namespace Comet.SourceGenerator
 {
 	[Generator]
-	public class StateWrapperGenerator : ISourceGenerator
+	public class StateWrapperGenerator : IIncrementalGenerator
 	{
 		private const string attributeSource = @"
   	[System.AttributeUsage(System.AttributeTargets.Assembly | System.AttributeTargets.Class, AllowMultiple = true)]
@@ -170,15 +171,72 @@ namespace {{NameSpace}} {
 			};
 		}
 
-		Stubble.Core.StubbleVisitorRenderer stubble = new StubbleBuilder().Build();
+		static readonly Stubble.Core.StubbleVisitorRenderer stubble = new StubbleBuilder().Build();
 		static Dictionary<(bool HasGet, bool HasSet), string> interfacePropertyDictionary;
 
-		public void Execute(GeneratorExecutionContext context)
+		public void Initialize(IncrementalGeneratorInitializationContext context)
 		{
-			if (!(context.SyntaxContextReceiver is SyntaxReceiver rx) || !rx.TemplateInfo.Any())
+			context.RegisterPostInitializationOutput((pi) => pi.AddSource("GenerateStateClassAttribute__", attributeSource));
+
+			var candidates = context.SyntaxProvider.CreateSyntaxProvider(
+					predicate: static (node, _) => IsCandidateNode(node),
+					transform: static (ctx, _) => GetCandidateType(ctx))
+				.Where(static t => t != null)
+				.Collect();
+
+			var compilationAndCandidates = context.CompilationProvider.Combine(candidates);
+
+			context.RegisterSourceOutput(compilationAndCandidates, static (spc, source) => Execute(source.Left, source.Right, spc));
+		}
+
+		static bool IsCandidateNode(Microsoft.CodeAnalysis.SyntaxNode node)
+		{
+			if (node is AttributeSyntax attrib)
+				return IsGenerateStateClassName(attrib);
+			if (node is ClassDeclarationSyntax cds && cds.AttributeLists.Count > 0)
+				return cds.AttributeLists.SelectMany(al => al.Attributes).Any(IsGenerateStateClassName);
+			return false;
+		}
+
+		static bool IsGenerateStateClassName(AttributeSyntax attrib)
+		{
+			var name = attrib.Name;
+			while (name is QualifiedNameSyntax qn)
+				name = qn.Right;
+			var id = (name as SimpleNameSyntax)?.Identifier.ValueText;
+			return id == "GenerateStateClass" || id == "GenerateStateClassAttribute";
+		}
+
+		static INamedTypeSymbol GetCandidateType(GeneratorSyntaxContext context)
+		{
+			if (context.Node is ClassDeclarationSyntax cds && context.SemanticModel.GetDeclaredSymbol(cds).GetAttributes().Any(x => x.AttributeClass.Name == "GenerateStateClassAttribute"))
+			{
+				return context.SemanticModel.GetDeclaredSymbol(cds).OriginalDefinition as INamedTypeSymbol;
+			}
+
+			if (context.Node is AttributeSyntax attrib)
+			{
+				if (context.SemanticModel.GetTypeInfo(attrib).Type?.ToDisplayString() == "GenerateStateClassAttribute")
+				{
+					if (attrib.ArgumentList == null)
+						return null;
+					var f = attrib.ArgumentList.Arguments[0].Expression as TypeOfExpressionSyntax;
+					return GetType(context.SemanticModel, f);
+				}
+			}
+			return null;
+		}
+
+		static void Execute(Compilation compilation, ImmutableArray<INamedTypeSymbol> candidates, SourceProductionContext context)
+		{
+			if (candidates.IsDefaultOrEmpty)
 				return;
 
-			var st = context.Compilation.SyntaxTrees;
+			var rx = new TemplateCollector();
+			foreach (var candidate in candidates)
+				rx.AddTemplate(candidate);
+
+			var st = compilation.SyntaxTrees;
 
 			void addChildStateClasses(IEnumerable<INamedTypeSymbol> match)
 			{
@@ -192,7 +250,7 @@ namespace {{NameSpace}} {
 						var select = false;
 						if (sn is ClassDeclarationSyntax cds)
 						{
-							var sm = context.Compilation.GetSemanticModel(cds.SyntaxTree);
+							var sm = compilation.GetSemanticModel(cds.SyntaxTree);
 							var ts = sm.GetDeclaredSymbol(cds).OriginalDefinition as INamedTypeSymbol;
 							select = matchWith.Any(c => c == ts || c.OriginalDefinition == ts);
 						}
@@ -204,7 +262,7 @@ namespace {{NameSpace}} {
 					var select = false;
 					if (cn is PropertyDeclarationSyntax pds)
 					{
-						var sm = context.Compilation.GetSemanticModel(pds.SyntaxTree);
+						var sm = compilation.GetSemanticModel(pds.SyntaxTree);
 						var realClass = StateWrapperGenerator.GetType(sm, pds.Type);
 						select = !(pds.Type is NullableTypeSyntax) && IsUserClass(realClass);
 					}
@@ -213,7 +271,7 @@ namespace {{NameSpace}} {
 
 				var parentStateClassesProps = props.Select(pds => {
 					var p = (PropertyDeclarationSyntax)pds;
-					var sm = context.Compilation.GetSemanticModel(p.SyntaxTree);
+					var sm = compilation.GetSemanticModel(p.SyntaxTree);
 					var realClass = StateWrapperGenerator.GetType(sm, p.Type);
 					return realClass;
 				}).ToList();
@@ -237,9 +295,9 @@ namespace {{NameSpace}} {
 			}
 		}
 
-		bool IsUserClass(ITypeSymbol realClass) => realClass?.TypeKind == TypeKind.Class && realClass.SpecialType == SpecialType.None && !realClass.ToString().StartsWith("System"); //&& realClass.isnu;
+		static bool IsUserClass(ITypeSymbol realClass) => realClass?.TypeKind == TypeKind.Class && realClass.SpecialType == SpecialType.None && !realClass.ToString().StartsWith("System"); //&& realClass.isnu;
 
-		IEnumerable<INamedTypeSymbol> GetAllBaseTypes(INamedTypeSymbol classType)
+		static IEnumerable<INamedTypeSymbol> GetAllBaseTypes(INamedTypeSymbol classType)
 		{
 			yield return classType;
 			if (classType.BaseType != null)
@@ -249,7 +307,7 @@ namespace {{NameSpace}} {
 			}
 		}
 
-		dynamic GetModelData(string className, INamedTypeSymbol classType, string nameSpace, SyntaxReceiver sr)
+		static dynamic GetModelData(string className, INamedTypeSymbol classType, string nameSpace, TemplateCollector sr)
 		{
 			var baseClasses = GetAllBaseTypes(classType).ToList();
 			List<(string Type, string Name)> properties = new();
@@ -373,18 +431,7 @@ namespace {{NameSpace}} {
 			return input;
 		}
 
-		public void Initialize(GeneratorInitializationContext context)
-		{
-			//if (!Debugger.IsAttached)
-			//{
-			//	Debugger.Launch();
-			//}
-
-			context.RegisterForPostInitialization((pi) => pi.AddSource("GenerateStateClassAttribute__", attributeSource));
-			context.RegisterForSyntaxNotifications(() => new SyntaxReceiver());
-		}
-
-		class SyntaxReceiver : ISyntaxContextReceiver
+		class TemplateCollector
 		{
 			public List<(string name, INamedTypeSymbol classType, string nameSpace)> TemplateInfo = new();
 
@@ -395,27 +442,6 @@ namespace {{NameSpace}} {
 				if (!TemplateInfo.Exists(t => t.name == name && t.nameSpace == nameSpace))
 				{
 					TemplateInfo.Add((name, classType, nameSpace));
-				}
-			}
-
-			public void OnVisitSyntaxNode(GeneratorSyntaxContext context)
-			{
-				INamedTypeSymbol realClass;
-				if (context.Node is ClassDeclarationSyntax cds && context.SemanticModel.GetDeclaredSymbol(cds).GetAttributes().Any(x => x.AttributeClass.Name == "GenerateStateClassAttribute"))
-				{
-					realClass = context.SemanticModel.GetDeclaredSymbol(cds).OriginalDefinition as INamedTypeSymbol;//GetType(context, f);
-					AddTemplate(realClass);
-				}
-
-				if (context.Node is AttributeSyntax attrib)
-				{
-					if (context.SemanticModel.GetTypeInfo(attrib).Type?.ToDisplayString() == "GenerateStateClassAttribute")
-					{
-						if (attrib.ArgumentList == null) return;
-						var f = attrib.ArgumentList.Arguments[0].Expression as TypeOfExpressionSyntax;
-						realClass = StateWrapperGenerator.GetType(context.SemanticModel, f);
-						AddTemplate(realClass);
-					}
 				}
 			}
 		}

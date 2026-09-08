@@ -177,7 +177,7 @@ namespace Comet.Benchmarks
 					1 => new TextField("", $"Entry {i}"),
 					2 => new Comet.Button($"Button {i}", null),
 					3 => new Toggle(false),
-					4 => new Comet.Slider(new System.Func<double>(() => 50.0), 0.0, 100.0),
+					4 => new Comet.Slider(() => 50.0, () => 0.0, () => 100.0),
 					_ => new Text("?")
 				};
 			}
