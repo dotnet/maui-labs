@@ -313,7 +313,7 @@ public class AiIntegrationTests : IDisposable
 			  broker discovery problems.
 			---
 			# DevFlow Connect Troubleshooter
-			
+
 			This skill helps diagnose and resolve connectivity issues with the
 			.NET MAUI DevFlow agent.
 			""";
@@ -377,7 +377,7 @@ public class AiIntegrationTests : IDisposable
 			description: Diagnose DevFlow agent connectivity issues
 			---
 			# DevFlow Connect
-			
+
 			Use this skill to troubleshoot DevFlow agent connections.
 			""";
 
