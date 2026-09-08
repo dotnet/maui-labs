@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-ios</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <RootNamespace>DevFlow.Sample.Native</RootNamespace>
+    <ApplicationId>com.microsoft.maui.devflow.samplenative</ApplicationId>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+
+    <!-- Deliberately a plain .NET for iOS app: no MAUI, no SingleProject. -->
+    <UseMaui>false</UseMaui>
+    <SingleProject>false</SingleProject>
+
+    <IsPackable>false</IsPackable>
+    <IsShipping>false</IsShipping>
+
+    <!--
+      Release iOS builds run the trimmer, which flags the agent's reflection-based JSON
+      (IL2026). The agent is not trim-safe today — that is agent-wide and predates native
+      support, since Agent.Core has the same reflection-based serialization. It only surfaces
+      here because this is the first app head that is built in Release with the linker on.
+      Suppressed so the sample keeps demonstrating agent hosting; tracked in #410.
+    -->
+    <SuppressTrimAnalysisWarnings>true</SuppressTrimAnalysisWarnings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Native\Microsoft.Maui.DevFlow.Agent.Native.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\**\*.cs" LinkBase="Shared" />
+    <Compile Include="..\Apple\**\*.cs" LinkBase="Apple" />
+  </ItemGroup>
+
+</Project>

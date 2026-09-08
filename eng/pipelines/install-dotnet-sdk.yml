@@ -1,0 +1,18 @@
+steps:
+- pwsh: |
+    $globalJsonPath = Join-Path '$(Build.SourcesDirectory)' 'global.json'
+    $sdkVersion = (Get-Content $globalJsonPath -Raw | ConvertFrom-Json).sdk.version
+
+    if ([string]::IsNullOrWhiteSpace($sdkVersion)) {
+      throw "Unable to read the .NET SDK version from $globalJsonPath."
+    }
+
+    Write-Host "Using .NET SDK $sdkVersion from $globalJsonPath."
+    Write-Host "##vso[task.setvariable variable=DotNetSdkVersion]$sdkVersion"
+  displayName: Read .NET SDK version
+
+- task: UseDotNet@2
+  displayName: Install .NET SDK
+  inputs:
+    packageType: sdk
+    version: $(DotNetSdkVersion)

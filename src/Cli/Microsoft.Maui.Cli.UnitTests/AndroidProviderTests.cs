@@ -186,16 +186,8 @@ public class AndroidProviderTests
 		var provider = new FakeAndroidProvider
 		{
 			InstalledPackages = packages,
-			GetMostRecentSystemImageFunc = async ct =>
-			{
-				var pkgs = packages;
-				return pkgs
-					.Where(p => p.Path.StartsWith("system-images;android-", StringComparison.OrdinalIgnoreCase))
-					.Select(p => new { Package = p, ApiLevel = ExtractApiLevel(p.Path) })
-					.Where(x => x.ApiLevel > 0)
-					.OrderByDescending(x => x.ApiLevel)
-					.FirstOrDefault()?.Package.Path;
-			}
+			GetMostRecentSystemImageFunc = ct =>
+				Task.FromResult(AndroidProvider.FindMostRecentSystemImage(packages))
 		};
 
 		// Act
@@ -203,6 +195,73 @@ public class AndroidProviderTests
 
 		// Assert
 		Assert.Equal("system-images;android-35;google_apis;arm64-v8a", result);
+	}
+
+	[Fact]
+	public async Task GetMostRecentSystemImageAsync_HandlesMinorRevisionSuffix()
+	{
+		// API 37 ships as "android-37.0" (with a minor revision suffix). Regression test
+		// ensuring such images are not silently dropped by API-level parsing. Calls the real
+		// production selector (AndroidProvider.FindMostRecentSystemImage) so filter and sort
+		// logic stay covered.
+		var packages = new List<SdkPackage>
+		{
+			new SdkPackage { Path = "system-images;android-35;google_apis;arm64-v8a" },
+			new SdkPackage { Path = "system-images;android-37.0;google_apis_ps16k;arm64-v8a" },
+			new SdkPackage { Path = "system-images;android-36;google_apis;arm64-v8a" }
+		};
+
+		var provider = new FakeAndroidProvider
+		{
+			InstalledPackages = packages,
+			GetMostRecentSystemImageFunc = ct =>
+				Task.FromResult(AndroidProvider.FindMostRecentSystemImage(packages))
+		};
+
+		// Act
+		var result = await provider.GetMostRecentSystemImageAsync();
+
+		// Assert
+		Assert.Equal("system-images;android-37.0;google_apis_ps16k;arm64-v8a", result);
+	}
+
+	[Fact]
+	public void FindMostRecentSystemImage_PrefersHigherMinorRevision()
+	{
+		// Two minor revisions of the same major API level can coexist. The newer revision
+		// must win regardless of input order — guards against a stable OrderByDescending
+		// leaving the older "37.0" ahead of "37.1" when both parse to the same major.
+		var packages = new List<SdkPackage>
+		{
+			new SdkPackage { Path = "system-images;android-37.0;google_apis_ps16k;arm64-v8a" },
+			new SdkPackage { Path = "system-images;android-37.1;google_apis_ps16k;arm64-v8a" },
+			new SdkPackage { Path = "system-images;android-36.1;google_apis;arm64-v8a" }
+		};
+
+		// Act
+		var result = AndroidProvider.FindMostRecentSystemImage(packages);
+
+		// Assert
+		Assert.Equal("system-images;android-37.1;google_apis_ps16k;arm64-v8a", result);
+	}
+
+	[Fact]
+	public void FindMostRecentSystemImage_Throws_WhenPackagesNull()
+	{
+		Assert.Throws<ArgumentNullException>(() => AndroidProvider.FindMostRecentSystemImage(null!));
+	}
+
+	[Theory]
+	[InlineData("system-images;android-35;google_apis;arm64-v8a", "35.0")]
+	[InlineData("system-images;android-37.0;google_apis_ps16k;arm64-v8a", "37.0")]
+	[InlineData("system-images;android-37.0;google_apis_playstore_ps16k;x86_64", "37.0")]
+	[InlineData("system-images;android-37.1;google_apis_ps16k;arm64-v8a", "37.1")]
+	[InlineData("platform-tools", "0.0")]
+	[InlineData("build-tools;34.0.0", "0.0")]
+	[InlineData("system-images;android-VanillaIceCream;google_apis;arm64-v8a", "0.0")]
+	public void ExtractApiLevel_ParsesApiLevel(string systemImagePath, string expected)
+	{
+		Assert.Equal(Version.Parse(expected), AndroidProvider.ExtractApiLevel(systemImagePath));
 	}
 
 	[Fact]
@@ -292,6 +351,24 @@ public class AndroidProviderTests
 		Assert.Equal(2, result.Count);
 		Assert.Contains(result, a => a.Name == "Pixel_6_API_35");
 		Assert.Contains(result, a => a.Name == "Pixel_7_API_34");
+	}
+
+	[Fact]
+	public async Task GetDeviceProfilesAsync_ReturnsDeviceProfileList()
+	{
+		// Arrange
+		var provider = new FakeAndroidProvider
+		{
+			DeviceProfiles = new List<string> { "pixel_9_pro_fold", "Nexus 10" }
+		};
+
+		// Act
+		var result = await provider.GetDeviceProfilesAsync();
+
+		// Assert
+		Assert.Equal(2, result.Count);
+		Assert.Contains("pixel_9_pro_fold", result);
+		Assert.Contains("Nexus 10", result);
 	}
 
 	[Fact]
@@ -436,23 +513,6 @@ public class AndroidProviderTests
 		Assert.Equal(4, allPackages.Count);
 		Assert.Equal(2, allPackages.Count(p => p.IsInstalled));
 		Assert.Equal(2, allPackages.Count(p => !p.IsInstalled));
-	}
-
-	// Helper method to extract API level from system image path
-	private static int ExtractApiLevel(string systemImagePath)
-	{
-		var parts = systemImagePath.Split(';');
-		if (parts.Length >= 2)
-		{
-			var androidPart = parts[1];
-			if (androidPart.StartsWith("android-", StringComparison.OrdinalIgnoreCase))
-			{
-				var levelStr = androidPart.Substring(8);
-				if (int.TryParse(levelStr, out var level))
-					return level;
-			}
-		}
-		return 0;
 	}
 }
 

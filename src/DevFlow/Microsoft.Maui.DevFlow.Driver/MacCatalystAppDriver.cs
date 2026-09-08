@@ -21,7 +21,7 @@ namespace Microsoft.Maui.DevFlow.Driver;
 ///   - Normalizes smart/curly quotes before comparison.
 ///   - Case-insensitive.
 /// </summary>
-public class MacCatalystAppDriver : AppDriverBase
+public class MacCatalystAppDriver : AppDriverBase, IAlertDriver
 {
     public override string Platform => "MacCatalyst";
 

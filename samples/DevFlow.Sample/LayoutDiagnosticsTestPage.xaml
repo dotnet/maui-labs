@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="DevFlow.Sample.LayoutDiagnosticsTestPage"
+             Title="Layout Diagnostics">
+    <ScrollView>
+        <VerticalStackLayout Padding="20" Spacing="20">
+            <Label Text="Layout Diagnostics Fixtures"
+                   FontSize="22"
+                   FontAttributes="Bold"
+                   AutomationId="LayoutDiagnosticsHeader" />
+
+            <Label Text="Ancestor clipping" FontAttributes="Bold" />
+            <Grid WidthRequest="180"
+                  HeightRequest="64"
+                  IsClippedToBounds="True"
+                  BackgroundColor="#FFE8E8"
+                  AutomationId="ClipHost">
+                <Button Text="Partially clipped button"
+                        AutomationId="ClippedButton"
+                        WidthRequest="150"
+                        HeightRequest="48"
+                        HorizontalOptions="Start"
+                        VerticalOptions="Center"
+                        TranslationX="100" />
+            </Grid>
+
+            <Label Text="Text truncation" FontAttributes="Bold" />
+            <Label Text="This sentence is intentionally much wider than its fixed single-line host."
+                   WidthRequest="130"
+                   MaxLines="1"
+                   LineBreakMode="TailTruncation"
+                   AutomationId="TruncatedLabel" />
+
+            <Label Text="Lost content overflow" FontAttributes="Bold" />
+            <Grid WidthRequest="150"
+                  HeightRequest="48"
+                  IsClippedToBounds="True"
+                  BackgroundColor="#E8F0FF"
+                  AutomationId="OverflowHost">
+                <Label Text="This child is deliberately wider than its clipped host."
+                       WidthRequest="360"
+                       VerticalOptions="Center"
+                       AutomationId="OverflowContent" />
+            </Grid>
+
+            <Label Text="Intentional overlap (must not be actionable by default)"
+                   FontAttributes="Bold" />
+            <Grid WidthRequest="220"
+                  HeightRequest="80"
+                  AutomationId="IntentionalOverlapHost">
+                <Border BackgroundColor="#D9EAD3"
+                        StrokeShape="RoundRectangle 10"
+                        AutomationId="IntentionalCard">
+                    <Label Text="Card content"
+                           HorizontalOptions="Center"
+                           VerticalOptions="Center" />
+                </Border>
+                <Border BackgroundColor="#6750A4"
+                        StrokeShape="RoundRectangle 10"
+                        Padding="8,3"
+                        HorizontalOptions="End"
+                        VerticalOptions="Start"
+                        TranslationX="8"
+                        TranslationY="-8"
+                        AutomationId="IntentionalBadge">
+                    <Label Text="NEW" TextColor="White" FontSize="11" />
+                </Border>
+            </Grid>
+
+            <Label Text="Interaction occlusion" FontAttributes="Bold" />
+            <Grid WidthRequest="220"
+                  HeightRequest="56"
+                  AutomationId="OcclusionHost">
+                <Button Text="Covered action"
+                        AutomationId="OccludedButton" />
+                <Grid BackgroundColor="#01000000"
+                      AutomationId="BlockingOverlay">
+                    <Grid.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnBlockingOverlayTapped" />
+                    </Grid.GestureRecognizers>
+                </Grid>
+            </Grid>
+
+            <Label x:Name="StatusLabel"
+                   Text="fixture ready"
+                   AutomationId="LayoutDiagnosticsStatus" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

@@ -190,9 +190,12 @@ HERE=&quot;%24(dirname &quot;%24(readlink -f &quot;%240&quot;)&quot;)&quot;
 # --- System dependency checks ---
 MISSING=&quot;&quot;
 
-# GTK4 (required)
-if ! ldconfig -p 2>/dev/null | grep -q &quot;libgtk-4.so&quot;; then
-  MISSING=&quot;%24{MISSING}  - GTK4 (libgtk-4-1 / gtk4)\n&quot;
+# GTK 4.12+ (required) — detected via the 4.12-only symbol gtk_css_provider_load_from_string
+_GTK_LIB=&quot;%24(ldconfig -p 2>/dev/null | grep -m1 &quot;libgtk-4.so&quot; | awk '{print %24NF}')&quot;
+if [ -z &quot;%24_GTK_LIB&quot; ]; then
+  MISSING=&quot;%24{MISSING}  - GTK 4.12+ (libgtk-4-1 / gtk4)\n&quot;
+elif ! grep -aq &quot;gtk_css_provider_load_from_string&quot; &quot;%24_GTK_LIB&quot; 2>/dev/null; then
+  MISSING=&quot;%24{MISSING}  - GTK 4.12+ (found older GTK 4.x; update to 4.12 or newer)\n&quot;
 fi
 
 # WebKitGTK 6.0 (required for Blazor WebView)
@@ -228,9 +231,12 @@ HERE=&quot;%24(dirname &quot;%24(readlink -f &quot;%240&quot;)&quot;)&quot;
 # --- System dependency checks ---
 MISSING=&quot;&quot;
 
-# GTK4 (required)
-if ! ldconfig -p 2>/dev/null | grep -q &quot;libgtk-4.so&quot;; then
-  MISSING=&quot;%24{MISSING}  - GTK4 (libgtk-4-1 / gtk4)\n&quot;
+# GTK 4.12+ (required) — detected via the 4.12-only symbol gtk_css_provider_load_from_string
+_GTK_LIB=&quot;%24(ldconfig -p 2>/dev/null | grep -m1 &quot;libgtk-4.so&quot; | awk '{print %24NF}')&quot;
+if [ -z &quot;%24_GTK_LIB&quot; ]; then
+  MISSING=&quot;%24{MISSING}  - GTK 4.12+ (libgtk-4-1 / gtk4)\n&quot;
+elif ! grep -aq &quot;gtk_css_provider_load_from_string&quot; &quot;%24_GTK_LIB&quot; 2>/dev/null; then
+  MISSING=&quot;%24{MISSING}  - GTK 4.12+ (found older GTK 4.x; update to 4.12 or newer)\n&quot;
 fi
 
 if [ -n &quot;%24MISSING&quot; ]; then

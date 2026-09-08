@@ -179,7 +179,7 @@ public class FileStorageRootTests
         return ((IPEndPoint)listener.LocalEndpoint).Port;
     }
 
-    private sealed class RootedDevFlowAgentService : DevFlowAgentService
+    private sealed class RootedDevFlowAgentService : MauiDevFlowAgentService
     {
         private readonly IReadOnlyList<FileStorageRoot> _roots;
 

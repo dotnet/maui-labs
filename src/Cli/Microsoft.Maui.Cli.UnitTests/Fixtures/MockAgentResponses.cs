@@ -34,23 +34,96 @@ internal static class MockAgentResponses
             "logs": true,
             "sensors": true,
             "storage": true,
-            "profiler": true
+            "profiler": true,
+            "theme": true
           },
           "running": true,
           "cdpReady": true,
-          "cdpWebViewCount": 1
+          "cdpWebViewCount": 1,
+          "extensions": {
+            "count": 1,
+            "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+          }
         }
         """;
 
     public const string AgentCapabilities = """
         {
-          "ui": { "supported": true, "features": ["tree", "query", "tap", "fill", "batch"] },
-          "webview": { "supported": true, "features": ["contexts", "evaluate", "source"] },
-          "network": { "supported": true, "features": ["list", "detail", "clear"] },
-          "logs": { "supported": true, "features": ["list", "stream"] },
-          "sensors": { "supported": true, "features": ["list", "start", "stop"] },
-          "storage": { "supported": true, "features": ["preferences", "secure-storage", "roots", "files"] },
-          "profiler": { "supported": true, "features": ["capabilities", "sessions", "samples"] }
+          "agent": {
+            "name": "Microsoft.Maui.DevFlow.Agent",
+            "version": "0.1.0-test",
+            "framework": "maui",
+            "frameworkVersion": "10.0.0"
+          },
+          "capabilities": {
+            "ui.tree": { "version": 1, "features": ["tree", "query"] },
+            "ui.actions": {
+              "version": 2,
+              "features": ["tap", "fill", "gesture", "batch", "stale-capture-rejection"],
+              "gestures": ["tap", "doubletap", "longpress", "swipe", "pan", "pinch", "rotate"]
+            },
+            "webview": { "version": 1, "features": ["contexts", "evaluate", "source"] },
+            "network": { "version": 1, "features": ["list", "detail", "clear"] },
+            "logs": { "version": 1, "features": ["list", "stream"] },
+            "device.sensors": { "version": 1, "features": ["list", "start", "stop"] },
+            "storage.preferences": { "version": 1, "features": ["list", "get", "set", "delete", "clear"] },
+            "storage.secure": { "version": 1, "features": ["get", "set", "delete", "clear"] },
+            "storage.files": { "version": 1, "features": ["roots", "list", "download", "upload", "delete"] },
+            "profiler": { "version": 1, "features": ["capabilities", "sessions", "samples"] },
+            "theme": { "version": 1, "supported": true, "features": ["get", "set"] },
+            "app.theme": { "version": 1, "supported": true, "features": ["get", "set"] },
+            "com.example.diagnostics": { "version": 1, "features": ["build_info", "echo"] }
+          },
+          "extensions": {
+            "com.example.diagnostics": {
+              "version": "1.0.0",
+              "description": "Sample diagnostics extension",
+              "tools": [
+                {
+                  "name": "build_info",
+                  "description": "Returns build information.",
+                  "method": "GET",
+                  "path": "/api/v1/ext/com.example.diagnostics/build-info",
+                  "returns": { "type": "object" },
+                  "annotations": {
+                    "readOnly": true,
+                    "idempotent": true,
+                    "destructive": false,
+                    "category": "diagnostics"
+                  }
+                },
+                {
+                  "name": "echo",
+                  "description": "Echoes request parameters.",
+                  "method": "POST",
+                  "path": "/api/v1/ext/com.example.diagnostics/echo",
+                  "parameters": { "type": "object" },
+                  "returns": { "type": "object" },
+                  "annotations": {
+                    "readOnly": false,
+                    "idempotent": true,
+                    "destructive": false,
+                    "category": "diagnostics"
+                  }
+                }
+              ]
+            }
+          }
+        }
+        """;
+
+    public const string LegacyAgentCapabilities = """
+        {
+          "agent": {
+            "name": "Microsoft.Maui.DevFlow.Agent",
+            "version": "0.1.0-legacy",
+            "framework": "maui",
+            "frameworkVersion": "10.0.0"
+          },
+          "capabilities": {
+            "ui.tree": { "version": 1, "features": ["tree", "query"] },
+            "ui.actions": { "version": 1, "features": ["tap", "fill", "batch"] }
+          }
         }
         """;
 
@@ -78,6 +151,64 @@ internal static class MockAgentResponses
         ]
         """;
 
+    public const string VisualTreeWithDetachedNativeRoot = """
+        [
+          {
+            "id": "window-root",
+            "type": "Window",
+            "captureEpoch": 42,
+            "registryGeneration": 7,
+            "windowId": 0,
+            "isVisible": true,
+            "isEnabled": true,
+            "windowBounds": {
+              "x": 0,
+              "y": 0,
+              "width": 100,
+              "height": 100
+            },
+            "children": [
+              {
+                "id": "page-root",
+                "type": "ContentPage",
+                "isVisible": true,
+                "isEnabled": true,
+                "windowBounds": {
+                  "x": 0,
+                  "y": 0,
+                  "width": 100,
+                  "height": 100
+                },
+                "children": []
+              }
+            ]
+          },
+          {
+            "id": "native:window",
+            "type": "Window",
+            "origin": "native",
+            "isVisible": false,
+            "isEnabled": true,
+            "children": [
+              {
+                "id": "native:dialog",
+                "type": "Dialog",
+                "origin": "native",
+                "isVisible": true,
+                "isEnabled": true,
+                "windowBounds": {
+                  "x": 10,
+                  "y": 10,
+                  "width": 80,
+                  "height": 60
+                },
+                "children": []
+              }
+            ]
+          }
+        ]
+        """;
+
     public const string QueryElements = """
         [
           {
@@ -87,6 +218,60 @@ internal static class MockAgentResponses
             "text": "Click Me",
             "isVisible": true,
             "isEnabled": true
+          }
+        ]
+        """;
+
+    public const string DuplicateActionElements = """
+        [
+          {
+            "id": "wrapper-grid",
+            "type": "Grid",
+            "fullType": "Microsoft.Maui.Controls.Grid",
+            "automationId": "DuplicateActionTarget",
+            "isVisible": true,
+            "isEnabled": true,
+            "captureEpoch": 42,
+            "registryGeneration": 7
+          },
+          {
+            "id": "native:registered:action-target",
+            "type": "NavigationViewItem",
+            "fullType": "Microsoft.UI.Xaml.Controls.NavigationViewItem",
+            "automationId": "DuplicateActionTarget",
+            "text": "Action target",
+            "isVisible": true,
+            "isEnabled": true,
+            "captureEpoch": 42,
+            "registryGeneration": 7,
+            "capabilities": ["invoke", "set-value", "focus"]
+          }
+        ]
+        """;
+
+    public const string DistinctActionElements = """
+        [
+          {
+            "id": "first-button",
+            "type": "Button",
+            "fullType": "Microsoft.Maui.Controls.Button",
+            "text": "Shared action",
+            "isVisible": true,
+            "isEnabled": true,
+            "captureEpoch": 51,
+            "registryGeneration": 9
+          },
+          {
+            "id": "native:registered:second-button",
+            "type": "Button",
+            "fullType": "Microsoft.UI.Xaml.Controls.Button",
+            "origin": "native",
+            "text": "Shared action",
+            "isVisible": true,
+            "isEnabled": true,
+            "captureEpoch": 51,
+            "registryGeneration": 9,
+            "capabilities": ["invoke"]
           }
         ]
         """;
@@ -102,15 +287,48 @@ internal static class MockAgentResponses
         }
         """;
 
-    public const string HitTestResult = """
+    public static string HitTestResult(int captureEpoch, string parentId = "hit-parent") => $$"""
         {
-          "id": "el-1",
-          "type": "Button",
-          "automationId": "ClickMeButton"
+          "captureEpoch": {{captureEpoch}},
+          "registryGeneration": 7,
+          "elements": [
+            {
+              "id": "hit-child",
+              "type": "Label"
+            },
+            {
+              "id": "{{parentId}}",
+              "type": "Button"
+            }
+          ]
+        }
+        """;
+
+    public static string ScrollableHitTestResult(int captureEpoch) => $$"""
+        {
+          "captureEpoch": {{captureEpoch}},
+          "registryGeneration": 7,
+          "elements": [
+            {
+              "id": "hit-child",
+              "type": "Label"
+            },
+            {
+              "id": "hit-scroll",
+              "type": "ScrollView"
+            },
+            {
+              "id": "hit-parent",
+              "type": "Button"
+            }
+          ]
         }
         """;
 
     public const string ActionSuccess = """{"success":true,"message":"ok"}""";
+
+    public const string GestureSuccess =
+        """{"success":true,"type":"pinch","elementId":"el-1","handledBy":"recognizer","platform":"iOS","detail":"PinchGestureRecognizer on Grid","error":null}""";
 
     public const string DeviceInfo = """
         {
@@ -119,6 +337,17 @@ internal static class MockAgentResponses
           "name": "My Mac",
           "platform": "MacCatalyst",
           "versionString": "15.0"
+        }
+        """;
+
+    public const string ThemeInfo = """
+        {
+          "theme": "dark",
+          "requestedTheme": "dark",
+          "userAppTheme": "dark",
+          "effectiveTheme": "dark",
+          "supportedThemes": ["light", "dark", "system"],
+          "source": "app"
         }
         """;
 

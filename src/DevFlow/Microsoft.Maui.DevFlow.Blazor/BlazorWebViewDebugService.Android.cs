@@ -2,6 +2,7 @@
 using global::Android.Webkit;
 using Microsoft.AspNetCore.Components.WebView.Maui;
 using Microsoft.Maui.Handlers;
+using System.Runtime.CompilerServices;
 using AWebView = global::Android.Webkit.WebView;
 
 namespace Microsoft.Maui.DevFlow.Blazor;
@@ -12,6 +13,8 @@ namespace Microsoft.Maui.DevFlow.Blazor;
 /// </summary>
 public class BlazorWebViewDebugService : BlazorWebViewDebugServiceBase
 {
+    private readonly ConditionalWeakTable<AWebView, BridgeRegistration> _registrations = new();
+
     public BlazorWebViewDebugService() { }
 
     /// <summary>
@@ -29,6 +32,14 @@ public class BlazorWebViewDebugService : BlazorWebViewDebugServiceBase
 
             if (handler.PlatformView is AWebView androidWebView)
             {
+                if (_registrations.TryGetValue(androidWebView, out var existing) &&
+                    existing.Index < Bridges.Count &&
+                    Bridges[existing.Index].IsActive)
+                {
+                    Log($"[BlazorDevFlow] Android WebView already captured as bridge {existing.Index}; skipping duplicate mapping.");
+                    return;
+                }
+
                 androidWebView.Settings.JavaScriptEnabled = true;
                 var automationId = (handler.VirtualView as VisualElement)?.AutomationId;
                 var idx = AddWebViewBridge(
@@ -61,7 +72,25 @@ public class BlazorWebViewDebugService : BlazorWebViewDebugServiceBase
                     () => MainThread.BeginInvokeOnMainThread(() => androidWebView.Reload()),
                     (url) => MainThread.BeginInvokeOnMainThread(() => androidWebView.LoadUrl(url)),
                     automationId);
+                _registrations.Remove(androidWebView);
+                _registrations.Add(androidWebView, new BridgeRegistration(idx));
                 Log($"[BlazorDevFlow] Android WebView captured as bridge {idx} (automationId={automationId})");
+
+                if (handler.VirtualView is VisualElement visualElement)
+                {
+                    EventHandler<HandlerChangingEventArgs>? handlerChanging = null;
+                    handlerChanging = (_, args) =>
+                    {
+                        if (!ReferenceEquals(args.OldHandler, handler))
+                            return;
+
+                        visualElement.HandlerChanging -= handlerChanging;
+                        DeactivateWebViewBridge(idx);
+                        _registrations.Remove(androidWebView);
+                        Log($"[BlazorDevFlow] Android WebView bridge {idx} deactivated.");
+                    };
+                    visualElement.HandlerChanging += handlerChanging;
+                }
 
                 // Install WebViewClient to detect page load completion and re-inject
                 // API level 26 is required, but MAUI min target is API 24. Suppress warning as MAUI
@@ -79,6 +108,8 @@ public class BlazorWebViewDebugService : BlazorWebViewDebugServiceBase
             }
         });
     }
+
+    private sealed record BridgeRegistration(int Index);
 }
 
 /// <summary>

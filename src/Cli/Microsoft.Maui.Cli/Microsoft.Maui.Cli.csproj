@@ -21,6 +21,11 @@
     <EnableAotAnalyzer>true</EnableAotAnalyzer>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <!-- Let the latest packaged tool TFM run on newer major runtimes. -->
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="System.CommandLine" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
@@ -72,13 +77,25 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="..\..\..\plugins\dotnet-maui\skills\maui-devflow-onboard\**\*" LogicalName="devflow.skills/maui-devflow-onboard/%(RecursiveDir)%(Filename)%(Extension)">
+    <EmbeddedResource Include="..\..\..\plugins\dotnet-maui-tooling\skills\maui-devflow-onboard\**\*" LogicalName="devflow.skills/maui-devflow-onboard/%(RecursiveDir)%(Filename)%(Extension)">
       <WithCulture>false</WithCulture>
     </EmbeddedResource>
-    <EmbeddedResource Include="..\..\..\plugins\dotnet-maui\skills\maui-devflow-debug\**\*" LogicalName="devflow.skills/maui-devflow-debug/%(RecursiveDir)%(Filename)%(Extension)">
+    <EmbeddedResource Include="..\..\..\plugins\dotnet-maui-tooling\skills\maui-devflow-debug\**\*" LogicalName="devflow.skills/maui-devflow-debug/%(RecursiveDir)%(Filename)%(Extension)">
       <WithCulture>false</WithCulture>
     </EmbeddedResource>
-    <EmbeddedResource Include="..\..\..\plugins\dotnet-maui\skills\maui-devflow-session-review\**\*" LogicalName="devflow.skills/maui-devflow-session-review/%(RecursiveDir)%(Filename)%(Extension)">
+    <EmbeddedResource Include="..\..\..\plugins\dotnet-maui-tooling\skills\maui-devflow-session-review\**\*" LogicalName="devflow.skills/maui-devflow-session-review/%(RecursiveDir)%(Filename)%(Extension)">
+      <WithCulture>false</WithCulture>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <Target Name="ValidateDevFlowSkillResources" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('$(MSBuildThisFileDirectory)..\..\..\plugins\dotnet-maui-tooling\skills\maui-devflow-onboard\SKILL.md')" Text="Bundled DevFlow skill 'maui-devflow-onboard' was not found." />
+    <Error Condition="!Exists('$(MSBuildThisFileDirectory)..\..\..\plugins\dotnet-maui-tooling\skills\maui-devflow-debug\SKILL.md')" Text="Bundled DevFlow skill 'maui-devflow-debug' was not found." />
+    <Error Condition="!Exists('$(MSBuildThisFileDirectory)..\..\..\plugins\dotnet-maui-tooling\skills\maui-devflow-session-review\SKILL.md')" Text="Bundled DevFlow skill 'maui-devflow-session-review' was not found." />
+  </Target>
+
+  <ItemGroup>
+    <EmbeddedResource Include="DevFlow\Inspector\Web\**\*" LogicalName="Microsoft.Maui.Cli.DevFlow.Inspector.Web.%(Filename)%(Extension)">
       <WithCulture>false</WithCulture>
     </EmbeddedResource>
   </ItemGroup>

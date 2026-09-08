@@ -21,6 +21,7 @@ public abstract class ChatClientMessagesTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithSystemMessage_AcceptsSystemRole()
 	{
 		var client = new T();
@@ -34,6 +35,7 @@ public abstract class ChatClientMessagesTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithConversationHistory_AcceptsMultipleMessages()
 	{
 		var client = new T();
@@ -48,6 +50,7 @@ public abstract class ChatClientMessagesTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithLongMessage_HandlesGracefully()
 	{
 		var client = new T();
@@ -61,6 +64,7 @@ public abstract class ChatClientMessagesTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithEmptyMessageContent_HandlesGracefully()
 	{
 		var client = new T();
@@ -73,6 +77,7 @@ public abstract class ChatClientMessagesTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithSpecialCharacters_HandlesGracefully()
 	{
 		var client = new T();
@@ -100,6 +105,7 @@ public abstract class ChatClientMessagesTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_WithSystemMessage_AcceptsSystemRole()
 	{
 		var client = new T();
@@ -116,6 +122,7 @@ public abstract class ChatClientMessagesTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_WithConversationHistory_AcceptsMultipleMessages()
 	{
 		var client = new T();
@@ -133,6 +140,7 @@ public abstract class ChatClientMessagesTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_WithLongMessage_HandlesGracefully()
 	{
 		var client = new T();
@@ -149,6 +157,7 @@ public abstract class ChatClientMessagesTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_WithEmptyMessageContent_HandlesGracefully()
 	{
 		var client = new T();
@@ -164,6 +173,7 @@ public abstract class ChatClientMessagesTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_WithSpecialCharacters_HandlesGracefully()
 	{
 		var client = new T();

@@ -68,8 +68,18 @@ public sealed class DevFlowActionAnalyzer : DiagnosticAnalyzer
 		description: "Each [DevFlowAction] name must be unique. At runtime, duplicate names cause the second registration to be silently ignored.",
 		customTags: [WellKnownDiagnosticTags.CompilationEnd]);
 
+	// MAUI_DFA006: Must not contain generic parameters
+	private static readonly DiagnosticDescriptor MustNotContainGenericParameters = new(
+		id: "MAUI_DFA006",
+		title: "[DevFlowAction] method must not contain generic parameters",
+		messageFormat: "Method '{0}' cannot be a DevFlow Action because it is generic or is declared on a generic type",
+		category: "DevFlow",
+		defaultSeverity: DiagnosticSeverity.Error,
+		isEnabledByDefault: true,
+		description: "DevFlow Actions are invoked without type arguments and therefore cannot contain generic parameters.");
+
 	public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
-		ImmutableArray.Create(UnsupportedParameterType, MustBePublicStatic, ReturnTypeMayNotSerialize, MissingParameterDescription, DuplicateActionName);
+		ImmutableArray.Create(UnsupportedParameterType, MustBePublicStatic, ReturnTypeMayNotSerialize, MissingParameterDescription, DuplicateActionName, MustNotContainGenericParameters);
 
 	public override void Initialize(AnalysisContext context)
 	{
@@ -132,6 +142,15 @@ public sealed class DevFlowActionAnalyzer : DiagnosticAnalyzer
 				method.Name));
 		}
 
+		// DFA006: Reflection cannot invoke an open generic method.
+		if (method.IsGenericMethod || HasGenericContainingType(method.ContainingType))
+		{
+			context.ReportDiagnostic(Diagnostic.Create(
+				MustNotContainGenericParameters,
+				method.Locations.FirstOrDefault(),
+				method.Name));
+		}
+
 		// DFA001 + DFA004: Check parameters
 		foreach (var param in method.Parameters)
 		{
@@ -162,6 +181,17 @@ public sealed class DevFlowActionAnalyzer : DiagnosticAnalyzer
 				method.Locations.FirstOrDefault(),
 				returnType.ToDisplayString()));
 		}
+	}
+
+	private static bool HasGenericContainingType(INamedTypeSymbol? type)
+	{
+		for (var current = type; current != null; current = current.ContainingType)
+		{
+			if (current.IsGenericType)
+				return true;
+		}
+
+		return false;
 	}
 
 	private static string? GetDevFlowActionName(IMethodSymbol method)

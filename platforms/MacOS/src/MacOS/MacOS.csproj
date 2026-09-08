@@ -16,6 +16,9 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Microsoft.Maui.Platforms.MacOS.BlazorWebView" />
+    <!-- Lets VisualTreeWalker's MACOS branch reuse ToolbarItemInvocationOutcome (see
+         Platform/ToolbarItemInvocationOutcome.cs) without making it public API. -->
+    <InternalsVisibleTo Include="Microsoft.Maui.DevFlow.Agent" />
   </ItemGroup>
 
   <ItemGroup>

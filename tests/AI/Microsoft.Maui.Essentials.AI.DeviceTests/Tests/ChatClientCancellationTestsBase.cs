@@ -12,6 +12,7 @@ public abstract class ChatClientCancellationTestsBase<T>
 	where T : class, IChatClient, new()
 {
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_AcceptsCancellationToken()
 	{
 		var client = new T();
@@ -41,6 +42,7 @@ public abstract class ChatClientCancellationTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_CancelAfterStart_ThrowsOperationCanceledException()
 	{
 		var client = new T();
@@ -60,6 +62,7 @@ public abstract class ChatClientCancellationTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithTimeout_ThrowsOperationCanceledException()
 	{
 		var client = new T();
@@ -74,6 +77,7 @@ public abstract class ChatClientCancellationTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_AcceptsCancellationToken()
 	{
 		var client = new T();
@@ -112,6 +116,7 @@ public abstract class ChatClientCancellationTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_CancelDuringStreaming_ThrowsOperationCanceledException()
 	{
 		var client = new T();
@@ -137,6 +142,7 @@ public abstract class ChatClientCancellationTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_WithTimeout_ThrowsOperationCanceledException()
 	{
 		var client = new T();

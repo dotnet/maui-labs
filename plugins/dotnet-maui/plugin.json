@@ -1,6 +1,6 @@
 {
   "name": "dotnet-maui",
-  "version": "0.2.0",
-  "description": "Skills for .NET MAUI development: DevFlow automation, session review, platform bindings, workload diagnostics, profiling, and accessibility. Some skills require the maui CLI tool.",
+  "version": "0.6.0",
+  "description": "Skills for building production .NET MAUI apps: architecture, project structure, UI, accessibility, testing, performance, platform integration, auth, networking, assets, lifecycle, Blazor Hybrid, AI, localization, theming, release notes, and migration.",
   "skills": ["./skills/"]
 }

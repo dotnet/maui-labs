@@ -92,11 +92,16 @@ internal class SidebarOutlineViewDelegate : NSOutlineViewDelegate
 {
 	readonly SidebarOutlineViewDataSource _dataSource;
 	readonly Action<MacOSSidebarItem> _onSelectionChanged;
+	readonly Action<MacOSSidebarItem, NSView>? _onItemRealized;
 
-	public SidebarOutlineViewDelegate(SidebarOutlineViewDataSource dataSource, Action<MacOSSidebarItem> onSelectionChanged)
+	public SidebarOutlineViewDelegate(
+		SidebarOutlineViewDataSource dataSource,
+		Action<MacOSSidebarItem> onSelectionChanged,
+		Action<MacOSSidebarItem, NSView>? onItemRealized = null)
 	{
 		_dataSource = dataSource;
 		_onSelectionChanged = onSelectionChanged;
+		_onItemRealized = onItemRealized;
 	}
 
 	public override bool IsGroupItem(NSOutlineView outlineView, NSObject item)
@@ -136,6 +141,7 @@ internal class SidebarOutlineViewDelegate : NSOutlineViewDelegate
 			cellView.ImageView.Hidden = image == null;
 		}
 
+		_onItemRealized?.Invoke(sidebarItem, cellView);
 		return cellView;
 	}
 

@@ -151,6 +151,84 @@
         }
       }
     },
+    "ThemeValue": {
+      "type": "string",
+      "description": "Application theme value. `system` means no app override; follow the host/device theme.",
+      "enum": [
+        "light",
+        "dark",
+        "system"
+      ]
+    },
+    "ThemeSetRequest": {
+      "type": "object",
+      "description": "Request to set the in-app theme override.",
+      "required": [
+        "theme"
+      ],
+      "properties": {
+        "theme": {
+          "$ref": "#/$defs/ThemeValue"
+        }
+      }
+    },
+    "ThemeInfo": {
+      "type": "object",
+      "description": "Application theme state.",
+      "required": [
+        "theme",
+        "requestedTheme",
+        "userAppTheme",
+        "effectiveTheme",
+        "supportedThemes",
+        "source"
+      ],
+      "properties": {
+        "theme": {
+          "$ref": "#/$defs/ThemeValue",
+          "description": "Effective application theme after applying any in-app override."
+        },
+        "requestedTheme": {
+          "type": "string",
+          "description": "Legacy MAUI AppTheme name requested by the host/device setting (for example, 'Light', 'Dark', or 'Unspecified')."
+        },
+        "requestedThemeValue": {
+          "$ref": "#/$defs/ThemeValue",
+          "description": "Protocol-normalized theme requested by the host/device setting."
+        },
+        "userAppTheme": {
+          "$ref": "#/$defs/ThemeValue",
+          "description": "Current in-app override; `system` means no override."
+        },
+        "effectiveTheme": {
+          "$ref": "#/$defs/ThemeValue",
+          "description": "Effective application theme after combining host/device and in-app override."
+        },
+        "supportedThemes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThemeValue"
+          },
+          "description": "Theme values accepted by the in-app endpoint."
+        },
+        "source": {
+          "type": "string",
+          "description": "Where the theme value was applied or read from.",
+          "enum": [
+            "app",
+            "system",
+            "auto"
+          ]
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Optional human-readable status detail."
+        }
+      }
+    },
     "AppInfo": {
       "type": "object",
       "description": "Application metadata.",
@@ -178,11 +256,20 @@
           "description": "Application package identifier (e.g. 'com.example.myapp')."
         },
         "theme": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Current application theme (e.g. 'light', 'dark', 'system')."
+          "$ref": "#/$defs/ThemeValue",
+          "description": "Effective application theme."
+        },
+        "requestedTheme": {
+          "$ref": "#/$defs/ThemeValue",
+          "description": "Theme requested by the host/device setting."
+        },
+        "userAppTheme": {
+          "$ref": "#/$defs/ThemeValue",
+          "description": "Current in-app override; `system` means no override."
+        },
+        "effectiveTheme": {
+          "$ref": "#/$defs/ThemeValue",
+          "description": "Effective application theme after combining host/device and in-app override."
         }
       }
     },

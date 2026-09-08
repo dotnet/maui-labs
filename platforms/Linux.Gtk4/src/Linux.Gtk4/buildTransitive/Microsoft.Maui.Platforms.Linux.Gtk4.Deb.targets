@@ -86,8 +86,8 @@
 
     <!-- Build the Depends field -->
     <PropertyGroup>
-      <DebDepends Condition="'$(DebDepends)' == '' and '$(_DebNeedsWebKit)' == 'true'">libgtk-4-1, libwebkitgtk-6.0-4</DebDepends>
-      <DebDepends Condition="'$(DebDepends)' == ''">libgtk-4-1</DebDepends>
+      <DebDepends Condition="'$(DebDepends)' == '' and '$(_DebNeedsWebKit)' == 'true'">libgtk-4-1 (&gt;= 4.12.0), libwebkitgtk-6.0-4</DebDepends>
+      <DebDepends Condition="'$(DebDepends)' == ''">libgtk-4-1 (&gt;= 4.12.0)</DebDepends>
     </PropertyGroup>
 
     <Message Importance="normal" Text="Deb: Dependencies: $(DebDepends)"  />

@@ -28,6 +28,26 @@ public abstract class AppDriverBase : IAppDriver
     public Task<AgentStatus?> GetStatusAsync()
         => EnsureClient().GetStatusAsync();
 
+    public Task<ThemeResult?> GetThemeAsync()
+        => EnsureClient().GetThemeAsync();
+
+    public virtual Task<ThemeResult> SetThemeAsync(DevFlowTheme theme, ThemeSetScope scope = ThemeSetScope.Auto)
+    {
+        if (scope == ThemeSetScope.System)
+        {
+            return Task.FromResult(new ThemeResult
+            {
+                Theme = theme,
+                RequestedTheme = theme,
+                Source = "system",
+                Success = false,
+                Message = $"System theme switching is not supported on {Platform}. Use app scope instead.",
+            });
+        }
+
+        return EnsureClient().SetThemeAsync(theme);
+    }
+
     public Task<List<ElementInfo>> GetTreeAsync(int maxDepth = 0)
         => EnsureClient().GetTreeAsync(maxDepth);
 

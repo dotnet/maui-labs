@@ -1,13 +1,7 @@
 [
   {
-    "_comment": "Client subscribes to accelerometer sensor on /ws/v1/sensors",
-    "direction": "client → server",
-    "message": {
-      "type": "subscribe",
-      "filter": {
-        "sensor": "accelerometer"
-      }
-    }
+    "_comment": "Precondition: the client starts accelerometer through POST /api/v1/device/sensors/accelerometer/start under its mutation lease, then connects to /ws/v1/sensors?sensor=accelerometer",
+    "direction": "HTTP then WebSocket connect"
   },
   {
     "_comment": "Server confirms sensor subscription",

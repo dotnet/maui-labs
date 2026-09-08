@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Components.WebView.Maui;
-using Platform.Maui.Linux.Gtk4.Hosting;
+using Microsoft.Maui.Platforms.Linux.Gtk4.Hosting;
 using Microsoft.Maui.DevFlow.Agent.Gtk;
 using Microsoft.Maui.DevFlow.Blazor.Gtk;
 
@@ -27,7 +27,7 @@ public static partial class MauiProgram
 		builder.Services.AddMauiBlazorWebView();
 		builder.ConfigureMauiHandlers(handlers =>
 		{
-			handlers.AddHandler<IBlazorWebView, Platform.Maui.Linux.Gtk4.BlazorWebView.BlazorWebViewHandler>();
+			handlers.AddHandler<IBlazorWebView, Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView.BlazorWebViewHandler>();
 		});
 
 		// Shared data

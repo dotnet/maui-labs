@@ -12,6 +12,7 @@ public abstract class ChatClientStreamingTestsBase<T>
 	where T : class, IChatClient, new()
 {
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_ReturnsStreamingUpdates()
 	{
 		var client = new T();
@@ -31,6 +32,7 @@ public abstract class ChatClientStreamingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_UpdatesHaveContents()
 	{
 		var client = new T();
@@ -50,6 +52,7 @@ public abstract class ChatClientStreamingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_CanBuildCompleteResponseFromUpdates()
 	{
 		var client = new T();
@@ -75,6 +78,7 @@ public abstract class ChatClientStreamingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_DeliversMultipleIncrementalUpdates()
 	{
 		var client = new T();
@@ -106,6 +110,7 @@ public abstract class ChatClientStreamingTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_ConcatenatedTextMatchesNonStreaming()
 	{
 		var client = new T();

@@ -22,6 +22,16 @@ public interface IAppDriver : IDisposable
     Task<AgentStatus?> GetStatusAsync();
 
     /// <summary>
+    /// Get the current app theme.
+    /// </summary>
+    Task<ThemeResult?> GetThemeAsync();
+
+    /// <summary>
+    /// Set the current app or system theme.
+    /// </summary>
+    Task<ThemeResult> SetThemeAsync(DevFlowTheme theme, ThemeSetScope scope = ThemeSetScope.Auto);
+
+    /// <summary>
     /// Get the visual tree.
     /// </summary>
     Task<List<ElementInfo>> GetTreeAsync(int maxDepth = 0);

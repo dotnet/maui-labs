@@ -1,0 +1,27 @@
+scenarios:
+  - name: "Create markdown report for long Blazor WebView debugging session"
+    prompt: |
+      Please summarize this long MAUI Blazor Hybrid DevFlow session into a
+      DevFlow friction report in markdown only. Output the markdown report in the chat
+      instead of saving a file. The repeated friction was around
+      `maui_cdp_webviews`, `maui_cdp_source`, `maui devflow ui tree`, and a
+      fallback to screenshots because the WebView list kept coming back empty.
+      Do not file an issue yet.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)markdown|(?m)^##\\s|# MAUI DevFlow"
+      - type: "output_contains"
+        value: "## Environment"
+      - type: "output_contains"
+        value: "## Findings"
+      - type: "output_matches"
+        pattern: "maui_cdp_webviews|maui_cdp_source|WebView"
+      - type: "output_not_matches"
+        pattern: "(?m)^\\s*gh issue create\\b"
+    rubric:
+      - "Defaults to markdown output and does not file an issue"
+      - "Uses the report shape with Environment and Findings sections"
+      - "Recognizes CDP/WebView and screenshot fallback as DevFlow-specific friction"
+      - "Captures attempts, workaround, and final outcome"
+      - "Keeps unknown environment fields explicit rather than guessing"
+    timeout: 240

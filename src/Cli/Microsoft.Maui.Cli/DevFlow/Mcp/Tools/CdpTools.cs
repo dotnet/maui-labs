@@ -17,7 +17,7 @@ public sealed class CdpTools
         [Description("WebView ID or index to target (optional if only one WebView)")] string? webviewId = null,
         [Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
     {
-        var agent = await session.GetAgentClientAsync(agentPort);
+        using var agent = await session.GetAgentClientAsync(agentPort);
         var content = await agent.SendCdpCommandAsync("Runtime.evaluate", new JsonObject
         {
             ["expression"] = expression,
@@ -46,7 +46,7 @@ public sealed class CdpTools
         [Description("WebView ID or index to target (optional if only one WebView)")] string? webviewId = null,
         [Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
     {
-        var agent = await session.GetAgentClientAsync(agentPort);
+        using var agent = await session.GetAgentClientAsync(agentPort);
         var json = await agent.SendCdpCommandAsync("Page.captureScreenshot", new JsonObject
         {
             ["format"] = "png"
@@ -71,7 +71,7 @@ public sealed class CdpTools
         [Description("WebView ID or index to target (optional if only one WebView)")] string? webviewId = null,
         [Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
     {
-        var agent = await session.GetAgentClientAsync(agentPort);
+        using var agent = await session.GetAgentClientAsync(agentPort);
         var source = await agent.GetCdpSourceAsync(webviewId);
         return string.IsNullOrEmpty(source) ? "No WebView source available." : source;
     }
@@ -81,7 +81,7 @@ public sealed class CdpTools
         McpAgentSession session,
         [Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
     {
-        var agent = await session.GetAgentClientAsync(agentPort);
+        using var agent = await session.GetAgentClientAsync(agentPort);
         var webviews = await agent.GetCdpWebViewsAsync();
         return webviews.ToString();
     }

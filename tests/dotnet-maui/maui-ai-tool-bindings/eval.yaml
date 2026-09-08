@@ -1,0 +1,42 @@
+scenarios:
+  - name: "Create source-generated app tools"
+    prompt: |
+      In my MAUI app I have a PlantCatalogService.SearchPlants method that I want
+      an AI assistant to call. Show the Microsoft.Maui.AI.Attributes pattern for
+      source-generated tools.
+    assertions:
+      - type: "output_contains"
+        value: "[ExportAIFunction"
+      - type: "output_contains"
+        value: "[AIToolSource"
+      - type: "output_contains"
+        value: "AIToolContext"
+      - type: "output_contains"
+        value: "Default.Tools"
+    rubric:
+      - "Annotates the service method with ExportAIFunction and Description"
+      - "Creates a partial AIToolContext with AIToolSource"
+      - "Uses the generated Default.Tools collection"
+      - "Explains that the generator emits tools at compile time for AOT-friendly invocation"
+    timeout: 240
+
+  - name: "Bind DI parameters and flow service provider"
+    prompt: |
+      My AI tool method needs a repository from DI but I do not want that
+      repository to appear as a JSON argument. How should I annotate the method
+      and build the chat client?
+    assertions:
+      - type: "output_contains"
+        value: "[FromServices]"
+      - type: "output_matches"
+        pattern: "Build\\(serviceProvider\\)|Build\\(.*ServiceProvider"
+      - type: "output_contains"
+        value: "UseFunctionInvocation"
+      - type: "output_matches"
+        pattern: "excluded from.*schema|not.*schema|ignored|invisible to AI"
+    rubric:
+      - "Uses FromServices or FromKeyedServices for DI-only parameters"
+      - "Explains that DI parameters are excluded from the JSON schema"
+      - "Builds the function-invoking chat client with a service provider"
+      - "Mentions that missing provider/service produces an explicit error rather than fake success"
+    timeout: 240

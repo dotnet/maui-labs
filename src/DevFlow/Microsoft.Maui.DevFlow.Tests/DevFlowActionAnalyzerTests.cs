@@ -117,6 +117,46 @@ public class DevFlowActionAnalyzerTests
 	}
 
 	[Fact]
+	public async Task DFA006_GenericMethod_ReportsDiagnostic()
+	{
+		const string source = """
+			using Microsoft.Maui.DevFlow.Agent.Core;
+
+			public static class Actions
+			{
+				[DevFlowAction("generic-action")]
+				public static void {|#0:GenericAction|}<T>() { }
+			}
+			""";
+
+		var expected = new DiagnosticResult("MAUI_DFA006", DiagnosticSeverity.Error)
+			.WithLocation(0)
+			.WithArguments("GenericAction");
+
+		await CreateTest(source, expected).RunAsync();
+	}
+
+	[Fact]
+	public async Task DFA006_MethodOnGenericType_ReportsDiagnostic()
+	{
+		const string source = """
+			using Microsoft.Maui.DevFlow.Agent.Core;
+
+			public static class Actions<T>
+			{
+				[DevFlowAction("generic-type-action")]
+				public static void {|#0:GenericTypeAction|}() { }
+			}
+			""";
+
+		var expected = new DiagnosticResult("MAUI_DFA006", DiagnosticSeverity.Error)
+			.WithLocation(0)
+			.WithArguments("GenericTypeAction");
+
+		await CreateTest(source, expected).RunAsync();
+	}
+
+	[Fact]
 	public async Task DFA003_ComplexReturnType_ReportsWarning()
 	{
 		const string source = """

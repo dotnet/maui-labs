@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 using WebKit;
 using WebView = WebKit.WebView;
 
@@ -58,6 +59,10 @@ public sealed class GtkBlazorWebView : IDisposable
 	public static void InitializeWebKit()
 	{
 		if (Interlocked.Exchange(ref _moduleInitialized, 1) != 0) return;
+
+		// Fail fast with a friendly message if GTK is missing or too old, before any
+		// GirCore GTK/WebKit native initialization happens below.
+		GtkRuntime.EnsureSupported();
 
 		WebKitSandboxHelper.ConfigureSandbox();
 

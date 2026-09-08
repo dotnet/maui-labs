@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!--
+		A single-project Comet app on the NODE BACKEND (Jetpack Compose on Android,
+		SwiftUI on iOS) — no MAUI in the render path. One shared view tree (App.cs) is
+		hosted from a thin native head per platform (Platforms/Android, Platforms/iOS).
+	-->
+	<PropertyGroup>
+		<TargetFrameworks>net11.0-android;net11.0-ios</TargetFrameworks>
+		<OutputType>Exe</OutputType>
+		<Nullable>enable</Nullable>
+		<!-- Comet transitively references Microsoft.Maui (for Graphics/Essentials primitives);
+		     keep implicit usings OFF so a global 'using Microsoft.Maui.Controls' doesn't make
+		     'View' ambiguous with Comet.View. Use explicit usings (as the heads do). -->
+		<ImplicitUsings>disable</ImplicitUsings>
+		<RootNamespace>CometNodeApp1</RootNamespace>
+
+		<ApplicationId>com.companyname.cometnodeapp1</ApplicationId>
+		<ApplicationTitle>CometNodeApp1</ApplicationTitle>
+		<ApplicationVersion>1</ApplicationVersion>
+		<ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">17.0</SupportedOSPlatformVersion>
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24</SupportedOSPlatformVersion>
+	</PropertyGroup>
+
+	<!-- Compile the native head per-TF so Android doesn't try to build the iOS AppDelegate
+	     (UIKit) and vice versa. -->
+	<ItemGroup>
+		<Compile Remove="Platforms\**\*.cs" />
+	</ItemGroup>
+	<ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+		<Compile Include="Platforms\Android\**\*.cs" />
+	</ItemGroup>
+	<ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
+		<Compile Include="Platforms\iOS\**\*.cs" />
+	</ItemGroup>
+
+	<!-- Comet: the shared view tree + node backends (Compose/SwiftUI). Restored from the
+	     local feed in nuget.config; the package pulls in Yoga, the Compose facade (Android),
+	     the SwiftUI binding + shim xcframework (iOS), and the iOS NativeReference/static-
+	     registrar wiring automatically. -->
+	<ItemGroup>
+		<PackageReference Include="Comet" Version="COMET_PACKAGE_VERSION" />
+	</ItemGroup>
+
+	<!-- Android: use the app manifest. (ComponentActivity comes transitively via Comet -> the
+	     Compose facade's Xamarin.AndroidX.Activity dependency.) -->
+	<PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+		<AndroidManifest>Platforms\Android\AndroidManifest.xml</AndroidManifest>
+	</PropertyGroup>
+
+</Project>

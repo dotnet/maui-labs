@@ -433,3 +433,4 @@ sim_tap.py
 # Personal / per-machine agent state
 .claude/settings.local.json
 .claude/skills/**/.skill-version
+test-results/

@@ -3,23 +3,29 @@ using Microsoft.Extensions.AI;
 using Xunit;
 
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
+
 public class AppleIntelligenceChatClientCancellationTests : ChatClientCancellationTestsBase<AppleIntelligenceChatClient>
 {
 }
+
 public class AppleIntelligenceChatClientFunctionCallingTestsBase : ChatClientFunctionCallingTestsBase<AppleIntelligenceChatClient>
 {
 }
+
 public class AppleIntelligenceChatClientGetServiceTests : ChatClientGetServiceTestsBase<AppleIntelligenceChatClient>
 {
 	protected override string ExpectedProviderName => "apple";
 	protected override string ExpectedDefaultModelId => "apple-intelligence";
 }
+
 public class AppleIntelligenceChatClientInstantiationTests : ChatClientInstantiationTestsBase<AppleIntelligenceChatClient>
 {
 }
+
 public class AppleIntelligenceChatClientMessagesTests : ChatClientMessagesTestsBase<AppleIntelligenceChatClient>
 {
 }
+
 public class AppleIntelligenceChatClientOptionsTests : ChatClientOptionsTestsBase<AppleIntelligenceChatClient>
 {
 	/// <summary>
@@ -73,12 +79,15 @@ public class AppleIntelligenceChatClientOptionsTests : ChatClientOptionsTestsBas
 		Assert.Contains("JSON schema", exception.Message, StringComparison.OrdinalIgnoreCase);
 	}
 }
+
 public class AppleIntelligenceChatClientResponseTests : ChatClientResponseTestsBase<AppleIntelligenceChatClient>
 {
 }
+
 public class AppleIntelligenceChatClientStreamingTests : ChatClientStreamingTestsBase<AppleIntelligenceChatClient>
 {
 }
+
 public class AppleIntelligenceChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<AppleIntelligenceChatClient>
 {
 	[Fact(Skip = "Apple Intelligence requires a JSON schema for structured responses, so this test is not applicable.")]
@@ -135,7 +144,6 @@ public class AppleIntelligenceChatClientJsonSchemaTests : ChatClientJsonSchemaTe
 
 		Assert.Contains("JSON schema", exception.Message, StringComparison.OrdinalIgnoreCase);
 	}
-
 }
 
 #endif

@@ -1,8 +1,8 @@
 {
-  "actions": [
-    { "type": "pointerMove", "x": 200, "y": 600, "duration": 0 },
-    { "type": "pointerDown" },
-    { "type": "pointerMove", "x": 200, "y": 200, "duration": 300 },
-    { "type": "pointerUp" }
-  ]
+  "type": "swipe",
+  "elementId": "todo-list",
+  "direction": "up",
+  "distance": 300,
+  "durationMs": 150,
+  "steps": 8
 }

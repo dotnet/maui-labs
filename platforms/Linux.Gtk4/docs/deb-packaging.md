@@ -50,7 +50,7 @@ When `CreateDeb=true` is set during `dotnet publish`, the build:
 | `DebSection` | Package section | `utils` |
 | `DebPriority` | Package priority | `optional` |
 | `DebMaintainer` | Maintainer field | `$(Authors)` |
-| `DebDepends` | Dependency list | Auto-detected (GTK4 + optional WebKitGTK) |
+| `DebDepends` | Dependency list | Auto-detected (GTK 4.12+ + optional WebKitGTK) |
 | `DebHomepage` | Homepage URL | `$(PackageProjectUrl)` |
 | `DebDescription` | Package description | `$(Description)` |
 | `DebCategories` | `.desktop` Categories | `Utility;` |
@@ -66,7 +66,7 @@ When `CreateDeb=true` is set during `dotnet publish`, the build:
   <ApplicationTitle>My App</ApplicationTitle>
   <ApplicationDisplayVersion>2.1.0</ApplicationDisplayVersion>
   <DebSection>office</DebSection>
-  <DebDepends>libgtk-4-1, libwebkitgtk-6.0-4, libsqlite3-0</DebDepends>
+  <DebDepends>libgtk-4-1 (&gt;= 4.12.0), libwebkitgtk-6.0-4, libsqlite3-0</DebDepends>
   <DebMaintainer>My Name &lt;me@example.com&gt;</DebMaintainer>
 </PropertyGroup>
 ```
@@ -75,7 +75,7 @@ When `CreateDeb=true` is set during `dotnet publish`, the build:
 
 The `Depends` field in `DEBIAN/control` is automatically populated:
 
-- **GTK4** (`libgtk-4-1`) — always included
+- **GTK 4.12+** (`libgtk-4-1 (>= 4.12.0)`) — always included
 - **WebKitGTK** (`libwebkitgtk-6.0-4`) — included when `Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView` is referenced
 
 Override with `DebDepends` if your app has additional system dependencies.
@@ -136,6 +136,11 @@ If your app needs additional system libraries, set `DebDepends`:
 
 ```xml
 <PropertyGroup>
-  <DebDepends>libgtk-4-1, libcurl4, libsqlite3-0</DebDepends>
+  <DebDepends>libgtk-4-1 (&gt;= 4.12.0), libcurl4, libsqlite3-0</DebDepends>
 </PropertyGroup>
 ```
+
+> **Note:** `DebDepends` *replaces* the auto-detected dependency list, so keep the
+> GTK floor `libgtk-4-1 (>= 4.12.0)` (and `libwebkitgtk-6.0-4` if you use Blazor)
+> in your override — otherwise the package will install on GTK older than 4.12
+> and only fail at launch.

@@ -6,6 +6,8 @@ namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests;
 
 [Collection("AgentIntegration")]
 [Trait("Category", "Device")]
+// Requires the MAUI sample: device, display, battery and connectivity info are Essentials APIs. Native runs filter this out.
+[Trait(TestFramework.Trait, TestFramework.Maui)]
 public class DeviceTests : IntegrationTestBase
 {
     public DeviceTests(AppFixture app, ITestOutputHelper output)

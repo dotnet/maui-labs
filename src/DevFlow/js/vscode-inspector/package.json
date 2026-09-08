@@ -1,0 +1,115 @@
+{
+  "name": "maui-devflow-inspector",
+  "displayName": "MAUI DevFlow Inspector",
+  "description": "MAUI DevFlow Inspector host for VS Code — embeds the existing DevFlow Web Inspector for a running .NET MAUI app.",
+  "version": "0.1.0",
+  "publisher": "maui-labs",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dotnet/maui-labs.git",
+    "directory": "src/DevFlow/js/vscode-inspector"
+  },
+  "homepage": "https://github.com/dotnet/maui-labs/tree/main/src/DevFlow/js/vscode-inspector",
+  "bugs": {
+    "url": "https://github.com/dotnet/maui-labs/issues"
+  },
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false
+    }
+  },
+  "engines": {
+    "vscode": "^1.98.0"
+  },
+  "categories": [
+    "Debuggers",
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "mauiDevflow.openInspector",
+        "title": "MAUI DevFlow: Open Inspector"
+      }
+    ],
+    "languageModelTools": [
+      {
+        "name": "maui-devflow_getSelectedElement",
+        "tags": [
+          "maui",
+          "devflow"
+        ],
+        "displayName": "MAUI DevFlow: Selected Element",
+        "modelDescription": "Returns the .NET MAUI UI element the user currently has selected in the MAUI DevFlow Inspector (its type, AutomationId, text, and whether XAML source is available). Call this whenever the user refers to 'the selected element', 'this element', 'the selected item', 'the highlighted control', or 'what I clicked', so you act on the exact control they mean.",
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "mauiSelection",
+        "icon": "$(inspect)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "maui-devflow_getDataSnapshot",
+        "tags": [
+          "maui",
+          "devflow"
+        ],
+        "displayName": "MAUI DevFlow: Data Snapshot",
+        "modelDescription": "Returns the bounded, redacted point-in-time Data snapshot the user added from the MAUI DevFlow Inspector (Logs, Network, Preferences, Device, Sensors, file metadata, or native Alerts). Use the included followUpTools identifiers to query DevFlow MCP for fresher or deeper detail when needed.",
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "mauiData",
+        "icon": "$(attach)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    ],
+    "configuration": {
+      "title": "MAUI DevFlow",
+      "properties": {
+        "mauiDevflow.brokerPort": {
+          "type": "number",
+          "default": 0,
+          "description": "Explicit DevFlow broker port. 0 = auto-discover via ~/.mauidevflow/broker.json."
+        },
+        "mauiDevflow.openLocation": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "beside",
+            "active"
+          ],
+          "enumDescriptions": [
+            "Open beside the active editor when one is open, otherwise in the active editor group.",
+            "Always open in a new column beside the active editor.",
+            "Always open in the currently active editor group."
+          ],
+          "default": "auto",
+          "description": "Where to place the MAUI DevFlow Inspector panel when it opens."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "npm run typecheck && esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node18 --external:vscode --outfile=dist/extension.js",
+    "watch": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node18 --external:vscode --outfile=dist/extension.js --watch",
+    "package:vsix": "npm run build && vsce package --pre-release --no-dependencies --out dist/maui-devflow-inspector.vsix"
+  },
+  "devDependencies": {
+    "@maui-devflow/client": "0.1.0-preview.12",
+    "@types/node": "^20.16.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.6.3"
+  }
+}

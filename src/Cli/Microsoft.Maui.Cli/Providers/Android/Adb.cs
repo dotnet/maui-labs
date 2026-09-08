@@ -15,21 +15,29 @@ namespace Microsoft.Maui.Cli.Providers.Android;
 /// </summary>
 public class Adb
 {
-	readonly AdbRunner? _runner;
+	readonly IDictionary<string, string>? _environmentVariables;
 	readonly string? _adbPath;
+	AdbRunner? _runner;
 
 	public Adb(Func<string?> getSdkPath, IDictionary<string, string>? environmentVariables = null)
 	{
 		_adbPath = ResolveAdbPath(getSdkPath());
-		if (_adbPath != null)
-			_runner = new AdbRunner(_adbPath, environmentVariables);
+		_environmentVariables = environmentVariables;
 	}
 
 	public string? AdbPath => _adbPath;
 
-	public bool IsAvailable => _runner != null;
+	public bool IsAvailable => _adbPath != null;
 
-	internal AdbRunner? Runner => _runner;
+	internal AdbRunner? Runner => GetRunner();
+
+	AdbRunner? GetRunner()
+	{
+		if (_adbPath == null)
+			return null;
+
+		return _runner ??= new AdbRunner(_adbPath, _environmentVariables);
+	}
 
 	static string? ResolveAdbPath(string? sdkPath)
 	{
@@ -43,15 +51,24 @@ public class Adb
 
 	public async Task<List<Device>> GetDevicesAsync(CancellationToken cancellationToken = default)
 	{
-		if (_runner == null)
+		var runner = Runner;
+		if (runner == null)
 			return new List<Device>();
 
 		try
 		{
 			// AdbRunner.ListDevicesAsync already queries AVD names for online emulators
 			// via getprop ro.boot.qemu.avd_name + emu avd name fallback
-			var devices = await _runner.ListDevicesAsync(cancellationToken);
-			return devices.Select(MapToMauiDevice).ToList();
+			var devices = await runner.ListDevicesAsync(cancellationToken);
+			var mapped = devices.Select(MapToMauiDevice).ToList();
+
+			// Enrich addressable devices with `adb shell getprop` so physical
+			// USB devices surface architecture/version/manufacturer/model the
+			// same way the legacy ServiceHub PopulateDeviceAsync did.
+			return await AndroidDeviceEnricher.EnrichAsync(
+				mapped,
+				(serial, prop, ct) => runner.GetShellPropertyAsync(serial, prop, ct),
+				cancellationToken);
 		}
 		catch (InvalidOperationException ex)
 		{
@@ -104,7 +121,11 @@ public class Adb
 		if (!IsAvailable)
 			throw new MauiToolException(ErrorCodes.AndroidAdbNotFound, "ADB not found");
 
-		await _runner!.StopEmulatorAsync(deviceSerial, cancellationToken);
+		var runner = Runner;
+		if (runner == null)
+			throw new MauiToolException(ErrorCodes.AndroidAdbNotFound, "ADB not found");
+
+		await runner.StopEmulatorAsync(deviceSerial, cancellationToken);
 	}
 
 }

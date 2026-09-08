@@ -83,6 +83,86 @@ public class CommandConstructionTests
 	}
 
 	[Fact]
+	public void DevFlowCommand_IncludesThemeCommands()
+	{
+		var jsonOption = new Option<bool>("--json");
+		var devflowCommand = DevFlowCommands.CreateDevFlowCommand(jsonOption);
+
+		var themeCommand = Assert.Single(devflowCommand.Subcommands, c => c.Name == "theme");
+		Assert.Contains(themeCommand.Subcommands, c => c.Name == "get");
+		var setCommand = Assert.Single(themeCommand.Subcommands, c => c.Name == "set");
+		var scopeOption = (Option<string>)Assert.Single(setCommand.Options, option => option.Name == "--scope");
+		var parseResult = themeCommand.Parse("set dark");
+
+		Assert.Empty(parseResult.Errors);
+		Assert.Equal("auto", parseResult.GetValue(scopeOption));
+	}
+
+	[Fact]
+	public void DevFlowCommand_IncludesLayoutDiagnosticsCommand()
+	{
+		var jsonOption = new Option<bool>("--json");
+		var devflowCommand = DevFlowCommands.CreateDevFlowCommand(jsonOption);
+
+		var uiCommand = Assert.Single(devflowCommand.Subcommands, command => command.Name == "ui");
+		var diagnosticsCommand = Assert.Single(uiCommand.Subcommands, command => command.Name == "diagnostics");
+
+		Assert.Contains(diagnosticsCommand.Options, option => option.Name == "--profile");
+		Assert.Contains(diagnosticsCommand.Options, option => option.Name == "--root");
+		Assert.Contains(diagnosticsCommand.Options, option => option.Name == "--checks");
+		Assert.Contains(diagnosticsCommand.Options, option => option.Name == "--watch");
+		Assert.Contains(diagnosticsCommand.Options, option => option.Name == "--fail-on");
+		Assert.Empty(diagnosticsCommand.Parse("diagnostics --profile strict --checks layout.element-clipped").Errors);
+	}
+
+	[Fact]
+	public void LayoutDiagnostics_CiProfileDefaultsToSeriousFailureThreshold()
+	{
+		Assert.Equal(
+			"serious",
+			DevFlowCommands.ResolveLayoutDiagnosticsFailOn("ci", failOn: null));
+		Assert.Equal(
+			"critical",
+			DevFlowCommands.ResolveLayoutDiagnosticsFailOn("ci", "critical"));
+		Assert.Null(DevFlowCommands.ResolveLayoutDiagnosticsFailOn("agent", failOn: null));
+	}
+
+	[Fact]
+	public void LayoutDiagnostics_CiProfileFailsIncompleteScans()
+	{
+		var result = new Microsoft.Maui.DevFlow.Driver.LayoutInspectionResult
+		{
+			Summary = new Microsoft.Maui.DevFlow.Driver.LayoutInspectionSummary
+			{
+				Incomplete = 1
+			}
+		};
+
+		Assert.True(DevFlowCommands.ShouldFailLayoutDiagnostics(
+			result,
+			"serious",
+			failOnIncomplete: true));
+		Assert.False(DevFlowCommands.ShouldFailLayoutDiagnostics(
+			result,
+			"serious",
+			failOnIncomplete: false));
+	}
+
+	[Fact]
+	public void DevFlowRequestedExitCode_OverridesGenericErrorExit()
+	{
+		try
+		{
+			DevFlowCommands.RequestExitCode(130);
+			Assert.Equal(130, Program.ResolveDevFlowExitCode(0));
+		}
+		finally
+		{
+			DevFlowCommands.ResetBrokerClientForTests();
+		}
+	}
+
+	[Fact]
 	public void DevFlowCommand_UpdateSkillIsHiddenCompatibilityAliasForSkillsUpdate()
 	{
 		var jsonOption = new Option<bool>("--json");

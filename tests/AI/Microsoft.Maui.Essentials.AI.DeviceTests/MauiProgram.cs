@@ -3,9 +3,6 @@ using System.Reflection;
 using Microsoft.Extensions.Configuration;
 using DeviceRunners.UITesting;
 using DeviceRunners.VisualRunners;
-#if MODE_XHARNESS
-using DeviceRunners.XHarness;
-#endif
 using Microsoft.Extensions.AI;
 
 #if ENABLE_OPENAI_CLIENT
@@ -27,12 +24,9 @@ public static class MauiProgram
 
 		appBuilder
 			.ConfigureUITesting()
-#if MODE_XHARNESS
-			.UseXHarnessTestRunner(conf => conf
-				.AddTestAssembly(typeof(MauiProgram).Assembly)
-				.AddXunit())
-#endif
 			.UseVisualTestRunner(conf => conf
+				.AddCliConfiguration()
+				.AddConsoleResultChannel()
 				.AddTestAssembly(typeof(MauiProgram).Assembly)
 				.AddXunit());
 

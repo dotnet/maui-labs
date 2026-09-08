@@ -1,0 +1,68 @@
+scenarios:
+  - name: "Discover Xcode requirement for .NET iOS workload"
+    prompt: |
+      I need to find out what Xcode version is required for the current .NET 10
+      iOS workload. I don't want hardcoded values — show me how to query this
+      from live NuGet APIs so I can script it in my CI pipeline.
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)dotnet workload search version|workload search|microsoft\\.net\\.workloads"
+      - type: "output_matches"
+        pattern: "v3-flatcontainer|api\\.nuget\\.org"
+      - type: "output_matches"
+        pattern: "WorkloadDependencies\\.json"
+      - type: "output_matches"
+        pattern: "Manifest-.*\\.0\\.100|Microsoft\\.NET\\.Sdk\\.iOS\\.Manifest"
+    rubric:
+      - "Shows the multi-step chain: SDK version discovery → workload set → workload manifest → WorkloadDependencies.json"
+      - "Uses the NuGet flat container API (v3-flatcontainer) to download nupkg files"
+      - "Correctly builds the manifest package ID as Microsoft.NET.Sdk.iOS.Manifest-{sdkBand}"
+      - "Extracts xcode version range from WorkloadDependencies.json and shows the recommended version"
+      - "Does not hardcode any specific Xcode version numbers as the answer"
+    timeout: 240
+
+  - name: "Convert between CLI and NuGet workload set versions"
+    prompt: |
+      I'm writing a script that uses `dotnet workload search version`
+      to get the workload set version, then needs to download the workload set
+      package from NuGet. The CLI returns version "10.0.103", and I know the
+      NuGet workload set package uses a converted package version. What's the
+      NuGet package ID and version I need for the download URL?
+    assertions:
+      - type: "output_contains"
+        value: "10.103.0"
+      - type: "output_contains"
+        value: "Microsoft.NET.Workloads.10.0.100"
+      - type: "output_matches"
+        pattern: "(?i)v3-flatcontainer/microsoft\\.net\\.workloads"
+      - type: "output_matches"
+        pattern: "(?i)workload search version|CLI\\s+(?:workload\\s+set\\s+)?version"
+    rubric:
+      - "Correctly converts CLI version 10.0.103 to NuGet version 10.103.0"
+      - "Derives the SDK band as 10.0.100 from the CLI version"
+      - "Shows the complete NuGet download URL with lowercase package ID"
+      - "Explains the conversion rule: CLI {major}.0.{patch} → NuGet {major}.{patch}.0"
+    timeout: 240
+
+  - name: "Find Android SDK packages from workload manifest"
+    prompt: |
+      My CI build script needs to install the exact Android SDK packages
+      required by the .NET MAUI workload. I don't want to guess — how do
+      I programmatically extract the list of required packages (build-tools
+      version, platform API level, etc.) from the workload manifests?
+    assertions:
+      - type: "output_matches"
+        pattern: "(?i)workloadset\\.json|workloads\\.workloadset"
+      - type: "output_matches"
+        pattern: "microsoft\\.net\\.sdk\\.android"
+      - type: "output_matches"
+        pattern: "build-tools|platforms;android"
+      - type: "output_matches"
+        pattern: "sdkmanager"
+    rubric:
+      - "Walks through downloading the workload set to find the Android manifest version and SDK band"
+      - "Downloads the Android manifest package and extracts WorkloadDependencies.json"
+      - "Shows the androidsdk.packages array with build-tools, platform-tools, platforms, and cmdline-tools"
+      - "Provides a scriptable approach suitable for CI (curl/unzip or PowerShell equivalent)"
+      - "Includes the sdkmanager install command using the extracted package list"
+    timeout: 240

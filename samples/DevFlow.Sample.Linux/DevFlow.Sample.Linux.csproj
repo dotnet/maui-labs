@@ -8,19 +8,27 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
+  <Import Project="..\..\platforms\Linux.Gtk4\src\Linux.Gtk4\buildTransitive\Microsoft.Maui.Platforms.Linux.Gtk4.props"
+          Condition="Exists('..\..\platforms\Linux.Gtk4\src\Linux.Gtk4\buildTransitive\Microsoft.Maui.Platforms.Linux.Gtk4.props')" />
+
   <ItemGroup>
-    <PackageReference Include="Platform.Maui.Linux.Gtk4" />
-    <PackageReference Include="Platform.Maui.Linux.Gtk4.BlazorWebView" />
-    <PackageReference Include="Platform.Maui.Linux.Gtk4.Essentials" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
     <PackageReference Include="Microsoft.Extensions.Http" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\platforms\Linux.Gtk4\src\Linux.Gtk4\Linux.Gtk4.csproj" />
+    <ProjectReference Include="..\..\platforms\Linux.Gtk4\src\Linux.Gtk4.BlazorWebView\Linux.Gtk4.BlazorWebView.csproj" />
+    <ProjectReference Include="..\..\platforms\Linux.Gtk4\src\Linux.Gtk4.Essentials\Linux.Gtk4.Essentials.csproj" />
     <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Gtk\Microsoft.Maui.DevFlow.Agent.Gtk.csproj" />
     <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Blazor.Gtk\Microsoft.Maui.DevFlow.Blazor.Gtk.csproj" />
+    <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Analyzers\Microsoft.Maui.DevFlow.Analyzers.csproj"
+                      ReferenceOutputAssembly="false"
+                      OutputItemType="Analyzer" />
   </ItemGroup>
+
+  <Import Project="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Core\buildTransitive\Microsoft.Maui.DevFlow.Agent.Core.props" />
+  <Import Project="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Core\buildTransitive\Microsoft.Maui.DevFlow.Agent.Core.targets" />
 
   <!-- Link shared source files from DevFlow.Sample (excluding MauiProgram.cs and Platforms/) -->
   <ItemGroup>
@@ -80,5 +88,8 @@
                      Overwrite="true"
                      Condition="!Exists('$(OutputPath)wwwroot/_framework/blazor.modules.json')" />
   </Target>
+
+  <Import Project="..\..\platforms\Linux.Gtk4\src\Linux.Gtk4\buildTransitive\Microsoft.Maui.Platforms.Linux.Gtk4.targets"
+          Condition="Exists('..\..\platforms\Linux.Gtk4\src\Linux.Gtk4\buildTransitive\Microsoft.Maui.Platforms.Linux.Gtk4.targets')" />
 
 </Project>

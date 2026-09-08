@@ -206,7 +206,7 @@ var sheetArgs = args[1]!;
 var title = GetProp<string>(sheetArgs, "Title") ?? "";
 var cancel = GetProp<string>(sheetArgs, "Cancel") ?? "Cancel";
 var destruction = GetProp<string>(sheetArgs, "Destruction");
-var buttons = GetProp<string[]>(sheetArgs, "Buttons");
+var buttons = GetProp<IEnumerable<string>>(sheetArgs, "Buttons")?.ToArray() ?? Array.Empty<string>();
 var result = GetProp<object>(sheetArgs, "Result");
 var trySetResult = result?.GetType().GetMethod("TrySetResult");
 
