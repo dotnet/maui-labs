@@ -1,0 +1,4 @@
+{
+  "__comment": "Comet is not built or published by the Azure DevOps official release pipeline and intentionally restores public packages from nuget.org.",
+  "cfs": [ "CFS0013" ]
+}
