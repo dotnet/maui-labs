@@ -97,7 +97,7 @@ public class AgentEnvironmentDetectorTests : IDisposable
 		var environments = AgentEnvironmentDetector.Detect(_tempDir);
 		var claude = Assert.Single(environments, e => e.Kind == AgentEnvironmentKind.Claude);
 
-		var expected = Path.Combine(_tempDir, ".claude", "mcp.json");
+		var expected = Path.Combine(_tempDir, ".mcp.json");
 		Assert.Equal(expected, claude.McpConfigPath);
 	}
 
@@ -145,7 +145,7 @@ public class AgentEnvironmentDetectorTests : IDisposable
 		var environments = AgentEnvironmentDetector.Detect(_tempDir);
 		var opencode = Assert.Single(environments, e => e.Kind == AgentEnvironmentKind.OpenCode);
 
-		var expected = Path.Combine(_tempDir, ".opencode", "config.json");
+		var expected = Path.Combine(_tempDir, "opencode.json");
 		Assert.Equal(expected, opencode.McpConfigPath);
 	}
 
@@ -155,13 +155,13 @@ public class AgentEnvironmentDetectorTests : IDisposable
 		var claudeDir = Path.Combine(_tempDir, ".claude");
 		Directory.CreateDirectory(claudeDir);
 
-		// Before creating mcp.json
+		// Before creating .mcp.json
 		var envBefore = AgentEnvironmentDetector.Detect(_tempDir);
 		var claudeBefore = Assert.Single(envBefore, e => e.Kind == AgentEnvironmentKind.Claude);
 		Assert.False(claudeBefore.McpConfigExists);
 
-		// After creating mcp.json
-		File.WriteAllText(Path.Combine(claudeDir, "mcp.json"), "{}");
+		// After creating .mcp.json
+		File.WriteAllText(Path.Combine(_tempDir, ".mcp.json"), "{}");
 		var envAfter = AgentEnvironmentDetector.Detect(_tempDir);
 		var claudeAfter = Assert.Single(envAfter, e => e.Kind == AgentEnvironmentKind.Claude);
 		Assert.True(claudeAfter.McpConfigExists);
@@ -244,6 +244,49 @@ public class AgentEnvironmentDetectorTests : IDisposable
 		Assert.NotNull(environment);
 		Assert.Equal(AgentEnvironmentKind.CopilotCli, environment.Kind);
 		Assert.Equal(Path.Combine(_tempDir, ".github", "skills"), environment.SkillsDirectory);
-		Assert.Equal(Path.Combine(userHome, ".copilot", "mcp.json"), environment.McpConfigPath);
+		Assert.Equal(Path.Combine(userHome, ".copilot", "mcp-config.json"), environment.McpConfigPath);
+		Assert.False(environment.McpConfigExists);
+		File.WriteAllText(environment.McpConfigPath, "{}");
+		Assert.True(AgentEnvironmentDetector.GetCopilotCliEnvironment(userHome, _tempDir)!.McpConfigExists);
+	}
+
+	[Theory]
+	[InlineData(".mcp.json", "Claude")]
+	[InlineData("opencode.json", "OpenCode")]
+	[InlineData("opencode.jsonc", "OpenCode")]
+	public void Detect_ProjectConfigWithoutAgentDirectory_DetectsExistingConfig(string fileName, string kindName)
+	{
+		var kind = Enum.Parse<AgentEnvironmentKind>(kindName);
+		File.WriteAllText(Path.Combine(_tempDir, fileName), "{}");
+
+		var environment = Assert.Single(AgentEnvironmentDetector.Detect(_tempDir), e => e.Kind == kind);
+
+		Assert.Equal(Path.Combine(_tempDir, fileName), environment.McpConfigPath);
+		Assert.True(environment.McpConfigExists);
+	}
+
+	[Fact]
+	public void Detect_OpenCodeBothConfigFormats_PrefersJsonc()
+	{
+		File.WriteAllText(Path.Combine(_tempDir, "opencode.json"), "{}");
+		File.WriteAllText(Path.Combine(_tempDir, "opencode.jsonc"), "{}");
+
+		var environment = Assert.Single(AgentEnvironmentDetector.Detect(_tempDir), e => e.Kind == AgentEnvironmentKind.OpenCode);
+
+		Assert.Equal(Path.Combine(_tempDir, "opencode.jsonc"), environment.McpConfigPath);
+	}
+
+	[Theory]
+	[InlineData(".claude", "mcp.json", "Claude")]
+	[InlineData(".opencode", "config.json", "OpenCode")]
+	public void Detect_LegacyConfig_DoesNotReportItAsClientConfig(string directory, string fileName, string kindName)
+	{
+		var kind = Enum.Parse<AgentEnvironmentKind>(kindName);
+		Directory.CreateDirectory(Path.Combine(_tempDir, directory));
+		File.WriteAllText(Path.Combine(_tempDir, directory, fileName), "{}");
+
+		var environment = Assert.Single(AgentEnvironmentDetector.Detect(_tempDir), e => e.Kind == kind);
+
+		Assert.False(environment.McpConfigExists);
 	}
 }

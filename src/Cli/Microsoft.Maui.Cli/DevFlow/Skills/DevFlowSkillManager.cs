@@ -59,6 +59,9 @@ internal static class DevFlowSkillManager
     internal static async Task<JsonObject> InstallAsync(string scope, string target, string? customPath, bool force, bool allowDowngrade, Func<SkillActionPrompt, bool>? confirm, CancellationToken cancellationToken)
         => await WriteSkillsAsync(s_skills.Select(s => s.Id), scope, target, customPath, force, allowDowngrade, "install", allowAllScopes: false, confirm, cancellationToken);
 
+    internal static Task<JsonObject> InstallSkillAsync(string skillId, string scope, string target, string? customPath, bool force, CancellationToken cancellationToken)
+        => WriteSkillsAsync([GetSkill(skillId).Id], scope, target, customPath, force, allowDowngrade: false, "install", allowAllScopes: false, confirm: _ => force, cancellationToken);
+
     public static async Task<JsonObject> UpdateAsync(string scope, string target, bool force, bool allowDowngrade, CancellationToken cancellationToken)
         => await UpdateAsync(scope, target, customPath: null, force, allowDowngrade, confirm: null, cancellationToken);
 
@@ -78,7 +81,7 @@ internal static class DevFlowSkillManager
     public static async Task<JsonObject> CheckAsync(string scope, string target, bool online, CancellationToken cancellationToken)
         => await CheckAsync(scope, target, customPath: null, online, cancellationToken);
 
-    internal static async Task<JsonObject> CheckAsync(string scope, string target, string? customPath, bool online, CancellationToken cancellationToken)
+    internal static async Task<JsonObject> CheckAsync(string scope, string target, string? customPath, bool online, CancellationToken cancellationToken, bool recordCheck = true)
     {
         var result = CreateBaseResult("check", scope, target);
         result["online"] = online;
@@ -87,7 +90,7 @@ internal static class DevFlowSkillManager
             result["onlineMessage"] = "Online skill file checks are intentionally not implemented. Update Microsoft.Maui.Cli to get newer bundled skills.";
         }
 
-        result["skills"] = await BuildSkillStatusesAsync(scope, target, customPath, cancellationToken);
+        result["skills"] = await BuildSkillStatusesAsync(scope, target, customPath, cancellationToken, recordCheck);
         return result;
     }
 
@@ -188,7 +191,7 @@ internal static class DevFlowSkillManager
         return result;
     }
 
-    static async Task<JsonArray> BuildSkillStatusesAsync(string scope, string target, string? customPath, CancellationToken cancellationToken)
+    static async Task<JsonArray> BuildSkillStatusesAsync(string scope, string target, string? customPath, CancellationToken cancellationToken, bool recordCheck = true)
     {
         var items = new JsonArray();
         var installTargets = ResolveInstallTargets(scope, target, customPath, allowAll: true);
@@ -198,7 +201,8 @@ internal static class DevFlowSkillManager
             foreach (var (skill, bundle) in skillBundles)
                 AddJsonObject(items, CreateStatusObject(installTarget, skill.Id, bundle));
 
-            await RecordSkillCheckAsync(installTarget, skillBundles, cancellationToken);
+            if (recordCheck)
+                await RecordSkillCheckAsync(installTarget, skillBundles, cancellationToken);
         }
 
         return items;

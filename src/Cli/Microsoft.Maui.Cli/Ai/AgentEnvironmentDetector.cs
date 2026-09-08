@@ -13,7 +13,7 @@ internal static class AgentEnvironmentDetector
 {
 	/// <summary>
 	/// Scans from <paramref name="workingDir"/> up to the Git root for known
-	/// agent environments (.claude/, .vscode/, .opencode/) and checks for
+	/// agent configuration directories and project configuration files, and checks for
 	/// Copilot CLI at the user level (~/.copilot/).
 	/// </summary>
 	/// <param name="workingDir">Directory to start scanning from.</param>
@@ -33,15 +33,16 @@ internal static class AgentEnvironmentDetector
 			var dir = current.FullName;
 
 			if (!foundKinds.Contains(AgentEnvironmentKind.Claude) &&
-				Directory.Exists(Path.Combine(dir, ".claude")))
+				(Directory.Exists(Path.Combine(dir, ".claude")) ||
+				 File.Exists(Path.Combine(dir, ".mcp.json"))))
 			{
 				foundKinds.Add(AgentEnvironmentKind.Claude);
 				environments.Add(new DetectedEnvironment
 				{
 					Kind = AgentEnvironmentKind.Claude,
 					SkillsDirectory = Path.Combine(dir, ".claude", "skills"),
-					McpConfigPath = Path.Combine(dir, ".claude", "mcp.json"),
-					McpConfigExists = File.Exists(Path.Combine(dir, ".claude", "mcp.json"))
+					McpConfigPath = Path.Combine(dir, ".mcp.json"),
+					McpConfigExists = File.Exists(Path.Combine(dir, ".mcp.json"))
 				});
 			}
 
@@ -59,15 +60,20 @@ internal static class AgentEnvironmentDetector
 			}
 
 			if (!foundKinds.Contains(AgentEnvironmentKind.OpenCode) &&
-				Directory.Exists(Path.Combine(dir, ".opencode")))
+				(Directory.Exists(Path.Combine(dir, ".opencode")) ||
+				 File.Exists(Path.Combine(dir, "opencode.json")) ||
+				 File.Exists(Path.Combine(dir, "opencode.jsonc"))))
 			{
+				var configPath = File.Exists(Path.Combine(dir, "opencode.jsonc"))
+					? Path.Combine(dir, "opencode.jsonc")
+					: Path.Combine(dir, "opencode.json");
 				foundKinds.Add(AgentEnvironmentKind.OpenCode);
 				environments.Add(new DetectedEnvironment
 				{
 					Kind = AgentEnvironmentKind.OpenCode,
 					SkillsDirectory = Path.Combine(dir, ".opencode", "skills"),
-					McpConfigPath = Path.Combine(dir, ".opencode", "config.json"),
-					McpConfigExists = File.Exists(Path.Combine(dir, ".opencode", "config.json"))
+					McpConfigPath = configPath,
+					McpConfigExists = File.Exists(configPath)
 				});
 			}
 
@@ -126,7 +132,7 @@ internal static class AgentEnvironmentDetector
 		if (!Directory.Exists(copilotDir))
 			return null;
 
-		var mcpPath = Path.Combine(copilotDir, "mcp.json");
+		var mcpPath = Path.Combine(copilotDir, "mcp-config.json");
 		return new DetectedEnvironment
 		{
 			Kind = AgentEnvironmentKind.CopilotCli,

@@ -55,6 +55,10 @@ internal static class McpConfigurator
 			if (writeRoot is null)
 				return McpConfigurationResult.Failure;
 
+			if (!FileSystemPathGuard.IsPathWithinRoot(configPath, writeRoot) ||
+				FileSystemPathGuard.IsReparsePoint(configPath))
+				return McpConfigurationResult.Failure;
+
 			if (!string.IsNullOrEmpty(configDir))
 			{
 				if (!FileSystemPathGuard.IsPathWithinRoot(configDir, writeRoot))
@@ -84,15 +88,7 @@ internal static class McpConfigurator
 				root = new JsonObject();
 			}
 
-			var serverEntry = new JsonObject
-			{
-				["command"] = "maui",
-				["args"] = new JsonArray("devflow", "mcp")
-			};
-
-			var configureResult = env.Kind == AgentEnvironmentKind.OpenCode
-				? EnsureOpenCodeEntry(root, serverEntry)
-				: EnsureStandardEntry(root, serverEntry);
+			var configureResult = EnsureServerEntry(root, env.Kind);
 
 			if (configureResult == ConfigureResult.AlreadyConfigured)
 				return McpConfigurationResult.SuccessResult;
@@ -129,72 +125,57 @@ internal static class McpConfigurator
 	}
 
 	/// <summary>
-	/// Adds the server entry under the standard <c>mcpServers</c> key used by
-	/// Claude, VS Code, and Copilot CLI.
+	/// Merges the server's launch configuration using the client's native schema.
 	/// </summary>
-	private static ConfigureResult EnsureStandardEntry(JsonObject root, JsonObject serverEntry)
+	private static ConfigureResult EnsureServerEntry(JsonObject root, AgentEnvironmentKind kind)
 	{
-		var existing = root["mcpServers"];
+		var key = kind switch
+		{
+			AgentEnvironmentKind.VsCode => "servers",
+			AgentEnvironmentKind.OpenCode => "mcp",
+			_ => "mcpServers"
+		};
+		var existing = root[key];
 		if (existing is not null and not JsonObject)
 			return ConfigureResult.IncompatibleSchema;
 
-		if (existing is not JsonObject mcpServers)
-		{
-			mcpServers = new JsonObject();
-			root["mcpServers"] = mcpServers;
-		}
-
-		if (IsExpectedServerEntry(mcpServers[ServerName]))
-			return ConfigureResult.AlreadyConfigured;
-
-		mcpServers[ServerName] = serverEntry;
-		return ConfigureResult.Updated;
-	}
-
-	/// <summary>
-	/// Adds the server entry under the OpenCode-specific <c>mcp.servers</c> key.
-	/// </summary>
-	private static ConfigureResult EnsureOpenCodeEntry(JsonObject root, JsonObject serverEntry)
-	{
-		var existingMcp = root["mcp"];
-		if (existingMcp is not null and not JsonObject)
-			return ConfigureResult.IncompatibleSchema;
-
-		if (existingMcp is not JsonObject mcp)
-		{
-			mcp = new JsonObject();
-			root["mcp"] = mcp;
-		}
-
-		var existingServers = mcp["servers"];
-		if (existingServers is not null and not JsonObject)
-			return ConfigureResult.IncompatibleSchema;
-
-		if (existingServers is not JsonObject servers)
+		if (existing is not JsonObject servers)
 		{
 			servers = new JsonObject();
-			mcp["servers"] = servers;
+			root[key] = servers;
 		}
 
-		if (IsExpectedServerEntry(servers[ServerName]))
+		var expected = kind == AgentEnvironmentKind.OpenCode
+			? new JsonObject
+			{
+				["type"] = "local",
+				["command"] = new JsonArray("maui", "devflow", "mcp")
+			}
+			: new JsonObject
+			{
+				["command"] = "maui",
+				["args"] = new JsonArray("devflow", "mcp")
+			};
+		if (kind == AgentEnvironmentKind.VsCode)
+			expected["type"] = "stdio";
+		if (kind == AgentEnvironmentKind.CopilotCli)
+		{
+			expected["type"] = "local";
+			if (servers[ServerName] is not JsonObject configuredServer || configuredServer["tools"] is null)
+				expected["tools"] = new JsonArray("*");
+		}
+
+		var server = servers[ServerName] as JsonObject;
+		if (server is not null && expected.All(property => JsonNode.DeepEquals(server[property.Key], property.Value)))
 			return ConfigureResult.AlreadyConfigured;
 
-		servers[ServerName] = serverEntry;
+		if (server is null)
+			servers[ServerName] = expected;
+		else
+			foreach (var property in expected)
+				server[property.Key] = property.Value?.DeepClone();
+
 		return ConfigureResult.Updated;
-	}
-
-	static bool IsExpectedServerEntry(JsonNode? server)
-	{
-		if (server is not JsonObject serverObject)
-			return false;
-
-		if (serverObject["command"]?.GetValue<string>() != "maui")
-			return false;
-
-		var args = serverObject["args"] as JsonArray;
-		return args is { Count: 2 } &&
-			args[0]?.GetValue<string>() == "devflow" &&
-			args[1]?.GetValue<string>() == "mcp";
 	}
 
 	static Task<bool> WriteAtomicAsync(string configPath, string contents, string writeRoot, CancellationToken ct)

@@ -21,17 +21,19 @@ public static partial class AiCommands
 	{
 		var skillOption = new Option<string[]>("--skill")
 		{
-			Description = "Install only specific skills (repeatable)",
+			Description = "Install only named skills, omitting Copilot agents (repeatable); any DevFlow name selects the recommended bundled group",
+			Arity = ArgumentArity.OneOrMore,
 			AllowMultipleArgumentsPerToken = true
 		};
 
 		var envOption = new Option<string[]>("--env")
 		{
-			Description = "Target only specific environments (repeatable, e.g. Claude, VsCode)",
+			Description = "Target detected environments: Claude, VsCode, CopilotCli, OpenCode (repeatable); Copilot agents remain project-wide",
+			Arity = ArgumentArity.OneOrMore,
 			AllowMultipleArgumentsPerToken = true
 		};
 
-		var command = new Command("init", "Bootstrap AI-powered MAUI development assets")
+		var command = new Command("init", "Install MAUI skills, bundled DevFlow skills and project-wide Copilot agents, then merge MCP configuration. Copilot CLI MCP config is user-wide. Local edits are preserved unless --force.")
 		{
 			CreateRepoOption(),
 			CreateBranchOption(),
@@ -81,12 +83,9 @@ public static partial class AiCommands
 				if (environments.Count == 0)
 				{
 					var canCreateDefaultClaudeEnvironment = ShouldCreateDefaultClaudeEnvironment(envFilter);
-					if ((isCi || force) && canCreateDefaultClaudeEnvironment)
+					if ((dryRun || isCi || force) && canCreateDefaultClaudeEnvironment)
 					{
-						// In CI or force mode, create .claude/ by default
-						var claudeDir = Path.Combine(workingDir, ".claude");
-						Directory.CreateDirectory(claudeDir);
-						environments = FilterEnvironments(AgentEnvironmentDetector.Detect(workingDir), envFilter);
+						environments = [CreateDefaultClaudeEnvironment(workingDir)];
 					}
 					else if (!canCreateDefaultClaudeEnvironment || useJson || isCi || force)
 					{
@@ -105,9 +104,7 @@ public static partial class AiCommands
 							return 0;
 						}
 
-						var claudeDir = Path.Combine(workingDir, ".claude");
-						Directory.CreateDirectory(claudeDir);
-						environments = FilterEnvironments(AgentEnvironmentDetector.Detect(workingDir), envFilter);
+						environments = [CreateDefaultClaudeEnvironment(workingDir)];
 					}
 				}
 
@@ -122,12 +119,12 @@ public static partial class AiCommands
 
 				// Step 3: Select skills
 				var filterSpecified = skillFilter is { Length: > 0 };
-				var selectedSkills = SelectSkills(allSkills, skillFilter, useJson, isCi, formatter);
+				var selectedSkills = SelectSkills(allSkills, skillFilter, useJson, isCi || force || dryRun, formatter);
 				var includeDevFlowSkills = filterSpecified
 					? skillFilter!.Any(IsDevFlowManagedSkillName)
 					: selectedSkills.Any(s => IsDevFlowManagedSkillName(s.Name));
 
-				if (!filterSpecified && !useJson && !isCi && allSkills.Count > 0 && selectedSkills.Count == 0)
+				if (!filterSpecified && !useJson && !isCi && !force && !dryRun && allSkills.Count > 0 && selectedSkills.Count == 0)
 				{
 					formatter.WriteInfo("No skills selected.");
 					return 0;
@@ -173,6 +170,12 @@ public static partial class AiCommands
 
 					foreach (var asset in selectedAgentAssets)
 						dryRunRows.Add((asset.Name, asset.Category, "GitHub Copilot", Path.Combine(workingDir, asset.DestinationRoot)));
+
+					if (!noMcp)
+					{
+						foreach (var env in environments)
+							dryRunRows.Add(("maui-devflow", "MCP", env.Kind.ToString(), env.McpConfigPath));
+					}
 
 					formatter.WriteInfo("[Dry run] Would install the following AI assets:");
 					formatter.WriteTable(
@@ -221,7 +224,7 @@ public static partial class AiCommands
 						target.CustomPath,
 						force,
 						allowDowngrade: false,
-						confirm: null,
+						confirm: _ => force,
 						ct);
 
 					var targetRows = GetDevFlowResultRows(result, target).ToList();
@@ -229,6 +232,8 @@ public static partial class AiCommands
 					{
 						devFlowInstallFailed = true;
 						formatter.WriteWarning($"Could not install DevFlow skills for {target.DisplayName}");
+						if (isCi)
+							break;
 					}
 
 					foreach (var row in targetRows)
@@ -240,7 +245,7 @@ public static partial class AiCommands
 
 				// Step 7: Install marketplace/repository skills not owned by DevFlow.
 				var skillResults = new List<(string Skill, string Env, int Files, string Path)>();
-				foreach (var env in skillInstallEnvironments)
+				foreach (var env in isCi && devFlowInstallFailed ? [] : skillInstallEnvironments)
 				{
 					foreach (var skill in selectedMarketplaceSkills)
 					{
@@ -261,12 +266,16 @@ public static partial class AiCommands
 							formatter.WriteSuccess($"Installed {skill.Name} → {env.Kind} ({filesInstalled} files)");
 						else
 							formatter.WriteInfo($"Skipped {skill.Name} → {env.Kind} (already installed)");
+						if (isCi && filesInstalled < 0)
+							break;
 					}
+					if (isCi && HasSkillInstallFailures(skillResults.Select(r => r.Files)))
+						break;
 				}
 
 				// Step 8: Install Copilot agent definitions.
 				var assetResults = new List<(string Asset, string Type, int Files, string Path)>();
-				foreach (var asset in selectedAgentAssets)
+				foreach (var asset in isCi && (devFlowInstallFailed || HasSkillInstallFailures(skillResults.Select(r => r.Files))) ? [] : selectedAgentAssets)
 				{
 					var (filesInstalled, installPath) = await RepositoryAssetInstaller.InstallAssetAsync(
 						http, asset, workingDir, repo, branch, force, ct);
@@ -280,17 +289,21 @@ public static partial class AiCommands
 						formatter.WriteWarning($"Failed to download asset files for '{asset.Name}'. Check your network connection.");
 					else
 						formatter.WriteInfo($"Skipped {asset.Name} → {asset.Category} (already installed)");
+					if (isCi && filesInstalled < 0)
+						break;
 				}
 
 				// Step 9: Configure MCP
 				var mcpResults = new List<(string Environment, bool Configured, string? BackupPath)>();
-				if (!noMcp)
+				if (!noMcp && (!isCi || !HasInitInstallFailures(skillResults.Select(r => r.Files), assetResults.Select(r => r.Files), devFlowInstallFailed)))
 				{
 					foreach (var env in environments)
 					{
 						var result = await McpConfigurator.ConfigureWithResultAsync(env, workingDir, ct);
 						mcpResults.Add((env.Kind.ToString(), result.Success, result.BackupPath));
 						WriteMcpConfigurationMessage(formatter, env.Kind, result, useJson);
+						if (isCi && !result.Success)
+							break;
 					}
 
 					if (!useJson)
@@ -305,7 +318,8 @@ public static partial class AiCommands
 				var hasInstallFailures = HasInitInstallFailures(
 					skillResults.Select(r => r.Files),
 					assetResults.Select(r => r.Files),
-					devFlowInstallFailed);
+					devFlowInstallFailed,
+					mcpResults.Any(r => !r.Configured));
 
 				if (useJson)
 				{
@@ -477,10 +491,19 @@ public static partial class AiCommands
 		=> envFilter is not { Length: > 0 } ||
 			envFilter.Any(f => string.Equals(f, AgentEnvironmentKind.Claude.ToString(), StringComparison.OrdinalIgnoreCase));
 
-	internal static List<AiDevFlowBootstrapTarget> GetDevFlowBootstrapTargets(IEnumerable<DetectedEnvironment> environments)
+	internal static DetectedEnvironment CreateDefaultClaudeEnvironment(string workingDir) => new()
 	{
+		Kind = AgentEnvironmentKind.Claude,
+		SkillsDirectory = Path.Combine(workingDir, ".claude", "skills"),
+		McpConfigPath = Path.Combine(workingDir, ".mcp.json"),
+		McpConfigExists = File.Exists(Path.Combine(workingDir, ".mcp.json"))
+	};
+
+	internal static List<AiDevFlowBootstrapTarget> GetDevFlowBootstrapTargets(IEnumerable<DetectedEnvironment> environments, string? workingDir = null)
+	{
+		workingDir ??= GetAiCommandWorkingDirectory(Directory.GetCurrentDirectory());
 		var targets = new List<AiDevFlowBootstrapTarget>();
-		var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+		var seen = new HashSet<string>(FileSystemPathComparer);
 
 		foreach (var env in environments)
 		{
@@ -496,7 +519,16 @@ public static partial class AiCommands
 			if (target is null)
 				continue;
 
-			var key = $"{target.Scope}|{target.Target}|{target.CustomPath}";
+			var key = Path.GetFullPath(env.SkillsDirectory);
+			var relativePath = Path.GetRelativePath(workingDir, key);
+			var presetPath = target.Target switch
+			{
+				"claude" => Path.Combine(".claude", "skills"),
+				"github" => Path.Combine(".github", "skills"),
+				_ => null
+			};
+			if (!FileSystemPathComparer.Equals(relativePath, presetPath))
+				target = target with { CustomPath = relativePath };
 			if (seen.Add(key))
 				targets.Add(target);
 		}
@@ -550,8 +582,9 @@ public static partial class AiCommands
 	internal static bool HasInitInstallFailures(
 		IEnumerable<int> skillFileCounts,
 		IEnumerable<int> assetFileCounts,
-		bool devFlowInstallFailed = false)
-		=> devFlowInstallFailed || HasSkillInstallFailures(skillFileCounts) || assetFileCounts.Any(files => files < 0);
+		bool devFlowInstallFailed = false,
+		bool mcpConfigurationFailed = false)
+		=> devFlowInstallFailed || mcpConfigurationFailed || HasSkillInstallFailures(skillFileCounts) || assetFileCounts.Any(files => files < 0);
 
 	internal static string GetInitStatus(bool hasInstallFailures)
 		=> hasInstallFailures ? "partial" : "success";

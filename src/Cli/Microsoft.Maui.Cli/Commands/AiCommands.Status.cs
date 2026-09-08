@@ -15,19 +15,23 @@ public static partial class AiCommands
 	/// </summary>
 	static Command CreateStatusCommand()
 	{
-		var command = new Command("status", "Show status of installed AI development assets")
+		var repoOption = CreateRepoOption();
+		var branchOption = CreateBranchOption();
+		var command = new Command("status", "Inspect local skills, bundled DevFlow skills and Copilot agents without changing files. Does not test MCP connectivity; --check-updates also queries remote assets.")
 		{
-			CreateRepoOption(),
-			CreateBranchOption(),
-			new Option<bool>("--check-updates") { Description = "Check remote repository for available updates" }
+			repoOption,
+			branchOption,
+			new Option<bool>("--check-updates") { Description = "Check remote skills/agents; bundled DevFlow freshness is relative to this CLI version" }
 		};
 
 		command.SetAction(async (ParseResult parseResult, CancellationToken ct) =>
 		{
 			var formatter = Program.GetFormatter(parseResult);
 			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
-			var repo = parseResult.GetOption<string>("repo") ?? DefaultRepo;
-			var branch = parseResult.GetOption<string>("branch") ?? DefaultBranch;
+			var repoOverride = parseResult.GetResult(repoOption) is { Implicit: false } ? parseResult.GetValue(repoOption) : null;
+			var branchOverride = parseResult.GetResult(branchOption) is { Implicit: false } ? parseResult.GetValue(branchOption) : null;
+			var repo = repoOverride ?? DefaultRepo;
+			var branch = branchOverride ?? DefaultBranch;
 			var checkUpdates = parseResult.GetOption<bool>("check-updates");
 
 			try
@@ -46,7 +50,7 @@ public static partial class AiCommands
 
 				var rows = new List<AiAssetStatusRow>();
 				rows.AddRange(await GetDevFlowStatusRowsAsync(GetDevFlowBootstrapTargets(environments), ct));
-				rows.AddRange(await GetMarketplaceSkillStatusRowsAsync(environments, checkUpdates, http, repo, branch, ct));
+				rows.AddRange(await GetMarketplaceSkillStatusRowsAsync(environments, checkUpdates, http, repoOverride, branchOverride, ct));
 
 				if (checkUpdates && http is not null)
 				{

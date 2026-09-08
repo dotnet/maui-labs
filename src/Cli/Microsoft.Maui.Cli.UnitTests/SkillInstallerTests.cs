@@ -23,6 +23,46 @@ public class SkillInstallerTests : IDisposable
 			Directory.Delete(_tempDir, recursive: true);
 	}
 
+	[Theory]
+	[InlineData(null)]
+	[InlineData("{invalid metadata")]
+	public async Task InstallSkillAsync_UnmanagedDestination_PreservesLocalFilesUnlessForced(string? metadata)
+	{
+		var env = new DetectedEnvironment { SkillsDirectory = Path.Combine(_tempDir, "skills") };
+		var skill = new SkillInfo
+		{
+			Name = "safe-name",
+			RemotePath = ".github/skills/safe-name",
+			Files = [".github/skills/safe-name/SKILL.md"]
+		};
+		var destination = Path.Combine(env.SkillsDirectory, skill.Name);
+		Directory.CreateDirectory(destination);
+		await File.WriteAllTextAsync(Path.Combine(destination, "SKILL.md"), "custom skill");
+		await File.WriteAllTextAsync(Path.Combine(destination, "notes.md"), "local notes");
+		if (metadata is not null)
+			await File.WriteAllTextAsync(Path.Combine(destination, ".skill-version"), metadata);
+
+		using var http = new HttpClient(new SuccessfulInstallHandler());
+		var skipped = await SkillInstaller.InstallSkillAsync(http, skill, env, _tempDir, "owner/repo", "main", false);
+		Assert.Equal(0, skipped.FilesInstalled);
+		Assert.Equal("custom skill", await File.ReadAllTextAsync(Path.Combine(destination, "SKILL.md")));
+		Assert.Equal("local notes", await File.ReadAllTextAsync(Path.Combine(destination, "notes.md")));
+
+		var replaced = await SkillInstaller.InstallSkillAsync(http, skill, env, _tempDir, "owner/repo", "main", true);
+		Assert.Equal(1, replaced.FilesInstalled);
+		Assert.False(File.Exists(Path.Combine(destination, "notes.md")));
+	}
+
+	[Theory]
+	[InlineData("CON", true)]
+	[InlineData("nul.txt", true)]
+	[InlineData("Com1", true)]
+	[InlineData("LPT9", true)]
+	[InlineData("COM10", false)]
+	[InlineData("console", false)]
+	public void IsWindowsReservedName_RecognizesDeviceNames(string name, bool expected)
+		=> Assert.Equal(expected, SkillInstaller.IsWindowsReservedName(name));
+
 	[Fact]
 	public async Task InstallSkillAsync_InvalidName_PathTraversal_ReturnsNegativeOne()
 	{

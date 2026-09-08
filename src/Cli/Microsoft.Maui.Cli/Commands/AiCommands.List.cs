@@ -17,7 +17,7 @@ public static partial class AiCommands
 	/// </summary>
 	static Command CreateListCommand()
 	{
-		var command = new Command("list", "List available AI agent skills from the marketplace")
+		var command = new Command("list", "Fetch marketplace and repository skills and show whether each is installed in any detected environment. Does not list Copilot agents; use status for installed assets.")
 		{
 			CreateRepoOption(),
 			CreateBranchOption()
@@ -55,6 +55,9 @@ public static partial class AiCommands
 				var workingDir = Directory.GetCurrentDirectory();
 				var environments = AgentEnvironmentDetector.Detect(workingDir);
 				var installedSkills = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+				var devFlowRows = await GetDevFlowStatusRowsAsync(GetDevFlowBootstrapTargets(environments), ct);
+				foreach (var row in devFlowRows.Where(row => row.Status != "missing"))
+					installedSkills.Add(row.Item);
 				foreach (var env in environments)
 				{
 					foreach (var skillDir in EnumerateSkillDirectories(env))

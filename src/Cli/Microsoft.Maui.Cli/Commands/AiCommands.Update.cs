@@ -21,14 +21,17 @@ public static partial class AiCommands
 	{
 		var skillOption = new Option<string[]>("--skill")
 		{
-			Description = "Update only specific skills or agents (repeatable)",
+			Description = "Update only specific skills or agents (repeatable); a bundled DevFlow skill selects its recommended skill group",
+			Arity = ArgumentArity.OneOrMore,
 			AllowMultipleArgumentsPerToken = true
 		};
 
-		var command = new Command("update", "Update installed AI development assets to the latest version")
+		var repoOption = CreateRepoOption();
+		var branchOption = CreateBranchOption();
+		var command = new Command("update", "Update installed AI development assets; without --skill, also install missing recommended DevFlow skills and repository agents")
 		{
-			CreateRepoOption(),
-			CreateBranchOption(),
+			repoOption,
+			branchOption,
 			CreateForceOption(),
 			skillOption
 		};
@@ -39,8 +42,10 @@ public static partial class AiCommands
 			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
 			var isCi = parseResult.GetValue(GlobalOptions.CiOption);
 			var dryRun = parseResult.GetValue(GlobalOptions.DryRunOption);
-			var repo = parseResult.GetOption<string>("repo") ?? DefaultRepo;
-			var branch = parseResult.GetOption<string>("branch") ?? DefaultBranch;
+			var repoOverride = parseResult.GetResult(repoOption) is { Implicit: false } ? parseResult.GetValue(repoOption) : null;
+			var branchOverride = parseResult.GetResult(branchOption) is { Implicit: false } ? parseResult.GetValue(branchOption) : null;
+			var repo = repoOverride ?? DefaultRepo;
+			var branch = branchOverride ?? DefaultBranch;
 			var force = parseResult.GetOption<bool>("force");
 			var skillFilter = parseResult.GetOption<string[]>("skill");
 
@@ -69,6 +74,10 @@ public static partial class AiCommands
 				{
 					(allSkills, allAgentAssets) = await FetchBootstrapAssetsAsync(http, repo, branch, ct);
 				}
+				var skillCatalogs = new Dictionary<(string Repo, string Branch), List<SkillInfo>>
+				{
+					[(repo, branch)] = allSkills
+				};
 
 				var filterSpecified = skillFilter is { Length: > 0 };
 				var includeDevFlowSkills = filterSpecified
@@ -93,6 +102,7 @@ public static partial class AiCommands
 				var agentsToUpdate = agentStatusRows
 					.Where(row => NeedsUpdate(row.Row, force))
 					.ToList();
+				var hasUnknownAssets = agentStatusRows.Any(row => row.Row.Status is "Unknown" or "Error");
 
 				// Scan installed marketplace/repository skills and check for updates; de-duplicate by resolved path
 				// so environments sharing the same skills directory are not updated twice.
@@ -123,14 +133,17 @@ public static partial class AiCommands
 						}
 
 						var version = await SkillVersionStore.ReadAsync(skillDir, ct);
-						if (version is null)
+						if (version is null || string.IsNullOrWhiteSpace(version.PluginPath))
+						{
+							uncheckableCount++;
 							continue;
+						}
 
 						// Check if update is available
-						if (version.PluginPath is not null)
 						{
+							var origin = ResolveInstalledSkillOrigin(version, repoOverride, branchOverride);
 							var (isCheckable, remoteSha) = await TryGetRemoteCommitShaAsync(
-								http, repo, branch, version.PluginPath, ct);
+								http, origin.Repo, origin.Branch, version.PluginPath, ct);
 
 							if (!isCheckable || remoteSha is null)
 							{
@@ -163,13 +176,13 @@ public static partial class AiCommands
 
 				if (updatable.Count == 0 && devFlowTargetsToUpdate.Count == 0 && agentsToUpdate.Count == 0)
 				{
-					formatter.WriteSuccess(filterSpecified ? "All selected AI development assets are up to date." : "All AI development assets are up to date.");
-					if (uncheckableCount > 0)
+					if (uncheckableCount > 0 || hasUnknownAssets)
 					{
-						var skillWord = uncheckableCount == 1 ? "skill" : "skill(s)";
-						formatter.WriteWarning($"Could not check {uncheckableCount} {skillWord} — GitHub may be unreachable.");
+						formatter.WriteWarning("Could not check all selected AI development assets — metadata may be missing or GitHub may be unreachable.");
+						return 1;
 					}
 
+					formatter.WriteSuccess(filterSpecified ? "All selected AI development assets are up to date." : "All AI development assets are up to date.");
 					return 0;
 				}
 
@@ -204,7 +217,7 @@ public static partial class AiCommands
 						("Target", r => r.Target),
 						("Status", r => r.Status),
 						("Path", r => r.Path));
-					return 0;
+					return uncheckableCount > 0 || hasUnknownAssets ? 1 : 0;
 				}
 
 				// Confirm unless --force, --ci, or --json
@@ -228,6 +241,7 @@ public static partial class AiCommands
 				var devFlowResults = new List<(string Skill, string Target, string Action, string Path)>();
 				var results = new List<(string Skill, string Env, int Files)>();
 				var assetResults = new List<(string Asset, string Type, int Files, string Path)>();
+				var stopAfterFailure = false;
 
 				foreach (var target in devFlowTargetsToUpdate)
 				{
@@ -237,7 +251,7 @@ public static partial class AiCommands
 						target.CustomPath,
 						force,
 						allowDowngrade: false,
-						confirm: null,
+						confirm: _ => force,
 						ct);
 
 					foreach (var row in GetDevFlowResultRows(result, target))
@@ -247,19 +261,32 @@ public static partial class AiCommands
 					}
 				}
 
-				foreach (var (env, skillDir, skillName, _) in updatable)
+				foreach (var (env, skillDir, skillName, version) in updatable)
 				{
-					var skillInfo = allSkills.FirstOrDefault(s =>
-						string.Equals(s.Name, skillName, StringComparison.OrdinalIgnoreCase));
+					var origin = ResolveInstalledSkillOrigin(version, repoOverride, branchOverride);
+					if (!skillCatalogs.TryGetValue(origin, out var catalog))
+					{
+						(catalog, _) = await FetchBootstrapAssetsAsync(http, origin.Repo, origin.Branch, ct);
+						skillCatalogs.Add(origin, catalog);
+					}
+					var skillInfo = catalog.FirstOrDefault(s =>
+						string.Equals(s.Name, skillName, StringComparison.Ordinal) &&
+						string.Equals(s.RemotePath, version.PluginPath, StringComparison.Ordinal));
 
 					if (skillInfo is null)
 					{
-						formatter.WriteWarning($"Skill '{skillName}' not found in marketplace, skipping.");
+						results.Add((skillName, env.Kind.ToString(), -2));
+						formatter.WriteWarning($"Skill '{skillName}' was not found at '{version.PluginPath}' in '{origin.Repo}' ({origin.Branch}); it was not updated.");
+						if (isCi)
+						{
+							stopAfterFailure = true;
+							break;
+						}
 						continue;
 					}
 
 					var (filesInstalled, _) = await SkillInstaller.InstallSkillAsync(
-						http, skillInfo, env, workingDir, repo, branch, force: true, ct);
+						http, skillInfo, env, workingDir, origin.Repo, origin.Branch, force: true, ct);
 
 					results.Add((skillName, env.Kind.ToString(), filesInstalled));
 
@@ -271,10 +298,19 @@ public static partial class AiCommands
 						formatter.WriteSuccess($"Updated {skillName} → {env.Kind} ({filesInstalled} files)");
 					else
 						formatter.WriteInfo($"Skipped {skillName} → {env.Kind} (no files downloaded)");
+
+					if (isCi && filesInstalled < 0)
+					{
+						stopAfterFailure = true;
+						break;
+					}
 				}
 
 				foreach (var (asset, _) in agentsToUpdate)
 				{
+					if (stopAfterFailure)
+						break;
+
 					var (filesInstalled, installPath) = await RepositoryAssetInstaller.InstallAssetAsync(
 						http, asset, workingDir, repo, branch, force: true, ct);
 
@@ -283,9 +319,12 @@ public static partial class AiCommands
 						formatter.WriteSuccess($"Updated {asset.Name} → {asset.Category} ({filesInstalled} files)");
 					else
 						formatter.WriteWarning($"Could not update {asset.Name} → {asset.Category}");
+					if (isCi && filesInstalled < 0)
+						break;
 				}
 
-				var hasUpdateFailures = HasUpdateInstallFailures(results.Select(r => r.Files), assetResults.Select(r => r.Files));
+				var hasUpdateFailures = uncheckableCount > 0 || hasUnknownAssets ||
+					HasUpdateInstallFailures(results.Select(r => r.Files), assetResults.Select(r => r.Files));
 				if (useJson)
 				{
 					var jsonResult = new JsonObject
@@ -318,7 +357,7 @@ public static partial class AiCommands
 				if (uncheckableCount > 0)
 				{
 					var skillWord = uncheckableCount == 1 ? "skill" : "skill(s)";
-					formatter.WriteWarning($"⚠ Could not check {uncheckableCount} {skillWord} — GitHub may be unreachable.");
+					formatter.WriteWarning($"⚠ Could not check {uncheckableCount} {skillWord} — metadata may be missing or GitHub may be unreachable.");
 				}
 
 				return hasUpdateFailures ? 1 : 0;

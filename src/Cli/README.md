@@ -44,6 +44,28 @@ maui ai update
 
 `maui ai init` detects Claude Code, VS Code, Copilot CLI, and OpenCode environments. It delegates DevFlow-owned skills to the bundled DevFlow installer, then installs broader MAUI skills and Copilot agent definitions from this repository.
 
+#### AI command scope and options
+
+Run from the project you want to configure. In Git repositories, the Git root is the project boundary; outside Git, the current directory is used. Detected nested environment directories are honored for skills and project MCP files. Copilot agent definitions always go in the project's `.github/agents`.
+
+| Command | Behavior and important options |
+|---------|--------------------------------|
+| `maui ai init` | Installs skills, recommended bundled DevFlow skills, and Copilot agents; merges MCP configuration. `--skill <name>` is repeatable and excludes Copilot agents. Selecting any DevFlow name installs the recommended DevFlow group. |
+| `maui ai list` | Fetches available marketplace and repository skills and reports installation in any detected environment. Does not list Copilot agents; use `status` for those. |
+| `maui ai status` | Inspects local assets without changing them. `--check-updates` also queries remote skill/agent content; DevFlow skills are compared with the running CLI bundle, not downloaded updates. This is an inventory, not an MCP connectivity check. |
+| `maui ai update` | Refreshes installed skills, and installs missing recommended DevFlow skills and catalog Copilot agents. `--skill <name>` limits skills/agents; any DevFlow name selects the bundled group. MCP configuration is not changed. |
+| `maui ai add <skill>` | Installs one named skill (from the CLI bundle for DevFlow), then merges MCP configuration. Does not install Copilot agent definitions. |
+
+`init` and `add` accept repeatable `--env Claude|VsCode|CopilotCli|OpenCode` filters and `--no-mcp`. These filters select detected environments; they do not create arbitrary environments or limit project-wide Copilot agents. With no matching environment, `init` can propose Claude Code; `--ci` or `--force` selects that fallback automatically when the filter permits it.
+
+Global `--dry-run` previews changes without writing project or DevFlow state files, but may require network access to discover remote assets. Global `--json` and `--ci` suppress interaction; `--ci` stops later mutations after an installation/configuration failure. `--force` (alias `-y`) **also authorizes replacing existing assets and local edits**; it is not just a yes-to-prompts switch. For DevFlow, force also permits replacing skills from a newer CLI with the running CLI's bundle. Without force, managed unchanged DevFlow skills can be refreshed, but customized/unmanaged bundles are skipped. Non-DevFlow updates replace selected skill directories; preserve customizations separately before updating.
+
+MCP configuration is merged into `.mcp.json` for Claude Code, `.vscode/mcp.json` for VS Code, `opencode.json` for OpenCode, and **user-wide** `~/.copilot/mcp-config.json` for Copilot CLI. Unrelated settings are preserved. JSONC comments cannot be retained when a configuration is rewritten; the original is backed up and the backup path is reported. Clients may require restart, project trust, or server approval before loading the configuration.
+
+The default catalog is `dotnet/maui-labs` on `main`. Advanced `--repo <owner/repo>` and `--branch <ref>` options select another source; installed skill metadata retains that origin for subsequent checks and updates unless explicitly overridden. Legacy skills lacking path metadata are reported as uncheckable rather than current.
+
+Skill replacement stages downloads and restores the previous directory on ordinary write failures. It is not crash-atomic: interruption between directory renames can leave `<skill>.<id>.bak` alongside the skills directory. If the skill directory is missing, inspect that backup and rename it back before retrying. Concurrent installations into the same destination are not supported. Repository-hosted Copilot agents are currently single-file assets; writes across multiple assets are not one transaction.
+
 ### 4. Manage a project's .NET MAUI version
 
 ```bash

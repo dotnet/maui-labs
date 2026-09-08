@@ -44,7 +44,8 @@ internal static class SkillInstaller
 			skill.Name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
 			skill.Name.Contains("..") ||
 			skill.Name.Contains('/') ||
-			skill.Name.Contains('\\'))
+			skill.Name.Contains('\\') ||
+			(OperatingSystem.IsWindows() && IsWindowsReservedName(skill.Name)))
 			return (-1, string.Empty);
 
 		// If the skills directory is not rooted, resolve it relative to the project root.
@@ -70,12 +71,8 @@ internal static class SkillInstaller
 		var displayInstallPath = Path.Combine(skillsDir, skill.Name);
 
 		// Skip if already installed and not forcing.
-		if (!force)
-		{
-			var existing = await SkillVersionStore.ReadAsync(installPath, ct).ConfigureAwait(false);
-			if (existing is not null)
-				return (0, displayInstallPath);
-		}
+		if (!force && (Directory.Exists(installPath) || File.Exists(installPath)))
+			return (0, displayInstallPath);
 
 		var tempInstallPath = Path.Combine(canonicalSkillsDir, $".{skill.Name}.{Guid.NewGuid():N}.tmp");
 		Directory.CreateDirectory(tempInstallPath);
@@ -142,6 +139,18 @@ internal static class SkillInstaller
 		}
 
 		return count;
+	}
+
+	internal static bool IsWindowsReservedName(string name)
+	{
+		var stem = name.Split('.')[0].TrimEnd(' ');
+		return stem.Equals("CON", StringComparison.OrdinalIgnoreCase) ||
+			stem.Equals("PRN", StringComparison.OrdinalIgnoreCase) ||
+			stem.Equals("AUX", StringComparison.OrdinalIgnoreCase) ||
+			stem.Equals("NUL", StringComparison.OrdinalIgnoreCase) ||
+			(stem.Length == 4 && stem[3] is >= '1' and <= '9' &&
+				(stem.StartsWith("COM", StringComparison.OrdinalIgnoreCase) ||
+				 stem.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)));
 	}
 
 	static void ReplaceDirectory(string sourceDirectory, string destinationDirectory)

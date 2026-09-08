@@ -15,6 +15,7 @@ public static partial class AiCommands
 	private const string RepositorySkillsRoot = ".github/skills";
 	private const string RepositorySkillsPluginName = "dotnet-maui-repo";
 	internal static readonly TimeSpan GitHubHttpTimeout = TimeSpan.FromSeconds(30);
+	internal static Func<HttpClient>? HttpClientFactoryForTests { get; set; }
 
 	private static readonly HashSet<string> s_devFlowManagedSkills = new(StringComparer.OrdinalIgnoreCase)
 	{
@@ -30,7 +31,7 @@ public static partial class AiCommands
 
 	public static Command Create()
 	{
-		var command = new Command("ai", "AI-assisted MAUI development: bootstrap and manage Copilot assets");
+		var command = new Command("ai", "Bootstrap and manage MAUI agent skills, Copilot agents, and MCP configuration. Installs target the current Git project (or current directory outside Git). Use --dry-run to preview; --ci or --json runs without prompts.");
 		command.Add(CreateInitCommand());
 		command.Add(CreateListCommand());
 		command.Add(CreateStatusCommand());
@@ -41,6 +42,13 @@ public static partial class AiCommands
 
 	internal static bool IsDevFlowManagedSkillName(string skillName) =>
 		s_devFlowManagedSkills.Contains(skillName);
+
+	internal static string GetBundledSkillId(string name) => name.ToLowerInvariant() switch
+	{
+		"devflow-onboard" => "maui-devflow-onboard",
+		"maui-ai-debugging" or "maui-devflow-connect" or "devflow-connect" or "devflow-debug" => "maui-devflow-debug",
+		_ => name.ToLowerInvariant()
+	};
 
 	/// <summary>
 	/// Creates the shared --repo option used by multiple subcommands.
@@ -58,7 +66,7 @@ public static partial class AiCommands
 	/// Creates the shared --force / -y option for skipping confirmation prompts.
 	/// </summary>
 	static Option<bool> CreateForceOption() =>
-		new("--force", "-y") { Description = "Skip confirmation prompts" };
+		new("--force", "-y") { Description = "Skip prompts and replace existing assets and local edits; permits replacing newer DevFlow skills with this CLI's bundle" };
 
 	/// <summary>
 	/// Creates an <see cref="HttpClient"/> configured for GitHub API access.
@@ -66,6 +74,9 @@ public static partial class AiCommands
 	/// </summary>
 	internal static HttpClient CreateGitHubHttpClient()
 	{
+		if (HttpClientFactoryForTests is { } factory)
+			return factory();
+
 		var http = new HttpClient
 		{
 			Timeout = GitHubHttpTimeout

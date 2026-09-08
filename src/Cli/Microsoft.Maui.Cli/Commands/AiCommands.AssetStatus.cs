@@ -33,7 +33,8 @@ public static partial class AiCommands
 				target.Target,
 				target.CustomPath,
 				online: false,
-				ct);
+				ct,
+				recordCheck: false);
 
 			rows.AddRange(GetDevFlowStatusRows(result, target));
 		}
@@ -63,8 +64,8 @@ public static partial class AiCommands
 		IEnumerable<DetectedEnvironment> environments,
 		bool checkUpdates,
 		HttpClient? http,
-		string repo,
-		string branch,
+		string? repo,
+		string? branch,
 		CancellationToken ct)
 	{
 		var rows = new List<AiAssetStatusRow>();
@@ -84,12 +85,13 @@ public static partial class AiCommands
 				}
 
 				var installed = FormatInstalledTimestamp(version.UpdatedAt);
-				var status = "Installed";
+				var status = checkUpdates ? "Unknown" : "Installed";
 
-				if (checkUpdates && http is not null && version.PluginPath is not null)
+				if (checkUpdates && http is not null && !string.IsNullOrWhiteSpace(version.PluginPath))
 				{
+					var origin = ResolveInstalledSkillOrigin(version, repo, branch);
 					var (isCheckable, remoteSha) = await TryGetRemoteCommitShaAsync(
-						http, repo, branch, version.PluginPath, ct).ConfigureAwait(false);
+						http, origin.Repo, origin.Branch, version.PluginPath, ct).ConfigureAwait(false);
 
 					if (!isCheckable)
 					{
@@ -111,6 +113,11 @@ public static partial class AiCommands
 
 		return rows;
 	}
+
+	internal static (string Repo, string Branch) ResolveInstalledSkillOrigin(
+		InstalledSkillVersion version, string? repo, string? branch)
+		=> (repo ?? (string.IsNullOrWhiteSpace(version.Source) ? DefaultRepo : version.Source),
+			branch ?? (string.IsNullOrWhiteSpace(version.Branch) ? DefaultBranch : version.Branch));
 
 	internal static IEnumerable<string> EnumerateSkillDirectories(DetectedEnvironment env)
 	{

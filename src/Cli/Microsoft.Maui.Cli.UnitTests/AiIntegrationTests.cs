@@ -57,7 +57,7 @@ public class AiIntegrationTests : IDisposable
 
 		// Paths point to the expected locations
 		Assert.Equal(Path.Combine(projectDir, ".claude", "skills"), claude.SkillsDirectory);
-		Assert.Equal(Path.Combine(projectDir, ".claude", "mcp.json"), claude.McpConfigPath);
+		Assert.Equal(Path.Combine(projectDir, ".mcp.json"), claude.McpConfigPath);
 		Assert.Equal(Path.Combine(projectDir, ".github", "skills"), vscode.SkillsDirectory);
 		Assert.Equal(Path.Combine(projectDir, ".vscode", "mcp.json"), vscode.McpConfigPath);
 	}
@@ -112,7 +112,7 @@ public class AiIntegrationTests : IDisposable
 		var projectDir = Path.Combine(_tempRoot, "claude-config");
 		var claudeDir = Path.Combine(projectDir, ".claude");
 		Directory.CreateDirectory(claudeDir);
-		var configPath = Path.Combine(claudeDir, "mcp.json");
+		var configPath = Path.Combine(projectDir, ".mcp.json");
 
 		var env = new DetectedEnvironment
 		{
@@ -151,7 +151,7 @@ public class AiIntegrationTests : IDisposable
 		var projectDir = Path.Combine(_tempRoot, "opencode-config");
 		var openCodeDir = Path.Combine(projectDir, ".opencode");
 		Directory.CreateDirectory(openCodeDir);
-		var configPath = Path.Combine(openCodeDir, "config.json");
+		var configPath = Path.Combine(projectDir, "opencode.json");
 
 		var env = new DetectedEnvironment
 		{
@@ -169,16 +169,19 @@ public class AiIntegrationTests : IDisposable
 		var json = JsonNode.Parse(await File.ReadAllTextAsync(configPath));
 		Assert.NotNull(json);
 
-		// OpenCode uses mcp.servers (different schema from Claude's mcpServers)
-		var server = json["mcp"]?["servers"]?["maui-devflow"];
+		// OpenCode maps server names directly under mcp.
+		var server = json["mcp"]?["maui-devflow"];
 		Assert.NotNull(server);
-		Assert.Equal("maui", server["command"]?.GetValue<string>());
+		Assert.Equal("local", server["type"]?.GetValue<string>());
 
-		var args = server["args"]?.AsArray();
-		Assert.NotNull(args);
-		Assert.Equal(2, args.Count);
-		Assert.Equal("devflow", args[0]?.GetValue<string>());
-		Assert.Equal("mcp", args[1]?.GetValue<string>());
+		var command = server["command"]?.AsArray();
+		Assert.NotNull(command);
+		Assert.Equal(3, command.Count);
+		Assert.Equal("maui", command[0]?.GetValue<string>());
+		Assert.Equal("devflow", command[1]?.GetValue<string>());
+		Assert.Equal("mcp", command[2]?.GetValue<string>());
+		Assert.Null(server["args"]);
+		Assert.Null(json["mcp"]?["servers"]);
 
 		// Verify it does NOT use the standard mcpServers key
 		Assert.Null(json["mcpServers"]);
@@ -194,7 +197,7 @@ public class AiIntegrationTests : IDisposable
 		var projectDir = Path.Combine(_tempRoot, "preserve-entries");
 		var claudeDir = Path.Combine(projectDir, ".claude");
 		Directory.CreateDirectory(claudeDir);
-		var configPath = Path.Combine(claudeDir, "mcp.json");
+		var configPath = Path.Combine(projectDir, ".mcp.json");
 
 		// Write an existing config with a custom server entry
 		var existing = new JsonObject
@@ -247,7 +250,7 @@ public class AiIntegrationTests : IDisposable
 		var projectDir = Path.Combine(_tempRoot, "idempotent");
 		var claudeDir = Path.Combine(projectDir, ".claude");
 		Directory.CreateDirectory(claudeDir);
-		var configPath = Path.Combine(claudeDir, "mcp.json");
+		var configPath = Path.Combine(projectDir, ".mcp.json");
 
 		var env = new DetectedEnvironment
 		{
@@ -399,7 +402,7 @@ public class AiIntegrationTests : IDisposable
 		{
 			Kind = AgentEnvironmentKind.Claude,
 			SkillsDirectory = skillsDir,
-			McpConfigPath = Path.Combine(projectDir, ".claude", "mcp.json"),
+			McpConfigPath = Path.Combine(projectDir, ".mcp.json"),
 			McpConfigExists = false
 		};
 
@@ -466,7 +469,7 @@ public class AiIntegrationTests : IDisposable
 		{
 			Kind = AgentEnvironmentKind.Claude,
 			SkillsDirectory = skillsDir,
-			McpConfigPath = Path.Combine(projectDir, ".claude", "mcp.json")
+			McpConfigPath = Path.Combine(projectDir, ".mcp.json")
 		};
 
 		var (filesInstalled, installPath) = await SkillInstaller.InstallSkillAsync(
@@ -502,7 +505,7 @@ public class AiIntegrationTests : IDisposable
 		{
 			Kind = AgentEnvironmentKind.Claude,
 			SkillsDirectory = skillsDir,
-			McpConfigPath = Path.Combine(projectDir, ".claude", "mcp.json")
+			McpConfigPath = Path.Combine(projectDir, ".mcp.json")
 		};
 
 		using var http = new HttpClient();

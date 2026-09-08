@@ -20,6 +20,17 @@ public class AiCommandsTests
 		Assert.Equal("ai", command.Name);
 	}
 
+	[Theory]
+	[InlineData("init --skill")]
+	[InlineData("init --env")]
+	[InlineData("add test-skill --env")]
+	[InlineData("update --skill")]
+	public void FilterOptions_RequireAValue(string arguments)
+	{
+		var result = AiCommands.Create().Parse(arguments);
+		Assert.NotEmpty(result.Errors);
+	}
+
 	[Fact]
 	public void Create_HasFiveSubcommands()
 	{
@@ -180,7 +191,7 @@ public class AiCommandsTests
 			}
 		};
 
-		var targets = AiCommands.GetDevFlowBootstrapTargets(environments);
+		var targets = AiCommands.GetDevFlowBootstrapTargets(environments, Path.GetFullPath("repo"));
 
 		var target = Assert.Single(targets);
 		Assert.Equal("github", target.Target);
@@ -199,7 +210,7 @@ public class AiCommandsTests
 			}
 		};
 
-		var target = Assert.Single(AiCommands.GetDevFlowBootstrapTargets(environments));
+		var target = Assert.Single(AiCommands.GetDevFlowBootstrapTargets(environments, Path.GetFullPath("repo")));
 
 		Assert.Equal("auto", target.Target);
 		Assert.Equal(Path.Combine(".opencode", "skills"), target.CustomPath);
