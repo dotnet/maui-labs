@@ -28,7 +28,7 @@
     "clean": "node -e \"const fs=require('fs');for(const d of ['dist','dist-test'])fs.rmSync(d,{recursive:true,force:true})\""
   },
   "devDependencies": {
-    "@types/node": "^20.16.0",
+    "@types/node": "^26.4.0",
     "typescript": "^5.6.3"
   }
 }
