@@ -139,7 +139,7 @@ public class LayoutDiagnosticsTrustTests
             }
             """;
 
-        var result = Microsoft.Maui.DevFlow.Driver.DriverJson.Deserialize<
+        var result = Microsoft.Maui.DevFlow.Driver.ProtocolJson.Deserialize<
             Microsoft.Maui.DevFlow.Driver.LayoutInspectionResult>(json);
 
         var finding = Assert.Single(result!.Findings);

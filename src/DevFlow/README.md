@@ -18,7 +18,8 @@ the agent was split away from MAUI, for plain .NET Android, iOS, Mac Catalyst an
 | **Microsoft.Maui.DevFlow.Blazor** | Blazor WebView CDP bridge. Enables Chrome DevTools Protocol access for Blazor Hybrid content via Chobitsu. |
 | **Microsoft.Maui.DevFlow.Blazor.Gtk** | Blazor CDP bridge for WebKitGTK on Linux. |
 | **Microsoft.Maui.DevFlow.CLI** | DevFlow command implementation used by the unified `maui devflow` CLI surface for automation, debugging, and MCP server support. |
-| **Microsoft.Maui.DevFlow.Driver** | Platform-aware app driver for iOS, Android, Mac Catalyst, Windows, and Linux. |
+| **Microsoft.Maui.DevFlow.Client** | Portable protocol client: `AgentClient`, element and protocol DTOs, and their serialization. Targets `netstandard2.0`, so .NET Framework harnesses speak the same protocol as modern .NET consumers. |
+| **Microsoft.Maui.DevFlow.Driver** | Platform-aware app driver for iOS, Android, Mac Catalyst, Windows, and Linux. Builds on `Microsoft.Maui.DevFlow.Client`. |
 | **Microsoft.Maui.DevFlow.Logging** | Buffered rotating JSONL file logger. No MAUI dependency. |
 
 ## Quick Start
@@ -213,6 +214,28 @@ For local debugging that needs full-path project disambiguation, opt in explicit
 - **Agent Extensions** — expose app-specific diagnostic tools under `/api/v1/ext/{namespace}/...` with self-describing metadata for CLI and MCP discovery
 - **Multi-Platform** — iOS, Android, Mac Catalyst, Windows, Linux/GTK
 
+## Agent API
+
+The in-app agent still exposes the HTTP/JSON and WebSocket API used by the CLI,
+MCP tools, and `Microsoft.Maui.DevFlow.Driver`. The server listens on loopback at
+`http://localhost:<port>`. Use the broker (port 19223), CLI, MCP tools, or
+`AgentClient` to discover the agent's dynamic port. Port 9223 is only the
+agent's last-resort default when no configured or broker-assigned port is
+available; it is not the broker port.
+
+The current API is versioned under `/api/v1/*`, with streaming channels under
+`/ws/v1/*`. The endpoint table from the original `Redth/MauiDevFlow` repository
+describes the earlier unversioned API and should not be used with the
+`Microsoft.Maui.DevFlow` packages.
+
+- [HTTP API (OpenAPI)](../../docs/DevFlow/spec/openapi.yaml)
+- [WebSocket API (AsyncAPI)](../../docs/DevFlow/spec/asyncapi.yaml)
+- [Protocol overview and schemas](../../docs/DevFlow/spec/README.md)
+
+For application code, prefer the typed `AgentClient` in
+`Microsoft.Maui.DevFlow.Driver`; use the protocol documents when implementing a
+client in another language or integrating directly with the agent.
+
 ## CLI Commands
 
 All DevFlow commands are available under `maui devflow`. Run `maui devflow <command> --help` for details.
@@ -330,7 +353,7 @@ These options apply to all `maui devflow` subcommands:
 
 - [DevFlow Web Inspector and MAUI DevFlow Inspector hosts](../../docs/DevFlow/inspector.md)
 - [Broker Architecture](../../docs/DevFlow/broker.md)
-- [Protocol Spec](../../docs/DevFlow/spec/README.md)
+- [Agent API / Protocol Spec](../../docs/DevFlow/spec/README.md)
 - [Android Setup](../../docs/DevFlow/setup-guides/android-setup.md)
 - [Apple Platforms Setup](../../docs/DevFlow/setup-guides/apple-platforms-setup.md)
 - [Windows Setup](../../docs/DevFlow/setup-guides/windows-setup.md)

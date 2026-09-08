@@ -23,6 +23,12 @@ public class FakeAppleProvider : IAppleProvider
 	public List<SimulatorInfo> Simulators { get; set; } = new();
 	public List<HealthCheck> HealthChecks { get; set; } = new();
 	public List<Device> Devices { get; set; } = new();
+
+	/// <summary>
+	/// Platforms this fake claims to serve. Settable so tests can simulate a provider that has
+	/// been extended to a new platform and assert the device manager follows it.
+	/// </summary>
+	public IReadOnlyList<string> SupportedPlatforms { get; set; } = [Platforms.iOS];
 	public AppleInstallResult InstallResult { get; set; } = new() { Status = "ok" };
 
 	public bool SelectXcodeResult { get; set; } = true;
@@ -78,6 +84,9 @@ public class FakeAppleProvider : IAppleProvider
 	public List<(string Udid, List<string> Paths)> AddMediaCalls { get; } = new();
 	public List<(string Udid, string OutputPath, ScreenshotFormat Format)> ScreenshotCalls { get; } = new();
 	public List<(string Udid, string OutputPath, RecordingOptions? Options)> StartRecordingCalls { get; } = new();
+
+	/// <summary>Number of times <see cref="GetDevices"/> was invoked.</summary>
+	public int GetDevicesCallCount { get; private set; }
 
 	// --- IAppleProvider implementation ---
 
@@ -256,7 +265,11 @@ public class FakeAppleProvider : IAppleProvider
 		return Task.FromResult(InstallResult);
 	}
 
-	public List<Device> GetDevices() => Devices;
+	public List<Device> GetDevices()
+	{
+		GetDevicesCallCount++;
+		return Devices;
+	}
 
 	sealed class NoopDisposable : IDisposable
 	{

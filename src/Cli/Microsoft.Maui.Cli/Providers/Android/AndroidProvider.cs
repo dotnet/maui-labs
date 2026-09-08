@@ -229,6 +229,9 @@ public class AndroidProvider : IAndroidProvider
 		return checks;
 	}
 
+	/// <inheritdoc />
+	public IReadOnlyList<string> SupportedPlatforms { get; } = [Platforms.Android];
+
 	public async Task<List<Device>> GetDevicesAsync(CancellationToken cancellationToken = default)
 	{
 		if (!_adb.IsAvailable)

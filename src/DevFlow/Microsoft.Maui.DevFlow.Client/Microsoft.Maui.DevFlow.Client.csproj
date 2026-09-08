@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk" TreatAsLocalProperty="PublishAot;PublishTrimmed;IsAotCompatible;IsTrimmable">
+
+  <PropertyGroup>
+    <!-- netstandard2.0 is what lets .NET Framework consumers (e.g. net472 Visual Studio Apex
+         tests) speak the DevFlow wire protocol. The modern target is kept so .NET consumers get
+         the SocketsHttpHandler loopback dial and trimming/AOT annotations, and is deliberately
+         net8.0 rather than net9.0: NuGet would otherwise hand .NET 8 (LTS) consumers the portable
+         asset, which cannot carry those annotations and so would silently weaken their NativeAOT
+         and trimming builds. Nothing here needs a post-net8.0 API. -->
+    <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
+    <!-- Only pack from the DevFlow pipeline job; the Cli job includes this project
+         transitively as a ProjectReference but the DevFlow job owns the package. -->
+    <IsPackable>false</IsPackable>
+    <IsPackable Condition="'$(PackDriverNuGet)' == 'true'">true</IsPackable>
+    <IsAotCompatible>true</IsAotCompatible>
+
+    <PackageId>Microsoft.Maui.DevFlow.Client</PackageId>
+    <IsShipping>true</IsShipping>
+    <Description>Portable client for the Microsoft.Maui.DevFlow Agent wire protocol: AgentClient, element and protocol DTOs, and their serialization. Targets netstandard2.0 so .NET Framework test harnesses share the exact protocol behavior used by modern .NET consumers.</Description>
+    <PackageTags>maui;automation;testing;devflow;client</PackageTags>
+    <PackRepoRootReadme>false</PackRepoRootReadme>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <DefineConstants>$(DefineConstants);DEVFLOW_NETSTANDARD</DefineConstants>
+    <!-- The netstandard2.0 build compiles polyfills for init-only setters and required members,
+         which the reference assembly does not declare. -->
+    <LangVersion>latest</LangVersion>
+    <!-- The CLI's NativeAOT publish smoke test runs with -p:PublishAot=true -p:PublishTrimmed=true.
+         MSBuild propagates those as global properties to every project in the graph, and NuGet's
+         restore-graph walk evaluates every target framework of each one — including this project's
+         portable target, where the SDK rejects them (NETSDK1207). Global properties cannot normally
+         be reassigned, hence TreatAsLocalProperty on the Project element above. -->
+    <PublishAot>false</PublishAot>
+    <PublishTrimmed>false</PublishTrimmed>
+    <IsAotCompatible>false</IsAotCompatible>
+    <IsTrimmable>false</IsTrimmable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" />
+  </ItemGroup>
+
+</Project>

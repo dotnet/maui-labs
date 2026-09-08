@@ -41,6 +41,7 @@ All DevFlow library packages have `IsShipping=true` and will be published to NuG
 - Microsoft.Maui.DevFlow.Blazor
 - Microsoft.Maui.DevFlow.Blazor.Gtk
 - Microsoft.Maui.DevFlow.CLI
+- Microsoft.Maui.DevFlow.Client
 - Microsoft.Maui.DevFlow.Driver
 - Microsoft.Maui.DevFlow.Logging
 
