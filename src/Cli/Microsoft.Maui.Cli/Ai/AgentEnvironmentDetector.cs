@@ -11,6 +11,25 @@ namespace Microsoft.Maui.Cli.Ai;
 /// </summary>
 internal static class AgentEnvironmentDetector
 {
+	internal static string? UserHomeOverrideForTests { get; set; }
+	internal static string UserHome => UserHomeOverrideForTests ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+	internal sealed record Descriptor(AgentEnvironmentKind Kind, string SkillsPath, string McpPath, string McpContainer, bool SupportsAgents);
+	internal static readonly Descriptor[] Descriptors =
+	[
+		new(AgentEnvironmentKind.Claude, ".claude/skills", ".mcp.json", "mcpServers", false),
+		new(AgentEnvironmentKind.VsCode, ".github/skills", ".vscode/mcp.json", "servers", true),
+		new(AgentEnvironmentKind.CopilotCli, ".github/skills", ".copilot/mcp-config.json", "mcpServers", true),
+		new(AgentEnvironmentKind.OpenCode, ".opencode/skills", "opencode.json", "mcp", false)
+	];
+	internal static Descriptor Describe(AgentEnvironmentKind kind) => Descriptors.Single(d => d.Kind == kind);
+	internal static bool Supports(AgentEnvironmentKind environment, AiAssetKind kind) => kind != AiAssetKind.Agent || Describe(environment).SupportsAgents;
+	internal static DetectedEnvironment Canonical(AgentEnvironmentKind kind, string projectRoot)
+	{
+		var descriptor = Describe(kind);
+		var config = Path.Combine(kind == AgentEnvironmentKind.CopilotCli ? UserHome : projectRoot, descriptor.McpPath);
+		return new() { Kind = kind, SkillsDirectory = Path.Combine(projectRoot, descriptor.SkillsPath), McpConfigPath = config, McpConfigExists = File.Exists(config) };
+	}
 	/// <summary>
 	/// Scans from <paramref name="workingDir"/> up to the Git root for known
 	/// agent configuration directories and project configuration files, and checks for
@@ -47,7 +66,9 @@ internal static class AgentEnvironmentDetector
 			}
 
 			if (!foundKinds.Contains(AgentEnvironmentKind.VsCode) &&
-				Directory.Exists(Path.Combine(dir, ".vscode")))
+				(Directory.Exists(Path.Combine(dir, ".vscode")) ||
+				 Directory.Exists(Path.Combine(dir, ".github", "skills")) ||
+				 Directory.Exists(Path.Combine(dir, ".github", "agents"))))
 			{
 				foundKinds.Add(AgentEnvironmentKind.VsCode);
 				environments.Add(new DetectedEnvironment
@@ -89,7 +110,7 @@ internal static class AgentEnvironmentDetector
 
 		// Copilot CLI is detected at the user level.
 		var copilotCliEnvironment = GetCopilotCliEnvironment(
-			Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+			UserHome,
 			searchRoot);
 		if (copilotCliEnvironment is not null)
 			environments.Add(copilotCliEnvironment);

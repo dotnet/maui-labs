@@ -469,12 +469,44 @@ public class MarketplaceClientTests : IDisposable
 
 	[Theory]
 	[InlineData("")]
+	[InlineData(".")]
+	[InlineData("..")]
+	[InlineData("main/../../../other/repo/main")]
+	[InlineData("feature/./test")]
+	[InlineData("/main")]
+	[InlineData("main/")]
+	[InlineData("feature//test")]
+	public async Task InvalidBranch_ThrowsBeforeAnyHttpCall(string branch)
+	{
+		var handler = new FakeHttpMessageHandler(() => new HttpResponseMessage(HttpStatusCode.OK)
+		{
+			Content = new StringContent("content")
+		});
+		using var http = new HttpClient(handler);
+
+		await Assert.ThrowsAsync<InvalidOperationException>(() =>
+			MarketplaceClient.FetchRawStringAsync(http, "owner/repo", branch, "README.md"));
+		await Assert.ThrowsAsync<InvalidOperationException>(() =>
+			MarketplaceClient.FetchRawBytesAsync(http, "owner/repo", branch, "README.md"));
+		await Assert.ThrowsAsync<InvalidOperationException>(() =>
+			MarketplaceClient.FetchTreeEntriesAsync(http, "owner/repo", branch));
+		await Assert.ThrowsAsync<InvalidOperationException>(() =>
+			MarketplaceClient.GetRemoteCommitShaAsync(http, "owner/repo", branch, "README.md"));
+		Assert.Equal(0, handler.Calls);
+	}
+
+	[Theory]
+	[InlineData("")]
 	[InlineData("owner")]
 	[InlineData("owner/")]
 	[InlineData("/repo")]
 	[InlineData("owner/repo/extra")]
 	[InlineData("owner/repo?foo=bar")]
 	[InlineData("owner/re po")]
+	[InlineData("owner/..")]
+	[InlineData("./repo")]
+	[InlineData("../repo")]
+	[InlineData("owner/.")]
 	public void EncodeRepoPath_InvalidRepo_Throws(string repo)
 	{
 		var exception = Assert.Throws<InvalidOperationException>(() => MarketplaceClient.EncodeRepoPath(repo));

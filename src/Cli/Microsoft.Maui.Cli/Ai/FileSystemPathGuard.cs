@@ -78,8 +78,8 @@ internal static class FileSystemPathGuard
 				return false;
 			}
 
-			// Re-evaluate the destination immediately before the replace so a symlink
-			// swap between directory creation and the final move cannot redirect writes.
+			// Recheck after staging; this detects intervening changes but is not
+			// handle-based protection against a concurrent directory swap.
 			if (!IsSafeDestination(fullDestinationPath, destinationDirectory, root))
 				return false;
 

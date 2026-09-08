@@ -60,7 +60,20 @@ internal static class DevFlowSkillManager
         => await WriteSkillsAsync(s_skills.Select(s => s.Id), scope, target, customPath, force, allowDowngrade, "install", allowAllScopes: false, confirm, cancellationToken);
 
     internal static Task<JsonObject> InstallSkillAsync(string skillId, string scope, string target, string? customPath, bool force, CancellationToken cancellationToken)
-        => WriteSkillsAsync([GetSkill(skillId).Id], scope, target, customPath, force, allowDowngrade: false, "install", allowAllScopes: false, confirm: _ => force, cancellationToken);
+        => WriteSkillsAsync([GetSkill(skillId).Id], scope, target, customPath, force, allowDowngrade: false, "install", allowAllScopes: false, confirm: _ => force, cancellationToken, migrateLegacy: false);
+
+    internal static async Task<bool> MatchesBundledSkillAsync(string skillId, string directory, CancellationToken cancellationToken)
+    {
+        var bundle = await LoadSkillBundleAsync(GetSkill(skillId), cancellationToken);
+        var expected = new JsonObject
+        {
+            ["files"] = new JsonArray(bundle.Files.Select(file => (JsonNode)new JsonObject
+            {
+                ["path"] = file.RelativePath, ["hash"] = HashContent(file.Content)
+            }).ToArray())
+        };
+        return !IsDirty(directory, expected);
+    }
 
     public static async Task<JsonObject> UpdateAsync(string scope, string target, bool force, bool allowDowngrade, CancellationToken cancellationToken)
         => await UpdateAsync(scope, target, customPath: null, force, allowDowngrade, confirm: null, cancellationToken);
@@ -228,7 +241,7 @@ internal static class DevFlowSkillManager
         return "DevFlow skills have not been checked recently. Run `maui devflow skills check` to compare installed skills with this CLI.";
     }
 
-    static async Task<JsonObject> WriteSkillsAsync(IEnumerable<string> skillIds, string scope, string target, string? customPath, bool force, bool allowDowngrade, string action, bool allowAllScopes, Func<SkillActionPrompt, bool>? confirm, CancellationToken cancellationToken)
+    static async Task<JsonObject> WriteSkillsAsync(IEnumerable<string> skillIds, string scope, string target, string? customPath, bool force, bool allowDowngrade, string action, bool allowAllScopes, Func<SkillActionPrompt, bool>? confirm, CancellationToken cancellationToken, bool migrateLegacy = true)
     {
         var result = CreateBaseResult(action, scope, target);
         if (!string.IsNullOrWhiteSpace(customPath))
@@ -301,7 +314,7 @@ internal static class DevFlowSkillManager
                 AddJsonObject(results, targetResult);
         }
 
-        foreach (var cleanupTarget in GetLegacyCleanupTargets(installTargets))
+        foreach (var cleanupTarget in migrateLegacy ? GetLegacyCleanupTargets(installTargets) : [])
         {
             if (!HasLegacySkillData(cleanupTarget))
                 continue;
@@ -1030,7 +1043,7 @@ internal static class DevFlowSkillManager
         if (!string.IsNullOrWhiteSpace(UserRootOverrideForTests))
             return Path.GetFullPath(UserRootOverrideForTests);
 
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var home = Microsoft.Maui.Cli.Ai.AgentEnvironmentDetector.UserHome;
         if (!string.IsNullOrWhiteSpace(home))
             return home;
 

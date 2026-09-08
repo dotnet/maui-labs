@@ -31,40 +31,73 @@ maui device list
 ### 3. Bootstrap AI-powered development
 
 ```bash
-# See which skills, Copilot agents, and MCP configs would be installed
-maui ai init --dry-run
+# Preview recommended setup for VS Code, including destinations and scope
+maui ai init --env VsCode --dry-run
 
-# Install MAUI/Copilot skills, bundled DevFlow skills, repo agents, and MCP config
-maui ai init
+# Install the recommended skills, agents, and MCP registration
+maui ai init --env VsCode --yes
 
-# Check and refresh everything later
-maui ai status --check-updates
+# Discover all supported asset kinds, then inspect this project's inventory
+maui ai list
+maui ai status
+
+# Refresh only existing managed assets; missing recommendations are NOT added
 maui ai update
 ```
 
-`maui ai init` detects Claude Code, VS Code, Copilot CLI, and OpenCode environments. It delegates DevFlow-owned skills to the bundled DevFlow installer, then installs broader MAUI skills and Copilot agent definitions from this repository.
+AI assets are explicit: **skills**, **agents**, and **MCP registrations**. Adding a skill does not install an agent or configure MCP. Use `init` for recommended combined setup, or choose individual assets:
+
+```bash
+maui ai add skill maui-devflow-debug --env Claude --yes
+maui ai list agent
+maui ai add agent "Comet Squad" --env VsCode --yes
+maui ai add mcp maui-devflow --env VsCode --yes
+
+# Only these named assets; selecting a bundled skill does not install siblings
+maui ai init --skill maui-devflow-debug --mcp maui-devflow --env Claude --yes
+
+# Restrict inventory and updates to one kind and environment
+maui ai status skill --env Claude
+maui ai update skill --skill maui-devflow-debug --env Claude --yes
+```
+
+Recommendations are explicit, not every catalog entry: the three bundled DevFlow skills, DevFlow MCP registration, the `expert-reviewer` agent, and the available `maui-current-apis`, `maui-project-structure`, `maui-app-architecture`, `maui-ui-patterns`, `maui-unit-testing`, and `maui-accessibility` skills. Only client-compatible recommendations are selected. Other catalog assets, including Comet-specific guidance, remain available through explicit selectors/add commands; adding an entry to the catalog does not automatically add it to init.
 
 #### AI command scope and options
 
-Run from the project you want to configure. In Git repositories, the Git root is the project boundary; outside Git, the current directory is used. Detected nested environment directories are honored for skills and project MCP files. Copilot agent definitions always go in the project's `.github/agents`.
+Run from the project you want to configure. In Git repositories, the Git root is the project boundary; outside Git, the current directory is used. Detected nested skill/configuration locations are honored. Copilot agents live in project `.github/agents` and support VS Code and Copilot CLI, not Claude Code or OpenCode.
 
 | Command | Behavior and important options |
 |---------|--------------------------------|
-| `maui ai init` | Installs skills, recommended bundled DevFlow skills, and Copilot agents; merges MCP configuration. `--skill <name>` is repeatable and excludes Copilot agents. Selecting any DevFlow name installs the recommended DevFlow group. |
-| `maui ai list` | Fetches available marketplace and repository skills and reports installation in any detected environment. Does not list Copilot agents; use `status` for those. |
-| `maui ai status` | Inspects local assets without changing them. `--check-updates` also queries remote skill/agent content; DevFlow skills are compared with the running CLI bundle, not downloaded updates. This is an inventory, not an MCP connectivity check. |
-| `maui ai update` | Refreshes installed skills, and installs missing recommended DevFlow skills and catalog Copilot agents. `--skill <name>` limits skills/agents; any DevFlow name selects the bundled group. MCP configuration is not changed. |
-| `maui ai add <skill>` | Installs one named skill (from the CLI bundle for DevFlow), then merges MCP configuration. Does not install Copilot agent definitions. |
+| `maui ai init` | Recommended combined setup. Repeatable `--skill`, `--agent`, and `--mcp` selectors instead install only their explicit union. Each bundled skill selector identifies one skill. |
+| `maui ai list [type]` | Available assets, default all kinds; optional singular `skill`, `agent`, or `mcp`. Catalog discovery may use the network. |
+| `maui ai status [type]` | Read-only installed/configured inventory, including unmanaged and tracked-but-missing assets. Not an MCP connectivity check. |
+| `maui ai update [type]` | Refresh existing managed assets only, using recorded origins. Missing or unmanaged assets are not installed/adopted, even with force. Supports exact type-specific selectors. |
+| `maui ai add skill <name>` | Install one skill through its owner (bundled DevFlow or repository). No implicit MCP or agent installation. |
+| `maui ai add agent <name>` | Install one Copilot agent definition. |
+| `maui ai add mcp <name>` | Merge a known server registration; currently `maui-devflow`. Does not install an executable, approve a client connection, or probe connectivity. |
 
-`init` and `add` accept repeatable `--env Claude|VsCode|CopilotCli|OpenCode` filters and `--no-mcp`. These filters select detected environments; they do not create arbitrary environments or limit project-wide Copilot agents. With no matching environment, `init` can propose Claude Code; `--ci` or `--force` selects that fallback automatically when the filter permits it.
+All commands support repeatable `--env Claude|VsCode|CopilotCli|OpenCode`. An explicit kind/name plus explicit environments must be compatible in **every** requested pairing: `add agent <name> --env Claude VsCode` fails before writing instead of silently targeting only VS Code. Without explicit assets, combined setup/catalog/inventory includes applicable kinds for the chosen environments. Shared physical destinations are deduplicated while retaining client associations.
 
-Global `--dry-run` previews changes without writing project or DevFlow state files, but may require network access to discover remote assets. Global `--json` and `--ci` suppress interaction; `--ci` stops later mutations after an installation/configuration failure. `--force` (alias `-y`) **also authorizes replacing existing assets and local edits**; it is not just a yes-to-prompts switch. For DevFlow, force also permits replacing skills from a newer CLI with the running CLI's bundle. Without force, managed unchanged DevFlow skills can be refreshed, but customized/unmanaged bundles are skipped. Non-DevFlow updates replace selected skill directories; preserve customizations separately before updating.
+`init` and `add --env` can target a canonical environment before its marker directory exists. Without `--env`, environments must be detected; no default environment is silently invented. Read-only commands and update never create environment directories.
 
-MCP configuration is merged into `.mcp.json` for Claude Code, `.vscode/mcp.json` for VS Code, `opencode.json` for OpenCode, and **user-wide** `~/.copilot/mcp-config.json` for Copilot CLI. Unrelated settings are preserved. JSONC comments cannot be retained when a configuration is rewritten; the original is backed up and the backup path is reported. Clients may require restart, project trust, or server approval before loading the configuration.
+`--yes` (alias `-y`) accepts confirmation prompts only. **`--force` authorizes replacement/adoption, not prompt acceptance**; combine it with `--yes` for unattended replacement. For bundled DevFlow skills, force can also replace a newer CLI's content with the running CLI's bundle. Global `--json` and `--ci` suppress prompts but never authorize overwriting conflicts. CI stops later mutations after a failure. Customized or conflicting unmanaged assets require force and otherwise produce a blocked result/nonzero exit. Harmless already-current actions can skip successfully.
 
-The default catalog is `dotnet/maui-labs` on `main`. Advanced `--repo <owner/repo>` and `--branch <ref>` options select another source; installed skill metadata retains that origin for subsequent checks and updates unless explicitly overridden. Legacy skills lacking path metadata are reported as uncheckable rather than current.
+Global `--dry-run` never prompts or writes, including ownership/freshness state. It uses the same selection and conflict rules as execution and reports create/replace/adopt/skip actions, reasons, destinations, and project/user scope. Network access may still be required.
 
-Skill replacement stages downloads and restores the previous directory on ordinary write failures. It is not crash-atomic: interruption between directory renames can leave `<skill>.<id>.bak` alongside the skills directory. If the skill directory is missing, inspect that backup and rename it back before retrying. Concurrent installations into the same destination are not supported. Repository-hosted Copilot agents are currently single-file assets; writes across multiple assets are not one transaction.
+JSON command results use a versioned envelope with `schemaVersion`, `command`, `dryRun`, aggregate `status`, and `results`. Each result identifies the asset kind/name, associated environments, destination and scope, ownership, observed state, planned action, outcome, and reason. A successful inventory command is not a claim that every row is current or managed. Inspect row states and reasons; blocked actions and application failures produce nonzero exits.
+
+MCP configuration uses `.mcp.json` for Claude Code, `.vscode/mcp.json` for VS Code, `opencode.json` (or existing `.jsonc`) for OpenCode, and **user-wide** `~/.copilot/mcp-config.json` for Copilot CLI. Only the known definition's launch fields are managed; other servers, credentials, environment settings, and user options are preserved even under force. Malformed shared configuration remains an error, not permission to replace the whole file. An exact unmanaged registration is not silently adopted; use `add mcp ... --force` to opt into management. MCP update refreshes the registration definition, not the server executable version.
+
+JSONC comments cannot be retained when a configuration is rewritten; the original is backed up to `<config>.bak`. This is a latest-only recovery file, not backup history: another comment-bearing rewrite replaces it. Copy it elsewhere before another rewrite if you need to retain that recovery point. Clients may require restart, project trust, or server approval before loading a registration. Inventory reports configuration and ownership, not connection health.
+
+The default catalog is `dotnet/maui-labs` on `main`. Source overrides use `--repo <owner/repo>` and `--branch <ref>`; managed assets retain their recorded origin for later updates unless explicitly overridden. Missing required provenance is reported rather than guessed. Bundled versions refer to the running CLI's content, not remote downloads.
+
+Skills retain their existing owner metadata (`.skill-version` or DevFlow state). Agent/project MCP ownership uses `.maui/ai-assets.json` under the project root; user MCP ownership is separate under the user's `.maui`. Registries record identity, origin, and managed-content hashes, not raw credentials/configuration. These are mutable local installation records; consider excluding them from version control. Commands do not silently change `.gitignore`.
+
+**Breaking changes from earlier versions of this unmerged PR:** use `add skill <name>` instead of `add <name>`; `-y` now means yes, not force; adding skills no longer configures MCP; selectors no longer expand bundled groups or target another kind; list defaults to all asset kinds; update never installs missing recommendations; JSON output uses the typed result envelope instead of the earlier command-specific arrays/records. No hook/canvas commands or executable stubs are provided.
+
+Skill replacement stages downloads and restores the previous directory on ordinary write failures. It is not crash-atomic: interruption between directory renames can leave `<skill>.<id>.bak` alongside the skills directory. If the skill directory is missing, inspect that backup and rename it back before retrying. Concurrent installations into the same destination are not supported. Path/symlink checks are not handle-based isolation against concurrent filesystem changes; use trusted, locally controlled destinations. Repository-hosted Copilot agents are currently single-file assets; writes across multiple assets are not one transaction.
 
 ### 4. Manage a project's .NET MAUI version
 
@@ -136,10 +169,12 @@ maui apple simulator delete "iPhone 16 Pro"
 | `maui version` | Display version information |
 | **AI** | |
 | `maui ai init` | Bootstrap MAUI/Copilot skills, bundled DevFlow skills, Copilot agents, and MCP configuration |
-| `maui ai list` | List available marketplace and repository skills |
-| `maui ai status` | Show installed AI development asset status, including DevFlow skills and Copilot agents |
-| `maui ai update` | Update installed AI development assets, including DevFlow skills and Copilot agents |
-| `maui ai add` | Install a specific marketplace or repository skill |
+| `maui ai list [type]` | List available skills, agents, and MCP registrations |
+| `maui ai status [type]` | Read-only installed/configured asset inventory |
+| `maui ai update [type]` | Refresh existing managed assets only |
+| `maui ai add skill <name>` | Install exactly one skill, without implicit MCP setup |
+| `maui ai add agent <name>` | Install one Copilot agent |
+| `maui ai add mcp <name>` | Configure one known MCP server registration |
 | **Android** | |
 | `maui android install` | Full interactive Android environment setup |
 | `maui android sdk list` | List available and installed Android SDK packages |

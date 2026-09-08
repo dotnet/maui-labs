@@ -2,18 +2,15 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.CommandLine;
+using Microsoft.Maui.Cli.Ai;
 
 namespace Microsoft.Maui.Cli.Commands;
 
 /// <summary>
-/// Root command group for AI-assisted MAUI development: install and manage agent skills.
+/// Root command group for explicitly typed AI assets.
 /// </summary>
 public static partial class AiCommands
 {
-	private const string DefaultRepo = "dotnet/maui-labs";
-	private const string DefaultBranch = "main";
-	private const string RepositorySkillsRoot = ".github/skills";
-	private const string RepositorySkillsPluginName = "dotnet-maui-repo";
 	internal static readonly TimeSpan GitHubHttpTimeout = TimeSpan.FromSeconds(30);
 	internal static Func<HttpClient>? HttpClientFactoryForTests { get; set; }
 
@@ -31,42 +28,25 @@ public static partial class AiCommands
 
 	public static Command Create()
 	{
-		var command = new Command("ai", "Bootstrap and manage MAUI agent skills, Copilot agents, and MCP configuration. Installs target the current Git project (or current directory outside Git). Use --dry-run to preview; --ci or --json runs without prompts.");
-		command.Add(CreateInitCommand());
-		command.Add(CreateListCommand());
-		command.Add(CreateStatusCommand());
-		command.Add(CreateUpdateCommand());
-		command.Add(CreateAddCommand());
+		var command = new Command("ai", "Bootstrap and manage MAUI skills, agents, and MCP configuration. Skills and agents are project-scoped, honoring detected nested skill directories within the current Git project (or current directory outside Git). MCP configuration uses the selected client's project location, except Copilot CLI MCP is user-wide (~/.copilot/mcp-config.json). Use --dry-run to preview; --ci or --json runs without prompts.");
+		command.Add(CreateAssetCommand("init"));
+		foreach (var name in new[] { "list", "status", "update" })
+			command.Add(CreateAssetCommand(name));
+		var add = new Command("add", "Add one explicitly named skill, agent, or known MCP registration.");
+		foreach (var kind in Enum.GetValues<AiAssetKind>())
+			add.Add(CreateAssetCommand("add", kind));
+		command.Add(add);
 		return command;
 	}
 
 	internal static bool IsDevFlowManagedSkillName(string skillName) =>
 		s_devFlowManagedSkills.Contains(skillName);
 
-	internal static string GetBundledSkillId(string name) => name.ToLowerInvariant() switch
-	{
-		"devflow-onboard" => "maui-devflow-onboard",
-		"maui-ai-debugging" or "maui-devflow-connect" or "devflow-connect" or "devflow-debug" => "maui-devflow-debug",
-		_ => name.ToLowerInvariant()
-	};
-
 	/// <summary>
-	/// Creates the shared --repo option used by multiple subcommands.
-	/// </summary>
-	static Option<string> CreateRepoOption() =>
-		new("--repo") { Description = "GitHub repository", DefaultValueFactory = _ => DefaultRepo, Hidden = true };
-
-	/// <summary>
-	/// Creates the shared --branch / -b option used by multiple subcommands.
-	/// </summary>
-	static Option<string> CreateBranchOption() =>
-		new("--branch", "-b") { Description = "GitHub branch", DefaultValueFactory = _ => DefaultBranch, Hidden = true };
-
-	/// <summary>
-	/// Creates the shared --force / -y option for skipping confirmation prompts.
+	/// Creates the replacement/adoption permission, separate from prompt acceptance.
 	/// </summary>
 	static Option<bool> CreateForceOption() =>
-		new("--force", "-y") { Description = "Skip prompts and replace existing assets and local edits; permits replacing newer DevFlow skills with this CLI's bundle" };
+		new("--force") { Description = "Allow replacing customized content or adopting an unmanaged asset, including downgrading bundled DevFlow skills to this CLI's version; does not accept prompts" };
 
 	/// <summary>
 	/// Creates an <see cref="HttpClient"/> configured for GitHub API access.

@@ -169,16 +169,25 @@ This repository is also a marketplace for distributable agent skills for .NET MA
 | [`dotnet-maui`](plugins/dotnet-maui/) | MAUI development: DevFlow automation, profiling, accessibility, platform bindings, diagnostics, session review |
 
 ```bash
-# Preview what will be installed and configured
-maui ai init --dry-run
+# Preview recommended setup and exact scopes for VS Code
+maui ai init --env VsCode --dry-run
 
 # Bootstrap this project for AI-powered MAUI development
-maui ai init
+maui ai init --env VsCode --yes
 
-# Check and refresh installed AI development assets
-maui ai status --check-updates
+# Discover skills, agents, and MCP registrations, then inspect local inventory
+maui ai list
+maui ai status
+
+# Refresh existing managed assets only; never add missing recommendations
 maui ai update
+
+# Or add exactly one typed asset, without implicit companion installations
+maui ai add skill maui-devflow-debug --env Claude --yes
+maui ai add mcp maui-devflow --env Claude --yes
 ```
+
+`--yes`/`-y` accepts prompts; `--force` separately authorizes replacement. Copilot CLI MCP registration is user-wide; other supported MCP destinations are project-scoped. See the [CLI guide](src/Cli/README.md#ai-command-scope-and-options) for targeting, provenance, and safety semantics.
 
 Direct plugin installation remains available for agent runtimes that support plugin marketplaces:
 

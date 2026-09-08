@@ -37,7 +37,9 @@ internal static class SkillInstaller
 		string repo,
 		string branch,
 		bool force,
-		CancellationToken ct = default)
+		CancellationToken ct = default,
+		IReadOnlyDictionary<string, byte[]>? preparedFiles = null,
+		string? preparedCommit = null)
 	{
 		if (string.IsNullOrWhiteSpace(skill.Name) ||
 			skill.Name is "." or ".." ||
@@ -79,16 +81,23 @@ internal static class SkillInstaller
 
 		try
 		{
-			var expectedFileCount = GetExpectedDownloadableFileCount(skill);
-			var filesInstalled = await MarketplaceClient.DownloadSkillFilesAsync(
-				http, skill, tempInstallPath, repo, branch, ct).ConfigureAwait(false);
+			var expectedFileCount = preparedFiles?.Count ?? GetExpectedDownloadableFileCount(skill);
+			var filesInstalled = 0;
+			if (preparedFiles is null)
+				filesInstalled = await MarketplaceClient.DownloadSkillFilesAsync(
+					http, skill, tempInstallPath, repo, branch, ct).ConfigureAwait(false);
+			else
+				foreach (var (relativePath, bytes) in preparedFiles)
+					if (await FileSystemPathGuard.WriteFileAtomicallyWithinRootAsync(
+						Path.Combine(tempInstallPath, relativePath), tempInstallPath, bytes, ct).ConfigureAwait(false))
+						filesInstalled++;
 
 			if (expectedFileCount == 0 || filesInstalled != expectedFileCount)
 				return (-2, string.Empty);
 
 			// Resolve the latest commit SHA for version tracking.
-			var commitSha = await MarketplaceClient.GetRemoteCommitShaAsync(
-				http, repo, branch, skill.RemotePath, ct).ConfigureAwait(false);
+			var commitSha = preparedFiles is null ? await MarketplaceClient.GetRemoteCommitShaAsync(
+				http, repo, branch, skill.RemotePath, ct).ConfigureAwait(false) : preparedCommit;
 
 			var version = new InstalledSkillVersion
 			{
@@ -97,7 +106,8 @@ internal static class SkillInstaller
 				Branch = branch,
 				UpdatedAt = DateTime.UtcNow.ToString("o"),
 				Source = repo,
-				PluginPath = skill.RemotePath
+				PluginPath = skill.RemotePath,
+				ContentHash = AiContentHash.DirectoryHash(tempInstallPath)
 			};
 
 			await SkillVersionStore.WriteAsync(tempInstallPath, version, ct).ConfigureAwait(false);

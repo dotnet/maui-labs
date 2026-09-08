@@ -226,6 +226,7 @@ internal static class MarketplaceClient
 	/// <returns>The commit SHA, or <c>null</c> on failure.</returns>
 	public static async Task<string?> GetRemoteCommitShaAsync(HttpClient http, string repo, string branch, string path, CancellationToken ct = default)
 	{
+		ValidateBranch(branch);
 		var encodedRepo = EncodeRepoPath(repo);
 		var normalizedPath = NormalizePath(path);
 		var url = $"{GitHubApiBase}/repos/{encodedRepo}/commits?sha={Uri.EscapeDataString(branch)}&path={Uri.EscapeDataString(normalizedPath)}&per_page=1";
@@ -262,6 +263,7 @@ internal static class MarketplaceClient
 	/// </summary>
 	private static async Task<string?> ResolveTreeShaAsync(HttpClient http, string repo, string branch, CancellationToken ct = default)
 	{
+		ValidateBranch(branch);
 		var encodedRepo = EncodeRepoPath(repo);
 		var url = $"{GitHubApiBase}/repos/{encodedRepo}/commits/{Uri.EscapeDataString(branch)}";
 		var json = await FetchStringAsync(http, url, ct).ConfigureAwait(false);
@@ -455,11 +457,18 @@ internal static class MarketplaceClient
 
 	static string BuildRawUrl(string repo, string branch, string path)
 	{
+		ValidateBranch(branch);
 		var encodedRepo = EncodeRepoPath(repo);
 		var encodedBranch = string.Join("/", branch.Split('/').Select(Uri.EscapeDataString));
 		var normalizedPath = NormalizePath(path);
 		var encodedPath = string.Join("/", normalizedPath.Split('/').Select(Uri.EscapeDataString));
 		return $"{GitHubRawBase}/{encodedRepo}/{encodedBranch}/{encodedPath}";
+	}
+
+	static void ValidateBranch(string branch)
+	{
+		if (string.IsNullOrWhiteSpace(branch) || branch.Split('/').Any(segment => segment is "" or "." or ".."))
+			throw new InvalidOperationException($"Branch '{branch}' must not be empty or contain empty, '.' or '..' segments.");
 	}
 
 	internal static string EncodeRepoPath(string repo)
@@ -477,7 +486,7 @@ internal static class MarketplaceClient
 
 	static bool IsValidRepoSegment(string segment)
 	{
-		if (segment.Length == 0)
+		if (segment is "" or "." or "..")
 			return false;
 
 		foreach (var ch in segment)
