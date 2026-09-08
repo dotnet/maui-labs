@@ -11,7 +11,7 @@ editing, workflow recording, and click-to-XAML navigation.
 3. Launch the app so it registers with the local DevFlow broker.
 4. Run **MAUI DevFlow: Open Inspector** from the Command Palette.
 
-The extension requires VS Code 1.98 or later. It runs in the workspace extension host so local,
+The extension requires VS Code 1.134 or later. It runs in the workspace extension host so local,
 Remote, and WSL workspaces connect to the broker beside the app tooling.
 
 ## Configuration

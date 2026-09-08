@@ -24,7 +24,7 @@
     }
   },
   "engines": {
-    "vscode": "^1.98.0"
+    "vscode": "^1.134.0"
   },
   "categories": [
     "Debuggers",
@@ -107,7 +107,7 @@
   "devDependencies": {
     "@maui-devflow/client": "0.1.0-preview.12",
     "@types/node": "^26.4.0",
-    "@types/vscode": "^1.90.0",
+    "@types/vscode": "^1.134.0",
     "@vscode/vsce": "^3.9.2",
     "esbuild": "^0.28.2",
     "typescript": "^7.0.2"
