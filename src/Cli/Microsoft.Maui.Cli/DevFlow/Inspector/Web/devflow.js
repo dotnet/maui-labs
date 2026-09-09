@@ -1,11 +1,11 @@
 // DevFlow Web Inspector — Interaction Script
 // Composition root: coordinates browser events, app transport, recording, hosts, and feature modules.
+import { createEvidenceController } from './inspector-evidence.js';
 import { createInspectorApi } from './inspector-api.js';
 import { confirmModal } from './inspector-dialog.js';
 import { createDataSnapshot, isSecretContextKey, supportsDataContextScope } from './inspector-data-context.js';
 import { createPropertyGridController } from './inspector-properties.js';
 import { createElementTreeController } from './inspector-tree.js';
-import { createEvidenceController } from './inspector-evidence.js';
 
 (function () {
   'use strict';
