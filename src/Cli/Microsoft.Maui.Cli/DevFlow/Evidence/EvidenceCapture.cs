@@ -13,7 +13,10 @@ internal static class EvidenceCapture
     private static string? s_toolVersion;
 
     public static string ToolVersion =>
-        s_toolVersion ??= Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
+        s_toolVersion ??= Assembly.GetExecutingAssembly()
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+            ?? Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)
+            ?? "unknown";
 
     internal static bool IsExpectedFailure(Exception exception)
         => exception is HttpRequestException or IOException or InvalidDataException or UnauthorizedAccessException or

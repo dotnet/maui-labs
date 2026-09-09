@@ -9,6 +9,7 @@ anything.
 Choose **Evidence** in the Inspector toolbar, or under **More** in a compact host. The same
 dialog is used in the browser, VS Code, and Copilot Canvas. It shows the current app's
 environment, the included entries, exclusions, redaction limits, and warnings.
+Unchanged connection/control polling does not dismiss the **More** menu while choosing Evidence.
 
 Screenshots and loaded workflow text start **off on every opening**. Enabling an attachment
 refreshes the preview and requires a second confirmation before download. Preview never
@@ -85,6 +86,7 @@ The existing recorder already supports AutomationId targets and verifying assert
 Evidence retains structural AutomationIds, but does not repair or promote locators.
 Attached structured workflow values and expected assertion text are redacted, so the
 attachment is diagnostic context, **not a replayable golden test**.
+When a file is loaded before replay validation, an unknown step count is not displayed as zero.
 
 ## Bundle and privacy contract
 
@@ -107,6 +109,8 @@ Tree projection retains at most 5,000 elements and 64 levels. No element Text/Va
 native/framework property dictionaries, view-model object graphs, preferences, secure
 storage, geolocation, app file contents, HTTP headers/bodies, or query-string values are
 collected into the structured entries. Source paths become project-relative or file-name-only.
+The tool version is the CLI's informational product version, not its build-system assembly-version
+placeholder.
 
 Redaction is heuristic, not a guarantee that arbitrary prose contains no private data.
 Review logs and workflow prose before sharing. Screenshot pixels are not redacted and can

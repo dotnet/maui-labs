@@ -1443,10 +1443,13 @@ import { createEvidenceController } from './inspector-evidence.js';
     // (setting textContent here would wipe the .df-btn-label wrapper the toolbar relies on).
     const lbl = recordBtn.querySelector('.df-btn-label');
     const label = recordingStopping ? 'Stopping…' : (recordingId ? `Rec (${recStepCount})` : 'Record');
-    if (lbl) lbl.textContent = label;
-    else recordBtn.textContent = recordingId ? `\u25CF ${label}` : `\u25CF ${label}`;
+    const labelElement = lbl || recordBtn;
+    const nextLabel = lbl ? label : `\u25CF ${label}`;
+    if (labelElement.textContent !== nextLabel) {
+      labelElement.textContent = nextLabel;
+      scheduleToolbarLayout();
+    }
     if (cancelRecordingBtn) cancelRecordingBtn.classList.toggle('df-hidden', !recordingId);
-    scheduleToolbarLayout();
   }
 
   // Highest-precedence DURABLE selector for the element (automationId > text > id). We never send a
@@ -1636,7 +1639,7 @@ import { createEvidenceController } from './inspector-evidence.js';
     }
     if (timelineTitleText) timelineTitleText.textContent = 'Workflow';
     if (timelineMetaEl) {
-      const count = Number.isFinite(Number(steps))
+      const count = steps != null && Number.isFinite(Number(steps))
         ? `${Number(steps)} step${Number(steps) === 1 ? '' : 's'}`
         : null;
       timelineMetaEl.textContent = [lastMarkdownName, count].filter(Boolean).join(' · ');

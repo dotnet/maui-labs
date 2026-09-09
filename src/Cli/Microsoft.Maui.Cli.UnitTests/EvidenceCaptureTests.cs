@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Maui.Cli.DevFlow.Evidence;
@@ -18,6 +19,14 @@ namespace Microsoft.Maui.Cli.UnitTests;
 /// </summary>
 public class EvidenceCaptureTests : IDisposable
 {
+    [Fact]
+    public void ToolVersion_UsesTheProductVersionRatherThanTheArcadeAssemblyPlaceholder()
+    {
+        var productVersion = typeof(EvidenceCapture).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion;
+        Assert.Equal(productVersion, EvidenceCapture.ToolVersion);
+    }
+
     private readonly string _root = Path.Combine(
         AppContext.BaseDirectory, "evidence-tests", Guid.NewGuid().ToString("N"));
 

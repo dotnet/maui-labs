@@ -110,6 +110,7 @@ public class EvidenceInspectorPageTests : IAsyncLifetime
     {
         await _page.GotoAsync(_url);
         await LoadWorkflowAsync();
+        await Expect(_page.Locator("#df-timeline-meta")).Not.ToContainTextAsync("0 steps");
         await OpenEvidenceAsync();
         await _page.Locator("#df-evidence-screenshot").CheckAsync();
         await _page.Locator("#df-evidence-workflow").CheckAsync();
@@ -134,6 +135,24 @@ public class EvidenceInspectorPageTests : IAsyncLifetime
         await OpenEvidenceAsync();
         await Expect(_page.Locator("#df-evidence-screenshot")).Not.ToBeCheckedAsync();
         await Expect(_page.Locator("#df-evidence-workflow")).Not.ToBeCheckedAsync();
+    }
+
+    [EvidenceBrowserFact]
+    public async Task EvidenceInOverflow_RemainsAvailableAcrossAnUnchangedControlPoll()
+    {
+        await _page.SetViewportSizeAsync(900, 720);
+        await _page.GotoAsync(_url);
+        await Expect(_page.Locator("#df-more")).ToBeVisibleAsync();
+        var poll = _page.WaitForResponseAsync(response =>
+            response.Url.EndsWith("/api/control", StringComparison.Ordinal) &&
+            response.Request.PostData is { } body &&
+            (body.Contains("\"status\"", StringComparison.Ordinal) || body.Contains("\"heartbeat\"", StringComparison.Ordinal)));
+        await _page.Locator("#df-more").ClickAsync();
+        await (await poll).FinishedAsync();
+        await _page.EvaluateAsync("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+        await Expect(_page.Locator("#df-toolbar-overflow")).ToBeVisibleAsync();
+        await _page.Locator("#df-evidence").ClickAsync();
+        await Expect(_page.Locator("dialog.df-evidence-dialog")).ToBeVisibleAsync();
     }
 
     [EvidenceBrowserFact]
