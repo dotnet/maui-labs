@@ -94,7 +94,7 @@ maui devflow broker start
 ```
 
 Then open `http://localhost:19223/inspector/`. See the
-[MAUI DevFlow Inspector guide](../../docs/DevFlow/inspector.md) for app registration and browser,
+[MAUI DevFlow Inspector guide](https://github.com/dotnet/maui-labs/blob/main/docs/DevFlow/inspector.md) for app registration and browser,
 VS Code, GitHub Copilot desktop, and Copilot CLI setup.
 
 ## Commands
@@ -157,7 +157,7 @@ VS Code, GitHub Copilot desktop, and Copilot CLI setup.
 Run `maui <command> --help` for detailed options on any command.
 
 For the shared Inspector UI and its host integrations, see the
-[MAUI DevFlow Inspector guide](../../docs/DevFlow/inspector.md).
+[MAUI DevFlow Inspector guide](https://github.com/dotnet/maui-labs/blob/main/docs/DevFlow/inspector.md).
 
 DevFlow file commands can use local files directly:
 
