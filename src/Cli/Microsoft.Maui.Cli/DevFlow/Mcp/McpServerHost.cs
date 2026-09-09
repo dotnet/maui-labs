@@ -48,6 +48,7 @@ public static class McpServerHost
 			.WithTools<ScreenshotTool>()
 			.WithTools<TreeTool>()
 			.WithTools<LayoutDiagnosticsTool>()
+			.WithTools<EvidenceTools>()
 			.WithTools<LogsTool>()
 			.WithTools<NetworkTool>()
 			.WithTools<InteractionTools>()
@@ -67,7 +68,6 @@ public static class McpServerHost
 			.WithTools<BatchTools>()
 			.WithTools<InvokeTools>()
 			.WithTools<ExtensionTools>()
-			.WithTools<EvidenceTools>()
 			.WithTools<Flows.FlowTools>()
 			.WithTools<Flows.FlowRecordTools>();
 
