@@ -1767,6 +1767,9 @@ public class DevFlowCommands
 
         _devflowCommand = devflowCommand;
 
+        devflowCommand.Add(Evidence.EvidenceCommands.Create(
+            jsonOption, noJsonOption, agentHostOption, agentPortOption,
+            output, CreateAgentClientAsync, () => _errorOccurred = true));
         return devflowCommand;
     }
 
@@ -1902,7 +1905,8 @@ public class DevFlowCommands
 
     private static readonly string s_cliMutationLeaseId = Guid.NewGuid().ToString("N");
 
-    private static async Task<Microsoft.Maui.DevFlow.Driver.AgentClient> CreateAgentClientAsync(string host, int port)
+    private static async Task<Microsoft.Maui.DevFlow.Driver.AgentClient> CreateAgentClientAsync(
+        string host, int port, bool announceAgent = true)
     {
         EnsureAgentPortResolved(port);
 
@@ -1916,7 +1920,8 @@ public class DevFlowCommands
                 if (agent is not null && IsAndroidAgent(agent))
                     await EnsureAndroidForwardingForAgentsAsync([agent], deviceId: null, repair: true, emitWarnings: false, CancellationToken.None, brokerPort: brokerPort.Value);
 
-                EmitAgentLabel(host, port, agents);
+                if (announceAgent)
+                    EmitAgentLabel(host, port, agents);
             }
         }
 

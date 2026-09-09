@@ -5,6 +5,7 @@ import { confirmModal } from './inspector-dialog.js';
 import { createDataSnapshot, isSecretContextKey, supportsDataContextScope } from './inspector-data-context.js';
 import { createPropertyGridController } from './inspector-properties.js';
 import { createElementTreeController } from './inspector-tree.js';
+import { createEvidenceController } from './inspector-evidence.js';
 
 (function () {
   'use strict';
@@ -950,6 +951,7 @@ import { createElementTreeController } from './inspector-tree.js';
   const toolbarActions = tb.secondary ? [...tb.secondary.querySelectorAll(':scope > button')] : [];
   const toolbarPriorities = new Map([
     ['df-goto-checkpoint', 10],
+    ['df-evidence', 15],
     ['df-assert', 20],
     ['df-toggle-bounds', 30],
     ['df-open-source', 50],
@@ -1983,6 +1985,19 @@ import { createElementTreeController } from './inspector-tree.js';
   });
 
   function selectedElement() { return selectedId ? elById(selectedId) : null; }
+
+  const evidence = createEvidenceController({
+    basePath,
+    inspectorToken,
+    api: inspectorApi,
+    setStatus,
+    getSelectedId: () => selectedId,
+    getWorkflow: () => lastMarkdown,
+  });
+  document.getElementById('df-evidence')?.addEventListener('click', () => {
+    setMoreOpen(false, false, document.body.classList.contains('df-more-open'));
+    evidence.open();
+  });
 
   function setExplainedDisabled(button, disabled) {
     if (!button) return;

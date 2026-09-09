@@ -536,6 +536,7 @@ function renderHost(inspectorUrl: string, title: string, nonce: string, bridgeId
       const bridgeId = ${bridgeLiteral};
       // Capabilities this host contributes to the shared inspector.
       const capabilities = ['copilot', 'copilotContext', 'workflowFilePicker', 'attachData', 'openSource', 'saveRecording', 'selection'];
+      frame.sandbox.add('allow-downloads');
       // Map the shared inspector's semantic theme tokens onto VS Code's theme colors so the panel
       // adopts the user's active color theme (light / dark / high-contrast). getComputedStyle resolves
       // each --vscode-* var to a concrete color; the inspector re-validates every value before use.
