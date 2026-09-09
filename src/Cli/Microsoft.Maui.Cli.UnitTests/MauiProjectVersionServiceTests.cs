@@ -395,6 +395,238 @@ public class MauiProjectVersionServiceTests
 	}
 
 	[Fact]
+	public async Task GetVersionInfoAsync_TargetFrameworks_ReturnsTargetFrameworkInfo()
+	{
+		using var directory = TemporaryDirectory.Create();
+		var projectPath = directory.WriteFile("App.csproj", """
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <UseMaui>true</UseMaui>
+			    <TargetFrameworks>net9.0-android;net9.0-ios;net9.0-windows10.0.19041.0</TargetFrameworks>
+			  </PropertyGroup>
+			</Project>
+			""");
+		var service = CreateService("10.0.41");
+
+		var info = await service.GetVersionInfoAsync(projectPath);
+
+		Assert.Equal(["net9.0-android", "net9.0-ios", "net9.0-windows10.0.19041.0"], info.TargetFrameworks);
+		Assert.Equal("net9.0", info.TargetDotNetFramework);
+	}
+
+	[Fact]
+	public async Task SetTargetFrameworkAsync_TargetFrameworks_ReplacesOnlyDotNetPrefix()
+	{
+		using var directory = TemporaryDirectory.Create();
+		var projectPath = directory.WriteFile("App.csproj", """
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <UseMaui>true</UseMaui>
+			    <TargetFrameworks>net9.0-android;net9.0-ios;net9.0-windows10.0.19041.0</TargetFrameworks>
+			  </PropertyGroup>
+			</Project>
+			""");
+		var service = CreateService("10.0.41");
+
+		var result = await service.SetTargetFrameworkAsync(projectPath, "net10.0", dryRun: false);
+		var content = File.ReadAllText(projectPath);
+
+		Assert.True(result.Changed);
+		Assert.Contains("net10.0-android;net10.0-ios;net10.0-windows10.0.19041.0", content);
+	}
+
+	[Fact]
+	public async Task SetTargetFrameworkAsync_ConditionalTargetFrameworkAppend_UpdatesLiteralAppend()
+	{
+		using var directory = TemporaryDirectory.Create();
+		var projectPath = directory.WriteFile("App.csproj", """
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <UseMaui>true</UseMaui>
+			    <TargetFrameworks>net9.0-android;net9.0-ios</TargetFrameworks>
+			  </PropertyGroup>
+			  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('windows'))">
+			    <TargetFrameworks>$(TargetFrameworks);net9.0-windows10.0.19041.0</TargetFrameworks>
+			  </PropertyGroup>
+			</Project>
+			""");
+		var service = CreateService("10.0.41");
+
+		var result = await service.SetTargetFrameworkAsync(projectPath, "net10.0", dryRun: false);
+		var content = File.ReadAllText(projectPath);
+
+		Assert.True(result.Changed);
+		Assert.Contains("net10.0-android;net10.0-ios", content);
+		Assert.Contains("$(TargetFrameworks);net10.0-windows10.0.19041.0", content);
+	}
+
+	[Fact]
+	public async Task SetTargetFrameworkAsync_NonPropertyGroupTargetFrameworkElement_IgnoresElement()
+	{
+		using var directory = TemporaryDirectory.Create();
+		var projectPath = directory.WriteFile("App.csproj", """
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <UseMaui>true</UseMaui>
+			    <TargetFramework>net9.0</TargetFramework>
+			  </PropertyGroup>
+			  <ItemGroup>
+			    <TargetFrameworks>not-a-msbuild-property</TargetFrameworks>
+			  </ItemGroup>
+			</Project>
+			""");
+		var service = CreateService("10.0.41");
+
+		var result = await service.SetTargetFrameworkAsync(projectPath, "net10.0", dryRun: false);
+		var content = File.ReadAllText(projectPath);
+
+		Assert.True(result.Changed);
+		Assert.Contains("<TargetFramework>net10.0</TargetFramework>", content);
+		Assert.Contains("<TargetFrameworks>not-a-msbuild-property</TargetFrameworks>", content);
+	}
+
+	[Fact]
+	public async Task SetTargetFrameworkAsync_PropertyComposedTargetFrameworks_ThrowsWithoutPartialUpdate()
+	{
+		using var directory = TemporaryDirectory.Create();
+		var projectPath = directory.WriteFile("App.csproj", """
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <UseMaui>true</UseMaui>
+			    <ExtraTargetFrameworks>net9.0-ios</ExtraTargetFrameworks>
+			    <TargetFrameworks>net9.0-android;$(ExtraTargetFrameworks)</TargetFrameworks>
+			  </PropertyGroup>
+			</Project>
+			""");
+		var service = CreateService("10.0.41");
+
+		var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+			service.SetTargetFrameworkAsync(projectPath, "net10.0", dryRun: false));
+
+		Assert.Contains("not a literal netX.Y target framework list", exception.Message, StringComparison.Ordinal);
+		Assert.Contains("net9.0-android;$(ExtraTargetFrameworks)", File.ReadAllText(projectPath));
+	}
+
+	[Fact]
+	public async Task SetTargetFrameworkAsync_ConditionalAppendWithInheritedBase_ThrowsWithoutPartialUpdate()
+	{
+		using var directory = TemporaryDirectory.Create();
+		directory.WriteFile("Directory.Build.props", """
+			<Project>
+			  <PropertyGroup>
+			    <TargetFrameworks>net9.0-android;net9.0-ios</TargetFrameworks>
+			  </PropertyGroup>
+			</Project>
+			""");
+		var projectPath = directory.WriteFile("App.csproj", """
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <UseMaui>true</UseMaui>
+			  </PropertyGroup>
+			  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('windows'))">
+			    <TargetFrameworks>$(TargetFrameworks);net9.0-windows10.0.19041.0</TargetFrameworks>
+			  </PropertyGroup>
+			</Project>
+			""");
+		var service = CreateService("10.0.41");
+
+		var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+			service.SetTargetFrameworkAsync(projectPath, "net10.0", dryRun: false));
+
+		Assert.Contains("not defined in the project file", exception.Message, StringComparison.Ordinal);
+		Assert.Contains("$(TargetFrameworks);net9.0-windows10.0.19041.0", File.ReadAllText(projectPath));
+	}
+
+	[Fact]
+	public async Task SetTargetFrameworkAsync_DryRun_DoesNotUpdateProject()
+	{
+		using var directory = TemporaryDirectory.Create();
+		var projectPath = directory.WriteFile("App.csproj", """
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <UseMaui>true</UseMaui>
+			    <TargetFramework>net9.0</TargetFramework>
+			  </PropertyGroup>
+			</Project>
+			""");
+		var service = CreateService("10.0.41");
+
+		var result = await service.SetTargetFrameworkAsync(projectPath, "10.0", dryRun: true);
+
+		Assert.True(result.Changed);
+		Assert.Contains("<TargetFramework>net9.0</TargetFramework>", File.ReadAllText(projectPath));
+		Assert.Equal("net10.0", result.Changes.Single().NewValue);
+	}
+
+	[Fact]
+	public async Task SetTargetFrameworkAsync_InheritedTargetFramework_ThrowsInsteadOfAddingSingularFramework()
+	{
+		using var directory = TemporaryDirectory.Create();
+		directory.WriteFile("Directory.Build.props", """
+			<Project>
+			  <PropertyGroup>
+			    <TargetFrameworks>net9.0-android;net9.0-ios</TargetFrameworks>
+			  </PropertyGroup>
+			</Project>
+			""");
+		var projectPath = directory.WriteFile("App.csproj", """
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <UseMaui>true</UseMaui>
+			  </PropertyGroup>
+			</Project>
+			""");
+		var service = CreateService("10.0.41");
+
+		var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+			service.SetTargetFrameworkAsync(projectPath, "net10.0", dryRun: false));
+
+		Assert.Contains("inherited", exception.Message, StringComparison.OrdinalIgnoreCase);
+		Assert.DoesNotContain("<TargetFramework>", File.ReadAllText(projectPath));
+	}
+
+	[Fact]
+	public void NormalizeTargetFramework_InvalidPlatformQualifiedValue_Throws()
+	{
+		var exception = Assert.Throws<ArgumentException>(() =>
+			MauiProjectVersionService.NormalizeTargetFramework("net10.0-android"));
+
+		Assert.Contains("netX.Y", exception.Message, StringComparison.Ordinal);
+	}
+
+	[Fact]
+	public void TryGetRequiredTargetFramework_MauiVersion_ReturnsMajorTargetFramework()
+	{
+		Assert.Equal("net10.0", MauiProjectVersionService.TryGetRequiredTargetFramework("10.0.999-ci.pr.1"));
+	}
+
+	[Fact]
+	public async Task EnsureNuGetSourceAsync_AbsoluteLocalPath_AddsPackageSource()
+	{
+		using var directory = TemporaryDirectory.Create();
+		var projectPath = directory.WriteFile("App.csproj", """
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <UseMaui>true</UseMaui>
+			  </PropertyGroup>
+			</Project>
+			""");
+		var packageSourcePath = Path.Combine(directory.Path, "hives", "dotnet-maui", "pr-1", "build-2", "packages");
+		Directory.CreateDirectory(packageSourcePath);
+		var service = CreateService("10.0.41");
+
+		var change = await service.EnsureNuGetSourceAsync(
+			projectPath,
+			".NET MAUI PR Build",
+			packageSourcePath,
+			dryRun: false);
+
+		Assert.NotNull(change);
+		Assert.Equal(packageSourcePath, change.NewValue);
+		Assert.Contains(packageSourcePath, File.ReadAllText(Path.Combine(directory.Path, "NuGet.config")));
+	}
+
+	[Fact]
 	public void DiscoverProjectFile_MultipleProjects_ReturnsNull()
 	{
 		using var directory = TemporaryDirectory.Create();
