@@ -147,7 +147,7 @@ The VS Code extension is currently a source-built preview and is not published t
 Requirements:
 
 - Node.js 20 or later;
-- VS Code 1.98 or later; and
+- VS Code 1.134 or later; and
 - a trusted workspace.
 
 From a `maui-labs` checkout:
@@ -236,7 +236,7 @@ capabilities, safety boundaries, and contributor tests.
 | The browser page does not open | Run `maui devflow broker status`, then `maui devflow broker start`. |
 | More than one app is connected | Browser: choose from the agent list. VS Code: use the picker. Canvas: ask Copilot to list and select an agent. |
 | Android app does not register or cannot be inspected | Run `maui devflow wait --wait-platform Android --device <serial>` while launching the app. Use `maui devflow diagnose --device <serial>` for a read-only forwarding report. |
-| VS Code command is missing | Install the generated VSIX, confirm VS Code 1.98 or later, trust the workspace, and reload the window. |
+| VS Code command is missing | Install the generated VSIX, confirm VS Code 1.134 or later, trust the workspace, and reload the window. |
 | `npm ci` child scripts cannot find Node on Windows | Run `node --version` and `cmd /c node --version`; fix `PATH` if the second command fails. |
 | Copilot Canvas is missing or uses the wrong copy | Disable same-purpose user extensions, start a new session, and use `/env` in Copilot CLI to confirm the repository extension path. |
 

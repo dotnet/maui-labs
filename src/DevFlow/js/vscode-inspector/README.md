@@ -15,7 +15,7 @@ of the browser, VS Code, GitHub Copilot desktop, and Copilot CLI hosts.
 Requirements:
 
 - Node.js 20 or later;
-- VS Code 1.98 or later; and
+- VS Code 1.134 or later; and
 - a trusted VS Code workspace.
 
 From the `maui-labs` repository root:
