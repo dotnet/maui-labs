@@ -31,16 +31,20 @@
 
   <!-- AI (Microsoft.Extensions.AI + Azure OpenAI) -->
   <ItemGroup Label="AI">
+    <PackageVersion Include="CommunityToolkit.Maui.Core" Version="14.0.1" />
     <PackageVersion Include="Microsoft.Extensions.AI" Version="$(MicrosoftExtensionsAIVersion)" />
     <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="$(MicrosoftExtensionsAIOpenAIVersion)" />
     <PackageVersion Include="Azure.AI.OpenAI" Version="$(AzureAIOpenAIVersion)" />
+    <PackageVersion Include="Azure.Identity" Version="$(AzureIdentityVersion)" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="$(CommunityToolkitMvvmVersion)" />
+    <PackageVersion Include="Plugin.Maui.Audio" Version="4.0.0" />
   </ItemGroup>
 
   <!-- Roslyn (for source generators) -->
   <ItemGroup Label="Roslyn">
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="$(MicrosoftCodeAnalysisCSharpVersion)" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="$(MicrosoftCodeAnalysisAnalyzersVersion)" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="4.14.0" />
   </ItemGroup>
 
   <!-- DevFlow dependencies (pinned, third party) -->
@@ -84,7 +88,7 @@
     <PackageVersion Include="Microsoft.Agents.AI.Workflows.Generators" Version="$(MicrosoftAgentsAIWorkflowsGeneratorsVersion)" />
     <!-- Sample app: additional packages (pinned) -->
     <PackageVersion Include="Markdig" Version="0.31.0" />
-    <PackageVersion Include="OpenAI" Version="2.9.1" />
+    <PackageVersion Include="OpenAI" Version="2.11.0" />
     <!-- Unit tests -->
     <PackageVersion Include="NSubstitute" Version="5.3.0" />
     <!-- Benchmarks -->
@@ -96,6 +100,8 @@
     <PackageVersion Include="DeviceRunners.VisualRunners.Maui" Version="$(DeviceRunnersVersion)" />
     <PackageVersion Include="DeviceRunners.Testing.Targets" Version="$(DeviceRunnersVersion)" />
   </ItemGroup>
+
+
 
   <!-- Testing (Microsoft.NET.Test.Sdk and xunit.runner.visualstudio are
        implicitly provided by the Arcade SDK — do not define PackageVersion for them) -->

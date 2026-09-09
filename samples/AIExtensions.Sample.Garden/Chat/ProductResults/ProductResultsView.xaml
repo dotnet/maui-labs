@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<chat:ContentContextView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                         xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                         xmlns:chat="clr-namespace:Microsoft.Maui.AI.Chat.Controls;assembly=Microsoft.Maui.AI.Chat.Controls"
+                         xmlns:local="clr-namespace:AIExtensions.Sample.Garden.Chat"
+                         xmlns:models="clr-namespace:AIExtensions.Sample.Garden.Models"
+                         x:Class="AIExtensions.Sample.Garden.Chat.ProductResultsView"
+                         x:Name="Root">
+
+    <!-- Three mutually-exclusive states, toggled by IsVisible. All bindings target the view's own
+         bindable properties (populated in RefreshFromContentContext) via x:Reference. -->
+    <Grid Padding="0,4" BindingContext="{x:Reference Root}" x:DataType="local:ProductResultsView">
+
+        <!-- Empty: a not-found lookup -->
+        <Border IsVisible="{Binding IsEmpty}"
+                WidthRequest="320"
+                Padding="14"
+                StrokeThickness="1"
+                HorizontalOptions="Start"
+                StrokeShape="RoundRectangle 12"
+                BackgroundColor="{AppThemeBinding Light={StaticResource CardBackgroundLight}, Dark={StaticResource CardBackgroundDark}}"
+                Stroke="{AppThemeBinding Light={StaticResource CardStrokeLight}, Dark={StaticResource CardStrokeDark}}">
+            <Label Text="No matching products found. Try a different name or category."
+                   FontSize="{StaticResource FontSizeCaption}"
+                   LineBreakMode="WordWrap"
+                   TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}" />
+        </Border>
+
+        <!-- Single: a large detail card. IsVisible binds the view's IsSingle (outer Root context);
+             the inner Grid switches to the product for its content bindings. -->
+        <Border IsVisible="{Binding IsSingle}"
+                WidthRequest="320"
+                Padding="14"
+                StrokeThickness="1"
+                HorizontalOptions="Start"
+                StrokeShape="RoundRectangle 12"
+                BackgroundColor="{AppThemeBinding Light={StaticResource CardBackgroundLight}, Dark={StaticResource CardBackgroundDark}}"
+                Stroke="{AppThemeBinding Light={StaticResource CardStrokeLight}, Dark={StaticResource CardStrokeDark}}">
+            <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="Auto,*"
+                  RowSpacing="4" ColumnSpacing="14"
+                  BindingContext="{Binding SingleProduct}" x:DataType="models:Product">
+                <Label Grid.RowSpan="2"
+                       Text="{Binding Emoji}"
+                       FontFamily="FluentFilled"
+                       FontSize="44"
+                       VerticalOptions="Center"
+                       TextColor="{StaticResource Primary}" />
+                <Label Grid.Column="1"
+                       Text="{Binding Name}"
+                       FontSize="{StaticResource FontSizeSubtitle}"
+                       FontAttributes="Bold"
+                       LineBreakMode="WordWrap"
+                       TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}" />
+                <Label Grid.Row="1" Grid.Column="1"
+                       Text="{Binding Category}"
+                       FontSize="{StaticResource FontSizeCaption}"
+                       TextColor="{AppThemeBinding Light={StaticResource TextMetaLight}, Dark={StaticResource TextMetaDark}}" />
+                <Label Grid.Row="2" Grid.ColumnSpan="2"
+                       Text="{Binding Price, StringFormat='{0:C}'}"
+                       FontSize="{StaticResource FontSizeTitle}"
+                       FontAttributes="Bold"
+                       TextColor="{StaticResource Primary}" />
+            </Grid>
+        </Border>
+
+        <!-- Carousel: a horizontal list of compact cards -->
+        <ScrollView IsVisible="{Binding IsCarousel}"
+                    Orientation="Horizontal"
+                    HorizontalScrollBarVisibility="Never">
+            <HorizontalStackLayout Spacing="10" BindableLayout.ItemsSource="{Binding Products}">
+                <BindableLayout.ItemTemplate>
+                    <DataTemplate x:DataType="models:Product">
+                        <Border WidthRequest="168"
+                                Padding="14"
+                                StrokeThickness="1"
+                                VerticalOptions="Start"
+                                StrokeShape="RoundRectangle 12"
+                                BackgroundColor="{AppThemeBinding Light={StaticResource CardBackgroundLight}, Dark={StaticResource CardBackgroundDark}}"
+                                Stroke="{AppThemeBinding Light={StaticResource CardStrokeLight}, Dark={StaticResource CardStrokeDark}}">
+                            <VerticalStackLayout Spacing="4">
+                                <Label Text="{Binding Emoji}"
+                                       FontFamily="FluentFilled"
+                                       FontSize="30"
+                                       HorizontalOptions="Start"
+                                       TextColor="{StaticResource Primary}" />
+                                <Label Text="{Binding Name}"
+                                       FontSize="{StaticResource FontSizeBody}"
+                                       FontAttributes="Bold"
+                                       MaxLines="2"
+                                       LineBreakMode="TailTruncation"
+                                       TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}" />
+                                <Label Text="{Binding Category}"
+                                       FontSize="{StaticResource FontSizeCaption}"
+                                       TextColor="{AppThemeBinding Light={StaticResource TextMetaLight}, Dark={StaticResource TextMetaDark}}" />
+                                <Label Text="{Binding Price, StringFormat='{0:C}'}"
+                                       FontSize="{StaticResource FontSizeBody}"
+                                       FontAttributes="Bold"
+                                       TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}" />
+                            </VerticalStackLayout>
+                        </Border>
+                    </DataTemplate>
+                </BindableLayout.ItemTemplate>
+            </HorizontalStackLayout>
+        </ScrollView>
+
+    </Grid>
+
+</chat:ContentContextView>

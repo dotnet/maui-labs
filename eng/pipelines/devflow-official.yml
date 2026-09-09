@@ -165,7 +165,18 @@ extends:
                     /p:TeamName=$(_TeamName)
                     /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
             steps:
-            - template: /eng/pipelines/install-dotnet-sdk.yml@self
+            - script: eng\common\dotnet.cmd --info
+              displayName: Provision .NET SDK via Arcade
+            # The AI Extensions slnf now includes the Garden MAUI showcase (android/ios/
+            # maccatalyst/windows) and the Chat.Controls MAUI library, so the MAUI and Apple
+            # workloads are required. Apple TFMs cross-compile on Windows using the workload
+            # reference assemblies. Mirrors the DevFlow job's provisioning (the shared
+            # install-dotnet-sdk.yml template only installs the SDK, not the workloads, and
+            # provisions a system SDK rather than the Arcade .dotnet that cibuild uses).
+            - script: .dotnet\dotnet workload install maui maui-android ios maccatalyst macos maui-tizen --version 10.0.203
+              displayName: Install MAUI and Apple workloads
+            - script: .dotnet\dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="%ANDROID_HOME%" -p:AcceptAndroidSDKLicenses=true samples\AIExtensions.Sample.Garden\AIExtensions.Sample.Garden.csproj
+              displayName: Install Android SDK dependencies
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
@@ -656,6 +667,7 @@ extends:
           - powershell: |
               New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/AIPackages'
               Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.AI.*.nupkg' '$(Pipeline.Workspace)/AIPackages/' -Verbose
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.Chat.*.nupkg' '$(Pipeline.Workspace)/AIPackages/' -Verbose
             displayName: Filter AI packages
 
         - job: PublishNuGet

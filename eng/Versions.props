@@ -24,22 +24,23 @@
     <MicrosoftAspNetCoreComponentsWebViewMauiVersion>$(MicrosoftMauiControlsVersion)</MicrosoftAspNetCoreComponentsWebViewMauiVersion>
   </PropertyGroup>
   <PropertyGroup Label="Dotnet Runtime / Extensions">
-    <MicrosoftExtensionsDependencyInjectionVersion>10.0.5</MicrosoftExtensionsDependencyInjectionVersion>
-    <MicrosoftExtensionsConfigurationVersion>10.0.5</MicrosoftExtensionsConfigurationVersion>
-    <MicrosoftExtensionsHttpVersion>10.0.5</MicrosoftExtensionsHttpVersion>
-    <MicrosoftExtensionsHostingVersion>10.0.5</MicrosoftExtensionsHostingVersion>
-    <MicrosoftExtensionsLoggingAbstractionsVersion>10.0.5</MicrosoftExtensionsLoggingAbstractionsVersion>
-    <MicrosoftExtensionsLoggingConsoleVersion>10.0.5</MicrosoftExtensionsLoggingConsoleVersion>
-    <MicrosoftExtensionsLoggingVersion>10.0.5</MicrosoftExtensionsLoggingVersion>
-    <MicrosoftExtensionsLoggingDebugVersion>10.0.5</MicrosoftExtensionsLoggingDebugVersion>
-    <MicrosoftExtensionsConfigurationJsonVersion>10.0.5</MicrosoftExtensionsConfigurationJsonVersion>
-    <MicrosoftExtensionsConfigurationUserSecretsVersion>10.0.5</MicrosoftExtensionsConfigurationUserSecretsVersion>
-    <SystemTextJsonVersion>10.0.5</SystemTextJsonVersion>
+    <MicrosoftExtensionsDependencyInjectionVersion>10.0.9</MicrosoftExtensionsDependencyInjectionVersion>
+    <MicrosoftExtensionsConfigurationVersion>10.0.9</MicrosoftExtensionsConfigurationVersion>
+    <MicrosoftExtensionsHttpVersion>10.0.9</MicrosoftExtensionsHttpVersion>
+    <MicrosoftExtensionsHostingVersion>10.0.9</MicrosoftExtensionsHostingVersion>
+    <MicrosoftExtensionsLoggingAbstractionsVersion>10.0.9</MicrosoftExtensionsLoggingAbstractionsVersion>
+    <MicrosoftExtensionsLoggingConsoleVersion>10.0.9</MicrosoftExtensionsLoggingConsoleVersion>
+    <MicrosoftExtensionsLoggingVersion>10.0.9</MicrosoftExtensionsLoggingVersion>
+    <MicrosoftExtensionsLoggingDebugVersion>10.0.9</MicrosoftExtensionsLoggingDebugVersion>
+    <MicrosoftExtensionsConfigurationJsonVersion>10.0.9</MicrosoftExtensionsConfigurationJsonVersion>
+    <MicrosoftExtensionsConfigurationUserSecretsVersion>10.0.9</MicrosoftExtensionsConfigurationUserSecretsVersion>
+    <SystemTextJsonVersion>10.0.9</SystemTextJsonVersion>
   </PropertyGroup>
   <PropertyGroup Label="AI">
-    <MicrosoftExtensionsAIVersion>10.4.1</MicrosoftExtensionsAIVersion>
-    <MicrosoftExtensionsAIOpenAIVersion>10.4.1</MicrosoftExtensionsAIOpenAIVersion>
+    <MicrosoftExtensionsAIVersion>10.7.0</MicrosoftExtensionsAIVersion>
+    <MicrosoftExtensionsAIOpenAIVersion>10.7.0</MicrosoftExtensionsAIOpenAIVersion>
     <AzureAIOpenAIVersion>2.1.0</AzureAIOpenAIVersion>
+    <AzureIdentityVersion>1.13.2</AzureIdentityVersion>
   </PropertyGroup>
   <PropertyGroup Label="Roslyn">
     <MicrosoftCodeAnalysisAnalyzersVersion>3.11.0</MicrosoftCodeAnalysisAnalyzersVersion>
@@ -86,7 +87,7 @@
     <EssentialsAIPreReleaseVersionLabel>preview</EssentialsAIPreReleaseVersionLabel>
     <EssentialsAIPreviewVersionIteration>6</EssentialsAIPreviewVersionIteration>
     <!-- Microsoft Extensions AI -->
-    <MicrosoftExtensionsAIAbstractionsVersion>10.4.1</MicrosoftExtensionsAIAbstractionsVersion>
+    <MicrosoftExtensionsAIAbstractionsVersion>10.7.0</MicrosoftExtensionsAIAbstractionsVersion>
     <!-- Microsoft Agents AI (sample only) -->
     <MicrosoftAgentsAIVersion>1.0.0-rc2</MicrosoftAgentsAIVersion>
     <MicrosoftAgentsAIWorkflowsVersion>1.0.0-rc2</MicrosoftAgentsAIWorkflowsVersion>

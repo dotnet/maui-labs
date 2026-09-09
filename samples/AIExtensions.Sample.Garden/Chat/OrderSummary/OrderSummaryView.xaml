@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<chat:ContentContextView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                         xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                         xmlns:chat="clr-namespace:Microsoft.Maui.AI.Chat.Controls;assembly=Microsoft.Maui.AI.Chat.Controls"
+                         xmlns:local="clr-namespace:AIExtensions.Sample.Garden.Chat"
+                         xmlns:models="clr-namespace:AIExtensions.Sample.Garden.Models"
+                         xmlns:garden="clr-namespace:AIExtensions.Sample.Garden"
+                         x:Class="AIExtensions.Sample.Garden.Chat.OrderSummaryView"
+                         x:Name="Root">
+
+    <!-- Three mutually-exclusive states, toggled by IsVisible. All bindings target the view's own
+         bindable properties (populated in RefreshFromContentContext) via x:Reference. -->
+    <Grid Padding="0,4" BindingContext="{x:Reference Root}" x:DataType="local:OrderSummaryView">
+
+        <!-- Pending: the find_order call was emitted, waiting on the result. -->
+        <Border IsVisible="{Binding IsPending}"
+                WidthRequest="320"
+                Padding="14"
+                StrokeThickness="1"
+                HorizontalOptions="Start"
+                StrokeShape="RoundRectangle 12"
+                BackgroundColor="{AppThemeBinding Light={StaticResource CardBackgroundLight}, Dark={StaticResource CardBackgroundDark}}"
+                Stroke="{AppThemeBinding Light={StaticResource CardStrokeLight}, Dark={StaticResource CardStrokeDark}}">
+            <Label Text="Looking up order…"
+                   FontSize="{StaticResource FontSizeCaption}"
+                   TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}" />
+        </Border>
+
+        <!-- Not found: the tool ran but no order matched the id. -->
+        <Border IsVisible="{Binding IsNotFound}"
+                WidthRequest="320"
+                Padding="14"
+                StrokeThickness="1"
+                HorizontalOptions="Start"
+                StrokeShape="RoundRectangle 12"
+                BackgroundColor="{AppThemeBinding Light={StaticResource CardBackgroundLight}, Dark={StaticResource CardBackgroundDark}}"
+                Stroke="{AppThemeBinding Light={StaticResource CardStrokeLight}, Dark={StaticResource CardStrokeDark}}">
+            <Label Text="{Binding OrderId, StringFormat='No past order found with id “{0}”. Try list_past_orders to see valid ids.'}"
+                   FontSize="{StaticResource FontSizeCaption}"
+                   LineBreakMode="WordWrap"
+                   TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}" />
+        </Border>
+
+        <!-- Found: a receipt-style order card with line items and total. -->
+        <Border IsVisible="{Binding IsFound}"
+                WidthRequest="320"
+                Padding="14"
+                StrokeThickness="1"
+                HorizontalOptions="Start"
+                StrokeShape="RoundRectangle 12"
+                BackgroundColor="{AppThemeBinding Light={StaticResource CardBackgroundLight}, Dark={StaticResource CardBackgroundDark}}"
+                Stroke="{AppThemeBinding Light={StaticResource CardStrokeLight}, Dark={StaticResource CardStrokeDark}}">
+            <VerticalStackLayout Spacing="10">
+
+                <!-- Header: receipt icon + order number -->
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                    <Label Text="{x:Static garden:FluentIcons.Receipt}"
+                           FontFamily="FluentFilled"
+                           FontSize="30"
+                           VerticalOptions="Center"
+                           TextColor="{StaticResource Primary}" />
+                    <VerticalStackLayout Grid.Column="1" Spacing="2" VerticalOptions="Center">
+                        <Label Text="{Binding OrderNumber, StringFormat='Order {0}'}"
+                               FontSize="{StaticResource FontSizeSubtitle}"
+                               FontAttributes="Bold"
+                               TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}" />
+                        <Label Text="{Binding PlacedOn}"
+                               FontSize="{StaticResource FontSizeCaption}"
+                               TextColor="{AppThemeBinding Light={StaticResource TextMetaLight}, Dark={StaticResource TextMetaDark}}" />
+                    </VerticalStackLayout>
+                </Grid>
+
+                <!-- Line items -->
+                <VerticalStackLayout Spacing="6" BindableLayout.ItemsSource="{Binding Items}">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="models:ListItem">
+                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                                <Label Grid.Column="0"
+                                       Text="{Binding Product.Name}"
+                                       FontSize="{StaticResource FontSizeBody}"
+                                       LineBreakMode="TailTruncation"
+                                       TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}" />
+                                <Label Grid.Column="1"
+                                       Text="{Binding Quantity, StringFormat='× {0}'}"
+                                       FontSize="{StaticResource FontSizeCaption}"
+                                       TextColor="{AppThemeBinding Light={StaticResource TextMetaLight}, Dark={StaticResource TextMetaDark}}" />
+                                <Label Grid.Column="2"
+                                       Text="{Binding Subtotal, StringFormat='{0:C}'}"
+                                       FontSize="{StaticResource FontSizeBody}"
+                                       TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}" />
+                            </Grid>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+
+                <!-- Divider -->
+                <BoxView HeightRequest="1"
+                         Color="{AppThemeBinding Light={StaticResource CardStrokeLight}, Dark={StaticResource CardStrokeDark}}" />
+
+                <!-- Total -->
+                <Grid ColumnDefinitions="*,Auto">
+                    <Label Text="Total"
+                           FontSize="{StaticResource FontSizeBody}"
+                           FontAttributes="Bold"
+                           TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}" />
+                    <Label Grid.Column="1"
+                           Text="{Binding Total, StringFormat='{0:C}'}"
+                           FontSize="{StaticResource FontSizeTitle}"
+                           FontAttributes="Bold"
+                           TextColor="{StaticResource Primary}" />
+                </Grid>
+
+            </VerticalStackLayout>
+        </Border>
+
+    </Grid>
+
+</chat:ContentContextView>

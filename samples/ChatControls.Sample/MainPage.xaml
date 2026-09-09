@@ -1,0 +1,337 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:chat="clr-namespace:Microsoft.Maui.Chat.Controls;assembly=Microsoft.Maui.Chat.Controls"
+    xmlns:local="clr-namespace:ChatControls.Sample"
+    x:Class="ChatControls.Sample.MainPage"
+    x:DataType="local:TeamChatViewModel"
+    Title="MAUI Chat Controls"
+    BackgroundColor="{AppThemeBinding Light={StaticResource ChatPageLight}, Dark={StaticResource ChatPageDark}}">
+
+    <Grid MaximumWidthRequest="1280"
+          HorizontalOptions="Fill">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="{OnIdiom Phone=300, Default=0}" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="{OnIdiom Phone=0, Default=330}" />
+        </Grid.ColumnDefinitions>
+
+        <chat:ChatView x:Name="Chat"
+                       Grid.Row="0"
+                       Grid.Column="0"
+                       Conversation="{Binding Conversation}"
+                       Suggestions="{Binding Suggestions}"
+                       AllowAttachments="True"
+                       AllowAudioCapture="True"
+                       AllowLiveSpeech="True"
+                       Placeholder="Message the garden crew..."
+                       WelcomeMessage="Plan something together"
+                       WelcomeIcon="&#x1F331;"
+                       InputAreaCornerRadius="18"
+                       AutomationId="TeamChat">
+            <chat:ChatView.Appearance>
+                <chat:ChatAppearance ShowAvatars="True"
+                                     ShowParticipantNames="True"
+                                     ShowTimestamps="True"
+                                     ShowMessageStatus="True"
+                                     AvatarSize="34"
+                                     BubbleCornerRadius="16"
+                                     MaxBubbleWidth="560"
+                                     IncomingBubbleColor="{AppThemeBinding Light=#E7F0EE, Dark=#21312E}"
+                                     OutgoingBubbleColor="{StaticResource ChatBrand}"
+                                     IncomingTextColor="{AppThemeBinding Light={StaticResource ChatTextLight}, Dark={StaticResource ChatTextDark}}"
+                                     OutgoingTextColor="White" />
+            </chat:ChatView.Appearance>
+
+            <chat:ChatView.HeaderTemplate>
+                <DataTemplate x:DataType="local:TeamChatViewModel">
+                    <Grid Padding="18,12"
+                          ColumnDefinitions="Auto,*,Auto"
+                          ColumnSpacing="12"
+                          BackgroundColor="{StaticResource ChatBrand}">
+                        <Border WidthRequest="44"
+                                HeightRequest="44"
+                                Padding="0"
+                                StrokeThickness="0"
+                                StrokeShape="RoundRectangle 22"
+                                BackgroundColor="#28FFFFFF">
+                            <Label Text="&#x1F331;"
+                                   FontSize="22"
+                                   HorizontalOptions="Center"
+                                   VerticalOptions="Center" />
+                        </Border>
+                        <VerticalStackLayout Grid.Column="1"
+                                             Spacing="1"
+                                             VerticalOptions="Center">
+                            <Label Text="Garden crew"
+                                   FontSize="18"
+                                   FontAttributes="Bold"
+                                   TextColor="White" />
+                            <Label Text="Morgan, Priya and Diego"
+                                   FontSize="12"
+                                   TextColor="#D5F5ED" />
+                        </VerticalStackLayout>
+                        <HorizontalStackLayout Grid.Column="2"
+                                               Spacing="6"
+                                               VerticalOptions="Center">
+                            <Button Text="{Binding ThemeButtonText}"
+                                    Command="{Binding CycleThemeCommand}"
+                                    AutomationId="CycleThemeButton"
+                                    FontSize="12"
+                                    Padding="10,6"
+                                    CornerRadius="15"
+                                    BackgroundColor="#28FFFFFF"
+                                    TextColor="White" />
+                            <Button Text="Clear"
+                                    Command="{Binding ClearCommand}"
+                                    Clicked="OnClearClicked"
+                                    AutomationId="ClearChatButton"
+                                    FontSize="12"
+                                    Padding="10,6"
+                                    CornerRadius="15"
+                                    BackgroundColor="#28FFFFFF"
+                                    TextColor="White" />
+                            <Button Text="Reset"
+                                    Command="{Binding ResetCommand}"
+                                    Clicked="OnResetClicked"
+                                    AutomationId="ResetChatButton"
+                                    FontSize="12"
+                                    Padding="10,6"
+                                    CornerRadius="15"
+                                    BackgroundColor="#28FFFFFF"
+                                    TextColor="White" />
+                        </HorizontalStackLayout>
+                    </Grid>
+                </DataTemplate>
+            </chat:ChatView.HeaderTemplate>
+
+            <chat:ChatView.EmptyViewTemplate>
+                <DataTemplate x:DataType="local:TeamChatViewModel">
+                    <VerticalStackLayout Padding="28"
+                                         Spacing="8"
+                                         HorizontalOptions="Center"
+                                         VerticalOptions="Center">
+                        <Label Text="&#x1F4AC;"
+                               FontSize="44"
+                               HorizontalTextAlignment="Center" />
+                        <Label Text="The crew room is clear"
+                               FontSize="20"
+                               FontAttributes="Bold"
+                               TextColor="{AppThemeBinding Light={StaticResource ChatTextLight}, Dark={StaticResource ChatTextDark}}"
+                               HorizontalTextAlignment="Center" />
+                        <Label Text="Pick a suggestion below, attach a file, or write the first message."
+                               FontSize="13"
+                               MaximumWidthRequest="360"
+                               Opacity="0.7"
+                               HorizontalTextAlignment="Center" />
+                    </VerticalStackLayout>
+                </DataTemplate>
+            </chat:ChatView.EmptyViewTemplate>
+
+            <chat:ChatView.ContentTemplates>
+                <chat:GenericChatContentTemplate
+                    ContentType="{x:Type local:GardenTaskContent}"
+                    ViewType="{x:Type local:GardenTaskView}"
+                    Priority="1000" />
+                <chat:GenericChatContentTemplate
+                    ContentType="{x:Type local:GardenStickerContent}"
+                    ViewType="{x:Type local:GardenStickerView}"
+                    Priority="1000" />
+            </chat:ChatView.ContentTemplates>
+        </chat:ChatView>
+
+        <Border x:Name="ParticipantPanel"
+                Grid.Row="{OnIdiom Phone=1, Default=0}"
+                Grid.Column="{OnIdiom Phone=0, Default=1}"
+                Padding="0"
+                StrokeThickness="1"
+                Stroke="{AppThemeBinding Light=#D6E3E0, Dark=#2B4540}"
+                BackgroundColor="{AppThemeBinding Light=#F8FBFA, Dark=#101A18}">
+            <ScrollView>
+                <VerticalStackLayout Padding="16"
+                                     Spacing="12">
+                    <Label Text="Participant simulator"
+                           FontSize="18"
+                           FontAttributes="Bold"
+                           AutomationId="ParticipantSimulatorHeading" />
+                    <Label Text="Inject deterministic messages and states without a server."
+                           FontSize="12"
+                           Opacity="0.65" />
+
+                    <Label Text="Sender"
+                           FontSize="12"
+                           FontAttributes="Bold" />
+                    <Picker ItemsSource="{Binding Participants}"
+                            SelectedItem="{Binding SelectedParticipant}"
+                            AutomationId="ParticipantPicker"
+                            BackgroundColor="{AppThemeBinding Light=White, Dark=#21312E}">
+                        <Picker.ItemDisplayBinding>
+                            <Binding x:DataType="chat:ChatParticipant"
+                                     Path="DisplayName" />
+                        </Picker.ItemDisplayBinding>
+                    </Picker>
+
+                    <Label Text="Messages"
+                           FontSize="12"
+                           FontAttributes="Bold" />
+                    <Grid ColumnDefinitions="*,*"
+                          RowDefinitions="Auto,Auto,Auto,Auto"
+                          ColumnSpacing="8"
+                          RowSpacing="8">
+                        <Button Text="Text"
+                                Command="{Binding SendParticipantTextCommand}"
+                                AutomationId="ParticipantTextButton" />
+                        <Button Grid.Column="1"
+                                Text="Photo"
+                                Command="{Binding SendParticipantPhotoCommand}"
+                                AutomationId="ParticipantPhotoButton" />
+                        <Button Grid.Row="1"
+                                Text="File"
+                                Command="{Binding SendParticipantFileCommand}"
+                                AutomationId="ParticipantFileButton" />
+                        <Button Grid.Row="1"
+                                Grid.Column="1"
+                                Text="Task"
+                                Command="{Binding SendParticipantTaskCommand}"
+                                AutomationId="ParticipantTaskButton" />
+                        <Button Grid.Row="2"
+                                Text="Multipart"
+                                Command="{Binding SendParticipantMultipartCommand}"
+                                AutomationId="ParticipantMultipartButton" />
+                        <Button Grid.Row="2"
+                                Grid.Column="1"
+                                Text="Stream text"
+                                Command="{Binding StreamParticipantTextCommand}"
+                                AutomationId="ParticipantStreamButton" />
+                        <Button Grid.Row="3"
+                                Text="Burst / grouping"
+                                Command="{Binding SendParticipantBurstCommand}"
+                                AutomationId="ParticipantBurstButton" />
+                        <Button Grid.Row="3"
+                                Grid.Column="1"
+                                Text="Sticker"
+                                Command="{Binding SendParticipantStickerCommand}"
+                                AutomationId="ParticipantStickerButton" />
+                    </Grid>
+
+                    <Label Text="Composer attachments"
+                           FontSize="12"
+                           FontAttributes="Bold" />
+                    <Grid ColumnDefinitions="*,*"
+                          RowDefinitions="Auto,Auto"
+                          ColumnSpacing="8"
+                          RowSpacing="8">
+                        <Button Text="Stage photo"
+                                AutomationId="StagePhotoAttachmentButton"
+                                Clicked="OnStagePhotoClicked" />
+                        <Button Grid.Column="1"
+                                Text="Stage file"
+                                AutomationId="StageFileAttachmentButton"
+                                Clicked="OnStageFileClicked" />
+                        <Button Grid.Row="1"
+                                Grid.ColumnSpan="2"
+                                Text="Clear staged"
+                                AutomationId="ClearAttachmentsButton"
+                                Clicked="OnClearAttachmentsClicked" />
+                    </Grid>
+
+                    <Label Text="Multimodal input"
+                           FontSize="12"
+                           FontAttributes="Bold" />
+                    <Grid ColumnDefinitions="*,Auto"
+                          ColumnSpacing="8">
+                        <VerticalStackLayout Spacing="1">
+                            <Label Text="Use simulated microphone"
+                                   VerticalOptions="Center" />
+                            <Label Text="Off uses the real platform recorder and speech recognizer."
+                                   FontSize="10"
+                                   Opacity="0.6" />
+                        </VerticalStackLayout>
+                        <Switch Grid.Column="1"
+                                AutomationId="SimulatedVoiceSwitch"
+                                Toggled="OnSimulatedVoiceToggled" />
+                    </Grid>
+
+                    <BoxView HeightRequest="1"
+                             Color="{AppThemeBinding Light=#D6E3E0, Dark=#2B4540}" />
+
+                    <Label Text="Live state"
+                           FontSize="12"
+                           FontAttributes="Bold" />
+                    <Grid ColumnDefinitions="Auto,*,Auto"
+                          RowDefinitions="Auto,Auto,Auto"
+                          ColumnSpacing="8">
+                        <CheckBox IsChecked="{Binding PriyaIsTyping}"
+                                  AutomationId="PriyaTypingCheckBox" />
+                        <Label Grid.Column="1"
+                               Text="Priya is typing"
+                               VerticalOptions="Center" />
+                        <CheckBox Grid.Row="1"
+                                  IsChecked="{Binding DiegoIsTyping}"
+                                  AutomationId="DiegoTypingCheckBox" />
+                        <Label Grid.Row="1"
+                               Grid.Column="1"
+                               Text="Diego is typing"
+                               VerticalOptions="Center" />
+                        <Label Grid.Row="2"
+                               Grid.Column="1"
+                               Text="Conversation busy"
+                               VerticalOptions="Center" />
+                        <Switch Grid.Row="2"
+                                Grid.Column="2"
+                                IsToggled="{Binding IsConversationBusy}"
+                                AutomationId="ConversationBusySwitch" />
+                    </Grid>
+
+                    <BoxView HeightRequest="1"
+                             Color="{AppThemeBinding Light=#D6E3E0, Dark=#2B4540}" />
+
+                    <Label Text="Outgoing state"
+                           FontSize="12"
+                           FontAttributes="Bold" />
+                    <Picker ItemsSource="{Binding DeliveryStatuses}"
+                            SelectedItem="{Binding SelectedDeliveryStatus}"
+                            AutomationId="DeliveryStatusPicker"
+                            BackgroundColor="{AppThemeBinding Light=White, Dark=#21312E}" />
+                    <Grid ColumnDefinitions="*,*"
+                          ColumnSpacing="8">
+                        <Button Text="Apply"
+                                Command="{Binding ApplyDeliveryStatusCommand}"
+                                AutomationId="ApplyDeliveryStatusButton" />
+                        <Button Grid.Column="1"
+                                Text="Edit text"
+                                Command="{Binding EditLastTextCommand}"
+                                AutomationId="EditLastTextButton" />
+                    </Grid>
+                    <Label Text="{Binding LastOutgoingStatusText}"
+                           FontSize="11"
+                           Opacity="0.65" />
+
+                    <Grid ColumnDefinitions="*,Auto"
+                          RowDefinitions="Auto,Auto"
+                          ColumnSpacing="8">
+                        <Label Text="Fail next composer send"
+                               VerticalOptions="Center" />
+                        <Switch Grid.Column="1"
+                                IsToggled="{Binding FailNextSend}"
+                                AutomationId="FailNextSendSwitch" />
+                        <Label Grid.Row="1"
+                               Text="Slow next composer send"
+                               VerticalOptions="Center" />
+                        <Switch Grid.Row="1"
+                                Grid.Column="1"
+                                IsToggled="{Binding SlowNextSend}"
+                                AutomationId="SlowNextSendSwitch" />
+                    </Grid>
+                    <Button Text="Remove last message"
+                            Command="{Binding RemoveLastMessageCommand}"
+                            AutomationId="RemoveLastMessageButton" />
+                </VerticalStackLayout>
+            </ScrollView>
+        </Border>
+    </Grid>
+</ContentPage>

@@ -96,11 +96,20 @@ AI integration packages for `Microsoft.Extensions.AI` and .NET MAUI apps.
 
 #### AI Attributes
 
-Source-generated AI tool discovery — annotate methods or property accessors with `[ExportAIFunction]` to create AI-callable tools. Composed or auto-generated tool contexts, DI-aware parameter binding, approval gates, AOT-friendly.
+Source-generated AI tools plus a native block-based chat engine and drop-in MAUI UI.
+
+- **AOT-friendly tools** — `[ExportAIFunction]`, DI/keyed-DI parameter binding, property tools, and generated tool contexts.
+- **Headless chat engine** — streaming typed blocks, tools, approvals, automatic UI actions, reasoning, typed state, retry, and application-provided conversation persistence.
+- **Provider-neutral chat controls** — human/group `ChatView` models, multimodal input, stop/cancel, and XAML templates with no AI dependency.
+- **Native AI chat controls** — zero-config `CopilotChatView`, predictive state, rich content, files/audio/live speech, suggestions, retry, accessibility, and full theme/control-template replacement.
+- **Typed tool views** — `[ToolBlock]` generates simple call/result projections while custom handlers support aggregate domain blocks.
 
 | Package | Description |
 |---------|-------------|
 | [![NuGet: Microsoft.Maui.AI.Attributes](https://img.shields.io/nuget/v/Microsoft.Maui.AI.Attributes.svg?label=Microsoft.Maui.AI.Attributes)](https://www.nuget.org/packages/Microsoft.Maui.AI.Attributes/) | Source-generated AI tool contexts for `Microsoft.Extensions.AI` |
+| [![NuGet: Microsoft.Maui.AI.Chat](https://img.shields.io/nuget/v/Microsoft.Maui.AI.Chat.svg?label=Microsoft.Maui.AI.Chat)](https://www.nuget.org/packages/Microsoft.Maui.AI.Chat/) | Headless block-mapping conversation engine |
+| [![NuGet: Microsoft.Maui.AI.Chat.Controls](https://img.shields.io/nuget/v/Microsoft.Maui.AI.Chat.Controls.svg?label=Microsoft.Maui.AI.Chat.Controls)](https://www.nuget.org/packages/Microsoft.Maui.AI.Chat.Controls/) | Native MAUI chat controls and XAML templates |
+| [![NuGet: Microsoft.Maui.Chat.Controls](https://img.shields.io/nuget/v/Microsoft.Maui.Chat.Controls.svg?label=Microsoft.Maui.Chat.Controls)](https://www.nuget.org/packages/Microsoft.Maui.Chat.Controls/) | Provider-neutral human and group chat controls |
 
 ### macOS AppKit Backend
 
@@ -199,7 +208,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions and development se
 
 For the formal DevFlow HTTP and WebSocket contract, see [`docs/DevFlow/spec`](docs/DevFlow/spec/README.md).
 
-For AI Extensions usage and samples, see [`src/AIExtensions/README.md`](src/AIExtensions/README.md) and [`samples/AIExtensions.Sample.Garden`](samples/AIExtensions.Sample.Garden/README.md).
+For AI Extensions usage and samples, see [`src/AIExtensions/README.md`](src/AIExtensions/README.md),
+the provider-neutral [`ChatControls.Sample`](samples/ChatControls.Sample/README.md), and the
+Azure OpenAI [`AIExtensions.Sample.Garden`](samples/AIExtensions.Sample.Garden/README.md).
 
 ## Support
 
