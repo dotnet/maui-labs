@@ -15,7 +15,7 @@ A command-line tool for .NET MAUI development environment setup and device manag
 ### 1. Install the CLI tool
 
 ```bash
-dotnet tool install -g Microsoft.Maui.Cli
+dotnet tool install -g Microsoft.Maui.Cli --prerelease
 ```
 
 ### 2. Check your environment
@@ -85,6 +85,18 @@ maui apple simulator stop "iPhone 16 Pro"
 maui apple simulator delete "iPhone 16 Pro"
 ```
 
+### 6. Open the MAUI DevFlow Inspector
+
+After adding the DevFlow agent to a running app:
+
+```bash
+maui devflow broker start
+```
+
+Then open `http://localhost:19223/inspector/`. See the
+[MAUI DevFlow Inspector guide](https://github.com/dotnet/maui-labs/blob/main/docs/DevFlow/inspector.md) for app registration and browser,
+VS Code, GitHub Copilot desktop, and Copilot CLI setup.
+
 ## Commands
 
 | Command | Description |
@@ -143,6 +155,9 @@ maui apple simulator delete "iPhone 16 Pro"
 | `maui go upgrade` | Graduate a Go project to a full MAUI project |
 
 Run `maui <command> --help` for detailed options on any command.
+
+For the shared Inspector UI and its host integrations, see the
+[MAUI DevFlow Inspector guide](https://github.com/dotnet/maui-labs/blob/main/docs/DevFlow/inspector.md).
 
 DevFlow file commands can use local files directly:
 
@@ -292,6 +307,9 @@ Other `E2106` throw sites (e.g., "no AVD with that name") emit the same code **w
 
 > For agent-facing usage examples and remediation patterns used by AI coding agents, see
 > [`maui-devflow-debug troubleshooting`](https://github.com/dotnet/maui-labs/blob/main/plugins/dotnet-maui-tooling/skills/maui-devflow-debug/references/troubleshooting.md).
+
+For Inspector reconnect behavior, control handoff, and XAML workspace recovery, see
+[Inspector recovery and source editing](https://github.com/dotnet/maui-labs/blob/main/docs/DevFlow/inspector-recovery-and-source-editing.md).
 
 ## Platform Support
 
