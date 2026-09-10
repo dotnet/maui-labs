@@ -284,6 +284,51 @@ Results distinguish violations, observations, incomplete checks, confidence,
 clip causes, visual versus interaction occlusion, and permanent platform
 limitations. Text content is not returned by default.
 
+Rule set **1.1** adds three managed-layout checks while retaining schema **1.0**:
+
+| Rule | Meaning | Result |
+| --- | --- | --- |
+| `layout.constraint-violation` | Conflicting minimum/maximum requests, or an arranged size outside those limits by at least one untransformed layout pixel at window density | Moderate violation for review |
+| `layout.desired-size-constrained` | The last measured desired size, with margins removed, exceeds the arranged size | Informational observation, not proof of lost content |
+| `layout.child-outside-parent` | A child's untransformed arranged frame extends outside its direct layout parent | Informational observation, not proof of clipping |
+
+Use `--minimum-severity info` to see the latter two rules. In the Inspector,
+choose **All findings** instead of the default actionable-only filter. Selecting
+a child-outside-parent finding highlights the child and its layout parent with a
+distinct parent outline, not a clip outline. Lower-severity detections remain
+visible in `summary.filtered` even when their detailed findings are omitted.
+Existing clip, overflow and hit-test rules still establish whether content is
+actually lost or unreachable; the new observations do not turn intentional
+overlays into CI failures.
+
+The checks use already-captured MAUI measurements and never call `Measure` or
+change the app's layout. Native-only and Blazor nodes are not treated as
+successful managed checks. Scroll containers are excluded from desired-size
+checks, and direct scroll content, transformed elements, negative margins,
+unknown parents and cross-window relationships are excluded from parent-frame
+checks. Exclusions count as not applicable, not passes; platform coverage remains
+explicitly partial. A sizing/constraint change invalidates the diagnostics
+revision even when rendered bounds have not changed.
+
+A desired-size pass requires known measurements for both axes. A partly unknown
+measurement is not applicable rather than a whole-rule pass. Unstable snapshots
+skip these baseline checks and report global incompleteness once; they do not
+flood the findings list with one incomplete item per element.
+
+Sizing and `layoutOverflowInsetsPhysicalPixels` describe untransformed layout,
+while `fullRegion` and `parentRegion` are rendered highlight regions. An ancestor
+transform does not invalidate parent-local containment, but a finding records the
+coordinate-space limitation so its layout insets are not mistaken for painted
+edges. Existing desired-size-based content-overflow estimates use the same
+margin normalization, preventing contradictory findings on valid margin layouts.
+
+Clients should read `GET /api/v1/ui/diagnostics/layout/rules` before requesting
+these rule IDs from an older agent. Older agents retain their rule set and reject
+unknown explicit rule IDs; existing schema-1.0 requests are unchanged.
+
+The sample's **Layout Diagnostics** page has problem examples and a **Use valid
+layout** toggle for checking that these findings disappear after a correction.
+
 Debug builds generate XAML source maps by default, so findings can include
 `sourceFile`, `sourceLine`, and `sourceColumn`. Source-content hashes are not
 emitted by the diagnostics contract.

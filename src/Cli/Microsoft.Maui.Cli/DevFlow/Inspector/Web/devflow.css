@@ -780,6 +780,11 @@ html[data-reduced-motion="true"] *, html[data-reduced-motion="true"] *::before, 
   background: rgba(197, 134, 192, 0.06);
 }
 
+.diagnostic-region-parent {
+  border: 2px dashed #9cdcfe;
+  background: rgba(156, 220, 254, 0.04);
+}
+
 .diagnostic-region-overlap {
   border: 2px solid #dcdcaa;
   background: rgba(220, 220, 170, 0.15);
@@ -803,6 +808,13 @@ svg .diagnostic-region-clip {
   stroke-width: 2;
   stroke-dasharray: 2 4;
   fill: rgba(197, 134, 192, 0.06);
+}
+
+svg .diagnostic-region-parent {
+  stroke: #9cdcfe;
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  fill: rgba(156, 220, 254, 0.04);
 }
 
 svg .diagnostic-region-overlap {

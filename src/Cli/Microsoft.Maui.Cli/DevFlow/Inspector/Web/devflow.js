@@ -3227,7 +3227,7 @@ import { createElementTreeController } from './inspector-tree.js';
     diagnosticsSummary.textContent =
       `${summary.violations || 0} violations, ${summary.observations || 0} observations, ` +
       `${summary.incomplete || 0} incomplete, ${summary.passes || 0} passes, ` +
-      `${summary.notApplicable || 0} n/a, ${summary.suppressed || 0} suppressed`;
+      `${summary.notApplicable || 0} n/a, ${summary.suppressed || 0} suppressed, ${summary.filtered || 0} filtered`;
     const limitations = diagnostics.coverage?.limitations || [];
     if (diagnosticsCoverage) {
       diagnosticsCoverage.textContent = limitations.length
@@ -3301,6 +3301,7 @@ import { createElementTreeController } from './inspector-tree.js';
 
     addDiagnosticRegion(finding.evidence?.fullRegion, 'diagnostic-region-full', rootOffsetX, rootOffsetY);
     addDiagnosticRegion(finding.evidence?.visibleRegion, 'diagnostic-region-visible', rootOffsetX, rootOffsetY);
+    addDiagnosticRegion(finding.evidence?.parentRegion, 'diagnostic-region-parent', rootOffsetX, rootOffsetY);
     for (const clip of finding.evidence?.clipChain || [])
       addDiagnosticRegion(clip.region, 'diagnostic-region-clip', rootOffsetX, rootOffsetY);
     addDiagnosticRegion(finding.evidence?.overlap?.intersectionRegion, 'diagnostic-region-overlap', rootOffsetX, rootOffsetY);

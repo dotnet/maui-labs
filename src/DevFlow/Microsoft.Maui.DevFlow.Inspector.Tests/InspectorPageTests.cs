@@ -52,6 +52,61 @@ public class InspectorPageTests : IAsyncLifetime
     }
 
     [LiveInspectorFact]
+    public async Task LayoutBaselineFindings_RespectOutcomeFilterAndHighlightParent()
+    {
+        Assert.True(int.TryParse(Environment.GetEnvironmentVariable("LAYOUT_QA_AGENT_PORT"), out var port),
+            "Set LAYOUT_QA_AGENT_PORT to the exact DevFlow.Sample layout QA agent.");
+        using var agent = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", port);
+        Assert.Equal("MauiTodo Layout QA", (await agent.GetStatusAsync())?.AppName);
+        Assert.True(await agent.NavigateAsync("//layoutdiagnostics"));
+        var scan = await agent.AnalyzeLayoutAsync(new Microsoft.Maui.DevFlow.Driver.LayoutInspectionRequest
+        {
+            MinimumSeverity = "info",
+            Stability = new Microsoft.Maui.DevFlow.Driver.LayoutStabilityOptions { TimeoutMs = 10000 },
+            Scope = new Microsoft.Maui.DevFlow.Driver.LayoutInspectionScope
+            {
+                IncludeNativeElements = false,
+                IncludeBlazorElements = false
+            },
+            Occlusion = new Microsoft.Maui.DevFlow.Driver.LayoutOcclusionOptions { Mode = "none" }
+        });
+        Assert.True(scan?.Snapshot.Stable);
+        Assert.Contains(scan!.Findings, finding =>
+            finding.RuleId == Microsoft.Maui.DevFlow.Driver.LayoutDiagnosticRules.ConstraintViolation
+            && finding.Element.AutomationId == "ConflictingLimitsBox");
+        await agent.ControlMutationLeaseAsync("release");
+
+        await _page.GotoAsync(BaseUrl);
+        await Expect(_page.Locator("#app-viewport")).ToBeVisibleAsync();
+        var layoutToggle = _page.Locator("#df-toggle-diagnostics");
+        if (!await layoutToggle.IsVisibleAsync())
+            await _page.Locator("#df-more").ClickAsync();
+        await layoutToggle.ClickAsync();
+        await Expect(_page.Locator("#df-diagnostics-pane")).ToBeVisibleAsync();
+
+        var ruleFilter = _page.Locator("#diagnostics-rule");
+        var findings = _page.Locator("#diagnostics-list .diagnostic-item");
+        await ruleFilter.FillAsync("layout.constraint-violation");
+        await Expect(findings.Filter(new() { HasText = "ConflictingLimitsBox" })).ToBeVisibleAsync(
+            new() { Timeout = 15000 });
+
+        await ruleFilter.FillAsync("layout.desired-size-constrained");
+        await Expect(findings).ToHaveCountAsync(0);
+        await _page.Locator("#diagnostics-filter").SelectOptionAsync("all");
+        await Expect(findings.Filter(new() { HasText = "ConstrainedDesiredProbe" })).ToBeVisibleAsync();
+
+        await ruleFilter.FillAsync("layout.child-outside-parent");
+        var overflow = findings.Filter(new() { HasText = "BaselineOverflowChild" });
+        await Expect(overflow).ToBeVisibleAsync();
+        await overflow.ClickAsync();
+        await Expect(_page.Locator(
+            ".devflow-element[data-automationId='BaselineOverflowChild'].diagnostic-selected")).ToHaveCountAsync(1);
+        await Expect(_page.Locator(
+            ".devflow-element[data-automationId='BaselineOverflowParent'].diagnostic-related-highlight")).ToHaveCountAsync(1);
+        await Expect(_page.Locator("#diagnostic-overlays .diagnostic-region-parent")).ToHaveCountAsync(1);
+    }
+
+    [LiveInspectorFact]
     public async Task ViewportUsesWindowDimensionsFromAgent()
     {
         await _page.GotoAsync(BaseUrl);
