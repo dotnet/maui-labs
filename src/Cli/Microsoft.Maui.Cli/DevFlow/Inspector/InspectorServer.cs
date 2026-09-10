@@ -14,7 +14,7 @@ namespace Microsoft.Maui.Cli.DevFlow.Inspector;
 /// Generates an interactive HTML page representing the native app's visual tree
 /// and proxies interaction commands to the DevFlow agent.
 /// </summary>
-public sealed class InspectorServer : IDisposable
+public sealed partial class InspectorServer : IDisposable
 {
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
@@ -955,6 +955,8 @@ public sealed class InspectorServer : IDisposable
                     "/inspector-data-context.js" => HandleEmbeddedFile("inspector-data-context.js", "application/javascript"),
                     "/inspector-properties.js" => HandleEmbeddedFile("inspector-properties.js", "application/javascript"),
                     "/inspector-tree.js" => HandleEmbeddedFile("inspector-tree.js", "application/javascript"),
+                    "/inspector-evidence.js" => HandleEmbeddedFile("inspector-evidence.js", "application/javascript"),
+                    "/inspector-evidence.css" => HandleEmbeddedFile("inspector-evidence.css", "text/css"),
                     "/devflow.css" => HandleEmbeddedFile("devflow.css", "text/css"),
                     _ => (404, "text/plain", Encoding.UTF8.GetBytes("Not Found"))
                 },
@@ -985,6 +987,8 @@ public sealed class InspectorServer : IDisposable
                     "/api/logs" => await HandleLogsAsync(request.Body),
                     "/api/network" => await HandleNetworkAsync(request.Body),
                     "/api/network/detail" => await HandleNetworkDetailAsync(request.Body),
+                    "/api/evidence/preview" => await HandleEvidencePreviewAsync(request.Body),
+                    "/api/evidence/capture" => await HandleEvidenceCaptureAsync(request.Body),
                     "/api/preferences" => await HandlePreferencesAsync(request.Body),
                     "/api/device" => await HandleDeviceAsync(request.Body),
                     "/api/sensors" => await HandleSensorsAsync(request.Body),
@@ -2991,6 +2995,7 @@ public sealed class InspectorServer : IDisposable
         "/api/source" or "/api/persistProperty" or "/api/logs" or "/api/network" or "/api/network/detail" or "/api/preferences"
             or "/api/device" or "/api/sensors" or "/api/geolocation"
             or "/api/files/roots" or "/api/files/list"
+            or "/api/evidence/preview" or "/api/evidence/capture"
             or "/api/flows/files/list" or "/api/flows/files/load"
             or "/api/alerts" or "/api/alerts/dismiss"
             or "/api/cdp/webviews" or "/api/cdp/source" or "/api/cdp/eval" => true,
