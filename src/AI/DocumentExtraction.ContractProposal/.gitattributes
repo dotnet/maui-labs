@@ -1,0 +1,2 @@
+# Keep the imported upstream subtree byte-for-byte stable on every platform.
+Upstream/dotnet-extensions/src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions/** -text

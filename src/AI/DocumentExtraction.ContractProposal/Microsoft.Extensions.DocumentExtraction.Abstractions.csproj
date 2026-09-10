@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Microsoft.Extensions.DocumentExtraction</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsShipping>false</IsShipping>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnablePackageValidation>false</EnablePackageValidation>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Compatibility\*.cs" />
+    <Compile Include="Upstream\dotnet-extensions\src\Libraries\Microsoft.Extensions.DocumentExtraction.Abstractions\*.cs"
+             Link="Upstream\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
+  </ItemGroup>
+
+</Project>

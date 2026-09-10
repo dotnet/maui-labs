@@ -1,0 +1,143 @@
+{
+  "upstreamRepository": "https://github.com/dotnet/extensions",
+  "sourceRepository": "https://github.com/luisquintanilla/extensions",
+  "pullRequest": "https://github.com/dotnet/extensions/pull/7588",
+  "commit": "a215825ae2c96723e922e068c226ff77122c7c94",
+  "sourcePath": "src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions",
+  "importRoot": "Upstream/dotnet-extensions/src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions",
+  "importDate": "2026-08-26",
+  "license": {
+    "name": "MIT",
+    "url": "https://github.com/luisquintanilla/extensions/blob/a215825ae2c96723e922e068c226ff77122c7c94/LICENSE"
+  },
+  "verificationCommand": "pwsh -File src/AI/DocumentExtraction.ContractProposal/Verify-Upstream.ps1",
+  "sourceFileCount": 23,
+  "provenanceArtifactCount": 2,
+  "files": [
+    {
+      "path": "DelegatingDocumentExtractionClient.cs",
+      "role": "source",
+      "sha256": "bf67bb1d7f99a9f0060a7646cae26385ac2ee656bbd76c7d59124b289a752240"
+    },
+    {
+      "path": "DocumentBlock.cs",
+      "role": "source",
+      "sha256": "276702e3082d24164e32ca80469389618ebacbb2c286baf60b2e594429d5e5ca"
+    },
+    {
+      "path": "DocumentBlockKind.cs",
+      "role": "source",
+      "sha256": "892bcc4cea94d1fd7822f8364ff0237fd1aa6b65da56b2aabbec4ef81c4ab4bc"
+    },
+    {
+      "path": "DocumentBoundingBox.cs",
+      "role": "source",
+      "sha256": "3e6d93dda590c2ecbefaeb671946e65540097a0d9906a5f4e386db812084d059"
+    },
+    {
+      "path": "DocumentBoundingRegion.cs",
+      "role": "source",
+      "sha256": "71eb18909324e3cffe5006ecb7d8ee31341f54707e6ca75c68b107bc1f3c25e4"
+    },
+    {
+      "path": "DocumentCoordinateOrigin.cs",
+      "role": "source",
+      "sha256": "21c20449aa89e9bc339a02cd985e92ccf8ac89d7685e74f38117b9d51ac85f97"
+    },
+    {
+      "path": "DocumentCoordinateUnit.cs",
+      "role": "source",
+      "sha256": "b6e2c24a0fd36cad8abbd21bc19cf815c61f475ece01c7073f7fc19405dfb8c9"
+    },
+    {
+      "path": "DocumentElement.cs",
+      "role": "source",
+      "sha256": "ef3c16d65cb27254612165bfce99cdda1402dd4c3be09463d8afe6771b4a6cf0"
+    },
+    {
+      "path": "DocumentExtractionClientExtensions.cs",
+      "role": "source",
+      "sha256": "dd8983d02ecbb000b6eb0c0f7d57f95578e82c8a0bae84b6b5efe76948e9c843"
+    },
+    {
+      "path": "DocumentExtractionClientMetadata.cs",
+      "role": "source",
+      "sha256": "996ddffcea4cd1addf200dd26d3ab726c99b1a75a2f26afbdae8a23b6e4d23dc"
+    },
+    {
+      "path": "DocumentExtractionOptions.cs",
+      "role": "source",
+      "sha256": "c73f3f4350deff3f42f783db824b072bde07e2a56bdaacd6af889e9e794c681a"
+    },
+    {
+      "path": "DocumentExtractionPageResult.cs",
+      "role": "source",
+      "sha256": "2dcf2353a10f75ad9e6aad00015c37058ef61b4af0bca03b80664817e78038f0"
+    },
+    {
+      "path": "DocumentExtractionPageResultExtensions.cs",
+      "role": "source",
+      "sha256": "4f58a8b7d82dfa118f202dc9f620b0515fd4c164a8c71bc98a5031615f1641f0"
+    },
+    {
+      "path": "DocumentExtractionResult.cs",
+      "role": "source",
+      "sha256": "440bf34f38b53de7c24a937d062d6518aa2966493cf91c926e4377e261fcae90"
+    },
+    {
+      "path": "DocumentExtractionUsage.cs",
+      "role": "source",
+      "sha256": "9cceccc31ff0a4e01fd23a273db34064da7ab7b6cc17399269dd262d35be1566"
+    },
+    {
+      "path": "DocumentImage.cs",
+      "role": "source",
+      "sha256": "b1d9fe44683a81d8d855d4c9c16bb32e6f4ce255ca8ee88f053b940208b33e04"
+    },
+    {
+      "path": "DocumentPage.cs",
+      "role": "source",
+      "sha256": "310abbd2277acc8b56136e7d53be7719bf6864d55791b2136ca7d07d8cb1e612"
+    },
+    {
+      "path": "DocumentPageDimensions.cs",
+      "role": "source",
+      "sha256": "94e330d6c6098e9d9ead74fc270d802fa9629f91262adc7a8ee38089020ee593"
+    },
+    {
+      "path": "DocumentPoint.cs",
+      "role": "source",
+      "sha256": "9d6a3ba3d2ce69b046819078afdc171105050801e13586a2fce03de17ba9cff8"
+    },
+    {
+      "path": "DocumentTable.cs",
+      "role": "source",
+      "sha256": "ca01c38b4c3093ddb78439738ddc8a583942b8e074dca8055942654e783046dc"
+    },
+    {
+      "path": "DocumentTableCell.cs",
+      "role": "source",
+      "sha256": "882ed6c6f2ce2be265474869d680cc469bd1d2aa48679fde89c95ce94faf57d5"
+    },
+    {
+      "path": "DocumentTableCellKind.cs",
+      "role": "source",
+      "sha256": "eced8ee1f969c88e638402f026b29607f5fa221fd14058c37715168a6a23996b"
+    },
+    {
+      "path": "IDocumentExtractionClient.cs",
+      "role": "source",
+      "sha256": "4997015d5ff6121b9272f38d4e384831c01b3662108dcd5626355614abbff98d"
+    },
+    {
+      "path": "Microsoft.Extensions.DocumentExtraction.Abstractions.json",
+      "role": "api-baseline-provenance",
+      "sha256": "9c77489ef06d78ba8b19be22dc2e08d51f5d02c3bd6efc936b774776bda98784"
+    },
+    {
+      "path": "README.md",
+      "role": "readme-provenance",
+      "sha256": "a8d6c2611fc81e13e6f792d0b6c7fea39c247ff1fc1994a51bdb5925f70aa053"
+    }
+  ]
+}
