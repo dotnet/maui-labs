@@ -133,12 +133,16 @@ public sealed class InspectorServer : IDisposable
             MutationLeaseHolderKind = "web-inspector",
             MutationLeaseLabel = "DevFlow Web Inspector"
         };
-        // Fall back to the inspected project so layout-diagnostics suppressions resolve even when
-        // the host does not pass an explicit policy start path.
-        _policyStartPath = string.IsNullOrWhiteSpace(policyStartPath) ? _project : policyStartPath;
-        _layoutDiagnosticsPolicy = LayoutDiagnosticsPolicyLoader.Load(_policyStartPath);
-        _projectLayoutDiagnosticsPolicy =
-            LayoutDiagnosticsPolicyLoader.LoadProjectPolicy(_policyStartPath);
+        var policyPath = string.IsNullOrWhiteSpace(policyStartPath) ? _project : policyStartPath;
+        // A filename-only app identity must never resolve against the broker's working directory.
+        _policyStartPath = !string.IsNullOrWhiteSpace(policyPath) && Path.IsPathFullyQualified(policyPath)
+            ? Path.GetFullPath(policyPath) : null;
+        _layoutDiagnosticsPolicy = _policyStartPath is null
+            ? LayoutDiagnosticsPolicyLoader.LoadUserPolicy()
+            : LayoutDiagnosticsPolicyLoader.Load(_policyStartPath);
+        _projectLayoutDiagnosticsPolicy = _policyStartPath is null
+            ? new LayoutDiagnosticsPolicy()
+            : LayoutDiagnosticsPolicyLoader.LoadProjectPolicy(_policyStartPath);
     }
 
     private void InvalidateScreenshotCache()
@@ -954,6 +958,7 @@ public sealed class InspectorServer : IDisposable
                     "/inspector-dialog.js" => HandleEmbeddedFile("inspector-dialog.js", "application/javascript"),
                     "/inspector-data-context.js" => HandleEmbeddedFile("inspector-data-context.js", "application/javascript"),
                     "/inspector-properties.js" => HandleEmbeddedFile("inspector-properties.js", "application/javascript"),
+                    "/inspector-layout.js" => HandleEmbeddedFile("inspector-layout.js", "application/javascript"),
                     "/inspector-tree.js" => HandleEmbeddedFile("inspector-tree.js", "application/javascript"),
                     "/devflow.css" => HandleEmbeddedFile("devflow.css", "text/css"),
                     _ => (404, "text/plain", Encoding.UTF8.GetBytes("Not Found"))
@@ -998,6 +1003,7 @@ public sealed class InspectorServer : IDisposable
                     "/api/cdp/eval" => await HandleCdpEvalAsync(request.Body),
                     "/api/control" => await HandleControlAsync(request.Body, leaseId, holderKind, holderLabel),
                     "/api/diagnostics/suppress" => HandleDiagnosticSuppression(request.Body, remove: false),
+                    "/api/diagnostics/layout" => await HandleLayoutScanAsync(request.Body),
                     "/api/diagnostics/unsuppress" => HandleDiagnosticSuppression(request.Body, remove: true),
                     "/api/diagnostics/agent-payload" => HandleDiagnosticAgentPayload(request.Body),
                     _ => (404, "text/plain", Encoding.UTF8.GetBytes("Not Found"))
@@ -1196,6 +1202,65 @@ public sealed class InspectorServer : IDisposable
         return diagnostics;
     }
 
+    private async Task<(int, string, byte[])> HandleLayoutScanAsync(string? body)
+    {
+        InspectorLayoutScanRequest? options;
+        try
+        {
+            options = JsonSerializer.Deserialize(body ?? "{}",
+                DevFlowCliJsonContext.Default.InspectorLayoutScanRequest);
+        }
+        catch (JsonException)
+        {
+            return BadRequest("Invalid Layout scan request.");
+        }
+        if (options is null || options.RootElementId?.Length > 1024
+            || options.Profile is not ("agent" or "strict" or "exhaustive"))
+            return BadRequest("Select a valid Layout profile and an optional root element ID.");
+
+        if (!await _diagnosticsDeltaGate.WaitAsync(0))
+            return (429, "application/json", Encoding.UTF8.GetBytes("""{"ok":false,"error":"A Layout scan is already running. Retry after it finishes."}"""));
+        try
+        {
+            var report = await _client.AnalyzeLayoutAsync(new LayoutInspectionRequest
+            {
+                Profile = options.Profile,
+                MinimumSeverity = "info",
+                IncludeEvidence = true,
+                Scope = new LayoutInspectionScope { RootElementId = options.RootElementId },
+                Privacy = new LayoutPrivacyOptions { Text = "none" },
+                Suppressions = GetLayoutSuppressions(),
+                Stability = new LayoutStabilityOptions { Mode = "wait", TimeoutMs = 2500 }
+            }, _lifetimeCts.Token);
+            if (report is null)
+                return (501, "application/json", Encoding.UTF8.GetBytes("""{"ok":false,"error":"The connected app does not support Layout diagnostics."}"""));
+
+            lock (_cacheLock)
+            {
+                _latestLayoutDiagnostics = report;
+                _latestLayoutDiagnosticsAt = DateTime.UtcNow;
+            }
+            return Ok(JsonSerializer.Serialize(new InspectorLayoutScanResponse
+            {
+                Report = report,
+                PolicyFilePath = _policyStartPath is null
+                    ? null : LayoutDiagnosticsPolicyLoader.ResolveProjectConfigPath(_policyStartPath)
+            },
+                DevFlowCliJsonContext.Default.InspectorLayoutScanResponse));
+        }
+        catch (LayoutDiagnosticsException error)
+        {
+            var payload = JsonSerializer.Serialize(new InspectorLayoutScanResponse { Ok = false, Error = error.Message },
+                DevFlowCliJsonContext.Default.InspectorLayoutScanResponse);
+            return (error.StatusCode is >= 400 and <= 599 ? error.StatusCode : 503,
+                "application/json", Encoding.UTF8.GetBytes(payload));
+        }
+        finally
+        {
+            _diagnosticsDeltaGate.Release();
+        }
+    }
+
     private async Task<LayoutInspectionResult?> CaptureLayoutDiagnosticsAsync(string stabilityMode)
     {
         try
@@ -1332,11 +1397,22 @@ public sealed class InspectorServer : IDisposable
         string? body,
         bool remove)
     {
+        if (_policyStartPath is null)
+            return BadRequest("Layout suppressions require the inspected project's full path. Rebuild the app with MauiDevFlowIncludeProjectPath=true.");
+
         var request = JsonSerializer.Deserialize<InspectorDiagnosticRequest>(
             body ?? "{}",
             DevFlowCliJsonContext.Default.InspectorDiagnosticRequest);
         if (string.IsNullOrWhiteSpace(request?.FindingId))
             return (400, "text/plain", Encoding.UTF8.GetBytes("findingId is required"));
+        if (request.PolicyFilePath is not null && !string.Equals(request.PolicyFilePath,
+            LayoutDiagnosticsPolicyLoader.ResolveProjectConfigPath(_policyStartPath),
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            return JsonResponse(409, new
+            {
+                success = false,
+                message = "The Layout policy location changed. Rescan and confirm the current path before saving."
+            });
 
         LayoutFinding? finding;
         lock (_cacheLock)
@@ -2965,10 +3041,18 @@ public sealed class InspectorServer : IDisposable
         var el = await _client.GetElementAsync(elementId);
         if (el?.SourceFile is null)
             return (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":false,\"error\":\"No source available for this element.\"}"));
+        var sourcePath = el.SourceFile;
+        if (!Path.IsPathFullyQualified(sourcePath) && _project is not null && Path.IsPathFullyQualified(_project))
+        {
+            var resolved = _sourcePropertyEditor.ResolveSourcePath(sourcePath, out var error);
+            if (resolved is null)
+                return JsonResponse(200, new { ok = false, error });
+            sourcePath = resolved;
+        }
         var payload = JsonSerializer.Serialize(new
         {
             ok = true,
-            file = el.SourceFile,
+            file = sourcePath,
             line = el.SourceLine,
             column = el.SourceColumn,
             sourceHash = el.SourceHash
@@ -2988,7 +3072,7 @@ public sealed class InspectorServer : IDisposable
     // Paths whose responses expose more than the visible tree and therefore require the read token.
     internal static bool IsTokenGatedPath(string path) => path switch
     {
-        "/api/source" or "/api/persistProperty" or "/api/logs" or "/api/network" or "/api/network/detail" or "/api/preferences"
+        "/api/source" or "/api/persistProperty" or "/api/diagnostics/layout" or "/api/logs" or "/api/network" or "/api/network/detail" or "/api/preferences"
             or "/api/device" or "/api/sensors" or "/api/geolocation"
             or "/api/files/roots" or "/api/files/list"
             or "/api/flows/files/list" or "/api/flows/files/load"
@@ -3646,6 +3730,29 @@ public sealed class InspectorServer : IDisposable
 
         [System.Text.Json.Serialization.JsonPropertyName("reason")]
         public string? Reason { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("policyFilePath")]
+        public string? PolicyFilePath { get; set; }
+    }
+
+    internal sealed class InspectorLayoutScanRequest
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("rootElementId")]
+        public string? RootElementId { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("profile")]
+        public string Profile { get; set; } = "agent";
+    }
+
+    internal sealed class InspectorLayoutScanResponse
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("ok")]
+        public bool Ok { get; set; } = true;
+        [System.Text.Json.Serialization.JsonPropertyName("report")]
+        public LayoutInspectionResult? Report { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("error")]
+        public string? Error { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("policyFilePath")]
+        public string? PolicyFilePath { get; set; }
     }
 
     internal sealed class HttpRequestInfo

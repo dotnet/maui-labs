@@ -278,7 +278,7 @@ The same result is available through:
 - HTTP: `POST /api/v1/ui/diagnostics/layout`
 - Driver: `AgentClient.AnalyzeLayoutAsync`
 - MCP: `maui_layout_diagnostics`
-- Web Inspector: the Layout diagnostics side panel
+- Web Inspector: Data -> Layout (also opened by the toolbar's Layout button)
 
 Results distinguish violations, observations, incomplete checks, confidence,
 clip causes, visual versus interaction occlusion, and permanent platform
@@ -292,8 +292,9 @@ Rule set **1.1** adds three managed-layout checks while retaining schema **1.0**
 | `layout.desired-size-constrained` | The last measured desired size, with margins removed, exceeds the arranged size | Informational observation, not proof of lost content |
 | `layout.child-outside-parent` | A child's untransformed arranged frame extends outside its direct layout parent | Informational observation, not proof of clipping |
 
-Use `--minimum-severity info` to see the latter two rules. In the Inspector,
-choose **All findings** instead of the default actionable-only filter. Selecting
+Use `--minimum-severity info` to see the latter two rules. The Inspector's Layout
+dock starts with **All findings**; use **Filters** to select actionable findings,
+outcome, severity, confidence, or a rule. Selecting
 a child-outside-parent finding highlights the child and its layout parent with a
 distinct parent outline, not a clip outline. Lower-severity detections remain
 visible in `summary.filtered` even when their detailed findings are omitted.
@@ -328,6 +329,37 @@ unknown explicit rule IDs; existing schema-1.0 requests are unchanged.
 
 The sample's **Layout Diagnostics** page has problem examples and a **Use valid
 layout** toggle for checking that these findings disappear after a correction.
+
+#### Layout workspace
+
+The original docked Layout experience is available with the current diagnostics
+contract: compact friendly finding rows, a detail view with measured sizing and
+limitations, and a coverage view listing every rule's actual support and
+confidence. Coverage does not invent per-element evaluated counts that the
+current agent does not report.
+
+Opening **Layout** performs one scan. **Rescan** and **Recheck** are explicit;
+**Live** is opt-in and updates after observed layout changes while this dock is
+visible. Hiding or collapsing the dock stops scheduled live work. Screenshot
+polling no longer runs layout analysis on every refresh.
+The toolbar's Layout state follows the selected tab and dock visibility.
+Selecting Layout in a collapsed dock defers scanning until it is expanded;
+the toolbar button expands that workspace instead of closing the dock.
+
+Changes mark the previous snapshot stale and remove its highlights. Navigation
+and reloads invalidate it even when the route and geometry are unchanged;
+repeated, unchanged connection snapshots do not count as navigation. A missing
+finding is not described as resolved when coverage is incomplete. Details offer
+**Show in app**, **Open source** when mapped, bounded **Copy payload** and **Add
+to Copilot** context, and confirmation before the existing project-policy
+suppression action. The confirmation shows the full policy path. Suppression
+requires a full project path from the host or an app built with
+`MauiDevFlowIncludeProjectPath=true`; a filename-only app identity never uses
+the broker's working directory for project policies. When the full project path
+is known, mapped source actions resolve project-relative XAML references to full
+local paths without requiring the file to be writable.
+Copilot context remains a redacted point-in-time snapshot,
+not mutation or source-write authority.
 
 Debug builds generate XAML source maps by default, so findings can include
 `sourceFile`, `sourceLine`, and `sourceColumn`. Source-content hashes are not

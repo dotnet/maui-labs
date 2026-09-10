@@ -20,7 +20,7 @@ namespace Microsoft.Maui.DevFlow.Inspector.Tests;
 /// </summary>
 [Collection("Inspector")]
 [Trait("Category", "Integration")]
-public class InspectorPageTests : IAsyncLifetime
+public partial class InspectorPageTests : IAsyncLifetime
 {
     private IPlaywright _playwright = null!;
     private IBrowser _browser = null!;
@@ -54,6 +54,8 @@ public class InspectorPageTests : IAsyncLifetime
     [LiveInspectorFact]
     public async Task LayoutBaselineFindings_RespectOutcomeFilterAndHighlightParent()
     {
+        var browserErrors = new List<string>();
+        _page.Console += (_, message) => { if (message.Type == "error") browserErrors.Add(message.Text); };
         Assert.True(int.TryParse(Environment.GetEnvironmentVariable("LAYOUT_QA_AGENT_PORT"), out var port),
             "Set LAYOUT_QA_AGENT_PORT to the exact DevFlow.Sample layout QA agent.");
         using var agent = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", port);
@@ -83,6 +85,10 @@ public class InspectorPageTests : IAsyncLifetime
             await _page.Locator("#df-more").ClickAsync();
         await layoutToggle.ClickAsync();
         await Expect(_page.Locator("#df-diagnostics-pane")).ToBeVisibleAsync();
+        await Expect(_page.Locator("#df-dock")).ToBeVisibleAsync();
+        await Expect(_page.Locator("#df-tab-layout")).ToHaveAttributeAsync("aria-selected", "true");
+        await _page.Locator(".df-layout-filter-menu > summary").ClickAsync();
+        await _page.Locator("#diagnostics-filter").SelectOptionAsync("actionable");
 
         var ruleFilter = _page.Locator("#diagnostics-rule");
         var findings = _page.Locator("#diagnostics-list .diagnostic-item");
@@ -99,11 +105,27 @@ public class InspectorPageTests : IAsyncLifetime
         var overflow = findings.Filter(new() { HasText = "BaselineOverflowChild" });
         await Expect(overflow).ToBeVisibleAsync();
         await overflow.ClickAsync();
+        await Expect(_page.Locator("[data-layout-detail-id]")).ToBeVisibleAsync();
         await Expect(_page.Locator(
             ".devflow-element[data-automationId='BaselineOverflowChild'].diagnostic-selected")).ToHaveCountAsync(1);
         await Expect(_page.Locator(
             ".devflow-element[data-automationId='BaselineOverflowParent'].diagnostic-related-highlight")).ToHaveCountAsync(1);
         await Expect(_page.Locator("#diagnostic-overlays .diagnostic-region-parent")).ToHaveCountAsync(1);
+        await Expect(_page.Locator("body")).Not.ToHaveClassAsync(new System.Text.RegularExpressions.Regex("df-disconnected"));
+        Assert.DoesNotContain(browserErrors, message => message.Contains("State refresh failed", StringComparison.Ordinal));
+        var screenshotPath = Environment.GetEnvironmentVariable("LAYOUT_QA_SCREENSHOT_PATH");
+        if (!string.IsNullOrWhiteSpace(screenshotPath))
+            await _page.ScreenshotAsync(new() { Path = screenshotPath });
+        var sourceResponse = await _page.RunAndWaitForResponseAsync(
+            () => _page.GetByRole(AriaRole.Button, new() { Name = "Open source", Exact = true }).ClickAsync(),
+            response => response.Url.EndsWith("/api/source", StringComparison.Ordinal));
+        using var source = JsonDocument.Parse(await sourceResponse.TextAsync());
+        Assert.True(source.RootElement.GetProperty("ok").GetBoolean());
+        var sourceFile = source.RootElement.GetProperty("file").GetString()!;
+        Assert.True(Path.IsPathFullyQualified(sourceFile), $"Expected a full mapped XAML path, got {sourceFile}.");
+        Assert.Equal("LayoutDiagnosticsTestPage.xaml", Path.GetFileName(sourceFile));
+        Assert.True(File.Exists(sourceFile));
+        await Expect(_page.Locator("#df-status")).ToContainTextAsync(sourceFile);
     }
 
     [LiveInspectorFact]
