@@ -2,15 +2,15 @@
 
 On-device AI for .NET MAUI apps using platform-native models — no cloud required.
 
-This package provides [`Microsoft.Extensions.AI`](https://learn.microsoft.com/dotnet/ai/ai-extensions) abstractions (`IChatClient`, `IEmbeddingGenerator`) backed by on-device AI capabilities:
+This package provides [`Microsoft.Extensions.AI`](https://learn.microsoft.com/dotnet/ai/ai-extensions) abstractions (`IChatClient`, `IEmbeddingGenerator`) backed by on-device AI capabilities, plus an experimental provider-neutral `IImageClassificationClient` contract:
 
-| Platform | Chat (IChatClient) | Embeddings (IEmbeddingGenerator) |
-|----------|-------------------|----------------------------------|
-| iOS 26+ | ✅ Apple Intelligence (Foundation Models) | ✅ NL Embeddings |
-| Mac Catalyst 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
-| macOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
-| Android | 🔜 Coming soon | 🔜 Coming soon |
-| Windows | 🔜 Coming soon | 🔜 Coming soon |
+| Platform | Chat (IChatClient) | Embeddings (IEmbeddingGenerator) | Image classification contract |
+|----------|-------------------|----------------------------------|-------------------------------|
+| iOS 26+ | ✅ Apple Intelligence (Foundation Models) | ✅ NL Embeddings | ✅ Provider-neutral contract |
+| Mac Catalyst 26+ | ✅ Apple Intelligence | ✅ NL Embeddings | ✅ Provider-neutral contract |
+| macOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings | ✅ Provider-neutral contract |
+| Android | 🔜 Coming soon | 🔜 Coming soon | ✅ Provider-neutral contract |
+| Windows | 🔜 Coming soon | 🔜 Coming soon | ✅ Provider-neutral contract |
 
 ## Getting Started
 
@@ -65,6 +65,52 @@ await foreach (var update in _chat.GetStreamingResponseAsync("Plan a day trip to
 var generator = new NLEmbeddingGenerator(NLEmbeddingType.Sentence);
 var embeddings = await generator.GenerateAsync(["sunset beach", "mountain hiking"]);
 ```
+
+### Image classification
+
+Applications depend on the contract and receive a provider from dependency injection:
+
+```csharp
+using Microsoft.Maui.Essentials.AI;
+
+public static async Task<ImageClassificationPrediction?> ClassifyAsync(
+    IImageClassificationClient classifier,
+    Stream image,
+    CancellationToken cancellationToken = default)
+{
+    ImageClassificationResult result = await classifier.ClassifyImageAsync(
+        image,
+        "image/jpeg",
+        new ImageClassificationOptions { MaximumPredictions = 3 },
+        cancellationToken);
+
+    return result.Predictions.FirstOrDefault();
+}
+```
+
+`MaximumPredictions` is an upper bound, so providers may return fewer results. `MaximumInputBytes` limits the image bytes a provider may read and defaults to exactly 20 MiB (`20 * 1024 * 1024` bytes). Prediction confidence is optional. Providers that cannot produce confidence values throw `NotSupportedException` when `MinimumConfidence` is set.
+
+To classify against a fixed label set with a dedicated vision-capable `IChatClient`, use the built-in adapter:
+
+```csharp
+IImageClassificationClient classifier =
+    new ChatClientImageClassificationClient(
+        visionChatClient,
+        ["cat", "dog", "bird"]);
+
+ImageClassificationResult result =
+    await classifier.ClassifyImageAsync(image, "image/jpeg");
+```
+
+The adapter snapshots the non-empty label allowlist, prefers structured output, rejects malformed responses and labels outside the allowlist, and preserves the model's ranking. If a chat client ignores the requested response format, the adapter also accepts a top-level JSON string array, but never extracts JSON from prose or Markdown fences. Its predictions have `null` confidence, and the original `ChatResponse` is available through `RawRepresentation`. Disposing the adapter does not dispose the injected chat client.
+
+The stream remains owned by the caller. Clients read one encoded image from its current position and must not dispose or retain the stream. A provider should throw `NotSupportedException` for a valid image media type it cannot decode.
+
+Provider identity is available from `ImageClassificationClientMetadata` through `GetService`. Each result retains its `ModelId` and can preserve provider-native response data through `RawRepresentation` and `AdditionalProperties`.
+
+For custom cloud classifiers, install
+[`Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding`](https://www.nuget.org/packages/Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding/)
+and configure an Azure Content Understanding analyzer with `EnableSegment=false`.
 
 ## Requirements
 
