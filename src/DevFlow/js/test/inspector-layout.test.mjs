@@ -7,6 +7,7 @@ import {
   layoutContextPayload,
   layoutRecheckMessage,
   layoutReportView,
+  layoutRootElementId,
   layoutRuleLabel,
 } from '../../../Cli/Microsoft.Maui.Cli/DevFlow/Inspector/Web/inspector-layout.js';
 
@@ -32,6 +33,24 @@ test('original friendly rule labels include the new baseline checks', () => {
   assert.equal(layoutRuleLabel('layout.desired-size-constrained'), 'Content under size pressure');
   assert.equal(layoutRuleLabel('layout.child-outside-parent'), 'Child outside parent');
   assert.equal(layoutRuleLabel('layout.future-rule'), 'future rule');
+});
+
+test('default scope includes both flyout and detail, preserving a shared navigation ancestor', () => {
+  const shell = { id: 'shell', type: 'MainShell' };
+  const menu = { id: 'menu', type: 'ContentPage', parentId: 'shell' };
+  const navigation = { id: 'navigation', type: 'NavigationPage', parentId: 'shell' };
+  const detail = { id: 'detail', type: 'DetailPage', parentId: 'navigation' };
+  assert.equal(layoutRootElementId([shell, menu, navigation, detail]), 'shell');
+  assert.equal(layoutRootElementId([shell, navigation, detail]), 'navigation');
+  assert.equal(layoutRootElementId([shell, { ...menu, isVisible: false }, navigation, detail]), 'navigation');
+  assert.equal(layoutRootElementId([shell, { ...detail, parentId: 'shell' }]), 'detail');
+});
+
+test('default scope handles non-Page roots and does not guess between disconnected pages', () => {
+  assert.equal(layoutRootElementId([{ id: 'window', type: 'Window' }]), 'window');
+  assert.equal(layoutRootElementId([]), null);
+  assert.equal(layoutRootElementId([{ id: 'a', type: 'OnePage' }, { id: 'b', type: 'TwoPage' }]), null);
+  assert.equal(layoutRootElementId([{ id: 'a', type: 'OnePage', parentId: 'a' }]), 'a');
 });
 
 test('event-stream reconnection snapshots do not invalidate an unchanged layout', () => {

@@ -24,6 +24,24 @@ export function layoutRuleLabel(rule) {
   return labels[rule] || text(rule).replace(/^layout\./, '').replaceAll('-', ' ') || 'Layout finding';
 }
 
+export function layoutRootElementId(elements) {
+  const byId = new Map(elements.filter(element => text(element?.id)).map(element => [element.id, element]));
+  const visible = [...byId.values()].filter(element => element.isVisible !== false);
+  const pages = visible.filter(element => /Page$/i.test(text(element.type)));
+  if (!pages.length) return visible[0]?.id || null;
+  const paths = pages.map(element => {
+    const path = [];
+    const seen = new Set();
+    while (element && !seen.has(element.id)) {
+      seen.add(element.id);
+      path.push(element.id);
+      element = byId.get(element.parentId);
+    }
+    return path;
+  });
+  return paths[0].find(id => paths.every(path => path.includes(id))) || null;
+}
+
 export function createLayoutEventTracker() {
   let route = '', lifecycle = '';
   return {

@@ -87,6 +87,71 @@ function liveStore(device) {
   return store;
 }
 
+test("page filtering preserves nested navigation content and a side-by-side flyout", async () => {
+  const el = (id, type, x, y, width, height, children = []) => ({
+    id, type, isVisible: true, windowBounds: { x, y, width, height }, children,
+  });
+  const device = new FakeDevice();
+  device._info.window = { x: 0, y: 0, width: 1000, height: 900 };
+  device.getRoots = async () => ({
+    ok: true,
+    window: device._info.window,
+    roots: [el("root", "MainShell", 0, 0, 1000, 900, [
+      el("menu", "ContentPage", 0, 0, 240, 900, [
+        el("menu-item", "Label", 20, 200, 200, 40),
+      ]),
+      el("navigation", "NavigationPage", 244, 100, 756, 800, [
+        el("detail", "DetailPage", 244, 100, 756, 800, [
+          el("detail-label", "Label", 260, 200, 200, 40),
+          el("detail-button", "Button", 260, 300, 200, 40),
+        ]),
+      ]),
+    ])],
+  });
+  const store = liveStore(device);
+  try {
+    await store.refresh({ shot: false });
+    const ids = new Set();
+    const visit = (element) => {
+      ids.add(element.id);
+      for (const child of element.children || []) visit(child);
+    };
+    store.state.roots.forEach(visit);
+    for (const id of ["menu", "menu-item", "navigation", "detail", "detail-label", "detail-button"])
+      assert.ok(ids.has(id), `${id} must not be mistaken for an inactive page`);
+  } finally {
+    store.dispose();
+  }
+});
+
+test("hidden Shell tabs prefer the selected current page over a populated cached page", async () => {
+  const device = new FakeDevice();
+  device._info.window = { x: 0, y: 0, width: 400, height: 900 };
+  const el = (id, type, children = []) => ({
+    id, type, isVisible: true, windowBounds: { x: 0, y: 100, width: 400, height: 800 }, children,
+  });
+  const label = id => ({ id, type: "Label", windowBounds: { x: 20, y: 200, width: 100, height: 40 } });
+  device.getRoots = async () => ({
+    ok: true,
+    window: device._info.window,
+    roots: [el("shell", "AppShell", [
+      el("home-wrapper", "ShellContent", [el("home", "MainPage", [label("old1"), label("old2"), label("old3")])]),
+      el("catalog-wrapper", "ShellContent", [{
+        ...el("catalog", "CatalogPage", [label("current")]), state: { selected: true },
+      }]),
+    ])],
+  });
+  const store = liveStore(device);
+  try {
+    await store.refresh({ shot: false });
+    const json = JSON.stringify(store.state.roots);
+    assert.match(json, /"id":"current"/);
+    assert.doesNotMatch(json, /"id":"home"/);
+  } finally {
+    store.dispose();
+  }
+});
+
 test("refresh serializes overlapping pulls and preserves the newest snapshot", async () => {
   const device = new FakeDevice();
   const store = liveStore(device);

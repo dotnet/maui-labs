@@ -7,6 +7,82 @@ namespace Microsoft.Maui.DevFlow.Inspector.Tests;
 public partial class InspectorPageTests
 {
     [LiveInspectorFact]
+    public async Task LayoutWorkspace_DefaultScopeIncludesFlyoutAndDetailPanes()
+    {
+        string? requestedRoot = null;
+        await _page.RouteAsync("**/api/diagnostics/layout", route =>
+        {
+            using var request = JsonDocument.Parse(route.Request.PostData!);
+            requestedRoot = request.RootElement.GetProperty("rootElementId").GetString();
+            return route.FulfillAsync(new() { ContentType = "application/json", Body = LayoutWorkspaceResponse() });
+        });
+        await PrepareLayoutWorkspaceAsync(elements: """
+            <div class="devflow-element" data-id="layout-root" data-type="MainShell" data-isVisible="true" style="position:absolute;left:0px;top:0px;width:320px;height:600px;"></div>
+            <div class="devflow-element" data-id="menu" data-parentId="layout-root" data-type="ContentPage" data-isVisible="true" style="position:absolute;left:0px;top:0px;width:80px;height:600px;"></div>
+            <div class="devflow-element" data-id="navigation" data-parentId="layout-root" data-type="NavigationPage" data-isVisible="true" style="position:absolute;left:80px;top:0px;width:240px;height:600px;"></div>
+            <div class="devflow-element" data-id="layout-target" data-parentId="navigation" data-type="BoxView" data-isVisible="true" style="position:absolute;left:100px;top:20px;width:180px;height:40px;"></div>
+            """);
+        await OpenLayoutWorkspaceAsync();
+        await Expect(_page.Locator("#diagnostics-list .diagnostic-item")).ToHaveCountAsync(1);
+        Assert.Equal("layout-root", requestedRoot);
+    }
+
+    [LiveInspectorFact]
+    public Task LayoutWorkspace_FullTreeRevisionInvalidatesUnchangedOverlaysWithPolling()
+        => VerifyFullTreeRevisionInvalidatesAsync(eventsSupported: false);
+
+    [LiveInspectorFact]
+    public Task LayoutWorkspace_FullTreeRevisionInvalidatesUnchangedOverlaysWithEventStream()
+        => VerifyFullTreeRevisionInvalidatesAsync(eventsSupported: true);
+
+    [LiveInspectorFact]
+    public async Task LayoutWorkspace_RenderedStateInvalidatesUnchangedGeometryRevision()
+    {
+        var position = 0;
+        await _page.RouteAsync("**/api/diagnostics/layout", route => route.FulfillAsync(new()
+        {
+            ContentType = "application/json", Body = LayoutWorkspaceResponse()
+        }));
+        await PrepareLayoutWorkspaceAsync(() => position, treeRevision: () => "unchanged-geometry");
+        await OpenLayoutWorkspaceAsync();
+        await Expect(_page.Locator("#layout-coverage")).ToHaveTextAsync("Partial coverage");
+
+        position = 10;
+        await AdvanceLayoutPollingAsync();
+
+        await Expect(_page.Locator("#layout-coverage")).ToHaveTextAsync("Stale snapshot");
+        await Expect(_page.Locator("#df-attach-data")).ToBeDisabledAsync();
+    }
+
+    private async Task VerifyFullTreeRevisionInvalidatesAsync(bool eventsSupported)
+    {
+        var revision = "before-scroll";
+        var scans = 0;
+        var socketOpened = new TaskCompletionSource<IWebSocketRoute>(TaskCreationOptions.RunContinuationsAsynchronously);
+        await _page.RouteWebSocketAsync("**/ws/events", socket => socketOpened.TrySetResult(socket));
+        await _page.RouteAsync("**/api/diagnostics/layout", route =>
+        {
+            scans++;
+            return route.FulfillAsync(new() { ContentType = "application/json", Body = LayoutWorkspaceResponse() });
+        });
+        await PrepareLayoutWorkspaceAsync(eventsSupported: eventsSupported, treeRevision: () => revision);
+        if (eventsSupported)
+            SendLayoutConnectionSeed(await socketOpened.Task.WaitAsync(TimeSpan.FromSeconds(10)), "seed");
+        await OpenLayoutWorkspaceAsync();
+        await _page.Locator("#diagnostics-list .diagnostic-item").ClickAsync();
+        await Expect(_page.Locator("#layout-coverage")).ToHaveTextAsync("Partial coverage");
+        Assert.Equal(1, scans);
+
+        revision = "after-scroll";
+        await _page.Clock.RunForAsync(3100);
+        await Expect(_page.Locator("#layout-coverage")).ToHaveTextAsync("Stale snapshot");
+        await Expect(_page.Locator("#df-attach-data")).ToBeDisabledAsync();
+        await Expect(_page.GetByRole(AriaRole.Button, new() { Name = "parent: LayoutRoot", Exact = true }))
+            .ToBeDisabledAsync();
+        Assert.Equal(1, scans);
+    }
+
+    [LiveInspectorFact]
     public async Task LayoutWorkspace_ToolbarFollowsDockCloseCollapseAndTabChanges()
     {
         var scans = 0;
@@ -356,7 +432,8 @@ public partial class InspectorPageTests
             }
         });
 
-    private async Task PrepareLayoutWorkspaceAsync(Func<int>? position = null, bool eventsSupported = false)
+    private async Task PrepareLayoutWorkspaceAsync(Func<int>? position = null, bool eventsSupported = false,
+        Func<string>? treeRevision = null, string? elements = null)
     {
         await _page.Clock.InstallAsync();
         await CaptureClipboardWritesAsync();
@@ -374,7 +451,8 @@ public partial class InspectorPageTests
             Body = JsonSerializer.Serialize(new
             {
                 viewportWidth = 320, viewportHeight = 600,
-                elements = $"""
+                treeRevision = treeRevision?.Invoke(),
+                elements = elements ?? $"""
                     <div class="devflow-element" data-id="layout-root" data-type="Window" data-automationId="LayoutRoot" data-isVisible="true" data-isEnabled="true" style="position:absolute;left:0px;top:0px;width:320px;height:600px;"></div>
                     <div class="devflow-element" data-id="layout-target" data-parentId="layout-root" data-type="BoxView" data-automationId="LayoutTarget" data-hasSource="true" data-isVisible="true" data-isEnabled="true" style="position:absolute;left:{position?.Invoke() ?? 0}px;top:20px;width:180px;height:40px;"></div>
                     """

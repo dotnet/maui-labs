@@ -1111,6 +1111,7 @@ public sealed class InspectorServer : IDisposable
         var json = JsonSerializer.Serialize(new
         {
             frameId = frame.Id,
+            treeRevision = frame.TreeRevision,
             screenshotUrl = $"screenshot.png?frame={Uri.EscapeDataString(frame.Id)}",
             elements = frame.ElementsHtml,
             viewportWidth = frame.Width,

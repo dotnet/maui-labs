@@ -9,6 +9,63 @@ namespace Microsoft.Maui.DevFlow.Tests;
 
 public class LayoutBaselineRulesTests
 {
+    [Theory]
+    [InlineData("agent")]
+    [InlineData("exhaustive")]
+    public void Analyze_SharedUnmeasuredShape_DoesNotDiscardIndependentFindings(string profile)
+    {
+        var first = Node("shared-shape", 0, 0);
+        first.GeometryAvailable = false;
+        first.Element.Type = "Rectangle";
+        first.Element.ParentId = "first-border";
+        var second = Node("shared-shape", 0, 0);
+        second.GeometryAvailable = false;
+        second.Element.Type = "Rectangle";
+        second.Element.ParentId = "second-border";
+        var target = Node("target", 100, 40);
+        target.Sizing!.MinimumWidth = 120;
+        var capture = new LayoutCaptureSnapshot();
+        capture.Nodes.AddRange([first, second, target]);
+
+        var result = LayoutDiagnosticsEngine.Analyze(capture, new LayoutInspectionRequest
+        {
+            Profile = profile,
+            Rules = [LayoutDiagnosticRules.ConstraintViolation, LayoutDiagnosticRules.GeometricOverlap],
+            MinimumSeverity = "info"
+        }, "test", true, null, Support());
+
+        Assert.Equal(1, result.Summary.Violations);
+        Assert.All(result.Findings, finding => Assert.Equal("target", finding.Element.Id));
+        Assert.Equal("partial", result.Coverage.Overall);
+        Assert.True(result.Summary.Incomplete > 0);
+        Assert.Contains(result.Coverage.Limitations, reason => reason.Contains("duplicate element identities"));
+    }
+
+    [Fact]
+    public void Analyze_AmbiguousParentIdentity_DoesNotChooseAnOwnerForDescendants()
+    {
+        var first = Node("shared-parent", 20, 40);
+        first.IsLayoutContainer = true;
+        var second = Node("SHARED-PARENT", 200, 40);
+        second.IsLayoutContainer = true;
+        var child = Child(first, x: 30);
+        var capture = new LayoutCaptureSnapshot();
+        capture.Nodes.AddRange([first, second, child]);
+
+        var result = LayoutDiagnosticsEngine.Analyze(capture, new LayoutInspectionRequest
+        {
+            Profile = "exhaustive",
+            Rules = [LayoutDiagnosticRules.ChildOutsideParent, LayoutDiagnosticRules.GeometricOverlap],
+            MinimumSeverity = "info",
+            IncludePasses = true
+        }, "test", true, null, Support());
+
+        Assert.Empty(result.Findings);
+        Assert.Equal(0, result.Summary.Passes);
+        Assert.True(result.Summary.Incomplete > 0);
+        Assert.Contains(result.Coverage.OpaqueSubtrees, element => element.Id == child.Element.Id);
+    }
+
     [Fact]
     public void Catalog_AdditiveRules_KeepSchemaAndAdvanceRuleSet()
     {

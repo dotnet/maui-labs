@@ -5,7 +5,7 @@ import { confirmModal } from './inspector-dialog.js';
 import { createDataSnapshot, isSecretContextKey, supportsDataContextScope } from './inspector-data-context.js';
 import { createPropertyGridController } from './inspector-properties.js';
 import { createElementTreeController } from './inspector-tree.js';
-import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload } from './inspector-layout.js';
+import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layoutRootElementId } from './inspector-layout.js';
 
 (function () {
   'use strict';
@@ -235,8 +235,11 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload } fro
         }
         latestRootOffsetX = rootOffsetX;
         latestRootOffsetY = rootOffsetY;
-        layoutPanel?.frameChanged([...viewport.querySelectorAll('.devflow-element')].map(element =>
-          `${element.getAttribute('data-id')}:${element.getAttribute('style')}:${element.getAttribute('data-isVisible')}`).join('|'));
+        const treeRevision = typeof state.treeRevision === 'string' ? state.treeRevision : '';
+        const renderedState = [...viewport.querySelectorAll('.devflow-element')].map(element =>
+          ['data-id', 'style', 'data-isVisible', 'data-isEnabled', 'data-opacity', 'data-text', 'data-value']
+            .map(attribute => element.getAttribute(attribute)));
+        layoutPanel?.frameChanged(JSON.stringify([treeRevision, renderedState]));
         return state;
       } catch (err) {
         markConnected(false);
@@ -796,7 +799,8 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload } fro
 
   // ── Live updates: a WebSocket to the broker-proxied /ws/events makes the mirror react instantly
   // to app-side changes. The 3s poll below stays as a zero-regression fallback and only refreshes
-  // when the socket is NOT live (wsLive) — so if the WS never connects, behavior is exactly as before.
+  // when the socket is NOT live (wsLive), or Layout is visible: an open event stream does not
+  // guarantee every native scroll or layout change emits an event. This poll never analyzes layout.
   let wsLive = false;
   let eventsWs = null;
   let eventConnectTimer = null;
@@ -871,9 +875,9 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload } fro
     if (!eventsWs || eventsWs.readyState >= WebSocket.CLOSING) connectEvents();
   });
 
-  // ── Periodic refresh for app-side changes (AJAX, no flash) — fallback when the WS isn't live ──
+  // ── Periodic safety refresh for app-side changes (AJAX, no flash) ──
   let pollInterval = setInterval(() => {
-    if (!document.hidden && !refreshTimer && !wsLive) {
+    if (!document.hidden && !refreshTimer && (!wsLive || isDiagnosticsPaneVisible())) {
       refreshState();
     }
   }, 3000);
@@ -885,7 +889,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload } fro
     } else if (!pollInterval) {
       if (!replaying) scheduleRefresh(0);
       pollInterval = setInterval(() => {
-        if (!refreshTimer && !wsLive) refreshState();
+        if (!refreshTimer && (!wsLive || isDiagnosticsPaneVisible())) refreshState();
       }, 3000);
     }
   });
@@ -1807,7 +1811,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload } fro
     updateFlowButtons();
     // Pause the 3s poll while replaying so the screenshot doesn't churn under the driven app.
     if (on && pollInterval) { clearInterval(pollInterval); pollInterval = null; }
-    else if (!on && !pollInterval) { pollInterval = setInterval(() => { if (!refreshTimer && !wsLive) refreshState(); }, 3000); }
+    else if (!on && !pollInterval) { pollInterval = setInterval(() => { if (!refreshTimer && (!wsLive || isDiagnosticsPaneVisible())) refreshState(); }, 3000); }
   }
 
   async function captureCheckpoint(label) {
@@ -3232,11 +3236,12 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload } fro
       return result.body;
     },
     selection: () => selectedId,
-    defaultRoot: () => {
-      const elements = [...viewport.querySelectorAll('.devflow-element')];
-      return (elements.find(element => /Page$/i.test(element.getAttribute('data-type') || '')) ||
-        elements[0])?.getAttribute('data-id') || null;
-    },
+    defaultRoot: () => layoutRootElementId([...viewport.querySelectorAll('.devflow-element')].map(element => ({
+      id: element.getAttribute('data-id'),
+      type: element.getAttribute('data-type'),
+      parentId: element.getAttribute('data-parentId'),
+      isVisible: element.getAttribute('data-isVisible') !== 'false',
+    }))),
     status: setStatus,
     show: finding => {
       diagnosticOverlays.replaceChildren();

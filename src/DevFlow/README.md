@@ -337,6 +337,9 @@ contract: compact friendly finding rows, a detail view with measured sizing and
 limitations, and a coverage view listing every rule's actual support and
 confidence. Coverage does not invent per-element evaluated counts that the
 current agent does not report.
+Shared resources can appear under multiple parents in a MAUI tree. Ambiguous
+identities and their dependent subtrees are excluded with an explicit incomplete
+coverage limitation; they do not abort the scan or become guessed ownership.
 
 Opening **Layout** performs one scan. **Rescan** and **Recheck** are explicit;
 **Live** is opt-in and updates after observed layout changes while this dock is
@@ -345,10 +348,20 @@ polling no longer runs layout analysis on every refresh.
 The toolbar's Layout state follows the selected tab and dock visibility.
 Selecting Layout in a collapsed dock defers scanning until it is expanded;
 the toolbar button expands that workspace instead of closing the dock.
+Nested navigation pages and side-by-side flyout/detail panes remain available in
+the visual tree and finding overlays rather than being treated as inactive tabs.
+The default scan scope uses their common ancestor so a flyout sidebar cannot
+silently replace the main content as the inspection target.
+For Shell navigation, the agent marks its current page as selected even when
+the tab bar is hidden. Inspector and Canvas prefer that state over retained
+inactive-page geometry, keeping the screenshot, overlays, and scan target aligned.
 
 Changes mark the previous snapshot stale and remove its highlights. Navigation
 and reloads invalidate it even when the route and geometry are unchanged;
 repeated, unchanged connection snapshots do not count as navigation. A missing
+native event does not leave a visible workspace unchecked: lightweight frame
+polling compares the full tree revision and rendered state, including changes
+omitted from the overlay. This does not rescan diagnostics unless **Live** is enabled. A missing
 finding is not described as resolved when coverage is incomplete. Details offer
 **Show in app**, **Open source** when mapped, bounded **Copy payload** and **Add
 to Copilot** context, and confirmation before the existing project-policy

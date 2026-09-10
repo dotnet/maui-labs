@@ -503,6 +503,30 @@ internal static partial class LayoutDiagnosticsEngine
         // be reported as a pass.
         request = CanonicalizeRequestedRules(request);
 
+        var nodesById = new Dictionary<string, LayoutNodeSnapshot>(StringComparer.OrdinalIgnoreCase);
+        var ambiguousIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var node in capture.Nodes)
+        {
+            if (!nodesById.TryAdd(node.Element.Id, node))
+                ambiguousIds.Add(node.Element.Id);
+        }
+        if (ambiguousIds.Count > 0)
+        {
+            // Shared resources can appear under multiple parents. Do not choose an arbitrary
+            // owner, or evaluate descendants whose ancestry would then be ambiguous.
+            var children = capture.Nodes.ToLookup(node => node.Element.ParentId, StringComparer.OrdinalIgnoreCase);
+            var pending = new Queue<string>(ambiguousIds);
+            while (pending.TryDequeue(out var id))
+            {
+                nodesById.Remove(id);
+                foreach (var child in children[id])
+                {
+                    if (ambiguousIds.Add(child.Element.Id))
+                        pending.Enqueue(child.Element.Id);
+                }
+            }
+        }
+
         var result = new LayoutInspectionResult
         {
             Snapshot = new LayoutSnapshotInfo
@@ -519,12 +543,18 @@ internal static partial class LayoutDiagnosticsEngine
             {
                 Rules = ruleSupport.Select(CloneSupport).ToList(),
                 OpaqueSubtrees = capture.Nodes
-                    .Where(node => node.IsCoverageOpaque || !node.GeometryAvailable)
+                    .Where(node => ambiguousIds.Contains(node.Element.Id)
+                        || node.IsCoverageOpaque || !node.GeometryAvailable)
                     .Select(ToReference)
                     .ToList(),
                 Limitations = capture.Limitations.Distinct(StringComparer.Ordinal).ToList()
             }
         };
+        if (ambiguousIds.Count > 0)
+        {
+            result.Coverage.Limitations.Add(
+                $"The visual tree contains duplicate element identities; {capture.Nodes.Count - nodesById.Count} entries with ambiguous identity or ancestry were not evaluated.");
+        }
 
         result.Coverage.Overall = result.Coverage.Rules.Any(rule => rule.Support != "exact")
             || result.Coverage.OpaqueSubtrees.Count > 0
@@ -547,8 +577,6 @@ internal static partial class LayoutDiagnosticsEngine
             supportByRule.TryGetValue(rule, out var support)
             && support.Support.Equals("unsupported", StringComparison.OrdinalIgnoreCase));
         var unsupportedRequestedCount = notApplicableCount;
-        var nodesById = capture.Nodes.ToDictionary(node => node.Element.Id, StringComparer.OrdinalIgnoreCase);
-
         if (!stable)
         {
             result.Coverage.Limitations.Add(
@@ -558,7 +586,7 @@ internal static partial class LayoutDiagnosticsEngine
 
         foreach (var node in capture.Nodes)
         {
-            if (!node.GeometryAvailable)
+            if (ambiguousIds.Contains(node.Element.Id) || !node.GeometryAvailable)
             {
                 notApplicableCount += s_nodeScopedRules.Count(enabledRules.Contains);
                 continue;
@@ -586,7 +614,7 @@ internal static partial class LayoutDiagnosticsEngine
         }
 
         var geometryNodes = capture.Nodes
-            .Where(node => node.GeometryAvailable)
+            .Where(node => node.GeometryAvailable && !ambiguousIds.Contains(node.Element.Id))
             .ToList();
         var overlapDetectedRules = AnalyzeOverlaps(
             result,

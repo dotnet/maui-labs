@@ -125,6 +125,77 @@ public class InspectorPageFilterTests
     }
 
     [Fact]
+    public void SelectedShellPage_OverridesMorePopulatedCachedPageWithoutTabMarkers()
+    {
+        var active = El("catalog", "CatalogPage", 0, 100, 400, 800, selected: true,
+            children: El("catalog-label", "Label", 20, 200, 100, 40));
+        var tree = new List<ElementInfo>
+        {
+            El("shell", "AppShell", 0, 0, 400, 900, children:
+            [
+                El("home-wrapper", "ShellContent", 0, 100, 400, 800,
+                    children: LaidOutPage("home", "MainPage")),
+                El("catalog-wrapper", "ShellContent", 0, 100, 400, 800, children: active),
+            ]),
+        };
+
+        var html = HtmlRenderer.RenderElements(tree);
+
+        Assert.Contains("data-id=\"catalog-label\"", html);
+        Assert.DoesNotContain("data-id=\"home\"", html);
+        Assert.DoesNotContain("data-id=\"home-wrapper\"", html);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NestedNavigationPage_KeepsBothActivePageAndItsContainer(bool selected)
+    {
+        var tree = new List<ElementInfo>
+        {
+            El("shell", "AppShell", 0, 0, 400, 900, children:
+            [
+                El("tab_DetailPage", "Tab", 300, 850, 100, 50, selected: selected),
+                El("navigation", "NavigationPage", 0, 100, 400, 800,
+                    children: LaidOutPage("detail", "DetailPage")),
+                CollapsedPage("inactive", "OtherPage"),
+            ]),
+        };
+
+        var html = HtmlRenderer.RenderElements(tree);
+
+        Assert.Contains("data-id=\"navigation\"", html);
+        Assert.Contains("data-id=\"detail\"", html);
+        Assert.Contains("data-id=\"detail-l1\"", html);
+        Assert.DoesNotContain("data-id=\"inactive\"", html);
+    }
+
+    [Fact]
+    public void SideBySidePages_KeepsLessPopulatedFlyoutPane()
+    {
+        var tree = new List<ElementInfo>
+        {
+            El("root", "MainShell", 0, 0, 1000, 900, children:
+            [
+                El("menu", "ContentPage", 0, 0, 240, 900,
+                    children: El("menu-item", "Label", 20, 200, 200, 40)),
+                El("detail", "DetailPage", 244, 100, 756, 800, children:
+                [
+                    El("detail-l1", "Label", 260, 200, 200, 40),
+                    El("detail-l2", "Button", 260, 300, 200, 40),
+                    El("detail-l3", "Entry", 260, 400, 200, 40),
+                ]),
+            ]),
+        };
+
+        var html = HtmlRenderer.RenderElements(tree);
+
+        Assert.Contains("data-id=\"menu\"", html);
+        Assert.Contains("data-id=\"menu-item\"", html);
+        Assert.Contains("data-id=\"detail\"", html);
+    }
+
+    [Fact]
     public void SelectFrameTree_UsesOnlyTheScreenshottedPageSubtree()
     {
         var underlying = El("under", "ContentPage", 0, 0, 400, 900);

@@ -2307,6 +2307,7 @@ public partial class VisualTreeWalker
             RadioButton rb => rb.IsChecked,
             Switch sw => sw.IsToggled,
             Picker pk => pk.SelectedIndex >= 0,
+            Page page => ReferenceEquals(FindAncestor<Shell>(page)?.CurrentPage, page),
             _ => info.IsSelected
         };
 

@@ -34,6 +34,7 @@ public class InspectorDiagnosticsOptInTests
             $"analyze called {agent.AnalyzeCalls}x; agent saw: {string.Join(" | ", agent.Calls)}");
         Assert.DoesNotContain("/api/v1/ui/diagnostics/layout", agent.Calls);
         using var json = JsonDocument.Parse(body);
+        Assert.Equal("rev-1", json.RootElement.GetProperty("treeRevision").GetString());
         Assert.Equal(
             JsonValueKind.Null,
             json.RootElement.GetProperty("diagnostics").ValueKind);
