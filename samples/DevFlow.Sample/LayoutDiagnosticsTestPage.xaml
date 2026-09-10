@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:DevFlow.Sample"
              x:Class="DevFlow.Sample.LayoutDiagnosticsTestPage"
              Title="Layout Diagnostics">
     <ScrollView>
@@ -9,6 +10,62 @@
                    FontSize="22"
                    FontAttributes="Bold"
                    AutomationId="LayoutDiagnosticsHeader" />
+
+            <VerticalStackLayout Spacing="12" AutomationId="BaselineFixtures">
+                <Label Text="Managed sizing rules" FontAttributes="Bold" />
+                <Label Text="Constraint conflicts are violations. Desired-size and parent overflow are observations: choose All findings to review them."
+                       FontSize="12" />
+                <Button x:Name="ToggleBaselineButton"
+                        Text="Use valid layout"
+                        AutomationId="ToggleBaselineFixtures"
+                        Clicked="OnToggleBaselineFixtures" />
+                <Label x:Name="BaselineStateLabel"
+                       Text="Problem examples"
+                       AutomationId="BaselineFixtureState" />
+
+                <Label Text="Conflicting minimum and maximum width" FontSize="12" />
+                <Grid WidthRequest="200" HeightRequest="40">
+                    <BoxView x:Name="ConflictingLimitsBox"
+                             WidthRequest="60"
+                             MinimumWidthRequest="160"
+                             MaximumWidthRequest="80"
+                             HeightRequest="30"
+                             HorizontalOptions="Start"
+                             Color="#C62828"
+                             AutomationId="ConflictingLimitsBox" />
+                </Grid>
+
+                <Label Text="Custom content reports a desired size larger than its slot" FontSize="12" />
+                <Grid WidthRequest="120" HeightRequest="40" BackgroundColor="#FFF3E0">
+                    <local:DesiredSizeProbe x:Name="ConstrainedDesiredProbe"
+                                            AutomationId="ConstrainedDesiredProbe">
+                        <Label Text="Measured content" FontSize="12" VerticalOptions="Center" />
+                    </local:DesiredSizeProbe>
+                </Grid>
+
+                <Label Text="Child outside its direct layout parent" FontSize="12" />
+                <Grid WidthRequest="120" HeightRequest="40"
+                      BackgroundColor="#E3F2FD"
+                      AutomationId="BaselineOverflowParent">
+                    <BoxView x:Name="BaselineOverflowChild"
+                             WidthRequest="180" HeightRequest="24"
+                             HorizontalOptions="Start" VerticalOptions="Center"
+                             Color="#1565C0"
+                             AutomationId="BaselineOverflowChild" />
+                </Grid>
+
+                <Label Text="Valid margin and scroll content (not sizing problems)" FontSize="12" />
+                <Grid WidthRequest="120" HeightRequest="60">
+                    <BoxView WidthRequest="80" HeightRequest="40"
+                             Margin="10" Color="#2E7D32"
+                             AutomationId="BaselineValidMargin" />
+                </Grid>
+                <ScrollView Orientation="Horizontal" WidthRequest="120" HeightRequest="40"
+                            AutomationId="BaselineValidScroll">
+                    <BoxView WidthRequest="220" HeightRequest="24" Color="#558B2F"
+                             AutomationId="BaselineScrollableContent" />
+                </ScrollView>
+            </VerticalStackLayout>
 
             <Label Text="Ancestor clipping" FontAttributes="Bold" />
             <Grid WidthRequest="180"

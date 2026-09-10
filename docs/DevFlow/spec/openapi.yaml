@@ -384,9 +384,32 @@ paths:
       operationId: getLayoutDiagnosticRules
       tags: [ui]
       summary: Get supported layout diagnostic rules
+      description: >
+        Returns schemaVersion 1.0 and the agent's ruleSetVersion. Rule set 1.1 adds
+        layout.constraint-violation, layout.desired-size-constrained and
+        layout.child-outside-parent. These rules use realized MAUI layout metadata;
+        native-only and Blazor nodes do not supply that evidence. Clients should
+        discover supported rule IDs here before sending an explicit rule list.
       responses:
         "200":
           description: Layout diagnostic rule support metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  schemaVersion: { type: string, examples: ["1.0"] }
+                  ruleSetVersion: { type: string, examples: ["1.1"] }
+                  profiles: { type: array, items: { type: string } }
+                  rules:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ruleId: { type: string }
+                        support: { type: string, enum: [exact, partial, unsupported] }
+                        confidence: { type: string }
+                        limitations: { type: array, items: { type: string } }
         "501":
           $ref: "#/components/responses/BackendNotSupported"
 
@@ -395,9 +418,90 @@ paths:
       operationId: analyzeLayout
       tags: [ui]
       summary: Analyze the current layout
+      description: >
+        One-shot read-only analysis. Rule set 1.1 retains the 1.0 request/response
+        schema and adds optional sizing, parentRegion and layoutOverflowInsetsPhysicalPixels
+        evidence, plus the additive summary.filtered count. Desired-size
+        and child-frame overflow are informational observations, not proof of
+        clipping. Set minimumSeverity to info to include those observations.
+        Missing managed sizing or excluded relationships are not applicable,
+        never counted as passes. A desired-size pass requires both axes to be known.
+        Unstable snapshots skip the baseline checks and retain one global incomplete
+        signal, rather than producing an incomplete finding for every node.
+        Findings below minimumSeverity are counted in summary.filtered.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                schemaVersion: { type: string, const: "1.0", default: "1.0" }
+                profile: { type: string, enum: [agent, strict, exhaustive, ci], default: agent }
+                rules:
+                  type: array
+                  description: Optional case-insensitive rule IDs from the agent's rule catalog; omitted or empty runs the profile's rules.
+                  items: { type: string }
+                minimumSeverity: { type: string, enum: [info, minor, moderate, serious, critical], default: minor }
+                includeEvidence: { type: boolean, default: true }
+                includePasses: { type: boolean, default: false }
+                scope: { type: object }
+                stability: { type: object }
+                occlusion: { type: object }
+                privacy: { type: object }
+                suppressions: { type: array, items: { type: object } }
       responses:
         "200":
           description: Layout diagnostic results.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  schemaVersion: { type: string, examples: ["1.0"] }
+                  ruleSetVersion: { type: string, examples: ["1.1"] }
+                  snapshot: { type: object }
+                  coverage: { type: object }
+                  summary:
+                    type: object
+                    properties:
+                      filtered:
+                        type: integer
+                        minimum: 0
+                        description: Detections omitted by minimumSeverity. These are not passes; use a lower severity to retrieve their details.
+                  findings:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ruleId: { type: string }
+                        outcome: { type: string }
+                        severity: { type: string }
+                        evidence:
+                          type: object
+                          properties:
+                            sizing:
+                              $ref: "#/components/schemas/LayoutSizingEvidence"
+                            parentRegion:
+                              type: object
+                              description: Direct layout parent's existing window-coordinate region, for highlighting; containment is compared in parent-local layout coordinates.
+                            layoutOverflowInsetsPhysicalPixels:
+                              type: object
+                              description: >
+                                Parent-local untransformed layout overflow multiplied by window
+                                display density. Visual transforms are not applied. This is
+                                distinct from rendered overflowInsetsPhysicalPixels and must
+                                not be painted as edge insets on the rendered fullRegion.
+                              properties:
+                                left: { type: number, minimum: 0 }
+                                top: { type: number, minimum: 0 }
+                                right: { type: number, minimum: 0 }
+                                bottom: { type: number, minimum: 0 }
+        "400":
+          description: Invalid request, unsupported schema version, or an unknown rule ID.
+        "429":
+          description: Another layout scan is running.
+        "503":
+          description: Agent is not yet bound to an app.
         "501":
           $ref: "#/components/responses/BackendNotSupported"
 
@@ -2690,6 +2794,24 @@ components:
         minimum: 0
 
   schemas:
+    LayoutSizingEvidence:
+      type: object
+      description: >
+        Existing MAUI arranged sizes, desired sizes normalized by removing margins,
+        and explicit minimum/maximum requests in logical units. Does not remeasure
+        controls or return text. Unknown, unset or infinite optional values are
+        omitted. Present only on the additive baseline sizing rules.
+      required: [arrangedWidth, arrangedHeight]
+      properties:
+        arrangedWidth: { type: number, minimum: 0 }
+        arrangedHeight: { type: number, minimum: 0 }
+        desiredWidth: { type: number, minimum: 0 }
+        desiredHeight: { type: number, minimum: 0 }
+        minimumWidth: { type: number, minimum: 0 }
+        minimumHeight: { type: number, minimum: 0 }
+        maximumWidth: { type: number, minimum: 0 }
+        maximumHeight: { type: number, minimum: 0 }
+
     BackendNotSupported:
       type: object
       description: >

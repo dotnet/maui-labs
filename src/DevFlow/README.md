@@ -278,11 +278,101 @@ The same result is available through:
 - HTTP: `POST /api/v1/ui/diagnostics/layout`
 - Driver: `AgentClient.AnalyzeLayoutAsync`
 - MCP: `maui_layout_diagnostics`
-- Web Inspector: the Layout diagnostics side panel
+- Web Inspector: Data -> Layout (also opened by the toolbar's Layout button)
 
 Results distinguish violations, observations, incomplete checks, confidence,
 clip causes, visual versus interaction occlusion, and permanent platform
 limitations. Text content is not returned by default.
+
+Rule set **1.1** adds three managed-layout checks while retaining schema **1.0**:
+
+| Rule | Meaning | Result |
+| --- | --- | --- |
+| `layout.constraint-violation` | Conflicting minimum/maximum requests, or an arranged size outside those limits by at least one untransformed layout pixel at window density | Moderate violation for review |
+| `layout.desired-size-constrained` | The last measured desired size, with margins removed, exceeds the arranged size | Informational observation, not proof of lost content |
+| `layout.child-outside-parent` | A child's untransformed arranged frame extends outside its direct layout parent | Informational observation, not proof of clipping |
+
+Use `--minimum-severity info` to see the latter two rules. The Inspector's Layout
+dock starts with **All findings**; use **Filters** to select actionable findings,
+outcome, severity, confidence, or a rule. Selecting
+a child-outside-parent finding highlights the child and its layout parent with a
+distinct parent outline, not a clip outline. Lower-severity detections remain
+visible in `summary.filtered` even when their detailed findings are omitted.
+Existing clip, overflow and hit-test rules still establish whether content is
+actually lost or unreachable; the new observations do not turn intentional
+overlays into CI failures.
+
+The checks use already-captured MAUI measurements and never call `Measure` or
+change the app's layout. Native-only and Blazor nodes are not treated as
+successful managed checks. Scroll containers are excluded from desired-size
+checks, and direct scroll content, transformed elements, negative margins,
+unknown parents and cross-window relationships are excluded from parent-frame
+checks. Exclusions count as not applicable, not passes; platform coverage remains
+explicitly partial. A sizing/constraint change invalidates the diagnostics
+revision even when rendered bounds have not changed.
+
+A desired-size pass requires known measurements for both axes. A partly unknown
+measurement is not applicable rather than a whole-rule pass. Unstable snapshots
+skip these baseline checks and report global incompleteness once; they do not
+flood the findings list with one incomplete item per element.
+
+Sizing and `layoutOverflowInsetsPhysicalPixels` describe untransformed layout,
+while `fullRegion` and `parentRegion` are rendered highlight regions. An ancestor
+transform does not invalidate parent-local containment, but a finding records the
+coordinate-space limitation so its layout insets are not mistaken for painted
+edges. Existing desired-size-based content-overflow estimates use the same
+margin normalization, preventing contradictory findings on valid margin layouts.
+
+Clients should read `GET /api/v1/ui/diagnostics/layout/rules` before requesting
+these rule IDs from an older agent. Older agents retain their rule set and reject
+unknown explicit rule IDs; existing schema-1.0 requests are unchanged.
+
+The sample's **Layout Diagnostics** page has problem examples and a **Use valid
+layout** toggle for checking that these findings disappear after a correction.
+
+#### Layout workspace
+
+The original docked Layout experience is available with the current diagnostics
+contract: compact friendly finding rows, a detail view with measured sizing and
+limitations, and a coverage view listing every rule's actual support and
+confidence. Coverage does not invent per-element evaluated counts that the
+current agent does not report.
+Shared resources can appear under multiple parents in a MAUI tree. Ambiguous
+identities and their dependent subtrees are excluded with an explicit incomplete
+coverage limitation; they do not abort the scan or become guessed ownership.
+
+Opening **Layout** performs one scan. **Rescan** and **Recheck** are explicit;
+**Live** is opt-in and updates after observed layout changes while this dock is
+visible. Hiding or collapsing the dock stops scheduled live work. Screenshot
+polling no longer runs layout analysis on every refresh.
+The toolbar's Layout state follows the selected tab and dock visibility.
+Selecting Layout in a collapsed dock defers scanning until it is expanded;
+the toolbar button expands that workspace instead of closing the dock.
+Nested navigation pages and side-by-side flyout/detail panes remain available in
+the visual tree and finding overlays rather than being treated as inactive tabs.
+The default scan scope uses their common ancestor so a flyout sidebar cannot
+silently replace the main content as the inspection target.
+For Shell navigation, the agent marks its current page as selected even when
+the tab bar is hidden. Inspector and Canvas prefer that state over retained
+inactive-page geometry, keeping the screenshot, overlays, and scan target aligned.
+
+Changes mark the previous snapshot stale and remove its highlights. Navigation
+and reloads invalidate it even when the route and geometry are unchanged;
+repeated, unchanged connection snapshots do not count as navigation. A missing
+native event does not leave a visible workspace unchecked: lightweight frame
+polling compares the full tree revision and rendered state, including changes
+omitted from the overlay. This does not rescan diagnostics unless **Live** is enabled. A missing
+finding is not described as resolved when coverage is incomplete. Details offer
+**Show in app**, **Open source** when mapped, bounded **Copy payload** and **Add
+to Copilot** context, and confirmation before the existing project-policy
+suppression action. The confirmation shows the full policy path. Suppression
+requires a full project path from the host or an app built with
+`MauiDevFlowIncludeProjectPath=true`; a filename-only app identity never uses
+the broker's working directory for project policies. When the full project path
+is known, mapped source actions resolve project-relative XAML references to full
+local paths without requiring the file to be writable.
+Copilot context remains a redacted point-in-time snapshot,
+not mutation or source-write authority.
 
 Debug builds generate XAML source maps by default, so findings can include
 `sourceFile`, `sourceLine`, and `sourceColumn`. Source-content hashes are not
