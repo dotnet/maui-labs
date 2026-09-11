@@ -1,8 +1,10 @@
 using System.ComponentModel;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using ModelContextProtocol.Server;
 using Microsoft.Maui.Cli.DevFlow.Mcp;
+using Microsoft.Maui.DevFlow.Driver;
 
 namespace Microsoft.Maui.Cli.DevFlow.Flows;
 
@@ -87,13 +89,13 @@ public sealed class FlowRecordTools
                 return Error(status.Error ?? "No shared recording is active.");
             if (!string.Equals(recordingId, status.RecordingId, StringComparison.Ordinal))
                 return Error($"Unknown recordingId '{recordingId}'.");
-            return Json(new
+            return Json(new JsonObject
             {
-                ok = true,
-                recordingId = status.RecordingId,
-                stepCount = status.Steps,
-                automaticallyRecorded = true,
-                message = "The mutation was observed automatically; no duplicate step was appended."
+                ["ok"] = true,
+                ["recordingId"] = status.RecordingId,
+                ["stepCount"] = status.Steps,
+                ["automaticallyRecorded"] = true,
+                ["message"] = "The mutation was observed automatically; no duplicate step was appended."
             });
         }
         catch (Exception ex)
@@ -251,7 +253,15 @@ public sealed class FlowRecordTools
             using var fs = new FileStream(resolved!, mode, FileAccess.Write, FileShare.None);
             using var writer = new StreamWriter(fs);
             await writer.WriteAsync(result.Markdown);
-            return Json(new { ok = true, file = resolved, steps = result.Steps, warnings = result.Warnings });
+            var stopNode = new JsonObject
+            {
+                ["ok"] = true,
+                ["file"] = resolved,
+                ["steps"] = result.Steps,
+            };
+            if (result.Warnings is not null)
+                stopNode["warnings"] = JsonSerializer.SerializeToNode(result.Warnings, DevFlowCliJsonContext.Default.StringArray);
+            return Json(stopNode);
         }
         catch (IOException) when (!overwrite && File.Exists(resolved))
         {
@@ -341,7 +351,20 @@ public sealed class FlowRecordTools
         var id = FlowRecordingStore.Instance.Start(name, app, platform, preconditions);
         return id is null
             ? Error($"Too many active recordings (max {FlowRecordingStore.MaxActive}). Stop or cancel one first.")
-            : Json(new { ok = true, recordingId = id, name = string.IsNullOrWhiteSpace(name) ? "scenario" : name.Trim(), app, platform });
+            : Json(BuildStartLocalNode(id, name, app, platform));
+    }
+
+    private static JsonObject BuildStartLocalNode(string id, string name, string? app, string? platform)
+    {
+        var node = new JsonObject
+        {
+            ["ok"] = true,
+            ["recordingId"] = id,
+            ["name"] = string.IsNullOrWhiteSpace(name) ? "scenario" : name.Trim(),
+        };
+        if (app is not null) node["app"] = app;
+        if (platform is not null) node["platform"] = platform;
+        return node;
     }
 
     private static string StepLocal(
@@ -369,7 +392,7 @@ public sealed class FlowRecordTools
             recorder, action, automationId, text, type, index, id, value, name,
             dx, dy, itemIndex, position, page, navigated, assertsJson);
         return added.ok
-            ? Json(new { ok = true, seq = added.seq, stepCount = added.stepCount, fragile = added.fragile })
+            ? Json(new JsonObject { ["ok"] = true, ["seq"] = added.seq, ["stepCount"] = added.stepCount, ["fragile"] = added.fragile })
             : Error(added.error!);
     }
 
@@ -383,12 +406,12 @@ public sealed class FlowRecordTools
             return Error("Recording has no steps. Add steps or cancel it.");
         if (!validation.valid)
         {
-            return Json(new
+            return Json(new JsonObject
             {
-                ok = false,
-                error = "Recording has validation errors; fix the offending steps or cancel. Not written.",
-                errors = validation.errors,
-                warnings = validation.warnings,
+                ["ok"] = false,
+                ["error"] = "Recording has validation errors; fix the offending steps or cancel. Not written.",
+                ["errors"] = JsonSerializer.SerializeToNode(validation.errors, DevFlowCliJsonContext.Default.StringArray),
+                ["warnings"] = JsonSerializer.SerializeToNode(validation.warnings, DevFlowCliJsonContext.Default.StringArray),
             });
         }
 
@@ -418,12 +441,12 @@ public sealed class FlowRecordTools
         }
 
         FlowRecordingStore.Instance.Remove(recordingId);
-        return Json(new
+        return Json(new JsonObject
         {
-            ok = true,
-            file = resolved,
-            steps = finished.flow!.Steps.Count,
-            warnings = validation.warnings
+            ["ok"] = true,
+            ["file"] = resolved,
+            ["steps"] = finished.flow!.Steps.Count,
+            ["warnings"] = JsonSerializer.SerializeToNode(validation.warnings, DevFlowCliJsonContext.Default.StringArray)
         });
     }
 
@@ -433,21 +456,31 @@ public sealed class FlowRecordTools
         {
             if (!FlowRecordingStore.Instance.TryGet(recordingId!, out var recorder))
                 return Error($"Unknown recordingId '{recordingId}'.");
-            return Json(new { ok = true, recordingId, name = recorder.Name, steps = recorder.StepCount });
+            return Json(new JsonObject { ["ok"] = true, ["recordingId"] = recordingId, ["name"] = recorder.Name, ["steps"] = recorder.StepCount });
         }
 
         var active = FlowRecordingStore.Instance.List()
-            .Select(r => new { name = r.Name, steps = r.Steps })
+            .Select(r => new ActiveRecordingSummary(r.Name, r.Steps))
             .ToList();
-        return Json(new { ok = true, count = active.Count, active });
+        return Json(new JsonObject
+        {
+            ["ok"] = true,
+            ["count"] = active.Count,
+            ["active"] = JsonSerializer.SerializeToNode(active, DevFlowCliJsonContext.Default.ListActiveRecordingSummary)
+        });
     }
+
+    /// <summary>A single active recording entry returned by <see cref="RecordStatus"/>.</summary>
+    internal sealed record ActiveRecordingSummary(
+        [property: JsonPropertyName("name")] string Name,
+        [property: JsonPropertyName("steps")] int Steps);
 
     private static string CancelLocal(string recordingId)
     {
         var removed = FlowRecordingStore.Instance.Remove(recordingId);
         return removed is null
             ? Error($"Unknown recordingId '{recordingId}'.")
-            : Json(new { ok = true, cancelled = recordingId });
+            : Json(new JsonObject { ["ok"] = true, ["cancelled"] = recordingId });
     }
 
     /// <summary>Builds a canonical selector keeping ONLY the highest-precedence form provided
@@ -472,7 +505,7 @@ public sealed class FlowRecordTools
         if (assertsJson.Length > MaxAssertsJson)
             throw new InvalidOperationException("assertsJson is too large.");
 
-        var parsed = JsonSerializer.Deserialize<List<FlowAssert>>(assertsJson, ReadOptions);
+        var parsed = JsonSerializer.Deserialize(assertsJson, DevFlowCliJsonContext.Default.ListFlowAssert);
         if (parsed is not { Count: > 0 })
             return null;
         if (parsed.Any(a => a is null))
@@ -578,15 +611,13 @@ public sealed class FlowRecordTools
     /// <summary>Trims an identifier-like field and treats whitespace-only as missing (null).</summary>
     private static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 
-    private static readonly JsonSerializerOptions ReadOptions = new() { PropertyNameCaseInsensitive = true };
-
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
-    private static string Json(object value) => JsonSerializer.Serialize(value, JsonOpts);
-    private static string Error(string error) => JsonSerializer.Serialize(new { ok = false, error }, JsonOpts);
+    private static string Json(JsonNode? value) => value?.ToJsonString(JsonOpts) ?? "null";
+    private static string Json(MutationRecordingStatus value) =>
+        Json(JsonSerializer.SerializeToNode(value, DevFlowCliJsonContext.Default.MutationRecordingStatus));
+    private static string Error(string error) => Json(new JsonObject { ["ok"] = false, ["error"] = error });
 }

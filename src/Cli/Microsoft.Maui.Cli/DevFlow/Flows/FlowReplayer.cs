@@ -1,38 +1,39 @@
 using Microsoft.Maui.DevFlow.Driver;
 using System.Globalization;
+using System.Text.Json.Serialization;
 
 namespace Microsoft.Maui.Cli.DevFlow.Flows;
 
 public sealed class FlowAssertResult
 {
-    public string Kind { get; set; } = "";
+    [JsonPropertyName("kind")] public string Kind { get; set; } = "";
     /// <summary>true = passed, false = failed, null = not evaluated (report-only or skipped).</summary>
-    public bool? Ok { get; set; }
-    public bool Skipped { get; set; }
-    public string? Name { get; set; }
-    public string? Expected { get; set; }
-    public string? Actual { get; set; }
+    [JsonPropertyName("ok")] public bool? Ok { get; set; }
+    [JsonPropertyName("skipped")] public bool Skipped { get; set; }
+    [JsonPropertyName("name")] public string? Name { get; set; }
+    [JsonPropertyName("expected")] public string? Expected { get; set; }
+    [JsonPropertyName("actual")] public string? Actual { get; set; }
 }
 
 public sealed class FlowStepResult
 {
-    public int Seq { get; set; }
-    public string Action { get; set; } = "";
-    public string Label { get; set; } = "";
-    public bool Ok { get; set; }
-    public string? Error { get; set; }
-    public List<FlowAssertResult> Asserts { get; set; } = new();
+    [JsonPropertyName("seq")] public int Seq { get; set; }
+    [JsonPropertyName("action")] public string Action { get; set; } = "";
+    [JsonPropertyName("label")] public string Label { get; set; } = "";
+    [JsonPropertyName("ok")] public bool Ok { get; set; }
+    [JsonPropertyName("error")] public string? Error { get; set; }
+    [JsonPropertyName("asserts")] public List<FlowAssertResult> Asserts { get; set; } = new();
 }
 
 public sealed class FlowReplayReport
 {
-    public bool Ok { get; set; }
-    public string Name { get; set; } = "scenario";
-    public string? File { get; set; }
-    public int Total { get; set; }
-    public int Passed { get; set; }
-    public int Failed { get; set; }
-    public List<FlowStepResult> Results { get; set; } = new();
+    [JsonPropertyName("ok")] public bool Ok { get; set; }
+    [JsonPropertyName("name")] public string Name { get; set; } = "scenario";
+    [JsonPropertyName("file")] public string? File { get; set; }
+    [JsonPropertyName("total")] public int Total { get; set; }
+    [JsonPropertyName("passed")] public int Passed { get; set; }
+    [JsonPropertyName("failed")] public int Failed { get; set; }
+    [JsonPropertyName("results")] public List<FlowStepResult> Results { get; set; } = new();
 }
 
 /// <summary>
