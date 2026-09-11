@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:indexer="clr-namespace:Microsoft.Maui.AI.Indexer;assembly=Microsoft.Maui.AI.Indexer"
              xmlns:views="clr-namespace:AIExtensions.Sample.Garden.Views"
              xmlns:vm="clr-namespace:AIExtensions.Sample.Garden.ViewModels"
              x:Class="AIExtensions.Sample.Garden.Pages.ProductDetailPage"
@@ -27,13 +28,16 @@
                         BackgroundColor="Transparent"
                         TextColor="{StaticResource White}"
                         VerticalOptions="Center"
-                        Clicked="OnBackClicked" />
+                        Clicked="OnBackClicked"
+                        SemanticProperties.Description="Back"
+                        SemanticProperties.Hint="Returns to previous page" />
                 <Label Grid.Column="1"
                        Text="{Binding Name}"
                        FontSize="{StaticResource FontSizeTitle}" FontAttributes="Bold"
                        TextColor="{StaticResource White}"
                        VerticalOptions="Center"
-                       LineBreakMode="TailTruncation" />
+                       LineBreakMode="TailTruncation"
+                       SemanticProperties.HeadingLevel="Level1" />
             </Grid>
         </Border>
 
@@ -59,7 +63,8 @@
                                    FontSize="56"
                                    TextColor="{StaticResource Primary}"
                                    HorizontalOptions="Center"
-                                   VerticalOptions="Center" />
+                                   VerticalOptions="Center"
+                                   SemanticProperties.Description="" />
                         </Border>
                         <Label Text="{Binding Name}"
                                FontSize="{StaticResource FontSizeTitle}"
@@ -84,21 +89,24 @@
                             TextColor="{StaticResource White}"
                             FontAttributes="Bold"
                             CornerRadius="12"
-                            Command="{Binding AddToCartCommand}" />
+                            Command="{Binding AddToCartCommand}"
+                            SemanticProperties.Hint="Adds this product to your shopping cart" />
                     <Button Grid.Column="1"
                             Text="Write Review"
                             BackgroundColor="{AppThemeBinding Light={StaticResource ChipBackgroundLight}, Dark={StaticResource ChipBackgroundDark}}"
                             TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}"
                             FontAttributes="Bold"
                             CornerRadius="12"
-                            Command="{Binding WriteReviewCommand}" />
+                            Command="{Binding WriteReviewCommand}"
+                            SemanticProperties.Hint="Opens a form to write a review for this product" />
                 </Grid>
 
                 <!-- Reviews section -->
                 <Label Text="{Binding RatingLabel}"
                        FontSize="{StaticResource FontSizeSubtitle}"
                        FontAttributes="Bold"
-                       TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}" />
+                       TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}"
+                       SemanticProperties.HeadingLevel="Level2" />
 
                 <VerticalStackLayout BindableLayout.ItemsSource="{Binding Reviews}" Spacing="8">
                     <BindableLayout.ItemTemplate>
@@ -131,7 +139,8 @@
             </VerticalStackLayout>
         </ScrollView>
         <views:ChatSidebar Grid.Column="1"
-                           Grid.RowSpan="2" />
+                           Grid.RowSpan="2"
+                           indexer:IndexingProperties.ExcludeWithChildren="True" />
     </Grid>
 
 </ContentPage>

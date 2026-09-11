@@ -1,0 +1,12 @@
+<Project>
+  <Target Name="_AddXamlAsAdditionalFiles"
+          BeforeTargets="GenerateMSBuildEditorConfigFileShouldRun"
+          Condition="'$(EnableUiIndexer)' != 'false'">
+    <ItemGroup>
+      <!-- MAUI projects use MauiXaml for page/view XAML files -->
+      <AdditionalFiles Include="@(MauiXaml)" Condition="'%(Extension)' == '.xaml'" />
+      <!-- Fallback: also include any XAML marked as EmbeddedResource or None -->
+      <AdditionalFiles Include="@(EmbeddedResource)" Condition="'%(Extension)' == '.xaml'" />
+    </ItemGroup>
+  </Target>
+</Project>

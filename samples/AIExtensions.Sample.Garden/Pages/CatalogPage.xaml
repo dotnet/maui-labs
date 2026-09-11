@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:indexer="clr-namespace:Microsoft.Maui.AI.Indexer;assembly=Microsoft.Maui.AI.Indexer"
              xmlns:views="clr-namespace:AIExtensions.Sample.Garden.Views"
              x:Class="AIExtensions.Sample.Garden.Pages.CatalogPage"
              Title="Catalog"
@@ -25,21 +26,26 @@
                         BackgroundColor="Transparent"
                         TextColor="{StaticResource White}"
                         VerticalOptions="Center"
-                        Clicked="OnBackClicked" />
+                        Clicked="OnBackClicked"
+                        SemanticProperties.Description="Back"
+                        SemanticProperties.Hint="Returns to previous page" />
                 <Label Text="&#xF788;"
                        FontFamily="FluentFilled"
                        FontSize="{StaticResource FontSizeTitle}"
-                       TextColor="{StaticResource White}" VerticalOptions="Center" />
+                       TextColor="{StaticResource White}" VerticalOptions="Center"
+                       SemanticProperties.Description="" />
                 <Label Text="Products"
                        FontSize="{StaticResource FontSizeTitle}" FontAttributes="Bold"
                        TextColor="{StaticResource White}"
-                       VerticalOptions="Center" />
+                       VerticalOptions="Center"
+                       SemanticProperties.HeadingLevel="Level1" />
             </HorizontalStackLayout>
         </Border>
 
         <views:CatalogView Grid.Row="1" />
         <views:ChatSidebar Grid.Column="1"
-                           Grid.RowSpan="2" />
+                           Grid.RowSpan="2"
+                           indexer:IndexingProperties.ExcludeWithChildren="True" />
     </Grid>
 
 </ContentPage>

@@ -29,7 +29,8 @@
                                        FontFamily="FluentFilled"
                                        FontSize="{StaticResource FontSizeTitle}"
                                        TextColor="{StaticResource Primary}"
-                                       VerticalOptions="Center" />
+                                       VerticalOptions="Center"
+                                       SemanticProperties.Description="" />
                                 <VerticalStackLayout Grid.Column="1" Spacing="2" VerticalOptions="Center">
                                     <Label Text="{Binding Name}"
                                            FontSize="{StaticResource FontSizeBody}" FontAttributes="Bold" />
@@ -48,7 +49,8 @@
                                      VerticalOptions="Center">
                     <Label Text="&#xE769;" FontFamily="FluentFilled"
                            FontSize="{StaticResource FontSizeDisplay}" HorizontalOptions="Center"
-                           TextColor="{StaticResource Primary}" />
+                           TextColor="{StaticResource Primary}"
+                           SemanticProperties.Description="" />
                     <Label Text="Your cart is empty."
                            FontSize="{StaticResource FontSizeBody}" HorizontalTextAlignment="Center"
                            TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}" />
@@ -72,7 +74,8 @@
                                FontFamily="FluentFilled"
                                FontSize="{StaticResource FontSizeBody}"
                                TextColor="{StaticResource Primary}"
-                               VerticalOptions="Center" />
+                               VerticalOptions="Center"
+                               SemanticProperties.Description="" />
                         <Label Grid.Column="1"
                                Text="{Binding Name}"
                                FontSize="{StaticResource FontSizeBody}" FontAttributes="Bold"
@@ -106,7 +109,8 @@
                     BackgroundColor="{StaticResource Primary}"
                     TextColor="{StaticResource White}"
                     CornerRadius="10"
-                    Command="{Binding CheckoutCommand}" />
+                    Command="{Binding CheckoutCommand}"
+                    SemanticProperties.Hint="Proceeds to checkout with your current cart items" />
         </Border>
     </Grid>
 

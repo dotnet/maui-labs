@@ -13,6 +13,9 @@ past purchases using source-generated tools.
 - `Open the catalog`
 - `Go to my past orders`
 - `Re-order my last order`
+- `Where do I write a review for the tomato seeds?` — Sage searches the UI index,
+  inspects the real pages, and walks you through it step by step with the exact
+  on-screen button and field labels.
 
 ## App behaviors
 
@@ -52,9 +55,22 @@ assembly-wide context for the whole app.
 | `MainViewModel` | singleton | UI navigation tools: `navigate_to_page` and `dismiss_page` |
 | `CartViewModel` | singleton | Accessor-level tools: `get_cart_mode` / `set_cart_mode` |
 | `CatalogViewModel` | transient | `recommend_bundle`, a page-local bundle recommender that returns a starter kit without mutating the cart |
+| `PageDiscovery` | static | Hybrid UI-index tools: compile-time `search_ui`, `get_page_ui`, and `list_app_pages`, plus runtime `get_current_ui` for the visible page |
 
 This sample is especially useful if you want to see a **transient view-model**
 participate in a shared tool context while still writing through to singleton state.
+
+## Current-screen help
+
+This lets a user navigate to the review form and ask, "What is this text box for?"
+without leaving the form. `get_current_ui` reads the visible `ProductReviewPage`,
+including the resolved product name and live rating, then identifies the editor by
+its `"Share your experience..."` placeholder.
+
+The sidebar is marked with
+`IndexingProperties.ExcludeWithChildren="True"`. It remains visible and interactive
+but is omitted from compile-time and runtime UI indexes, so Sage receives the page's
+domain controls rather than recursively describing its own chat UI.
 
 ## Tool scenarios
 
@@ -64,7 +80,9 @@ participate in a shared tool context while still writing through to singleton st
 | Cart management | `show_list`, `add_to_list`, `change_qty`, `remove_from_list`, `cancel_list` |
 | Cart presentation | `get_cart_mode`, `set_cart_mode` |
 | Orders | `list_past_orders`, `find_order`, `checkout_list`, `reorder`, `clear_past_orders` |
-| Page navigation | `navigate_to_page`, `dismiss_page` |
+| Page navigation (actually moves the user) | `navigate_to_page`, `dismiss_page` |
+| Whole-app UI discovery & walkthroughs | `search_ui`, `get_page_ui`, `list_app_pages` |
+| Current visible screen & live control state | `get_current_ui` |
 | Recommendations | `recommend_bundle` |
 
 ## Feature showcase
@@ -80,6 +98,8 @@ participate in a shared tool context while still writing through to singleton st
 | Accessor-level property tools | `ViewModels/Cart/CartViewModel.cs` → `get_cart_mode` / `set_cart_mode` |
 | Transient tool host | `ViewModels/Catalog/CatalogViewModel.cs` → `recommend_bundle` |
 | Shell modal navigation tools | `ViewModels/MainViewModel.cs` + `AppShell.xaml.cs` |
+| Compile-time whole-app UI index | `Services/PageDiscovery.cs` → `search_ui` / `get_page_ui` / `list_app_pages` |
+| Runtime current-page augmentation | `Services/PageDiscovery.cs` → `get_current_ui`, over `RuntimePageIndexer` |
 | Persistent assistant beside non-home pages | `Views/ChatSidebar.xaml`, backed by singleton `ChatViewModel` |
 | Responsive welcome cards and centered chat layout | `Views/ChatView.xaml` + `Pages/MainPage.xaml` |
 

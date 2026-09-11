@@ -48,8 +48,15 @@
 		<ProjectReference Include="..\..\src\AIExtensions\Microsoft.Maui.AI.Attributes.Generators\Microsoft.Maui.AI.Attributes.Generators.csproj"
 		                  OutputItemType="Analyzer"
 		                  ReferenceOutputAssembly="false" />
+		<ProjectReference Include="..\..\src\AIExtensions\Microsoft.Maui.AI.Indexer\Microsoft.Maui.AI.Indexer.csproj" />
+		<ProjectReference Include="..\..\src\AIExtensions\Microsoft.Maui.AI.Indexer.Generators\Microsoft.Maui.AI.Indexer.Generators.csproj"
+		                  OutputItemType="Analyzer"
+		                  ReferenceOutputAssembly="false" />
 		<ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj" />
 	</ItemGroup>
+
+	<!-- Wire XAML files as AdditionalFiles for the UI indexer source generator -->
+	<Import Project="..\..\src\AIExtensions\Microsoft.Maui.AI.Indexer\build\Microsoft.Maui.AI.Indexer.targets" />
 
 	<!-- WARNING: This embeds your local secrets.json into the app binary.
 	     This is a terrible practice that will expose secrets if the app is ever

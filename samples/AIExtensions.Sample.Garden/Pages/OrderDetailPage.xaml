@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:indexer="clr-namespace:Microsoft.Maui.AI.Indexer;assembly=Microsoft.Maui.AI.Indexer"
              xmlns:views="clr-namespace:AIExtensions.Sample.Garden.Views"
              xmlns:vm="clr-namespace:AIExtensions.Sample.Garden.ViewModels"
              x:Class="AIExtensions.Sample.Garden.Pages.OrderDetailPage"
@@ -27,12 +28,15 @@
                         BackgroundColor="Transparent"
                         TextColor="{StaticResource White}"
                         VerticalOptions="Center"
-                        Clicked="OnBackClicked" />
+                        Clicked="OnBackClicked"
+                        SemanticProperties.Description="Back"
+                        SemanticProperties.Hint="Returns to previous page" />
                 <Label Grid.Column="1"
                        Text="Order Details"
                        FontSize="{StaticResource FontSizeTitle}" FontAttributes="Bold"
                        TextColor="{StaticResource White}"
-                       VerticalOptions="Center" />
+                       VerticalOptions="Center"
+                       SemanticProperties.HeadingLevel="Level1" />
             </Grid>
         </Border>
 
@@ -63,7 +67,8 @@
 
                 <!-- Line items -->
                 <Label Text="Items"
-                       FontSize="{StaticResource FontSizeSubtitle}" FontAttributes="Bold" />
+                       FontSize="{StaticResource FontSizeSubtitle}" FontAttributes="Bold"
+                       SemanticProperties.HeadingLevel="Level2" />
 
                 <VerticalStackLayout BindableLayout.ItemsSource="{Binding Lines}" Spacing="6">
                     <BindableLayout.ItemTemplate>
@@ -82,7 +87,8 @@
                                            FontFamily="FluentFilled"
                                            FontSize="20"
                                            TextColor="{StaticResource Primary}"
-                                           VerticalOptions="Center" />
+                                           VerticalOptions="Center"
+                                           SemanticProperties.Description="" />
                                     <Label Grid.Column="1"
                                            Text="{Binding ItemDescription}"
                                            FontSize="{StaticResource FontSizeBody}"
@@ -114,13 +120,15 @@
                             TextColor="{StaticResource White}"
                             FontAttributes="Bold"
                             CornerRadius="12"
-                            Command="{Binding ReorderCommand}" />
+                            Command="{Binding ReorderCommand}"
+                            SemanticProperties.Hint="Adds all items from this order to your cart" />
                 </Grid>
 
             </VerticalStackLayout>
         </ScrollView>
         <views:ChatSidebar Grid.Column="1"
-                           Grid.RowSpan="2" />
+                           Grid.RowSpan="2"
+                           indexer:IndexingProperties.ExcludeWithChildren="True" />
     </Grid>
 
 </ContentPage>
