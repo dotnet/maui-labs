@@ -247,6 +247,10 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                     jobs = IsJobsSupported,
                     theme = IsThemeSupported,
                     mutationLease = _options.RequireMutationLease,
+                    // Whether gestures can reach views that take touches directly (SKCanvasView,
+                    // GraphicsView) rather than through a recognizer. iOS/Mac Catalyst only, and
+                    // opt-in, so callers can tell a "no handler" apart from a disabled tier.
+                    syntheticTouch = _options.EnableSyntheticTouch,
                 },
                 running = IsAppBound,
                 // Current navigation route (null for backends without a router). Powers the

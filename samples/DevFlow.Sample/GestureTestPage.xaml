@@ -147,6 +147,29 @@
                 </VerticalStackLayout>
             </Border>
 
+            <!-- Raw touch: no recognizer anywhere, the view takes touches itself the way
+                 SKCanvasView does. Only real/synthetic touches reach this. -->
+            <Border StrokeShape="RoundRectangle 8" Padding="16">
+                <Border.BackgroundColor>
+                    <AppThemeBinding Light="#DCE7C8" Dark="#3B4A2E" />
+                </Border.BackgroundColor>
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Raw-touch target (GraphicsView)" FontAttributes="Bold" FontSize="16" />
+                    <Label Text="Takes touches directly, like SKCanvasView — no gesture recognizer to drive."
+                           FontSize="12" />
+                    <GraphicsView x:Name="RawTouchCanvas"
+                                  AutomationId="RawTouchTarget"
+                                  HeightRequest="140"
+                                  StartInteraction="OnRawTouchStarted"
+                                  DragInteraction="OnRawTouchDragged"
+                                  EndInteraction="OnRawTouchEnded" />
+                    <Label x:Name="RawTouchStatusLabel"
+                           Text="rawtouch: none"
+                           FontSize="14"
+                           AutomationId="RawTouchStatusLabel" />
+                </VerticalStackLayout>
+            </Border>
+
         </VerticalStackLayout>
     </ScrollView>
 </ContentPage>

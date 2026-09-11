@@ -45,6 +45,8 @@ public static class MauiProgram
 			options.Port = ResolveAgentPort();
 			options.EnableProfiler = true;
 			options.EnableLayoutDiagnostics = true;
+			// Lets gestures reach raw-touch views (GraphicsView, SKCanvasView) on iOS/Mac Catalyst.
+			options.EnableSyntheticTouch = true;
 
 			var diagnostics = options.RegisterExtension(
 				"com.example.diagnostics",

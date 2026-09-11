@@ -96,7 +96,8 @@ public sealed class InteractionTools
 		"Use maui_tap for simple taps and maui_scroll for scrolling a list; this tool is for real gestures. " +
 		"Each gesture is first sent to a matching MAUI gesture recognizer on the element or its ancestors, and if there is " +
 		"none it is injected natively at the platform view — which is how pinch-to-zoom works on Maps, WebViews and other " +
-		"controls that handle gestures internally. Use maui_tree first to find the element ID; the 'gestures' field on each " +
+		"controls that handle gestures internally, including canvases such as SKCanvasView and GraphicsView that take touches " +
+		"directly. Use maui_tree first to find the element ID; the 'gestures' field on each " +
 		"element lists the recognizers it has. Omitting elementId aims non-tap gestures at the current page; tap requires an element ID.")]
 	public static async Task<string> Gesture(
 		McpAgentSession session,

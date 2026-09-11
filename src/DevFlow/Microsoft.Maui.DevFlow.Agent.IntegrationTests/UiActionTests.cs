@@ -410,6 +410,93 @@ public class UiActionTests : IntegrationTestBase
         Assert.Equal($"swipe: {direction}", status.Text);
     }
 
+    // ========== raw-touch tier: views that take their touches directly ==========
+    // A GraphicsView — like SkiaSharp's SKCanvasView — overrides the platform touch methods
+    // and installs no gesture recognizer, so nothing above can service it. Android delivers
+    // real MotionEvents; iOS and Mac Catalyst synthesise UITouches, which the sample opts
+    // into with AgentOptions.EnableSyntheticTouch. The status label reports the whole
+    // sequence, so these assert what the app actually received rather than an HTTP 200.
+
+    private bool SupportsRawTouchInjection =>
+        Platform.Equals("android", StringComparison.OrdinalIgnoreCase)
+        || Platform.Equals("ios", StringComparison.OrdinalIgnoreCase)
+        || Platform.Equals("maccatalyst", StringComparison.OrdinalIgnoreCase);
+
+    private async Task<ElementInfo> FindRawTouchTargetAsync()
+    {
+        await NavigateToGesturePageAsync();
+        await Client.ScrollAsync("RawTouchTarget");
+        await SettleAsync();
+        return await FindElementAsync("RawTouchTarget");
+    }
+
+    [Fact]
+    public async Task Pinch_OnRawTouchView_ArrivesAsTwoTouches()
+    {
+        if (!SupportsRawTouchInjection)
+        {
+            Output.WriteLine($"Raw-touch injection is not available on {Platform}.");
+            return;
+        }
+
+        var target = await FindRawTouchTargetAsync();
+
+        var result = await Client.PinchAsync(target.Id, scale: 0.5);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("native", result.HandledBy);
+
+        await SettleAsync();
+        var status = await FindElementAsync("RawTouchStatusLabel");
+        // Two simultaneous pointers is the whole point: a single-pointer approximation
+        // cannot produce a scale at all.
+        Assert.Contains("maxtouches=2", status.Text);
+        Assert.Contains("scale=0.50", status.Text);
+    }
+
+    [Fact]
+    public async Task Pan_OnRawTouchView_DeliversTheWholeDrag()
+    {
+        if (!SupportsRawTouchInjection)
+        {
+            Output.WriteLine($"Raw-touch injection is not available on {Platform}.");
+            return;
+        }
+
+        var target = await FindRawTouchTargetAsync();
+
+        var result = await Client.PanAsync(target.Id, deltaX: 80, deltaY: 0);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("native", result.HandledBy);
+
+        await SettleAsync();
+        var status = await FindElementAsync("RawTouchStatusLabel");
+        Assert.Contains("dx=80", status.Text);
+    }
+
+    [Fact]
+    public async Task Pan_OnRawTouchViewInsideAScrollView_IsNotStolenByTheScrollView()
+    {
+        if (!SupportsRawTouchInjection)
+        {
+            Output.WriteLine($"Raw-touch injection is not available on {Platform}.");
+            return;
+        }
+
+        var target = await FindRawTouchTargetAsync();
+
+        // Vertical, inside a vertical ScrollView: the case where the enclosing scroller
+        // takes the gesture away from the element the caller actually named.
+        var result = await Client.PanAsync(target.Id, deltaX: 0, deltaY: 60);
+
+        Assert.True(result.Success, result.Error);
+
+        await SettleAsync();
+        var status = await FindElementAsync("RawTouchStatusLabel");
+        Assert.Contains("dy=60", status.Text);
+    }
+
     [Fact]
     public async Task DoubleTap_FiresTwoTapRecognizerNotTheSingleTapOne()
     {

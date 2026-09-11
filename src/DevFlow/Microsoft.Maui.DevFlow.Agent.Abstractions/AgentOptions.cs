@@ -82,6 +82,15 @@ public class AgentOptions
     public bool EnableProfiler { get; set; } = false;
 
     /// <summary>
+    /// Allows gestures to be delivered as synthesised touches on iOS and Mac Catalyst when the
+    /// target owns no gesture recognizer and no scroll offset to move — SkiaSharp's SKCanvasView,
+    /// MAUI's GraphicsView, and other views that override <c>touchesBegan:</c> directly.
+    /// Building such a touch requires private UIKit ivars, so it is off by default and should
+    /// only be enabled in development builds. Default: false.
+    /// </summary>
+    public bool EnableSyntheticTouch { get; set; } = false;
+
+    /// <summary>
     /// Enables the experimental layout diagnostics API and capability advertisement.
     /// Default: false until the cross-platform acceptance matrix is complete.
     /// </summary>
