@@ -1,0 +1,239 @@
+// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+
+using Microsoft.Maui.Cli.Ai.Models;
+
+namespace Microsoft.Maui.Cli.Ai;
+
+/// <summary>
+/// Orchestrates skill installation by downloading files from the marketplace,
+/// creating the local directory structure, and writing version metadata.
+/// </summary>
+internal static class SkillInstaller
+{
+	/// <summary>
+	/// Installs a skill into the target environment directory.
+	/// </summary>
+	/// <param name="http">Configured <see cref="HttpClient"/> (caller manages lifetime).</param>
+	/// <param name="skill">Skill to install.</param>
+	/// <param name="env">Target agent environment.</param>
+	/// <param name="projectRoot">Absolute path to the project root directory.</param>
+	/// <param name="repo">Repository in "owner/repo" format.</param>
+	/// <param name="branch">Branch name to install from.</param>
+	/// <param name="force">When <c>true</c>, overwrite an existing installation.</param>
+	/// <param name="ct">Cancellation token.</param>
+	/// <returns>
+	/// A tuple of (filesInstalled, installPath) where filesInstalled is the number
+	/// of files written and installPath is the absolute path to the skill directory.
+	/// Returns (0, installPath) if the skill is already installed and <paramref name="force"/> is <c>false</c>.
+	/// Returns (-1, string.Empty) if the skill name contains invalid characters or targets an unsafe path.
+	/// Returns (-2, string.Empty) if the download produced no valid installation (network or remote failure).
+	/// </returns>
+	public static async Task<(int FilesInstalled, string InstallPath)> InstallSkillAsync(
+		HttpClient http,
+		SkillInfo skill,
+		DetectedEnvironment env,
+		string projectRoot,
+		string repo,
+		string branch,
+		bool force,
+		CancellationToken ct = default,
+		IReadOnlyDictionary<string, byte[]>? preparedFiles = null,
+		string? preparedCommit = null)
+	{
+		if (string.IsNullOrWhiteSpace(skill.Name) ||
+			skill.Name is "." or ".." ||
+			skill.Name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
+			skill.Name.Contains("..") ||
+			skill.Name.Contains('/') ||
+			skill.Name.Contains('\\') ||
+			(OperatingSystem.IsWindows() && IsWindowsReservedName(skill.Name)))
+			return (-1, string.Empty);
+
+		// If the skills directory is not rooted, resolve it relative to the project root.
+		var skillsDir = Path.IsPathRooted(env.SkillsDirectory)
+			? env.SkillsDirectory
+			: Path.GetFullPath(Path.Combine(projectRoot, env.SkillsDirectory));
+
+		if (!FileSystemPathGuard.IsPathWithinRoot(skillsDir, projectRoot))
+			return (-1, string.Empty);
+
+		Directory.CreateDirectory(skillsDir);
+		if (FileSystemPathGuard.IsReparsePoint(skillsDir) ||
+			!FileSystemPathGuard.IsPathWithinRoot(skillsDir, projectRoot))
+		{
+			return (-1, string.Empty);
+		}
+
+		var canonicalSkillsDir = FileSystemPathGuard.ResolveCanonicalPath(skillsDir);
+		if (!FileSystemPathGuard.IsPathWithinRoot(canonicalSkillsDir, projectRoot))
+			return (-1, string.Empty);
+
+		var installPath = Path.Combine(canonicalSkillsDir, skill.Name);
+		var displayInstallPath = Path.Combine(skillsDir, skill.Name);
+
+		// Skip if already installed and not forcing.
+		if (!force && (Directory.Exists(installPath) || File.Exists(installPath)))
+			return (0, displayInstallPath);
+
+		var tempInstallPath = Path.Combine(canonicalSkillsDir, $".{skill.Name}.{Guid.NewGuid():N}.tmp");
+		Directory.CreateDirectory(tempInstallPath);
+
+		try
+		{
+			var expectedFileCount = preparedFiles?.Count ?? GetExpectedDownloadableFileCount(skill);
+			var filesInstalled = 0;
+			if (preparedFiles is null)
+				filesInstalled = await MarketplaceClient.DownloadSkillFilesAsync(
+					http, skill, tempInstallPath, repo, branch, ct).ConfigureAwait(false);
+			else
+				foreach (var (relativePath, bytes) in preparedFiles)
+					if (await FileSystemPathGuard.WriteFileAtomicallyWithinRootAsync(
+						Path.Combine(tempInstallPath, relativePath), tempInstallPath, bytes, ct).ConfigureAwait(false))
+						filesInstalled++;
+
+			if (expectedFileCount == 0 || filesInstalled != expectedFileCount)
+				return (-2, string.Empty);
+
+			// Resolve the latest commit SHA for version tracking.
+			var commitSha = preparedFiles is null ? await MarketplaceClient.GetRemoteCommitShaAsync(
+				http, repo, branch, skill.RemotePath, ct).ConfigureAwait(false) : preparedCommit;
+
+			var version = new InstalledSkillVersion
+			{
+				Name = skill.Name,
+				Commit = commitSha,
+				Branch = branch,
+				UpdatedAt = DateTime.UtcNow.ToString("o"),
+				Source = repo,
+				PluginPath = skill.RemotePath,
+				ContentHash = AiContentHash.DirectoryHash(tempInstallPath)
+			};
+
+			await SkillVersionStore.WriteAsync(tempInstallPath, version, ct).ConfigureAwait(false);
+
+			ReplaceDirectory(tempInstallPath, installPath);
+
+			return (filesInstalled, displayInstallPath);
+		}
+		finally
+		{
+			TryDeleteDirectoryIfExists(tempInstallPath);
+		}
+	}
+
+	internal static int GetExpectedDownloadableFileCount(SkillInfo skill)
+	{
+		var count = 0;
+		string remotePrefix;
+		try
+		{
+			remotePrefix = MarketplaceClient.NormalizePath(skill.RemotePath) + "/";
+		}
+		catch (InvalidOperationException)
+		{
+			return 0;
+		}
+
+		foreach (var filePath in skill.Files)
+		{
+			try
+			{
+				if (MarketplaceClient.NormalizePath(filePath).StartsWith(remotePrefix, StringComparison.Ordinal))
+					count++;
+			}
+			catch (InvalidOperationException)
+			{
+				// Invalid repository paths are intentionally skipped by the downloader.
+			}
+		}
+
+		return count;
+	}
+
+	internal static bool IsWindowsReservedName(string name)
+	{
+		var stem = name.Split('.')[0].TrimEnd(' ');
+		return stem.Equals("CON", StringComparison.OrdinalIgnoreCase) ||
+			stem.Equals("PRN", StringComparison.OrdinalIgnoreCase) ||
+			stem.Equals("AUX", StringComparison.OrdinalIgnoreCase) ||
+			stem.Equals("NUL", StringComparison.OrdinalIgnoreCase) ||
+			(stem.Length == 4 && stem[3] is >= '1' and <= '9' &&
+				(stem.StartsWith("COM", StringComparison.OrdinalIgnoreCase) ||
+				 stem.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)));
+	}
+
+	static void ReplaceDirectory(string sourceDirectory, string destinationDirectory)
+	{
+		var backupDirectory = $"{destinationDirectory}.{Guid.NewGuid():N}.bak";
+		TryDeleteDirectoryIfExists(backupDirectory);
+
+		var movedExistingDirectory = false;
+		var succeeded = false;
+		if (Directory.Exists(destinationDirectory))
+		{
+			Directory.Move(destinationDirectory, backupDirectory);
+			movedExistingDirectory = true;
+		}
+
+		try
+		{
+			Directory.Move(sourceDirectory, destinationDirectory);
+			succeeded = true;
+			TryDeleteDirectoryIfExists(backupDirectory);
+		}
+		finally
+		{
+			if (!succeeded && movedExistingDirectory)
+				RestoreBackupDirectory(backupDirectory, destinationDirectory);
+		}
+	}
+
+	static void RestoreBackupDirectory(string backupDirectory, string destinationDirectory)
+	{
+		if (!Directory.Exists(backupDirectory) || Directory.Exists(destinationDirectory))
+			return;
+
+		try
+		{
+			Directory.Move(backupDirectory, destinationDirectory);
+		}
+		catch (Exception restoreException) when (restoreException is IOException or UnauthorizedAccessException)
+		{
+			throw new InvalidOperationException(
+				$"Could not replace skill directory '{destinationDirectory}' and could not restore the previous installation.",
+				restoreException);
+		}
+	}
+
+	static void DeleteDirectoryIfExists(string path)
+	{
+		if (!Directory.Exists(path))
+			return;
+
+		try
+		{
+			Directory.Delete(path, recursive: true);
+		}
+		catch (IOException ex)
+		{
+			throw new InvalidOperationException($"Could not clean up temporary skill installation directory '{path}'.", ex);
+		}
+		catch (UnauthorizedAccessException ex)
+		{
+			throw new InvalidOperationException($"Could not clean up temporary skill installation directory '{path}'.", ex);
+		}
+	}
+
+	static void TryDeleteDirectoryIfExists(string path)
+	{
+		try
+		{
+			DeleteDirectoryIfExists(path);
+		}
+		catch (InvalidOperationException)
+		{
+			// Best-effort cleanup: do not hide the actual install result or root exception.
+		}
+	}
+}
