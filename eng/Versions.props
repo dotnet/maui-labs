@@ -74,6 +74,8 @@
     <PlatformMauiLinuxGtk4EssentialsVersion>$(PlatformMauiLinuxGtk4Version)</PlatformMauiLinuxGtk4EssentialsVersion>
     <PlatformMauiWindowsWpfVersion>0.1.0</PlatformMauiWindowsWpfVersion>
     <PlatformMauiWindowsWpfEssentialsVersion>$(PlatformMauiWindowsWpfVersion)</PlatformMauiWindowsWpfEssentialsVersion>
+    <PlatformMauiBrowserVersion>0.1.0</PlatformMauiBrowserVersion>
+    <PlatformMauiBrowserEssentialsVersion>$(PlatformMauiBrowserVersion)</PlatformMauiBrowserEssentialsVersion>
     <PlatformMauiMacOSVersion>0.3.0</PlatformMauiMacOSVersion>
     <PlatformMauiMacOSBlazorWebViewVersion>$(PlatformMauiMacOSVersion)</PlatformMauiMacOSBlazorWebViewVersion>
     <PlatformMauiMacOSEssentialsVersion>$(PlatformMauiMacOSVersion)</PlatformMauiMacOSEssentialsVersion>

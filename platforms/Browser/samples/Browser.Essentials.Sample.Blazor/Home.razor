@@ -1,0 +1,281 @@
+@page "/"
+@using Microsoft.Maui.Accessibility
+@using Microsoft.Maui.ApplicationModel
+@using Microsoft.Maui.ApplicationModel.DataTransfer
+@using Microsoft.Maui.Devices
+@using Microsoft.Maui.Devices.Sensors
+@using Microsoft.Maui.Media
+@using Microsoft.Maui.Networking
+@using Microsoft.Maui.Storage
+@inject IPreferences Preferences
+@inject ISecureStorage SecureStorage
+@inject IClipboard Clipboard
+@inject IConnectivity Connectivity
+@inject IDeviceInfo DeviceInfo
+@inject IDeviceDisplay DeviceDisplay
+@inject IAppInfo AppInfo
+@inject IGeolocation Geolocation
+@inject IBattery Battery
+@inject IShare Share
+@inject ILauncher Launcher
+@inject IBrowser Browser
+@inject ITextToSpeech TextToSpeech
+@inject IFilePicker FilePicker
+@inject IFileSystem FileSystem
+@inject IVibration Vibration
+@inject IAccelerometer Accelerometer
+@inject ISemanticScreenReader ScreenReader
+@inject IVersionTracking VersionTracking
+
+<PageTitle>Browser Essentials Sample</PageTitle>
+
+<h1>MAUI Essentials in the browser</h1>
+<p>Each section calls the corresponding MAUI Essentials interface, implemented with web APIs.</p>
+
+<section>
+    <h2>Preferences</h2>
+    <input @bind="prefValue" placeholder="value" />
+    <button @onclick="SavePref">Save</button>
+    <button @onclick="LoadPref">Load</button>
+    <button @onclick="() => Preferences.Clear()">Clear</button>
+    <output>@prefStatus</output>
+</section>
+
+<section>
+    <h2>Secure storage (AES-GCM)</h2>
+    <input @bind="secureValue" placeholder="secret" />
+    <button @onclick="SaveSecure">Save</button>
+    <button @onclick="LoadSecure">Load</button>
+    <output>@secureStatus</output>
+</section>
+
+<section>
+    <h2>Clipboard</h2>
+    <input @bind="clipboardValue" placeholder="text to copy" />
+    <button @onclick="CopyText">Copy</button>
+    <button @onclick="PasteText">Paste</button>
+    <output>@clipboardStatus</output>
+</section>
+
+<section>
+    <h2>Device / app / display / connectivity</h2>
+    <button @onclick="ReadInfo">Read</button>
+    <pre>@infoStatus</pre>
+</section>
+
+<section>
+    <h2>Geolocation</h2>
+    <button @onclick="GetLocation">Get location</button>
+    <output>@geoStatus</output>
+</section>
+
+<section>
+    <h2>Battery</h2>
+    <button @onclick="ReadBattery">Read</button>
+    <output>@batteryStatus</output>
+</section>
+
+<section>
+    <h2>Share / launcher</h2>
+    <button @onclick="ShareText">Share text</button>
+    <button @onclick="OpenBrowser">Open dotnet.microsoft.com</button>
+    <output>@shareStatus</output>
+</section>
+
+<section>
+    <h2>Text to speech</h2>
+    <input @bind="speechText" />
+    <button @onclick="Speak">Speak</button>
+    <output>@speechStatus</output>
+</section>
+
+<section>
+    <h2>File picker + file system</h2>
+    <button @onclick="PickFile">Pick file</button>
+    <button @onclick="ReadPackageFile">Read app package file</button>
+    <output>@fileStatus</output>
+</section>
+
+<section>
+    <h2>Sensors / vibration / screen reader</h2>
+    <button @onclick="ToggleAccelerometer">@(Accelerometer.IsMonitoring ? "Stop" : "Start") accelerometer</button>
+    <button @onclick="DoVibrate">Vibrate</button>
+    <button @onclick="Announce">Announce</button>
+    <output>@sensorStatus</output>
+</section>
+
+@code {
+    string prefValue = "hello from localStorage";
+    string prefStatus = "";
+    string secureValue = "s3cret";
+    string secureStatus = "";
+    string clipboardValue = "copied from MAUI Essentials";
+    string clipboardStatus = "";
+    string infoStatus = "";
+    string geoStatus = "";
+    string batteryStatus = "";
+    string shareStatus = "";
+    string speechText = "Hello from MAUI Essentials in the browser";
+    string speechStatus = "";
+    string fileStatus = "";
+    string sensorStatus = "";
+
+    protected override void OnInitialized() => VersionTracking.Track();
+
+    void SavePref()
+    {
+        Preferences.Set("sample-key", prefValue);
+        prefStatus = "saved";
+    }
+
+    void LoadPref() =>
+        prefStatus = $"loaded: '{Preferences.Get("sample-key", "(not set)")}'";
+
+    async Task SaveSecure()
+    {
+        await SecureStorage.SetAsync("sample-secret", secureValue);
+        secureStatus = "saved (encrypted)";
+    }
+
+    async Task LoadSecure() =>
+        secureStatus = $"loaded: '{await SecureStorage.GetAsync("sample-secret") ?? "(not set)"}'";
+
+    async Task CopyText()
+    {
+        await Clipboard.SetTextAsync(clipboardValue);
+        clipboardStatus = "copied";
+    }
+
+    async Task PasteText()
+    {
+        try
+        {
+            clipboardStatus = $"pasted: '{await Clipboard.GetTextAsync()}'";
+        }
+        catch (Exception ex)
+        {
+            clipboardStatus = $"failed: {ex.Message}";
+        }
+    }
+
+    void ReadInfo()
+    {
+        var display = DeviceDisplay.MainDisplayInfo;
+        infoStatus =
+            $"Device: {DeviceInfo.Manufacturer} {DeviceInfo.Model} {DeviceInfo.VersionString} ({DeviceInfo.Platform}, {DeviceInfo.Idiom})\n" +
+            $"App: {AppInfo.Name} v{AppInfo.VersionString} on {AppInfo.PackageName}, theme {AppInfo.RequestedTheme}\n" +
+            $"Display: {display.Width}x{display.Height} at {display.Density}x, {display.Orientation}\n" +
+            $"Network: {Connectivity.NetworkAccess} ({string.Join(",", Connectivity.ConnectionProfiles)})\n" +
+            $"Version tracking: first launch ever = {VersionTracking.IsFirstLaunchEver}, history = [{string.Join(", ", VersionTracking.VersionHistory)}]";
+    }
+
+    async Task GetLocation()
+    {
+        try
+        {
+            geoStatus = "requesting…";
+            var location = await Geolocation.GetLocationAsync(new GeolocationRequest(GeolocationAccuracy.Medium, TimeSpan.FromSeconds(15)));
+            geoStatus = location is null ? "no location" : $"{location.Latitude:F5}, {location.Longitude:F5} (±{location.Accuracy:F0}m)";
+        }
+        catch (Exception ex)
+        {
+            geoStatus = $"failed: {ex.Message}";
+        }
+    }
+
+    void ReadBattery() =>
+        batteryStatus = $"{Battery.ChargeLevel:P0}, {Battery.State}, {Battery.PowerSource}";
+
+    async Task ShareText()
+    {
+        try
+        {
+            await Share.RequestAsync(new ShareTextRequest { Title = "Browser Essentials", Text = "Shared via the Web Share API" });
+            shareStatus = "share sheet shown";
+        }
+        catch (Exception ex)
+        {
+            shareStatus = $"failed: {ex.Message}";
+        }
+    }
+
+    async Task OpenBrowser() =>
+        shareStatus = await Browser.OpenAsync(new Uri("https://dotnet.microsoft.com"), new BrowserLaunchOptions())
+            ? "opened" : "popup blocked";
+
+    async Task Speak()
+    {
+        try
+        {
+            speechStatus = "speaking…";
+            await TextToSpeech.SpeakAsync(speechText);
+            speechStatus = "done";
+        }
+        catch (Exception ex)
+        {
+            speechStatus = $"failed: {ex.Message}";
+        }
+    }
+
+    async Task PickFile()
+    {
+        var file = await FilePicker.PickAsync();
+        if (file is null)
+        {
+            fileStatus = "cancelled";
+            return;
+        }
+        var bytes = await File.ReadAllBytesAsync(file.FullPath);
+        fileStatus = $"picked '{file.FileName}' ({bytes.Length} bytes, {file.ContentType})";
+    }
+
+    async Task ReadPackageFile()
+    {
+        using var stream = await FileSystem.OpenAppPackageFileAsync("sample-asset.txt");
+        using var reader = new StreamReader(stream);
+        fileStatus = $"sample-asset.txt: '{(await reader.ReadToEndAsync()).Trim()}'";
+    }
+
+    void ToggleAccelerometer()
+    {
+        try
+        {
+            if (Accelerometer.IsMonitoring)
+            {
+                Accelerometer.Stop();
+                sensorStatus = "accelerometer stopped";
+                return;
+            }
+            Accelerometer.ReadingChanged += (_, e) =>
+            {
+                sensorStatus = $"accel: {e.Reading.Acceleration.X:F2}, {e.Reading.Acceleration.Y:F2}, {e.Reading.Acceleration.Z:F2} g";
+                InvokeAsync(StateHasChanged);
+            };
+            Accelerometer.Start(SensorSpeed.UI);
+            sensorStatus = "accelerometer started (mobile devices only)";
+        }
+        catch (Exception ex)
+        {
+            sensorStatus = $"failed: {ex.Message}";
+        }
+    }
+
+    void DoVibrate()
+    {
+        try
+        {
+            Vibration.Vibrate(TimeSpan.FromMilliseconds(200));
+            sensorStatus = "vibrated";
+        }
+        catch (Exception ex)
+        {
+            sensorStatus = $"failed: {ex.Message}";
+        }
+    }
+
+    void Announce()
+    {
+        ScreenReader.Announce("Hello from the semantic screen reader");
+        sensorStatus = "announced via aria-live";
+    }
+}
