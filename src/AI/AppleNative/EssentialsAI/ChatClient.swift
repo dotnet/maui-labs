@@ -1,4 +1,6 @@
 import Foundation
+import CoreGraphics
+import ImageIO
 import FoundationModels
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
@@ -245,7 +247,16 @@ public class ChatClientNative: NSObject {
         let otherMessages = Array(messages.dropLast())
 
         let model = SystemLanguageModel.default
-        let tools = options?.tools?.map { ToolNative($0, toolWatcher?.notifyToolCall, toolWatcher?.notifyToolResult) } ?? []
+
+        // Wrap the (Sendable) watcher's methods in explicit @Sendable closures so the partially
+        // applied references carry Sendable-correctness through to ToolNative.
+        let onToolCall: (@Sendable (String, String, String) -> Void)? = toolWatcher.map { watcher in
+            { @Sendable id, name, arguments in watcher.notifyToolCall(id: id, name: name, arguments: arguments) }
+        }
+        let onToolResult: (@Sendable (String, String, String) -> Void)? = toolWatcher.map { watcher in
+            { @Sendable id, name, result in watcher.notifyToolResult(id: id, name: name, result: result) }
+        }
+        let tools = options?.tools?.map { ToolNative($0, onToolCall, onToolResult) } ?? []
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
         if let log = AppleIntelligenceLogger.log, let toolList = options?.tools {
@@ -277,7 +288,7 @@ public class ChatClientNative: NSObject {
 
         // Map options into GenerationOptions
         let genOptions = GenerationOptions(
-            sampling: {
+            samplingMode: {
                 if let topK = options?.topK?.intValue {
                     return .random(top: topK, seed: options?.seed?.uint64Value)
                 }
@@ -368,15 +379,28 @@ public class ChatClientNative: NSObject {
             throw NSError.chatError(.invalidRole, description: "Only user messages can be prompts. Found: \(message.role)")
         }
 
-        return try Prompt {
-            try message.contents.map {
-                switch $0 {
-                case let textContent as TextContentNative:
-                    return textContent.text
-                default:
-                    throw NSError.chatError(.invalidContent, description: "Unsupported content type in prompt. Found: \(type(of: $0))")
+        // Build one Prompt fragment per content item, then combine so that text and image
+        // attachments interleave in order.
+        let fragments: [Prompt] = try message.contents.map { content in
+            switch content {
+            case let textContent as TextContentNative:
+                return Prompt { textContent.text }
+
+            case let imageContent as ImageContentNative:
+                if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) {
+                    let attachment = try imageContent.toAttachment()
+                    return Prompt { attachment }
+                } else {
+                    throw NSError.chatError(.invalidContent, description: "Image prompts require iOS/macCatalyst/macOS 27.0 or later.")
                 }
+
+            default:
+                throw NSError.chatError(.invalidContent, description: "Unsupported content type in prompt. Found: \(type(of: content))")
             }
+        }
+
+        return Prompt {
+            for fragment in fragments { fragment }
         }
     }
 
@@ -395,13 +419,28 @@ public class ChatClientNative: NSObject {
         }
     }
 
-    private func toUserEntry(_ message: ChatMessageNative) throws -> Transcript.Entry {
-        let segments: [Transcript.Segment] = try message.contents.map { content in
-            guard let textContent = content as? TextContentNative else {
-                throw NSError.chatError(.invalidContent, description: "Unsupported content type in user message: \(type(of: content))")
-            }
+    /// Maps a single content item to a transcript segment (text or image attachment).
+    /// Shared by user prompts and system instructions so both can carry images.
+    private func toSegment(_ content: AIContentNative) throws -> Transcript.Segment {
+        switch content {
+        case let textContent as TextContentNative:
             return .text(Transcript.TextSegment(content: textContent.text))
+
+        case let imageContent as ImageContentNative:
+            if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) {
+                let attachment = try imageContent.toTranscriptAttachment()
+                return .attachment(Transcript.AttachmentSegment(content: attachment, label: imageContent.label))
+            } else {
+                throw NSError.chatError(.invalidContent, description: "Image content requires iOS/macCatalyst/macOS 27.0 or later.")
+            }
+
+        default:
+            throw NSError.chatError(.invalidContent, description: "Unsupported content type in message: \(type(of: content))")
         }
+    }
+
+    private func toUserEntry(_ message: ChatMessageNative) throws -> Transcript.Entry {
+        let segments = try message.contents.map(self.toSegment)
         return .prompt(Transcript.Prompt(segments: segments))
     }
 
@@ -439,12 +478,7 @@ public class ChatClientNative: NSObject {
     }
 
     private func toSystemEntry(_ message: ChatMessageNative) throws -> Transcript.Entry {
-        let segments: [Transcript.Segment] = try message.contents.map { content in
-            guard let textContent = content as? TextContentNative else {
-                throw NSError.chatError(.invalidContent, description: "Unsupported content type in system message: \(type(of: content))")
-            }
-            return .text(Transcript.TextSegment(content: textContent.text))
-        }
+        let segments = try message.contents.map(self.toSegment)
         return .instructions(Transcript.Instructions(segments: segments, toolDefinitions: []))
     }
 
@@ -492,7 +526,8 @@ public class ChatClientNative: NSObject {
             message.contents = fromToolOutput(toolOutput)
             return message
 
-        @unknown default:
+        default:
+            // Reasoning and any future entry kinds are not surfaced as messages.
             return nil
         }
     }
@@ -510,7 +545,8 @@ public class ChatClientNative: NSObject {
                 resultText = textSegment.content
             case .structure(let structuredSegment):
                 resultText = structuredSegment.content.jsonString
-            @unknown default:
+            default:
+                // Attachment/custom/future tool-output segments are not represented as text.
                 return nil
             }
 
@@ -525,10 +561,20 @@ public class ChatClientNative: NSObject {
 
         case .structure(let structuredSegment):
             // For now, convert structured content to text
-            let jsonString = structuredSegment.content.jsonString
-            return TextContentNative(text: jsonString)
+            return TextContentNative(text: structuredSegment.content.jsonString)
 
-        @unknown default:
+        default:
+            // Image attachment segments are available on 27.0+. Match inside the availability
+            // guard so the case references compile against the 26.x deployment target. Other
+            // segment kinds (custom, future) are not represented as content.
+            if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *),
+               case .attachment(let attachmentSegment) = segment,
+               case .image(let image) = attachmentSegment.content {
+                return ImageContentNative(
+                    cgImage: image.cgImage,
+                    orientationRaw: Int32(image.orientation.rawValue),
+                    label: attachmentSegment.label)
+            }
             return nil
         }
     }
@@ -594,7 +640,7 @@ public class ChatClientNative: NSObject {
 
 extension NSError {
 
-    fileprivate static func chatError(_ code: ChatClientError, description: String) -> NSError {
+    static func chatError(_ code: ChatClientError, description: String) -> NSError {
         NSError(
             domain: "ChatClientNative",
             code: code.rawValue,

@@ -63,6 +63,7 @@ The CI pipeline handles the macOS → Windows artifact flow automatically. See `
 ## Documentation
 
 - [JSON Stream Chunker Design](../../docs/ai/json-stream-chunker-design.md)
+- [Multimodal Image Input Design](../../docs/ai/multimodal-design.md)
 
 ## Requirements
 
