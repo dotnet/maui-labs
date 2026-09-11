@@ -76,6 +76,7 @@
     <Project Path="tests/AI/Microsoft.Maui.Essentials.AI.UnitTests/Microsoft.Maui.Essentials.AI.UnitTests.csproj" />
   </Folder>
   <Folder Name="/tests/DevFlow/" />
+  <Folder Name="/platforms/" />
   <Folder Name="/platforms/MacOS/">
     <Project Path="platforms/MacOS/src/MacOS/MacOS.csproj" />
     <Project Path="platforms/MacOS/src/MacOS.Essentials/MacOS.Essentials.csproj" />
