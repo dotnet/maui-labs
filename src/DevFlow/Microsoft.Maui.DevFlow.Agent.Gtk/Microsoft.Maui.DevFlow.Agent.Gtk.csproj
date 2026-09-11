@@ -19,4 +19,15 @@
     <PackageReference Include="Microsoft.Extensions.Http" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\Microsoft.Maui.DevFlow.Agent\build\Microsoft.Maui.DevFlow.Agent.targets"
+          Pack="true"
+          PackagePath="build\$(PackageId).targets"
+          Visible="false" />
+    <None Include="..\Microsoft.Maui.DevFlow.Agent\buildTransitive\Microsoft.Maui.DevFlow.Agent.targets"
+          Pack="true"
+          PackagePath="buildTransitive\$(PackageId).targets"
+          Visible="false" />
+  </ItemGroup>
+
 </Project>

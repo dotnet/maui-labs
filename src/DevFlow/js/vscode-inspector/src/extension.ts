@@ -2,6 +2,13 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { createHash, randomBytes } from "crypto";
 import type { AgentRegistration } from "@maui-devflow/client";
+import {
+  createReconnectController,
+  inspectorTitle,
+  renderReconnectHost,
+  sameAgentIdentity,
+  type ReconnectState,
+} from "./host-shells";
 
 /**
  * MAUI DevFlow Inspector — VS Code host shell.
@@ -54,6 +61,26 @@ interface BridgeResult {
 }
 let currentSelection: SelectedElement | null = null;
 let currentDataSnapshot: DataSnapshot | null = null;
+let currentSelectionOwner: object | null = null;
+let currentDataSnapshotOwner: object | null = null;
+
+function updatePanelSelection(owner: object, selection: SelectedElement | null): void {
+  if (selection || currentSelectionOwner === owner || currentSelectionOwner === null) {
+    currentSelection = selection;
+    currentSelectionOwner = selection ? owner : null;
+  }
+}
+
+function clearPanelContext(owner: object): void {
+  if (currentSelectionOwner === owner) {
+    currentSelection = null;
+    currentSelectionOwner = null;
+  }
+  if (currentDataSnapshotOwner === owner) {
+    currentDataSnapshot = null;
+    currentDataSnapshotOwner = null;
+  }
+}
 
 function registerSelectionTool(context: vscode.ExtensionContext): void {
   // A Language Model Tool lets Copilot (agent mode) resolve "the selected element" / "fix the selected
@@ -69,7 +96,10 @@ function registerSelectionTool(context: vscode.ExtensionContext): void {
           const ToolResult = (vscode as any).LanguageModelToolResult;
           const TextPart = (vscode as any).LanguageModelTextPart;
           const text = currentSelection
-            ? "The user has this .NET MAUI element selected in the MAUI DevFlow Inspector:\n" + JSON.stringify(currentSelection, null, 2)
+            ? "The user has this .NET MAUI element selected in the MAUI DevFlow Inspector:\n" +
+              JSON.stringify(currentSelection, null, 2) +
+              "\nIf a requested mutation is blocked by another DevFlow host, call maui_control_status, " +
+              "then maui_take_control after the user approves taking control."
             : "No element is currently selected in the MAUI DevFlow Inspector. Ask the user to click an element in the Inspector (or open it via 'MAUI DevFlow: Open Inspector').";
           return new ToolResult([new TextPart(text)]);
         },
@@ -111,77 +141,138 @@ async function openInspector(): Promise<void> {
   const configured = config.get<number>("brokerPort");
   const brokerPort = typeof configured === "number" && configured > 0 ? configured : undefined;
 
-  const discovery = await discoverBroker({ bootstrap: "never", brokerPort });
-  if (!discovery || discovery.agents.length === 0) {
-    vscode.window.showWarningMessage(
-      "MAUI DevFlow: no running app found. Launch your app with the DevFlow agent, then run this command again."
-    );
-    return;
-  }
-
-  const agent = await pickAgent(discovery.agents);
-  if (!agent) return;
-
-  // The embed token proves this is a trusted local shell so the Inspector relaxes its
-  // anti-framing headers; it lives in the local broker.json. Only use it when that state file
-  // actually describes the broker we discovered, so a stale/foreign broker.json can't pair a wrong
-  // token with the configured port.
-  const state = readBrokerState();
-  const embedToken = state && state.port === discovery.port ? state.embedToken ?? undefined : undefined;
-  // The broker's HttpListener is bound to `localhost`, so the iframe host MUST be localhost
-  // (a 127.0.0.1 Host header is rejected as "Invalid Hostname").
-  const base = `http://localhost:${discovery.port}/inspector/${encodeURIComponent(agent.id)}/`;
-  const inspectorUrl = embedToken ? `${base}?embed=${encodeURIComponent(embedToken)}` : base;
-  const title = agent.appName ?? agent.id;
-
   const panel = vscode.window.createWebviewPanel(
     "mauiDevflowInspector",
-    `MAUI DevFlow Inspector · ${title}`,
+    inspectorTitle(),
     resolveViewColumn(config.get<string>("openLocation")),
     {
       enableScripts: true,
       retainContextWhenHidden: true,
-      // A VS Code webview will NOT load a localhost server in an iframe without a port mapping,
-      // even on local desktop. Map the broker port through so the iframe's http://localhost:{port}
-      // resolves to the extension-host's localhost:{port} (the broker). Also covers Remote/WSL.
-      portMapping: [{ webviewPort: discovery.port, extensionHostPort: discovery.port }],
+      portMapping: [],
     }
   );
 
   // Per-embed secrets: `nonce` gates the one inline relay script (strict CSP, no unsafe-inline);
   // `bridgeId` authenticates every postMessage on the host bridge. The bridgeId travels in the URL
   // *fragment*, so it never reaches the broker over HTTP — only the iframe's own script reads it.
-  const nonce = randomToken();
-  const bridgeId = randomToken();
+  let nonce = randomToken();
+  let bridgeId = randomToken();
+  let activeAgent: AgentRegistration | undefined;
+  let connected = false;
+  let reconnectState: ReconnectState | undefined;
+  let disposed = false;
+  let connectionSignature = "";
+  const pickerCancellation = new vscode.CancellationTokenSource();
+  const contextOwner = {};
+
+  const showReconnect = (state: ReconnectState): void => {
+    if (disposed) return;
+    if (!connected && reconnectState === state) return;
+    clearPanelContext(contextOwner);
+    connected = false;
+    reconnectState = state;
+    panel.title = inspectorTitle();
+    bridgeId = randomToken();
+    nonce = randomToken();
+    panel.webview.options = {
+      enableScripts: true,
+      retainContextWhenHidden: true,
+      portMapping: [],
+    } as any;
+    panel.webview.html = renderReconnectHost(state, nonce, bridgeId);
+  };
+
+  const connectPanel = (
+    discovery: { port: number; agents: AgentRegistration[] },
+    agent: AgentRegistration,
+  ): void => {
+    if (disposed) return;
+    const state = readBrokerState();
+    const embedToken = state && state.port === discovery.port
+      ? state.embedToken ?? undefined
+      : undefined;
+    const signature = `${discovery.port}|${embedToken ?? ""}|${agent.id}|${agent.port}`;
+    if (connected && signature === connectionSignature) return;
+
+    clearPanelContext(contextOwner);
+    const base = `http://localhost:${discovery.port}/inspector/${encodeURIComponent(agent.id)}/`;
+    const inspectorUrl = embedToken ? `${base}?embed=${encodeURIComponent(embedToken)}` : base;
+    activeAgent = agent;
+    connectionSignature = signature;
+    bridgeId = randomToken();
+    nonce = randomToken();
+    panel.title = inspectorTitle(agent.appName ?? agent.id);
+    panel.webview.options = {
+      enableScripts: true,
+      retainContextWhenHidden: true,
+      // Required for local desktop and Remote/WSL webview proxying.
+      portMapping: [{ webviewPort: discovery.port, extensionHostPort: discovery.port }],
+    } as any;
+    panel.webview.html = renderHost(inspectorUrl, agent.appName ?? agent.id, nonce, bridgeId);
+    connected = true;
+    reconnectState = undefined;
+  };
+
+  const reconnect = createReconnectController<AgentRegistration>({
+    discover: () => discoverBroker({ bootstrap: "never", brokerPort }),
+    pickAgent: (agents) => pickAgent(agents, pickerCancellation.token),
+    targetAgent: () => activeAgent,
+    matchesTarget: sameAgentIdentity,
+    applyConnected: connectPanel,
+    applyReconnect: showReconnect,
+    isConnected: () => connected,
+    isDisposed: () => disposed,
+  });
 
   // Register the message handler BEFORE the webview HTML loads so no early bridge message is lost.
-  panel.webview.onDidReceiveMessage(async (msg: BridgeMessage | undefined) => {
+  panel.webview.onDidReceiveMessage(async (msg: BridgeMessage | ReconnectMessage | undefined) => {
+    if (!msg || !("bridgeId" in msg) || msg.bridgeId !== bridgeId) return;
+    if (msg?.type === "devflow:reconnectPoll") {
+      await reconnect.poll({ queueIfBusy: true });
+      return;
+    }
+    if (msg?.type === "devflow:chooseApp") {
+      await reconnect.poll({ choose: true, queueIfBusy: true });
+      return;
+    }
+
+    const bridgeMessage = msg as BridgeMessage;
     let result: BridgeResult;
     try {
-      result = await handleBridgeMessage(msg);
+      result = await handleBridgeMessage(bridgeMessage, contextOwner);
     } catch (error) {
       result = { ok: false, error: `The VS Code host could not handle the request: ${String(error)}` };
     }
-    if (typeof msg?.requestId === "string" &&
-        (msg.type === "devflow:attachData" ||
-         msg.type === "devflow:attachCopilot" ||
-         msg.type === "devflow:pickWorkflow")) {
+    if (typeof bridgeMessage.requestId === "string" &&
+        (bridgeMessage.type === "devflow:attachData" ||
+         bridgeMessage.type === "devflow:attachCopilot" ||
+         bridgeMessage.type === "devflow:pickWorkflow")) {
       await panel.webview.postMessage({
         type: "devflow:hostResult",
         v: 1,
         bridgeId,
-        requestId: msg.requestId,
+        requestId: bridgeMessage.requestId,
         ...result,
       });
     }
   });
-  panel.webview.html = renderHost(inspectorUrl, title, nonce, bridgeId);
+
+  const reconnectTimer = setInterval(() => void reconnect.poll(), 2500);
+  panel.onDidDispose(() => {
+    disposed = true;
+    clearInterval(reconnectTimer);
+    pickerCancellation.cancel();
+    pickerCancellation.dispose();
+    clearPanelContext(contextOwner);
+  });
+  await reconnect.poll();
 }
 
 // ── Host bridge handlers (the shared inspector calls these via postMessage → relay → extension) ──
 
 interface BridgeMessage {
   type?: string;
+  bridgeId?: string;
   payload?: CopilotPayload;
   file?: string;
   line?: number;
@@ -195,6 +286,11 @@ interface BridgeMessage {
   requestId?: string;
 }
 
+interface ReconnectMessage {
+  type: "devflow:reconnectPoll" | "devflow:chooseApp";
+  bridgeId: string;
+}
+
 interface CopilotPayload {
   element?: { type?: string; automationId?: string | null; text?: string | null; id?: string | null } | null;
   markdown?: string | null;
@@ -202,14 +298,17 @@ interface CopilotPayload {
   appName?: string | null;
 }
 
-async function handleBridgeMessage(msg: BridgeMessage | undefined): Promise<BridgeResult> {
+async function handleBridgeMessage(
+  msg: BridgeMessage | undefined,
+  contextOwner: object,
+): Promise<BridgeResult> {
   if (!msg || typeof msg.type !== "string") return { ok: false, error: "Invalid DevFlow bridge message." };
   switch (msg.type) {
     case "devflow:sendToCopilot":
-      await sendToCopilot(msg.payload);
+      await sendToCopilot(msg.payload, contextOwner);
       return { ok: true };
     case "devflow:attachCopilot":
-      await sendToCopilot(msg.payload);
+      await sendToCopilot(msg.payload, contextOwner);
       return { ok: true, message: "Added Inspector context to Copilot." };
     case "devflow:pickWorkflow":
       return await pickWorkflowFile();
@@ -220,19 +319,19 @@ async function handleBridgeMessage(msg: BridgeMessage | undefined): Promise<Brid
       await saveRecording(msg.name, msg.markdown);
       return { ok: true };
     case "devflow:selectionChanged":
-      currentSelection = msg.element ?? null;
+      updatePanelSelection(contextOwner, msg.element ?? null);
       return { ok: true };
     case "devflow:attachData":
-      return await attachDataToCopilot(msg.snapshot);
+      return await attachDataToCopilot(msg.snapshot, contextOwner);
     default:
       return { ok: false, error: "Unsupported DevFlow bridge message." };
   }
 }
 
-async function sendToCopilot(payload: CopilotPayload | undefined): Promise<void> {
+async function sendToCopilot(payload: CopilotPayload | undefined, contextOwner: object): Promise<void> {
   const carriesElement = !!payload && Object.prototype.hasOwnProperty.call(payload, "element");
   const el = carriesElement ? payload?.element : currentSelection;
-  if (el) currentSelection = el; // keep the language-model tool in sync with what we're attaching
+  if (carriesElement && el) updatePanelSelection(contextOwner, el);
 
   const bits: string[] = [];
   if (el) {
@@ -294,7 +393,10 @@ async function pickWorkflowFile(): Promise<BridgeResult> {
 const dataSnapshotScopes = new Set(["logs", "network", "preferences", "device", "sensors", "files", "alerts"]);
 const DATA_SNAPSHOT_MAX_BYTES = 20_000;
 
-async function attachDataToCopilot(snapshot: DataSnapshot | undefined): Promise<BridgeResult> {
+async function attachDataToCopilot(
+  snapshot: DataSnapshot | undefined,
+  contextOwner: object,
+): Promise<BridgeResult> {
   if (!snapshot || snapshot.kind !== "dataSnapshot" || snapshot.redacted !== true
       || !dataSnapshotScopes.has(snapshot.scope) || typeof snapshot.title !== "string") {
     const error = "The Data snapshot was invalid and was not added to Copilot.";
@@ -313,6 +415,7 @@ async function attachDataToCopilot(snapshot: DataSnapshot | undefined): Promise<
     return { ok: false, error };
   }
   currentDataSnapshot = JSON.parse(serialized) as DataSnapshot;
+  currentDataSnapshotOwner = contextOwner;
   const fallback = "MAUI DevFlow Data snapshot:\n" + JSON.stringify(currentDataSnapshot, null, 2);
   return await attachToolContext(
     "maui-devflow_getDataSnapshot",
@@ -493,7 +596,10 @@ function resolveViewColumn(openLocation: string | undefined): vscode.ViewColumn 
   return vscode.window.activeTextEditor ? vscode.ViewColumn.Beside : vscode.ViewColumn.Active;
 }
 
-async function pickAgent(agents: AgentRegistration[]): Promise<AgentRegistration | undefined> {
+async function pickAgent(
+  agents: AgentRegistration[],
+  token?: vscode.CancellationToken,
+): Promise<AgentRegistration | undefined> {
   if (agents.length === 1) return agents[0];
   const pick = await vscode.window.showQuickPick(
     agents.map((a) => ({
@@ -501,12 +607,13 @@ async function pickAgent(agents: AgentRegistration[]): Promise<AgentRegistration
       description: `${a.platform ?? "?"} · port ${a.port}`,
       agent: a,
     })),
-    { placeHolder: "Select a running MAUI app to inspect" }
+    { placeHolder: "Select a running MAUI app to inspect" },
+    token,
   );
   return pick?.agent;
 }
 
-function renderHost(inspectorUrl: string, title: string, nonce: string, bridgeId: string): string {
+function renderHost(inspectorUrl: string, appName: string, nonce: string, bridgeId: string): string {
   // The shared inspector runs on localhost; embed it in an iframe. On desktop the iframe keeps its
   // http://localhost origin, but in Remote/WSL/web VS Code serves it through a
   // `https://<port>-<uuid>.vscode-webview.net` proxy origin, so the webview CSP frame-src allows
@@ -519,7 +626,7 @@ function renderHost(inspectorUrl: string, title: string, nonce: string, bridgeId
   <meta charset="utf-8" />
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'none'; frame-src http://127.0.0.1:* http://localhost:* https://*.vscode-webview.net; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';" />
-  <title>${escapeHtml(title)}</title>
+  <title>${escapeHtml(inspectorTitle(appName))}</title>
   <style>
     /* Fill the whole webview: no host chrome (the editor tab already names the panel) and no VS Code
        default body padding, so the shared inspector sits flush to the panel edges. */

@@ -25,6 +25,31 @@ export function readBrokerState(): BrokerState | null {
   }
 }
 
+/** Validate untrusted broker registry entries before hosts use them for targeting. */
+export function isAgentRegistration(value: unknown): value is AgentRegistration {
+  if (!value || typeof value !== "object") return false;
+
+  const agent = value as Record<string, unknown>;
+  const optionalString = (candidate: unknown) =>
+    candidate === undefined || candidate === null || typeof candidate === "string";
+
+  return typeof agent.id === "string" &&
+    agent.id.length > 0 &&
+    typeof agent.project === "string" &&
+    typeof agent.tfm === "string" &&
+    typeof agent.platform === "string" &&
+    typeof agent.appName === "string" &&
+    Number.isInteger(agent.port) &&
+    (agent.port as number) >= 1 &&
+    (agent.port as number) <= 65535 &&
+    optionalString(agent.version) &&
+    optionalString(agent.sessionId) &&
+    (agent.processId === undefined ||
+      agent.processId === null ||
+      (Number.isInteger(agent.processId) && (agent.processId as number) > 0)) &&
+    (agent.connectedAt === undefined || typeof agent.connectedAt === "string");
+}
+
 /**
  * GET the broker's agent registry. The broker is an HttpListener that rejects any Host
  * header other than "localhost", so we send it explicitly. Returns null if unreachable.
@@ -46,7 +71,7 @@ export async function fetchAgents(
   }
   if (!r.ok || !r.buffer) return null;
   const data = parseJsonSafe(r.buffer.toString("utf8"));
-  return Array.isArray(data) ? (data as AgentRegistration[]) : null;
+  return Array.isArray(data) && data.every(isAgentRegistration) ? data : null;
 }
 
 /** Resolve the `maui` CLI path: explicit override → ~/.dotnet/tools/maui → PATH. */

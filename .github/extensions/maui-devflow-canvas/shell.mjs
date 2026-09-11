@@ -15,20 +15,22 @@ import { randomBytes } from "node:crypto";
 
 const UI_FONT_STACK = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif';
 
-export function renderShell(inspectorUrl, appName, bridgeId) {
-  const title = escapeHtml(appName || "MAUI app");
+export function renderShell(inspectorUrl, appName, bridgeId, agentId = "", generation = "") {
+  const title = productTitle(appName);
   const bridge = String(bridgeId || "").replace(/[^A-Za-z0-9_-]/g, "");
   const nonce = scriptNonce();
   const frameOrigin = new URL(String(inspectorUrl)).origin;
   const frameSrc = jsString(`${inspectorUrl}#devflowBridge=${bridge}`);
   const bridgeLiteral = jsString(bridge);
   const frameOriginLiteral = jsString(frameOrigin);
+  const agentLiteral = jsString(agentId);
+  const generationLiteral = jsString(generation);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${title}</title>
+  <title>${escapeHtml(title)}</title>
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'none'; frame-src http://127.0.0.1:* http://localhost:* https://*.vscode-webview.net; style-src 'unsafe-inline'; connect-src 'self'; script-src 'nonce-${nonce}';" />
   <style>
@@ -37,15 +39,35 @@ export function renderShell(inspectorUrl, appName, bridgeId) {
     html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: light-dark(#ffffff, #1e1e1e);
                  font: 13px/1.5 ${UI_FONT_STACK}; }
     #frame { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
+    #host-status { min-height: 100%; display: grid; place-items: center; padding: 32px; color: light-dark(#1f2328, #e6edf3); }
+    #host-status[hidden], #frame[hidden] { display: none; }
+    #host-status section { width: min(480px, 100%); }
+    #host-status h1 { margin: 0 0 8px; font-size: 20px; font-weight: 600; }
+    #host-status p { margin: 0 0 20px; color: light-dark(#656d76, #8b949e); }
+    #host-status button { border: 1px solid transparent; border-radius: 6px; padding: 7px 14px;
+                          background: light-dark(#0969da, #2f81f7); color: #ffffff; font: inherit; cursor: pointer; }
   </style>
 </head>
 <body>
-  <iframe id="frame" sandbox="allow-scripts allow-forms allow-same-origin"></iframe>
+  <main id="host-status">
+    <section aria-live="polite">
+      <h1 id="host-heading">Connecting to the selected MAUI app</h1>
+      <p id="host-detail">Aligning the Inspector and Canvas controls to the same running app.</p>
+      <button id="host-retry" type="button" hidden>Retry</button>
+    </section>
+  </main>
+  <iframe id="frame" hidden sandbox="allow-scripts allow-forms allow-same-origin"></iframe>
   <script nonce="${nonce}">
     (function () {
       const frame = document.getElementById('frame');
+      const hostStatus = document.getElementById('host-status');
+      const hostHeading = document.getElementById('host-heading');
+      const hostDetail = document.getElementById('host-detail');
+      const hostRetry = document.getElementById('host-retry');
       const bridgeId = ${bridgeLiteral};
       const frameOrigin = ${frameOriginLiteral};
+      const targetAgentId = ${agentLiteral};
+      const targetGeneration = ${generationLiteral};
       // Capabilities the canvas contributes: save recordings, receive the human's selection (so the
       // agent can answer about "the selected element"), and push that selection to Copilot as context.
       const capabilities = bridgeId ? ['saveRecording', 'selection', 'copilot', 'copilotContext', 'attachData'] : [];
@@ -265,7 +287,62 @@ export function renderShell(inspectorUrl, appName, bridgeId) {
           else if (mq && mq.addListener) mq.addListener(sendTheme);
         });
       } catch (e) { /* matchMedia is available in the canvas webview */ }
-      frame.src = ${frameSrc};
+      var checkingTarget = false;
+      var syncingTarget = false;
+      var targetMisses = 0;
+      var livenessTimer = 0;
+      function startLiveness() {
+        if (!livenessTimer)
+          livenessTimer = setInterval(function () { void checkTarget(); }, 2500);
+      }
+      function startInspector() {
+        hostStatus.hidden = true;
+        frame.hidden = false;
+        frame.src = ${frameSrc};
+        startLiveness();
+      }
+      function showSyncError(message) {
+        frame.hidden = true;
+        hostStatus.hidden = false;
+        hostHeading.textContent = 'Waiting for the selected MAUI app';
+        hostDetail.textContent = message || 'The selected app could not be connected.';
+        hostRetry.hidden = false;
+        startLiveness();
+      }
+      function syncTarget() {
+        if (syncingTarget) return;
+        syncingTarget = true;
+        hostRetry.hidden = true;
+        hostHeading.textContent = 'Connecting to the selected MAUI app';
+        hostDetail.textContent = 'Aligning the Inspector and Canvas controls to the same running app.';
+        postControl({ action: 'syncTarget', agentId: targetAgentId }, function (result) {
+          syncingTarget = false;
+          if (result && result.ok) startInspector();
+          else showSyncError(result && result.error);
+        });
+      }
+      async function checkTarget() {
+        if (checkingTarget) return;
+        checkingTarget = true;
+        try {
+          const response = await fetch('/inspector-ready', { cache: 'no-store' });
+          const readiness = await response.json();
+          if (readiness && readiness.ready &&
+              readiness.agentId === targetAgentId &&
+              readiness.generation === targetGeneration) {
+            targetMisses = 0;
+            if (frame.hidden) syncTarget();
+          } else if (++targetMisses >= 2) {
+            location.reload();
+          }
+        } catch (e) {
+          if (++targetMisses >= 2) location.reload();
+        } finally {
+          checkingTarget = false;
+        }
+      }
+      hostRetry.addEventListener('click', syncTarget);
+      syncTarget();
     })();
   </script>
 </body>
@@ -279,15 +356,32 @@ export function renderShell(inspectorUrl, appName, bridgeId) {
 // there is no embedded inspector document to hand a Primer palette to yet), so the panel doesn't
 // visually jar once it converges to the real inspector. It polls /inspector-ready and reloads into
 // the shared inspector the moment it resolves.
-export function renderDisconnected(appName) {
-  const title = escapeHtml(appName || "MAUI app");
+export function renderDisconnected(appName, connectionState = "broker") {
+  const title = productTitle(appName);
+  const waitingForApp = connectionState === "app";
+  const multipleApps = connectionState === "multiple";
+  const waitingForTarget = connectionState === "target";
+  const heading = waitingForApp
+    ? "Waiting for a running MAUI app"
+    : multipleApps
+      ? "Choose a running MAUI app"
+      : waitingForTarget
+        ? "Waiting for the selected MAUI app"
+        : "Waiting for the DevFlow broker";
+  const detail = waitingForApp
+    ? "Launch your app with the DevFlow agent. The Inspector will reconnect automatically."
+    : multipleApps
+      ? "More than one app is available. Ask Copilot to list and select an agent."
+      : waitingForTarget
+        ? "The selected process is unavailable. Ask Copilot to select the restarted app explicitly if it reports a relative project path."
+        : "Start or restart MAUI DevFlow. The Inspector will reconnect automatically.";
   const nonce = scriptNonce();
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${title}</title>
+  <title>${escapeHtml(title)}</title>
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'none'; style-src 'unsafe-inline'; connect-src 'self'; script-src 'nonce-${nonce}';" />
   <style>
@@ -296,40 +390,71 @@ export function renderDisconnected(appName) {
       --df-bg: light-dark(#ffffff, #0d1117); --df-surface: light-dark(#f6f8fa, #161b22);
       --df-fg: light-dark(#1f2328, #e6edf3); --df-muted: light-dark(#656d76, #8b949e);
       --df-border: light-dark(#d0d7de, #30363d); --df-accent: light-dark(#0969da, #2f81f7);
-      --df-warn: light-dark(#9a6700, #d29922);
+      --df-accent-fg: #ffffff;
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; height: 100%; background: var(--df-bg); color: var(--df-fg);
                  font: 13px/1.5 ${UI_FONT_STACK}; }
-    main { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
-           gap: 12px; padding: 24px; text-align: center; }
-    .card { max-width: 360px; padding: 20px 24px; border: 1px solid var(--df-border); border-radius: 10px;
-            background: var(--df-surface); }
-    .title { font-weight: 600; margin: 0 0 4px; }
-    .status { color: var(--df-muted); margin: 0 0 14px; }
-    .spinner { width: 22px; height: 22px; margin: 0 auto 14px; border-radius: 50%;
-               border: 2px solid var(--df-border); border-top-color: var(--df-accent);
-               animation: df-spin 0.9s linear infinite; }
-    @media (prefers-reduced-motion: reduce) { .spinner { animation: none; border-top-color: var(--df-warn); } }
-    @keyframes df-spin { to { transform: rotate(360deg); } }
+    main { min-height: 100%; display: grid; place-items: center; padding: 32px; }
+    section { width: min(480px, 100%); }
+    .eyebrow { margin: 0 0 8px; color: var(--df-muted); }
+    h1 { margin: 0 0 8px; font-size: 20px; font-weight: 600; }
+    .status { color: var(--df-muted); margin: 0 0 20px; }
+    button { border: 1px solid transparent; border-radius: 6px; padding: 7px 14px;
+             background: var(--df-accent); color: var(--df-accent-fg); font: inherit; cursor: pointer; }
+    button:hover { filter: brightness(1.08); }
+    button:focus-visible { outline: 2px solid var(--df-accent); outline-offset: 2px; }
+    @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
   </style>
 </head>
 <body>
   <main>
-    <div class="card">
-      <div class="spinner" role="presentation"></div>
-      <p class="title">${title}</p>
-      <p class="status" id="df-status">Waiting for the MAUI DevFlow agent to connect…</p>
-    </div>
+    <section aria-live="polite">
+      <p class="eyebrow">${escapeHtml(title)}</p>
+      <h1 id="df-heading">${heading}</h1>
+      <p class="status" id="df-status">${detail}</p>
+      <button id="df-retry" type="button">Retry</button>
+    </section>
   </main>
   <script nonce="${nonce}">
     (function () {
       // Self-heal: poll /inspector-ready and reload into the shared Inspector as soon as a broker
       // and running app resolve. The 5s guard stops a
       // flapping broker from hot-looping reloads.
+      var headingEl = document.getElementById('df-heading');
       var statusEl = document.getElementById('df-status');
-      function setStatus(text) { if (statusEl) statusEl.textContent = text; }
-      async function heal() {
+      var retryEl = document.getElementById('df-retry');
+      var polling = false;
+      var pollAgain = false;
+      function setState(state) {
+        var waitingForApp = state === 'app';
+        var multipleApps = state === 'multiple';
+        var waitingForTarget = state === 'target';
+        if (headingEl) headingEl.textContent = waitingForApp
+          ? 'Waiting for a running MAUI app'
+          : multipleApps
+            ? 'Choose a running MAUI app'
+            : waitingForTarget
+              ? 'Waiting for the selected MAUI app'
+              : 'Waiting for the DevFlow broker';
+        if (statusEl) statusEl.textContent = waitingForApp
+          ? 'Launch your app with the DevFlow agent. The Inspector will reconnect automatically.'
+          : multipleApps
+            ? 'More than one app is available. Ask Copilot to list and select an agent.'
+            : waitingForTarget
+              ? 'The selected process is unavailable. Ask Copilot to select the restarted app explicitly if it reports a relative project path.'
+              : 'Start or restart MAUI DevFlow. The Inspector will reconnect automatically.';
+      }
+      async function heal(explicit) {
+        if (polling) {
+          if (explicit) pollAgain = true;
+          return;
+        }
+        polling = true;
+        if (explicit) {
+          if (headingEl) headingEl.textContent = 'Checking the connection';
+          if (statusEl) statusEl.textContent = 'Looking for the broker and a running MAUI app…';
+        }
         try {
           const r = await fetch('/inspector-ready', { cache: 'no-store' });
           const j = await r.json();
@@ -337,20 +462,35 @@ export function renderDisconnected(appName) {
             const last = +sessionStorage.getItem('df_healAt') || 0;
             if (Date.now() - last > 5000) {
               sessionStorage.setItem('df_healAt', String(Date.now()));
-              setStatus('Connected — opening the inspector…');
+              if (headingEl) headingEl.textContent = 'Connected';
+              if (statusEl) statusEl.textContent = 'Opening the Inspector…';
               location.reload();
             }
           } else {
-            setStatus('Waiting for the MAUI DevFlow agent to connect…');
+            setState(j && ['app', 'multiple', 'target'].includes(j.state) ? j.state : 'broker');
           }
-        } catch (e) { setStatus('Waiting for the MAUI DevFlow broker…'); }
+        } catch (e) {
+          setState('broker');
+        } finally {
+          polling = false;
+          if (pollAgain) {
+            pollAgain = false;
+            void heal(false);
+          }
+        }
       }
-      heal();
-      setInterval(heal, 2500);
+      retryEl.addEventListener('click', function () { void heal(true); });
+      void heal(false);
+      setInterval(function () { void heal(false); }, 2500);
     })();
   </script>
 </body>
 </html>`;
+}
+
+function productTitle(appName) {
+  const app = String(appName || "").trim();
+  return app ? `MAUI DevFlow Inspector · ${app}` : "MAUI DevFlow Inspector";
 }
 
 function escapeHtml(s) {
