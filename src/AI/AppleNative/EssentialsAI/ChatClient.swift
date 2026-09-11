@@ -103,7 +103,7 @@ public class ChatClientNative: NSObject {
                     log("[\(methodName)] Stream collected, content length: \(response.content.jsonString.count)")
                 }
 #endif
-                return (response.content.jsonString, response.transcriptEntries)
+                return (response.content.jsonString, response.transcriptEntries, self.toUsageDetailsNative(response))
             } else {
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                 if let log = AppleIntelligenceLogger.log {
@@ -132,7 +132,7 @@ public class ChatClientNative: NSObject {
                     log("[\(methodName)] Stream collected, content length: \(response.content.count)")
                 }
 #endif
-                return (response.content, response.transcriptEntries)
+                return (response.content, response.transcriptEntries, self.toUsageDetailsNative(response))
             }
         }
 
@@ -202,7 +202,7 @@ public class ChatClientNative: NSObject {
                         log("[\(methodName)] Response received, content length: \(inner.content.jsonString.count)")
                     }
 #endif
-                    return (inner.content.jsonString, inner.transcriptEntries)
+                    return (inner.content.jsonString, inner.transcriptEntries, self.toUsageDetailsNative(inner))
                 } else {
                     let inner = try await session.respond(to: prompt, options: genOptions)
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
@@ -210,7 +210,7 @@ public class ChatClientNative: NSObject {
                         log("[\(methodName)] Response received, content length: \(inner.content.count)")
                     }
 #endif
-                    return (inner.content, inner.transcriptEntries)
+                    return (inner.content, inner.transcriptEntries, self.toUsageDetailsNative(inner))
                 }
             }()
 
@@ -298,6 +298,25 @@ public class ChatClientNative: NSObject {
         return (session, prompt, schema, genOptions)
     }
 
+    private func toUsageDetailsNative<Content>(
+        _ response: LanguageModelSession.Response<Content>
+    ) -> UsageDetailsNative? where Content: Generable {
+#if compiler(>=6.4)
+        if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) {
+            let usage = response.usage
+            return UsageDetailsNative(
+                inputTokenCount: usage.input.totalTokenCount,
+                outputTokenCount: usage.output.totalTokenCount,
+                totalTokenCount: usage.totalTokenCount,
+                cachedInputTokenCount: usage.input.cachedTokenCount,
+                reasoningTokenCount: usage.output.reasoningTokenCount
+            )
+        }
+#endif
+
+        return nil
+    }
+
     private func executeTask(
         _ methodName: String,
         _ messages: [ChatMessageNative],
@@ -306,7 +325,7 @@ public class ChatClientNative: NSObject {
         _ onComplete: @escaping (ChatResponseNative?, NSError?) -> Void,
         operation:
             @escaping (LanguageModelSession, Prompt, GenerationSchema?, GenerationOptions) async throws
-            -> (String, ArraySlice<Transcript.Entry>)
+            -> (String, ArraySlice<Transcript.Entry>, UsageDetailsNative?)
     ) -> CancellationTokenNative? {
 
         let cq = OperationQueue.current?.underlyingQueue
@@ -337,7 +356,7 @@ public class ChatClientNative: NSObject {
                 let transcriptMessages = try result.1.compactMap(self.fromTranscriptEntry)
 
                 // Create response with all transcript messages
-                let response = ChatResponseNative(messages: transcriptMessages)
+                let response = ChatResponseNative(messages: transcriptMessages, usage: result.2)
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                 if let log = AppleIntelligenceLogger.log {

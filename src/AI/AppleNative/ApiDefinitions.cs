@@ -185,10 +185,44 @@ interface ChatResponseNative
 	[Export("messages", ArgumentSemantic.Copy)]
 	ChatMessageNative[] Messages { get; set; }
 
+	// @property (nonatomic, readonly, strong) UsageDetailsNative * _Nullable usage;
+	[NullAllowed, Export("usage", ArgumentSemantic.Strong)]
+	UsageDetailsNative Usage { get; }
+
 	// - (nonnull instancetype)initWithMessages:(NSArray<ChatMessageNative *> * _Nonnull)messages OBJC_DESIGNATED_INITIALIZER;
 	[Export("initWithMessages:")]
 	[DesignatedInitializer]
 	NativeHandle Constructor(ChatMessageNative[] messages);
+
+	// - (nonnull instancetype)initWithMessages:(NSArray<ChatMessageNative *> * _Nonnull)messages usage:(UsageDetailsNative * _Nullable)usage OBJC_DESIGNATED_INITIALIZER;
+	[Export("initWithMessages:usage:")]
+	[DesignatedInitializer]
+	NativeHandle Constructor(ChatMessageNative[] messages, [NullAllowed] UsageDetailsNative usage);
+}
+
+// @interface UsageDetailsNative : NSObject
+[Introduced(PlatformName.iOS, 26, 0)]
+[Introduced(PlatformName.MacCatalyst, 26, 0)]
+[Introduced(PlatformName.MacOSX, 26, 0)]
+[BaseType(typeof(NSObject))]
+[DisableDefaultCtor]
+[Internal]
+interface UsageDetailsNative
+{
+	[Export("inputTokenCount")]
+	nint InputTokenCount { get; }
+
+	[Export("outputTokenCount")]
+	nint OutputTokenCount { get; }
+
+	[Export("totalTokenCount")]
+	nint TotalTokenCount { get; }
+
+	[Export("cachedInputTokenCount")]
+	nint CachedInputTokenCount { get; }
+
+	[Export("reasoningTokenCount")]
+	nint ReasoningTokenCount { get; }
 }
 
 // @interface FunctionCallContentNative : AIContentNative
