@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1200" viewBox="0 0 1600 1200">
+  <rect width="1600" height="1200" fill="white"/>
+  <g fill="#111111" font-family="Helvetica, Arial, sans-serif">
+    <text x="120" y="125" font-size="66" font-weight="700">DOCUMENT EXTRACTION EVALUATION</text>
+    <text x="120" y="275" font-size="52" font-weight="700">STRUCTURED CONTENT</text>
+    <text x="120" y="390" font-size="42">This page evaluates title detection and paragraph grouping.</text>
+    <text x="120" y="455" font-size="42">The first paragraph spans two visual lines with consistent spacing.</text>
+    <text x="120" y="610" font-size="52" font-weight="700">EXPECTED OUTCOME</text>
+    <text x="120" y="725" font-size="42">The recognizer should preserve readable text, geometry, and provider fidelity.</text>
+    <text x="120" y="790" font-size="42">Section headings should remain distinguishable from body paragraphs.</text>
+  </g>
+</svg>

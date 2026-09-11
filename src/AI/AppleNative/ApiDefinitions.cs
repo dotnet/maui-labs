@@ -289,3 +289,231 @@ interface ResponseUpdateNative
 	[NullAllowed, Export("toolCallResult")]
 	string ToolCallResult { get; }
 }
+
+[Internal] delegate void OnVisionDocumentComplete(
+	[NullAllowed] VisionDocumentResultNative result,
+	[NullAllowed] NSError error);
+
+[Introduced(PlatformName.iOS, 26, 0)]
+[Introduced(PlatformName.MacCatalyst, 26, 0)]
+[Introduced(PlatformName.MacOSX, 26, 0)]
+[BaseType(typeof(NSObject))]
+[DisableDefaultCtor]
+[Internal]
+interface VisionDocumentCapabilitiesNative
+{
+	[Export("recognitionLanguages")]
+	string[] RecognitionLanguages { get; }
+
+	[Export("barcodeSymbologies")]
+	string[] BarcodeSymbologies { get; }
+
+	[Export("revisions")]
+	NSNumber[] Revisions { get; }
+}
+
+[Introduced(PlatformName.iOS, 26, 0)]
+[Introduced(PlatformName.MacCatalyst, 26, 0)]
+[Introduced(PlatformName.MacOSX, 26, 0)]
+[BaseType(typeof(NSObject))]
+[DisableDefaultCtor]
+[Internal]
+interface VisionDocumentNodeNative
+{
+	[Export("kind")]
+	VisionDocumentNodeKindNative Kind { get; }
+
+	[Export("path")]
+	string Path { get; }
+
+	[NullAllowed, Export("parentPath")]
+	string ParentPath { get; }
+
+	[NullAllowed, Export("text")]
+	string Text { get; }
+
+	[Export("polygon")]
+	NSNumber[] Polygon { get; }
+
+	[NullAllowed, Export("confidence")]
+	NSNumber Confidence { get; }
+
+	[NullAllowed, Export("rowIndex")]
+	NSNumber RowIndex { get; }
+
+	[NullAllowed, Export("columnIndex")]
+	NSNumber ColumnIndex { get; }
+
+	[NullAllowed, Export("rowSpan")]
+	NSNumber RowSpan { get; }
+
+	[NullAllowed, Export("columnSpan")]
+	NSNumber ColumnSpan { get; }
+
+	[NullAllowed, Export("itemString")]
+	string ItemString { get; }
+
+	[NullAllowed, Export("markerString")]
+	string MarkerString { get; }
+
+	[NullAllowed, Export("markerType")]
+	string MarkerType { get; }
+
+	[NullAllowed, Export("symbology")]
+	string Symbology { get; }
+
+	[NullAllowed, Export("payloadString")]
+	string PayloadString { get; }
+
+	[NullAllowed, Export("payloadData")]
+	NSData PayloadData { get; }
+
+	[NullAllowed, Export("isGS1DataCarrier")]
+	NSNumber IsGs1DataCarrier { get; }
+
+	[NullAllowed, Export("isColorInverted")]
+	NSNumber IsColorInverted { get; }
+
+	[NullAllowed, Export("supplementalPayloadString")]
+	string SupplementalPayloadString { get; }
+
+	[NullAllowed, Export("supplementalPayloadData")]
+	NSData SupplementalPayloadData { get; }
+
+	[NullAllowed, Export("supplementalCompositeType")]
+	string SupplementalCompositeType { get; }
+
+	[NullAllowed, Export("textAlignment")]
+	string TextAlignment { get; }
+
+	[NullAllowed, Export("recognitionLanguages")]
+	string[] RecognitionLanguages { get; }
+
+	[NullAllowed, Export("detectedDataJson")]
+	NSData DetectedDataJson { get; }
+
+	[NullAllowed, Export("candidatesJson")]
+	NSData CandidatesJson { get; }
+
+	[NullAllowed, Export("jsonData")]
+	NSData JsonData { get; }
+
+	[Export("boundingRegionForUtf16Location:length:")]
+	[return: NullAllowed]
+	NSNumber[] GetBoundingRegion(nint location, nint length);
+}
+
+[Introduced(PlatformName.iOS, 26, 0)]
+[Introduced(PlatformName.MacCatalyst, 26, 0)]
+[Introduced(PlatformName.MacOSX, 26, 0)]
+[BaseType(typeof(NSObject))]
+[DisableDefaultCtor]
+[Internal]
+interface VisionDocumentObservationNative
+{
+	[Export("uuidString")]
+	string UuidString { get; }
+
+	[Export("confidence")]
+	float Confidence { get; }
+
+	[Export("transcript")]
+	string Transcript { get; }
+
+	[Export("nodes")]
+	VisionDocumentNodeNative[] Nodes { get; }
+
+	[Export("structureTruncated")]
+	bool StructureTruncated { get; }
+
+	[Export("projectedNodeCount")]
+	nint ProjectedNodeCount { get; }
+
+	[Export("maximumTraversalDepth")]
+	nint MaximumTraversalDepth { get; }
+
+	[Export("repeatedContainerCount")]
+	nint RepeatedContainerCount { get; }
+
+	[NullAllowed, Export("firstRepeatedContainerPath")]
+	string FirstRepeatedContainerPath { get; }
+
+	[NullAllowed, Export("firstRepeatedAncestorPath")]
+	string FirstRepeatedAncestorPath { get; }
+
+	[NullAllowed, Export("jsonData")]
+	NSData JsonData { get; }
+}
+
+[Introduced(PlatformName.iOS, 26, 0)]
+[Introduced(PlatformName.MacCatalyst, 26, 0)]
+[Introduced(PlatformName.MacOSX, 26, 0)]
+[BaseType(typeof(NSObject))]
+[Internal]
+interface VisionDocumentOptionsNative
+{
+	[NullAllowed, Export("recognitionLanguages", ArgumentSemantic.Copy)]
+	string[] RecognitionLanguages { get; set; }
+
+	[NullAllowed, Export("customWords", ArgumentSemantic.Copy)]
+	string[] CustomWords { get; set; }
+
+	[NullAllowed, Export("useLanguageCorrection", ArgumentSemantic.Strong)]
+	NSNumber UseLanguageCorrection { get; set; }
+
+	[NullAllowed, Export("automaticallyDetectLanguage", ArgumentSemantic.Strong)]
+	NSNumber AutomaticallyDetectLanguage { get; set; }
+
+	[NullAllowed, Export("maximumCandidateCount", ArgumentSemantic.Strong)]
+	NSNumber MaximumCandidateCount { get; set; }
+
+	[NullAllowed, Export("minimumTextHeightFraction", ArgumentSemantic.Strong)]
+	NSNumber MinimumTextHeightFraction { get; set; }
+
+	[NullAllowed, Export("barcodeDetectionEnabled", ArgumentSemantic.Strong)]
+	NSNumber BarcodeDetectionEnabled { get; set; }
+
+	[NullAllowed, Export("barcodeSymbologies", ArgumentSemantic.Copy)]
+	string[] BarcodeSymbologies { get; set; }
+
+	[NullAllowed, Export("coalesceCompositeSymbologies", ArgumentSemantic.Strong)]
+	NSNumber CoalesceCompositeSymbologies { get; set; }
+
+	[NullAllowed, Export("regionOfInterest", ArgumentSemantic.Copy)]
+	NSNumber[] RegionOfInterest { get; set; }
+
+	[NullAllowed, Export("revision", ArgumentSemantic.Strong)]
+	NSNumber Revision { get; set; }
+}
+
+[Introduced(PlatformName.iOS, 26, 0)]
+[Introduced(PlatformName.MacCatalyst, 26, 0)]
+[Introduced(PlatformName.MacOSX, 26, 0)]
+[BaseType(typeof(NSObject))]
+[DisableDefaultCtor]
+[Internal]
+interface VisionDocumentResultNative
+{
+	[Export("observations")]
+	VisionDocumentObservationNative[] Observations { get; }
+}
+
+[Introduced(PlatformName.iOS, 26, 0)]
+[Introduced(PlatformName.MacCatalyst, 26, 0)]
+[Introduced(PlatformName.MacOSX, 26, 0)]
+[BaseType(typeof(NSObject))]
+[Internal]
+interface VisionRecognizeDocumentsClientNative
+{
+	[Static]
+	[Export("capabilities")]
+	VisionDocumentCapabilitiesNative GetCapabilities();
+
+	[Export("recognizeDocumentWithImageData:orientation:options:onComplete:")]
+	[return: NullAllowed]
+	CancellationTokenNative RecognizeDocument(
+		NSData imageData,
+		nint orientation,
+		[NullAllowed] VisionDocumentOptionsNative options,
+		OnVisionDocumentComplete onComplete);
+}
