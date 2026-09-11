@@ -1,0 +1,302 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://microsoft.github.io/maui-devflow/spec/schemas/sqlite.json",
+  "title": "DevFlow SQLite schemas",
+  "$defs": {
+    "DatabaseColumn": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "description": "Declared type, or \"any\" for a column declared without one."
+        },
+        "notNull": {
+          "type": "boolean"
+        },
+        "primaryKey": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ]
+    },
+    "DatabaseIndex": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "In index order. An expression index reads \"(expression)\" for that position."
+        },
+        "unique": {
+          "type": "boolean"
+        },
+        "automatic": {
+          "type": "boolean",
+          "description": "Created by SQLite for a constraint; cannot be dropped."
+        },
+        "partial": {
+          "type": "boolean",
+          "description": "Has a WHERE clause, so it covers only some rows."
+        }
+      },
+      "required": [
+        "name",
+        "columns"
+      ]
+    },
+    "DatabaseTable": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "table",
+            "view"
+          ]
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DatabaseColumn"
+          }
+        },
+        "indexes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DatabaseIndex"
+          }
+        },
+        "hasRowId": {
+          "type": "boolean",
+          "description": "Whether a row can be named for editing. False for views and WITHOUT ROWID tables."
+        }
+      },
+      "required": [
+        "name",
+        "kind",
+        "columns",
+        "indexes",
+        "hasRowId"
+      ]
+    },
+    "DatabaseSchemaResponse": {
+      "type": "object",
+      "properties": {
+        "tables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DatabaseTable"
+          }
+        },
+        "fileSize": {
+          "type": "integer"
+        },
+        "sqliteVersion": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "tables"
+      ]
+    },
+    "DatabaseRow": {
+      "type": "array",
+      "items": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "description": "One row. Every value is a string, including numbers; null is SQL NULL. A blob is described rather than sent."
+    },
+    "DatabaseQueryRequest": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Root-relative path to the database file."
+        },
+        "sql": {
+          "type": "string"
+        },
+        "maxRows": {
+          "type": "integer",
+          "default": 500
+        }
+      },
+      "required": [
+        "path",
+        "sql"
+      ]
+    },
+    "DatabaseQueryResponse": {
+      "type": "object",
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DatabaseRow"
+          }
+        },
+        "rowsAffected": {
+          "type": "integer",
+          "description": "-1 when the statement was a query rather than a change."
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "elapsedMs": {
+          "type": "integer"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "What the statement failed with. A failed statement is a 200 with this set, not an HTTP error."
+        }
+      },
+      "required": [
+        "columns",
+        "rows",
+        "rowsAffected"
+      ]
+    },
+    "DatabaseRowsResponse": {
+      "type": "object",
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rowIds": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "description": "Parallel to rows. Empty when the table has no rowid to address by."
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DatabaseRow"
+          }
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "elapsedMs": {
+          "type": "integer"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "columns",
+        "rowIds",
+        "rows"
+      ]
+    },
+    "DatabaseCell": {
+      "type": "object",
+      "properties": {
+        "column": {
+          "type": "string"
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Null is SQL NULL."
+        }
+      },
+      "required": [
+        "column"
+      ]
+    },
+    "DatabaseRowRequest": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "table": {
+          "type": "string"
+        },
+        "rowId": {
+          "type": "integer",
+          "description": "Required for update and delete."
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DatabaseCell"
+          }
+        }
+      },
+      "required": [
+        "path",
+        "table"
+      ]
+    },
+    "DatabaseCreateRequest": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ]
+    },
+    "DatabaseCreateResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "root": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "success",
+        "path"
+      ]
+    }
+  }
+}

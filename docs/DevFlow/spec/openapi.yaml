@@ -2311,6 +2311,381 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/storage/files/move:
+    post:
+      operationId: moveStorageEntry
+      tags: [storage]
+      summary: Rename or move a file or directory
+      description: >
+        Renames or moves a file or a whole directory within one storage root.
+        Both ends are resolved against the same root - moving between roots would
+        cross a persistence and backup boundary silently. An existing destination
+        is refused unless `overwrite` is set, and a directory is never overwritten.
+      parameters:
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/storage.json#/$defs/FileMoveRequest"
+      responses:
+        "200":
+          description: Where it ended up.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/storage.json#/$defs/FileMoveResponse"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/storage/directories/{path}:
+    put:
+      operationId: createStorageDirectory
+      tags: [storage]
+      summary: Create a directory
+      description: >
+        Creates a directory under an advertised storage root, including any missing
+        parents. A directory that is already there is a success rather than an error,
+        and says so with `created: false`.
+      parameters:
+        - name: path
+          in: path
+          required: true
+          description: URI-encoded relative directory path under the selected storage root.
+          schema:
+            type: string
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+      responses:
+        "200":
+          description: The directory as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/storage.json#/$defs/DirectoryCreateResponse"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      operationId: deleteStorageDirectory
+      tags: [storage]
+      summary: Delete a directory
+      description: >
+        Deletes a directory under an advertised storage root. A non-empty directory
+        is refused unless `recursive` is set - emptying a tree by accident is the one
+        mistake here with no undo.
+      parameters:
+        - name: path
+          in: path
+          required: true
+          description: URI-encoded relative directory path under the selected storage root.
+          schema:
+            type: string
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+        - name: recursive
+          in: query
+          description: Delete the directory and everything in it.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Deleted directory metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/storage.json#/$defs/DirectoryDeleteResponse"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/storage/sqlite/schema:
+    get:
+      operationId: getDatabaseSchema
+      tags: [storage]
+      summary: Read a SQLite database schema
+      description: >
+        The tables and views in a SQLite file under an advertised storage root,
+        with their columns and indexes. The database is opened in the app's own
+        process against the live file, so this sees what the app is actually
+        storing rather than a snapshot. A file whose bytes are not a database is
+        reported as such rather than failing later inside a query.
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: Relative path to the database file under the selected storage root.
+          schema:
+            type: string
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+      responses:
+        "200":
+          description: Tables, views, columns and indexes.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/sqlite.json#/$defs/DatabaseSchemaResponse"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/storage/sqlite/query:
+    post:
+      operationId: queryDatabase
+      tags: [storage]
+      summary: Run SQL against a database
+      description: >
+        Runs SQL and returns a page of the result. This can write: the pane it
+        serves is a database client, and it can UPDATE, DELETE and run DDL. What
+        it cannot do is leave the file - `ATTACH` and `load_extension` are refused
+        by SQLite's own authorizer while the statement is being prepared. A
+        statement that will not parse, names a missing table, or breaks a
+        constraint comes back as a 200 with `error` set; those are answers, not faults.
+      parameters:
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/sqlite.json#/$defs/DatabaseQueryRequest"
+      responses:
+        "200":
+          description: What the statement did.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/sqlite.json#/$defs/DatabaseQueryResponse"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/storage/sqlite/rows:
+    get:
+      operationId: getDatabaseRows
+      tags: [storage]
+      summary: Read one table's rows
+      description: >
+        One table's rows, each carrying the rowid that names it - which is what an
+        editable grid is built from. A view is accepted and comes back with no
+        rowids, which is how a client is told it is read-only.
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: Relative path to the database file under the selected storage root.
+          schema:
+            type: string
+        - name: table
+          in: query
+          required: true
+          description: Table or view name.
+          schema:
+            type: string
+        - name: maxRows
+          in: query
+          description: Row cap. The response says whether it bit.
+          schema:
+            type: integer
+            default: 500
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+      responses:
+        "200":
+          description: Rows with their rowids.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/sqlite.json#/$defs/DatabaseRowsResponse"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    post:
+      operationId: insertDatabaseRow
+      tags: [storage]
+      summary: Insert a row
+      description: >
+        Adds one record and answers with it as it stands afterwards - read back
+        rather than echoed, because a column left out takes its default and an
+        INTEGER PRIMARY KEY takes the next rowid. Column names are checked against
+        the database's own schema; only identifiers it recognises reach a statement.
+      parameters:
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/sqlite.json#/$defs/DatabaseRowRequest"
+      responses:
+        "200":
+          description: The record as it stands after the insert.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/sqlite.json#/$defs/DatabaseQueryResponse"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    put:
+      operationId: updateDatabaseRow
+      tags: [storage]
+      summary: Update a row
+      description: >
+        Changes cells of one record named by its rowid, and answers with the record
+        as it stands afterwards - SQLite applies the column's type affinity, so
+        "42" typed into an INTEGER column comes back as the number.
+      parameters:
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/sqlite.json#/$defs/DatabaseRowRequest"
+      responses:
+        "200":
+          description: The record as it stands after the update.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/sqlite.json#/$defs/DatabaseQueryResponse"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/storage/sqlite/rows/delete:
+    post:
+      operationId: deleteDatabaseRow
+      tags: [storage]
+      summary: Delete a row
+      description: Removes one record named by its rowid.
+      parameters:
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/sqlite.json#/$defs/DatabaseRowRequest"
+      responses:
+        "200":
+          description: What the delete did.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/sqlite.json#/$defs/DatabaseQueryResponse"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/storage/sqlite/create:
+    post:
+      operationId: createDatabase
+      tags: [storage]
+      summary: Create an empty database
+      description: >
+        Writes a new, empty SQLite file - a real one, with the header a file needs
+        to be opened as a database by anything it is later handed to. Refuses a
+        path where something already exists.
+      parameters:
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/sqlite.json#/$defs/DatabaseCreateRequest"
+      responses:
+        "200":
+          description: The new database.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/sqlite.json#/$defs/DatabaseCreateResponse"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/storage/secure:
     delete:
       operationId: clearSecureStorage

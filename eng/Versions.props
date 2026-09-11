@@ -25,6 +25,10 @@
   </PropertyGroup>
   <PropertyGroup Label="Dotnet Runtime / Extensions">
     <MicrosoftExtensionsDependencyInjectionVersion>10.0.5</MicrosoftExtensionsDependencyInjectionVersion>
+    <!-- The agent's SQLite browser. .Core plus an explicit bundle, rather than Microsoft.Data.Sqlite,
+         so the agent decides when a provider is registered - see SqliteGateway. -->
+    <MicrosoftDataSqliteVersion>10.0.5</MicrosoftDataSqliteVersion>
+    <SQLitePCLRawVersion>3.0.4</SQLitePCLRawVersion>
     <MicrosoftExtensionsConfigurationVersion>10.0.5</MicrosoftExtensionsConfigurationVersion>
     <MicrosoftExtensionsHttpVersion>10.0.5</MicrosoftExtensionsHttpVersion>
     <MicrosoftExtensionsHostingVersion>10.0.5</MicrosoftExtensionsHostingVersion>

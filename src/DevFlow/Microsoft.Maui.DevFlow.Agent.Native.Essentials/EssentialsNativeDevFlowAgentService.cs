@@ -66,6 +66,9 @@ public class EssentialsNativeDevFlowAgentService : NativeDevFlowAgentService
     protected override string GetAppDataBasePath()
         => _essentials.GetAppDataBasePath();
 
+    protected override string GetCacheBasePath()
+        => _essentials.GetCacheBasePath();
+
     protected override Task<HttpResponse> HandlePlatformAppInfo(HttpRequest request)
         => _essentials.HandlePlatformAppInfo(request);
 

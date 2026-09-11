@@ -51,8 +51,12 @@
         },
         "type": {
           "oneOf": [
-            { "$ref": "#/$defs/PreferenceValueType" },
-            { "type": "null" }
+            {
+              "$ref": "#/$defs/PreferenceValueType"
+            },
+            {
+              "type": "null"
+            }
           ],
           "description": "Data type of the value. If null, the type is auto-detected from the JSON value."
         },
@@ -190,6 +194,10 @@
           "type": "string",
           "format": "date-time",
           "description": "UTC timestamp when the entry was last modified."
+        },
+        "path": {
+          "type": "string",
+          "description": "Root-relative, forward-slashed path to this entry."
         }
       }
     },
@@ -327,6 +335,104 @@
           "description": "Human-readable delete confirmation."
         }
       }
+    },
+    "DirectoryCreateResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "root": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "created": {
+          "type": "boolean",
+          "description": "False when the directory was already there."
+        }
+      },
+      "required": [
+        "success",
+        "root",
+        "path"
+      ]
+    },
+    "DirectoryDeleteResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "root": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "success",
+        "root",
+        "path"
+      ]
+    },
+    "FileMoveRequest": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "string",
+          "description": "Root-relative path of the file or directory to move."
+        },
+        "to": {
+          "type": "string",
+          "description": "Root-relative destination path."
+        },
+        "overwrite": {
+          "type": "boolean",
+          "default": false,
+          "description": "Replace an existing file at the destination. A directory is never overwritten."
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ]
+    },
+    "FileMoveResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "root": {
+          "type": "string"
+        },
+        "from": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string",
+          "description": "Where it ended up."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "file",
+            "directory"
+          ]
+        }
+      },
+      "required": [
+        "success",
+        "root",
+        "from",
+        "path"
+      ]
     }
   }
 }

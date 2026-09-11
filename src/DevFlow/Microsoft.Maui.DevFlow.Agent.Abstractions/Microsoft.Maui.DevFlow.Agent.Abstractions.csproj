@@ -13,6 +13,12 @@
   <ItemGroup>
     <PackageReference Include="Fizzler" />
     <PackageReference Include="SkiaSharp" />
+
+    <!-- The SQLite browser. .Core rather than Microsoft.Data.Sqlite so nothing registers a provider
+         behind our back: the host app may already have one, and replacing it would change how the
+         app under test talks to its own database. SqliteGateway decides. -->
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
   </ItemGroup>
 
   <ItemGroup>

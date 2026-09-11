@@ -157,7 +157,10 @@ internal static class LayoutDiagnosticsPolicyLoader
                 stream.Flush(flushToDisk: true);
             }
 
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+            // Windows reports a transient scanner or pending-delete handle on the
+            // destination as either a sharing violation (IOException) or
+            // ERROR_ACCESS_DENIED (UnauthorizedAccessException), so retry both.
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
             while (true)
             {
                 try
@@ -165,7 +168,9 @@ internal static class LayoutDiagnosticsPolicyLoader
                     File.Move(temporaryPath, path, overwrite: true);
                     break;
                 }
-                catch (IOException) when (DateTime.UtcNow < deadline)
+                catch (Exception ex)
+                    when ((ex is IOException or UnauthorizedAccessException)
+                        && DateTime.UtcNow < deadline)
                 {
                     Thread.Sleep(25);
                 }
@@ -173,8 +178,26 @@ internal static class LayoutDiagnosticsPolicyLoader
         }
         finally
         {
-            if (File.Exists(temporaryPath))
-                File.Delete(temporaryPath);
+            DeleteBestEffort(temporaryPath);
+        }
+    }
+
+    private static void DeleteBestEffort(string path)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+        while (File.Exists(path))
+        {
+            try
+            {
+                File.Delete(path);
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                if (DateTime.UtcNow >= deadline)
+                    return;
+                Thread.Sleep(25);
+            }
         }
     }
 

@@ -22,6 +22,8 @@
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(MicrosoftExtensionsDependencyInjectionVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="$(MicrosoftExtensionsHostingVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="$(MicrosoftExtensionsHttpVersion)" />
+    <PackageVersion Include="Microsoft.Data.Sqlite.Core" Version="$(MicrosoftDataSqliteVersion)" />
+    <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="$(SQLitePCLRawVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="$(MicrosoftExtensionsHostingVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="$(MicrosoftExtensionsLoggingAbstractionsVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="$(MicrosoftExtensionsLoggingConsoleVersion)" />
