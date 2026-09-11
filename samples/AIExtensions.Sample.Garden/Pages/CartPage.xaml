@@ -13,6 +13,7 @@
              BackgroundColor="{StaticResource Primary}">
 
     <Grid RowDefinitions="Auto,*"
+          ColumnDefinitions="*,Auto"
           BackgroundColor="{AppThemeBinding Light={StaticResource ModalBackgroundLight}, Dark={StaticResource ModalBackgroundDark}}">
         <!-- Standard header: [back] [icon] [title] ... [mode pill] -->
         <Border Grid.Row="0"
@@ -60,6 +61,8 @@
         <!-- Cart content -->
         <views:CartView Grid.Row="1"
                         BindingContext="{Binding .}" />
+        <views:ChatSidebar Grid.Column="1"
+                           Grid.RowSpan="2" />
     </Grid>
 
 </ContentPage>

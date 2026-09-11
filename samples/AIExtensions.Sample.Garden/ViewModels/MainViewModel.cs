@@ -40,7 +40,7 @@ public sealed partial class MainViewModel(CurrentCart currentCart) : ObservableO
     // ─── Navigation AI tools ────────────────────────────────────────
 
     [ExportAIFunction("navigate_to_page",
-        Description = "Navigate to a page in the app. Use 'catalog' to browse products, 'orders' to see past orders, 'cart' to view the shopping cart. Pages open as modal overlays.")]
+        Description = "Navigate to a page in the app. Use 'catalog' to browse products, 'orders' to see past orders, or 'cart' to view the shopping cart. The persistent chat remains available beside non-home pages on wide windows.")]
     public async Task<string> NavigateToPageAsync(
         [System.ComponentModel.Description("The page to navigate to: 'catalog', 'orders', or 'cart'")] string page)
     {
@@ -71,7 +71,7 @@ public sealed partial class MainViewModel(CurrentCart currentCart) : ObservableO
     }
 
     [ExportAIFunction("dismiss_page",
-        Description = "Close the current modal page (catalog or orders) and return to the main shop view.")]
+        Description = "Close the current page or modal and return toward the main shop view without resetting the chat.")]
     public async Task<string> DismissPageAsync()
     {
         var tcs = new TaskCompletionSource();

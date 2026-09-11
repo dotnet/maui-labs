@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:views="clr-namespace:AIExtensions.Sample.Garden.Views"
+             x:Class="AIExtensions.Sample.Garden.Views.ChatSidebar"
+             AutomationId="ChatSidebar"
+             WidthRequest="420"
+             HorizontalOptions="End"
+             VerticalOptions="Fill"
+             SafeAreaEdges="Container">
+
+    <VisualStateManager.VisualStateGroups>
+        <VisualStateGroup>
+            <VisualState x:Name="Wide">
+                <VisualState.StateTriggers>
+                    <AdaptiveTrigger MinWindowWidth="800" />
+                </VisualState.StateTriggers>
+                <VisualState.Setters>
+                    <Setter Property="IsVisible" Value="True" />
+                </VisualState.Setters>
+            </VisualState>
+            <VisualState x:Name="Narrow">
+                <VisualState.StateTriggers>
+                    <AdaptiveTrigger MinWindowWidth="0" />
+                </VisualState.StateTriggers>
+                <VisualState.Setters>
+                    <Setter Property="IsVisible" Value="False" />
+                </VisualState.Setters>
+            </VisualState>
+        </VisualStateGroup>
+    </VisualStateManager.VisualStateGroups>
+
+    <Border Margin="12"
+            Padding="0"
+            BackgroundColor="{AppThemeBinding Light={StaticResource InputBackgroundLight}, Dark={StaticResource InputBackgroundDark}}"
+            Stroke="{AppThemeBinding Light={StaticResource CardStrokeLight}, Dark={StaticResource CardStrokeDark}}"
+            StrokeThickness="1"
+            StrokeShape="RoundRectangle 16">
+        <Border.Shadow>
+            <Shadow Brush="Black" Offset="0,2" Radius="8" Opacity="0.12" />
+        </Border.Shadow>
+
+        <Grid RowDefinitions="Auto,*">
+            <Border BackgroundColor="{StaticResource Primary}"
+                    StrokeThickness="0"
+                    Padding="14,10">
+                <HorizontalStackLayout Spacing="8">
+                    <Label Text="&#xE76C;"
+                           FontFamily="FluentFilled"
+                           FontSize="{StaticResource FontSizeSubtitle}"
+                           TextColor="{StaticResource White}"
+                           VerticalOptions="Center"
+                           SemanticProperties.Description="Sage app icon" />
+                    <Label Text="Ask Sage"
+                           FontSize="{StaticResource FontSizeSubtitle}"
+                           FontAttributes="Bold"
+                           TextColor="{StaticResource White}"
+                           VerticalOptions="Center" />
+                </HorizontalStackLayout>
+            </Border>
+
+            <views:ChatView Grid.Row="1" />
+        </Grid>
+    </Border>
+
+</ContentView>

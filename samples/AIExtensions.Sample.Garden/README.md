@@ -25,6 +25,17 @@ past purchases using source-generated tools.
 - **Approval flow** — checkout and destructive actions pause the chat and show an
   inline approve/reject banner.
 
+## Persistent chat across pages
+
+`ChatViewModel` is registered as a singleton, so the conversation, approval state,
+and model history survive page navigation. On windows at least 800
+device-independent pixels wide, catalog, cart, order, product, and review pages
+each create a fresh `ChatView` inside a 420-DIP `ChatSidebar`; every instance
+resolves the same singleton through `ViewModelBinder`.
+
+Below 800 DIPs, the sidebar is hidden so each page keeps its full working area.
+Returning home restores the chat-first layout with the same conversation history.
+
 ## Tool sources and lifetimes
 
 `GardenShopTools` composes several very different source types with repeated
@@ -69,6 +80,7 @@ participate in a shared tool context while still writing through to singleton st
 | Accessor-level property tools | `ViewModels/Cart/CartViewModel.cs` → `get_cart_mode` / `set_cart_mode` |
 | Transient tool host | `ViewModels/Catalog/CatalogViewModel.cs` → `recommend_bundle` |
 | Shell modal navigation tools | `ViewModels/MainViewModel.cs` + `AppShell.xaml.cs` |
+| Persistent assistant beside non-home pages | `Views/ChatSidebar.xaml`, backed by singleton `ChatViewModel` |
 | Responsive welcome cards and centered chat layout | `Views/ChatView.xaml` + `Pages/MainPage.xaml` |
 
 ## Approval flow

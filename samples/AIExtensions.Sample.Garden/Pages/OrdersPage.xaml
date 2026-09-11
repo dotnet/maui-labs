@@ -12,6 +12,7 @@
              BackgroundColor="{StaticResource Primary}">
 
     <Grid RowDefinitions="Auto,*"
+          ColumnDefinitions="*,Auto"
           local:ViewModelBinder.Type="{x:Type vm:OrdersViewModel}"
           BackgroundColor="{AppThemeBinding Light={StaticResource ModalBackgroundLight}, Dark={StaticResource ModalBackgroundDark}}">
         <!-- Header: [back] [icon] [title] ... [clear all] -->
@@ -53,6 +54,8 @@
         </Border>
 
         <views:OrdersView Grid.Row="1" />
+        <views:ChatSidebar Grid.Column="1"
+                           Grid.RowSpan="2" />
     </Grid>
 
 </ContentPage>
