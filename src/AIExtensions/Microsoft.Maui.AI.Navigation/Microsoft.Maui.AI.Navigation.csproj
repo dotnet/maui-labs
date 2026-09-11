@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Microsoft.Maui.AI.Navigation</RootNamespace>
+    <PackageId>Microsoft.Maui.AI.Navigation</PackageId>
+    <Description>Runtime Shell route discovery and AI-friendly navigation for .NET MAUI apps.</Description>
+    <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
+    <PackageTags>$(PackageTags) ai navigation shell</PackageTags>
+    <PackRepoRootReadme>false</PackRepoRootReadme>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Microsoft.Maui.AI.Navigation.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>
