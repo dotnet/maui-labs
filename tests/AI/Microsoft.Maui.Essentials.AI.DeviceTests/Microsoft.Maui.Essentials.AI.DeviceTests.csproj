@@ -20,6 +20,11 @@
     <GenerateTestingPlatformEntryPoint>false</GenerateTestingPlatformEntryPoint>
   </PropertyGroup>
 
+  <!-- Opt in with -p:EnableOpenAITests=true when OpenAI credentials are configured. -->
+  <PropertyGroup Condition="'$(EnableOpenAITests)' == 'true'">
+    <DefineConstants>$(DefineConstants);ENABLE_OPENAI_CLIENT</DefineConstants>
+  </PropertyGroup>
+
   <PropertyGroup>
     <ApplicationTitle>AI Tests</ApplicationTitle>
     <ApplicationId>com.microsoft.maui.ai.devicetests</ApplicationId>
@@ -40,6 +45,11 @@
     <PackageReference Include="DeviceRunners.VisualRunners.Xunit" />
     <PackageReference Include="DeviceRunners.VisualRunners.Maui" />
     <PackageReference Include="DeviceRunners.Testing.Targets" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(EnableOpenAITests)' == 'true'">
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
+    <PackageReference Include="OpenAI" />
   </ItemGroup>
 
   <ItemGroup>

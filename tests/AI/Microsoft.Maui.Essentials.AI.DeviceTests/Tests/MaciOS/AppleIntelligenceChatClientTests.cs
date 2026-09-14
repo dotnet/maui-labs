@@ -88,6 +88,29 @@ public class AppleIntelligenceChatClientStreamingTests : ChatClientStreamingTest
 {
 }
 
+public class AppleIntelligenceChatClientUsageTests : ChatClientUsageTestsBase<AppleIntelligenceChatClient>
+{
+	protected override bool IsUsageAvailable
+	{
+		get
+		{
+#if IOS
+			return OperatingSystem.IsIOSVersionAtLeast(27);
+#elif MACCATALYST
+			return OperatingSystem.IsMacCatalystVersionAtLeast(27);
+#else
+			return false;
+#endif
+		}
+	}
+
+	protected override void AssertProviderUsage(UsageDetails usage)
+	{
+		Assert.NotNull(usage.CachedInputTokenCount);
+		Assert.NotNull(usage.ReasoningTokenCount);
+	}
+}
+
 public class AppleIntelligenceChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<AppleIntelligenceChatClient>
 {
 	[Fact(Skip = "Apple Intelligence requires a JSON schema for structured responses, so this test is not applicable.")]

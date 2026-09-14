@@ -43,6 +43,9 @@ public class OpenAIChatClientResponseTests : ChatClientResponseTestsBase<OpenAIC
 public class OpenAIChatClientStreamingTests : ChatClientStreamingTestsBase<OpenAIChatClient>
 {
 }
+public class OpenAIChatClientUsageTests : ChatClientUsageTestsBase<OpenAIChatClient>
+{
+}
 public class OpenAIChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<OpenAIChatClient>
 {
 }
