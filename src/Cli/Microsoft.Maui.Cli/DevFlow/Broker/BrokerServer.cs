@@ -23,6 +23,7 @@ public class BrokerServer : IDisposable
 
     private readonly int _port;
     private readonly TimeSpan _idleTimeout;
+    private readonly XamlSourceWorkspace _sourceWorkspace;
     private HttpListener? _listener;
     private CancellationTokenSource? _cts;
     private readonly ConcurrentDictionary<string, AgentConnection> _agents = new();
@@ -41,14 +42,33 @@ public class BrokerServer : IDisposable
     public int AgentCount => _agents.Count;
     public bool IsRunning => _listener?.IsListening ?? false;
 
-    public BrokerServer(int port = DefaultPort, TimeSpan? idleTimeout = null, Action<string>? log = null)
+    public BrokerServer(int port = DefaultPort, TimeSpan? idleTimeout = null, Action<string>? log = null,
+        string? workspaceStartPath = null)
     {
         _port = port;
         _idleTimeout = idleTimeout ?? TimeSpan.FromMinutes(5);
         _log = log;
+        _sourceWorkspace = XamlSourceWorkspace.Capture(
+            workspaceStartPath ?? Environment.GetEnvironmentVariable("MAUI_DEVFLOW_PROJECT_ROOT"));
+        if (_sourceWorkspace.Error is { } sourceError)
+            Log($"{sourceError} Non-source DevFlow features remain available.");
         _flows = new BrokerFlowCoordinator();
         _mutationLeases = new MutationLeaseRegistry();
     }
+
+    internal InspectorServer CreateInspector(AgentRegistration registration, int inspectorPort = 0)
+        => new(
+            inspectorPort,
+            "localhost",
+            registration.Port,
+            _embedToken,
+            registration.Id,
+            registration.AppName,
+            registration.Platform,
+            registration.Project,
+            registration.SessionId,
+            processId: registration.ProcessId,
+            sourceWorkspace: _sourceWorkspace);
 
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
@@ -970,16 +990,7 @@ public class BrokerServer : IDisposable
         if (inspector == null)
         {
             var registration = connection.Registration;
-            var created = new InspectorServer(
-                0,
-                "localhost",
-                agentPort,
-                _embedToken,
-                registration.Id,
-                registration.AppName,
-                registration.Platform,
-                registration.Project,
-                registration.SessionId);
+            var created = CreateInspector(registration);
             inspector = _inspectors.GetOrAdd(connection.Registration.Id, created);
             if (!ReferenceEquals(inspector, created))
             {

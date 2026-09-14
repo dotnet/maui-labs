@@ -30,6 +30,12 @@ public sealed class MockAgentServer : IAsyncDisposable
     private readonly bool _propertyFailureWithoutReason;
     private readonly bool _propertyNotFound;
     private readonly int _capabilitiesErrorResponseCount;
+    private readonly bool _supportMutationLease;
+    private readonly bool _mutationLeaseTransactionBlocked;
+    private readonly object _mutationLeaseLock = new();
+    private string? _mockMutationLeaseId;
+    private string? _mockMutationHolderKind;
+    private string? _mockMutationLabel;
     private int _capabilitiesRequestCount;
     private int _hitTestCount;
     private int _tapCount;
@@ -56,7 +62,10 @@ public sealed class MockAgentServer : IAsyncDisposable
         bool malformedPropertyResponse = false,
         bool propertyFailureWithoutReason = false,
         bool propertyNotFound = false,
-        int capabilitiesErrorResponseCount = 0)
+        int capabilitiesErrorResponseCount = 0,
+        bool supportMutationLease = false,
+        bool mutationLeaseHeldByOther = false,
+        bool mutationLeaseTransactionBlocked = false)
     {
         _supportsCaptureEpoch = supportsCaptureEpoch;
         _failFirstHitTestCandidate = failFirstHitTestCandidate;
@@ -76,6 +85,14 @@ public sealed class MockAgentServer : IAsyncDisposable
         _propertyFailureWithoutReason = propertyFailureWithoutReason;
         _propertyNotFound = propertyNotFound;
         _capabilitiesErrorResponseCount = capabilitiesErrorResponseCount;
+        _supportMutationLease = supportMutationLease;
+        _mutationLeaseTransactionBlocked = mutationLeaseTransactionBlocked;
+        if (mutationLeaseHeldByOther)
+        {
+            _mockMutationLeaseId = "other-lease";
+            _mockMutationHolderKind = "vscode";
+            _mockMutationLabel = "VS Code Inspector";
+        }
     }
 
     public int Port { get; private set; }
@@ -167,6 +184,74 @@ public sealed class MockAgentServer : IAsyncDisposable
                     : MockAgentResponses.LegacyAgentCapabilities,
                 "application/json");
         });
+        if (_supportMutationLease)
+        {
+            app.MapPost("/api/v1/agent/lease", async (HttpContext context) =>
+            {
+                using var body = await JsonDocument.ParseAsync(context.Request.Body);
+                var action = body.RootElement.TryGetProperty("action", out var actionValue)
+                    ? actionValue.GetString()
+                    : null;
+                var force = body.RootElement.TryGetProperty("force", out var forceValue) &&
+                    forceValue.GetBoolean();
+                var requestedLeaseId = body.RootElement.TryGetProperty("leaseId", out var leaseId)
+                    ? leaseId.GetString()
+                    : null;
+                var requestedHolderKind = body.RootElement.TryGetProperty("holderKind", out var holderKind)
+                    ? holderKind.GetString()
+                    : null;
+                var requestedLabel = body.RootElement.TryGetProperty("label", out var label)
+                    ? label.GetString()
+                    : null;
+                bool allowed;
+                bool youHold;
+                bool heldByOther;
+                string? currentLeaseId;
+                string? currentHolderKind;
+                string? currentLabel;
+                lock (_mutationLeaseLock)
+                {
+                    if (action == "claim")
+                    {
+                        var available = _mockMutationLeaseId is null ||
+                            string.Equals(_mockMutationLeaseId, requestedLeaseId, StringComparison.Ordinal);
+                        if (available || (force && !_mutationLeaseTransactionBlocked))
+                        {
+                            _mockMutationLeaseId = requestedLeaseId;
+                            _mockMutationHolderKind = requestedHolderKind;
+                            _mockMutationLabel = requestedLabel;
+                        }
+                    }
+                    else if (action == "release" &&
+                             string.Equals(_mockMutationLeaseId, requestedLeaseId, StringComparison.Ordinal))
+                    {
+                        _mockMutationLeaseId = null;
+                        _mockMutationHolderKind = null;
+                        _mockMutationLabel = null;
+                    }
+
+                    currentLeaseId = _mockMutationLeaseId;
+                    currentHolderKind = _mockMutationHolderKind;
+                    currentLabel = _mockMutationLabel;
+                    youHold = currentLeaseId is not null &&
+                        string.Equals(currentLeaseId, requestedLeaseId, StringComparison.Ordinal);
+                    heldByOther = currentLeaseId is not null && !youHold;
+                    allowed = youHold;
+                }
+                return Results.Json(new
+                {
+                    ok = true,
+                    allowed,
+                    youHold,
+                    heldByOther,
+                    leaseId = youHold ? currentLeaseId : null,
+                    holderKind = currentHolderKind,
+                    label = currentLabel,
+                    expiresInMs = currentLeaseId is null ? 0 : 10000,
+                    authority = "mock"
+                });
+            });
+        }
     }
 
     private static void RegisterExtensionEndpoints(WebApplication app)

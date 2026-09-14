@@ -74,6 +74,37 @@ public class ProcessRunnerTests
 		Assert.True(result.Success);
 		Assert.NotEmpty(result.StandardOutput);
 	}
+
+	[Fact]
+	public async Task RunAsync_CallerCancellation_TerminatesChildProcess()
+	{
+		var marker = Path.Combine(Path.GetTempPath(), $"process-runner-survived-{Guid.NewGuid():N}.txt");
+		var (fileName, args) = OperatingSystem.IsWindows()
+			? (
+				Path.Combine(
+					Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+					"System32",
+					"WindowsPowerShell",
+					"v1.0",
+					"powershell.exe"),
+				new[]
+				{
+					"-NoProfile",
+					"-Command",
+					$"Start-Sleep -Seconds 2; Set-Content -LiteralPath '{marker.Replace("'", "''", StringComparison.Ordinal)}' -Value survived"
+				})
+			: (
+				"/bin/sh",
+				new[] { "-c", $"sleep 2; echo survived > '{marker.Replace("'", "'\\''", StringComparison.Ordinal)}'" });
+
+		using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(
+			() => ProcessRunner.RunAsync(fileName, args, cancellationToken: cancellation.Token));
+
+		await Task.Delay(TimeSpan.FromSeconds(3));
+		Assert.False(File.Exists(marker), "The cancelled child process continued running.");
+	}
 }
 
 public class DoctorServiceParseCommandTests
