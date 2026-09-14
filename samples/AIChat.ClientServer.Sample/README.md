@@ -23,12 +23,13 @@ dotnet user-secrets set "Parameters:agui-api-key" "a-local-secret" --project AIC
 dotnet run --project AIChat.ClientServer.Sample.AppHost
 ```
 
-`Parameters:ai-model` defaults to `gpt-5.4-mini`. The server requires `AGUI_API_KEY` and
-`AI:Endpoint` outside `AI:Replay=true` test/replay configurations. It accepts a bearer key;
+`Parameters:ai-model` defaults to `gpt-5.4-mini`. The server always requires `AGUI_API_KEY`;
+`AI:Endpoint` is required outside `AI:Replay=true` test/replay configurations. It accepts a bearer key;
 unauthenticated requests receive a non-descriptive `401`.
 
 `AI:Replay=true` starts the scenario catalog without an Azure endpoint and returns a deterministic
 streaming response, so contract tests and local protocol experiments do not need Azure access.
+Set `Parameters:ai-replay=true` when launching through the AppHost.
 
 ## Endpoints
 

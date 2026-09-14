@@ -130,6 +130,39 @@ public class ChatPageTests
     }
 
     [Fact]
+    public async Task CopilotChatView_ReplacingOwnedPresentation_DisposesOldProjection()
+    {
+        var session = SessionFactory.Create("Hello");
+        var control = new CopilotChatView { Session = session };
+        var owned = Assert.IsType<AgentChatPresentation>(control.Conversation);
+        using var external = new AgentChatPresentation(session);
+
+        control.Presentation = external;
+        await session.SendMessageAsync("question");
+
+        Assert.Empty(owned.Messages);
+        Assert.Same(external, control.Conversation);
+        Assert.NotEmpty(external.Messages);
+    }
+
+    [Fact]
+    public void CopilotChatView_ExternalPresentation_IsRestoredAfterReattach()
+    {
+        var session = SessionFactory.Create("Hello");
+        using var presentation = new AgentChatPresentation(session);
+        var control = new CopilotChatView { Presentation = presentation };
+        var host = new ContentView { Content = control };
+
+        Assert.Same(presentation, control.Conversation);
+
+        host.Content = null;
+        Assert.Null(control.Conversation);
+
+        host.Content = control;
+        Assert.Same(presentation, control.Conversation);
+    }
+
+    [Fact]
     public async Task HostedImageResult_ProjectsThroughAgentContextAsNeutralMedia()
     {
         var result = new ImageGenerationToolResultContent("call-1")

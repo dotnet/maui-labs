@@ -74,6 +74,11 @@ public sealed class SampleContractTests
 
         var plan = Assert.Single(routes, endpoint => endpoint.RoutePattern.RawText == "/agentic_generative_ui");
         Assert.NotNull(plan.Metadata.GetMetadata<AGUI.Server.AGUIStreamOptions>());
+        var predictive = Assert.Single(
+            routes,
+            endpoint => endpoint.RoutePattern.RawText == "/predictive_state");
+        Assert.NotNull(
+            predictive.Metadata.GetMetadata<AGUI.Server.AGUIStreamOptions>());
     }
 
     [Fact]
@@ -92,6 +97,13 @@ public sealed class SampleContractTests
         var routes = ((IEndpointRouteBuilder)app).DataSources
             .SelectMany(source => source.Endpoints).OfType<RouteEndpoint>();
         Assert.Contains(routes, endpoint => endpoint.RoutePattern.RawText == "/agentic_chat");
+    }
+
+    [Fact]
+    public void Host_ReplayConfiguration_StillRequiresApiKey()
+    {
+        Assert.Throws<InvalidOperationException>(() =>
+            SampleServerHost.Build(["--AI:Replay=true"]));
     }
 
     [Fact]

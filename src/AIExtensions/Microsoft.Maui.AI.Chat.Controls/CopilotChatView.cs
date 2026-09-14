@@ -112,7 +112,9 @@ public class CopilotChatView : ChatView
 
         if (Application.Current is { } application)
             ChatThemeLoader.EnsureLoaded(application.Resources);
-        if (_agentConversation is null && Session is not null)
+        if (_agentConversation is null && Presentation is not null)
+            UsePresentation(Presentation, ownsPresentation: false);
+        else if (_agentConversation is null && Session is not null)
             ReplaceAgentConversation(Session);
     }
 
@@ -200,28 +202,49 @@ public class CopilotChatView : ChatView
         AgentChatPresentation? oldPresentation,
         AgentChatPresentation? newPresentation)
     {
-        if (ReferenceEquals(oldPresentation, _agentConversation) && _ownsPresentation)
-            _agentConversation?.Dispose();
-        _agentConversation = newPresentation;
-        _ownsPresentation = false;
-        _agentConversation?.UpdateParticipantNames(UserDisplayName, AssistantDisplayName);
-        Conversation = _agentConversation;
+        _ = oldPresentation;
+        if (newPresentation is not null)
+            UsePresentation(newPresentation, ownsPresentation: false);
         if (newPresentation is null && Session is not null)
             ReplaceAgentConversation(Session);
+        else if (newPresentation is null)
+            UsePresentation(null, ownsPresentation: false);
     }
 
     private void ReplaceAgentConversation(AgentContext? session)
     {
-        if (_ownsPresentation)
-            _agentConversation?.Dispose();
-        _agentConversation = session is null
+        var presentation = session is null
             ? null
             : new AgentChatPresentation(session);
-        _ownsPresentation = _agentConversation is not null;
+        UsePresentation(
+            presentation,
+            ownsPresentation: presentation is not null);
+    }
+
+    private void UsePresentation(
+        AgentChatPresentation? presentation,
+        bool ownsPresentation)
+    {
+        if (ReferenceEquals(_agentConversation, presentation))
+        {
+            _ownsPresentation = ownsPresentation;
+            _agentConversation?.UpdateParticipantNames(
+                UserDisplayName,
+                AssistantDisplayName);
+            Conversation = _agentConversation;
+            return;
+        }
+
+        var previous = _agentConversation;
+        var disposePrevious = _ownsPresentation;
+        _agentConversation = presentation;
+        _ownsPresentation = ownsPresentation;
         _agentConversation?.UpdateParticipantNames(
             UserDisplayName,
             AssistantDisplayName);
         Conversation = _agentConversation;
+        if (disposePrevious)
+            previous?.Dispose();
     }
 
     private void ReleaseAgentConversation()

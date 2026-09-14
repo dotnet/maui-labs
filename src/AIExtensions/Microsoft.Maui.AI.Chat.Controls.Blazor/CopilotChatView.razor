@@ -52,7 +52,10 @@
     {
         if (Presentation is not null)
         {
-            DisposeOwnedPresentation();
+            if (ReferenceEquals(Presentation, _ownedPresentation))
+                _ownedPresentation = null;
+            else
+                DisposeOwnedPresentation();
             return;
         }
 

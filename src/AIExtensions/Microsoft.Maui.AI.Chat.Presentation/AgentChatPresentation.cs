@@ -24,6 +24,7 @@ public sealed class AgentChatPresentation : ChatConversation, IDisposable
     private readonly IDisposable _responseBlocksCleared;
     private ConversationMessage? _thinkingMessage;
     private ConversationMessage? _errorMessage;
+    private long _nextProjectionId;
     private bool _disposed;
 
     /// <summary>Creates a neutral projection over <paramref name="session"/>.</summary>
@@ -236,11 +237,14 @@ public sealed class AgentChatPresentation : ChatConversation, IDisposable
         var agentContents = contents
             .Cast<IAgentBlockContent>()
             .ToList();
+        var sourceId = string.IsNullOrWhiteSpace(block.Id)
+            ? "block"
+            : block.Id;
+        var projectionId =
+            $"{sourceId}:{_nextProjectionId++.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
         var message = new ConversationMessage(
             participant,
-            string.IsNullOrWhiteSpace(block.Id)
-                ? Guid.NewGuid().ToString("N")
-                : block.Id,
+            projectionId,
             block.CreatedAt)
         {
             Status = block.LifecycleState == BlockLifecycleState.Active
