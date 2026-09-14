@@ -30,6 +30,10 @@ public sealed class ChatRecordingOptions
     public string? Adapter { get; set; }
     public IList<IChatRecordingContentCodec> ContentCodecs { get; } = new List<IChatRecordingContentCodec>();
     public IList<IChatRecordingRawCodec> RawCodecs { get; } = new List<IChatRecordingRawCodec>();
+    /// <summary>Codecs that opt an otherwise opaque request factory into deterministic matching.</summary>
+    public IList<IChatRecordingRequestCodec> RequestCodecs { get; } = new List<IChatRecordingRequestCodec>();
+    /// <summary>AIContent and annotation additional-property names permitted in a recording.</summary>
+    public ISet<string> AllowedContentAdditionalProperties { get; } = new HashSet<string>(StringComparer.Ordinal);
 }
 
 public sealed class ChatRecording
@@ -81,6 +85,22 @@ public interface IChatRecordingRawCodec
     JsonNode? Write(object value);
     bool CanRead(string type);
     object? Read(string type, JsonNode? value);
+}
+
+/// <summary>
+/// Represents an opaque provider request extension without serializing its
+/// <see cref="ChatOptions.RawRepresentationFactory"/> delegate or result.
+/// </summary>
+public interface IChatRecordingRequestCodec
+{
+    /// <summary>Returns whether this codec owns the request extension in <paramref name="options"/>.</summary>
+    bool CanWrite(ChatOptions options);
+    /// <summary>Writes a canonical, JSON-only request extension.</summary>
+    JsonObject Write(ChatOptions options);
+    /// <summary>Returns whether this codec recognizes a stored extension.</summary>
+    bool CanRead(JsonObject extension);
+    /// <summary>Validates and canonicalizes a stored extension for request matching.</summary>
+    JsonObject Read(JsonObject extension);
 }
 
 public sealed class ChatRecordingMismatchException : InvalidOperationException
@@ -288,9 +308,11 @@ public sealed class RecordingChatClient : DelegatingChatClient
     }
     public override async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(messages);
+        var messageSnapshot = messages.ToList();
         if (_options.Mode != ChatRecordingMode.Record)
         {
-            await foreach (var update in base.GetStreamingResponseAsync(messages, options, cancellationToken).WithCancellation(cancellationToken).ConfigureAwait(false))
+            await foreach (var update in base.GetStreamingResponseAsync(messageSnapshot, options, cancellationToken).WithCancellation(cancellationToken).ConfigureAwait(false))
                 yield return update;
             yield break;
         }
@@ -298,12 +320,12 @@ public sealed class RecordingChatClient : DelegatingChatClient
         {
             Sequence = _session.Recording.Interactions.Count,
             Name = _session.CurrentTurn,
-            Request = ChatRecordingJson.Request(messages, options, _options),
+            Request = ChatRecordingJson.Request(messageSnapshot, options, _options),
         };
         _session.Recording.Interactions.Add(interaction);
         var started = _options.TimeProvider.GetTimestamp();
         var completed = false;
-        await using var enumerator = base.GetStreamingResponseAsync(messages, options, cancellationToken)
+        await using var enumerator = base.GetStreamingResponseAsync(messageSnapshot, options, cancellationToken)
             .GetAsyncEnumerator(cancellationToken);
         try
         {
@@ -322,8 +344,7 @@ public sealed class RecordingChatClient : DelegatingChatClient
                 catch (Exception ex)
                 {
                     interaction.Outcome = "error";
-                    interaction.ErrorType = ex.GetType().FullName;
-                    interaction.ErrorMessage = ex.Message;
+                    (interaction.ErrorType, interaction.ErrorMessage) = ChatRecordingSecurity.SanitizeException(ex, _options);
                     throw;
                 }
                 if (!hasNext) break;
@@ -418,7 +439,6 @@ internal static class ChatRecordingJson
     private static JsonObject Options(ChatOptions? o, ChatRecordingOptions settings)
     {
         if (o is null) return new();
-        if (o.RawRepresentationFactory is not null) Reject(settings, "RawRepresentationFactory cannot be recorded.");
         var node = new JsonObject
         {
             ["conversationId"] = o.ConversationId, ["instructions"] = TextValue(o.Instructions, settings), ["temperature"] = o.Temperature,
@@ -427,8 +447,12 @@ internal static class ChatRecordingJson
             ["allowMultipleToolCalls"] = o.AllowMultipleToolCalls, ["allowBackgroundResponses"] = o.AllowBackgroundResponses,
             ["stopSequences"] = o.StopSequences is null ? null : new JsonArray(o.StopSequences.Select(static value => JsonValue.Create(value)).ToArray()),
             ["tools"] = new JsonArray((o.Tools ?? []).Select(static tool => Tool(tool)).ToArray()), ["additional"] = Additional(o.AdditionalProperties, settings),
+            ["reasoning"] = Reasoning(o.Reasoning), ["toolMode"] = ToolMode(o.ToolMode, settings),
+            ["continuationToken"] = ContinuationToken(o.ContinuationToken), ["responseFormat"] = ResponseFormat(o.ResponseFormat, settings),
         };
-        return node;
+        if (o.RawRepresentationFactory is not null)
+            node["requestExtension"] = RequestExtension(o, settings);
+        return Sanitize(node, settings);
     }
     private static JsonObject Tool(AITool tool)
     {
@@ -440,19 +464,68 @@ internal static class ChatRecordingJson
         }
         return result;
     }
+    private static JsonObject? Reasoning(ReasoningOptions? reasoning) => reasoning is null ? null : new JsonObject
+    {
+        ["effort"] = reasoning.Effort?.ToString(),
+        ["output"] = reasoning.Output?.ToString(),
+    };
+    private static JsonObject? ToolMode(ChatToolMode? mode, ChatRecordingOptions settings) => mode switch
+    {
+        null => null,
+        AutoChatToolMode => new JsonObject { ["kind"] = "auto" },
+        NoneChatToolMode => new JsonObject { ["kind"] = "none" },
+        RequiredChatToolMode required => new JsonObject { ["kind"] = "required", ["function"] = required.RequiredFunctionName },
+        _ => UnsupportedToolMode(mode, settings),
+    };
+    private static JsonObject? UnsupportedToolMode(ChatToolMode mode, ChatRecordingOptions settings)
+    {
+        Reject(settings, $"Chat tool mode '{mode.GetType().FullName}' cannot be recorded.");
+        return null;
+    }
+    private static JsonNode? ContinuationToken(ResponseContinuationToken? token) =>
+        token is null ? null : JsonValue.Create(Convert.ToBase64String(token.ToBytes().Span));
+    private static JsonObject? ResponseFormat(ChatResponseFormat? format, ChatRecordingOptions settings)
+    {
+        if (format is null) return null;
+        if (format is ChatResponseFormatText) return new JsonObject { ["kind"] = "text" };
+        if (format is ChatResponseFormatJson json)
+        {
+            return new JsonObject
+            {
+                ["kind"] = "json",
+                ["schema"] = json.Schema is { } schema ? JsonNode.Parse(schema.GetRawText()) : null,
+                ["schemaName"] = json.SchemaName,
+                ["schemaDescription"] = TextValue(json.SchemaDescription, settings),
+            };
+        }
+        Reject(settings, $"Response format '{format.GetType().FullName}' cannot be recorded.");
+        return null;
+    }
+    private static JsonObject RequestExtension(ChatOptions options, ChatRecordingOptions settings)
+    {
+        foreach (var codec in settings.RequestCodecs)
+        {
+            if (!codec.CanWrite(options)) continue;
+            var extension = codec.Write(options) ?? throw new InvalidOperationException($"{nameof(IChatRecordingRequestCodec)} returned null.");
+            return Sanitize(extension, settings);
+        }
+        Reject(settings, $"RawRepresentationFactory cannot be recorded without an {nameof(IChatRecordingRequestCodec)}.");
+        return new JsonObject();
+    }
     internal static JsonObject Update(ChatResponseUpdate u, ChatRecordingOptions settings) => Sanitize(new JsonObject
     {
         ["authorName"] = u.AuthorName, ["role"] = u.Role?.Value, ["responseId"] = u.ResponseId, ["messageId"] = u.MessageId,
         ["conversationId"] = u.ConversationId, ["createdAt"] = u.CreatedAt?.ToString("O"), ["finishReason"] = u.FinishReason?.Value,
         ["modelId"] = u.ModelId, ["contents"] = new JsonArray(u.Contents.Select(x => Content(x, settings)).ToArray()),
         ["additional"] = Additional(u.AdditionalProperties, settings), ["raw"] = Raw(u.RawRepresentation, settings),
+        ["continuationToken"] = ContinuationToken(u.ContinuationToken),
     }, settings);
     private static JsonObject Content(AIContent content, ChatRecordingOptions settings)
     {
         JsonObject serialized;
         foreach (var codec in settings.ContentCodecs)
             if (codec.CanWrite(content))
-                return Sanitize(codec.Write(content), settings);
+                return ContentEnvelope(codec.Write(content), content, settings);
         serialized = content switch
         {
             TextContent text => new JsonObject { ["type"] = "text", ["text"] = TextValue(text.Text, settings) },
@@ -471,31 +544,88 @@ internal static class ChatRecordingJson
             ToolCallContent call => new JsonObject { ["type"] = "toolCall", ["callId"] = call.CallId },
             ToolResultContent result => new JsonObject { ["type"] = "toolResult", ["callId"] = result.CallId },
             UsageContent usage => new JsonObject { ["type"] = "usage", ["details"] = JsonSerializer.SerializeToNode(usage.Details) },
-            RichTextContent rich => new JsonObject { ["type"] = "richText", ["text"] = rich.Text, ["nodes"] = new JsonArray(rich.Nodes.Select((node, index) => Node(node, $"$.nodes[{index}]")).ToArray()) },
+            RichTextContent rich => new JsonObject { ["type"] = "richText", ["text"] = rich.Text, ["nodes"] = new JsonArray(rich.Nodes.Select((node, index) => Node(node, $"$.nodes[{index}]", settings)).ToArray()) },
             ErrorContent error => new JsonObject { ["type"] = "error", ["message"] = error.Message, ["code"] = error.ErrorCode, ["details"] = error.Details },
             _ => throw new NotSupportedException($"Recording does not support AI content type '{content.GetType().FullName}'. Register an {nameof(IChatRecordingContentCodec)}.")
         };
+        return ContentEnvelope(serialized, content, settings);
+    }
+    private static JsonObject ContentEnvelope(JsonObject serialized, AIContent content, ChatRecordingOptions settings)
+    {
+        ArgumentNullException.ThrowIfNull(serialized);
+        var metadata = new JsonObject
+        {
+            ["additional"] = Additional(content.AdditionalProperties, settings, allowContentMetadata: true),
+            ["annotations"] = Annotations(content.Annotations, settings),
+            ["raw"] = Raw(content.RawRepresentation, settings),
+        };
+        if (metadata.Any(pair => pair.Value is not null))
+            serialized["metadata"] = metadata;
         return Sanitize(serialized, settings);
     }
     private static JsonObject? Additional(AdditionalPropertiesDictionary? additional, ChatRecordingOptions settings)
+        => Additional(additional, settings, allowContentMetadata: false);
+    private static JsonObject? Additional(AdditionalPropertiesDictionary? additional, ChatRecordingOptions settings, bool allowContentMetadata)
     {
         if (additional is null || additional.Count == 0) return null;
         var result = new JsonObject();
         foreach (var pair in additional)
         {
             if (settings.AllowAguiThreadId && pair.Key == "agui_thread_id") { result[pair.Key] = SafeValue(pair.Value, settings); continue; }
+            if (allowContentMetadata && settings.AllowedContentAdditionalProperties.Contains(pair.Key))
+            {
+                result[pair.Key] = SafeValue(pair.Value, settings);
+                continue;
+            }
             Reject(settings, $"Additional property '{pair.Key}' is not permitted by strict-v1.");
         }
         return result;
     }
+    private static JsonArray? Annotations(IList<AIAnnotation>? annotations, ChatRecordingOptions settings)
+    {
+        if (annotations is null || annotations.Count == 0) return null;
+        return new JsonArray(annotations.Select(annotation => Annotation(annotation, settings)).ToArray());
+    }
+    private static JsonObject Annotation(AIAnnotation annotation, ChatRecordingOptions settings)
+    {
+        if (annotation.RawRepresentation is not null)
+            Reject(settings, "Annotation raw representation requires a content codec and cannot be recorded directly.");
+        var result = annotation switch
+        {
+            CitationAnnotation citation => new JsonObject
+            {
+                ["type"] = "citation", ["title"] = TextValue(citation.Title, settings),
+                ["url"] = citation.Url is null ? null : SafeUri(citation.Url, settings, "Citation annotation URL"),
+                ["fileId"] = citation.FileId, ["toolName"] = citation.ToolName, ["snippet"] = TextValue(citation.Snippet, settings),
+            },
+            AIAnnotation when annotation.GetType() == typeof(AIAnnotation) => new JsonObject { ["type"] = "annotation" },
+            _ => throw new NotSupportedException($"Recording does not support annotation type '{annotation.GetType().FullName}'."),
+        };
+        result["regions"] = annotation.AnnotatedRegions is null ? null : new JsonArray(annotation.AnnotatedRegions.Select(AnnotatedRegion).ToArray());
+        result["additional"] = Additional(annotation.AdditionalProperties, settings, allowContentMetadata: true);
+        return result;
+    }
+    private static JsonObject AnnotatedRegion(AnnotatedRegion region) => region switch
+    {
+        TextSpanAnnotatedRegion span => new JsonObject { ["type"] = "textSpan", ["start"] = span.StartIndex, ["end"] = span.EndIndex },
+        _ => throw new NotSupportedException($"Recording does not support annotated region type '{region.GetType().FullName}'."),
+    };
     private static JsonObject Uri(UriContent uri, ChatRecordingOptions settings)
     {
-        if (!IsSafeUri(uri.Uri))
-        {
-            Reject(settings, "URI content must be an ordinary HTTP(S) URI without credentials, query, fragment, or provider endpoint.");
-            return new JsonObject { ["type"] = "uri", ["uri"] = "about:blank", ["mediaType"] = uri.MediaType };
-        }
-        return new JsonObject { ["type"] = "uri", ["uri"] = uri.Uri.AbsoluteUri, ["mediaType"] = uri.MediaType };
+        return new JsonObject { ["type"] = "uri", ["uri"] = SafeUri(uri.Uri, settings, "URI content"), ["mediaType"] = uri.MediaType };
+    }
+    private static string SafeUri(Uri uri, ChatRecordingOptions settings, string context)
+    {
+        if (ChatRecordingSecurity.IsSafeUri(uri)) return uri.AbsoluteUri;
+        Reject(settings, $"{context} must be an ordinary HTTP(S) URI without credentials, query, fragment, or provider endpoint.");
+        return "about:blank";
+    }
+    private static string SafeUri(string uri, ChatRecordingOptions settings, string context)
+    {
+        if (System.Uri.TryCreate(uri, UriKind.Absolute, out var parsed))
+            return SafeUri(parsed, settings, context);
+        Reject(settings, $"{context} must be an ordinary HTTP(S) URI without credentials, query, fragment, or provider endpoint.");
+        return "about:blank";
     }
     private static string? TextValue(string? value, ChatRecordingOptions settings)
     {
@@ -562,7 +692,7 @@ internal static class ChatRecordingJson
     }
     internal static ChatResponseUpdate ReadUpdate(JsonObject node, ChatRecordingOptions settings)
     {
-        var result = new ChatResponseUpdate { AuthorName = node["authorName"]?.GetValue<string>(), ResponseId = node["responseId"]?.GetValue<string>(), MessageId = node["messageId"]?.GetValue<string>(), ConversationId = node["conversationId"]?.GetValue<string>(), ModelId = node["modelId"]?.GetValue<string>(), RawRepresentation = ReadRaw(node["raw"], settings), AdditionalProperties = ReadAdditional(node["additional"], settings) };
+        var result = new ChatResponseUpdate { AuthorName = node["authorName"]?.GetValue<string>(), ResponseId = node["responseId"]?.GetValue<string>(), MessageId = node["messageId"]?.GetValue<string>(), ConversationId = node["conversationId"]?.GetValue<string>(), ModelId = node["modelId"]?.GetValue<string>(), RawRepresentation = ReadRaw(node["raw"], settings), AdditionalProperties = ReadAdditional(node["additional"], settings), ContinuationToken = ReadContinuationToken(node["continuationToken"]) };
         if (node["role"]?.GetValue<string>() is { } role) result.Role = new ChatRole(role);
         if (node["createdAt"]?.GetValue<string>() is { } time) result.CreatedAt = DateTimeOffset.Parse(time, null, System.Globalization.DateTimeStyles.RoundtripKind);
         if (node["finishReason"]?.GetValue<string>() is { } finish) result.FinishReason = new ChatFinishReason(finish);
@@ -570,13 +700,15 @@ internal static class ChatRecordingJson
         return result;
     }
     private static AdditionalPropertiesDictionary? ReadAdditional(JsonNode? node, ChatRecordingOptions settings)
+        => ReadAdditional(node, settings, allowContentMetadata: false);
+    private static AdditionalPropertiesDictionary? ReadAdditional(JsonNode? node, ChatRecordingOptions settings, bool allowContentMetadata)
     {
         if (node is null)
             return null;
         var result = new AdditionalPropertiesDictionary();
         foreach (var pair in node.AsObject())
         {
-            if (!AllowedAdditional.Contains(pair.Key))
+            if (!AllowedAdditional.Contains(pair.Key) && (!allowContentMetadata || !settings.AllowedContentAdditionalProperties.Contains(pair.Key)))
             {
                 Reject(settings, $"Additional property '{pair.Key}' is not permitted by strict-v1.");
                 continue;
@@ -588,12 +720,14 @@ internal static class ChatRecordingJson
     private static AIContent ReadContent(JsonObject node, ChatRecordingOptions settings)
     {
         var type = node["type"]?.GetValue<string>() ?? throw new InvalidDataException("Content lacks type.");
-        foreach (var codec in settings.ContentCodecs) if (codec.CanRead(type)) return codec.Read(node);
-        return type switch
+        foreach (var codec in settings.ContentCodecs)
+            if (codec.CanRead(type))
+                return ReadContentMetadata(codec.Read(node), node["metadata"], settings);
+        var content = type switch
         {
             "text" => new TextContent(node["text"]?.GetValue<string>()),
             "reasoning" => new TextReasoningContent(node["text"]?.GetValue<string>()),
-            "uri" => new UriContent(node["uri"]!.GetValue<string>(), node["mediaType"]?.GetValue<string>()),
+            "uri" => new UriContent(SafeUri(node["uri"]!.GetValue<string>(), settings, "URI content"), node["mediaType"]?.GetValue<string>()),
             "data" => new DataContent(ReadData(node, settings), node["mediaType"]!.GetValue<string>()) { Name = node["name"]?.GetValue<string>() },
             "inputRequest" => new RecordedInputRequestContent(node["requestId"]!.GetValue<string>()),
             "inputResponse" => new RecordedInputResponseContent(node["requestId"]!.GetValue<string>()),
@@ -606,11 +740,48 @@ internal static class ChatRecordingJson
             "imageGenerationCall" => new ImageGenerationToolCallContent(node["callId"]!.GetValue<string>()),
             "imageGenerationResult" => new ImageGenerationToolResultContent(node["callId"]!.GetValue<string>()) { Outputs = node["outputs"] is JsonArray outputs ? outputs.Select(x => ReadContent(x!.AsObject(), settings)).ToList() : null },
             "usage" => new UsageContent(node["details"]?.Deserialize<UsageDetails>() ?? new UsageDetails()),
-            "richText" => new RichTextContent(node["text"]?.GetValue<string>() ?? string.Empty, node["nodes"] is JsonArray nodes ? nodes.Select(x => ReadNode(x!.AsObject())).ToList() : []),
+            "richText" => new RichTextContent(node["text"]?.GetValue<string>() ?? string.Empty, node["nodes"] is JsonArray nodes ? nodes.Select(x => ReadNode(x!.AsObject(), settings)).ToList() : []),
             "error" => new ErrorContent(node["message"]?.GetValue<string>()) { ErrorCode = node["code"]?.GetValue<string>(), Details = node["details"]?.GetValue<string>() },
             _ => UnknownContent(type, settings)
         };
+        return ReadContentMetadata(content, node["metadata"], settings);
     }
+    private static AIContent ReadContentMetadata(AIContent content, JsonNode? node, ChatRecordingOptions settings)
+    {
+        if (node is not JsonObject metadata) return content;
+        content.AdditionalProperties = ReadAdditional(metadata["additional"], settings, allowContentMetadata: true);
+        content.RawRepresentation = ReadRaw(metadata["raw"], settings);
+        if (metadata["annotations"] is JsonArray annotations)
+            content.Annotations = annotations.Select(value => ReadAnnotation(value!.AsObject(), settings)).ToList();
+        return content;
+    }
+    private static AIAnnotation ReadAnnotation(JsonObject node, ChatRecordingOptions settings)
+    {
+        var annotation = node["type"]?.GetValue<string>() switch
+        {
+            "annotation" => new AIAnnotation(),
+            "citation" => new CitationAnnotation
+            {
+                Title = node["title"]?.GetValue<string>(),
+                Url = node["url"]?.GetValue<string>() is { } url ? new Uri(SafeUri(url, settings, "Citation annotation URL"), UriKind.Absolute) : null,
+                FileId = node["fileId"]?.GetValue<string>(),
+                ToolName = node["toolName"]?.GetValue<string>(),
+                Snippet = node["snippet"]?.GetValue<string>(),
+            },
+            var type => throw new NotSupportedException($"Recording contains unsupported annotation type '{type}'."),
+        };
+        annotation.AdditionalProperties = ReadAdditional(node["additional"], settings, allowContentMetadata: true);
+        if (node["regions"] is JsonArray regions)
+            annotation.AnnotatedRegions = regions.Select(region => ReadAnnotatedRegion(region!.AsObject())).ToList();
+        return annotation;
+    }
+    private static AnnotatedRegion ReadAnnotatedRegion(JsonObject node) => node["type"]?.GetValue<string>() switch
+    {
+        "textSpan" => new TextSpanAnnotatedRegion { StartIndex = node["start"]?.GetValue<int?>(), EndIndex = node["end"]?.GetValue<int?>() },
+        var type => throw new NotSupportedException($"Recording contains unsupported annotated region type '{type}'."),
+    };
+    private static ResponseContinuationToken? ReadContinuationToken(JsonNode? node) =>
+        node is null ? null : ResponseContinuationToken.FromBytes(Convert.FromBase64String(node.GetValue<string>()));
     private static AIContent UnknownContent(string type, ChatRecordingOptions settings)
     {
         Reject(settings, $"Recording contains unsupported AI content type '{type}'. Register an {nameof(IChatRecordingContentCodec)}.");
@@ -635,13 +806,6 @@ internal static class ChatRecordingJson
             throw new InvalidDataException($"Blob '{relative}' failed hash or length verification.");
         return bytes;
     }
-    private static bool IsSafeUri(Uri uri) =>
-        uri.IsAbsoluteUri &&
-        (uri.Scheme == System.Uri.UriSchemeHttp || uri.Scheme == System.Uri.UriSchemeHttps) &&
-        string.IsNullOrEmpty(uri.UserInfo) &&
-        string.IsNullOrEmpty(uri.Query) &&
-        string.IsNullOrEmpty(uri.Fragment) &&
-        !Regex.IsMatch(uri.Host, @"(?i)(^|\.)(api\.)?(openai|azure|anthropic|googleapis|amazonaws)(\.|$)");
     private static object? ReadSafeValue(JsonNode? node)
     {
         if (node is null)
@@ -699,22 +863,22 @@ internal static class ChatRecordingJson
     }
     private sealed class RecordedInputRequestContent(string requestId) : InputRequestContent(requestId);
     private sealed class RecordedInputResponseContent(string requestId) : InputResponseContent(requestId);
-    private static JsonObject Node(RichTextNode node, string path)
+    private static JsonObject Node(RichTextNode node, string path, ChatRecordingOptions settings)
     {
-        var result = new JsonObject { ["kind"] = node.GetType().Name, ["children"] = new JsonArray(node.Children.Select((child, index) => Node(child, $"{path}.children[{index}]")).ToArray()) };
+        var result = new JsonObject { ["kind"] = node.GetType().Name, ["children"] = new JsonArray(node.Children.Select((child, index) => Node(child, $"{path}.children[{index}]", settings)).ToArray()) };
         switch (node)
         {
             case TextNode n: result["text"] = n.Text; break;
             case HeadingNode n: result["level"] = n.Level; break;
             case CodeBlockNode n: result["code"] = n.Code; result["language"] = n.Language; break;
             case InlineCodeNode n: result["code"] = n.Code; break;
-            case LinkNode n: result["url"] = n.Url; result["title"] = n.Title; break;
-            case ImageNode n: result["url"] = n.Url; result["alt"] = n.Alt; result["title"] = n.Title; break;
+            case LinkNode n: result["url"] = SafeUri(n.Url, settings, "Rich text link URL"); result["title"] = n.Title; break;
+            case ImageNode n: result["url"] = SafeUri(n.Url, settings, "Rich text image URL"); result["alt"] = n.Alt; result["title"] = n.Title; break;
             case ListNode n: result["ordered"] = n.Ordered; result["start"] = n.Start; break;
             case ListItemNode n: result["checked"] = n.Checked; break;
             case HtmlNode n: result["value"] = n.Value; break;
             case TableNode n: result["alignment"] = new JsonArray(n.Alignment.Select(value => JsonValue.Create((int)value)).ToArray()); break;
-            case DefinitionNode n: result["label"] = n.Label; result["url"] = n.Url; result["title"] = n.Title; break;
+            case DefinitionNode n: result["label"] = n.Label; result["url"] = SafeUri(n.Url, settings, "Rich text definition URL"); result["title"] = n.Title; break;
             case LinkReferenceNode n: result["label"] = n.Label; result["referenceKind"] = (int)n.ReferenceKind; break;
             case ImageReferenceNode n: result["label"] = n.Label; result["alt"] = n.Alt; result["referenceKind"] = (int)n.ReferenceKind; break;
             case FootnoteDefinitionNode n: result["label"] = n.Label; break;
@@ -724,7 +888,7 @@ internal static class ChatRecordingJson
         }
         return result;
     }
-    private static RichTextNode ReadNode(JsonObject node)
+    private static RichTextNode ReadNode(JsonObject node, ChatRecordingOptions settings)
     {
         var kind = node["kind"]?.GetValue<string>() ?? throw new InvalidDataException("Rich text node lacks kind.");
         RichTextNode result = kind switch
@@ -733,13 +897,13 @@ internal static class ChatRecordingJson
             nameof(HeadingNode) => new HeadingNode(node["level"]?.GetValue<int>() ?? 1),
             nameof(CodeBlockNode) => new CodeBlockNode(node["code"]?.GetValue<string>() ?? string.Empty, node["language"]?.GetValue<string>()),
             nameof(InlineCodeNode) => new InlineCodeNode(node["code"]?.GetValue<string>() ?? string.Empty),
-            nameof(LinkNode) => new LinkNode(node["url"]?.GetValue<string>() ?? string.Empty, node["title"]?.GetValue<string>()),
-            nameof(ImageNode) => new ImageNode(node["url"]?.GetValue<string>() ?? string.Empty, node["alt"]?.GetValue<string>(), node["title"]?.GetValue<string>()),
+            nameof(LinkNode) => new LinkNode(SafeUri(node["url"]?.GetValue<string>() ?? string.Empty, settings, "Rich text link URL"), node["title"]?.GetValue<string>()),
+            nameof(ImageNode) => new ImageNode(SafeUri(node["url"]?.GetValue<string>() ?? string.Empty, settings, "Rich text image URL"), node["alt"]?.GetValue<string>(), node["title"]?.GetValue<string>()),
             nameof(ListNode) => new ListNode(node["ordered"]?.GetValue<bool>() ?? false, node["start"]?.GetValue<int?>()),
             nameof(ListItemNode) => new ListItemNode { Checked = node["checked"]?.GetValue<bool?>() },
             nameof(TableNode) => new TableNode { Alignment = node["alignment"] is JsonArray alignment ? alignment.Select(value => (TableColumnAlignment)(value?.GetValue<int>() ?? 0)).ToArray() : [] },
             nameof(HtmlNode) => new HtmlNode(node["value"]?.GetValue<string>() ?? string.Empty),
-            nameof(DefinitionNode) => new DefinitionNode { Label = node["label"]?.GetValue<string>() ?? string.Empty, Url = node["url"]?.GetValue<string>() ?? string.Empty, Title = node["title"]?.GetValue<string>() },
+            nameof(DefinitionNode) => new DefinitionNode { Label = node["label"]?.GetValue<string>() ?? string.Empty, Url = SafeUri(node["url"]?.GetValue<string>() ?? string.Empty, settings, "Rich text definition URL"), Title = node["title"]?.GetValue<string>() },
             nameof(LinkReferenceNode) => new LinkReferenceNode { Label = node["label"]?.GetValue<string>() ?? string.Empty, ReferenceKind = (ReferenceKind)(node["referenceKind"]?.GetValue<int>() ?? 0) },
             nameof(ImageReferenceNode) => new ImageReferenceNode { Label = node["label"]?.GetValue<string>() ?? string.Empty, Alt = node["alt"]?.GetValue<string>(), ReferenceKind = (ReferenceKind)(node["referenceKind"]?.GetValue<int>() ?? 0) },
             nameof(FootnoteDefinitionNode) => new FootnoteDefinitionNode { Label = node["label"]?.GetValue<string>() ?? string.Empty },
@@ -750,7 +914,7 @@ internal static class ChatRecordingJson
             nameof(FootnoteNode) => new FootnoteNode(),
             _ => throw new NotSupportedException($"Recording contains unsupported rich text node '{kind}'."),
         };
-        if (node["children"] is JsonArray children) foreach (var child in children) result.AddChild(ReadNode(child!.AsObject()));
+        if (node["children"] is JsonArray children) foreach (var child in children) result.AddChild(ReadNode(child!.AsObject(), settings));
         return result;
     }
     internal static void AssertRequestEqual(int interaction, JsonNode expected, JsonNode actual, ChatRecordingOptions settings)
@@ -758,12 +922,26 @@ internal static class ChatRecordingJson
         var expectedCopy = expected.DeepClone();
         var actualCopy = actual.DeepClone();
         NormalizeBlobs(expectedCopy, settings);
+        NormalizeRequestExtension(expectedCopy, settings);
+        NormalizeRequestExtension(actualCopy, settings);
         if (!settings.RequireMessageId)
         {
             RemoveMessageIds(expectedCopy);
             RemoveMessageIds(actualCopy);
         }
         Compare(interaction, "$", expectedCopy, actualCopy);
+    }
+    private static void NormalizeRequestExtension(JsonNode? node, ChatRecordingOptions settings)
+    {
+        if (node is not JsonObject root || root["options"] is not JsonObject options || options["requestExtension"] is not JsonObject extension)
+            return;
+        foreach (var codec in settings.RequestCodecs)
+        {
+            if (!codec.CanRead(extension)) continue;
+            options["requestExtension"] = Sanitize(codec.Read(extension.DeepClone().AsObject()), settings);
+            return;
+        }
+        Reject(settings, $"Recording contains a request extension without a registered {nameof(IChatRecordingRequestCodec)}.");
     }
     private static void NormalizeBlobs(JsonNode? node, ChatRecordingOptions settings)
     {
