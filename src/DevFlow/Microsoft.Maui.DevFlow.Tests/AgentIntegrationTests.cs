@@ -412,7 +412,9 @@ public class AgentHttpServerTests : IDisposable
                 "POST /api/v1/echo HTTP/1.1\r\n" +
                 "Host: localhost\r\n" +
                 "Content-Type: application/json\r\n" +
-                "Content-Length: 1048577\r\n" +
+                // One byte past the ceiling. It moved up when the storage routes gained real file
+                // uploads - a database or a screenshot is routinely bigger than the old 1MB.
+                $"Content-Length: {(64 * 1024 * 1024) + 1}\r\n" +
                 "Connection: close\r\n\r\n");
             await stream.WriteAsync(request);
             await stream.FlushAsync();
