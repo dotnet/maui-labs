@@ -17,16 +17,18 @@ namespace Microsoft.Maui.DevFlow.Agent;
 /// <summary>
 /// Native gesture injection — the second tier behind the managed MAUI gesture recognizers
 /// in <see cref="Core.MauiDevFlowAgentService"/>. This is what makes pinch-to-zoom work on
-/// controls that own their gestures internally (Map, WebView, SKCanvasView, native scroll views)
+/// controls that own their gestures internally (Map, WebView, GraphicsView, native scroll views)
 /// and therefore expose no <c>PinchGestureRecognizer</c> to walk.
 ///
 /// Fidelity varies by platform, and each method reports how it was handled so callers can tell:
 /// <list type="bullet">
 /// <item>Android — genuine multi-pointer <c>MotionEvent</c>s dispatched through the activity,
 /// so the whole hit-test and <c>GestureDetector</c> pipeline runs. Fully faithful.</item>
-/// <item>iOS / Mac Catalyst — drives the real native zoom/pan surfaces (MKMapView camera,
-/// UIScrollView zoom/offset) and, failing those, the attached UIGestureRecognizers.
-/// In-process synthetic <c>UITouch</c> needs private API and is deliberately not attempted.</item>
+/// <item>iOS / Mac Catalyst — drives the real native zoom/pan surfaces (MKMapView camera and
+/// centre, UIScrollView zoom/offset), then the attached UIGestureRecognizers, and finally —
+/// when <c>AgentOptions.EnableSyntheticTouch</c> is on — synthesised <c>UITouch</c>es delivered
+/// to an allow-list of raw-touch views (GraphicsView, plus <c>AgentOptions.SyntheticTouchViewTypes</c>),
+/// which own no recognizer to drive. That last tier needs private UIKit ivars, hence the opt-in.</item>
 /// <item>Windows — ScrollViewer zoom/offset. Input injection needs the restricted
 /// <c>inputInjectionBrokered</c> capability and is not usable from a normal app package.</item>
 /// <item>macOS AppKit — NSScrollView magnification and content offset.</item>
@@ -40,7 +42,7 @@ public partial class PlatformAgentService
 #if ANDROID
         return await AndroidPinchAsync(element, scale, origin, durationMs, steps);
 #elif IOS || MACCATALYST
-        return await ApplePinchAsync(element, scale, origin, durationMs, steps);
+        return await ApplePinchAsync(element, scale, origin, durationMs, steps, RawTouchPolicy);
 #elif WINDOWS
         return await Task.FromResult(WindowsPinch(element, scale));
 #elif MACOS
@@ -66,7 +68,7 @@ public partial class PlatformAgentService
 #if ANDROID
         return await AndroidPanAsync(element, deltaX, deltaY, durationMs, steps, "pan");
 #elif IOS || MACCATALYST
-        return await ApplePanAsync(element, deltaX, deltaY);
+        return await ApplePanAsync(element, deltaX, deltaY, durationMs, steps, RawTouchPolicy);
 #elif WINDOWS
         return await Task.FromResult(WindowsPan(element, deltaX, deltaY));
 #elif MACOS
@@ -85,6 +87,8 @@ public partial class PlatformAgentService
         var dy = direction switch { "up" => -distance, "down" => distance, _ => 0 };
         var swipeDuration = durationMs > 0 ? Math.Min(durationMs, 150) : 100;
         return await AndroidPanAsync(element, dx, dy, swipeDuration, 8, "swipe");
+#elif IOS || MACCATALYST
+        return await AppleSwipeAsync(element, direction, distance, durationMs, RawTouchPolicy);
 #else
         return await base.TryNativeSwipe(element, direction, distance, durationMs);
 #endif
@@ -162,7 +166,8 @@ public partial class PlatformAgentService
         Func<double, PointF[]> positionsAt,
         int durationMs,
         int steps,
-        int holdMs = 0)
+        int holdMs = 0,
+        int settleMs = 0)
     {
         var activity = global::Microsoft.Maui.ApplicationModel.Platform.CurrentActivity;
         var targetLocation = new int[2];
@@ -258,6 +263,12 @@ public partial class PlatformAgentService
                     (MotionEventActions)((int)MotionEventActions.PointerDown | (i << PointerIndexShift)),
                     i + 1);
 
+            // Keep the gesture on the element the caller named. Without this an enclosing
+            // ScrollView steals a vertical drag once it passes the touch slop — correct for a
+            // real finger, wrong for "pan this canvas". Ancestors only: the target view itself
+            // still handles the gesture normally. Must follow the down, which resets the flag.
+            targetView.Parent?.RequestDisallowInterceptTouchEvent(true);
+
             if (holdMs > 0)
             {
                 await Task.Delay(holdMs);
@@ -272,6 +283,16 @@ public partial class PlatformAgentService
                 if (stepDelay > 0) await Task.Delay(stepDelay);
             }
 
+            // A pan should stop where it was asked to. Lifting straight after the last move
+            // leaves velocity on the VelocityTracker and the view flings past the target, so
+            // hold still for a moment first; a swipe skips this precisely to keep its fling.
+            if (settleMs > 0)
+            {
+                await Task.Delay(settleMs);
+                eventTime += settleMs;
+                handled |= Send(MotionEventActions.Move, pointerCount);
+            }
+
             eventTime += 1;
             for (var i = pointerCount - 1; i >= 1; i--)
                 Send((MotionEventActions)((int)MotionEventActions.PointerUp | (i << PointerIndexShift)), i + 1);
@@ -282,6 +303,10 @@ public partial class PlatformAgentService
         {
             System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] Android touch injection failed: {ex.GetBaseException().Message}");
             return false;
+        }
+        finally
+        {
+            targetView.Parent?.RequestDisallowInterceptTouchEvent(false);
         }
     }
 
@@ -365,7 +390,8 @@ public partial class PlatformAgentService
             pointerCount: 1,
             positionsAt: t => [new PointF(start.X + pixelX * (float)t, start.Y + pixelY * (float)t)],
             durationMs: durationMs > 0 ? durationMs : 200,
-            steps: steps);
+            steps: steps,
+            settleMs: label == "pan" ? 60 : 0);
 
         return handled ? $"MotionEvent {label} ({deltaX:0.#}, {deltaY:0.#})" : null;
     }
@@ -429,11 +455,22 @@ public partial class PlatformAgentService
 
     private static UIView? GetAppleView(VisualElement element) => element.Handler?.PlatformView as UIView;
 
+    private AppleRawTouchPolicy? _rawTouchPolicy;
+
+    /// <summary>The synthetic-touch allow-list, or null when the app has not opted in.</summary>
+    private AppleRawTouchPolicy? RawTouchPolicy => _options.EnableSyntheticTouch
+        ? _rawTouchPolicy ??= new AppleRawTouchPolicy(_options.SyntheticTouchViewTypes)
+        : null;
+
     /// <summary>
     /// Breadth-ish search for a recognizer of the given kind on the view, its subviews and
     /// its ancestors. Native controls such as MKMapView keep their recognizers on internal subviews.
+    /// Callers that want the element's own handling to win pass <paramref name="includeAncestors"/>
+    /// as false, try the closer tiers, and only then widen the search.
     /// </summary>
-    private static T? FindRecognizer<T>(UIView? view, Func<T, bool>? predicate = null) where T : UIGestureRecognizer
+    private static T? FindRecognizer<T>(
+        UIView? view, Func<T, bool>? predicate = null, bool includeAncestors = true)
+        where T : UIGestureRecognizer
     {
         if (view == null) return null;
 
@@ -462,6 +499,7 @@ public partial class PlatformAgentService
 
         var descendant = Descend(view, predicate);
         if (descendant != null) return descendant;
+        if (!includeAncestors) return null;
 
         var ancestor = view.Superview;
         while (ancestor != null)
@@ -536,7 +574,8 @@ public partial class PlatformAgentService
         }
     }
 
-    private static async Task<string?> ApplePinchAsync(VisualElement element, double scale, Point origin, int durationMs, int steps)
+    private static async Task<string?> ApplePinchAsync(
+        VisualElement element, double scale, Point origin, int durationMs, int steps, AppleRawTouchPolicy? rawTouch)
     {
         var view = GetAppleView(element);
         if (view == null) return null;
@@ -559,21 +598,104 @@ public partial class PlatformAgentService
             return $"UIScrollView.ZoomScale → {target:0.##}";
         }
 
-        // 3. Fall back to driving whatever pinch recognizer the control installed.
-        var recognizer = FindRecognizer<UIPinchGestureRecognizer>(view);
-        if (recognizer == null) return null;
-
-        var stepDelay = steps > 0 && durationMs > 0 ? Math.Max(1, durationMs / steps) : 0;
-        recognizer.Scale = 1;
-        if (!TrySetState(recognizer, UIGestureRecognizerState.Began)) return null;
-        for (var i = 1; i <= steps; i++)
+        // 3. Drive whatever pinch recognizer the control installed.
+        if (FindRecognizer<UIPinchGestureRecognizer>(view) is { } recognizer)
         {
-            recognizer.Scale = (nfloat)(1 + (scale - 1) * i / steps);
-            TrySetState(recognizer, UIGestureRecognizerState.Changed);
-            if (stepDelay > 0) await Task.Delay(stepDelay);
+            var stepDelay = steps > 0 && durationMs > 0 ? Math.Max(1, durationMs / steps) : 0;
+            recognizer.Scale = 1;
+            if (!TrySetState(recognizer, UIGestureRecognizerState.Began)) return null;
+            for (var i = 1; i <= steps; i++)
+            {
+                recognizer.Scale = (nfloat)(1 + (scale - 1) * i / steps);
+                TrySetState(recognizer, UIGestureRecognizerState.Changed);
+                if (stepDelay > 0) await Task.Delay(stepDelay);
+            }
+            TrySetState(recognizer, UIGestureRecognizerState.Ended);
+            return $"UIPinchGestureRecognizer x{scale:0.##}";
         }
-        TrySetState(recognizer, UIGestureRecognizerState.Ended);
-        return $"UIPinchGestureRecognizer x{scale:0.##}";
+
+        // 4. Raw-touch surfaces such as GraphicsView own no recognizer at all.
+        if (rawTouch == null) return null;
+        return await AppleSyntheticPinchAsync(view, rawTouch, scale, origin, durationMs, steps);
+    }
+
+    /// <summary>
+    /// The raw-touch view a finger on the element's centre would reach, or null when the policy
+    /// refuses it — in which case nothing is delivered and the gesture reports "no handler".
+    /// </summary>
+    private static UIView? ResolveRawTouchTarget(UIView view, AppleRawTouchPolicy policy)
+    {
+        var bounds = view.Bounds;
+        if (view.Window == null || bounds.Width <= 0 || bounds.Height <= 0)
+            return null;
+
+        var center = view.ConvertPointToView(
+            new CoreGraphics.CGPoint(
+                (double)bounds.X + (double)bounds.Width / 2,
+                (double)bounds.Y + (double)bounds.Height / 2),
+            null);
+        return policy.Resolve(view, center);
+    }
+
+    /// <summary>A point relative to <paramref name="view"/>'s bounds, in window coordinates.</summary>
+    private static CoreGraphics.CGPoint ToWindow(UIView view, double x, double y)
+    {
+        var bounds = view.Bounds;
+        return view.ConvertPointToView(
+            new CoreGraphics.CGPoint((double)bounds.X + x, (double)bounds.Y + y), null);
+    }
+
+    private static async Task<string?> AppleSyntheticPinchAsync(
+        UIView view, AppleRawTouchPolicy policy, double scale, Point origin, int durationMs, int steps)
+    {
+        if (ResolveRawTouchTarget(view, policy) is not { } target) return null;
+
+        // Geometry comes from the resolved view, not the element: the element's platform view
+        // can be a wrapper around the canvas, and the fingers must land on the canvas itself.
+        var bounds = target.Bounds;
+        if (Core.SyntheticTouchGeometry.ForPinch(
+                (double)bounds.Width, (double)bounds.Height, origin.X, origin.Y, scale) is not { } pinch)
+            return null;
+
+        var handled = await AppleTouchInjector.InjectAsync(
+            target,
+            t =>
+            {
+                var r = pinch.StartRadius + (pinch.EndRadius - pinch.StartRadius) * t;
+                return
+                [
+                    ToWindow(target, pinch.CenterX - r, pinch.CenterY),
+                    ToWindow(target, pinch.CenterX + r, pinch.CenterY)
+                ];
+            },
+            durationMs > 0 ? durationMs : 200,
+            steps);
+
+        return handled ? $"Synthetic UITouch pinch x{scale:0.##} on {target.GetType().Name}" : null;
+    }
+
+    private static async Task<string?> AppleSyntheticDragAsync(
+        UIView view, AppleRawTouchPolicy policy, double deltaX, double deltaY, int durationMs, int steps, string label)
+    {
+        if (ResolveRawTouchTarget(view, policy) is not { } target) return null;
+
+        var bounds = target.Bounds;
+        if (Core.SyntheticTouchGeometry.ForDrag(
+                (double)bounds.Width, (double)bounds.Height, deltaX, deltaY) is not { } drag)
+            return null;
+
+        var handled = await AppleTouchInjector.InjectAsync(
+            target,
+            t => [ToWindow(target, drag.StartX + drag.DeltaX * t, drag.StartY + drag.DeltaY * t)],
+            durationMs > 0 ? durationMs : 200,
+            steps);
+        if (!handled) return null;
+
+        var detail = $"Synthetic UITouch {label} ({drag.DeltaX:0.#}, {drag.DeltaY:0.#}) on {target.GetType().Name}";
+        // A drag longer than the view is shortened to stay on it; say so rather than claim the full distance.
+        return drag.DeltaX == deltaX && drag.DeltaY == deltaY
+            ? detail
+            : $"{detail}, shortened from ({deltaX:0.#}, {deltaY:0.#}) to stay on the view";
     }
 
     private static async Task<string?> AppleRotateAsync(VisualElement element, double degrees, int durationMs, int steps)
@@ -596,11 +718,18 @@ public partial class PlatformAgentService
         return $"UIRotationGestureRecognizer {degrees:0.#}°";
     }
 
-    private static Task<string?> ApplePanAsync(VisualElement element, double deltaX, double deltaY)
+    private static async Task<string?> ApplePanAsync(
+        VisualElement element, double deltaX, double deltaY, int durationMs, int steps, AppleRawTouchPolicy? rawTouch)
     {
         var view = GetAppleView(element);
-        if (view == null) return Task.FromResult<string?>(null);
+        if (view == null) return null;
 
+        // 1. Maps pan themselves and expose no scroll view to nudge.
+        if (FindMapView(view) is { } mapView && TryPanMapView(mapView, deltaX, deltaY) is { } mapDetail)
+            return mapDetail;
+
+        // 2. Scroll views — including WKWebView's inner one — move honestly by content offset,
+        // but only when there is somewhere to move; a page that fits falls through.
         var scrollView = view as UIScrollView ?? FindNativeSubview<UIScrollView>(view);
         if (scrollView != null)
         {
@@ -608,11 +737,130 @@ public partial class PlatformAgentService
             // A pan that drags content right moves the viewport left, hence the negation.
             var x = Math.Max(0, Math.Min(offset.X - deltaX, Math.Max(0, scrollView.ContentSize.Width - scrollView.Bounds.Width)));
             var y = Math.Max(0, Math.Min(offset.Y - deltaY, Math.Max(0, scrollView.ContentSize.Height - scrollView.Bounds.Height)));
-            scrollView.SetContentOffset(new CoreGraphics.CGPoint(x, y), animated: true);
-            return Task.FromResult<string?>($"UIScrollView.ContentOffset → ({x:0.#}, {y:0.#})");
+            if (Math.Abs(x - offset.X) > 0.5 || Math.Abs(y - offset.Y) > 0.5)
+            {
+                scrollView.SetContentOffset(new CoreGraphics.CGPoint(x, y), animated: true);
+                return $"UIScrollView.ContentOffset → ({x:0.#}, {y:0.#})";
+            }
         }
 
-        return Task.FromResult<string?>(null);
+        // 3. A real pan recognizer on the element itself: MKMapView's own, a custom drag
+        // handler. Translation is public API; velocity stays zero, so a handler that flings
+        // off velocity sees a drag that simply stops.
+        if (FindRecognizer<UIPanGestureRecognizer>(view, IsDrivablePan, includeAncestors: false) is { } own)
+            return await DriveApplePanRecognizerAsync(own, deltaX, deltaY, durationMs, steps);
+
+        // 4. Raw-touch surfaces such as GraphicsView own no recognizer at all.
+        if (rawTouch != null
+            && await AppleSyntheticDragAsync(view, rawTouch, deltaX, deltaY, durationMs, steps, "pan") is { } synthetic)
+            return synthetic;
+
+        // 5. Only now an enclosing pan: a real finger would have been consumed by the element
+        // above, so an ancestor's recognizer is the weakest reading of the request.
+        return FindRecognizer<UIPanGestureRecognizer>(view, IsDrivablePan) is { } ancestor
+            ? await DriveApplePanRecognizerAsync(ancestor, deltaX, deltaY, durationMs, steps)
+            : null;
+    }
+
+    /// <summary>
+    /// Whether a pan recognizer is one we can honestly drive. A scroll view's built-in
+    /// recognizer is not — UIScrollView scrolls from its own touch tracking, so driving it
+    /// reports success and moves nothing — and neither is a screen-edge recognizer, which
+    /// belongs to the navigation controller's back swipe rather than to the element. A pan an
+    /// app attaches to a scroll view itself is the app's own handler, and stays drivable; the
+    /// private ones UIKit adds (a table's swipe-action pan) are not.
+    /// </summary>
+    private static bool IsDrivablePan(UIPanGestureRecognizer recognizer)
+        => recognizer is not UIScreenEdgePanGestureRecognizer
+           && !(recognizer.View is UIScrollView scrollView
+                && (ReferenceEquals(recognizer, scrollView.PanGestureRecognizer)
+                    || recognizer.Class.Name?.StartsWith("_UI", StringComparison.Ordinal) == true));
+
+    private static async Task<string?> DriveApplePanRecognizerAsync(
+        UIPanGestureRecognizer recognizer, double deltaX, double deltaY, int durationMs, int steps)
+    {
+        var reference = recognizer.View;
+        var stepDelay = steps > 0 && durationMs > 0 ? Math.Max(1, durationMs / steps) : 0;
+
+        recognizer.SetTranslation(CoreGraphics.CGPoint.Empty, reference);
+        if (!TrySetState(recognizer, UIGestureRecognizerState.Began)) return null;
+        for (var i = 1; i <= steps; i++)
+        {
+            recognizer.SetTranslation(
+                new CoreGraphics.CGPoint(deltaX * i / steps, deltaY * i / steps), reference);
+            TrySetState(recognizer, UIGestureRecognizerState.Changed);
+            if (stepDelay > 0) await Task.Delay(stepDelay);
+        }
+        TrySetState(recognizer, UIGestureRecognizerState.Ended);
+        return $"UIPanGestureRecognizer ({deltaX:0.#}, {deltaY:0.#})";
+    }
+
+    private static async Task<string?> AppleSwipeAsync(
+        VisualElement element, string direction, double distance, int durationMs, AppleRawTouchPolicy? rawTouch)
+    {
+        var view = GetAppleView(element);
+        if (view == null) return null;
+
+        // A UISwipeGestureRecognizer is discrete — it only ever reports the completed swipe,
+        // so driving it to Ended is the entire gesture.
+        var swipeDirection = direction switch
+        {
+            "left" => UISwipeGestureRecognizerDirection.Left,
+            "right" => UISwipeGestureRecognizerDirection.Right,
+            "up" => UISwipeGestureRecognizerDirection.Up,
+            "down" => UISwipeGestureRecognizerDirection.Down,
+            _ => default
+        };
+
+        if (swipeDirection != default
+            && FindRecognizer<UISwipeGestureRecognizer>(view, r => r.Direction.HasFlag(swipeDirection)) is { } swipe
+            && TrySetState(swipe, UIGestureRecognizerState.Ended))
+            return $"UISwipeGestureRecognizer {direction}";
+
+        // Otherwise a swipe is a fast pan over the same surfaces.
+        var travel = distance > 0 ? distance : 120;
+        var dx = direction switch { "left" => -travel, "right" => travel, _ => 0d };
+        var dy = direction switch { "up" => -travel, "down" => travel, _ => 0d };
+        var swipeDuration = durationMs > 0 ? Math.Min(durationMs, 150) : 100;
+
+        var detail = await ApplePanAsync(element, dx, dy, swipeDuration, 6, rawTouch);
+        return detail == null ? null : $"{detail} (swipe {direction})";
+    }
+
+    /// <summary>
+    /// Pans an MKMapView by re-centring on the coordinate that the drag would bring to the
+    /// middle. Both calls deal in CLLocationCoordinate2D, which stays reachable by reflection
+    /// because the value is only ever handed straight back to MapKit, never picked apart.
+    /// </summary>
+    private static string? TryPanMapView(UIView mapView, double deltaX, double deltaY)
+    {
+        try
+        {
+            var mapType = mapView.GetType();
+            var convert = mapType.GetMethod(
+                "ConvertPoint", [typeof(CoreGraphics.CGPoint), typeof(UIView)]);
+            var setCenter = mapType.GetMethods().FirstOrDefault(
+                m => m.Name == "SetCenterCoordinate" && m.GetParameters().Length == 2);
+            if (convert == null || setCenter == null) return null;
+
+            var bounds = mapView.Bounds;
+            // Dragging content right reveals the map further left, hence the negation.
+            var point = new CoreGraphics.CGPoint(
+                (double)bounds.X + (double)bounds.Width / 2 - deltaX,
+                (double)bounds.Y + (double)bounds.Height / 2 - deltaY);
+
+            var coordinate = convert.Invoke(mapView, [point, mapView]);
+            if (coordinate == null) return null;
+
+            setCenter.Invoke(mapView, [coordinate, true]);
+            return $"MKMapView.SetCenterCoordinate ({deltaX:0.#}, {deltaY:0.#})";
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[Microsoft.Maui.DevFlow] MKMapView pan failed: {ex.GetBaseException().Message}");
+            return null;
+        }
     }
 
     private static async Task<string?> AppleLongPressAsync(VisualElement element, int durationMs)
