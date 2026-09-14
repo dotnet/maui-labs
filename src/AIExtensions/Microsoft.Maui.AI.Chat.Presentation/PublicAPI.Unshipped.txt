@@ -1,0 +1,69 @@
+#nullable enable
+Microsoft.Maui.AI.Chat.Presentation.AgentBlockBinding
+Microsoft.Maui.AI.Chat.Presentation.AgentBlockBinding.AgentBlockBinding(Microsoft.Maui.AI.Chat.ContentBlock! block, Microsoft.Maui.AI.Chat.ConversationTurn? turn, bool isRequest, System.Action! contentChanged) -> void
+Microsoft.Maui.AI.Chat.Presentation.AgentBlockBinding.AttachMessage(Microsoft.Maui.Chat.Controls.ConversationMessage! message) -> void
+Microsoft.Maui.AI.Chat.Presentation.AgentBlockBinding.Block.get -> Microsoft.Maui.AI.Chat.ContentBlock!
+Microsoft.Maui.AI.Chat.Presentation.AgentBlockBinding.Dispose() -> void
+Microsoft.Maui.AI.Chat.Presentation.AgentBlockBinding.IsRequest.get -> bool
+Microsoft.Maui.AI.Chat.Presentation.AgentBlockBinding.NotifyChanged() -> void
+Microsoft.Maui.AI.Chat.Presentation.AgentBlockBinding.Turn.get -> Microsoft.Maui.AI.Chat.ConversationTurn?
+Microsoft.Maui.AI.Chat.Presentation.AgentBlockContent
+Microsoft.Maui.AI.Chat.Presentation.AgentBlockContent.AgentBlockContent(Microsoft.Maui.AI.Chat.ContentBlock! block, Microsoft.Maui.AI.Chat.ConversationTurn? turn, bool isRequest) -> void
+Microsoft.Maui.AI.Chat.Presentation.AgentBlockContent.AttachMessage(Microsoft.Maui.Chat.Controls.ConversationMessage! message) -> void
+Microsoft.Maui.AI.Chat.Presentation.AgentBlockContent.Block.get -> Microsoft.Maui.AI.Chat.ContentBlock!
+Microsoft.Maui.AI.Chat.Presentation.AgentBlockContent.Dispose() -> void
+Microsoft.Maui.AI.Chat.Presentation.AgentBlockContent.IsRequest.get -> bool
+Microsoft.Maui.AI.Chat.Presentation.AgentBlockContent.NotifyChanged() -> void
+Microsoft.Maui.AI.Chat.Presentation.AgentBlockContent.Turn.get -> Microsoft.Maui.AI.Chat.ConversationTurn?
+Microsoft.Maui.AI.Chat.Presentation.AgentChatPresentation
+Microsoft.Maui.AI.Chat.Presentation.AgentChatPresentation.AgentChatPresentation(Microsoft.Maui.AI.Chat.AgentContext! session) -> void
+Microsoft.Maui.AI.Chat.Presentation.AgentChatPresentation.AssistantDisplayName.get -> string!
+Microsoft.Maui.AI.Chat.Presentation.AgentChatPresentation.AssistantDisplayName.set -> void
+Microsoft.Maui.AI.Chat.Presentation.AgentChatPresentation.AssistantParticipant.get -> Microsoft.Maui.Chat.Controls.ChatParticipant!
+Microsoft.Maui.AI.Chat.Presentation.AgentChatPresentation.Dispose() -> void
+Microsoft.Maui.AI.Chat.Presentation.AgentChatPresentation.Session.get -> Microsoft.Maui.AI.Chat.AgentContext!
+Microsoft.Maui.AI.Chat.Presentation.AgentChatPresentation.UpdateParticipantNames(string! userDisplayName, string! assistantDisplayName) -> void
+Microsoft.Maui.AI.Chat.Presentation.AgentChatPresentation.UserDisplayName.get -> string!
+Microsoft.Maui.AI.Chat.Presentation.AgentChatPresentation.UserDisplayName.set -> void
+Microsoft.Maui.AI.Chat.Presentation.AgentChatPresentation.UserParticipant.get -> Microsoft.Maui.Chat.Controls.ChatParticipant!
+Microsoft.Maui.AI.Chat.Presentation.AgentMediaMessageContent
+Microsoft.Maui.AI.Chat.Presentation.AgentMediaMessageContent.AgentMediaMessageContent(Microsoft.Maui.AI.Chat.MediaContentBlock! block, Microsoft.Extensions.AI.DataContent! item, int index, Microsoft.Maui.AI.Chat.ConversationTurn? turn, bool isRequest) -> void
+Microsoft.Maui.AI.Chat.Presentation.AgentMediaMessageContent.AttachMessage(Microsoft.Maui.Chat.Controls.ConversationMessage! message) -> void
+Microsoft.Maui.AI.Chat.Presentation.AgentMediaMessageContent.Block.get -> Microsoft.Maui.AI.Chat.ContentBlock!
+Microsoft.Maui.AI.Chat.Presentation.AgentMediaMessageContent.Dispose() -> void
+Microsoft.Maui.AI.Chat.Presentation.AgentMediaMessageContent.IsRequest.get -> bool
+Microsoft.Maui.AI.Chat.Presentation.AgentMediaMessageContent.NotifyChanged() -> void
+Microsoft.Maui.AI.Chat.Presentation.AgentMediaMessageContent.Turn.get -> Microsoft.Maui.AI.Chat.ConversationTurn?
+Microsoft.Maui.AI.Chat.Presentation.AgentStructuredTextMessageContent
+Microsoft.Maui.AI.Chat.Presentation.AgentStructuredTextMessageContent.AgentStructuredTextMessageContent(Microsoft.Maui.AI.Chat.RichContentBlock! block, Microsoft.Maui.AI.Chat.ConversationTurn? turn, bool isRequest) -> void
+Microsoft.Maui.AI.Chat.Presentation.AgentStructuredTextMessageContent.AttachMessage(Microsoft.Maui.Chat.Controls.ConversationMessage! message) -> void
+Microsoft.Maui.AI.Chat.Presentation.AgentStructuredTextMessageContent.Block.get -> Microsoft.Maui.AI.Chat.ContentBlock!
+Microsoft.Maui.AI.Chat.Presentation.AgentStructuredTextMessageContent.Dispose() -> void
+Microsoft.Maui.AI.Chat.Presentation.AgentStructuredTextMessageContent.IsRequest.get -> bool
+Microsoft.Maui.AI.Chat.Presentation.AgentStructuredTextMessageContent.NotifyChanged() -> void
+Microsoft.Maui.AI.Chat.Presentation.AgentStructuredTextMessageContent.Turn.get -> Microsoft.Maui.AI.Chat.ConversationTurn?
+Microsoft.Maui.AI.Chat.Presentation.AgentTextMessageContent
+Microsoft.Maui.AI.Chat.Presentation.AgentTextMessageContent.AgentTextMessageContent(Microsoft.Maui.AI.Chat.TextContentBlock! block, Microsoft.Maui.AI.Chat.ConversationTurn? turn, bool isRequest) -> void
+Microsoft.Maui.AI.Chat.Presentation.AgentTextMessageContent.AttachMessage(Microsoft.Maui.Chat.Controls.ConversationMessage! message) -> void
+Microsoft.Maui.AI.Chat.Presentation.AgentTextMessageContent.Block.get -> Microsoft.Maui.AI.Chat.ContentBlock!
+Microsoft.Maui.AI.Chat.Presentation.AgentTextMessageContent.Dispose() -> void
+Microsoft.Maui.AI.Chat.Presentation.AgentTextMessageContent.IsRequest.get -> bool
+Microsoft.Maui.AI.Chat.Presentation.AgentTextMessageContent.NotifyChanged() -> void
+Microsoft.Maui.AI.Chat.Presentation.AgentTextMessageContent.Turn.get -> Microsoft.Maui.AI.Chat.ConversationTurn?
+Microsoft.Maui.AI.Chat.Presentation.ErrorContentBlock
+Microsoft.Maui.AI.Chat.Presentation.ErrorContentBlock.ErrorContentBlock(string! message) -> void
+Microsoft.Maui.AI.Chat.Presentation.ErrorContentBlock.Message.get -> string!
+Microsoft.Maui.AI.Chat.Presentation.IAgentBlockContent
+Microsoft.Maui.AI.Chat.Presentation.IAgentBlockContent.AttachMessage(Microsoft.Maui.Chat.Controls.ConversationMessage! message) -> void
+Microsoft.Maui.AI.Chat.Presentation.IAgentBlockContent.Block.get -> Microsoft.Maui.AI.Chat.ContentBlock!
+Microsoft.Maui.AI.Chat.Presentation.IAgentBlockContent.IsRequest.get -> bool
+Microsoft.Maui.AI.Chat.Presentation.IAgentBlockContent.NotifyChanged() -> void
+Microsoft.Maui.AI.Chat.Presentation.IAgentBlockContent.Turn.get -> Microsoft.Maui.AI.Chat.ConversationTurn?
+Microsoft.Maui.AI.Chat.Presentation.ThinkingContentBlock
+Microsoft.Maui.AI.Chat.Presentation.ThinkingContentBlock.Text.get -> string!
+Microsoft.Maui.AI.Chat.Presentation.ThinkingContentBlock.ThinkingContentBlock(string! text = "Thinking…") -> void
+const Microsoft.Maui.AI.Chat.Presentation.ErrorContentBlock.DefaultUserMessage = "Something went wrong. Please try again." -> string!
+override Microsoft.Maui.AI.Chat.Presentation.AgentChatPresentation.CanCancel.get -> bool
+override Microsoft.Maui.AI.Chat.Presentation.AgentChatPresentation.CanSend(Microsoft.Maui.Chat.Controls.ChatDraft? draft) -> bool
+static Microsoft.Maui.AI.Chat.Presentation.AgentChatPresentation.CreateMessageContent(Microsoft.Maui.AI.Chat.ContentBlock! block, Microsoft.Maui.AI.Chat.ConversationTurn? turn, bool isRequest) -> Microsoft.Maui.Chat.Controls.MessageContent!
+static Microsoft.Maui.AI.Chat.Presentation.AgentChatPresentation.CreateMessageContents(Microsoft.Maui.AI.Chat.ContentBlock! block, Microsoft.Maui.AI.Chat.ConversationTurn? turn, bool isRequest) -> System.Collections.Generic.IReadOnlyList<Microsoft.Maui.Chat.Controls.MessageContent!>!

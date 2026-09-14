@@ -3,7 +3,7 @@ using Microsoft.Maui.Controls.Shapes;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
 
-/// <summary>Renders an <see cref="ErrorContentBlock"/> as an error-styled message bubble.</summary>
+/// <summary>Renders an <see cref="Presentation.ErrorContentBlock"/> as an error-styled message bubble.</summary>
 public sealed class ErrorMessageView : ContentContextView
 {
     private readonly Label _label;
@@ -45,7 +45,7 @@ public sealed class ErrorMessageView : ContentContextView
 
     protected override void RefreshFromContentContext()
     {
-        if (ContentContext?.Block is ErrorContentBlock error)
+        if (ContentContext?.Block is Presentation.ErrorContentBlock error)
         {
             _label.Text = $"⚠️ {error.Message}";
             _retry.IsVisible =
