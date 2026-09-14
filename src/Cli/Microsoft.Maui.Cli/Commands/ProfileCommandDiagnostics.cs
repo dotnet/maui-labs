@@ -11,7 +11,7 @@ internal static class ProfileCommandDiagnostics
 {
 	internal static void ValidateDnxAvailable()
 	{
-		var hasDnx = ProcessRunner.GetCommandPath("dnx") is not null;
+		var hasDnx = ResolveDnxCommand() is not null;
 		var hasDotnetTrace = CanResolveDiagnosticsTool(
 			FindInstalledDotnetToolCommand("dotnet-trace"),
 			FindCachedDotnetToolDll("dotnet-trace"));
@@ -58,15 +58,51 @@ internal static class ProfileCommandDiagnostics
 			return;
 		}
 
-		startInfo.FileName = "dnx";
-		startInfo.ArgumentList.Add("-y");
-		startInfo.ArgumentList.Add(packageId);
-		startInfo.ArgumentList.Add("--");
-		foreach (var arg in toolArgs)
-			startInfo.ArgumentList.Add(arg);
+		var dnxPath = ResolveDnxCommand();
+		if (dnxPath is null)
+		{
+			throw MauiToolException.UserActionRequired(
+				ErrorCodes.DiagnosticsToolNotFound,
+				$"Could not resolve a command for '{packageId}'.",
+				[
+					$"Install the global tool: `dotnet tool install -g {packageId}`.",
+					"Or install a .NET SDK that provides dnx on PATH: https://dot.net/download"
+				]);
+		}
 
-		commandLine = ProfileCommandProcessHelpers.FormatCommandLine("dnx", ["-y", packageId, "--", .. toolArgs]);
+		ConfigureDnxStartInfo(startInfo, dnxPath, packageId, toolArgs, out commandLine);
 	}
+
+	internal static void ConfigureDnxStartInfo(
+		ProcessStartInfo startInfo,
+		string dnxPath,
+		string packageId,
+		IReadOnlyList<string> toolArgs,
+		out string commandLine,
+		bool? isWindows = null)
+	{
+		var dnxArgs = new List<string> { "-y", packageId, "--" };
+		dnxArgs.AddRange(toolArgs);
+		if ((isWindows ?? OperatingSystem.IsWindows())
+			&& string.Equals(Path.GetExtension(dnxPath), ".cmd", StringComparison.OrdinalIgnoreCase))
+		{
+			startInfo.FileName = Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe";
+			var commandProcessorLine = string.Join(" ", new[] { dnxPath }.Concat(dnxArgs).Select(QuoteForCommandProcessor));
+			startInfo.Arguments = $"/d /s /v:off /c \"{commandProcessorLine}\"";
+		}
+		else
+		{
+			startInfo.FileName = dnxPath;
+			foreach (var arg in dnxArgs)
+				startInfo.ArgumentList.Add(arg);
+		}
+
+		commandLine = ProfileCommandProcessHelpers.FormatCommandLine(dnxPath, dnxArgs);
+	}
+
+	internal static string? ResolveDnxCommand() => ProcessRunner.GetCommandPath("dnx");
+
+	static string QuoteForCommandProcessor(string value) => $"\"{value.Replace("\"", "\"\"")}\"";
 
 	internal static bool CanResolveDiagnosticsTool(string? installedToolPath, string? cachedToolDll)
 		=> !string.IsNullOrWhiteSpace(installedToolPath) || !string.IsNullOrWhiteSpace(cachedToolDll);

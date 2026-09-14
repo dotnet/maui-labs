@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.CommandLine;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using Microsoft.Maui.Cli.Commands;
@@ -1027,6 +1028,55 @@ public class ProfileCommandTests
 	public void CanUseDiagnosticsTooling_MissingRequiredToolWithoutDnx_ReturnsFalse()
 	{
 		Assert.False(ProfileCommand.CanUseDiagnosticsTooling(hasDnx: false, hasDotnetTrace: true, hasDotnetDsrouter: false));
+	}
+
+	[Fact]
+	public void ConfigureDnxStartInfo_UsesResolvedCommandPath()
+	{
+		var startInfo = new ProcessStartInfo();
+		var dnxPath = TestPath("dotnet", "dnx");
+
+		ProfileCommandDiagnostics.ConfigureDnxStartInfo(
+			startInfo,
+			dnxPath,
+			"dotnet-trace",
+			["collect", "--output", "trace.nettrace"],
+			out var commandLine);
+
+		Assert.Equal(dnxPath, startInfo.FileName);
+		Assert.Equal(
+			["-y", "dotnet-trace", "--", "collect", "--output", "trace.nettrace"],
+			startInfo.ArgumentList);
+		Assert.Contains(dnxPath, commandLine);
+	}
+
+	[Fact]
+	public void ConfigureDnxStartInfo_WindowsCommandWrapperUsesCommandProcessor()
+	{
+		var startInfo = new ProcessStartInfo
+		{
+			RedirectStandardInput = true,
+			RedirectStandardOutput = true,
+			RedirectStandardError = true
+		};
+		var dnxPath = TestPath("Program Files", "dotnet", "dnx.cmd");
+
+		ProfileCommandDiagnostics.ConfigureDnxStartInfo(
+			startInfo,
+			dnxPath,
+			"dotnet-trace",
+			["collect", "--output", "trace.nettrace"],
+			out var commandLine,
+			isWindows: true);
+
+		Assert.EndsWith("cmd.exe", startInfo.FileName, StringComparison.OrdinalIgnoreCase);
+		Assert.Empty(startInfo.ArgumentList);
+		Assert.Contains("/c", startInfo.Arguments);
+		Assert.Contains(dnxPath, startInfo.Arguments);
+		Assert.True(startInfo.RedirectStandardInput);
+		Assert.True(startInfo.RedirectStandardOutput);
+		Assert.True(startInfo.RedirectStandardError);
+		Assert.Contains(dnxPath, commandLine);
 	}
 
 	[Fact]
