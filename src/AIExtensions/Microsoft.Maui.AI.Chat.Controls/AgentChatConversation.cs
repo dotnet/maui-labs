@@ -600,8 +600,8 @@ internal sealed class AgentBlockContent : MessageContent, IAgentBlockContent
     {
         ArgumentNullException.ThrowIfNull(block);
         Presentation = block is MediaContentBlock
-            ? ChatContentPresentation.Bubble
-            : ChatContentPresentation.Bare;
+            ? Microsoft.Maui.Chat.ChatContentPresentation.Bubble
+            : Microsoft.Maui.Chat.ChatContentPresentation.Bare;
         _binding = new AgentBlockBinding(
             block,
             turn,

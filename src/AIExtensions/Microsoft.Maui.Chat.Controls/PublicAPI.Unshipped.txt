@@ -40,6 +40,7 @@ Microsoft.Maui.Chat.Controls.ChatBubbleView.ApplyBubbleTextStyle(Microsoft.Maui.
 Microsoft.Maui.Chat.Controls.ChatBubbleView.BubbleContent.get -> Microsoft.Maui.Controls.View?
 Microsoft.Maui.Chat.Controls.ChatBubbleView.BubbleContent.set -> void
 Microsoft.Maui.Chat.Controls.ChatBubbleView.ChatBubbleView() -> void
+Microsoft.Maui.Chat.Controls.ChatContentPresentation
 Microsoft.Maui.Chat.Controls.ChatContentItem
 Microsoft.Maui.Chat.Controls.ChatContentItem.Appearance.get -> Microsoft.Maui.Chat.Controls.ChatAppearance!
 Microsoft.Maui.Chat.Controls.ChatContentItem.Appearance.set -> void
@@ -328,6 +329,8 @@ Microsoft.Maui.Chat.Controls.Themes.ChatViewTheme.ChatViewTheme() -> void
 abstract Microsoft.Maui.Chat.Controls.ChatBubbleView.GetContentDescription() -> string!
 abstract Microsoft.Maui.Chat.Controls.ChatContentTemplate.When(Microsoft.Maui.Chat.Controls.ChatContentItem! item) -> bool
 abstract Microsoft.Maui.Chat.Controls.ChatContentView.RefreshContent() -> void
+const Microsoft.Maui.Chat.Controls.ChatContentPresentation.Bare = Microsoft.Maui.Chat.ChatContentPresentation.Bare -> Microsoft.Maui.Chat.ChatContentPresentation
+const Microsoft.Maui.Chat.Controls.ChatContentPresentation.Bubble = Microsoft.Maui.Chat.ChatContentPresentation.Bubble -> Microsoft.Maui.Chat.ChatContentPresentation
 const Microsoft.Maui.Chat.Controls.ChatMessagesView.MessagesPartName = "PART_Messages" -> string!
 const Microsoft.Maui.Chat.Controls.ChatView.AttachButtonPartName = "PART_AttachButton" -> string!
 const Microsoft.Maui.Chat.Controls.ChatView.AttachmentsPartName = "PART_Attachments" -> string!

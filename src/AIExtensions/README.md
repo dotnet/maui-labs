@@ -25,6 +25,7 @@ thread.
 - [Chat core documentation](Microsoft.Maui.Chat/README.md) — shared model and composer controller
 - [Neutral chat documentation](Microsoft.Maui.Chat.Controls/README.md) — reusable human/group chat model, controls, and templates
 - [Neutral Blazor Hybrid chat documentation](Microsoft.Maui.Chat.Controls.Blazor/README.md) — same neutral conversation model rendered through a Blazor Hybrid `<ChatView>`
+- [Chat recording/replay utility](Microsoft.Maui.AI.Chat.Recording/README.md) — nonshipping semantic `IChatClient` fixtures for deterministic tests and offline samples
 - [Chat upstream notes](Microsoft.Maui.AI.Chat/UPSTREAM-CHANGES.md) — how the chat engine relates to the ASP.NET AI Components it forked from
 
 ## Samples

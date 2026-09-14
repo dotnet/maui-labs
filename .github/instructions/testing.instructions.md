@@ -17,6 +17,7 @@ applyTo: "**/*Tests*/**,**/*.Tests.*"
 | AIExtensions | `tests/AIExtensions/Microsoft.Maui.AI.Attributes.Tests/` | `net10.0` |
 | AIExtensions | `tests/AIExtensions/Microsoft.Maui.AI.Attributes.Generators.Tests/` | `net10.0` |
 | AIExtensions | `tests/AIExtensions/Microsoft.Maui.AI.Chat.Tests/` | `net10.0` |
+| AIExtensions | `tests/AIExtensions/Microsoft.Maui.AI.Chat.Recording.Tests/` | `net10.0` |
 | AIExtensions | `tests/AIExtensions/Microsoft.Maui.AI.Chat.Generators.Tests/` | `net10.0` |
 | AIExtensions | `tests/AIExtensions/Microsoft.Maui.AI.Chat.Controls.Tests/` | `net10.0` |
 | AIExtensions | `tests/AIExtensions/Microsoft.Maui.Chat.Controls.Tests/` | `net10.0` |
