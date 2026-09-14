@@ -48,6 +48,7 @@ public static class McpServerHost
 			.WithTools<ScreenshotTool>()
 			.WithTools<TreeTool>()
 			.WithTools<LayoutDiagnosticsTool>()
+			.WithTools<EvidenceTools>()
 			.WithTools<LogsTool>()
 			.WithTools<NetworkTool>()
 			.WithTools<InteractionTools>()

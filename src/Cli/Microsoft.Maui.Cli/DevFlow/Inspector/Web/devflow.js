@@ -1,5 +1,6 @@
 // DevFlow Web Inspector — Interaction Script
 // Composition root: coordinates browser events, app transport, recording, hosts, and feature modules.
+import { createEvidenceController } from './inspector-evidence.js';
 import { createInspectorApi } from './inspector-api.js';
 import { confirmModal } from './inspector-dialog.js';
 import { createDataSnapshot, isSecretContextKey, supportsDataContextScope } from './inspector-data-context.js';
@@ -950,6 +951,7 @@ import { createElementTreeController } from './inspector-tree.js';
   const toolbarActions = tb.secondary ? [...tb.secondary.querySelectorAll(':scope > button')] : [];
   const toolbarPriorities = new Map([
     ['df-goto-checkpoint', 10],
+    ['df-evidence', 15],
     ['df-assert', 20],
     ['df-toggle-bounds', 30],
     ['df-open-source', 50],
@@ -1441,10 +1443,13 @@ import { createElementTreeController } from './inspector-tree.js';
     // (setting textContent here would wipe the .df-btn-label wrapper the toolbar relies on).
     const lbl = recordBtn.querySelector('.df-btn-label');
     const label = recordingStopping ? 'Stopping…' : (recordingId ? `Rec (${recStepCount})` : 'Record');
-    if (lbl) lbl.textContent = label;
-    else recordBtn.textContent = recordingId ? `\u25CF ${label}` : `\u25CF ${label}`;
+    const labelElement = lbl || recordBtn;
+    const nextLabel = lbl ? label : `\u25CF ${label}`;
+    if (labelElement.textContent !== nextLabel) {
+      labelElement.textContent = nextLabel;
+      scheduleToolbarLayout();
+    }
     if (cancelRecordingBtn) cancelRecordingBtn.classList.toggle('df-hidden', !recordingId);
-    scheduleToolbarLayout();
   }
 
   // Highest-precedence DURABLE selector for the element (automationId > text > id). We never send a
@@ -1634,7 +1639,7 @@ import { createElementTreeController } from './inspector-tree.js';
     }
     if (timelineTitleText) timelineTitleText.textContent = 'Workflow';
     if (timelineMetaEl) {
-      const count = Number.isFinite(Number(steps))
+      const count = steps != null && Number.isFinite(Number(steps))
         ? `${Number(steps)} step${Number(steps) === 1 ? '' : 's'}`
         : null;
       timelineMetaEl.textContent = [lastMarkdownName, count].filter(Boolean).join(' · ');
@@ -1983,6 +1988,19 @@ import { createElementTreeController } from './inspector-tree.js';
   });
 
   function selectedElement() { return selectedId ? elById(selectedId) : null; }
+
+  const evidence = createEvidenceController({
+    basePath,
+    inspectorToken,
+    api: inspectorApi,
+    setStatus,
+    getSelectedId: () => selectedId,
+    getWorkflow: () => lastMarkdown,
+  });
+  document.getElementById('df-evidence')?.addEventListener('click', () => {
+    setMoreOpen(false, false, document.body.classList.contains('df-more-open'));
+    evidence.open();
+  });
 
   function setExplainedDisabled(button, disabled) {
     if (!button) return;

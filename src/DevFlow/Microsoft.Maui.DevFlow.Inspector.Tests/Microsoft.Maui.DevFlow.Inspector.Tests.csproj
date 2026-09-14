@@ -18,6 +18,8 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Compile Include="..\..\Cli\Microsoft.Maui.Cli.UnitTests\Fixtures\EvidenceAgentFixture.cs"
+             Link="Fixtures\EvidenceAgentFixture.cs" />
   </ItemGroup>
 
 </Project>
