@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);OPENAI001</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\AIChat.ClientServer.Sample.Shared\AIChat.ClientServer.Sample.Shared.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="AGUI.Server" />
+    <PackageReference Include="Microsoft.Agents.AI" VersionOverride="1.15.0" />
+    <PackageReference Include="Microsoft.Agents.AI.Hosting" VersionOverride="1.15.0-preview.260722.1" />
+    <PackageReference Include="Microsoft.Agents.AI.Hosting.AGUI.AspNetCore" />
+    <PackageReference Include="Microsoft.Agents.AI.OpenAI" />
+    <PackageReference Include="Microsoft.Agents.AI.Workflows" VersionOverride="1.15.0" />
+    <PackageReference Include="Azure.AI.OpenAI" VersionOverride="2.9.0-beta.1" />
+    <PackageReference Include="Azure.Identity" VersionOverride="1.21.0" />
+    <!-- Azure.AI.OpenAI 2.9.0-beta.1 requires an OpenAI client before the API change in 2.11. -->
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" VersionOverride="10.6.0" />
+    <PackageReference Include="OpenAI" VersionOverride="2.10.0" />
+  </ItemGroup>
+</Project>
