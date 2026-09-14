@@ -3,11 +3,11 @@ namespace Microsoft.Maui.Chat.Controls;
 internal sealed class ChatTemplatedBubbleView : ChatBubbleView
 {
     private readonly View _body;
-    private readonly ChatContentPresentation? _presentationOverride;
+    private readonly Microsoft.Maui.Chat.ChatContentPresentation? _presentationOverride;
 
     public ChatTemplatedBubbleView(
         View body,
-        ChatContentPresentation? presentationOverride)
+        Microsoft.Maui.Chat.ChatContentPresentation? presentationOverride)
     {
         _body = body;
         _presentationOverride = presentationOverride;
@@ -25,7 +25,8 @@ internal sealed class ChatTemplatedBubbleView : ChatBubbleView
     }
 
     protected override bool ResolveUsesStandardBubble(ChatContentItem item) =>
-        (_presentationOverride ?? item.Content.Presentation) == ChatContentPresentation.Bubble;
+        (_presentationOverride ?? item.Content.Presentation) ==
+            Microsoft.Maui.Chat.ChatContentPresentation.Bubble;
 
     protected override string GetContentDescription()
     {
