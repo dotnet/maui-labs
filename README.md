@@ -14,7 +14,7 @@ At a glance:
 | [Comet](#comet) | Experimental MVU UI framework for .NET MAUI with C# fluent UI, signals, and reactive state. |
 | [Go](#go) | Single-file Comet app server and companion app for rapid prototyping. |
 | [DevFlow](#devflow) | Runtime app automation, inspection, debugging, and MCP tooling for .NET MAUI apps — and for plain .NET Android, iOS, Mac Catalyst and macOS apps. |
-| [AI Extensions](#ai-extensions) | Source-generated `Microsoft.Extensions.AI` tool bindings for MAUI and .NET apps. |
+| [AI Extensions](#ai-extensions) | Source-generated AI tool bindings plus semantic app indexing and wayfinding for MAUI apps. |
 | [macOS AppKit Backend](#macos-appkit-backend) | Native AppKit backend for running MAUI apps as macOS apps without Mac Catalyst. |
 | [WPF Backend](#wpf-backend) | WPF-based Windows desktop backend for .NET MAUI apps. |
 | [Essentials.AI](#essentialsai) | On-device AI APIs for chat completion, embeddings, and tool calling in MAUI apps. |
@@ -102,13 +102,18 @@ Source-generated AI tool discovery — annotate methods or property accessors wi
 |---------|-------------|
 | [![NuGet: Microsoft.Maui.AI.Attributes](https://img.shields.io/nuget/v/Microsoft.Maui.AI.Attributes.svg?label=Microsoft.Maui.AI.Attributes)](https://www.nuget.org/packages/Microsoft.Maui.AI.Attributes/) | Source-generated AI tool contexts for `Microsoft.Extensions.AI` |
 
-#### AI Navigation
+#### AI Wayfinding
 
-Runtime Shell route discovery and template-aware navigation for AI agents. Clean URIs like `//main/products/product/seed-tomato/review` are resolved to one Shell URI with route-scoped query parameters.
+Compile-time semantic XAML indexing, live current-screen context, and
+template-aware Shell navigation for AI agents. The application map finds a feature,
+explains its verified page path, validates route parameters, and resolves clean URIs
+like `//main/products/product/seed-tomato/review` to one Shell navigation call.
 
 | Package | Description |
 |---------|-------------|
-| `Microsoft.Maui.AI.Navigation` | Runtime Shell route discovery and AI-friendly navigation |
+| `Microsoft.Maui.AI.Indexer` | Generated semantic page catalog and runtime current-page snapshots |
+| `Microsoft.Maui.AI.Navigation` | Model-independent Shell route discovery and navigation |
+| `Microsoft.Maui.AI.Wayfinding` | AI middleware combining indexing, current context, semantic destinations, navigation, and optional vision |
 
 ### macOS AppKit Backend
 

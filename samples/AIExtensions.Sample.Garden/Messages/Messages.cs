@@ -13,6 +13,11 @@ public sealed class CartChangedMessage;
 public sealed class ChatTurnCompletedMessage;
 
 /// <summary>
+/// Broadcast when completed order history changes outside the AI chat loop.
+/// </summary>
+public sealed class OrderArchiveChangedMessage;
+
+/// <summary>
 /// Broadcast when a new chat message is appended so views can scroll.
 /// </summary>
 public sealed class ChatMessageAddedMessage(ChatMessageViewModel message)

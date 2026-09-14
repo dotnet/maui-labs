@@ -7,7 +7,9 @@ using Azure.AI.OpenAI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Maui.AI.Indexer;
 using Microsoft.Maui.AI.Navigation;
+using Microsoft.Maui.AI.Wayfinding;
 using Microsoft.Maui.DevFlow.Agent;
 
 namespace AIExtensions.Sample.Garden;
@@ -50,8 +52,9 @@ public static class MauiProgram
         builder.Services.AddSingleton<IOrderArchive, PreferencesOrderArchive>();
         builder.Services.AddSingleton<CurrentCart>();
         builder.Services.AddSingleton<ReviewStore>();
-        builder.Services.AddSingleton<ShellNavigationService>();
-        builder.Services.AddSingleton<AINavigationService>();
+        builder.Services.AddMauiWayfinding(
+            AIExtensions_Sample_GardenIndexedPageCatalog.Default,
+            options => options.EnableVision = true);
 
         builder.AddOpenAIServices();
 
@@ -63,6 +66,7 @@ public static class MauiProgram
         builder.Services.AddTransient<ProductReviewViewModel>();
         builder.Services.AddTransient<OrderDetailViewModel>();
         builder.Services.AddSingleton<MainViewModel>();
+        builder.Services.AddTransient<AppShell>();
         builder.Services.AddTransient<MainPage>();
         builder.Services.AddTransient<OrdersPage>();
         builder.Services.AddTransient<CatalogPage>();
@@ -114,8 +118,12 @@ public static class MauiProgram
             new Uri(endpoint),
             new ApiKeyCredential(apiKey));
         var chatClient = azureClient.GetChatClient(deploymentName);
+        var aiChatClient = chatClient.AsIChatClient();
 
-        builder.Services.AddSingleton<IChatClient>(chatClient.AsIChatClient());
+        builder.Services.AddSingleton<IChatClient>(aiChatClient);
+        builder.Services.AddKeyedSingleton<IChatClient>(
+            MauiWayfindingOptions.VisionChatClientServiceKey,
+            aiChatClient);
 
         return builder;
     }

@@ -5,8 +5,12 @@
       "src\\AIExtensions\\Microsoft.Maui.AI.Attributes\\Microsoft.Maui.AI.Attributes.csproj",
       "src\\AIExtensions\\Microsoft.Maui.AI.Attributes.Generators\\Microsoft.Maui.AI.Attributes.Generators.csproj",
       "src\\AIExtensions\\Microsoft.Maui.AI.Navigation\\Microsoft.Maui.AI.Navigation.csproj",
+      "src\\AIExtensions\\Microsoft.Maui.AI.Wayfinding\\Microsoft.Maui.AI.Wayfinding.csproj",
+      "src\\AIExtensions\\Microsoft.Maui.AI.Indexer\\Microsoft.Maui.AI.Indexer.csproj",
+      "src\\AIExtensions\\Microsoft.Maui.AI.Indexer.Generators\\Microsoft.Maui.AI.Indexer.Generators.csproj",
       "tests\\AIExtensions\\Microsoft.Maui.AI.Attributes.Tests\\Microsoft.Maui.AI.Attributes.Tests.csproj",
       "tests\\AIExtensions\\Microsoft.Maui.AI.Attributes.Generators.Tests\\Microsoft.Maui.AI.Attributes.Generators.Tests.csproj",
+      "tests\\AIExtensions\\Microsoft.Maui.AI.Indexer.Tests\\Microsoft.Maui.AI.Indexer.Tests.csproj",
       "tests\\AIExtensions\\Microsoft.Maui.AI.Navigation.Tests\\Microsoft.Maui.AI.Navigation.Tests.csproj"
     ]
   }

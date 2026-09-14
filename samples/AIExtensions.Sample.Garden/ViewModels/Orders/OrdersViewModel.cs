@@ -10,7 +10,10 @@ namespace AIExtensions.Sample.Garden.ViewModels;
 /// <summary>
 /// Owns order history state, reorder, and clear actions.
 /// </summary>
-public sealed partial class OrdersViewModel : ObservableObject, IRecipient<ChatTurnCompletedMessage>
+public sealed partial class OrdersViewModel :
+    ObservableObject,
+    IRecipient<ChatTurnCompletedMessage>,
+    IRecipient<OrderArchiveChangedMessage>
 {
     private readonly IOrderArchive _archive;
     private readonly CurrentCart _currentCart;
@@ -20,13 +23,20 @@ public sealed partial class OrdersViewModel : ObservableObject, IRecipient<ChatT
         _archive = archive;
         _currentCart = currentCart;
 
-        WeakReferenceMessenger.Default.Register(this);
+        WeakReferenceMessenger.Default.RegisterAll(this);
         Refresh();
     }
 
     public ObservableCollection<OrderViewModel> Orders { get; } = [];
 
+    [ObservableProperty]
+    public partial OrderInsightsSnapshot Insights { get; set; } =
+        OrderInsightsSnapshot.Empty;
+
     void IRecipient<ChatTurnCompletedMessage>.Receive(ChatTurnCompletedMessage message)
+        => Refresh();
+
+    void IRecipient<OrderArchiveChangedMessage>.Receive(OrderArchiveChangedMessage message)
         => Refresh();
 
     [RelayCommand]
@@ -41,7 +51,7 @@ public sealed partial class OrdersViewModel : ObservableObject, IRecipient<ChatT
     private void Clear()
     {
         _archive.Clear();
-        Refresh();
+        WeakReferenceMessenger.Default.Send(new OrderArchiveChangedMessage());
     }
 
     public void Refresh()
@@ -59,5 +69,7 @@ public sealed partial class OrdersViewModel : ObservableObject, IRecipient<ChatT
             if (!existing.Contains(order.Id))
                 Orders.Add(new OrderViewModel(order));
         }
+
+        Insights = OrderInsightsSnapshot.Create(source);
     }
 }

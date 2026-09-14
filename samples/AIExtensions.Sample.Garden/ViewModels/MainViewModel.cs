@@ -9,7 +9,7 @@ namespace AIExtensions.Sample.Garden.ViewModels;
 /// <summary>
 /// Top-level view model for <see cref="Pages.MainPage"/>.
 /// Owns the new-session action and the cart header button.
-/// Navigation AI tools have moved to <see cref="AINavigationService"/>.
+/// AI wayfinding is composed from the independent Indexer and Navigation middleware.
 /// </summary>
 public sealed partial class MainViewModel(CurrentCart currentCart) : ObservableObject
 {
