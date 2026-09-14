@@ -24,6 +24,8 @@ internal static class ProfileSessionRunner
 					// newline (or close stdin) to stop. Other modes keep the existing
 					// "no manual stop in JSON" behavior.
 					allowManualStop: !context.UseJson || context.ManualStart,
+					context.EffectiveDuration,
+					context.TraceFinalizationStarted.Task,
 					context.TraceStopTimeout,
 					context.Formatter,
 					context.UseJson,

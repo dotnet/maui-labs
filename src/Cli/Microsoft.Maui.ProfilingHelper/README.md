@@ -39,7 +39,7 @@ or:
 maui profile startup --duration 00:00:15
 ```
 
-Trace duration and trace finalization are separate limits. By default, the CLI waits up to two minutes for `dotnet-trace` to finish rundown and flush the output after a stop request. Use `--trace-stop-timeout` when a large trace or a slower device needs a different finalization window:
+Trace duration and trace finalization are separate limits. By default, the CLI waits up to two minutes for `dotnet-trace` to finish rundown and flush the output after a manual, timed, or event-driven stop. Use `--trace-stop-timeout` when a large trace or a slower device needs a different finalization window:
 
 ```sh
 maui profile startup --duration 00:00:20 --trace-stop-timeout 00:05:00

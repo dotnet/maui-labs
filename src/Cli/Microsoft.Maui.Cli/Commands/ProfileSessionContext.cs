@@ -56,6 +56,7 @@ internal sealed class ProfileSessionContext
 	internal DateTimeOffset StartedAtUtc { get; }
 	internal bool UseRuntimeOwnedTraceCollection { get; set; }
 	internal string? RuntimeOwnedTraceDevicePath { get; set; }
+	internal TaskCompletionSource<bool> TraceFinalizationStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 	internal bool StartTraceAfterLaunch =>
 		string.Equals(Transport.Platform, Platforms.Android, StringComparison.OrdinalIgnoreCase) ||
 		string.Equals(Transport.Platform, Platforms.iOS, StringComparison.OrdinalIgnoreCase);

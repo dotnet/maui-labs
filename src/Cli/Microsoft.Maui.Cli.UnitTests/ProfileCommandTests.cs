@@ -196,6 +196,73 @@ public class ProfileCommandTests
 		Assert.True(process.HasExited);
 	}
 
+	[Theory]
+	[InlineData("Stopping the trace. This may take several minutes depending on the application being traced.", true)]
+	[InlineData("Trace completed.", false)]
+	public void IsFinalizationStartedMessage_RecognizesDotnetTraceRundownOutput(string line, bool expected)
+	{
+		Assert.Equal(expected, DotnetTraceRunner.IsFinalizationStartedMessage(line));
+	}
+
+	[Fact]
+	public async Task WaitForCompletionAsync_TimedStopUsesTraceStopTimeout()
+	{
+		var startInfo = new ProcessStartInfo
+		{
+			FileName = OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/sh",
+			UseShellExecute = false,
+			RedirectStandardInput = true,
+			RedirectStandardOutput = true,
+			RedirectStandardError = true,
+			CreateNoWindow = true
+		};
+		if (OperatingSystem.IsWindows())
+		{
+			startInfo.ArgumentList.Add("/c");
+			startInfo.ArgumentList.Add("echo timed-collector-output & ping 127.0.0.1 -n 30 > nul");
+		}
+		else
+		{
+			startInfo.ArgumentList.Add("-c");
+			startInfo.ArgumentList.Add("echo timed-collector-output; sleep 30");
+		}
+
+		using var process = Process.Start(startInfo)!;
+		using var monitoredProcess = MonitoredProcess.Attach(
+			process,
+			new JsonOutputFormatter(TextWriter.Null),
+			useJson: true,
+			verbose: false,
+			"trace",
+			CancellationToken.None);
+		try
+		{
+			for (var attempt = 0; attempt < 100 && monitoredProcess.StandardOutput.Length == 0; attempt++)
+				await Task.Delay(10);
+
+			var exception = await Assert.ThrowsAsync<MauiToolException>(() =>
+				ProfileTraceLifecycle.WaitForCompletionAsync(
+					monitoredProcess,
+					allowManualStop: false,
+					duration: TimeSpan.FromMilliseconds(10),
+					finalizationStartedTask: Task.Delay(Timeout.InfiniteTimeSpan),
+					traceStopTimeout: TimeSpan.FromMilliseconds(50),
+					new JsonOutputFormatter(TextWriter.Null),
+					useJson: true,
+					verbose: false,
+					CancellationToken.None));
+
+			Assert.Contains("after the stop request", exception.Message, StringComparison.Ordinal);
+			Assert.Contains("timed-collector-output", exception.NativeError, StringComparison.Ordinal);
+		}
+		finally
+		{
+			if (!process.HasExited)
+				process.Kill(entireProcessTree: true);
+			await process.WaitForExitAsync();
+		}
+	}
+
 	[Fact]
 	public void ProfileCommand_DefaultConfigurationIsRelease()
 	{
