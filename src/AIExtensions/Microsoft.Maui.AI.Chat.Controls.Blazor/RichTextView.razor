@@ -1,0 +1,46 @@
+@namespace Microsoft.Maui.AI.Chat.Controls.Blazor
+@using Microsoft.AspNetCore.Components.Rendering
+
+<div class="mai-rich">@RenderNodes(Nodes)</div>
+
+@code {
+    /// <summary>Gets or sets rich text nodes.</summary>
+    [Parameter] public IReadOnlyList<RichTextNode>? Nodes { get; set; }
+    /// <summary>Gets or sets readable content for unsupported node types.</summary>
+    [Parameter] public string? Fallback { get; set; }
+
+    private RenderFragment RenderNodes(IReadOnlyList<RichTextNode>? nodes) => builder =>
+    {
+        if (nodes is null || nodes.Count == 0) { builder.AddContent(0, Fallback); return; }
+        var sequence = 0;
+        foreach (var node in nodes)
+            RenderNode(builder, ref sequence, node);
+    };
+
+    private static void RenderNode(RenderTreeBuilder builder, ref int sequence, RichTextNode node)
+    {
+        switch (node)
+        {
+            case TextNode text: builder.AddContent(sequence++, text.Text); break;
+            case LineBreakNode: builder.AddMarkupContent(sequence++, "<br />"); break;
+            case CodeBlockNode code:
+                builder.OpenElement(sequence++, "pre"); builder.AddContent(sequence++, code.Code); builder.CloseElement(); break;
+            case InlineCodeNode code:
+                builder.OpenElement(sequence++, "code"); builder.AddContent(sequence++, code.Code); builder.CloseElement(); break;
+            case LinkNode link when IsSafeUri(link.Url):
+                builder.OpenElement(sequence++, "a"); builder.AddAttribute(sequence++, "href", link.Url); builder.AddAttribute(sequence++, "rel", "noopener noreferrer"); RenderChildren(builder, ref sequence, link); builder.CloseElement(); break;
+            case ImageNode image when IsSafeUri(image.Url):
+                builder.OpenElement(sequence++, "img"); builder.AddAttribute(sequence++, "src", image.Url); builder.AddAttribute(sequence++, "alt", image.Alt ?? string.Empty); builder.CloseElement(); break;
+            default: RenderChildren(builder, ref sequence, node); break;
+        }
+    }
+
+    private static void RenderChildren(RenderTreeBuilder builder, ref int sequence, RichTextNode node)
+    {
+        foreach (var child in node.Children) RenderNode(builder, ref sequence, child);
+    }
+
+    private static bool IsSafeUri(string value) =>
+        Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
+        (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+}

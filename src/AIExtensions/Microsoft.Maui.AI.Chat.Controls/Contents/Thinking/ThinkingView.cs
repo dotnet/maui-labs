@@ -3,7 +3,7 @@ using Microsoft.Maui.Controls.Shapes;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
 
-/// <summary>Renders a <see cref="ThinkingContentBlock"/> as an assistant bubble with a spinner and status text.</summary>
+/// <summary>Renders a <see cref="Presentation.ThinkingContentBlock"/> as an assistant bubble with a spinner and status text.</summary>
 public sealed class ThinkingView : ContentContextView
 {
     private readonly Label _label;
@@ -48,7 +48,7 @@ public sealed class ThinkingView : ContentContextView
 
     protected override void RefreshFromContentContext()
     {
-        if (ContentContext?.Block is ThinkingContentBlock thinking)
+        if (ContentContext?.Block is Presentation.ThinkingContentBlock thinking)
             _label.Text = thinking.Text;
     }
 }
