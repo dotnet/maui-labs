@@ -406,10 +406,8 @@ public class UIAgent : IDisposable
             return update;
 
         var context = new StateMapperContext(update);
-        if (!_options.StateMapper(context))
-            return update;
-
         stateContext = context;
+        _options.StateMapper(context);
         return context.HasHandledContent ? context.GetFilteredUpdate() : update;
     }
 
@@ -448,6 +446,8 @@ public class UIAgent : IDisposable
             return _options.ChatOptions;
 
         var chatOptions = _options.ChatOptions?.Clone() ?? new ChatOptions();
+        // ChatOptions.Clone does not retain this transport customization on all M.E.AI versions.
+        chatOptions.RawRepresentationFactory = _options.ChatOptions?.RawRepresentationFactory;
         if (conversationId is not null)
             chatOptions.ConversationId = conversationId;
 
@@ -457,8 +457,9 @@ public class UIAgent : IDisposable
                 ? new List<AITool>()
                 : [.. chatOptions.Tools];
 
-            foreach (var action in _options.UIActions.Values)
+            foreach (var registration in _options.UIActions.Values)
             {
+                var action = registration.Function;
                 if (tools.Any(tool => string.Equals(
                     tool.Name,
                     action.Name,

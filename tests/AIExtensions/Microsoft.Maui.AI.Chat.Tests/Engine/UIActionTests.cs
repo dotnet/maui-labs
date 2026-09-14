@@ -59,6 +59,52 @@ public class UIActionTests
     }
 
     [Fact]
+    public async Task UIAction_ManualInvocation_AwaitsInputAndResumesAsToolResult()
+    {
+        var action = AIFunctionFactory.Create(
+            (string city) => city,
+            "ChooseCity",
+            "Chooses a city");
+        IReadOnlyList<ChatMessage>? continuation = null;
+        var calls = 0;
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((messages, _, cancellationToken) =>
+        {
+            if (++calls == 1)
+                return EmitUIActionCall(
+                    "city-1",
+                    "ChooseCity",
+                    cancellationToken,
+                    new Dictionary<string, object?> { ["city"] = string.Empty });
+
+            continuation = messages.ToArray();
+            return ResponseEmitters.EmitTextResponse("Done", cancellationToken);
+        });
+        var context = new AgentContext(new UIAgent(client, options =>
+            options.RegisterUIAction(action, UIActionInvocationMode.Manual)));
+        var statuses = new List<ConversationStatus>();
+        context.RegisterOnStatusChanged(status =>
+        {
+            statuses.Add(status);
+            if (status == ConversationStatus.AwaitingInput)
+            {
+                var block = context.Turns[^1].ResponseBlocks.OfType<UIActionBlock>().Single();
+                block.Call!.Arguments!["city"] = "Portland";
+                _ = block.InvokeAsync();
+            }
+        });
+
+        await context.SendMessageAsync("Pick a city");
+
+        Assert.Contains(ConversationStatus.AwaitingInput, statuses);
+        var result = Assert.Single(
+            continuation!.Single(message => message.Role == ChatRole.Tool).Contents
+                .OfType<FunctionResultContent>());
+        Assert.Equal("city-1", result.CallId);
+        Assert.Equal("Portland", result.Result?.ToString());
+    }
+
+    [Fact]
     public async Task UIAction_WithArguments_InvokesOnceAndPreservesBlockArguments()
     {
         var invocationCount = 0;
@@ -143,6 +189,38 @@ public class UIActionTests
         await context.SendMessageAsync("Capture services");
 
         Assert.Same(services, action.CapturedServices);
+    }
+
+    [Fact]
+    public async Task UIAction_StatefulThread_PreservesRawRepresentationFactory()
+    {
+        var action = AIFunctionFactory.Create(() => "ok", "ClientTool", "Client tool");
+        var thread = new InMemoryConversationThread("thread-1");
+        var configured = new ChatOptions { RawRepresentationFactory = static _ => new object() };
+        ChatOptions? captured = null;
+        var calls = 0;
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((_, options, cancellationToken) =>
+        {
+            if (++calls == 1)
+                return EmitResponseWithConversationId(cancellationToken);
+
+            captured = options;
+            return ResponseEmitters.EmitTextResponse("second", cancellationToken);
+        });
+        var agent = new UIAgent(client, options =>
+        {
+            options.ChatOptions = configured;
+            options.Thread = thread;
+            options.RegisterUIAction(action);
+        });
+
+        await EnumerateAsync(agent.SendMessageAsync(new ChatMessage(ChatRole.User, "first")));
+        await EnumerateAsync(agent.SendMessageAsync(new ChatMessage(ChatRole.User, "second")));
+
+        Assert.NotNull(captured);
+        Assert.NotSame(configured, captured);
+        Assert.NotNull(captured!.RawRepresentationFactory);
     }
 
     [Fact]
@@ -289,6 +367,9 @@ public class UIActionTests
         Assert.True(block.IsComplete);
         Assert.Equal(BlockLifecycleState.Inactive, block.LifecycleState);
         Assert.Equal("existing result", block.Result?.Result);
+        Assert.Equal(
+            "existing result",
+            Assert.IsType<FunctionResultContent>(await block.GetResultAsync()).Result);
         Assert.Equal(0, invocationCount);
         Assert.Equal(ConversationStatus.Idle, context.Status);
     }
@@ -507,6 +588,19 @@ public class UIActionTests
                 new FunctionCallContent("completed", "ClientTool"),
                 new FunctionResultContent("completed", "existing result"),
             ],
+        };
+        await Task.CompletedTask;
+    }
+
+    private static async IAsyncEnumerable<ChatResponseUpdate> EmitResponseWithConversationId(
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        yield return new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            ConversationId = "provider-conversation",
+            Contents = [new TextContent("first")],
         };
         await Task.CompletedTask;
     }

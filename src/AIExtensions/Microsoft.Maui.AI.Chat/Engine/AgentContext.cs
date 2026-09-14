@@ -235,7 +235,10 @@ public class AgentContext(UIAgent agent) : IDisposable
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    if (block is UIActionBlock uiAction)
+                    if (block is UIActionBlock
+                        {
+                            Mode: UIActionInvocationMode.Automatic,
+                        } uiAction)
                     {
                         if (!uiAction.IsComplete)
                             uiActionBlocks.Add(uiAction);

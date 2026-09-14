@@ -40,7 +40,10 @@ foreach (var block in turn.ResponseBlocks)
 - Minimal paragraph/text rich-content AST plus an extensible rich-node vocabulary.
 - Function call/result correlation, including batched out-of-order results.
 - `ToolApprovalBlock` human-in-the-loop flow with single-use decisions.
-- Automatic `UIActionBlock` client actions without a false human-input pause.
+- Automatic or manually invoked `UIActionBlock` client actions, with no false human-input pause
+  for automatic actions.
+- Extensible `ActivityContentBlock`/`ActivityHandler<TBlock>` support for provider activity
+  snapshots and deltas (handlers are opt-in).
 - Reasoning and protected-reasoning blocks.
 - Direct media plus hosted image-generation result extraction.
 - Custom streaming handlers and many-to-one aggregate blocks.
@@ -85,6 +88,13 @@ discriminators must survive serialization; `RawRepresentation` is not durable un
 persisted. A thread keeps one pending turn until `CompleteTurn`; `AbortTurn` must discard that pending
 turn after cancellation or failure without touching committed history. Restored approvals and UI
 actions are display history, not resumable pending work.
+
+## State and provider metadata
+
+`StateMapperContext` maps inbound updates to application state. It runs for every configured
+update; call `MarkHandled` only for content that should not be rendered. `ChatOptions.RawRepresentationFactory`
+is retained when the engine adds AG-UI stateful-thread or UI-action metadata. It is
+transport-neutral request customization, not a provider API or dependency.
 
 ## Threading contract
 
