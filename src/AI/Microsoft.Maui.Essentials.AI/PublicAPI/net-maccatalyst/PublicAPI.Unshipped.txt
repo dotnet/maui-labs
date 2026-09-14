@@ -1,4 +1,43 @@
 ﻿#nullable enable
+Microsoft.Maui.Essentials.AI.ChatClientImageClassificationClient
+Microsoft.Maui.Essentials.AI.ChatClientImageClassificationClient.ChatClientImageClassificationClient(Microsoft.Extensions.AI.IChatClient! chatClient, System.Collections.Generic.IEnumerable<string!>! labels, Microsoft.Maui.Essentials.AI.ImageClassificationClientMetadata? metadata = null) -> void
+Microsoft.Maui.Essentials.AI.ChatClientImageClassificationClient.ClassifyImageAsync(System.IO.Stream! imageStream, string! imageMediaType, Microsoft.Maui.Essentials.AI.ImageClassificationOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Maui.Essentials.AI.ImageClassificationResult!>!
+Microsoft.Maui.Essentials.AI.ChatClientImageClassificationClient.Dispose() -> void
+Microsoft.Maui.Essentials.AI.ChatClientImageClassificationClient.GetService(System.Type! serviceType, object? serviceKey = null) -> object?
+Microsoft.Maui.Essentials.AI.IImageClassificationClient
+Microsoft.Maui.Essentials.AI.IImageClassificationClient.ClassifyImageAsync(System.IO.Stream! imageStream, string! imageMediaType, Microsoft.Maui.Essentials.AI.ImageClassificationOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Maui.Essentials.AI.ImageClassificationResult!>!
+Microsoft.Maui.Essentials.AI.IImageClassificationClient.GetService(System.Type! serviceType, object? serviceKey = null) -> object?
+Microsoft.Maui.Essentials.AI.ImageClassificationClientExtensions
+Microsoft.Maui.Essentials.AI.ImageClassificationClientMetadata
+Microsoft.Maui.Essentials.AI.ImageClassificationClientMetadata.DefaultModelId.get -> string?
+Microsoft.Maui.Essentials.AI.ImageClassificationClientMetadata.ImageClassificationClientMetadata(string? providerName = null, System.Uri? providerUri = null, string? defaultModelId = null) -> void
+Microsoft.Maui.Essentials.AI.ImageClassificationClientMetadata.ProviderName.get -> string?
+Microsoft.Maui.Essentials.AI.ImageClassificationClientMetadata.ProviderUri.get -> System.Uri?
+Microsoft.Maui.Essentials.AI.ImageClassificationOptions
+Microsoft.Maui.Essentials.AI.ImageClassificationOptions.ImageClassificationOptions() -> void
+Microsoft.Maui.Essentials.AI.ImageClassificationOptions.ImageClassificationOptions(Microsoft.Maui.Essentials.AI.ImageClassificationOptions? other) -> void
+Microsoft.Maui.Essentials.AI.ImageClassificationOptions.MaximumInputBytes.get -> long
+Microsoft.Maui.Essentials.AI.ImageClassificationOptions.MaximumInputBytes.set -> void
+Microsoft.Maui.Essentials.AI.ImageClassificationOptions.MaximumPredictions.get -> int?
+Microsoft.Maui.Essentials.AI.ImageClassificationOptions.MaximumPredictions.set -> void
+Microsoft.Maui.Essentials.AI.ImageClassificationOptions.MinimumConfidence.get -> float?
+Microsoft.Maui.Essentials.AI.ImageClassificationOptions.MinimumConfidence.set -> void
+Microsoft.Maui.Essentials.AI.ImageClassificationPrediction
+Microsoft.Maui.Essentials.AI.ImageClassificationPrediction.Confidence.get -> float?
+Microsoft.Maui.Essentials.AI.ImageClassificationPrediction.ImageClassificationPrediction(string! label, float? confidence = null) -> void
+Microsoft.Maui.Essentials.AI.ImageClassificationPrediction.Label.get -> string!
+Microsoft.Maui.Essentials.AI.ImageClassificationResult
+Microsoft.Maui.Essentials.AI.ImageClassificationResult.AdditionalProperties.get -> Microsoft.Extensions.AI.AdditionalPropertiesDictionary?
+Microsoft.Maui.Essentials.AI.ImageClassificationResult.AdditionalProperties.set -> void
+Microsoft.Maui.Essentials.AI.ImageClassificationResult.ImageClassificationResult(System.Collections.Generic.IEnumerable<Microsoft.Maui.Essentials.AI.ImageClassificationPrediction!>! predictions) -> void
+Microsoft.Maui.Essentials.AI.ImageClassificationResult.ModelId.get -> string?
+Microsoft.Maui.Essentials.AI.ImageClassificationResult.ModelId.init -> void
+Microsoft.Maui.Essentials.AI.ImageClassificationResult.Predictions.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Maui.Essentials.AI.ImageClassificationPrediction!>!
+Microsoft.Maui.Essentials.AI.ImageClassificationResult.RawRepresentation.get -> object?
+Microsoft.Maui.Essentials.AI.ImageClassificationResult.RawRepresentation.set -> void
+static Microsoft.Maui.Essentials.AI.ImageClassificationClientExtensions.ClassifyImageAsync(this Microsoft.Maui.Essentials.AI.IImageClassificationClient! client, Microsoft.Extensions.AI.DataContent! image, Microsoft.Maui.Essentials.AI.ImageClassificationOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Maui.Essentials.AI.ImageClassificationResult!>!
+static Microsoft.Maui.Essentials.AI.ImageClassificationClientExtensions.GetService<TService>(this Microsoft.Maui.Essentials.AI.IImageClassificationClient! client, object? serviceKey = null) -> TService?
+virtual Microsoft.Maui.Essentials.AI.ImageClassificationOptions.Clone() -> Microsoft.Maui.Essentials.AI.ImageClassificationOptions!
 Microsoft.Extensions.AI.NLEmbeddingExtensions
 Microsoft.Maui.Essentials.AI.AppleIntelligenceChatClient
 Microsoft.Maui.Essentials.AI.AppleIntelligenceChatClient.AppleIntelligenceChatClient() -> void

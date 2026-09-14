@@ -24,6 +24,7 @@
   <Folder Name="/src/" />
   <Folder Name="/src/AI/">
     <Project Path="src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj" />
+    <Project Path="src/AI/Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding/Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding.csproj" />
   </Folder>
   <Folder Name="/src/AIExtensions/">
     <Project Path="src/AIExtensions/Microsoft.Maui.AI.Attributes/Microsoft.Maui.AI.Attributes.csproj" />
@@ -73,6 +74,7 @@
   <Folder Name="/tests/AI/">
     <Project Path="tests/AI/Microsoft.Maui.Essentials.AI.Benchmarks/Microsoft.Maui.Essentials.AI.Benchmarks.csproj" />
     <Project Path="tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj" />
+    <Project Path="tests/AI/Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding.Tests/Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding.Tests.csproj" />
     <Project Path="tests/AI/Microsoft.Maui.Essentials.AI.UnitTests/Microsoft.Maui.Essentials.AI.UnitTests.csproj" />
   </Folder>
   <Folder Name="/tests/DevFlow/" />
