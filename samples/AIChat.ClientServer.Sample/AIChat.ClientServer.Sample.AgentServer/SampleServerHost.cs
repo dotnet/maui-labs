@@ -1,5 +1,8 @@
+using System.Text.Json;
+using AGUI.Abstractions;
 using AIChat.ClientServer.Sample.Shared;
 using AGUI.Server;
+using Microsoft.Extensions.AI;
 using Microsoft.Agents.AI.Hosting.AGUI.AspNetCore;
 
 namespace AIChat.ClientServer.Sample.AgentServer;
@@ -29,8 +32,8 @@ public static class SampleServerHost
 
         var apiKey = app.Configuration["AGUI_API_KEY"] ?? app.Configuration["AGUI:ApiKey"];
         var replay = app.Configuration.GetValue<bool>("AI:Replay");
-        if (!replay && string.IsNullOrWhiteSpace(apiKey))
-            throw new InvalidOperationException("AGUI_API_KEY must be configured for live agent execution.");
+        if (string.IsNullOrWhiteSpace(apiKey))
+            throw new InvalidOperationException("AGUI_API_KEY must be configured.");
 
         var options = replay ? null : Foundry.ReadOptions(app.Configuration);
         var chatClient = options is null
@@ -50,7 +53,34 @@ public static class SampleServerHost
                     .MapResultAsStateDelta("update_plan_step"));
             else if (scenario.Id == ScenarioIds.SharedState)
                 endpoint.WithMetadata(new AGUIStreamOptions().MapResultAsStateSnapshot("generate_recipe"));
+            else if (scenario.Id == ScenarioIds.PredictiveState)
+                endpoint.WithMetadata(new AGUIStreamOptions().MapCall(
+                    "propose_document",
+                    MapDocumentProposal));
         }
         return app;
+    }
+
+    private static IEnumerable<BaseEvent> MapDocumentProposal(
+        FunctionCallContent call)
+    {
+        if (call.Arguments?.TryGetValue("document", out var value) != true)
+            return [];
+
+        var snapshot = value switch
+        {
+            JsonElement element => element,
+            DocumentState document => JsonSerializer.SerializeToElement(
+                document,
+                SampleSerializerContext.Default.DocumentState),
+            DocumentProposal proposal => JsonSerializer.SerializeToElement(
+                proposal.Document,
+                SampleSerializerContext.Default.DocumentState),
+            _ => JsonSerializer.SerializeToElement(
+                value,
+                SampleSerializerContext.Default.Options),
+        };
+
+        return [new StateSnapshotEvent { Snapshot = snapshot }];
     }
 }

@@ -19,6 +19,9 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
   </ItemGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="Microsoft.Maui.AI.Chat.Controls.Blazor.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\Microsoft.Maui.AI.Chat.Presentation\Microsoft.Maui.AI.Chat.Presentation.csproj" />
     <ProjectReference Include="..\Microsoft.Maui.AI.Chat\Microsoft.Maui.AI.Chat.csproj" />
     <ProjectReference Include="..\Microsoft.Maui.Chat.Controls\Microsoft.Maui.Chat.Controls.csproj" />

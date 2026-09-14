@@ -85,7 +85,7 @@
         _invokingAction = true;
         try
         {
-            await action.InvokeAsync();
+            await AgentActionRunner.InvokeAsync(() => action.InvokeAsync());
         }
         finally
         {
