@@ -3,6 +3,7 @@
 
 <CascadingValue Value="EffectivePresentation" IsFixed="true">
 <Microsoft.Maui.Chat.Controls.Blazor.ChatView Conversation="@EffectivePresentation"
+                                                  ComposerController="@ComposerController"
                                                   @attributes="AdditionalAttributes">
     <MessageContentRenderer TContent="AgentTextMessageContent">
         <ChildContent Context="content"><AgentContentView Content="content" /></ChildContent>
@@ -30,6 +31,10 @@
     /// <summary>Gets or sets the session from which an internally owned presentation is created.</summary>
     [Parameter]
     public AgentContext? Session { get; set; }
+
+    /// <summary>Gets or sets the shared composer controller forwarded to the neutral chat view.</summary>
+    [Parameter]
+    public ChatComposerController? ComposerController { get; set; }
 
     /// <summary>Gets or sets caller renderer registrations appended after the built-in registrations.</summary>
     [Parameter]

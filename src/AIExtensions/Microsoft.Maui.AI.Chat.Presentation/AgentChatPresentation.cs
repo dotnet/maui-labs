@@ -1,11 +1,11 @@
 using Microsoft.Extensions.AI;
-using Microsoft.Maui.Chat.Controls;
+using Microsoft.Maui.Chat;
 
 namespace Microsoft.Maui.AI.Chat.Presentation;
 
 /// <summary>
 /// Projects an <see cref="AgentContext"/> into the provider-neutral conversation model used by
-/// <see cref="ChatView"/>.
+/// renderer-neutral chat conversation model.
 /// </summary>
 public sealed class AgentChatPresentation : ChatConversation, IDisposable
 {
