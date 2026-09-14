@@ -59,6 +59,17 @@ return true;
              Visible="false" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(MauiProfilingHelperInject)' == 'true'
+    and '$(UseMaui)' == 'true'
+    and '$(TargetFramework)' != ''
+    and $([System.String]::Copy('$(TargetFramework)').Contains('-ios'))">
+    <MlaunchEnvironmentVariables Include="MAUI_PROFILING_HELPER=1" />
+    <MlaunchEnvironmentVariables Include="MAUI_PROFILING_HELPER_EXIT_HOST=$(MauiProfilingHelperExitHost)"
+                                 Condition="'$(MauiProfilingHelperExitHost)' != ''" />
+    <MlaunchEnvironmentVariables Include="MAUI_PROFILING_HELPER_EXIT_PORT=$(MauiProfilingHelperExitPort)"
+                                 Condition="'$(MauiProfilingHelperExitPort)' != ''" />
+  </ItemGroup>
+
   <Target Name="GenerateMauiProfilingHelperEnvironment"
           BeforeTargets="PrepareForBuild"
           Condition="'$(MauiProfilingHelperInject)' == 'true'

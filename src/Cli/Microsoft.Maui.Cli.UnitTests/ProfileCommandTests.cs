@@ -1030,6 +1030,21 @@ public class ProfileCommandTests
 	}
 
 	[Fact]
+	public void ProfilingInjectionAssets_AreSelfContainedAndConfigureIosLaunchEnvironment()
+	{
+		var buildDirectory = Path.GetFullPath(Path.Combine(
+			AppContext.BaseDirectory,
+			"../../../../../src/Cli/Microsoft.Maui.Cli/Build"));
+		var source = File.ReadAllText(Path.Combine(buildDirectory, "MauiProfilingHelper.AutoInitialize.cs"));
+		var targets = File.ReadAllText(Path.Combine(buildDirectory, "MauiProfilingHelperInjection.targets"));
+
+		Assert.Contains("using System;", source);
+		Assert.Contains("MlaunchEnvironmentVariables Include=\"MAUI_PROFILING_HELPER=1\"", targets);
+		Assert.Contains("MlaunchEnvironmentVariables Include=\"MAUI_PROFILING_HELPER_EXIT_HOST=", targets);
+		Assert.Contains("MlaunchEnvironmentVariables Include=\"MAUI_PROFILING_HELPER_EXIT_PORT=", targets);
+	}
+
+	[Fact]
 	public void ResolveProfileConfiguration_IosWithoutExplicitOverride_DefaultsToRelease()
 	{
 		var configuration = ProfileCommand.ResolveProfileConfiguration("Release", explicitlySpecified: false, Platforms.iOS);
