@@ -13,7 +13,7 @@ public sealed class SensorTools
 		McpAgentSession session,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.GetSensorsAsync();
 		return result.ValueKind == JsonValueKind.Undefined ? "Failed to list sensors." : result.ToString();
 	}
@@ -25,7 +25,7 @@ public sealed class SensorTools
 		[Description("Reading speed: UI, Default, Game, Fastest (default: Default)")] string? speed = null,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var success = await agent.StartSensorAsync(sensor, speed);
 		return success ? $"Sensor '{sensor}' started." : $"Failed to start sensor '{sensor}'.";
 	}
@@ -36,7 +36,7 @@ public sealed class SensorTools
 		[Description("Sensor name to stop")] string sensor,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var success = await agent.StopSensorAsync(sensor);
 		return success ? $"Sensor '{sensor}' stopped." : $"Failed to stop sensor '{sensor}'.";
 	}

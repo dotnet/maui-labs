@@ -11,7 +11,37 @@ namespace Microsoft.Maui.Cli.Services;
 public interface IDeviceManager
 {
 	Task<IReadOnlyList<Device>> GetAllDevicesAsync(CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Returns the devices for <paramref name="platform"/>, querying only the providers that
+	/// can produce them. Accepts any value handled by <see cref="Platforms.Normalize"/>,
+	/// including <see cref="Platforms.All"/>.
+	/// </summary>
+	/// <remarks>
+	/// Implementations must not enumerate every provider and then filter: provider queries are
+	/// expensive (the Apple provider shells out to <c>simctl</c>) and asking for one platform
+	/// must never pay another platform's cost.
+	/// <para>
+	/// Valid platforms may have no backing provider (Mac Catalyst and Windows do not today), in
+	/// which case this returns an empty list rather than failing. Callers that want to report
+	/// "not supported yet" separately from "none found" can check
+	/// <see cref="HasProviderFor"/>.
+	/// </para>
+	/// </remarks>
 	Task<IReadOnlyList<Device>> GetDevicesByPlatformAsync(string platform, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Whether any registered provider can currently produce devices for
+	/// <paramref name="platform"/>. Accepts any value handled by
+	/// <see cref="Platforms.Normalize"/>.
+	/// </summary>
+	/// <remarks>
+	/// Lets callers distinguish "this platform has no backing provider yet" from "the provider
+	/// ran and found nothing", which are both an empty result from
+	/// <see cref="GetDevicesByPlatformAsync"/>.
+	/// </remarks>
+	bool HasProviderFor(string? platform);
+
 	Task<Device?> GetDeviceByIdAsync(string deviceId, CancellationToken cancellationToken = default);
 	Task<Device> GetRunningDeviceOrThrowAsync(CancellationToken cancellationToken = default);
 }

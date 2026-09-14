@@ -23,6 +23,7 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
     const string BackButtonId = "MauiBackButton";
     const string TitleId = "MauiTitle";
     const string SearchId = "MauiSearchItem";
+    const string ShellSearchId = "MauiShellSearchItem";
     const string MenuIdPrefix = "MauiMenu_";
     const string GroupIdPrefix = "MauiGroup_";
     const string ShareId = "MauiShareItem";
@@ -55,12 +56,15 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
     Shell? _shell;
     NSSplitView? _splitView;
     MacOSSearchToolbarItem? _searchItem;
-    NSSearchToolbarItem? _nativeSearchItem;
+    SearchHandler? _shellSearchHandler;
+    NSToolbarItem? _nativeSearchItem;
+    NSSearchField? _nativeSearchField;
     readonly List<MacOSMenuToolbarItem> _menuItems = new();
     readonly List<MacOSToolbarItemGroup> _groupItems = new();
     MacOSShareToolbarItem? _shareItem;
     readonly List<MacOSPopUpToolbarItem> _popUpItems = new();
     readonly List<MacOSViewToolbarItem> _viewItems = new();
+    readonly HashSet<NSObject> _registeredNativeElements = new();
     bool _isRefreshing;
 
     public void AttachToWindow(NSWindow window)
@@ -90,6 +94,7 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
         if (_currentPage != null)
         {
             UnsubscribeCommands();
+            _currentPage.PropertyChanged -= OnPagePropertyChanged;
             if (_currentPage.ToolbarItems is INotifyCollectionChanged oldCollection)
                 oldCollection.CollectionChanged -= OnToolbarItemsChanged;
         }
@@ -107,6 +112,7 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
 
         if (_currentPage != null)
         {
+            _currentPage.PropertyChanged += OnPagePropertyChanged;
             if (_currentPage.ToolbarItems is INotifyCollectionChanged newCollection)
                 newCollection.CollectionChanged += OnToolbarItemsChanged;
             RefreshToolbar(_currentPage.ToolbarItems);
@@ -154,6 +160,15 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
             RefreshToolbar(_currentPage.ToolbarItems);
     }
 
+    void OnPagePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == Shell.SearchHandlerProperty.PropertyName
+            && _currentPage != null)
+        {
+            RefreshToolbar(_currentPage.ToolbarItems);
+        }
+    }
+
     void UnsubscribeCommands()
     {
         foreach (var item in _items)
@@ -162,10 +177,61 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
             item.PropertyChanged -= OnToolbarItemPropertyChanged;
     }
 
+    void SetShellSearchHandler(SearchHandler? searchHandler)
+    {
+        if (ReferenceEquals(_shellSearchHandler, searchHandler))
+            return;
+
+        if (_shellSearchHandler != null)
+            _shellSearchHandler.PropertyChanged -= OnShellSearchHandlerPropertyChanged;
+
+        _shellSearchHandler = searchHandler;
+
+        if (_shellSearchHandler != null)
+            _shellSearchHandler.PropertyChanged += OnShellSearchHandlerPropertyChanged;
+    }
+
+    bool HasVisibleShellSearchHandler()
+        => ShellSearchHandlerCoordinator.IsVisible(_shellSearchHandler);
+
+    string? GetSearchIdentifier()
+    {
+        if (_searchItem != null)
+            return SearchId;
+        return HasVisibleShellSearchHandler() ? ShellSearchId : null;
+    }
+
+    void OnShellSearchHandlerPropertyChanged(
+        object? sender,
+        System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (!ReferenceEquals(sender, _shellSearchHandler))
+            return;
+
+        if (e.PropertyName == nameof(SearchHandler.SearchBoxVisibility))
+        {
+            CleanupSearchItem(releaseNativeField: true);
+            if (_currentPage != null)
+                RefreshToolbar(_currentPage.ToolbarItems);
+            return;
+        }
+
+        if (e.PropertyName is nameof(SearchHandler.Query)
+            or nameof(SearchHandler.Placeholder)
+            or nameof(SearchHandler.IsSearchEnabled))
+        {
+            SyncSearchItem();
+            _toolbar?.ValidateVisibleItems();
+        }
+    }
+
     bool ShouldShowBackButton()
     {
-        // Respect HasNavigationBar on the current page
-        if (_currentPage != null && !NavigationPage.GetHasNavigationBar(_currentPage))
+        if (_currentPage == null
+            || !NavigationPage.GetHasNavigationBar(_currentPage)
+            || !Shell.GetNavBarIsVisible(_currentPage)
+            || _shell != null && !Shell.GetNavBarIsVisible(_shell)
+            || GetEffectiveBackButtonBehavior() is { IsVisible: false })
             return false;
 
         if (_navigationPage != null)
@@ -181,6 +247,23 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
 
         return false;
     }
+
+    bool IsBackButtonEnabled()
+    {
+        if (_currentPage == null)
+            return false;
+
+        var behavior = GetEffectiveBackButtonBehavior();
+        return behavior is not { IsEnabled: false }
+            && (behavior?.Command is not { } command
+                || command.CanExecute(behavior.CommandParameter));
+    }
+
+    BackButtonBehavior? GetEffectiveBackButtonBehavior()
+        => _currentPage == null
+            ? null
+            : Shell.GetBackButtonBehavior(_currentPage)
+                ?? (_shell == null ? null : Shell.GetBackButtonBehavior(_shell));
 
     string? GetBackButtonTitle()
     {
@@ -209,16 +292,35 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
         _isRefreshing = true;
         try
         {
+        var previousItems = _items.ToArray();
+        var previousSidebarItems = _sidebarItems.ToArray();
+        var previousSearchSource = (object?)_searchItem ?? _shellSearchHandler;
         UnsubscribeCommands();
         _items.Clear();
         _sidebarItems.Clear();
         _itemIdentifiers.Clear();
-        CleanupSearchItem();
 
         bool hasBackButton = ShouldShowBackButton();
 
         // Resolve search item — can come from explicit layout or page-level property
-        _searchItem = _currentPage != null ? MacOSToolbar.GetSearchItem(_currentPage) : null;
+        var nextSearchItem = _currentPage != null ? MacOSToolbar.GetSearchItem(_currentPage) : null;
+        var nextShellSearchHandler = nextSearchItem == null && _currentPage != null
+            ? Shell.GetSearchHandler(_currentPage)
+            : null;
+        var nextSearchSource = (object?)nextSearchItem ?? nextShellSearchHandler;
+        var searchKindChanged =
+            (previousSearchSource is MacOSSearchToolbarItem)
+            != (nextSearchSource is MacOSSearchToolbarItem);
+        if (previousSearchSource is not null && nextSearchSource is null)
+            CleanupSearchItem();
+        else if (previousSearchSource is not null
+            && nextSearchSource is not null
+            && searchKindChanged)
+        {
+            CleanupSearchItem(releaseNativeField: true);
+        }
+        _searchItem = nextSearchItem;
+        SetShellSearchHandler(nextShellSearchHandler);
 
         // Resolve other special toolbar items from page-level properties
         _menuItems.Clear();
@@ -332,7 +434,7 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
             }
         }
 
-        bool hasSpecialItems = _searchItem != null || _menuItems.Count > 0
+        bool hasSpecialItems = _searchItem != null || HasVisibleShellSearchHandler() || _menuItems.Count > 0
             || _groupItems.Count > 0 || _shareItem != null || _popUpItems.Count > 0
             || _viewItems.Count > 0;
         bool hasContentItems = contentItems.Count > 0 || hasExplicitContentLayout || hasSpecialItems;
@@ -355,6 +457,7 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
             {
                 if (_window?.Toolbar != null)
                     _window.Toolbar = null;
+                UnregisterNativeElements();
                 return;
             }
 
@@ -371,6 +474,7 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
                 if (_splitView != null)
                     _toolbar.InsertItem(TrackingSeparatorId, 0);
             }
+            ReconcileNativeElements();
             return;
         }
 
@@ -394,7 +498,8 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
                 }
                 else if (entry is SearchLayoutRef)
                 {
-                    _itemIdentifiers.Add(SearchId);
+                    if (GetSearchIdentifier() is { } searchIdentifier)
+                        _itemIdentifiers.Add(searchIdentifier);
                 }
                 else if (entry is MenuLayoutRef menuRef)
                 {
@@ -506,7 +611,8 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
                 }
                 else if (entry is SearchLayoutRef)
                 {
-                    _itemIdentifiers.Add(SearchId);
+                    if (GetSearchIdentifier() is { } searchIdentifier)
+                        _itemIdentifiers.Add(searchIdentifier);
                 }
                 else if (entry is MenuLayoutRef menuRef)
                 {
@@ -582,6 +688,8 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
             if (_searchItem != null && _searchItem.Placement == MacOSToolbarItemPlacement.Content
                 && !explicitSpecialItems.Contains("__search__"))
                 _itemIdentifiers.Add(SearchId);
+            else if (HasVisibleShellSearchHandler())
+                _itemIdentifiers.Add(ShellSearchId);
 
             // Other special items in content area (convenience mode — skip items
             // already claimed by an explicit layout to avoid duplicates)
@@ -616,8 +724,39 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
         {
             var currentIds = _toolbar.Items.Select(i => i.Identifier).ToList();
             var desiredIds = _itemIdentifiers;
+            bool HasSourceChanged(string identifier)
+            {
+                if (identifier.StartsWith(ItemIdPrefix, StringComparison.Ordinal)
+                    && int.TryParse(identifier.AsSpan(ItemIdPrefix.Length), out var itemIndex))
+                {
+                    return itemIndex >= previousItems.Length
+                        || itemIndex >= _items.Count
+                        || !ReferenceEquals(previousItems[itemIndex], _items[itemIndex]);
+                }
 
-            if (!currentIds.SequenceEqual(desiredIds))
+                if (identifier.StartsWith(SidebarItemIdPrefix, StringComparison.Ordinal)
+                    && int.TryParse(
+                        identifier.AsSpan(SidebarItemIdPrefix.Length),
+                        out var sidebarIndex))
+                {
+                    return sidebarIndex >= previousSidebarItems.Length
+                        || sidebarIndex >= _sidebarItems.Count
+                        || !ReferenceEquals(
+                            previousSidebarItems[sidebarIndex],
+                            _sidebarItems[sidebarIndex]);
+                }
+
+                if (identifier is SearchId or ShellSearchId)
+                {
+                    return nextSearchSource is not null
+                        && (_nativeSearchItem is null || _nativeSearchField is null);
+                }
+
+                return false;
+            }
+
+            if (!currentIds.SequenceEqual(desiredIds)
+                || currentIds.Any(HasSourceChanged))
             {
                 NSAnimationContext.BeginGrouping();
                 NSAnimationContext.CurrentContext.Duration = 0;
@@ -625,7 +764,9 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
                 // Remove items that are no longer present (iterate backwards)
                 for (int i = currentIds.Count - 1; i >= 0; i--)
                 {
-                    if (i >= desiredIds.Count || currentIds[i] != desiredIds[i])
+                    if (i >= desiredIds.Count
+                        || currentIds[i] != desiredIds[i]
+                        || HasSourceChanged(currentIds[i]))
                         _toolbar.RemoveItem(i);
                     else
                         currentIds[i] = null!; // mark as matched
@@ -649,11 +790,15 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
             // MacOSToolbarItem.IsVisible changes take effect without
             // removing/re-inserting items.
             SyncItemVisibility();
+            SyncBackButton();
+            SyncSearchItem();
 
             // Always update the title label text — the identifier list may
             // not change when navigating between pages with the same toolbar
             // structure, but the title text does.
             UpdateTitleLabel();
+
+            ReconcileNativeElements();
         }
         }
         finally
@@ -742,13 +887,99 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
 
             if (source != null)
                 nsItem.Hidden = !MacOSToolbarItem.GetIsVisible(source);
+
+            if (source is ToolbarItem toolbarItem)
+                SyncToolbarItem(nsItem, toolbarItem);
+        }
+    }
+
+    void SyncToolbarItem(NSToolbarItem nsItem, ToolbarItem toolbarItem)
+    {
+        var isSidebarItem = nsItem.Identifier.StartsWith(
+            SidebarItemIdPrefix,
+            StringComparison.Ordinal);
+        var prefixLength = isSidebarItem
+            ? SidebarItemIdPrefix.Length
+            : ItemIdPrefix.Length;
+        if (!int.TryParse(nsItem.Identifier.AsSpan(prefixLength), out var index))
+            return;
+
+        var tag = isSidebarItem ? index + SidebarItemTagOffset : index;
+        var text = toolbarItem.Text ?? string.Empty;
+        nsItem.Label = text;
+        nsItem.PaletteLabel = text;
+        nsItem.ToolTip = MacOSToolbarItem.GetToolTip(toolbarItem) ?? text;
+        nsItem.Enabled = toolbarItem.IsEnabled;
+        nsItem.Tag = tag;
+
+        if (nsItem.View is NSButton button)
+        {
+            button.Title = text;
+            button.Enabled = toolbarItem.IsEnabled;
+            button.Tag = tag;
+        }
+    }
+
+    void SyncBackButton()
+    {
+        if (_toolbar?.Items.FirstOrDefault(item => item.Identifier == BackButtonId)
+            is not NSToolbarItem item)
+        {
+            return;
+        }
+
+        var title = GetBackButtonTitle() ?? "Back";
+        var isEnabled = IsBackButtonEnabled();
+        item.Label = title;
+        item.ToolTip = $"Back to {title}";
+        item.Enabled = isEnabled;
+        if (item.View is NSButton button)
+        {
+            button.Title = title;
+            button.Enabled = isEnabled;
+        }
+    }
+
+    void SyncSearchItem()
+    {
+        if (_nativeSearchItem == null || _nativeSearchField == null)
+            return;
+
+        if (_searchItem != null)
+        {
+            _nativeSearchField.PlaceholderString = _searchItem.Placeholder ?? string.Empty;
+            _nativeSearchField.StringValue = _searchItem.Text ?? string.Empty;
+            _nativeSearchField.Enabled = true;
+            if (_nativeSearchItem is NSSearchToolbarItem searchToolbarItem)
+            {
+                if (_searchItem.PreferredWidth > 0)
+                {
+                    searchToolbarItem.PreferredWidthForSearchField =
+                        (nfloat)_searchItem.PreferredWidth;
+                }
+                searchToolbarItem.ResignsFirstResponderWithCancel =
+                    _searchItem.ResignsFirstResponderWithCancel;
+            }
+            return;
+        }
+
+        if (_shellSearchHandler != null)
+        {
+            _nativeSearchItem.Enabled = _shellSearchHandler.IsSearchEnabled;
+            _nativeSearchField.Enabled = _shellSearchHandler.IsSearchEnabled;
+            _nativeSearchField.PlaceholderString =
+                _shellSearchHandler.Placeholder ?? string.Empty;
+            _nativeSearchField.StringValue = _shellSearchHandler.Query ?? string.Empty;
         }
     }
 
     void OnToolbarItemPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (_toolbar != null)
+        {
+            SyncItemVisibility();
             _toolbar.ValidateVisibleItems();
+        }
     }
 
     // INSToolbarDelegate
@@ -783,6 +1014,10 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
             };
             button.SetButtonType(NSButtonType.MomentaryPushIn);
             nsItem.View = button;
+            RegisterNativeElement(
+                _shell ?? (object?)_flyoutPage ?? _currentPage,
+                nsItem,
+                "ShellFlyoutToggle");
             return nsItem;
         }
 
@@ -790,11 +1025,13 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
         if (itemIdentifier == BackButtonId)
         {
             var backTitle = GetBackButtonTitle() ?? "Back";
+            var isEnabled = IsBackButtonEnabled();
             var nsItem = new NSToolbarItem(BackButtonId)
             {
                 Label = backTitle,
                 PaletteLabel = "Back",
                 ToolTip = $"Back to {backTitle}",
+                Enabled = isEnabled,
                 Target = this,
                 Action = new ObjCRuntime.Selector("backButtonClicked:"),
             };
@@ -802,6 +1039,7 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
             var button = new NSButton
             {
                 BezelStyle = NSBezelStyle.TexturedRounded,
+                Enabled = isEnabled,
                 Target = this,
                 Action = new ObjCRuntime.Selector("backButtonClicked:"),
             };
@@ -821,6 +1059,7 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
             }
 
             nsItem.View = button;
+            RegisterNativeElement(_currentPage, nsItem, "BackButton");
             return nsItem;
         }
 
@@ -850,9 +1089,10 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
         }
 
         // Native search toolbar item
-        if (itemIdentifier == SearchId && _searchItem != null)
+        if ((itemIdentifier == SearchId && _searchItem != null)
+            || (itemIdentifier == ShellSearchId && HasVisibleShellSearchHandler()))
         {
-            return CreateSearchToolbarItem();
+            return CreateSearchToolbarItem(itemIdentifier);
         }
 
         // Menu toolbar items
@@ -955,7 +1195,8 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
         var iconSource = mauiItem.IconImageSource;
         NSImage? image = null;
         if (iconSource is FileImageSource fileSource && !string.IsNullOrEmpty(fileSource.File))
-            image = NSImage.GetSystemSymbol(fileSource.File, null) ?? new NSImage(fileSource.File);
+            image = NSImage.GetSystemSymbol(fileSource.File, null)
+                ?? ImageHandler.FindBundleImage(fileSource.File);
 
         if (image != null)
         {
@@ -976,16 +1217,13 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
             };
             button.SetButtonType(NSButtonType.MomentaryPushIn);
 
-            var capturedMauiItem = mauiItem;
-            button.Activated += (s, e) =>
-            {
-                if (capturedMauiItem.IsEnabled)
-                    ((IMenuItemController)capturedMauiItem).Activate();
-            };
+            button.Tag = effectiveTag;
+            button.Activated += OnToolbarButtonActivated;
 
             nsItem.View = button;
         }
 
+        RegisterNativeElement(mauiItem, nsItem, "ToolbarItem");
         return nsItem;
     }
 
@@ -999,6 +1237,7 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
             FlexibleSpaceId, FixedSpaceId, SeparatorId,
             BackButtonId, SidebarToggleId, TitleId, TrackingSeparatorId,
             SearchId,
+            ShellSearchId,
             NSToolbar.NSToolbarToggleSidebarItemIdentifier,
             NSToolbar.NSToolbarToggleInspectorItemIdentifier,
             NSToolbar.NSToolbarCloudSharingItemIdentifier,
@@ -1042,6 +1281,12 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
             ((IMenuItemController)mauiItem).Activate();
     }
 
+    void OnToolbarButtonActivated(object? sender, EventArgs e)
+    {
+        if (sender is NSObject nativeSender)
+            OnToolbarItemClicked(nativeSender);
+    }
+
     [Export("sidebarToggleClicked:")]
     void OnSidebarToggleClicked(NSObject sender)
     {
@@ -1052,6 +1297,16 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
     [Export("backButtonClicked:")]
     void OnBackButtonClicked(NSObject sender)
     {
+        var behavior = GetEffectiveBackButtonBehavior();
+        if (behavior is { IsEnabled: false })
+            return;
+        if (behavior?.Command is { } command)
+        {
+            if (command.CanExecute(behavior.CommandParameter))
+                command.Execute(behavior.CommandParameter);
+            return;
+        }
+
         if (_navigationPage != null && _navigationPage.Navigation.NavigationStack.Count > 1)
         {
             _navigationPage.PopAsync();
@@ -1067,21 +1322,57 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
         }
     }
 
-    NSToolbarItem CreateSearchToolbarItem()
+    NSToolbarItem CreateSearchToolbarItem(string identifier)
     {
-        var nsSearchItem = new NSSearchToolbarItem(SearchId);
-        _nativeSearchItem = nsSearchItem;
+        NSToolbarItem nsSearchItem;
+        NSSearchField searchField;
+        if (_shellSearchHandler != null
+            && !ShellSearchHandlerCoordinator.IsCollapsible(_shellSearchHandler))
+        {
+            searchField = new NSSearchField
+            {
+                Frame = new CoreGraphics.CGRect(0, 0, 240, 24)
+            };
+            nsSearchItem = new NSToolbarItem(identifier)
+            {
+                Label = "Search",
+                PaletteLabel = "Search",
+                View = searchField
+            };
+        }
+        else
+        {
+            var searchToolbarItem = new NSSearchToolbarItem(identifier);
+            nsSearchItem = searchToolbarItem;
+            searchField = searchToolbarItem.SearchField;
+            if (_shellSearchHandler != null)
+                searchToolbarItem.PreferredWidthForSearchField = 240;
+        }
 
-        var searchField = nsSearchItem.SearchField;
+        _nativeSearchItem = nsSearchItem;
+        _nativeSearchField = searchField;
+        RegisterNativeElement(
+            _shellSearchHandler ?? (object?)_currentPage,
+            _shellSearchHandler != null ? searchField : nsSearchItem,
+            "SearchHandler");
         if (_searchItem != null)
         {
             if (!string.IsNullOrEmpty(_searchItem.Placeholder))
                 searchField.PlaceholderString = _searchItem.Placeholder;
             if (_searchItem.PreferredWidth > 0)
-                nsSearchItem.PreferredWidthForSearchField = (nfloat)_searchItem.PreferredWidth;
-            nsSearchItem.ResignsFirstResponderWithCancel = _searchItem.ResignsFirstResponderWithCancel;
+                ((NSSearchToolbarItem)nsSearchItem).PreferredWidthForSearchField =
+                    (nfloat)_searchItem.PreferredWidth;
+            ((NSSearchToolbarItem)nsSearchItem).ResignsFirstResponderWithCancel =
+                _searchItem.ResignsFirstResponderWithCancel;
             if (!string.IsNullOrEmpty(_searchItem.Text))
                 searchField.StringValue = _searchItem.Text;
+        }
+        else if (_shellSearchHandler != null)
+        {
+            nsSearchItem.Enabled = _shellSearchHandler.IsSearchEnabled;
+            searchField.Enabled = _shellSearchHandler.IsSearchEnabled;
+            searchField.PlaceholderString = _shellSearchHandler.Placeholder ?? string.Empty;
+            searchField.StringValue = _shellSearchHandler.Query ?? string.Empty;
         }
 
         // Subscribe to text changes via NSTextField.Changed notification
@@ -1092,8 +1383,8 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
         searchField.SearchingEnded += OnSearchFieldEnded;
 
         // Subscribe to Enter/Return via the text field action
-        nsSearchItem.Target = this;
-        nsSearchItem.Action = new ObjCRuntime.Selector("searchItemAction:");
+        searchField.Target = this;
+        searchField.Action = new ObjCRuntime.Selector("searchItemAction:");
 
         return nsSearchItem;
     }
@@ -1101,16 +1392,25 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
     [Export("searchItemAction:")]
     void OnSearchItemAction(NSObject sender)
     {
-        if (_searchItem == null || _nativeSearchItem == null) return;
-        var text = _nativeSearchItem.SearchField.StringValue ?? string.Empty;
-        _searchItem.Text = text;
-        _searchItem.RaiseSearchCommitted(text);
+        if (_nativeSearchField == null) return;
+        var text = _nativeSearchField.StringValue ?? string.Empty;
+        if (_searchItem != null)
+        {
+            _searchItem.Text = text;
+            _searchItem.RaiseSearchCommitted(text);
+        }
+        if (_shellSearchHandler != null)
+            ShellSearchHandlerCoordinator.ConfirmQuery(_shellSearchHandler, text);
     }
 
     void OnSearchFieldTextChanged(object? sender, EventArgs e)
     {
-        if (_searchItem == null || _nativeSearchItem == null) return;
-        _searchItem.Text = _nativeSearchItem.SearchField.StringValue ?? string.Empty;
+        if (_nativeSearchField == null) return;
+        var text = _nativeSearchField.StringValue ?? string.Empty;
+        if (_searchItem != null)
+            _searchItem.Text = text;
+        if (_shellSearchHandler != null)
+            _shellSearchHandler.Query = text;
     }
 
     void OnSearchFieldStarted(object? sender, EventArgs e)
@@ -1123,16 +1423,131 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
         _searchItem?.RaiseSearchEnded();
     }
 
-    void CleanupSearchItem()
+    void CleanupSearchItem(bool releaseNativeField = false)
     {
-        if (_nativeSearchItem != null)
+        if (_nativeSearchField != null)
         {
-            _nativeSearchItem.SearchField.Changed -= OnSearchFieldTextChanged;
-            _nativeSearchItem.SearchField.SearchingStarted -= OnSearchFieldStarted;
-            _nativeSearchItem.SearchField.SearchingEnded -= OnSearchFieldEnded;
-            _nativeSearchItem = null;
+            _nativeSearchField.Changed -= OnSearchFieldTextChanged;
+            _nativeSearchField.SearchingStarted -= OnSearchFieldStarted;
+            _nativeSearchField.SearchingEnded -= OnSearchFieldEnded;
         }
+        if (releaseNativeField)
+            _nativeSearchField = null;
+        _nativeSearchItem = null;
         _searchItem = null;
+        SetShellSearchHandler(null);
+    }
+
+    void RegisterNativeElement(object? owner, NSObject nativeElement, string role)
+    {
+        if (owner is null)
+            return;
+
+        NativeElementDiagnosticsBridge.Register(owner, nativeElement, role);
+        _registeredNativeElements.Add(nativeElement);
+    }
+
+    void ReconcileNativeElements()
+    {
+        if (_toolbar is null)
+        {
+            UnregisterNativeElements();
+            return;
+        }
+
+        var currentItems = _toolbar.Items
+            .Cast<NSObject>()
+            .ToHashSet(ReferenceEqualityComparer.Instance);
+        if (_shellSearchHandler != null && _nativeSearchField != null)
+            currentItems.Add(_nativeSearchField);
+        foreach (var nativeElement in _registeredNativeElements.ToArray())
+        {
+            if (currentItems.Contains(nativeElement))
+                continue;
+
+            NativeElementDiagnosticsBridge.Unregister(nativeElement);
+            _registeredNativeElements.Remove(nativeElement);
+        }
+
+        foreach (var nativeItem in _toolbar.Items)
+        {
+            if (TryGetNativeRegistration(nativeItem, out var owner, out var role))
+            {
+                RegisterNativeElement(
+                    owner,
+                    nativeItem.Identifier is SearchId or ShellSearchId
+                        && _shellSearchHandler != null
+                        && _nativeSearchField != null
+                        ? _nativeSearchField
+                        : nativeItem,
+                    role);
+            }
+        }
+    }
+
+    bool TryGetNativeRegistration(
+        NSToolbarItem nativeItem,
+        out object? owner,
+        out string role)
+    {
+        owner = null;
+        role = string.Empty;
+
+        if (nativeItem.Identifier == SidebarToggleId)
+        {
+            owner = _shell ?? (object?)_flyoutPage ?? _currentPage;
+            role = "ShellFlyoutToggle";
+            return owner is not null;
+        }
+
+        if (nativeItem.Identifier == BackButtonId)
+        {
+            owner = _currentPage;
+            role = "BackButton";
+            return owner is not null;
+        }
+
+        if (nativeItem.Identifier is SearchId or ShellSearchId)
+        {
+            owner = _shellSearchHandler ?? (object?)_currentPage;
+            role = "SearchHandler";
+            return owner is not null;
+        }
+
+        if (nativeItem.Identifier.StartsWith(SidebarItemIdPrefix, StringComparison.Ordinal))
+        {
+            var indexText = nativeItem.Identifier[SidebarItemIdPrefix.Length..];
+            if (int.TryParse(indexText, out var index)
+                && index >= 0
+                && index < _sidebarItems.Count)
+            {
+                owner = _sidebarItems[index];
+                role = "ToolbarItem";
+                return true;
+            }
+        }
+
+        if (nativeItem.Identifier.StartsWith(ItemIdPrefix, StringComparison.Ordinal))
+        {
+            var indexText = nativeItem.Identifier[ItemIdPrefix.Length..];
+            if (int.TryParse(indexText, out var index)
+                && index >= 0
+                && index < _items.Count)
+            {
+                owner = _items[index];
+                role = "ToolbarItem";
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    void UnregisterNativeElements()
+    {
+        foreach (var nativeElement in _registeredNativeElements)
+            NativeElementDiagnosticsBridge.Unregister(nativeElement);
+        _registeredNativeElements.Clear();
     }
 
     // ── Menu Toolbar Item ──────────────────────────────────────────────
@@ -1427,7 +1842,8 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
 
     public void Detach()
     {
-        CleanupSearchItem();
+        UnregisterNativeElements();
+        CleanupSearchItem(releaseNativeField: true);
         SetPage(null);
         if (_window != null)
         {

@@ -32,6 +32,44 @@ public static class ReactiveScheduler
 		set => _suppressNotifications = value;
 	}
 
+	/// <summary>Depth of active <see cref="HoldFlushes"/> scopes on this thread.</summary>
+	[ThreadStatic]
+	static int _holdDepth;
+
+	/// <summary>
+	/// Defers reactive flushes for the duration of the returned scope. An own-content node
+	/// swapping its hosted subtree materializes views whose modifiers write the environment;
+	/// each write schedules a flush, and on the UI thread the flush runs INLINE — its
+	/// AfterFlush layout pass would then re-arrange the node that is still mid-build and
+	/// re-enter the swap (double-built subtrees, lost node state). Holding makes the swap
+	/// atomic: writes just mark the flush pending, and it runs once when the scope closes.
+	/// </summary>
+	public static IDisposable HoldFlushes()
+	{
+		_holdDepth++;
+		return new FlushHold();
+	}
+
+	sealed class FlushHold : IDisposable
+	{
+		bool _released;
+		public void Dispose()
+		{
+			if (_released)
+				return;
+			_released = true;
+			if (--_holdDepth == 0 && _flushScheduled)
+			{
+				// Re-drive scheduling for the pending work that accumulated during the hold.
+				lock (_lock)
+				{
+					_flushScheduled = false;
+				}
+				EnsureFlushScheduled();
+			}
+		}
+	}
+
 	public static void EnsureFlushScheduled()
 	{
 		// If a flush is already in progress, skip scheduling — the current
@@ -40,6 +78,17 @@ public static class ReactiveScheduler
 		// → MarkViewDirty → EnsureFlushScheduled would otherwise re-enter FlushEntry.
 		if (_flushScheduled || _flushing)
 			return;
+
+		// A HoldFlushes scope is active on this thread: record that a flush is wanted and
+		// let the scope run it on release (keeps hosted-subtree swaps atomic).
+		if (_holdDepth > 0)
+		{
+			lock (_lock)
+			{
+				_flushScheduled = true;
+			}
+			return;
+		}
 
 		lock (_lock)
 		{
@@ -111,21 +160,84 @@ public static class ReactiveScheduler
 		EnsureFlushScheduled();
 	}
 
+	/// <summary>
+	/// Raised on the UI thread after a full flush cycle settles (effects + view reloads + their
+	/// backend property pushes are done). The layout-driving backends subscribe to this to
+	/// recompute Yoga layout once per flush, so reactive content-size changes reflow.
+	/// </summary>
+	public static event Action? AfterFlush;
+
+	/// <summary>True while <see cref="FlushEntry"/> is running on this thread — including its
+	/// <see cref="AfterFlush"/> phase, which <see cref="_flushing"/> deliberately excludes.</summary>
+	[ThreadStatic]
+	static bool _inFlushEntry;
+
 	static void FlushEntry()
 	{
-		lock (_lock)
-		{
-			_flushScheduled = false;
-		}
+		// Re-entrancy guard. An AfterFlush handler that BUILDS views — an own-content node
+		// refreshing its hosted subtree during the post-flush layout pass — writes the
+		// environment, which calls EnsureFlushScheduled; with _flushing already false that
+		// would run a nested FlushEntry inline, whose AfterFlush re-arranges the node that is
+		// still mid-build and recurses without bound (the Reply detail-swap stack overflow).
+		// Instead leave _flushScheduled set and return: the outer call's pass loop below
+		// picks the new work up after the current pass settles.
+		if (_inFlushEntry)
+			return;
 
-		_flushing = true;
+		_inFlushEntry = true;
 		try
 		{
-			Flush(depth: 0);
+			for (int pass = 0; ; pass++)
+			{
+				lock (_lock)
+				{
+					_flushScheduled = false;
+				}
+
+				_flushing = true;
+				try
+				{
+					Flush(depth: 0);
+				}
+				finally
+				{
+					_flushing = false;
+				}
+
+				AfterFlush?.Invoke();
+
+				lock (_lock)
+				{
+					if (!_flushScheduled && _dirtyEffects.Count == 0 && _dirtyViews.Count == 0)
+						return;
+				}
+
+				if (pass >= MaxFlushDepth)
+				{
+					ReactiveDiagnostics.NotifyFlushDepthWarning(pass);
+					Debug.WriteLine(
+						$"[Comet.Reactive] ReactiveScheduler exceeded {MaxFlushDepth} AfterFlush passes. " +
+						"This indicates AfterFlush work that re-dirties the graph every pass " +
+						"(e.g. a layout handler rebuilding views unconditionally). Breaking the cycle.");
+#if DEBUG
+					throw new InvalidOperationException(
+						$"Reactive AfterFlush cycle detected: exceeded {MaxFlushDepth} passes. " +
+						"Check AfterFlush handlers that write signals/environment on every pass.");
+#else
+					lock (_lock)
+					{
+						_flushScheduled = false;
+						_dirtyEffects.Clear();
+						_dirtyViews.Clear();
+					}
+					return;
+#endif
+				}
+			}
 		}
 		finally
 		{
-			_flushing = false;
+			_inFlushEntry = false;
 		}
 	}
 

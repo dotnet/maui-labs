@@ -44,6 +44,10 @@ All NuGet package versions are defined in **`Directory.Packages.props`** at the 
    ```
 6. Add the project to the solution: `MauiLabs.slnx` and the product's `.slnf`
 7. Add to `DevFlow.slnf` if it should be built by CI
+8. Check the product's build job in `eng/pipelines/devflow-official.yml`. Add the project to the exact
+   `.slnf` or `.slnx` used by that job; it may be narrower than the product's main solution.
+9. Check the product's NuGet.org publish stage in `eng/pipelines/devflow-official.yml`. Ensure its
+   `Copy-Item` package glob matches the new `<PackageId>`.
 
 ## Version Management
 

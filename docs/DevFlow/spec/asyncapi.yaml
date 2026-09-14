@@ -120,24 +120,6 @@ channels:
                   $ref: './schemas/network.json#/$defs/NetworkRequestDetail'
                   description: Full details of the network request.
 
-      networkCleared:
-        name: networkCleared
-        title: Buffer Cleared
-        summary: Server confirms the request buffer has been cleared.
-        contentType: application/json
-        payload:
-          type: object
-          description: Confirmation that the request buffer was cleared.
-          required: [type, timestamp]
-          properties:
-            type:
-              type: string
-              const: cleared
-              description: Message type identifier.
-            timestamp:
-              $ref: './schemas/common.json#/$defs/Timestamp'
-              description: UTC timestamp when this message was produced.
-
       # ── client → server ──
       networkGetDetails:
         name: networkGetDetails
@@ -163,24 +145,6 @@ channels:
                 id:
                   type: string
                   description: Unique identifier of the network request to retrieve.
-
-      networkClear:
-        name: networkClear
-        title: Clear Request Buffer
-        summary: Clear the server's captured request buffer.
-        contentType: application/json
-        payload:
-          type: object
-          description: Command to clear the request buffer.
-          required: [type, timestamp]
-          properties:
-            type:
-              type: string
-              const: clear
-              description: Message type identifier.
-            timestamp:
-              $ref: './schemas/common.json#/$defs/Timestamp'
-              description: UTC timestamp when this message was produced.
 
   # ── Log Stream ───────────────────────────────────────────────────────────
   logs:
@@ -267,11 +231,11 @@ channels:
 
   # ── Sensor Readings Stream ──────────────────────────────────────────────
   sensors:
-    address: /ws/v1/device/sensors
+    address: /ws/v1/sensors
     description: |
-      Live sensor data streaming. Connect with query parameters to specify the
-      sensor, reading speed, and throttle interval. Supports subscribing to
-      different sensors or changing settings over the same connection.
+      Read-only live sensor data streaming. Start and configure the sensor first
+      through the mutation-lease-protected HTTP endpoint, then connect with the
+      sensor query parameter to receive readings.
     servers:
       - $ref: '#/servers/agent'
     bindings:
@@ -285,16 +249,6 @@ channels:
               type: string
               enum: [accelerometer, barometer, compass, gyroscope, magnetometer, orientation]
               description: Sensor to subscribe to (required).
-            speed:
-              type: string
-              enum: [UI, Game, Fastest, Default]
-              default: UI
-              description: Reading speed preset.
-            throttleMs:
-              type: integer
-              default: 100
-              minimum: 0
-              description: Minimum milliseconds between readings.
     messages:
       # ── server → client ──
       sensorSubscribed:
@@ -305,7 +259,7 @@ channels:
         payload:
           type: object
           description: Sensor subscription confirmation.
-          required: [type, timestamp, data]
+          required: [type, timestamp, sensor, sensorName, throttleMs]
           properties:
             type:
               type: string
@@ -314,19 +268,25 @@ channels:
             timestamp:
               $ref: './schemas/common.json#/$defs/Timestamp'
               description: UTC timestamp when this message was produced.
-            data:
+            sensor:
               type: object
-              required: [sensor, speed, throttleMs]
+              required: [name, available, active]
               properties:
-                sensor:
+                name:
                   type: string
                   description: Name of the subscribed sensor.
-                speed:
-                  type: string
-                  description: Active reading speed.
-                throttleMs:
-                  type: number
-                  description: Active throttle interval in milliseconds.
+                available:
+                  type: boolean
+                  description: Whether the sensor is available on the current device.
+                active:
+                  type: boolean
+                  description: Whether the sensor was started through the HTTP control endpoint.
+            sensorName:
+              type: string
+              description: Name of the subscribed sensor.
+            throttleMs:
+              type: integer
+              description: Active throttle interval in milliseconds.
 
       sensorReading:
         name: sensorReading
@@ -401,65 +361,6 @@ channels:
                 sensor:
                   type: string
                   description: Name of the sensor that was stopped.
-
-      # ── client → server ──
-      sensorSubscribe:
-        name: sensorSubscribe
-        title: Subscribe to Sensor
-        summary: Subscribe to a different sensor or change settings.
-        contentType: application/json
-        payload:
-          type: object
-          description: Command to subscribe to a sensor or update settings.
-          required: [type, timestamp, data]
-          properties:
-            type:
-              type: string
-              const: subscribe
-              description: Message type identifier.
-            timestamp:
-              $ref: './schemas/common.json#/$defs/Timestamp'
-              description: UTC timestamp when this message was produced.
-            data:
-              type: object
-              required: [sensor]
-              properties:
-                sensor:
-                  type: string
-                  description: Name of the sensor to subscribe to.
-                speed:
-                  type: string
-                  enum: [UI, Game, Fastest, Default]
-                  description: Reading speed preset.
-                throttleMs:
-                  type: integer
-                  minimum: 0
-                  description: Minimum milliseconds between readings.
-
-      sensorUnsubscribe:
-        name: sensorUnsubscribe
-        title: Unsubscribe from Sensor
-        summary: Stop receiving readings for a sensor.
-        contentType: application/json
-        payload:
-          type: object
-          description: Command to unsubscribe from a sensor.
-          required: [type, timestamp, data]
-          properties:
-            type:
-              type: string
-              const: unsubscribe
-              description: Message type identifier.
-            timestamp:
-              $ref: './schemas/common.json#/$defs/Timestamp'
-              description: UTC timestamp when this message was produced.
-            data:
-              type: object
-              required: [sensor]
-              properties:
-                sensor:
-                  type: string
-                  description: Name of the sensor to unsubscribe from.
 
   # ── Profiler Data Stream ────────────────────────────────────────────────
   profiler:
@@ -808,12 +709,11 @@ operations:
     description: |
       Sends a replay of recent requests on connect, followed by individual
       request events as new HTTP traffic is captured. Also sends detail
-      responses and buffer-cleared confirmations in reply to client commands.
+      responses in reply to client commands.
     messages:
       - $ref: '#/channels/network/messages/networkReplay'
       - $ref: '#/channels/network/messages/networkRequest'
       - $ref: '#/channels/network/messages/networkDetails'
-      - $ref: '#/channels/network/messages/networkCleared'
 
   receiveNetworkCommands:
     action: receive
@@ -821,11 +721,10 @@ operations:
       $ref: '#/channels/network'
     summary: Client sends commands to the network channel.
     description: |
-      Clients can request full details for a captured request or clear the
-      request buffer.
+      Clients can request full details for a captured request. Clearing the
+      buffer uses the mutation-lease-protected HTTP endpoint.
     messages:
       - $ref: '#/channels/network/messages/networkGetDetails'
-      - $ref: '#/channels/network/messages/networkClear'
 
   # ── Logs ─────────────────────────────────────────────────────────────────
   sendLogEvents:
@@ -854,18 +753,6 @@ operations:
       - $ref: '#/channels/sensors/messages/sensorReading'
       - $ref: '#/channels/sensors/messages/sensorError'
       - $ref: '#/channels/sensors/messages/sensorStopped'
-
-  receiveSensorCommands:
-    action: receive
-    channel:
-      $ref: '#/channels/sensors'
-    summary: Client sends sensor subscription commands.
-    description: |
-      Clients can subscribe to a different sensor or change settings,
-      or unsubscribe to stop receiving readings.
-    messages:
-      - $ref: '#/channels/sensors/messages/sensorSubscribe'
-      - $ref: '#/channels/sensors/messages/sensorUnsubscribe'
 
   # ── Profiler ─────────────────────────────────────────────────────────────
   sendProfilerEvents:

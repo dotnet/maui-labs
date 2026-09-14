@@ -87,6 +87,133 @@ public class DevFlowCliIntegrationTests
     }
 
     [Fact]
+    public async Task UiTap_ByAutomationId_PrefersActionableTargetAndForwardsCaptureMetadata()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var serverHandle = server;
+
+        var result = await cli.InvokeAsync(
+            "devflow",
+            "ui",
+            "tap",
+            "--automationId",
+            "DuplicateActionTarget",
+            "--json");
+
+        Assert.Equal(0, result.ExitCode);
+        var request = Assert.Single(
+            server.RecordedRequests,
+            recorded => recorded.Path == "/api/v1/ui/actions/tap");
+        using var body = JsonDocument.Parse(request.Body!);
+        Assert.Equal(
+            "native:registered:action-target",
+            body.RootElement.GetProperty("elementId").GetString());
+        Assert.Equal(42, body.RootElement.GetProperty("captureEpoch").GetInt64());
+        Assert.Equal(7, body.RootElement.GetProperty("registryGeneration").GetInt64());
+    }
+
+    [Fact]
+    public async Task UiTap_MultipleLogicalMatches_DefaultsToFirstResult()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var serverHandle = server;
+
+        var result = await cli.InvokeAsync(
+            "devflow",
+            "ui",
+            "tap",
+            "--text",
+            "Shared action",
+            "--json");
+
+        Assert.Equal(0, result.ExitCode);
+        var request = Assert.Single(
+            server.RecordedRequests,
+            recorded => recorded.Path == "/api/v1/ui/actions/tap");
+        using var body = JsonDocument.Parse(request.Body!);
+        Assert.Equal("first-button", body.RootElement.GetProperty("elementId").GetString());
+    }
+
+    [Fact]
+    public async Task UiTap_MultipleLogicalMatches_ExplicitIndexIsPreserved()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var serverHandle = server;
+
+        var result = await cli.InvokeAsync(
+            "devflow",
+            "ui",
+            "tap",
+            "--text",
+            "Shared action",
+            "--index",
+            "1",
+            "--json");
+
+        Assert.Equal(0, result.ExitCode);
+        var request = Assert.Single(
+            server.RecordedRequests,
+            recorded => recorded.Path == "/api/v1/ui/actions/tap");
+        using var body = JsonDocument.Parse(request.Body!);
+        Assert.Equal(
+            "native:registered:second-button",
+            body.RootElement.GetProperty("elementId").GetString());
+    }
+
+    [Fact]
+    public async Task UiFill_ByAutomationId_UsesSingleTextArgumentAndForwardsCaptureMetadata()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var serverHandle = server;
+
+        var result = await cli.InvokeAsync(
+            "devflow",
+            "ui",
+            "fill",
+            "updated",
+            "--automationId",
+            "DuplicateActionTarget",
+            "--json");
+
+        Assert.Equal(0, result.ExitCode);
+        var request = Assert.Single(
+            server.RecordedRequests,
+            recorded => recorded.Path == "/api/v1/ui/actions/fill");
+        using var body = JsonDocument.Parse(request.Body!);
+        Assert.Equal(
+            "native:registered:action-target",
+            body.RootElement.GetProperty("elementId").GetString());
+        Assert.Equal("updated", body.RootElement.GetProperty("text").GetString());
+        Assert.Equal(42, body.RootElement.GetProperty("captureEpoch").GetInt64());
+        Assert.Equal(7, body.RootElement.GetProperty("registryGeneration").GetInt64());
+    }
+
+    [Fact]
+    public async Task UiFill_ByElementId_PreservesTwoPositionalArguments()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var serverHandle = server;
+
+        var result = await cli.InvokeAsync(
+            "devflow",
+            "ui",
+            "fill",
+            "el-1",
+            "updated",
+            "--json");
+
+        Assert.Equal(0, result.ExitCode);
+        var request = Assert.Single(
+            server.RecordedRequests,
+            recorded => recorded.Path == "/api/v1/ui/actions/fill");
+        using var body = JsonDocument.Parse(request.Body!);
+        Assert.Equal("el-1", body.RootElement.GetProperty("elementId").GetString());
+        Assert.Equal("updated", body.RootElement.GetProperty("text").GetString());
+        Assert.False(body.RootElement.TryGetProperty("captureEpoch", out _));
+        Assert.False(body.RootElement.TryGetProperty("registryGeneration", out _));
+    }
+
+    [Fact]
     public async Task DiagnoseJson_WhenBrokerIsNotRunning_ReportsJsonArraysWithoutStartingBroker()
     {
         var cli = new CliTestHarness(mockAgentPort: 9223);

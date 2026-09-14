@@ -1,6 +1,8 @@
 using System.Text.Json.Serialization;
 using Microsoft.Maui.Cli.DevFlow.Android;
 using Microsoft.Maui.Cli.DevFlow.Broker;
+using Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
+using Microsoft.Maui.Cli.DevFlow.Inspector;
 using Microsoft.Maui.DevFlow.Driver;
 
 namespace Microsoft.Maui.Cli.DevFlow;
@@ -32,4 +34,10 @@ namespace Microsoft.Maui.Cli.DevFlow;
 [JsonSerializable(typeof(ExtensionToolInfo))]
 [JsonSerializable(typeof(ExtensionToolAnnotationsInfo))]
 [JsonSerializable(typeof(Dictionary<string, ExtensionDescriptor>))]
+[JsonSerializable(typeof(LayoutInspectionResult))]
+[JsonSerializable(typeof(LayoutFinding))]
+[JsonSerializable(typeof(CompactLayoutDiagnosticsResult))]
+[JsonSerializable(typeof(LayoutDiagnosticsPolicy))]
+[JsonSerializable(typeof(LayoutDiagnosticsDelta))]
+[JsonSerializable(typeof(InspectorServer.InspectorDiagnosticRequest))]
 internal sealed partial class DevFlowCliJsonContext : JsonSerializerContext;

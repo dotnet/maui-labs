@@ -6,6 +6,8 @@ namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests;
 
 [Collection("AgentIntegration")]
 [Trait("Category", "Sensors")]
+// Requires the MAUI sample: device sensors are an Essentials API. Native runs filter this out.
+[Trait(TestFramework.Trait, TestFramework.Maui)]
 public class SensorTests : IntegrationTestBase
 {
     public SensorTests(AppFixture app, ITestOutputHelper output)

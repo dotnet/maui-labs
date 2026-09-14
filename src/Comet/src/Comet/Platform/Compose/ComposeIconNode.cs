@@ -1,0 +1,171 @@
+#nullable enable
+#if ANDROID
+using AndroidX.Compose;
+using AndroidX.Compose.Runtime;
+using AndroidX.Compose.UI.Graphics.Vector;
+using Comet.Backend;
+using ComposeIcon = AndroidX.Compose.Icon;
+using ComposeText = AndroidX.Compose.Text;
+
+namespace Comet.Platform.Compose
+{
+	/// <summary>Renders a Comet <see cref="Comet.Icon"/> as a real Material <c>Icon</c>
+	/// (<c>ImageVector</c> from the <c>Icons</c> set), tinted and sized — not a glyph in a label.</summary>
+	sealed class ComposeIconNode : ComposeNode
+	{
+		protected override bool PadsOwnContent => true;
+
+		readonly MutableState<string> _symbol = new(string.Empty);
+		readonly MutableState<string> _glyph = new(string.Empty);       // icon-font codepoint, if any
+		readonly MutableState<string> _glyphFont = new(string.Empty);   // icon-font family
+		Microsoft.Maui.Graphics.Color? _tint;
+		float _size = 24f;
+		bool _fillFrame;
+		readonly MutableState<int> _iconVersion = new(0);
+
+		// Brand logos that ship their own colors — rendered as an Image (untinted) so
+		// painterResource preserves them. Every other bundled "ic_<symbol>" is tinted.
+		static readonly System.Collections.Generic.HashSet<string> MulticolorAssets = new() { "jetchat", "jetnews_badge" };
+
+		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
+		{
+			if (id == PropertyIds.Icon_Symbol)
+				_symbol.Value = value.AsString ?? string.Empty;
+			else if (id == PropertyIds.Icon_Glyph)
+				_glyph.Value = value.AsString ?? string.Empty;
+			else if (id == PropertyIds.Icon_FontFamily)
+				_glyphFont.Value = value.AsString ?? string.Empty;
+			else if (id == PropertyIds.Icon_Tint)
+			{
+				_tint = value.AsColor;
+				_iconVersion.Value++;
+			}
+			else if (id == PropertyIds.Icon_Size)
+				_size = (float)value.AsDouble;
+			else if (id == PropertyIds.Icon_FillFrame)
+				_fillFrame = value.AsBool;
+		}
+
+		public override Size Measure(double widthConstraint, double heightConstraint)
+			=> new Size(_size, _size);
+
+		public override void Render(IComposer composer)
+		{
+			_ = _iconVersion.Value;
+
+			// Honor IconSize even when the engine hasn't given this node a frame (e.g. an icon inside a
+			// native control's slot — a FAB — which lays its own content out). With a frame, the size
+			// already comes from the frame; without one, pin it here so the glyph isn't the default 24dp.
+			// A frame LARGER than the icon size (a 24dp star in a 40dp circle) centers the glyph via
+			// symmetric padding — nothing else does (the glyph otherwise draws at the box origin).
+			Modifier IconModifier()
+			{
+				var m = BuildNodeModifier() ?? Modifier.Companion;
+				if (!HasFrame)
+					return m.Size(new Dp(_size), new Dp(_size));
+				// Non-square asset: draw at the frame's size, no slack centering.
+				if (_fillFrame)
+					return m;
+				// Remaining slack after any explicit leaf padding (BuildNodeModifier applied it).
+				float padH = (float)((FrameWidth - Padding.Left - Padding.Right - _size) / 2.0);
+				float padV = (float)((FrameHeight - Padding.Top - Padding.Bottom - _size) / 2.0);
+				if (padH > 0.5f || padV > 0.5f)
+					m = m.Padding(System.Math.Max(0f, padH), System.Math.Max(0f, padV),
+						System.Math.Max(0f, padH), System.Math.Max(0f, padV));
+				return m;
+			}
+
+			// An icon-font glyph (e.g. Material Icons) renders as a tinted, sized character in the
+			// registered font — the SAME glyph the iOS backend draws, so the icon set is identical
+			// cross-platform. Wins over the native ImageVector/drawable path when a glyph is set.
+			// AnnotatedText (not plain Text) so the LINE box can be pinned to the icon size and
+			// centered: the default line height exceeds the glyph box and pushed the ink below
+			// center (the Reply back-arrow rendered low + clipped by its circular clip).
+			if (!string.IsNullOrEmpty(_glyph.Value))
+			{
+				var glyph = new AndroidX.Compose.AnnotatedText(new AndroidX.Compose.AnnotatedString(_glyph.Value))
+				{
+					FontSize = new AndroidX.Compose.Sp((int)_size),
+					LineHeight = new AndroidX.Compose.Sp((int)_size),
+					Align = AndroidX.Compose.TextAlign.Center,
+					SoftWrap = false,
+				};
+				if (_tint is { } gc)
+					glyph.Color = ToComposeColor(gc);
+				if (ComposeFontRegistry.Resolve(_glyphFont.Value, 400) is { } r)
+					glyph.FontFamily = r.Family;
+				((ComposableNode)glyph).Modifier = IconModifier();
+				glyph.Render(composer);
+				return;
+			}
+
+			// A bundled vector drawable named "ic_<symbol>" wins over the built-in ImageVector set,
+			// so apps can ship exact assets (e.g. Jetchat's own footer icons). Multicolor brand
+			// logos (jetchat) render as an Image so painterResource keeps their own colors;
+			// everything else renders through the tinted Material Icon (painter overload), so the
+			// requested .Color() recolors the glyph just like a built-in icon.
+			var ctx = global::Android.App.Application.Context;
+			int resId = ctx.Resources!.GetIdentifier("ic_" + _symbol.Value, "drawable", ctx.PackageName);
+			if (resId != 0)
+			{
+				// A multicolor brand logo renders as an Image to keep its own colors — UNLESS an
+				// explicit .Color() asks for a tint, in which case it routes through the tinted Icon
+				// path and renders monochrome (e.g. the drawer's chat-row logo, tinted onSurfaceVariant).
+				if (MulticolorAssets.Contains(_symbol.Value) && _tint is null)
+				{
+					var image = new AndroidX.Compose.Image(resId, _symbol.Value);
+					((ComposableNode)image).Modifier = IconModifier();
+					image.Render(composer);
+					return;
+				}
+
+				var bundled = new ComposeIcon(resId, _symbol.Value);
+				if (_tint is { } bt)
+					bundled.Tint = ToComposeColor(bt);
+				((ComposableNode)bundled).Modifier = IconModifier();
+				bundled.Render(composer);
+				return;
+			}
+
+			var icon = new ComposeIcon(Resolve(_symbol.Value), _symbol.Value);
+			if (_tint is { } t)
+				icon.Tint = ToComposeColor(t);
+			((ComposableNode)icon).Modifier = IconModifier();
+			icon.Render(composer);
+		}
+
+		// Cross-platform symbol name → Material ImageVector. Core set (material-icons-core);
+		// a few footer icons fall back to the nearest available until the facade exposes the
+		// extended set (mood/alternate_email/photo/duo).
+	internal static ImageVector ResolveSymbol(string s) => Resolve(s);
+
+		static ImageVector Resolve(string s) => s switch
+		{
+			"search" => Icons.Filled.Search,
+			"info" => Icons.Outlined.Info,
+			"menu" => Icons.Filled.Menu,
+			"send" => Icons.AutoMirrored.Default.Send,
+			"place" or "location" => Icons.Filled.Place,
+			"person" => Icons.Filled.Person,
+			"people" => Icons.Filled.AccountCircle,   // jetchat logo stand-in (core set has no "groups")
+			"account" => Icons.Filled.AccountCircle,
+			"call" or "phone" => Icons.Filled.Call,
+			"email" or "mail" => Icons.Filled.Email,
+			"close" => Icons.Filled.Close,
+			"settings" => Icons.Filled.Settings,
+			"share" => Icons.Filled.Share,
+			"back" => Icons.AutoMirrored.Default.ArrowBack,
+			"arrow_down" or "arrow_downward" or "expand_more" => Icons.Filled.KeyboardArrowDown,
+			"add" => Icons.Filled.Add,
+			"edit" => Icons.Filled.Edit,
+			// Nearest-available stand-ins for Jetchat's extended footer icons:
+			"mood" or "emoji" => Icons.Filled.Face,
+			"at" => Icons.Filled.Email,
+			"photo" or "image" => Icons.Filled.AccountBox,
+			"video" or "duo" => Icons.Filled.Call,
+			"mic" or "microphone" => Icons.Filled.Phone,   // core set has no Mic glyph (stand-in)
+			_ => Icons.Filled.Star,
+		};
+	}
+}
+#endif

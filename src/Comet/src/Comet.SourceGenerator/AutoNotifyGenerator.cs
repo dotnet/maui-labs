@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
@@ -12,7 +13,7 @@ using Microsoft.CodeAnalysis.Text;
 namespace Comet.SourceGenerator
 {
 	[Generator]
-	public class AutoNotifyGenerator : ISourceGenerator
+	public class AutoNotifyGenerator : IIncrementalGenerator
 	{
 		private const string attributeText = @"
 using System;
@@ -29,43 +30,42 @@ namespace Comet
 }
 ";
 
-		public void Initialize(GeneratorInitializationContext context)
+		public void Initialize(IncrementalGeneratorInitializationContext context)
 		{
-			context.RegisterForPostInitialization((i) => i.AddSource("AutoNotifyAttribute", attributeText));
-			// Register a syntax receiver that will be created for each generation pass
-			context.RegisterForSyntaxNotifications(() => new SyntaxReceiver());
+			context.RegisterPostInitializationOutput((i) => i.AddSource("AutoNotifyAttribute", attributeText));
+
+			var fields = context.SyntaxProvider.ForAttributeWithMetadataName(
+					"Comet.AutoNotifyAttribute",
+					predicate: static (node, _) => node is VariableDeclaratorSyntax,
+					transform: static (ctx, _) => ctx.TargetSymbol as IFieldSymbol)
+				.Where(static f => f != null)
+				.Collect();
+
+			var compilationAndFields = context.CompilationProvider.Combine(fields);
+
+			context.RegisterSourceOutput(compilationAndFields, static (spc, source) => Execute(source.Left, source.Right, spc));
 		}
 
-		public void Execute(GeneratorExecutionContext context)
+		static void Execute(Compilation compilation, ImmutableArray<IFieldSymbol> fields, SourceProductionContext context)
 		{
-			// add the attribute text
-
-			// retreive the populated receiver 
-			if (!(context.SyntaxContextReceiver is SyntaxReceiver receiver) || !receiver.Fields.Any())
+			if (fields.IsDefaultOrEmpty)
 				return;
-			// we're going to create a new compilation that contains the attribute.
-			// TODO: we should allow source generators to provide source during initialize, so that this step isn't required.
-			CSharpParseOptions options = (context.Compilation as CSharpCompilation).SyntaxTrees[0].Options as CSharpParseOptions;
-			Compilation compilation = context.Compilation.AddSyntaxTrees(CSharpSyntaxTree.ParseText(SourceText.From(attributeText, Encoding.UTF8), options));
 
-
-			var attributeSymbol = context.Compilation.GetTypeByMetadataName("Comet.AutoNotifyAttribute");
-			var notifySymbol = context.Compilation.GetTypeByMetadataName("System.ComponentModel.INotifyPropertyChanged");
+			var attributeSymbol = compilation.GetTypeByMetadataName("Comet.AutoNotifyAttribute");
+			var notifySymbol = compilation.GetTypeByMetadataName("System.ComponentModel.INotifyPropertyChanged");
 			var notifyReadSymbol = compilation.GetTypeByMetadataName("Comet.INotifyPropertyRead");
 			var autoImplementedSymbol = compilation.GetTypeByMetadataName("Comet.IAutoImplemented");
 
 			// group the fields by class, and generate the source
-			foreach (IGrouping<INamedTypeSymbol, IFieldSymbol> group in receiver.Fields.GroupBy(f => f.ContainingType))
+			foreach (IGrouping<INamedTypeSymbol, IFieldSymbol> group in fields.GroupBy<IFieldSymbol, INamedTypeSymbol>(f => f.ContainingType, SymbolEqualityComparer.Default))
 			{
 				string classSource = ProcessClass(group.Key, group.ToList(), attributeSymbol, notifySymbol, notifyReadSymbol, autoImplementedSymbol, context);
 				if(!string.IsNullOrWhiteSpace(classSource))
 					context.AddSource($"{group.Key.Name}_autoNotify.cs", SourceText.From(classSource, Encoding.UTF8));
 			}
-
-		
-		
 		}
-		private string ProcessClass(INamedTypeSymbol classSymbol, List<IFieldSymbol> fields, ISymbol attributeSymbol, ISymbol notifySymbol, ISymbol notifyReadSymbol, ISymbol autoImplementedSymbol, GeneratorExecutionContext context)
+
+		private static string ProcessClass(INamedTypeSymbol classSymbol, List<IFieldSymbol> fields, ISymbol attributeSymbol, ISymbol notifySymbol, ISymbol notifyReadSymbol, ISymbol autoImplementedSymbol, SourceProductionContext context)
 		{
 			if (!classSymbol.ContainingSymbol.Equals(classSymbol.ContainingNamespace, SymbolEqualityComparer.Default))
 			{
@@ -105,7 +105,7 @@ namespace {namespaceName}
 			return source.ToString();
 		}
 
-		private void ProcessField(StringBuilder source, IFieldSymbol fieldSymbol, ISymbol attributeSymbol)
+		private static void ProcessField(StringBuilder source, IFieldSymbol fieldSymbol, ISymbol attributeSymbol)
 		{
 			// get the name and type of the field
 			string fieldName = fieldSymbol.Name;
@@ -157,33 +157,5 @@ public {fieldType} {propertyName}
 
 		}
 
-		/// <summary>
-		/// Created on demand before each generation pass
-		/// </summary>
-		class SyntaxReceiver : ISyntaxContextReceiver
-		{
-			public List<IFieldSymbol> Fields { get; } = new List<IFieldSymbol>();
-
-			/// <summary>
-			/// Called for every syntax node in the compilation, we can inspect the nodes and save any information useful for generation
-			/// </summary>
-			public void OnVisitSyntaxNode(GeneratorSyntaxContext context)
-			{
-				// any field with at least one attribute is a candidate for property generation
-				if (context.Node is FieldDeclarationSyntax fieldDeclarationSyntax
-					&& fieldDeclarationSyntax.AttributeLists.Count > 0)
-				{
-					foreach (VariableDeclaratorSyntax variable in fieldDeclarationSyntax.Declaration.Variables)
-					{
-						// Get the symbol being declared by the field, and keep it if its annotated
-						IFieldSymbol fieldSymbol = context.SemanticModel.GetDeclaredSymbol(variable) as IFieldSymbol;
-						if (fieldSymbol.GetAttributes().Any(ad => ad.AttributeClass.ToDisplayString() == "Comet.AutoNotifyAttribute"))
-						{
-							Fields.Add(fieldSymbol);
-						}
-					}
-				}
-			}
-		}
 	}
 }

@@ -13,7 +13,7 @@ public sealed class FileTools
 		McpAgentSession session,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.ListStorageRootsAsync();
 		return result.ValueKind == JsonValueKind.Undefined ? "Failed to list storage roots." : result.ToString();
 	}
@@ -25,7 +25,7 @@ public sealed class FileTools
 		[Description("Storage root id (default: appData; call maui_storage_roots to discover supported roots)")] string? root = null,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.ListFilesAsync(path, root);
 		return result.ValueKind == JsonValueKind.Undefined ? "Failed to list files." : result.ToString();
 	}
@@ -37,7 +37,7 @@ public sealed class FileTools
 		[Description("Storage root id (default: appData; call maui_storage_roots to discover supported roots)")] string? root = null,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.DownloadFileAsync(path, root);
 		return result.ValueKind == JsonValueKind.Undefined ? $"Failed to download file '{path}'." : result.ToString();
 	}
@@ -50,7 +50,7 @@ public sealed class FileTools
 		[Description("Storage root id (default: appData; call maui_storage_roots to discover supported roots)")] string? root = null,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.UploadFileAsync(path, contentBase64, root);
 		return result.ValueKind == JsonValueKind.Undefined ? $"Failed to upload file '{path}'." : result.ToString();
 	}
@@ -62,7 +62,7 @@ public sealed class FileTools
 		[Description("Storage root id (default: appData; call maui_storage_roots to discover supported roots)")] string? root = null,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var success = await agent.DeleteFileAsync(path, root);
 		return success ? $"File '{path}' deleted." : $"Failed to delete file '{path}'.";
 	}

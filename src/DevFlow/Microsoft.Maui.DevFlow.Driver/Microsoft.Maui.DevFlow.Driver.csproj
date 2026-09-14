@@ -18,7 +18,12 @@
   <ItemGroup>
     <PackageReference Include="SkiaSharp" />
     <PackageReference Include="System.Text.Json" />
+    <PackageReference Include="Xamarin.Android.Tools.AndroidSdk" />
     <PackageReference Include="Interop.UIAutomationClient" Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Microsoft.Maui.DevFlow.Client\Microsoft.Maui.DevFlow.Client.csproj" />
   </ItemGroup>
 
 </Project>

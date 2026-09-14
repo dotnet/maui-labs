@@ -7,7 +7,7 @@ namespace Microsoft.Maui.DevFlow.Driver;
 /// Direct localhost connection, no special setup needed (like Windows).
 /// Dialog detection uses the agent's /api/tree endpoint initially.
 /// </summary>
-public class LinuxAppDriver : AppDriverBase
+public class LinuxAppDriver : AppDriverBase, IAlertDriver
 {
     public override string Platform => "Linux";
 

@@ -1,3 +1,4 @@
+using Comet.Reactive;
 using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -130,7 +131,7 @@ namespace Comet.Benchmarks
 
 	public class SingleStateCometView : Comet.View
 	{
-		public readonly State<int> _counter = new State<int>(0);
+		public readonly Signal<int> _counter = new Signal<int>(0);
 
 		public SingleStateCometView()
 		{
@@ -140,13 +141,13 @@ namespace Comet.Benchmarks
 
 	public class MultiStateCometView : Comet.View
 	{
-		readonly State<string>[] _states;
+		readonly Signal<string>[] _states;
 
 		public MultiStateCometView(int count)
 		{
-			_states = new State<string>[count];
+			_states = new Signal<string>[count];
 			for (int i = 0; i < count; i++)
-				_states[i] = new State<string>($"Value {i}");
+				_states[i] = new Signal<string>($"Value {i}");
 
 			Body = () =>
 			{

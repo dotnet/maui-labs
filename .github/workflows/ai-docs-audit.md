@@ -109,8 +109,8 @@ matching checklist section.
   ```
 - **NuGet feeds**: Run `grep '<add key=' NuGet.config` and compare with the documented feed list.
 - **SDK version**: Run `cat global.json` and verify the documented SDK version matches exactly.
-- **Agent skills**: Verify `plugins/dotnet-maui/skills/` lists match what's documented.
-  Run: `ls plugins/dotnet-maui/skills/`
+- **Agent skills**: Verify plugin skill lists match what's documented.
+  Run: `find plugins -mindepth 3 -maxdepth 3 -type d -path '*/skills/*' | sort`
 
 ### .github/copilot-instructions.md
 
@@ -198,7 +198,7 @@ the configuration of this workflow itself:
 - **Agentic workflows**: Are there new `.md` workflows that might need auditing?
   Run: `ls .github/workflows/*.md`
 - **Skills**: Has the skills marketplace structure changed?
-  Run: `ls plugins/dotnet-maui/skills/`
+  Run: `find plugins -mindepth 3 -maxdepth 3 -type d -path '*/skills/*' | sort`
 
 If you find drift — paths, products, files, or audit sections that are missing
 or outdated in this workflow — open an issue on this repository with the title

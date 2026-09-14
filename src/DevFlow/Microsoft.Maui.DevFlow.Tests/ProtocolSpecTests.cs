@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Microsoft.OpenApi;
 using Microsoft.OpenApi.Reader;
 using YamlDotNet.Serialization;
@@ -9,6 +10,52 @@ namespace Microsoft.Maui.DevFlow.Tests;
 
 public class ProtocolSpecTests
 {
+    private static readonly string[] BackendOptionalOperationIds =
+    [
+        "getUiTree",
+        "getElement",
+        "queryElements",
+        "hitTest",
+        "captureScreenshot",
+        "tapElement",
+        "fillElement",
+        "clearElement",
+        "focusElement",
+        "scrollElement",
+        "navigateRoute",
+        "resizeWindow",
+        "goBack",
+        "pressKey",
+        "performGesture",
+        "batchActions",
+        "getElementProperty",
+        "setElementProperty",
+        "getDeviceInfo",
+        "getDisplayInfo",
+        "getBatteryInfo",
+        "getConnectivityInfo",
+        "getAppInfo",
+        "getAppTheme",
+        "setAppTheme",
+        "listSensors",
+        "startSensor",
+        "stopSensor",
+        "listDeviceJobs",
+        "runDeviceJob",
+        "listPermissions",
+        "checkPermission",
+        "getGeolocation",
+        "listPreferences",
+        "clearPreferences",
+        "getPreference",
+        "setPreference",
+        "deletePreference",
+        "clearSecureStorage",
+        "getSecureValue",
+        "setSecureValue",
+        "deleteSecureValue",
+    ];
+
     private static readonly IDeserializer YamlDeserializer = new DeserializerBuilder().Build();
     private static readonly YamlDotNet.Serialization.ISerializer JsonCompatibleYamlSerializer = new SerializerBuilder()
         .JsonCompatible()
@@ -103,6 +150,95 @@ public class ProtocolSpecTests
     }
 
     [Fact]
+    public void RegisteredAgentRoutes_AreDocumentedInProtocolSpecs()
+    {
+        var repoRoot = Path.GetFullPath(Path.Combine(SpecRoot.Value, "..", "..", ".."));
+        var servicePath = Path.Combine(
+            repoRoot,
+            "src",
+            "DevFlow",
+            "Microsoft.Maui.DevFlow.Agent.Abstractions",
+            "DevFlowAgentService.Handlers.cs");
+        var serviceSource = File.ReadAllText(servicePath);
+        var routePattern = new Regex(
+            "_server\\.Map(?<method>Get|Post|Put|Delete|WebSocket)\\s*\\(\\s*\"(?<path>[^\"]+)\"",
+            RegexOptions.CultureInvariant | RegexOptions.Singleline);
+
+        var registeredHttpRoutes = new HashSet<string>(StringComparer.Ordinal);
+        var registeredWebSocketRoutes = new HashSet<string>(StringComparer.Ordinal);
+        foreach (Match match in routePattern.Matches(serviceSource))
+        {
+            var method = match.Groups["method"].Value;
+            var path = NormalizeRoute(match.Groups["path"].Value);
+            if (method == "WebSocket")
+                registeredWebSocketRoutes.Add(path);
+            else
+                registeredHttpRoutes.Add($"{method.ToUpperInvariant()} {path}");
+        }
+
+        var openApi = LoadDocument(Path.Combine(SpecRoot.Value, "openapi.yaml"));
+        var documentedHttpRoutes = new HashSet<string>(StringComparer.Ordinal);
+        var paths = openApi["paths"]?.AsObject()
+            ?? throw new InvalidOperationException("OpenAPI document has no paths object.");
+        foreach (var (path, operationsNode) in paths)
+        {
+            if (operationsNode is not JsonObject operations)
+                continue;
+
+            foreach (var (method, _) in operations)
+            {
+                if (method is "get" or "post" or "put" or "delete")
+                    documentedHttpRoutes.Add($"{method.ToUpperInvariant()} {NormalizeRoute(path)}");
+            }
+        }
+
+        var asyncApi = LoadDocument(Path.Combine(SpecRoot.Value, "asyncapi.yaml"));
+        var documentedWebSocketRoutes = asyncApi["channels"]?.AsObject()
+            .Select(channel => channel.Value?["address"]?.GetValue<string>())
+            .Where(address => address is not null)
+            .Select(address => NormalizeRoute(address!))
+            .ToHashSet(StringComparer.Ordinal)
+            ?? throw new InvalidOperationException("AsyncAPI document has no channels object.");
+
+        Assert.Empty(registeredHttpRoutes.Except(documentedHttpRoutes));
+        Assert.Empty(registeredWebSocketRoutes.Except(documentedWebSocketRoutes));
+    }
+
+    [Fact]
+    public void BackendOptionalOperations_DocumentUniformNotSupportedResponse()
+    {
+        var openApiPath = Path.Combine(SpecRoot.Value, "openapi.yaml");
+        var document = LoadDocument(openApiPath).AsObject();
+        var operations = document["paths"]!.AsObject()
+            .SelectMany(path => path.Value!.AsObject())
+            .Where(entry => entry.Value is JsonObject operation
+                && operation.ContainsKey("operationId"))
+            .Select(entry => entry.Value!.AsObject())
+            .ToDictionary(
+                operation => operation["operationId"]!.GetValue<string>(),
+                StringComparer.Ordinal);
+
+        foreach (var operationId in BackendOptionalOperationIds)
+        {
+            Assert.True(
+                operations.TryGetValue(operationId, out var operation),
+                $"OpenAPI operation '{operationId}' is missing.");
+            Assert.Equal(
+                "#/components/responses/BackendNotSupported",
+                operation!["responses"]?["501"]?["$ref"]?.GetValue<string>());
+        }
+
+        var schema = document["components"]!["schemas"]!["BackendNotSupported"]!.AsObject();
+        Assert.Equal("object", schema["type"]!.GetValue<string>());
+        Assert.Equal(
+            "not_supported",
+            schema["properties"]!["error"]!["const"]!.GetValue<string>());
+        Assert.Equal(
+            ["error", "capability", "reason"],
+            schema["required"]!.AsArray().Select(value => value!.GetValue<string>()));
+    }
+
+    [Fact]
     public void PointerExists_HandlesEscapedSegmentsAndNullValues()
     {
         var document = JsonNode.Parse(
@@ -169,6 +305,9 @@ public class ProtocolSpecTests
         return path.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase) ||
             path.EndsWith(".yml", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static string NormalizeRoute(string route)
+        => Regex.Replace(route, """\{[^}]+\}""", "{}");
 
     private static IEnumerable<SpecReference> EnumerateReferences(JsonNode? node, string jsonPath = "$")
     {

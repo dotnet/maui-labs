@@ -1,0 +1,8 @@
+<Project>
+
+  <PropertyGroup>
+    <DevFlowXamlSourceMapsEnabled Condition="'$(DevFlowXamlSourceMapsEnabled)' == '' and '$(Configuration)' == 'Debug'">true</DevFlowXamlSourceMapsEnabled>
+    <DevFlowXamlSourceMapsEnabled Condition="'$(DevFlowXamlSourceMapsEnabled)' == ''">false</DevFlowXamlSourceMapsEnabled>
+  </PropertyGroup>
+
+</Project>

@@ -269,6 +269,59 @@ internal sealed class AndroidDevFlowPortForwarder
         };
     }
 
+    public async Task<AndroidDevFlowDeviceResolution> ResolveDeviceForForwardedPortAsync(
+        int agentPort,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(_adbPath) || _adbRunner is null)
+            return AndroidDevFlowDeviceResolution.Failed("ADB was not found. Install Android platform-tools or set ANDROID_HOME.");
+
+        List<Device> devices;
+        try
+        {
+            devices = await _androidProvider.GetDevicesAsync(cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return AndroidDevFlowDeviceResolution.Failed($"Failed to list Android devices: {ex.Message}");
+        }
+
+        var onlineDevices = devices
+            .Where(IsAndroidDevice)
+            .Select(AndroidDevFlowDevice.FromDevice)
+            .Where(static device => device.IsOnline)
+            .ToArray();
+        if (onlineDevices.Length == 0)
+            return AndroidDevFlowDeviceResolution.Failed("No online Android devices or emulators were found.");
+
+        var matches = new List<string>();
+        var errors = new List<string>();
+        foreach (var device in onlineDevices)
+        {
+            var mappings = await ListMappingsAsync(device.Serial, reverse: false, cancellationToken);
+            if (!mappings.Success)
+            {
+                errors.Add($"{device.Serial}: {mappings.Error}");
+                continue;
+            }
+
+            if (ContainsMapping(mappings.Mappings, agentPort))
+                matches.Add(device.Serial);
+        }
+
+        if (matches.Count > 1)
+            return AndroidDevFlowDeviceResolution.Failed(
+                $"Agent port {agentPort} is forwarded by multiple Android devices ({string.Join(", ", matches)}). Remove stale ADB forwards and reconnect.");
+        if (errors.Count > 0)
+            return AndroidDevFlowDeviceResolution.Failed(
+                $"Could not identify the Android device for agent port {agentPort}: {string.Join("; ", errors)}");
+        if (matches.Count == 1)
+            return AndroidDevFlowDeviceResolution.Resolved(matches[0], _adbPath);
+
+        return AndroidDevFlowDeviceResolution.Failed(
+            $"No online Android device owns the ADB forward for agent port {agentPort}. Reconnect the app or run 'maui devflow diagnose'.");
+    }
+
     static bool IsAndroidDevice(Device device)
         => device.Platforms.Any(static p => p.Equals("android", StringComparison.OrdinalIgnoreCase));
 
@@ -382,6 +435,15 @@ internal sealed record AndroidDevFlowForwardingRequest
     public bool Repair { get; init; }
 
     public string? DeviceSerial { get; init; }
+}
+
+internal sealed record AndroidDevFlowDeviceResolution(string? Serial, string? AdbPath, string? Error)
+{
+    public bool IsResolved => !string.IsNullOrWhiteSpace(Serial) && string.IsNullOrWhiteSpace(Error);
+
+    public static AndroidDevFlowDeviceResolution Resolved(string serial, string? adbPath = null) => new(serial, adbPath, null);
+
+    public static AndroidDevFlowDeviceResolution Failed(string error) => new(null, null, error);
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter<AndroidDevFlowForwardingStatus>))]

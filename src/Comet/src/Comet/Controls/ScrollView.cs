@@ -1,12 +1,13 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using Comet.Reactive;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui;
 
 namespace Comet
 {
-	public class ScrollView : ContentView, IEnumerable, IScrollView
+	public partial class ScrollView : ContentView, IEnumerable, IScrollView
 	{
 		public ScrollView(Orientation orientation = Orientation.Vertical)
 		{
@@ -14,6 +15,16 @@ namespace Comet
 		}
 
 		public Orientation Orientation { get; }
+
+		/// <summary>True while the scroll content is at the very top (scroll offset == 0); false
+		/// once the user has scrolled away. The backend node drives this from the native scroll
+		/// state so a floating button (e.g. ProfileFab) can reactively extend/contract.</summary>
+		public Signal<bool> AtTop { get; } = new(true);
+
+		/// <summary>The continuous vertical scroll offset in Dp (0 at the top), driven by the backend
+		/// node from the native scroll state — for a parallax header that translates with the scroll
+		/// (e.g. the profile photo moving at half the scroll speed).</summary>
+		public Signal<double> ScrollOffset { get; } = new(0);
 
 		ScrollBarVisibility IScrollView.HorizontalScrollBarVisibility => this.GetPropertyValue<ScrollBarVisibility?>() ?? ScrollBarVisibility.Default;
 

@@ -58,13 +58,21 @@ public static class GtkAgentServiceExtensions
                 options.Port = metaPort.Value;
         }
 
-        var service = new GtkAgentService(options);
+        var nativeElementRegistry = new RegisteredNativeElementRegistry();
+        var nativeElementDiagnosticSubscriber =
+            new MauiNativeElementDiagnosticSubscriber(nativeElementRegistry);
+        var service = new GtkAgentService(
+            options,
+            nativeElementRegistry,
+            nativeElementDiagnosticSubscriber);
         if (brokerReg != null)
         {
             brokerReg.CurrentPort = options.Port;
             service.SetBrokerRegistration(brokerReg);
         }
+        builder.Services.AddSingleton(nativeElementRegistry);
         builder.Services.AddSingleton<DevFlowAgentService>(service);
+        builder.Services.AddSingleton<MauiDevFlowAgentService>(service);
 
         if (options.EnableFileLogging)
         {
@@ -113,7 +121,7 @@ public static class GtkAgentServiceExtensions
                         for (int i = 0; i < 50 && app == null; i++)
                         {
                             await Task.Delay(200);
-                            app = Application.Current;
+                            app = ResolveCurrentApplication();
                         }
                         if (app != null)
                             app.StartDevFlowAgent();
@@ -138,11 +146,26 @@ public static class GtkAgentServiceExtensions
         }
     }
 
-    private static DevFlowAgentService? GetAgentService(Application app)
+    private static MauiDevFlowAgentService? GetAgentService(Application app)
     {
         try
         {
-            return app.Handler?.MauiContext?.Services.GetService<DevFlowAgentService>();
+            return app.Handler?.MauiContext?.Services.GetService<MauiDevFlowAgentService>();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static Application? ResolveCurrentApplication()
+    {
+        if (Application.Current is { } current)
+            return current;
+
+        try
+        {
+            return IPlatformApplication.Current?.Application as Application;
         }
         catch
         {

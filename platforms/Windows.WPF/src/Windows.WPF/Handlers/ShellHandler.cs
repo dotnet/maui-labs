@@ -45,11 +45,14 @@ namespace Microsoft.Maui.Handlers.WPF
 		readonly WBorder _flyoutOverlay;
 		readonly global::System.Windows.Controls.DockPanel _toolbar;
 		readonly global::System.Windows.Controls.StackPanel _toolbarItemsPanel;
+		readonly HashSet<DependencyObject> _registeredNativeElements = new();
+		Microsoft.Maui.Controls.Page? _backButtonOwner;
 		bool _flyoutOpen;
 		FlyoutBehavior _currentBehavior = FlyoutBehavior.Flyout;
 
 		public Action<ShellItem>? OnShellItemSelected { get; set; }
 		public Action? OnBackButtonClicked { get; set; }
+		public Action<bool>? OnFlyoutOpenChanged { get; set; }
 		public IMauiContext? MauiContext { get; set; }
 
 		public ShellContainerView()
@@ -237,11 +240,15 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		public void ToggleFlyout(bool open)
 		{
-			if (_currentBehavior == FlyoutBehavior.Locked)
-				return; // Locked flyout cannot be toggled
+			if (_currentBehavior == FlyoutBehavior.Locked
+				|| _currentBehavior == FlyoutBehavior.Disabled && open)
+				return;
+			if (_flyoutOpen == open)
+				return;
 			_flyoutOpen = open;
 			_flyoutPanel.Visibility = open ? WVisibility.Visible : WVisibility.Collapsed;
 			_flyoutOverlay.Visibility = open ? WVisibility.Visible : WVisibility.Collapsed;
+			OnFlyoutOpenChanged?.Invoke(open);
 		}
 
 		public void SetFlyoutBehavior(FlyoutBehavior behavior)
@@ -250,9 +257,13 @@ namespace Microsoft.Maui.Handlers.WPF
 			switch (behavior)
 			{
 				case FlyoutBehavior.Disabled:
+					var wasOpen = _flyoutOpen;
 					_hamburgerButton.Visibility = WVisibility.Collapsed;
 					_flyoutPanel.Visibility = WVisibility.Collapsed;
+					_flyoutOverlay.Visibility = WVisibility.Collapsed;
 					_flyoutOpen = false;
+					if (wasOpen)
+						OnFlyoutOpenChanged?.Invoke(false);
 					break;
 				case FlyoutBehavior.Flyout:
 					_hamburgerButton.Visibility = WVisibility.Visible;
@@ -260,10 +271,13 @@ namespace Microsoft.Maui.Handlers.WPF
 						_flyoutPanel.Visibility = WVisibility.Collapsed;
 					break;
 				case FlyoutBehavior.Locked:
+					var wasClosed = !_flyoutOpen;
 					_hamburgerButton.Visibility = WVisibility.Collapsed;
 					_flyoutPanel.Visibility = WVisibility.Visible;
 					_flyoutOverlay.Visibility = WVisibility.Collapsed;
 					_flyoutOpen = true;
+					if (wasClosed)
+						OnFlyoutOpenChanged?.Invoke(true);
 					break;
 			}
 		}
@@ -295,8 +309,11 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		public void BuildFlyoutItems(Shell shell)
 		{
+			UnregisterNativeElements();
 			_flyoutItems.Children.Clear();
 			_tabControl.Items.Clear();
+			RegisterNativeElement(shell, _hamburgerButton, "ShellFlyoutToggle");
+			UpdateBackButtonRegistration(shell.CurrentPage);
 
 			// Render FlyoutHeader template
 			if (shell.FlyoutHeaderTemplate != null && MauiContext != null)
@@ -416,6 +433,7 @@ namespace Microsoft.Maui.Handlers.WPF
 								};
 								itemElement = container;
 								_flyoutItems.Children.Add(itemElement);
+								RegisterNativeElement(capturedItem, itemElement, "ShellFlyout");
 								continue;
 							}
 						}
@@ -476,6 +494,7 @@ namespace Microsoft.Maui.Handlers.WPF
 							ToggleFlyout(false);
 					};
 					_flyoutItems.Children.Add(btn);
+					RegisterNativeElement(capturedItem, btn, "ShellFlyout");
 				}
 
 				if (item.Items.Count > 1)
@@ -485,6 +504,7 @@ namespace Microsoft.Maui.Handlers.WPF
 					{
 						var tabItem = new global::System.Windows.Controls.TabItem { Header = section.Title ?? section.Route ?? "Tab", Tag = section };
 						_tabControl.Items.Add(tabItem);
+						RegisterNativeElement(section, tabItem, "ShellTab");
 					}
 				}
 			}
@@ -499,6 +519,32 @@ namespace Microsoft.Maui.Handlers.WPF
 			// Apply theme after building items
 			UpdateFlyoutTheme();
 			UpdateToolbarTheme();
+		}
+
+		void RegisterNativeElement(object owner, DependencyObject nativeElement, string role)
+		{
+			NativeElementDiagnosticsBridge.Register(owner, nativeElement, role);
+			_registeredNativeElements.Add(nativeElement);
+		}
+
+		public void UpdateBackButtonRegistration(Microsoft.Maui.Controls.Page? page)
+		{
+			if (ReferenceEquals(_backButtonOwner, page))
+				return;
+
+			if (_registeredNativeElements.Remove(_backButton))
+				NativeElementDiagnosticsBridge.Unregister(_backButton);
+			_backButtonOwner = page;
+			if (page is not null)
+				RegisterNativeElement(page, _backButton, "BackButton");
+		}
+
+		public void UnregisterNativeElements()
+		{
+			foreach (var nativeElement in _registeredNativeElements)
+				NativeElementDiagnosticsBridge.Unregister(nativeElement);
+			_registeredNativeElements.Clear();
+			_backButtonOwner = null;
 		}
 
 		static void SetIconSource(global::System.Windows.Controls.Image img, Microsoft.Maui.Controls.ImageSource? source, IMauiContext mauiContext)
@@ -777,6 +823,7 @@ namespace Microsoft.Maui.Handlers.WPF
 			new PropertyMapper<Shell, ShellHandler>(ViewMapper)
 			{
 				[nameof(Shell.FlyoutBehavior)] = MapFlyoutBehavior,
+				[nameof(Shell.FlyoutIsPresented)] = MapFlyoutIsPresented,
 				[nameof(Shell.FlyoutBackgroundColor)] = MapFlyoutBackground,
 				[nameof(Shell.FlyoutBackground)] = MapFlyoutBackgroundBrush,
 				[nameof(Shell.FlyoutWidth)] = MapFlyoutWidth,
@@ -795,6 +842,11 @@ namespace Microsoft.Maui.Handlers.WPF
 			var container = new ShellContainerView();
 			container.OnShellItemSelected = OnShellItemSelected;
 			container.OnBackButtonClicked = OnBackButtonClicked;
+			container.OnFlyoutOpenChanged = open =>
+			{
+				if (VirtualView != null && VirtualView.FlyoutIsPresented != open)
+					VirtualView.FlyoutIsPresented = open;
+			};
 			container.MauiContext = MauiContext;
 			return container;
 		}
@@ -811,7 +863,7 @@ namespace Microsoft.Maui.Handlers.WPF
 				{
 					platformView.MauiContext = MauiContext;
 					platformView.BuildFlyoutItems(VirtualView);
-					
+
 					// Ensure theme-related properties are applied after items built
 					MapFlyoutBackground(this, VirtualView);
 					MapFlyoutBackgroundBrush(this, VirtualView);
@@ -834,6 +886,7 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		protected override void DisconnectHandler(ShellContainerView platformView)
 		{
+			platformView.UnregisterNativeElements();
 			if (VirtualView != null)
 			{
 				VirtualView.Navigated -= OnShellNavigated;
@@ -860,7 +913,7 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		void OnShellNavigated(object? sender, ShellNavigatedEventArgs e)
 		{
-			PlatformView?.Dispatcher.InvokeAsync(() => ShowCurrentPage(), 
+			PlatformView?.Dispatcher.InvokeAsync(() => ShowCurrentPage(),
 				System.Windows.Threading.DispatcherPriority.Background);
 		}
 
@@ -875,6 +928,11 @@ namespace Microsoft.Maui.Handlers.WPF
 			{
 				PlatformView?.Dispatcher.InvokeAsync(() =>
 					PlatformView?.SetFlyoutBehavior(VirtualView!.FlyoutBehavior));
+			}
+			else if (e.PropertyName == nameof(Shell.FlyoutIsPresented))
+			{
+				PlatformView?.Dispatcher.InvokeAsync(() =>
+					PlatformView?.ToggleFlyout(VirtualView!.FlyoutIsPresented));
 			}
 			else if (e.PropertyName == nameof(Shell.FlyoutWidth))
 			{
@@ -922,12 +980,17 @@ namespace Microsoft.Maui.Handlers.WPF
 					}
 				}
 
-				if (currentPage == null) return;
+				if (currentPage == null)
+				{
+					PlatformView.UpdateBackButtonRegistration(null);
+					return;
+				}
 
 				var platformView = Microsoft.Maui.Platform.ElementExtensions.ToPlatform((IElement)currentPage, MauiContext);
 				var title = currentPage.Title ?? VirtualView.CurrentItem?.Title ?? string.Empty;
 				bool hasNavStack = section?.Stack?.Count > 1;
 
+				PlatformView.UpdateBackButtonRegistration(currentPage);
 				PlatformView.ShowPage(platformView as FrameworkElement, title, hasNavStack);
 			}
 			catch { }
@@ -936,7 +999,7 @@ namespace Microsoft.Maui.Handlers.WPF
 		async void OnShellItemSelected(ShellItem item)
 		{
 			if (VirtualView == null) return;
-			
+
 			try
 			{
 				// Use absolute route navigation to pop any pushed pages and show section root
@@ -975,6 +1038,9 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		static void MapFlyoutBehavior(ShellHandler handler, Shell shell)
 			=> handler.PlatformView.SetFlyoutBehavior(shell.FlyoutBehavior);
+
+		static void MapFlyoutIsPresented(ShellHandler handler, Shell shell)
+			=> handler.PlatformView.ToggleFlyout(shell.FlyoutIsPresented);
 
 		static void MapFlyoutWidth(ShellHandler handler, Shell shell)
 		{

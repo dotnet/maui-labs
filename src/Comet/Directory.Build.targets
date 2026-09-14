@@ -62,6 +62,10 @@
     <Compile Remove="bin\**;obj\**" />
     <None Remove="bin\**;obj\**" />
   </ItemGroup>
-  
+
+  <!-- Fast-dev APK staleness fix ("no Java peer type found" after library rebuilds) —
+       see the file for the analysis. sample/Directory.Build.targets imports it too
+       (it shadows this file for projects under sample/). -->
+  <Import Project="eng\FastDevApkFix.targets" />
 
 </Project>

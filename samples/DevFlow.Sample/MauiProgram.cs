@@ -44,6 +44,7 @@ public static class MauiProgram
 		{
 			options.Port = ResolveAgentPort();
 			options.EnableProfiler = true;
+			options.EnableLayoutDiagnostics = true;
 
 			var diagnostics = options.RegisterExtension(
 				"com.example.diagnostics",

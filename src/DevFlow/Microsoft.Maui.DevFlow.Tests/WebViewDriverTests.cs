@@ -239,6 +239,57 @@ public class WindowsAppDriverTests
         using var driver = new WindowsAppDriver();
         Assert.Equal("Windows", driver.Platform);
     }
+
+    [Fact]
+    public void AlertCandidate_RequiresDedicatedChildWindow()
+    {
+        var root = new FakeWindow
+        {
+            Buttons = ["Close"],
+            Texts = ["Dogs"]
+        };
+
+        var candidate = WindowsAppDriver.FindDedicatedDialogCandidate(
+            new[] { root },
+            window => window.Children,
+            window => window.Buttons.Select(name => (window, name)).ToArray(),
+            window => window.Texts);
+
+        Assert.Null(candidate);
+    }
+
+    [Fact]
+    public void AlertCandidate_AcceptsDedicatedChildWindowWithTextAndButtons()
+    {
+        var dialog = new FakeWindow
+        {
+            Buttons = ["OK", "Cancel"],
+            Texts = ["Confirm Action", "Do you want to proceed?"]
+        };
+        var root = new FakeWindow
+        {
+            Children = [dialog],
+            Buttons = ["Close"],
+            Texts = ["Dogs"]
+        };
+
+        var candidate = WindowsAppDriver.FindDedicatedDialogCandidate(
+            new[] { root },
+            window => window.Children,
+            window => window.Buttons.Select(name => (window, name)).ToArray(),
+            window => window.Texts);
+
+        Assert.NotNull(candidate);
+        Assert.Equal(["OK", "Cancel"], candidate.Buttons.Select(button => button.name));
+        Assert.Equal("Confirm Action", candidate.Texts[0]);
+    }
+
+    private sealed class FakeWindow
+    {
+        public IReadOnlyList<FakeWindow> Children { get; init; } = [];
+        public IReadOnlyList<string> Buttons { get; init; } = [];
+        public IReadOnlyList<string> Texts { get; init; } = [];
+    }
 }
 
 public class ElementInfoTests
@@ -271,6 +322,11 @@ public class ElementInfoTests
             Type = "Button",
             FullType = "Microsoft.Maui.Controls.Button",
             Framework = "maui",
+            Origin = "native",
+            OwnerId = "owner1",
+            Discriminator = "primary",
+            BoundsQuality = "exact",
+            Capabilities = ["invoke", "focus"],
             AutomationId = "SubmitBtn",
             Text = "Submit",
             IsVisible = true,
@@ -286,6 +342,10 @@ public class ElementInfoTests
 
         Assert.NotNull(deserialized);
         Assert.Contains("\"framework\":\"maui\"", json);
+        Assert.Contains("\"origin\":\"native\"", json);
+        Assert.Contains("\"ownerId\":\"owner1\"", json);
+        Assert.Contains("\"boundsQuality\":\"exact\"", json);
+        Assert.Contains("\"capabilities\":", json);
         Assert.Contains("\"role\":\"button\"", json);
         Assert.Contains("\"traits\":", json);
         Assert.Contains("\"state\":", json);
@@ -294,6 +354,11 @@ public class ElementInfoTests
         Assert.Equal("btn1", deserialized.Id);
         Assert.Equal("Button", deserialized.Type);
         Assert.Equal("maui", deserialized.Framework);
+        Assert.Equal("native", deserialized.Origin);
+        Assert.Equal("owner1", deserialized.OwnerId);
+        Assert.Equal("primary", deserialized.Discriminator);
+        Assert.Equal("exact", deserialized.BoundsQuality);
+        Assert.Equal(["invoke", "focus"], deserialized.Capabilities);
         Assert.Equal("SubmitBtn", deserialized.AutomationId);
         Assert.Equal("Submit", deserialized.Text);
         Assert.True(deserialized.IsVisible);
@@ -309,6 +374,27 @@ public class ElementInfoTests
         Assert.Equal("UIButton", deserialized.NativeView!.Type);
         Assert.NotNull(deserialized.Bounds);
         Assert.Equal(100, deserialized.Bounds.Width);
+    }
+
+    [Fact]
+    public void Serialization_DeclaredCapabilitiesPreserveNonInteractiveTraitsInDriver()
+    {
+        var agentElement = new Microsoft.Maui.DevFlow.Agent.Core.ElementInfo
+        {
+            Id = "native-button",
+            Type = "NSButton",
+            Role = "button",
+            Capabilities = ["select"],
+            IsVisible = true,
+            IsEnabled = true
+        };
+
+        var json = System.Text.Json.JsonSerializer.Serialize(agentElement);
+        var driverElement = System.Text.Json.JsonSerializer.Deserialize<ElementInfo>(json);
+
+        Assert.NotNull(driverElement);
+        Assert.DoesNotContain("interactive", driverElement.Traits ?? []);
+        Assert.DoesNotContain("focusable", driverElement.Traits ?? []);
     }
 
     [Fact]

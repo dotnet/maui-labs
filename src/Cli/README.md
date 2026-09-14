@@ -15,7 +15,7 @@ A command-line tool for .NET MAUI development environment setup and device manag
 ### 1. Install the CLI tool
 
 ```bash
-dotnet tool install -g Microsoft.Maui.Cli
+dotnet tool install -g Microsoft.Maui.Cli --prerelease
 ```
 
 ### 2. Check your environment
@@ -85,6 +85,18 @@ maui apple simulator stop "iPhone 16 Pro"
 maui apple simulator delete "iPhone 16 Pro"
 ```
 
+### 6. Open the MAUI DevFlow Inspector
+
+After adding the DevFlow agent to a running app:
+
+```bash
+maui devflow broker start
+```
+
+Then open `http://localhost:19223/inspector/`. See the
+[MAUI DevFlow Inspector guide](https://github.com/dotnet/maui-labs/blob/main/docs/DevFlow/inspector.md) for app registration and browser,
+VS Code, GitHub Copilot desktop, and Copilot CLI setup.
+
 ## Commands
 
 | Command | Description |
@@ -122,6 +134,7 @@ maui apple simulator delete "iPhone 16 Pro"
 | `maui devflow init` | Install project-scoped DevFlow onboarding/debugging skills |
 | `maui devflow skills` | Manage bundled DevFlow skill installs and updates |
 | `maui devflow ui` | Visual tree inspection, interaction, and screenshots |
+| `maui devflow ui diagnostics` | Detect clipping, overflow, text truncation, overlap, and occlusion |
 | `maui devflow recording` | Manage UI recording sessions (start, stop, status) |
 | `maui devflow webview` | Blazor WebView automation via Chrome DevTools Protocol |
 | `maui devflow logs` | Fetch and stream application logs |
@@ -142,6 +155,9 @@ maui apple simulator delete "iPhone 16 Pro"
 | `maui go upgrade` | Graduate a Go project to a full MAUI project |
 
 Run `maui <command> --help` for detailed options on any command.
+
+For the shared Inspector UI and its host integrations, see the
+[MAUI DevFlow Inspector guide](https://github.com/dotnet/maui-labs/blob/main/docs/DevFlow/inspector.md).
 
 DevFlow file commands can use local files directly:
 

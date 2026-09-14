@@ -6,6 +6,8 @@ namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests;
 
 [Collection("AgentIntegration")]
 [Trait("Category", "Files")]
+// Requires the MAUI sample: storage roots are resolved through Essentials FileSystem. Native runs filter this out.
+[Trait(TestFramework.Trait, TestFramework.Maui)]
 public class FileStorageTests : IntegrationTestBase
 {
     const string TestPathPrefix = "integration-tests/files";

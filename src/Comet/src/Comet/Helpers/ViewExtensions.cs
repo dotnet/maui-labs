@@ -136,6 +136,12 @@ namespace Comet
 		public static T OnPan<T>(this T view, Action<PanGesture> action) where T : View
 			=> view.AddGesture(new PanGesture(action));
 
+		/// <summary>Press-and-hold voice-record gesture (gold Jetchat RecordButton). The handler
+		/// is invoked through the phases of a <see cref="RecordGesture"/> — Started on long-press,
+		/// Running on each drag, Completed on release, Canceled on a swipe-to-cancel.</summary>
+		public static T OnRecord<T>(this T view, Action<RecordGesture> action) where T : View
+			=> view.AddGesture(new RecordGesture(action));
+
 		public static T OnPinch<T>(this T view, Action<PinchGesture> action) where T : View
 			=> view.AddGesture(new PinchGesture(action));
 
@@ -196,11 +202,10 @@ namespace Comet
 		/// <returns></returns>
 		public static IMauiContext GetMauiContext(this View view)
 		{
-			//IF there is only one app, with one window, then there is only one context.
-			//Don't go hunting!
-			if (CometApp.CurrentApp.Windows.Count == 1)
-				return CometApp.MauiContext;
-			return view.FindParentOfType<IMauiContextHolder>()?.MauiContext ?? CometApp.MauiContext;
+			// The MAUI host (CometApp) was deleted with the legacy render path (Phase 5);
+			// the node backends (Compose/SwiftUI) never run inside a MauiContext. Null lets
+			// callers (e.g. the animation-manager probe) fall through to Comet-owned services.
+			return null;
 		}
 
 		public static T Aspect<T>(this T image, Aspect aspect) where T : Image =>

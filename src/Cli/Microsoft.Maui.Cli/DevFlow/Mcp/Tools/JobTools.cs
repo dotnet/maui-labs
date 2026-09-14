@@ -13,7 +13,7 @@ public sealed class JobTools
 		McpAgentSession session,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.GetJobsAsync();
 		return result.ValueKind == JsonValueKind.Undefined ? "Failed to list jobs." : result.ToString();
 	}
@@ -25,7 +25,7 @@ public sealed class JobTools
 		[Description("Optional iOS BGTask type: 'processing' or 'refresh'. If omitted, the agent resolves it from pending requests when possible.")] string? type = null,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.RunJobAsync(identifier, type);
 		return result.ValueKind == JsonValueKind.Undefined ? $"Failed to run job '{identifier}'." : result.ToString();
 	}

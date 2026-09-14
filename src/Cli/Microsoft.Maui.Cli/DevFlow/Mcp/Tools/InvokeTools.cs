@@ -24,7 +24,7 @@ public sealed class InvokeTools
 		McpAgentSession session,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.ListActionsAsync();
 		return CliJson.SerializeUntyped(result, indented: false);
 	}
@@ -67,7 +67,7 @@ public sealed class InvokeTools
 			}
 		}
 
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.InvokeActionAsync(actionName, args);
 
 		if (result == null)
