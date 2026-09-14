@@ -20,11 +20,11 @@ public class UIAgentOptions
     /// state for a <see cref="UIAgent{TState}"/>.
     /// </summary>
     /// <remarks>
-    /// Return <see langword="true"/> when the update contained state handled by the mapper. Content
-    /// must also be marked with <see cref="StateMapperContext.MarkHandled"/> to keep it out of the
-    /// visible block pipeline. The mapper and agent are single-thread-affine and not thread-safe.
+    /// Content must be explicitly marked with <see cref="StateMapperContext.MarkHandled"/> to keep it
+    /// out of the visible block pipeline. Supplying state alone does not consume content. The mapper
+    /// and agent are single-thread-affine and not thread-safe.
     /// </remarks>
-    public Func<StateMapperContext, bool>? StateMapper { get; set; }
+    public Action<StateMapperContext>? StateMapper { get; set; }
 
     /// <summary>
     /// Gets or sets the conversation thread that persists committed raw updates.
@@ -42,7 +42,7 @@ public class UIAgentOptions
     public IServiceProvider? Services { get; set; }
 
     internal List<IHandlerRegistration> HandlerRegistrations { get; } = new();
-    internal Dictionary<string, AIFunction> UIActions { get; } =
+    internal Dictionary<string, UIActionRegistration> UIActions { get; } =
         new(StringComparer.Ordinal);
 
     public void AddBlockHandler<TState>(ContentBlockHandler<TState> handler)
@@ -53,20 +53,29 @@ public class UIAgentOptions
     }
 
     /// <summary>
-    /// Registers a client-side action. Its declaration is sent to the model and any matching call is
-    /// executed automatically by <see cref="AgentContext"/> without entering
-    /// <see cref="ConversationStatus.AwaitingInput"/>.
+    /// Registers a client-side action that is automatically executed by <see cref="AgentContext"/>
+    /// without entering <see cref="ConversationStatus.AwaitingInput"/>.
     /// </summary>
     public void RegisterUIAction(AIFunction function)
+        => RegisterUIAction(function, UIActionInvocationMode.Automatic);
+
+    /// <summary>
+    /// Registers a client-side action with the specified invocation mode.
+    /// </summary>
+    /// <param name="function">The function declared to the model and invoked by the client.</param>
+    /// <param name="mode">Whether the action is invoked automatically or requires UI input.</param>
+    public void RegisterUIAction(AIFunction function, UIActionInvocationMode mode)
     {
         ArgumentNullException.ThrowIfNull(function);
-        if (!UIActions.TryAdd(function.Name, function))
+        if (!UIActions.TryAdd(function.Name, new UIActionRegistration(function, mode)))
         {
             throw new ArgumentException(
                 $"A UI action named '{function.Name}' is already registered.",
                 nameof(function));
         }
     }
+
+    internal sealed record UIActionRegistration(AIFunction Function, UIActionInvocationMode Mode);
 
     internal interface IHandlerRegistration
     {

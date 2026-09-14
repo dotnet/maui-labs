@@ -54,7 +54,7 @@ public class StateMapperTests
     }
 
     [Fact]
-    public async Task StateMapper_ReturnsFalse_DoesNotFilterOrUpdateState()
+    public async Task StateMapper_StateAndFilteringAreIndependent()
     {
         var client = CreateClient(EmitStateOnly());
         var agent = new UIAgent<RecipeState>(client, options =>
@@ -64,18 +64,15 @@ public class StateMapperTests
                 var content = GetFirstUnhandled(context);
                 context.MarkHandled(content);
                 context.SetState(new RecipeState { Title = "ignored" });
-                return false;
+                return;
             };
         });
 
         var blocks = await EnumerateAsync(agent.SendMessageAsync(
             new ChatMessage(ChatRole.User, "Recipe?")));
 
-        Assert.Equal(string.Empty, agent.State.Value.Title);
-        var text = Assert.Single(
-            blocks.OfType<TextContentBlock>(),
-            block => block.Role == ChatRole.Assistant);
-        Assert.StartsWith("{", text.RawText);
+        Assert.Equal("ignored", agent.State.Value.Title);
+        Assert.DoesNotContain(blocks, block => block.Role == ChatRole.Assistant);
     }
 
     [Fact]
@@ -90,7 +87,7 @@ public class StateMapperTests
                 var content = GetFirstUnhandled(context);
                 context.MarkHandled(content);
                 context.SetState("not a RecipeState");
-                return true;
+                return;
             };
         }, initial);
 
@@ -344,7 +341,7 @@ public class StateMapperTests
 
                     context.MarkHandled(content);
                     context.SetState(new RecipeState { Title = "Restored" });
-                    return true;
+                    return;
                 };
             },
             previous);
@@ -405,9 +402,9 @@ public class StateMapperTests
 
                     context.MarkHandled(content);
                     context.SetState(state);
-                    return true;
+                    return;
                 }
-                return false;
+                return;
             };
         });
     }
@@ -435,10 +432,10 @@ public class StateMapperTests
 
                     context.MarkHandled(content);
                     context.SetPredictiveState(state);
-                    return true;
+                    return;
                 }
 
-                return false;
+                return;
             };
         }, initial);
     }
