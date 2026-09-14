@@ -1,0 +1,25 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.5.3">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AspireUseCliBundle>true</AspireUseCliBundle>
+    <UserSecretsId>AIChat-ClientServer-Sample-AppHost</UserSecretsId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\AIChat.ClientServer.Sample.AgentServer\AIChat.ClientServer.Sample.AgentServer.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" VersionOverride="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" VersionOverride="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" VersionOverride="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" VersionOverride="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" VersionOverride="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" VersionOverride="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Http" VersionOverride="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" VersionOverride="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" VersionOverride="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" VersionOverride="10.0.11" />
+    <PackageReference Include="ModelContextProtocol" VersionOverride="1.3.0" />
+  </ItemGroup>
+</Project>
