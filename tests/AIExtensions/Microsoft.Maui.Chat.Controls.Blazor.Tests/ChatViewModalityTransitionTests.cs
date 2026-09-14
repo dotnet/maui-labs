@@ -142,11 +142,8 @@ public class ChatViewModalityTransitionTests
     }
 
     [Fact]
-    public async Task CanToggleSpeech_DeniedWhile_AudioTranscribing()
+    public async Task CanToggleSpeech_DeniedWhile_ConversationBusy()
     {
-        // Model the transcribing state directly (a real recorder would arrive here in the
-        // window between StopAsync being awaited and the buffer being converted to an
-        // attachment). Regardless of how the state was reached, speech must not start.
         var conversation = CreateConversation();
         var recorder = new TestAudioRecorder();
         var recognizer = new TestSpeechRecognizer();
@@ -155,10 +152,8 @@ public class ChatViewModalityTransitionTests
         view.SetParameter(nameof(ChatView.AllowAudioCapture), true);
         view.SetParameter(nameof(ChatView.AllowLiveSpeech), true);
 
-        var composer = (ChatComposerContext)view.ComposerContext;
-        composer.SetIsTranscribingAudio(true);
+        conversation.SetStatus(ChatConversationStatus.Busy);
 
-        Assert.True(view.ComposerContext.IsTranscribingAudio);
         Assert.False(view.ComposerContext.CanToggleLiveSpeech);
         await Task.CompletedTask;
     }

@@ -12,12 +12,14 @@ namespace Microsoft.Maui.Chat.Controls;
 /// </remarks>
 public sealed class ChatInputContext : BindableObject
 {
-    private readonly ChatView _owner;
+    private readonly ChatComposerController _controller;
+    private readonly Func<ValueTask> _focusAsync;
     private CallbackRegistration[] _callbacks = [];
 
-    internal ChatInputContext(ChatView owner)
+    internal ChatInputContext(ChatComposerController controller, Func<ValueTask> focusAsync)
     {
-        _owner = owner;
+        _controller = controller;
+        _focusAsync = focusAsync;
         SubmitCommand = new Command(
             () => _ = SubmitAsync(),
             () => CanSubmit);
@@ -38,59 +40,57 @@ public sealed class ChatInputContext : BindableObject
     /// <summary>Gets or sets the current composer text.</summary>
     public string Text
     {
-        get => _owner.Text;
-        set => _owner.Text = value;
+        get => _controller.Text;
+        set => _controller.Text = value;
     }
 
     /// <summary>Gets the staged attachments.</summary>
-    public ReadOnlyObservableCollection<ChatAttachment> Attachments => _owner.Attachments;
+    public ReadOnlyObservableCollection<ChatAttachment> Attachments => _controller.Attachments;
 
     /// <summary>Gets the current conversation state.</summary>
     public ChatConversationStatus Status =>
-        _owner.Conversation?.Status ?? ChatConversationStatus.Idle;
+        _controller.Status;
 
     /// <summary>Gets whether the conversation is streaming or waiting for local input.</summary>
-    public bool IsConversationBusy => _owner.IsBusy;
+    public bool IsConversationBusy => _controller.IsConversationBusy;
 
     /// <summary>Gets whether an attachment, recording, transcription, or speech operation is active.</summary>
-    public bool IsComposing => _owner.IsComposing;
+    public bool IsComposing => _controller.IsComposing;
 
     /// <summary>Gets whether the current draft can be submitted.</summary>
-    public bool CanSubmit => _owner.CanSend;
+    public bool CanSubmit => _controller.CanSubmit;
 
     /// <summary>Gets whether the active response can be stopped.</summary>
-    public bool CanCancel => _owner.CanStop;
+    public bool CanCancel => _controller.CanStop;
 
     /// <summary>Gets whether the attachment picker can be opened.</summary>
     public bool CanPickAttachments =>
-        _owner.AllowAttachments && !_owner.IsBusy && !_owner.IsComposing;
+        _controller.CanPickAttachments;
 
     /// <summary>Gets whether audio capture can be started, stopped, or canceled.</summary>
-    public bool CanToggleAudioCapture => _owner.CanToggleAudioCapture;
+    public bool CanToggleAudioCapture => _controller.CanToggleAudioCapture;
 
     /// <summary>Gets whether live speech can be started or stopped.</summary>
-    public bool CanToggleLiveSpeech => _owner.CanToggleLiveSpeech;
+    public bool CanToggleLiveSpeech => _controller.CanToggleLiveSpeech;
 
     /// <summary>Gets whether audio is currently being recorded.</summary>
-    public bool IsRecordingAudio => _owner.IsRecordingAudio;
+    public bool IsRecordingAudio => _controller.IsRecordingAudio;
 
     /// <summary>Gets whether captured audio is being transcribed.</summary>
-    public bool IsTranscribingAudio => _owner.IsTranscribingAudio;
+    public bool IsTranscribingAudio => _controller.IsTranscribingAudio;
 
     /// <summary>Gets whether live speech is enabled.</summary>
-    public bool IsLiveSpeechEnabled => _owner.IsLiveSpeechEnabled;
+    public bool IsLiveSpeechEnabled => _controller.IsLiveSpeechEnabled;
 
     /// <summary>Gets whether a speech recognizer is actively listening.</summary>
-    public bool IsListening => _owner.IsListening;
+    public bool IsListening => _controller.IsListening;
 
     /// <summary>Gets the current user-safe composer status.</summary>
-    public string? StatusMessage => _owner.InputStatusMessage;
+    public string? StatusMessage => _controller.StatusMessage;
 
     /// <summary>Gets the current user-safe composer error.</summary>
     public string? ErrorMessage =>
-        _owner.InputErrorMessage
-        ?? _owner.AttachmentError
-        ?? _owner.SendError;
+        _controller.ErrorMessage;
 
     /// <summary>Gets the submit command for XAML templates.</summary>
     public ICommand SubmitCommand { get; }
@@ -110,46 +110,46 @@ public sealed class ChatInputContext : BindableObject
     /// <summary>Stages an attachment.</summary>
     public ValueTask AddAttachmentAsync(ChatAttachment attachment)
     {
-        _owner.AddAttachment(attachment);
+        _controller.AddAttachment(attachment);
         return ValueTask.CompletedTask;
     }
 
     /// <summary>Removes a staged attachment.</summary>
     public ValueTask RemoveAttachmentAsync(ChatAttachment attachment)
     {
-        _owner.RemoveAttachment(attachment);
+        _controller.RemoveAttachment(attachment);
         return ValueTask.CompletedTask;
     }
 
     /// <summary>Submits the current draft.</summary>
-    public Task SubmitAsync() => _owner.SendAsync();
+    public Task SubmitAsync() => _controller.SubmitAsync();
 
     /// <summary>Stops the active response.</summary>
-    public Task CancelAsync() => _owner.StopAsync();
+    public Task CancelAsync() => _controller.StopAsync();
 
     /// <summary>Opens the configured attachment picker.</summary>
     public Task PickAttachmentsAsync(CancellationToken cancellationToken = default) =>
-        _owner.PickAttachmentsAsync(cancellationToken);
+        _controller.PickAttachmentsAsync(cancellationToken);
 
     /// <summary>Starts or stops audio capture, or cancels an active transcription.</summary>
-    public Task ToggleAudioCaptureAsync() => _owner.ToggleAudioCaptureAsync();
+    public Task ToggleAudioCaptureAsync() => _controller.ToggleAudioCaptureAsync();
 
     /// <summary>Starts or stops continuous speech recognition.</summary>
-    public Task ToggleLiveSpeechAsync() => _owner.ToggleLiveSpeechAsync();
+    public Task ToggleLiveSpeechAsync() => _controller.ToggleLiveSpeechAsync();
 
     /// <summary>Focuses the composer input when the template supplies one.</summary>
-    public ValueTask FocusAsync() => _owner.FocusInputAsync();
+    public ValueTask FocusAsync() => _focusAsync();
 
     /// <summary>
     /// Marks a custom asynchronous composer operation as active or inactive.
     /// </summary>
-    public void SetComposing(bool value) => _owner.SetInputComposing(value);
+    public void SetComposing(bool value) => _controller.SetComposing(value);
 
     /// <summary>Sets a user-safe composer status, or clears it with <see langword="null"/>.</summary>
-    public void SetStatusMessage(string? value) => _owner.SetInputStatusMessage(value);
+    public void SetStatusMessage(string? value) => _controller.SetStatusMessage(value);
 
     /// <summary>Sets a user-safe composer error, or clears it with <see langword="null"/>.</summary>
-    public void SetErrorMessage(string? value) => _owner.SetInputErrorMessage(value);
+    public void SetErrorMessage(string? value) => _controller.SetErrorMessage(value);
 
     /// <summary>Registers a synchronous state-change callback.</summary>
     public IDisposable RegisterOnChanged(Action callback)

@@ -1,21 +1,21 @@
 namespace Microsoft.Maui.AI.Chat.Controls;
 
 /// <summary>Abstracts native file selection for a <see cref="CopilotChatView"/>.</summary>
-public interface IChatAttachmentPicker : Microsoft.Maui.Chat.Controls.IChatAttachmentPicker
+public interface IChatAttachmentPicker : Microsoft.Maui.Chat.IChatAttachmentPicker
 {
-    new Task<IReadOnlyList<ChatAttachment>> PickAsync(
+    Task<IReadOnlyList<ChatAttachment>> PickAsync(
         FilePickerFileType? fileTypes,
         long maxBytesPerFile,
         CancellationToken cancellationToken = default);
 
-    async Task<IReadOnlyList<Microsoft.Maui.Chat.Controls.ChatAttachment>>
-        Microsoft.Maui.Chat.Controls.IChatAttachmentPicker.PickAsync(
-            FilePickerFileType? fileTypes,
+    async Task<IReadOnlyList<Microsoft.Maui.Chat.ChatAttachment>>
+        Microsoft.Maui.Chat.IChatAttachmentPicker.PickAsync(
+            object? fileTypes,
             long maxBytesPerFile,
             CancellationToken cancellationToken)
     {
         var attachments = await PickAsync(
-            fileTypes,
+            fileTypes as FilePickerFileType,
             maxBytesPerFile,
             cancellationToken);
         return attachments;

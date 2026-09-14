@@ -335,7 +335,7 @@ public class ChatMessagesView : TemplatedView
     private void OnConversationPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         // The local participant decides which rows are outgoing, so re-evaluate the grouping flags.
-        if (e.PropertyName == ChatConversation.LocalParticipantProperty.PropertyName)
+        if (e.PropertyName == nameof(ChatConversation.LocalParticipant))
             ReconcileItems();
     }
 

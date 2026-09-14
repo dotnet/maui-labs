@@ -74,7 +74,7 @@ The default services registered by `UseChatControls()` are:
 
 `TryAddSingleton` means an app-supplied registration (for a simulated microphone, a cloud picker,
 or a deterministic test double) wins if it is registered before `UseChatControls()`. This is how
-the [sample](../../../samples/ChatControls.BlazorHybrid.Sample/) swaps in
+the [consolidated sample](../../../samples/ChatControls.Sample/) swaps in
 `SimulatedChatAudioRecorder` / `SimulatedChatSpeechRecognizer` for DevFlow automation:
 
 ```csharp
