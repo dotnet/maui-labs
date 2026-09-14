@@ -5,42 +5,36 @@ namespace Microsoft.Maui.Chat.Controls.Blazor.Tests;
 
 /// <summary>
 /// Verifies the composer-context action contract exposes plain <see cref="Task"/>-returning
-/// methods (not <c>EventCallback</c>) and that they are wired through the attached delegates.
+/// methods (not <c>EventCallback</c>) and delegate directly to the shared controller.
 /// </summary>
 public class ChatComposerContextActionTests
 {
     [Fact]
-    public async Task SubmitAsync_ForwardsToAttachedDelegate()
+    public async Task SubmitAsync_DelegatesToController()
     {
-        var context = new ChatComposerContext();
-        var invoked = false;
-        context.AttachActions(
-            onSubmit: () => { invoked = true; return Task.CompletedTask; },
-            onStop: () => Task.CompletedTask,
-            onPickAttachments: () => Task.CompletedTask,
-            onToggleAudioCapture: () => Task.CompletedTask,
-            onToggleLiveSpeech: () => Task.CompletedTask);
+        var local = new ChatParticipant("local", kind: ChatParticipantKind.Local);
+        var conversation = new ObservableChatConversation(local);
+        using var controller = new ChatComposerController
+        {
+            Conversation = conversation,
+            Text = "hello",
+        };
+        using var context = new ChatComposerContext(controller);
 
         await ((IChatComposerContext)context).SubmitAsync();
 
-        Assert.True(invoked);
+        Assert.Single(conversation.Messages);
     }
 
     [Fact]
-    public async Task StopAsync_ForwardsToAttachedDelegate()
+    public async Task StopAsync_DelegatesToController()
     {
-        var context = new ChatComposerContext();
-        var invoked = false;
-        context.AttachActions(
-            onSubmit: () => Task.CompletedTask,
-            onStop: () => { invoked = true; return Task.CompletedTask; },
-            onPickAttachments: () => Task.CompletedTask,
-            onToggleAudioCapture: () => Task.CompletedTask,
-            onToggleLiveSpeech: () => Task.CompletedTask);
+        using var controller = new ChatComposerController();
+        using var context = new ChatComposerContext(controller);
 
         await ((IChatComposerContext)context).StopAsync();
 
-        Assert.True(invoked);
+        Assert.False(controller.CanStop);
     }
 
     [Fact]
@@ -53,7 +47,7 @@ public class ChatComposerContextActionTests
         var audioTask = context.ToggleAudioCaptureAsync();
         var speechTask = context.ToggleLiveSpeechAsync();
 
-        // A no-op action was installed by default so every call returns a completed Task.
+        // An unconfigured controller treats all actions as safe no-ops.
         Assert.True(submitTask.IsCompletedSuccessfully);
         Assert.True(stopTask.IsCompletedSuccessfully);
         Assert.True(pickTask.IsCompletedSuccessfully);
@@ -64,21 +58,15 @@ public class ChatComposerContextActionTests
     }
 
     [Fact]
-    public async Task ActionsAreReInvokable()
+    public async Task ContextDisposal_DoesNotDisposeExternallySuppliedController()
     {
-        var context = new ChatComposerContext();
-        var count = 0;
-        context.AttachActions(
-            onSubmit: () => { count++; return Task.CompletedTask; },
-            onStop: () => Task.CompletedTask,
-            onPickAttachments: () => Task.CompletedTask,
-            onToggleAudioCapture: () => Task.CompletedTask,
-            onToggleLiveSpeech: () => Task.CompletedTask);
+        var controller = new ChatComposerController();
+        using (var context = new ChatComposerContext(controller))
+        {
+        }
 
-        await ((IChatComposerContext)context).SubmitAsync();
-        await ((IChatComposerContext)context).SubmitAsync();
-        await ((IChatComposerContext)context).SubmitAsync();
-
-        Assert.Equal(3, count);
+        controller.Text = "still alive";
+        Assert.Equal("still alive", controller.Text);
+        controller.Dispose();
     }
 }

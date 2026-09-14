@@ -4,6 +4,7 @@
 using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Chat.Controls;
+using Microsoft.Maui.Hosting;
 
 namespace Microsoft.Maui.Chat.Controls.Blazor.Tests;
 
@@ -50,16 +51,10 @@ public class BlazorServiceRegistrationTests
     [Fact]
     public void AddChatControlsBlazor_Chains_Into_AddChatControlsDefaults()
     {
-        // The extension method takes a MauiAppBuilder, which we cannot instantiate in a unit
-        // test. But we can verify that the same shared helper is publicly reachable and behaves
-        // identically when called from any downstream package.
-        var services = new ServiceCollection();
+        var builder = MauiApp.CreateBuilder();
+        builder.AddChatControlsBlazor();
 
-        // Simulate the Blazor extension by calling the shared helper (which is what
-        // AddChatControlsBlazor now does under the hood).
-        Microsoft.Maui.Chat.Controls.AppBuilderExtensions.AddChatControlsDefaults(services);
-
-        var provider = services.BuildServiceProvider();
+        var provider = builder.Services.BuildServiceProvider();
         Assert.NotNull(provider.GetService<IChatAttachmentPicker>());
         Assert.NotNull(provider.GetService<IChatAudioRecorder>());
         Assert.NotNull(provider.GetService<IChatSpeechRecognizer>());
@@ -68,7 +63,7 @@ public class BlazorServiceRegistrationTests
     private sealed class StubPicker : IChatAttachmentPicker
     {
         public Task<IReadOnlyList<ChatAttachment>> PickAsync(
-            FilePickerFileType? fileTypes,
+            object? fileTypes,
             long maxBytesPerFile,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ChatAttachment>>(Array.Empty<ChatAttachment>());

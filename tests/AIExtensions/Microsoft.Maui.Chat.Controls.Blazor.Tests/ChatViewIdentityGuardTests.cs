@@ -410,7 +410,7 @@ public class ChatViewIdentityGuardTests
         public GatePicker(Task<IReadOnlyList<ChatAttachment>> gate) => _gate = gate;
 
         public Task<IReadOnlyList<ChatAttachment>> PickAsync(
-            FilePickerFileType? fileTypes,
+            object? fileTypes,
             long maxBytesPerFile,
             CancellationToken cancellationToken = default) => _gate;
     }

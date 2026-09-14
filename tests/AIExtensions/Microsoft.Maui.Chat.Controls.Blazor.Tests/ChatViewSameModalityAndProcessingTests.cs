@@ -503,7 +503,7 @@ public class ChatViewSameModalityAndProcessingTests
     // ============================================================================
 
     [Fact]
-    public async Task RapidStopStart_SameModality_StaleCompletionIgnored()
+    public async Task ConversationSwap_AwaitsStaleStopBeforeRestartAndIgnoresAttachment()
     {
         var conversation = CreateConversation();
         var recorder = new TestAudioRecorder();
@@ -528,8 +528,10 @@ public class ChatViewSameModalityAndProcessingTests
         // AttachConversation bumped both op-ids. The gated stop from the first
         // recording is now stale.
         recorder.StopGate = null;  // second stop completes synchronously
-        await view.ToggleAudioCaptureAsync();  // recording #2 on new conv
-        Assert.True(view.ComposerContext.IsRecordingAudio);
+        var blockedStart = view.ToggleAudioCaptureAsync();
+        await blockedStart;
+        Assert.False(view.ComposerContext.IsRecordingAudio);
+        Assert.Equal(1, recorder.StartCallCount);
 
         // Now the first (stale) stop completes with an attachment.
         firstStopGate.SetResult(new ChatAttachment(
@@ -537,6 +539,8 @@ public class ChatViewSameModalityAndProcessingTests
             "audio/wav",
             new ReadOnlyMemory<byte>(new byte[] { 9 })));
         await stopA;
+        await WaitFor(() => view.ComposerContext.CanToggleAudioCapture);
+        await view.ToggleAudioCaptureAsync();
         await Task.Delay(30);
 
         // Stale attachment must NOT appear on the new conversation.

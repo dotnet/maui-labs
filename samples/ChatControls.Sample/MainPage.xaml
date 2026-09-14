@@ -3,6 +3,8 @@
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:chat="clr-namespace:Microsoft.Maui.Chat.Controls;assembly=Microsoft.Maui.Chat.Controls"
+    xmlns:chatCore="clr-namespace:Microsoft.Maui.Chat;assembly=Microsoft.Maui.Chat"
+    xmlns:blazor="clr-namespace:ChatControls.Sample.Components"
     xmlns:local="clr-namespace:ChatControls.Sample"
     x:Class="ChatControls.Sample.MainPage"
     x:DataType="local:TeamChatViewModel"
@@ -17,6 +19,7 @@
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="{OnIdiom Phone=0, Default=*}" />
             <ColumnDefinition Width="{OnIdiom Phone=0, Default=330}" />
         </Grid.ColumnDefinitions>
 
@@ -24,6 +27,7 @@
                        Grid.Row="0"
                        Grid.Column="0"
                        Conversation="{Binding Conversation}"
+                       ComposerController="{Binding ComposerController}"
                        Suggestions="{Binding Suggestions}"
                        AllowAttachments="True"
                        AllowAudioCapture="True"
@@ -144,9 +148,19 @@
             </chat:ChatView.ContentTemplates>
         </chat:ChatView>
 
+        <!-- Both renderers receive the same singleton TeamChatViewModel and conversation. -->
+        <BlazorWebView Grid.Row="0"
+                       Grid.Column="1"
+                       AutomationId="BlazorTeamChat"
+                       HostPage="wwwroot/index.html">
+            <BlazorWebView.RootComponents>
+                <RootComponent Selector="#app" ComponentType="{x:Type blazor:Routes}" />
+            </BlazorWebView.RootComponents>
+        </BlazorWebView>
+
         <Border x:Name="ParticipantPanel"
                 Grid.Row="{OnIdiom Phone=1, Default=0}"
-                Grid.Column="{OnIdiom Phone=0, Default=1}"
+                Grid.Column="{OnIdiom Phone=0, Default=2}"
                 Padding="0"
                 StrokeThickness="1"
                 Stroke="{AppThemeBinding Light=#D6E3E0, Dark=#2B4540}"
@@ -170,7 +184,7 @@
                             AutomationId="ParticipantPicker"
                             BackgroundColor="{AppThemeBinding Light=White, Dark=#21312E}">
                         <Picker.ItemDisplayBinding>
-                            <Binding x:DataType="chat:ChatParticipant"
+                            <Binding x:DataType="chatCore:ChatParticipant"
                                      Path="DisplayName" />
                         </Picker.ItemDisplayBinding>
                     </Picker>
@@ -253,6 +267,7 @@
                         </VerticalStackLayout>
                         <Switch Grid.Column="1"
                                 AutomationId="SimulatedVoiceSwitch"
+                                IsToggled="True"
                                 Toggled="OnSimulatedVoiceToggled" />
                     </Grid>
 
