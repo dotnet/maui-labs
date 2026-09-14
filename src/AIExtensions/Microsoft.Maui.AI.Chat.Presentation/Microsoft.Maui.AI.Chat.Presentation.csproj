@@ -19,6 +19,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Microsoft.Maui.AI.Chat\Microsoft.Maui.AI.Chat.csproj" />
-    <ProjectReference Include="..\Microsoft.Maui.Chat.Controls\Microsoft.Maui.Chat.Controls.csproj" />
+    <ProjectReference Include="..\Microsoft.Maui.Chat\Microsoft.Maui.Chat.csproj" />
   </ItemGroup>
 </Project>

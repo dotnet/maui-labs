@@ -23,6 +23,15 @@
         {
             case TextNode text: builder.AddContent(sequence++, text.Text); break;
             case LineBreakNode: builder.AddMarkupContent(sequence++, "<br />"); break;
+            case ThematicBreakNode: builder.AddMarkupContent(sequence++, "<hr />"); break;
+            case ParagraphNode: RenderElement(builder, ref sequence, "p", node); break;
+            case BlockQuoteNode: RenderElement(builder, ref sequence, "blockquote", node); break;
+            case EmphasisNode: RenderElement(builder, ref sequence, "em", node); break;
+            case StrongNode: RenderElement(builder, ref sequence, "strong", node); break;
+            case StrikethroughNode: RenderElement(builder, ref sequence, "s", node); break;
+            case HeadingNode heading:
+                RenderElement(builder, ref sequence, $"h{Math.Clamp(heading.Level, 1, 6)}", node);
+                break;
             case CodeBlockNode code:
                 builder.OpenElement(sequence++, "pre"); builder.AddContent(sequence++, code.Code); builder.CloseElement(); break;
             case InlineCodeNode code:
@@ -31,8 +40,47 @@
                 builder.OpenElement(sequence++, "a"); builder.AddAttribute(sequence++, "href", link.Url); builder.AddAttribute(sequence++, "rel", "noopener noreferrer"); RenderChildren(builder, ref sequence, link); builder.CloseElement(); break;
             case ImageNode image when IsSafeUri(image.Url):
                 builder.OpenElement(sequence++, "img"); builder.AddAttribute(sequence++, "src", image.Url); builder.AddAttribute(sequence++, "alt", image.Alt ?? string.Empty); builder.CloseElement(); break;
+            case ListNode list:
+                builder.OpenElement(sequence++, list.Ordered ? "ol" : "ul");
+                if (list.Ordered && list.Start is not null) builder.AddAttribute(sequence++, "start", list.Start);
+                RenderChildren(builder, ref sequence, list);
+                builder.CloseElement();
+                break;
+            case ListItemNode item:
+                builder.OpenElement(sequence++, "li");
+                if (item.Checked is not null)
+                {
+                    builder.OpenElement(sequence++, "input");
+                    builder.AddAttribute(sequence++, "type", "checkbox");
+                    builder.AddAttribute(sequence++, "checked", item.Checked);
+                    builder.AddAttribute(sequence++, "disabled", true);
+                    builder.CloseElement();
+                }
+                RenderChildren(builder, ref sequence, item);
+                builder.CloseElement();
+                break;
+            case TableNode: RenderElement(builder, ref sequence, "table", node); break;
+            case TableRowNode: RenderElement(builder, ref sequence, "tr", node); break;
+            case TableCellNode: RenderElement(builder, ref sequence, "td", node); break;
+            case HtmlNode html: builder.AddContent(sequence++, html.Value); break;
+            case DefinitionNode definition: builder.AddContent(sequence++, definition.Label); break;
+            case LinkReferenceNode reference: builder.AddContent(sequence++, reference.Label); break;
+            case ImageReferenceNode reference: builder.AddContent(sequence++, reference.Alt ?? reference.Label); break;
+            case FootnoteDefinitionNode definition: builder.AddContent(sequence++, definition.Label); RenderChildren(builder, ref sequence, definition); break;
+            case FootnoteReferenceNode reference: builder.AddContent(sequence++, reference.Label); break;
             default: RenderChildren(builder, ref sequence, node); break;
         }
+    }
+
+    private static void RenderElement(
+        RenderTreeBuilder builder,
+        ref int sequence,
+        string element,
+        RichTextNode node)
+    {
+        builder.OpenElement(sequence++, element);
+        RenderChildren(builder, ref sequence, node);
+        builder.CloseElement();
     }
 
     private static void RenderChildren(RenderTreeBuilder builder, ref int sequence, RichTextNode node)
