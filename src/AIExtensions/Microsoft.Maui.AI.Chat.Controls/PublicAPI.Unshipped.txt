@@ -1,22 +1,4 @@
 #nullable enable
-abstract Microsoft.Maui.AI.Chat.Controls.ContentContextView.RefreshFromContentContext() -> void
-abstract Microsoft.Maui.AI.Chat.Controls.ContentTemplate.When(Microsoft.Maui.AI.Chat.Controls.ContentContext! context) -> bool
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.DefaultTemplate = "MauiAIChat.DefaultTemplate" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.DefaultTextColor = "MauiAIChat.Default.TextColor" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.ErrorBackground = "MauiAIChat.Error.Background" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.ErrorTextColor = "MauiAIChat.Error.TextColor" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.FunctionCallBackground = "MauiAIChat.FunctionCall.Background" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.FunctionCallTextColor = "MauiAIChat.FunctionCall.TextColor" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.FunctionInvocationTemplate = "MauiAIChat.FunctionInvocationTemplate" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.FunctionResultBackground = "MauiAIChat.FunctionResult.Background" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.FunctionResultTextColor = "MauiAIChat.FunctionResult.TextColor" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.MessageListTemplate = "MauiAIChat.MessageListTemplate" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.ToolApprovalArgNameLabelStyle = "MauiAIChat.ToolApproval.ArgNameLabelStyle" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.ToolApprovalArgsRowStyle = "MauiAIChat.ToolApproval.ArgsRowStyle" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.ToolApprovalArgsStackStyle = "MauiAIChat.ToolApproval.ArgsStackStyle" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.ToolApprovalArgValueLabelStyle = "MauiAIChat.ToolApproval.ArgValueLabelStyle" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.ToolApprovalEmptyArgsLabelStyle = "MauiAIChat.ToolApproval.EmptyArgsLabelStyle" -> string!
-const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.ToolApprovalTemplate = "MauiAIChat.ToolApprovalTemplate" -> string!
 Microsoft.Maui.AI.Chat.Controls.AppBuilderExtensions
 Microsoft.Maui.AI.Chat.Controls.ChatAttachment
 Microsoft.Maui.AI.Chat.Controls.ChatAttachment.ChatAttachment(string! fileName, Microsoft.Extensions.AI.DataContent! content) -> void
@@ -51,7 +33,7 @@ Microsoft.Maui.AI.Chat.Controls.ContentContextView.ContentContextView() -> void
 Microsoft.Maui.AI.Chat.Controls.ContentTemplate
 Microsoft.Maui.AI.Chat.Controls.ContentTemplate.ContentTemplate() -> void
 Microsoft.Maui.AI.Chat.Controls.ContentTemplate.CreateMessageTemplate(System.Func<Microsoft.Maui.Controls.View!>! createView) -> Microsoft.Maui.Controls.DataTemplate!
-Microsoft.Maui.AI.Chat.Controls.ContentTemplate.Presentation.get -> Microsoft.Maui.Chat.Controls.ChatContentPresentation?
+Microsoft.Maui.AI.Chat.Controls.ContentTemplate.Presentation.get -> Microsoft.Maui.Chat.ChatContentPresentation?
 Microsoft.Maui.AI.Chat.Controls.ContentTemplate.Presentation.set -> void
 Microsoft.Maui.AI.Chat.Controls.ContentTemplate.UseMessageChrome.get -> bool
 Microsoft.Maui.AI.Chat.Controls.ContentTemplate.UseMessageChrome.set -> void
@@ -158,6 +140,24 @@ Microsoft.Maui.AI.Chat.Controls.UIActionContentTemplate
 Microsoft.Maui.AI.Chat.Controls.UIActionContentTemplate.UIActionContentTemplate() -> void
 Microsoft.Maui.AI.Chat.Controls.UIActionView
 Microsoft.Maui.AI.Chat.Controls.UIActionView.UIActionView() -> void
+abstract Microsoft.Maui.AI.Chat.Controls.ContentContextView.RefreshFromContentContext() -> void
+abstract Microsoft.Maui.AI.Chat.Controls.ContentTemplate.When(Microsoft.Maui.AI.Chat.Controls.ContentContext! context) -> bool
+const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.DefaultTemplate = "MauiAIChat.DefaultTemplate" -> string!
+const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.DefaultTextColor = "MauiAIChat.Default.TextColor" -> string!
+const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.ErrorBackground = "MauiAIChat.Error.Background" -> string!
+const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.ErrorTextColor = "MauiAIChat.Error.TextColor" -> string!
+const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.FunctionCallBackground = "MauiAIChat.FunctionCall.Background" -> string!
+const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.FunctionCallTextColor = "MauiAIChat.FunctionCall.TextColor" -> string!
+const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.FunctionInvocationTemplate = "MauiAIChat.FunctionInvocationTemplate" -> string!
+const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.FunctionResultBackground = "MauiAIChat.FunctionResult.Background" -> string!
+const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.FunctionResultTextColor = "MauiAIChat.FunctionResult.TextColor" -> string!
+const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.MessageListTemplate = "MauiAIChat.MessageListTemplate" -> string!
+const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.ToolApprovalArgNameLabelStyle = "MauiAIChat.ToolApproval.ArgNameLabelStyle" -> string!
+const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.ToolApprovalArgValueLabelStyle = "MauiAIChat.ToolApproval.ArgValueLabelStyle" -> string!
+const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.ToolApprovalArgsRowStyle = "MauiAIChat.ToolApproval.ArgsRowStyle" -> string!
+const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.ToolApprovalArgsStackStyle = "MauiAIChat.ToolApproval.ArgsStackStyle" -> string!
+const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.ToolApprovalEmptyArgsLabelStyle = "MauiAIChat.ToolApproval.EmptyArgsLabelStyle" -> string!
+const Microsoft.Maui.AI.Chat.Controls.Themes.ChatThemeKeys.ToolApprovalTemplate = "MauiAIChat.ToolApprovalTemplate" -> string!
 override Microsoft.Maui.AI.Chat.Controls.ContentContextView.OnContentUpdated() -> void
 override Microsoft.Maui.AI.Chat.Controls.ContentTemplate.CreateTemplate() -> Microsoft.Maui.Controls.DataTemplate!
 override Microsoft.Maui.AI.Chat.Controls.CopilotChatView.OnApplyTemplate() -> void
@@ -171,7 +171,7 @@ override Microsoft.Maui.AI.Chat.Controls.FunctionInvocationTemplate.CreateTempla
 override Microsoft.Maui.AI.Chat.Controls.FunctionInvocationTemplate.When(Microsoft.Maui.AI.Chat.Controls.ContentContext! context) -> bool
 override Microsoft.Maui.AI.Chat.Controls.FunctionInvocationView.RefreshFromContentContext() -> void
 override Microsoft.Maui.AI.Chat.Controls.GenericContentTemplate.When(Microsoft.Maui.AI.Chat.Controls.ContentContext! context) -> bool
-override Microsoft.Maui.AI.Chat.Controls.MessageListView.CreateItem(Microsoft.Maui.Chat.Controls.ConversationMessage! message, Microsoft.Maui.Chat.Controls.MessageContent! content, Microsoft.Maui.Chat.Controls.ChatConversation? conversation, Microsoft.Maui.Chat.Controls.ChatAppearance! appearance) -> Microsoft.Maui.Chat.Controls.ChatContentItem!
+override Microsoft.Maui.AI.Chat.Controls.MessageListView.CreateItem(Microsoft.Maui.Chat.ConversationMessage! message, Microsoft.Maui.Chat.MessageContent! content, Microsoft.Maui.Chat.ChatConversation? conversation, Microsoft.Maui.Chat.Controls.ChatAppearance! appearance) -> Microsoft.Maui.Chat.Controls.ChatContentItem!
 override Microsoft.Maui.AI.Chat.Controls.MessageListView.CreateTemplateSelector() -> Microsoft.Maui.Chat.Controls.ChatContentTemplateSelector!
 override Microsoft.Maui.AI.Chat.Controls.MessageListView.OnParentSet() -> void
 override Microsoft.Maui.AI.Chat.Controls.ReasoningContentTemplate.CreateTemplate() -> Microsoft.Maui.Controls.DataTemplate!

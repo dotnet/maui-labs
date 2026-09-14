@@ -111,6 +111,7 @@ Source-generated AI tools plus a native block-based chat engine and drop-in MAUI
 | [![NuGet: Microsoft.Maui.AI.Attributes](https://img.shields.io/nuget/v/Microsoft.Maui.AI.Attributes.svg?label=Microsoft.Maui.AI.Attributes)](https://www.nuget.org/packages/Microsoft.Maui.AI.Attributes/) | Source-generated AI tool contexts for `Microsoft.Extensions.AI` |
 | [![NuGet: Microsoft.Maui.AI.Chat](https://img.shields.io/nuget/v/Microsoft.Maui.AI.Chat.svg?label=Microsoft.Maui.AI.Chat)](https://www.nuget.org/packages/Microsoft.Maui.AI.Chat/) | Headless block-mapping conversation engine |
 | [![NuGet: Microsoft.Maui.AI.Chat.Controls](https://img.shields.io/nuget/v/Microsoft.Maui.AI.Chat.Controls.svg?label=Microsoft.Maui.AI.Chat.Controls)](https://www.nuget.org/packages/Microsoft.Maui.AI.Chat.Controls/) | Native MAUI chat controls and XAML templates |
+| [![NuGet: Microsoft.Maui.Chat](https://img.shields.io/nuget/v/Microsoft.Maui.Chat.svg?label=Microsoft.Maui.Chat)](https://www.nuget.org/packages/Microsoft.Maui.Chat/) | Shared conversations, content, drafts, attachments, and composer state |
 | [![NuGet: Microsoft.Maui.Chat.Controls](https://img.shields.io/nuget/v/Microsoft.Maui.Chat.Controls.svg?label=Microsoft.Maui.Chat.Controls)](https://www.nuget.org/packages/Microsoft.Maui.Chat.Controls/) | Provider-neutral human and group chat controls |
 | [![NuGet: Microsoft.Maui.Chat.Controls.Blazor](https://img.shields.io/nuget/v/Microsoft.Maui.Chat.Controls.Blazor.svg?label=Microsoft.Maui.Chat.Controls.Blazor)](https://www.nuget.org/packages/Microsoft.Maui.Chat.Controls.Blazor/) | Provider-neutral Blazor Hybrid chat controls (same neutral conversation model, no AI dependency) |
 
@@ -215,9 +216,8 @@ For live app inspection and host setup, see the
 [MAUI DevFlow Inspector guide](docs/DevFlow/inspector.md).
 
 For AI Extensions usage and samples, see [`src/AIExtensions/README.md`](src/AIExtensions/README.md),
-the provider-neutral [`ChatControls.Sample`](samples/ChatControls.Sample/README.md),
-the [`ChatControls.BlazorHybrid.Sample`](samples/ChatControls.BlazorHybrid.Sample/README.md),
-and the Azure OpenAI [`AIExtensions.Sample.Garden`](samples/AIExtensions.Sample.Garden/README.md).
+the provider-neutral [`ChatControls.Sample`](samples/ChatControls.Sample/README.md), and the Azure OpenAI
+[`AIExtensions.Sample.Garden`](samples/AIExtensions.Sample.Garden/README.md).
 
 ## Support
 

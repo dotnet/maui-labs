@@ -692,6 +692,49 @@ public class ChatViewTests
             () => FileChatAttachmentPicker.Default.PickAsync(null, -1));
     }
 
+    [Fact]
+    public void ExternalComposerController_PreservesHostConfiguredServices()
+    {
+        var hostRecorder = new TrackingAudioRecorder();
+        using var controller = new ChatComposerController
+        {
+            AudioRecorder = hostRecorder,
+            AllowAudioCapture = true,
+        };
+        using var view = new ChatView
+        {
+            ComposerController = controller,
+            AudioRecorder = new TrackingAudioRecorder(),
+            AllowAudioCapture = true,
+        };
+
+        Assert.Same(hostRecorder, controller.AudioRecorder);
+    }
+
+    [Fact]
+    public async Task ReplacingOwnedComposerController_CancelsItsActiveRecorder()
+    {
+        var recorder = new TrackingAudioRecorder();
+        using var view = new ChatView
+        {
+            AudioRecorder = recorder,
+            AllowAudioCapture = true,
+        };
+        using var replacement = new ChatComposerController();
+
+        await view.StartAudioCaptureAsync();
+        view.ComposerController = replacement;
+
+        await WaitUntilAsync(() => recorder.CancelCount == 1);
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        while (!condition())
+            await Task.Delay(10, timeout.Token);
+    }
+
     private sealed class FakePicker : IChatAttachmentPicker
     {
         private readonly IReadOnlyList<ChatAttachment>? _result;
@@ -706,16 +749,46 @@ public class ChatViewTests
         public long SeenMaxBytes { get; private set; }
 
         public Task<IReadOnlyList<ChatAttachment>> PickAsync(
-            FilePickerFileType? fileTypes,
+            object? fileTypes,
             long maxBytesPerFile,
             CancellationToken cancellationToken = default)
         {
-            SeenFileTypes = fileTypes;
+            SeenFileTypes = fileTypes as FilePickerFileType;
             SeenMaxBytes = maxBytesPerFile;
 
             return _failure is not null
                 ? Task.FromException<IReadOnlyList<ChatAttachment>>(_failure)
                 : Task.FromResult(_result!);
+        }
+    }
+
+    private sealed class TrackingAudioRecorder : IChatAudioRecorder
+    {
+        public bool IsSupported => true;
+
+        public bool IsRecording { get; private set; }
+
+        public int CancelCount { get; private set; }
+
+        public Task StartAsync(CancellationToken cancellationToken = default)
+        {
+            IsRecording = true;
+            return Task.CompletedTask;
+        }
+
+        public Task<ChatAttachment?> StopAsync(
+            long maximumBytes,
+            CancellationToken cancellationToken = default)
+        {
+            IsRecording = false;
+            return Task.FromResult<ChatAttachment?>(null);
+        }
+
+        public Task CancelAsync(CancellationToken cancellationToken = default)
+        {
+            CancelCount++;
+            IsRecording = false;
+            return Task.CompletedTask;
         }
     }
 }

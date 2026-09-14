@@ -208,7 +208,7 @@ public abstract class ChatBubbleView : ChatContentView
             return;
 
         var participant = item.Participant;
-        if (participant.Avatar is { } avatar)
+        if (participant.Avatar is ImageSource avatar)
         {
             _avatarImage.Source = avatar;
             _avatarImage.IsVisible = true;

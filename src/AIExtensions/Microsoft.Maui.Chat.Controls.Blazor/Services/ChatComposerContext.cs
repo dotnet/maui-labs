@@ -2,465 +2,139 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using Microsoft.Maui.Chat.Controls;
 
 namespace Microsoft.Maui.Chat.Controls.Blazor;
 
 /// <summary>
-/// Default implementation of <see cref="IChatComposerContext"/> owned by <see cref="ChatView"/>.
+/// Blazor compatibility adapter over the renderer-neutral <see cref="ChatComposerController"/>.
 /// </summary>
 /// <remarks>
-/// The composer state machine lives here. All button actions dispatch through this class so
-/// custom composers, leading/trailing action fragments, and layer 2 all funnel into the
-/// same guarded send/stop path.
+/// The shell retains ownership of platform service resolution and JavaScript lifetime. All observable
+/// composer state, draft preservation, and change callbacks come from the shared controller.
 /// </remarks>
-internal sealed class ChatComposerContext : IChatComposerContext
+internal sealed class ChatComposerContext : IChatComposerContext, IDisposable
 {
-    /// <summary>The generic, user-safe message shown when sending fails.</summary>
-    public const string DefaultSendErrorMessage =
-        "Your message could not be sent. Please try again.";
+    internal const string DefaultSendErrorMessage = ChatComposerController.DefaultSendErrorMessage;
+    internal const string DefaultAttachmentErrorMessage = ChatComposerController.DefaultAttachmentErrorMessage;
 
-    /// <summary>The generic, user-safe message shown when picking an attachment fails.</summary>
-    public const string DefaultAttachmentErrorMessage =
-        "That attachment could not be added.";
+    private readonly bool _ownsController;
 
-    private static readonly Func<Task> NoAction = () => Task.CompletedTask;
+    internal ChatComposerContext(ChatComposerController? controller = null)
+    {
+        _ownsController = controller is null;
+        Controller = controller ?? new ChatComposerController();
+        Controller.Changed += RaiseChanged;
+    }
 
-    private readonly ObservableCollection<ChatAttachment> _attachments = new();
-    private readonly ReadOnlyObservableCollection<ChatAttachment> _readOnlyAttachments;
+    internal ChatComposerController Controller { get; }
 
-    private Func<Task> _onSubmit = NoAction;
-    private Func<Task> _onStop = NoAction;
-    private Func<Task> _onPickAttachments = NoAction;
-    private Func<Task> _onToggleAudioCapture = NoAction;
-    private Func<Task> _onToggleLiveSpeech = NoAction;
-
-    private string _text = string.Empty;
-    private bool _isSending;
-    private bool _isRecordingAudio;
-    private bool _isTranscribingAudio;
-    private bool _isAudioStarting;
-    private bool _isLiveSpeechEnabled;
-    private bool _isListening;
-    private bool _isSpeechStarting;
-    private bool _isSpeechStopping;
-    private bool _isComposingOverride;
-    private string? _statusMessage;
-    private string? _errorMessage;
-    private ChatConversation? _conversation;
-
-    /// <summary>Fires when any observable composer state changed.</summary>
     public event Action? Changed;
 
-    /// <summary>Creates an empty composer context. Actions must be attached via <see cref="AttachActions"/>.</summary>
-    public ChatComposerContext()
+    public bool AllowAttachments
     {
-        _readOnlyAttachments = new ReadOnlyObservableCollection<ChatAttachment>(_attachments);
+        get => Controller.AllowAttachments;
+        set => Controller.AllowAttachments = value;
     }
 
-    /// <summary>Wires the shell-owned action delegates. Called once by <see cref="ChatView"/>.</summary>
-    /// <param name="onSubmit">Delegate invoked by <see cref="IChatComposerContext.SubmitAsync"/>.</param>
-    /// <param name="onStop">Delegate invoked by <see cref="IChatComposerContext.StopAsync"/>.</param>
-    /// <param name="onPickAttachments">Delegate invoked by <see cref="IChatComposerContext.PickAttachmentsAsync"/>.</param>
-    /// <param name="onToggleAudioCapture">Delegate invoked by <see cref="IChatComposerContext.ToggleAudioCaptureAsync"/>.</param>
-    /// <param name="onToggleLiveSpeech">Delegate invoked by <see cref="IChatComposerContext.ToggleLiveSpeechAsync"/>.</param>
-    public void AttachActions(
-        Func<Task> onSubmit,
-        Func<Task> onStop,
-        Func<Task> onPickAttachments,
-        Func<Task> onToggleAudioCapture,
-        Func<Task> onToggleLiveSpeech)
+    public bool AllowAudioCapture
     {
-        _onSubmit = onSubmit ?? NoAction;
-        _onStop = onStop ?? NoAction;
-        _onPickAttachments = onPickAttachments ?? NoAction;
-        _onToggleAudioCapture = onToggleAudioCapture ?? NoAction;
-        _onToggleLiveSpeech = onToggleLiveSpeech ?? NoAction;
+        get => Controller.AllowAudioCapture;
+        set => Controller.AllowAudioCapture = value;
     }
 
-    /// <summary>Gets or sets whether the conversation currently supports attachments.</summary>
-    public bool AllowAttachments { get; set; }
+    public bool AllowLiveSpeech
+    {
+        get => Controller.AllowLiveSpeech;
+        set => Controller.AllowLiveSpeech = value;
+    }
 
-    /// <summary>Gets or sets whether the conversation currently supports audio capture.</summary>
-    public bool AllowAudioCapture { get; set; }
-
-    /// <summary>Gets or sets whether the conversation currently supports live speech.</summary>
-    public bool AllowLiveSpeech { get; set; }
-
-    /// <inheritdoc />
     public string Text
     {
-        get => _text;
-        set
-        {
-            var next = value ?? string.Empty;
-            if (string.Equals(_text, next, StringComparison.Ordinal))
-            {
-                return;
-            }
-
-            _text = next;
-            RaiseChanged();
-        }
+        get => Controller.Text;
+        set => Controller.Text = value;
     }
 
-    /// <inheritdoc />
-    public IReadOnlyList<ChatAttachment> Attachments => _readOnlyAttachments;
+    public IReadOnlyList<ChatAttachment> Attachments => Controller.Attachments;
 
-    /// <inheritdoc />
-    public ChatConversationStatus Status => _conversation?.Status ?? ChatConversationStatus.Idle;
+    public ChatConversationStatus Status => Controller.Status;
 
-    /// <inheritdoc />
-    public bool CanSubmit => !_isSending && !IsComposing && _conversation is { } conversation
-        && conversation.CanSend(CreateDraft());
+    public bool CanSubmit => Controller.CanSubmit;
 
-    /// <inheritdoc />
-    public bool CanStop => (_isSending || _conversation?.CanCancel == true) && !_isRecordingAudio && !_isTranscribingAudio;
+    public bool CanStop => Controller.CanStop;
 
-    /// <inheritdoc />
-    public bool CanPickAttachments =>
-        AllowAttachments && !IsConversationBusy && !IsComposing;
+    public bool CanPickAttachments => Controller.CanPickAttachments;
 
-    /// <inheritdoc />
-    /// <inheritdoc />
-    /// <remarks>
-    /// A toggle is only meaningful in two settled states:
-    /// <list type="bullet">
-    /// <item><description><c>IsRecordingAudio</c>: the user has an active recording and can stop it.</description></item>
-    /// <item><description>Idle (neither modality active): the user can start a fresh recording.</description></item>
-    /// </list>
-    /// The transient states <c>IsAudioStarting</c> (recorder <c>StartAsync</c> in flight) and
-    /// <c>IsTranscribingAudio</c> (recorder <c>StopAsync</c> in flight, waiting for the buffer
-    /// to be delivered) are NOT toggleable — the button is disabled so a rapid second click
-    /// cannot invoke <c>StartAsync</c> or <c>StopAsync</c> again. Programmatic callers must
-    /// also observe the gate; <see cref="ChatView.ToggleAudioCaptureAsync"/> reinforces the
-    /// rule with an early return for callers that bypass the DOM disabled flag.
-    /// Starting additionally requires <c>!IsConversationBusy</c> AND
-    /// <c>!IsSpeechActive</c> — the single-microphone-owner rule.
-    /// </remarks>
-    public bool CanToggleAudioCapture
-    {
-        get
-        {
-            if (!AllowAudioCapture)
-            {
-                return false;
-            }
+    public bool CanToggleAudioCapture => Controller.CanToggleAudioCapture;
 
-            // Transient windows FIRST. The button is disabled during startup / stop-read
-            // regardless of whether IsRecordingAudio might also be true briefly (in the
-            // current state machine they are mutually exclusive, but ordering the guard
-            // this way keeps the contract robust to future refactors).
-            if (_isAudioStarting || _isTranscribingAudio)
-            {
-                return false;
-            }
+    public bool CanToggleLiveSpeech => Controller.CanToggleLiveSpeech;
 
-            // Settled recording: user can stop.
-            if (_isRecordingAudio)
-            {
-                return true;
-            }
+    public bool IsConversationBusy => Controller.IsConversationBusy;
 
-            // Idle: fresh start requires conversation idle AND no speech contention.
-            return !IsConversationBusy && !IsSpeechActive;
-        }
-    }
+    public bool IsComposing => Controller.IsComposing;
 
-    /// <inheritdoc />
-    /// <remarks>
-    /// Symmetric to <see cref="CanToggleAudioCapture"/>. The stop-await window
-    /// (<c>IsSpeechStopping</c>) overlaps with the settled listening flags until the
-    /// finally clears them, so <c>IsSpeechStopping</c> must be checked BEFORE the
-    /// "settled listening allows stop" branch — otherwise the button would appear
-    /// enabled during the stop-await window and a rapid second click would try to
-    /// invoke <c>StopAsync</c> again on the already-detached recognizer.
-    /// </remarks>
-    public bool CanToggleLiveSpeech
-    {
-        get
-        {
-            if (!AllowLiveSpeech)
-            {
-                return false;
-            }
+    public bool IsRecordingAudio => Controller.IsRecordingAudio;
 
-            // Transient windows FIRST. See remarks above.
-            if (_isSpeechStarting || _isSpeechStopping)
-            {
-                return false;
-            }
+    public bool IsTranscribingAudio => Controller.IsTranscribingAudio;
 
-            // Settled listening: user can stop.
-            if (_isLiveSpeechEnabled || _isListening)
-            {
-                return true;
-            }
+    // A completed pass retains controller intent so a native surface can resume it after an
+    // auto-submit. Blazor's compatibility contract exposes only an active pass.
+    public bool IsLiveSpeechEnabled =>
+        Controller.IsListening || Controller.IsSpeechStarting || Controller.IsSpeechStopping;
 
-            return !IsConversationBusy && !IsAudioActive;
-        }
-    }
+    public bool IsListening => Controller.IsListening;
 
-    /// <inheritdoc />
-    public bool IsConversationBusy =>
-        Status is ChatConversationStatus.Busy or ChatConversationStatus.AwaitingInput;
+    internal bool IsAudioStarting => Controller.IsAudioStarting;
 
-    /// <inheritdoc />
-    public bool IsComposing =>
-        IsAudioActive || IsSpeechActive || _isComposingOverride;
+    internal bool IsSpeechStarting => Controller.IsSpeechStarting;
 
-    /// <inheritdoc />
-    public bool IsRecordingAudio => _isRecordingAudio;
+    internal bool IsSpeechStopping => Controller.IsSpeechStopping;
 
-    /// <inheritdoc />
-    public bool IsTranscribingAudio => _isTranscribingAudio;
+    internal bool IsAudioActive => Controller.IsAudioActive;
 
-    /// <inheritdoc />
-    public bool IsLiveSpeechEnabled => _isLiveSpeechEnabled;
+    internal bool IsSpeechActive => Controller.IsSpeechActive;
 
-    /// <inheritdoc />
-    public bool IsListening => _isListening;
+    public string? StatusMessage => Controller.StatusMessage;
 
-    /// <summary>Gets whether the audio-capture modality is starting, recording, or transcribing.</summary>
-    internal bool IsAudioActive =>
-        _isRecordingAudio || _isTranscribingAudio || _isAudioStarting;
+    public string? ErrorMessage => Controller.ErrorMessage;
 
-    /// <summary>Gets whether the live-speech modality is starting, enabled, listening, or stopping.</summary>
-    internal bool IsSpeechActive =>
-        _isLiveSpeechEnabled || _isListening || _isSpeechStarting || _isSpeechStopping;
+    public Task SubmitAsync() => Controller.SubmitAsync();
 
-    /// <summary>Gets whether the audio-capture startup await is currently in flight.</summary>
-    internal bool IsAudioStarting => _isAudioStarting;
+    public Task StopAsync() => Controller.StopAsync();
 
-    /// <summary>Gets whether the live-speech startup await is currently in flight.</summary>
-    internal bool IsSpeechStarting => _isSpeechStarting;
+    public Task PickAttachmentsAsync() => Controller.PickAttachmentsAsync();
 
-    /// <summary>Gets whether the live-speech stop await is currently in flight.</summary>
-    internal bool IsSpeechStopping => _isSpeechStopping;
+    public Task ToggleAudioCaptureAsync() => Controller.ToggleAudioCaptureAsync();
 
-    /// <inheritdoc />
-    public string? StatusMessage => _statusMessage;
+    public Task ToggleLiveSpeechAsync() => Controller.ToggleLiveSpeechAsync();
 
-    /// <inheritdoc />
-    public string? ErrorMessage => _errorMessage;
-
-    /// <inheritdoc />
-    public Task SubmitAsync() => _onSubmit();
-
-    /// <inheritdoc />
-    public Task StopAsync() => _onStop();
-
-    /// <inheritdoc />
-    public Task PickAttachmentsAsync() => _onPickAttachments();
-
-    /// <inheritdoc />
-    public Task ToggleAudioCaptureAsync() => _onToggleAudioCapture();
-
-    /// <inheritdoc />
-    public Task ToggleLiveSpeechAsync() => _onToggleLiveSpeech();
-
-    /// <summary>Sets the conversation this context tracks.</summary>
-    /// <param name="conversation">The new conversation.</param>
-    public void AttachConversation(ChatConversation? conversation)
-    {
-        _conversation = conversation;
-        RaiseChanged();
-    }
-
-    /// <summary>Creates the draft this context would send right now.</summary>
-    /// <returns>The trimmed, staged draft.</returns>
-    public ChatDraft CreateDraft() => new(_text, _attachments);
-
-    /// <summary>Clears text and attachments that were accepted.</summary>
-    /// <param name="draft">The accepted draft.</param>
-    public void ClearAcceptedDraft(ChatDraft draft)
-    {
-        ArgumentNullException.ThrowIfNull(draft);
-
-        if (string.Equals(_text?.Trim(), draft.Text, StringComparison.Ordinal))
-        {
-            _text = string.Empty;
-        }
-
-        foreach (var attachment in draft.Attachments)
-        {
-            _attachments.Remove(attachment);
-        }
-
-        RaiseChanged();
-    }
-
-    /// <inheritdoc />
     public ValueTask AddAttachmentAsync(ChatAttachment attachment)
     {
-        ArgumentNullException.ThrowIfNull(attachment);
-        _attachments.Add(attachment);
-        RaiseChanged();
+        Controller.AddAttachment(attachment);
         return ValueTask.CompletedTask;
     }
 
-    /// <inheritdoc />
-    public ValueTask<bool> RemoveAttachmentAsync(ChatAttachment attachment)
+    public ValueTask<bool> RemoveAttachmentAsync(ChatAttachment attachment) =>
+        ValueTask.FromResult(Controller.RemoveAttachment(attachment));
+
+    public void SetStatusMessage(string? value) => Controller.SetStatusMessage(value);
+
+    public void SetErrorMessage(string? value) => Controller.SetErrorMessage(value);
+
+    public void SetComposing(bool value) => Controller.SetComposing(value);
+
+    internal void AttachConversation(ChatConversation? conversation) => Controller.Conversation = conversation;
+
+    internal ChatDraft CreateDraft() => Controller.CreateDraft();
+
+    internal void ClearAcceptedDraft(ChatDraft draft) => Controller.ClearAcceptedDraft(draft);
+
+    public void Dispose()
     {
-        ArgumentNullException.ThrowIfNull(attachment);
-        var removed = _attachments.Remove(attachment);
-        if (removed)
-        {
-            RaiseChanged();
-        }
-
-        return ValueTask.FromResult(removed);
+        Controller.Changed -= RaiseChanged;
+        if (_ownsController)
+            Controller.Dispose();
+        Changed = null;
     }
-
-    /// <inheritdoc />
-    public void SetStatusMessage(string? value)
-    {
-        if (string.Equals(_statusMessage, value, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        _statusMessage = value;
-        RaiseChanged();
-    }
-
-    /// <inheritdoc />
-    public void SetErrorMessage(string? value)
-    {
-        if (string.Equals(_errorMessage, value, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        _errorMessage = value;
-        RaiseChanged();
-    }
-
-    /// <inheritdoc />
-    public void SetComposing(bool value)
-    {
-        if (_isComposingOverride == value)
-        {
-            return;
-        }
-
-        _isComposingOverride = value;
-        RaiseChanged();
-    }
-
-    /// <summary>Sets the shell's send-in-flight flag.</summary>
-    internal void SetIsSending(bool value)
-    {
-        if (_isSending == value)
-        {
-            return;
-        }
-
-        _isSending = value;
-        RaiseChanged();
-    }
-
-    /// <summary>Sets the shell's recording flag.</summary>
-    internal void SetIsRecordingAudio(bool value)
-    {
-        if (_isRecordingAudio == value)
-        {
-            return;
-        }
-
-        _isRecordingAudio = value;
-        RaiseChanged();
-    }
-
-    /// <summary>Sets the shell's audio-transcription flag.</summary>
-    internal void SetIsTranscribingAudio(bool value)
-    {
-        if (_isTranscribingAudio == value)
-        {
-            return;
-        }
-
-        _isTranscribingAudio = value;
-        RaiseChanged();
-    }
-
-    /// <summary>Sets the shell's live-speech enabled flag.</summary>
-    internal void SetIsLiveSpeechEnabled(bool value)
-    {
-        if (_isLiveSpeechEnabled == value)
-        {
-            return;
-        }
-
-        _isLiveSpeechEnabled = value;
-        RaiseChanged();
-    }
-
-    /// <summary>Sets the shell's listening flag.</summary>
-    internal void SetIsListening(bool value)
-    {
-        if (_isListening == value)
-        {
-            return;
-        }
-
-        _isListening = value;
-        RaiseChanged();
-    }
-
-    /// <summary>
-    /// Sets the shell's audio-startup-in-flight flag. Set while the recorder is running
-    /// <c>StartAsync</c> so the composer treats the microphone as audio-owned across
-    /// the await window, denying live-speech from racing for the same device.
-    /// </summary>
-    internal void SetIsAudioStarting(bool value)
-    {
-        if (_isAudioStarting == value)
-        {
-            return;
-        }
-
-        _isAudioStarting = value;
-        RaiseChanged();
-    }
-
-    /// <summary>
-    /// Sets the shell's speech-startup-in-flight flag. Set while the recognizer is
-    /// running <c>StartAsync</c> so the composer treats the microphone as speech-owned
-    /// across the await window, denying audio capture from racing for the same device.
-    /// </summary>
-    internal void SetIsSpeechStarting(bool value)
-    {
-        if (_isSpeechStarting == value)
-        {
-            return;
-        }
-
-        _isSpeechStarting = value;
-        RaiseChanged();
-    }
-
-    /// <summary>
-    /// Sets the shell's speech-stop-in-flight flag. Set while the recognizer is running
-    /// <c>StopAsync</c> so the composer treats the microphone as speech-owned across
-    /// the stop-await window, denying audio capture from racing for the same device
-    /// AND denying a second click from re-invoking <c>StopAsync</c>.
-    /// </summary>
-    internal void SetIsSpeechStopping(bool value)
-    {
-        if (_isSpeechStopping == value)
-        {
-            return;
-        }
-
-        _isSpeechStopping = value;
-        RaiseChanged();
-    }
-
-    /// <summary>Forces a change notification without mutating any observable value.</summary>
-    internal void NotifyChanged() => RaiseChanged();
 
     private void RaiseChanged() => Changed?.Invoke();
 }
-

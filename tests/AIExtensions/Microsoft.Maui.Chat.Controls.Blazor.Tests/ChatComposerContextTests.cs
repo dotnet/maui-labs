@@ -36,16 +36,23 @@ public class ChatComposerContextTests
     }
 
     [Fact]
-    public void CanSubmit_False_WhileSending()
+    public async Task CanSubmit_False_WhileSending()
     {
         var local = new ChatParticipant("me", "Me", ChatParticipantKind.Local);
-        var conversation = new ObservableChatConversation(local);
-        var context = CreateContext(conversation);
+        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var conversation = new ObservableChatConversation(local)
+        {
+            SendHandler = (_, _, _) => completion.Task,
+        };
+        using var context = CreateContext(conversation);
         context.Text = "hi";
 
-        context.SetIsSending(true);
+        var send = context.SubmitAsync();
+        await Task.Yield();
 
         Assert.False(context.CanSubmit);
+        completion.SetResult(true);
+        await send;
     }
 
     [Fact]
@@ -57,6 +64,37 @@ public class ChatComposerContextTests
         context.Text = "hi";
 
         Assert.True(context.CanSubmit);
+    }
+
+    [Fact]
+    public void Constructor_SharedController_UsesItsDraft()
+    {
+        var local = new ChatParticipant("me", "Me", ChatParticipantKind.Local);
+        var conversation = new ObservableChatConversation(local);
+        using var controller = new ChatComposerController
+        {
+            Conversation = conversation,
+            Text = "shared draft",
+        };
+        using var context = new ChatComposerContext(controller);
+
+        Assert.Equal("shared draft", context.Text);
+
+        context.Text = "updated by Blazor";
+
+        Assert.Equal("updated by Blazor", controller.Text);
+    }
+
+    [Fact]
+    public void Dispose_ExternalController_RemainsUsable()
+    {
+        using var controller = new ChatComposerController();
+        var context = new ChatComposerContext(controller);
+
+        context.Dispose();
+        controller.Text = "still owned by the host";
+
+        Assert.Equal("still owned by the host", controller.Text);
     }
 
     [Fact]

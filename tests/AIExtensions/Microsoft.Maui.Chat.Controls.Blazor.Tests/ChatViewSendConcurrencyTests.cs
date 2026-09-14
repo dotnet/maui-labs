@@ -14,25 +14,31 @@ namespace Microsoft.Maui.Chat.Controls.Blazor.Tests;
 public class ChatViewSendConcurrencyTests
 {
     [Fact]
-    public void CanSubmit_Returns_False_WhileSending()
+    public async Task CanSubmit_Returns_False_WhileSending()
     {
         var local = new ChatParticipant("me", "Me", ChatParticipantKind.Local);
-        var conversation = new ObservableChatConversation(local);
-        var context = new ChatComposerContext();
+        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var conversation = new ObservableChatConversation(local)
+        {
+            SendHandler = (_, _, _) => completion.Task,
+        };
+        using var context = new ChatComposerContext();
         context.AttachConversation(conversation);
         context.Text = "hi";
 
         Assert.True(context.CanSubmit);
 
-        context.SetIsSending(true);
+        var send = context.SubmitAsync();
+        await Task.Yield();
 
         // The neutral guard is what the shell relies on to reject a second submit while the
         // first is in flight; without it a fast tap + Enter would race past CanSend.
         Assert.False(context.CanSubmit);
 
-        context.SetIsSending(false);
+        completion.SetResult(true);
+        await send;
 
-        Assert.True(context.CanSubmit);
+        Assert.False(context.CanSubmit);
     }
 
     [Fact]
