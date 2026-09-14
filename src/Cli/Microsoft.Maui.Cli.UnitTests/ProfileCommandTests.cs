@@ -1050,8 +1050,10 @@ public class ProfileCommandTests
 		Assert.Contains(dnxPath, commandLine);
 	}
 
-	[Fact]
-	public void ConfigureDnxStartInfo_WindowsCommandWrapperUsesCommandProcessor()
+	[Theory]
+	[InlineData(".cmd")]
+	[InlineData(".bat")]
+	public void ConfigureDnxStartInfo_WindowsCommandWrapperUsesCommandProcessor(string extension)
 	{
 		var startInfo = new ProcessStartInfo
 		{
@@ -1059,20 +1061,24 @@ public class ProfileCommandTests
 			RedirectStandardOutput = true,
 			RedirectStandardError = true
 		};
-		var dnxPath = TestPath("Program Files", "dotnet", "dnx.cmd");
+		var dnxPath = TestPath("Program Files", "dotnet", "dnx" + extension);
+		var outputPath = TestPath("trace output", "%TEMP% ^ & | < > ( ) \"quoted\".nettrace");
 
 		ProfileCommandDiagnostics.ConfigureDnxStartInfo(
 			startInfo,
 			dnxPath,
 			"dotnet-trace",
-			["collect", "--output", "trace.nettrace"],
+			["collect", "--output", outputPath],
 			out var commandLine,
 			isWindows: true);
 
 		Assert.EndsWith("cmd.exe", startInfo.FileName, StringComparison.OrdinalIgnoreCase);
-		Assert.Empty(startInfo.ArgumentList);
-		Assert.Contains("/c", startInfo.Arguments);
-		Assert.Contains(dnxPath, startInfo.Arguments);
+		Assert.Equal(["/d", "/s", "/v:on", "/c"], startInfo.ArgumentList.Take(4));
+		Assert.Equal(
+			[dnxPath, "-y", "dotnet-trace", "--", "collect", "--output", outputPath],
+			Enumerable.Range(0, 7).Select(i => startInfo.EnvironmentVariables[$"__MAUI_CLI_DNX_VALUE_{i}"]));
+		Assert.DoesNotContain(dnxPath, startInfo.ArgumentList[4]);
+		Assert.DoesNotContain(outputPath, startInfo.ArgumentList[4]);
 		Assert.True(startInfo.RedirectStandardInput);
 		Assert.True(startInfo.RedirectStandardOutput);
 		Assert.True(startInfo.RedirectStandardError);

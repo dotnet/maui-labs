@@ -84,11 +84,24 @@ internal static class ProfileCommandDiagnostics
 		var dnxArgs = new List<string> { "-y", packageId, "--" };
 		dnxArgs.AddRange(toolArgs);
 		if ((isWindows ?? OperatingSystem.IsWindows())
-			&& string.Equals(Path.GetExtension(dnxPath), ".cmd", StringComparison.OrdinalIgnoreCase))
+			&& IsCommandProcessorWrapper(dnxPath))
 		{
 			startInfo.FileName = Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe";
-			var commandProcessorLine = string.Join(" ", new[] { dnxPath }.Concat(dnxArgs).Select(QuoteForCommandProcessor));
-			startInfo.Arguments = $"/d /s /v:off /c \"{commandProcessorLine}\"";
+			var commandValues = new[] { dnxPath }.Concat(dnxArgs).ToArray();
+			var commandVariables = new string[commandValues.Length];
+			for (var i = 0; i < commandValues.Length; i++)
+			{
+				commandVariables[i] = $"__MAUI_CLI_DNX_VALUE_{i}";
+				startInfo.EnvironmentVariables[commandVariables[i]] = commandValues[i];
+			}
+
+			// Delayed expansion occurs after cmd.exe parses quotes and metacharacters.
+			var commandProcessorLine = string.Join(" ", commandVariables.Select(name => $"\"!{name}!\""));
+			startInfo.ArgumentList.Add("/d");
+			startInfo.ArgumentList.Add("/s");
+			startInfo.ArgumentList.Add("/v:on");
+			startInfo.ArgumentList.Add("/c");
+			startInfo.ArgumentList.Add($"\"{commandProcessorLine}\"");
 		}
 		else
 		{
@@ -102,7 +115,12 @@ internal static class ProfileCommandDiagnostics
 
 	internal static string? ResolveDnxCommand() => ProcessRunner.GetCommandPath("dnx");
 
-	static string QuoteForCommandProcessor(string value) => $"\"{value.Replace("\"", "\"\"")}\"";
+	static bool IsCommandProcessorWrapper(string path)
+	{
+		var extension = Path.GetExtension(path);
+		return string.Equals(extension, ".cmd", StringComparison.OrdinalIgnoreCase)
+			|| string.Equals(extension, ".bat", StringComparison.OrdinalIgnoreCase);
+	}
 
 	internal static bool CanResolveDiagnosticsTool(string? installedToolPath, string? cachedToolDll)
 		=> !string.IsNullOrWhiteSpace(installedToolPath) || !string.IsNullOrWhiteSpace(cachedToolDll);
