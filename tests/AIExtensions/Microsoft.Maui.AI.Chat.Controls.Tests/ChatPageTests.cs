@@ -3,6 +3,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Maui.Chat.Controls;
 using Microsoft.Maui.AI.Chat.Controls.Tests.TestHelpers;
 using Microsoft.Maui.AI.Chat.Controls.Themes;
+using Microsoft.Maui.AI.Chat.Presentation;
 
 namespace Microsoft.Maui.AI.Chat.Controls.Tests;
 
@@ -14,13 +15,13 @@ namespace Microsoft.Maui.AI.Chat.Controls.Tests;
 public class ChatPageTests
 {
     [Fact]
-    public void CopilotChatView_IsANeutralChatViewWithAnAgentConversationAdapter()
+    public void CopilotChatView_IsANeutralChatViewWithAnAgentPresentation()
     {
         var session = SessionFactory.Create("Hello");
         var control = new CopilotChatView { Session = session };
 
         Assert.IsAssignableFrom<ChatView>(control);
-        var conversation = Assert.IsType<AgentChatConversation>(
+        var conversation = Assert.IsType<AgentChatPresentation>(
             control.Conversation);
         Assert.Same(session, conversation.Session);
 
@@ -33,7 +34,7 @@ public class ChatPageTests
     {
         var session = SessionFactory.Create("Hello from the assistant");
         await session.SendMessageAsync("Hello from the user");
-        using var conversation = new AgentChatConversation(session);
+        using var conversation = new AgentChatPresentation(session);
         var list = new MessageListView { Session = session };
 
         Assert.All(
@@ -72,7 +73,7 @@ public class ChatPageTests
             Name = "layout.pdf",
         });
 
-        var contents = AgentChatConversation.CreateMessageContents(
+        var contents = AgentChatPresentation.CreateMessageContents(
             block,
             turn: null,
             isRequest: false);
@@ -90,12 +91,42 @@ public class ChatPageTests
     [Fact]
     public void EmptyMediaBlock_ProjectsNoPlaceholderContent()
     {
-        var contents = AgentChatConversation.CreateMessageContents(
+        var contents = AgentChatPresentation.CreateMessageContents(
             new MediaContentBlock(),
             turn: null,
             isRequest: false);
 
         Assert.Empty(contents);
+    }
+
+    [Fact]
+    public void AgentProjection_ContentMetadata_RetainsBlockAndRequestSide()
+    {
+        var block = new TextContentBlock();
+
+        var content = Assert.IsAssignableFrom<IAgentBlockContent>(
+            AgentChatPresentation.CreateMessageContent(block, turn: null, isRequest: true));
+
+        Assert.Same(block, content.Block);
+        Assert.Null(content.Turn);
+        Assert.True(content.IsRequest);
+        content.Dispose();
+    }
+
+    [Fact]
+    public void CopilotChatView_ExternalPresentation_IsReused()
+    {
+        var session = SessionFactory.Create("Hello");
+        using var presentation = new AgentChatPresentation(session);
+        var control = new CopilotChatView
+        {
+            Session = session,
+            Presentation = presentation,
+        };
+
+        Assert.Same(presentation, control.Conversation);
+        control.Presentation = null;
+        Assert.NotSame(presentation, control.Conversation);
     }
 
     [Fact]
@@ -122,7 +153,7 @@ public class ChatPageTests
         var session = SessionFactory.Create(client);
 
         await session.SendMessageAsync("draw");
-        using var conversation = new AgentChatConversation(session);
+        using var conversation = new AgentChatPresentation(session);
 
         var media = Assert.Single(
             conversation.Messages
@@ -223,13 +254,13 @@ public class ChatPageTests
         var session = SessionFactory.Create("test");
         var control = new CopilotChatView { Session = session };
         var host = new ContentView { Content = control };
-        Assert.IsType<AgentChatConversation>(control.Conversation);
+        Assert.IsType<AgentChatPresentation>(control.Conversation);
 
         host.Content = null;
         Assert.Null(control.Conversation);
 
         host.Content = control;
-        var conversation = Assert.IsType<AgentChatConversation>(
+        var conversation = Assert.IsType<AgentChatPresentation>(
             control.Conversation);
         Assert.Same(session, conversation.Session);
     }

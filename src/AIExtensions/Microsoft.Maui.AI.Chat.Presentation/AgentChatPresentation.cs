@@ -1,13 +1,13 @@
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.Chat.Controls;
 
-namespace Microsoft.Maui.AI.Chat.Controls;
+namespace Microsoft.Maui.AI.Chat.Presentation;
 
 /// <summary>
 /// Projects an <see cref="AgentContext"/> into the provider-neutral conversation model used by
 /// <see cref="ChatView"/>.
 /// </summary>
-internal sealed class AgentChatConversation : ChatConversation, IDisposable
+public sealed class AgentChatPresentation : ChatConversation, IDisposable
 {
     private readonly Dictionary<ContentBlock, ConversationMessage> _messagesByBlock =
         new(ReferenceEqualityComparer.Instance);
@@ -27,7 +27,7 @@ internal sealed class AgentChatConversation : ChatConversation, IDisposable
     private bool _disposed;
 
     /// <summary>Creates a neutral projection over <paramref name="session"/>.</summary>
-    public AgentChatConversation(AgentContext session)
+    public AgentChatPresentation(AgentContext session)
     {
         Session = session ?? throw new ArgumentNullException(nameof(session));
 
@@ -82,7 +82,7 @@ internal sealed class AgentChatConversation : ChatConversation, IDisposable
         set => AssistantParticipant.DisplayName = value;
     }
 
-    internal void UpdateParticipantNames(
+    public void UpdateParticipantNames(
         string userDisplayName,
         string assistantDisplayName)
     {
@@ -400,7 +400,7 @@ internal sealed class AgentChatConversation : ChatConversation, IDisposable
         MessageList.Clear();
     }
 
-    internal static MessageContent CreateMessageContent(
+    public static MessageContent CreateMessageContent(
         ContentBlock block,
         ConversationTurn? turn,
         bool isRequest)
@@ -411,7 +411,7 @@ internal sealed class AgentChatConversation : ChatConversation, IDisposable
             : new AgentBlockContent(block, turn, isRequest);
     }
 
-    internal static IReadOnlyList<MessageContent> CreateMessageContents(
+    public static IReadOnlyList<MessageContent> CreateMessageContents(
         ContentBlock block,
         ConversationTurn? turn,
         bool isRequest) =>
@@ -520,7 +520,7 @@ internal sealed class AgentChatConversation : ChatConversation, IDisposable
         bool IsRequest);
 }
 
-internal interface IAgentBlockContent : IDisposable
+public interface IAgentBlockContent : IDisposable
 {
     ContentBlock Block { get; }
 
@@ -533,7 +533,7 @@ internal interface IAgentBlockContent : IDisposable
     void NotifyChanged();
 }
 
-internal sealed class AgentBlockBinding : IDisposable
+public sealed class AgentBlockBinding : IDisposable
 {
     private readonly Action _contentChanged;
     private ContentBlockChangedSubscription _subscription;
@@ -588,11 +588,11 @@ internal sealed class AgentBlockBinding : IDisposable
 }
 
 /// <summary>Neutral message content that retains an AI block needing a specialized body view.</summary>
-internal sealed class AgentBlockContent : MessageContent, IAgentBlockContent
+public sealed class AgentBlockContent : MessageContent, IAgentBlockContent
 {
     private readonly AgentBlockBinding _binding;
 
-    internal AgentBlockContent(
+    public AgentBlockContent(
         ContentBlock block,
         ConversationTurn? turn,
         bool isRequest)
@@ -626,12 +626,12 @@ internal sealed class AgentBlockContent : MessageContent, IAgentBlockContent
 }
 
 /// <summary>Maps an AI rich/text block into the provider-neutral text content primitive.</summary>
-internal sealed class AgentTextMessageContent : TextMessageContent, IAgentBlockContent
+public sealed class AgentTextMessageContent : TextMessageContent, IAgentBlockContent
 {
     private readonly TextContentBlock _block;
     private readonly AgentBlockBinding _binding;
 
-    internal AgentTextMessageContent(
+    public AgentTextMessageContent(
         TextContentBlock block,
         ConversationTurn? turn,
         bool isRequest)
@@ -671,13 +671,13 @@ internal sealed class AgentTextMessageContent : TextMessageContent, IAgentBlockC
 }
 
 /// <summary>Maps an AI rich block into structured text with a readable neutral fallback.</summary>
-internal sealed class AgentStructuredTextMessageContent
+public sealed class AgentStructuredTextMessageContent
     : StructuredTextMessageContent<IReadOnlyList<RichTextNode>>, IAgentBlockContent
 {
     private readonly RichContentBlock _block;
     private readonly AgentBlockBinding _binding;
 
-    internal AgentStructuredTextMessageContent(
+    public AgentStructuredTextMessageContent(
         RichContentBlock block,
         ConversationTurn? turn,
         bool isRequest)
@@ -714,7 +714,7 @@ internal sealed class AgentStructuredTextMessageContent
 }
 
 /// <summary>Maps one AI media item into the provider-neutral media content primitive.</summary>
-internal sealed class AgentMediaMessageContent : MediaMessageContent, IAgentBlockContent
+public sealed class AgentMediaMessageContent : MediaMessageContent, IAgentBlockContent
 {
     private readonly MediaContentBlock _block;
     private readonly DataContent _item;
@@ -722,7 +722,7 @@ internal sealed class AgentMediaMessageContent : MediaMessageContent, IAgentBloc
     private readonly bool _isRequest;
     private ConversationMessage? _message;
 
-    internal AgentMediaMessageContent(
+    public AgentMediaMessageContent(
         MediaContentBlock block,
         DataContent item,
         int index,
