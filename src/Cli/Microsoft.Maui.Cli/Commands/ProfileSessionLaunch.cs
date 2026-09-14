@@ -48,6 +48,21 @@ internal static class ProfileSessionLaunch
 
 		context.ExitControlServer = ExitControlServer.Attach(context.ReservedPorts!.ExitControlReservation, context.Formatter, context.UseJson, context.Verbose);
 		context.ReservedPorts.DiagnosticReservation.Dispose();
+		if (context.Transport.RequiresExplicitDsrouter)
+		{
+			context.ReservedPorts.DsrouterTcpReservation!.Dispose();
+			context.DsrouterIpcEndpoint = ProfileDsrouterRunner.CreateIpcEndpoint();
+			context.DsrouterProcess = ProfileDsrouterRunner.Start(
+				context.Project.ProjectDirectory,
+				context.DsrouterIpcEndpoint,
+				context.ReservedPorts.DsrouterTcpPort!.Value,
+				context.Device,
+				context.Formatter,
+				context.UseJson,
+				context.Verbose,
+				cancellationToken);
+			await ProfileDsrouterRunner.EnsureStartedAsync(context.DsrouterProcess, cancellationToken);
+		}
 
 		if (!context.StartTraceAfterLaunch)
 		{
@@ -55,12 +70,15 @@ internal static class ProfileSessionLaunch
 				context.Formatter,
 				context.UseJson,
 				context.Verbose,
-				$"Starting dotnet-trace with built-in dsrouter mode '{context.DsrouterKind}' on port {context.DiagnosticPort}.");
+				context.DsrouterIpcEndpoint is null
+					? $"Starting dotnet-trace with built-in dsrouter mode '{context.DsrouterKind}' on port {context.DiagnosticPort}."
+					: $"Starting dotnet-trace through explicit dsrouter endpoint '{context.DsrouterIpcEndpoint}'.");
 			context.TraceProcess = DotnetTraceRunner.StartCollector(
 				context.Project.ProjectDirectory,
 				context.OutputPath,
 				context.OutputFormat,
 				context.Transport,
+				context.DsrouterIpcEndpoint,
 				context.Device,
 				context.TraceProfile,
 				context.EffectiveDuration,
@@ -91,12 +109,15 @@ internal static class ProfileSessionLaunch
 				context.Formatter,
 				context.UseJson,
 				context.Verbose,
-				$"Starting dotnet-trace with built-in dsrouter mode '{context.DsrouterKind}' on port {context.DiagnosticPort} after the {(context.ManualStart ? "non-suspended" : "suspended")} app launch.");
+				context.DsrouterIpcEndpoint is null
+					? $"Starting dotnet-trace with built-in dsrouter mode '{context.DsrouterKind}' on port {context.DiagnosticPort} after the {(context.ManualStart ? "non-suspended" : "suspended")} app launch."
+					: $"Starting dotnet-trace through explicit dsrouter endpoint '{context.DsrouterIpcEndpoint}' after the {(context.ManualStart ? "non-suspended" : "suspended")} app launch.");
 			context.TraceProcess = await DotnetTraceRunner.StartWithRetryAsync(
 				context.Project.ProjectDirectory,
 				context.OutputPath,
 				context.OutputFormat,
 				context.Transport,
+				context.DsrouterIpcEndpoint,
 				context.Device,
 				context.TraceProfile,
 				context.EffectiveDuration,

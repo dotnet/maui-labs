@@ -2,11 +2,13 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.CommandLine;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using Microsoft.Maui.Cli.Commands;
 using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
+using Microsoft.Maui.Cli.Output;
 using Microsoft.Maui.Cli.Utils;
 using Xunit;
 
@@ -50,9 +52,48 @@ public class ProfileCommandTests
 		Assert.Contains(startup.Options, o => o.Name == "--trace-profile");
 		Assert.Contains(startup.Options, o => o.Name == "--no-build");
 		Assert.Contains(startup.Options, o => o.Name == "--diagnostic-port");
+		Assert.Contains(startup.Options, o => o.Name == "--trace-stop-timeout");
 		Assert.Contains(startup.Options, o => o.Name == "--stopping-event-provider-name");
 		Assert.Contains(startup.Options, o => o.Name == "--stopping-event-event-name");
 		Assert.Contains(startup.Options, o => o.Name == "--stopping-event-payload-filter");
+	}
+
+	[Fact]
+	public void ProfileCommand_DefaultTraceStopTimeoutIsTwoMinutes()
+	{
+		var command = ProfileCommand.Create();
+		var startup = command.Subcommands.Single(c => c.Name == "startup");
+		var timeoutOption = (Option<TimeSpan>)startup.Options.First(o => o.Name == "--trace-stop-timeout");
+		var parseResult = command.Parse("profile startup");
+
+		Assert.Equal(TimeSpan.FromMinutes(2), parseResult.GetValue(timeoutOption));
+	}
+
+	[Fact]
+	public void ProfileCommand_ParsesExplicitTraceStopTimeout()
+	{
+		var command = ProfileCommand.Create();
+		var startup = command.Subcommands.Single(c => c.Name == "startup");
+		var timeoutOption = (Option<TimeSpan>)startup.Options.First(o => o.Name == "--trace-stop-timeout");
+		var parseResult = command.Parse("profile startup --trace-stop-timeout 00:05:00");
+
+		Assert.Equal(TimeSpan.FromMinutes(5), parseResult.GetValue(timeoutOption));
+	}
+
+	[Fact]
+	public void ProfileCommand_ManualSubcommandHasTraceStopTimeout()
+	{
+		var manual = ProfileCommand.Create().Subcommands.Single(c => c.Name == "manual");
+
+		Assert.Contains(manual.Options, o => o.Name == "--trace-stop-timeout");
+	}
+
+	[Fact]
+	public void ValidateTraceStopTimeout_RejectsNonPositiveValues()
+	{
+		Assert.Throws<MauiToolException>(() => ProfileCommand.ValidateTraceStopTimeout(TimeSpan.Zero));
+		Assert.Throws<MauiToolException>(() => ProfileCommand.ValidateTraceStopTimeout(TimeSpan.FromSeconds(-1)));
+		ProfileCommand.ValidateTraceStopTimeout(TimeSpan.FromSeconds(1));
 	}
 
 	[Fact]
@@ -783,6 +824,109 @@ public class ProfileCommandTests
 		Assert.Equal("connect", transport.DiagnosticListenMode);
 		Assert.Equal("android", transport.DsrouterKind);
 		Assert.True(transport.RequiresManualExitControlPortRouting);
+		Assert.True(transport.RequiresExplicitDsrouter);
+	}
+
+	[Fact]
+	public void PhysicalAndroidPorts_ReserveSeparateRouterAndExitControlPorts()
+	{
+		var transport = ProfileCommand.ResolveProfileTransport(
+			Platforms.Android,
+			CreateDevice(Platforms.Android, isEmulator: false));
+
+		Assert.Equal(9001, ProfileCommandPortRouter.GetDsrouterTcpPort(9000));
+		Assert.Equal(9002, ProfileCommandPortRouter.GetExitControlPort(9000, transport));
+	}
+
+	[Fact]
+	public async Task ReserveProfilePorts_ExplicitDsrouterSkipsCollidingPortSet()
+	{
+		using var listener = new TcpListener(IPAddress.Loopback, 0);
+		listener.Start();
+		var busyPort = ((IPEndPoint)listener.LocalEndpoint).Port;
+		var startingPort = busyPort - 1;
+		var transport = new ProfileTransportConfiguration(
+			Platforms.Android,
+			"127.0.0.1",
+			"connect",
+			"android",
+			RequiresManualExitControlPortRouting: false,
+			RequiresExplicitDsrouter: true);
+
+		using var ports = await ProfileCommandPortRouter.ReserveProfilePortsAndConfigureRoutingAsync(
+			CreateDevice(Platforms.Android, isEmulator: false),
+			transport,
+			startingPort,
+			new JsonOutputFormatter(TextWriter.Null),
+			useJson: false,
+			verbose: false,
+			CancellationToken.None);
+
+		Assert.True(ports.DiagnosticPort > busyPort);
+		Assert.Equal(ports.DiagnosticPort + 1, ports.DsrouterTcpPort);
+		Assert.Equal(ports.DiagnosticPort + 2, ports.ExitControlPort);
+		Assert.NotNull(ports.DsrouterTcpReservation);
+	}
+
+	[Fact]
+	public void EmulatorExitControlPort_RemainsAdjacentToDiagnosticPort()
+	{
+		var transport = ProfileCommand.ResolveProfileTransport(
+			Platforms.Android,
+			CreateDevice(Platforms.Android, isEmulator: true));
+
+		Assert.Equal(9001, ProfileCommandPortRouter.GetExitControlPort(9000, transport));
+	}
+
+	[Fact]
+	public void BuildDsrouterArguments_UsesSelectedRouterPortAndUniqueIpcEndpoint()
+	{
+		var args = ProfileDsrouterRunner.BuildArguments("maui-profile-test", 9101);
+
+		Assert.Equal(
+			[
+				"server-server",
+				"--ipc-server", "maui-profile-test",
+				"--tcp-server", "127.0.0.1:9101",
+				"--forward-port", "Android"
+			],
+			args);
+	}
+
+	[Fact]
+	public void CreateDsrouterIpcEndpoint_UnixPathFitsSocketLimit()
+	{
+		if (OperatingSystem.IsWindows())
+			return;
+
+		var endpoint = ProfileDsrouterRunner.CreateIpcEndpoint();
+
+		Assert.StartsWith("/tmp/", endpoint, StringComparison.Ordinal);
+		Assert.True(endpoint.Length < 100);
+	}
+
+	[Fact]
+	public void BuildTraceArguments_WithExplicitDsrouterIpc_DoesNotLaunchImplicitRouter()
+	{
+		var transport = ProfileCommand.ResolveProfileTransport(
+			Platforms.Android,
+			CreateDevice(Platforms.Android, isEmulator: false));
+
+		var args = ProfileCommand.BuildTraceArguments(
+			"trace.nettrace",
+			TraceOutputFormat.NetTrace,
+			transport,
+			traceProfile: null,
+			duration: null,
+			stoppingEventProvider: null,
+			stoppingEventName: null,
+			stoppingEventPayloadFilter: null,
+			diagnosticPortEndpoint: "maui-profile-test").ToArray();
+
+		Assert.DoesNotContain("--dsrouter", args);
+		var diagnosticPortIndex = Array.IndexOf(args, "--diagnostic-port");
+		Assert.True(diagnosticPortIndex >= 0);
+		Assert.Equal("maui-profile-test,connect", args[diagnosticPortIndex + 1]);
 	}
 
 	[Fact]
@@ -1027,6 +1171,62 @@ public class ProfileCommandTests
 	public void CanUseDiagnosticsTooling_MissingRequiredToolWithoutDnx_ReturnsFalse()
 	{
 		Assert.False(ProfileCommand.CanUseDiagnosticsTooling(hasDnx: false, hasDotnetTrace: true, hasDotnetDsrouter: false));
+	}
+
+	[Fact]
+	public void ConfigureDnxStartInfo_UsesResolvedCommandPath()
+	{
+		var startInfo = new ProcessStartInfo();
+		var dnxPath = TestPath("dotnet", "dnx");
+
+		ProfileCommandDiagnostics.ConfigureDnxStartInfo(
+			startInfo,
+			dnxPath,
+			"dotnet-trace",
+			["collect", "--output", "trace.nettrace"],
+			out var commandLine);
+
+		Assert.Equal(dnxPath, startInfo.FileName);
+		Assert.Equal(
+			["-y", "dotnet-trace", "--", "collect", "--output", "trace.nettrace"],
+			startInfo.ArgumentList);
+		Assert.Contains(dnxPath, commandLine);
+	}
+
+	[Fact]
+	public void ConfigureDnxStartInfo_WindowsCommandWrapperUsesCommandProcessor()
+	{
+		var startInfo = new ProcessStartInfo();
+		var dnxPath = TestPath("Program Files", "dotnet", "dnx.cmd");
+
+		ProfileCommandDiagnostics.ConfigureDnxStartInfo(
+			startInfo,
+			dnxPath,
+			"dotnet-trace",
+			["collect", "--output", "trace.nettrace"],
+			out var commandLine,
+			isWindows: true);
+
+		Assert.EndsWith("cmd.exe", startInfo.FileName, StringComparison.OrdinalIgnoreCase);
+		Assert.Empty(startInfo.ArgumentList);
+		Assert.Contains("/c", startInfo.Arguments);
+		Assert.Contains(dnxPath, startInfo.Arguments);
+		Assert.Contains(dnxPath, commandLine);
+	}
+
+	[Fact]
+	public void ProfilingInjectionAssets_AreSelfContainedAndConfigureIosLaunchEnvironment()
+	{
+		var buildDirectory = Path.GetFullPath(Path.Combine(
+			AppContext.BaseDirectory,
+			"../../../../../src/Cli/Microsoft.Maui.Cli/Build"));
+		var source = File.ReadAllText(Path.Combine(buildDirectory, "MauiProfilingHelper.AutoInitialize.cs"));
+		var targets = File.ReadAllText(Path.Combine(buildDirectory, "MauiProfilingHelperInjection.targets"));
+
+		Assert.Contains("using System;", source);
+		Assert.Contains("MlaunchEnvironmentVariables Include=\"MAUI_PROFILING_HELPER=1\"", targets);
+		Assert.Contains("MlaunchEnvironmentVariables Include=\"MAUI_PROFILING_HELPER_EXIT_HOST=", targets);
+		Assert.Contains("MlaunchEnvironmentVariables Include=\"MAUI_PROFILING_HELPER_EXIT_PORT=", targets);
 	}
 
 	[Fact]

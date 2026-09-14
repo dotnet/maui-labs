@@ -47,14 +47,12 @@ internal static class ProfileSessionSetup
 		context.DiagnosticPort = context.ReservedPorts.DiagnosticPort;
 
 		var hasProfilingHelper = MauiProjectResolver.HasPackageReference(context.Project.ProjectPath, ProfileCommand.ProfilingHelperPackageId);
-		context.BuildInjection = string.Equals(profilePlatform, Platforms.iOS, StringComparison.OrdinalIgnoreCase)
-			? null
-			: ProfileCommandBuildInjectionResolver.TryCreateBuildInjection(
-				context.DiagnosticAddress,
-				context.ReservedPorts!.ExitControlPort,
-				injectBootstrap: !hasProfilingHelper,
-				enableRuntimePgo: context.UseRuntimeOwnedTraceCollection || context.OutputFormat == TraceOutputFormat.Mibc,
-				eventPipeOutputPath: context.RuntimeOwnedTraceDevicePath);
+		context.BuildInjection = ProfileCommandBuildInjectionResolver.TryCreateBuildInjection(
+			context.DiagnosticAddress,
+			context.ReservedPorts!.ExitControlPort,
+			injectBootstrap: !hasProfilingHelper,
+			enableRuntimePgo: context.UseRuntimeOwnedTraceCollection || context.OutputFormat == TraceOutputFormat.Mibc,
+			eventPipeOutputPath: context.RuntimeOwnedTraceDevicePath);
 
 		WriteDiagnosticPortInfo(context);
 		return context;
@@ -94,7 +92,7 @@ internal static class ProfileSessionSetup
 			context.Verbose,
 			$"Profile settings: configuration={context.Configuration}, noBuild={context.NoBuild}, dsrouterKind={context.DsrouterKind}, " +
 			$"diagnosticAddress={context.DiagnosticAddress}, diagnosticListenMode={context.Transport.DiagnosticListenMode}, diagnosticPort={context.DiagnosticPort}, " +
-			$"traceProfile={context.TraceProfile ?? "(default)"}, outputFormat={ProfileOutputResolver.FormatOutputFormat(context.OutputFormat)}, duration={context.EffectiveDuration?.ToString() ?? "(manual stop)"}, " +
+			$"traceProfile={context.TraceProfile ?? "(default)"}, outputFormat={ProfileOutputResolver.FormatOutputFormat(context.OutputFormat)}, duration={context.EffectiveDuration?.ToString() ?? "(manual stop)"}, traceStopTimeout={context.TraceStopTimeout}, " +
 			$"stoppingEventProvider={context.StoppingEventProvider ?? "(none)"}, stoppingEventName={context.StoppingEventName ?? "(none)"}, " +
 			$"stoppingEventPayloadFilter={context.StoppingEventPayloadFilter ?? "(none)"}");
 	}
@@ -111,6 +109,10 @@ internal static class ProfileSessionSetup
 		}
 
 		context.Formatter.WriteInfo($"Diagnostic port: {context.DiagnosticPort}");
+		if (!context.UseRuntimeOwnedTraceCollection
+			&& context.Transport.RequiresExplicitDsrouter
+			&& context.ReservedPorts?.DsrouterTcpPort is { } dsrouterTcpPort)
+			context.Formatter.WriteInfo($"Dsrouter host TCP port: {dsrouterTcpPort}");
 		if (context.DiagnosticPort != context.RequestedDiagnosticPort)
 			context.Formatter.WriteInfo($"Port {context.RequestedDiagnosticPort} was busy, so the profiler selected {context.DiagnosticPort}.");
 

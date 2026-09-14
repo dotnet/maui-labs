@@ -24,6 +24,7 @@ internal static class ProfileSessionRunner
 					// newline (or close stdin) to stop. Other modes keep the existing
 					// "no manual stop in JSON" behavior.
 					allowManualStop: !context.UseJson || context.ManualStart,
+					context.TraceStopTimeout,
 					context.Formatter,
 					context.UseJson,
 					context.Verbose,
@@ -95,12 +96,32 @@ internal static class ProfileSessionRunner
 			context.TraceProcess.Dispose();
 		}
 
+		if (context.DsrouterProcess is not null)
+		{
+			await ProfileTraceLifecycle.StopBackgroundProcessAsync(context.DsrouterProcess.Process, "dotnet-dsrouter", context.Formatter, context.UseJson, context.Verbose);
+			context.DsrouterProcess.Dispose();
+		}
+		ProfileDsrouterRunner.DeleteIpcEndpoint(context.DsrouterIpcEndpoint);
+
 		if (context.Transport.RequiresManualExitControlPortRouting)
 		{
 			if (context.ReservedPorts is not null)
-				await ProfileCommandPortRouter.RemoveAdbPortRoutingAsync(context.Device, context.Formatter, context.UseJson, context.Verbose, context.ReservedPorts.ExitControlPort);
+			{
+				await ProfileCommandPortRouter.RemoveAdbPortRoutingAsync(
+					context.Device,
+					context.Formatter,
+					context.UseJson,
+					context.Verbose,
+					context.Transport.RequiresExplicitDsrouter ? context.ReservedPorts.DiagnosticPort : -1,
+					context.ReservedPorts.ExitControlPort);
+			}
 			else
-				await ProfileCommandPortRouter.RemoveAdbPortRoutingAsync(context.Device, context.Formatter, context.UseJson, context.Verbose, ProfileCommandPortRouter.GetExitControlPort(context.DiagnosticPort));
+				await ProfileCommandPortRouter.RemoveAdbPortRoutingAsync(
+					context.Device,
+					context.Formatter,
+					context.UseJson,
+					context.Verbose,
+					ProfileCommandPortRouter.GetExitControlPort(context.DiagnosticPort, context.Transport));
 		}
 	}
 

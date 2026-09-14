@@ -24,6 +24,7 @@ internal static class ProfileTraceLifecycle
 	internal static async Task<bool> WaitForCompletionAsync(
 		MonitoredProcess traceProcess,
 		bool allowManualStop,
+		TimeSpan traceStopTimeout,
 		IOutputFormatter formatter,
 		bool useJson,
 		bool verbose,
@@ -69,13 +70,13 @@ internal static class ProfileTraceLifecycle
 		{
 			try
 			{
-				await processWaitTask.WaitAsync(ProfileCommand.s_traceStopTimeout);
+				await processWaitTask.WaitAsync(traceStopTimeout);
 			}
 			catch (TimeoutException)
 			{
 				throw new MauiToolException(
 					ErrorCodes.InternalError,
-					$"dotnet-trace did not exit within {ProfileCommand.s_traceStopTimeout.TotalSeconds:0}s after the stop request.",
+					$"dotnet-trace did not exit within {traceStopTimeout.TotalSeconds:0}s after the stop request.",
 					nativeError: traceProcess.GetCombinedOutput());
 			}
 		}
