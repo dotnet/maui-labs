@@ -33,14 +33,14 @@ is green; the next-to-merge approval layer has unrelated QuickGrid flakes.
 | Multimodal input | Converged with native file/audio/speech services and one reusable `ChatInputContext` |
 | Reasoning/protected reasoning | MAUI preserved; current ASP.NET stack removed reasoning blocks/handlers |
 | Approval | Converged; decisions are single-use and rejection reasons propagate |
-| Automatic UI actions | MAUI improvement: actions auto-run without entering human `AwaitingInput` |
-| Typed state/state mapper | Converged |
+| UI actions | Converged: automatic actions auto-run; manual actions are interactive UI entries |
+| Typed state/state mapper | Converged: mapping and explicit content filtering are independent |
 | Predictive state | Converged: provisional values can be accepted/rejected and otherwise roll back at turn completion, cancellation, error, clear, or dispose |
 | Shared state/stateful provider | Converged through thread replay plus `ConversationId` forwarding |
 | Conversation threads/restore | Converged plus explicit thread `Clear()` |
 | Retry/cancellation | Converged with separate graceful cancel, observable caller cancellation, transactional direct history, and pending-thread abort |
 | `[ToolBlock]` generator | Converged in `Microsoft.Maui.AI.Chat.Generators` |
-| Activity blocks | Not added to defaults; ASP.NET still leaves activity handlers unregistered |
+| Activity blocks | Converged as opt-in handlers; not added to defaults |
 
 ## 2026-08-18 human-review hardening
 
@@ -55,6 +55,8 @@ audited and hardened the corresponding paths:
 - a second send is rejected while the context awaits human input;
 - state-only content is filtered from local chat history while raw thread
   updates remain available for durable replay;
+- state mapping always applies its typed or predictive value; only explicitly handled content is
+  filtered from rendering/history;
 - a state mapper supplying the wrong state type fails explicitly instead of
   silently hiding content;
 - restore is transactional for local history and typed state, starts from the
@@ -154,7 +156,9 @@ is added.
 - `ImageGenerationToolResultContent.Outputs` are unwrapped into media blocks.
 - Media and reasoning remain supported despite their removal upstream.
 - `AgentContext.Clear()` resets local and persistent history coherently.
-- UI actions auto-run and do not stall in `AwaitingInput`.
+- Automatic UI actions auto-run and do not stall in `AwaitingInput`; manual UI actions deliberately
+  await UI input and can edit arguments before invoking.
+- `ChatOptions.RawRepresentationFactory` survives stateful/UI-action request option cloning.
 - Mixed approval and tool results continue as separate user/tool messages.
 - Failed or canceled sends cannot grow local or persistent pending history.
 - Informational calls and same-update call/results are handled without

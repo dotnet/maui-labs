@@ -138,6 +138,48 @@ public class AgentContextTests
             statuses);
     }
 
+    [Fact]
+    public async Task SendMessageAsync_AsynchronousStreamingAndToolContinuation_PreserveSynchronizationContext()
+    {
+        var synchronizationContext = new RecordingSynchronizationContext();
+        var previousSynchronizationContext = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(synchronizationContext);
+
+        try
+        {
+            var observedContexts = new List<SynchronizationContext?>();
+            var tool = AIFunctionFactory.Create(
+                async () =>
+                {
+                    await Task.Yield();
+                    observedContexts.Add(SynchronizationContext.Current);
+                    return "tool result";
+                },
+                "GetValue",
+                "Gets a value");
+            var callCount = 0;
+            var client = new DelegatingStreamingChatClient();
+            client.SetHandler((_, _, cancellationToken) =>
+                EmitAsyncResponse(
+                    ++callCount,
+                    observedContexts,
+                    cancellationToken));
+            var context = new AgentContext(
+                new UIAgent(client, new ChatOptions { Tools = [tool] }));
+            context.RegisterOnStatusChanged(_ =>
+                observedContexts.Add(SynchronizationContext.Current));
+
+            await context.SendMessageAsync("Get a value");
+
+            Assert.NotEmpty(observedContexts);
+            Assert.All(observedContexts, observed => Assert.Same(synchronizationContext, observed));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previousSynchronizationContext);
+        }
+    }
+
     // ---- Notifications ----
 
     [Fact]
@@ -296,5 +338,49 @@ public class AgentContextTests
         Assert.Single(context.Turns);
         Assert.Equal(new[] { 1, 1 }, messageCounts);
         Assert.Equal(ConversationStatus.Idle, context.Status);
+    }
+
+    private static async IAsyncEnumerable<ChatResponseUpdate> EmitAsyncResponse(
+        int callCount,
+        List<SynchronizationContext?> observedContexts,
+        [System.Runtime.CompilerServices.EnumeratorCancellation]
+        CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+        observedContexts.Add(SynchronizationContext.Current);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (callCount == 1)
+        {
+            yield return new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                Contents = [new FunctionCallContent("value-1", "GetValue")],
+            };
+            yield break;
+        }
+
+        yield return new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            Contents = [new TextContent("Done")],
+        };
+    }
+
+    private sealed class RecordingSynchronizationContext : SynchronizationContext
+    {
+        public override void Post(SendOrPostCallback callback, object? state)
+        {
+            var previous = Current;
+            SetSynchronizationContext(this);
+            try
+            {
+                callback(state);
+            }
+            finally
+            {
+                SetSynchronizationContext(previous);
+            }
+        }
     }
 }

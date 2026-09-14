@@ -283,6 +283,10 @@ Microsoft.Maui.AI.Chat.UIActionBlock
 Microsoft.Maui.AI.Chat.UIActionBlock.GetResultAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.AIContent!>!
 Microsoft.Maui.AI.Chat.UIActionBlock.InvokeAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.AIContent!>!
 Microsoft.Maui.AI.Chat.UIActionBlock.IsComplete.get -> bool
+Microsoft.Maui.AI.Chat.UIActionBlock.Mode.get -> Microsoft.Maui.AI.Chat.UIActionInvocationMode
+Microsoft.Maui.AI.Chat.UIActionInvocationMode
+Microsoft.Maui.AI.Chat.UIActionInvocationMode.Automatic = 0 -> Microsoft.Maui.AI.Chat.UIActionInvocationMode
+Microsoft.Maui.AI.Chat.UIActionInvocationMode.Manual = 1 -> Microsoft.Maui.AI.Chat.UIActionInvocationMode
 Microsoft.Maui.AI.Chat.UIAgent
 Microsoft.Maui.AI.Chat.UIAgent.ClearHistory() -> void
 Microsoft.Maui.AI.Chat.UIAgent.Dispose() -> void
@@ -307,11 +311,24 @@ Microsoft.Maui.AI.Chat.UIAgentOptions.ChatOptions.set -> void
 Microsoft.Maui.AI.Chat.UIAgentOptions.RegisterUIAction(Microsoft.Extensions.AI.AIFunction! function) -> void
 Microsoft.Maui.AI.Chat.UIAgentOptions.Services.get -> System.IServiceProvider?
 Microsoft.Maui.AI.Chat.UIAgentOptions.Services.set -> void
-Microsoft.Maui.AI.Chat.UIAgentOptions.StateMapper.get -> System.Func<Microsoft.Maui.AI.Chat.StateMapperContext!, bool>?
+Microsoft.Maui.AI.Chat.UIAgentOptions.StateMapper.get -> System.Action<Microsoft.Maui.AI.Chat.StateMapperContext!>?
 Microsoft.Maui.AI.Chat.UIAgentOptions.StateMapper.set -> void
 Microsoft.Maui.AI.Chat.UIAgentOptions.Thread.get -> Microsoft.Maui.AI.Chat.IConversationThread?
 Microsoft.Maui.AI.Chat.UIAgentOptions.Thread.set -> void
 Microsoft.Maui.AI.Chat.UIAgentOptions.UIAgentOptions() -> void
+Microsoft.Maui.AI.Chat.UIAgentOptions.RegisterUIAction(Microsoft.Extensions.AI.AIFunction! function, Microsoft.Maui.AI.Chat.UIActionInvocationMode mode) -> void
+Microsoft.Maui.AI.Chat.ActivityContentBlock
+Microsoft.Maui.AI.Chat.ActivityContentBlock.ActivityContentBlock() -> void
+Microsoft.Maui.AI.Chat.ActivityContentBlock.ActivityType.get -> string!
+Microsoft.Maui.AI.Chat.ActivityContentBlock.ActivityType.set -> void
+Microsoft.Maui.AI.Chat.ActivityContentBlock.Content.get -> System.Text.Json.JsonElement
+Microsoft.Maui.AI.Chat.ActivityContentBlock.Content.set -> void
+Microsoft.Maui.AI.Chat.ActivityHandler<TBlock>
+Microsoft.Maui.AI.Chat.ActivityHandler<TBlock>.ActivityHandler() -> void
+abstract Microsoft.Maui.AI.Chat.ActivityHandler<TBlock>.TryCreateBlock(Microsoft.Maui.AI.Chat.BlockMappingContext! context, TBlock! state) -> bool
+abstract Microsoft.Maui.AI.Chat.ActivityHandler<TBlock>.TryUpdateBlock(Microsoft.Maui.AI.Chat.BlockMappingContext! context, TBlock! state, out bool isCompleted) -> bool
+override sealed Microsoft.Maui.AI.Chat.ActivityHandler<TBlock>.Handle(Microsoft.Maui.AI.Chat.BlockMappingContext! context, TBlock! state) -> Microsoft.Maui.AI.Chat.BlockMappingResult<TBlock!>
+virtual Microsoft.Maui.AI.Chat.ActivityHandler<TBlock>.OnContentUpdated(TBlock! block) -> void
 static Microsoft.Maui.AI.Chat.BlockMappingResult<TState>.Complete() -> Microsoft.Maui.AI.Chat.BlockMappingResult<TState>
 static Microsoft.Maui.AI.Chat.BlockMappingResult<TState>.Emit(Microsoft.Maui.AI.Chat.ContentBlock! block, TState state) -> Microsoft.Maui.AI.Chat.BlockMappingResult<TState>
 static Microsoft.Maui.AI.Chat.BlockMappingResult<TState>.Pass() -> Microsoft.Maui.AI.Chat.BlockMappingResult<TState>
