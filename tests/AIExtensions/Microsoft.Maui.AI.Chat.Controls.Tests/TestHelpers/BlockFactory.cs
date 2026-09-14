@@ -92,7 +92,11 @@ internal static class BlockFactory
         var call = new FunctionCallContent("action-1", toolName);
         var inner = new FunctionInvocationContentBlock { Call = call };
         var function = AIFunctionFactory.Create(() => "complete", toolName, "Test action");
-        var block = new UIActionBlock(function, inner, services: null)
+        var block = new UIActionBlock(
+            function,
+            UIActionInvocationMode.Automatic,
+            inner,
+            services: null)
         {
             Role = ChatRole.Assistant,
         };
