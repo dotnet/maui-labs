@@ -28,6 +28,18 @@ public class CopilotChatView : ChatView
                     (AgentContext?)oldValue,
                     (AgentContext?)newValue));
 
+    /// <summary>Backing property for <see cref="Presentation"/>.</summary>
+    public static readonly BindableProperty PresentationProperty =
+        BindableProperty.Create(
+            nameof(Presentation),
+            typeof(AgentChatPresentation),
+            typeof(CopilotChatView),
+            default(AgentChatPresentation),
+            propertyChanged: static (bindable, oldValue, newValue) =>
+                ((CopilotChatView)bindable).OnPresentationChanged(
+                    (AgentChatPresentation?)oldValue,
+                    (AgentChatPresentation?)newValue));
+
     /// <summary>Backing property for <see cref="UserDisplayName"/>.</summary>
     public static readonly BindableProperty UserDisplayNameProperty =
         BindableProperty.Create(
@@ -46,7 +58,8 @@ public class CopilotChatView : ChatView
             "Assistant",
             propertyChanged: OnParticipantAliasChanged);
 
-    private AgentChatConversation? _agentConversation;
+    private AgentChatPresentation? _agentConversation;
+    private bool _ownsPresentation;
 
     /// <summary>Initializes a new AI chat view.</summary>
     public CopilotChatView()
@@ -61,6 +74,16 @@ public class CopilotChatView : ChatView
     {
         get => (AgentContext?)GetValue(SessionProperty);
         set => SetValue(SessionProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets an external presentation. External presentations are shared and are never
+    /// disposed by this view.
+    /// </summary>
+    public AgentChatPresentation? Presentation
+    {
+        get => (AgentChatPresentation?)GetValue(PresentationProperty);
+        set => SetValue(PresentationProperty, value);
     }
 
     /// <summary>Gets or sets the local user display name.</summary>
@@ -169,15 +192,32 @@ public class CopilotChatView : ChatView
         AgentContext? newSession)
     {
         _ = oldSession;
-        ReplaceAgentConversation(newSession);
+        if (Presentation is null)
+            ReplaceAgentConversation(newSession);
+    }
+
+    private void OnPresentationChanged(
+        AgentChatPresentation? oldPresentation,
+        AgentChatPresentation? newPresentation)
+    {
+        if (ReferenceEquals(oldPresentation, _agentConversation) && _ownsPresentation)
+            _agentConversation?.Dispose();
+        _agentConversation = newPresentation;
+        _ownsPresentation = false;
+        _agentConversation?.UpdateParticipantNames(UserDisplayName, AssistantDisplayName);
+        Conversation = _agentConversation;
+        if (newPresentation is null && Session is not null)
+            ReplaceAgentConversation(Session);
     }
 
     private void ReplaceAgentConversation(AgentContext? session)
     {
-        _agentConversation?.Dispose();
+        if (_ownsPresentation)
+            _agentConversation?.Dispose();
         _agentConversation = session is null
             ? null
-            : new AgentChatConversation(session);
+            : new AgentChatPresentation(session);
+        _ownsPresentation = _agentConversation is not null;
         _agentConversation?.UpdateParticipantNames(
             UserDisplayName,
             AssistantDisplayName);
@@ -188,7 +228,9 @@ public class CopilotChatView : ChatView
     {
         var conversation = _agentConversation;
         _agentConversation = null;
-        conversation?.Dispose();
+        if (_ownsPresentation)
+            conversation?.Dispose();
+        _ownsPresentation = false;
         if (ReferenceEquals(Conversation, conversation))
             Conversation = null;
     }

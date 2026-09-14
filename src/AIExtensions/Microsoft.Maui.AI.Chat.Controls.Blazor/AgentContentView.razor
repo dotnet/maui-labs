@@ -1,0 +1,76 @@
+@namespace Microsoft.Maui.AI.Chat.Controls.Blazor
+
+@switch (Content.Block)
+{
+    case ToolApprovalBlock approval:
+        <section class="maicard" role="group" aria-label="Tool approval">
+            <strong>@approval.ToolName</strong>
+            @if (approval.Status == ApprovalStatus.Pending)
+            {
+                <button aria-label="Approve tool" @onclick="approval.Approve">Approve</button>
+                <button aria-label="Reject tool" @onclick="() => approval.Reject()">Reject</button>
+            }
+            else { <span>@approval.Status</span> }
+        </section>
+        break;
+    case UIActionBlock action:
+        <section class="maicard" role="status" aria-label="UI action">
+            <strong>@action.ToolName</strong>
+            <span>@(action.IsComplete ? "Completed" : "In progress")</span>
+            @if (!action.IsComplete)
+            {
+                <button @onclick="() => action.InvokeAsync()">Run action</button>
+            }
+        </section>
+        break;
+    case FunctionInvocationContentBlock function:
+        <section class="maicard" role="status"><strong>@function.ToolName</strong><pre>@Format(function.Arguments)</pre><pre>@Format(function.Result)</pre></section>
+        break;
+    case ReasoningContentBlock reasoning:
+        <details class="maicard"><summary>Reasoning</summary><pre>@reasoning.Text</pre></details>
+        break;
+    case ThinkingContentBlock thinking:
+        <p role="status" class="mai-thinking">@thinking.Text</p>
+        break;
+    case ErrorContentBlock error:
+        <section class="maicard mai-error" role="alert">@error.Message <button @onclick="RetryAsync">Retry</button></section>
+        break;
+    case RichContentBlock rich:
+        <RichTextView Nodes="rich.Content" Fallback="@rich.RawText" />
+        break;
+    case MediaContentBlock when Content is AgentMediaMessageContent media:
+        @if (media.IsImage)
+        {
+            <img class="mai-media" src="@MediaSource(media)" alt="@media.DisplayName" />
+        }
+        else
+        {
+            <span class="maicard" role="status">@media.DisplayName (@media.MediaType)</span>
+        }
+        break;
+    default:
+        <pre class="maicard">@Content.Block.GetType().Name</pre>
+        break;
+}
+
+@code {
+    /// <summary>Gets or sets the content projection.</summary>
+    [Parameter, EditorRequired]
+    public IAgentBlockContent Content { get; set; } = default!;
+
+    /// <summary>Gets the presentation cascaded by <see cref="CopilotChatView"/>.</summary>
+    [CascadingParameter]
+    public AgentChatPresentation? Presentation { get; set; }
+
+    private Task RetryAsync() =>
+        Presentation?.Session.Status == ConversationStatus.Error
+            ? Presentation.Session.RetryAsync()
+            : Task.CompletedTask;
+
+    private static string Format(object? value) =>
+        value is null ? string.Empty : System.Text.Json.JsonSerializer.Serialize(value);
+
+    private static string MediaSource(AgentMediaMessageContent media) =>
+        media.Uri?.ToString()
+        ?? $"data:{media.MediaType};base64,{Convert.ToBase64String(media.Data.ToArray())}";
+}

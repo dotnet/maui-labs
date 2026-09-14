@@ -43,7 +43,7 @@ public sealed class ContentContext : ChatContentItem, IDisposable
         ConversationMessage message,
         MessageContent content,
         IAgentBlockContent agentContent,
-        AgentChatConversation conversation,
+        AgentChatPresentation conversation,
         ChatAppearance appearance)
         : base(
             message,
@@ -151,7 +151,7 @@ public sealed class ContentContext : ChatContentItem, IDisposable
             block.Role == ChatRole.User
                 ? ChatParticipantKind.Local
                 : ChatParticipantKind.Agent);
-        var content = AgentChatConversation.CreateMessageContent(
+        var content = AgentChatPresentation.CreateMessageContent(
             block,
             turn: null,
             isRequest: block.Role == ChatRole.User);
