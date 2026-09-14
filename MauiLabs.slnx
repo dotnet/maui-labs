@@ -8,6 +8,9 @@
     <Project Path="playground/DevFlow.Console/DevFlow.Console.csproj" />
   </Folder>
   <Folder Name="/samples/">
+    <Project Path="samples/AIChat.ClientServer.Sample/AIChat.ClientServer.Sample.AgentServer/AIChat.ClientServer.Sample.AgentServer.csproj" />
+    <Project Path="samples/AIChat.ClientServer.Sample/AIChat.ClientServer.Sample.AppHost/AIChat.ClientServer.Sample.AppHost.csproj" />
+    <Project Path="samples/AIChat.ClientServer.Sample/AIChat.ClientServer.Sample.Shared/AIChat.ClientServer.Sample.Shared.csproj" />
     <Project Path="samples/AIExtensions.Sample.Garden/AIExtensions.Sample.Garden.csproj" />
     <Project Path="samples/AIExtensions.Sample.Hello/AIExtensions.Sample.Hello.csproj" />
     <Project Path="samples/AIExtensions.Sample.DIParameters/AIExtensions.Sample.DIParameters.csproj" />
@@ -48,6 +51,7 @@
     <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Chat.Controls.Blazor.Tests/Microsoft.Maui.AI.Chat.Controls.Blazor.Tests.csproj" />
     <Project Path="tests/AIExtensions/Microsoft.Maui.Chat.Controls.Tests/Microsoft.Maui.Chat.Controls.Tests.csproj" />
     <Project Path="tests/AIExtensions/Microsoft.Maui.Chat.Controls.Blazor.Tests/Microsoft.Maui.Chat.Controls.Blazor.Tests.csproj" />
+    <Project Path="tests/AIExtensions/AIChat.ClientServer.Sample.Tests/AIChat.ClientServer.Sample.Tests.csproj" />
   </Folder>
   <Folder Name="/src/Comet/">
     <Project Path="src/Comet/src/Comet.SourceGenerator/Comet.SourceGenerator.csproj" />
