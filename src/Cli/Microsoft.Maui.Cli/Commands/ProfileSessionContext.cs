@@ -33,6 +33,7 @@ internal sealed class ProfileSessionContext
 	internal string Configuration => Request.Configuration;
 	internal string? TraceProfile => Request.TraceProfile;
 	internal bool NoBuild => Request.NoBuild;
+	internal TimeSpan TraceStopTimeout => Request.TraceStopTimeout;
 	internal TimeSpan? EffectiveDuration => Request.Duration;
 	internal string? StoppingEventProvider => Request.StoppingEventProvider;
 	internal string? StoppingEventName => Request.StoppingEventName;
@@ -49,6 +50,7 @@ internal sealed class ProfileSessionContext
 	internal ProfileTransportConfiguration Transport { get; }
 	internal string DsrouterKind => Transport.DsrouterKind;
 	internal string DiagnosticAddress => Transport.DiagnosticAddress;
+	internal bool RequiresExplicitDsrouter => Transport.RequiresExplicitDsrouter && !UseRuntimeOwnedTraceCollection;
 	internal int RequestedDiagnosticPort { get; }
 	internal int DiagnosticPort { get; set; }
 	internal DateTimeOffset StartedAtUtc { get; }
@@ -61,5 +63,7 @@ internal sealed class ProfileSessionContext
 	internal ReservedProfilePorts? ReservedPorts { get; set; }
 	internal ExitControlServer? ExitControlServer { get; set; }
 	internal ProfilingBuildInjection? BuildInjection { get; set; }
+	internal MonitoredProcess? DsrouterProcess { get; set; }
+	internal string? DsrouterIpcEndpoint { get; set; }
 	internal MonitoredProcess? TraceProcess { get; set; }
 }
