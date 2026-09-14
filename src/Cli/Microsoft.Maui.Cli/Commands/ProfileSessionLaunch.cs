@@ -47,7 +47,8 @@ internal static class ProfileSessionLaunch
 		}
 
 		context.ExitControlServer = ExitControlServer.Attach(context.ReservedPorts!.ExitControlReservation, context.Formatter, context.UseJson, context.Verbose);
-		context.ReservedPorts.DiagnosticReservation.Dispose();
+		if (!context.RequiresExplicitDsrouter)
+			context.ReservedPorts.DiagnosticReservation.Dispose();
 		if (context.RequiresExplicitDsrouter)
 		{
 			context.ReservedPorts.DsrouterTcpReservation!.Dispose();
@@ -88,6 +89,7 @@ internal static class ProfileSessionLaunch
 				context.Formatter,
 				context.UseJson,
 				context.Verbose,
+				() => context.TraceFinalizationStarted.TrySetResult(true),
 				cancellationToken);
 
 			ProfileCommandProcessHelpers.WriteVerbose(
@@ -127,6 +129,7 @@ internal static class ProfileSessionLaunch
 				context.Formatter,
 				context.UseJson,
 				context.Verbose,
+				() => context.TraceFinalizationStarted.TrySetResult(true),
 				cancellationToken);
 		}
 

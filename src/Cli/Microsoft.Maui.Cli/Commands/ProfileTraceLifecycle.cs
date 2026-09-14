@@ -15,6 +15,7 @@ internal static class ProfileTraceLifecycle
 		None,
 		Manual,
 		Timed,
+		CollectorFinalizing,
 		ExternalCompletion
 	}
 
@@ -24,6 +25,8 @@ internal static class ProfileTraceLifecycle
 	internal static async Task<bool> WaitForCompletionAsync(
 		MonitoredProcess traceProcess,
 		bool allowManualStop,
+		TimeSpan? duration,
+		Task finalizationStartedTask,
 		TimeSpan traceStopTimeout,
 		IOutputFormatter formatter,
 		bool useJson,
@@ -43,7 +46,8 @@ internal static class ProfileTraceLifecycle
 
 		var stopReason = await WaitForStopSignalCoreAsync(
 			externalCompletionTask: processWaitTask,
-			duration: null,
+			duration,
+			finalizationStartedTask,
 			allowManualStop: allowManualStop,
 			formatter,
 			useJson,
@@ -70,6 +74,19 @@ internal static class ProfileTraceLifecycle
 				formatter,
 				useJson,
 				verbose);
+		}
+		else if (stopReason == StopSignalReason.CollectorFinalizing)
+		{
+			ProfileCommandProcessHelpers.WriteVerbose(
+				formatter,
+				useJson,
+				verbose,
+				"dotnet-trace began collector-managed rundown and finalization.");
+			await WaitForFinalizationAsync(
+				traceProcess,
+				processWaitTask,
+				traceStopTimeout,
+				"after finalization started");
 		}
 
 		ProfileCommandProcessHelpers.WriteVerbose(formatter, useJson, verbose, $"dotnet-trace exited with code {traceProcess.Process.ExitCode}.");
@@ -107,7 +124,12 @@ internal static class ProfileTraceLifecycle
 		try
 		{
 			await RequestStopAsync(traceProcess.Process, formatter, useJson, verbose, timeoutSource.Token);
-			await processWaitTask.WaitAsync(timeoutSource.Token);
+			await WaitForFinalizationAsync(
+				traceProcess,
+				processWaitTask,
+				traceStopTimeout,
+				"after the stop request",
+				timeoutSource);
 		}
 		catch (OperationCanceledException) when (timeoutSource.IsCancellationRequested)
 		{
@@ -115,6 +137,33 @@ internal static class ProfileTraceLifecycle
 				ErrorCodes.InternalError,
 				$"dotnet-trace did not exit within {traceStopTimeout.TotalSeconds:0}s after the stop request.",
 				nativeError: traceProcess.GetCombinedOutput());
+		}
+	}
+
+	static async Task WaitForFinalizationAsync(
+		MonitoredProcess traceProcess,
+		Task processWaitTask,
+		TimeSpan traceStopTimeout,
+		string timeoutContext,
+		CancellationTokenSource? timeoutSource = null)
+	{
+		var ownsTimeoutSource = timeoutSource is null;
+		timeoutSource ??= new CancellationTokenSource(traceStopTimeout);
+		try
+		{
+			await processWaitTask.WaitAsync(timeoutSource.Token);
+		}
+		catch (OperationCanceledException) when (timeoutSource.IsCancellationRequested)
+		{
+			throw new MauiToolException(
+				ErrorCodes.InternalError,
+				$"dotnet-trace did not exit within {traceStopTimeout.TotalSeconds:0}s {timeoutContext}.",
+				nativeError: traceProcess.GetCombinedOutput());
+		}
+		finally
+		{
+			if (ownsTimeoutSource)
+				timeoutSource.Dispose();
 		}
 	}
 
@@ -130,6 +179,7 @@ internal static class ProfileTraceLifecycle
 		var stopReason = await WaitForStopSignalCoreAsync(
 			externalCompletionTask: null,
 			duration,
+			finalizationStartedTask: null,
 			allowManualStop,
 			formatter,
 			useJson,
@@ -199,6 +249,7 @@ internal static class ProfileTraceLifecycle
 	static async Task<StopSignalReason> WaitForStopSignalCoreAsync(
 		Task? externalCompletionTask,
 		TimeSpan? duration,
+		Task? finalizationStartedTask,
 		bool allowManualStop,
 		IOutputFormatter formatter,
 		bool useJson,
@@ -206,6 +257,8 @@ internal static class ProfileTraceLifecycle
 		CancellationToken cancellationToken)
 	{
 		var completionTask = externalCompletionTask ?? s_neverCompletes;
+		var finalizationTask = finalizationStartedTask ?? s_neverCompletes;
+		var cancellationTask = Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
 
 		if (!allowManualStop)
 		{
@@ -215,16 +268,22 @@ internal static class ProfileTraceLifecycle
 					formatter,
 					useJson,
 					verbose,
-					$"Waiting {nonInteractiveDuration} before requesting app exit for runtime-owned trace finalization.");
-				var completedTask = await Task.WhenAny(completionTask, Task.Delay(nonInteractiveDuration, cancellationToken));
-				return completedTask == completionTask ? StopSignalReason.ExternalCompletion : StopSignalReason.Timed;
+					$"Waiting {nonInteractiveDuration} before requesting trace finalization.");
+				var completedTask = await Task.WhenAny(completionTask, finalizationTask, Task.Delay(nonInteractiveDuration), cancellationTask);
+				if (completedTask == cancellationTask)
+					cancellationToken.ThrowIfCancellationRequested();
+				if (completedTask == completionTask)
+					return StopSignalReason.ExternalCompletion;
+				return completedTask == finalizationTask ? StopSignalReason.CollectorFinalizing : StopSignalReason.Timed;
 			}
 
 			if (externalCompletionTask is null)
 				return StopSignalReason.None;
 
-			await completionTask;
-			return StopSignalReason.ExternalCompletion;
+			var completionOrFinalizationTask = await Task.WhenAny(completionTask, finalizationTask, cancellationTask);
+			if (completionOrFinalizationTask == cancellationTask)
+				cancellationToken.ThrowIfCancellationRequested();
+			return completionOrFinalizationTask == completionTask ? StopSignalReason.ExternalCompletion : StopSignalReason.CollectorFinalizing;
 		}
 
 		var manualStopSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -251,12 +310,16 @@ internal static class ProfileTraceLifecycle
 		try
 		{
 			var durationTask = duration is { } waitDuration
-				? Task.Delay(waitDuration, cancellationToken)
+				? Task.Delay(waitDuration)
 				: s_neverCompletes;
-			var completedTask = await Task.WhenAny(completionTask, durationTask, manualStopSignal.Task);
+			var completedTask = await Task.WhenAny(completionTask, finalizationTask, durationTask, manualStopSignal.Task, cancellationTask);
 
 			if (externalCompletionTask is not null && completedTask == completionTask)
 				return StopSignalReason.ExternalCompletion;
+			if (finalizationStartedTask is not null && completedTask == finalizationTask)
+				return StopSignalReason.CollectorFinalizing;
+			if (completedTask == cancellationTask)
+				cancellationToken.ThrowIfCancellationRequested();
 
 			if (duration is not null && completedTask == durationTask)
 			{

@@ -25,6 +25,7 @@ internal static class DotnetTraceRunner
 		IOutputFormatter formatter,
 		bool useJson,
 		bool verbose,
+		Action? onFinalizationStarted,
 		CancellationToken cancellationToken)
 	{
 		var startInfo = new ProcessStartInfo
@@ -66,8 +67,22 @@ internal static class DotnetTraceRunner
 				"Failed to start dotnet-trace.");
 		}
 
-		return MonitoredProcess.Attach(process, formatter, useJson, verbose, "trace", cancellationToken);
+		return MonitoredProcess.Attach(
+			process,
+			formatter,
+			useJson,
+			verbose,
+			"trace",
+			cancellationToken,
+			onStdoutLine: line =>
+			{
+				if (IsFinalizationStartedMessage(line))
+					onFinalizationStarted?.Invoke();
+			});
 	}
+
+	internal static bool IsFinalizationStartedMessage(string line)
+		=> line.StartsWith("Stopping the trace.", StringComparison.Ordinal);
 
 	internal static IEnumerable<string> BuildTraceArguments(
 		string outputPath,
@@ -196,6 +211,7 @@ internal static class DotnetTraceRunner
 		IOutputFormatter formatter,
 		bool useJson,
 		bool verbose,
+		Action? onFinalizationStarted,
 		CancellationToken cancellationToken)
 	{
 		var startedAt = Stopwatch.GetTimestamp();
@@ -218,6 +234,7 @@ internal static class DotnetTraceRunner
 				formatter,
 				useJson,
 				verbose,
+				onFinalizationStarted,
 				cancellationToken);
 
 			try
