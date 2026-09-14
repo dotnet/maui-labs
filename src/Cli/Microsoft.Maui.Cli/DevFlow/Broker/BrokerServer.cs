@@ -762,8 +762,7 @@ public class BrokerServer : IDisposable
                     break;
                 case "observe":
                     var observationNode = body["observation"];
-                    var observation = observationNode?.Deserialize<FlowObservation>(
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    var observation = observationNode?.Deserialize(DevFlowCliJsonContext.Default.FlowObservation);
                     result = observation is null
                         ? BrokerFlowResult.Failure("observation is required")
                         : _flows.Observe(agentId, observation, recordingId);
@@ -787,11 +786,7 @@ public class BrokerServer : IDisposable
             stateGate.Release();
         }
 
-        var resultNode = JsonSerializer.SerializeToNode(result, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-        })?.AsObject() ?? new JsonObject();
+        var resultNode = JsonSerializer.SerializeToNode(result, DevFlowCliJsonContext.Default.BrokerFlowResult)?.AsObject() ?? new JsonObject();
         await WriteJsonResponseAsync(context, result.Ok ? 200 : 400, resultNode);
     }
 

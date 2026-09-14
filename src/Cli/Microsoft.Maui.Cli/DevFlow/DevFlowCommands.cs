@@ -1890,7 +1890,7 @@ public class DevFlowCommands
         try
         {
             using var doc = JsonDocument.Parse(value);
-            return JsonSerializer.Serialize(doc.RootElement, new JsonSerializerOptions { WriteIndented = true });
+            return CliJson.PrettyPrint(doc.RootElement);
         }
         catch (JsonException)
         {
@@ -5373,7 +5373,7 @@ public class DevFlowCommands
         // Scan for devflow-enabled projects
         var projects = ScanForDevFlowProjects();
         foreach (var project in projects)
-            projectsJson.Add(project);
+            projectsJson.Add((JsonNode?)JsonValue.Create(project));
         
         if (json)
         {
