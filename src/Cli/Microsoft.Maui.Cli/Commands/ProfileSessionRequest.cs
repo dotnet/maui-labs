@@ -16,6 +16,7 @@ internal sealed record ProfileSessionRequest(
 	string? TraceProfile,
 	bool NoBuild,
 	int DiagnosticPort,
+	TimeSpan TraceStopTimeout,
 	TimeSpan? Duration,
 	string? StoppingEventProvider,
 	string? StoppingEventName,

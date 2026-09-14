@@ -75,8 +75,10 @@ internal static class ProfileCommandPortRouter
 		for (var port = startingPort; port < IPEndPoint.MaxPort; port++)
 		{
 			ReservedTcpPort? diagnosticReservation = null;
+			ReservedTcpPort? dsrouterTcpReservation = null;
 			ReservedTcpPort? exitControlReservation = null;
-			var exitControlPort = GetExitControlPort(port);
+			int? dsrouterTcpPort = transport.RequiresExplicitDsrouter ? GetDsrouterTcpPort(port) : null;
+			var exitControlPort = GetExitControlPort(port, transport);
 
 			try
 			{
@@ -84,10 +86,21 @@ internal static class ProfileCommandPortRouter
 				if (diagnosticReservation is null)
 					continue;
 
+				if (dsrouterTcpPort is { } routerPort)
+				{
+					dsrouterTcpReservation = TryReserveTcpPort(routerPort);
+					if (dsrouterTcpReservation is null)
+					{
+						diagnosticReservation.Dispose();
+						continue;
+					}
+				}
+
 				exitControlReservation = TryReserveTcpPort(exitControlPort);
 				if (exitControlReservation is null)
 				{
 					diagnosticReservation.Dispose();
+					dsrouterTcpReservation?.Dispose();
 					continue;
 				}
 
@@ -95,9 +108,21 @@ internal static class ProfileCommandPortRouter
 					formatter,
 					useJson,
 					verbose,
-					$"Reserved diagnostic port {port} and exit control port {exitControlPort}.");
+					dsrouterTcpPort is { } explicitRouterPort
+						? $"Reserved device diagnostic port {port}, host dsrouter TCP port {explicitRouterPort}, and exit control port {exitControlPort}."
+						: $"Reserved diagnostic port {port} and exit control port {exitControlPort}.");
 				if (transport.RequiresManualExitControlPortRouting)
 				{
+					if (transport.RequiresExplicitDsrouter)
+					{
+						ProfileCommandProcessHelpers.WriteVerbose(
+							formatter,
+							useJson,
+							verbose,
+							$"Clearing any stale adb mapping for the device diagnostic port {port} before dotnet-dsrouter takes ownership.");
+						await RemoveAdbPortRoutingAsync(device, formatter, useJson, verbose, port);
+					}
+
 					ProfileCommandProcessHelpers.WriteVerbose(
 						formatter,
 						useJson,
@@ -106,11 +131,18 @@ internal static class ProfileCommandPortRouter
 					await EnsureAdbPortRoutingAsync(device, formatter, useJson, verbose, cancellationToken, exitControlPort);
 				}
 
-				return new ReservedProfilePorts(port, exitControlPort, diagnosticReservation, exitControlReservation);
+				return new ReservedProfilePorts(
+					port,
+					dsrouterTcpPort,
+					exitControlPort,
+					diagnosticReservation,
+					dsrouterTcpReservation,
+					exitControlReservation);
 			}
 			catch (DiagnosticPortRoutingConflictException ex)
 			{
 				diagnosticReservation?.Dispose();
+				dsrouterTcpReservation?.Dispose();
 				exitControlReservation?.Dispose();
 				await RemoveAdbPortRoutingAsync(device, formatter, useJson, verbose, port, exitControlPort);
 				ProfileCommandProcessHelpers.WriteVerbose(formatter, useJson, verbose, $"Port {ex.Port} was unavailable for adb routing ({ex.Direction}): {ex.Details}");
@@ -118,7 +150,9 @@ internal static class ProfileCommandPortRouter
 			catch
 			{
 				diagnosticReservation?.Dispose();
+				dsrouterTcpReservation?.Dispose();
 				exitControlReservation?.Dispose();
+				await RemoveAdbPortRoutingAsync(device, formatter, useJson, verbose, port, exitControlPort);
 				throw;
 			}
 		}
@@ -158,16 +192,22 @@ internal static class ProfileCommandPortRouter
 		}
 	}
 
-	internal static int GetExitControlPort(int diagnosticPort)
+	internal static int GetDsrouterTcpPort(int diagnosticPort)
+		=> GetOffsetPort(diagnosticPort, 1, "dsrouter TCP");
+
+	internal static int GetExitControlPort(int diagnosticPort, ProfileTransportConfiguration transport)
+		=> GetOffsetPort(diagnosticPort, transport.RequiresExplicitDsrouter ? 2 : ProfileCommand.ExitControlPortOffset, "exit control");
+
+	static int GetOffsetPort(int diagnosticPort, int offset, string purpose)
 	{
-		if (diagnosticPort >= IPEndPoint.MaxPort)
+		if (diagnosticPort > IPEndPoint.MaxPort - offset)
 		{
 			throw new MauiToolException(
 				ErrorCodes.InvalidArgument,
-				$"Cannot reserve an exit control port after diagnostic port {diagnosticPort}.");
+				$"Cannot reserve the {purpose} port after diagnostic port {diagnosticPort}.");
 		}
 
-		return checked(diagnosticPort + ProfileCommand.ExitControlPortOffset);
+		return checked(diagnosticPort + offset);
 	}
 
 	static ReservedTcpPort ReserveAvailableTcpPort(int startingPort, int maxPort = IPEndPoint.MaxPort)
