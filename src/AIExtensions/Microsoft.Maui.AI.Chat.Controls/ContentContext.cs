@@ -11,6 +11,7 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 public sealed class ContentContext : ChatContentItem, IDisposable
 {
     private readonly bool _ownsAgentContent;
+    private readonly ContentBlock? _compatibilityBlock;
 
     /// <summary>Creates a standalone context for a block.</summary>
     public ContentContext(
@@ -53,13 +54,19 @@ public sealed class ContentContext : ChatContentItem, IDisposable
     {
         AgentContext = agentContext;
         AgentContent = agentContent;
+        _compatibilityBlock = agentContent.Block switch
+        {
+            Presentation.ErrorContentBlock error => new ErrorContentBlock(error.Message),
+            Presentation.ThinkingContentBlock thinking => new ThinkingContentBlock(thinking.Text),
+            _ => null,
+        };
     }
 
     /// <summary>Gets the AI conversation context.</summary>
     public AgentContext AgentContext { get; }
 
     /// <summary>Gets the underlying renderable block.</summary>
-    public ContentBlock Block => AgentContent.Block;
+    public ContentBlock Block => _compatibilityBlock ?? AgentContent.Block;
 
     /// <summary>Gets the containing conversation turn, when persisted.</summary>
     public ConversationTurn? Turn => AgentContent.Turn;

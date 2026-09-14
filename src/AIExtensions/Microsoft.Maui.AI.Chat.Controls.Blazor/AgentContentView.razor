@@ -16,15 +16,26 @@
     case UIActionBlock action:
         <section class="maicard" role="status" aria-label="UI action">
             <strong>@action.ToolName</strong>
-            <span>@(action.IsComplete ? "Completed" : "In progress")</span>
-            @if (!action.IsComplete)
+            <span>@ActionStatus(action)</span>
+            @if (action.Mode == UIActionInvocationMode.Manual && !action.IsComplete)
             {
-                <button @onclick="() => action.InvokeAsync()">Run action</button>
+                <button aria-label="Run UI action" disabled="@_invokingAction" @onclick="() => InvokeManualActionAsync(action)">Run action</button>
             }
         </section>
         break;
     case FunctionInvocationContentBlock function:
-        <section class="maicard" role="status"><strong>@function.ToolName</strong><pre>@Format(function.Arguments)</pre><pre>@Format(function.Result)</pre></section>
+        <section class="maicard" role="status" aria-label="Tool invocation">
+            <strong>@function.ToolName</strong>
+            <span>@ToolStatus(function)</span>
+            @if (function.Arguments is not null) { <pre>@Format(function.Arguments)</pre> }
+            @if (function.Result is not null) { <pre>@Format(function.Result)</pre> }
+        </section>
+        break;
+    case ActivityContentBlock activity:
+        <section class="maicard" role="status" aria-label="Activity">
+            <strong>@activity.ActivityType</strong>
+            <pre>@activity.Content.GetRawText()</pre>
+        </section>
         break;
     case ReasoningContentBlock reasoning:
         <details class="maicard"><summary>Reasoning</summary><pre>@reasoning.Text</pre></details>
@@ -54,6 +65,8 @@
 }
 
 @code {
+    private bool _invokingAction;
+
     /// <summary>Gets or sets the content projection.</summary>
     [Parameter, EditorRequired]
     public IAgentBlockContent Content { get; set; } = default!;
@@ -66,6 +79,33 @@
         Presentation?.Session.Status == ConversationStatus.Error
             ? Presentation.Session.RetryAsync()
             : Task.CompletedTask;
+
+    private async Task InvokeManualActionAsync(UIActionBlock action)
+    {
+        _invokingAction = true;
+        try
+        {
+            await action.InvokeAsync();
+        }
+        finally
+        {
+            _invokingAction = false;
+        }
+    }
+
+    private static string ActionStatus(UIActionBlock action) =>
+        action.IsComplete
+            ? "Completed"
+            : action.Mode == UIActionInvocationMode.Manual
+                ? "Awaiting approval"
+                : "Running";
+
+    private static string ToolStatus(FunctionInvocationContentBlock function) =>
+        function.Result is not null
+            ? "Completed"
+            : function.LifecycleState == BlockLifecycleState.Active
+                ? "Running"
+                : "Pending";
 
     private static string Format(object? value) =>
         value is null ? string.Empty : System.Text.Json.JsonSerializer.Serialize(value);
