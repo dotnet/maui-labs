@@ -514,6 +514,202 @@ public sealed class ChatRecordingTests
             await recorder.GetStreamingResponseAsync([new ChatMessage(ChatRole.User, "x")]).ToListAsync());
     }
 
+    [Fact]
+    public async Task Record_OneShotMessages_MaterializesOnceAndForwardsExactSnapshot()
+    {
+        var source = new OneShotMessages(
+        [
+            new ChatMessage(ChatRole.System, "rules"),
+            new ChatMessage(ChatRole.User, "question"),
+        ]);
+        var provider = new CapturingClient();
+        var tape = new ChatRecording();
+        using (var recorder = new RecordingChatClient(provider, new ChatRecordingOptions { Mode = ChatRecordingMode.Record, Recording = tape }))
+            await recorder.GetStreamingResponseAsync(source).ToListAsync();
+
+        Assert.Equal(new[] { "rules", "question" }, provider.Messages!.Select(message => message.Text));
+        using var replay = new ReplayChatClient(new ChatRecordingOptions { Recording = tape });
+        await replay.GetStreamingResponseAsync(
+        [
+            new ChatMessage(ChatRole.System, "rules"),
+            new ChatMessage(ChatRole.User, "question"),
+        ]).ToListAsync();
+
+        var liveProvider = new CapturingClient();
+        using var live = new RecordingChatClient(liveProvider, new ChatRecordingOptions { Mode = ChatRecordingMode.Live });
+        await live.GetStreamingResponseAsync(new OneShotMessages(
+        [
+            new ChatMessage(ChatRole.System, "rules"),
+            new ChatMessage(ChatRole.User, "question"),
+        ])).ToListAsync();
+        Assert.Equal(new[] { "rules", "question" }, liveProvider.Messages!.Select(message => message.Text));
+    }
+
+    [Theory]
+    [InlineData("Bearer abc.def.ghi")]
+    [InlineData("api-key=super-secret")]
+    [InlineData("Authorization: super-secret")]
+    [InlineData("Cookie: session=super-secret")]
+    [InlineData("connection string=Server=provider.example.test;Password=super-secret")]
+    [InlineData("request failed at https://api.openai.com/v1/chat")]
+    public async Task Record_SecretBearingProviderErrors_SaveOnlyStableSanitizedMessage(string message)
+    {
+        var tape = new ChatRecording();
+        using var recorder = new RecordingChatClient(
+            new ThrowingClient(new InvalidOperationException(message)),
+            new ChatRecordingOptions { Mode = ChatRecordingMode.Record, Recording = tape });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await recorder.GetStreamingResponseAsync([new ChatMessage(ChatRole.User, "x")]).ToListAsync());
+        using var stream = new MemoryStream();
+        ChatRecordingStore.Save(tape, stream);
+        var saved = System.Text.Encoding.UTF8.GetString(stream.ToArray());
+
+        Assert.Equal("ProviderError", tape.Interactions.Single().ErrorType);
+        Assert.Equal("[REDACTED provider error]", tape.Interactions.Single().ErrorMessage);
+        Assert.Equal(1, tape.Manifest["redacted"]!.GetValue<int>());
+        Assert.DoesNotContain("super-secret", saved, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("api.openai.com", saved, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Record_OptionsAndUpdateContinuationTokens_MatchExactlyAndReplay()
+    {
+        var requestToken = ResponseContinuationToken.FromBytes(new byte[] { 1, 2, 3 });
+        var updateToken = ResponseContinuationToken.FromBytes(new byte[] { 4, 5, 6 });
+        using var schemaDocument = JsonDocument.Parse("""{"type":"object","properties":{"answer":{"type":"string"}}}""");
+        var options = new ChatOptions
+        {
+            Reasoning = new ReasoningOptions { Effort = ReasoningEffort.High, Output = ReasoningOutput.Summary },
+            ToolMode = ChatToolMode.RequireSpecific("lookup"),
+            ContinuationToken = requestToken,
+            ResponseFormat = ChatResponseFormat.ForJsonSchema(schemaDocument.RootElement, "answer", "A safe answer"),
+        };
+        var update = new ChatResponseUpdate(ChatRole.Assistant, "ok") { ContinuationToken = updateToken };
+        var tape = await RecordAsync([update], options);
+        var recordedOptions = tape.Interactions.Single().Request["options"]!.AsObject();
+        Assert.Equal("High", recordedOptions["reasoning"]!["effort"]!.GetValue<string>());
+        Assert.Equal("required", recordedOptions["toolMode"]!["kind"]!.GetValue<string>());
+        Assert.Equal("json", recordedOptions["responseFormat"]!["kind"]!.GetValue<string>());
+
+        using (var replay = new ReplayChatClient(new ChatRecordingOptions { Recording = tape }))
+        {
+            var replayed = (await replay.GetStreamingResponseAsync([new ChatMessage(ChatRole.User, "x")], options).ToListAsync()).Single();
+            Assert.Equal(updateToken.ToBytes().ToArray(), replayed.ContinuationToken!.ToBytes().ToArray());
+        }
+
+        var mismatched = options.Clone();
+        mismatched.ContinuationToken = ResponseContinuationToken.FromBytes(new byte[] { 7, 8, 9 });
+        using var mismatchReplay = new ReplayChatClient(new ChatRecordingOptions { Recording = tape });
+        var mismatch = await Assert.ThrowsAsync<ChatRecordingMismatchException>(async () =>
+            await mismatchReplay.GetStreamingResponseAsync([new ChatMessage(ChatRole.User, "x")], mismatched).ToListAsync());
+        Assert.Equal("$.options.continuationToken", mismatch.Path);
+    }
+
+    [Fact]
+    public async Task Record_RequestFactory_RequiresCodecAndCodecExtensionMatchesWithoutSerializingDelegate()
+    {
+        var options = new ChatOptions { RawRepresentationFactory = _ => new object() };
+        using (var recorder = new RecordingChatClient(new StubClient([]), new ChatRecordingOptions { Mode = ChatRecordingMode.Record }))
+            await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+                await recorder.GetStreamingResponseAsync([new ChatMessage(ChatRole.User, "x")], options).ToListAsync());
+
+        var recordingOptions = new ChatRecordingOptions { Mode = ChatRecordingMode.Record };
+        recordingOptions.RequestCodecs.Add(new TestRequestCodec());
+        var tape = await RecordAsync([], options, recordingOptions);
+        Assert.DoesNotContain("RawRepresentationFactory", tape.Interactions[0].Request.ToJsonString());
+        Assert.DoesNotContain("System.Func", tape.Interactions[0].Request.ToJsonString());
+
+        var replayOptions = new ChatRecordingOptions { Recording = tape };
+        replayOptions.RequestCodecs.Add(new TestRequestCodec());
+        using var replay = new ReplayChatClient(replayOptions);
+        await replay.GetStreamingResponseAsync([new ChatMessage(ChatRole.User, "x")], options).ToListAsync();
+    }
+
+    [Theory]
+    [InlineData("https://user:password@example.test/link", 0)]
+    [InlineData("https://images.example.test/image.png?sig=secret", 1)]
+    [InlineData("https://api.openai.com/definition", 2)]
+    public async Task Record_UnsafeRichTextUris_StrictModeRejects(string uri, int nodeIndex)
+    {
+        RichTextNode node = nodeIndex switch
+        {
+            0 => new LinkNode(uri),
+            1 => new ImageNode(uri),
+            _ => new DefinitionNode { Label = "definition", Url = uri },
+        };
+        var update = new ChatResponseUpdate(ChatRole.Assistant, (string?)null);
+        update.Contents.Add(new RichTextContent("rich", [node]));
+        using var recorder = new RecordingChatClient(new StubClient([update]), new ChatRecordingOptions { Mode = ChatRecordingMode.Record });
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await recorder.GetStreamingResponseAsync([new ChatMessage(ChatRole.User, "x")]).ToListAsync());
+    }
+
+    [Fact]
+    public async Task Record_ContentMetadataAndCodecContent_RoundTrip()
+    {
+        var text = new TextContent("annotated")
+        {
+            RawRepresentation = new CustomRaw("content-raw"),
+            AdditionalProperties = new AdditionalPropertiesDictionary { ["trace"] = "safe" },
+            Annotations =
+            [
+                new CitationAnnotation
+                {
+                    Title = "Source",
+                    Url = new Uri("https://docs.example.test/source"),
+                    Snippet = "quoted",
+                    AnnotatedRegions = [new TextSpanAnnotatedRegion { StartIndex = 0, EndIndex = 4 }],
+                },
+            ],
+        };
+        var custom = new CustomContent("custom")
+        {
+            AdditionalProperties = new AdditionalPropertiesDictionary { ["trace"] = "custom-safe" },
+        };
+        var update = new ChatResponseUpdate(ChatRole.Assistant, (string?)null);
+        update.Contents.Add(text);
+        update.Contents.Add(custom);
+        var options = new ChatRecordingOptions { Mode = ChatRecordingMode.Record };
+        options.AllowedContentAdditionalProperties.Add("trace");
+        options.ContentCodecs.Add(new CustomContentCodec());
+        options.RawCodecs.Add(new CustomRawCodec());
+        var tape = await RecordAsync([update], options: options);
+        var replayOptions = new ChatRecordingOptions { Recording = tape };
+        replayOptions.AllowedContentAdditionalProperties.Add("trace");
+        replayOptions.ContentCodecs.Add(new CustomContentCodec());
+        replayOptions.RawCodecs.Add(new CustomRawCodec());
+        using var replay = new ReplayChatClient(replayOptions);
+        var contents = (await replay.GetStreamingResponseAsync([new ChatMessage(ChatRole.User, "x")]).ToListAsync()).Single().Contents;
+        var replayedText = Assert.IsType<TextContent>(contents[0]);
+        Assert.Equal("safe", replayedText.AdditionalProperties!["trace"]);
+        Assert.Equal("content-raw", Assert.IsType<CustomRaw>(replayedText.RawRepresentation).Value);
+        var citation = Assert.IsType<CitationAnnotation>(replayedText.Annotations!.Single());
+        Assert.Equal("https://docs.example.test/source", citation.Url!.AbsoluteUri);
+        Assert.Equal(4, Assert.IsType<TextSpanAnnotatedRegion>(citation.AnnotatedRegions!.Single()).EndIndex);
+        Assert.Equal("custom-safe", Assert.IsType<CustomContent>(contents[1]).AdditionalProperties!["trace"]);
+    }
+
+    [Fact]
+    public async Task Record_UnallowlistedContentMetadata_StrictModeRejects()
+    {
+        var update = new ChatResponseUpdate(ChatRole.Assistant, (string?)null);
+        update.Contents.Add(new TextContent("x") { AdditionalProperties = new AdditionalPropertiesDictionary { ["unknown"] = "value" } });
+        using var recorder = new RecordingChatClient(new StubClient([update]), new ChatRecordingOptions { Mode = ChatRecordingMode.Record });
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await recorder.GetStreamingResponseAsync([new ChatMessage(ChatRole.User, "x")]).ToListAsync());
+    }
+
+    [Fact]
+    public async Task Record_UnknownAnnotation_StrictModeRejectsRatherThanDroppingIt()
+    {
+        var update = new ChatResponseUpdate(ChatRole.Assistant, (string?)null);
+        update.Contents.Add(new TextContent("x") { Annotations = [new CustomAnnotation()] });
+        using var recorder = new RecordingChatClient(new StubClient([update]), new ChatRecordingOptions { Mode = ChatRecordingMode.Record });
+        await Assert.ThrowsAsync<NotSupportedException>(async () =>
+            await recorder.GetStreamingResponseAsync([new ChatMessage(ChatRole.User, "x")]).ToListAsync());
+    }
+
     private static async Task<ChatRecording> RecordAsync(
         IReadOnlyList<ChatResponseUpdate> updates,
         IReadOnlyList<ChatMessage>? messages = null,
@@ -525,6 +721,20 @@ public sealed class ChatRecordingTests
         options.Recording = tape;
         using var recorder = new RecordingChatClient(new StubClient(updates), options);
         await recorder.GetStreamingResponseAsync(messages ?? [new ChatMessage(ChatRole.User, "x")]).ToListAsync();
+        return tape;
+    }
+
+    private static async Task<ChatRecording> RecordAsync(
+        IReadOnlyList<ChatResponseUpdate> updates,
+        ChatOptions chatOptions,
+        ChatRecordingOptions? recordingOptions = null)
+    {
+        var tape = recordingOptions?.Recording ?? new ChatRecording();
+        recordingOptions ??= new ChatRecordingOptions();
+        recordingOptions.Mode = ChatRecordingMode.Record;
+        recordingOptions.Recording = tape;
+        using var recorder = new RecordingChatClient(new StubClient(updates), recordingOptions);
+        await recorder.GetStreamingResponseAsync([new ChatMessage(ChatRole.User, "x")], chatOptions).ToListAsync();
         return tape;
     }
 
@@ -554,6 +764,7 @@ public sealed class ChatRecordingTests
     private sealed class TestInputRequest(string requestId) : InputRequestContent(requestId);
     private sealed class TestInputResponse(string requestId) : InputResponseContent(requestId);
     private sealed class CustomContent(string value) : AIContent { public string Value { get; } = value; }
+    private sealed class CustomAnnotation : AIAnnotation { }
     private sealed record CustomRaw(string Value);
 
     private sealed class CustomContentCodec : IChatRecordingContentCodec
@@ -570,6 +781,43 @@ public sealed class ChatRecordingTests
         public JsonNode? Write(object value) => JsonValue.Create(((CustomRaw)value).Value);
         public bool CanRead(string type) => type == typeof(CustomRaw).FullName;
         public object? Read(string type, JsonNode? value) => new CustomRaw(value!.GetValue<string>());
+    }
+
+    private sealed class TestRequestCodec : IChatRecordingRequestCodec
+    {
+        public bool CanWrite(ChatOptions options) => options.RawRepresentationFactory is not null;
+        public JsonObject Write(ChatOptions options) => new() { ["type"] = "test-provider", ["version"] = 1 };
+        public bool CanRead(JsonObject extension) => extension["type"]?.GetValue<string>() == "test-provider";
+        public JsonObject Read(JsonObject extension) => new() { ["type"] = "test-provider", ["version"] = extension["version"]?.GetValue<int>() ?? 0 };
+    }
+
+    private sealed class OneShotMessages(IReadOnlyList<ChatMessage> messages) : IEnumerable<ChatMessage>
+    {
+        private bool _enumerated;
+
+        public IEnumerator<ChatMessage> GetEnumerator()
+        {
+            if (_enumerated) throw new InvalidOperationException("The source was enumerated twice.");
+            _enumerated = true;
+            return messages.GetEnumerator();
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class CapturingClient : IChatClient
+    {
+        public IReadOnlyList<ChatMessage>? Messages { get; private set; }
+        public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ChatResponse());
+        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            Messages = messages.ToArray();
+            await Task.Yield();
+            yield return new ChatResponseUpdate(ChatRole.Assistant, "ok");
+        }
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+        public void Dispose() { }
     }
 
     private sealed class ThrowingClient(Exception exception) : IChatClient
