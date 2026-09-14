@@ -1,7 +1,8 @@
 # Microsoft.Maui.Chat.Controls
 
-Provider-neutral chat controls for .NET MAUI: a conversation model, a flat virtualized message list, a
-content template system, and a drop-in chat surface with a composer.
+Provider-neutral native XAML chat controls for .NET MAUI: a flat virtualized message list, a
+content template system, and a drop-in chat surface with a composer. Conversation models and shared
+composer behavior live in the renderer-neutral `Microsoft.Maui.Chat` package.
 
 > [!WARNING]
 > **Experimental.** This package is part of [dotnet/maui-labs](https://github.com/dotnet/maui-labs) and
@@ -12,8 +13,8 @@ model you drive: from a websocket, a local database, an AI client, or a unit tes
 
 ## Features
 
-- **Conversation model** — participants, messages, ordered per-message content, delivery status, and a
-  single ordered change stream (`Subscribe`) that every mutation publishes automatically.
+- **Shared chat core** — `Microsoft.Maui.Chat` supplies participants, messages, drafts, attachments,
+  media content, and `ChatComposerController` for native and Razor Hybrid renderers.
 - **Streaming friendly** — content is mutated in place, so a growing response updates the existing row
   instead of replacing it.
 - **Flat virtualized list** — one row per content item, never a nested list inside a cell.
@@ -59,6 +60,8 @@ builder.UseChatControls();
 Build a conversation, then bind it:
 
 ```csharp
+using Microsoft.Maui.Chat;
+
 var me = new ChatParticipant("me", "Me", ChatParticipantKind.Local);
 var assistant = new ChatParticipant("bot", "Assistant", ChatParticipantKind.Agent);
 

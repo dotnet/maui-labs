@@ -51,6 +51,12 @@ public sealed class FileChatAttachmentPicker : IChatAttachmentPicker
         return attachments;
     }
 
+    Task<IReadOnlyList<ChatAttachment>> IChatAttachmentPicker.PickAsync(
+        object? fileTypes,
+        long maxBytesPerFile,
+        CancellationToken cancellationToken) =>
+        PickAsync(fileTypes as FilePickerFileType, maxBytesPerFile, cancellationToken);
+
     private static async Task CopyWithLimitAsync(
         Stream source,
         Stream destination,

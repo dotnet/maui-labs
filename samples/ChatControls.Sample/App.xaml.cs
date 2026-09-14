@@ -1,14 +1,17 @@
-﻿namespace ChatControls.Sample;
+﻿using Microsoft.Extensions.DependencyInjection;
+
+namespace ChatControls.Sample;
 
 public partial class App : Application
 {
-	public App()
-	{
-		InitializeComponent();
-	}
+    private readonly IServiceProvider _services;
 
-	protected override Window CreateWindow(IActivationState? activationState)
-	{
-		return new Window(new MainPage());
-	}
+    public App(IServiceProvider services)
+    {
+        _services = services;
+        InitializeComponent();
+    }
+
+    protected override Window CreateWindow(IActivationState? activationState) =>
+        new(_services.GetRequiredService<MainPage>());
 }

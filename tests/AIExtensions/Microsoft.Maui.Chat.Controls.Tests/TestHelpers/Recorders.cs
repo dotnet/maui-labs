@@ -1,4 +1,5 @@
 using System.Collections.Specialized;
+using System.ComponentModel;
 
 namespace Microsoft.Maui.Chat.Controls.Tests.TestHelpers;
 
@@ -43,12 +44,12 @@ internal sealed class CollectionRecorder : IDisposable
     private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) => Events.Add(e);
 }
 
-/// <summary>Records property change notifications raised by a bindable object.</summary>
+/// <summary>Records property change notifications raised by an observable object.</summary>
 internal sealed class PropertyRecorder : IDisposable
 {
-    private readonly BindableObject _source;
+    private readonly INotifyPropertyChanged _source;
 
-    public PropertyRecorder(BindableObject source)
+    public PropertyRecorder(INotifyPropertyChanged source)
     {
         _source = source;
         _source.PropertyChanged += OnPropertyChanged;

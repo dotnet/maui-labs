@@ -6,7 +6,7 @@
     <IsPackable>true</IsPackable>
     <IsShipping>true</IsShipping>
     <PackageId>Microsoft.Maui.Chat.Controls.Blazor</PackageId>
-    <Description>Provider-neutral Blazor Hybrid chat controls for .NET MAUI: virtualization-friendly message list, multimodal composer, streaming, typing, empty/header/footer slots, participant chrome, and a MessageContentRenderer&lt;T&gt; seam. Backed by Microsoft.Maui.Chat.Controls models. No AI provider dependency.</Description>
+    <Description>Provider-neutral Blazor Hybrid chat controls for .NET MAUI: virtualization-friendly message list, multimodal composer, streaming, typing, empty/header/footer slots, participant chrome, and a MessageContentRenderer&lt;T&gt; seam. Backed by Microsoft.Maui.Chat. No AI provider dependency.</Description>
     <PackRepoRootReadme>false</PackRepoRootReadme>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -34,9 +34,11 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
+    <PackageReference Include="Microsoft.Maui.Controls" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Microsoft.Maui.Chat\Microsoft.Maui.Chat.csproj" />
     <ProjectReference Include="..\Microsoft.Maui.Chat.Controls\Microsoft.Maui.Chat.Controls.csproj" />
   </ItemGroup>
 

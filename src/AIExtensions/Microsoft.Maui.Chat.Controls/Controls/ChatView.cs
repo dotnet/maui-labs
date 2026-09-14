@@ -48,7 +48,7 @@ namespace Microsoft.Maui.Chat.Controls;
 /// </para>
 /// </remarks>
 [ContentProperty(nameof(ContentTemplates))]
-public partial class ChatView : TemplatedView
+public partial class ChatView : TemplatedView, IDisposable
 {
     /// <summary>The name of the header host part.</summary>
     public const string HeaderPartName = "PART_Header";
@@ -113,6 +113,15 @@ public partial class ChatView : TemplatedView
                 ((ChatView)bindable).OnConversationChanged(
                     oldValue as ChatConversation,
                     newValue as ChatConversation));
+
+    /// <summary>Backing property for <see cref="ComposerController"/>.</summary>
+    public static readonly BindableProperty ComposerControllerProperty =
+        BindableProperty.Create(
+            nameof(ComposerController),
+            typeof(ChatComposerController),
+            typeof(ChatView),
+            propertyChanged: static (bindable, _, _) =>
+                ((ChatView)bindable).OnComposerControllerChanged());
 
     /// <summary>Backing property for <see cref="Text"/>.</summary>
     public static readonly BindableProperty TextProperty =
@@ -243,19 +252,37 @@ public partial class ChatView : TemplatedView
 
     /// <summary>Backing property for <see cref="AllowAttachments"/>.</summary>
     public static readonly BindableProperty AllowAttachmentsProperty =
-        BindableProperty.Create(nameof(AllowAttachments), typeof(bool), typeof(ChatView), false);
+        BindableProperty.Create(
+            nameof(AllowAttachments),
+            typeof(bool),
+            typeof(ChatView),
+            false,
+            propertyChanged: static (bindable, _, _) => ((ChatView)bindable).UpdateMultimodalState());
 
     /// <summary>Backing property for <see cref="AttachmentPicker"/>.</summary>
     public static readonly BindableProperty AttachmentPickerProperty =
-        BindableProperty.Create(nameof(AttachmentPicker), typeof(IChatAttachmentPicker), typeof(ChatView));
+        BindableProperty.Create(
+            nameof(AttachmentPicker),
+            typeof(IChatAttachmentPicker),
+            typeof(ChatView),
+            propertyChanged: static (bindable, _, _) => ((ChatView)bindable).UpdateMultimodalState());
 
     /// <summary>Backing property for <see cref="AttachmentFileTypes"/>.</summary>
     public static readonly BindableProperty AttachmentFileTypesProperty =
-        BindableProperty.Create(nameof(AttachmentFileTypes), typeof(FilePickerFileType), typeof(ChatView));
+        BindableProperty.Create(
+            nameof(AttachmentFileTypes),
+            typeof(FilePickerFileType),
+            typeof(ChatView),
+            propertyChanged: static (bindable, _, _) => ((ChatView)bindable).UpdateMultimodalState());
 
     /// <summary>Backing property for <see cref="MaxAttachmentBytes"/>.</summary>
     public static readonly BindableProperty MaxAttachmentBytesProperty =
-        BindableProperty.Create(nameof(MaxAttachmentBytes), typeof(long), typeof(ChatView), 10L * 1024 * 1024);
+        BindableProperty.Create(
+            nameof(MaxAttachmentBytes),
+            typeof(long),
+            typeof(ChatView),
+            10L * 1024 * 1024,
+            propertyChanged: static (bindable, _, _) => ((ChatView)bindable).UpdateMultimodalState());
 
     /// <summary>Backing property for <see cref="Placeholder"/>.</summary>
     public static readonly BindableProperty PlaceholderProperty =
@@ -431,7 +458,6 @@ public partial class ChatView : TemplatedView
     /// <summary>Backing property for <see cref="CanSend"/>.</summary>
     public static readonly BindableProperty CanSendProperty = CanSendPropertyKey.BindableProperty;
 
-    private readonly ObservableCollection<ChatAttachment> _attachments = [];
     private readonly ObservableCollection<ChatSuggestion> _effectiveSuggestions = [];
     private readonly ICommand _suggestionCommand;
     private readonly ICommand _removeAttachmentCommand;
@@ -453,15 +479,17 @@ public partial class ChatView : TemplatedView
     private Entry? _inputEntryPart;
     private Button? _sendButtonPart;
     private Button? _attachButtonPart;
-    private bool _isSending;
+    private ChatComposerController? _ownedComposerController;
+    private ChatComposerController? _effectiveComposerController;
+    private bool _updatingController;
 
     /// <summary>Creates the view and applies the default control template.</summary>
     public ChatView()
     {
-        SetValue(AttachmentsPropertyKey, new ReadOnlyObservableCollection<ChatAttachment>(_attachments));
+        _ownedComposerController = new ChatComposerController();
+        AttachComposerController(_ownedComposerController);
         EffectiveSuggestions = new ReadOnlyObservableCollection<ChatSuggestion>(_effectiveSuggestions);
 
-        _attachments.CollectionChanged += OnAttachmentsChanged;
         _suggestionCommand = new Command<ChatSuggestion>(suggestion => _ = SendSuggestionAsync(suggestion));
         _removeAttachmentCommand = new Command<ChatAttachment>(attachment => RemoveAttachment(attachment));
 
@@ -475,7 +503,6 @@ public partial class ChatView : TemplatedView
         SetDynamicResource(InputEntryStyleProperty, ChatThemeKeys.InputEntryStyle);
         SetDynamicResource(AttachButtonStyleProperty, ChatThemeKeys.AttachButtonStyle);
         SetDynamicResource(SendButtonStyleProperty, ChatThemeKeys.SendButtonStyle);
-        InitializeMultimodalInput();
     }
 
     // ── Public surface ──
@@ -487,11 +514,26 @@ public partial class ChatView : TemplatedView
         set => SetValue(ConversationProperty, value);
     }
 
+    /// <summary>
+    /// Gets or sets the renderer-neutral composer state machine. When <see langword="null"/>,
+    /// this view owns a private controller. A supplied controller is never disposed by the view.
+    /// </summary>
+    public ChatComposerController? ComposerController
+    {
+        get => (ChatComposerController?)GetValue(ComposerControllerProperty);
+        set => SetValue(ComposerControllerProperty, value);
+    }
+
     /// <summary>Gets or sets the composer text. Two-way bound to the input part.</summary>
     public string Text
     {
-        get => (string)GetValue(TextProperty);
-        set => SetValue(TextProperty, value);
+        get => _effectiveComposerController?.Text ?? (string)GetValue(TextProperty);
+        set
+        {
+            if (!_updatingController && _effectiveComposerController is not null)
+                EffectiveComposerController.Text = value;
+            SetValue(TextProperty, value);
+        }
     }
 
     /// <summary>Gets or sets the consumer content templates, forwarded to the message list.</summary>
@@ -743,7 +785,7 @@ public partial class ChatView : TemplatedView
 
     /// <summary>Creates the draft the composer would send right now.</summary>
     /// <returns>A draft carrying the trimmed text and the staged attachments.</returns>
-    public ChatDraft CreateDraft() => new(Text, _attachments);
+    public ChatDraft CreateDraft() => EffectiveComposerController.CreateDraft();
 
     /// <summary>Stages an attachment in the composer.</summary>
     /// <param name="attachment">The attachment to stage.</param>
@@ -752,7 +794,7 @@ public partial class ChatView : TemplatedView
     {
         ArgumentNullException.ThrowIfNull(attachment);
 
-        _attachments.Add(attachment);
+        EffectiveComposerController.AddAttachment(attachment);
     }
 
     /// <summary>Removes a staged attachment.</summary>
@@ -763,11 +805,15 @@ public partial class ChatView : TemplatedView
     {
         ArgumentNullException.ThrowIfNull(attachment);
 
-        return _attachments.Remove(attachment);
+        return EffectiveComposerController.RemoveAttachment(attachment);
     }
 
     /// <summary>Removes every staged attachment.</summary>
-    public void ClearAttachments() => _attachments.Clear();
+    public void ClearAttachments()
+    {
+        foreach (var attachment in EffectiveComposerController.Attachments.ToArray())
+            EffectiveComposerController.RemoveAttachment(attachment);
+    }
 
     /// <summary>
     /// Sends the current draft. Does nothing when a send is already running, when there is no
@@ -793,81 +839,8 @@ public partial class ChatView : TemplatedView
     /// <returns>A task that completes when picking finished.</returns>
     public async Task PickAttachmentsAsync(CancellationToken cancellationToken = default)
     {
-        if (IsComposing && _attachmentReadCts is null)
-            return;
-
-        SetValue(AttachmentErrorPropertyKey, null);
-        var previous = _attachmentReadCts;
-        _attachmentReadCts = null;
-        previous?.Cancel();
-        previous?.Dispose();
-
-        var operationCts = cancellationToken.CanBeCanceled
-            ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
-            : new CancellationTokenSource();
-        _attachmentReadCts = operationCts;
-        UpdateMultimodalState();
-
-        try
-        {
-            var picker = AttachmentPicker ?? FileChatAttachmentPicker.Default;
-            var picked = await picker
-                .PickAsync(AttachmentFileTypes, MaxAttachmentBytes, operationCts.Token)
-                .ConfigureAwait(true);
-
-            if (!ReferenceEquals(_attachmentReadCts, operationCts)
-                || picked is null)
-                return;
-
-            var additions = picked
-                .Where(static attachment => attachment is not null)
-                .ToArray();
-            if (_attachments.Count + additions.Length > MaximumAttachmentCount)
-            {
-                SetValue(
-                    AttachmentErrorPropertyKey,
-                    $"Attach no more than {MaximumAttachmentCount} files.");
-                return;
-            }
-            var totalBytes = _attachments.Sum(static attachment => attachment.ByteCount)
-                + additions.Sum(static attachment => attachment.ByteCount);
-            if (totalBytes > MaximumTotalAttachmentBytes)
-            {
-                SetValue(
-                    AttachmentErrorPropertyKey,
-                    $"Attachments must be {FormatMegabytes(MaximumTotalAttachmentBytes)} MB or smaller in total.");
-                return;
-            }
-
-            foreach (var attachment in additions)
-                _attachments.Add(attachment);
-
-            if (additions.Length > 0)
-            {
-                SetInputStatusMessage(
-                    additions.Length == 1
-                        ? "1 file attached."
-                        : $"{additions.Length} files attached.");
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // Cancelling a picker is a normal outcome, not an error worth showing.
-        }
-        catch (Exception)
-        {
-            // Anything a picker throws is reported generically: raw details are never safe to show.
-            SetValue(AttachmentErrorPropertyKey, DefaultAttachmentErrorMessage);
-        }
-        finally
-        {
-            if (ReferenceEquals(_attachmentReadCts, operationCts))
-            {
-                _attachmentReadCts = null;
-                operationCts.Dispose();
-                UpdateMultimodalState();
-            }
-        }
+        ConfigureComposerController();
+        await EffectiveComposerController.PickAttachmentsAsync(cancellationToken).ConfigureAwait(true);
     }
 
     /// <inheritdoc />
@@ -1067,6 +1040,7 @@ public partial class ChatView : TemplatedView
             newConversation.TypingParticipants.CollectionChanged += OnTypingParticipantsChanged;
         }
 
+        EffectiveComposerController.Conversation = newConversation;
         SetValue(SendErrorPropertyKey, null);
         ApplyMessageListProperties();
         UpdateState();
@@ -1077,6 +1051,173 @@ public partial class ChatView : TemplatedView
         _ = sender;
         _ = e;
         UpdateTypingState();
+    }
+
+    private ChatComposerController EffectiveComposerController =>
+        _effectiveComposerController
+        ?? throw new InvalidOperationException("The composer controller was not initialized.");
+
+    private void OnComposerControllerChanged()
+    {
+        if (ComposerController is { } externalController)
+        {
+            var previousOwnedController = _ownedComposerController;
+            AttachComposerController(externalController);
+            previousOwnedController?.Dispose();
+            _ownedComposerController = null;
+            return;
+        }
+
+        _ownedComposerController = new ChatComposerController();
+        AttachComposerController(_ownedComposerController);
+    }
+
+    private void AttachComposerController(ChatComposerController controller)
+    {
+        if (ReferenceEquals(_effectiveComposerController, controller))
+            return;
+
+        if (_effectiveComposerController is not null)
+        {
+            _effectiveComposerController.Changed -= OnEffectiveComposerChanged;
+            _effectiveComposerController.AudioRecorded -= OnControllerAudioRecorded;
+            _effectiveComposerController.AudioTranscribed -= OnControllerAudioTranscribed;
+            _effectiveComposerController.SpeechRecognized -= OnControllerSpeechRecognized;
+            ((INotifyCollectionChanged)_effectiveComposerController.Attachments).CollectionChanged -= OnControllerAttachmentsChanged;
+        }
+
+        _effectiveComposerController = controller;
+        controller.Changed += OnEffectiveComposerChanged;
+        controller.AudioRecorded += OnControllerAudioRecorded;
+        controller.AudioTranscribed += OnControllerAudioTranscribed;
+        controller.SpeechRecognized += OnControllerSpeechRecognized;
+        ((INotifyCollectionChanged)controller.Attachments).CollectionChanged += OnControllerAttachmentsChanged;
+        ConfigureComposerController();
+        controller.Conversation = Conversation;
+        SetValue(AttachmentsPropertyKey, controller.Attachments);
+        _updatingController = true;
+        try
+        {
+            SetValue(TextProperty, controller.Text);
+        }
+        finally
+        {
+            _updatingController = false;
+        }
+        InitializeMultimodalInput();
+        SynchronizeComposerState();
+    }
+
+    private void ConfigureComposerController()
+    {
+        var controller = EffectiveComposerController;
+        if (ComposerController is not null)
+            return;
+        controller.AllowAttachments = AllowAttachments;
+        controller.AllowAudioCapture = AllowAudioCapture;
+        controller.AllowLiveSpeech = AllowLiveSpeech;
+        controller.AttachmentPicker = AttachmentPicker ?? FileChatAttachmentPicker.Default;
+        controller.AttachmentFileTypes = AttachmentFileTypes;
+        controller.MaximumAttachmentBytes = MaxAttachmentBytes;
+        controller.MaximumAttachmentCount = MaximumAttachmentCount;
+        controller.MaximumTotalAttachmentBytes = MaximumTotalAttachmentBytes;
+        controller.AudioRecorder = AudioRecorder;
+        controller.AudioTranscriber = AudioTranscriber;
+        controller.MaximumAudioBytes = MaximumAudioBytes;
+        controller.AttachAudioRecording = AttachAudioRecording;
+        controller.ReplaceExistingAudio = ReplaceExistingAudio;
+        controller.ShowInterimAudioTranscript = ShowInterimAudioTranscript;
+        controller.SpeechRecognizer = SpeechRecognizer;
+        controller.ShowInterimSpeechText = ShowInterimSpeechText;
+        controller.LiveSpeechAutoSubmit = LiveSpeechAutoSubmit;
+        controller.ContinuousLiveSpeech = true;
+        controller.SpeechRecognitionCulture = SpeechRecognitionCulture;
+    }
+
+    /// <inheritdoc />
+    protected override void OnPropertyChanged(string? propertyName = null)
+    {
+        base.OnPropertyChanged(propertyName);
+
+        if (_effectiveComposerController is null || _updatingController)
+            return;
+
+        if (propertyName is nameof(AllowAttachments)
+            or nameof(AttachmentPicker)
+            or nameof(AttachmentFileTypes)
+            or nameof(MaxAttachmentBytes)
+            or nameof(AllowAudioCapture)
+            or nameof(AudioRecorder)
+            or nameof(AudioTranscriber)
+            or nameof(MaximumAudioBytes)
+            or nameof(MaximumAttachmentCount)
+            or nameof(MaximumTotalAttachmentBytes)
+            or nameof(AttachAudioRecording)
+            or nameof(ReplaceExistingAudio)
+            or nameof(ShowInterimAudioTranscript)
+            or nameof(AllowLiveSpeech)
+            or nameof(SpeechRecognizer)
+            or nameof(ShowInterimSpeechText)
+            or nameof(LiveSpeechAutoSubmit)
+            or nameof(SpeechRecognitionCulture))
+        {
+            ConfigureComposerController();
+        }
+    }
+
+    private void OnEffectiveComposerChanged()
+    {
+        _updatingController = true;
+        try
+        {
+            SetValue(TextProperty, EffectiveComposerController.Text);
+        }
+        finally
+        {
+            _updatingController = false;
+        }
+        SynchronizeComposerState();
+    }
+
+    private void OnControllerAttachmentsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        SetValue(HasAttachmentsPropertyKey, EffectiveComposerController.Attachments.Count > 0);
+        ApplyAttachmentTemplate();
+        UpdateCanSend();
+        RefreshInputContextIfAvailable();
+    }
+
+    private void OnControllerAudioRecorded(object? sender, ChatAudioRecordedEventArgs e) =>
+        AudioRecorded?.Invoke(this, e);
+
+    private void OnControllerAudioTranscribed(object? sender, ChatAudioTranscribedEventArgs e) =>
+        AudioTranscribed?.Invoke(this, e);
+
+    private void OnControllerSpeechRecognized(object? sender, ChatSpeechRecognitionEventArgs e) =>
+        SpeechRecognized?.Invoke(this, e);
+
+    private void SynchronizeComposerState()
+    {
+        var controller = EffectiveComposerController;
+        SetValue(SendErrorPropertyKey, controller.ErrorMessage);
+        SetValue(AttachmentErrorPropertyKey, controller.ErrorMessage);
+        SetValue(InputStatusMessagePropertyKey, controller.StatusMessage);
+        SetValue(InputErrorMessagePropertyKey, controller.ErrorMessage);
+        SetValue(IsComposingPropertyKey, controller.IsComposing);
+        SetValue(IsInputEnabledPropertyKey, !controller.IsConversationBusy && !controller.IsComposing);
+        SetValue(CanStopPropertyKey, controller.CanStop);
+        SetValue(ShowSendButtonPropertyKey, !controller.CanStop);
+        SetValue(IsRecordingAudioPropertyKey, controller.IsRecordingAudio);
+        SetValue(IsTranscribingAudioPropertyKey, controller.IsTranscribingAudio);
+        SetValue(IsLiveSpeechEnabledPropertyKey, controller.IsLiveSpeechEnabled);
+        SetValue(IsListeningPropertyKey, controller.IsListening);
+        SetValue(CanToggleAudioCapturePropertyKey, controller.CanToggleAudioCapture);
+        SetValue(CanToggleLiveSpeechPropertyKey, controller.CanToggleLiveSpeech);
+        SetValue(HasAttachmentsPropertyKey, controller.Attachments.Count > 0);
+        SetValue(CanSendPropertyKey, controller.CanSubmit);
+        RefreshInputContextIfAvailable();
     }
 
     private void UpdateTypingState()
@@ -1166,13 +1307,7 @@ public partial class ChatView : TemplatedView
 
     private void UpdateCanSend()
     {
-        var conversation = Conversation;
-        SetValue(
-            CanSendPropertyKey,
-            !_isSending
-            && !IsComposing
-            && conversation is not null
-            && conversation.CanSend(CreateDraft()));
+        SetValue(CanSendPropertyKey, EffectiveComposerController.CanSubmit);
     }
 
     // ── Send ──
@@ -1183,85 +1318,10 @@ public partial class ChatView : TemplatedView
 
     private void OnAttachClicked(object? sender, EventArgs e) => _ = PickAttachmentsAsync();
 
-    /// <summary>
-    /// The single send path. A plain boolean guard is enough because the control is single-thread
-    /// affine: a second tap or an <c>Enter</c> keypress arriving while the first send is awaiting is
-    /// simply ignored, so no lock is involved.
-    /// </summary>
     private async Task SendCoreAsync(CancellationToken cancellationToken)
     {
-        if (_isSending)
-            return;
-
-        var conversation = Conversation;
-        if (conversation is null)
-            return;
-
-        var draft = CreateDraft();
-        if (!conversation.CanSend(draft))
-            return;
-
-        var sendCts = cancellationToken.CanBeCanceled
-            ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
-            : new CancellationTokenSource();
-        _sendCts = sendCts;
-        _isSending = true;
-        SetValue(SendErrorPropertyKey, null);
-        SetInputStatusMessage("Sending message.");
-        UpdateMultimodalState();
-        UpdateCanSend();
-
-        try
-        {
-            var accepted = await conversation
-                .SendAsync(draft, sendCts.Token)
-                .ConfigureAwait(true);
-            var wasStopped = ReferenceEquals(_stoppedSendCts, sendCts);
-
-            // Only an accepted draft is cleared: a rejected one stays so the user can retry it.
-            if (accepted)
-            {
-                ClearAcceptedDraft(draft);
-                if (!wasStopped)
-                    SetInputStatusMessage("Message sent.");
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // A cancelled send is not a failure worth reporting.
-        }
-        catch (Exception)
-        {
-            // Event handlers must never surface raw exceptions, and raw text is never safe to show.
-            SetValue(SendErrorPropertyKey, DefaultSendErrorMessage);
-        }
-        finally
-        {
-            if (ReferenceEquals(_sendCts, sendCts))
-            {
-                _sendCts = null;
-                _isSending = false;
-            }
-            if (ReferenceEquals(_stoppedSendCts, sendCts))
-                _stoppedSendCts = null;
-            sendCts.Dispose();
-            UpdateMultimodalState();
-            UpdateCanSend();
-        }
-    }
-
-    private void ClearAcceptedDraft(ChatDraft acceptedDraft)
-    {
-        if (string.Equals(
-            Text?.Trim(),
-            acceptedDraft.Text,
-            StringComparison.Ordinal))
-        {
-            Text = string.Empty;
-        }
-
-        foreach (var attachment in acceptedDraft.Attachments)
-            _attachments.Remove(attachment);
+        ConfigureComposerController();
+        await EffectiveComposerController.SubmitAsync(cancellationToken).ConfigureAwait(true);
     }
 
     private async Task SendSuggestionAsync(ChatSuggestion? suggestion)
@@ -1326,7 +1386,7 @@ public partial class ChatView : TemplatedView
         if (_attachmentsPart is null)
             return;
 
-        BindableLayout.SetItemsSource(_attachmentsPart, _attachments);
+        BindableLayout.SetItemsSource(_attachmentsPart, EffectiveComposerController.Attachments);
         BindableLayout.SetItemTemplate(
             _attachmentsPart,
             AttachmentTemplate ?? (_defaultAttachmentTemplate ??= CreateDefaultAttachmentTemplate()));
@@ -1415,10 +1475,33 @@ public partial class ChatView : TemplatedView
         UpdateState();
     }
 
-    private void OnAttachmentsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    /// <summary>
+    /// Releases this view's subscriptions and private composer. A caller-supplied
+    /// <see cref="ComposerController"/> remains owned by that caller.
+    /// </summary>
+    public void Dispose()
     {
-        SetValue(HasAttachmentsPropertyKey, _attachments.Count > 0);
-        UpdateCanSend();
-        InputContext.Refresh();
+        if (Conversation is { } conversation)
+            conversation.TypingParticipants.CollectionChanged -= OnTypingParticipantsChanged;
+        if (Suggestions is INotifyCollectionChanged suggestions)
+            suggestions.CollectionChanged -= OnSuggestionsChanged;
+        if (SuggestionPrompts is INotifyCollectionChanged prompts)
+            prompts.CollectionChanged -= OnSuggestionsChanged;
+
+        _conversationSubscription?.Dispose();
+        _conversationSubscription = null;
+        if (_effectiveComposerController is not null)
+        {
+            _effectiveComposerController.Changed -= OnEffectiveComposerChanged;
+            _effectiveComposerController.AudioRecorded -= OnControllerAudioRecorded;
+            _effectiveComposerController.AudioTranscribed -= OnControllerAudioTranscribed;
+            _effectiveComposerController.SpeechRecognized -= OnControllerSpeechRecognized;
+            ((INotifyCollectionChanged)_effectiveComposerController.Attachments).CollectionChanged -= OnControllerAttachmentsChanged;
+            _effectiveComposerController = null;
+        }
+
+        _ownedComposerController?.Dispose();
+        _ownedComposerController = null;
     }
+
 }

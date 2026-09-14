@@ -29,7 +29,9 @@ public sealed class TeamChatViewModel : INotifyPropertyChanged
     private ConversationMessageStatus _selectedDeliveryStatus =
         ConversationMessageStatus.Delivered;
 
-    public TeamChatViewModel()
+    public TeamChatViewModel(
+        IChatAudioRecorder audioRecorder,
+        IChatSpeechRecognizer speechRecognizer)
     {
         Participants = [_morgan, _priya, _diego];
         _selectedParticipant = _priya;
@@ -40,6 +42,15 @@ public sealed class TeamChatViewModel : INotifyPropertyChanged
         };
         Conversation.Participants.Add(_priya);
         Conversation.Participants.Add(_diego);
+        ComposerController = new ChatComposerController
+        {
+            Conversation = Conversation,
+            AllowAttachments = true,
+            AllowAudioCapture = true,
+            AllowLiveSpeech = true,
+            AudioRecorder = audioRecorder,
+            SpeechRecognizer = speechRecognizer,
+        };
 
         Suggestions =
         [
@@ -79,6 +90,9 @@ public sealed class TeamChatViewModel : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public ObservableChatConversation Conversation { get; }
+
+    /// <summary>Gets the singleton composer shared by the native and Blazor chat surfaces.</summary>
+    public ChatComposerController ComposerController { get; }
 
     public IReadOnlyList<ChatParticipant> Participants { get; }
 
