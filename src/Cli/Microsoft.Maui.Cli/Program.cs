@@ -134,6 +134,9 @@ public class Program
 		// DevFlow automation commands (maui devflow ...)
 		rootCommand.Add(DevFlow.DevFlowCommands.CreateDevFlowCommand(GlobalOptions.JsonOption));
 
+		// AI agent skill management (maui ai ...)
+		rootCommand.Add(Commands.AiCommands.Create());
+
 		// Comet Go single-file dev experience (maui go ...)
 		rootCommand.Add(Commands.GoCommands.Create());
 
