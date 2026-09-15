@@ -27,6 +27,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\AIExtensions\Microsoft.Maui.AI.Chat\Microsoft.Maui.AI.Chat.csproj" />
+    <ProjectReference Include="..\..\..\src\AIExtensions\Microsoft.Maui.AI.Chat.Recording\Microsoft.Maui.AI.Chat.Recording.csproj" />
     <ProjectReference Include="..\..\..\src\AIExtensions\Microsoft.Maui.AI.Chat.Generators\Microsoft.Maui.AI.Chat.Generators.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />

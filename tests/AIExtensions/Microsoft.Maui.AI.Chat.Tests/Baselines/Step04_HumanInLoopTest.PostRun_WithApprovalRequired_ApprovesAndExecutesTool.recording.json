@@ -1,20 +1,57 @@
-[
-  [
+{
+  "format": "maui-ai-chat-recording",
+  "schemaVersion": 1,
+  "metadata": {
+    "meaiVersion": "10.7.0.0",
+    "pipelineBoundary": "legacy-ordinal",
+    "sanitizerProfile": "legacy-import-v1"
+  },
+  "interactions": [
     {
-      "role": "Assistant",
-      "contents": [
+      "sequence": 0,
+      "name": "legacy-0",
+      "request": {
+        "legacy": true
+      },
+      "updates": [
         {
-          "$type": "functionCall",
-          "name": "ApproveExpenseReport",
-          "arguments": {
-            "expenseReportId": "EXP-2024-001"
+          "sequence": 0,
+          "value": {
+            "authorName": null,
+            "role": "Assistant",
+            "responseId": null,
+            "messageId": null,
+            "conversationId": null,
+            "createdAt": null,
+            "finishReason": "toolCalls",
+            "modelId": "gpt-4o-mini",
+            "contents": [
+              {
+                "type": "functionCall",
+                "callId": "call_expense_001",
+                "name": "ApproveExpenseReport",
+                "arguments": {
+                  "expenseReportId": "EXP-2024-001"
+                },
+                "informationalOnly": false
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
           },
-          "informationalOnly": false,
-          "callId": "call_expense_001"
+          "delayMs": null
         }
       ],
-      "finishReason": "toolCalls",
-      "modelId": "gpt-4o-mini"
+      "outcome": "completed",
+      "errorType": null,
+      "errorMessage": null,
+      "legacy": true
     }
-  ]
-]
+  ],
+  "manifest": {
+    "redacted": 0,
+    "rejected": 0,
+    "legacyImport": true
+  }
+}
