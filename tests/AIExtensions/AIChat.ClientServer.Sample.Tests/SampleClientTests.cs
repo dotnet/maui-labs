@@ -124,6 +124,24 @@ public sealed class SampleClientTests
         Assert.DoesNotContain("NSAllowsArbitraryLoads", manifest, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("AIChat.Client.Sample")]
+    [InlineData("AIChat.ClientServer.Sample/AIChat.ClientServer.Sample.Client")]
+    public void IosManifests_DeclarePhoneAndTabletOrientations(string samplePath)
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var manifest = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "samples",
+            samplePath,
+            "Platforms",
+            "iOS",
+            "Info.plist"));
+
+        Assert.Contains("<key>UISupportedInterfaceOrientations</key>", manifest, StringComparison.Ordinal);
+        Assert.Contains("<key>UISupportedInterfaceOrientations~ipad</key>", manifest, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void AguiScenarioPaths_MatchAllServerScenarios()
     {
