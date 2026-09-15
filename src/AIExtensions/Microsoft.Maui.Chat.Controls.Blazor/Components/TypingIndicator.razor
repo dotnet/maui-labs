@@ -1,0 +1,31 @@
+@*
+    Licensed to the .NET Foundation under one or more agreements.
+    The .NET Foundation licenses this file to you under the MIT license.
+
+    Renders the "N is typing…" summary. Reads directly from the conversation's typing list
+    so a change in the participants shows up on the next Blazor render.
+*@
+@namespace Microsoft.Maui.Chat.Controls.Blazor
+@using Microsoft.Maui.Chat.Controls
+
+@if (!string.IsNullOrEmpty(_text))
+{
+    <div class="mchat-typing" role="status" aria-live="polite" aria-label="@_text">
+        <span class="mchat-typing__dot"></span>
+        <span class="mchat-typing__dot"></span>
+        <span class="mchat-typing__dot"></span>
+        <span>@_text</span>
+    </div>
+}
+
+@code {
+    private string _text = string.Empty;
+
+    /// <summary>Gets or sets the participants currently composing.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyCollection<ChatParticipant> Participants { get; set; } = Array.Empty<ChatParticipant>();
+
+    /// <inheritdoc />
+    protected override void OnParametersSet() =>
+        _text = ChatCultureFormats.FormatTypingText(Participants);
+}

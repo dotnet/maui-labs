@@ -1,0 +1,58 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<Application xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="ChatControls.Sample.App">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Resources/Styles/Colors.xaml" />
+                <ResourceDictionary Source="Resources/Styles/Styles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <Color x:Key="ChatBrand">#0F766E</Color>
+            <Color x:Key="ChatBrandDark">#5EEAD4</Color>
+            <Color x:Key="ChatPageLight">#F4F7F6</Color>
+            <Color x:Key="ChatPageDark">#0B1211</Color>
+            <Color x:Key="ChatSurfaceLight">#FFFFFF</Color>
+            <Color x:Key="ChatSurfaceDark">#17211F</Color>
+            <Color x:Key="ChatTextLight">#17211F</Color>
+            <Color x:Key="ChatTextDark">#E7F4F1</Color>
+
+            <!-- Override the provider-neutral theme with ordinary ResourceDictionary styles. -->
+            <Style x:Key="MauiChat.Suggestion" TargetType="Button">
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="Padding" Value="13,7" />
+                <Setter Property="CornerRadius" Value="17" />
+                <Setter Property="BackgroundColor"
+                        Value="{AppThemeBinding Light=#DDF4EF, Dark=#173B35}" />
+                <Setter Property="TextColor"
+                        Value="{AppThemeBinding Light=#115E59, Dark=#99F6E4}" />
+            </Style>
+            <Style x:Key="MauiChat.InputArea" TargetType="Border">
+                <Setter Property="Padding" Value="6" />
+                <Setter Property="BackgroundColor"
+                        Value="{AppThemeBinding Light=#FFFFFF, Dark=#17211F}" />
+                <Setter Property="Stroke"
+                        Value="{AppThemeBinding Light=#D6E3E0, Dark=#2B4540}" />
+                <Setter Property="StrokeThickness" Value="1" />
+                <Setter Property="Shadow">
+                    <Setter.Value>
+                        <Shadow Brush="#24000000"
+                                Offset="0,4"
+                                Radius="12"
+                                Opacity="0.18" />
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <Style x:Key="MauiChat.SendButton" TargetType="Button">
+                <Setter Property="FontSize" Value="17" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="CornerRadius" Value="20" />
+                <Setter Property="WidthRequest" Value="40" />
+                <Setter Property="HeightRequest" Value="40" />
+                <Setter Property="BackgroundColor" Value="{StaticResource ChatBrand}" />
+                <Setter Property="TextColor" Value="White" />
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

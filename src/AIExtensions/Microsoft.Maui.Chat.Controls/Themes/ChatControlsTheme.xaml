@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                    xmlns:themes="clr-namespace:Microsoft.Maui.Chat.Controls.Themes"
+                    x:Class="Microsoft.Maui.Chat.Controls.Themes.ChatControlsTheme">
+
+    <!-- The root theme. Merging this one dictionary brings in everything: -->
+    <!--   • ChatStyles         — design tokens and styles (light + dark)  -->
+    <!--   • ChatMessagesTheme  — the ChatMessagesView control template    -->
+    <!--   • ChatViewTheme      — the ChatView control template            -->
+    <ResourceDictionary.MergedDictionaries>
+        <themes:ChatStyles />
+        <themes:ChatMessagesTheme />
+        <themes:ChatViewTheme />
+    </ResourceDictionary.MergedDictionaries>
+
+</ResourceDictionary>

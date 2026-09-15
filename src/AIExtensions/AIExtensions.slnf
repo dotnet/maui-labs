@@ -4,8 +4,34 @@
     "projects": [
       "src\\AIExtensions\\Microsoft.Maui.AI.Attributes\\Microsoft.Maui.AI.Attributes.csproj",
       "src\\AIExtensions\\Microsoft.Maui.AI.Attributes.Generators\\Microsoft.Maui.AI.Attributes.Generators.csproj",
+      "src\\AIExtensions\\Microsoft.Maui.AI.Chat\\Microsoft.Maui.AI.Chat.csproj",
+      "src\\AIExtensions\\Microsoft.Maui.AI.Chat.Recording\\Microsoft.Maui.AI.Chat.Recording.csproj",
+      "src\\AIExtensions\\Microsoft.Maui.AI.Chat.Generators\\Microsoft.Maui.AI.Chat.Generators.csproj",
+      "src\\AIExtensions\\Microsoft.Maui.AI.Chat.Controls\\Microsoft.Maui.AI.Chat.Controls.csproj",
+      "src\\AIExtensions\\Microsoft.Maui.Chat\\Microsoft.Maui.Chat.csproj",
+      "src\\AIExtensions\\Microsoft.Maui.AI.Chat.Presentation\\Microsoft.Maui.AI.Chat.Presentation.csproj",
+      "src\\AIExtensions\\Microsoft.Maui.AI.Chat.Controls.Blazor\\Microsoft.Maui.AI.Chat.Controls.Blazor.csproj",
+      "src\\AIExtensions\\Microsoft.Maui.Chat.Controls\\Microsoft.Maui.Chat.Controls.csproj",
+      "src\\AIExtensions\\Microsoft.Maui.Chat.Controls.Blazor\\Microsoft.Maui.Chat.Controls.Blazor.csproj",
       "tests\\AIExtensions\\Microsoft.Maui.AI.Attributes.Tests\\Microsoft.Maui.AI.Attributes.Tests.csproj",
-      "tests\\AIExtensions\\Microsoft.Maui.AI.Attributes.Generators.Tests\\Microsoft.Maui.AI.Attributes.Generators.Tests.csproj"
+      "tests\\AIExtensions\\Microsoft.Maui.AI.Attributes.Generators.Tests\\Microsoft.Maui.AI.Attributes.Generators.Tests.csproj",
+      "tests\\AIExtensions\\Microsoft.Maui.AI.Chat.Tests\\Microsoft.Maui.AI.Chat.Tests.csproj",
+      "tests\\AIExtensions\\Microsoft.Maui.AI.Chat.Recording.Tests\\Microsoft.Maui.AI.Chat.Recording.Tests.csproj",
+      "tests\\AIExtensions\\Microsoft.Maui.AI.Chat.Generators.Tests\\Microsoft.Maui.AI.Chat.Generators.Tests.csproj",
+      "tests\\AIExtensions\\Microsoft.Maui.AI.Chat.Controls.Tests\\Microsoft.Maui.AI.Chat.Controls.Tests.csproj",
+      "tests\\AIExtensions\\Microsoft.Maui.Chat.Tests\\Microsoft.Maui.Chat.Tests.csproj",
+      "tests\\AIExtensions\\Microsoft.Maui.AI.Chat.Controls.Blazor.Tests\\Microsoft.Maui.AI.Chat.Controls.Blazor.Tests.csproj",
+      "tests\\AIExtensions\\Microsoft.Maui.Chat.Controls.Tests\\Microsoft.Maui.Chat.Controls.Tests.csproj",
+      "tests\\AIExtensions\\Microsoft.Maui.Chat.Controls.Blazor.Tests\\Microsoft.Maui.Chat.Controls.Blazor.Tests.csproj",
+      "samples\\AIChat.ClientServer.Sample\\AIChat.ClientServer.Sample.Shared\\AIChat.ClientServer.Sample.Shared.csproj",
+      "samples\\AIChat.Sample.Shared\\AIChat.Sample.Shared.csproj",
+      "samples\\AIChat.ClientServer.Sample\\AIChat.ClientServer.Sample.AgentServer\\AIChat.ClientServer.Sample.AgentServer.csproj",
+      "samples\\AIChat.ClientServer.Sample\\AIChat.ClientServer.Sample.AppHost\\AIChat.ClientServer.Sample.AppHost.csproj",
+      "samples\\AIChat.Client.Sample\\AIChat.Client.Sample.csproj",
+      "samples\\AIChat.ClientServer.Sample\\AIChat.ClientServer.Sample.Client\\AIChat.ClientServer.Sample.Client.csproj",
+      "tests\\AIExtensions\\AIChat.ClientServer.Sample.Tests\\AIChat.ClientServer.Sample.Tests.csproj",
+      "samples\\AIExtensions.Sample.Garden\\AIExtensions.Sample.Garden.csproj",
+      "samples\\ChatControls.Sample\\ChatControls.Sample.csproj"
     ]
   }
 }

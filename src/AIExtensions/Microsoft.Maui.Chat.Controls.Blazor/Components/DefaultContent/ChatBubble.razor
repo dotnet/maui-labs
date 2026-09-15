@@ -1,0 +1,101 @@
+@*
+    Licensed to the .NET Foundation under one or more agreements.
+    The .NET Foundation licenses this file to you under the MIT license.
+
+    Standard participant chrome shared by every row: avatar + name on the leading edge of
+    the first row of a run, timestamp + delivery status on the trailing edge of the last.
+    Rendered around the body a MessageContentRenderer (or the built-in default) produced.
+*@
+@namespace Microsoft.Maui.Chat.Controls.Blazor
+@using Microsoft.Maui.Chat.Controls
+
+<div class="mchat-row mchat-row--@(Row.IsOutgoing ? "outgoing" : "incoming") @(Row.IsFirstFromParticipant ? null : "mchat-row--group-continuation")">
+    @if (Row.IsFirstFromParticipant)
+    {
+        <div class="mchat-row__header">
+            <span class="mchat-avatar" aria-hidden="true">@Row.Participant.Initials</span>
+            <span class="mchat-participant-name">@Row.Participant.DisplayName</span>
+        </div>
+    }
+
+    <div class="mchat-bubble @BubbleClass" role="article" aria-describedby="@FooterId">
+        @ChildContent
+    </div>
+
+    @if (Row.IsLastFromParticipant || Row.Message.Status == ConversationMessageStatus.Failed)
+    {
+        <div class="mchat-row__footer" id="@FooterId">
+            <span class="mchat-timestamp">@ChatCultureFormats.FormatTimestamp(Row.Timestamp)</span>
+            @if (Row.Message.Status != ConversationMessageStatus.Draft)
+            {
+                <span class="mchat-status @StatusClass" aria-label="@StatusLabel">@StatusGlyph</span>
+            }
+            @if (!string.IsNullOrEmpty(Row.Message.ErrorText))
+            {
+                <span class="mchat-status mchat-status--failed" role="alert">@Row.Message.ErrorText</span>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>Gets or sets the projected row this bubble renders.</summary>
+    [Parameter, EditorRequired]
+    public ChatMessageRowModel Row { get; set; } = default!;
+
+    /// <summary>Gets or sets the body rendered inside the bubble.</summary>
+    [Parameter, EditorRequired]
+    public RenderFragment ChildContent { get; set; } = default!;
+
+    /// <summary>Gets or sets whether the bubble should show the streaming cursor.</summary>
+    [Parameter]
+    public bool IsStreaming { get; set; }
+
+    private string BubbleClass
+    {
+        get
+        {
+            var bare = Row.Content.Presentation == ChatContentPresentation.Bare;
+            if (bare && IsStreaming)
+            {
+                return "mchat-bubble--bare mchat-bubble--streaming";
+            }
+
+            if (bare)
+            {
+                return "mchat-bubble--bare";
+            }
+
+            return IsStreaming ? "mchat-bubble--streaming" : string.Empty;
+        }
+    }
+
+    private string FooterId => $"footer-{Row.Message.Id}-{Row.Content.Id}";
+
+    private string StatusGlyph => Row.Message.Status switch
+    {
+        ConversationMessageStatus.Sending => "…",
+        ConversationMessageStatus.Sent => "✓",
+        ConversationMessageStatus.Delivered => "✓✓",
+        ConversationMessageStatus.Read => "✓✓",
+        ConversationMessageStatus.Failed => "!",
+        _ => string.Empty,
+    };
+
+    private string StatusClass => Row.Message.Status switch
+    {
+        ConversationMessageStatus.Sending => "mchat-status--sending",
+        ConversationMessageStatus.Failed => "mchat-status--failed",
+        _ => string.Empty,
+    };
+
+    private string StatusLabel => Row.Message.Status switch
+    {
+        ConversationMessageStatus.Sending => "Sending",
+        ConversationMessageStatus.Sent => "Sent",
+        ConversationMessageStatus.Delivered => "Delivered",
+        ConversationMessageStatus.Read => "Read",
+        ConversationMessageStatus.Failed => "Failed to send",
+        _ => string.Empty,
+    };
+}
