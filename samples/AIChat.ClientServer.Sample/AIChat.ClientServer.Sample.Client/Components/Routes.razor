@@ -1,0 +1,69 @@
+@namespace AIChat.ClientServer.Sample.Client.Components
+@using AIChat.ClientServer.Sample.Client
+@using AIChat.Sample.Shared
+@inject AguiChatComposition Host
+@implements IDisposable
+
+<main data-testid="agui-chat-root">
+  <p data-testid="state-panel">@Host.StatusText</p>
+  <Microsoft.Maui.AI.Chat.Controls.Blazor.CopilotChatView Presentation="@Host.Presentation"
+                                                            ComposerController="@Host.ComposerController"
+                                                            data-testid="blazor-copilot-chat">
+    <Microsoft.Maui.Chat.Controls.Blazor.MessageContentRenderer TContent="AgentBlockContent"
+                                                                 When="IsPredictiveProposal">
+      <ChildContent Context="content">
+        <section data-testid="predictive-proposal-card">
+          <p>@Host.State.PendingDocument?.Document.Content</p>
+          <button data-testid="proposal-accept" disabled="@(Host.State.PendingDocument is null)" @onclick="() => ResolveDocumentAsync(true)">Accept</button>
+          <button data-testid="proposal-reject" disabled="@(Host.State.PendingDocument is null)" @onclick="() => ResolveDocumentAsync(false)">Reject</button>
+        </section>
+      </ChildContent>
+    </Microsoft.Maui.Chat.Controls.Blazor.MessageContentRenderer>
+  </Microsoft.Maui.AI.Chat.Controls.Blazor.CopilotChatView>
+  <aside data-testid="typed-state">
+    @if (Host.State.PendingDocument is not null)
+    {
+      <p>Predictive document proposal: @Host.State.PendingDocument.Document.Content</p>
+      <button data-testid="approve-document" @onclick="() => ResolveDocumentAsync(true)">Accept</button>
+      <button data-testid="reject-document" @onclick="() => ResolveDocumentAsync(false)">Reject</button>
+    }
+    @if (Host.State.Weather is not null)
+    {
+      <p data-testid="weather-card">@Host.State.Weather.Conditions</p>
+    }
+    @if (Host.State.Plan.Steps.Count > 0)
+    {
+      <p data-testid="plan-card">@string.Join(", ", Host.State.Plan.Steps.Select(step => $"{step.Description}: {step.Status}"))</p>
+    }
+    @if (Host.State.Recipe is not null)
+    {
+      <p data-testid="recipe-card">@Host.State.Recipe.Title</p>
+    }
+    @if (Host.State.PendingDocument is null && !string.IsNullOrWhiteSpace(Host.State.Document.Content))
+    {
+      <p data-testid="document-card">@Host.State.Document.Content</p>
+    }
+  </aside>
+  <button data-testid="blazor-retry" @onclick="Host.RetryAsync">Retry</button>
+</main>
+
+@code {
+  protected override void OnInitialized()
+  {
+    Host.PropertyChanged += OnHostChanged;
+    Host.State.Changed += OnStateChanged;
+  }
+
+  private void OnHostChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) =>
+    _ = InvokeAsync(StateHasChanged);
+  private void OnStateChanged() => _ = InvokeAsync(StateHasChanged);
+  private Task ResolveDocumentAsync(bool accepted) => Host.ResolveDocumentProposalAsync(accepted);
+  private bool IsPredictiveProposal(AgentBlockContent content) =>
+    Host.State.HasPendingDocument && PredictiveProposal.IsPredictiveProposal(content);
+
+  public void Dispose()
+  {
+    Host.PropertyChanged -= OnHostChanged;
+    Host.State.Changed -= OnStateChanged;
+  }
+}

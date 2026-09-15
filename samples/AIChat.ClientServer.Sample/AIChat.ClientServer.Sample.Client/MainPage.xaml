@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:ai="clr-namespace:Microsoft.Maui.AI.Chat.Controls;assembly=Microsoft.Maui.AI.Chat.Controls"
+             xmlns:components="clr-namespace:AIChat.ClientServer.Sample.Client.Components"
+             xmlns:local="clr-namespace:AIChat.ClientServer.Sample.Client"
+             xmlns:shared="clr-namespace:AIChat.ClientServer.Sample.Shared;assembly=AIChat.ClientServer.Sample.Shared"
+             x:Class="AIChat.ClientServer.Sample.Client.MainPage"
+             x:DataType="local:AguiChatComposition"
+             Title="AG-UI MAUI client">
+  <Grid RowDefinitions="Auto,*" ColumnDefinitions="*,*">
+    <Grid Grid.ColumnSpan="2" Padding="12" ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8">
+      <Picker ItemsSource="{Binding Scenarios}"
+              SelectedItem="{Binding SelectedScenario}"
+              SelectedIndexChanged="OnScenarioChanged"
+              AutomationId="ScenarioPicker">
+        <Picker.ItemDisplayBinding>
+          <Binding Path="Title" x:DataType="shared:ScenarioDescriptor" />
+        </Picker.ItemDisplayBinding>
+      </Picker>
+      <VerticalStackLayout Grid.Column="1" AutomationId="NativeStatePanel">
+        <Label Text="{Binding StatusText}" AutomationId="StatePanel" />
+        <Label Text="{Binding State.Weather.Conditions}" AutomationId="NativeWeatherCard" />
+        <Label Text="{Binding State.Plan.Steps.Count}" AutomationId="NativePlanCard" />
+        <Label Text="{Binding State.Recipe.Title}" AutomationId="NativeRecipeCard" />
+        <Label Text="{Binding State.PendingDocument.Document.Content}" AutomationId="NativeDocumentProposalCard" />
+        <HorizontalStackLayout IsVisible="{Binding HasPendingDocument}">
+          <Button Text="Accept document" IsEnabled="{Binding HasPendingDocument}" Clicked="OnAcceptDocument" AutomationId="AcceptDocumentButton" />
+          <Button Text="Reject document" IsEnabled="{Binding HasPendingDocument}" Clicked="OnRejectDocument" AutomationId="RejectDocumentButton" />
+        </HorizontalStackLayout>
+      </VerticalStackLayout>
+      <Label Grid.Column="2" Text="{Binding Mode}" AutomationId="ModeLabel" />
+      <Button Grid.Column="3" Text="Clear" Clicked="OnClear" AutomationId="ClearButton" />
+      <Button Grid.Column="4" Text="Next scenario" Clicked="OnNextScenario" AutomationId="NextScenarioButton" />
+      <Picker x:Name="SurfacePicker" Grid.Column="5" Title="Surface"
+              IsVisible="False" SelectedIndexChanged="OnSurfaceChanged"
+              AutomationId="SurfacePicker">
+        <Picker.Items>
+          <x:String>Native</x:String>
+          <x:String>Hybrid</x:String>
+        </Picker.Items>
+      </Picker>
+    </Grid>
+    <ai:CopilotChatView Grid.Row="1"
+                        x:Name="NativeChat"
+                        AttachmentPicker="{Binding ComposerController.AttachmentPicker}"
+                        AudioRecorder="{Binding ComposerController.AudioRecorder}"
+                        SpeechRecognizer="{Binding ComposerController.SpeechRecognizer}"
+                        AllowAttachments="True"
+                        AllowAudioCapture="True"
+                        AllowLiveSpeech="True"
+                        AutomationId="NativeChat">
+      <ai:CopilotChatView.ContentTemplates>
+        <ai:FunctionInvocationTemplate />
+      </ai:CopilotChatView.ContentTemplates>
+    </ai:CopilotChatView>
+    <BlazorWebView Grid.Row="1" Grid.Column="1" x:Name="BlazorChat"
+                   HostPage="wwwroot/index.html" AutomationId="BlazorChat">
+      <BlazorWebView.RootComponents>
+        <RootComponent Selector="#app" ComponentType="{x:Type components:Routes}" />
+      </BlazorWebView.RootComponents>
+    </BlazorWebView>
+  </Grid>
+</ContentPage>

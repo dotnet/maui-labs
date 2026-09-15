@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0-android;net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>AIChat.ClientServer.Sample.Client</RootNamespace>
+    <UseMaui>true</UseMaui>
+    <SingleProject>true</SingleProject>
+    <IsPackable>false</IsPackable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <ValidateXcodeVersion>false</ValidateXcodeVersion>
+    <ApplicationTitle>AG-UI MAUI Client</ApplicationTitle>
+    <ApplicationId>com.microsoft.maui.aichat.aguiclient</ApplicationId>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+    <WindowsPackageType>None</WindowsPackageType>
+    <CodesignEntitlements Condition="$(TargetFramework.Contains('-maccatalyst'))">Platforms\MacCatalyst\Entitlements.plist</CodesignEntitlements>
+    <UserSecretsId>maui-ai-chat-agui-sample</UserSecretsId>
+    <AndroidManifest Condition="'$(Configuration)' == 'Debug'">Platforms\Android\AndroidManifest.Debug.xml</AndroidManifest>
+    <!-- Avoid merging architecture-specific signatures and static web assets into a universal app. -->
+    <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst'))">maccatalyst-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst')) and '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'arm64'">maccatalyst-arm64</RuntimeIdentifier>
+    <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Remove="Configuration\**" />
+    <None Remove="Configuration\**" />
+    <EmbeddedResource Include="Configuration\**" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="AGUI.Client" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\AIChat.Sample.Shared\AIChat.Sample.Shared.csproj" />
+    <ProjectReference Include="..\AIChat.ClientServer.Sample.Shared\AIChat.ClientServer.Sample.Shared.csproj" />
+    <ProjectReference Include="..\..\..\src\AIExtensions\Microsoft.Maui.AI.Chat.Controls\Microsoft.Maui.AI.Chat.Controls.csproj" />
+    <ProjectReference Include="..\..\..\src\AIExtensions\Microsoft.Maui.AI.Chat.Controls.Blazor\Microsoft.Maui.AI.Chat.Controls.Blazor.csproj" />
+    <ProjectReference Include="..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj" Condition="'$(Configuration)' == 'Debug'" />
+    <ProjectReference Include="..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Blazor\Microsoft.Maui.DevFlow.Blazor.csproj" Condition="'$(Configuration)' == 'Debug'" />
+  </ItemGroup>
+  <!-- Single-project defaults reassign the manifest during evaluation, so apply the Debug override at packaging time too. -->
+  <Target Name="UseDebugAndroidManifest" BeforeTargets="_GetAndroidPackageName"
+          Condition="'$(Configuration)' == 'Debug' and '$(TargetFramework)' == 'net10.0-android'">
+    <PropertyGroup>
+      <AndroidManifest>Platforms\Android\AndroidManifest.Debug.xml</AndroidManifest>
+    </PropertyGroup>
+  </Target>
+</Project>

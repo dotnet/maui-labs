@@ -12,7 +12,7 @@ public sealed class GardenStickerContent : MessageContent
         Description = string.IsNullOrWhiteSpace(description)
             ? throw new ArgumentException("A sticker description is required.", nameof(description))
             : description;
-        Presentation = ChatContentPresentation.Bare;
+        Presentation = Microsoft.Maui.Chat.ChatContentPresentation.Bare;
     }
 
     public string Glyph { get; }

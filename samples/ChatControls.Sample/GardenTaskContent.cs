@@ -26,7 +26,7 @@ public sealed class GardenTaskContent : MessageContent
             ? throw new ArgumentException("A due time is required.", nameof(dueText))
             : dueText;
         Priority = priority;
-        Presentation = ChatContentPresentation.Bare;
+        Presentation = Microsoft.Maui.Chat.ChatContentPresentation.Bare;
     }
 
     public string Title { get; }

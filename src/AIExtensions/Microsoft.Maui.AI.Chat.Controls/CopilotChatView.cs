@@ -136,7 +136,15 @@ public class CopilotChatView : ChatView
     internal void AttachMessageListPart(MessageListView? messageList)
     {
         if (messageList is not null)
-            base.ApplyMessageListProperties(messageList);
+            ApplyMessageListProperties(messageList);
+    }
+
+    /// <inheritdoc />
+    protected override void ApplyMessageListProperties(ChatMessagesView messageList)
+    {
+        base.ApplyMessageListProperties(messageList);
+        if (messageList is MessageListView agentMessageList)
+            agentMessageList.Presentation = _agentConversation;
     }
 
     internal new void AttachSuggestionsPart(Layout? suggestionsPart) =>
