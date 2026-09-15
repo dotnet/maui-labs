@@ -254,8 +254,10 @@ public partial class VisualTreeWalker
                     return false;
             }
 
+#pragma warning disable CS0618 // Existing apps can still use ListView and its subclasses.
             var clipsChildren = view is ScrollView or ItemsView or ListView
                 || view is Microsoft.Maui.Controls.Layout { IsClippedToBounds: true };
+#pragma warning restore CS0618
             if (!ReferenceEquals(view, element) && !clipsChildren)
                 continue;
             if (ResolveWindowBounds(view) is { } bounds
