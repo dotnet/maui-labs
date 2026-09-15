@@ -1053,7 +1053,7 @@ public class ProfileCommandTests
 	[Theory]
 	[InlineData(".cmd")]
 	[InlineData(".bat")]
-	public void ConfigureDnxStartInfo_WindowsCommandWrapperUsesCommandProcessor(string extension)
+	public void ConfigureDnxStartInfo_WindowsCommandWrapperUsesDotnetExecutable(string extension)
 	{
 		var startInfo = new ProcessStartInfo
 		{
@@ -1072,17 +1072,97 @@ public class ProfileCommandTests
 			out var commandLine,
 			isWindows: true);
 
-		Assert.EndsWith("cmd.exe", startInfo.FileName, StringComparison.OrdinalIgnoreCase);
-		Assert.Equal(["/d", "/s", "/v:on", "/c"], startInfo.ArgumentList.Take(4));
+		Assert.Equal(Path.Combine(Path.GetDirectoryName(dnxPath)!, "dotnet.exe"), startInfo.FileName);
 		Assert.Equal(
-			[dnxPath, "-y", "dotnet-trace", "--", "collect", "--output", outputPath],
-			Enumerable.Range(0, 7).Select(i => startInfo.EnvironmentVariables[$"__MAUI_CLI_DNX_VALUE_{i}"]));
-		Assert.DoesNotContain(dnxPath, startInfo.ArgumentList[4]);
-		Assert.DoesNotContain(outputPath, startInfo.ArgumentList[4]);
+			["dnx", "-y", "dotnet-trace", "--", "collect", "--output", outputPath],
+			startInfo.ArgumentList);
 		Assert.True(startInfo.RedirectStandardInput);
 		Assert.True(startInfo.RedirectStandardOutput);
 		Assert.True(startInfo.RedirectStandardError);
-		Assert.Contains(dnxPath, commandLine);
+		Assert.Contains(startInfo.FileName, commandLine);
+	}
+
+	[Fact]
+	public async Task ConfigureDnxStartInfo_WindowsCommandWrapperPreservesExclamationMarksWhenExecuted()
+	{
+		if (!OperatingSystem.IsWindows())
+			return;
+
+		var tempDirectory = Path.Combine(Path.GetTempPath(), $"maui-dnx!test-{Guid.NewGuid():N}");
+		var helperProject = Path.Combine(tempDirectory, "DnxEcho.csproj");
+		var outputDirectory = Path.Combine(tempDirectory, "sdk!path");
+		Directory.CreateDirectory(tempDirectory);
+		try
+		{
+			File.WriteAllText(helperProject, """
+				<Project Sdk="Microsoft.NET.Sdk">
+				  <PropertyGroup>
+				    <OutputType>Exe</OutputType>
+				    <TargetFramework>net10.0</TargetFramework>
+				    <AssemblyName>dotnet</AssemblyName>
+				    <UseAppHost>true</UseAppHost>
+				  </PropertyGroup>
+				</Project>
+				""");
+			File.WriteAllText(
+				Path.Combine(tempDirectory, "Program.cs"),
+				"""Console.Write(System.Text.Json.JsonSerializer.Serialize(args));""");
+
+			var dotnetPath = ProcessRunner.GetCommandPath("dotnet");
+			Assert.NotNull(dotnetPath);
+			var buildStartInfo = new ProcessStartInfo(dotnetPath)
+			{
+				UseShellExecute = false,
+				RedirectStandardOutput = true,
+				RedirectStandardError = true
+			};
+			foreach (var arg in new[] { "build", helperProject, "--nologo", "--configuration", "Release", "--output", outputDirectory })
+				buildStartInfo.ArgumentList.Add(arg);
+
+			using (var buildProcess = Process.Start(buildStartInfo)!)
+			{
+				var buildOutputTask = buildProcess.StandardOutput.ReadToEndAsync();
+				var buildErrorTask = buildProcess.StandardError.ReadToEndAsync();
+				await buildProcess.WaitForExitAsync();
+				var buildOutput = await buildOutputTask;
+				var buildError = await buildErrorTask;
+				Assert.True(buildProcess.ExitCode == 0, buildOutput + buildError);
+			}
+
+			var dnxPath = Path.Combine(outputDirectory, "dnx.cmd");
+			var outputPath = Path.Combine(tempDirectory, "trace!output.nettrace");
+			File.WriteAllText(dnxPath, "@exit /b 99");
+			var startInfo = new ProcessStartInfo
+			{
+				UseShellExecute = false,
+				RedirectStandardOutput = true,
+				RedirectStandardError = true,
+				RedirectStandardInput = true
+			};
+			ProfileCommandDiagnostics.ConfigureDnxStartInfo(
+				startInfo,
+				dnxPath,
+				"dotnet-trace",
+				["collect", "--output", outputPath],
+				out _,
+				isWindows: true);
+
+			using var process = Process.Start(startInfo)!;
+			var standardOutput = await process.StandardOutput.ReadToEndAsync();
+			var standardError = await process.StandardError.ReadToEndAsync();
+			await process.WaitForExitAsync();
+
+			Assert.True(process.ExitCode == 0, standardError);
+			var actualArgs = System.Text.Json.JsonSerializer.Deserialize<string[]>(standardOutput);
+			Assert.NotNull(actualArgs);
+			Assert.Equal(
+				["dnx", "-y", "dotnet-trace", "--", "collect", "--output", outputPath],
+				actualArgs);
+		}
+		finally
+		{
+			Directory.Delete(tempDirectory, recursive: true);
+		}
 	}
 
 	[Fact]

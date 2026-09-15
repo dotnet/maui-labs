@@ -86,29 +86,18 @@ internal static class ProfileCommandDiagnostics
 		if ((isWindows ?? OperatingSystem.IsWindows())
 			&& IsCommandProcessorWrapper(dnxPath))
 		{
-			startInfo.FileName = Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe";
-			var commandValues = new[] { dnxPath }.Concat(dnxArgs).ToArray();
-			var commandVariables = new string[commandValues.Length];
-			for (var i = 0; i < commandValues.Length; i++)
-			{
-				commandVariables[i] = $"__MAUI_CLI_DNX_VALUE_{i}";
-				startInfo.EnvironmentVariables[commandVariables[i]] = commandValues[i];
-			}
-
-			// Delayed expansion occurs after cmd.exe parses quotes and metacharacters.
-			var commandProcessorLine = string.Join(" ", commandVariables.Select(name => $"\"!{name}!\""));
-			startInfo.ArgumentList.Add("/d");
-			startInfo.ArgumentList.Add("/s");
-			startInfo.ArgumentList.Add("/v:on");
-			startInfo.ArgumentList.Add("/c");
-			startInfo.ArgumentList.Add($"\"{commandProcessorLine}\"");
-		}
-		else
-		{
-			startInfo.FileName = dnxPath;
+			startInfo.FileName = Path.Combine(Path.GetDirectoryName(dnxPath)!, "dotnet.exe");
+			startInfo.ArgumentList.Add("dnx");
 			foreach (var arg in dnxArgs)
 				startInfo.ArgumentList.Add(arg);
+
+			commandLine = ProfileCommandProcessHelpers.FormatCommandLine(startInfo.FileName, ["dnx", .. dnxArgs]);
+			return;
 		}
+
+		startInfo.FileName = dnxPath;
+		foreach (var arg in dnxArgs)
+			startInfo.ArgumentList.Add(arg);
 
 		commandLine = ProfileCommandProcessHelpers.FormatCommandLine(dnxPath, dnxArgs);
 	}
