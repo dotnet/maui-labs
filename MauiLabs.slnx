@@ -11,6 +11,9 @@
     <Project Path="samples/AIChat.ClientServer.Sample/AIChat.ClientServer.Sample.AgentServer/AIChat.ClientServer.Sample.AgentServer.csproj" />
     <Project Path="samples/AIChat.ClientServer.Sample/AIChat.ClientServer.Sample.AppHost/AIChat.ClientServer.Sample.AppHost.csproj" />
     <Project Path="samples/AIChat.ClientServer.Sample/AIChat.ClientServer.Sample.Shared/AIChat.ClientServer.Sample.Shared.csproj" />
+    <Project Path="samples/AIChat.Sample.Shared/AIChat.Sample.Shared.csproj" />
+    <Project Path="samples/AIChat.Client.Sample/AIChat.Client.Sample.csproj" />
+    <Project Path="samples/AIChat.ClientServer.Sample/AIChat.ClientServer.Sample.Client/AIChat.ClientServer.Sample.Client.csproj" />
     <Project Path="samples/AIExtensions.Sample.Garden/AIExtensions.Sample.Garden.csproj" />
     <Project Path="samples/AIExtensions.Sample.Hello/AIExtensions.Sample.Hello.csproj" />
     <Project Path="samples/AIExtensions.Sample.DIParameters/AIExtensions.Sample.DIParameters.csproj" />

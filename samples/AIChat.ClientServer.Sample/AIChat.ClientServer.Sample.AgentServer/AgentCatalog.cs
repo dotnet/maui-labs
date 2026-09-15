@@ -76,7 +76,8 @@ public sealed class AgentCatalog(IChatClient chatClient, IChatClient reasoningCh
         ChatOptions = new ChatOptions
         {
             Instructions = "Preserve the inbound document state. Call propose_document with a complete document proposal for edits.",
-            Tools = [AIFunctionFactory.Create(ProposeDocument, "propose_document", "Propose a complete document.", SampleSerializerContext.Default.Options)]
+            Tools = [AIFunctionFactory.Create(ProposeDocument, "propose_document", "Propose a complete document.", SampleSerializerContext.Default.Options)],
+            AllowMultipleToolCalls = PredictiveToolCallPolicy.ForServerDocument()
         }
     });
 
@@ -121,7 +122,8 @@ public sealed class AgentCatalog(IChatClient chatClient, IChatClient reasoningCh
     private static List<JsonPatchOperation> UpdatePlanStep(int index, PlanStepStatus status) =>
         [new() { Op = "replace", Path = $"/steps/{index}/status", Value = status.ToString().ToLowerInvariant() }];
     private static RecipeResponse GenerateRecipe(Recipe recipe) => new() { Recipe = recipe };
-    private static DocumentProposal ProposeDocument(DocumentState document) => new() { Document = document };
+    private static DocumentProposal ProposeDocument(DocumentProposal proposal, bool? accepted = null) =>
+        new() { Document = proposal.Document, Accepted = accepted };
     private static string GetBalance() => "$1,250.00";
     private static string Transfer(string toAccount, decimal amount) => $"Transferred {amount:C} to {toAccount}.";
 }

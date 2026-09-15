@@ -39,7 +39,9 @@ thread.
 | [`AIExtensions.Sample.Hello`](../../samples/AIExtensions.Sample.Hello/) | Minimal end-to-end usage |
 | [`AIExtensions.Sample.DIParameters`](../../samples/AIExtensions.Sample.DIParameters/) | DI parameter binding with `[FromServices]` |
 | [`ChatControls.Sample`](../../samples/ChatControls.Sample/) | One provider-neutral conversation rendered side-by-side through native XAML and Blazor Hybrid chat surfaces, with participants, delivery states, typing, media, attachments, custom content, and theme overrides |
-| [`AIExtensions.Sample.Garden`](../../samples/AIExtensions.Sample.Garden/) | Full MAUI AI chat app: Azure OpenAI, custom product/order blocks, generated `[ToolBlock]`, approvals, UI state, attachments, rich text, image generation, raw-block preview, and template switching |
+| [`AIExtensions.Sample.Garden`](../../samples/AIExtensions.Sample.Garden/) | Full MAUI AI chat app: Azure OpenAI, custom product/order blocks, generated `[ToolBlock]`, approvals, UI state, attachments, image generation, raw-block preview, and template switching |
+| [`AIChat.Client.Sample`](../../samples/AIChat.Client.Sample/) | Direct Azure OpenAI MAUI Razor client with strict record/replay modes and one shared native/Blazor session |
+| [`AIChat.ClientServer.Sample`](../../samples/AIChat.ClientServer.Sample/) | AG-UI server plus MAUI Razor client covering all server scenarios and typed state |
 | [`AIExtensions.Sample.ChatPlayground`](../../samples/AIExtensions.Sample.ChatPlayground/) | Azure/Apple `IChatClient` requests, images and tools, automatic recording, and offline replay with portable tests |
 
 ## CI

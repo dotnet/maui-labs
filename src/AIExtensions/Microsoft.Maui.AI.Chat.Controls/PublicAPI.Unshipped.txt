@@ -41,6 +41,7 @@ Microsoft.Maui.AI.Chat.Controls.CopilotChatView
 Microsoft.Maui.AI.Chat.Controls.CopilotChatView.AssistantDisplayName.get -> string!
 Microsoft.Maui.AI.Chat.Controls.CopilotChatView.AssistantDisplayName.set -> void
 Microsoft.Maui.AI.Chat.Controls.CopilotChatView.CopilotChatView() -> void
+override Microsoft.Maui.AI.Chat.Controls.CopilotChatView.ApplyMessageListProperties(Microsoft.Maui.Chat.Controls.ChatMessagesView! messageList) -> void
 static readonly Microsoft.Maui.AI.Chat.Controls.CopilotChatView.PresentationProperty -> Microsoft.Maui.Controls.BindableProperty!
 Microsoft.Maui.AI.Chat.Controls.CopilotChatView.Presentation.get -> Microsoft.Maui.AI.Chat.Presentation.AgentChatPresentation?
 Microsoft.Maui.AI.Chat.Controls.CopilotChatView.Presentation.set -> void

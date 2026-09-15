@@ -196,7 +196,7 @@ public class ChatAppearance : BindableObject
         set => SetValue(OutgoingTextColorProperty, value);
     }
 
-    /// <summary>Formats a timestamp with <see cref="TimestampFormat"/> using the current culture.</summary>
+    /// <summary>Formats a timestamp in local time with <see cref="TimestampFormat"/> using the current culture.</summary>
     /// <param name="timestamp">The value to format.</param>
     /// <returns>The formatted timestamp, or an empty string when <see cref="ShowTimestamps"/> is <see langword="false"/>.</returns>
     public string FormatTimestamp(DateTimeOffset timestamp)
@@ -204,9 +204,10 @@ public class ChatAppearance : BindableObject
         if (!ShowTimestamps)
             return string.Empty;
 
+        var local = timestamp.ToLocalTime();
         var format = TimestampFormat;
         return string.IsNullOrEmpty(format)
-            ? timestamp.ToString(System.Globalization.CultureInfo.CurrentCulture)
-            : timestamp.ToString(format, System.Globalization.CultureInfo.CurrentCulture);
+            ? local.ToString(System.Globalization.CultureInfo.CurrentCulture)
+            : local.ToString(format, System.Globalization.CultureInfo.CurrentCulture);
     }
 }
