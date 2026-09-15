@@ -16,18 +16,25 @@ public class RecordingLoaderTests
     public void Load_DeserializesExpectedTurnCount(string fileName, int expectedTurns)
     {
         var turns = RecordingLoader.Load(fileName);
-        Assert.Equal(expectedTurns, turns.Count);
-        Assert.All(turns, turn => Assert.NotEmpty(turn));
+        Assert.Equal(expectedTurns, turns.Interactions.Count);
+        Assert.All(
+            turns.Interactions,
+            interaction => Assert.NotEmpty(interaction.Updates));
     }
 
     [Fact]
-    public void CreateReplayClient_YieldsTurnsInOrder()
+    public async Task CreateReplayClient_YieldsTurnsInOrder()
     {
         var client = RecordingLoader.CreateReplayClient(
             "Step01_GettingStartedTest.PostRun_MultiTurn_SynthesizesAssistantMessages.recording.json");
 
-        var enumerator = client.GetStreamingResponseAsync(
-            [new ChatMessage(ChatRole.User, "test")]).GetAsyncEnumerator();
-        Assert.NotNull(enumerator);
+        var first = await client.GetStreamingResponseAsync(
+            [new ChatMessage(ChatRole.User, "test")]).ToListAsync();
+        var second = await client.GetStreamingResponseAsync(
+            [new ChatMessage(ChatRole.User, "test again")]).ToListAsync();
+
+        Assert.NotEmpty(first);
+        Assert.NotEmpty(second);
+        client.Session.AssertFullyReplayed();
     }
 }

@@ -1,313 +1,604 @@
-[
-  [
+{
+  "format": "maui-ai-chat-recording",
+  "schemaVersion": 1,
+  "metadata": {
+    "meaiVersion": "10.7.0.0",
+    "pipelineBoundary": "legacy-ordinal",
+    "sanitizerProfile": "legacy-import-v1"
+  },
+  "interactions": [
     {
-      "contents": [],
-      "responseId": "",
-      "messageId": "",
-      "createdAt": "1970-01-01T00:00:00+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [],
-      "responseId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
-      "messageId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
-      "createdAt": "2026-03-30T16:23:25+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [],
-      "responseId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
-      "messageId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
-      "createdAt": "2026-03-30T16:23:25+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [],
-      "responseId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
-      "messageId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
-      "createdAt": "2026-03-30T16:23:25+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [],
-      "responseId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
-      "messageId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
-      "createdAt": "2026-03-30T16:23:25+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [],
-      "responseId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
-      "messageId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
-      "createdAt": "2026-03-30T16:23:25+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [],
-      "responseId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
-      "messageId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
-      "createdAt": "2026-03-30T16:23:25+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [],
-      "responseId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
-      "messageId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
-      "createdAt": "2026-03-30T16:23:25+00:00",
-      "finishReason": "tool_calls",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
+      "sequence": 0,
+      "name": "legacy-0",
+      "request": {
+        "legacy": true
+      },
+      "updates": [
         {
-          "$type": "usage",
-          "details": {
-            "inputTokenCount": 137,
-            "outputTokenCount": 24,
-            "totalTokenCount": 161,
-            "cachedInputTokenCount": 0,
-            "reasoningTokenCount": 0,
-            "additionalCounts": {
-              "InputTokenDetails.AudioTokenCount": 0,
-              "OutputTokenDetails.AudioTokenCount": 0,
-              "OutputTokenDetails.AcceptedPredictionTokenCount": 0,
-              "OutputTokenDetails.RejectedPredictionTokenCount": 0
-            }
-          }
-        }
-      ],
-      "responseId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
-      "messageId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
-      "createdAt": "2026-03-30T16:23:25+00:00",
-      "finishReason": "tool_calls",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "functionCall",
-          "name": "GetWeather",
-          "arguments": {
-            "city": "Seattle"
+          "sequence": 0,
+          "value": {
+            "authorName": null,
+            "role": null,
+            "responseId": "",
+            "messageId": "",
+            "conversationId": null,
+            "createdAt": "1970-01-01T00:00:00.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
           },
-          "informationalOnly": false,
-          "callId": "call_nopXKO9quzfBylxH4lD0N5Sv"
+          "delayMs": null
+        },
+        {
+          "sequence": 1,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
+            "messageId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:25.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 2,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
+            "messageId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:25.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 3,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
+            "messageId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:25.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 4,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
+            "messageId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:25.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 5,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
+            "messageId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:25.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 6,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
+            "messageId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:25.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 7,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
+            "messageId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:25.0000000+00:00",
+            "finishReason": "tool_calls",
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 8,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
+            "messageId": "chatcmpl-DP9gb2AOOy5yHyzcH2y4p1MZDGaV1",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:25.0000000+00:00",
+            "finishReason": "tool_calls",
+            "modelId": "",
+            "contents": [
+              {
+                "type": "usage",
+                "details": {
+                  "InputTokenCount": 137,
+                  "OutputTokenCount": 24,
+                  "TotalTokenCount": 161,
+                  "CachedInputTokenCount": 0,
+                  "ReasoningTokenCount": 0,
+                  "inputAudioTokenCount": null,
+                  "inputTextTokenCount": null,
+                  "outputAudioTokenCount": null,
+                  "outputTextTokenCount": null,
+                  "AdditionalCounts": {
+                    "InputTokenDetails.AudioTokenCount": 0,
+                    "OutputTokenDetails.AudioTokenCount": 0,
+                    "OutputTokenDetails.AcceptedPredictionTokenCount": 0,
+                    "OutputTokenDetails.RejectedPredictionTokenCount": 0
+                  }
+                }
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 9,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "",
+            "messageId": "",
+            "conversationId": null,
+            "createdAt": "1970-01-01T00:00:00.0000000+00:00",
+            "finishReason": "tool_calls",
+            "modelId": "",
+            "contents": [
+              {
+                "type": "functionCall",
+                "callId": "call_nopXKO9quzfBylxH4lD0N5Sv",
+                "name": "GetWeather",
+                "arguments": {
+                  "city": "Seattle"
+                },
+                "informationalOnly": false
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
         }
       ],
-      "responseId": "",
-      "messageId": "",
-      "createdAt": "1970-01-01T00:00:00+00:00",
-      "finishReason": "tool_calls",
-      "modelId": ""
+      "outcome": "completed",
+      "errorType": null,
+      "errorMessage": null,
+      "legacy": true
+    },
+    {
+      "sequence": 1,
+      "name": "legacy-1",
+      "request": {
+        "legacy": true
+      },
+      "updates": [
+        {
+          "sequence": 0,
+          "value": {
+            "authorName": null,
+            "role": null,
+            "responseId": "",
+            "messageId": "",
+            "conversationId": null,
+            "createdAt": "1970-01-01T00:00:00.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 1,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:27.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 2,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:27.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "The"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 3,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:27.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " weather"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 4,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:27.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " in"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 5,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:27.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " Seattle"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 6,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:27.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " is"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 7,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:27.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " "
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 8,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:27.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "72"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 9,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:27.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "°F"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 10,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:27.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " and"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 11,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:27.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " sunny"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 12,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:27.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "."
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 13,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:27.0000000+00:00",
+            "finishReason": "stop",
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 14,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:27.0000000+00:00",
+            "finishReason": "stop",
+            "modelId": "",
+            "contents": [
+              {
+                "type": "usage",
+                "details": {
+                  "InputTokenCount": 176,
+                  "OutputTokenCount": 15,
+                  "TotalTokenCount": 191,
+                  "CachedInputTokenCount": 0,
+                  "ReasoningTokenCount": 0,
+                  "inputAudioTokenCount": null,
+                  "inputTextTokenCount": null,
+                  "outputAudioTokenCount": null,
+                  "outputTextTokenCount": null,
+                  "AdditionalCounts": {
+                    "InputTokenDetails.AudioTokenCount": 0,
+                    "OutputTokenDetails.AudioTokenCount": 0,
+                    "OutputTokenDetails.AcceptedPredictionTokenCount": 0,
+                    "OutputTokenDetails.RejectedPredictionTokenCount": 0
+                  }
+                }
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        }
+      ],
+      "outcome": "completed",
+      "errorType": null,
+      "errorMessage": null,
+      "legacy": true
     }
   ],
-  [
-    {
-      "contents": [],
-      "responseId": "",
-      "messageId": "",
-      "createdAt": "1970-01-01T00:00:00+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "text",
-          "text": ""
-        }
-      ],
-      "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "createdAt": "2026-03-30T16:23:27+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "text",
-          "text": "The"
-        }
-      ],
-      "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "createdAt": "2026-03-30T16:23:27+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "text",
-          "text": " weather"
-        }
-      ],
-      "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "createdAt": "2026-03-30T16:23:27+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "text",
-          "text": " in"
-        }
-      ],
-      "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "createdAt": "2026-03-30T16:23:27+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "text",
-          "text": " Seattle"
-        }
-      ],
-      "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "createdAt": "2026-03-30T16:23:27+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "text",
-          "text": " is"
-        }
-      ],
-      "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "createdAt": "2026-03-30T16:23:27+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "text",
-          "text": " "
-        }
-      ],
-      "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "createdAt": "2026-03-30T16:23:27+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "text",
-          "text": "72"
-        }
-      ],
-      "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "createdAt": "2026-03-30T16:23:27+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "text",
-          "text": "°F"
-        }
-      ],
-      "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "createdAt": "2026-03-30T16:23:27+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "text",
-          "text": " and"
-        }
-      ],
-      "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "createdAt": "2026-03-30T16:23:27+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "text",
-          "text": " sunny"
-        }
-      ],
-      "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "createdAt": "2026-03-30T16:23:27+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "text",
-          "text": "."
-        }
-      ],
-      "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "createdAt": "2026-03-30T16:23:27+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [],
-      "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "createdAt": "2026-03-30T16:23:27+00:00",
-      "finishReason": "stop",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "usage",
-          "details": {
-            "inputTokenCount": 176,
-            "outputTokenCount": 15,
-            "totalTokenCount": 191,
-            "cachedInputTokenCount": 0,
-            "reasoningTokenCount": 0,
-            "additionalCounts": {
-              "InputTokenDetails.AudioTokenCount": 0,
-              "OutputTokenDetails.AudioTokenCount": 0,
-              "OutputTokenDetails.AcceptedPredictionTokenCount": 0,
-              "OutputTokenDetails.RejectedPredictionTokenCount": 0
-            }
-          }
-        }
-      ],
-      "responseId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "messageId": "chatcmpl-DP9gdtsHbb86rkonYf3UguwPiAixX",
-      "createdAt": "2026-03-30T16:23:27+00:00",
-      "finishReason": "stop",
-      "modelId": ""
-    }
-  ]
-]
+  "manifest": {
+    "redacted": 0,
+    "rejected": 0,
+    "legacyImport": true
+  }
+}

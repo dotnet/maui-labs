@@ -1,281 +1,552 @@
-[
-  [
+{
+  "format": "maui-ai-chat-recording",
+  "schemaVersion": 1,
+  "metadata": {
+    "meaiVersion": "10.7.0.0",
+    "pipelineBoundary": "legacy-ordinal",
+    "sanitizerProfile": "legacy-import-v1"
+  },
+  "interactions": [
     {
-      "contents": [],
-      "responseId": "",
-      "messageId": "",
-      "createdAt": "1970-01-01T00:00:00+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [],
-      "responseId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
-      "messageId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
-      "createdAt": "2026-03-30T16:23:36+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [],
-      "responseId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
-      "messageId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
-      "createdAt": "2026-03-30T16:23:36+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [],
-      "responseId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
-      "messageId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
-      "createdAt": "2026-03-30T16:23:36+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [],
-      "responseId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
-      "messageId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
-      "createdAt": "2026-03-30T16:23:36+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [],
-      "responseId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
-      "messageId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
-      "createdAt": "2026-03-30T16:23:36+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [],
-      "responseId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
-      "messageId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
-      "createdAt": "2026-03-30T16:23:36+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [],
-      "responseId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
-      "messageId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
-      "createdAt": "2026-03-30T16:23:36+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [],
-      "responseId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
-      "messageId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
-      "createdAt": "2026-03-30T16:23:36+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [],
-      "responseId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
-      "messageId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
-      "createdAt": "2026-03-30T16:23:36+00:00",
-      "finishReason": "tool_calls",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
+      "sequence": 0,
+      "name": "legacy-0",
+      "request": {
+        "legacy": true
+      },
+      "updates": [
         {
-          "$type": "usage",
-          "details": {
-            "inputTokenCount": 138,
-            "outputTokenCount": 90,
-            "totalTokenCount": 228,
-            "cachedInputTokenCount": 0,
-            "reasoningTokenCount": 64,
-            "additionalCounts": {
-              "InputTokenDetails.AudioTokenCount": 0,
-              "OutputTokenDetails.AudioTokenCount": 0,
-              "OutputTokenDetails.AcceptedPredictionTokenCount": 0,
-              "OutputTokenDetails.RejectedPredictionTokenCount": 0
-            }
-          }
-        }
-      ],
-      "responseId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
-      "messageId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
-      "createdAt": "2026-03-30T16:23:36+00:00",
-      "finishReason": "tool_calls",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "toolApprovalRequest",
-          "toolCall": {
-            "$type": "functionCall",
-            "name": "DeleteFile",
-            "arguments": {
-              "fileName": "test.txt"
-            },
-            "informationalOnly": false,
-            "callId": "call_K2gGVaWM6bo9vVD5ncDAMlEl"
+          "sequence": 0,
+          "value": {
+            "authorName": null,
+            "role": null,
+            "responseId": "",
+            "messageId": "",
+            "conversationId": null,
+            "createdAt": "1970-01-01T00:00:00.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
           },
-          "requestId": "ficc_call_K2gGVaWM6bo9vVD5ncDAMlEl"
+          "delayMs": null
+        },
+        {
+          "sequence": 1,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
+            "messageId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:36.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 2,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
+            "messageId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:36.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 3,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
+            "messageId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:36.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 4,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
+            "messageId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:36.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 5,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
+            "messageId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:36.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 6,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
+            "messageId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:36.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 7,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
+            "messageId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:36.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 8,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
+            "messageId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:36.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 9,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
+            "messageId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:36.0000000+00:00",
+            "finishReason": "tool_calls",
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 10,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
+            "messageId": "chatcmpl-DP9gmCztP9RTJdetFqkdXyBuRpM2l",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:36.0000000+00:00",
+            "finishReason": "tool_calls",
+            "modelId": "",
+            "contents": [
+              {
+                "type": "usage",
+                "details": {
+                  "InputTokenCount": 138,
+                  "OutputTokenCount": 90,
+                  "TotalTokenCount": 228,
+                  "CachedInputTokenCount": 0,
+                  "ReasoningTokenCount": 64,
+                  "inputAudioTokenCount": null,
+                  "inputTextTokenCount": null,
+                  "outputAudioTokenCount": null,
+                  "outputTextTokenCount": null,
+                  "AdditionalCounts": {
+                    "InputTokenDetails.AudioTokenCount": 0,
+                    "OutputTokenDetails.AudioTokenCount": 0,
+                    "OutputTokenDetails.AcceptedPredictionTokenCount": 0,
+                    "OutputTokenDetails.RejectedPredictionTokenCount": 0
+                  }
+                }
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 11,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "",
+            "messageId": "",
+            "conversationId": null,
+            "createdAt": "1970-01-01T00:00:00.0000000+00:00",
+            "finishReason": "tool_calls",
+            "modelId": "",
+            "contents": [
+              {
+                "type": "toolApprovalRequest",
+                "requestId": "ficc_call_K2gGVaWM6bo9vVD5ncDAMlEl",
+                "toolCall": {
+                  "type": "functionCall",
+                  "callId": "call_K2gGVaWM6bo9vVD5ncDAMlEl",
+                  "name": "DeleteFile",
+                  "arguments": {
+                    "fileName": "test.txt"
+                  },
+                  "informationalOnly": false
+                }
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
         }
       ],
-      "responseId": "",
-      "messageId": "",
-      "createdAt": "1970-01-01T00:00:00+00:00",
-      "finishReason": "tool_calls",
-      "modelId": ""
+      "outcome": "completed",
+      "errorType": null,
+      "errorMessage": null,
+      "legacy": true
+    },
+    {
+      "sequence": 1,
+      "name": "legacy-1",
+      "request": {
+        "legacy": true
+      },
+      "updates": [
+        {
+          "sequence": 0,
+          "value": {
+            "authorName": null,
+            "role": null,
+            "responseId": "",
+            "messageId": "",
+            "conversationId": null,
+            "createdAt": "1970-01-01T00:00:00.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 1,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
+            "messageId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:39.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 2,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
+            "messageId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:39.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "Done"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 3,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
+            "messageId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:39.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " —"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 4,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
+            "messageId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:39.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " I"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 5,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
+            "messageId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:39.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " deleted"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 6,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
+            "messageId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:39.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": " test"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 7,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
+            "messageId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:39.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": ".txt"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 8,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
+            "messageId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:39.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "."
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 9,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
+            "messageId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:39.0000000+00:00",
+            "finishReason": "stop",
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 10,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
+            "messageId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:39.0000000+00:00",
+            "finishReason": "stop",
+            "modelId": "",
+            "contents": [
+              {
+                "type": "usage",
+                "details": {
+                  "InputTokenCount": 178,
+                  "OutputTokenCount": 11,
+                  "TotalTokenCount": 189,
+                  "CachedInputTokenCount": 0,
+                  "ReasoningTokenCount": 0,
+                  "inputAudioTokenCount": null,
+                  "inputTextTokenCount": null,
+                  "outputAudioTokenCount": null,
+                  "outputTextTokenCount": null,
+                  "AdditionalCounts": {
+                    "InputTokenDetails.AudioTokenCount": 0,
+                    "OutputTokenDetails.AudioTokenCount": 0,
+                    "OutputTokenDetails.AcceptedPredictionTokenCount": 0,
+                    "OutputTokenDetails.RejectedPredictionTokenCount": 0
+                  }
+                }
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        }
+      ],
+      "outcome": "completed",
+      "errorType": null,
+      "errorMessage": null,
+      "legacy": true
     }
   ],
-  [
-    {
-      "contents": [],
-      "responseId": "",
-      "messageId": "",
-      "createdAt": "1970-01-01T00:00:00+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "text",
-          "text": ""
-        }
-      ],
-      "responseId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
-      "messageId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
-      "createdAt": "2026-03-30T16:23:39+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "text",
-          "text": "Done"
-        }
-      ],
-      "responseId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
-      "messageId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
-      "createdAt": "2026-03-30T16:23:39+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "text",
-          "text": " —"
-        }
-      ],
-      "responseId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
-      "messageId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
-      "createdAt": "2026-03-30T16:23:39+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "text",
-          "text": " I"
-        }
-      ],
-      "responseId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
-      "messageId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
-      "createdAt": "2026-03-30T16:23:39+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "text",
-          "text": " deleted"
-        }
-      ],
-      "responseId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
-      "messageId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
-      "createdAt": "2026-03-30T16:23:39+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "text",
-          "text": " test"
-        }
-      ],
-      "responseId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
-      "messageId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
-      "createdAt": "2026-03-30T16:23:39+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "text",
-          "text": ".txt"
-        }
-      ],
-      "responseId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
-      "messageId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
-      "createdAt": "2026-03-30T16:23:39+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "text",
-          "text": "."
-        }
-      ],
-      "responseId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
-      "messageId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
-      "createdAt": "2026-03-30T16:23:39+00:00",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [],
-      "responseId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
-      "messageId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
-      "createdAt": "2026-03-30T16:23:39+00:00",
-      "finishReason": "stop",
-      "modelId": ""
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "usage",
-          "details": {
-            "inputTokenCount": 178,
-            "outputTokenCount": 11,
-            "totalTokenCount": 189,
-            "cachedInputTokenCount": 0,
-            "reasoningTokenCount": 0,
-            "additionalCounts": {
-              "InputTokenDetails.AudioTokenCount": 0,
-              "OutputTokenDetails.AudioTokenCount": 0,
-              "OutputTokenDetails.AcceptedPredictionTokenCount": 0,
-              "OutputTokenDetails.RejectedPredictionTokenCount": 0
-            }
-          }
-        }
-      ],
-      "responseId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
-      "messageId": "chatcmpl-DP9gpaYj7kLUNvousC32jpxgcVxic",
-      "createdAt": "2026-03-30T16:23:39+00:00",
-      "finishReason": "stop",
-      "modelId": ""
-    }
-  ]
-]
+  "manifest": {
+    "redacted": 0,
+    "rejected": 0,
+    "legacyImport": true
+  }
+}

@@ -141,7 +141,12 @@ public sealed class ChatRecordingSession
 
 public static class ChatRecordingStore
 {
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, PropertyNameCaseInsensitive = true };
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
 
     public static ChatRecording Load(string path)
     {
@@ -206,12 +211,34 @@ public static class ChatRecordingStore
     private static ChatRecording LoadLegacy(JsonArray arrays)
     {
         var recording = new ChatRecording();
+        recording.Metadata["pipelineBoundary"] = "legacy-ordinal";
+        recording.Metadata["sanitizerProfile"] = "legacy-import-v1";
+        recording.Manifest["legacyImport"] = true;
+        var conversionOptions = new ChatRecordingOptions
+        {
+            Mode = ChatRecordingMode.Replay,
+            Recording = recording,
+            StrictSanitizer = false,
+        };
         foreach (var item in arrays)
         {
             var interaction = new RecordedChatInteraction { Sequence = recording.Interactions.Count, Legacy = true, Name = $"legacy-{recording.Interactions.Count}", Request = new JsonObject { ["legacy"] = true } };
             if (item is JsonArray updates)
+            {
                 foreach (var update in updates)
-                    interaction.Updates.Add(new RecordedChatUpdate { Sequence = interaction.Updates.Count, Value = update?.AsObject() ?? new JsonObject() });
+                {
+                    var legacyUpdate = update?.Deserialize<ChatResponseUpdate>(
+                        AIJsonUtilities.DefaultOptions)
+                        ?? new ChatResponseUpdate();
+                    interaction.Updates.Add(new RecordedChatUpdate
+                    {
+                        Sequence = interaction.Updates.Count,
+                        Value = ChatRecordingJson.Update(
+                            legacyUpdate,
+                            conversionOptions),
+                    });
+                }
+            }
             recording.Interactions.Add(interaction);
         }
         return recording;
