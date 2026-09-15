@@ -8,6 +8,7 @@ using System.Net.Sockets;
 using Microsoft.Maui.Cli.Commands;
 using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
+using Microsoft.Maui.Cli.Output;
 using Microsoft.Maui.Cli.Utils;
 using Xunit;
 
@@ -51,9 +52,283 @@ public class ProfileCommandTests
 		Assert.Contains(startup.Options, o => o.Name == "--trace-profile");
 		Assert.Contains(startup.Options, o => o.Name == "--no-build");
 		Assert.Contains(startup.Options, o => o.Name == "--diagnostic-port");
+		Assert.Contains(startup.Options, o => o.Name == "--trace-stop-timeout");
 		Assert.Contains(startup.Options, o => o.Name == "--stopping-event-provider-name");
 		Assert.Contains(startup.Options, o => o.Name == "--stopping-event-event-name");
 		Assert.Contains(startup.Options, o => o.Name == "--stopping-event-payload-filter");
+	}
+
+	[Fact]
+	public void ProfileCommand_DefaultTraceStopTimeoutIsTwoMinutes()
+	{
+		var command = ProfileCommand.Create();
+		var startup = command.Subcommands.Single(c => c.Name == "startup");
+		var timeoutOption = (Option<TimeSpan>)startup.Options.First(o => o.Name == "--trace-stop-timeout");
+		var parseResult = command.Parse("profile startup");
+
+		Assert.Equal(TimeSpan.FromMinutes(2), parseResult.GetValue(timeoutOption));
+	}
+
+	[Fact]
+	public void ProfileCommand_ParsesExplicitTraceStopTimeout()
+	{
+		var command = ProfileCommand.Create();
+		var startup = command.Subcommands.Single(c => c.Name == "startup");
+		var timeoutOption = (Option<TimeSpan>)startup.Options.First(o => o.Name == "--trace-stop-timeout");
+		var parseResult = command.Parse("profile startup --trace-stop-timeout 00:05:00");
+
+		Assert.Equal(TimeSpan.FromMinutes(5), parseResult.GetValue(timeoutOption));
+	}
+
+	[Fact]
+	public void ProfileCommand_ManualSubcommandHasTraceStopTimeout()
+	{
+		var manual = ProfileCommand.Create().Subcommands.Single(c => c.Name == "manual");
+
+		Assert.Contains(manual.Options, o => o.Name == "--trace-stop-timeout");
+	}
+
+	[Fact]
+	public void ValidateTraceStopTimeout_RejectsNonPositiveValues()
+	{
+		Assert.Throws<MauiToolException>(() => ProfileCommand.ValidateTraceStopTimeout(TimeSpan.Zero));
+		Assert.Throws<MauiToolException>(() => ProfileCommand.ValidateTraceStopTimeout(TimeSpan.FromSeconds(-1)));
+		ProfileCommand.ValidateTraceStopTimeout(TimeSpan.FromSeconds(1));
+	}
+
+	[Fact]
+	public async Task StopAndWaitForFinalizationAsync_TimesOutWithCollectorOutput()
+	{
+		var startInfo = new ProcessStartInfo
+		{
+			FileName = OperatingSystem.IsWindows() ? "ping.exe" : "/bin/sh",
+			UseShellExecute = false,
+			RedirectStandardInput = true,
+			RedirectStandardOutput = true,
+			RedirectStandardError = true,
+			CreateNoWindow = true
+		};
+		if (OperatingSystem.IsWindows())
+		{
+			startInfo.ArgumentList.Add("127.0.0.1");
+			startInfo.ArgumentList.Add("-n");
+			startInfo.ArgumentList.Add("30");
+		}
+		else
+		{
+			startInfo.ArgumentList.Add("-c");
+			startInfo.ArgumentList.Add("echo 127.0.0.1; exec sleep 30");
+		}
+
+		using var process = Process.Start(startInfo)!;
+		using var monitoredProcess = MonitoredProcess.Attach(
+			process,
+			new JsonOutputFormatter(TextWriter.Null),
+			useJson: true,
+			verbose: false,
+			"trace",
+			CancellationToken.None);
+		try
+		{
+			for (var attempt = 0; attempt < 100 && monitoredProcess.StandardOutput.Length == 0; attempt++)
+				await Task.Delay(10);
+
+			var exception = await Assert.ThrowsAsync<MauiToolException>(() =>
+				ProfileTraceLifecycle.StopAndWaitForFinalizationAsync(
+					monitoredProcess,
+					monitoredProcess.WaitForExitAsync(),
+					Task.CompletedTask,
+					TimeSpan.FromMilliseconds(50),
+					new JsonOutputFormatter(TextWriter.Null),
+					useJson: true,
+					verbose: false,
+					traceStopInterruptDelay: TimeSpan.FromMilliseconds(10)));
+
+			Assert.Contains("did not exit within", exception.Message, StringComparison.Ordinal);
+			Assert.Contains("127.0.0.1", exception.NativeError, StringComparison.Ordinal);
+		}
+		finally
+		{
+			if (!process.HasExited)
+				process.Kill(entireProcessTree: true);
+			await process.WaitForExitAsync();
+		}
+	}
+
+	[Fact]
+	public async Task StopAndWaitForFinalizationAsync_ReturnsWhenCollectorExitsBeforeInterruptDelay()
+	{
+		var startInfo = new ProcessStartInfo
+		{
+			FileName = OperatingSystem.IsWindows() ? "powershell.exe" : "/bin/sh",
+			UseShellExecute = false,
+			RedirectStandardInput = true,
+			RedirectStandardOutput = true,
+			RedirectStandardError = true,
+			CreateNoWindow = true
+		};
+		if (OperatingSystem.IsWindows())
+		{
+			startInfo.ArgumentList.Add("-NoProfile");
+			startInfo.ArgumentList.Add("-Command");
+			startInfo.ArgumentList.Add("Start-Sleep -Milliseconds 100");
+		}
+		else
+		{
+			startInfo.ArgumentList.Add("-c");
+			startInfo.ArgumentList.Add("exec sleep 0.1");
+		}
+
+		using var process = Process.Start(startInfo)!;
+		using var monitoredProcess = MonitoredProcess.Attach(
+			process,
+			new JsonOutputFormatter(TextWriter.Null),
+			useJson: true,
+			verbose: false,
+			"trace",
+			CancellationToken.None);
+
+		await ProfileTraceLifecycle.StopAndWaitForFinalizationAsync(
+			monitoredProcess,
+			monitoredProcess.WaitForExitAsync(),
+			Task.Delay(Timeout.InfiniteTimeSpan),
+			TimeSpan.FromSeconds(2),
+			new JsonOutputFormatter(TextWriter.Null),
+			useJson: true,
+			verbose: false,
+			traceStopInterruptDelay: TimeSpan.FromSeconds(1));
+
+		Assert.True(process.HasExited);
+	}
+
+	[Fact]
+	public async Task StopAndWaitForFinalizationAsync_AcknowledgedRundownGetsFullTimeoutWithoutInterrupt()
+	{
+		var startInfo = new ProcessStartInfo
+		{
+			FileName = OperatingSystem.IsWindows() ? "powershell.exe" : "/bin/sh",
+			UseShellExecute = false,
+			RedirectStandardInput = true,
+			RedirectStandardOutput = true,
+			RedirectStandardError = true,
+			CreateNoWindow = true
+		};
+		if (OperatingSystem.IsWindows())
+		{
+			startInfo.ArgumentList.Add("-NoProfile");
+			startInfo.ArgumentList.Add("-Command");
+			startInfo.ArgumentList.Add("Start-Sleep -Milliseconds 200");
+		}
+		else
+		{
+			startInfo.ArgumentList.Add("-c");
+			startInfo.ArgumentList.Add("exec sleep 0.2");
+		}
+
+		using var process = Process.Start(startInfo)!;
+		using var monitoredProcess = MonitoredProcess.Attach(
+			process,
+			new JsonOutputFormatter(TextWriter.Null),
+			useJson: true,
+			verbose: false,
+			"trace",
+			CancellationToken.None);
+		var finalizationStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+		_ = Task.Run(async () =>
+		{
+			await Task.Delay(25);
+			finalizationStarted.TrySetResult(true);
+		});
+
+		var stopwatch = Stopwatch.StartNew();
+		var interrupted = await ProfileTraceLifecycle.StopAndWaitForFinalizationAsync(
+			monitoredProcess,
+			monitoredProcess.WaitForExitAsync(),
+			finalizationStarted.Task,
+			TimeSpan.FromSeconds(1),
+			new JsonOutputFormatter(TextWriter.Null),
+			useJson: true,
+			verbose: false,
+			traceStopInterruptDelay: TimeSpan.FromMilliseconds(50));
+
+		Assert.False(interrupted);
+		Assert.True(process.HasExited);
+		Assert.True(stopwatch.Elapsed >= TimeSpan.FromMilliseconds(100));
+	}
+
+	[Theory]
+	[InlineData("Stopping the trace. This may take several minutes depending on the application being traced.", true)]
+	[InlineData("Trace completed.", false)]
+	public void IsFinalizationStartedMessage_RecognizesDotnetTraceRundownOutput(string line, bool expected)
+	{
+		Assert.Equal(expected, DotnetTraceRunner.IsFinalizationStartedMessage(line));
+	}
+
+	[Fact]
+	public async Task WaitForCompletionAsync_TimedStopUsesTraceStopTimeout()
+	{
+		var startInfo = new ProcessStartInfo
+		{
+			FileName = OperatingSystem.IsWindows() ? "ping.exe" : "/bin/sh",
+			UseShellExecute = false,
+			RedirectStandardInput = true,
+			RedirectStandardOutput = true,
+			RedirectStandardError = true,
+			CreateNoWindow = true
+		};
+		if (OperatingSystem.IsWindows())
+		{
+			startInfo.ArgumentList.Add("127.0.0.1");
+			startInfo.ArgumentList.Add("-n");
+			startInfo.ArgumentList.Add("30");
+		}
+		else
+		{
+			startInfo.ArgumentList.Add("-c");
+			startInfo.ArgumentList.Add("echo 127.0.0.1; exec sleep 30");
+		}
+
+		using var process = Process.Start(startInfo)!;
+		using var monitoredProcess = MonitoredProcess.Attach(
+			process,
+			new JsonOutputFormatter(TextWriter.Null),
+			useJson: true,
+			verbose: false,
+			"trace",
+			CancellationToken.None);
+		try
+		{
+			for (var attempt = 0; attempt < 100 && monitoredProcess.StandardOutput.Length == 0; attempt++)
+				await Task.Delay(10);
+
+			var finalizationStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+			_ = Task.Run(async () =>
+			{
+				await Task.Delay(25);
+				finalizationStarted.TrySetResult(true);
+			});
+			var exception = await Assert.ThrowsAsync<MauiToolException>(() =>
+				ProfileTraceLifecycle.WaitForCompletionAsync(
+					monitoredProcess,
+					allowManualStop: false,
+					duration: TimeSpan.FromMilliseconds(10),
+					finalizationStartedTask: finalizationStarted.Task,
+					traceStopTimeout: TimeSpan.FromMilliseconds(50),
+					new JsonOutputFormatter(TextWriter.Null),
+					useJson: true,
+					verbose: false,
+					CancellationToken.None,
+					traceStopInterruptDelay: TimeSpan.FromMilliseconds(100)));
+
+			Assert.Contains("after finalization started", exception.Message, StringComparison.Ordinal);
+			Assert.Contains("127.0.0.1", exception.NativeError, StringComparison.Ordinal);
+		}
+		finally
+		{
+			if (!process.HasExited)
+				process.Kill(entireProcessTree: true);
+			await process.WaitForExitAsync();
+		}
 	}
 
 	[Fact]
@@ -784,6 +1059,150 @@ public class ProfileCommandTests
 		Assert.Equal("connect", transport.DiagnosticListenMode);
 		Assert.Equal("android", transport.DsrouterKind);
 		Assert.True(transport.RequiresManualExitControlPortRouting);
+		Assert.True(transport.RequiresExplicitDsrouter);
+	}
+
+	[Fact]
+	public void PhysicalAndroidPorts_ReserveSeparateRouterAndExitControlPorts()
+	{
+		var transport = ProfileCommand.ResolveProfileTransport(
+			Platforms.Android,
+			CreateDevice(Platforms.Android, isEmulator: false));
+
+		Assert.Equal(9001, ProfileCommandPortRouter.GetDsrouterTcpPort(9000));
+		Assert.Equal(9002, ProfileCommandPortRouter.GetExitControlPort(9000, transport));
+	}
+
+	[Fact]
+	public void ParseAdbReverseMappings_ParsesTcpMappingsAndIgnoresMalformedLines()
+	{
+		var mappings = ProfileCommandPortRouter.ParseAdbReverseMappings(
+			"""
+			device-123 tcp:9000 tcp:9001
+			UsbFfs tcp:9002 tcp:9002
+			device-123 localabstract:not-tcp tcp:9003
+			malformed
+			""");
+
+		Assert.Equal(
+			[
+				new ProfileCommandPortRouter.AdbReverseMapping(9000, 9001),
+				new ProfileCommandPortRouter.AdbReverseMapping(9002, 9002)
+			],
+			mappings);
+	}
+
+	[Fact]
+	public void AdbReverseMappingOwnership_RequiresOneExactMapping()
+	{
+		ProfileCommandPortRouter.AdbReverseMapping[] ownedMapping = [new(9000, 9001)];
+		ProfileCommandPortRouter.AdbReverseMapping[] replacedMapping = [new(9000, 9101)];
+		ProfileCommandPortRouter.AdbReverseMapping[] duplicateMappings = [new(9000, 9001), new(9000, 9101)];
+
+		Assert.True(ProfileCommandPortRouter.HasAdbReverseMapping(ownedMapping, 9000));
+		Assert.True(ProfileCommandPortRouter.IsOwnedAdbReverseMapping(ownedMapping, 9000, 9001));
+		Assert.False(ProfileCommandPortRouter.IsOwnedAdbReverseMapping(replacedMapping, 9000, 9001));
+		Assert.False(ProfileCommandPortRouter.IsOwnedAdbReverseMapping(duplicateMappings, 9000, 9001));
+		Assert.False(ProfileCommandPortRouter.HasAdbReverseMapping(ownedMapping, 9002));
+	}
+
+	[Fact]
+	public void BuildAdbReverseArguments_RefusesToReplaceAnExistingMapping()
+	{
+		Assert.Equal(
+			["-s", "device-123", "reverse", "--no-rebind", "tcp:9000", "tcp:9001"],
+			ProfileCommandPortRouter.BuildAdbReverseArguments("device-123", 9000, 9001));
+	}
+
+	[Fact]
+	public async Task ReserveProfilePorts_ExplicitDsrouterSkipsCollidingPortSet()
+	{
+		using var listener = new TcpListener(IPAddress.Loopback, 0);
+		listener.Start();
+		var busyPort = ((IPEndPoint)listener.LocalEndpoint).Port;
+		var startingPort = busyPort - 1;
+		var transport = new ProfileTransportConfiguration(
+			Platforms.Android,
+			"127.0.0.1",
+			"connect",
+			"android",
+			RequiresManualExitControlPortRouting: false,
+			RequiresExplicitDsrouter: true);
+
+		using var ports = await ProfileCommandPortRouter.ReserveProfilePortsAndConfigureRoutingAsync(
+			CreateDevice(Platforms.Android, isEmulator: false),
+			transport,
+			startingPort,
+			new JsonOutputFormatter(TextWriter.Null),
+			useJson: false,
+			verbose: false,
+			CancellationToken.None);
+
+		Assert.True(ports.DiagnosticPort > busyPort);
+		Assert.Equal(ports.DiagnosticPort + 1, ports.DsrouterTcpPort);
+		Assert.Equal(ports.DiagnosticPort + 2, ports.ExitControlPort);
+		Assert.NotNull(ports.DsrouterTcpReservation);
+	}
+
+	[Fact]
+	public void EmulatorExitControlPort_RemainsAdjacentToDiagnosticPort()
+	{
+		var transport = ProfileCommand.ResolveProfileTransport(
+			Platforms.Android,
+			CreateDevice(Platforms.Android, isEmulator: true));
+
+		Assert.Equal(9001, ProfileCommandPortRouter.GetExitControlPort(9000, transport));
+	}
+
+	[Fact]
+	public void BuildDsrouterArguments_UsesSelectedRouterPortAndUniqueIpcEndpoint()
+	{
+		var args = ProfileDsrouterRunner.BuildArguments("maui-profile-test", 9101);
+
+		Assert.Equal(
+			[
+				"server-server",
+				"--ipc-server", "maui-profile-test",
+				"--tcp-server", "127.0.0.1:9101",
+				"--forward-port", "Android"
+			],
+			args);
+	}
+
+	[Fact]
+	public void CreateDsrouterIpcEndpoint_UnixPathFitsSocketLimit()
+	{
+		if (OperatingSystem.IsWindows())
+			return;
+
+		var endpoint = ProfileDsrouterRunner.CreateIpcEndpoint();
+
+		Assert.StartsWith("/tmp/", endpoint, StringComparison.Ordinal);
+		Assert.True(endpoint.Length < 100);
+	}
+
+	[Fact]
+	public void BuildTraceArguments_WithExplicitDsrouterIpc_DoesNotLaunchImplicitRouter()
+	{
+		var transport = ProfileCommand.ResolveProfileTransport(
+			Platforms.Android,
+			CreateDevice(Platforms.Android, isEmulator: false));
+
+		var args = ProfileCommand.BuildTraceArguments(
+			"trace.nettrace",
+			TraceOutputFormat.NetTrace,
+			transport,
+			traceProfile: null,
+			duration: null,
+			stoppingEventProvider: null,
+			stoppingEventName: null,
+			stoppingEventPayloadFilter: null,
+			diagnosticPortEndpoint: "maui-profile-test").ToArray();
+
+		Assert.DoesNotContain("--dsrouter", args);
+		var diagnosticPortIndex = Array.IndexOf(args, "--diagnostic-port");
+		Assert.True(diagnosticPortIndex >= 0);
+		Assert.Equal("maui-profile-test,connect", args[diagnosticPortIndex + 1]);
 	}
 
 	[Fact]
