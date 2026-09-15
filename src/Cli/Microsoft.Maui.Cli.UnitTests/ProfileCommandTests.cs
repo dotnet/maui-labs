@@ -1151,17 +1151,19 @@ public class ProfileCommandTests
 				out _,
 				isWindows: true);
 
-			using var process = Process.Start(startInfo)!;
-			var standardOutput = await process.StandardOutput.ReadToEndAsync();
-			var standardError = await process.StandardError.ReadToEndAsync();
-			await process.WaitForExitAsync();
+			using (var process = Process.Start(startInfo)!)
+			{
+				var standardOutput = await process.StandardOutput.ReadToEndAsync();
+				var standardError = await process.StandardError.ReadToEndAsync();
+				await process.WaitForExitAsync();
 
-			Assert.True(process.ExitCode == 0, standardError);
-			var actualArgs = System.Text.Json.JsonSerializer.Deserialize<string[]>(standardOutput);
-			Assert.NotNull(actualArgs);
-			Assert.Equal(
-				["dnx", "-y", "dotnet-trace", "--", "collect", "--output", outputPath],
-				actualArgs);
+				Assert.True(process.ExitCode == 0, standardError);
+				var actualArgs = System.Text.Json.JsonSerializer.Deserialize<string[]>(standardOutput);
+				Assert.NotNull(actualArgs);
+				Assert.Equal(
+					["dnx", "-y", "dotnet-trace", "--", "collect", "--output", outputPath],
+					actualArgs);
+			}
 		}
 		finally
 		{
