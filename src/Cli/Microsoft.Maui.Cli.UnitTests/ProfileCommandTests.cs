@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.CommandLine;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using Microsoft.Maui.Cli.Commands;
@@ -1027,6 +1028,147 @@ public class ProfileCommandTests
 	public void CanUseDiagnosticsTooling_MissingRequiredToolWithoutDnx_ReturnsFalse()
 	{
 		Assert.False(ProfileCommand.CanUseDiagnosticsTooling(hasDnx: false, hasDotnetTrace: true, hasDotnetDsrouter: false));
+	}
+
+	[Fact]
+	public void ConfigureDnxStartInfo_UsesResolvedCommandPath()
+	{
+		var startInfo = new ProcessStartInfo();
+		var dnxPath = TestPath("dotnet", "dnx");
+
+		ProfileCommandDiagnostics.ConfigureDnxStartInfo(
+			startInfo,
+			dnxPath,
+			"dotnet-trace",
+			["collect", "--output", "trace.nettrace"],
+			out var commandLine);
+
+		Assert.Equal(dnxPath, startInfo.FileName);
+		Assert.Equal(
+			["-y", "dotnet-trace", "--", "collect", "--output", "trace.nettrace"],
+			startInfo.ArgumentList);
+		Assert.Contains(dnxPath, commandLine);
+	}
+
+	[Theory]
+	[InlineData(".cmd")]
+	[InlineData(".bat")]
+	public void ConfigureDnxStartInfo_WindowsCommandWrapperUsesDotnetExecutable(string extension)
+	{
+		var startInfo = new ProcessStartInfo
+		{
+			RedirectStandardInput = true,
+			RedirectStandardOutput = true,
+			RedirectStandardError = true
+		};
+		var dnxPath = TestPath("Program Files", "dotnet", "dnx" + extension);
+		var outputPath = TestPath("trace output", "%TEMP% ^ & | < > ( ) \"quoted\".nettrace");
+
+		ProfileCommandDiagnostics.ConfigureDnxStartInfo(
+			startInfo,
+			dnxPath,
+			"dotnet-trace",
+			["collect", "--output", outputPath],
+			out var commandLine,
+			isWindows: true);
+
+		Assert.Equal(Path.Combine(Path.GetDirectoryName(dnxPath)!, "dotnet.exe"), startInfo.FileName);
+		Assert.Equal(
+			["dnx", "-y", "dotnet-trace", "--", "collect", "--output", outputPath],
+			startInfo.ArgumentList);
+		Assert.True(startInfo.RedirectStandardInput);
+		Assert.True(startInfo.RedirectStandardOutput);
+		Assert.True(startInfo.RedirectStandardError);
+		Assert.Contains(startInfo.FileName, commandLine);
+	}
+
+	[Fact]
+	public async Task ConfigureDnxStartInfo_WindowsCommandWrapperPreservesExclamationMarksWhenExecuted()
+	{
+		if (!OperatingSystem.IsWindows())
+			return;
+
+		var tempDirectory = Path.Combine(Path.GetTempPath(), $"maui-dnx!test-{Guid.NewGuid():N}");
+		var helperProject = Path.Combine(tempDirectory, "DnxEcho.csproj");
+		var outputDirectory = Path.Combine(tempDirectory, "sdk!path");
+		Directory.CreateDirectory(tempDirectory);
+		try
+		{
+			File.WriteAllText(helperProject, """
+				<Project Sdk="Microsoft.NET.Sdk">
+				  <PropertyGroup>
+				    <OutputType>Exe</OutputType>
+				    <TargetFramework>net10.0</TargetFramework>
+				    <AssemblyName>dotnet</AssemblyName>
+				    <UseAppHost>true</UseAppHost>
+				  </PropertyGroup>
+				</Project>
+				""");
+			File.WriteAllText(
+				Path.Combine(tempDirectory, "Program.cs"),
+				"""
+				using System;
+
+				Console.Write(System.Text.Json.JsonSerializer.Serialize(args));
+				""");
+
+			var dotnetPath = ProcessRunner.GetCommandPath("dotnet");
+			Assert.NotNull(dotnetPath);
+			var buildStartInfo = new ProcessStartInfo(dotnetPath)
+			{
+				UseShellExecute = false,
+				RedirectStandardOutput = true,
+				RedirectStandardError = true
+			};
+			foreach (var arg in new[] { "build", helperProject, "--nologo", "--configuration", "Release", "--output", outputDirectory })
+				buildStartInfo.ArgumentList.Add(arg);
+
+			using (var buildProcess = Process.Start(buildStartInfo)!)
+			{
+				var buildOutputTask = buildProcess.StandardOutput.ReadToEndAsync();
+				var buildErrorTask = buildProcess.StandardError.ReadToEndAsync();
+				await buildProcess.WaitForExitAsync();
+				var buildOutput = await buildOutputTask;
+				var buildError = await buildErrorTask;
+				Assert.True(buildProcess.ExitCode == 0, buildOutput + buildError);
+			}
+
+			var dnxPath = Path.Combine(outputDirectory, "dnx.cmd");
+			var outputPath = Path.Combine(tempDirectory, "trace!output.nettrace");
+			File.WriteAllText(dnxPath, "@exit /b 99");
+			var startInfo = new ProcessStartInfo
+			{
+				UseShellExecute = false,
+				RedirectStandardOutput = true,
+				RedirectStandardError = true,
+				RedirectStandardInput = true
+			};
+			ProfileCommandDiagnostics.ConfigureDnxStartInfo(
+				startInfo,
+				dnxPath,
+				"dotnet-trace",
+				["collect", "--output", outputPath],
+				out _,
+				isWindows: true);
+
+			using (var process = Process.Start(startInfo)!)
+			{
+				var standardOutput = await process.StandardOutput.ReadToEndAsync();
+				var standardError = await process.StandardError.ReadToEndAsync();
+				await process.WaitForExitAsync();
+
+				Assert.True(process.ExitCode == 0, standardError);
+				var actualArgs = System.Text.Json.JsonSerializer.Deserialize<string[]>(standardOutput);
+				Assert.NotNull(actualArgs);
+				Assert.Equal(
+					["dnx", "-y", "dotnet-trace", "--", "collect", "--output", outputPath],
+					actualArgs);
+			}
+		}
+		finally
+		{
+			Directory.Delete(tempDirectory, recursive: true);
+		}
 	}
 
 	[Fact]
