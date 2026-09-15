@@ -1106,7 +1106,11 @@ public class ProfileCommandTests
 				""");
 			File.WriteAllText(
 				Path.Combine(tempDirectory, "Program.cs"),
-				"""Console.Write(System.Text.Json.JsonSerializer.Serialize(args));""");
+				"""
+				using System;
+
+				Console.Write(System.Text.Json.JsonSerializer.Serialize(args));
+				""");
 
 			var dotnetPath = ProcessRunner.GetCommandPath("dotnet");
 			Assert.NotNull(dotnetPath);
