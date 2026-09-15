@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using Microsoft.Maui.Cli.Errors;
@@ -77,6 +78,7 @@ internal static class ProfileCommandPortRouter
 			ReservedTcpPort? diagnosticReservation = null;
 			ReservedTcpPort? dsrouterTcpReservation = null;
 			ReservedTcpPort? exitControlReservation = null;
+			var ownsExitControlAdbReverse = false;
 			int? dsrouterTcpPort = transport.RequiresExplicitDsrouter ? GetDsrouterTcpPort(port) : null;
 			var exitControlPort = GetExitControlPort(port, transport);
 
@@ -113,14 +115,23 @@ internal static class ProfileCommandPortRouter
 						: $"Reserved diagnostic port {port} and exit control port {exitControlPort}.");
 				if (transport.RequiresManualExitControlPortRouting)
 				{
-					if (transport.RequiresExplicitDsrouter)
+					var adbPath = ResolveAdbPathOrThrow();
+					var reverseMappings = await GetAdbReverseMappingsAsync(adbPath, device, cancellationToken);
+					var mappedPorts = transport.RequiresExplicitDsrouter
+						? new[] { port, exitControlPort }
+						: new[] { exitControlPort };
+					var collidingPort = mappedPorts.FirstOrDefault(candidate => HasAdbReverseMapping(reverseMappings, candidate));
+					if (collidingPort > 0)
 					{
 						ProfileCommandProcessHelpers.WriteVerbose(
 							formatter,
 							useJson,
 							verbose,
-							$"Clearing any stale adb mapping for the device diagnostic port {port} before dotnet-dsrouter takes ownership.");
-						await RemoveAdbPortRoutingAsync(device, formatter, useJson, verbose, port);
+							$"Device port {collidingPort} already has an adb reverse mapping on {device.Id}; trying the next profiling port set.");
+						diagnosticReservation.Dispose();
+						dsrouterTcpReservation?.Dispose();
+						exitControlReservation.Dispose();
+						continue;
 					}
 
 					ProfileCommandProcessHelpers.WriteVerbose(
@@ -128,23 +139,35 @@ internal static class ProfileCommandPortRouter
 						useJson,
 						verbose,
 						$"dotnet-trace/dsrouter will handle the diagnostics port; configuring adb reverse for the auxiliary exit-control port on {device.Id}.");
-					await EnsureAdbPortRoutingAsync(device, formatter, useJson, verbose, cancellationToken, exitControlPort);
+					await CreateAdbReverseMappingAsync(
+						adbPath,
+						device,
+						formatter,
+						useJson,
+						verbose,
+						exitControlPort,
+						exitControlPort,
+						cancellationToken);
+					ownsExitControlAdbReverse = true;
 				}
 
-				return new ReservedProfilePorts(
+				var reservedPorts = new ReservedProfilePorts(
 					port,
 					dsrouterTcpPort,
 					exitControlPort,
 					diagnosticReservation,
 					dsrouterTcpReservation,
 					exitControlReservation);
+				reservedPorts.ShouldCleanupExitControlAdbReverse = ownsExitControlAdbReverse;
+				return reservedPorts;
 			}
 			catch (DiagnosticPortRoutingConflictException ex)
 			{
 				diagnosticReservation?.Dispose();
 				dsrouterTcpReservation?.Dispose();
 				exitControlReservation?.Dispose();
-				await RemoveAdbPortRoutingAsync(device, formatter, useJson, verbose, port, exitControlPort);
+				if (ownsExitControlAdbReverse)
+					await RemoveOwnedAdbReverseMappingAsync(device, formatter, useJson, verbose, exitControlPort, exitControlPort);
 				ProfileCommandProcessHelpers.WriteVerbose(formatter, useJson, verbose, $"Port {ex.Port} was unavailable for adb routing ({ex.Direction}): {ex.Details}");
 			}
 			catch
@@ -152,7 +175,8 @@ internal static class ProfileCommandPortRouter
 				diagnosticReservation?.Dispose();
 				dsrouterTcpReservation?.Dispose();
 				exitControlReservation?.Dispose();
-				await RemoveAdbPortRoutingAsync(device, formatter, useJson, verbose, port, exitControlPort);
+				if (ownsExitControlAdbReverse)
+					await RemoveOwnedAdbReverseMappingAsync(device, formatter, useJson, verbose, exitControlPort, exitControlPort);
 				throw;
 			}
 		}
@@ -162,33 +186,102 @@ internal static class ProfileCommandPortRouter
 			$"Could not find free diagnostic/control TCP ports starting at {startingPort}.");
 	}
 
-	internal static async Task RemoveAdbPortRoutingAsync(
+	internal static async Task RemoveOwnedAdbReverseMappingsAsync(
 		Device device,
+		ReservedProfilePorts ports,
 		IOutputFormatter formatter,
 		bool useJson,
-		bool verbose,
-		params int[] ports)
+		bool verbose)
 	{
-		if (ports.Length == 0 || ports.All(port => port < 1))
-			return;
-
-		var adbPath = ResolveAdbPath();
-		if (adbPath is null)
-			return;
-
-		try
+		if (ports.ShouldCleanupDiagnosticAdbReverse && ports.DsrouterTcpPort is { } dsrouterTcpPort)
 		{
-			foreach (var port in ports.Distinct().Where(port => port > 0))
-			{
-				var portSpec = $"tcp:{port}";
-				ProfileCommandProcessHelpers.WriteVerbose(formatter, useJson, verbose, $"Removing adb reverse/forward mappings for {device.Id} on {portSpec}.");
-				await ResetAdbPortMappingAsync(adbPath, device.Id, "reverse", portSpec, CancellationToken.None);
-				await ResetAdbPortMappingAsync(adbPath, device.Id, "forward", portSpec, CancellationToken.None);
-			}
+			await RemoveOwnedAdbReverseMappingAsync(
+				device,
+				formatter,
+				useJson,
+				verbose,
+				ports.DiagnosticPort,
+				dsrouterTcpPort);
 		}
-		catch
+
+		if (ports.ShouldCleanupExitControlAdbReverse)
 		{
-			// Best-effort cleanup only.
+			await RemoveOwnedAdbReverseMappingAsync(
+				device,
+				formatter,
+				useJson,
+				verbose,
+				ports.ExitControlPort,
+				ports.ExitControlPort);
+		}
+	}
+
+	internal static IReadOnlyList<AdbReverseMapping> ParseAdbReverseMappings(string output)
+	{
+		var mappings = new List<AdbReverseMapping>();
+		foreach (var line in output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+		{
+			var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+			if (parts.Length < 2
+				|| !TryParseTcpEndpoint(parts[^2], out var devicePort)
+				|| !TryParseTcpEndpoint(parts[^1], out var hostPort))
+			{
+				continue;
+			}
+
+			mappings.Add(new AdbReverseMapping(devicePort, hostPort));
+		}
+
+		return mappings;
+	}
+
+	internal static bool HasAdbReverseMapping(IReadOnlyList<AdbReverseMapping> mappings, int devicePort)
+		=> mappings.Any(mapping => mapping.DevicePort == devicePort);
+
+	internal static bool IsOwnedAdbReverseMapping(
+		IReadOnlyList<AdbReverseMapping> mappings,
+		int devicePort,
+		int hostPort)
+	{
+		var matchingDeviceMappings = mappings.Where(mapping => mapping.DevicePort == devicePort).ToArray();
+		return matchingDeviceMappings.Length == 1 && matchingDeviceMappings[0].HostPort == hostPort;
+	}
+
+	internal static async Task EnsureAdbReverseMappingOwnedAsync(
+		Device device,
+		int devicePort,
+		int hostPort,
+		CancellationToken cancellationToken)
+	{
+		var adbPath = ResolveAdbPathOrThrow();
+		var startedAt = Stopwatch.GetTimestamp();
+		do
+		{
+			var mappings = await GetAdbReverseMappingsAsync(adbPath, device, cancellationToken);
+			if (IsOwnedAdbReverseMapping(mappings, devicePort, hostPort))
+				return;
+
+			await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken);
+		}
+		while (Stopwatch.GetElapsedTime(startedAt) < ProfileCommand.s_traceStartupRetryTimeout);
+
+		throw new MauiToolException(
+			ErrorCodes.InternalError,
+			$"dotnet-dsrouter did not establish the expected adb reverse mapping tcp:{devicePort} -> tcp:{hostPort} on '{device.Id}'.");
+	}
+
+	internal static async Task EnsureAdbReversePortAvailableAsync(
+		Device device,
+		int devicePort,
+		CancellationToken cancellationToken)
+	{
+		var adbPath = ResolveAdbPathOrThrow();
+		var mappings = await GetAdbReverseMappingsAsync(adbPath, device, cancellationToken);
+		if (HasAdbReverseMapping(mappings, devicePort))
+		{
+			throw new MauiToolException(
+				ErrorCodes.InternalError,
+				$"Device port {devicePort} acquired an adb reverse mapping before dotnet-dsrouter could start on '{device.Id}'. Rerun the profiling command to select another port set.");
 		}
 	}
 
@@ -232,71 +325,121 @@ internal static class ProfileCommandPortRouter
 			$"Could not find a free diagnostic TCP port starting at {startingPort}.");
 	}
 
-	static async Task EnsureAdbPortRoutingAsync(
+	static async Task CreateAdbReverseMappingAsync(
+		string adbPath,
 		Device device,
 		IOutputFormatter formatter,
 		bool useJson,
 		bool verbose,
-		CancellationToken cancellationToken,
-		params int[] ports)
+		int devicePort,
+		int hostPort,
+		CancellationToken cancellationToken)
+	{
+		var devicePortSpec = $"tcp:{devicePort}";
+		var hostPortSpec = $"tcp:{hostPort}";
+		ProfileCommandProcessHelpers.WriteVerbose(formatter, useJson, verbose, $"Creating adb reverse for {device.Id}: {devicePortSpec} -> {hostPortSpec}.");
+		var reverseResult = await ProcessRunner.RunAsync(
+			adbPath,
+			BuildAdbReverseArguments(device.Id, devicePort, hostPort),
+			timeout: ProfileCommand.s_adbPortForwardTimeout,
+			cancellationToken: cancellationToken);
+
+		if (reverseResult.Success)
+			return;
+
+		var details = ProfileCommandProcessHelpers.GetProcessFailureDetails(reverseResult);
+		if (IsPortBindingConflict(details))
+			throw new DiagnosticPortRoutingConflictException(devicePort, "reverse", details);
+
+		throw MauiToolException.UserActionRequired(
+			ErrorCodes.InternalError,
+			$"Failed to open Android reverse port forwarding for {devicePortSpec} on '{device.Id}'.",
+			[
+				$"Reconnect the device and verify `adb -s {device.Id} reverse {devicePortSpec} {hostPortSpec}` succeeds.",
+				"Then rerun the profiling command."
+			],
+			nativeError: details);
+	}
+
+	internal static string[] BuildAdbReverseArguments(string deviceId, int devicePort, int hostPort)
+		=> ["-s", deviceId, "reverse", "--no-rebind", $"tcp:{devicePort}", $"tcp:{hostPort}"];
+
+	static async Task<IReadOnlyList<AdbReverseMapping>> GetAdbReverseMappingsAsync(
+		string adbPath,
+		Device device,
+		CancellationToken cancellationToken)
+	{
+		var result = await ProcessRunner.RunAsync(
+			adbPath,
+			["-s", device.Id, "reverse", "--list"],
+			timeout: ProfileCommand.s_adbPortForwardTimeout,
+			cancellationToken: cancellationToken);
+		if (result.Success)
+			return ParseAdbReverseMappings(result.StandardOutput);
+
+		throw MauiToolException.UserActionRequired(
+			ErrorCodes.InternalError,
+			$"Failed to list Android reverse port mappings on '{device.Id}'.",
+			[
+				$"Reconnect the device and verify `adb -s {device.Id} reverse --list` succeeds.",
+				"Then rerun the profiling command."
+			],
+			nativeError: ProfileCommandProcessHelpers.GetProcessFailureDetails(result));
+	}
+
+	static async Task RemoveOwnedAdbReverseMappingAsync(
+		Device device,
+		IOutputFormatter formatter,
+		bool useJson,
+		bool verbose,
+		int devicePort,
+		int hostPort)
 	{
 		var adbPath = ResolveAdbPath();
 		if (adbPath is null)
+			return;
+
+		try
 		{
-			throw MauiToolException.UserActionRequired(
-				ErrorCodes.AndroidAdbNotFound,
-				"ADB was not found, so the app exit-control port could not be opened on the Android device.",
-				[
-					"Install the Android SDK platform-tools so adb is available.",
-					"Or add adb to PATH and rerun `maui profile startup`."
-				]);
-		}
-
-		foreach (var port in ports.Distinct().Where(port => port > 0))
-		{
-			var portSpec = $"tcp:{port}";
-			ProfileCommandProcessHelpers.WriteVerbose(formatter, useJson, verbose, $"Ensuring adb reverse for {device.Id} on {portSpec}.");
-
-			await ResetAdbPortMappingAsync(adbPath, device.Id, "reverse", portSpec, cancellationToken);
-			var reverseResult = await ProcessRunner.RunAsync(
-				adbPath,
-				["-s", device.Id, "reverse", portSpec, portSpec],
-				timeout: ProfileCommand.s_adbPortForwardTimeout,
-				cancellationToken: cancellationToken);
-
-			if (!reverseResult.Success)
+			var mappings = await GetAdbReverseMappingsAsync(adbPath, device, CancellationToken.None);
+			if (!IsOwnedAdbReverseMapping(mappings, devicePort, hostPort))
 			{
-				var details = ProfileCommandProcessHelpers.GetProcessFailureDetails(reverseResult);
-				if (IsPortBindingConflict(details))
-					throw new DiagnosticPortRoutingConflictException(port, "reverse", details);
-
-				throw MauiToolException.UserActionRequired(
-					ErrorCodes.InternalError,
-					$"Failed to open Android reverse port forwarding for {portSpec} on '{device.Id}'.",
-					[
-						$"Reconnect the device or emulator and verify `adb -s {device.Id} reverse {portSpec} {portSpec}` succeeds.",
-						"Then rerun `maui profile startup`."
-					],
-					nativeError: details);
+				ProfileCommandProcessHelpers.WriteVerbose(
+					formatter,
+					useJson,
+					verbose,
+					$"Leaving adb reverse tcp:{devicePort} unchanged because it no longer matches this session's tcp:{devicePort} -> tcp:{hostPort} mapping.");
+				return;
 			}
+
+			ProfileCommandProcessHelpers.WriteVerbose(formatter, useJson, verbose, $"Removing owned adb reverse for {device.Id} on tcp:{devicePort} -> tcp:{hostPort}.");
+			_ = await ProcessRunner.RunAsync(
+				adbPath,
+				["-s", device.Id, "reverse", "--remove", $"tcp:{devicePort}"],
+				timeout: ProfileCommand.s_adbPortForwardTimeout,
+				cancellationToken: CancellationToken.None);
+		}
+		catch
+		{
+			// Best-effort cleanup only.
 		}
 	}
 
-	static async Task ResetAdbPortMappingAsync(string adbPath, string deviceId, string direction, string portSpec, CancellationToken cancellationToken)
+	static bool TryParseTcpEndpoint(string endpoint, out int port)
 	{
-		string[] removeArgs = direction switch
-		{
-			"reverse" => ["-s", deviceId, "reverse", "--remove", portSpec],
-			"forward" => ["-s", deviceId, "forward", "--remove", portSpec],
-			_ => throw new ArgumentOutOfRangeException(nameof(direction), direction, "Expected 'reverse' or 'forward'.")
-		};
-
-		_ = await ProcessRunner.RunAsync(
-			adbPath,
-			removeArgs,
-			timeout: ProfileCommand.s_adbPortForwardTimeout,
-			cancellationToken: cancellationToken);
+		port = 0;
+		return endpoint.StartsWith("tcp:", StringComparison.Ordinal)
+			&& int.TryParse(endpoint.AsSpan("tcp:".Length), out port);
 	}
+
+	static string ResolveAdbPathOrThrow()
+		=> ResolveAdbPath() ?? throw MauiToolException.UserActionRequired(
+			ErrorCodes.AndroidAdbNotFound,
+			"ADB was not found, so Android profiling port mappings could not be configured.",
+			[
+				"Install the Android SDK platform-tools so adb is available.",
+				"Or add adb to PATH and rerun the profiling command."
+			]);
 
 	internal static string? ResolveAdbPath()
 	{
@@ -313,10 +456,14 @@ internal static class ProfileCommandPortRouter
 		return File.Exists(candidate) ? candidate : null;
 	}
 
+	internal readonly record struct AdbReverseMapping(int DevicePort, int HostPort);
+
 	static bool IsPortBindingConflict(string details) =>
 		details.Contains("Address already in use", StringComparison.OrdinalIgnoreCase)
 		|| details.Contains("cannot bind listener", StringComparison.OrdinalIgnoreCase)
-		|| details.Contains("cannot bind socket", StringComparison.OrdinalIgnoreCase);
+		|| details.Contains("cannot bind socket", StringComparison.OrdinalIgnoreCase)
+		|| details.Contains("cannot rebind", StringComparison.OrdinalIgnoreCase)
+		|| details.Contains("already exists", StringComparison.OrdinalIgnoreCase);
 
 	static ReservedTcpPort? TryReserveTcpPort(int port)
 	{

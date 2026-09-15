@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Output;
 using Microsoft.Maui.Cli.Utils;
 using Spectre.Console;
@@ -52,6 +53,11 @@ internal static class ProfileSessionLaunch
 		if (context.RequiresExplicitDsrouter)
 		{
 			context.ReservedPorts.DsrouterTcpReservation!.Dispose();
+			await ProfileCommandPortRouter.EnsureAdbReversePortAvailableAsync(
+				context.Device,
+				context.ReservedPorts.DiagnosticPort,
+				cancellationToken);
+			context.ReservedPorts.ShouldCleanupDiagnosticAdbReverse = true;
 			context.DsrouterIpcEndpoint = ProfileDsrouterRunner.CreateIpcEndpoint();
 			context.DsrouterProcess = ProfileDsrouterRunner.Start(
 				context.Project.ProjectDirectory,
@@ -63,6 +69,11 @@ internal static class ProfileSessionLaunch
 				context.Verbose,
 				cancellationToken);
 			await ProfileDsrouterRunner.EnsureStartedAsync(context.DsrouterProcess, cancellationToken);
+			await ProfileCommandPortRouter.EnsureAdbReverseMappingOwnedAsync(
+				context.Device,
+				context.ReservedPorts.DiagnosticPort,
+				context.ReservedPorts.DsrouterTcpPort.Value,
+				cancellationToken);
 		}
 
 		if (!context.StartTraceAfterLaunch)
@@ -208,8 +219,25 @@ internal static class ProfileSessionLaunch
 
 		if (context.TraceProcess is not null)
 		{
-			await ProfileTraceLifecycle.RequestStopAsync(context.TraceProcess.Process, context.Formatter, context.UseJson, context.Verbose);
-			await context.TraceProcess.WaitForExitAsync();
+			try
+			{
+				await ProfileTraceLifecycle.StopAndWaitForFinalizationAsync(
+					context.TraceProcess,
+					context.TraceProcess.WaitForExitAsync(),
+					context.TraceFinalizationStarted.Task,
+					context.TraceStopTimeout,
+					context.Formatter,
+					context.UseJson,
+					context.Verbose);
+			}
+			catch (MauiToolException ex)
+			{
+				ProfileCommandProcessHelpers.WriteVerbose(
+					context.Formatter,
+					context.UseJson,
+					context.Verbose,
+					$"Trace finalization after the failed app launch did not complete cleanly: {ex.Message}");
+			}
 		}
 
 		throw ProfileCommandProcessHelpers.CreateProcessFailureException("dotnet build -t:Run", launchResult);

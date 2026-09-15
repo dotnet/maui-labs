@@ -101,7 +101,7 @@ public class ProfileCommandTests
 	{
 		var startInfo = new ProcessStartInfo
 		{
-			FileName = OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/sh",
+			FileName = OperatingSystem.IsWindows() ? "ping.exe" : "/bin/sh",
 			UseShellExecute = false,
 			RedirectStandardInput = true,
 			RedirectStandardOutput = true,
@@ -110,13 +110,14 @@ public class ProfileCommandTests
 		};
 		if (OperatingSystem.IsWindows())
 		{
-			startInfo.ArgumentList.Add("/c");
-			startInfo.ArgumentList.Add("echo collector-output & ping 127.0.0.1 -n 30 > nul");
+			startInfo.ArgumentList.Add("127.0.0.1");
+			startInfo.ArgumentList.Add("-n");
+			startInfo.ArgumentList.Add("30");
 		}
 		else
 		{
 			startInfo.ArgumentList.Add("-c");
-			startInfo.ArgumentList.Add("echo collector-output; sleep 30");
+			startInfo.ArgumentList.Add("echo 127.0.0.1; exec sleep 30");
 		}
 
 		using var process = Process.Start(startInfo)!;
@@ -136,13 +137,15 @@ public class ProfileCommandTests
 				ProfileTraceLifecycle.StopAndWaitForFinalizationAsync(
 					monitoredProcess,
 					monitoredProcess.WaitForExitAsync(),
+					Task.CompletedTask,
 					TimeSpan.FromMilliseconds(50),
 					new JsonOutputFormatter(TextWriter.Null),
 					useJson: true,
-					verbose: false));
+					verbose: false,
+					traceStopInterruptDelay: TimeSpan.FromMilliseconds(10)));
 
 			Assert.Contains("did not exit within", exception.Message, StringComparison.Ordinal);
-			Assert.Contains("collector-output", exception.NativeError, StringComparison.Ordinal);
+			Assert.Contains("127.0.0.1", exception.NativeError, StringComparison.Ordinal);
 		}
 		finally
 		{
@@ -173,7 +176,7 @@ public class ProfileCommandTests
 		else
 		{
 			startInfo.ArgumentList.Add("-c");
-			startInfo.ArgumentList.Add("sleep 0.1");
+			startInfo.ArgumentList.Add("exec sleep 0.1");
 		}
 
 		using var process = Process.Start(startInfo)!;
@@ -188,12 +191,69 @@ public class ProfileCommandTests
 		await ProfileTraceLifecycle.StopAndWaitForFinalizationAsync(
 			monitoredProcess,
 			monitoredProcess.WaitForExitAsync(),
+			Task.Delay(Timeout.InfiniteTimeSpan),
 			TimeSpan.FromSeconds(2),
 			new JsonOutputFormatter(TextWriter.Null),
 			useJson: true,
-			verbose: false);
+			verbose: false,
+			traceStopInterruptDelay: TimeSpan.FromSeconds(1));
 
 		Assert.True(process.HasExited);
+	}
+
+	[Fact]
+	public async Task StopAndWaitForFinalizationAsync_AcknowledgedRundownGetsFullTimeoutWithoutInterrupt()
+	{
+		var startInfo = new ProcessStartInfo
+		{
+			FileName = OperatingSystem.IsWindows() ? "powershell.exe" : "/bin/sh",
+			UseShellExecute = false,
+			RedirectStandardInput = true,
+			RedirectStandardOutput = true,
+			RedirectStandardError = true,
+			CreateNoWindow = true
+		};
+		if (OperatingSystem.IsWindows())
+		{
+			startInfo.ArgumentList.Add("-NoProfile");
+			startInfo.ArgumentList.Add("-Command");
+			startInfo.ArgumentList.Add("Start-Sleep -Milliseconds 200");
+		}
+		else
+		{
+			startInfo.ArgumentList.Add("-c");
+			startInfo.ArgumentList.Add("exec sleep 0.2");
+		}
+
+		using var process = Process.Start(startInfo)!;
+		using var monitoredProcess = MonitoredProcess.Attach(
+			process,
+			new JsonOutputFormatter(TextWriter.Null),
+			useJson: true,
+			verbose: false,
+			"trace",
+			CancellationToken.None);
+		var finalizationStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+		_ = Task.Run(async () =>
+		{
+			await Task.Delay(25);
+			finalizationStarted.TrySetResult(true);
+		});
+
+		var stopwatch = Stopwatch.StartNew();
+		var interrupted = await ProfileTraceLifecycle.StopAndWaitForFinalizationAsync(
+			monitoredProcess,
+			monitoredProcess.WaitForExitAsync(),
+			finalizationStarted.Task,
+			TimeSpan.FromSeconds(1),
+			new JsonOutputFormatter(TextWriter.Null),
+			useJson: true,
+			verbose: false,
+			traceStopInterruptDelay: TimeSpan.FromMilliseconds(50));
+
+		Assert.False(interrupted);
+		Assert.True(process.HasExited);
+		Assert.True(stopwatch.Elapsed >= TimeSpan.FromMilliseconds(100));
 	}
 
 	[Theory]
@@ -209,7 +269,7 @@ public class ProfileCommandTests
 	{
 		var startInfo = new ProcessStartInfo
 		{
-			FileName = OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/sh",
+			FileName = OperatingSystem.IsWindows() ? "ping.exe" : "/bin/sh",
 			UseShellExecute = false,
 			RedirectStandardInput = true,
 			RedirectStandardOutput = true,
@@ -218,13 +278,14 @@ public class ProfileCommandTests
 		};
 		if (OperatingSystem.IsWindows())
 		{
-			startInfo.ArgumentList.Add("/c");
-			startInfo.ArgumentList.Add("echo timed-collector-output & ping 127.0.0.1 -n 30 > nul");
+			startInfo.ArgumentList.Add("127.0.0.1");
+			startInfo.ArgumentList.Add("-n");
+			startInfo.ArgumentList.Add("30");
 		}
 		else
 		{
 			startInfo.ArgumentList.Add("-c");
-			startInfo.ArgumentList.Add("echo timed-collector-output; sleep 30");
+			startInfo.ArgumentList.Add("echo 127.0.0.1; exec sleep 30");
 		}
 
 		using var process = Process.Start(startInfo)!;
@@ -240,20 +301,27 @@ public class ProfileCommandTests
 			for (var attempt = 0; attempt < 100 && monitoredProcess.StandardOutput.Length == 0; attempt++)
 				await Task.Delay(10);
 
+			var finalizationStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+			_ = Task.Run(async () =>
+			{
+				await Task.Delay(25);
+				finalizationStarted.TrySetResult(true);
+			});
 			var exception = await Assert.ThrowsAsync<MauiToolException>(() =>
 				ProfileTraceLifecycle.WaitForCompletionAsync(
 					monitoredProcess,
 					allowManualStop: false,
 					duration: TimeSpan.FromMilliseconds(10),
-					finalizationStartedTask: Task.Delay(Timeout.InfiniteTimeSpan),
+					finalizationStartedTask: finalizationStarted.Task,
 					traceStopTimeout: TimeSpan.FromMilliseconds(50),
 					new JsonOutputFormatter(TextWriter.Null),
 					useJson: true,
 					verbose: false,
-					CancellationToken.None));
+					CancellationToken.None,
+					traceStopInterruptDelay: TimeSpan.FromMilliseconds(100)));
 
-			Assert.Contains("after the stop request", exception.Message, StringComparison.Ordinal);
-			Assert.Contains("timed-collector-output", exception.NativeError, StringComparison.Ordinal);
+			Assert.Contains("after finalization started", exception.Message, StringComparison.Ordinal);
+			Assert.Contains("127.0.0.1", exception.NativeError, StringComparison.Ordinal);
 		}
 		finally
 		{
@@ -1003,6 +1071,47 @@ public class ProfileCommandTests
 
 		Assert.Equal(9001, ProfileCommandPortRouter.GetDsrouterTcpPort(9000));
 		Assert.Equal(9002, ProfileCommandPortRouter.GetExitControlPort(9000, transport));
+	}
+
+	[Fact]
+	public void ParseAdbReverseMappings_ParsesTcpMappingsAndIgnoresMalformedLines()
+	{
+		var mappings = ProfileCommandPortRouter.ParseAdbReverseMappings(
+			"""
+			device-123 tcp:9000 tcp:9001
+			UsbFfs tcp:9002 tcp:9002
+			device-123 localabstract:not-tcp tcp:9003
+			malformed
+			""");
+
+		Assert.Equal(
+			[
+				new ProfileCommandPortRouter.AdbReverseMapping(9000, 9001),
+				new ProfileCommandPortRouter.AdbReverseMapping(9002, 9002)
+			],
+			mappings);
+	}
+
+	[Fact]
+	public void AdbReverseMappingOwnership_RequiresOneExactMapping()
+	{
+		ProfileCommandPortRouter.AdbReverseMapping[] ownedMapping = [new(9000, 9001)];
+		ProfileCommandPortRouter.AdbReverseMapping[] replacedMapping = [new(9000, 9101)];
+		ProfileCommandPortRouter.AdbReverseMapping[] duplicateMappings = [new(9000, 9001), new(9000, 9101)];
+
+		Assert.True(ProfileCommandPortRouter.HasAdbReverseMapping(ownedMapping, 9000));
+		Assert.True(ProfileCommandPortRouter.IsOwnedAdbReverseMapping(ownedMapping, 9000, 9001));
+		Assert.False(ProfileCommandPortRouter.IsOwnedAdbReverseMapping(replacedMapping, 9000, 9001));
+		Assert.False(ProfileCommandPortRouter.IsOwnedAdbReverseMapping(duplicateMappings, 9000, 9001));
+		Assert.False(ProfileCommandPortRouter.HasAdbReverseMapping(ownedMapping, 9002));
+	}
+
+	[Fact]
+	public void BuildAdbReverseArguments_RefusesToReplaceAnExistingMapping()
+	{
+		Assert.Equal(
+			["-s", "device-123", "reverse", "--no-rebind", "tcp:9000", "tcp:9001"],
+			ProfileCommandPortRouter.BuildAdbReverseArguments("device-123", 9000, 9001));
 	}
 
 	[Fact]

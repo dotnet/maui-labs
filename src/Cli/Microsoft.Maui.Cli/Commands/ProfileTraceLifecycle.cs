@@ -19,6 +19,14 @@ internal static class ProfileTraceLifecycle
 		ExternalCompletion
 	}
 
+	internal enum StopRequestOutcome
+	{
+		Exited,
+		FinalizationAcknowledged,
+		Unacknowledged,
+		Interrupted
+	}
+
 	static readonly Task s_neverCompletes = Task.Delay(Timeout.InfiniteTimeSpan, CancellationToken.None);
 	static readonly TimeSpan s_consoleReadJoinTimeout = TimeSpan.FromMilliseconds(100);
 
@@ -31,7 +39,8 @@ internal static class ProfileTraceLifecycle
 		IOutputFormatter formatter,
 		bool useJson,
 		bool verbose,
-		CancellationToken cancellationToken)
+		CancellationToken cancellationToken,
+		TimeSpan? traceStopInterruptDelay = null)
 	{
 		ProfileCommandProcessHelpers.WriteVerbose(
 			formatter,
@@ -43,6 +52,7 @@ internal static class ProfileTraceLifecycle
 
 		var processWaitTask = traceProcess.WaitForExitAsync();
 		var stopRequested = false;
+		var collectorInterrupted = false;
 
 		var stopReason = await WaitForStopSignalCoreAsync(
 			externalCompletionTask: processWaitTask,
@@ -67,13 +77,15 @@ internal static class ProfileTraceLifecycle
 			if (!useJson)
 				formatter.WriteInfo("Stopping trace and finalizing output...");
 			stopRequested = true;
-			await StopAndWaitForFinalizationAsync(
+			collectorInterrupted = await StopAndWaitForFinalizationAsync(
 				traceProcess,
 				processWaitTask,
+				finalizationStartedTask,
 				traceStopTimeout,
 				formatter,
 				useJson,
-				verbose);
+				verbose,
+				traceStopInterruptDelay);
 		}
 		else if (stopReason == StopSignalReason.CollectorFinalizing)
 		{
@@ -91,7 +103,7 @@ internal static class ProfileTraceLifecycle
 
 		ProfileCommandProcessHelpers.WriteVerbose(formatter, useJson, verbose, $"dotnet-trace exited with code {traceProcess.Process.ExitCode}.");
 
-		if (stopRequested && traceProcess.Process.ExitCode == 130)
+		if (collectorInterrupted && traceProcess.Process.ExitCode == 130)
 		{
 			ProfileCommandProcessHelpers.WriteVerbose(
 				formatter,
@@ -112,32 +124,31 @@ internal static class ProfileTraceLifecycle
 		return stopRequested;
 	}
 
-	internal static async Task StopAndWaitForFinalizationAsync(
+	internal static async Task<bool> StopAndWaitForFinalizationAsync(
 		MonitoredProcess traceProcess,
 		Task processWaitTask,
+		Task finalizationStartedTask,
 		TimeSpan traceStopTimeout,
 		IOutputFormatter formatter,
 		bool useJson,
-		bool verbose)
+		bool verbose,
+		TimeSpan? traceStopInterruptDelay = null)
 	{
-		using var timeoutSource = new CancellationTokenSource(traceStopTimeout);
-		try
-		{
-			await RequestStopAsync(traceProcess.Process, formatter, useJson, verbose, timeoutSource.Token);
-			await WaitForFinalizationAsync(
-				traceProcess,
-				processWaitTask,
-				traceStopTimeout,
-				"after the stop request",
-				timeoutSource);
-		}
-		catch (OperationCanceledException) when (timeoutSource.IsCancellationRequested)
-		{
-			throw new MauiToolException(
-				ErrorCodes.InternalError,
-				$"dotnet-trace did not exit within {traceStopTimeout.TotalSeconds:0}s after the stop request.",
-				nativeError: traceProcess.GetCombinedOutput());
-		}
+		var stopOutcome = await RequestStopAsync(
+			traceProcess.Process,
+			finalizationStartedTask,
+			formatter,
+			useJson,
+			verbose,
+			traceStopInterruptDelay ?? ProfileCommand.s_traceStopInterruptDelay);
+		await WaitForFinalizationAsync(
+			traceProcess,
+			processWaitTask,
+			traceStopTimeout,
+			stopOutcome == StopRequestOutcome.FinalizationAcknowledged
+				? "after finalization started"
+				: "after the stop request");
+		return stopOutcome == StopRequestOutcome.Interrupted;
 	}
 
 	static async Task WaitForFinalizationAsync(
@@ -349,17 +360,19 @@ internal static class ProfileTraceLifecycle
 		}
 	}
 
-	internal static async Task RequestStopAsync(
+	internal static async Task<StopRequestOutcome> RequestStopAsync(
 		Process traceProcess,
+		Task finalizationStartedTask,
 		IOutputFormatter formatter,
 		bool useJson,
 		bool verbose,
+		TimeSpan interruptDelay,
 		CancellationToken cancellationToken = default)
 	{
 		if (traceProcess.HasExited)
 		{
 			ProfileCommandProcessHelpers.WriteVerbose(formatter, useJson, verbose, "dotnet-trace had already exited before the stop request was sent.");
-			return;
+			return StopRequestOutcome.Exited;
 		}
 
 		ProfileCommandProcessHelpers.WriteVerbose(formatter, useJson, verbose, $"Sending a stop newline to dotnet-trace stdin (PID {traceProcess.Id}).");
@@ -385,20 +398,45 @@ internal static class ProfileTraceLifecycle
 		ProfileCommandProcessHelpers.WriteVerbose(formatter, useJson, verbose, "Closed dotnet-trace stdin after the stop request.");
 
 		var processExitTask = traceProcess.WaitForExitAsync();
-		var interruptDelayTask = Task.Delay(ProfileCommand.s_traceStopInterruptDelay, cancellationToken);
-		if (await Task.WhenAny(processExitTask, interruptDelayTask) == processExitTask)
-			return;
+		var interruptDelayTask = Task.Delay(interruptDelay, cancellationToken);
+		var completedTask = await Task.WhenAny(processExitTask, finalizationStartedTask, interruptDelayTask);
+		if (completedTask == processExitTask)
+			return StopRequestOutcome.Exited;
+		if (completedTask == finalizationStartedTask)
+		{
+			ProfileCommandProcessHelpers.WriteVerbose(formatter, useJson, verbose, "dotnet-trace acknowledged the stop request and began finalization.");
+			return StopRequestOutcome.FinalizationAcknowledged;
+		}
 
 		await interruptDelayTask;
+		if (finalizationStartedTask.IsCompleted)
+		{
+			ProfileCommandProcessHelpers.WriteVerbose(formatter, useJson, verbose, "dotnet-trace acknowledged the stop request before the interrupt fallback.");
+			return StopRequestOutcome.FinalizationAcknowledged;
+		}
 		if (!traceProcess.HasExited)
 		{
 			ProfileCommandProcessHelpers.WriteVerbose(
 				formatter,
 				useJson,
 				verbose,
-				$"dotnet-trace was still running {ProfileCommand.s_traceStopInterruptDelay.TotalSeconds:0.#}s after the stdin stop request; sending SIGINT to the process tree.");
-			await SendInterruptToProcessTreeAsync(traceProcess, formatter, useJson, verbose, cancellationToken);
+				$"dotnet-trace did not acknowledge the stop request within {interruptDelay.TotalSeconds:0.#}s; sending SIGINT to the process tree.");
+			var interruptOutcome = await SendInterruptToProcessTreeAsync(
+				traceProcess,
+				finalizationStartedTask,
+				formatter,
+				useJson,
+				verbose,
+				cancellationToken);
+			if (interruptOutcome is StopRequestOutcome.FinalizationAcknowledged or StopRequestOutcome.Interrupted)
+				return interruptOutcome;
+
+			return traceProcess.HasExited
+				? StopRequestOutcome.Exited
+				: StopRequestOutcome.Unacknowledged;
 		}
+
+		return StopRequestOutcome.Exited;
 	}
 
 	internal static async Task StopBackgroundProcessAsync(Process? process, string processName, IOutputFormatter formatter, bool useJson, bool verbose)
@@ -419,35 +457,46 @@ internal static class ProfileTraceLifecycle
 		}
 	}
 
-	static async Task SendInterruptToProcessTreeAsync(
+	static async Task<StopRequestOutcome> SendInterruptToProcessTreeAsync(
 		Process rootProcess,
+		Task finalizationStartedTask,
 		IOutputFormatter formatter,
 		bool useJson,
 		bool verbose,
 		CancellationToken cancellationToken)
 	{
 		if (rootProcess.HasExited)
-			return;
+			return StopRequestOutcome.Exited;
 
 		if (OperatingSystem.IsWindows())
 		{
 			ProfileCommandProcessHelpers.WriteVerbose(formatter, useJson, verbose, "Skipping SIGINT fallback on Windows.");
-			return;
+			return StopRequestOutcome.Unacknowledged;
 		}
 
 		var pids = await GetDescendantProcessIdsAsync(rootProcess.Id, cancellationToken);
 		pids.Add(rootProcess.Id);
 
+		var rootInterrupted = false;
 		foreach (var pid in pids.Distinct().OrderByDescending(pid => pid))
 		{
 			cancellationToken.ThrowIfCancellationRequested();
+			if (finalizationStartedTask.IsCompleted)
+			{
+				ProfileCommandProcessHelpers.WriteVerbose(formatter, useJson, verbose, "dotnet-trace acknowledged finalization before the SIGINT fallback reached the collector.");
+				return StopRequestOutcome.FinalizationAcknowledged;
+			}
 			ProfileCommandProcessHelpers.WriteVerbose(formatter, useJson, verbose, $"Sending SIGINT to PID {pid}.");
-			_ = await ProcessRunner.RunAsync(
+			var result = await ProcessRunner.RunAsync(
 				"kill",
 				["-INT", pid.ToString()],
 				timeout: TimeSpan.FromSeconds(5),
 				cancellationToken: cancellationToken);
+			if (pid == rootProcess.Id && result.Success)
+				rootInterrupted = true;
 		}
+
+		return rootInterrupted ? StopRequestOutcome.Interrupted : StopRequestOutcome.Unacknowledged;
 	}
 
 	static async Task<List<int>> GetDescendantProcessIdsAsync(int rootPid, CancellationToken cancellationToken)
