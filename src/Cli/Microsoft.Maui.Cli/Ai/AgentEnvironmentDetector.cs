@@ -59,6 +59,7 @@ internal static class AgentEnvironmentDetector
 				environments.Add(new DetectedEnvironment
 				{
 					Kind = AgentEnvironmentKind.Claude,
+					MarkerPath = Directory.Exists(Path.Combine(dir, ".claude")) ? Path.Combine(dir, ".claude") : Path.Combine(dir, ".mcp.json"),
 					SkillsDirectory = Path.Combine(dir, ".claude", "skills"),
 					McpConfigPath = Path.Combine(dir, ".mcp.json"),
 					McpConfigExists = File.Exists(Path.Combine(dir, ".mcp.json"))
@@ -74,6 +75,8 @@ internal static class AgentEnvironmentDetector
 				environments.Add(new DetectedEnvironment
 				{
 					Kind = AgentEnvironmentKind.VsCode,
+					MarkerPath = new[] { ".vscode", ".github/skills", ".github/agents" }
+						.Select(path => Path.Combine(dir, path)).First(Directory.Exists),
 					SkillsDirectory = Path.Combine(dir, ".github", "skills"),
 					McpConfigPath = Path.Combine(dir, ".vscode", "mcp.json"),
 					McpConfigExists = File.Exists(Path.Combine(dir, ".vscode", "mcp.json"))
@@ -92,6 +95,7 @@ internal static class AgentEnvironmentDetector
 				environments.Add(new DetectedEnvironment
 				{
 					Kind = AgentEnvironmentKind.OpenCode,
+					MarkerPath = Directory.Exists(Path.Combine(dir, ".opencode")) ? Path.Combine(dir, ".opencode") : configPath,
 					SkillsDirectory = Path.Combine(dir, ".opencode", "skills"),
 					McpConfigPath = configPath,
 					McpConfigExists = File.Exists(configPath)
@@ -157,6 +161,8 @@ internal static class AgentEnvironmentDetector
 		return new DetectedEnvironment
 		{
 			Kind = AgentEnvironmentKind.CopilotCli,
+			MarkerPath = copilotDir,
+			Scope = "user",
 			SkillsDirectory = Path.Combine(searchRoot, ".github", "skills"),
 			McpConfigPath = mcpPath,
 			McpConfigExists = File.Exists(mcpPath)

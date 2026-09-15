@@ -39,7 +39,8 @@ internal static class SkillInstaller
 		bool force,
 		CancellationToken ct = default,
 		IReadOnlyDictionary<string, byte[]>? preparedFiles = null,
-		string? preparedCommit = null)
+		string? preparedCommit = null,
+		string? resolvedCommit = null)
 	{
 		if (string.IsNullOrWhiteSpace(skill.Name) ||
 			skill.Name is "." or ".." ||
@@ -103,6 +104,7 @@ internal static class SkillInstaller
 			{
 				Name = skill.Name,
 				Commit = commitSha,
+				ResolvedCommit = resolvedCommit,
 				Branch = branch,
 				UpdatedAt = DateTime.UtcNow.ToString("o"),
 				Source = repo,

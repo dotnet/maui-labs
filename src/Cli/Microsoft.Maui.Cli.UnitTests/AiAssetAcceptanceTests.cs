@@ -471,24 +471,37 @@ public sealed class AiAssetAcceptanceTests : IDisposable
 
 	sealed class CatalogHandler(Func<string> revision, Func<bool> rejectNetwork) : HttpMessageHandler
 	{
+		private readonly Dictionary<string, string> snapshots = [];
 		protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
 		{
 			if (rejectNetwork())
 				throw new InvalidOperationException($"Unexpected network access during inventory: {request.RequestUri}");
 			var path = request.RequestUri!.AbsolutePath;
+			var contentRevision = revision();
+			if (request.RequestUri.Host == "raw.githubusercontent.com")
+			{
+				var commit = path.Split('/')[3];
+				if (!snapshots.TryGetValue(commit, out contentRevision))
+					throw new InvalidOperationException($"Unpinned content request: {request.RequestUri}");
+			}
 			string body;
 			if (path.EndsWith("/marketplace.json", StringComparison.Ordinal))
 				body = """{"plugins":[]}""";
 			else if (path.Contains("/git/trees/", StringComparison.Ordinal))
 				body = """{"tree":[{"path":".github/skills/test-skill/SKILL.md","type":"blob"},{"path":".github/skills/second-skill/SKILL.md","type":"blob"},{"path":".github/agents/maui-reviewer.agent.md","type":"blob"}]}""";
 			else if (path.Contains("/commits/", StringComparison.Ordinal))
-				body = """{"commit":{"tree":{"sha":"tree"}}}""";
+			{
+				var reference = path[(path.IndexOf("/commits/", StringComparison.Ordinal) + 9)..];
+				var commit = MarketplaceClient.IsCommitSha(reference) ? reference : AiTestCatalog.CommitFor(contentRevision);
+				snapshots.TryAdd(commit, contentRevision);
+				body = $$$$"""{"sha":"{{{{commit}}}}","commit":{"tree":{"sha":"{{{{AiTestCatalog.TreeFor(commit)}}}}"}}}""";
+			}
 			else if (path.EndsWith("/commits", StringComparison.Ordinal))
 				body = $$"""[{"sha":"{{revision()}}"}]""";
 			else if (path.EndsWith("/maui-reviewer.agent.md", StringComparison.Ordinal))
-				body = $"---\nname: maui-reviewer\ndescription: MAUI review guidance\n---\nMAUI agent {revision()}";
+				body = $"---\nname: maui-reviewer\ndescription: MAUI review guidance\n---\nMAUI agent {contentRevision}";
 			else if (path.EndsWith("/SKILL.md", StringComparison.Ordinal))
-				body = $"---\nname: {(path.Contains("second-skill", StringComparison.Ordinal) ? "second-skill" : "test-skill")}\ndescription: MAUI skill\n---\nMAUI skill {revision()}";
+				body = $"---\nname: {(path.Contains("second-skill", StringComparison.Ordinal) ? "second-skill" : "test-skill")}\ndescription: MAUI skill\n---\nMAUI skill {contentRevision}";
 			else
 				throw new InvalidOperationException($"Unexpected catalog request: {request.RequestUri}");
 			return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) });

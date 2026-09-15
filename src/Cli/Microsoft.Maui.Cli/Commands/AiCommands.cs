@@ -3,6 +3,7 @@
 
 using System.CommandLine;
 using Microsoft.Maui.Cli.Ai;
+using Microsoft.Maui.Cli.Output;
 
 namespace Microsoft.Maui.Cli.Commands;
 
@@ -28,11 +29,17 @@ public static partial class AiCommands
 
 	public static Command Create()
 	{
-		var command = new Command("ai", "Bootstrap and manage MAUI skills, agents, and MCP configuration. Skills and agents are project-scoped, honoring detected nested skill directories within the current Git project (or current directory outside Git). MCP configuration uses the selected client's project location, except Copilot CLI MCP is user-wide (~/.copilot/mcp-config.json). Use --dry-run to preview; --ci or --json runs without prompts.");
+		var command = new DetailedHelpCommand("ai", "Manage MAUI skills, agents, and MCP configuration.")
+		{
+			HelpDetails = "Skills and agents are project-scoped, honoring detected nested skill directories within the current Git project (or current directory outside Git). MCP configuration uses the selected client's project location, except Copilot CLI MCP is user-wide (~/.copilot/mcp-config.json). Markers are configuration evidence, not executable detection. Only interactive init offers client selection when no targets are detected or tracked; automation must use --env. Use --dry-run to preview; --ci or --json runs without prompts.\n\nExamples:\n  maui ai init --env VsCode --dry-run\n  maui ai list skill --env Claude --json\n  maui ai add mcp maui-devflow --env CopilotCli --yes"
+		};
 		command.Add(CreateAssetCommand("init"));
 		foreach (var name in new[] { "list", "status", "update" })
 			command.Add(CreateAssetCommand(name));
-		var add = new Command("add", "Add one explicitly named skill, agent, or known MCP registration.");
+		var add = new DetailedHelpCommand("add", "Add one named skill, agent, or known MCP registration.")
+		{
+			HelpDetails = "Select the kind and exact name; no sibling assets are implied.\n\nExamples:\n  maui ai add skill maui-devflow-debug --env Claude --yes\n  maui ai add agent expert-reviewer --env VsCode --dry-run\n  maui ai add mcp maui-devflow --env CopilotCli --json\n\nGlobal flags: --dry-run previews without writes; --json emits one result envelope; --ci disables prompts. --yes accepts confirmation, not conflicts."
+		};
 		foreach (var kind in Enum.GetValues<AiAssetKind>())
 			add.Add(CreateAssetCommand("add", kind));
 		command.Add(add);

@@ -63,6 +63,11 @@ maui ai update skill --skill maui-devflow-debug --env Claude --yes
 
 Recommendations are explicit, not every catalog entry: the three bundled DevFlow skills, DevFlow MCP registration, the `expert-reviewer` agent, and the available `maui-current-apis`, `maui-project-structure`, `maui-app-architecture`, `maui-ui-patterns`, `maui-unit-testing`, and `maui-accessibility` skills. Only client-compatible recommendations are selected. Other catalog assets, including Comet-specific guidance, remain available through explicit selectors/add commands; adding an entry to the catalog does not automatically add it to init.
 
+Human catalog output labels recommendations explicitly. Each command's `--help`
+includes examples; `[type]` means an optional positional kind, not a required
+option. Global `--json`, `--ci`, and `--dry-run` control CLI behavior, not
+installation scope.
+
 #### AI command scope and options
 
 Run from the project you want to configure. In Git repositories, the Git root is the project boundary; outside Git, the current directory is used. Detected nested skill/configuration locations are honored. Copilot agents live in project `.github/agents` and support VS Code and Copilot CLI, not Claude Code or OpenCode.
@@ -79,7 +84,14 @@ Run from the project you want to configure. In Git repositories, the Git root is
 
 All commands support repeatable `--env Claude|VsCode|CopilotCli|OpenCode`. An explicit kind/name plus explicit environments must be compatible in **every** requested pairing: `add agent <name> --env Claude VsCode` fails before writing instead of silently targeting only VS Code. Without explicit assets, combined setup/catalog/inventory includes applicable kinds for the chosen environments. Shared physical destinations are deduplicated while retaining client associations.
 
-`init` and `add --env` can target a canonical environment before its marker directory exists. Without `--env`, environments must be detected; no default environment is silently invented. Read-only commands and update never create environment directories.
+`init` and `add --env` can target a canonical environment before its marker directory exists. Without `--env`, the default is **all detected environments, not Copilot**. Setup explains the configuration markers or recorded installations that selected each client, together with destinations and scope. A marker is not proof that the client executable is installed or running. In particular, a user's `~/.copilot/` can select Copilot CLI even without a project Copilot marker.
+
+Interactive `init` offers a client selector when none are detected. It never invents a default client. With `--yes`, `--ci`, `--json`, `--dry-run`, or redirected input, missing targets instead produce actionable `--env` guidance without prompting. Read-only commands and update never create environment directories. Preview setup explicitly when configuring a project for the first time:
+
+```bash
+maui ai init --env Claude --dry-run
+maui ai init --env Claude --yes
+```
 
 `--yes` (alias `-y`) accepts confirmation prompts only. **`--force` authorizes replacement/adoption, not prompt acceptance**; combine it with `--yes` for unattended replacement. For bundled DevFlow skills, force can also replace a newer CLI's content with the running CLI's bundle. Global `--json` and `--ci` suppress prompts but never authorize overwriting conflicts. CI stops later mutations after a failure. Customized or conflicting unmanaged assets require force and otherwise produce a blocked result/nonzero exit. Harmless already-current actions can skip successfully.
 
@@ -87,11 +99,24 @@ Global `--dry-run` never prompts or writes, including ownership/freshness state.
 
 JSON command results use a versioned envelope with `schemaVersion`, `command`, `dryRun`, aggregate `status`, and `results`. Each result identifies the asset kind/name, associated environments, destination and scope, ownership, observed state, planned action, outcome, and reason. A successful inventory command is not a claim that every row is current or managed. Inspect row states and reasons; blocked actions and application failures produce nonzero exits.
 
+The [automation contract](../../docs/Cli/ai-automation.md) documents the
+[JSON Schema](../../docs/Cli/ai-result.schema.json), reason codes, exit semantics,
+compatibility rules, and the parser/cancellation cases outside the envelope.
+
 MCP configuration uses `.mcp.json` for Claude Code, `.vscode/mcp.json` for VS Code, `opencode.json` (or existing `.jsonc`) for OpenCode, and **user-wide** `~/.copilot/mcp-config.json` for Copilot CLI. Only the known definition's launch fields are managed; other servers, credentials, environment settings, and user options are preserved even under force. Malformed shared configuration remains an error, not permission to replace the whole file. An exact unmanaged registration is not silently adopted; use `add mcp ... --force` to opt into management. MCP update refreshes the registration definition, not the server executable version.
 
 JSONC comments cannot be retained when a configuration is rewritten; the original is backed up to `<config>.bak`. This is a latest-only recovery file, not backup history: another comment-bearing rewrite replaces it. Copy it elsewhere before another rewrite if you need to retain that recovery point. Clients may require restart, project trust, or server approval before loading a registration. Inventory reports configuration and ownership, not connection health.
 
 The default catalog is `dotnet/maui-labs` on `main`. Source overrides use `--repo <owner/repo>` and `--branch <ref>`; managed assets retain their recorded origin for later updates unless explicitly overridden. Missing required provenance is reported rather than guessed. Bundled versions refer to the running CLI's content, not remote downloads.
+
+Each remote repository/ref is resolved once per plan to an immutable commit, so
+catalog discovery and downloaded content cannot mix revisions when a branch
+moves. Results report `origin.resolvedCommit` when a source is resolved, while
+`origin.branch` retains the tracking ref. To reproduce remote selection across
+separate preview/apply runs, pass the same full 40-character commit to `--branch`
+and use the same CLI version. A commit-pinned installation stays pinned on update
+unless its source is explicitly overridden; ordinary branches continue tracking
+new commits. See the automation contract for pipeline examples and limitations.
 
 Skills retain their existing owner metadata (`.skill-version` or DevFlow state). Agent/project MCP ownership uses `.maui/ai-assets.json` under the project root; user MCP ownership is separate under the user's `.maui`. Registries record identity, origin, and managed-content hashes, not raw credentials/configuration. These are mutable local installation records; consider excluding them from version control. Commands do not silently change `.gitignore`.
 

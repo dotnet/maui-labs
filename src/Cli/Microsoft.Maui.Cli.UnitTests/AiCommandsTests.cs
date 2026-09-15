@@ -1,3 +1,4 @@
+using System.CommandLine;
 using Microsoft.Maui.Cli.Commands;
 using Xunit;
 
@@ -53,7 +54,7 @@ public class AiCommandsTests
 	public void AddHelp_IsSpecificToAssetKind(string kind, string purpose, string argument)
 	{
 		var add = AiCommands.Create().Subcommands.Single(c => c.Name == "add").Subcommands.Single(c => c.Name == kind);
-		Assert.Contains(purpose, add.Description);
+		Assert.Contains(purpose, RenderHelp(add));
 		Assert.Contains(argument, add.Arguments.Single().Description);
 		if (kind == "agent") Assert.Contains("VsCode, CopilotCli", add.Options.Single(o => o.Name == "--env").Description);
 		if (kind is "agent" or "mcp")
@@ -66,9 +67,10 @@ public class AiCommandsTests
 	public void RootHelp_DisclosesUserWideCopilotMcpException()
 	{
 		var root = AiCommands.Create();
-		Assert.Contains("Copilot CLI MCP is user-wide", root.Description);
-		Assert.Contains("~/.copilot/mcp-config.json", root.Description);
-		Assert.Contains("detected nested skill directories", root.Description);
+		var help = RenderHelp(root);
+		Assert.Contains("Copilot CLI MCP is user-wide", help);
+		Assert.Contains("~/.copilot/mcp-config.json", help);
+		Assert.Contains("detected nested skill directories", help);
 		Assert.Contains("downgrading bundled DevFlow", root.Subcommands.Single(c => c.Name == "init").Options.Single(o => o.Name == "--force").Description);
 		Assert.Contains("downgrading bundled DevFlow", root.Subcommands.Single(c => c.Name == "update").Options.Single(o => o.Name == "--force").Description);
 	}
@@ -103,5 +105,12 @@ public class AiCommandsTests
 	{
 		using var client = AiCommands.CreateGitHubHttpClient();
 		Assert.Equal(TimeSpan.FromSeconds(30), client.Timeout);
+	}
+
+	private static string RenderHelp(Command command)
+	{
+		using var output = new StringWriter();
+		Assert.Equal(0, command.Parse("--help").Invoke(new InvocationConfiguration { Output = output }));
+		return output.ToString();
 	}
 }

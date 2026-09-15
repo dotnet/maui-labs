@@ -1,6 +1,7 @@
 using Microsoft.Maui.Cli.Ai;
 using Microsoft.Maui.Cli.Ai.Models;
 using Microsoft.Maui.Cli.Commands;
+using Microsoft.Maui.Cli.Output;
 using Spectre.Console.Testing;
 using Xunit;
 
@@ -9,6 +10,120 @@ namespace Microsoft.Maui.Cli.UnitTests;
 [Collection("CLI")]
 public sealed class AiHumanPlanTests
 {
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public async Task RootHelp_IsBoundedAndDoesNotIncludeChildHelpDetails(bool spectre)
+	{
+		using var test = new AiCommandFixture();
+		string output;
+		if (spectre)
+		{
+			var console = new TestConsole();
+			SpectreHelpBuilder.WriteHelp(AiCommands.Create(), console);
+			output = console.Output;
+		}
+		else
+		{
+			var result = await AiEnvironmentSelectionTests.Invoke(["ai", "--help"]);
+			Assert.Equal(0, result.Exit);
+			output = result.Output;
+		}
+		Assert.InRange(output.Split('\n').Length, 10, 65);
+		Assert.Equal(1, output.Split("Examples:", StringSplitOptions.None).Length - 1);
+		Assert.DoesNotContain("Global flags:", output);
+		Assert.DoesNotContain("[type] is optional", output);
+		Assert.DoesNotContain("maui ai update skill", output);
+		foreach (var command in AiCommands.Create().Subcommands)
+		{
+			Assert.DoesNotContain("\n", command.Description);
+			Assert.DoesNotContain("Examples:", command.Description);
+		}
+		Assert.Empty(test.Handler.Requests);
+	}
+
+	[Fact]
+	public void SpectreLeafHelp_RetainsItsOwnExamplesFlagsAndTypeGuidance()
+	{
+		var console = new TestConsole();
+		var command = AiCommands.Create().Subcommands.Single(command => command.Name == "update");
+		SpectreHelpBuilder.WriteHelp(command, console);
+		Assert.Contains("maui ai update skill --skill maui-devflow-debug", console.Output);
+		Assert.Contains("Global flags:", console.Output);
+		Assert.Contains("[type] is optional", console.Output);
+		Assert.Equal(1, console.Output.Split("Examples:", StringSplitOptions.None).Length - 1);
+	}
+
+	[Theory]
+	[InlineData("init")]
+	[InlineData("list")]
+	[InlineData("status")]
+	[InlineData("update")]
+	[InlineData("add", "skill")]
+	[InlineData("add", "agent")]
+	[InlineData("add", "mcp")]
+	public async Task CommandHelp_ContainsCopyableExamplesAndAutomationFlags(params string[] command)
+	{
+		using var test = new AiCommandFixture();
+		var result = await AiEnvironmentSelectionTests.Invoke(["ai", .. command, "--help"]);
+		Assert.Equal(0, result.Exit);
+		Assert.Contains("Examples:", result.Output);
+		Assert.Contains("maui ai " + string.Join(" ", command), result.Output);
+		Assert.Contains("--env", result.Output);
+		Assert.Contains("--json", result.Output);
+		Assert.Contains("--ci", result.Output);
+		Assert.Contains("--dry-run", result.Output);
+		if (command[0] is "list" or "status" or "update")
+			Assert.Contains("[type] is optional", result.Output);
+		var examples = result.Output.Split('\n').Select(line => line.Trim())
+			.Where(line => line.StartsWith("maui ai ", StringComparison.Ordinal)).ToArray();
+		Assert.NotEmpty(examples);
+		foreach (var example in examples)
+			Assert.Empty(Program.BuildRootCommand().Parse(example["maui ".Length..]).Errors);
+		Assert.Empty(test.Handler.Requests);
+	}
+
+	[Fact]
+	public async Task HumanCatalog_LabelsRecommendationsWithoutSelectingEveryAsset()
+	{
+		using var test = new AiCommandFixture();
+		var result = await AiEnvironmentSelectionTests.Invoke(["ai", "list", "--env", "VsCode"]);
+		Assert.Equal(0, result.Exit);
+		Assert.Contains("maui-devflow-debug (recommended)", result.Output);
+		Assert.Contains("maui-devflow (recommended)", result.Output);
+		Assert.Contains("custom-skill", result.Output);
+		Assert.DoesNotContain("custom-skill (recommended)", result.Output);
+	}
+
+	[Fact]
+	public async Task HumanYes_PrintsSelectionAndCompletePlanBeforeAnyWrite()
+	{
+		using var test = new AiCommandFixture();
+		var console = new TestConsole();
+		console.Interactive();
+		AiCommands.ConsoleForTests = console;
+		AiCommands.InputRedirectedForTests = false;
+		var before = test.Snapshot();
+		var original = Console.Out;
+		using var output = new BeforeWriteObserver(line =>
+		{
+			if (line?.StartsWith("user ", StringComparison.Ordinal) == true)
+				Assert.Equal(before, test.Snapshot());
+		});
+		try
+		{
+			Console.SetOut(output);
+			Assert.Equal(0, await Program.BuildRootCommand().Parse(
+				["ai", "add", "mcp", "maui-devflow", "--env", "CopilotCli", "--yes"]).InvokeAsync());
+		}
+		finally { Console.SetOut(original); }
+		Assert.Contains("explicit-selection", output.ToString());
+		Assert.Contains("user-wide MCP", output.ToString());
+		Assert.Contains("user     mcp    create", output.ToString());
+		Assert.True(File.Exists(Path.Combine(test.Home, ".copilot", "mcp-config.json")));
+		Assert.Empty(console.Output);
+	}
+
 	[Fact]
 	public async Task HumanDryRun_ShowsActionScopeAndDestinationWithoutPromptingOrWriting()
 	{
@@ -92,5 +207,14 @@ public sealed class AiHumanPlanTests
 		};
 		asset.Environments.Add(AgentEnvironmentKind.CopilotCli);
 		return asset;
+	}
+
+	private sealed class BeforeWriteObserver(Action<string?> observe) : StringWriter
+	{
+		public override void WriteLine(string? value)
+		{
+			observe(value);
+			base.WriteLine(value);
+		}
 	}
 }

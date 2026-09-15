@@ -207,6 +207,8 @@ internal sealed class AiCommandFixture : IDisposable
 	private readonly string? originalHome = AgentEnvironmentDetector.UserHomeOverrideForTests;
 	private readonly string? originalStateRoot = DevFlowSkillManager.StateRootOverrideForTests;
 	private readonly Func<HttpClient>? originalFactory = AiCommands.HttpClientFactoryForTests;
+	private readonly Spectre.Console.IAnsiConsole? originalConsole = AiCommands.ConsoleForTests;
+	private readonly bool? originalRedirected = AiCommands.InputRedirectedForTests;
 	internal string Root { get; }
 	internal string Home { get; }
 	internal AiTestCatalog Handler { get; } = new();
@@ -241,6 +243,8 @@ internal sealed class AiCommandFixture : IDisposable
 		AgentEnvironmentDetector.UserHomeOverrideForTests = originalHome;
 		DevFlowSkillManager.StateRootOverrideForTests = originalStateRoot;
 		AiCommands.HttpClientFactoryForTests = originalFactory;
+		AiCommands.ConsoleForTests = originalConsole;
+		AiCommands.InputRedirectedForTests = originalRedirected;
 		Handler.Dispose();
 		Directory.Delete(Root, true);
 	}
@@ -249,22 +253,52 @@ internal sealed class AiCommandFixture : IDisposable
 internal sealed class AiTestCatalog : HttpMessageHandler
 {
 	internal string Revision { get; set; } = "initial";
+	internal bool MoveAfterEveryRequest { get; set; }
+	internal bool FailResolution { get; set; }
+	internal Dictionary<string, string> Snapshots { get; } = [];
 	internal List<Uri> Requests { get; } = [];
+	internal static string CommitFor(string revision) => Convert.ToHexString(
+		System.Security.Cryptography.SHA1.HashData(System.Text.Encoding.UTF8.GetBytes(revision))).ToLowerInvariant();
+	internal static string TreeFor(string commit) => CommitFor("tree:" + commit);
 	protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
 	{
 		var uri = request.RequestUri!;
 		Requests.Add(uri);
 		var path = uri.AbsolutePath;
 		string content;
+		var revision = Revision;
+		if (MoveAfterEveryRequest) Revision = $"moved-{Requests.Count}";
+		if (path.Contains("/commits/"))
+		{
+			if (FailResolution) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+			var reference = Uri.UnescapeDataString(path[(path.IndexOf("/commits/", StringComparison.Ordinal) + 9)..]);
+			var commit = MarketplaceClient.IsCommitSha(reference) ? reference : CommitFor(revision);
+			Snapshots.TryAdd(commit, revision);
+			content = $$$$"""{"sha":"{{{{commit}}}}","commit":{"tree":{"sha":"{{{{TreeFor(commit)}}}}"}}}""";
+			return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(content) });
+		}
+		if (uri.Host == "raw.githubusercontent.com")
+		{
+			var commit = path.Split('/')[3];
+			if (!Snapshots.TryGetValue(commit, out revision))
+				throw new InvalidOperationException($"Unpinned content request: {uri}");
+		}
 		if (path.Contains("/git/trees/"))
+		{
+			Assert.Contains(Snapshots.Keys, commit => path.EndsWith(TreeFor(commit), StringComparison.Ordinal));
 			content = """{"tree":[{"path":".github/skills/custom-skill/SKILL.md","type":"blob"},{"path":".github/skills/other-skill/SKILL.md","type":"blob"},{"path":".github/agents/maui-helper.agent.md","type":"blob"}]}""";
-		else if (path.EndsWith("/marketplace.json")) content = """{"plugins":[]}""";
-		else if (path.Contains("/commits/")) content = """{"commit":{"tree":{"sha":"tree"}}}""";
-		else if (path.EndsWith("/commits")) content = """[{"sha":"new-commit"}]""";
+		}
+		else if (path.EndsWith("/marketplace.json")) content = """{"plugins":[{"name":"test-plugin","source":".github"}]}""";
+		else if (path.EndsWith("/plugin.json")) content = """{"name":"test-plugin","skills":["skills"]}""";
+		else if (path.EndsWith("/commits"))
+		{
+			Assert.Contains(Snapshots.Keys, commit => uri.Query.Contains("sha=" + commit, StringComparison.Ordinal));
+			content = """[{"sha":"new-commit"}]""";
+		}
 		else if (path.EndsWith("/SKILL.md"))
-			content = $"---\nname: {(path.Contains("other-skill") ? "other-skill" : "custom-skill")}\ndescription: MAUI skill\n---\n{path} {Revision}";
+			content = $"---\nname: {(path.Contains("other-skill") ? "other-skill" : "custom-skill")}\ndescription: MAUI skill\n---\n{path} {revision}";
 		else if (path.EndsWith(".agent.md"))
-			content = $"---\nname: maui-helper\ndescription: MAUI development agent\n---\n{path} {Revision}";
+			content = $"---\nname: maui-helper\ndescription: MAUI development agent\n---\n{path} {revision}";
 		else return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
 		return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(content) });
 	}

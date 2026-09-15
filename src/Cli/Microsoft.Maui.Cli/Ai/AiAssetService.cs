@@ -22,22 +22,35 @@ internal sealed class AiAssetService(HttpClient http, string currentDirectory, L
 	};
 	private readonly string projectRoot = AgentEnvironmentDetector.ResolveProjectRoot(currentDirectory);
 	private readonly Dictionary<(string Repo, string Branch), List<(string Path, string Type)>> trees = [];
+	private readonly Dictionary<(string Repo, string Branch), MarketplaceClient.Snapshot> snapshots = [];
 	internal static bool IsRecommended(AiAssetKind kind, string name) => RecommendedIdentities.Contains($"{kind}:{name}");
+
+	private async Task<MarketplaceClient.Snapshot> SnapshotAsync(string repo, string branch, CancellationToken ct)
+	{
+		if (snapshots.TryGetValue((repo, branch), out var cached)) return cached;
+		var snapshot = await MarketplaceClient.ResolveSnapshotAsync(http, repo, branch, ct);
+		snapshots.Add((repo, branch), snapshot);
+		return snapshot;
+	}
 
 	private async Task<List<(string Path, string Type)>> TreeAsync(string repo, string branch, CancellationToken ct)
 	{
 		if (trees.TryGetValue((repo, branch), out var cached)) return cached;
-		var tree = await MarketplaceClient.FetchTreeEntriesAsync(http, repo, branch, ct)
+		var snapshot = await SnapshotAsync(repo, branch, ct);
+		var tree = await MarketplaceClient.FetchTreeEntriesAsync(http, repo, snapshot.Commit, ct, snapshot.Tree)
 			?? throw new InvalidOperationException($"Could not read source catalog from {repo}@{branch}.");
 		trees.Add((repo, branch), tree);
 		return tree;
 	}
 
-	internal async Task<List<AiAsset>> PlanAsync(AiAssetRequest request, CancellationToken ct)
+	internal async Task<List<AiAsset>> PlanAsync(AiAssetRequest request, CancellationToken ct, List<DetectedEnvironment>? resolvedEnvironments = null)
 	{
-		var environments = ResolveEnvironments(request);
-		var kinds = request.Selectors.Count > 0 ? request.Selectors.Keys.ToArray() :
-			request.Kind is { } kind ? [kind] : Enum.GetValues<AiAssetKind>();
+		trees.Clear();
+		snapshots.Clear();
+		var environments = resolvedEnvironments ?? ResolveEnvironments(request);
+		if (environments.Count == 0)
+			throw new InvalidOperationException(NoEnvironmentsMessage(request));
+		var kinds = RequestedKinds(request);
 		ValidateSupport(request, environments, kinds);
 		if (request.Command == "list")
 		{
@@ -120,25 +133,71 @@ internal sealed class AiAssetService(HttpClient http, string currentDirectory, L
 		return plans;
 	}
 
-	private List<DetectedEnvironment> ResolveEnvironments(AiAssetRequest request)
+	internal static string NoEnvironmentsMessage(AiAssetRequest request) =>
+		$"No agent environments selected or detected. Select one explicitly, for example:\n  {EnvironmentRecoveryCommand(request)}\n" +
+		$"Valid --env names: {string.Join(", ", Enum.GetNames<AgentEnvironmentKind>())}. Configuration markers do not establish that client executables are installed.";
+
+	internal static string EnvironmentRecoveryCommand(AiAssetRequest request)
+	{
+		var explicitlyRequestedKinds = request.Selectors.Count > 0 ? request.Selectors.Keys.ToArray() :
+			request.Kind is { } kind ? [kind] : [];
+		var environment = AgentEnvironmentDetector.Descriptors.First(descriptor =>
+			explicitlyRequestedKinds.All(kind => AgentEnvironmentDetector.Supports(descriptor.Kind, kind))).Kind;
+		var arguments = new List<string> { "maui", "ai", request.Command };
+		if (request.Kind is { } assetKind && request.Command != "init")
+			arguments.Add(assetKind.ToString().ToLowerInvariant());
+		foreach (var (selectedKind, names) in request.Selectors)
+		{
+			if (request.Command != "add") arguments.Add("--" + selectedKind.ToString().ToLowerInvariant());
+			arguments.AddRange(names);
+		}
+		if (request.Repo is not null) arguments.AddRange(["--repo", request.Repo]);
+		if (request.Branch is not null) arguments.AddRange(["--branch", request.Branch]);
+		arguments.AddRange(["--env", environment.ToString()]);
+		if (request.Force) arguments.Add("--force");
+		if (request.DryRun) arguments.Add("--dry-run");
+		return string.Join(" ", arguments.Select(argument =>
+			argument.Length > 0 && argument.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.' or '/')
+				? argument : "\"" + argument.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("$", "\\$").Replace("`", "\\`") + "\""));
+	}
+
+	private static AiAssetKind[] RequestedKinds(AiAssetRequest request) => request.Selectors.Count > 0 ? request.Selectors.Keys.ToArray() :
+		request.Kind is { } kind ? [kind] : Enum.GetValues<AiAssetKind>();
+
+	private static bool UsesRegistry(string scope, AiAssetKind[] kinds, IEnumerable<AgentEnvironmentKind> environments) =>
+		scope == "user" ? kinds.Contains(AiAssetKind.Mcp) && environments.Contains(AgentEnvironmentKind.CopilotCli) :
+			kinds.Contains(AiAssetKind.Agent) && environments.Any(environment => AgentEnvironmentDetector.Supports(environment, AiAssetKind.Agent)) ||
+			kinds.Contains(AiAssetKind.Mcp) && environments.Any(environment => environment != AgentEnvironmentKind.CopilotCli);
+
+	internal List<DetectedEnvironment> ResolveEnvironments(AiAssetRequest request)
 	{
 		var detected = AgentEnvironmentDetector.Detect(currentDirectory);
-		if (request.Environments.Length > 0)
-			return request.Environments.Select(kind => detected.FirstOrDefault(e => e.Kind == kind) ?? AgentEnvironmentDetector.Canonical(kind, projectRoot)).ToList();
+		var kinds = RequestedKinds(request);
+		var candidates = request.Environments.Length > 0 ? request.Environments : Enum.GetValues<AgentEnvironmentKind>();
 		foreach (var (root, scope) in new[] { (projectRoot, "project"), (AgentEnvironmentDetector.UserHome, "user") })
 		{
+			if (request.Command == "list" && request.Environments.Length > 0 || !UsesRegistry(scope, kinds, candidates))
+				continue;
 			if (!File.Exists(AiAssetRegistry.RegistryPath(root))) continue;
-			foreach (var tracked in AiAssetRegistry.Inventory(root, scope))
-				foreach (var kind in tracked.Environments)
+			foreach (var tracked in AiAssetRegistry.Inventory(root, scope).Where(tracked => kinds.Contains(tracked.Kind)))
+				foreach (var kind in tracked.Environments.Where(candidates.Contains))
 				{
 					if (detected.Any(e => e.Kind == kind)) continue;
 					var environment = AgentEnvironmentDetector.Canonical(kind, projectRoot);
 					if (tracked.Kind == AiAssetKind.Mcp) environment.McpConfigPath = tracked.Path;
+					environment.ReasonCode = "managed-registry";
+					environment.MarkerPath = AiAssetRegistry.RegistryPath(root);
+					environment.Scope = scope;
 					detected.Add(environment);
 				}
 		}
-		if (detected.Count == 0)
-			throw new InvalidOperationException("No agent environments detected. Use --env to select an environment explicitly.");
+		if (request.Environments.Length > 0)
+			return request.Environments.Select(kind =>
+			{
+				var environment = detected.FirstOrDefault(e => e.Kind == kind) ?? AgentEnvironmentDetector.Canonical(kind, projectRoot);
+				environment.ReasonCode = "explicit-selection";
+				return environment;
+			}).ToList();
 		return detected;
 	}
 
@@ -171,27 +230,28 @@ internal sealed class AiAssetService(HttpClient http, string currentDirectory, L
 			(!request.Selectors.TryGetValue(AiAssetKind.Skill, out var skillNames) || skillNames.Any(n => !BundledNames.Contains(n, StringComparer.OrdinalIgnoreCase)));
 		var needAgents = kinds.Contains(AiAssetKind.Agent);
 		if (!needSkills && !needAgents) return result;
+		var snapshot = await SnapshotAsync(repo, branch, ct);
 		var tree = await TreeAsync(repo, branch, ct);
 		if (needSkills)
 		{
 			var skills = new List<SkillInfo>();
-			var marketplace = await MarketplaceClient.GetMarketplaceAsync(http, repo, branch, ct);
+			var marketplace = await MarketplaceClient.GetMarketplaceAsync(http, repo, snapshot.Commit, ct);
 			if (marketplace is not null)
 				foreach (var pluginEntry in marketplace.Plugins)
 				{
-					var plugin = await MarketplaceClient.GetPluginAsync(http, repo, branch, pluginEntry.Source, ct);
+					var plugin = await MarketplaceClient.GetPluginAsync(http, repo, snapshot.Commit, pluginEntry.Source, ct);
 					if (plugin is not null)
-						skills.AddRange(await MarketplaceClient.GetSkillsAsync(http, repo, branch, plugin, pluginEntry.Source, tree, ct));
+						skills.AddRange(await MarketplaceClient.GetSkillsAsync(http, repo, snapshot.Commit, plugin, pluginEntry.Source, tree, ct));
 				}
-			skills.AddRange(await MarketplaceClient.GetSkillsFromDirectoryAsync(http, repo, branch, ".github/skills", "dotnet-maui-repo", tree, ct));
+			skills.AddRange(await MarketplaceClient.GetSkillsFromDirectoryAsync(http, repo, snapshot.Commit, ".github/skills", "dotnet-maui-repo", tree, ct));
 			foreach (var skill in skills.GroupBy(s => s.Name, StringComparer.OrdinalIgnoreCase).Select(g => g.First()))
 				if (!Commands.AiCommands.IsDevFlowManagedSkillName(skill.Name))
-					result.Add(new AiAsset { Kind = AiAssetKind.Skill, Name = skill.Name, Origin = new(repo, branch, skill.RemotePath), Skill = skill });
+					result.Add(new AiAsset { Kind = AiAssetKind.Skill, Name = skill.Name, Origin = new(repo, branch, skill.RemotePath, snapshot.Commit), Skill = skill });
 		}
 		if (needAgents)
-			foreach (var agent in (await RepositoryAssetInstaller.GetCopilotAgentsAsync(http, repo, branch, tree, ct))
+			foreach (var agent in (await RepositoryAssetInstaller.GetCopilotAgentsAsync(http, repo, snapshot.Commit, tree, ct))
 				.GroupBy(a => a.Name, StringComparer.OrdinalIgnoreCase).Select(g => g.First()))
-				result.Add(new AiAsset { Kind = AiAssetKind.Agent, Name = agent.Name, Origin = new(repo, branch, agent.RemotePath) });
+				result.Add(new AiAsset { Kind = AiAssetKind.Agent, Name = agent.Name, Origin = new(repo, branch, agent.RemotePath, snapshot.Commit) });
 		return result;
 	}
 
@@ -223,8 +283,9 @@ internal sealed class AiAssetService(HttpClient http, string currentDirectory, L
 	private async Task<List<AiAsset>> InventoryAsync(List<DetectedEnvironment> environments, AiAssetKind[] kinds, CancellationToken ct)
 	{
 		var items = new List<AiAsset>();
-		var projectRegistry = kinds.Any(k => k != AiAssetKind.Skill) ? AiAssetRegistry.Inventory(projectRoot, "project") : [];
-		var userRegistry = kinds.Contains(AiAssetKind.Mcp) && environments.Any(e => e.Kind == AgentEnvironmentKind.CopilotCli)
+		var selectedEnvironments = environments.Select(environment => environment.Kind).ToArray();
+		var projectRegistry = UsesRegistry("project", kinds, selectedEnvironments) ? AiAssetRegistry.Inventory(projectRoot, "project") : [];
+		var userRegistry = UsesRegistry("user", kinds, selectedEnvironments)
 			? AiAssetRegistry.Inventory(AgentEnvironmentDetector.UserHome, "user") : [];
 		foreach (var tracked in projectRegistry.Concat(userRegistry).Where(a => kinds.Contains(a.Kind)))
 		{
@@ -267,7 +328,7 @@ internal sealed class AiAssetService(HttpClient http, string currentDirectory, L
 						{
 							Kind = AiAssetKind.Skill, Name = name, Path = directory, Environment = environment,
 							Managed = version is not null, AppliedHash = version?.ContentHash,
-							Origin = version is null ? null : new(version.Source ?? "", version.Branch ?? "", version.PluginPath ?? ""),
+							Origin = version is null ? null : new(version.Source ?? "", version.Branch ?? "", version.PluginPath ?? "", version.ResolvedCommit),
 							SkillVersion = version, CurrentHash = currentHash
 						};
 						item.Environments.AddRange(group.Select(e => e.Kind));
@@ -351,9 +412,11 @@ internal sealed class AiAssetService(HttpClient http, string currentDirectory, L
 	{
 		if (item.Kind == AiAssetKind.Mcp) return;
 		var origin = item.Origin!;
+		var snapshot = await SnapshotAsync(origin.Repo, origin.Branch, ct);
+		item.Origin = origin with { ResolvedCommit = snapshot.Commit };
 		if (item.Kind == AiAssetKind.Agent)
 		{
-			item.Content = await MarketplaceClient.FetchRawBytesAsync(http, origin.Repo, origin.Branch, origin.Path, ct)
+			item.Content = await MarketplaceClient.FetchRawBytesAsync(http, origin.Repo, snapshot.Commit, origin.Path, ct)
 				?? throw new InvalidOperationException($"Could not download agent '{item.Name}' from its recorded source.");
 			return;
 		}
@@ -375,13 +438,13 @@ internal sealed class AiAssetService(HttpClient http, string currentDirectory, L
 				throw new InvalidOperationException("Source skill file is outside its recorded path.");
 			var relative = normalized[remotePrefix.Length..];
 			if (relative == ".skill-version") continue;
-			files.Add(relative, await MarketplaceClient.FetchRawBytesAsync(http, origin.Repo, origin.Branch, normalized, ct)
+			files.Add(relative, await MarketplaceClient.FetchRawBytesAsync(http, origin.Repo, snapshot.Commit, normalized, ct)
 				?? throw new InvalidOperationException($"Could not download skill '{item.Name}' completely."));
 		}
 		if (!files.ContainsKey("SKILL.md")) throw new InvalidOperationException($"Skill '{item.Name}' has no SKILL.md.");
 		item.DesiredHash = AiContentHash.FilesHash(files);
 		item.PreparedFiles = files;
-		item.PreparedCommit = await MarketplaceClient.GetRemoteCommitShaAsync(http, origin.Repo, origin.Branch, origin.Path, ct);
+		item.PreparedCommit = await MarketplaceClient.GetRemoteCommitShaAsync(http, origin.Repo, snapshot.Commit, origin.Path, ct);
 	}
 
 	private void Classify(AiAsset item, AiAssetRequest request)
@@ -461,7 +524,7 @@ internal sealed class AiAssetService(HttpClient http, string currentDirectory, L
 				{
 					var currentHash = Directory.Exists(item.Path) ? AiContentHash.DirectoryHash(item.Path) : null;
 					if (currentHash != item.CurrentHash) throw new IOException("Skill changed after planning; retry.");
-					var result = await SkillInstaller.InstallSkillAsync(http, item.Skill!, item.Environment!, projectRoot, item.Origin!.Repo, item.Origin.Branch, force: true, ct, item.PreparedFiles, item.PreparedCommit);
+					var result = await SkillInstaller.InstallSkillAsync(http, item.Skill!, item.Environment!, projectRoot, item.Origin!.Repo, item.Origin.Branch, force: true, ct, item.PreparedFiles, item.PreparedCommit, item.Origin.ResolvedCommit);
 					if (result.FilesInstalled <= 0) throw new IOException($"Skill installation failed ({result.FilesInstalled}).");
 				}
 				else

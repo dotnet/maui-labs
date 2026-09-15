@@ -18,6 +18,24 @@ internal static class MarketplaceClient
 	private const string GitHubRawBase = "https://raw.githubusercontent.com";
 	private const int MaxResponseBytes = 10 * 1024 * 1024;
 
+	internal sealed record Snapshot(string Commit, string Tree);
+
+	internal static async Task<Snapshot> ResolveSnapshotAsync(HttpClient http, string repo, string branch, CancellationToken ct)
+	{
+		ValidateBranch(branch);
+		var json = await FetchStringAsync(http,
+			$"{GitHubApiBase}/repos/{EncodeRepoPath(repo)}/commits/{Uri.EscapeDataString(branch)}", ct).ConfigureAwait(false);
+		var node = json is null ? null : JsonNode.Parse(json);
+		var commit = node?["sha"]?.GetValue<string>();
+		var tree = node?["commit"]?["tree"]?["sha"]?.GetValue<string>();
+		if (!IsCommitSha(commit) || !IsCommitSha(tree) ||
+			IsCommitSha(branch) && !string.Equals(commit, branch, StringComparison.OrdinalIgnoreCase))
+			throw new InvalidOperationException($"Could not resolve an immutable repository commit for {repo}@{branch}; no source files were read.");
+		return new(commit!, tree!);
+	}
+
+	internal static bool IsCommitSha(string? value) => value is { Length: 40 } && value.All(char.IsAsciiHexDigit);
+
 	/// <summary>
 	/// Fetches and deserializes the marketplace.json manifest from the repository.
 	/// </summary>
@@ -65,10 +83,10 @@ internal static class MarketplaceClient
 	/// <param name="ct">Cancellation token.</param>
 	/// <returns>List of tree entries, or <c>null</c> on failure.</returns>
 	public static async Task<List<(string Path, string Type)>?> FetchTreeEntriesAsync(
-		HttpClient http, string repo, string branch, CancellationToken ct = default)
+		HttpClient http, string repo, string branch, CancellationToken ct = default, string? resolvedTree = null)
 	{
 		var encodedRepo = EncodeRepoPath(repo);
-		var treeSha = await ResolveTreeShaAsync(http, repo, branch, ct).ConfigureAwait(false);
+		var treeSha = resolvedTree ?? await ResolveTreeShaAsync(http, repo, branch, ct).ConfigureAwait(false);
 		if (treeSha is null)
 			return null;
 

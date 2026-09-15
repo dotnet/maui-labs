@@ -7,11 +7,11 @@ namespace Microsoft.Maui.Cli.Ai;
 
 internal enum AiAssetKind { Skill, Agent, Mcp }
 
-internal sealed record AiAssetOrigin(string Repo, string Branch, string Path)
+internal sealed record AiAssetOrigin(string Repo, string Branch, string Path, string? ResolvedCommit = null)
 {
-	internal JsonObject ToJson() => new() { ["repo"] = Repo, ["branch"] = Branch, ["path"] = Path };
+	internal JsonObject ToJson() => new() { ["repo"] = Repo, ["branch"] = Branch, ["path"] = Path, ["resolvedCommit"] = ResolvedCommit };
 	internal static AiAssetOrigin? FromJson(JsonObject? value) => value is null ? null :
-		new(value["repo"]?.GetValue<string>() ?? "", value["branch"]?.GetValue<string>() ?? "", value["path"]?.GetValue<string>() ?? "");
+		new(value["repo"]?.GetValue<string>() ?? "", value["branch"]?.GetValue<string>() ?? "", value["path"]?.GetValue<string>() ?? "", value["resolvedCommit"]?.GetValue<string>());
 	internal bool IsComplete => !string.IsNullOrWhiteSpace(Repo) && !string.IsNullOrWhiteSpace(Branch) && !string.IsNullOrWhiteSpace(Path);
 }
 

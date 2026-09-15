@@ -11,6 +11,7 @@ namespace Microsoft.Maui.Cli.Ai.Models;
 internal sealed class InstalledSkillVersion
 {
 	public string? ContentHash { get; set; }
+	public string? ResolvedCommit { get; set; }
 	/// <summary>
 	/// Name of the installed skill.
 	/// </summary>

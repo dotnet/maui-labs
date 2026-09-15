@@ -3,15 +3,29 @@ using System.CommandLine.Parsing;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Maui.Cli.Ai;
+using Microsoft.Maui.Cli.Ai.Models;
+using Microsoft.Maui.Cli.Output;
 using Spectre.Console;
 
 namespace Microsoft.Maui.Cli.Commands;
 
 public static partial class AiCommands
 {
+	internal static IAnsiConsole? ConsoleForTests { get; set; }
+	internal static bool? InputRedirectedForTests { get; set; }
+
 	private static Command CreateAssetCommand(string operation, AiAssetKind? addKind = null)
 	{
-		var command = new Command(addKind?.ToString().ToLowerInvariant() ?? operation, operation switch
+		var description = operation switch
+		{
+			"list" => "List available skills, agents and known MCP registrations.",
+			"status" => "Show installed assets and configured MCP inventory.",
+			"update" => "Refresh existing managed assets only.",
+			"init" => "Install recommendations or the exact union of selected assets.",
+			_ => $"Add one named {addKind!.Value.ToString().ToLowerInvariant()} asset only."
+		};
+		var command = new DetailedHelpCommand(addKind?.ToString().ToLowerInvariant() ?? operation, description);
+		command.HelpDetails = operation switch
 		{
 			"list" => "List available skills, agents and known MCP registrations.",
 			"status" => "Show installed assets and configured MCP inventory (not connectivity).",
@@ -23,7 +37,23 @@ public static partial class AiCommands
 				AiAssetKind.Agent => "Install one project-scoped agent definition in .github/agents for VsCode or CopilotCli. No implicit skills or MCP registration.",
 				_ => "Merge the known maui-devflow MCP registration only; do not install or approve an executable. CopilotCli configuration is user-wide (~/.copilot/mcp-config.json). No implicit skills or agents."
 			}
-		});
+		};
+		command.HelpDetails += "\n\nExamples:\n" + (operation switch
+		{
+			"init" => "  maui ai init --env VsCode --dry-run\n  maui ai init --skill maui-devflow-debug --env Claude --yes",
+			"list" => "  maui ai list --env VsCode\n  maui ai list skill --env Claude --json",
+			"status" => "  maui ai status --env VsCode\n  maui ai status mcp --env CopilotCli --json",
+			"update" => "  maui ai update --env VsCode --dry-run\n  maui ai update skill --skill maui-devflow-debug --env Claude --yes",
+			_ => addKind switch
+			{
+				AiAssetKind.Skill => "  maui ai add skill maui-devflow-debug --env Claude --yes",
+				AiAssetKind.Agent => "  maui ai add agent expert-reviewer --env VsCode --dry-run",
+				_ => "  maui ai add mcp maui-devflow --env CopilotCli --dry-run"
+			}
+		}) + "\n\nGlobal flags: --dry-run previews without writes; --json emits one result envelope; --ci disables prompts. " +
+			(operation is "init" or "add" or "update" ? "--yes accepts confirmation, not conflicts. " : "") +
+			"No-target automation must supply --env; configuration markers do not prove executables are installed." +
+			(operation is "list" or "status" or "update" ? "\n[type] is optional: skill, agent, or mcp. Omit it to include all applicable kinds." : "");
 		var type = new Argument<string?>("type")
 		{
 			Arity = ArgumentArity.ZeroOrOne,
@@ -57,8 +87,8 @@ public static partial class AiCommands
 			? "Source repository override for skills/agents (otherwise preserve recorded origin)"
 			: "Source repository for skills/agents (default: dotnet/maui-labs)" };
 		var branch = new Option<string?>("--branch", "-b") { Description = operation == "update"
-			? "Source branch override for skills/agents (otherwise preserve recorded origin)"
-			: "Source branch for skills/agents (default: main)" };
+			? "Tracked source branch/ref override for skills/agents; full 40-character commit SHA stays pinned (otherwise preserve origin)"
+			: "Tracked source branch/ref for skills/agents (default: main); full 40-character commit SHA stays pinned" };
 		if (operation != "status" && addKind != AiAssetKind.Mcp) { command.Add(repo); command.Add(branch); }
 		var force = CreateForceOption();
 		if (operation == "add" && addKind is AiAssetKind.Agent or AiAssetKind.Mcp)
@@ -76,6 +106,7 @@ public static partial class AiCommands
 			var results = new List<AiAsset>();
 			var messages = new List<string>();
 			var humanPlanShown = false;
+			var resolvedEnvironments = new List<DetectedEnvironment>();
 			try
 			{
 				AiAssetKind? kind = addKind;
@@ -110,16 +141,39 @@ public static partial class AiCommands
 				var service = new AiAssetService(http, Directory.GetCurrentDirectory(), messages);
 				var request = new AiAssetRequest(operation, kind, selectors, requestedEnvironments,
 					parse.GetValue(repo), parse.GetValue(branch), parse.GetValue(force), dryRun);
-				results = await service.PlanAsync(request, ct);
+				resolvedEnvironments = service.ResolveEnvironments(request);
+				if (resolvedEnvironments.Count == 0)
+				{
+					if (!ShouldPromptForEnvironments(operation, parse.GetValue(GlobalOptions.CiOption), json, dryRun,
+						parse.GetValue(yes), InputRedirectedForTests ?? Console.IsInputRedirected))
+						throw new AiEnvironmentSelectionException("environment-selection-required", AiAssetService.NoEnvironmentsMessage(request));
+					var selected = PickEnvironments(ConsoleForTests);
+					if (selected.Length == 0)
+						throw new AiEnvironmentSelectionException("environment-selection-cancelled",
+							$"Environment selection cancelled or empty; no files were written. Retry with:\n  {AiAssetService.EnvironmentRecoveryCommand(request)}");
+					request = request with { Environments = selected };
+					resolvedEnvironments = service.ResolveEnvironments(request);
+					foreach (var environment in resolvedEnvironments) environment.ReasonCode = "guided-selection";
+				}
+				if (!json)
+				{
+					WriteEnvironmentSelection(resolvedEnvironments);
+				}
+				results = await service.PlanAsync(request, ct, resolvedEnvironments);
 				var blocked = results.Any(r => r.Outcome is "blocked" or "failed");
 				if (!dryRun && operation is "init" or "add" or "update")
 				{
+					if (!json)
+					{
+						WriteHumanAssetPlan(results, messages);
+						humanPlanShown = true;
+					}
 					var actionable = results.Any(r => r.Action != "skip" && r.Outcome == "planned");
 					var confirmed = true;
-					if (!blocked && actionable && !json && !parse.GetValue(GlobalOptions.CiOption) && !parse.GetValue(yes))
+					if (!blocked && actionable && !json && !parse.GetValue(GlobalOptions.CiOption) && !parse.GetValue(yes) &&
+						!(InputRedirectedForTests ?? Console.IsInputRedirected))
 					{
-						humanPlanShown = true;
-						confirmed = ConfirmAssetPlan(results, messages);
+						confirmed = (ConsoleForTests ?? AnsiConsole.Console).Confirm("Apply the selected AI assets?", defaultValue: true);
 					}
 					if (!confirmed)
 					{
@@ -131,13 +185,14 @@ public static partial class AiCommands
 			}
 			catch (Exception ex) when (ex is not OperationCanceledException)
 			{
-				results.Add(new AiAsset { Kind = addKind ?? AiAssetKind.Skill, Name = "", State = "error", Outcome = "failed", ReasonCode = "preflight-failed", Message = ex.Message, Error = ex.Message });
+				results.Add(new AiAsset { Kind = addKind ?? AiAssetKind.Skill, Name = "", State = "error", Outcome = "failed", ReasonCode = ex is AiEnvironmentSelectionException selection ? selection.ReasonCode : "preflight-failed", Message = ex.Message, Error = ex.Message });
 			}
 			var failure = results.Any(r => r.Outcome is "blocked" or "failed");
 			var envelope = new JsonObject
 			{
 				["schemaVersion"] = 1, ["command"] = operation == "add" ? $"add {addKind!.Value.ToString().ToLowerInvariant()}" : operation,
 				["dryRun"] = dryRun, ["status"] = failure ? "failed" : "success",
+				["environments"] = new JsonArray(resolvedEnvironments.Select(e => (JsonNode)e.ToJson()).ToArray()),
 				["results"] = new JsonArray(results.Select(r => (JsonNode)r.ToJson()).ToArray()),
 				["messages"] = new JsonArray(messages.Select(m => (JsonNode?)JsonValue.Create(m)).ToArray())
 			};
@@ -155,6 +210,33 @@ public static partial class AiCommands
 		return command;
 	}
 
+	internal static bool ShouldPromptForEnvironments(string operation, bool ci, bool json, bool dryRun, bool yes, bool inputRedirected) =>
+		operation == "init" && !ci && !json && !dryRun && !yes && !inputRedirected;
+
+	internal static AgentEnvironmentKind[] PickEnvironments(IAnsiConsole? console = null)
+	{
+		try
+		{
+			return (console ?? AnsiConsole.Console).Prompt(new MultiSelectionPrompt<AgentEnvironmentKind>()
+				.Title("No configuration markers found. Select your AI clients (space to select; enter to continue; empty selection cancels).")
+				.NotRequired()
+				.UseConverter(kind => kind == AgentEnvironmentKind.CopilotCli ? "CopilotCli (project skills/agents; user-wide MCP)" : kind.ToString())
+				.AddChoices(Enum.GetValues<AgentEnvironmentKind>())).ToArray();
+		}
+		catch (OperationCanceledException) { return []; }
+	}
+
+	internal static void WriteEnvironmentSelection(IEnumerable<DetectedEnvironment> environments)
+	{
+		Console.WriteLine("Selected AI environments (configuration evidence only; executables were not checked):");
+		foreach (var environment in environments)
+		{
+			Console.WriteLine($"  {environment.Kind}: {environment.ReasonCode}; {(environment.MarkerPath is null ? "no marker" : $"{environment.Scope} marker {environment.MarkerPath}")}");
+			Console.WriteLine($"    project skills: {environment.SkillsDirectory}");
+			Console.WriteLine($"    {(environment.Kind == AgentEnvironmentKind.CopilotCli ? "user-wide" : "project")} MCP: {environment.McpConfigPath}");
+		}
+	}
+
 	internal static bool ConfirmAssetPlan(IReadOnlyList<AiAsset> results, IEnumerable<string> messages, IAnsiConsole? console = null)
 	{
 		WriteHumanAssetPlan(results, messages);
@@ -166,7 +248,12 @@ public static partial class AiCommands
 		foreach (var message in messages) Console.WriteLine(message);
 		if (results.Count > 0) Console.WriteLine("Scope    Kind   Action   Asset / environments / result / destination");
 		foreach (var row in results)
-			Console.WriteLine($"{row.Scope,-8} {row.Kind.ToString().ToLowerInvariant(),-6} {row.Action,-8} {row.Name} [{string.Join(", ", row.Environments)}] {row.State}: {row.Outcome} ({row.ReasonCode}) {row.Path} {row.Message}");
+			Console.WriteLine($"{row.Scope,-8} {row.Kind.ToString().ToLowerInvariant(),-6} {row.Action,-8} {row.Name}{(row.Recommended ? " (recommended)" : "")} [{string.Join(", ", row.Environments)}] {row.State}: {row.Outcome} ({row.ReasonCode}) {row.Path} {row.Message}");
+	}
+
+	internal sealed class AiEnvironmentSelectionException(string reasonCode, string message) : InvalidOperationException(message)
+	{
+		internal string ReasonCode { get; } = reasonCode;
 	}
 
 	private static Option<string[]> NamesOption(string name, string description) => new(name)

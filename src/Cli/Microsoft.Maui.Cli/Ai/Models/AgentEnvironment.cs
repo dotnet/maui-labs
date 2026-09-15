@@ -27,6 +27,17 @@ internal enum AgentEnvironmentKind
 /// </summary>
 internal sealed class DetectedEnvironment
 {
+	public string ReasonCode { get; set; } = "detected-marker";
+	public string? MarkerPath { get; set; }
+	public string Scope { get; set; } = "project";
+
+	internal System.Text.Json.Nodes.JsonObject ToJson() => new()
+	{
+		["name"] = Kind.ToString(), ["reasonCode"] = ReasonCode, ["markerPath"] = MarkerPath,
+		["scope"] = Scope, ["skillsPath"] = SkillsDirectory, ["mcpPath"] = McpConfigPath,
+		["mcpScope"] = Kind == AgentEnvironmentKind.CopilotCli ? "user" : "project"
+	};
+
 	/// <summary>
 	/// Kind of agent environment detected.
 	/// </summary>

@@ -155,8 +155,11 @@ public sealed class AiAssetLifecycleTests
 		Assert.Equal(1, (await test.Invoke("update", "agent", "--env", "VsCode")).Exit);
 		Assert.Equal("local agent instructions", File.ReadAllText(path));
 		Assert.Equal(0, (await test.Invoke("update", "agent", "--env", "VsCode", "--force")).Exit);
-		Assert.Contains("custom/agents/release", File.ReadAllText(path));
-		Assert.All(test.Handler.Requests, uri => Assert.Contains("custom/agents/release", uri.AbsolutePath));
+		Assert.Contains($"custom/agents/{AiTestCatalog.CommitFor("updated")}", File.ReadAllText(path));
+		Assert.All(test.Handler.Requests, uri => Assert.Contains("custom/agents/", uri.AbsolutePath));
+		Assert.Contains(test.Handler.Requests, uri => uri.AbsolutePath.EndsWith("/commits/release", StringComparison.Ordinal));
+		Assert.All(test.Handler.Requests.Where(uri => uri.Host == "raw.githubusercontent.com"),
+			uri => Assert.Contains($"/{AiTestCatalog.CommitFor("updated")}/", uri.AbsolutePath));
 		Assert.Equal(0, (await test.Invoke("status", "agent")).Exit);
 	}
 
