@@ -10,6 +10,22 @@ public partial class VisualTreeWalker
         Application app,
         LayoutInspectionRequest request)
     {
+        _layoutPlatformElementIds = null;
+        try
+        {
+            return CaptureLayoutSnapshotCore(app, request);
+        }
+        finally
+        {
+            _layoutPlatformElementIds = null;
+            _layoutTreeOrder = 0;
+        }
+    }
+
+    private LayoutCaptureSnapshot CaptureLayoutSnapshotCore(
+        Application app,
+        LayoutInspectionRequest request)
+    {
         var tree = WalkTree(app, request.Scope.MaxDepth, request.Scope.Window);
         var capture = new LayoutCaptureSnapshot();
         if (tree.Count == 0)
@@ -17,6 +33,17 @@ public partial class VisualTreeWalker
             capture.MarkIncomplete(
                 "The MAUI visual tree is empty or the requested window is not available.");
             return capture;
+        }
+
+        HashSet<ElementInfo>? captureNodes = null;
+        if (!string.IsNullOrWhiteSpace(request.Scope.RootElementId))
+        {
+            var scopedNodes = new HashSet<ElementInfo>();
+            foreach (var root in tree)
+                CollectLayoutCapturePath(root, request.Scope, scopedNodes, insideScope: false);
+            // A native or Blazor root can be added later during enrichment.
+            if (scopedNodes.Count > 0)
+                captureNodes = scopedNodes;
         }
 
         var requestedWindow = request.Scope.Window;
@@ -53,12 +80,32 @@ public partial class VisualTreeWalker
                 insideScrollableViewport: false,
                 ancestorVisible: true,
                 request,
-                ref _layoutTreeOrder);
+                ref _layoutTreeOrder,
+                captureNodes);
         }
 
         _layoutTreeOrder = 0;
         capture.HasActiveAnimations = capture.Nodes.Any(node => node.HasActiveAnimation);
         return capture;
+    }
+
+    private static bool CollectLayoutCapturePath(
+        ElementInfo info,
+        LayoutInspectionScope scope,
+        HashSet<ElementInfo> nodes,
+        bool insideScope)
+    {
+        var inScope = insideScope
+            || info.Id.Equals(scope.RootElementId, StringComparison.OrdinalIgnoreCase);
+        var keep = inScope;
+        if (info.Children is not null)
+        {
+            foreach (var child in info.Children)
+                keep |= CollectLayoutCapturePath(child, scope, nodes, inScope && scope.IncludeDescendants);
+        }
+        if (keep)
+            nodes.Add(info);
+        return keep;
     }
 
     internal void ApplyLayoutScope(
@@ -143,17 +190,23 @@ public partial class VisualTreeWalker
     {
     }
 
+    private Dictionary<object, string>? _layoutPlatformElementIds;
+
     protected string? FindElementIdForPlatformView(object platformView)
     {
-        foreach (var pair in _externalIdToElement)
+        if (_layoutPlatformElementIds is null)
         {
-            if (pair.Value is IView view
-                && ReferenceEquals(view.Handler?.PlatformView, platformView))
+            // Hit-test samples repeatedly resolve the same native ancestors within one capture.
+            var ids = new Dictionary<object, string>(ReferenceEqualityComparer.Instance);
+            foreach (var pair in _externalIdToElement)
             {
-                return pair.Key;
+                if (pair.Value is IView view && view.Handler?.PlatformView is { } nativeView)
+                    ids.TryAdd(nativeView, pair.Key);
             }
+            _layoutPlatformElementIds = ids;
         }
-        return null;
+
+        return _layoutPlatformElementIds.GetValueOrDefault(platformView);
     }
 
     protected static bool ShouldCollectInteractionOcclusion(
@@ -218,9 +271,13 @@ public partial class VisualTreeWalker
         bool ancestorVisible,
         LayoutInspectionRequest request,
         ref int treeOrder,
+        IReadOnlySet<ElementInfo>? captureNodes = null,
         VisualElement? managedParent = null,
         bool hasTransformedAncestor = false)
     {
+        if (captureNodes is not null && !captureNodes.Contains(info))
+            return;
+
         _externalIdToElement.TryGetValue(info.Id, out var visualTreeElement);
         var metrics = BuildBaseLayoutMetrics(info, visualTreeElement);
         if (visualTreeElement is VisualElement visualElement)
@@ -372,6 +429,7 @@ public partial class VisualTreeWalker
                 isRendered,
                 request,
                 ref treeOrder,
+                captureNodes,
                 visualTreeElement as VisualElement,
                 hasTransformedAncestor || node.HasVisualTransform);
         }
