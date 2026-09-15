@@ -1,0 +1,13 @@
+<Shell
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    x:Class="CopilotSdkSample.AppShell"
+    xmlns:local="clr-namespace:CopilotSdkSample"
+    Title="Copilot Chat">
+
+    <ShellContent
+        Title="Home"
+        ContentTemplate="{DataTemplate local:MainPage}"
+        Route="MainPage" />
+
+</Shell>

@@ -110,4 +110,7 @@
     <QRCoderVersion>1.7.0</QRCoderVersion>
     <ZXingNetMauiVersion>0.7.4</ZXingNetMauiVersion>
   </PropertyGroup>
+  <PropertyGroup Label="CopilotSdk">
+    <GitHubCopilotSDKVersion>0.3.0</GitHubCopilotSDKVersion>
+  </PropertyGroup>
 </Project>

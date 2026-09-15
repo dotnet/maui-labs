@@ -122,4 +122,9 @@
     <PackageVersion Include="ZXing.Net.Maui.Controls" Version="$(ZXingNetMauiVersion)" />
   </ItemGroup>
 
+  <!-- Copilot SDK -->
+  <ItemGroup Label="CopilotSdk">
+    <PackageVersion Include="GitHub.Copilot.SDK" Version="$(GitHubCopilotSDKVersion)" />
+  </ItemGroup>
+
 </Project>
