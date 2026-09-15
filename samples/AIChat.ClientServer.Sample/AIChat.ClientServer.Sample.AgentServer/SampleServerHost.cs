@@ -1,9 +1,13 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using AGUI.Abstractions;
 using AIChat.ClientServer.Sample.Shared;
 using AGUI.Server;
 using Microsoft.Extensions.AI;
-using Microsoft.Agents.AI.Hosting.AGUI.AspNetCore;
+using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Hosting;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace AIChat.ClientServer.Sample.AgentServer;
 
@@ -17,8 +21,12 @@ public static class SampleServerHost
         var builder = WebApplication.CreateBuilder(args);
         configure?.Invoke(builder);
         builder.Services.ConfigureHttpJsonOptions(options =>
-            options.SerializerOptions.TypeInfoResolverChain.Add(SampleSerializerContext.Default));
-        builder.Services.AddAGUIServer();
+        {
+            var resolvers = options.SerializerOptions.TypeInfoResolverChain;
+            resolvers.Add(AgentAbstractionsJsonUtilities.DefaultOptions.TypeInfoResolver!);
+            resolvers.Add(AGUIJsonSerializerContext.Default.Options.TypeInfoResolver!);
+            resolvers.Add(SampleSerializerContext.Default);
+        });
         builder.Services.AddHealthChecks();
         builder.Services.AddAuthentication(ApiKeyAuthenticationHandler.SchemeName)
             .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(
@@ -46,7 +54,8 @@ public static class SampleServerHost
         foreach (var scenario in ScenarioIds.All)
         {
             var route = "/" + scenario.Id;
-            var endpoint = app.MapAGUIServer(route, catalog.Create(scenario.Id)).RequireAuthorization();
+            var endpoint = MapAgentEndpoint(app, route, catalog.Create(scenario.Id))
+                .RequireAuthorization();
             if (scenario.Id == ScenarioIds.AgenticGenerativeUi)
                 endpoint.WithMetadata(new AGUIStreamOptions()
                     .MapResultAsStateSnapshot("create_plan")
@@ -61,26 +70,99 @@ public static class SampleServerHost
         return app;
     }
 
+    // Keep the sample on the public AGUI.Server pipeline instead of the preview ASP.NET host adapter.
+    private static IEndpointConventionBuilder MapAgentEndpoint(
+        WebApplication app,
+        string route,
+        AIAgent agent)
+    {
+        var hostAgent = new AIHostAgent(agent, new NoopAgentSessionStore());
+        return app.MapPost(route, async (
+            [FromBody] RunAgentInput? input,
+            [FromServices] IOptions<Microsoft.AspNetCore.Http.Json.JsonOptions> jsonOptions,
+            HttpContext context,
+            CancellationToken cancellationToken) =>
+        {
+            if (input is null)
+                return Results.BadRequest();
+
+            var streamOptions = context.GetEndpoint()?.Metadata.GetMetadata<AGUIStreamOptions>();
+            var request = input.ToChatRequestContext(
+                jsonOptions.Value.SerializerOptions,
+                streamOptions);
+            var threadId = string.IsNullOrWhiteSpace(request.Input.ThreadId)
+                ? Guid.NewGuid().ToString("N")
+                : request.Input.ThreadId;
+            request.Input.ThreadId = threadId;
+            var session = await hostAgent.GetOrCreateSessionAsync(
+                threadId,
+                cancellationToken).ConfigureAwait(false);
+            var events = hostAgent
+                .RunStreamingAsync(
+                    request.Messages,
+                    session,
+                    new ChatClientAgentRunOptions { ChatOptions = request.ChatOptions },
+                    cancellationToken)
+                .AsChatResponseUpdatesAsync()
+                .AsAGUIEventStreamAsync(request, cancellationToken);
+
+            return TypedResults.ServerSentEvents(
+                SaveSessionAfterStreamingAsync(
+                    events,
+                    hostAgent,
+                    threadId,
+                    session,
+                    cancellationToken));
+        });
+    }
+
+    private static async IAsyncEnumerable<BaseEvent> SaveSessionAfterStreamingAsync(
+        IAsyncEnumerable<BaseEvent> events,
+        AIHostAgent hostAgent,
+        string threadId,
+        AgentSession session,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await foreach (var item in events.WithCancellation(cancellationToken).ConfigureAwait(false))
+            yield return item;
+
+        await hostAgent.SaveSessionAsync(
+            threadId,
+            session,
+            cancellationToken).ConfigureAwait(false);
+    }
+
     private static IEnumerable<BaseEvent> MapDocumentProposal(
         FunctionCallContent call)
     {
-        if (call.Arguments?.TryGetValue("document", out var value) != true)
+        if (call.Arguments is null ||
+            !(call.Arguments.TryGetValue("proposal", out var value)
+                || call.Arguments.TryGetValue("document", out value)))
             return [];
 
-        var snapshot = value switch
+        var proposal = value switch
         {
-            JsonElement element => element,
-            DocumentState document => JsonSerializer.SerializeToElement(
-                document,
-                SampleSerializerContext.Default.DocumentState),
-            DocumentProposal proposal => JsonSerializer.SerializeToElement(
-                proposal.Document,
-                SampleSerializerContext.Default.DocumentState),
-            _ => JsonSerializer.SerializeToElement(
-                value,
-                SampleSerializerContext.Default.Options),
+            JsonElement element when element.ValueKind == JsonValueKind.Object &&
+                element.TryGetProperty("document", out _) =>
+                element.Deserialize(SampleSerializerContext.Default.DocumentProposal),
+            JsonElement element => new DocumentProposal
+                {
+                    Document = element.Deserialize(SampleSerializerContext.Default.DocumentState) ?? new DocumentState(),
+                },
+            DocumentState document => new DocumentProposal { Document = document },
+            DocumentProposal existing => existing,
+            _ => throw new InvalidOperationException(
+                $"Unsupported document proposal payload type '{value?.GetType().FullName ?? "null"}'."),
         };
 
-        return [new StateSnapshotEvent { Snapshot = snapshot }];
+        if (proposal is null)
+            return [];
+
+        return [new StateSnapshotEvent
+        {
+            Snapshot = JsonSerializer.SerializeToElement(
+                new DocumentProposalSnapshot { Proposal = proposal },
+                SampleSerializerContext.Default.DocumentProposalSnapshot),
+        }];
     }
 }

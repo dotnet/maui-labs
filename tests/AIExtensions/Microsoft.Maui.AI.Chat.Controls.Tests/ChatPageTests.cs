@@ -282,6 +282,30 @@ public class ChatPageTests
     }
 
     [Fact]
+    public void ActivePresentation_IsPropagatedToTheAiMessageList()
+    {
+        var aiTheme = new MessageListTheme();
+        var session1 = SessionFactory.Create("First");
+        var session2 = SessionFactory.Create("Second");
+        using var presentation1 = new AgentChatPresentation(session1);
+        using var presentation2 = new AgentChatPresentation(session2);
+        var control = new FactoryCopilotChatView
+        {
+            MessageListTemplate = Assert.IsType<DataTemplate>(
+                aiTheme[ChatThemeKeys.MessageListTemplate]),
+            Presentation = presentation1,
+        };
+        var messageList = Assert.IsType<MessageListView>(control.CreateMessageList());
+
+        control.ApplyTo(messageList);
+        control.Presentation = presentation2;
+        control.ApplyTo(messageList);
+
+        Assert.Same(presentation2, messageList.Presentation);
+        Assert.Same(presentation2, messageList.Conversation);
+    }
+
+    [Fact]
     public void DetachAndReattach_ReleasesAndRebuildsAgentConversation()
     {
         var session = SessionFactory.Create("test");
@@ -479,6 +503,8 @@ public class ChatPageTests
     private sealed class FactoryCopilotChatView : CopilotChatView
     {
         public ChatMessagesView CreateMessageList() => CreateMessageListView();
+        public void ApplyTo(ChatMessagesView messageList) =>
+            ApplyMessageListProperties(messageList);
     }
 
     private static void AssertAiMessageList(FactoryCopilotChatView view)
