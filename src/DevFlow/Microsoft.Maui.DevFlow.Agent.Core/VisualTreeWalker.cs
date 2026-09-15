@@ -215,7 +215,7 @@ public partial class VisualTreeWalker
 
     private void HitTestByBoundsRecursive(Element element, double x, double y, List<VisualElement> hits)
     {
-        if (element is VisualElement ve && ve.IsVisible)
+        if (element is VisualElement ve && IsPointVisibleToElement(ve, x, y))
         {
             var wb = ResolveWindowBounds(ve);
             if (wb != null && wb.Width > 0 && wb.Height > 0 &&
@@ -234,6 +234,51 @@ public partial class VisualTreeWalker
                     HitTestByBoundsRecursive(childEl, x, y, hits);
             }
         }
+    }
+
+    internal bool IsPointVisibleToElement(VisualElement element, double x, double y)
+    {
+        for (Element? current = element; current is not null; current = current.Parent)
+        {
+            if (current is not VisualElement view)
+                continue;
+            if (!view.IsVisible || view.Opacity <= 0)
+                return false;
+
+            if (view is Page page && page is not Shell && FindAncestor<Shell>(page) is { } shell)
+            {
+                var activePage = shell.Navigation.ModalStack.LastOrDefault() ?? shell.CurrentPage;
+                if (activePage is not null
+                    && !IsInParentChain(activePage, page)
+                    && !IsInParentChain(page, activePage))
+                    return false;
+            }
+
+#pragma warning disable CS0618 // Existing apps can still use ListView and its subclasses.
+            var clipsChildren = view is ScrollView or ItemsView or ListView
+                || view is Microsoft.Maui.Controls.Layout { IsClippedToBounds: true };
+#pragma warning restore CS0618
+            if (!ReferenceEquals(view, element) && !clipsChildren)
+                continue;
+            if (ResolveWindowBounds(view) is { } bounds
+                && (bounds.Width <= 0 || bounds.Height <= 0
+                    || x < bounds.X || y < bounds.Y
+                    || x > bounds.X + bounds.Width || y > bounds.Y + bounds.Height))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static bool IsInParentChain(Element element, Element ancestor)
+    {
+        for (Element? current = element; current is not null; current = current.Parent)
+        {
+            if (ReferenceEquals(current, ancestor))
+                return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -2307,6 +2352,7 @@ public partial class VisualTreeWalker
             RadioButton rb => rb.IsChecked,
             Switch sw => sw.IsToggled,
             Picker pk => pk.SelectedIndex >= 0,
+            Page page => ReferenceEquals(FindAncestor<Shell>(page)?.CurrentPage, page),
             _ => info.IsSelected
         };
 

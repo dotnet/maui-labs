@@ -249,10 +249,22 @@ internal sealed class XamlSourcePropertyEditor
     private static string ComputeContentHash(ReadOnlySpan<byte> bytes)
         => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
 
+    internal string? ResolveSourcePath(string sourceFile, out string? error)
+    {
+        var result = ValidateSourcePath(sourceFile, requireWritable: false);
+        error = result.Error;
+        return result.Success ? result.Path : null;
+    }
+
     private SourcePathValidation ValidateSourcePath(string sourceFile)
+        => ValidateSourcePath(sourceFile, requireWritable: true);
+
+    private SourcePathValidation ValidateSourcePath(string sourceFile, bool requireWritable)
     {
         if (_project is null)
-            return new(false, Error: "Source writing requires a broker-registered project identity.");
+            return new(false, Error: requireWritable
+                ? "Source writing requires a broker-registered project identity."
+                : "Source resolution requires a broker-registered project identity.");
 
         string sourcePath;
         try
@@ -287,8 +299,10 @@ internal sealed class XamlSourcePropertyEditor
 
             var attributes = File.GetAttributes(sourcePath);
             if ((attributes & FileAttributes.ReparsePoint) != 0)
-                return new(false, Error: "Symbolic-link and reparse-point XAML files are not writable.");
-            if ((attributes & FileAttributes.ReadOnly) != 0)
+                return new(false, Error: requireWritable
+                    ? "Symbolic-link and reparse-point XAML files are not writable."
+                    : "Symbolic-link and reparse-point XAML files cannot be opened safely.");
+            if (requireWritable && (attributes & FileAttributes.ReadOnly) != 0)
                 return new(false, Error: "Read-only XAML source files are not writable.");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -301,14 +315,18 @@ internal sealed class XamlSourcePropertyEditor
         {
             return new(
                 false,
-                Error: "Only XAML files under the registered app project are writable.");
+                Error: requireWritable
+                    ? "Only XAML files under the registered app project are writable."
+                    : "Only XAML files under the registered app project can be opened.");
         }
 
         if (PathContainsReparsePoint(projectRoot, sourcePath))
         {
             return new(
                 false,
-                Error: "XAML files reached through symbolic links, junctions, or reparse points are not writable.");
+                Error: requireWritable
+                    ? "XAML files reached through symbolic links, junctions, or reparse points are not writable."
+                    : "XAML files reached through symbolic links, junctions, or reparse points cannot be opened safely.");
         }
 
         return new(true, sourcePath);

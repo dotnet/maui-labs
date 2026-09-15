@@ -1796,6 +1796,8 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             foreach (var hit in allHits)
             {
                 if (hit is not IVisualTreeElement vte) continue;
+                if (hit is VisualElement hitView && !_treeWalker.IsPointVisibleToElement(hitView, x, y))
+                    continue;
 
                 // Skip elements under inactive ShellItem subtrees
                 if (activeShellItemIds != null && IsUnderInactiveShellItem(hit, activeShellItemIds))

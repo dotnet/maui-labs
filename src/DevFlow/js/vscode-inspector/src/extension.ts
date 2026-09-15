@@ -26,7 +26,7 @@ export function activate(context: vscode.ExtensionContext): void {
 type SelectedElement = { id?: string | null; type?: string; automationId?: string | null; text?: string | null; hasSource?: boolean };
 interface DataSnapshot {
   kind: "dataSnapshot";
-  scope: "logs" | "network" | "preferences" | "device" | "sensors" | "files" | "alerts";
+  scope: "logs" | "network" | "preferences" | "device" | "sensors" | "files" | "alerts" | "layout";
   title: string;
   appName?: string | null;
   capturedAt: string;
@@ -291,7 +291,7 @@ async function pickWorkflowFile(): Promise<BridgeResult> {
   }
 }
 
-const dataSnapshotScopes = new Set(["logs", "network", "preferences", "device", "sensors", "files", "alerts"]);
+const dataSnapshotScopes = new Set(["logs", "network", "preferences", "device", "sensors", "files", "alerts", "layout"]);
 const DATA_SNAPSHOT_MAX_BYTES = 20_000;
 
 async function attachDataToCopilot(snapshot: DataSnapshot | undefined): Promise<BridgeResult> {
