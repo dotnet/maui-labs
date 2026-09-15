@@ -10,4 +10,7 @@
   <Folder Name="/templates/">
     <Project Path="templates/MacOS.Templates.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MacOS.Tests/MacOS.Tests.csproj" />
+  </Folder>
 </Solution>

@@ -76,10 +76,14 @@
     <Project Path="tests/AI/Microsoft.Maui.Essentials.AI.UnitTests/Microsoft.Maui.Essentials.AI.UnitTests.csproj" />
   </Folder>
   <Folder Name="/tests/DevFlow/" />
+  <Folder Name="/platforms/" />
   <Folder Name="/platforms/MacOS/">
     <Project Path="platforms/MacOS/src/MacOS/MacOS.csproj" />
     <Project Path="platforms/MacOS/src/MacOS.Essentials/MacOS.Essentials.csproj" />
     <Project Path="platforms/MacOS/src/MacOS.BlazorWebView/MacOS.BlazorWebView.csproj" />
+  </Folder>
+  <Folder Name="/platforms/MacOS/tests/">
+    <Project Path="platforms/MacOS/tests/MacOS.Tests/MacOS.Tests.csproj" />
   </Folder>
   <Folder Name="/platforms/Windows.WPF/">
     <Project Path="platforms/Windows.WPF/src/Windows.WPF/Windows.WPF.csproj" />
