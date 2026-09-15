@@ -62,6 +62,32 @@ public sealed class ChatRecordingTests
         var recording = ChatRecordingStore.Load(stream);
         Assert.Single(recording.Interactions);
         Assert.True(recording.Interactions[0].Legacy);
+        Assert.Equal(
+            "legacy-import-v1",
+            recording.Metadata["sanitizerProfile"]!.GetValue<string>());
+        Assert.True(recording.Manifest["legacyImport"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task Store_LegacyMeaiUpdates_AreConvertedForReplay()
+    {
+        var updates = new List<List<ChatResponseUpdate>>
+        {
+            new() { new ChatResponseUpdate(ChatRole.Assistant, "legacy text") },
+        };
+        var json = JsonSerializer.Serialize(
+            updates,
+            AIJsonUtilities.DefaultOptions);
+        using var stream = new MemoryStream(
+            System.Text.Encoding.UTF8.GetBytes(json));
+        var recording = ChatRecordingStore.Load(stream);
+        using var replay = new ReplayChatClient(
+            new ChatRecordingOptions { Recording = recording });
+
+        var result = await replay.GetStreamingResponseAsync([]).ToListAsync();
+
+        Assert.Equal("legacy text", Assert.Single(result).Text);
+        replay.Session.AssertFullyReplayed();
     }
 
     [Fact]

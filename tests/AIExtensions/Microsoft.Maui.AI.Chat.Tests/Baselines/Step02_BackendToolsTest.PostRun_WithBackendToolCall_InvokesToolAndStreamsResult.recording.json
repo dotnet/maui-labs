@@ -1,83 +1,199 @@
-[
-  [
+{
+  "format": "maui-ai-chat-recording",
+  "schemaVersion": 1,
+  "metadata": {
+    "meaiVersion": "10.7.0.0",
+    "pipelineBoundary": "legacy-ordinal",
+    "sanitizerProfile": "legacy-import-v1"
+  },
+  "interactions": [
     {
-      "role": "assistant",
-      "contents": [
+      "sequence": 0,
+      "name": "legacy-0",
+      "request": {
+        "legacy": true
+      },
+      "updates": [
         {
-          "$type": "functionCall",
-          "name": "SearchRestaurants",
-          "arguments": {
-            "request": {
-              "location": "Seattle",
-              "cuisine": "Italian"
-            }
+          "sequence": 0,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": null,
+            "messageId": "chatcmpl-tool1",
+            "conversationId": null,
+            "createdAt": null,
+            "finishReason": "toolCalls",
+            "modelId": null,
+            "contents": [
+              {
+                "type": "functionCall",
+                "callId": "call_abc123",
+                "name": "SearchRestaurants",
+                "arguments": {
+                  "request": {
+                    "location": "Seattle",
+                    "cuisine": "Italian"
+                  }
+                },
+                "informationalOnly": false
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
           },
-          "informationalOnly": false,
-          "callId": "call_abc123"
+          "delayMs": null
+        },
+        {
+          "sequence": 1,
+          "value": {
+            "authorName": null,
+            "role": null,
+            "responseId": null,
+            "messageId": null,
+            "conversationId": null,
+            "createdAt": null,
+            "finishReason": null,
+            "modelId": null,
+            "contents": [
+              {
+                "type": "functionResult",
+                "callId": "call_abc123",
+                "result": "{\"location\":\"Seattle\",\"cuisine\":\"Italian\",\"results\":[{\"name\":\"The Golden Fork\",\"cuisine\":\"Italian\",\"rating\":4.5,\"address\":\"123 Main St, Seattle\"},{\"name\":\"Spice Haven\",\"cuisine\":\"Indian\",\"rating\":4.7,\"address\":\"456 Oak Ave, Seattle\"},{\"name\":\"Green Leaf\",\"cuisine\":\"Vegetarian\",\"rating\":4.3,\"address\":\"789 Elm Rd, Seattle\"}]}"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 2,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": null,
+            "messageId": "chatcmpl-text1",
+            "conversationId": null,
+            "createdAt": null,
+            "finishReason": null,
+            "modelId": null,
+            "contents": [
+              {
+                "type": "text",
+                "text": "I found some great Italian restaurants in Seattle for you!\n\n"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 3,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": null,
+            "messageId": "chatcmpl-text1",
+            "conversationId": null,
+            "createdAt": null,
+            "finishReason": null,
+            "modelId": null,
+            "contents": [
+              {
+                "type": "text",
+                "text": "1. **The Golden Fork** - Italian cuisine, rated 4.5/5, located at 123 Main St, Seattle\n"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 4,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": null,
+            "messageId": "chatcmpl-text1",
+            "conversationId": null,
+            "createdAt": null,
+            "finishReason": null,
+            "modelId": null,
+            "contents": [
+              {
+                "type": "text",
+                "text": "2. **Spice Haven** - Indian cuisine, rated 4.7/5, located at 456 Oak Ave, Seattle\n"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 5,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": null,
+            "messageId": "chatcmpl-text1",
+            "conversationId": null,
+            "createdAt": null,
+            "finishReason": null,
+            "modelId": null,
+            "contents": [
+              {
+                "type": "text",
+                "text": "3. **Green Leaf** - Vegetarian cuisine, rated 4.3/5, located at 789 Elm Rd, Seattle"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 6,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": null,
+            "messageId": "chatcmpl-text1",
+            "conversationId": null,
+            "createdAt": null,
+            "finishReason": "stop",
+            "modelId": null,
+            "contents": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
         }
       ],
-      "messageId": "chatcmpl-tool1",
-      "finishReason": "toolCalls"
-    },
-    {
-      "contents": [
-        {
-          "$type": "functionResult",
-          "result": "{\"location\":\"Seattle\",\"cuisine\":\"Italian\",\"results\":[{\"name\":\"The Golden Fork\",\"cuisine\":\"Italian\",\"rating\":4.5,\"address\":\"123 Main St, Seattle\"},{\"name\":\"Spice Haven\",\"cuisine\":\"Indian\",\"rating\":4.7,\"address\":\"456 Oak Ave, Seattle\"},{\"name\":\"Green Leaf\",\"cuisine\":\"Vegetarian\",\"rating\":4.3,\"address\":\"789 Elm Rd, Seattle\"}]}",
-          "callId": "call_abc123"
-        }
-      ]
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "text",
-          "text": "I found some great Italian restaurants in Seattle for you!\n\n"
-        }
-      ],
-      "messageId": "chatcmpl-text1"
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "text",
-          "text": "1. **The Golden Fork** - Italian cuisine, rated 4.5/5, located at 123 Main St, Seattle\n"
-        }
-      ],
-      "messageId": "chatcmpl-text1"
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "text",
-          "text": "2. **Spice Haven** - Indian cuisine, rated 4.7/5, located at 456 Oak Ave, Seattle\n"
-        }
-      ],
-      "messageId": "chatcmpl-text1"
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "text",
-          "text": "3. **Green Leaf** - Vegetarian cuisine, rated 4.3/5, located at 789 Elm Rd, Seattle"
-        }
-      ],
-      "messageId": "chatcmpl-text1"
-    },
-    {
-      "role": "assistant",
-      "contents": [
-        {
-          "$type": "text",
-          "text": ""
-        }
-      ],
-      "messageId": "chatcmpl-text1",
-      "finishReason": "stop"
+      "outcome": "completed",
+      "errorType": null,
+      "errorMessage": null,
+      "legacy": true
     }
-  ]
-]
+  ],
+  "manifest": {
+    "redacted": 0,
+    "rejected": 0,
+    "legacyImport": true
+  }
+}
