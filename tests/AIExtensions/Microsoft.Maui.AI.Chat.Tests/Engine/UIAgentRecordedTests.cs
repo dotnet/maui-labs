@@ -2,8 +2,11 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.ComponentModel;
+using System.ClientModel;
 using Azure.AI.OpenAI;
 using Azure.Identity;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Maui.AI.Chat.Recording;
 using Microsoft.Maui.AI.Chat.Tests.TestHelpers;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -13,9 +16,6 @@ namespace Microsoft.Maui.AI.Chat.Tests.Engine;
 
 public class UIAgentRecordedTests
 {
-    private const string Endpoint = "https://your-resource.cognitiveservices.azure.com/";
-    private const string DeploymentName = "your-deployment-name";
-
     private readonly ITestOutputHelper _output;
     private readonly ILoggerFactory _loggerFactory;
 
@@ -44,23 +44,64 @@ public class UIAgentRecordedTests
 
     private static IChatClient CreateAzureOpenAIClient()
     {
-        var azureClient = new AzureOpenAIClient(
-            new Uri(Endpoint),
-            new DefaultAzureCredential());
-        return azureClient.GetChatClient(DeploymentName).AsIChatClient();
+        var configuration = new ConfigurationBuilder()
+            .AddUserSecrets<UIAgentRecordedTests>(optional: true)
+            .Build();
+        var endpoint =
+            Environment.GetEnvironmentVariable("AI_ENDPOINT")
+            ?? configuration["AI:Endpoint"];
+        var apiKey =
+            Environment.GetEnvironmentVariable("AI_API_KEY")
+            ?? configuration["AI:ApiKey"];
+        var deploymentName =
+            Environment.GetEnvironmentVariable("AI_DEPLOYMENT_NAME")
+            ?? configuration["AI:DeploymentName"]
+            ?? "gpt-5.4-mini";
+        if (string.IsNullOrWhiteSpace(endpoint))
+        {
+            throw new InvalidOperationException(
+                "Set AI:Endpoint in the shared user secrets or AI_ENDPOINT before recording.");
+        }
+
+        var azureClient = string.IsNullOrWhiteSpace(apiKey)
+            ? new AzureOpenAIClient(
+                new Uri(endpoint),
+                new DefaultAzureCredential())
+            : new AzureOpenAIClient(
+                new Uri(endpoint),
+                new ApiKeyCredential(apiKey));
+        return azureClient.GetChatClient(deploymentName).AsIChatClient();
     }
 
     private static IChatClient CreateReplayOrRecordClient(string baselineFileName)
     {
         var baselinePath = GetBaselinePath(baselineFileName);
-        if (File.Exists(baselinePath))
+        var record =
+            string.Equals(
+                Environment.GetEnvironmentVariable("MAUI_AI_CHAT_RECORD"),
+                "1",
+                StringComparison.Ordinal);
+        if (!record && File.Exists(baselinePath))
         {
             return RecordingLoader.CreateReplayClient(baselineFileName);
         }
 
-        // Record mode: wrap real LLM
+        if (!record)
+        {
+            throw new FileNotFoundException(
+                $"Recording baseline not found: {baselinePath}. Set MAUI_AI_CHAT_RECORD=1 to record it.");
+        }
+
         var inner = CreateAzureOpenAIClient();
-        return new RecordingChatClient(inner);
+        return new RecordingChatClient(
+            inner,
+            new ChatRecordingOptions
+            {
+                Mode = ChatRecordingMode.Record,
+                Recording = new ChatRecording(),
+                Adapter = "azure-openai",
+                StrictSanitizer = true,
+            });
     }
 
     private static void SaveIfRecording(IChatClient client, string baselineFileName)
@@ -68,11 +109,11 @@ public class UIAgentRecordedTests
         if (client is RecordingChatClient recorder)
         {
             var sourcePath = GetSourceBaselinePath(baselineFileName);
-            recorder.SaveRecording(sourcePath);
+            ChatRecordingStore.Save(recorder.Session.Recording, sourcePath);
 
             // Also save to output dir so subsequent test runs in the same session can find it
             var outputPath = GetBaselinePath(baselineFileName);
-            recorder.SaveRecording(outputPath);
+            ChatRecordingStore.Save(recorder.Session.Recording, outputPath);
         }
     }
 
