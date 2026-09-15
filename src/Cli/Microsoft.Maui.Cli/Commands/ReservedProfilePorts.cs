@@ -17,6 +17,8 @@ internal sealed class ReservedProfilePorts(
 	public ReservedTcpPort DiagnosticReservation { get; } = diagnosticReservation;
 	public ReservedTcpPort? DsrouterTcpReservation { get; } = dsrouterTcpReservation;
 	public ReservedTcpPort ExitControlReservation { get; } = exitControlReservation;
+	public bool ShouldCleanupDiagnosticAdbReverse { get; set; }
+	public bool ShouldCleanupExitControlAdbReverse { get; set; }
 
 	public void Dispose()
 	{

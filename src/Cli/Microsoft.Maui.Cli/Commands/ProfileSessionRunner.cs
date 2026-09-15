@@ -128,24 +128,12 @@ internal static class ProfileSessionRunner
 					{
 						if (context.ReservedPorts is not null)
 						{
-							await ProfileCommandPortRouter.RemoveAdbPortRoutingAsync(
+							await ProfileCommandPortRouter.RemoveOwnedAdbReverseMappingsAsync(
 								context.Device,
+								context.ReservedPorts,
 								context.Formatter,
 								context.UseJson,
-								context.Verbose,
-								context.RequiresExplicitDsrouter ? context.ReservedPorts.DiagnosticPort : -1,
-								context.ReservedPorts.ExitControlPort);
-						}
-						else
-						{
-							await ProfileCommandPortRouter.RemoveAdbPortRoutingAsync(
-								context.Device,
-								context.Formatter,
-								context.UseJson,
-								context.Verbose,
-								ProfileCommandPortRouter.GetExitControlPort(
-									context.DiagnosticPort,
-									context.Transport with { RequiresExplicitDsrouter = context.RequiresExplicitDsrouter }));
+								context.Verbose);
 						}
 					}
 				}
