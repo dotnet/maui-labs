@@ -1,5 +1,9 @@
 using System.Runtime.CompilerServices;
+using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Maui.AI.Chat;
 using Microsoft.Maui.AI.Chat.Presentation;
 
@@ -103,6 +107,30 @@ public class PresentationComponentTests
             () => Task.FromException(new InvalidOperationException("failure")));
         await AgentActionRunner.InvokeAsync(
             () => Task.FromCanceled(new CancellationToken(canceled: true)));
+    }
+
+    [Fact]
+    public async Task InteractiveButtons_RenderAsBlazorEvents()
+    {
+        using var content = new AgentBlockContent(
+            new ErrorContentBlock("Try again."),
+            turn: null,
+            isRequest: false);
+        var services = new ServiceCollection().BuildServiceProvider();
+        await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
+
+        var html = await renderer.Dispatcher.InvokeAsync(async () =>
+        {
+            var output = await renderer.RenderComponentAsync<AgentContentView>(
+                ParameterView.FromDictionary(new Dictionary<string, object?>
+                {
+                    [nameof(AgentContentView.Content)] = content,
+                }));
+            return output.ToHtmlString();
+        });
+
+        Assert.Contains(">Retry</button>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("@onclick", html, StringComparison.Ordinal);
     }
 
     private static AgentContext CreateSession(params ChatResponseUpdate[] updates) =>

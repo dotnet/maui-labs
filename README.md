@@ -14,7 +14,7 @@ At a glance:
 | [Comet](#comet) | Experimental MVU UI framework for .NET MAUI with C# fluent UI, signals, and reactive state. |
 | [Go](#go) | Single-file Comet app server and companion app for rapid prototyping. |
 | [DevFlow](#devflow) | Runtime app automation, inspection, debugging, and MCP tooling for .NET MAUI apps — and for plain .NET Android, iOS, Mac Catalyst and macOS apps. |
-| [AI Extensions](#ai-extensions) | Source-generated `Microsoft.Extensions.AI` tool bindings for MAUI and .NET apps. |
+| [AI Extensions](#ai-extensions) | Source-generated AI tools plus provider-neutral, native MAUI, and Blazor Hybrid chat packages. |
 | [macOS AppKit Backend](#macos-appkit-backend) | Native AppKit backend for running MAUI apps as macOS apps without Mac Catalyst. |
 | [WPF Backend](#wpf-backend) | WPF-based Windows desktop backend for .NET MAUI apps. |
 | [Essentials.AI](#essentialsai) | On-device AI APIs for chat completion, embeddings, and tool calling in MAUI apps. |
@@ -96,8 +96,6 @@ A comprehensive testing, automation, and debugging toolkit for .NET MAUI apps �
 
 AI integration packages for `Microsoft.Extensions.AI` and .NET MAUI apps.
 
-#### AI Attributes
-
 Source-generated AI tools plus a native block-based chat engine and drop-in MAUI UI.
 
 - **AOT-friendly tools** — `[ExportAIFunction]`, DI/keyed-DI parameter binding, property tools, and generated tool contexts.
@@ -105,6 +103,8 @@ Source-generated AI tools plus a native block-based chat engine and drop-in MAUI
 - **Provider-neutral chat controls** — human/group `ChatView` models, multimodal input, stop/cancel, and XAML templates with no AI dependency.
 - **Native AI chat controls** — zero-config `CopilotChatView`, predictive state, rich content, files/audio/live speech, suggestions, retry, accessibility, and full theme/control-template replacement.
 - **Typed tool views** — `[ToolBlock]` generates simple call/result projections while custom handlers support aggregate domain blocks.
+- **MAUI client samples** — direct Azure OpenAI and AG-UI clients share one externally-owned
+  session, presentation, and composer across native and Blazor Hybrid surfaces.
 
 | Package | Description |
 |---------|-------------|

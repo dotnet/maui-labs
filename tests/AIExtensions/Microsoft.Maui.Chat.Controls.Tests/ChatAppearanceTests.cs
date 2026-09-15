@@ -66,7 +66,23 @@ public class ChatAppearanceTests
         var appearance = new ChatAppearance { TimestampFormat = "yyyy-MM-dd" };
         var timestamp = new DateTimeOffset(2024, 3, 4, 5, 6, 7, TimeSpan.Zero);
 
-        Assert.Equal("2024-03-04", appearance.FormatTimestamp(timestamp));
+        Assert.Equal(timestamp.ToLocalTime().ToString("yyyy-MM-dd"), appearance.FormatTimestamp(timestamp));
+    }
+
+    [Fact]
+    public void FormatTimestamp_ConvertsProviderOffsetsToLocalTime()
+    {
+        var appearance = new ChatAppearance { TimestampFormat = "yyyy-MM-dd HH:mm zzz" };
+        var instant = new DateTimeOffset(2024, 3, 4, 12, 0, 0, TimeSpan.Zero);
+        var localOffset = TimeZoneInfo.Local.GetUtcOffset(instant);
+        var providerOffset = localOffset == TimeSpan.FromHours(13)
+            ? TimeSpan.FromHours(-13)
+            : TimeSpan.FromHours(13);
+        var providerTimestamp = instant.ToOffset(providerOffset);
+
+        Assert.Equal(
+            providerTimestamp.ToLocalTime().ToString(appearance.TimestampFormat),
+            appearance.FormatTimestamp(providerTimestamp));
     }
 
     [Fact]

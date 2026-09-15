@@ -215,11 +215,12 @@ public class ChatContentViewTests
     public void TextView_ShowsTimestampAndStatusOnlyOnTheLastRowOfAGroup()
     {
         var appearance = new ChatAppearance { TimestampFormat = "HH:mm" };
+        var timestamp = new DateTimeOffset(2024, 1, 1, 9, 30, 0, TimeSpan.Zero);
         var message = new ConversationMessage(
             ChatFactory.Local(),
             "hello",
             "m-1",
-            new DateTimeOffset(2024, 1, 1, 9, 30, 0, TimeSpan.Zero))
+            timestamp)
         {
             Status = ConversationMessageStatus.Read,
         };
@@ -227,7 +228,9 @@ public class ChatContentViewTests
         var item = new ChatContentItem(message, message.Contents[0], null, appearance);
         var view = new ChatTextContentView { Item = item };
 
-        var metadata = VisualTree.All<Label>(view).First(label => label.Text?.Contains("09:30", StringComparison.Ordinal) == true);
+        var expectedTimestamp = appearance.FormatTimestamp(timestamp);
+        var metadata = VisualTree.All<Label>(view).First(
+            label => label.Text?.Contains(expectedTimestamp, StringComparison.Ordinal) == true);
         Assert.True(metadata.IsVisible);
         Assert.Contains("✓✓", metadata.Text);
 

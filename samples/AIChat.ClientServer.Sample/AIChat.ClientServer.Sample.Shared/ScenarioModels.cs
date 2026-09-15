@@ -124,8 +124,29 @@ public sealed class DocumentState
     public string Content { get; set; } = string.Empty;
 }
 
+public sealed class ClientAgentState
+{
+    [JsonPropertyName("plan")]
+    public Plan Plan { get; set; } = new();
+
+    [JsonPropertyName("recipe")]
+    public Recipe? Recipe { get; set; }
+
+    [JsonPropertyName("document")]
+    public DocumentState Document { get; set; } = new();
+}
+
 public sealed class DocumentProposal
 {
     [JsonPropertyName("document")]
     public DocumentState Document { get; set; } = new();
+
+    [JsonPropertyName("accepted")]
+    public bool? Accepted { get; set; }
+}
+
+public sealed class DocumentProposalSnapshot
+{
+    [JsonPropertyName("proposal")]
+    public DocumentProposal Proposal { get; set; } = new();
 }

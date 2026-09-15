@@ -24,8 +24,11 @@
       "tests\\AIExtensions\\Microsoft.Maui.Chat.Controls.Tests\\Microsoft.Maui.Chat.Controls.Tests.csproj",
       "tests\\AIExtensions\\Microsoft.Maui.Chat.Controls.Blazor.Tests\\Microsoft.Maui.Chat.Controls.Blazor.Tests.csproj",
       "samples\\AIChat.ClientServer.Sample\\AIChat.ClientServer.Sample.Shared\\AIChat.ClientServer.Sample.Shared.csproj",
+      "samples\\AIChat.Sample.Shared\\AIChat.Sample.Shared.csproj",
       "samples\\AIChat.ClientServer.Sample\\AIChat.ClientServer.Sample.AgentServer\\AIChat.ClientServer.Sample.AgentServer.csproj",
       "samples\\AIChat.ClientServer.Sample\\AIChat.ClientServer.Sample.AppHost\\AIChat.ClientServer.Sample.AppHost.csproj",
+      "samples\\AIChat.Client.Sample\\AIChat.Client.Sample.csproj",
+      "samples\\AIChat.ClientServer.Sample\\AIChat.ClientServer.Sample.Client\\AIChat.ClientServer.Sample.Client.csproj",
       "tests\\AIExtensions\\AIChat.ClientServer.Sample.Tests\\AIChat.ClientServer.Sample.Tests.csproj",
       "samples\\AIExtensions.Sample.Garden\\AIExtensions.Sample.Garden.csproj",
       "samples\\ChatControls.Sample\\ChatControls.Sample.csproj"

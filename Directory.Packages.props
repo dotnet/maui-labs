@@ -20,6 +20,8 @@
   <!-- Microsoft Extensions (versions from eng/Versions.props, flowing via maestro) -->
   <ItemGroup Label="Extensions">
     <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="$(MicrosoftExtensionsConfigurationVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="$(MicrosoftExtensionsConfigurationVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="$(MicrosoftExtensionsConfigurationVersion)" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(MicrosoftExtensionsDependencyInjectionVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="$(MicrosoftExtensionsHostingVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="$(MicrosoftExtensionsHttpVersion)" />
@@ -88,8 +90,8 @@
     <PackageVersion Include="Microsoft.Agents.AI.Workflows" Version="$(MicrosoftAgentsAIWorkflowsVersion)" />
     <PackageVersion Include="Microsoft.Agents.AI.Workflows.Generators" Version="$(MicrosoftAgentsAIWorkflowsGeneratorsVersion)" />
     <PackageVersion Include="Microsoft.Agents.AI.OpenAI" Version="1.15.0" />
-    <PackageVersion Include="Microsoft.Agents.AI.Hosting.AGUI.AspNetCore" Version="1.15.0-preview.260722.1" />
     <PackageVersion Include="AGUI.Server" Version="0.0.6" />
+    <PackageVersion Include="AGUI.Client" Version="0.0.6" />
     <!-- Sample app: additional packages (pinned) -->
     <PackageVersion Include="Markdig" Version="0.31.0" />
     <PackageVersion Include="OpenAI" Version="2.11.0" />
