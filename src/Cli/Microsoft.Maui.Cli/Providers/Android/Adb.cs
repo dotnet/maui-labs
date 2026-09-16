@@ -36,7 +36,7 @@ public class Adb
 		if (_adbPath == null)
 			return null;
 
-		return _runner ??= new AdbRunner(_adbPath, _environmentVariables);
+		return _runner ??= new MauiAdbRunner(_adbPath, _environmentVariables);
 	}
 
 	static string? ResolveAdbPath(string? sdkPath)

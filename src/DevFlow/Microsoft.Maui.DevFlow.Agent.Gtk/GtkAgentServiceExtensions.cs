@@ -24,6 +24,7 @@ public static class GtkAgentServiceExtensions
         // Read project identity from assembly metadata (injected by .targets)
         var project = ReadAssemblyMetadata("Microsoft.Maui.DevFlowProject") ?? "unknown";
         var tfm = ReadAssemblyMetadata("Microsoft.Maui.DevFlowTfm") ?? "unknown";
+        var sessionId = ReadAssemblyMetadata("Microsoft.Maui.DevFlowSessionId");
 
         // Always register with the broker for discoverability. When a custom port is
         // set, we tell the broker our port so it uses it instead of assigning from the pool.
@@ -33,7 +34,7 @@ public static class GtkAgentServiceExtensions
         {
             var platform = "Linux";
             var appName = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name ?? "unknown";
-            brokerReg = new BrokerRegistration(project, tfm, platform, appName);
+            brokerReg = new BrokerRegistration(project, tfm, platform, appName, sessionId);
             if (hasCustomPort)
                 brokerReg.CurrentPort = options.Port;
             var assignedPort = Task.Run(() => brokerReg.TryRegisterAsync(TimeSpan.FromSeconds(5))).GetAwaiter().GetResult();
@@ -65,6 +66,7 @@ public static class GtkAgentServiceExtensions
             options,
             nativeElementRegistry,
             nativeElementDiagnosticSubscriber);
+        service.SetSessionId(sessionId);
         if (brokerReg != null)
         {
             brokerReg.CurrentPort = options.Port;

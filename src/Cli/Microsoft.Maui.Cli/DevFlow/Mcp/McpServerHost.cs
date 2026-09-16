@@ -44,6 +44,13 @@ public static class McpServerHost
 					throw new McpException(
 						$"{ex.Message} Call maui_capabilities to see what this agent supports.");
 				}
+				catch (MutationLeaseException ex)
+				{
+					var guidance = ex.Status.HeldByOther
+						? " Call maui_control_status to inspect the current holder, then call maui_take_control with force=true only after the user approves interrupting that session."
+						: " Check the broker and agent connection, then retry the mutation.";
+					throw new McpException(ex.Message + guidance);
+				}
 			}))
 			.WithTools<ScreenshotTool>()
 			.WithTools<TreeTool>()
@@ -67,6 +74,7 @@ public static class McpServerHost
 			.WithTools<BatchTools>()
 			.WithTools<InvokeTools>()
 			.WithTools<ExtensionTools>()
+			.WithTools<MutationLeaseTools>()
 			.WithTools<Flows.FlowTools>()
 			.WithTools<Flows.FlowRecordTools>();
 
