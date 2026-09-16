@@ -99,98 +99,33 @@ public class ProfileCommandTests
 	[Fact]
 	public async Task StopAndWaitForFinalizationAsync_TimesOutWithCollectorOutput()
 	{
-		var startInfo = new ProcessStartInfo
-		{
-			FileName = OperatingSystem.IsWindows() ? "ping.exe" : "/bin/sh",
-			UseShellExecute = false,
-			RedirectStandardInput = true,
-			RedirectStandardOutput = true,
-			RedirectStandardError = true,
-			CreateNoWindow = true
-		};
-		if (OperatingSystem.IsWindows())
-		{
-			startInfo.ArgumentList.Add("127.0.0.1");
-			startInfo.ArgumentList.Add("-n");
-			startInfo.ArgumentList.Add("30");
-		}
-		else
-		{
-			startInfo.ArgumentList.Add("-c");
-			startInfo.ArgumentList.Add("echo 127.0.0.1; exec sleep 30");
-		}
+		await using var testProcess = StartProfileTestProcess("ignore-stdin");
+		await testProcess.Ready.WaitAsync(TimeSpan.FromSeconds(10));
 
-		using var process = Process.Start(startInfo)!;
-		using var monitoredProcess = MonitoredProcess.Attach(
-			process,
-			new JsonOutputFormatter(TextWriter.Null),
-			useJson: true,
-			verbose: false,
-			"trace",
-			CancellationToken.None);
-		try
-		{
-			for (var attempt = 0; attempt < 100 && monitoredProcess.StandardOutput.Length == 0; attempt++)
-				await Task.Delay(10);
+		var exception = await Assert.ThrowsAsync<MauiToolException>(() =>
+			ProfileTraceLifecycle.StopAndWaitForFinalizationAsync(
+				testProcess.MonitoredProcess,
+				testProcess.MonitoredProcess.WaitForExitAsync(),
+				Task.CompletedTask,
+				TimeSpan.FromMilliseconds(50),
+				new JsonOutputFormatter(TextWriter.Null),
+				useJson: true,
+				verbose: false,
+				traceStopInterruptDelay: TimeSpan.FromMilliseconds(10)));
 
-			var exception = await Assert.ThrowsAsync<MauiToolException>(() =>
-				ProfileTraceLifecycle.StopAndWaitForFinalizationAsync(
-					monitoredProcess,
-					monitoredProcess.WaitForExitAsync(),
-					Task.CompletedTask,
-					TimeSpan.FromMilliseconds(50),
-					new JsonOutputFormatter(TextWriter.Null),
-					useJson: true,
-					verbose: false,
-					traceStopInterruptDelay: TimeSpan.FromMilliseconds(10)));
-
-			Assert.Contains("did not exit within", exception.Message, StringComparison.Ordinal);
-			Assert.Contains("127.0.0.1", exception.NativeError, StringComparison.Ordinal);
-		}
-		finally
-		{
-			if (!process.HasExited)
-				process.Kill(entireProcessTree: true);
-			await process.WaitForExitAsync();
-		}
+		Assert.Contains("did not exit within", exception.Message, StringComparison.Ordinal);
+		Assert.Contains("collector-output", exception.NativeError, StringComparison.Ordinal);
 	}
 
 	[Fact]
 	public async Task StopAndWaitForFinalizationAsync_ReturnsWhenCollectorExitsBeforeInterruptDelay()
 	{
-		var startInfo = new ProcessStartInfo
-		{
-			FileName = OperatingSystem.IsWindows() ? "powershell.exe" : "/bin/sh",
-			UseShellExecute = false,
-			RedirectStandardInput = true,
-			RedirectStandardOutput = true,
-			RedirectStandardError = true,
-			CreateNoWindow = true
-		};
-		if (OperatingSystem.IsWindows())
-		{
-			startInfo.ArgumentList.Add("-NoProfile");
-			startInfo.ArgumentList.Add("-Command");
-			startInfo.ArgumentList.Add("Start-Sleep -Milliseconds 100");
-		}
-		else
-		{
-			startInfo.ArgumentList.Add("-c");
-			startInfo.ArgumentList.Add("exec sleep 0.1");
-		}
-
-		using var process = Process.Start(startInfo)!;
-		using var monitoredProcess = MonitoredProcess.Attach(
-			process,
-			new JsonOutputFormatter(TextWriter.Null),
-			useJson: true,
-			verbose: false,
-			"trace",
-			CancellationToken.None);
+		await using var testProcess = StartProfileTestProcess("exit-on-stdin");
+		await testProcess.Ready.WaitAsync(TimeSpan.FromSeconds(10));
 
 		await ProfileTraceLifecycle.StopAndWaitForFinalizationAsync(
-			monitoredProcess,
-			monitoredProcess.WaitForExitAsync(),
+			testProcess.MonitoredProcess,
+			testProcess.MonitoredProcess.WaitForExitAsync(),
 			Task.Delay(Timeout.InfiniteTimeSpan),
 			TimeSpan.FromSeconds(2),
 			new JsonOutputFormatter(TextWriter.Null),
@@ -198,62 +133,39 @@ public class ProfileCommandTests
 			verbose: false,
 			traceStopInterruptDelay: TimeSpan.FromSeconds(1));
 
-		Assert.True(process.HasExited);
+		Assert.True(testProcess.Process.HasExited);
 	}
 
 	[Fact]
 	public async Task StopAndWaitForFinalizationAsync_AcknowledgedRundownGetsFullTimeoutWithoutInterrupt()
 	{
-		var startInfo = new ProcessStartInfo
+		var releasePath = Path.Combine(Path.GetTempPath(), $"maui-profile-test-release-{Guid.NewGuid():N}");
+		try
 		{
-			FileName = OperatingSystem.IsWindows() ? "powershell.exe" : "/bin/sh",
-			UseShellExecute = false,
-			RedirectStandardInput = true,
-			RedirectStandardOutput = true,
-			RedirectStandardError = true,
-			CreateNoWindow = true
-		};
-		if (OperatingSystem.IsWindows())
-		{
-			startInfo.ArgumentList.Add("-NoProfile");
-			startInfo.ArgumentList.Add("-Command");
-			startInfo.ArgumentList.Add("Start-Sleep -Milliseconds 200");
+			await using var testProcess = StartProfileTestProcess("finalize-on-stdin", releasePath);
+			await testProcess.Ready.WaitAsync(TimeSpan.FromSeconds(10));
+			var interruptDelay = TimeSpan.FromMilliseconds(100);
+			var stopTask = ProfileTraceLifecycle.StopAndWaitForFinalizationAsync(
+				testProcess.MonitoredProcess,
+				testProcess.MonitoredProcess.WaitForExitAsync(),
+				testProcess.FinalizationStarted,
+				TimeSpan.FromSeconds(5),
+				new JsonOutputFormatter(TextWriter.Null),
+				useJson: true,
+				verbose: false,
+				traceStopInterruptDelay: interruptDelay);
+
+			await testProcess.FinalizationStarted.WaitAsync(TimeSpan.FromSeconds(10));
+			await Task.Delay(interruptDelay + interruptDelay);
+			await File.WriteAllTextAsync(releasePath, string.Empty);
+
+			Assert.False(await stopTask);
+			Assert.True(testProcess.Process.HasExited);
 		}
-		else
+		finally
 		{
-			startInfo.ArgumentList.Add("-c");
-			startInfo.ArgumentList.Add("exec sleep 0.2");
+			File.Delete(releasePath);
 		}
-
-		using var process = Process.Start(startInfo)!;
-		using var monitoredProcess = MonitoredProcess.Attach(
-			process,
-			new JsonOutputFormatter(TextWriter.Null),
-			useJson: true,
-			verbose: false,
-			"trace",
-			CancellationToken.None);
-		var finalizationStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-		_ = Task.Run(async () =>
-		{
-			await Task.Delay(25);
-			finalizationStarted.TrySetResult(true);
-		});
-
-		var stopwatch = Stopwatch.StartNew();
-		var interrupted = await ProfileTraceLifecycle.StopAndWaitForFinalizationAsync(
-			monitoredProcess,
-			monitoredProcess.WaitForExitAsync(),
-			finalizationStarted.Task,
-			TimeSpan.FromSeconds(1),
-			new JsonOutputFormatter(TextWriter.Null),
-			useJson: true,
-			verbose: false,
-			traceStopInterruptDelay: TimeSpan.FromMilliseconds(50));
-
-		Assert.False(interrupted);
-		Assert.True(process.HasExited);
-		Assert.True(stopwatch.Elapsed >= TimeSpan.FromMilliseconds(100));
 	}
 
 	[Theory]
@@ -267,52 +179,17 @@ public class ProfileCommandTests
 	[Fact]
 	public async Task WaitForCompletionAsync_TimedStopUsesTraceStopTimeout()
 	{
-		var startInfo = new ProcessStartInfo
-		{
-			FileName = OperatingSystem.IsWindows() ? "ping.exe" : "/bin/sh",
-			UseShellExecute = false,
-			RedirectStandardInput = true,
-			RedirectStandardOutput = true,
-			RedirectStandardError = true,
-			CreateNoWindow = true
-		};
-		if (OperatingSystem.IsWindows())
-		{
-			startInfo.ArgumentList.Add("127.0.0.1");
-			startInfo.ArgumentList.Add("-n");
-			startInfo.ArgumentList.Add("30");
-		}
-		else
-		{
-			startInfo.ArgumentList.Add("-c");
-			startInfo.ArgumentList.Add("echo 127.0.0.1; exec sleep 30");
-		}
-
-		using var process = Process.Start(startInfo)!;
-		using var monitoredProcess = MonitoredProcess.Attach(
-			process,
-			new JsonOutputFormatter(TextWriter.Null),
-			useJson: true,
-			verbose: false,
-			"trace",
-			CancellationToken.None);
+		var releasePath = Path.Combine(Path.GetTempPath(), $"maui-profile-test-release-{Guid.NewGuid():N}");
 		try
 		{
-			for (var attempt = 0; attempt < 100 && monitoredProcess.StandardOutput.Length == 0; attempt++)
-				await Task.Delay(10);
-
-			var finalizationStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-			_ = Task.Run(async () =>
-			{
-				await Task.Delay(25);
-				finalizationStarted.TrySetResult(true);
-			});
+			await using var testProcess = StartProfileTestProcess("finalize-on-stdin", releasePath);
+			await testProcess.Ready.WaitAsync(TimeSpan.FromSeconds(10));
 			var exception = await Assert.ThrowsAsync<MauiToolException>(() =>
 				ProfileTraceLifecycle.WaitForCompletionAsync(
-					monitoredProcess,
+					testProcess.MonitoredProcess,
 					allowManualStop: false,
 					duration: TimeSpan.FromMilliseconds(10),
-					finalizationStartedTask: finalizationStarted.Task,
+					finalizationStartedTask: testProcess.FinalizationStarted,
 					traceStopTimeout: TimeSpan.FromMilliseconds(50),
 					new JsonOutputFormatter(TextWriter.Null),
 					useJson: true,
@@ -321,13 +198,11 @@ public class ProfileCommandTests
 					traceStopInterruptDelay: TimeSpan.FromMilliseconds(100)));
 
 			Assert.Contains("after finalization started", exception.Message, StringComparison.Ordinal);
-			Assert.Contains("127.0.0.1", exception.NativeError, StringComparison.Ordinal);
+			Assert.Contains("collector-output", exception.NativeError, StringComparison.Ordinal);
 		}
 		finally
 		{
-			if (!process.HasExited)
-				process.Kill(entireProcessTree: true);
-			await process.WaitForExitAsync();
+			File.Delete(releasePath);
 		}
 	}
 
@@ -1758,6 +1633,55 @@ public class ProfileCommandTests
 		Assert.Equal("kind:start", customResult.PayloadFilter);
 	}
 
+	static ProfileTestProcess StartProfileTestProcess(string mode, string? releasePath = null)
+	{
+		var helperAssembly = Path.Combine(
+			AppContext.BaseDirectory,
+			"Microsoft.Maui.Cli.UnitTests.ProcessHelper.dll");
+		if (!File.Exists(helperAssembly))
+			throw new FileNotFoundException("The profile test process helper was not built.", helperAssembly);
+
+		var dotnetHost = Path.GetFullPath(Path.Combine(
+			System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(),
+			"..",
+			"..",
+			"..",
+			OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet"));
+		var startInfo = new ProcessStartInfo(dotnetHost)
+		{
+			UseShellExecute = false,
+			RedirectStandardInput = true,
+			RedirectStandardOutput = true,
+			RedirectStandardError = true,
+			CreateNoWindow = true
+		};
+		startInfo.ArgumentList.Add(helperAssembly);
+		startInfo.ArgumentList.Add(mode);
+		if (releasePath is not null)
+			startInfo.ArgumentList.Add(releasePath);
+
+		var process = Process.Start(startInfo)
+			?? throw new InvalidOperationException("Failed to start the profile test process helper.");
+		var ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+		var finalizationStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+		var monitoredProcess = MonitoredProcess.Attach(
+			process,
+			new JsonOutputFormatter(TextWriter.Null),
+			useJson: true,
+			verbose: false,
+			"trace",
+			CancellationToken.None,
+			onStdoutLine: line =>
+			{
+				if (line == "ready")
+					ready.TrySetResult(true);
+				else if (line == "finalizing")
+					finalizationStarted.TrySetResult(true);
+			});
+
+		return new ProfileTestProcess(monitoredProcess, ready.Task, finalizationStarted.Task);
+	}
+
 	static TempFile CreateTempFile(string fileName)
 	{
 		var directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "maui-cli-profile-tests", Guid.NewGuid().ToString("N"));
@@ -1789,6 +1713,25 @@ public class ProfileCommandTests
 					File.Delete(Path);
 			}
 			catch { /* best-effort cleanup */ }
+		}
+	}
+
+	sealed class ProfileTestProcess(
+		MonitoredProcess monitoredProcess,
+		Task ready,
+		Task finalizationStarted) : IAsyncDisposable
+	{
+		public MonitoredProcess MonitoredProcess { get; } = monitoredProcess;
+		public Process Process => MonitoredProcess.Process;
+		public Task Ready { get; } = ready;
+		public Task FinalizationStarted { get; } = finalizationStarted;
+
+		public async ValueTask DisposeAsync()
+		{
+			if (!Process.HasExited)
+				Process.Kill(entireProcessTree: true);
+			await Process.WaitForExitAsync();
+			MonitoredProcess.Dispose();
 		}
 	}
 }

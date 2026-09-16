@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Microsoft.Maui.Cli\Microsoft.Maui.Cli.csproj" />
+    <ProjectReference Include="..\Microsoft.Maui.Cli.UnitTests.ProcessHelper\Microsoft.Maui.Cli.UnitTests.ProcessHelper.csproj" />
   </ItemGroup>
 
 </Project>
