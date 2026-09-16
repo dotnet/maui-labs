@@ -27,8 +27,9 @@ internal static class AgentEnvironmentDetector
 	internal static DetectedEnvironment Canonical(AgentEnvironmentKind kind, string projectRoot)
 	{
 		var descriptor = Describe(kind);
-		var config = Path.Combine(kind == AgentEnvironmentKind.CopilotCli ? UserHome : projectRoot, descriptor.McpPath);
-		return new() { Kind = kind, SkillsDirectory = Path.Combine(projectRoot, descriptor.SkillsPath), McpConfigPath = config, McpConfigExists = File.Exists(config) };
+		var config = Path.Combine(kind == AgentEnvironmentKind.CopilotCli ? UserHome : projectRoot,
+			descriptor.McpPath.Replace('/', Path.DirectorySeparatorChar));
+		return new() { Kind = kind, SkillsDirectory = Path.Combine(projectRoot, descriptor.SkillsPath.Replace('/', Path.DirectorySeparatorChar)), McpConfigPath = config, McpConfigExists = File.Exists(config) };
 	}
 	/// <summary>
 	/// Scans from <paramref name="workingDir"/> up to the Git root for known

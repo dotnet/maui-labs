@@ -94,7 +94,7 @@ public sealed class AiRegistryScopeTests
 		using var test = new AiCommandFixture();
 		Assert.Equal(0, (await test.Invoke("add", "mcp", "maui-devflow", "--env", "Claude")).Exit);
 		var relativePath = "nested/config/mcp.json";
-		var path = Path.Combine(test.Root, relativePath);
+		var path = Path.Combine(test.Root, "nested", "config", "mcp.json");
 		Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 		File.Move(Path.Combine(test.Root, ".mcp.json"), path);
 		var registry = AiAssetRegistry.Read(test.Root);

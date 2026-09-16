@@ -251,6 +251,25 @@ public class AgentEnvironmentDetectorTests : IDisposable
 	}
 
 	[Theory]
+	[InlineData("Claude", ".claude", ".mcp.json")]
+	[InlineData("VsCode", ".github", ".vscode", "mcp.json")]
+	[InlineData("CopilotCli", ".github", ".copilot", "mcp-config.json")]
+	[InlineData("OpenCode", ".opencode", "opencode.json")]
+	public void Canonical_UsesNativeSeparatorsForSkillsAndMcp(
+		string kindName, string skillsDirectory, string configDirectoryOrFile, string? configFile = null)
+	{
+		var kind = Enum.Parse<AgentEnvironmentKind>(kindName);
+		var environment = AgentEnvironmentDetector.Canonical(kind, _tempDir);
+		var configRoot = kind == AgentEnvironmentKind.CopilotCli ? AgentEnvironmentDetector.UserHome : _tempDir;
+		var expectedConfig = configFile is null
+			? Path.Combine(configRoot, configDirectoryOrFile)
+			: Path.Combine(configRoot, configDirectoryOrFile, configFile);
+
+		Assert.Equal(Path.Combine(_tempDir, skillsDirectory, "skills"), environment.SkillsDirectory);
+		Assert.Equal(expectedConfig, environment.McpConfigPath);
+	}
+
+	[Theory]
 	[InlineData(".mcp.json", "Claude")]
 	[InlineData("opencode.json", "OpenCode")]
 	[InlineData("opencode.jsonc", "OpenCode")]
