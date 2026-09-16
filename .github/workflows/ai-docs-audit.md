@@ -53,7 +53,7 @@ number, title, and changed file paths.
 
 **Focus areas** — prioritize auditing when PRs touched:
 - `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/` → MCP tools table
-- `src/Cli/Microsoft.Maui.Cli/Commands/` → CLI commands (doctor, device, android, apple, devflow, go, profile, version)
+- `src/Cli/Microsoft.Maui.Cli/Commands/` → CLI commands (doctor, device, android, apple, devflow, go, profile, version, project, port)
 - `src/DevFlow/` → DevFlow architecture, agent, driver
 - `src/Comet/`, `src/Go/` → Comet MVU framework and Go server
 - `src/AI/` → Essentials.AI
@@ -92,7 +92,7 @@ matching checklist section.
   Run `find src platforms -name "*.csproj" -not -path "*/artifacts/*" | sort` and verify every
   shipping project is represented in the products table.
 - **CLI commands**: Verify all top-level commands are documented. Current command groups:
-  `doctor`, `device`, `android`, `apple`, `devflow`, `go`, `profile`, `version`.
+  `doctor`, `device`, `android`, `apple`, `devflow`, `go`, `profile`, `version`, `project`, `port`.
   Run: `grep "new Command\|rootCommand.Add" src/Cli/Microsoft.Maui.Cli/Program.cs`
 - **MCP tools table**:
   1. Run: `grep -rn "McpServerTool" src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/*.cs`
