@@ -168,6 +168,29 @@ public class ProfileCommandTests
 		}
 	}
 
+	[Fact]
+	public async Task StopAndWaitForFinalizationAsync_DescendantInterruptCountsWhenWrapperExitsFirst()
+	{
+		if (OperatingSystem.IsWindows())
+			return;
+
+		await using var testProcess = StartProfileTestProcess("wrap-ignore-stdin");
+		await testProcess.Ready.WaitAsync(TimeSpan.FromMinutes(1));
+
+		var interrupted = await ProfileTraceLifecycle.StopAndWaitForFinalizationAsync(
+			testProcess.MonitoredProcess,
+			testProcess.MonitoredProcess.WaitForExitAsync(),
+			Task.Delay(Timeout.InfiniteTimeSpan),
+			TimeSpan.FromSeconds(5),
+			new JsonOutputFormatter(TextWriter.Null),
+			useJson: true,
+			verbose: false,
+			traceStopInterruptDelay: TimeSpan.FromMilliseconds(10));
+
+		Assert.True(interrupted);
+		Assert.Equal(130, testProcess.Process.ExitCode);
+	}
+
 	[Theory]
 	[InlineData("Stopping the trace. This may take several minutes depending on the application being traced.", true)]
 	[InlineData("Trace completed.", false)]
@@ -1661,6 +1684,8 @@ public class ProfileCommandTests
 		startInfo.ArgumentList.Add("--no-launch-profile");
 		startInfo.ArgumentList.Add("--");
 		startInfo.ArgumentList.Add(mode);
+		if (mode == "wrap-ignore-stdin")
+			startInfo.ArgumentList.Add(helperSource);
 		if (releasePath is not null)
 			startInfo.ArgumentList.Add(releasePath);
 

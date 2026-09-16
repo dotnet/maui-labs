@@ -477,7 +477,7 @@ internal static class ProfileTraceLifecycle
 		var pids = await GetDescendantProcessIdsAsync(rootProcess.Id, cancellationToken);
 		pids.Add(rootProcess.Id);
 
-		var rootInterrupted = false;
+		var interruptDelivered = false;
 		foreach (var pid in pids.Distinct().OrderByDescending(pid => pid))
 		{
 			cancellationToken.ThrowIfCancellationRequested();
@@ -492,11 +492,11 @@ internal static class ProfileTraceLifecycle
 				["-INT", pid.ToString()],
 				timeout: TimeSpan.FromSeconds(5),
 				cancellationToken: cancellationToken);
-			if (pid == rootProcess.Id && result.Success)
-				rootInterrupted = true;
+			if (result.Success)
+				interruptDelivered = true;
 		}
 
-		return rootInterrupted ? StopRequestOutcome.Interrupted : StopRequestOutcome.Unacknowledged;
+		return interruptDelivered ? StopRequestOutcome.Interrupted : StopRequestOutcome.Unacknowledged;
 	}
 
 	static async Task<List<int>> GetDescendantProcessIdsAsync(int rootPid, CancellationToken cancellationToken)
