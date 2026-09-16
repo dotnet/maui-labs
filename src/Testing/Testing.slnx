@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/Testing/">
+    <Project Path="Microsoft.Maui.Testing/Microsoft.Maui.Testing.csproj" />
+    <Project Path="Microsoft.Maui.Testing.Tests/Microsoft.Maui.Testing.Tests.csproj" />
+  </Folder>
+  <Folder Name="/src/Testing/templates/">
+    <Project Path="templates/Microsoft.Maui.Testing.Templates.csproj" />
+  </Folder>
+</Solution>
