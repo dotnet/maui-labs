@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                    xmlns:chat="clr-namespace:Microsoft.Maui.Chat.Controls"
+                    x:Class="Microsoft.Maui.Chat.Controls.Themes.ChatViewTheme">
+
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <!-- ControlTemplate: ChatView (the whole chat surface)              -->
+    <!--                                                                 -->
+    <!-- Every PART_* is optional: drop one to remove that section.      -->
+    <!-- All state flows through template bindings, so replacing this     -->
+    <!-- template never requires code. Colours come from the styles in    -->
+    <!-- ChatStyles.xaml, which carry their own light and dark values.    -->
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <ControlTemplate x:Key="MauiChat.ChatViewTemplate">
+        <Grid x:DataType="chat:ChatView" RowDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto" RowSpacing="0">
+
+            <!-- Header -->
+            <ContentView x:Name="PART_Header" Grid.Row="0" IsVisible="False" />
+
+            <!-- Messages, welcome, empty state, and busy indicator share one cell -->
+            <Grid Grid.Row="1">
+                <!-- ChatView creates the list and inserts it here. Derived controls can override
+                     CreateMessageListView while retaining this entire shell. A replacement template
+                     may still supply a ChatMessagesView directly under the same part name. -->
+                <ContentView x:Name="PART_MessageList"
+                             Margin="12,8,12,0" />
+
+                <VerticalStackLayout x:Name="PART_WelcomePanel"
+                                     Padding="24"
+                                     Spacing="12"
+                                     InputTransparent="True"
+                                     HorizontalOptions="Center"
+                                     VerticalOptions="Center"
+                                     IsVisible="{TemplateBinding ShowWelcome}">
+                    <Label x:Name="PART_WelcomeIcon"
+                           Style="{DynamicResource MauiChat.WelcomeIcon}"
+                           Text="{TemplateBinding WelcomeIcon}" />
+                    <Label x:Name="PART_WelcomeMessage"
+                           Style="{DynamicResource MauiChat.WelcomeMessage}"
+                           Text="{TemplateBinding WelcomeMessage}"
+                           SemanticProperties.Description="{TemplateBinding WelcomeMessage}" />
+                </VerticalStackLayout>
+
+                <ContentView x:Name="PART_EmptyView"
+                             IsVisible="{TemplateBinding ShowEmptyView}" />
+
+                <ActivityIndicator x:Name="PART_BusyIndicator"
+                                   Margin="0,0,0,12"
+                                   HorizontalOptions="Center"
+                                   VerticalOptions="End"
+                                   AutomationId="ChatBusyIndicator"
+                                   SemanticProperties.Description="Waiting for a response"
+                                   IsRunning="{TemplateBinding IsBusyIndicatorVisible}"
+                                   IsVisible="{TemplateBinding IsBusyIndicatorVisible}" />
+            </Grid>
+
+            <!-- Suggestions -->
+            <FlexLayout x:Name="PART_Suggestions"
+                        Grid.Row="2"
+                        Margin="12,4"
+                        Wrap="Wrap"
+                        JustifyContent="Center"
+                        AutomationId="ChatSuggestions"
+                        IsVisible="{TemplateBinding ShowSuggestions}" />
+
+            <!-- Footer -->
+            <ContentView x:Name="PART_Footer" Grid.Row="3" IsVisible="False" />
+
+            <!-- Typing participants -->
+            <Label x:Name="PART_TypingIndicator"
+                   Grid.Row="4"
+                   Margin="16,2"
+                   Style="{DynamicResource MauiChat.TypingIndicator}"
+                   AutomationId="ChatTypingIndicator"
+                   SemanticProperties.Description="{TemplateBinding TypingText}"
+                   Text="{TemplateBinding TypingText}"
+                   IsVisible="{TemplateBinding HasTypingParticipants}" />
+
+            <!-- Send error -->
+            <Label Grid.Row="5"
+                   Margin="16,0"
+                   Style="{DynamicResource MauiChat.ErrorText}"
+                   AutomationId="ChatSendError"
+                   Text="{TemplateBinding SendError}"
+                   IsVisible="{TemplateBinding HasSendError}" />
+
+            <!-- Composer -->
+            <Border x:Name="PART_InputArea"
+                    Grid.Row="6"
+                    Margin="12,8,12,12"
+                    Style="{TemplateBinding InputAreaStyle}">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="{TemplateBinding InputAreaCornerRadius}" />
+                </Border.StrokeShape>
+                <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                      ColumnDefinitions="Auto,Auto,Auto,*,Auto"
+                      ColumnSpacing="6" RowSpacing="4">
+
+                    <FlexLayout x:Name="PART_Attachments"
+                                Grid.Row="0"
+                                Grid.ColumnSpan="5"
+                                Wrap="Wrap"
+                                AutomationId="ChatAttachments"
+                                IsVisible="{TemplateBinding HasAttachments}" />
+
+                    <Label Grid.Row="1"
+                           Grid.ColumnSpan="5"
+                           Margin="8,0"
+                           Style="{DynamicResource MauiChat.ErrorText}"
+                           AutomationId="ChatAttachmentError"
+                           Text="{TemplateBinding AttachmentError}"
+                           IsVisible="{TemplateBinding HasAttachmentError}" />
+
+                    <Label Grid.Row="2"
+                           Grid.ColumnSpan="5"
+                           Margin="8,0"
+                           FontSize="12"
+                           Opacity="0.7"
+                           AutomationId="ChatInputStatus"
+                           SemanticProperties.Description="{TemplateBinding InputStatusMessage}"
+                           Text="{TemplateBinding InputStatusMessage}"
+                           IsVisible="{TemplateBinding HasInputStatusMessage}" />
+
+                    <Label Grid.Row="3"
+                           Grid.ColumnSpan="5"
+                           Margin="8,0"
+                           Style="{DynamicResource MauiChat.ErrorText}"
+                           AutomationId="ChatInputError"
+                           SemanticProperties.Description="{TemplateBinding InputErrorMessage}"
+                           Text="{TemplateBinding InputErrorMessage}"
+                           IsVisible="{TemplateBinding HasInputErrorMessage}" />
+
+                    <Button x:Name="PART_AttachButton"
+                            Grid.Row="4"
+                            Grid.Column="0"
+                            Style="{TemplateBinding AttachButtonStyle}"
+                            Text="{TemplateBinding AttachButtonText}"
+                            AutomationId="ChatAttachButton"
+                            SemanticProperties.Description="Add attachment"
+                            IsEnabled="{TemplateBinding IsInputEnabled}"
+                            IsVisible="{TemplateBinding AllowAttachments}" />
+
+                    <Button x:Name="PART_AudioButton"
+                            Grid.Row="4"
+                            Grid.Column="1"
+                            Style="{TemplateBinding AudioButtonStyle}"
+                            Text="{TemplateBinding AudioButtonDisplayText}"
+                            AutomationId="ChatAudioButton"
+                            SemanticProperties.Description="{TemplateBinding AudioButtonLabel}"
+                            IsEnabled="{TemplateBinding CanToggleAudioCapture}"
+                            IsVisible="{TemplateBinding AllowAudioCapture}" />
+
+                    <Button x:Name="PART_LiveSpeechButton"
+                            Grid.Row="4"
+                            Grid.Column="2"
+                            Style="{TemplateBinding LiveSpeechButtonStyle}"
+                            Text="{TemplateBinding LiveSpeechButtonDisplayText}"
+                            AutomationId="ChatLiveSpeechButton"
+                            SemanticProperties.Description="{TemplateBinding LiveSpeechButtonLabel}"
+                            IsEnabled="{TemplateBinding CanToggleLiveSpeech}"
+                            IsVisible="{TemplateBinding AllowLiveSpeech}" />
+
+                    <Entry x:Name="PART_InputEntry"
+                           Grid.Row="4"
+                           Grid.Column="3"
+                           Style="{TemplateBinding InputEntryStyle}"
+                           Text="{TemplateBinding Text, Mode=TwoWay}"
+                           Placeholder="{TemplateBinding Placeholder}"
+                           AutomationId="ChatInput"
+                           SemanticProperties.Description="Message text"
+                           IsEnabled="{TemplateBinding IsInputEnabled}" />
+
+                    <Button x:Name="PART_SendButton"
+                            Grid.Row="4"
+                            Grid.Column="4"
+                            Style="{TemplateBinding SendButtonStyle}"
+                            Text="{TemplateBinding SendButtonText}"
+                            AutomationId="ChatSendButton"
+                            SemanticProperties.Description="Send message"
+                            IsEnabled="{TemplateBinding CanSend}"
+                            IsVisible="{TemplateBinding ShowSendButton}" />
+
+                    <Button x:Name="PART_StopButton"
+                            Grid.Row="4"
+                            Grid.Column="4"
+                            Style="{TemplateBinding StopButtonStyle}"
+                            Text="{TemplateBinding StopButtonText}"
+                            AutomationId="ChatStopButton"
+                            SemanticProperties.Description="Stop response"
+                            IsVisible="{TemplateBinding CanStop}" />
+                </Grid>
+            </Border>
+        </Grid>
+    </ControlTemplate>
+
+</ResourceDictionary>

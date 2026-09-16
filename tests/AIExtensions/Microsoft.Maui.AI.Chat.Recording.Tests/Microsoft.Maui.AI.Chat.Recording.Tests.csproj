@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsShipping>false</IsShipping>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\AIExtensions\Microsoft.Maui.AI.Chat.Recording\Microsoft.Maui.AI.Chat.Recording.csproj" />
+    <ProjectReference Include="..\..\..\src\AIExtensions\Microsoft.Maui.AI.Chat\Microsoft.Maui.AI.Chat.csproj" />
+  </ItemGroup>
+  <ItemGroup><Using Include="Xunit" /></ItemGroup>
+</Project>

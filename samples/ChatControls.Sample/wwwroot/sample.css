@@ -1,0 +1,63 @@
+/* Sample-specific overrides layered on top of _content/Microsoft.Maui.Chat.Controls.Blazor/mchat.css */
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--mchat-color-bg, #ffffff);
+    -webkit-font-smoothing: antialiased;
+}
+
+#app {
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Sample-specific participant chrome overrides. Every color still funnels through the mchat-*
+   CSS variables so a consumer that wants to rebrand only has to redefine those. */
+.mchat-root {
+    --mchat-color-accent: #0f766e;
+    --mchat-color-accent-hover: #115e59;
+    --mchat-color-bubble-outgoing: #0f766e;
+}
+
+/* Garden task card - matches the native GardenTaskView shape from ChatControls.Sample. */
+.garden-task {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: #ffffff;
+    color: #212529;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid #cbd5e1;
+    max-width: 22rem;
+}
+
+.garden-task__title {
+    font-weight: 600;
+}
+
+.garden-task__meta {
+    font-size: 0.8125rem;
+    color: #64748b;
+}
+
+.garden-task__owner {
+    display: inline-block;
+    font-size: 0.75rem;
+    padding: 2px 6px;
+    background: #ecfeff;
+    color: #0e7490;
+    border-radius: 999px;
+}
+
+/* Garden sticker - a bare-presentation content that opts out of the standard bubble. */
+.garden-sticker {
+    font-size: 3rem;
+    line-height: 1;
+    padding: 0;
+    background: transparent;
+}

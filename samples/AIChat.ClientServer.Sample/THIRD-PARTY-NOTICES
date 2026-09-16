@@ -1,0 +1,5 @@
+This sample substantively adapts scenario and AG-UI hosting patterns from AgenticUI
+(https://github.com/dotnet/AgenticUI), licensed under the MIT License.
+
+Source paths reused/adapted: src/AgenticUI.AgentServer/{Program.cs,AgentCatalog.cs,Foundry.cs,
+AgentServerSerializerContext.cs,Scenarios/**} and src/AgenticUI.AppHost/AppHost.cs.

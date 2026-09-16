@@ -9,7 +9,7 @@ namespace AIExtensions.Sample.Garden.ViewModels;
 
 /// <summary>
 /// Top-level view model for <see cref="Pages.MainPage"/>.
-/// Owns page navigation and the new-session action.
+/// Owns page navigation, the new-session action, and the chat template mode toggle.
 /// </summary>
 public sealed partial class MainViewModel(CurrentCart currentCart) : ObservableObject
 {
@@ -24,11 +24,62 @@ public sealed partial class MainViewModel(CurrentCart currentCart) : ObservableO
         StartNewSession();
     }
 
+    /// <summary>
+    /// Handler axis: whether the chat uses the custom Garden block handlers (custom blocks) or only the
+    /// built-in defaults (raw function-call blocks). Toggling sends a <see cref="StartNewChatSessionMessage"/>
+    /// with the new mode so the chat view recreates its session with that handler set.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HandlerToggleIcon))]
+    [NotifyPropertyChangedFor(nameof(HandlerToggleTooltip))]
+    public partial bool UseCustomHandlers { get; set; } = true;
+
+    /// <summary>Fluent glyph for the handler toggle — a toolbox when custom, a box when raw/defaults.</summary>
+    public string HandlerToggleIcon => UseCustomHandlers ? FluentIcons.Toolbox : FluentIcons.Box;
+
+    /// <summary>Hover text describing the current handler mode and what tapping will do.</summary>
+    public string HandlerToggleTooltip => UseCustomHandlers
+        ? "Handlers: custom Garden blocks — tap for built-in defaults"
+        : "Handlers: built-in defaults — tap for custom Garden blocks";
+
+    /// <summary>
+    /// Rendering axis: whether blocks render through the raw block-preview inspector instead of the
+    /// designed views. Broadcasts <see cref="ChatBlockPreviewModeChangedMessage"/>.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PreviewToggleIcon))]
+    [NotifyPropertyChangedFor(nameof(PreviewToggleTooltip))]
+    public partial bool IsPreview { get; set; }
+
+    /// <summary>Fluent glyph for the preview toggle — a beaker when inspecting, a leaf for designed views.</summary>
+    public string PreviewToggleIcon => IsPreview ? FluentIcons.Beaker : FluentIcons.LeafOne;
+
+    /// <summary>Hover text describing the current rendering mode and what tapping will do.</summary>
+    public string PreviewToggleTooltip => IsPreview
+        ? "Rendering: raw block inspector — tap for designed views"
+        : "Rendering: designed views — tap for raw block inspector";
+
     [RelayCommand]
-    private void StartNewSession()
+    private void ToggleChatPreviewMode()
     {
+        IsPreview = !IsPreview;
+        WeakReferenceMessenger.Default.Send(new ChatBlockPreviewModeChangedMessage(IsPreview));
+    }
+
+    /// <summary>
+    /// Starts a fresh chat session: clears the cart and requests a new conversation. The New Chat button
+    /// invokes this with no parameter (keep the current handler mode); the handler toggle passes a
+    /// non-null parameter to also flip <see cref="UseCustomHandlers"/> first, so switching handlers and
+    /// starting a new session are one command and one message.
+    /// </summary>
+    [RelayCommand]
+    private void StartNewSession(string? toggleHandlers = null)
+    {
+        if (toggleHandlers is not null)
+            UseCustomHandlers = !UseCustomHandlers;
+
         currentCart.Clear();
-        WeakReferenceMessenger.Default.Send(new StartNewChatSessionMessage());
+        WeakReferenceMessenger.Default.Send(new StartNewChatSessionMessage(UseCustomHandlers));
     }
 
     [RelayCommand]

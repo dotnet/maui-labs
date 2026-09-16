@@ -1,0 +1,58 @@
+html,
+body,
+#app {
+    height: 100%;
+    margin: 0;
+}
+
+body {
+    background: #f4f6fb;
+    color: #1f2937;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+[data-testid="direct-chat-root"] {
+    box-sizing: border-box;
+    display: grid;
+    gap: 0.75rem;
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    height: 100%;
+    padding: 0.75rem;
+}
+
+[data-testid="direct-chat-root"] > [data-testid="state-panel"] {
+    color: #475569;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+[data-testid="direct-chat-root"] > .mchat-chat-page {
+    border: 1px solid #dbe3ef;
+    border-radius: 1rem;
+    box-shadow: 0 0.5rem 1.5rem rgb(15 23 42 / 8%);
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+
+[data-testid="typed-state"]:empty {
+    display: none;
+}
+
+.sample-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.sample-actions button,
+[data-testid="typed-state"] button,
+[data-testid="predictive-proposal-card"] button {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.5rem;
+    color: #1e40af;
+    cursor: pointer;
+    font: inherit;
+    padding: 0.45rem 0.8rem;
+}

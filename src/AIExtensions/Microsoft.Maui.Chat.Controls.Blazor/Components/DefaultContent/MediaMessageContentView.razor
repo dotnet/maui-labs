@@ -1,0 +1,67 @@
+@*
+    Licensed to the .NET Foundation under one or more agreements.
+    The .NET Foundation licenses this file to you under the MIT license.
+
+    Default renderer for MediaMessageContent. Images render inline; audio delegates to
+    AudioMessageContentView so a consumer can override just the audio card. Everything
+    else renders as a safe file card.
+*@
+@namespace Microsoft.Maui.Chat.Controls.Blazor
+@using Microsoft.Maui.Chat.Controls
+
+@if (Content.IsImage)
+{
+    <figure class="mchat-media" aria-label="@Label">
+        <img src="@ResolvedSource" alt="@Label" />
+    </figure>
+}
+else if (Content.IsAudio)
+{
+    <AudioMessageContentView Content="Content" />
+}
+else
+{
+    <div class="mchat-file-card" role="group" aria-label="@Label">
+        <span class="mchat-file-card__icon" aria-hidden="true">📄</span>
+        <div class="mchat-file-card__meta">
+            <span class="mchat-file-card__name">@Label</span>
+            @if (Content.ByteCount > 0)
+            {
+                <span class="mchat-file-card__size">@FormatBytes(Content.ByteCount)</span>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private string? _cachedDataUri;
+
+    /// <summary>Gets or sets the media content to render.</summary>
+    [Parameter, EditorRequired]
+    public MediaMessageContent Content { get; set; } = default!;
+
+    private string Label => Content.DisplayName;
+
+    private string ResolvedSource => Content.Uri?.ToString() ?? BuildDataUri();
+
+    private string BuildDataUri()
+    {
+        if (_cachedDataUri is not null)
+        {
+            return _cachedDataUri;
+        }
+
+        if (Content.Data.IsEmpty)
+        {
+            return string.Empty;
+        }
+
+        _cachedDataUri = "data:" + Content.MediaType + ";base64," + Convert.ToBase64String(Content.Data.Span);
+        return _cachedDataUri;
+    }
+
+    private static string FormatBytes(long bytes) =>
+        bytes < 1024 ? bytes + " B"
+        : bytes < 1024 * 1024 ? (bytes / 1024d).ToString("0.#") + " KB"
+        : (bytes / (1024d * 1024d)).ToString("0.#") + " MB";
+}
