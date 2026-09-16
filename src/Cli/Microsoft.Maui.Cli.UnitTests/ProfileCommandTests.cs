@@ -1112,8 +1112,13 @@ public class ProfileCommandTests
 				Console.Write(System.Text.Json.JsonSerializer.Serialize(args));
 				""");
 
-			var dotnetPath = ProcessRunner.GetCommandPath("dotnet");
-			Assert.NotNull(dotnetPath);
+			var dotnetPath = Path.GetFullPath(Path.Combine(
+				System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(),
+				"..",
+				"..",
+				"..",
+				"dotnet.exe"));
+			Assert.True(File.Exists(dotnetPath), $"Could not find the active .NET host at '{dotnetPath}'.");
 			var buildStartInfo = new ProcessStartInfo(dotnetPath)
 			{
 				UseShellExecute = false,
