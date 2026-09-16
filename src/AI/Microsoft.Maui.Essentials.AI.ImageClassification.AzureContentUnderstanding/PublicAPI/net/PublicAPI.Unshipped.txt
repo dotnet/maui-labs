@@ -1,0 +1,10 @@
+#nullable enable
+Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding.AzureContentUnderstandingImageClassificationClient
+Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding.AzureContentUnderstandingImageClassificationClient.AzureContentUnderstandingImageClassificationClient(System.Uri! endpoint, Azure.Core.TokenCredential! credential, Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding.AzureContentUnderstandingImageClassificationOptions! options) -> void
+Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding.AzureContentUnderstandingImageClassificationClient.ClassifyImageAsync(System.IO.Stream! image, string! imageMediaType, Microsoft.Maui.Essentials.AI.ImageClassificationOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Maui.Essentials.AI.ImageClassificationResult!>!
+Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding.AzureContentUnderstandingImageClassificationClient.Dispose() -> void
+Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding.AzureContentUnderstandingImageClassificationClient.GetService(System.Type! serviceType, object? serviceKey = null) -> object?
+Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding.AzureContentUnderstandingImageClassificationOptions
+Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding.AzureContentUnderstandingImageClassificationOptions.AnalyzerId.get -> string!
+Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding.AzureContentUnderstandingImageClassificationOptions.AnalyzerId.set -> void
+Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding.AzureContentUnderstandingImageClassificationOptions.AzureContentUnderstandingImageClassificationOptions() -> void
