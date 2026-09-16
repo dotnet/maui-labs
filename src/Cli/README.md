@@ -253,12 +253,15 @@ VS Code, GitHub Copilot desktop, and Copilot CLI setup.
 | `maui devflow mcp` | Start the MCP server for AI agent integration |
 | **Profiling** | |
 | `maui profile startup` | Collect a startup trace for a .NET MAUI app (.nettrace, speedscope, or MIBC output) |
+| `maui profile manual` | Launch a MAUI app normally, then attach and stop tracing on demand |
 | **Go** | |
 | `maui go create` | Create a new MAUI Go single-file project |
 | `maui go serve` | Start the dev server with hot reload |
 | `maui go upgrade` | Graduate a Go project to a full MAUI project |
 
 Run `maui <command> --help` for detailed options on any command.
+
+Profiling commands wait up to two minutes for `dotnet-trace` to finish rundown and flush after a manual, timed, or event-driven stop. Use `--trace-stop-timeout` to adjust that finalization window independently of `--duration`.
 
 For the shared Inspector UI and its host integrations, see the
 [MAUI DevFlow Inspector guide](https://github.com/dotnet/maui-labs/blob/main/docs/DevFlow/inspector.md).
