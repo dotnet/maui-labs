@@ -100,7 +100,7 @@ public class ProfileCommandTests
 	public async Task StopAndWaitForFinalizationAsync_TimesOutWithCollectorOutput()
 	{
 		await using var testProcess = StartProfileTestProcess("ignore-stdin");
-		await testProcess.Ready.WaitAsync(TimeSpan.FromSeconds(10));
+		await testProcess.Ready.WaitAsync(TimeSpan.FromMinutes(1));
 
 		var exception = await Assert.ThrowsAsync<MauiToolException>(() =>
 			ProfileTraceLifecycle.StopAndWaitForFinalizationAsync(
@@ -121,7 +121,7 @@ public class ProfileCommandTests
 	public async Task StopAndWaitForFinalizationAsync_ReturnsWhenCollectorExitsBeforeInterruptDelay()
 	{
 		await using var testProcess = StartProfileTestProcess("exit-on-stdin");
-		await testProcess.Ready.WaitAsync(TimeSpan.FromSeconds(10));
+		await testProcess.Ready.WaitAsync(TimeSpan.FromMinutes(1));
 
 		await ProfileTraceLifecycle.StopAndWaitForFinalizationAsync(
 			testProcess.MonitoredProcess,
@@ -143,7 +143,7 @@ public class ProfileCommandTests
 		try
 		{
 			await using var testProcess = StartProfileTestProcess("finalize-on-stdin", releasePath);
-			await testProcess.Ready.WaitAsync(TimeSpan.FromSeconds(10));
+			await testProcess.Ready.WaitAsync(TimeSpan.FromMinutes(1));
 			var interruptDelay = TimeSpan.FromMilliseconds(100);
 			var stopTask = ProfileTraceLifecycle.StopAndWaitForFinalizationAsync(
 				testProcess.MonitoredProcess,
@@ -183,7 +183,7 @@ public class ProfileCommandTests
 		try
 		{
 			await using var testProcess = StartProfileTestProcess("finalize-on-stdin", releasePath);
-			await testProcess.Ready.WaitAsync(TimeSpan.FromSeconds(10));
+			await testProcess.Ready.WaitAsync(TimeSpan.FromMinutes(1));
 			var exception = await Assert.ThrowsAsync<MauiToolException>(() =>
 				ProfileTraceLifecycle.WaitForCompletionAsync(
 					testProcess.MonitoredProcess,
@@ -1635,11 +1635,11 @@ public class ProfileCommandTests
 
 	static ProfileTestProcess StartProfileTestProcess(string mode, string? releasePath = null)
 	{
-		var helperAssembly = Path.Combine(
+		var helperSource = Path.Combine(
 			AppContext.BaseDirectory,
-			"Microsoft.Maui.Cli.UnitTests.ProcessHelper.dll");
-		if (!File.Exists(helperAssembly))
-			throw new FileNotFoundException("The profile test process helper was not built.", helperAssembly);
+			"ProfileTestProcess.cs");
+		if (!File.Exists(helperSource))
+			throw new FileNotFoundException("The profile test process helper was not copied.", helperSource);
 
 		var dotnetHost = Path.GetFullPath(Path.Combine(
 			System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(),
@@ -1655,7 +1655,11 @@ public class ProfileCommandTests
 			RedirectStandardError = true,
 			CreateNoWindow = true
 		};
-		startInfo.ArgumentList.Add(helperAssembly);
+		startInfo.ArgumentList.Add("run");
+		startInfo.ArgumentList.Add("--file");
+		startInfo.ArgumentList.Add(helperSource);
+		startInfo.ArgumentList.Add("--no-launch-profile");
+		startInfo.ArgumentList.Add("--");
 		startInfo.ArgumentList.Add(mode);
 		if (releasePath is not null)
 			startInfo.ArgumentList.Add(releasePath);
