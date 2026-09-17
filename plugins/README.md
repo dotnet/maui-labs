@@ -7,7 +7,7 @@ Distributable agent skills for .NET MAUI development. Installable via the Copilo
 | Plugin | Purpose |
 |--------|---------|
 | [dotnet-maui](dotnet-maui/) | Default app-development plugin for building production .NET MAUI apps. |
-| [dotnet-maui-tooling](dotnet-maui-tooling/) | Specialist tooling plugin for DevFlow automation, slim bindings, workload discovery, and diagnostics. |
+| [dotnet-maui-tooling](dotnet-maui-tooling/) | Specialist tooling plugin for DevFlow automation, Java/Kotlin and slim bindings, workload discovery, and diagnostics. |
 
 DevFlow runtime skills (`maui-devflow-onboard`, `maui-devflow-debug`, `maui-devflow-session-review`) live in `plugins/dotnet-maui-tooling/skills/`, are bundled with the `maui` CLI by `maui devflow init`, and are exposed through the plugin manifest.
 
@@ -62,6 +62,7 @@ DevFlow runtime skills (`maui-devflow-onboard`, `maui-devflow-debug`, `maui-devf
 | [devflow-automation](dotnet-maui-tooling/skills/devflow-automation/) | Automate MAUI app inspection and debugging workflows through DevFlow tools. |
 | [devflow-connect](dotnet-maui-tooling/skills/devflow-connect/) | Diagnose and fix DevFlow agent connectivity issues between the `maui` CLI and running .NET MAUI apps. |
 | [maui-ai-debugging](dotnet-maui-tooling/skills/maui-ai-debugging/) | Legacy compatibility skill for older DevFlow clients. |
+| [android-java-bindings](dotnet-maui-tooling/skills/android-java-bindings/) | Write direct Java/Kotlin C# bindings and diagnose missing APIs, metadata, interface contracts, and generator errors. |
 | [android-slim-bindings](dotnet-maui-tooling/skills/android-slim-bindings/) | Create Android slim bindings using the Native Library Interop approach. |
 | [ios-slim-bindings](dotnet-maui-tooling/skills/ios-slim-bindings/) | Create iOS slim bindings using the Native Library Interop approach. |
 | [dotnet-workload-info](dotnet-maui-tooling/skills/dotnet-workload-info/) | Discover installed .NET workloads, SDK versions, and dependency requirements. |
