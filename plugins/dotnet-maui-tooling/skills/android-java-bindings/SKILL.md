@@ -44,6 +44,13 @@ Preserve the repository's SDK pins, package management, feeds, and conventions.
 ### 1. Inspect the actual library
 
 Check the POM and, if available, the native project's resolved dependency graph.
+Even dependency-report tasks execute Gradle build/plugin code. Before running an
+unfamiliar native project, establish trust in its wrapper and build files or use
+an isolated environment without developer/CI credentials. Verify the wrapper JAR
+and distribution provenance separately: `distributionSha256Sum` checks the
+downloaded Gradle distribution, not the wrapper JAR or project scripts. See
+[Gradle wrapper verification](https://docs.gradle.org/current/userguide/gradle_wrapper.html#sec:verification).
+
 For a Gradle Android library on Windows:
 
 ```powershell
