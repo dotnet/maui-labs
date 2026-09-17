@@ -41,4 +41,21 @@ public sealed class PropertyTools
 			$"Set '{property}' = '{value}' on element '{elementId}'.",
 			$"Failed to set property '{property}' on element '{elementId}'.");
 	}
+
+	[McpServerTool(Name = "maui_clear_property"), Description("Clear a locally set property on a UI element so it falls back to its style or default value.")]
+	public static async Task<string> ClearProperty(
+		McpAgentSession session,
+		[Description("Element ID from the visual tree")] string elementId,
+		[Description("Property name (e.g., 'FontSize', 'TextColor')")] string property,
+		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null,
+		[Description("Capture epoch from maui_tree; stale epochs are rejected")] long? captureEpoch = null,
+		[Description("Native registry generation from maui_tree")] long? registryGeneration = null)
+	{
+		using var agent = await session.GetAgentClientAsync(agentPort);
+		var result = await agent.ClearPropertyResultAsync(elementId, property, captureEpoch, registryGeneration);
+		return McpActionResult.RequireSuccess(
+			result,
+			$"Cleared '{property}' on element '{elementId}'.",
+			$"Failed to clear property '{property}' on element '{elementId}'.");
+	}
 }

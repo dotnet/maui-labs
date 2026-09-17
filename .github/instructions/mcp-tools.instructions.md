@@ -79,6 +79,7 @@ If the tool calls a new agent endpoint, add the client method in `Microsoft.Maui
 | `AssertTool.cs` | `maui_assert` | Property assertions |
 | `BatchTools.cs` | `maui_batch` | Batch actions |
 | `CdpTools.cs` | `maui_cdp_evaluate`, `maui_cdp_screenshot`, `maui_cdp_source`, `maui_cdp_webviews` | Blazor WebView CDP |
+| `EditingTools.cs` | `maui_add_element`, `maui_remove_element`, `maui_move_element`, `maui_reload_xaml`, `maui_highlight_element` | Design-time editing |
 | `ExtensionTools.cs` | `maui_extension_list`, `maui_extension_call` | Agent extensions |
 | `FileTools.cs` | `maui_storage_roots`, `maui_files_list`, `maui_files_download`, `maui_files_upload`, `maui_files_delete` | File storage |
 | `InteractionTools.cs` | `maui_tap`, `maui_fill`, `maui_clear`, `maui_key`, `maui_gesture`, `maui_scroll` | User interactions |
@@ -90,7 +91,7 @@ If the tool calls a new agent endpoint, add the client method in `Microsoft.Maui
 | `NetworkTool.cs` | `maui_network`, `maui_network_detail`, `maui_network_clear` | Network inspection |
 | `PlatformTools.cs` | `maui_app_info`, `maui_device_info`, `maui_display_info`, `maui_battery_info`, `maui_connectivity`, `maui_geolocation` | Device/app info |
 | `PreferencesTools.cs` | `maui_preferences_list`, `maui_preferences_get`, `maui_preferences_set`, `maui_preferences_delete`, `maui_preferences_clear`, `maui_secure_storage_get`, `maui_secure_storage_set`, `maui_secure_storage_delete`, `maui_secure_storage_clear` | Storage |
-| `PropertyTools.cs` | `maui_get_property`, `maui_set_property` | Property read/write |
+| `PropertyTools.cs` | `maui_get_property`, `maui_set_property`, `maui_clear_property` | Property read/write |
 | `QueryTools.cs` | `maui_query`, `maui_query_css`, `maui_element`, `maui_hittest` | Element search |
 | `RecordingTools.cs` | `maui_recording_start`, `maui_recording_stop`, `maui_recording_status` | Screen recording |
 | `ScreenshotTool.cs` | `maui_screenshot` | Image capture |

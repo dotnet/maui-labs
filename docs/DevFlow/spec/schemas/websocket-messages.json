@@ -420,6 +420,44 @@
               }
             }
           }
+        },
+        {
+          "type": "object",
+          "description": "Element picked in the app while pick mode was on.",
+          "required": [
+            "type",
+            "timestamp",
+            "data"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "elementPicked",
+              "description": "Event type for a pick-mode selection."
+            },
+            "timestamp": {
+              "$ref": "common.json#/$defs/Timestamp",
+              "description": "UTC timestamp of the event."
+            },
+            "data": {
+              "type": "object",
+              "description": "Picked element.",
+              "required": [
+                "elementId",
+                "elementType"
+              ],
+              "properties": {
+                "elementId": {
+                  "$ref": "common.json#/$defs/ElementId",
+                  "description": "Identifier of the picked element."
+                },
+                "elementType": {
+                  "type": "string",
+                  "description": "Type name of the picked element."
+                }
+              }
+            }
+          }
         }
       ]
     }

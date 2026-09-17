@@ -34,6 +34,8 @@ namespace Microsoft.Maui.DevFlow.Driver;
 [JsonSerializable(typeof(LayoutInspectionRequest))]
 [JsonSerializable(typeof(LayoutInspectionResult))]
 [JsonSerializable(typeof(LayoutRuleCatalog))]
+[JsonSerializable(typeof(ElementEditResult))]
+[JsonSerializable(typeof(XamlReloadResult))]
 internal sealed partial class DevFlowClientJsonContext : JsonSerializerContext;
 
 internal static class ProtocolJson

@@ -374,6 +374,17 @@ public partial class DevFlowAgentService
         }
         _server.MapGet("/api/v1/ui/elements/{id}/properties/{name}", HandleProperty);
         _server.MapPut("/api/v1/ui/elements/{id}/properties/{name}", request => ExecuteUiMutationAsync(request, HandleSetProperty));
+        _server.MapDelete("/api/v1/ui/elements/{id}/properties/{name}", request => ExecuteUiMutationAsync(request, HandleClearProperty));
+
+        // Design-time editing: structural changes, XAML reload and in-app selection.
+        _server.MapPost("/api/v1/ui/elements/{id}/children", request => ExecuteUiMutationAsync(request, HandleAddElement));
+        _server.MapDelete("/api/v1/ui/elements/{id}", request => ExecuteUiMutationAsync(request, HandleRemoveElement));
+        _server.MapPost("/api/v1/ui/elements/{id}/move", request => ExecuteUiMutationAsync(request, HandleMoveElement));
+        _server.MapPost("/api/v1/ui/xaml/reload", request => ExecuteUiMutationAsync(request, HandleReloadXaml));
+        // Highlight and pick change what is drawn over the app, not the app's own tree, so they
+        // hold the lease but do not invalidate outstanding captures.
+        _server.MapPut("/api/v1/ui/highlight", HandleHighlight);
+        _server.MapPost("/api/v1/ui/pick", HandlePickMode);
         _server.MapPost("/api/v1/ui/actions/tap", request => ExecuteUiMutationAsync(request, HandleTap));
         _server.MapPost("/api/v1/ui/actions/fill", request => ExecuteUiMutationAsync(request, HandleFill));
         _server.MapPost("/api/v1/ui/actions/clear", request => ExecuteUiMutationAsync(request, HandleClear));
@@ -2909,6 +2920,49 @@ public class WebViewInputTextRequest
 public class SetPropertyRequest : CaptureBoundRequest
 {
     public string? Value { get; set; }
+}
+
+public class AddElementRequest : CaptureBoundRequest
+{
+    /// <summary>XAML for a single view, e.g. <c>&lt;Label Text="Hello" /&gt;</c>.</summary>
+    public string? Xaml { get; set; }
+
+    /// <summary>Position among the parent's children; omitted or out of range appends.</summary>
+    public int? Index { get; set; }
+}
+
+public class MoveElementRequest : CaptureBoundRequest
+{
+    public string? ParentId { get; set; }
+
+    /// <summary>Position among the new parent's children; omitted or out of range appends.</summary>
+    public int? Index { get; set; }
+}
+
+public class XamlReloadRequest : CaptureBoundRequest
+{
+    /// <summary>The full XAML document for a page or view, including its <c>x:Class</c>.</summary>
+    public string? Xaml { get; set; }
+
+    /// <summary>Type to reload; defaults to the document's <c>x:Class</c>.</summary>
+    public string? ClassName { get; set; }
+
+    /// <summary>Reload only this live instance instead of every instance of the class.</summary>
+    public string? ElementId { get; set; }
+
+    /// <summary>Project-relative source path used for the refreshed source map when none exists yet.</summary>
+    public string? SourceFile { get; set; }
+}
+
+public class HighlightRequest
+{
+    /// <summary>Element to highlight, or <c>null</c> to clear the highlight.</summary>
+    public string? ElementId { get; set; }
+}
+
+public class PickModeRequest
+{
+    public bool Enabled { get; set; }
 }
 
 public class ScrollRequest : CaptureBoundRequest

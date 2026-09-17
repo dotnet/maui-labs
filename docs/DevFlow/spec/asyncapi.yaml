@@ -563,6 +563,39 @@ channels:
                   $ref: './schemas/common.json#/$defs/Timestamp'
                   description: Timestamp when the tree change occurred.
 
+      uiElementPicked:
+        name: uiElementPicked
+        title: Element Picked Event
+        summary: An element was selected in the app while pick mode was on.
+        contentType: application/json
+        payload:
+          type: object
+          description: >
+            Raised once after POST /api/v1/ui/pick enabled pick mode and the user tapped the app.
+            Pick mode is already off and the element is highlighted when this arrives.
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: elementPicked
+              description: Message type identifier.
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: UTC timestamp when this message was produced.
+            data:
+              type: object
+              required: [elementId, elementType, timestamp]
+              properties:
+                elementId:
+                  type: string
+                  description: Identifier of the picked element.
+                elementType:
+                  type: string
+                  description: Type name of the picked element.
+                timestamp:
+                  $ref: './schemas/common.json#/$defs/Timestamp'
+                  description: Timestamp when the element was picked.
+
       uiAlert:
         name: uiAlert
         title: Alert Event
@@ -662,7 +695,7 @@ channels:
                   type: array
                   items:
                     type: string
-                    enum: [navigation, lifecycle, treeChange, alert, error, all]
+                    enum: [navigation, lifecycle, treeChange, elementPicked, alert, error, all]
                   description: >
                     Event types to subscribe to. Use "all" to receive every
                     event type.
@@ -692,7 +725,7 @@ channels:
                   type: array
                   items:
                     type: string
-                    enum: [navigation, lifecycle, treeChange, alert, error, all]
+                    enum: [navigation, lifecycle, treeChange, elementPicked, alert, error, all]
                   description: Event types to unsubscribe from.
 
 # ---------------------------------------------------------------------------
@@ -780,6 +813,7 @@ operations:
       - $ref: '#/channels/uiEvents/messages/uiNavigation'
       - $ref: '#/channels/uiEvents/messages/uiLifecycle'
       - $ref: '#/channels/uiEvents/messages/uiTreeChange'
+      - $ref: '#/channels/uiEvents/messages/uiElementPicked'
       - $ref: '#/channels/uiEvents/messages/uiAlert'
       - $ref: '#/channels/uiEvents/messages/uiError'
 

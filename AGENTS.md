@@ -431,10 +431,11 @@ Each product requires source setup **and** CI/CD configuration across two system
 
 ## DevFlow MCP Tools
 
-DevFlow exposes 68 MCP tools for AI agent integration (in `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/`):
+DevFlow exposes 74 MCP tools for AI agent integration (in `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/`):
 
 | Tool | Purpose |
 |------|---------|
+| `maui_add_element` | Add a view to the running app from a XAML snippet |
 | `maui_app_info` | App name, version, package, theme |
 | `maui_assert` | Assert element property equals expected value |
 | `maui_back` | Go back in the app navigation stack |
@@ -446,6 +447,7 @@ DevFlow exposes 68 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_cdp_source` | Get WebView page source |
 | `maui_cdp_webviews` | List available WebViews |
 | `maui_clear` | Clear text from an element |
+| `maui_clear_property` | Clear a locally set property back to its style or default value |
 | `maui_connectivity` | Network access and connection profiles |
 | `maui_device_info` | Device manufacturer, model, OS |
 | `maui_display_info` | Screen density, size, orientation |
@@ -462,6 +464,7 @@ DevFlow exposes 68 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_gesture` | Pinch/zoom, rotate, pan, swipe, double-tap, long-press |
 | `maui_get_property` | Read any element property |
 | `maui_get_theme` | Get the current app-scoped light/dark theme |
+| `maui_highlight_element` | Outline an element inside the running app, or clear the outline |
 | `maui_hittest` | Find elements at screen coordinates |
 | `maui_invoke_action` | Invoke a registered DevFlow Action by name |
 | `maui_jobs_list` | List background jobs registered on the device |
@@ -471,6 +474,7 @@ DevFlow exposes 68 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_list_actions` | List all registered DevFlow Actions |
 | `maui_list_agents` | List connected MAUI DevFlow agents (running apps) |
 | `maui_logs` | Retrieve app logs (ILogger + WebView console) |
+| `maui_move_element` | Move or reorder a view in the running app |
 | `maui_navigate` | Shell navigation to a route |
 | `maui_network` | List captured HTTP requests |
 | `maui_network_clear` | Clear captured request buffer |
@@ -485,6 +489,8 @@ DevFlow exposes 68 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_recording_start` | Start screen recording |
 | `maui_recording_status` | Check recording status |
 | `maui_recording_stop` | Stop screen recording |
+| `maui_reload_xaml` | Hot reload a page or view from XAML text or a .xaml file, without an IDE |
+| `maui_remove_element` | Remove a view from its parent in the running app |
 | `maui_resize` | Resize the app window |
 | `maui_screenshot` | Capture screenshot (page, element, or fullscreen) |
 | `maui_scroll` | Scroll by delta, item index, or into view |

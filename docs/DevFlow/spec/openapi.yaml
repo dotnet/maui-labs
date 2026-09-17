@@ -24,6 +24,8 @@ tags:
     description: UI tree inspection, element queries, screenshots
   - name: ui-actions
     description: UI interaction (tap, fill, scroll, gestures, etc.)
+  - name: ui-edit
+    description: Design-time editing (add, remove and move elements, XAML reload, in-app selection)
   - name: webview
     description: WebView inspection and interaction
   - name: profiler
@@ -196,6 +198,44 @@ paths:
             application/json:
               schema:
                 $ref: "./schemas/element-info.json"
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "409":
+          $ref: "#/components/responses/CaptureConflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
+
+    delete:
+      operationId: removeElement
+      tags: [ui-edit]
+      summary: Remove element
+      description: >
+        Removes a view from its parent in the running app. Layout children are removed from the
+        layout; single content (ContentPage.Content, Border.Content, ...) is cleared. Capture
+        metadata may be sent in the body or as captureEpoch/registryGeneration query parameters.
+      parameters:
+        - $ref: "#/components/parameters/ElementIdPath"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/editing.json#/$defs/CaptureBinding"
+      responses:
+        "200":
+          description: Element removed.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/editing.json#/$defs/RemoveElementResponse"
+        "400":
+          description: The edit could not be applied.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/editing.json#/$defs/EditError"
         "404":
           $ref: "#/components/responses/ElementNotFound"
         "409":
@@ -887,6 +927,226 @@ paths:
           $ref: "#/components/responses/ElementNotFound"
         "409":
           $ref: "#/components/responses/CaptureConflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
+
+    delete:
+      operationId: clearElementProperty
+      tags: [ui-edit]
+      summary: Clear element property
+      description: >
+        Clears a locally set bindable property so it falls back to its style, inherited or default
+        value, and returns the resulting value.
+      parameters:
+        - $ref: "#/components/parameters/ElementIdPath"
+        - name: name
+          in: path
+          required: true
+          description: Property name.
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/editing.json#/$defs/CaptureBinding"
+      responses:
+        "200":
+          description: Property cleared.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/editing.json#/$defs/ClearPropertyResponse"
+        "400":
+          description: The edit could not be applied.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/editing.json#/$defs/EditError"
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "409":
+          $ref: "#/components/responses/CaptureConflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
+
+  # ──────────────────────────── UI editing ─────────────────────────────
+  /api/v1/ui/elements/{id}/children:
+    post:
+      operationId: addElement
+      tags: [ui-edit]
+      summary: Add element from XAML
+      description: >
+        Inflates a single view from a XAML snippet and inserts it into the parent element named in
+        the path. The change applies to the running app only; persisting it to source is the
+        client's responsibility.
+      parameters:
+        - $ref: "#/components/parameters/ElementIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/editing.json#/$defs/AddElementRequest"
+            example:
+              xaml: '<Label Text="Hello" />'
+              index: 1
+      responses:
+        "201":
+          description: Element created.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/editing.json#/$defs/ElementEditResponse"
+        "400":
+          description: The edit could not be applied.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/editing.json#/$defs/EditError"
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "409":
+          $ref: "#/components/responses/CaptureConflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
+
+  /api/v1/ui/elements/{id}/move:
+    post:
+      operationId: moveElement
+      tags: [ui-edit]
+      summary: Move element
+      description: >
+        Moves a view to another parent, or reorders it within its current parent. On failure the
+        element is returned to where it was.
+      parameters:
+        - $ref: "#/components/parameters/ElementIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/editing.json#/$defs/MoveElementRequest"
+      responses:
+        "200":
+          description: Element moved.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/editing.json#/$defs/ElementEditResponse"
+        "400":
+          description: The edit could not be applied.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/editing.json#/$defs/EditError"
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "409":
+          $ref: "#/components/responses/CaptureConflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
+
+  /api/v1/ui/xaml/reload:
+    post:
+      operationId: reloadXaml
+      tags: [ui-edit]
+      summary: Reload XAML
+      description: >
+        Re-inflates every live instance of a page or view (or one instance) from new XAML text, and
+        replaces the agent's source map for the type so sourceLine and sourceHash follow the text
+        that is now running. Works without an IDE; it can run alongside IDE XAML Hot Reload, where
+        the last change applied wins. A reload targeting elementId may carry capture metadata, which
+        is validated as it is for the structural edits. XAML that fails to inflate leaves the live
+        view as it was.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/editing.json#/$defs/XamlReloadRequest"
+      responses:
+        "200":
+          description: XAML reloaded.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/editing.json#/$defs/XamlReloadResponse"
+        "400":
+          description: The edit could not be applied.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/editing.json#/$defs/EditError"
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "409":
+          $ref: "#/components/responses/CaptureConflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
+
+  /api/v1/ui/highlight:
+    put:
+      operationId: highlightElement
+      tags: [ui-edit]
+      summary: Highlight element in the app
+      description: >
+        Draws the selection adorner around an element inside the running app through the window's
+        visual diagnostics overlay, or clears it. Requires the mutation lease but does not
+        invalidate outstanding captures.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/editing.json#/$defs/HighlightRequest"
+      responses:
+        "200":
+          description: Highlight updated.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/editing.json#/$defs/SelectionResponse"
+        "404":
+          $ref: "#/components/responses/ElementNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
+
+  /api/v1/ui/pick:
+    post:
+      operationId: setPickMode
+      tags: [ui-edit]
+      summary: Enable or disable pick mode
+      description: >
+        While enabled, the next tap in the app selects the element under it instead of interacting
+        with it, highlights it, publishes an elementPicked event on /ws/v1/ui/events, and turns
+        pick mode off.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/editing.json#/$defs/PickModeRequest"
+      responses:
+        "200":
+          description: Pick mode updated.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/editing.json#/$defs/SelectionResponse"
         "500":
           $ref: "#/components/responses/InternalError"
         "501":

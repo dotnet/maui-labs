@@ -1,0 +1,255 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "editing.json",
+  "title": "Editing Models",
+  "description": "Request and response models for design-time editing: structural changes to the live tree, clearing properties, XAML reload and the in-app selection overlay.",
+  "$defs": {
+    "AddElementRequest": {
+      "type": "object",
+      "description": "Inflate a single view from XAML and insert it into the parent named in the path. Layouts insert at index; single-content parents (ContentPage, Border, ScrollView, ContentView, ...) must be empty.",
+      "required": ["xaml"],
+      "properties": {
+        "xaml": {
+          "type": "string",
+          "description": "XAML for exactly one view. The default MAUI namespace and the x: namespace are supplied when the snippet does not declare them. x:Class is not allowed."
+        },
+        "index": {
+          "type": ["integer", "null"],
+          "description": "Position among the parent's children. Omitted, negative or past the end appends. Ignored for single-content parents."
+        },
+        "captureEpoch": {
+          "$ref": "actions.json#/$defs/CaptureEpoch"
+        },
+        "registryGeneration": {
+          "$ref": "actions.json#/$defs/RegistryGeneration"
+        }
+      }
+    },
+    "MoveElementRequest": {
+      "type": "object",
+      "description": "Move the element named in the path to a new parent, or reorder it within its current parent.",
+      "required": ["parentId"],
+      "properties": {
+        "parentId": {
+          "type": "string",
+          "description": "Target parent element. May be the element's current parent to reorder."
+        },
+        "index": {
+          "type": ["integer", "null"],
+          "description": "The element's final position among the target's children. Omitted or out of range appends."
+        },
+        "captureEpoch": {
+          "$ref": "actions.json#/$defs/CaptureEpoch"
+        },
+        "registryGeneration": {
+          "$ref": "actions.json#/$defs/RegistryGeneration"
+        }
+      }
+    },
+    "CaptureBinding": {
+      "type": "object",
+      "description": "Optional capture metadata for requests that otherwise carry no body. May also be supplied as captureEpoch and registryGeneration query parameters.",
+      "properties": {
+        "captureEpoch": {
+          "$ref": "actions.json#/$defs/CaptureEpoch"
+        },
+        "registryGeneration": {
+          "$ref": "actions.json#/$defs/RegistryGeneration"
+        }
+      }
+    },
+    "ElementEditResponse": {
+      "type": "object",
+      "description": "Result of adding or moving an element.",
+      "required": ["success", "element", "parentId"],
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": true
+        },
+        "element": {
+          "$ref": "element-info.json",
+          "description": "The element as it now appears in the tree, including its new id and children."
+        },
+        "parentId": {
+          "type": "string",
+          "description": "The parent the element now belongs to."
+        },
+        "index": {
+          "type": ["integer", "null"],
+          "description": "Position among the parent's children; null for single-content parents."
+        }
+      }
+    },
+    "RemoveElementResponse": {
+      "type": "object",
+      "required": ["success", "id"],
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": true
+        },
+        "id": {
+          "type": "string",
+          "description": "The removed element."
+        },
+        "parentId": {
+          "type": ["string", "null"],
+          "description": "The parent the element was removed from."
+        }
+      }
+    },
+    "ClearPropertyResponse": {
+      "type": "object",
+      "required": ["id", "property"],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "property": {
+          "type": "string"
+        },
+        "value": {
+          "type": ["string", "null"],
+          "description": "The formatted value after clearing, i.e. the style or default value."
+        }
+      }
+    },
+    "EditError": {
+      "type": "object",
+      "description": "A structural edit or reload that could not be applied.",
+      "required": ["success", "error"],
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": false
+        },
+        "error": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "invalid-xaml",
+            "not-a-container",
+            "content-occupied",
+            "invalid-target",
+            "not-a-view",
+            "no-parent",
+            "not-removable",
+            "native-element-not-supported",
+            "invalid-property",
+            "native-property-not-supported",
+            "class-mismatch",
+            "reload-failed",
+            "not-found",
+            "capture-epoch-required"
+          ]
+        },
+        "details": {
+          "type": "object",
+          "description": "For invalid-xaml during reload: the parse error position, when known.",
+          "properties": {
+            "line": {
+              "type": ["integer", "null"]
+            },
+            "column": {
+              "type": ["integer", "null"]
+            }
+          }
+        }
+      }
+    },
+    "XamlReloadRequest": {
+      "type": "object",
+      "description": "Re-inflate live pages or views from XAML text. Resources, behaviors, triggers, gesture recognizers, toolbar items, single content, layout children, Shell items and multi-page children on the root are reset before inflation and restored when inflation fails; generated x:Name fields are re-pointed at the new elements, and cleared for names the document no longer declares.",
+      "required": ["xaml"],
+      "properties": {
+        "xaml": {
+          "type": "string",
+          "description": "The complete XAML document, normally including x:Class."
+        },
+        "className": {
+          "type": ["string", "null"],
+          "description": "Type to reload. Defaults to the document's x:Class."
+        },
+        "elementId": {
+          "type": ["string", "null"],
+          "description": "Reload only this live instance. Its type must match the class when one is known."
+        },
+        "sourceFile": {
+          "type": ["string", "null"],
+          "description": "Project-relative path for the refreshed source map when the app has no build-time map for the type."
+        },
+        "captureEpoch": {
+          "$ref": "actions.json#/$defs/CaptureEpoch"
+        },
+        "registryGeneration": {
+          "$ref": "actions.json#/$defs/RegistryGeneration"
+        }
+      }
+    },
+    "XamlReloadResponse": {
+      "type": "object",
+      "required": ["success", "reloaded", "elementIds"],
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": true
+        },
+        "className": {
+          "type": ["string", "null"]
+        },
+        "reloaded": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of live instances re-inflated."
+        },
+        "elementIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sourceHash": {
+          "type": ["string", "null"],
+          "description": "Content hash of the replaced source map. Elements of the reloaded type report this as sourceHash from now on. Null when no source map could be built."
+        }
+      }
+    },
+    "HighlightRequest": {
+      "type": "object",
+      "properties": {
+        "elementId": {
+          "type": ["string", "null"],
+          "description": "Element to outline inside the app. Null or omitted clears every highlight."
+        }
+      }
+    },
+    "PickModeRequest": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "While enabled, the next tap in the app selects the element under it instead of interacting with it. Pick mode turns itself off after one pick."
+        }
+      }
+    },
+    "SelectionResponse": {
+      "type": "object",
+      "required": ["success"],
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "elementId": {
+          "type": ["string", "null"]
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

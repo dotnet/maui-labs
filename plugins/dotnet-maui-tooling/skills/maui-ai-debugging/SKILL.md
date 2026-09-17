@@ -219,6 +219,17 @@ maui devflow ui set-property <id> FontSize "24"
 Supports: string, bool, int, double, Color (named/hex), Thickness, enums. Changes persist
 until the app restarts — safe for experimentation.
 
+**Structural editing and XAML reload (running app only, source files are not changed):**
+```bash
+maui devflow ui add-element <parentId> '<Label Text="New" />' --index 0
+maui devflow ui move-element <id> <newParentId> --index 2
+maui devflow ui remove-element <id>
+maui devflow ui clear-property <id> FontSize
+maui devflow ui reload-xaml Views/MainPage.xaml      # after editing the file, no rebuild or IDE
+maui devflow ui highlight <id>                       # outline it in the app; omit id to clear
+maui devflow ui pick                                 # ask the user to tap an element, prints its id
+```
+
 **Typical interaction flow:**
 1. `maui devflow ui fill --automationId "MyEntry" "text"` — type into Entry/Editor fields (no query needed)
 2. `maui devflow ui tap --automationId "MyButton"` — tap buttons, checkboxes, list items
@@ -438,6 +449,13 @@ resolution options are provided.
 | `MAUI screenshot [--output path.png] [--window W] [--id ID] [--selector SEL] [--overwrite] [--max-width N] [--scale native]` | PNG screenshot. Auto-scales to 1x logical resolution on HiDPI displays (2x, 3x). Use `--scale native` for full resolution. `--max-width N` overrides auto-scaling with explicit width. `--overwrite` replaces existing file |
 | `MAUI property <elementId> <prop>` | Read property (Text, IsVisible, FontSize, etc.) |
 | `MAUI set-property <elementId> <prop> <value>` | Set property (live editing — colors, text, sizes, etc.) |
+| `MAUI clear-property <elementId> <prop>` | Clear a locally set property so it falls back to its style or default value |
+| `MAUI add-element <parentId> <xaml> [--index N]` | Add one view from a XAML snippet to a layout or empty content container |
+| `MAUI remove-element <elementId>` | Remove a view from its parent |
+| `MAUI move-element <elementId> <parentId> [--index N]` | Move or reorder a view; index is its final position |
+| `MAUI reload-xaml <file> [--element ID]` | Re-inflate every live instance of the file's x:Class (or one instance) without an IDE |
+| `MAUI highlight [elementId]` | Outline an element inside the app; omit the id to clear |
+| `MAUI pick [--timeout S]` | Wait for a tap in the app and print the element under it |
 | `MAUI element <elementId>` | Full element JSON (type, bounds, children, etc.) |
 | `MAUI navigate <route>` | Shell navigation (e.g. `//native`, `//blazor`) |
 | `MAUI scroll [--element id] [--dx N] [--dy N] [--item-index N] [--group-index N] [--position P] [--window W]` | Scroll by delta, item index, or scroll element into view. `--item-index` scrolls to a specific item in CollectionView/ListView (works even for virtualized off-screen items). `--position`: MakeVisible (default), Start, Center, End. Delta scroll (`--dy -500`) uses native platform scroll for CollectionView |

@@ -10,7 +10,7 @@ namespace Microsoft.Maui.DevFlow.Driver;
 /// <summary>
 /// HTTP client that communicates with the Microsoft.Maui.DevFlow Agent running inside the MAUI app.
 /// </summary>
-public class AgentClient : IDisposable
+public partial class AgentClient : IDisposable
 {
     private const string ApiV1 = "/api/v1";
     private const string AgentApi = $"{ApiV1}/agent";

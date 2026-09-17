@@ -202,6 +202,7 @@ For local debugging that needs full-path project disambiguation, opt in explicit
 - **Global Mutation Lease** — prevents browser, VS Code, Canvas, MCP, and CLI callers from driving the app concurrently
 - **Workflow Recording** — broker-owned recording observes successful mutations from every host and emits replayable Markdown
 - **Click-to-XAML** — Debug source maps connect visual-tree elements to their XAML declarations
+- **Design-time Editing** — add views from XAML snippets, remove, move and reorder elements, clear properties, reload XAML without an IDE (source maps follow the reloaded text), and highlight or pick elements inside the running app
 - **MCP Server** — structured tools for AI agent integration, including `maui_layout_diagnostics`
 - **Logging** — buffered JSONL file logging with WebView JS console capture
 - **Real-time Streaming** — WebSocket channels for logs, network, sensors, profiler, and UI events

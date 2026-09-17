@@ -316,6 +316,12 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         capabilities["ui.screenshot"] = Capability(1, IsScreenshotSupported,
             ["element", "fullscreen", "selector"], reason);
         capabilities["ui.events"] = Capability(1, true, ["stream", "subscribe"], null);
+        capabilities["ui.edit"] = Capability(1, false, [],
+            $"Structural editing is not supported by the '{UiFrameworkName}' DevFlow backend.");
+        capabilities["ui.xaml"] = Capability(1, false, [],
+            $"XAML reload is not supported by the '{UiFrameworkName}' DevFlow backend.");
+        capabilities["ui.highlight"] = Capability(1, false, [],
+            $"In-app highlighting is not supported by the '{UiFrameworkName}' DevFlow backend.");
 
         if (_options.EnableLayoutDiagnostics)
         {
@@ -472,6 +478,29 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     /// <summary>Handles <c>PUT /api/v1/ui/element/{id}/property</c>.</summary>
     protected virtual Task<HttpResponse> HandleSetProperty(HttpRequest request) => NotSupportedTask("ui.actions");
+
+    /// <summary>Handles <c>DELETE /api/v1/ui/elements/{id}/properties/{name}</c>.</summary>
+    protected virtual Task<HttpResponse> HandleClearProperty(HttpRequest request) => NotSupportedTask("ui.edit");
+
+    // ── Design-time editing seams ─────────────────────────────────────────
+
+    /// <summary>Handles <c>POST /api/v1/ui/elements/{id}/children</c>.</summary>
+    protected virtual Task<HttpResponse> HandleAddElement(HttpRequest request) => NotSupportedTask("ui.edit");
+
+    /// <summary>Handles <c>DELETE /api/v1/ui/elements/{id}</c>.</summary>
+    protected virtual Task<HttpResponse> HandleRemoveElement(HttpRequest request) => NotSupportedTask("ui.edit");
+
+    /// <summary>Handles <c>POST /api/v1/ui/elements/{id}/move</c>.</summary>
+    protected virtual Task<HttpResponse> HandleMoveElement(HttpRequest request) => NotSupportedTask("ui.edit");
+
+    /// <summary>Handles <c>POST /api/v1/ui/xaml/reload</c>.</summary>
+    protected virtual Task<HttpResponse> HandleReloadXaml(HttpRequest request) => NotSupportedTask("ui.xaml");
+
+    /// <summary>Handles <c>PUT /api/v1/ui/highlight</c>.</summary>
+    protected virtual Task<HttpResponse> HandleHighlight(HttpRequest request) => NotSupportedTask("ui.highlight");
+
+    /// <summary>Handles <c>POST /api/v1/ui/pick</c>.</summary>
+    protected virtual Task<HttpResponse> HandlePickMode(HttpRequest request) => NotSupportedTask("ui.highlight");
 
     /// <summary>Handles <c>POST /api/v1/ui/tap</c>.</summary>
     protected virtual Task<HttpResponse> HandleTap(HttpRequest request) => NotSupportedTask("ui.actions");

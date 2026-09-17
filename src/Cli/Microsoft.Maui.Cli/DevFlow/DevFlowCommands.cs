@@ -696,6 +696,99 @@ public class DevFlowCommands
         });
         mauiCommand.Add(mauiSetPropertyCmd);
 
+        // MAUI clear-property
+        var clearPropIdArg = new Argument<string>("elementId") { Description = "Element ID" };
+        var clearPropNameArg = new Argument<string>("propertyName") { Description = "Property name" };
+        var mauiClearPropertyCmd = new Command("clear-property", "Clear a locally set property so it falls back to its style or default value") { clearPropIdArg, clearPropNameArg };
+        mauiClearPropertyCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var json = output.ResolveJsonMode(ctx.GetValue(jsonOption), ctx.GetValue(noJsonOption));
+            await MauiClearPropertyAsync(host, port, json, ctx.GetValue(clearPropIdArg)!, ctx.GetValue(clearPropNameArg)!);
+        });
+        mauiCommand.Add(mauiClearPropertyCmd);
+
+        // MAUI add-element
+        var addParentArg = new Argument<string>("parentId") { Description = "Element ID of the parent layout or content container" };
+        var addXamlArg = new Argument<string>("xaml") { Description = "XAML for one view, e.g. '<Label Text=\"Hi\" />'" };
+        var addIndexOption = new Option<int?>("--index") { Description = "Position among the parent's children (default: append)" };
+        var mauiAddElementCmd = new Command("add-element", "Add a view to the running app from a XAML snippet") { addParentArg, addXamlArg, addIndexOption };
+        mauiAddElementCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var json = output.ResolveJsonMode(ctx.GetValue(jsonOption), ctx.GetValue(noJsonOption));
+            await MauiEditElementAsync(host, port, json, "AddElement",
+                client => client.AddElementAsync(ctx.GetValue(addParentArg)!, ctx.GetValue(addXamlArg)!, ctx.GetValue(addIndexOption)));
+        });
+        mauiCommand.Add(mauiAddElementCmd);
+
+        // MAUI remove-element
+        var removeIdArg = new Argument<string>("elementId") { Description = "Element ID" };
+        var mauiRemoveElementCmd = new Command("remove-element", "Remove a view from its parent in the running app") { removeIdArg };
+        mauiRemoveElementCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var json = output.ResolveJsonMode(ctx.GetValue(jsonOption), ctx.GetValue(noJsonOption));
+            await MauiEditElementAsync(host, port, json, "RemoveElement",
+                client => client.RemoveElementAsync(ctx.GetValue(removeIdArg)!));
+        });
+        mauiCommand.Add(mauiRemoveElementCmd);
+
+        // MAUI move-element
+        var moveIdArg = new Argument<string>("elementId") { Description = "Element ID of the view to move" };
+        var moveParentArg = new Argument<string>("parentId") { Description = "Element ID of the new parent (may be the current parent to reorder)" };
+        var moveIndexOption = new Option<int?>("--index") { Description = "Final position among the new parent's children (default: append)" };
+        var mauiMoveElementCmd = new Command("move-element", "Move or reorder a view in the running app") { moveIdArg, moveParentArg, moveIndexOption };
+        mauiMoveElementCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var json = output.ResolveJsonMode(ctx.GetValue(jsonOption), ctx.GetValue(noJsonOption));
+            await MauiEditElementAsync(host, port, json, "MoveElement",
+                client => client.MoveElementAsync(ctx.GetValue(moveIdArg)!, ctx.GetValue(moveParentArg)!, ctx.GetValue(moveIndexOption)));
+        });
+        mauiCommand.Add(mauiMoveElementCmd);
+
+        // MAUI reload-xaml
+        var reloadFileArg = new Argument<string>("file") { Description = "Path to the .xaml file to reload" };
+        var reloadElementOption = new Option<string?>("--element") { Description = "Reload only this live instance (default: every instance of the file's x:Class)" };
+        var mauiReloadXamlCmd = new Command("reload-xaml", "Hot reload a .xaml file into the running app without an IDE") { reloadFileArg, reloadElementOption };
+        mauiReloadXamlCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var json = output.ResolveJsonMode(ctx.GetValue(jsonOption), ctx.GetValue(noJsonOption));
+            await MauiReloadXamlAsync(host, port, json, ctx.GetValue(reloadFileArg)!, ctx.GetValue(reloadElementOption));
+        });
+        mauiCommand.Add(mauiReloadXamlCmd);
+
+        // MAUI highlight
+        var highlightIdArg = new Argument<string?>("elementId") { Description = "Element ID to outline in the app (omit to clear)", Arity = ArgumentArity.ZeroOrOne };
+        var mauiHighlightCmd = new Command("highlight", "Outline an element inside the running app, or clear the outline") { highlightIdArg };
+        mauiHighlightCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var json = output.ResolveJsonMode(ctx.GetValue(jsonOption), ctx.GetValue(noJsonOption));
+            await MauiHighlightAsync(host, port, json, ctx.GetValue(highlightIdArg));
+        });
+        mauiCommand.Add(mauiHighlightCmd);
+
+        // MAUI pick
+        var pickTimeoutOption = new Option<int>("--timeout") { Description = "Seconds to wait for a tap in the app", DefaultValueFactory = _ => 60 };
+        var mauiPickCmd = new Command("pick", "Wait for a tap in the running app and print the element under it") { pickTimeoutOption };
+        mauiPickCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var json = output.ResolveJsonMode(ctx.GetValue(jsonOption), ctx.GetValue(noJsonOption));
+            await MauiPickAsync(host, port, json, TimeSpan.FromSeconds(ctx.GetValue(pickTimeoutOption)), ct);
+        });
+        mauiCommand.Add(mauiPickCmd);
+
         // MAUI element
         var elementIdArg = new Argument<string>("elementId") { Description = "Element ID" };
         var mauiElementCmd = new Command("element", "Get element details") { elementIdArg };
@@ -2908,6 +3001,13 @@ public class DevFlowCommands
         new("ui resize", "Resize app window", true),
         new("ui property", "Get element property value", false),
         new("ui set-property", "Set element property value", true),
+        new("ui clear-property", "Clear a locally set property", true),
+        new("ui add-element", "Add a view from a XAML snippet", true),
+        new("ui remove-element", "Remove a view from its parent", true),
+        new("ui move-element", "Move or reorder a view", true),
+        new("ui reload-xaml", "Hot reload a .xaml file into the running app", true),
+        new("ui highlight", "Outline an element inside the app", true),
+        new("ui pick", "Wait for a tap in the app and print the element", true),
         new("ui screenshot", "Take screenshot of app or element", false),
         new("ui assert", "Assert element property equals expected value", false),
         new("recording start", "Start screen recording", true),
@@ -3749,6 +3849,153 @@ public class DevFlowCommands
 
             Output.WriteError(message, json, retryable: result.Retryable);
             _errorOccurred = true;
+        }
+        catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
+    }
+
+    private static async Task MauiClearPropertyAsync(string host, int port, bool json, string elementId, string propertyName)
+    {
+        try
+        {
+            using var client = await CreateAgentClientAsync(host, port);
+            var result = await client.ClearPropertyResultAsync(elementId, propertyName);
+            if (result.Success)
+            {
+                Output.WriteActionResult(true, "ClearProperty", elementId, json, $"Cleared {propertyName}");
+                return;
+            }
+
+            var message = !string.IsNullOrWhiteSpace(result.Error) ? result.Error! : $"Failed to clear {propertyName}";
+            if (!string.IsNullOrWhiteSpace(result.Reason))
+                message += $" (reason: {result.Reason})";
+            Output.WriteError(message, json, retryable: result.Retryable);
+            _errorOccurred = true;
+        }
+        catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
+    }
+
+    private static async Task MauiEditElementAsync(
+        string host,
+        int port,
+        bool json,
+        string action,
+        Func<Microsoft.Maui.DevFlow.Driver.AgentClient, Task<Microsoft.Maui.DevFlow.Driver.ElementEditResult>> edit)
+    {
+        try
+        {
+            using var client = await CreateAgentClientAsync(host, port);
+            var result = await edit(client);
+            if (!result.Success)
+            {
+                var message = result.Error ?? $"{action} failed";
+                if (!string.IsNullOrWhiteSpace(result.Reason))
+                    message += $" (reason: {result.Reason})";
+                Output.WriteError(message, json, retryable: result.Reason == "stale-capture-epoch",
+                    suggestions: result.StatusCode == 404 ? new[] { "Run 'ui tree' to refresh element IDs" } : null);
+                _errorOccurred = true;
+                return;
+            }
+
+            var elementId = result.Element?.Id ?? result.Id;
+            var payload = new JsonObject
+            {
+                ["success"] = true,
+                ["action"] = action,
+                ["elementId"] = elementId,
+                ["elementType"] = result.Element?.Type,
+                ["parentId"] = result.ParentId,
+                ["index"] = result.Index
+            };
+            Output.WriteResult(payload, json, _ => Console.WriteLine(result.Index is { } index
+                ? $"{action}: {elementId} (parent {result.ParentId}, index {index})"
+                : $"{action}: {elementId} (parent {result.ParentId})"));
+        }
+        catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
+    }
+
+    private static async Task MauiReloadXamlAsync(string host, int port, bool json, string file, string? elementId)
+    {
+        try
+        {
+            if (!File.Exists(file))
+            {
+                Output.WriteError($"File not found: {file}", json);
+                _errorOccurred = true;
+                return;
+            }
+
+            using var client = await CreateAgentClientAsync(host, port);
+            var result = await client.ReloadXamlAsync(
+                await File.ReadAllTextAsync(file),
+                elementId: elementId,
+                sourceFile: file);
+            if (!result.Success)
+            {
+                var message = result.Error ?? "XAML reload failed";
+                if (result.Details?.Line is { } line)
+                    message += $" ({Path.GetFileName(file)}:{line}:{result.Details.Column})";
+                Output.WriteError(message, json);
+                _errorOccurred = true;
+                return;
+            }
+
+            var ids = new JsonArray();
+            foreach (var id in result.ElementIds ?? [])
+                ids.Add(id);
+            var payload = new JsonObject
+            {
+                ["success"] = true,
+                ["className"] = result.ClassName,
+                ["reloaded"] = result.Reloaded,
+                ["elementIds"] = ids,
+                ["sourceHash"] = result.SourceHash
+            };
+            Output.WriteResult(payload, json, _ => Console.WriteLine($"Reloaded {result.Reloaded} live instance(s) of {result.ClassName}"));
+        }
+        catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
+    }
+
+    private static async Task MauiHighlightAsync(string host, int port, bool json, string? elementId)
+    {
+        try
+        {
+            using var client = await CreateAgentClientAsync(host, port);
+            var result = await client.HighlightElementAsync(elementId);
+            if (result.Success)
+            {
+                Output.WriteActionResult(true, "Highlight", elementId, json, elementId is null ? "Cleared highlight" : $"Highlighted {elementId}");
+                return;
+            }
+
+            Output.WriteError(result.Error ?? "Highlight failed", json);
+            _errorOccurred = true;
+        }
+        catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
+    }
+
+    private static async Task MauiPickAsync(string host, int port, bool json, TimeSpan timeout, CancellationToken ct)
+    {
+        try
+        {
+            using var client = await CreateAgentClientAsync(host, port);
+            if (!json)
+                Console.Error.WriteLine("Tap an element in the app...");
+
+            var picked = await client.PickElementAsync(timeout, ct);
+            if (picked is null)
+            {
+                Output.WriteError($"No element was picked within {timeout.TotalSeconds:0} seconds", json, errorType: "Timeout", retryable: true);
+                _errorOccurred = true;
+                return;
+            }
+
+            var payload = new JsonObject
+            {
+                ["success"] = true,
+                ["elementId"] = picked.ElementId,
+                ["elementType"] = picked.ElementType
+            };
+            Output.WriteResult(payload, json, _ => Console.WriteLine($"{picked.ElementType} {picked.ElementId}"));
         }
         catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
     }

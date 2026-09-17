@@ -138,6 +138,33 @@
               "subscribe"
             ]
           },
+          "ui.edit": {
+            "version": 1,
+            "features": [
+              "add-element",
+              "remove-element",
+              "move-element",
+              "clear-property",
+              "xaml-snippet",
+              "capture-epoch"
+            ]
+          },
+          "ui.xaml": {
+            "version": 1,
+            "features": [
+              "reload",
+              "reload-element",
+              "source-map-refresh"
+            ]
+          },
+          "ui.highlight": {
+            "version": 1,
+            "features": [
+              "highlight",
+              "pick",
+              "element-picked-event"
+            ]
+          },
           "ui.screenshot": {
             "version": 2,
             "features": [

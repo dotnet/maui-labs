@@ -275,6 +275,31 @@ public sealed class MockAgentServer : IAsyncDisposable
 
             return Results.Content(MockAgentResponses.ActionSuccess, "application/json");
         });
+        app.MapDelete("/api/v1/ui/elements/{id}/properties/{name}", (string id, string name) =>
+            Results.Json(new { id, property = name, value = "14" }));
+        app.MapPost("/api/v1/ui/elements/{id}/children", (string id) => id == "leaf"
+            ? Results.Json(
+                new { success = false, error = "Label cannot hold child views", reason = "not-a-container" },
+                statusCode: StatusCodes.Status400BadRequest)
+            : Results.Json(
+                new { success = true, element = new { id = "new-1", type = "Label" }, parentId = id, index = 0 },
+                statusCode: StatusCodes.Status201Created));
+        app.MapDelete("/api/v1/ui/elements/{id}", (string id) =>
+            Results.Json(new { success = true, id, parentId = "parent-1" }));
+        app.MapPost("/api/v1/ui/elements/{id}/move", (string id) =>
+            Results.Json(new { success = true, element = new { id, type = "Label" }, parentId = "parent-2", index = 1 }));
+        app.MapPost("/api/v1/ui/xaml/reload", async (HttpContext context) =>
+        {
+            using var reader = new StreamReader(context.Request.Body, Encoding.UTF8);
+            var body = await reader.ReadToEndAsync();
+            return body.Contains("Broken", StringComparison.Ordinal)
+                ? Results.Json(
+                    new { success = false, error = "Invalid XAML: unknown type", reason = "invalid-xaml", details = new { line = 3, column = 5 } },
+                    statusCode: StatusCodes.Status400BadRequest)
+                : Results.Json(new { success = true, className = "App.MainPage", reloaded = 1, elementIds = new[] { "page-1" }, sourceHash = "abc123" });
+        });
+        app.MapPut("/api/v1/ui/highlight", () => Results.Json(new { success = true }));
+        app.MapPost("/api/v1/ui/pick", () => Results.Json(new { success = true, enabled = true }));
         app.MapGet("/api/v1/ui/hit-test", () =>
         {
             var hitTestNumber = Interlocked.Increment(ref _hitTestCount);

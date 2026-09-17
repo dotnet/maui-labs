@@ -139,6 +139,15 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             gestures = SupportedGestures,
             reason = (string?)null
         };
+        capabilities["ui.edit"] = Capability(1, supported: true,
+            ["add-element", "remove-element", "move-element", "clear-property", "xaml-snippet", "capture-epoch"],
+            reason: null);
+        capabilities["ui.xaml"] = Capability(1, supported: true,
+            ["reload", "reload-element", "source-map-refresh"],
+            reason: null);
+        capabilities["ui.highlight"] = Capability(1, supported: true,
+            ["highlight", "pick", "element-picked-event"],
+            reason: null);
         capabilities["ui.screenshot"] = Capability(2, supported: true,
             SupportsNativeElementScreenshots
                 ? ["element", "native-element", "fullscreen", "selector", "capture-epoch"]
