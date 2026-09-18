@@ -89,10 +89,14 @@ component.Reload();
 var secondRender = component.BuiltView as VStack;
 var secondChildren = ((IContainerView)secondRender).GetChildren().ToList();
 
-// With keyed diffing, instances should be reused and moved
-Assert.Same(firstChildC, secondChildren[0]); // C moved to front
-Assert.Same(firstChildA, secondChildren[1]); // A moved to middle
-Assert.Same(firstChildB, secondChildren[2]); // B moved to end
+// Plain views are fresh declarations; keys preserve backend identity and ordering,
+// not the stale logical object.
+Assert.NotSame(firstChildC, secondChildren[0]); // C moved to front
+Assert.NotSame(firstChildA, secondChildren[1]); // A moved to middle
+Assert.NotSame(firstChildB, secondChildren[2]); // B moved to end
+Assert.Equal("C", (secondChildren[0] as Text)?.Value);
+Assert.Equal("A", (secondChildren[1] as Text)?.Value);
+Assert.Equal("B", (secondChildren[2] as Text)?.Value);
 }
 
 [Fact]
@@ -116,9 +120,9 @@ var secondRender = component.BuiltView as VStack;
 var secondChildren = ((IContainerView)secondRender).GetChildren().ToList();
 Assert.Equal(3, secondChildren.Count);
 
-// First two should be reused
-Assert.Same(firstChildren[0], secondChildren[0]);
-Assert.Same(firstChildren[1], secondChildren[1]);
+// Existing keys receive fresh declaration objects.
+Assert.NotSame(firstChildren[0], secondChildren[0]);
+Assert.NotSame(firstChildren[1], secondChildren[1]);
 // Third is new
 Assert.NotSame(firstChildren.FirstOrDefault(), secondChildren[2]);
 }
@@ -144,9 +148,9 @@ var secondRender = component.BuiltView as VStack;
 var secondChildren = ((IContainerView)secondRender).GetChildren().ToList();
 Assert.Equal(2, secondChildren.Count);
 
-// First and third should be reused
-Assert.Same(firstChildren[0], secondChildren[0]); // A
-Assert.Same(firstChildren[2], secondChildren[1]); // C (was third, now second)
+// Existing keys receive fresh declaration objects in the requested order.
+Assert.NotSame(firstChildren[0], secondChildren[0]); // A
+Assert.NotSame(firstChildren[2], secondChildren[1]); // C (was third, now second)
 }
 
 [Fact]
@@ -167,10 +171,10 @@ component.Reload();
 var secondRender = component.BuiltView as VStack;
 var secondChildren = ((IContainerView)secondRender).GetChildren().ToList();
 
-// All children should be reused (same keys, same order)
-Assert.Same(firstChildren[0], secondChildren[0]);
-Assert.Same(firstChildren[1], secondChildren[1]);
-Assert.Same(firstChildren[2], secondChildren[2]);
+// Keys preserve native identity; plain logical declarations are replaced.
+Assert.NotSame(firstChildren[0], secondChildren[0]);
+Assert.NotSame(firstChildren[1], secondChildren[1]);
+Assert.NotSame(firstChildren[2], secondChildren[2]);
 }
 
 [Fact]
@@ -208,12 +212,12 @@ component.Reload();
 
 var secondChildren = ((IContainerView)(component.BuiltView as VStack)).GetChildren().ToList();
 
-// All children should be reused, just reordered
-Assert.Same(firstChildren[4], secondChildren[0]); // E
-Assert.Same(firstChildren[3], secondChildren[1]); // D
-Assert.Same(firstChildren[2], secondChildren[2]); // C
-Assert.Same(firstChildren[1], secondChildren[3]); // B
-Assert.Same(firstChildren[0], secondChildren[4]); // A
+// All keyed backend identities are reordered onto fresh declarations.
+Assert.NotSame(firstChildren[4], secondChildren[0]); // E
+Assert.NotSame(firstChildren[3], secondChildren[1]); // D
+Assert.NotSame(firstChildren[2], secondChildren[2]); // C
+Assert.NotSame(firstChildren[1], secondChildren[3]); // B
+Assert.NotSame(firstChildren[0], secondChildren[4]); // A
 }
 
 [Fact]
@@ -234,9 +238,9 @@ component.Reload();
 var secondChildren = ((IContainerView)(component.BuiltView as VStack)).GetChildren().ToList();
 Assert.Equal(3, secondChildren.Count);
 
-// A and C should be reused
-Assert.Same(firstChildren[0], secondChildren[0]); // A
-Assert.Same(firstChildren[2], secondChildren[1]); // C (moved from index 2 to 1)
+// A and C keep their keyed backend identities on fresh declarations.
+Assert.NotSame(firstChildren[0], secondChildren[0]); // A
+Assert.NotSame(firstChildren[2], secondChildren[1]); // C (moved from index 2 to 1)
 // D is new
 Assert.Equal("D", (secondChildren[2] as Text)?.Value);
 }

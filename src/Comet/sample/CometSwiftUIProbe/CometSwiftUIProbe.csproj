@@ -57,6 +57,8 @@
     <!-- Shared JetNews sample (M2). -->
     <Compile Include="..\Shared\JetNews\*.cs" Link="Shared\JetNews\%(Filename)%(Extension)" />
     <Compile Include="..\Shared\Jetsnack\*.cs" Link="Shared\Jetsnack\%(Filename)%(Extension)" />
+    <!-- Shared BaristaNotes sample (coffee-themed native-backend app). -->
+    <Compile Include="..\Shared\BaristaNotes\**\*.cs" Link="Shared\BaristaNotes\%(RecursiveDir)%(Filename)%(Extension)" />
     <!-- Shared Jetcaster sample (M4): fixture feeds + artwork at the bundle root
          (explicit LogicalName — the SDK ignores subdir'd duplicates otherwise). -->
     <Compile Include="..\Shared\Jetcaster\*.cs" Link="Shared\Jetcaster\%(Filename)%(Extension)" />
@@ -70,6 +72,11 @@
     <BundleResource Include="Fonts\Karla-Bold.ttf" />
     <BundleResource Include="Fonts\MaterialIcons-Regular.ttf" />
     <BundleResource Include="Fonts\RobotoFlex-Regular.ttf" />
+    <!-- BaristaNotes fonts, copied unchanged from the reference app. -->
+    <BundleResource Include="Fonts\Manrope-Regular.ttf" />
+    <BundleResource Include="Fonts\Manrope-SemiBold.ttf" />
+    <BundleResource Include="Fonts\MaterialSymbols.ttf" />
+    <BundleResource Include="Fonts\coffee-icons.ttf" />
     <!-- Jetchat avatars/sticker at the bundle root so UIImage(named:) finds them. -->
     <BundleResource Include="Resources\ali.png"><LogicalName>ali.png</LogicalName></BundleResource>
     <BundleResource Include="Resources\jetnews_logo.png"><LogicalName>jetnews_logo.png</LogicalName></BundleResource>
@@ -117,6 +124,7 @@
       <Kind>Framework</Kind>
       <SmartLink>False</SmartLink>
     </NativeReference>
+    <LinkerArgument Include="-lsqlite3" />
   </ItemGroup>
 
 </Project>

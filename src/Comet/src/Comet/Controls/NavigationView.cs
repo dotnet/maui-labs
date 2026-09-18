@@ -1,4 +1,5 @@
 ﻿using System;
+using Comet.Backend;
 
 namespace Comet
 {
@@ -6,6 +7,8 @@ namespace Comet
 	{
 		readonly object _viewsLock = new();
 		List<IView> _views = new List<IView>();
+		object _logicalOwnerIdentity = new();
+		bool _retainLogicalStackAfterOwnerTransfer = true;
 
 		/// <summary>
 		/// Action and icon for the leading (left) navigation bar button.
@@ -26,8 +29,7 @@ namespace Comet
 
 		public void Navigate(View view)
 		{
-			view.Navigation = this;
-			view.UpdateNavigation();
+			RebindNavigationOwner(view, this);
 
 			if (PerformNavigate is null && Navigation is not null)
 				Navigation.Navigate(view);
@@ -58,6 +60,60 @@ namespace Comet
 		public void SetPerformPop(NavigationView navView)
 			=> PerformPop = navView.PerformPop;
 		protected Action PerformPop { get; set; }
+		Func<View> CurrentViewProvider { get; set; }
+
+		internal void SetCurrentViewProvider(Func<View> provider)
+			=> CurrentViewProvider = provider;
+
+		// Only the NavigationView currently owned by a rendered backend has this callback.
+		// The registry retains inactive navigation roots across shell section swaps.
+		internal bool HasActiveBackendCallbacks => CurrentViewProvider is not null;
+
+		internal void DetachBackendCallbacks()
+		{
+			PerformNavigate = null;
+			PerformPop = null;
+			PerformContentReset = null;
+			CurrentViewProvider = null;
+		}
+
+		internal bool RetainsLogicalStackAfterOwnerTransfer
+			=> _retainLogicalStackAfterOwnerTransfer;
+
+		internal void SetRetainsLogicalStackAfterOwnerTransfer(bool retain)
+			=> _retainLogicalStackAfterOwnerTransfer = retain;
+
+		internal override bool TryRetainForOwnerTransfer()
+		{
+			if (!_retainLogicalStackAfterOwnerTransfer ||
+				!string.IsNullOrEmpty(this.GetKey()))
+				return false;
+
+			_retainLogicalStackAfterOwnerTransfer = false;
+			DetachBackendCallbacks();
+			return true;
+		}
+
+		/// <summary>
+		/// Carries logical owner identity across a fresh declaration at the same reconciled
+		/// position. Persistent NavigationView instances keep their own identity.
+		/// </summary>
+		internal void AdoptReconciledOwnerIdentityFrom(NavigationView previous)
+		{
+			if (previous is null)
+				throw new ArgumentNullException(nameof(previous));
+			if (ReferenceEquals(this, previous) ||
+				!string.IsNullOrEmpty(this.GetKey()) ||
+				!string.IsNullOrEmpty(previous.GetKey()) ||
+				!WasFreshlyDeclaredAtSameBodyPositionAs(previous))
+				return;
+
+			_logicalOwnerIdentity = previous._logicalOwnerIdentity;
+		}
+
+		internal bool HasSameLogicalOwnerIdentity(NavigationView other)
+			=> other is not null &&
+				ReferenceEquals(_logicalOwnerIdentity, other._logicalOwnerIdentity);
 
 		public void SetPerformNavigate(Action<View> action)
 			=> PerformNavigate = action;
@@ -74,6 +130,111 @@ namespace Comet
 		public void SetPerformContentReset(NavigationView navView)
 			=> PerformContentReset = navView.PerformContentReset;
 		protected Action<View> PerformContentReset { get; set; }
+
+		internal static bool HasSameBackendRoot(View current, View next)
+		{
+			if (ReferenceEquals(current, next))
+				return true;
+			if (current is null || next is null || current.GetType() != next.GetType())
+				return false;
+
+			var currentKey = current.GetKey();
+			var nextKey = next.GetKey();
+			if (!string.IsNullOrEmpty(currentKey) || !string.IsNullOrEmpty(nextKey))
+				return string.Equals(currentKey, nextKey, StringComparison.Ordinal);
+
+			var currentId = current.AutomationId;
+			var nextId = next.AutomationId;
+			return string.IsNullOrEmpty(currentId) && string.IsNullOrEmpty(nextId)
+				|| string.Equals(currentId, nextId, StringComparison.Ordinal);
+		}
+
+		internal IReadOnlyList<View> GetBackendNavigationStack()
+		{
+			lock (_viewsLock)
+			{
+				if (Content is not null &&
+					(_views.Count == 0 ||
+					 _views[0] is not View first ||
+					 !HasSameBackendRoot(first, Content)))
+					_views.Insert(0, Content);
+				return _views.OfType<View>().ToArray();
+			}
+		}
+
+		internal void SetBackendNavigationStack(IReadOnlyList<View> stack)
+		{
+			if (stack is null)
+				throw new ArgumentNullException(nameof(stack));
+
+			List<View> previous;
+			lock (_viewsLock)
+			{
+				previous = _views.OfType<View>().ToList();
+				_views = new List<IView>(stack.Count);
+				foreach (var view in stack)
+				{
+					RebindNavigationOwner(view, this);
+					_views.Add(view);
+				}
+			}
+
+			NavigationStackLifecycle.DisposeRemovedOwnedPages(
+				previous,
+				stack,
+				this,
+				(_, _) => { });
+		}
+
+		internal static void RebindNavigationOwner(View view, NavigationView owner)
+		{
+			RebindNavigationOwner(view, owner, new HashSet<View>());
+		}
+
+		static void RebindNavigationOwner(
+			View view,
+			NavigationView owner,
+			HashSet<View> visited)
+		{
+			if (view is null || !visited.Add(view))
+				return;
+
+			if (view is NavigationView nestedNavigation)
+			{
+				nestedNavigation.Navigation = owner;
+				nestedNavigation.RebindOwnedPages(visited);
+				return;
+			}
+
+			view.Navigation = owner;
+
+			var rendered = view.BuiltView;
+			if (rendered is not null && !ReferenceEquals(rendered, view))
+				RebindNavigationOwner(rendered, owner, visited);
+
+			if (view is not IContainerView container)
+				return;
+
+			foreach (var child in container.GetChildren())
+				RebindNavigationOwner(child, owner, visited);
+		}
+
+		void RebindOwnedPages(HashSet<View> visited)
+		{
+			View[] pages;
+			lock (_viewsLock)
+			{
+				if (Content is not null &&
+					(_views.Count == 0 ||
+					 _views[0] is not View first ||
+					 !HasSameBackendRoot(first, Content)))
+					_views.Insert(0, Content);
+				pages = _views.OfType<View>().ToArray();
+			}
+
+			foreach (var page in pages)
+				RebindNavigationOwner(page, this, visited);
+		}
 
 		//IToolbar IToolbarElement.Toolbar => CometWindow.Toolbar;
 
@@ -94,6 +255,19 @@ namespace Comet
 		}
 
 		public void Pop()
+			=> PopCore();
+
+		/// <summary>Requests a guarded back navigation. A page BackButtonBehavior command
+		/// intercepts the request and decides whether to call Pop.</summary>
+		public bool RequestBack()
+		{
+			if (TryHandleBackBehavior(CurrentViewProvider?.Invoke() ?? _views.LastOrDefault() as View))
+				return true;
+			PopCore();
+			return true;
+		}
+
+		void PopCore()
 		{
 			if (PerformPop is null && Navigation is not null)
 				Navigation.Pop();
@@ -103,13 +277,33 @@ namespace Comet
 					PerformPop();
 				else
 				{
-					var lastIndex = _views.Count - 1;
-					if (lastIndex < 0)
+					var stack = GetBackendNavigationStack().ToList();
+					if (!NavigationStackLifecycle.TryPop(
+						stack,
+						(_, _) => { },
+						out _))
 						return;
-					_views.RemoveAt(lastIndex);
+					ReplaceBackendNavigationStackWithoutDisposal(stack);
 					((IStackNavigationView)this).RequestNavigation(new NavigationRequest(_views, true));
 				}
 			}
+
+		}
+
+		bool TryHandleBackBehavior(View view)
+		{
+			var behavior = view?.GetBackButtonBehavior();
+			if (behavior is null)
+				return false;
+			if (!behavior.IsEnabled)
+				return true;
+			if (behavior.Command is null)
+				return false;
+			if (!behavior.Command.CanExecute(behavior.CommandParameter))
+				return false;
+
+			behavior.Command.Execute(behavior.CommandParameter);
+			return true;
 		}
 
 		public override void Add(View view)
@@ -117,7 +311,7 @@ namespace Comet
 			base.Add(view);
 			if (view is not null)
 			{
-				view.Navigation = this;
+				RebindNavigationOwner(view, this);
 				view.Parent = this;
 			}
 		}
@@ -156,15 +350,20 @@ namespace Comet
 		/// </summary>
 		public void PopToRoot()
 		{
-			lock (_viewsLock)
-			{
-				if (_views.Count <= 1) return;
-				var root = _views[0];
-				_views.Clear();
-				_views.Add(root);
-			}
 			if (PerformContentReset is not null && Content is not null)
+			{
 				PerformContentReset(Content);
+				return;
+			}
+
+			var stack = GetBackendNavigationStack().ToList();
+			if (stack.Count <= 1)
+				return;
+			NavigationStackLifecycle.ResetToRoot(
+				stack,
+				stack[0],
+				(_, _) => { });
+			ReplaceBackendNavigationStackWithoutDisposal(stack);
 		}
 
 		public static void PopToRoot(View view)
@@ -185,6 +384,42 @@ namespace Comet
 			}
 
 			return FindParentNavigationView(view?.Parent) ?? view.Navigation;
+		}
+
+		void ReplaceBackendNavigationStackWithoutDisposal(IReadOnlyList<View> stack)
+		{
+			lock (_viewsLock)
+			{
+				_views = new List<IView>(stack.Count);
+				foreach (var view in stack)
+					_views.Add(view);
+			}
+		}
+
+		protected override void Dispose(bool disposing)
+		{
+			if (!disposing)
+			{
+				base.Dispose(disposing);
+				return;
+			}
+			_retainLogicalStackAfterOwnerTransfer = false;
+			_retainLogicalStackAfterOwnerTransfer = false;
+			var content = Content;
+			var stack = GetBackendNavigationStack().ToList();
+			if (content is not null &&
+				!stack.Any(page => ReferenceEquals(page, content)))
+				stack.Insert(0, content);
+			lock (_viewsLock)
+				_views.Clear();
+			NavigationStackLifecycle.DisposeOwnedPages(
+				stack,
+				this,
+				(_, _) => { });
+			Content = null;
+			DetachBackendCallbacks();
+
+			base.Dispose(disposing);
 		}
 
 		void IStackNavigation.RequestNavigation(NavigationRequest eventArgs) =>

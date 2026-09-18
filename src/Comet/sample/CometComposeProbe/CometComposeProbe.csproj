@@ -47,6 +47,10 @@
     <ProjectReference Include="..\..\src\Comet\Comet.csproj" />
     <!-- ComponentActivity host for ComposeView. -->
     <PackageReference Include="Xamarin.AndroidX.Activity" Version="1.13.0.1" />
+    <!-- Bundles libe_sqlite3.so for Android — safety net for devices where the system
+         libsqlite.so is restricted.  SqliteNativeDatabase prefers the system library
+         and falls back to e_sqlite3 when the system lib is unavailable. -->
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3.android" Version="2.1.10" />
     <!-- Google's Material 3 dynamic-color algorithm (HCT -> tonal palettes -> roles), in C#,
          so the SAME M3 scheme is generated from a seed on both platforms (Apache-2.0). -->
     <PackageReference Include="MaterialColorUtilities" Version="0.3.0" />
@@ -63,6 +67,8 @@
     <Compile Include="..\Shared\Jetcaster\*.cs" Link="Shared\Jetcaster\%(Filename)%(Extension)" />
     <AndroidAsset Include="..\Shared\Jetcaster\fixtures\*.rss" Link="Assets\jetcaster\%(Filename)%(Extension)" />
     <AndroidResource Include="..\Shared\Jetcaster\fixtures\*_art.jpg" Link="Resources\drawable-nodpi\%(Filename)%(Extension)" />
+    <!-- Shared BaristaNotes sample (coffee-themed native-backend app). -->
+    <Compile Include="..\Shared\BaristaNotes\**\*.cs" Link="Shared\BaristaNotes\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <!-- DevFlow agent for maui devflow screenshot/tap/list — Debug only.

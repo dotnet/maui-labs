@@ -65,9 +65,23 @@ namespace Comet.Styles
 
 			View.SetGlobalEnvironment(ActiveThemeKey, theme);
 
-			// Mark all views with a render body dirty so they re-render with new
-			// theme values. Token reads resolve from ThemeManager.Current() so
-			// a full re-render picks up the change.
+			InvalidateThemedViews();
+		}
+
+		/// <summary>Raised by a native host when the operating-system light/dark
+		/// appearance changes. System-following themes can re-read native state
+		/// without every sample owning platform lifecycle hooks.</summary>
+		public static event Action SystemThemeChanged;
+
+		/// <summary>Host notification contract for an operating-system theme change.</summary>
+		public static void NotifySystemThemeChanged()
+		{
+			SystemThemeChanged?.Invoke();
+			InvalidateThemedViews();
+		}
+
+		static void InvalidateThemedViews()
+		{
 			ThreadHelper.RunOnMainThread(() =>
 			{
 				List<View> views;

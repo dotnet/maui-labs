@@ -16,11 +16,14 @@ namespace Comet.Platform.SwiftUI
 	/// </summary>
 	sealed class SwiftUIListNode : ICometBackendNode, IBackendManagesOwnContent, ISwiftUINativeNode
 	{
-		readonly IListView _list;
+		IListView _list;
 		readonly BackendContext _context;
 		readonly CometNode _native;
 		readonly List<View> _rows = new();
 		double _width;
+		double _height;
+		double _centerEndSpacing = -1;
+		readonly ListInitialScrollState _initialScroll = new();
 
 		public CometNode Native => _native;
 
@@ -31,10 +34,14 @@ namespace Comet.Platform.SwiftUI
 			_native = CometSwiftUIHost.MakeNode("list");
 			if (_list.Horizontal)
 				CometSwiftUIHost.SetBool(_native, "horizontal", true);
+			CometSwiftUIHost.SetBool(_native, "lazyvstack", UsesRetainedSafeLazyStack(_list));
+			CometSwiftUIHost.SetBool(_native, "snapcenter", _list.SnapToCenter);
 
 			// Drive ScrollToBottom (JumpToBottom FAB / after-send) through the native
 			// ScrollViewReader — the iOS counterpart of the Compose LazyListState scroller.
 			_list.RegisterScroller(() => CometSwiftUIHost.ScrollToBottom(_native));
+			_list.RegisterScrollTo((index, position, animate) =>
+				CometSwiftUIHost.ScrollAnimated(_native, index, (nint)position, animate));
 
 			// The shim reports last-row visibility (0 = newest on screen / at bottom, 1 = scrolled away);
 			// mirror it onto IListView.ScrolledAway so the JumpToBottom FAB shows/hides on scroll — the
@@ -78,45 +85,44 @@ namespace Comet.Platform.SwiftUI
 				Rebuild();
 		}
 
-		// Nodes materialized for the current row set; disposed on the next rebuild so stale
-		// row generations release any static hooks.
-		List<ICometBackendNode>? _rowGeneration;
+		// Owns the current row generation so a rebuild clears both backend nodes and
+		// their logical-view registrations before the replacement rows materialize.
+		OwnedContentGeneration? _rowGeneration;
 
 		void Rebuild()
 		{
 			// Hold flushes: row templates carry modifiers (environment writes) — an inline
 			// flush mid-rebuild re-arranges ancestors around a half-built row set.
+			if (UsesRetainedSafeLazyStack(_list))
+				_initialScroll.Invalidate();
+			_ownerGeneration++;
 			using var hold = Comet.Reactive.ReactiveScheduler.HoldFlushes();
-			// Drop the previous rows from the dev tree (they register under the ListView).
-			if (_list is View listView)
-				Comet.DevTools.CometDevRegistry.UnregisterSubtree(listView, includeRoot: false);
-
-			if (_rowGeneration is { } stale)
-			{
-				_rowGeneration = null;
-				foreach (var n in stale)
-					n.Dispose();
-			}
+			_rowGeneration?.Dispose();
+			_rowGeneration = null;
 
 			CometSwiftUIHost.ClearChildren(_native);
 			_rows.Clear();
 			_visibleRows.Clear();
 			_lastMinVisible = int.MaxValue;
 			int count = _list.Sections() > 0 ? _list.Rows(0) : 0;
-			var generation = new List<ICometBackendNode>();
-			using (var scope = CometBackendBridge.CollectNodes(generation))
+			var generation = new OwnedContentGeneration((View)_list, _context);
+			for (int i = 0; i < count; i++)
 			{
-				for (int i = 0; i < count; i++)
-				{
-					var view = _list.ViewFor(0, i);
-					var node = (ISwiftUINativeNode)CometBackendBridge.Materialize(view, _context, _list as View);
-					CometSwiftUIHost.InsertChild(_native, i, node.Native);
-					_rows.Add(view);
-					LayoutRow(view); // no-op until the list has been arranged (width known)
-				}
+				var view = _list.ViewFor(0, i);
+				var node = (ISwiftUINativeNode)generation.Materialize(view);
+				CometSwiftUIHost.InsertChild(_native, i, node.Native);
+				_rows.Add(view);
+				LayoutRow(view); // no-op until the list has been arranged (width known)
 			}
 			_rowGeneration = generation;
+			CometSwiftUIHost.MarkListContentReady(_native);
+			ConfigureInitialScroll();
 		}
+
+		static bool UsesRetainedSafeLazyStack(IListView list) =>
+			!list.Horizontal &&
+			list.InitialScrollIndex >= 0 &&
+			list.InitialScrollPosition == ListScrollPosition.Center;
 
 		// Lay each row out to the list's arranged width with the shared Yoga engine, height-wrapped,
 		// so rows render identically to the Compose backend (avatar + author + wrapping body). Each
@@ -143,6 +149,7 @@ namespace Comet.Platform.SwiftUI
 		{
 			// Position + size the List from its Yoga frame (below the top bar, filling the rest).
 			CometSwiftUIHost.SetFrame(_native, frame.X, frame.Y, frame.Width, frame.Height);
+			_height = frame.Height;
 
 			// First time we learn our width (or it changed), (re)lay the rows out to it.
 			if (frame.Width > 0 && System.Math.Abs(frame.Width - _width) > 0.5)
@@ -150,42 +157,71 @@ namespace Comet.Platform.SwiftUI
 				_width = frame.Width;
 				foreach (var row in _rows)
 					LayoutRow(row);
+			}
 
-				// AnchorBottom (chat log): open at the newest message — the iOS twin of
-				// ComposeListNode's one-shot ScrollToItem(last) seed. Nudged a few times
-				// because a ScrollViewReader scroll to a far target undershoots while rows
-				// are still realizing. Ordinary lists (inbox) open at the top.
-				if (_list.AnchorBottom && !_seededToNewest && _rows.Count > 0)
-				{
-					_seededToNewest = true;
-					SeedToNewest();
-				}
+			ConfigureInitialScroll();
+
+			// AnchorBottom (chat log): open at the newest message — the iOS twin of
+			// ComposeListNode's one-shot ScrollToItem(last) seed. Nudged a few times
+			// because a ScrollViewReader scroll to a far target undershoots while rows
+			// are still realizing. Ordinary lists (inbox) open at the top.
+			if (_list.InitialScrollIndex < 0 &&
+				_list.AnchorBottom &&
+				!_seededToNewest &&
+				_rows.Count > 0)
+			{
+				_seededToNewest = true;
+				SeedToNewest(_ownerGeneration);
 			}
 		}
 
 		bool _seededToNewest;
+		int _ownerGeneration;
 		bool _disposed;
 		readonly HashSet<int> _visibleRows = new();
 		int _lastMinVisible = int.MaxValue;
 		double _lastAway = 1;   // 1 = not at bottom yet
+
+		void ConfigureInitialScroll()
+		{
+			double spacing = _list.InitialScrollIndex >= 0
+				? ListInitialScrollState.EdgeSpacing(
+					_height,
+					_list.InitialScrollPosition)
+				: 0;
+			if (System.Math.Abs(spacing - _centerEndSpacing) > 0.5)
+			{
+				_centerEndSpacing = spacing;
+				CometSwiftUIHost.SetDouble(_native, "listendspacing", spacing);
+			}
+
+			if (_initialScroll.TrySchedule(
+				_height,
+				_rows.Count,
+				_list.InitialScrollIndex,
+				_list.InitialScrollPosition,
+				targetExtent: 0,
+				out var plan))
+				SeedInitialScroll(plan);
+		}
 
 		// Seed the list at the newest message (iOS twin of ComposeListNode's one-shot
 		// ScrollToItem(last)). A ScrollViewReader scroll to a far target undershoots while rows
 		// are still realizing, so nudge a few times — but STOP as soon as the shim reports we've
 		// landed at the bottom (_lastAway low) or the node is torn down, so it doesn't re-scroll
 		// redundantly or yank a user who scrolled up during the window.
-		async void SeedToNewest()
+		async void SeedToNewest(int generation)
 		{
 			try
 			{
 				foreach (var delay in new[] { 350, 900, 1700 })
 				{
 					await System.Threading.Tasks.Task.Delay(delay);
-					if (_disposed || _lastAway <= 0.5)
+					if (_disposed || generation != _ownerGeneration || _lastAway <= 0.5)
 						return;
 					ThreadHelper.RunOnMainThread(() =>
 					{
-						if (!_disposed)
+						if (!_disposed && generation == _ownerGeneration)
 							CometSwiftUIHost.ScrollToBottom(_native);
 					});
 				}
@@ -196,20 +232,67 @@ namespace Comet.Platform.SwiftUI
 			}
 		}
 
+		// Reference CollectionView behavior: dispatch the one-shot center after layout.
+		// Repeat once after the sheet/list transition settles. SwiftUI can report a lazily
+		// preloaded target row as visible even when an earlier ScrollViewReader request ran
+		// before the List was attached, so row realization is not a reliable completion signal.
+		async void SeedInitialScroll(ListInitialScrollPlan plan)
+		{
+			try
+			{
+				await System.Threading.Tasks.Task.Delay(150);
+				if (_disposed || !_initialScroll.IsCurrent(plan.Generation))
+					return;
+				ThreadHelper.RunOnMainThread(() =>
+				{
+					if (!_disposed && _initialScroll.IsCurrent(plan.Generation))
+						CometSwiftUIHost.Scroll(_native, plan.Index, (nint)plan.Position);
+				});
+
+				await System.Threading.Tasks.Task.Delay(450);
+				if (_disposed || !_initialScroll.IsCurrent(plan.Generation))
+					return;
+				ThreadHelper.RunOnMainThread(() =>
+				{
+					if (!_disposed && _initialScroll.IsCurrent(plan.Generation))
+						CometSwiftUIHost.Scroll(_native, plan.Index, (nint)plan.Position);
+				});
+			}
+			catch (System.Exception ex)
+			{
+				System.Diagnostics.Debug.WriteLine($"[SwiftUIListNode] initial center failed: {ex.Message}");
+			}
+		}
+
 		public void SetEventSink(ICometEventSink? sink) { }
+		public void OnOwnerViewChanged(View newView, bool isHotReload)
+		{
+			if (newView is not IListView list)
+				return;
+
+			_list = list;
+			_list.RegisterScroller(() => CometSwiftUIHost.ScrollToBottom(_native));
+			_list.RegisterScrollTo((index, position, animate) =>
+				CometSwiftUIHost.ScrollAnimated(_native, index, (nint)position, animate));
+			CometSwiftUIHost.SetBool(_native, "horizontal", _list.Horizontal);
+			CometSwiftUIHost.SetBool(_native, "lazyvstack", UsesRetainedSafeLazyStack(_list));
+			if (UsesRetainedSafeLazyStack(_list))
+			{
+				_initialScroll.Invalidate();
+				CometSwiftUIHost.ResetListScrollReplay(_native);
+			}
+			_seededToNewest = false;
+			_ownerGeneration++;
+			// TransferBackendNodeFrom applies List_Version immediately after this callback.
+			// That patch performs the single row-generation rebuild for the new owner.
+		}
+
 		public void Dispose()
 		{
 			_disposed = true;
-			// Drop this node's rows from the dev registry (runs BEFORE a successor list node
-			// re-registers fresh rows, so only the stale generation is pruned).
-			if (_list is View listView)
-				Comet.DevTools.CometDevRegistry.UnregisterSubtree(listView, includeRoot: false);
-			if (_rowGeneration is { } rows)
-			{
-				_rowGeneration = null;
-				foreach (var n in rows)
-					n.Dispose();
-			}
+			_initialScroll.Dispose();
+			_rowGeneration?.Dispose();
+			_rowGeneration = null;
 		}
 	}
 }

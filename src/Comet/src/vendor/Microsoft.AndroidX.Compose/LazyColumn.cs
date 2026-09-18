@@ -1,6 +1,7 @@
 using Android.Runtime;
 using AndroidX.Compose.Foundation.Lazy;
 using AndroidX.Compose.Foundation.Layout;
+using AndroidX.Compose.Foundation.Gestures;
 using AndroidX.Compose.Runtime;
 
 namespace AndroidX.Compose;
@@ -71,6 +72,9 @@ public sealed class LazyColumn<T> : ComposableNode
     /// bottom-first when this flag is set.
     /// </remarks>
     public bool ReverseLayout { get; set; }
+
+    /// <summary>Use Compose's native centered snap fling behavior.</summary>
+    public bool SnapToCenter { get; set; }
 
     /// <summary>
     /// Optional fixed content padding applied inside the list (not as a
@@ -144,6 +148,17 @@ public sealed class LazyColumn<T> : ComposableNode
         });
 
         var contentPadding = ContentPadding?.Jvm ?? _runtimeContentPadding;
+        IFlingBehavior? flingBehavior = null;
+        Java.Lang.Object? flingPeer = null;
+        if (SnapToCenter && State is not null)
+        {
+            var snapHandle = ComposeBridges.RememberSnapFlingBehavior(
+                ((Java.Lang.Object)State.Jvm).Handle,
+                ComposeBridges.SnapPositionCenter(),
+                composer);
+            flingPeer = new Java.Lang.Object(snapHandle, JniHandleOwnership.TransferLocalRef);
+            flingBehavior = flingPeer.JavaCast<IFlingBehavior>();
+        }
 
         int defaults = (int)LazyColumnDefault.All;
         if (modifier       is not null) defaults &= ~(int)LazyColumnDefault.Modifier;
@@ -162,12 +177,13 @@ public sealed class LazyColumn<T> : ComposableNode
             reverseLayout:       ReverseLayout,
             verticalArrangement: null,
             horizontalAlignment: null,
-            flingBehavior:       null,
+            flingBehavior:       flingBehavior,
             userScrollEnabled:   true,
             overscrollEffect:    null,
             content:             content,
             _composer:           composer,
             p11:                 0,
             _changed:            defaults);
+        flingPeer?.Dispose();
     }
 }

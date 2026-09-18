@@ -17,7 +17,7 @@ namespace Comet.Platform.SwiftUI
 	/// (SwiftUI-native look), not cross-OS pixel identity: chrome is composed from existing
 	/// Comet views instead of binding new native widgets.
 	/// </summary>
-	abstract class SwiftUIHostedCompositionNode : ICometBackendNode, IBackendManagesOwnContent, ISwiftUINativeNode
+	abstract class SwiftUIHostedCompositionNode : ICometBackendNode, IBackendRetainsLogicalContentOnOwnerTransfer, ISwiftUINativeNode
 	{
 		protected readonly BackendContext Context;
 		readonly CometNode _native = CometSwiftUIHost.MakeNode("navigation");
@@ -77,8 +77,7 @@ namespace Comet.Platform.SwiftUI
 			if (_generation is not { } nodes)
 				return;
 			_generation = null;
-			foreach (var n in nodes)
-				n.Dispose();
+			CometBackendBridge.DisposeNodes(nodes);
 		}
 
 		/// <summary>Whether the hosted subtree has been built (Arrange builds lazily).</summary>
@@ -111,10 +110,12 @@ namespace Comet.Platform.SwiftUI
 		{
 			// Honour the control's .Background(): the suite's safe-area strips paint with it
 			// (without this the strips showed the bare window — white above the content).
-			if (id == PropertyIds.BackgroundColor && value.AsColor is { } c)
+			if (id == PropertyIds.BackgroundColor)
 				CometSwiftUIHost.SetColor(_native, "background",
-					((uint)(c.Alpha * 255) << 24) | ((uint)(c.Red * 255) << 16) |
-					((uint)(c.Green * 255) << 8) | (uint)(c.Blue * 255));
+					value.AsColor is { } c
+						? ((uint)(c.Alpha * 255) << 24) | ((uint)(c.Red * 255) << 16) |
+							((uint)(c.Green * 255) << 8) | (uint)(c.Blue * 255)
+						: 0);
 		}
 		public void InsertChild(int index, ICometBackendNode child) { }
 		public void RemoveChildAt(int index) { }
@@ -163,6 +164,16 @@ namespace Comet.Platform.SwiftUI
 		public SwiftUIContentSwitcherNode(ContentSwitcher switcher, BackendContext context)
 			: base(context) => _switcher = switcher;
 
+		public override void OnOwnerViewChanged(View newView, bool isHotReload)
+		{
+			if (newView is not ContentSwitcher switcher)
+				return;
+			_switcher = switcher;
+			_index = switcher.Index.Peek();
+			if (IsBuilt && (isHotReload || !string.IsNullOrEmpty(newView.GetKey())))
+				Refresh();
+		}
+
 		protected override View BuildContent()
 		{
 			var views = _switcher.Views;
@@ -196,6 +207,16 @@ namespace Comet.Platform.SwiftUI
 
 		public SwiftUIListDetailNode(ListDetail listDetail, BackendContext context)
 			: base(context) => _listDetail = listDetail;
+
+		public override void OnOwnerViewChanged(View newView, bool isHotReload)
+		{
+			if (newView is not ListDetail listDetail)
+				return;
+			_listDetail = listDetail;
+			_open = listDetail.IsDetailOpen.Peek();
+			if (IsBuilt && (isHotReload || !string.IsNullOrEmpty(newView.GetKey())))
+				Refresh();
+		}
 
 		protected override View BuildContent()
 		{
@@ -261,6 +282,30 @@ namespace Comet.Platform.SwiftUI
 			});
 			_hookedMetrics.SizeDp.PropertyChanged += _metricsHandler;
 			_hookedMetrics.SafeAreaDp.PropertyChanged += _metricsHandler;
+		}
+
+		public override void OnOwnerViewChanged(View newView, bool isHotReload)
+		{
+			if (newView is not NavigationSuite suite)
+				return;
+
+			if (_hookedMetrics is not null && _metricsHandler is not null)
+			{
+				_hookedMetrics.SizeDp.PropertyChanged -= _metricsHandler;
+				_hookedMetrics.SafeAreaDp.PropertyChanged -= _metricsHandler;
+			}
+
+			_suite = suite;
+			_selected = suite.SelectedIndex.Peek();
+			_hookedMetrics = suite.GetWindowMetrics();
+			if (_metricsHandler is not null)
+			{
+				_hookedMetrics.SizeDp.PropertyChanged += _metricsHandler;
+				_hookedMetrics.SafeAreaDp.PropertyChanged += _metricsHandler;
+			}
+
+			if (IsBuilt && (isHotReload || !string.IsNullOrEmpty(newView.GetKey())))
+				Refresh();
 		}
 
 		public override void Dispose()
@@ -471,6 +516,21 @@ namespace Comet.Platform.SwiftUI
 			// ancestor refreshes); the node just re-renders when it changes.
 			_expandedHandler = (_, __) => ThreadHelper.RunOnMainThread(Refresh);
 			_bar.Expanded.PropertyChanged += _expandedHandler;
+		}
+
+		public override void OnOwnerViewChanged(View newView, bool isHotReload)
+		{
+			if (newView is not Comet.SearchBar bar)
+				return;
+
+			if (_expandedHandler is not null)
+				_bar.Expanded.PropertyChanged -= _expandedHandler;
+			_bar = bar;
+			if (_expandedHandler is not null)
+				_bar.Expanded.PropertyChanged += _expandedHandler;
+
+			if (IsBuilt && (isHotReload || !string.IsNullOrEmpty(newView.GetKey())))
+				Refresh();
 		}
 
 		public override void Dispose()

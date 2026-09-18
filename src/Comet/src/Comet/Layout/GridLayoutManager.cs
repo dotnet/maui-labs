@@ -74,7 +74,7 @@ namespace Comet.Layout
 				for (var index = 0; index < layout.Count; index++)
 				{
 					var view = layout[index];
-					var constraint = view.GetLayoutConstraints() as GridConstraints ?? GridConstraints.Default;
+					var constraint = GetGridConstraints(view);
 					autoGrid?.SetupConstraints(view, ref correntColumn, ref currentRow, ref constraint);
 					_constraints.Add(constraint);
 					maxRow = Math.Max(maxRow, constraint.Row + constraint.RowSpan - 1);
@@ -105,14 +105,16 @@ namespace Comet.Layout
 				double w = 0;
 				for (var i = 0; i < position.ColumnSpan; i++)
 					w += GetColumnWidth(position.Column + i);
+				w += ColumnSpacing * Math.Max(0, position.ColumnSpan - 1);
 
 				double h = 0;
 				for (var i = 0; i < position.RowSpan; i++)
 					h += GetRowHeight(position.Row + i);
+				h += RowSpacing * Math.Max(0, position.RowSpan - 1);
 
 				if (position.WeightX < 1 || position.WeightY < 1)
 				{
-					var viewSize = view.Measure(widthConstraint, heightConstraint);
+					var viewSize = MeasureChild(view, widthConstraint, heightConstraint);
 
 					var cellWidth = w;
 					var cellHeight = h;
@@ -142,7 +144,8 @@ namespace Comet.Layout
 					view.MeasuredSize = new Size(w, h);
 					view.MeasurementValid = true;
 				}
-				view.Measure(w, h);
+				view.MeasuredSize = MeasureChild(view, w, h);
+				view.MeasurementValid = true;
 			}
 
 			return new Size(_width, _height);
@@ -172,18 +175,25 @@ namespace Comet.Layout
 				var position = _constraints[index];
 				var view = layout[index];
 
-				var viewSize =  view.Measure(measured.Width, measured.Height);
-
-				var x = _gridX[position.Column];
-				var y = _gridY[position.Row];
+				var x = bounds.X + _gridX[position.Column];
+				var y = bounds.Y + _gridY[position.Row];
 
 				double w = 0;
 				for (var i = 0; i < position.ColumnSpan; i++)
 					w += GetColumnWidth(position.Column + i);
+				w += ColumnSpacing * Math.Max(0, position.ColumnSpan - 1);
 
 				double h = 0;
 				for (var i = 0; i < position.RowSpan; i++)
 					h += GetRowHeight(position.Row + i);
+				h += RowSpacing * Math.Max(0, position.RowSpan - 1);
+
+				// Alignment is applied inside the resolved grid cell. Measure against that
+				// cell rather than the whole grid, otherwise a centered Auto-column layout
+				// retains the grid width and overflows back across its star-column sibling.
+				var viewSize = MeasureChild(view, w, h);
+				view.MeasuredSize = viewSize;
+				view.MeasurementValid = true;
 
 				if (position.WeightX < 1 || position.WeightY < 1)
 				{
@@ -289,6 +299,76 @@ namespace Comet.Layout
 			return _heights[row];
 		}
 
+		private static Size MeasureChild(View view, double widthConstraint, double heightConstraint)
+		{
+			var backendView = view.Node is not null ? view : view.BuiltView ?? view;
+			var margin = view.GetMargin();
+			var outerWidthConstraint = double.IsInfinity(widthConstraint)
+				? widthConstraint
+				: Math.Max(0, widthConstraint - margin.HorizontalThickness);
+			var outerHeightConstraint = double.IsInfinity(heightConstraint)
+				? heightConstraint
+				: Math.Max(0, heightConstraint - margin.VerticalThickness);
+
+			Size size;
+			if (backendView is AbstractLayout)
+			{
+				// The backend engine owns a layout's complete outer box: Build applies its
+				// padding and min/max constraints, so its measured size already includes padding.
+				// Passing the outer constraint and adding padding again here doubled padded Auto
+				// rows (the source footer's 48pt padding became 96pt).
+				size = double.IsInfinity(outerWidthConstraint)
+					? Comet.Backend.CometBackendLayoutEngine.Measure(backendView)
+					: Comet.Backend.CometBackendLayoutEngine.MeasureContent(
+						backendView,
+						outerWidthConstraint);
+			}
+			else if (backendView.Node is { } node)
+			{
+				// A native leaf measures only its content. Grid owns the leaf's outer-box
+				// contract, so remove padding from the constraint and add it exactly once.
+				var padding = view.GetPadding();
+				var contentWidthConstraint = double.IsInfinity(outerWidthConstraint)
+					? outerWidthConstraint
+					: Math.Max(0, outerWidthConstraint - padding.HorizontalThickness);
+				var contentHeightConstraint = double.IsInfinity(outerHeightConstraint)
+					? outerHeightConstraint
+					: Math.Max(0, outerHeightConstraint - padding.VerticalThickness);
+				size = node.Measure(contentWidthConstraint, contentHeightConstraint);
+				size.Width += padding.HorizontalThickness;
+				size.Height += padding.VerticalThickness;
+			}
+			else
+			{
+				// Legacy/unmaterialized views retain their existing IView measurement path,
+				// which already owns frame constraints and margins.
+				return view.Measure(widthConstraint, heightConstraint);
+			}
+
+			var platformView = (Microsoft.Maui.IView)view;
+			size.Width = LayoutManager.ResolveConstraints(
+				outerWidthConstraint,
+				platformView.Width,
+				size.Width,
+				platformView.MinimumWidth,
+				platformView.MaximumWidth);
+			size.Height = LayoutManager.ResolveConstraints(
+				outerHeightConstraint,
+				platformView.Height,
+				size.Height,
+				platformView.MinimumHeight,
+				platformView.MaximumHeight);
+
+			size.Width += margin.HorizontalThickness;
+			size.Height += margin.VerticalThickness;
+			return size;
+		}
+
+		private static GridConstraints GetGridConstraints(View view)
+			=> view.GetLayoutConstraints() as GridConstraints
+				?? view.BuiltView?.GetLayoutConstraints() as GridConstraints
+				?? GridConstraints.Default;
+
 		private static bool IsAutoSize(object definition)
 		{
 			var str = definition?.ToString() ?? "";
@@ -311,6 +391,7 @@ namespace Comet.Layout
 			var calculatedColumns = new List<int>();
 			var calculatedColumnFactors = new List<double>();
 			var autoColumns = new HashSet<int>();
+			var starColumns = new HashSet<int>();
 			for (var c = 0; c < columns; c++)
 			{
 				var w = _definedColumns[c];
@@ -329,12 +410,14 @@ namespace Comet.Layout
 					}
 					else
 					{
+						starColumns.Add(c);
 						calculatedColumns.Add(c);
 						calculatedColumnFactors.Add(GetFactor(w));
 					}
 				}
 				else
 				{
+					starColumns.Add(c);
 					calculatedColumns.Add(c);
 					calculatedColumnFactors.Add(GetFactor(w));
 				}
@@ -346,32 +429,51 @@ namespace Comet.Layout
 				for (var index = 0; index < _constraints.Count && index < grid.Count; index++)
 				{
 					var constraint = _constraints[index];
-					if (autoColumns.Contains(constraint.Column))
+					if (Enumerable.Range(constraint.Column, constraint.ColumnSpan).Any(autoColumns.Contains))
 					{
 						var child = grid[index];
-						var childSize = child.Measure(width, height);
-						_widths[constraint.Column] = Math.Max(_widths[constraint.Column], childSize.Width);
+						// Auto columns need the child's intrinsic width. Measuring a layout child
+						// at the grid width pins it to that width, consuming the whole row and
+						// leaving a sibling star column negative (for example "*", "Auto" with
+						// a trailing HStack).
+						var childSize = MeasureChild(child, double.PositiveInfinity, height);
+						var autoInSpan = Enumerable.Range(constraint.Column, constraint.ColumnSpan)
+							.Where(autoColumns.Contains).ToArray();
+						if (autoInSpan.Length == 0 ||
+							Enumerable.Range(constraint.Column, constraint.ColumnSpan).Any(starColumns.Contains))
+							continue;
+						var occupied = Enumerable.Range(constraint.Column, constraint.ColumnSpan)
+							.Sum(i => _widths[i]) + ColumnSpacing * Math.Max(0, constraint.ColumnSpan - 1);
+						var extra = Math.Max(0, childSize.Width - occupied) / autoInSpan.Length;
+						foreach (var autoColumn in autoInSpan)
+							_widths[autoColumn] += extra;
 					}
 				}
 				foreach (var c in autoColumns)
 					takenX += _widths[c];
 			}
 
-			var availableWidth = width - takenX - (ColumnSpacing * (calculatedColumns.Count > 0 ? columns - 1 : Math.Max(0, columns - 1)));
-			if (double.IsInfinity(availableWidth) || double.IsNaN(availableWidth))
-				availableWidth = 0;
-			var columnFactor = calculatedColumnFactors.Sum(f => f);
-			var columnWidth = columnFactor > 0 ? availableWidth / columnFactor : 0;
-			var factorIndex = 0;
-			foreach (var c in calculatedColumns)
+			var unboundedWidth = double.IsInfinity(width) || double.IsNaN(width);
+			if (unboundedWidth)
 			{
-				_widths[c] = columnWidth * calculatedColumnFactors[factorIndex++];
+				MeasureUnboundedStarColumns(height, starColumns);
+			}
+			else
+			{
+				var availableWidth = width - takenX -
+					(ColumnSpacing * (calculatedColumns.Count > 0 ? columns - 1 : Math.Max(0, columns - 1)));
+				var columnFactor = calculatedColumnFactors.Sum(f => f);
+				var columnWidth = columnFactor > 0 ? availableWidth / columnFactor : 0;
+				var factorIndex = 0;
+				foreach (var c in calculatedColumns)
+					_widths[c] = columnWidth * calculatedColumnFactors[factorIndex++];
 			}
 
 			double takenY = 0;
 			var calculatedRows = new List<int>();
 			var calculatedRowFactors = new List<double>();
 			var autoRows = new HashSet<int>();
+			var starRows = new HashSet<int>();
 			for (var r = 0; r < rows; r++)
 			{
 				var h = _definedRows[r];
@@ -390,12 +492,14 @@ namespace Comet.Layout
 					}
 					else
 					{
+						starRows.Add(r);
 						calculatedRows.Add(r);
 						calculatedRowFactors.Add(GetFactor(h));
 					}
 				}
 				else
 				{
+					starRows.Add(r);
 					calculatedRows.Add(r);
 					calculatedRowFactors.Add(GetFactor(h));
 				}
@@ -407,26 +511,40 @@ namespace Comet.Layout
 				for (var index = 0; index < _constraints.Count && index < grid.Count; index++)
 				{
 					var constraint = _constraints[index];
-					if (autoRows.Contains(constraint.Row))
+					if (Enumerable.Range(constraint.Row, constraint.RowSpan).Any(autoRows.Contains))
 					{
 						var child = grid[index];
-						var childSize = child.Measure(width, height);
-						_heights[constraint.Row] = Math.Max(_heights[constraint.Row], childSize.Height);
+						var childSize = MeasureChild(child, width, height);
+						var autoInSpan = Enumerable.Range(constraint.Row, constraint.RowSpan)
+							.Where(autoRows.Contains).ToArray();
+						if (autoInSpan.Length == 0 ||
+							Enumerable.Range(constraint.Row, constraint.RowSpan).Any(starRows.Contains))
+							continue;
+						var occupied = Enumerable.Range(constraint.Row, constraint.RowSpan)
+							.Sum(i => _heights[i]) + RowSpacing * Math.Max(0, constraint.RowSpan - 1);
+						var extra = Math.Max(0, childSize.Height - occupied) / autoInSpan.Length;
+						foreach (var autoRow in autoInSpan)
+							_heights[autoRow] += extra;
 					}
 				}
 				foreach (var r in autoRows)
 					takenY += _heights[r];
 			}
 
-			var availableHeight = height - takenY - (RowSpacing * (calculatedRows.Count > 0 ? rows - 1 : Math.Max(0, rows - 1)));
-			if (double.IsInfinity(availableHeight) || double.IsNaN(availableHeight))
-				availableHeight = 0;
-			var rowFactor = calculatedRowFactors.Sum(f => f);
-			var rowHeight = rowFactor > 0 ? availableHeight / rowFactor : 0;
-			factorIndex = 0;
-			foreach (var r in calculatedRows)
+			var unboundedHeight = double.IsInfinity(height) || double.IsNaN(height);
+			if (unboundedHeight)
 			{
-				_heights[r] = rowHeight * calculatedRowFactors[factorIndex++];
+				MeasureUnboundedStarRows(width, starRows);
+			}
+			else
+			{
+				var availableHeight = height - takenY -
+					(RowSpacing * (calculatedRows.Count > 0 ? rows - 1 : Math.Max(0, rows - 1)));
+				var rowFactor = calculatedRowFactors.Sum(f => f);
+				var rowHeight = rowFactor > 0 ? availableHeight / rowFactor : 0;
+				var factorIndex = 0;
+				foreach (var r in calculatedRows)
+					_heights[r] = rowHeight * calculatedRowFactors[factorIndex++];
 			}
 
 			double x = 0;
@@ -445,6 +563,77 @@ namespace Comet.Layout
 
 			_width = _widths.Sum() + ColumnSpacing * Math.Max(0, columns - 1);
 			_height = _heights.Sum() + RowSpacing * Math.Max(0, rows - 1);
+		}
+
+		void MeasureUnboundedStarColumns(double heightConstraint, HashSet<int> starColumns)
+		{
+			for (var index = 0; index < _constraints.Count && index < grid.Count; index++)
+			{
+				var constraint = _constraints[index];
+				var stars = Enumerable.Range(constraint.Column, constraint.ColumnSpan)
+					.Where(starColumns.Contains)
+					.ToArray();
+				if (stars.Length == 0)
+					continue;
+
+				var measured = MeasureChild(grid[index], double.PositiveInfinity, heightConstraint);
+				var occupied = Enumerable.Range(constraint.Column, constraint.ColumnSpan)
+					.Sum(column => _widths[column]) +
+					ColumnSpacing * Math.Max(0, constraint.ColumnSpan - 1);
+				DistributeIntrinsicStarSize(
+					stars,
+					Math.Max(0, measured.Width - occupied),
+					_widths,
+					_definedColumns);
+			}
+		}
+
+		void MeasureUnboundedStarRows(double widthConstraint, HashSet<int> starRows)
+		{
+			for (var index = 0; index < _constraints.Count && index < grid.Count; index++)
+			{
+				var constraint = _constraints[index];
+				var stars = Enumerable.Range(constraint.Row, constraint.RowSpan)
+					.Where(starRows.Contains)
+					.ToArray();
+				if (stars.Length == 0)
+					continue;
+
+				var spanWidth = Enumerable.Range(constraint.Column, constraint.ColumnSpan)
+					.Sum(column => _widths[column]) +
+					ColumnSpacing * Math.Max(0, constraint.ColumnSpan - 1);
+				var measured = MeasureChild(grid[index], spanWidth, double.PositiveInfinity);
+				var occupied = Enumerable.Range(constraint.Row, constraint.RowSpan)
+					.Sum(row => _heights[row]) +
+					RowSpacing * Math.Max(0, constraint.RowSpan - 1);
+				DistributeIntrinsicStarSize(
+					stars,
+					Math.Max(0, measured.Height - occupied),
+					_heights,
+					_definedRows);
+			}
+		}
+
+		void DistributeIntrinsicStarSize(
+			int[] starIndexes,
+			double extra,
+			double[] sizes,
+			IReadOnlyList<object> definitions)
+		{
+			if (extra <= 0 || starIndexes.Length == 0)
+				return;
+
+			var factors = starIndexes.Select(index =>
+			{
+				var factor = GetFactor(definitions[index]);
+				return factor > 0 ? factor : 1;
+			}).ToArray();
+			var totalFactor = factors.Sum();
+
+			for (var index = 0; index < starIndexes.Length; index++)
+			{
+				sizes[starIndexes[index]] += extra * factors[index] / totalFactor;
+			}
 		}
 
 		private double GetFactor(object value)

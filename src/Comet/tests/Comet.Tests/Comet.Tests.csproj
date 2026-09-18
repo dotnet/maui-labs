@@ -32,4 +32,22 @@
     </Reference>
   </ItemGroup>
 
+  <!-- BaristaNotes shared domain files (compiled into test project for domain testing) -->
+  <ItemGroup>
+    <Compile Include="..\..\sample\Shared\BaristaNotes\Models\**\*.cs" LinkBase="BaristaNotes\Models" />
+    <Compile Include="..\..\sample\Shared\BaristaNotes\Data\**\*.cs" LinkBase="BaristaNotes\Data" />
+    <Compile Include="..\..\sample\Shared\BaristaNotes\Services\**\*.cs" LinkBase="BaristaNotes\Services" />
+    <Compile Include="..\..\sample\Shared\BaristaNotes\Components\SourceComponents.cs" LinkBase="BaristaNotes\Components" />
+    <Compile Include="..\..\sample\Shared\BaristaNotes\Styles\**\*.cs" LinkBase="BaristaNotes\Styles" />
+    <!-- These two files depend on BaristaNavigationCoordinator, BaristaServices (BaristaNotesApp.cs),
+         and ShotLoggingPage (Pages/) — all of which require the Comet framework (NavigationView,
+         Signal<T>), and Pages that are not compiled into the test project. Including
+         BaristaNotesApp.cs would transitively pull the entire UI layer into the test assembly.
+         Their callback interfaces (IBaristaVoiceCallbacks, IBaristaPhotoWorkflowCallbacks) are
+         thoroughly tested via test doubles in BaristaNotesVoiceDefectTests, BaristaNotesVoiceTests,
+         BaristaNotesIntegrationTests, and BaristaNotesPhotoWorkflowTests. -->
+    <Compile Remove="..\..\sample\Shared\BaristaNotes\Services\Voice\AppVoiceCallbacks.cs" />
+    <Compile Remove="..\..\sample\Shared\BaristaNotes\Services\AppPhotoWorkflowCallbacks.cs" />
+  </ItemGroup>
+
 </Project>

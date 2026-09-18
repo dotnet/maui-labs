@@ -13,7 +13,7 @@ namespace Comet.Platform.Compose
 	/// own slots), tracks the reactive selected index, and routes an item tap through the Comet
 	/// control's <c>SelectItem</c> (signal write + OnSelect) so selection state has one source
 	/// of truth.</summary>
-	abstract class ComposeNavChromeNode : ComposeNode, IBackendManagesOwnContent
+	abstract class ComposeNavChromeNode : ComposeNode, IBackendRetainsLogicalContentOnOwnerTransfer
 	{
 		protected readonly BackendContext Context;
 		protected readonly MutableState<int> Selected = new(0);
@@ -34,9 +34,9 @@ namespace Comet.Platform.Compose
 
 		/// <summary>Only a hot reload re-materializes the slot content (the code changed);
 		/// an ordinary re-render keeps the materialized nodes — the view diff patches them.</summary>
-		protected void OnChromeViewChanged(bool isHotReload)
+		protected void OnChromeViewChanged(View newView, bool isHotReload)
 		{
-			if (!isHotReload)
+			if (!isHotReload && string.IsNullOrEmpty(newView.GetKey()))
 				return;
 			_built = false;
 			ItemNodes = System.Array.Empty<(ComposeNode, ComposeNode?)>();
@@ -79,7 +79,7 @@ namespace Comet.Platform.Compose
 			if (newView is not Comet.NavigationBar bar)
 				return;
 			_bar = bar;
-			OnChromeViewChanged(isHotReload);
+			OnChromeViewChanged(newView, isHotReload);
 		}
 
 		public override Size Measure(double widthConstraint, double heightConstraint)
@@ -137,9 +137,9 @@ namespace Comet.Platform.Compose
 			if (newView is not Comet.NavigationRail rail)
 				return;
 			_rail = rail;
-			if (isHotReload)
+			if (isHotReload || !string.IsNullOrEmpty(newView.GetKey()))
 				_headerNode = null;
-			OnChromeViewChanged(isHotReload);
+			OnChromeViewChanged(newView, isHotReload);
 		}
 
 		public override Size Measure(double widthConstraint, double heightConstraint)

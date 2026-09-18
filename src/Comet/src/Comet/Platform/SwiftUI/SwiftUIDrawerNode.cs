@@ -12,9 +12,9 @@ namespace Comet.Platform.SwiftUI
 	/// the shim composes content + scrim + a left-edge panel). Owns its two children
 	/// (<see cref="IBackendManagesOwnContent"/>) and lays each out with the shared Yoga engine —
 	/// content at full screen, the panel at the sheet width.</summary>
-	sealed class SwiftUIDrawerNode : ICometBackendNode, IBackendManagesOwnContent, ISwiftUINativeNode
+	sealed class SwiftUIDrawerNode : ICometBackendNode, IBackendRetainsLogicalContentOnOwnerTransfer, ISwiftUINativeNode
 	{
-		readonly Drawer _drawer;
+		Drawer _drawer;
 		readonly BackendContext _context;
 		readonly CometNode _native;
 		ICometEventSink? _sink;
@@ -53,6 +53,17 @@ namespace Comet.Platform.SwiftUI
 		}
 
 		public void SetEventSink(ICometEventSink? sink) => _sink = sink;
+
+		public void OnOwnerViewChanged(View newView, bool isHotReload)
+		{
+			if (newView is not Drawer drawer ||
+				(!isHotReload && string.IsNullOrEmpty(newView.GetKey())))
+				return;
+
+			_drawer = drawer;
+			CometSwiftUIHost.ClearChildren(_native);
+			BuildContent();
+		}
 
 		// Content is managed internally.
 		public void InsertChild(int index, ICometBackendNode child) { }
