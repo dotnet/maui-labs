@@ -6,8 +6,6 @@ namespace CometSamples.BaristaNotes.Styles;
 public static class BaristaSourceVisualContract
 {
     public const float ContentInset = 16f;
-    public const float EquipmentHeaderHeight = 90f;
-    public const float SettingsHeaderContentHeight = 77f;
     public const float SectionTopPadding = 24f;
     public const float SectionBottomPadding = 10f;
 

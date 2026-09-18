@@ -13,7 +13,7 @@ using CometBaristaNotes.Services.DTOs;
 
 namespace CometSamples.BaristaNotes.Pages;
 
-public sealed class ProfileManagementPage : View
+public sealed class ProfileManagementPage : BaristaManagementPage
 {
     readonly Action _openNewDrink;
     readonly Action _openActivity;
@@ -157,21 +157,7 @@ public sealed class ProfileManagementPage : View
     {
         var count = state.Profiles.Count;
         var countText = count == 1 ? "1 profile" : $"{count} profiles";
-        return new Grid(columns: new object[] { "*" }, rows: new object[] { "Auto", "*" })
-        {
-            new Text("PROFILES").SectionLabel().Cell(row: 0),
-            new Text(countText)
-                .FontFamily("ManropeSemibold")
-                .FontSize(28)
-                .Color(CoffeeTheme.TextPrimary)
-                .MaxLines(1)
-                .Alignment(Comet.Alignment.BottomLeading)
-                .Cell(row: 1),
-        }
-        .Padding(BaristaSafeAreaLayout.HeaderPadding(safeArea))
-        .MinimumHeight(BaristaSafeAreaLayout.HeaderMinimumHeight(safeArea))
-        .Background(CoffeeTheme.SurfaceColor)
-        .AutomationId("profiles_header");
+        return BaristaPageHeader.Build("PROFILES", countText, safeArea, "profiles_header");
     }
 
     View BodyView(ProfileManagementSnapshot state)
@@ -230,18 +216,10 @@ public sealed class ProfileManagementPage : View
     View ProfileRow(UserProfileDto profile)
     {
         _state.Value.AvatarPaths.TryGetValue(profile.Id, out var avatarPath);
-        return AdaptiveTwoLineTile.Build(
-            "MEMBER",
+        return ProfileListRow.Build(
             profile.Name,
+            new ProfileAvatar(avatarPath, 48, $"profile_avatar_{profile.Id}"),
             $"profile_row_{profile.Id}",
-            onTap: () => OpenProfile(profile.Id),
-            minimumHeight: 120,
-            leading: new ProfileAvatar(avatarPath, 48, $"profile_avatar_{profile.Id}"),
-            trailing: new Text(CoffeeIcons.Chevron)
-                .FontFamily(CoffeeIcons.FontFamily)
-                .FontSize(24)
-                .Color(CoffeeTheme.TextPrimary)
-                .Center())
-            .Margin(bottom: CoffeeSpacing.Divider);
+            () => OpenProfile(profile.Id));
     }
 }

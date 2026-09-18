@@ -16,7 +16,7 @@ namespace CometSamples.BaristaNotes.Pages;
 /// <summary>
 /// Lists active equipment in the same flat, name-sorted order as the source app.
 /// </summary>
-public class EquipmentManagementPage : View
+public class EquipmentManagementPage : BaristaManagementPage
 {
     readonly Action? _openNewDrink;
     readonly Action? _openActivity;
@@ -35,10 +35,6 @@ public class EquipmentManagementPage : View
         _openNewDrink = openNewDrink;
         _openActivity = openActivity;
         _openSettings = openSettings;
-        this.BackButtonBehavior(new BackButtonBehavior
-        {
-            IsVisible = false,
-        });
         _ = LoadAsync(showLoading: true);
     }
 
@@ -87,19 +83,12 @@ public class EquipmentManagementPage : View
     View HeaderView(Thickness safeArea)
     {
         var count = _equipment.Value.Count;
-        return new Grid(rows: new object[] { "Auto", "*" }, columns: new object[] { "*" })
-        {
-            new Text("EQUIPMENT").SectionLabel().Cell(row: 0),
-            new Text(count == 1 ? "1 item" : $"{count} items")
-                .Headline()
-                .Alignment(Comet.Alignment.BottomLeading)
-                .AutomationId("equipment_count")
-                .Cell(row: 1),
-        }
-        .Padding(BaristaSafeAreaLayout.HeaderPadding(safeArea))
-        .MinimumHeight(BaristaSourceVisualContract.EquipmentHeaderHeight)
-        .Background(CoffeeTheme.SurfaceColor)
-        .AutomationId("equipment_header");
+        return BaristaPageHeader.Build(
+            "EQUIPMENT",
+            count == 1 ? "1 item" : $"{count} items",
+            safeArea,
+            "equipment_header",
+            titleAutomationId: "equipment_count");
     }
 
     View BodyView()
@@ -134,29 +123,11 @@ public class EquipmentManagementPage : View
         .AutomationId("equipment_list");
     }
 
-    View EquipmentRow(EquipmentDto equipment)
-    {
-        var tile = AdaptiveTwoLineTile.Build(
-                equipment.Type.ToString().ToUpperInvariant(),
-                equipment.Name,
-                $"equipment_row_{equipment.Id}",
-                () => OpenDetail(equipment.Id),
-                minimumHeight: 80,
-                trailing: new Text(CoffeeIcons.Chevron)
-                    .FontFamily(CoffeeIcons.FontFamily)
-                    .FontSize(24)
-                    .Color(CoffeeTheme.TextPrimary)
-                    .Center(),
-                singleLineTailTruncation: true);
-
-        return new Grid(rows: new object[] { "Auto", CoffeeSpacing.Divider })
-        {
-            tile.Cell(row: 0),
-            new Grid()
-                .Background(CoffeeTheme.OutlineColor)
-                .Cell(row: 1),
-        };
-    }
+    View EquipmentRow(EquipmentDto equipment) => ManagementListRow.Build(
+        equipment.Type.ToString(),
+        equipment.Name,
+        $"equipment_row_{equipment.Id}",
+        () => OpenDetail(equipment.Id));
 
     View BottomActionRow()
     {

@@ -200,25 +200,13 @@ public class EquipmentDetailPage : View
             ? string.IsNullOrEmpty(_name.Value) ? "Loading…" : _name.Value
             : "Add equipment";
 
-        return new Grid(rows: new object[] { "Auto", "*" }, columns: new object[] { "*" })
-        {
-            new Text(IsEdit ? "EDIT EQUIPMENT" : "NEW EQUIPMENT")
-                .SectionLabel()
-                .Cell(row: 0),
-            new Text(title)
-                .FontFamily("ManropeSemibold")
-                .FontSize(TitleFontSize(title))
-                .Color(CoffeeTheme.TextPrimary)
-                .LineBreakMode(LineBreakMode.WordWrap)
-                .MaxLines(2)
-                .Alignment(Comet.Alignment.BottomLeading)
-                .AutomationId("equipment_title")
-                .Cell(row: 1),
-        }
-        .Padding(BaristaSafeAreaLayout.HeaderPadding(safeArea))
-        .MinimumHeight(BaristaSafeAreaLayout.HeaderMinimumHeight(safeArea))
-        .Background(CoffeeTheme.SurfaceColor)
-        .AutomationId("equipment_detail_header");
+        return BaristaPageHeader.Build(
+            IsEdit ? "EDIT EQUIPMENT" : "NEW EQUIPMENT",
+            title,
+            safeArea,
+            "equipment_detail_header",
+            BaristaPageHeader.TitleFontSize(title),
+            titleAutomationId: "equipment_title");
     }
 
     View FormBody()
@@ -228,19 +216,14 @@ public class EquipmentDetailPage : View
                 .Background(CoffeeTheme.SurfaceColor)
                 .AutomationId("equipment_detail_loading");
 
-        return new ScrollView
-        {
-            new VStack(spacing: CoffeeSpacing.Divider)
-            {
+        return BaristaSections.Scroll(
+            BaristaSections.Create(
                 NameFieldTile(),
                 TypeSelectorTile(),
                 NotesFieldTile(),
                 ErrorTile(),
-                new Grid().Frame(height: CoffeeSpacing.L).Background(CoffeeTheme.SurfaceColor),
-            }
-        }
-        .Background(CoffeeTheme.OutlineColor)
-        .AutomationId("equipment_form");
+                new Grid().Frame(height: CoffeeSpacing.L).Background(CoffeeTheme.SurfaceColor)),
+            "equipment_form");
     }
 
     View NameFieldTile() => new Grid(
@@ -449,13 +432,5 @@ public class EquipmentDetailPage : View
                 .CornerRadius(0)
                 .AutomationId("equipment_archive_cancel"))
         .AutomationId("equipment_archive_dialog");
-
-    static double TitleFontSize(string title) => title.Length switch
-    {
-        <= 12 => 28,
-        <= 20 => 22,
-        <= 28 => 18,
-        _ => 16,
-    };
 
 }

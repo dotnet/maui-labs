@@ -32,26 +32,13 @@ public sealed class BeanBagHeaderTile : View
     }
 
     [Body]
-    View body() => new VStack(spacing: CoffeeSpacing.S)
-        {
-            new Text(_label).SectionLabel(),
-            new Text(_title)
-                .FontFamily("ManropeSemibold")
-                .FontSize(HeaderFontSize(_title()))
-                .Color(CoffeeTheme.TextPrimary)
-                .MaxLines(2),
-        }
-        .Padding(BaristaSafeAreaLayout.HeaderPadding(_safeArea))
-        .Background(CoffeeTheme.SurfaceColor)
-        .MinimumHeight(BaristaSafeAreaLayout.HeaderMinimumHeight(_safeArea));
-
-    static double HeaderFontSize(string title) => title.Length switch
+    View body()
     {
-        <= 12 => 28,
-        <= 20 => 22,
-        <= 28 => 18,
-        _ => 16,
-    };
+        var title = _title();
+        return BaristaPageHeader.Build(
+            _label, title, _safeArea, "bean_bag_header",
+            BaristaPageHeader.TitleFontSize(title));
+    }
 }
 
 public sealed class BeanBagActionRow : View

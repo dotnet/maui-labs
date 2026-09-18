@@ -65,31 +65,19 @@ public static class BaristaSafeAreaLayout
     public static Thickness HeaderPadding(float topInset) =>
         HeaderPadding(new Thickness(0, Normalize(topInset), 0, 0));
 
-    public static double HeaderMinimumHeight(Thickness safeArea)
+    public static double HeaderMinimumHeight()
     {
 #if ANDROID
-        // The reference Android page host starts below the status inset, then
-        // allocates the full 120-dp header. Our edge-to-edge host must reserve
-        // that same content region inside its window-relative allocation.
-        return HeaderMinimumHeight(safeArea, includeTopInset: true);
+        return HeaderMinimumHeight(AndroidStatusBarHeight());
 #else
-        // Apple headers grow intrinsically from inset-aware padding. Adding
-        // the inset to the minimum recreates the rejected 182-point header.
-        return HeaderMinimumHeight(safeArea, includeTopInset: false);
+        return HeaderMinimumHeight(0);
 #endif
     }
 
-    public static double SettingsHeaderMinimumHeight(Thickness safeArea)
-    {
-#if ANDROID
-        return BaristaSourceVisualContract.SettingsHeaderContentHeight;
-#else
-        return HeaderMinimumHeight(safeArea);
-#endif
-    }
-
-    public static double HeaderMinimumHeight(Thickness safeArea, bool includeTopInset) =>
-        HeaderContentHeight + (includeTopInset ? Normalize(safeArea.Top) : 0);
+    // The minimum belongs to the whole top region. Android reserves its status
+    // strip outside the header; Apple includes the inset in the header padding.
+    public static double HeaderMinimumHeight(double reservedTopInset) =>
+        Math.Max(0, HeaderContentHeight - Normalize(reservedTopInset));
 
     public static Thickness PickerHeaderPadding(Thickness safeArea) =>
         new(

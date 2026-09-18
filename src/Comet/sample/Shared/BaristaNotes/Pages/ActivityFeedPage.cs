@@ -172,20 +172,10 @@ public sealed class ActivityFeedPage : View
                 ? "1 shot"
                 : $"{_totalShotCount.Value} shots";
 
-        return new VStack(spacing: CoffeeSpacing.S)
-        {
-            new Text("ACTIVITY").SectionLabel()
-                .AutomationId("activity_heading"),
-            new Spacer(),
-            new Text(countText)
-                .FontFamily("ManropeSemibold")
-                .FontSize(28)
-                .Color(CoffeeTheme.TextPrimary)
-                .AutomationId("activity_count"),
-        }
-        .Padding(BaristaSafeAreaLayout.HeaderPadding(safeArea))
-        .MinimumHeight(BaristaSafeAreaLayout.HeaderMinimumHeight(safeArea))
-        .Background(CoffeeTheme.SurfaceColor);
+        return BaristaPageHeader.Build(
+            "ACTIVITY", countText, safeArea, "activity_header",
+            titleAutomationId: "activity_count",
+            labelAutomationId: "activity_heading");
     }
 
     View RefreshableBody()

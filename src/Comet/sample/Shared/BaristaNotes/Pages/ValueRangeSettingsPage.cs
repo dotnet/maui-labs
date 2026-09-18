@@ -80,23 +80,14 @@ public class ValueRangeSettingsPage : View
         .AutomationId("value_range_settings_page");
     }
 
-    static View HeaderTile(string title, Thickness safeArea) => new Grid(rows: new object[] { "Auto", "*" })
-    {
-        new Text("VALUE RANGES").RangeCaption().Cell(row: 0),
-        new Text(title).Headline().Alignment(Comet.Alignment.BottomLeading).Cell(row: 1),
-    }
-    .Padding(BaristaSafeAreaLayout.HeaderPadding(safeArea))
-    .MinimumHeight(BaristaSafeAreaLayout.HeaderMinimumHeight(safeArea))
-    .Background(CoffeeTheme.SurfaceColor)
-    .AutomationId("ValueRangeHeader");
+    static View HeaderTile(string title, Thickness safeArea) => BaristaPageHeader.Build(
+        "VALUE RANGES", title, safeArea, "ValueRangeHeader", rangeCaption: true);
 
     View BodyContent()
     {
-        var content = new VStack(spacing: CoffeeSpacing.Divider)
-        {
+        var content = BaristaSections.Create(
             ModeHelpTile(),
-            ModePickerRow(),
-        };
+            ModePickerRow());
 
         if (_loadWarning.Value is not null)
             content.Add(WarningTile(_loadWarning.Value!));
@@ -109,8 +100,7 @@ public class ValueRangeSettingsPage : View
         else
             content.Add(new Grid().Frame(height: CoffeeSpacing.M).Background(CoffeeTheme.SurfaceColor));
 
-        return new ScrollView { content.Background(CoffeeTheme.OutlineColor) }
-            .Background(CoffeeTheme.SurfaceColor);
+        return BaristaSections.Scroll(content);
     }
 
     View ModeHelpTile() => new VStack(spacing: CoffeeSpacing.XS)

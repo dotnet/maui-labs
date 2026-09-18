@@ -77,20 +77,16 @@ public class SettingsPage : View
             "SettingsPage");
     }
 
-    View HeaderTile(Thickness safeArea) => new Grid(rows: new object[] { "Auto", "*" })
-    {
-        new Text("SETTINGS").SectionLabel().Cell(row: 0),
-        new Text(() => _themeMode.Value switch
+    View HeaderTile(Thickness safeArea) => BaristaPageHeader.Build(
+        "SETTINGS",
+        _themeMode.Value switch
         {
             CoffeeThemeMode.Light => "Light theme",
             CoffeeThemeMode.Dark => "Dark theme",
             _ => "System theme",
-        }).Headline().Alignment(Comet.Alignment.BottomLeading).Cell(row: 1),
-    }
-    .Padding(BaristaSafeAreaLayout.HeaderPadding(safeArea))
-    .MinimumHeight(BaristaSafeAreaLayout.SettingsHeaderMinimumHeight(safeArea))
-    .Background(CoffeeTheme.SurfaceColor)
-    .AutomationId("SettingsHeader");
+        },
+        safeArea,
+        "SettingsHeader");
 
     View BodyContent() => new ScrollView
     {

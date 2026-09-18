@@ -344,6 +344,23 @@ value and grinder; its nested grinder picker returns to Grind without discarding
 the pending value. Close cancels the pending Grind changes. These confirmation
 and equipment-toggle rules include approved changes to the reference app.
 
+### Native BaristaNotes list and detail layouts
+
+Settings, Activity, management lists, detail forms, and value-range pages share
+one header layout. Its minimum covers the complete top region: Android's
+separate status-bar strip counts toward that minimum, while iOS includes the
+safe inset in the header padding. Text can increase the intrinsic height; pages
+do not set separate header heights.
+Management pages also share the source's hidden native navigation bar, so a
+platform back button does not add a second top region or move the footer.
+
+Management rows use the source's 20-point name style and one-unit separators.
+Profiles have a distinct row: MEMBER starts above the avatar, the avatar and
+name have the same vertical center, and the chevron stays centered in the row.
+This profile arrangement is an approved change to the reference layout. Detail
+forms share an outline-colored section stack that paints the one-unit gaps
+between fields without coloring the unused area below the form.
+
 ## Build
 
 > **Requires:** .NET 11 SDK (preview) with the MAUI workload. Comet has its own [`global.json`](global.json) that targets .NET 11.

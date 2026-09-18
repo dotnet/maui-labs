@@ -131,13 +131,16 @@ public sealed class BaristaNotesSafeAreaLayoutTests
         Assert.Contains("BaristaEdgeFrame.CreateEqualDataRows", shot);
         Assert.DoesNotContain("topInset: topInset", shot);
         Assert.Contains("BaristaSafeAreaLayout.PickerHeaderPadding(safeArea)", shot);
-        Assert.Contains("BaristaSafeAreaLayout.HeaderPadding(safeArea)", settings);
-        Assert.Contains("BaristaSafeAreaLayout.HeaderPadding(safeArea)", profile);
+        Assert.Contains("BaristaPageHeader.Build(", settings);
+        Assert.Contains("BaristaPageHeader.Build(", profile);
         Assert.Contains("BaristaEdgeFrame.Build(", bean);
         Assert.Contains("safeArea),", bean);
         Assert.Contains("BaristaEdgeFrame.Build(", bag);
         Assert.Contains("safeArea),", bag);
-        Assert.Contains("BaristaSafeAreaLayout.HeaderPadding(safeArea)", equipment);
+        Assert.Contains("BaristaPageHeader.Build(", equipment);
+        Assert.Contains(
+            "BaristaSafeAreaLayout.HeaderPadding(safeArea)",
+            Read(root!, "sample/Shared/BaristaNotes/Components/SourceComponents.cs"));
     }
 
     static SafeChromeProbe Page(CometWindowMetrics metrics, string automationId)
@@ -163,8 +166,7 @@ public sealed class BaristaNotesSafeAreaLayoutTests
             : BaristaSafeAreaLayout.HeaderVerticalPadding;
         var expectedMinimumHeight = isPicker
             ? BaristaSafeAreaLayout.PickerHeaderContentHeight
-            : BaristaSafeAreaLayout.HeaderMinimumHeight(
-                new Thickness(0, topInset, 0, 0));
+            : BaristaSafeAreaLayout.HeaderMinimumHeight();
 
         Assert.True(root.GetIgnoreSafeArea(false));
         Assert.False(header.GetIgnoreSafeArea(false));
@@ -254,7 +256,7 @@ public sealed class BaristaNotesSafeAreaLayoutTests
             var safeArea = new Thickness(0, topInset, 0, 0);
             var minimumHeight = isPicker
                 ? BaristaSafeAreaLayout.PickerHeaderContentHeight
-                : BaristaSafeAreaLayout.HeaderMinimumHeight(safeArea);
+                : BaristaSafeAreaLayout.HeaderMinimumHeight();
 
             return new Grid
             {

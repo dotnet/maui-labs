@@ -16,6 +16,139 @@ public sealed record BottomAction(
     string? Label = null,
     bool Inverted = false);
 
+public abstract class BaristaManagementPage : View
+{
+    protected BaristaManagementPage() =>
+        this.BackButtonBehavior(new BackButtonBehavior { IsVisible = false });
+}
+
+public static class BaristaPageHeader
+{
+    public static View Build(
+        string label,
+        string title,
+        Thickness safeArea,
+        string automationId,
+        double titleFontSize = 28,
+        string? titleAutomationId = null,
+        string? labelAutomationId = null,
+        bool rangeCaption = false)
+    {
+        var caption = new Text(label);
+        if (rangeCaption)
+            caption.RangeCaption();
+        else
+            caption.SectionLabel();
+        if (labelAutomationId is not null)
+            caption.AutomationId(labelAutomationId);
+
+        var value = new Text(title)
+            .FontFamily("ManropeSemibold")
+            .FontSize(titleFontSize)
+            .Color(CoffeeTheme.TextPrimary)
+            .LineBreakMode(LineBreakMode.WordWrap)
+            .MaxLines(2)
+            .Alignment(Comet.Alignment.BottomLeading);
+        if (titleAutomationId is not null)
+            value.AutomationId(titleAutomationId);
+
+        return new Grid(columns: new object[] { "*" }, rows: new object[] { "Auto", "*" })
+        {
+            caption.Cell(row: 0),
+            value.Cell(row: 1),
+        }
+        .Padding(BaristaSafeAreaLayout.HeaderPadding(safeArea))
+        .MinimumHeight(BaristaSafeAreaLayout.HeaderMinimumHeight())
+        .Background(CoffeeTheme.SurfaceColor)
+        .AutomationId(automationId);
+    }
+
+    public static double TitleFontSize(string title) => title.Length switch
+    {
+        <= 12 => 28,
+        <= 20 => 22,
+        <= 28 => 18,
+        _ => 16,
+    };
+}
+
+public static class BaristaSections
+{
+    public static VStack Create(params View[] sections)
+    {
+        var stack = new VStack(spacing: CoffeeSpacing.Divider)
+            .Background(CoffeeTheme.OutlineColor);
+        foreach (var section in sections)
+            stack.Add(section);
+        return stack;
+    }
+
+    public static View Scroll(VStack sections, string? automationId = null)
+    {
+        var scroll = new ScrollView { sections }.Background(CoffeeTheme.SurfaceColor);
+        if (automationId is not null)
+            scroll.AutomationId(automationId);
+
+        // Native scroll content is intrinsic; paint the full viewport separately.
+        return new Grid { scroll }.Background(CoffeeTheme.SurfaceColor);
+    }
+}
+
+public static class ManagementListRow
+{
+    public static View Build(string label, string name, string automationId, Action onTap) =>
+        new Grid(
+            columns: new object[] { "*", "Auto" },
+            rows: new object[] { "*", "Auto", "Auto", "*" },
+            columnSpacing: CoffeeSpacing.S)
+        {
+            new Text(label.ToUpperInvariant()).SectionLabel()
+                .MaxLines(1).LineBreakMode(LineBreakMode.TailTruncation)
+                .Cell(row: 1),
+            new Text(name).FontFamily("ManropeSemibold").FontSize(20)
+                .Color(CoffeeTheme.TextPrimary)
+                .MaxLines(1).LineBreakMode(LineBreakMode.TailTruncation)
+                .Cell(row: 2),
+            Chevron().Cell(row: 0, column: 1, rowSpan: 4),
+        }
+        .Padding(new Thickness(CoffeeSpacing.M))
+        .MinimumHeight(80)
+        .Background(CoffeeTheme.SurfaceColor)
+        .Margin(bottom: CoffeeSpacing.Divider)
+        .AutomationId(automationId)
+        .OnTap(_ => onTap());
+
+    internal static View Chevron() => new Text(CoffeeIcons.Chevron)
+        .FontFamily(CoffeeIcons.FontFamily)
+        .FontSize(24)
+        .Color(CoffeeTheme.TextPrimary)
+        .Center();
+}
+
+public static class ProfileListRow
+{
+    public static View Build(string name, View avatar, string automationId, Action onTap) =>
+        new Grid(
+            columns: new object[] { "Auto", "*", "Auto" },
+            rows: new object[] { "Auto", "Auto" },
+            columnSpacing: 12)
+        {
+            new Text("MEMBER").SectionLabel().Cell(row: 0, colSpan: 2),
+            avatar.Center().Cell(row: 1),
+            new Text(name).FontFamily("ManropeSemibold").FontSize(20)
+                .Color(CoffeeTheme.TextPrimary)
+                .MaxLines(1).LineBreakMode(LineBreakMode.TailTruncation)
+                .Leading().Cell(row: 1, column: 1),
+            ManagementListRow.Chevron().Cell(row: 0, column: 2, rowSpan: 2),
+        }
+        .Padding(new Thickness(CoffeeSpacing.M))
+        .MinimumHeight(80)
+        .Background(CoffeeTheme.SurfaceColor)
+        .Margin(bottom: CoffeeSpacing.Divider)
+        .AutomationId(automationId)
+        .OnTap(_ => onTap());
+}
+
 public sealed class AdaptiveTwoLineTile : View
 {
     readonly string _label;

@@ -30,7 +30,7 @@ namespace Comet.Platform.Compose
 		// recomposes per scroll frame), so materializing + Yoga-laying-out the row in the item
 		// lambda re-did that work for every visible row every frame. Cache the materialized node per
 		// row so a recomposition is O(1); invalidate when the data version or the row width changes.
-		readonly System.Collections.Generic.Dictionary<int, ComposableNode> _rowCache = new();
+		readonly System.Collections.Generic.Dictionary<int, NativeListRow> _rowCache = new();
 		OwnedContentGeneration? _rowGeneration;
 		int _cachedVersion = -1;
 		double _cachedWidth = -1;
@@ -78,8 +78,26 @@ namespace Comet.Platform.Compose
 		{
 			_rowGeneration?.Dispose();
 			_rowGeneration = null;
+			foreach (var row in _rowCache.Values)
+				row.Dispose();
 			_rowCache.Clear();
 		}
+
+		NativeListRow GetRow(int index)
+		{
+			if (_rowCache.TryGetValue(index, out var row))
+				return row;
+
+			var generation = _rowGeneration ??=
+				new OwnedContentGeneration((View)_list, _context);
+			row = NativeListRow.Materialize(_list.ViewFor(0, index), generation);
+			_rowCache[index] = row;
+			return row;
+		}
+
+		double RowWidth => FrameWidth > 0
+			? FrameWidth
+			: global::Android.Content.Res.Resources.System!.DisplayMetrics!.WidthPixels / ComposeNode.Density;
 
 		public override void Render(IComposer composer)
 		{
@@ -120,8 +138,7 @@ namespace Comet.Platform.Compose
 					int scrollOffset = 0;
 					if (position == ListScrollPosition.Center && FrameHeight > 0)
 					{
-						var targetView = _list.ViewFor(0, index);
-						var targetExtent = CometBackendLayoutEngine.Measure(targetView).Height;
+						var targetExtent = GetRow(index).MeasureExtent(RowWidth).Height;
 						// Centered selector lists have half-viewport content padding so the
 						// boundary rows can reach the viewport center. Compose's scroll offset
 						// is measured from that padded content start, so use half the target
@@ -196,9 +213,7 @@ namespace Comet.Platform.Compose
 			// to the rest of the tree (and to iOS). FrameWidth is 0 until the engine arranges this
 			// list, so fall back to the screen width.
 			bool yoga = HasFrame;
-			double rowWidth = FrameWidth > 0
-				? FrameWidth
-				: global::Android.Content.Res.Resources.System!.DisplayMetrics!.WidthPixels / ComposeNode.Density;
+			double rowWidth = RowWidth;
 
 			// Drop the cache when the rows or the width change (otherwise we'd render stale layout).
 			if (version != _cachedVersion || rowWidth != _cachedWidth)
@@ -222,32 +237,25 @@ namespace Comet.Platform.Compose
 			{
 				carouselWidth = _list.CarouselItemWidth > 0
 					? _list.CarouselItemWidth
-					: CometBackendLayoutEngine.Measure(_list.ViewFor(0, 0)).Width;
+					: GetRow(0).MeasureIntrinsicExtent().Width;
 			}
 
 			ComposableNode BuildRow(int i)
 			{
-				if (_rowCache.TryGetValue(i, out var cached))
-					return cached;
-
 				// First time this row is needed: build, materialize, and Yoga-lay-out once, then cache.
-				var view = _list.ViewFor(0, i);
-				var generation = _rowGeneration ??=
-					new OwnedContentGeneration((View)_list, _context);
-				var node = (ComposableNode)generation.Materialize(view);
-				if (yoga)
+				var row = GetRow(i);
+				if (yoga && !row.IsArranged)
 				{
 					// Vertical rows fill the list's width; grid cells the computed column
 					// width; carousel items their (resolved) item width; LazyRow items
 					// their own intrinsic width (a fixed-size card).
 					double w = horizontal && carouselWidth > 0 ? carouselWidth
-						: horizontal ? CometBackendLayoutEngine.Measure(view).Width
+						: horizontal ? row.MeasureIntrinsicExtent().Width
 						: gridColumns > 0 ? rowWidth / gridColumns
 						: rowWidth;
-					CometBackendLayoutEngine.LayoutContent(view, w);
+					row.Layout(w);
 				}
-				_rowCache[i] = node;
-				return node;
+				return (ComposableNode)row.Node!;
 			}
 
 			PaddingValues? contentPadding = null;
@@ -280,9 +288,8 @@ namespace Comet.Platform.Compose
 				_list.InitialScrollPosition == ListScrollPosition.Center &&
 				FrameHeight > 0)
 			{
-				var targetView = _list.ViewFor(0, initialIndex);
 				_ = BuildRow(initialIndex);
-				targetExtent = CometBackendLayoutEngine.Measure(targetView).Height;
+				targetExtent = GetRow(initialIndex).MeasureExtent(rowWidth).Height;
 			}
 
 			if (scrollBridge &&

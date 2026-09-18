@@ -211,21 +211,13 @@ public class ValueRangeEditorPage : View
         .AutomationId("ValueRangeEditorPage");
     }
 
-    View HeaderTile(string metric, Thickness safeArea) => new Grid(rows: new object[] { "Auto", "*" })
-    {
-        new Text($"CUSTOM {metric.ToUpperInvariant()}").RangeCaption().Cell(row: 0),
-        new Text(_method.DisplayName()).Headline()
-            .Alignment(Comet.Alignment.BottomLeading).Cell(row: 1),
-    }
-    .Padding(BaristaSafeAreaLayout.HeaderPadding(safeArea))
-    .MinimumHeight(BaristaSafeAreaLayout.HeaderMinimumHeight(safeArea))
-    .Background(CoffeeTheme.SurfaceColor)
-    .AutomationId("RangeEditorHeader");
+    View HeaderTile(string metric, Thickness safeArea) => BaristaPageHeader.Build(
+        $"CUSTOM {metric.ToUpperInvariant()}", _method.DisplayName(), safeArea,
+        "RangeEditorHeader", rangeCaption: true);
 
     View BodyContent()
     {
-        var content = new VStack(spacing: CoffeeSpacing.Divider)
-        {
+        var content = BaristaSections.Create(
             GuidanceTile(),
             ValueFieldTile(
                 "MINIMUM",
@@ -238,16 +230,14 @@ public class ValueRangeEditorPage : View
                 _maximumText,
                 "Maximum value",
                 UpdateMaximum,
-                "RangeMaximum"),
-        };
+                "RangeMaximum"));
 
         if (_error.Value is not null)
             content.Add(ErrorTile(_error.Value!));
 
         content.Add(RecommendedTile());
 
-        return new ScrollView { content.Background(CoffeeTheme.OutlineColor) }
-            .Background(CoffeeTheme.SurfaceColor);
+        return BaristaSections.Scroll(content);
     }
 
     View GuidanceTile() => new VStack(spacing: CoffeeSpacing.S)
