@@ -82,8 +82,21 @@ namespace Comet.Backend
 			return new Size(yoga.LayoutWidth, yoga.LayoutHeight);
 		}
 
+		/// <summary>Measures <paramref name="content"/> at a fixed width while allowing its
+		/// height to wrap naturally, without arranging the tree.</summary>
+		internal static Size MeasureContent(View content, double width)
+		{
+			if (content is null) throw new ArgumentNullException(nameof(content));
+
+			var yoga = Build(content, YogaFlexDirection.Column);
+			yoga.Width = Comet.Layout.Yoga.YogaValue.Point((float)width);
+			yoga.CalculateLayout((float)width, float.NaN);
+			return new Size(yoga.LayoutWidth, yoga.LayoutHeight);
+		}
+
 		static YogaNode Build(View view, YogaFlexDirection parentDirection)
 		{
+			view = ResolveBackendView(view);
 			var node = new YogaNode();
 			YogaMeasureBridge.ApplyStyle(node, view, parentDirection);
 
@@ -97,7 +110,18 @@ namespace Comet.Backend
 			if (pad.Right != 0) node.SetPadding(YogaEdge.Right, YogaValue.Point((float)pad.Right));
 			if (pad.Bottom != 0) node.SetPadding(YogaEdge.Bottom, YogaValue.Point((float)pad.Bottom));
 
-			if (IsLayoutContainer(view))
+			if (view is Grid grid)
+			{
+				((GridLayoutManager)grid.LayoutManager).Invalidate();
+				node.MeasureFunction = (_, availableWidth, widthMode, availableHeight, heightMode) =>
+				{
+					var width = Resolve(availableWidth, widthMode);
+					var height = Resolve(availableHeight, heightMode);
+					var measured = grid.LayoutManager.Measure(width, height);
+					return new YogaSize((float)measured.Width, (float)measured.Height);
+				};
+			}
+			else if (IsLayoutContainer(view))
 			{
 				bool isDepth = view is ZStack;
 				var direction = view is HStack ? YogaFlexDirection.Row : YogaFlexDirection.Column;
@@ -128,12 +152,28 @@ namespace Comet.Backend
 				}
 
 				var children = ((IContainerView)view).GetChildren();
+				var nonNullChildCount = 0;
+				for (var i = 0; i < children.Count; i++)
+					if (children[i] is not null)
+						nonNullChildCount++;
+				var materializedChildCount = 0;
 				for (int i = 0; i < children.Count; i++)
 				{
-					var childNode = Build(children[i], direction);
+					var child = children[i];
+					if (child is null)
+						continue;
+					var childNode = Build(child, direction);
+					// Content hosts give their single presented child the full content slot.
+					// Without this, a virtualized child such as CollectionView keeps its
+					// intrinsic zero height inside a fixed-height RefreshView.
+					if (view is IContentView && nonNullChildCount == 1)
+					{
+						childNode.FlexGrow = 1f;
+						childNode.FlexShrink = 1f;
+					}
 					if (isDepth)
-						ApplyZStackOverlay(childNode, children[i], (ContainerView)view);
-					node.InsertChild(childNode, node.ChildCount);
+						ApplyZStackOverlay(childNode, child, (ContainerView)view);
+					node.InsertChild(childNode, materializedChildCount++);
 				}
 			}
 			else
@@ -208,13 +248,78 @@ namespace Comet.Backend
 
 		static void Arrange(View view, YogaNode node)
 		{
-			view.Node?.Arrange(new Rect(node.LayoutX, node.LayoutY, node.LayoutWidth, node.LayoutHeight));
+			view = ResolveBackendView(view);
+			var frame = new Rect(node.LayoutX, node.LayoutY, node.LayoutWidth, node.LayoutHeight);
+			view.Frame = frame;
+			view.Node?.Arrange(frame);
 
-			if (IsLayoutContainer(view))
+			if (view is Grid grid)
+			{
+				ArrangeGrid(grid, node.LayoutWidth, node.LayoutHeight);
+			}
+			else if (IsLayoutContainer(view))
 			{
 				var children = ((IContainerView)view).GetChildren();
-				for (int i = 0; i < children.Count && i < node.ChildCount; i++)
-					Arrange(children[i], node.GetChild(i));
+				var nodeIndex = 0;
+				for (int i = 0; i < children.Count && nodeIndex < node.ChildCount; i++)
+				{
+					if (children[i] is not { } child)
+						continue;
+					Arrange(child, node.GetChild(nodeIndex++));
+				}
+			}
+		}
+
+		static void ArrangeGrid(Grid grid, double width, double height)
+		{
+			var padding = grid.GetPadding();
+			var contentWidth = Math.Max(0, width - padding.HorizontalThickness);
+			var contentHeight = Math.Max(0, height - padding.VerticalThickness);
+			grid.LayoutManager.Measure(contentWidth, contentHeight);
+			grid.LayoutManager.ArrangeChildren(new Rect(
+				padding.Left, padding.Top, contentWidth, contentHeight));
+
+			var children = ((IContainerView)grid).GetChildren();
+			for (int i = 0; i < children.Count; i++)
+			{
+				var child = children[i];
+				if (child is null)
+					continue;
+				var frame = child.Frame;
+				var backendChild = ResolveBackendView(child);
+				var yoga = Build(backendChild, YogaFlexDirection.Column);
+				yoga.SetMargin(YogaEdge.Left, YogaValue.Point(0));
+				yoga.SetMargin(YogaEdge.Top, YogaValue.Point(0));
+				yoga.SetMargin(YogaEdge.Right, YogaValue.Point(0));
+				yoga.SetMargin(YogaEdge.Bottom, YogaValue.Point(0));
+				yoga.Width = YogaValue.Point((float)frame.Width);
+				yoga.Height = YogaValue.Point((float)frame.Height);
+				yoga.CalculateLayout((float)frame.Width, (float)frame.Height);
+				ArrangeGridChild(backendChild, yoga, frame);
+			}
+		}
+
+		static void ArrangeGridChild(View view, YogaNode node, Rect frame)
+		{
+			view.Frame = frame;
+			view.Node?.Arrange(frame);
+
+			if (view is Grid nested)
+			{
+				ArrangeGrid(nested, frame.Width, frame.Height);
+				return;
+			}
+
+			if (!IsLayoutContainer(view))
+				return;
+
+			var children = ((IContainerView)view).GetChildren();
+			var nodeIndex = 0;
+			for (int i = 0; i < children.Count && nodeIndex < node.ChildCount; i++)
+			{
+				if (children[i] is not { } child)
+					continue;
+				Arrange(child, node.GetChild(nodeIndex++));
 			}
 		}
 
@@ -222,6 +327,9 @@ namespace Comet.Backend
 		// their own children and so are leaves to the layout pass.
 		static bool IsLayoutContainer(View view)
 			=> view is IContainerView && view.Node is not IBackendManagesOwnContent;
+
+		static View ResolveBackendView(View view)
+			=> view.Node is not null ? view : view.BuiltView ?? view;
 
 		static double Resolve(float available, YogaMeasureMode mode)
 			=> (mode == YogaMeasureMode.Undefined || float.IsNaN(available))

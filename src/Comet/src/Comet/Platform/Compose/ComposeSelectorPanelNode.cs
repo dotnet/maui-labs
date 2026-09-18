@@ -17,11 +17,12 @@ namespace Comet.Platform.Compose
 	/// reflow — the lighter, layout-driven equivalent of the gold's bottom-anchored
 	/// <c>Surface(tonalElevation = 8.dp)</c>. While a panel is open a <see cref="BackHandler"/> routes the
 	/// system back press to a dismiss event (the control writes the index back to 0).</summary>
-	sealed class ComposeSelectorPanelNode : ComposeNode, IBackendManagesOwnContent
+	sealed class ComposeSelectorPanelNode : ComposeNode, IBackendRetainsLogicalContentOnOwnerTransfer
 	{
 		SelectorPanel _panel;
 		readonly BackendContext _context;
 		readonly MutableState<int> _selector = new(0);   // drives Render (content swap)
+		readonly MutableState<int> _contentVersion = new(0);
 		int _selectorValue;                               // drives Measure (layout reflow)
 		ComposeNode?[] _nodes = System.Array.Empty<ComposeNode?>();
 		bool _initialized;
@@ -48,10 +49,11 @@ namespace Comet.Platform.Compose
 			if (newView is not SelectorPanel panel)
 				return;
 			_panel = panel;
-			if (!isHotReload)
+			if (!isHotReload && string.IsNullOrEmpty(newView.GetKey()))
 				return;
 			_initialized = false;
 			_nodes = System.Array.Empty<ComposeNode?>();
+			_contentVersion.Value++;
 		}
 
 		void EnsureContent()
@@ -78,6 +80,7 @@ namespace Comet.Platform.Compose
 		// ComposeBackendRoot after every reactive flush, so a selector change reflows the layout.
 		public override Size Measure(double widthConstraint, double heightConstraint)
 		{
+			_ = _contentVersion.Value;
 			EnsureContent();
 
 			var view = ActiveView();
@@ -95,6 +98,7 @@ namespace Comet.Platform.Compose
 
 		public override void Render(IComposer composer)
 		{
+			_ = _contentVersion.Value;
 			EnsureContent();
 
 			int s = _selector.Value;   // subscribe so a selector change recomposes this scope

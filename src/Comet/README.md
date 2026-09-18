@@ -330,6 +330,20 @@ The [`sample/`](sample/) directory contains working apps:
 | [CometBaristaNotes](sample/CometBaristaNotes) | Real app with Syncfusion gauges |
 | [CometStressTest](sample/CometStressTest) | Performance and stress tests |
 
+### Native BaristaNotes picker behavior
+
+The [shared BaristaNotes sample](sample/Shared/BaristaNotes) runs in both native
+probes with `-p:CometSample=baristanotes`. Drink Logging lists center the selected
+item when opened, including the first and last items. Single-choice pickers apply
+on tap and close, including Water Temp. Machine and Grinder are optional: Clear
+or tapping the selected item removes the selection. The cleared selection stays
+empty after you save an edited drink and reopen it.
+
+Dose, Yield, Time, Made By/For, and Grind use Done. Grind stages both the micron
+value and grinder; its nested grinder picker returns to Grind without discarding
+the pending value. Close cancels the pending Grind changes. These confirmation
+and equipment-toggle rules include approved changes to the reference app.
+
 ## Build
 
 > **Requires:** .NET 11 SDK (preview) with the MAUI workload. Comet has its own [`global.json`](global.json) that targets .NET 11.
@@ -337,6 +351,9 @@ The [`sample/`](sample/) directory contains working apps:
 From the `src/Comet/` directory:
 
 ```bash
+# Rebuild the first-party SwiftUI native artifact after any shim or binding change
+./src/Comet.SwiftUI.Shim/build-xcframework.sh
+
 # Source generator first, then the framework
 dotnet build src/Comet.SourceGenerator/Comet.SourceGenerator.csproj -c Release
 dotnet build src/Comet/Comet.csproj -c Release
@@ -344,6 +361,11 @@ dotnet build src/Comet/Comet.csproj -c Release
 # Tests
 dotnet test tests/Comet.Tests/Comet.Tests.csproj -c Release
 ```
+
+`src/Comet.SwiftUI.Shim/CometSwiftUIShim.xcframework` is a tracked package input, not
+an external dependency. Changes to its Swift source must include the regenerated device
+and simulator slices. Clean and rebuild `sample/CometSwiftUIProbe` after regeneration so
+the app relinks the current native framework.
 
 Or from the repo root:
 

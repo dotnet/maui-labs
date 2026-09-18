@@ -55,6 +55,7 @@ namespace Comet.DevTools
 		public void Start()
 		{
 			CometDevRegistry.Enabled = true;
+			CometDevRegistry.MainThreadEnqueue = _dispatchToMain;
 			SocketException? lastError = null;
 			for (int candidate = _port; candidate < _port + 10; candidate++)
 			{
@@ -131,19 +132,24 @@ namespace Comet.DevTools
 				return;
 			}
 
-			string json;
-			int status = 200;
+			var (status, json) = RouteResponse(method, path, body);
+			WriteResponse(stream, status, json);
+		}
+
+		internal (int StatusCode, string Json) RouteResponse(string method, string path, string body)
+		{
 			try
 			{
-				json = Route(method, path, body);
+				return (200, Route(method, path, body));
+			}
+			catch (InspectionNotFoundException ex)
+			{
+				return (404, $"{{\"success\":false,\"error\":{JsonEncode(ex.Message)}}}");
 			}
 			catch (Exception ex)
 			{
-				status = 400;
-				json = $"{{\"ok\":false,\"error\":{JsonEncode(ex.Message)}}}";
+				return (400, $"{{\"ok\":false,\"error\":{JsonEncode(ex.Message)}}}");
 			}
-
-			WriteResponse(stream, status, json);
 		}
 
 		byte[]? RunOnMainBytes(Func<byte[]?> work)
@@ -194,6 +200,8 @@ namespace Comet.DevTools
 					return RunOnMain(() =>
 					{
 						var id = GetInt(body, "id");
+						if (CometDevRegistry.TryInvokeSemanticAction(id))
+							return Ok(id, "tap");
 						var view = Resolve(id);
 						view.OnBackendEvent(EventIds.Clicked);
 						view.OnBackendGesture(GestureKind.Tap, new GestureData(GestureState.Ended, default));
@@ -232,6 +240,9 @@ namespace Comet.DevTools
 			}
 		}
 
+		internal string RouteForTest(string method, string path, string body) =>
+			Route(method, path, body);
+
 		static View Resolve(int id) =>
 			CometDevRegistry.Find(id) ?? throw new InvalidOperationException($"no element with id {id}");
 
@@ -257,6 +268,22 @@ namespace Comet.DevTools
 				if (n.AutomationId is not null) sb.Append(",\"automationId\":").Append(JsonEncode(n.AutomationId));
 				if (n.Text is not null) sb.Append(",\"text\":").Append(JsonEncode(n.Text));
 				if (n.Value is not null) sb.Append(",\"value\":").Append(JsonEncode(n.Value));
+				if (n.HasLayoutFrame)
+				{
+					sb.Append(",\"frame\":");
+					WriteRect(sb, n.Frame);
+					sb.Append(",\"frameCoordinateSpace\":\"parent\"");
+					sb.Append(",\"frameUnits\":\"logicalPixels\"");
+					sb.Append(",\"frameKind\":\"layoutAllocation\"");
+				}
+				else
+				{
+					sb.Append(",\"frame\":null");
+					sb.Append(",\"frameAvailable\":false");
+					sb.Append(",\"frameKind\":\"semanticActionProxy\"");
+					sb.Append(",\"frameUnavailableReason\":")
+						.Append(JsonEncode(n.GeometryUnavailableReason));
+				}
 				sb.Append(",\"props\":{");
 				bool first = true;
 				foreach (var (k, v) in n.Props)
@@ -282,6 +309,7 @@ namespace Comet.DevTools
 				catch (Exception ex) { tcs.SetException(ex); }
 			});
 			try { return tcs.Task.GetAwaiter().GetResult(); }
+			catch (InspectionNotFoundException) { throw; }
 			catch (Exception ex) { return $"{{\"ok\":false,\"error\":{JsonEncode(ex.Message)}}}"; }
 		}
 
@@ -338,7 +366,13 @@ namespace Comet.DevTools
 		static void WriteResponse(NetworkStream stream, int status, string json)
 		{
 			var payload = Encoding.UTF8.GetBytes(json);
-			var reason = status == 200 ? "OK" : "Bad Request";
+			var reason = status switch
+			{
+				200 => "OK",
+				404 => "Not Found",
+				503 => "Service Unavailable",
+				_ => "Bad Request",
+			};
 			var head = $"HTTP/1.1 {status} {reason}\r\n" +
 				"Content-Type: application/json\r\n" +
 				$"Content-Length: {payload.Length}\r\n" +

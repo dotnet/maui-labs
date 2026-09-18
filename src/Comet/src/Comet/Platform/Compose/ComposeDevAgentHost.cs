@@ -44,12 +44,49 @@ namespace Comet.Platform.Compose
 			CometDevRegistry.DragInjector = (x1, y1, x2, y2, durationMs) =>
 				InjectDrag(activity, x1, y1, x2, y2, durationMs);
 
+			CometDevRegistry.ScrollInjector = (elemId, dx, dy) =>
+				ScrollElement(elemId, dx, dy);
+
 			if (_agent is not null)
 				return;
 
 			var agent = new CometDevAgent(port, a => activity.RunOnUiThread(a));
 			agent.Start();
 			_agent = agent;
+		}
+
+		/// <summary>
+		/// Scrolls the Compose ScrollState backing the element (or its nearest ScrollView ancestor).
+		/// Receives native-sign deltas (positive dy = scroll down = increase offset). Converts dp to px.
+		/// </summary>
+		static bool ScrollElement(int elemId, double dx, double dy)
+		{
+			var view = CometDevRegistry.Find(elemId);
+			if (view is null) return false;
+
+			// Walk up to find a Comet.ScrollView whose node is a ComposeScrollNode
+			View? current = view;
+			ComposeScrollNode? scrollNode = null;
+			while (current is not null)
+			{
+				if (current is Comet.ScrollView && current.Node is ComposeScrollNode csn)
+				{
+					scrollNode = csn;
+					break;
+				}
+				current = current.Parent as View;
+			}
+			if (scrollNode is null) return false;
+
+			var state = scrollNode.GetScrollState();
+			if (state is null) return false;
+
+			int pxDelta = (int)(dy * ComposeNode.Density);
+			int target = System.Math.Clamp(state.Value + pxDelta, 0, state.MaxValue);
+			if (target == state.Value) return false;
+			// Fire-and-forget: ScrollToAsync is a Compose suspend that runs on the next frame.
+			_ = state.ScrollToAsync(target);
+			return true;
 		}
 
 		/// <summary>

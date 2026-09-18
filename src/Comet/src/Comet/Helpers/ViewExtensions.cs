@@ -60,11 +60,36 @@ namespace Comet
 			return listview;
 		}
 
+		/// <summary>
+		/// Reveals a row once after the native list receives its viewport. Center placement
+		/// preserves enough native start/end space for the first and last rows to center.
+		/// </summary>
+		public static ListView<T> InitialScrollTo<T>(
+			this ListView<T> listview,
+			int index,
+			ListScrollPosition position = ListScrollPosition.Start)
+		{
+			listview.InitialScrollIndex = index;
+			listview.InitialScrollPosition = position;
+			return listview;
+		}
+
 		public static CollectionView<T> OnSelected<T>(this CollectionView<T> collectionView, Action<T> selected)
 		{
 			collectionView.ItemSelected = (o) => {
 				selected?.Invoke((T)o.item);
 			};
+			return collectionView;
+		}
+
+		/// <inheritdoc cref="InitialScrollTo{T}(ListView{T}, int, ListScrollPosition)"/>
+		public static CollectionView<T> InitialScrollTo<T>(
+			this CollectionView<T> collectionView,
+			int index,
+			ListScrollPosition position = ListScrollPosition.Start)
+		{
+			collectionView.InitialScrollIndex = index;
+			collectionView.InitialScrollPosition = position;
 			return collectionView;
 		}
 

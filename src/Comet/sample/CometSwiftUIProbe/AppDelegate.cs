@@ -1,10 +1,14 @@
 using Comet;
+using Comet.Backend;
 using Comet.DevTools;
 using Comet.Platform.SwiftUI;
 using Comet.Reactive;
+using CometSamples.BaristaNotes.Components;
 using CoreFoundation;
 using Foundation;
 using Microsoft.Maui.Graphics;
+using CometBaristaNotes.Services.Voice;
+using CometSwiftUIProbe.BaristaNotes;
 using UIKit;
 
 namespace CometSwiftUIProbe
@@ -31,13 +35,32 @@ namespace CometSwiftUIProbe
 
 		NavigationView? _nav;
 		CometDevAgent? _agent;
+		BaristaNotesPhotoService? _baristaPhotos;
 
 		public override bool FinishedLaunching(UIApplication application, NSDictionary launchOptions)
 		{
-			// Comet's fluent env writes post through ThreadHelper; we're on the main thread.
-			ThreadHelper.SetFireOnMainThread(a => a?.Invoke());
+			ThreadHelper.SetFireOnMainThread(a =>
+			{
+				if (NSThread.IsMain)
+					a();
+				else
+					DispatchQueue.MainQueue.DispatchAsync(a);
+			});
 
 			Window = new UIWindow(UIScreen.MainScreen.Bounds);
+
+			if (Screen == "baristanotes")
+				BaristaVoiceIntegration.ConfigurePlatform(new IosSpeechRecognitionAdapter());
+
+			if (Screen == "baristanotes")
+			{
+				_baristaPhotos = new BaristaNotesPhotoService(() => Window);
+				ProfilePhotoMedia.CaptureFromCamera = _baristaPhotos.CapturePhotoAsync;
+				ProfilePhotoMedia.PickFromLibrary = _baristaPhotos.PickPhotoAsync;
+				CometBaristaNotes.Services.BaristaPlatformServices.Configure(
+					_baristaPhotos,
+					CometBaristaNotes.Services.AzureOpenAiVisionAnalyzer.FromEnvironment());
+			}
 
 			// Dev agent on the DevFlow CLI's default port: `maui devflow ui tree/tap` connects
 			// straight to localhost:9223 on the iOS sim, so the stock CLI drives this Comet app.
@@ -48,6 +71,14 @@ namespace CometSwiftUIProbe
 			// Use Google's Material Icons font (bundled, registered via Info.plist UIAppFonts) as the
 			// cross-platform icon set, so Icon("mic") etc. draw the SAME Material glyph as Android.
 			CometSamples.Jetchat.JetchatIcons.Register();
+
+			if (Screen == "baristanotes")
+			{
+				FontFamilyRegistry.Register("Manrope", "Manrope-Regular", Microsoft.Maui.FontWeight.Regular);
+				FontFamilyRegistry.Register("ManropeSemibold", "Manrope-SemiBold", Microsoft.Maui.FontWeight.Semibold);
+				FontFamilyRegistry.Register("MaterialIcons", "MaterialSymbolsOutlined-Regular", Microsoft.Maui.FontWeight.Regular);
+				FontFamilyRegistry.Register("coffee-icons", "coffeeicons", Microsoft.Maui.FontWeight.Regular);
+			}
 
 			// Generate the Material 3 scheme from the Comet theme using Google's material-color-utilities
 			// (the SAME algorithm as Android's Material You) so iOS renders a real tonal scheme — identical
@@ -70,7 +101,50 @@ namespace CometSwiftUIProbe
 			Window.RootViewController = backend.CreateController(BuildUi());
 
 			Window.MakeKeyAndVisible();
+			DispatchQueue.MainQueue.DispatchAsync(() =>
+			{
+				if (Window is not { } window)
+					return;
+
+				var safeArea = window.SafeAreaInsets;
+				CometWindowMetrics.Shared.UpdateSafeArea(new Microsoft.Maui.Thickness(
+					safeArea.Left,
+					safeArea.Top,
+					safeArea.Right,
+					safeArea.Bottom));
+				ReactiveScheduler.FlushSync();
+			});
 			return true;
+		}
+
+		public override void DidEnterBackground(UIApplication application)
+		{
+			ObserveLifecycleTask(
+				BaristaVoiceIntegration.OnAppBackgroundedAsync(),
+				"Voice background deactivation");
+			base.DidEnterBackground(application);
+		}
+
+		public override void WillTerminate(UIApplication application)
+		{
+			ObserveLifecycleTask(
+				BaristaVoiceIntegration.ShutdownAsync(),
+				"Voice shutdown");
+			_baristaPhotos?.Dispose();
+			_baristaPhotos = null;
+			ProfilePhotoMedia.CaptureFromCamera = null;
+			ProfilePhotoMedia.PickFromLibrary = null;
+			base.WillTerminate(application);
+		}
+
+		static void ObserveLifecycleTask(System.Threading.Tasks.Task task, string operation)
+		{
+			_ = task.ContinueWith(
+				failed => System.Diagnostics.Debug.WriteLine(
+					$"[CometSwiftUIProbe] {operation} failed: {failed.Exception?.GetBaseException()}"),
+				System.Threading.CancellationToken.None,
+				System.Threading.Tasks.TaskContinuationOptions.OnlyOnFaulted,
+				System.Threading.Tasks.TaskScheduler.Default);
 		}
 
 		// The faithful Jetchat conversation screen (shared tree, identical on Android). iPhone
@@ -89,6 +163,7 @@ namespace CometSwiftUIProbe
 			"reply" => new CometSamples.Reply.ReplyProbeRoot(),
 			"jetnews" => new CometSamples.JetNews.JetNewsRoot(),
 			"jetsnack" => new CometSamples.Jetsnack.JetsnackRoot(topInset: 59),
+			"baristanotes" => new CometSamples.BaristaNotes.BaristaNotesApp(),
 			_ => CometSamples.Jetchat.JetchatConversation.Build(topInset: 50, bottomInset: 28),
 		};
 

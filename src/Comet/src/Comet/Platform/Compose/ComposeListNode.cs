@@ -20,7 +20,7 @@ namespace Comet.Platform.Compose
 	/// Data changes bump a version <see cref="MutableState{T}"/> via
 	/// <see cref="ApplyProperty"/> so the LazyColumn recomposes against the new rows.
 	/// </remarks>
-	sealed class ComposeListNode : ComposeNode
+	sealed class ComposeListNode : ComposeNode, IBackendManagesOwnContent
 	{
 		IListView _list;
 		readonly BackendContext _context;
@@ -31,6 +31,7 @@ namespace Comet.Platform.Compose
 		// lambda re-did that work for every visible row every frame. Cache the materialized node per
 		// row so a recomposition is O(1); invalidate when the data version or the row width changes.
 		readonly System.Collections.Generic.Dictionary<int, ComposableNode> _rowCache = new();
+		OwnedContentGeneration? _rowGeneration;
 		int _cachedVersion = -1;
 		double _cachedWidth = -1;
 
@@ -39,6 +40,9 @@ namespace Comet.Platform.Compose
 		// composable scope, so ScrolledAway fires correctly on scroll; a registered scroller
 		// animates to index 0 (newest = top of a newest-first list) on demand.
 		bool _scrollerRegistered;
+		readonly ListInitialScrollState _initialScroll = new();
+		PaddingValues? _centerContentPadding;
+		double _centerContentPaddingExtent = -1;
 
 		public ComposeListNode(IListView list, BackendContext context)
 		{
@@ -49,28 +53,32 @@ namespace Comet.Platform.Compose
 		/// <summary>The node was transferred to a new ListView (ordinary re-render or hot reload).
 		/// Re-point at the new list and re-bind the JumpToBottom scroller + ScrolledAway signal to
 		/// it; bump the version so the new list's data is read (Render's version check drops the
-		/// stale row cache). Scroll position is preserved either way — the LazyListState persists
-		/// via Remember and the one-shot seed is composition-keyed, so it does not re-fire here.</summary>
+		/// stale row cache). Initial scroll remains one-shot for the retained native node, so
+		/// ordinary row updates preserve the user's current scroll position.</summary>
 		public override void OnOwnerViewChanged(View newView, bool isHotReload)
 		{
 			if (newView is not IListView list)
 				return;
 			_list = list;
 			_scrollerRegistered = false;
-			_version.Value++;
+			// TransferBackendNodeFrom applies List_Version immediately after this callback.
+			// Let that one patch release the old rows and invalidate composition exactly once.
 		}
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
 		{
 			if (id == PropertyIds.List_Version)
 			{
-				// Drop the previous rows from the dev registry before the recompose pulls the
-				// new ones (the iOS list node's Rebuild does the same) — stale row elements
-				// otherwise accumulate and the agent resolves dead views.
-				if (_list is View listView)
-					Comet.DevTools.CometDevRegistry.UnregisterSubtree(listView, includeRoot: false);
+				ReleaseRows();
 				_version.Value++; // recompose against the latest rows
 			}
+		}
+
+		void ReleaseRows()
+		{
+			_rowGeneration?.Dispose();
+			_rowGeneration = null;
+			_rowCache.Clear();
 		}
 
 		public override void Render(IComposer composer)
@@ -91,9 +99,8 @@ namespace Comet.Platform.Compose
 			// that never changes.
 			bool scrollBridge = !horizontal && gridMin <= 0;
 
-			// Remembered scroll state (survives recomposition). The first time, register a scroller
-			// that animates to the last item (newest = bottom of a forward-order list).
 			var listState = composer.RememberLazyListState();
+			int count = _list.Sections() > 0 ? _list.Rows(0) : 0;
 			if (scrollBridge && !_scrollerRegistered)
 			{
 				_scrollerRegistered = true;
@@ -102,6 +109,32 @@ namespace Comet.Platform.Compose
 				{
 					int lastIndex = _list.Sections() > 0 ? System.Math.Max(0, _list.Rows(0) - 1) : 0;
 					_ = captured.AnimateScrollToItemAsync(lastIndex);
+				});
+				_list.RegisterScrollTo((index, position, animate) =>
+				{
+					int itemCount = _list.Sections() > 0 ? _list.Rows(0) : 0;
+					if (itemCount <= 0)
+						return;
+
+					index = System.Math.Clamp(index, 0, itemCount - 1);
+					int scrollOffset = 0;
+					if (position == ListScrollPosition.Center && FrameHeight > 0)
+					{
+						var targetView = _list.ViewFor(0, index);
+						var targetExtent = CometBackendLayoutEngine.Measure(targetView).Height;
+						// Centered selector lists have half-viewport content padding so the
+						// boundary rows can reach the viewport center. Compose's scroll offset
+						// is measured from that padded content start, so use half the target
+						// extent instead of applying the viewport-center offset a second time.
+						var desiredOffset = _centerContentPadding is not null
+							? targetExtent / 2
+							: System.Math.Max(0, FrameHeight / 2 - targetExtent / 2);
+						scrollOffset = (int)System.Math.Round(desiredOffset * ComposeNode.Density);
+					}
+
+					_ = animate
+						? captured.AnimateScrollToItemAsync(index, scrollOffset)
+						: captured.ScrollToItemAsync(index, scrollOffset);
 				});
 			}
 
@@ -118,7 +151,9 @@ namespace Comet.Platform.Compose
 					// reverseLayout initial position; instant so launch doesn't visibly scroll.
 					// Ordinary lists (inbox) open at the top.
 					int lastIndex = capturedList.Sections() > 0 ? System.Math.Max(0, capturedList.Rows(0) - 1) : 0;
-					if (capturedList.AnchorBottom && lastIndex > 0)
+					if (capturedList.InitialScrollIndex < 0 &&
+						capturedList.AnchorBottom &&
+						lastIndex > 0)
 						await capturedState.ScrollToItemAsync(lastIndex);
 
 					await foreach (var away in ComposeExtensions.SnapshotFlow(() => capturedState.CanScrollForward)
@@ -155,7 +190,6 @@ namespace Comet.Platform.Compose
 			}
 
 			// Single-section (the common case); multi-section flattening is a follow-up.
-			int count = _list.Sections() > 0 ? _list.Rows(0) : 0;
 			var indices = Enumerable.Range(0, count).ToList();
 
 			// Under Yoga, lay each row out to the list's arranged width so rows render identically
@@ -169,7 +203,7 @@ namespace Comet.Platform.Compose
 			// Drop the cache when the rows or the width change (otherwise we'd render stale layout).
 			if (version != _cachedVersion || rowWidth != _cachedWidth)
 			{
-				_rowCache.Clear();
+				ReleaseRows();
 				_cachedVersion = version;
 				_cachedWidth = rowWidth;
 			}
@@ -198,10 +232,9 @@ namespace Comet.Platform.Compose
 
 				// First time this row is needed: build, materialize, and Yoga-lay-out once, then cache.
 				var view = _list.ViewFor(0, i);
-				// Parent the row under the ListView in the dev registry (like the iOS list
-				// node) so UnregisterSubtree(list) can prune stale rows on reload — parentless
-				// rows were registry ROOTS and survived every rebuild as ghost elements.
-				var node = (ComposableNode)CometBackendBridge.Materialize(view, _context, _list as View);
+				var generation = _rowGeneration ??=
+					new OwnedContentGeneration((View)_list, _context);
+				var node = (ComposableNode)generation.Materialize(view);
 				if (yoga)
 				{
 					// Vertical rows fill the list's width; grid cells the computed column
@@ -215,6 +248,64 @@ namespace Comet.Platform.Compose
 				}
 				_rowCache[i] = node;
 				return node;
+			}
+
+			PaddingValues? contentPadding = null;
+			int initialIndex = System.Math.Clamp(_list.InitialScrollIndex, 0, System.Math.Max(0, count - 1));
+			double edgeSpacing = scrollBridge
+				? ListInitialScrollState.EdgeSpacing(
+					FrameHeight,
+					_list.InitialScrollPosition)
+				: 0;
+			if (_list.InitialScrollIndex >= 0 && edgeSpacing > 0)
+			{
+				// Match the reference CollectionView contract: symmetric half-viewport
+				// start/end space lets the first and last rows reach the viewport center.
+				if (_centerContentPadding is null ||
+					System.Math.Abs(edgeSpacing - _centerContentPaddingExtent) > 0.5)
+				{
+					_centerContentPadding?.Dispose();
+					_centerContentPadding = new PaddingValues(
+						top: new Dp((float)edgeSpacing),
+						bottom: new Dp((float)edgeSpacing));
+					_centerContentPaddingExtent = edgeSpacing;
+				}
+				contentPadding = _centerContentPadding;
+			}
+
+			double targetExtent = 0;
+			if (scrollBridge &&
+				count > 0 &&
+				_list.InitialScrollIndex >= 0 &&
+				_list.InitialScrollPosition == ListScrollPosition.Center &&
+				FrameHeight > 0)
+			{
+				var targetView = _list.ViewFor(0, initialIndex);
+				_ = BuildRow(initialIndex);
+				targetExtent = CometBackendLayoutEngine.Measure(targetView).Height;
+			}
+
+			if (scrollBridge &&
+				_initialScroll.TrySchedule(
+					FrameHeight,
+					count,
+					_list.InitialScrollIndex,
+					_list.InitialScrollPosition,
+					targetExtent,
+					out var initialPlan))
+			{
+				int scrollOffset = (int)System.Math.Round(
+					initialPlan.TargetOffset * ComposeNode.Density);
+				var initialState = listState;
+				composer.LaunchedEffect(initialPlan.Generation, initialPlan.Index, async ct =>
+				{
+					if (!_initialScroll.IsCurrent(initialPlan.Generation))
+						return;
+					await initialState.ScrollToItemAsync(
+						initialPlan.Index,
+						initialPlan.Position == ListScrollPosition.Center ? scrollOffset : 0,
+						ct);
+				});
 			}
 
 			// Horizontal: the REAL Compose LazyRow, or the real M3 carousel the gold
@@ -248,12 +339,23 @@ namespace Comet.Platform.Compose
 			var lazy = new ComposeLazyColumn(indices, BuildRow)
 			{
 				State = listState,
+				ContentPadding = contentPadding,
+				SnapToCenter = _list.SnapToCenter,
 			};
 
 			// Position + size the list from its Yoga frame (offset below the top bar, sized to the
 			// remaining height) so it scrolls within its slot rather than laying out at the origin.
 			((ComposableNode)lazy).Modifier = BuildNodeModifier();
 			lazy.Render(composer);
+		}
+
+		public override void Dispose()
+		{
+			_initialScroll.Dispose();
+			ReleaseRows();
+			_centerContentPadding?.Dispose();
+			_centerContentPadding = null;
+			base.Dispose();
 		}
 	}
 }

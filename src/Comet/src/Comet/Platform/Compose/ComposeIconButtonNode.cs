@@ -1,5 +1,6 @@
 #nullable enable
 #if ANDROID
+using AndroidX.Compose;
 using AndroidX.Compose.Runtime;
 using Comet.Backend;
 
@@ -16,6 +17,7 @@ namespace Comet.Platform.Compose
 
 		IconButton _control;
 		readonly BackendContext _context;
+		readonly MutableState<int> _contentVersion = new(0);
 		ComposeNode? _iconNode;
 
 		public ComposeIconButtonNode(IconButton control, BackendContext context)
@@ -30,6 +32,7 @@ namespace Comet.Platform.Compose
 				return;
 			_control = control;
 			_iconNode = null;   // the icon slot view was rebuilt with the owner
+			_contentVersion.Value++;
 		}
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
@@ -42,6 +45,7 @@ namespace Comet.Platform.Compose
 
 		public override void Render(IComposer composer)
 		{
+			_ = _contentVersion.Value;
 			_iconNode ??= (ComposeNode)CometBackendBridge.Materialize(_control.IconView, _context, _control);
 			var button = new AndroidX.Compose.IconButton(() => _control.OnClick())
 			{

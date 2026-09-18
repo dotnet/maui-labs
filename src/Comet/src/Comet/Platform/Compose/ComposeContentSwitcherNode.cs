@@ -12,7 +12,7 @@ namespace Comet.Platform.Compose
 	/// materialized (state survives route switches — the gold keeps route state too). Active
 	/// content is Yoga-laid to this node's arranged frame (window metrics standalone),
 	/// re-flowed per flush like the other own-content hosts.</summary>
-	sealed class ComposeContentSwitcherNode : ComposeNode, IBackendManagesOwnContent
+	sealed class ComposeContentSwitcherNode : ComposeNode, IBackendRetainsLogicalContentOnOwnerTransfer
 	{
 		ContentSwitcher _switcher;
 		readonly BackendContext _context;
@@ -47,7 +47,7 @@ namespace Comet.Platform.Compose
 			if (newView is not ContentSwitcher switcher)
 				return;
 			_switcher = switcher;
-			if (!isHotReload)
+			if (!isHotReload && string.IsNullOrEmpty(newView.GetKey()))
 				return;
 			_nodes = System.Array.Empty<ComposeNode?>();
 			_contentVersion.Value++;

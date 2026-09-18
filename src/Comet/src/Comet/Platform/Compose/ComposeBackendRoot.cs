@@ -6,6 +6,7 @@ using AndroidX.Compose;
 using AndroidX.Compose.Runtime;
 using AndroidX.Compose.UI.Platform;
 using Comet.Backend;
+using Comet.DevTools;
 
 namespace Comet.Platform.Compose
 {
@@ -17,10 +18,12 @@ namespace Comet.Platform.Compose
 	/// </summary>
 	public sealed class ComposeBackendRoot
 	{
+		static ThemeConfigurationCallbacks? themeCallbacks;
 		readonly BackendContext _context;
 		ComposeNode? _root;
 		View? _layoutRoot;
 		Microsoft.Maui.Graphics.Size _availableDp;
+		Microsoft.Maui.Thickness? _nativeSafeAreaPixels;
 
 		/// <summary>The logical root view: the layout target is re-resolved from it on every
 		/// pass because a (hot) reload rebuilds the view tree — a captured built tree would
@@ -73,6 +76,8 @@ namespace Comet.Platform.Compose
 				var bars = insets.GetInsets(
 					AndroidX.Core.View.WindowInsetsCompat.Type.SystemBars()
 					| AndroidX.Core.View.WindowInsetsCompat.Type.DisplayCutout());
+				_owner._nativeSafeAreaPixels = new Microsoft.Maui.Thickness(
+					bars.Left, bars.Top, bars.Right, bars.Bottom);
 				float d = ComposeNode.Density;
 				Backend.CometWindowMetrics.Shared.UpdateSafeArea(new Microsoft.Maui.Thickness(
 					bars.Left / d, bars.Top / d, bars.Right / d, bars.Bottom / d));
@@ -97,6 +102,11 @@ namespace Comet.Platform.Compose
 		/// hosting <see cref="ComposeView"/> to set as content.</summary>
 		public ComposeView CreateView(Context context, View view)
 		{
+			if (themeCallbacks is null)
+			{
+				themeCallbacks = new ThemeConfigurationCallbacks();
+				global::Android.App.Application.Context.RegisterComponentCallbacks(themeCallbacks);
+			}
 			var metrics = context.Resources!.DisplayMetrics!;
 			ComposeNode.Density = metrics.Density;
 
@@ -147,14 +157,36 @@ namespace Comet.Platform.Compose
 			// lifts above the soft keyboard (P7). The window itself must do NOTHING for the
 			// IME — without AdjustNothing the system falls back to adjustPan and pans the
 			// whole window up (pushing the top bar off-screen) on top of our reflow.
+			CometDevRegistry.NativeWindowMetricsProvider = null;
 			if (context is global::Android.App.Activity activity && activity.Window is { } window)
 			{
 				window.SetSoftInputMode(global::Android.Views.SoftInput.AdjustNothing);
 				if (window.DecorView is { } decor)
+				{
 					AndroidX.Core.View.ViewCompat.SetOnApplyWindowInsetsListener(decor, new ImeInsetListener(this));
+					CometDevRegistry.NativeWindowMetricsProvider = () =>
+						decor.Width > 0 && decor.Height > 0
+							? new CometDevRegistry.NativeWindowMetrics
+							{
+								Size = new Microsoft.Maui.Graphics.Size(decor.Width, decor.Height),
+								SafeAreaInsets = _nativeSafeAreaPixels,
+								Units = "physicalPixels",
+								Scale = ComposeNode.Density,
+								Source = "Window.DecorView bounds and WindowInsetsCompat(systemBars|displayCutout)",
+							}
+							: null;
+				}
 			}
 
 			return composeView;
+		}
+
+		sealed class ThemeConfigurationCallbacks : Java.Lang.Object, global::Android.Content.IComponentCallbacks
+		{
+			public void OnConfigurationChanged(global::Android.Content.Res.Configuration newConfig)
+				=> Comet.Styles.ThemeManager.NotifySystemThemeChanged();
+
+			public void OnLowMemory() { }
 		}
 
 		void RunLayout()

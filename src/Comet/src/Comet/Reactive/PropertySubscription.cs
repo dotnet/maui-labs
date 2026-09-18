@@ -19,6 +19,11 @@ internal interface IPropertySubscriptionFlushable
 	void Flush();
 }
 
+internal interface IViewBoundPropertySubscription : IDisposable
+{
+	void RebindToView(View view);
+}
+
 /// <summary>
 /// A unified reactive property primitive that uses <see cref="ReactiveScope"/> for
 /// automatic dependency tracking and dispatches per-property handler updates when
@@ -39,7 +44,7 @@ internal interface IPropertySubscriptionFlushable
 /// from body-level dependency tracking.
 /// </para>
 /// </remarks>
-public sealed class PropertySubscription<T> : IReactiveSubscriber, IPropertySubscriptionFlushable, IDisposable
+public sealed class PropertySubscription<T> : IReactiveSubscriber, IPropertySubscriptionFlushable, IViewBoundPropertySubscription
 {
 	readonly Func<T>? _compute;
 	readonly EqualityComparer<T> _comparer;
@@ -157,6 +162,12 @@ public sealed class PropertySubscription<T> : IReactiveSubscriber, IPropertySubs
 	{
 		_viewRef = new WeakReference<View>(view);
 		_propertyName = propertyName;
+	}
+
+	void IViewBoundPropertySubscription.RebindToView(View view)
+	{
+		if (_propertyName is not null)
+			_viewRef = new WeakReference<View>(view);
 	}
 
 	/// <summary>

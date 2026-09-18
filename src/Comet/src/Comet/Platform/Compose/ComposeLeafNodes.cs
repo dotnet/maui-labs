@@ -20,6 +20,8 @@ namespace Comet.Platform.Compose
 		int _fontSize;
 		int _lineHeight;
 		int _lineBreak;   // (int)TextLineBreak — wrap strategy, threaded to render AND measure
+		int _lineBreakMode;
+		float _characterSpacing;
 		bool _italic;
 		int _fontWeight;
 		string? _fontFamily;
@@ -54,6 +56,16 @@ namespace Comet.Platform.Compose
 				_lineBreak = value.AsInt;
 				_colorVersion.Value++;
 			}
+			else if (id == PropertyIds.Text_LineBreakMode)
+			{
+				_lineBreakMode = value.AsInt;
+				_colorVersion.Value++;
+			}
+			else if (id == PropertyIds.Text_CharacterSpacing)
+			{
+				_characterSpacing = (float)value.AsDouble;
+				_colorVersion.Value++;
+			}
 			else if (id == PropertyIds.Text_Italic)
 			{
 				_italic = value.AsBool;
@@ -80,7 +92,9 @@ namespace Comet.Platform.Compose
 		// with StaticLayout (synchronous, no composition needed). Uses the resolved custom typeface
 		// so measurement matches the rendered (custom-font) glyphs. 16sp ~ Material bodyLarge.
 		public override Size Measure(double widthConstraint, double heightConstraint)
-			=> TextMeasure.MeasureWrapped(_text.Value, _fontSize > 0 ? _fontSize : 16f, widthConstraint, MeasureTypeface(), EffectiveLineHeightSp(), _maxLines, _lineBreak);
+			=> TextMeasure.MeasureWrapped(_text.Value, _fontSize > 0 ? _fontSize : 16f,
+				widthConstraint, MeasureTypeface(), EffectiveLineHeightSp(), _maxLines,
+				_lineBreak, _characterSpacing, _lineBreakMode);
 
 		// First-baseline offset (Dp) measured by Compose's OWN layout (TextMeasurer) so the reported
 		// baseline equals the drawn one (the RN single-engine model). Only invoked for baseline-aligned
@@ -120,9 +134,9 @@ namespace Comet.Platform.Compose
 			// ApplyProperty -> setValue recomposes just this Text.
 			_ = _colorVersion.Value; // subscribe so a color/size/weight/family change recomposes
 			var text = new ComposeText(_text.Value) { Modifier = BuildNodeModifier() };
-			// Zero letter-spacing so the rendered width matches the Paint measurement above (the
-			// MaterialTheme default bodyLarge adds 0.5sp, which otherwise overflows the frame).
-			text.LetterSpacing = AndroidX.Compose.Sp.Zero;
+			// Explicit Comet character spacing wins; zero keeps the old measure==render behavior
+			// instead of inheriting Material bodyLarge's 0.5sp tracking.
+			text.LetterSpacing = new AndroidX.Compose.Sp(_characterSpacing);
 			if (_color is { } c)
 				text.Color = ToComposeColor(c);
 			if (_fontSize > 0)
@@ -142,17 +156,49 @@ namespace Comet.Platform.Compose
 			// line isn't an over-tall box (which threw off vertical centering + the title/subtitle
 			// gap), and the frame height matches the render line-for-line.
 			text.LineHeight = new AndroidX.Compose.Sp(EffectiveLineHeightSp());
-			if (_maxLines > 0)
-			{
-				text.MaxLines = _maxLines;
-				text.Overflow = AndroidX.Compose.TextOverflow.Ellipsis;
-			}
+			ApplyLineBreakMode(text);
 			// Wrap strategy rides in on a base TextStyle (Compose has no direct lineBreak
 			// param); the explicit params above still win over the style, so only lineBreak
 			// changes. Measurement mirrors it via StaticLayout break-strategy (below).
 			if (_lineBreak != 0)
 				text.Style = TextMeasure.LineBreakStyleFor(_lineBreak);
 			text.Render(composer);
+		}
+
+		void ApplyLineBreakMode(ComposeText text)
+		{
+			var effectiveMax = _maxLines;
+			switch (_lineBreakMode)
+			{
+				case 2: // NoWrap
+					text.SoftWrap = false;
+					text.MaxLines = effectiveMax > 0 ? effectiveMax : 1;
+					text.Overflow = AndroidX.Compose.TextOverflow.Clip;
+					break;
+				case 3: // HeadTruncation
+					text.SoftWrap = false;
+					text.MaxLines = 1;
+					text.Overflow = AndroidX.Compose.TextOverflow.StartEllipsis;
+					break;
+				case 5: // MiddleTruncation
+					text.SoftWrap = false;
+					text.MaxLines = 1;
+					text.Overflow = AndroidX.Compose.TextOverflow.MiddleEllipsis;
+					break;
+				case 4: // TailTruncation
+					text.SoftWrap = false;
+					text.MaxLines = 1;
+					text.Overflow = AndroidX.Compose.TextOverflow.Ellipsis;
+					break;
+				default:
+					text.SoftWrap = true;
+					if (effectiveMax > 0)
+					{
+						text.MaxLines = effectiveMax;
+						text.Overflow = AndroidX.Compose.TextOverflow.Ellipsis;
+					}
+					break;
+			}
 		}
 
 		static AndroidX.Compose.FontWeight MapWeight(int w) =>
@@ -262,10 +308,18 @@ namespace Comet.Platform.Compose
 		}
 
 		// Single-line width (e.g. a button label).
-		public static Size SingleLine(string? text, float sp)
+		public static Size SingleLine(
+			string? text,
+			float sp,
+			global::Android.Graphics.Typeface? typeface = null,
+			float characterSpacing = 0)
 		{
 			var density = ComposeNode.Density;
-			using var paint = new global::Android.Graphics.Paint { TextSize = sp * density };
+			using var paint = new global::Android.Text.TextPaint { TextSize = sp * density };
+			if (typeface is not null)
+				paint.SetTypeface(typeface);
+			if (System.OperatingSystem.IsAndroidVersionAtLeast(21))
+				paint.LetterSpacing = sp > 0 ? characterSpacing / sp : 0;
 			float wPx = paint.MeasureText(text ?? string.Empty);
 			var fm = paint.GetFontMetrics();
 			return new Size(wPx / density, (fm.Descent - fm.Ascent) / density);
@@ -274,7 +328,10 @@ namespace Comet.Platform.Compose
 		// Wrapped to the available width: StaticLayout lays the text out to widthPx and reports
 		// the multi-line height (the Compose analog of iOS TextKit boundingRect). When a custom
 		// typeface is supplied it is used so the measurement matches the rendered glyph metrics.
-		public static Size MeasureWrapped(string? text, float sp, double maxWidthDp, global::Android.Graphics.Typeface? typeface = null, int lineHeightSp = 0, int maxLines = 0, int lineBreak = 0)
+		public static Size MeasureWrapped(string? text, float sp, double maxWidthDp,
+			global::Android.Graphics.Typeface? typeface = null, int lineHeightSp = 0,
+			int maxLines = 0, int lineBreak = 0, float characterSpacing = 0,
+			int lineBreakMode = 0)
 		{
 			var density = ComposeNode.Density;
 			var s = text ?? string.Empty;
@@ -284,8 +341,13 @@ namespace Comet.Platform.Compose
 			using var paint = new global::Android.Text.TextPaint { TextSize = sp * density };
 			if (typeface is not null)
 				paint.SetTypeface(typeface);
+			if (System.OperatingSystem.IsAndroidVersionAtLeast(21))
+				paint.LetterSpacing = sp > 0 ? characterSpacing / sp : 0;
 			var builder = global::Android.Text.StaticLayout.Builder
 				.Obtain(s, 0, s.Length, paint, widthPx);
+			var truncates = lineBreakMode is 3 or 4 or 5;
+			if (lineBreakMode == 2 || truncates)
+				builder.SetMaxLines(1);
 			ApplyBreakStrategy(builder, lineBreak);
 			using var layout = builder.Build();
 
@@ -298,7 +360,9 @@ namespace Comet.Platform.Compose
 			// Width: +2px absorbs hinting differences so a one-line label never clips.
 			// Height: lineCount × the SAME line-height the renderer pins (explicit if supplied, else
 			// the heuristic), so the frame is exactly as tall as the composed Text — no clipping.
-			int lines = maxLines > 0 ? System.Math.Min(layout.LineCount, maxLines) : layout.LineCount;
+			int effectiveMax = (lineBreakMode == 2 || truncates)
+				? 1 : maxLines;
+			int lines = effectiveMax > 0 ? System.Math.Min(layout.LineCount, effectiveMax) : layout.LineCount;
 			double heightDp = lines * (lineHeightSp > 0 ? lineHeightSp : LineHeightSp(sp));
 			return new Size((System.Math.Ceiling(used) + 2) / density, heightDp);
 		}
@@ -312,6 +376,17 @@ namespace Comet.Platform.Compose
 		Microsoft.Maui.Graphics.Color? _textColor;
 		bool _outlined;
 		bool _textButton;
+		int _fontSize;
+		int _fontWeight;
+		int _maxLines;
+		int _lineBreakMode;
+		float _characterSpacing;
+		bool _italic;
+		bool _hasExplicitPadding;
+		string? _fontFamily;
+		AndroidX.Compose.PaddingValues? _contentPadding;
+		Microsoft.Maui.Thickness _cachedContentPadding;
+		bool _hasCachedContentPadding;
 		readonly MutableState<int> _styleVersion = new(0);
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
@@ -333,13 +408,60 @@ namespace Comet.Platform.Compose
 				_textButton = value.AsBool;
 				_styleVersion.Value++;
 			}
+			else if (id == PropertyIds.Text_FontSize)
+			{
+				_fontSize = (int)System.Math.Round(value.AsDouble);
+				_styleVersion.Value++;
+			}
+			else if (id == PropertyIds.Text_FontWeight)
+			{
+				_fontWeight = value.AsInt;
+				_styleVersion.Value++;
+			}
+			else if (id == PropertyIds.Text_FontFamily)
+			{
+				_fontFamily = value.AsString;
+				_styleVersion.Value++;
+			}
+			else if (id == PropertyIds.Text_MaxLines)
+			{
+				_maxLines = value.AsInt;
+				_styleVersion.Value++;
+			}
+			else if (id == PropertyIds.Text_LineBreakMode)
+			{
+				_lineBreakMode = value.AsInt;
+				_styleVersion.Value++;
+			}
+			else if (id == PropertyIds.Text_CharacterSpacing)
+			{
+				_characterSpacing = (float)value.AsDouble;
+				_styleVersion.Value++;
+			}
+			else if (id == PropertyIds.Text_Italic)
+			{
+				_italic = value.AsBool;
+				_styleVersion.Value++;
+			}
+			else if (id == PropertyIds.Button_HasExplicitPadding)
+			{
+				_hasExplicitPadding = value.AsBool;
+				if (!_hasExplicitPadding)
+					ClearContentPadding();
+				_styleVersion.Value++;
+			}
 		}
 
-		// A Material button: label plus default content padding, min 48dp tall.
+		// A Material button: native defaults when Comet padding is unset; otherwise the node
+		// reports label content and lets Yoga add the explicit padding exactly once.
 		public override Size Measure(double widthConstraint, double heightConstraint)
 		{
-			var label = TextMeasure.SingleLine(_text.Value, 14f);
-			return new Size(label.Width + 48, System.Math.Max(label.Height + 20, 48));
+			var label = TextMeasure.SingleLine(
+				_text.Value,
+				_fontSize > 0 ? _fontSize : 14f,
+				MeasureTypeface(),
+				_characterSpacing);
+			return ButtonMeasurementContract.MeasureContent(label, Padding, _hasExplicitPadding);
 		}
 
 		public override void Render(IComposer composer)
@@ -348,7 +470,29 @@ namespace Comet.Platform.Compose
 
 			// A real Material Button — filled by default, or OutlinedButton (bordered, no fill) when
 			// asked. Content color + corner shape come from the Comet view's .Color()/.CornerRadius().
-			var label = new ComposeText(_text.Value);
+			var label = new ComposeText(_text.Value)
+			{
+				SoftWrap = false,
+				MaxLines = _maxLines > 0 ? _maxLines : 1,
+				Overflow = _lineBreakMode == 2
+					? AndroidX.Compose.TextOverflow.Clip
+					: AndroidX.Compose.TextOverflow.Ellipsis,
+				LetterSpacing = new AndroidX.Compose.Sp(_characterSpacing),
+			};
+			if (_fontSize > 0)
+				label.FontSize = new AndroidX.Compose.Sp(_fontSize);
+			if (ComposeFontRegistry.Resolve(_fontFamily, _fontWeight, _italic) is { } resolved)
+				label.FontFamily = resolved.Family;
+			else if (_fontWeight > 0)
+				label.FontWeight = _fontWeight >= 700
+					? AndroidX.Compose.FontWeight.Bold
+					: _fontWeight >= 600
+						? AndroidX.Compose.FontWeight.SemiBold
+						: _fontWeight >= 500
+							? AndroidX.Compose.FontWeight.Medium
+							: AndroidX.Compose.FontWeight.Normal;
+			if (_italic)
+				label.FontStyle = AndroidX.Compose.FontStyle.Italic;
 			void OnClick() => Sink?.OnEvent(EventIds.Clicked);
 
 			if (_textButton)
@@ -362,6 +506,8 @@ namespace Comet.Platform.Compose
 						contentColor: (long)ToComposeColor(tc));
 				if (HasRoundedCorners)
 					button.Shape = CornerShape();
+				if (_hasExplicitPadding)
+					button.ContentPadding = GetContentPadding();
 				((ComposableNode)button).Modifier = BuildNodeModifier();
 				button.Add(label);
 				button.Render(composer);
@@ -373,6 +519,8 @@ namespace Comet.Platform.Compose
 					button.Colors = composer.ButtonColors(contentColor: (long)ToComposeColor(tc));
 				if (HasRoundedCorners)
 					button.Shape = CornerShape();
+				if (_hasExplicitPadding)
+					button.ContentPadding = GetContentPadding();
 				((ComposableNode)button).Modifier = BuildNodeModifier();
 				button.Add(label);
 				button.Render(composer);
@@ -384,30 +532,149 @@ namespace Comet.Platform.Compose
 					button.Colors = composer.ButtonColors(contentColor: (long)ToComposeColor(tc));
 				if (HasRoundedCorners)
 					button.Shape = CornerShape();
+				if (_hasExplicitPadding)
+					button.ContentPadding = GetContentPadding();
 				((ComposableNode)button).Modifier = BuildNodeModifier();
 				button.Add(label);
 				button.Render(composer);
 			}
 		}
+
+		global::Android.Graphics.Typeface? MeasureTypeface()
+		{
+			if (ComposeFontRegistry.Resolve(_fontFamily, _fontWeight, _italic)?.Typeface is { } custom)
+				return custom;
+			if ((_fontWeight > 0 || _italic) && System.OperatingSystem.IsAndroidVersionAtLeast(28))
+				return global::Android.Graphics.Typeface.Create(
+					global::Android.Graphics.Typeface.Default,
+					_fontWeight > 0 ? _fontWeight : 400,
+					_italic);
+			return null;
+		}
+
+		AndroidX.Compose.PaddingValues GetContentPadding()
+		{
+			var padding = Padding;
+			if (_contentPadding is not null && _hasCachedContentPadding &&
+				_cachedContentPadding == padding)
+				return _contentPadding;
+
+			ClearContentPadding();
+			_cachedContentPadding = padding;
+			_hasCachedContentPadding = true;
+			return _contentPadding = new AndroidX.Compose.PaddingValues(
+				new AndroidX.Compose.Dp((float)padding.Left),
+				new AndroidX.Compose.Dp((float)padding.Top),
+				new AndroidX.Compose.Dp((float)padding.Right),
+				new AndroidX.Compose.Dp((float)padding.Bottom));
+		}
+
+		void ClearContentPadding()
+		{
+			_contentPadding?.Dispose();
+			_contentPadding = null;
+			_hasCachedContentPadding = false;
+		}
+
+		public override void Dispose()
+		{
+			ClearContentPadding();
+			base.Dispose();
+		}
 	}
 
-	/// <summary>Renders Comet <c>Image</c> by hosting a native <c>ImageView</c> (via Compose
-	/// AndroidView) and loading the URL source asynchronously. Images carry no intrinsic layout
-	/// size, so callers give them an explicit Frame; the Yoga engine positions/sizes the node.</summary>
+	/// <summary>Renders Comet <c>Image</c> through a native <c>ImageView</c> (via Compose
+	/// AndroidView) or a bundled Compose image. Font images are rasterized with Android's
+	/// registered typeface and expose their glyph's native intrinsic size to Yoga.</summary>
 	sealed class ComposeImageNode : ComposeNode
 	{
 		static readonly System.Net.Http.HttpClient Http = new();
+		static readonly System.Runtime.CompilerServices.ConditionalWeakTable<
+			global::Android.Widget.ImageView, HostedImageState> HostedStates = new();
 		readonly MutableState<string> _url = new(string.Empty);
+		byte[]? _data;
+		string _fontGlyph = string.Empty;
+		string _fontFamily = string.Empty;
+		float _fontSize;
+		int _fontWeight;
+		bool _fontItalic;
+		bool _fontAutoScaling;
+		Microsoft.Maui.Graphics.Color? _fontColor;
+		readonly MutableState<int> _dataVersion = new(0);
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
 		{
 			if (id == PropertyIds.Image_Source)
 				_url.Value = value.AsString ?? string.Empty;
+			else if (id == PropertyIds.Image_Data && value.AsObject is byte[] bytes)
+			{
+				_data = bytes;
+				_dataVersion.Value++;
+			}
+			else if (id == PropertyIds.Image_FontFamily)
+			{
+				_fontFamily = value.AsString ?? string.Empty;
+				_dataVersion.Value++;
+			}
+			else if (id == PropertyIds.Image_FontSize)
+			{
+				_fontSize = (float)value.AsDouble;
+				_dataVersion.Value++;
+			}
+			else if (id == PropertyIds.Image_FontWeight)
+			{
+				_fontWeight = value.AsInt;
+				_dataVersion.Value++;
+			}
+			else if (id == PropertyIds.Image_FontItalic)
+			{
+				_fontItalic = value.AsBool;
+				_dataVersion.Value++;
+			}
+			else if (id == PropertyIds.Image_FontColor)
+			{
+				_fontColor = value.AsColor;
+				_dataVersion.Value++;
+			}
+			else if (id == PropertyIds.Image_FontAutoScaling)
+			{
+				_fontAutoScaling = value.AsBool;
+				_dataVersion.Value++;
+			}
+			else if (id == PropertyIds.Image_FontGlyph)
+			{
+				_fontGlyph = value.AsString ?? string.Empty;
+				_dataVersion.Value++;
+			}
 		}
+
+		public override Size Measure(double widthConstraint, double heightConstraint)
+			=> CurrentFontImage() is { } fontImage
+				? ComposeFontImageRasterizer.Measure(fontImage)
+				: Size.Zero;
 
 		public override void Render(IComposer composer)
 		{
 			var url = _url.Value; // subscribe so a source change recomposes
+			_ = _dataVersion.Value;
+			var fontImage = CurrentFontImage();
+
+			if (fontImage is { } spec)
+			{
+				var fontView = new AndroidView(
+					factory: ctx => new global::Android.Widget.ImageView(ctx),
+					update: native => UpdateImageView(
+						(global::Android.Widget.ImageView)native,
+						string.Empty,
+						null,
+						false,
+						0,
+						false,
+						spec));
+				((ComposableNode)fontView).Modifier = BuildNodeModifier();
+				fontView.Render(composer);
+				return;
+			}
 
 			// A bundled drawable renders through the real Compose Image widget (painterResource),
 			// cropped + clipped by the node's modifier — exactly the gold standard's
@@ -432,20 +699,39 @@ namespace Comet.Platform.Compose
 			// with a hardware outline (Compose's Modifier.clip doesn't reliably round an AndroidView).
 			float radiusPx = CornerRadiusDp * ComposeNode.Density;
 			bool rounded = HasRoundedCorners;
-			var view = new AndroidView(factory: ctx =>
-			{
-				var iv = new global::Android.Widget.ImageView(ctx);
-				iv.SetScaleType(global::Android.Widget.ImageView.ScaleType.CenterCrop);
-				if (rounded)
+			var data = _data;
+			var circular = IsCircularClip;
+			var view = new AndroidView(
+				factory: ctx =>
 				{
-					iv.OutlineProvider = new RoundedOutlineProvider(radiusPx);
-					iv.ClipToOutline = true;
-				}
-				Load(iv, url);
-				return iv;
-			});
+					var iv = new global::Android.Widget.ImageView(ctx);
+					iv.SetScaleType(global::Android.Widget.ImageView.ScaleType.CenterCrop);
+					return iv;
+				},
+				update: native => UpdateImageView(
+					(global::Android.Widget.ImageView)native, url, data, rounded, radiusPx, circular, null));
 			((ComposableNode)view).Modifier = BuildNodeModifier();
 			view.Render(composer);
+		}
+
+		ComposeFontImageSpec? CurrentFontImage()
+		{
+			if (string.IsNullOrEmpty(_fontGlyph) || _fontSize <= 0)
+				return null;
+
+			var color = _fontColor ?? Microsoft.Maui.Graphics.Colors.White;
+			var argb = ((uint)(color.Alpha * 255) << 24) |
+				((uint)(color.Red * 255) << 16) |
+				((uint)(color.Green * 255) << 8) |
+				(uint)(color.Blue * 255);
+			return new ComposeFontImageSpec(
+				_fontGlyph,
+				_fontFamily,
+				_fontSize,
+				_fontWeight,
+				_fontItalic,
+				_fontAutoScaling,
+				argb);
 		}
 
 		// Clips a hosted ImageView to a circle (radius ≥ half the size) or a rounded rect, using the
@@ -453,34 +739,129 @@ namespace Comet.Platform.Compose
 		sealed class RoundedOutlineProvider : global::Android.Views.ViewOutlineProvider
 		{
 			readonly float _radiusPx;
-			public RoundedOutlineProvider(float radiusPx) => _radiusPx = radiusPx;
+			readonly bool _circle;
+			public RoundedOutlineProvider(float radiusPx, bool circle)
+			{
+				_radiusPx = radiusPx;
+				_circle = circle;
+			}
 			public override void GetOutline(global::Android.Views.View view, global::Android.Graphics.Outline outline)
 			{
 				int w = view.Width, h = view.Height;
 				if (w <= 0 || h <= 0)
 					return;
-				if (_radiusPx * 2f >= System.Math.Min(w, h))
+				if (_circle || _radiusPx * 2f >= System.Math.Min(w, h))
 					outline.SetOval(0, 0, w, h);
 				else
 					outline.SetRoundRect(0, 0, w, h, _radiusPx);
 			}
 		}
 
-		// Async network fetch for a remote (http) source; bundled drawables take the Compose Image
-		// path in Render instead.
-		static void Load(global::Android.Widget.ImageView iv, string url)
+		sealed class HostedImageState
 		{
-			if (string.IsNullOrEmpty(url))
+			public string Source = string.Empty;
+			public byte[]? Data;
+			public ComposeFontImageSpec? FontImage;
+			public global::Android.Graphics.Bitmap? OwnedBitmap;
+			public int Generation;
+			public System.Threading.CancellationTokenSource? Cancellation;
+		}
+
+		static void UpdateImageView(
+			global::Android.Widget.ImageView iv,
+			string source,
+			byte[]? data,
+			bool rounded,
+			float radiusPx,
+			bool circular,
+			ComposeFontImageSpec? fontImage)
+		{
+			if (rounded)
+			{
+				iv.OutlineProvider = new RoundedOutlineProvider(radiusPx, circular);
+				iv.ClipToOutline = true;
+				iv.InvalidateOutline();
+			}
+			else
+			{
+				iv.ClipToOutline = false;
+				iv.OutlineProvider = null;
+			}
+
+			var state = HostedStates.GetOrCreateValue(iv);
+			if (state.Source == source &&
+				ReferenceEquals(state.Data, data) &&
+				System.Nullable.Equals(state.FontImage, fontImage))
 				return;
+
+			state.Cancellation?.Cancel();
+			state.Cancellation?.Dispose();
+			state.Cancellation = null;
+			state.Source = source;
+			state.Data = data;
+			state.FontImage = fontImage;
+			var generation = ++state.Generation;
+			iv.SetImageDrawable(null);
+			state.OwnedBitmap?.Dispose();
+			state.OwnedBitmap = null;
+
+			if (fontImage is { } fontSpec)
+			{
+				iv.SetScaleType(global::Android.Widget.ImageView.ScaleType.Center);
+				var bitmap = ComposeFontImageRasterizer.Render(fontSpec);
+				state.OwnedBitmap = bitmap;
+				if (bitmap is not null)
+					iv.SetImageBitmap(bitmap);
+				return;
+			}
+
+			iv.SetScaleType(global::Android.Widget.ImageView.ScaleType.CenterCrop);
+
+			if (data is { Length: > 0 })
+			{
+				var bitmap = global::Android.Graphics.BitmapFactory.DecodeByteArray(data, 0, data.Length);
+				if (bitmap is not null)
+				{
+					state.OwnedBitmap = bitmap;
+					iv.SetImageBitmap(bitmap);
+				}
+				return;
+			}
+			if (string.IsNullOrEmpty(source))
+				return;
+			if (!source.StartsWith("http", System.StringComparison.OrdinalIgnoreCase))
+			{
+				var bitmap = global::Android.Graphics.BitmapFactory.DecodeFile(source);
+				if (bitmap is not null)
+				{
+					state.OwnedBitmap = bitmap;
+					iv.SetImageBitmap(bitmap);
+				}
+				return;
+			}
+			var cancellation = new System.Threading.CancellationTokenSource();
+			state.Cancellation = cancellation;
 			_ = System.Threading.Tasks.Task.Run(async () =>
 			{
 				try
 				{
-					var bytes = await Http.GetByteArrayAsync(url).ConfigureAwait(false);
+					var bytes = await Http.GetByteArrayAsync(source, cancellation.Token).ConfigureAwait(false);
 					var bmp = global::Android.Graphics.BitmapFactory.DecodeByteArray(bytes, 0, bytes.Length);
 					if (bmp is not null)
-						iv.Post(() => iv.SetImageBitmap(bmp));
+						iv.Post(() =>
+						{
+							if (!cancellation.IsCancellationRequested && state.Generation == generation &&
+								state.Source == source && ReferenceEquals(state.Data, data) &&
+								state.FontImage is null)
+							{
+								state.OwnedBitmap = bmp;
+								iv.SetImageBitmap(bmp);
+							}
+							else
+								bmp.Recycle();
+						});
 				}
+				catch (System.OperationCanceledException) when (cancellation.IsCancellationRequested) { }
 				catch { /* leave the empty image view */ }
 			});
 		}
