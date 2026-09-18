@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using EssentialsAISample.AI;
 using EssentialsAISample.Pages;
 using EssentialsAISample.Services;
@@ -41,6 +41,8 @@ public static class MauiProgram
 		// Register AI agents and workflow
 #if IOS || MACCATALYST
 		builder.AddAppleIntelligenceServices();
+#elif WINDOWS
+		builder.AddPhiSilicaServices();
 #else
 		builder.AddOpenAIServices();
 #endif
@@ -64,9 +66,12 @@ public static class MauiProgram
 		builder.Services.AddHttpClient<WeatherService>();
 		builder.Services.AddSingleton<ChatService>();
 
-		// Semantic search — uses whatever IEmbeddingGenerator is registered (Apple NL or OpenAI)
+		// Semantic search — uses whatever IEmbeddingGenerator is registered (Apple NL or OpenAI).
+		// On Windows, AddPhiSilicaServices registers AppContentIndexerSearchService instead.
+#if !WINDOWS
 		builder.Services.AddSingleton<ISemanticSearchService>(sp =>
 			new EmbeddingSearchService(sp.GetRequiredService<IEmbeddingGenerator<string, Embedding<float>>>()));
+#endif
 
 		// Configure Logging
 		builder.Services.AddLogging();
@@ -149,6 +154,69 @@ public static class MauiProgram
 
 		// Semantic search backed by NL embeddings (also registered in common services above,
 		// but this line is kept in case the common registration is removed in the future)
+
+		return builder;
+	}
+#pragma warning restore CA1416
+#endif
+
+#if WINDOWS
+#pragma warning disable CA1416 // Validate platform compatibility - this sample requires Windows 10.0.26100.0+
+	private static MauiAppBuilder AddPhiSilicaServices(this MauiAppBuilder builder)
+	{
+		// Register the base Phi Silica client
+		builder.Services.AddSingleton<PhiSilicaChatClient>();
+
+		// Semantic search via the OS AppContentIndexer (embedding + chunking handled by Windows)
+		builder.Services.AddSingleton<ISemanticSearchService, AppContentIndexerSearchService>();
+
+		// On-device image generation (text to image, image to image, and inpainting)
+		builder.Services.AddSingleton<IImageGenerator, PhiSilicaImageGenerator>();
+
+		// Register the Phi Silica client as IChatClient to allow direct use
+		builder.Services.AddSingleton<IChatClient>(sp =>
+		{
+			var phiClient = sp.GetRequiredService<PhiSilicaChatClient>();
+			var imageGenerator = sp.GetRequiredService<IImageGenerator>();
+			var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+			return phiClient
+				.AsBuilder()
+				// Handles HostedImageGenerationTool, so asking the model to draw something
+				// runs the on-device image model and returns the image inline.
+				.UseImageGeneration(imageGenerator)
+				.Use(cc => new PhiSilicaToolCallingClient(cc))
+				.UseLogging(loggerFactory)
+				.Build();
+		});
+
+		// Register the Agent Framework wrapper as "local-model"
+		builder.Services.AddKeyedSingleton<IChatClient>("local-model", (sp, _) =>
+		{
+			var phiClient = sp.GetRequiredService<PhiSilicaChatClient>();
+			var imageGenerator = sp.GetRequiredService<IImageGenerator>();
+			var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+			return phiClient
+				.AsBuilder()
+				.UseImageGeneration(imageGenerator)
+				.Use(cc => new PhiSilicaToolCallingClient(cc))
+				.UseLogging(loggerFactory)
+				.Build();
+		});
+
+		// Register "cloud-model" with buffering
+		builder.Services.AddKeyedSingleton<IChatClient>("cloud-model", (sp, _) =>
+		{
+			var phiClient = sp.GetRequiredService<PhiSilicaChatClient>();
+			var imageGenerator = sp.GetRequiredService<IImageGenerator>();
+			var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+			return phiClient
+				.AsBuilder()
+				.UseImageGeneration(imageGenerator)
+				.Use(cc => new PhiSilicaToolCallingClient(cc))
+				.Use(cc => new BufferedChatClient(cc))
+				.UseLogging(loggerFactory)
+				.Build();
+		});
 
 		return builder;
 	}
