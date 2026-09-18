@@ -32,7 +32,7 @@ public sealed class R2DoseAndTimeSelectorContractTests
         Assert.Contains("top: new Dp((float)edgeSpacing)", compose);
         Assert.Contains("bottom: new Dp((float)edgeSpacing)", compose);
         Assert.Contains("ContentPadding = contentPadding", compose);
-        Assert.Contains("var targetView = _list.ViewFor(0, initialIndex);", compose);
+        Assert.Contains("targetExtent = GetRow(initialIndex).MeasureExtent(rowWidth).Height;", compose);
         Assert.Contains("_ = BuildRow(initialIndex);", compose);
         Assert.Contains("ListInitialScrollState.EdgeSpacing(", swiftUi);
         Assert.Contains("_initialScroll.TrySchedule(", swiftUi);

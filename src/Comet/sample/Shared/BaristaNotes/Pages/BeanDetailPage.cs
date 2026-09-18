@@ -542,14 +542,12 @@ public class BeanDetailPage : View
             return new ContentStateView(ContentStateKind.Loading, "Loading bean")
                 .Background(CoffeeTheme.SurfaceColor);
 
-        var sections = new VStack(spacing: CoffeeSpacing.Divider)
-        {
+        var sections = BaristaSections.Create(
             EntryTile("NAME", _name, "Bean name (required)", "bean_name", 100, UpdateName),
             EntryTile("ROASTER", _roaster, "Roaster name", "bean_roaster"),
             EntryTile("ORIGIN", _origin, "Country or region", "bean_origin"),
             EntryTile("ROASTER URL", _roasterUrl, "https://… (where to reorder these beans)", "bean_url"),
-            NotesTile(),
-        };
+            NotesTile());
 
         if (IsEdit)
         {
@@ -562,7 +560,7 @@ public class BeanDetailPage : View
             sections.Add(ErrorTile(error));
         sections.Add(new Grid().Background(CoffeeTheme.SurfaceColor).MinimumHeight(CoffeeSpacing.L));
 
-        return new ScrollView { sections }.Background(CoffeeTheme.SurfaceColor);
+        return BaristaSections.Scroll(sections);
     }
 
     View EntryTile(

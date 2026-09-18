@@ -80,28 +80,17 @@ public class R1VisualContractTests
         Assert.True(
             settings.Split(
                 ".Alignment(Comet.Alignment.BottomLeading)",
-                StringSplitOptions.None).Length - 1 >= 3);
+                StringSplitOptions.None).Length - 1 >= 2);
         Assert.DoesNotContain(
             "content.Add(new Grid().Frame(height: CoffeeSpacing.M)",
             range);
-        Assert.Contains(
-            "new Grid(rows: new object[] { \"Auto\", CoffeeSpacing.Divider })",
-            equipment);
-        Assert.Contains(
-            ".MinimumHeight(BaristaSourceVisualContract.EquipmentHeaderHeight)",
-            equipment);
-        Assert.DoesNotContain(
-            ".Margin(bottom: CoffeeSpacing.Divider)",
-            equipment);
-        Assert.Contains(
-            ".MinimumHeight(BaristaSafeAreaLayout.SettingsHeaderMinimumHeight(safeArea))",
-            settings);
-        Assert.Contains(
-            "return BaristaSourceVisualContract.SettingsHeaderContentHeight;",
-            safeArea);
-        Assert.Contains(
-            "public const float SettingsHeaderContentHeight = 77f;",
-            Read("sample/Shared/BaristaNotes/Styles/BaristaSourceVisualContract.cs"));
+        Assert.Contains("ManagementListRow.Build(", equipment);
+        Assert.Contains("BaristaPageHeader.Build(", equipment);
+        Assert.Contains("BaristaPageHeader.Build(", settings);
+        Assert.Contains("return HeaderMinimumHeight(AndroidStatusBarHeight());", safeArea);
+        var contract = Read("sample/Shared/BaristaNotes/Styles/BaristaSourceVisualContract.cs");
+        Assert.DoesNotContain("EquipmentHeaderHeight", contract);
+        Assert.DoesNotContain("SettingsHeaderContentHeight", contract);
     }
 
     [Fact]

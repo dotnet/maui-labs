@@ -274,11 +274,9 @@ public class BagDetailPage : View
             return new ContentStateView(ContentStateKind.Loading, "Loading bag")
                 .Background(CoffeeTheme.SurfaceColor);
 
-        var sections = new VStack(spacing: CoffeeSpacing.Divider)
-        {
+        var sections = BaristaSections.Create(
             new BeanBagDateTile(_roastDate, "bag_roast_date"),
-            NotesTile(),
-        };
+            NotesTile());
 
         if (IsEdit)
         {
@@ -290,7 +288,7 @@ public class BagDetailPage : View
             sections.Add(ErrorTile(error));
         sections.Add(new Grid().Background(CoffeeTheme.SurfaceColor).MinimumHeight(CoffeeSpacing.L));
 
-        return new ScrollView { sections }.Background(CoffeeTheme.SurfaceColor);
+        return BaristaSections.Scroll(sections);
     }
 
     View NotesTile() => new VStack(spacing: CoffeeSpacing.XS)

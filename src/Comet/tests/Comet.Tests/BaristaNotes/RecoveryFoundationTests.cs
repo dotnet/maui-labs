@@ -22,24 +22,22 @@ public sealed class RecoveryFoundationTests
     static readonly BackendContext Context = new(new EmptyServiceProvider());
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void HeaderMinimumPolicy_UsesActualLayoutWithoutAddingInsetToNativeHostPolicy(
-        bool includeTopInset)
+    [InlineData(51.809525, 0, 120)]
+    [InlineData(0, 51.809525, 68.190475)]
+    public void HeaderMinimumPolicy_CountsTheTopInsetAtItsActualOwner(
+        double topInset,
+        double reservedTopInset,
+        double expectedMinimum)
     {
-        const double topInset = 51.809525;
         var metrics = new CometWindowMetrics();
         metrics.UpdateSafeArea(new Thickness(0, topInset, 0, 24));
-        var probe = new HeaderPolicyProbe(includeTopInset);
+        var probe = new HeaderPolicyProbe(reservedTopInset);
         probe.WindowMetrics(metrics);
         Materialize(probe);
 
         CometBackendLayoutEngine.Layout(probe, new Size(411.428558, 914.285706));
 
         var header = FindByAutomationId(probe, "recovery_policy_header");
-        var expectedMinimum = CoffeeSpacing.HeaderHeight
-            + (includeTopInset ? topInset : 0);
-
         Assert.Equal(expectedMinimum, ((IView)header).MinimumHeight, 3);
         Assert.Equal(Math.Ceiling(expectedMinimum), header.Frame.Height, 3);
         Assert.Equal(
@@ -100,8 +98,10 @@ public sealed class RecoveryFoundationTests
             "sample/Shared/BaristaNotes/Pages/ValueRangeEditorPage.cs");
 
         Assert.DoesNotContain(".RangeCaption()", settingsPage);
-        Assert.Equal(3, rangeSettings.Split(".RangeCaption()", StringSplitOptions.None).Length - 1);
-        Assert.Equal(4, rangeEditor.Split(".RangeCaption()", StringSplitOptions.None).Length - 1);
+        Assert.Equal(2, rangeSettings.Split(".RangeCaption()", StringSplitOptions.None).Length - 1);
+        Assert.Equal(3, rangeEditor.Split(".RangeCaption()", StringSplitOptions.None).Length - 1);
+        Assert.Contains("rangeCaption: true", rangeSettings);
+        Assert.Contains("rangeCaption: true", rangeEditor);
     }
 
     [Theory]
@@ -260,8 +260,8 @@ public sealed class RecoveryFoundationTests
         Assert.Contains("new Image(CoffeeIcons.Source", fixedActions);
         Assert.Contains("new Image(CoffeeIcons.Source", activity);
         Assert.Contains("new Image(CoffeeIcons.Source", equipment);
-        Assert.Contains("this.BackButtonBehavior(new BackButtonBehavior", equipment);
-        Assert.Contains("IsVisible = false", equipment);
+        Assert.Contains("EquipmentManagementPage : BaristaManagementPage", equipment);
+        Assert.Contains("IsVisible = false", fixedActions);
         Assert.Contains("Inverted: true", beans);
         Assert.Contains("action.inverted", profiles);
         Assert.Contains("new Button(\"BACK\"", oneAction);
@@ -365,7 +365,7 @@ public sealed class RecoveryFoundationTests
                     new Text("HEADER"),
                 }
                 .Padding(BaristaSafeAreaLayout.HeaderPadding(safeArea))
-                .MinimumHeight(BaristaSafeAreaLayout.HeaderMinimumHeight(safeArea))
+                .MinimumHeight(BaristaSafeAreaLayout.HeaderMinimumHeight())
                 .AutomationId("recovery_header"),
                 new ScrollView
                 {
@@ -439,7 +439,7 @@ public sealed class RecoveryFoundationTests
         }
     }
 
-    sealed class HeaderPolicyProbe(bool includeTopInset) : View
+    sealed class HeaderPolicyProbe(double reservedTopInset) : View
     {
         [Body]
         View body()
@@ -452,9 +452,7 @@ public sealed class RecoveryFoundationTests
                     new Text("Dose In Ranges").Headline().Cell(row: 1),
                 }
                 .Padding(BaristaSafeAreaLayout.HeaderPadding(safeArea))
-                .MinimumHeight(BaristaSafeAreaLayout.HeaderMinimumHeight(
-                    safeArea,
-                    includeTopInset))
+                .MinimumHeight(BaristaSafeAreaLayout.HeaderMinimumHeight(reservedTopInset))
                 .AutomationId("recovery_policy_header"),
                 new Grid(),
                 new Grid(),

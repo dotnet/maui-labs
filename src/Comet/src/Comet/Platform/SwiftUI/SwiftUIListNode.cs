@@ -19,7 +19,7 @@ namespace Comet.Platform.SwiftUI
 		IListView _list;
 		readonly BackendContext _context;
 		readonly CometNode _native;
-		readonly List<View> _rows = new();
+		readonly List<NativeListRow> _rows = new();
 		double _width;
 		double _height;
 		double _centerEndSpacing = -1;
@@ -101,6 +101,8 @@ namespace Comet.Platform.SwiftUI
 			_rowGeneration = null;
 
 			CometSwiftUIHost.ClearChildren(_native);
+			foreach (var row in _rows)
+				row.Dispose();
 			_rows.Clear();
 			_visibleRows.Clear();
 			_lastMinVisible = int.MaxValue;
@@ -108,11 +110,11 @@ namespace Comet.Platform.SwiftUI
 			var generation = new OwnedContentGeneration((View)_list, _context);
 			for (int i = 0; i < count; i++)
 			{
-				var view = _list.ViewFor(0, i);
-				var node = (ISwiftUINativeNode)generation.Materialize(view);
+				var row = NativeListRow.Materialize(_list.ViewFor(0, i), generation);
+				var node = (ISwiftUINativeNode)row.Node!;
 				CometSwiftUIHost.InsertChild(_native, i, node.Native);
-				_rows.Add(view);
-				LayoutRow(view); // no-op until the list has been arranged (width known)
+				_rows.Add(row);
+				LayoutRow(row); // no-op until the list has been arranged (width known)
 			}
 			_rowGeneration = generation;
 			CometSwiftUIHost.MarkListContentReady(_native);
@@ -127,16 +129,16 @@ namespace Comet.Platform.SwiftUI
 		// Lay each row out to the list's arranged width with the shared Yoga engine, height-wrapped,
 		// so rows render identically to the Compose backend (avatar + author + wrapping body). Each
 		// row's nodes self-position from the frames this pushes; the row root self-sizes for the List.
-		void LayoutRow(View row)
+		void LayoutRow(NativeListRow row)
 		{
 			if (_width <= 0)
 				return;
 			// Horizontal rows lay at their intrinsic width (the ComposeListNode LazyRow
 			// branch does the same); vertical rows fill the list width.
 			if (_list.Horizontal)
-				CometBackendLayoutEngine.LayoutContent(row, CometBackendLayoutEngine.Measure(row).Width);
+				row.Layout(row.MeasureIntrinsicExtent().Width);
 			else
-				CometBackendLayoutEngine.LayoutContent(row, _width);
+				row.Layout(_width);
 		}
 
 		// The node manages its own rows; the generic child API is unused.
@@ -293,6 +295,9 @@ namespace Comet.Platform.SwiftUI
 			_initialScroll.Dispose();
 			_rowGeneration?.Dispose();
 			_rowGeneration = null;
+			foreach (var row in _rows)
+				row.Dispose();
+			_rows.Clear();
 		}
 	}
 }

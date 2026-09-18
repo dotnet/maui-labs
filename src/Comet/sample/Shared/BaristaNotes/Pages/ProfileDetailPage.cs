@@ -591,29 +591,8 @@ public sealed class ProfileDetailPage : View
     {
         var label = IsEdit ? "EDIT PROFILE" : "NEW PROFILE";
         var title = IsEdit ? (_name.Value.Length == 0 ? "Loading…" : _name.Value) : "Add profile";
-        var titleSize = title.Length switch
-        {
-            <= 12 => 28,
-            <= 20 => 22,
-            <= 28 => 18,
-            _ => 16,
-        };
-
-        return new Grid(columns: new object[] { "*" }, rows: new object[] { "Auto", "*" })
-        {
-            new Text(label).SectionLabel().Cell(row: 0),
-            new Text(title)
-                .FontFamily("ManropeSemibold")
-                .FontSize(titleSize)
-                .Color(CoffeeTheme.TextPrimary)
-                .MaxLines(2)
-                .Alignment(Comet.Alignment.BottomLeading)
-                .Cell(row: 1),
-        }
-        .Padding(BaristaSafeAreaLayout.HeaderPadding(safeArea))
-        .MinimumHeight(BaristaSafeAreaLayout.HeaderMinimumHeight(safeArea))
-        .Background(CoffeeTheme.SurfaceColor)
-        .AutomationId("profile_header");
+        return BaristaPageHeader.Build(
+            label, title, safeArea, "profile_header", BaristaPageHeader.TitleFontSize(title));
     }
 
     View BodyView()
@@ -626,19 +605,15 @@ public sealed class ProfileDetailPage : View
                 .AutomationId("profile_loading");
         }
 
-        var form = new VStack(spacing: CoffeeSpacing.Divider)
-        {
+        var form = BaristaSections.Create(
             NameTile(),
             PhotoTile(),
-            ContextTile(),
-        };
+            ContextTile());
         if (_error.Value is { } error)
             form.Add(ErrorTile(error));
         form.Add(new Grid().Frame(height: CoffeeSpacing.L).Background(CoffeeTheme.SurfaceColor));
 
-        return new ScrollView { form }
-            .Background(CoffeeTheme.SurfaceColor)
-            .AutomationId("profile_form_scroll");
+        return BaristaSections.Scroll(form, "profile_form_scroll");
     }
 
     View NameTile()

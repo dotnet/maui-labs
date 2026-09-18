@@ -13,7 +13,7 @@ using CometBaristaNotes.Services.DTOs;
 
 namespace CometSamples.BaristaNotes.Pages;
 
-public class BeanManagementPage : View
+public class BeanManagementPage : BaristaManagementPage
 {
     readonly IBeanService _beanService;
     readonly IBagService _bagService;
@@ -143,12 +143,10 @@ public class BeanManagementPage : View
     View body()
     {
         var safeArea = BaristaSafeAreaLayout.GetInsets(this);
+        var count = _beans.Value.Count;
         var root = BaristaEdgeFrame.Build(
-            new BeanBagHeaderTile("BEANS", () =>
-            {
-                var count = _beans.Value.Count;
-                return count == 1 ? "1 bean" : $"{count} beans";
-            }, safeArea),
+            BaristaPageHeader.Build(
+                "BEANS", count == 1 ? "1 bean" : $"{count} beans", safeArea, "beans_header"),
             RenderBody(),
             BottomActions(),
             "bean_management_page");
@@ -189,30 +187,8 @@ public class BeanManagementPage : View
             ? bean.Roaster!
             : !string.IsNullOrWhiteSpace(bean.Origin) ? bean.Origin! : "Bean";
 
-        return new Grid(
-            columns: new object[] { "*", "Auto" },
-            rows: new object[] { "Auto", "*" })
-        {
-            new Text(subtitle.ToUpperInvariant()).SectionLabel().Cell(row: 0, column: 0),
-            new Text(bean.Name)
-                .FontFamily("ManropeSemibold")
-                .FontSize(20)
-                .Color(CoffeeTheme.TextPrimary)
-                .MaxLines(1)
-                .Cell(row: 1, column: 0),
-            new Text(CoffeeIcons.Chevron)
-                .FontFamily(CoffeeIcons.FontFamily)
-                .FontSize(24)
-                .Color(CoffeeTheme.TextPrimary)
-                .Center()
-                .Cell(row: 0, column: 1, rowSpan: 2),
-        }
-        .Padding(new Thickness(CoffeeSpacing.M, 14))
-        .Background(CoffeeTheme.SurfaceColor)
-        .MinimumHeight(80)
-        .Margin(bottom: CoffeeSpacing.Divider)
-        .AutomationId($"bean_row_{bean.Id}")
-        .OnTap(_ => OpenBean(bean.Id));
+        return ManagementListRow.Build(
+            subtitle, bean.Name, $"bean_row_{bean.Id}", () => OpenBean(bean.Id));
     }
 
     View BottomActions() => new FixedBottomActionRow(
