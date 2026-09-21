@@ -186,14 +186,6 @@ its logs for startup/model/authentication failures before assuming scenarios are
 missing. Re-running an old workflow run does not pick up new workflow YAML; post
 a fresh `/evaluate` after the fix lands.
 
-Workflow reporting regression tests run in `skill-check` without credentials or
-LLM calls. To run them locally (Python 3.12+ and Bash, or Git Bash on Windows):
-
-```bash
-python -m pip install PyYAML==6.0.3
-python eng/scripts/test-skill-evaluation.py
-```
-
 ## PR Checklist
 
 - [ ] `SKILL.md` has valid YAML frontmatter with `name` and `description`
