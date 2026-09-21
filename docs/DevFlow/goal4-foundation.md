@@ -43,3 +43,21 @@ cannot substitute for physical-device qualification.
 Host unit tests use in-memory fakes only. They establish contract behavior, not
 device functionality, safe business replay, native human approval, or qualification.
 The existing legacy flow API is unchanged. No new shipping package is introduced.
+
+## Restricted MCP increment
+
+`maui devflow mcp --profile test-agent` requires
+`DEVFLOW_PREVIEW_AGENT_AUTHORING=true`; the `agent-authoring` kill switch wins.
+The default remains `full` with its existing behavior.
+
+This initial upstream profile exposes **only** `maui_test_author` (`begin`)
+and `maui_test_validate`. Both validate supplied JSON offline and return inert
+plan digests. No agent discovery or app access occurs. Target fields describe
+intent, not observations. No session is persisted. Missing/unknown JSON fields,
+duplicate properties, unsafe selectors and unsupported actions fail closed.
+
+There is no approval-request, approval issuer, commit, run, repair, source,
+file, network-body, CDP, device or generic action tool in this profile. Native
+approval is explicitly unavailable. Do not substitute the full profile or the
+fork's CLI approval command to bypass this boundary. Full live authoring and
+native approval remain separate, unimplemented upstream increments.
