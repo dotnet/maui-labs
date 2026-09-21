@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Maui.Cli.DevFlow.Flows;
 using Microsoft.Maui.Cli.DevFlow.Testing;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
@@ -59,9 +60,11 @@ public sealed class PreviewTestAgentTools
             using var document = JsonDocument.Parse(flowJson);
             if (document.RootElement.ValueKind != JsonValueKind.Object ||
                 !document.RootElement.TryGetProperty("schema", out var schema) ||
-                schema.ValueKind != JsonValueKind.Number || !schema.TryGetInt32(out var version) || version != 1)
+                schema.ValueKind != JsonValueKind.Number || !schema.TryGetInt32(out var version))
                 throw new JsonException();
             RejectDuplicateProperties(document.RootElement);
+            if (version != MauiFlow.CurrentSchema)
+                throw new McpException($"invalid-request: unsupported flow schema; expected {MauiFlow.CurrentSchema}.");
             var flow = JsonSerializer.Deserialize(flowJson, PreviewTestingJsonContext.Default.MauiFlow)
                 ?? throw new JsonException();
             var plan = PreviewFlowPlan.Create(planId, revision,

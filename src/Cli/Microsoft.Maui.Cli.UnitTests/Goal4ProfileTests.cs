@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Reflection;
 using System.Text.Json;
+using Microsoft.Maui.Cli.DevFlow.Flows;
 using Microsoft.Maui.Cli.DevFlow.Mcp;
 using Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
 using Microsoft.Maui.Cli.DevFlow.Testing;
@@ -53,6 +54,38 @@ public class Goal4ProfileTests
         Assert.False(document.RootElement.GetProperty("ExecutionAvailable").GetBoolean());
         Assert.False(document.RootElement.GetProperty("TargetObserved").GetBoolean());
         Assert.DoesNotContain("result", result, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Draft_AcceptsCurrentFlowSchema(bool author)
+    {
+        using var result = JsonDocument.Parse(CreateDraft(author, MauiFlow.CurrentSchema));
+        Assert.Equal("inert-draft", result.RootElement.GetProperty("State").GetString());
+    }
+
+    [Theory]
+    [InlineData(false, -1)]
+    [InlineData(false, 1)]
+    [InlineData(true, -1)]
+    [InlineData(true, 1)]
+    public void Draft_RejectsOtherSchemasAndNamesSupportedVersion(bool author, int offset)
+    {
+        var error = Assert.Throws<McpException>(() => CreateDraft(author, MauiFlow.CurrentSchema + offset));
+        Assert.Equal($"invalid-request: unsupported flow schema; expected {MauiFlow.CurrentSchema}.", error.Message);
+    }
+
+    private static string CreateDraft(bool author, int schema)
+    {
+        var flow = Goal4FoundationTests.Flow();
+        flow.Schema = schema;
+        var json = JsonSerializer.Serialize(flow, PreviewTestingJsonContext.Default.MauiFlow);
+        return author
+            ? PreviewTestAgentTools.Author(new(), "begin", json,
+                "agent", "instance", "build", "seed", "checkpoint", "none", "plan", 1)
+            : PreviewTestAgentTools.Validate(new(), json,
+                "agent", "instance", "build", "seed", "checkpoint", "none", "plan", 1);
     }
 
     [Theory]
