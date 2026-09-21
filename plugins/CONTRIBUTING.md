@@ -183,7 +183,16 @@ The evaluation workflow runs from the default branch, while skills and scenarios
 are checked out from the PR. Workflow fixes must reach the default branch before
 another `/evaluate` comment can use them. If a run produces no reports, inspect
 its logs for startup/model/authentication failures before assuming scenarios are
-missing.
+missing. Re-running an old workflow run does not pick up new workflow YAML; post
+a fresh `/evaluate` after the fix lands.
+
+Workflow reporting regression tests run in `skill-check` without credentials or
+LLM calls. To run them locally (Python 3.12+ and Bash, or Git Bash on Windows):
+
+```bash
+python -m pip install PyYAML==6.0.3
+python eng/scripts/test-skill-evaluation.py
+```
 
 ## PR Checklist
 
