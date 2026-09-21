@@ -162,28 +162,15 @@ skill-validator check --plugin plugins/<plugin-name>
 
 # LLM evaluation (requires GitHub auth)
 skill-validator evaluate \
-  --model gpt-5.6-terra \
-  --judge-model gpt-5.6-sol \
   --runs 3 \
   --tests-dir tests/<plugin-name> \
   plugins/<plugin-name>/skills
 ```
 
-Set both model options explicitly rather than relying on the validator's default.
-To evaluate one skill, pass its directory instead of the parent `skills` directory.
-Reports are written as `results.json` and `summary.md` under a timestamped directory
-inside `--results-dir`.
-
 ### CI
 
 - **skill-check** — Runs automatically on every PR that modifies `plugins/` or `tests/`
 - **skill-evaluation** — Triggered by posting `/evaluate` on a PR (write access required)
-
-The evaluation workflow runs from the default branch, while skills and scenarios
-are checked out from the PR. Workflow fixes must reach the default branch before
-another `/evaluate` comment can use them. If a run produces no reports, inspect
-its logs for startup/model/authentication failures before assuming scenarios are
-missing.
 
 ## PR Checklist
 

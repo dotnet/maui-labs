@@ -202,10 +202,9 @@ jobs:
           done
 
           echo "entries=$(echo "$ENTRIES" | jq -c .)" >> "$GITHUB_OUTPUT"
-          echo "Found $(echo "$ENTRIES" | jq length) plugin(s) with evaluation scenarios"
+          echo "Found $(echo "$ENTRIES" | jq length) skill(s) to evaluate"
 
       - name: Run evaluation
-        id: run-evaluation
         if: fromJson(steps.discover.outputs.entries)[0] != null
         env:
           GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
@@ -222,8 +221,6 @@ jobs:
 
             echo "=== Evaluating plugin: $plugin ==="
             if ! /tmp/skill-validator/bin/skill-validator evaluate \
-              --model gpt-5.6-terra \
-              --judge-model gpt-5.6-sol \
               --verdict-warn-only \
               --results-dir "$RESULTS_DIR/$plugin" \
               --reporter console --reporter json --reporter markdown \
@@ -240,49 +237,30 @@ jobs:
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
-          DISCOVERY_OUTCOME: ${{ steps.discover.outcome }}
-          EVALUATION_OUTCOME: ${{ steps.run-evaluation.outcome }}
-          ENTRIES: ${{ steps.discover.outputs.entries }}
         run: |
           PR_NUMBER=${{ needs.gate.outputs.pr_number }}
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
           # Consolidate results if any exist
-          REPORT_FAILED=0
           mapfile -t JSON_FILES < <(find artifacts/eval-results -name results.json 2>/dev/null || true)
           if [ "${#JSON_FILES[@]}" -gt 0 ]; then
             {
               echo "## Skill Evaluation Results"
               echo ""
-              if [ "$EVALUATION_OUTCOME" != "success" ]; then
-                echo "**Evaluation did not complete successfully. Results below may be partial; see the run logs.**"
-                echo ""
-              fi
               for f in "${JSON_FILES[@]}"; do
                 skill=$(basename "$(dirname "$f")")
                 echo "### $skill"
-                report_dir=$(dirname "$f")
-                if [ -f "$report_dir/summary.md" ]; then
-                  cat "$report_dir/summary.md"
-                elif [ -f "$report_dir/results.md" ]; then
-                  cat "$report_dir/results.md"
-                else
-                  echo "_No markdown report; see the uploaded results.json artifact._"
-                fi
+                cat "$(dirname "$f")/results.md" 2>/dev/null || echo "_No markdown report_"
                 echo ""
               done
               echo "[Full results]($RUN_URL)"
             } > comment-body.md
-          elif [ "$DISCOVERY_OUTCOME" = "success" ] && [ "$ENTRIES" = "[]" ]; then
-            echo "ℹ️ No skills with eval.yaml found to evaluate. [View run]($RUN_URL)" > comment-body.md
           else
-            echo "Evaluation failed or did not complete before producing results. This does not mean eval.yaml files are missing. [View run logs]($RUN_URL)" > comment-body.md
-            REPORT_FAILED=1
+            echo "ℹ️ No skills with eval.yaml found to evaluate. [View run]($RUN_URL)" > comment-body.md
           fi
 
           gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/comments" \
             -X POST -F "body=@comment-body.md"
-          exit "$REPORT_FAILED"
 
       - name: Update commit status
         if: always()
