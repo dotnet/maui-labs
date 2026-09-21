@@ -61,3 +61,18 @@ file, network-body, CDP, device or generic action tool in this profile. Native
 approval is explicitly unavailable. Do not substitute the full profile or the
 fork's CLI approval command to bypass this boundary. Full live authoring and
 native approval remain separate, unimplemented upstream increments.
+
+## CI evidence and local reproduction
+
+The optional `maui-devflow-ci-triage` skill is distributed by the tooling plugin
+and bundled in the CLI. Explicit `maui devflow skills install` includes it;
+`maui devflow init` does not. Its read-only PowerShell issue resolver is
+forward-ported from fork `fb2db33e` without importing the privileged publisher.
+Offline fixture tests cover both production and disjoint nonqualified demo
+envelopes. Producer/consumer integration remains a later CI increment.
+
+`PreviewFailureCorrespondence` compares supplied identities and preserves
+indeterminate when a source fingerprint or other required fact is missing.
+Matching facts are not attestation, qualification, a broker reproduction record
+or a grant. The skill stops at an owner-bound handoff; it does not recommend
+unavailable fork execution/repair commands.

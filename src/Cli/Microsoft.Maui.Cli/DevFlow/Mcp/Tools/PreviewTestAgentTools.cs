@@ -59,7 +59,7 @@ public sealed class PreviewTestAgentTools
             using var document = JsonDocument.Parse(flowJson);
             if (document.RootElement.ValueKind != JsonValueKind.Object ||
                 !document.RootElement.TryGetProperty("schema", out var schema) ||
-                !schema.TryGetInt32(out var version) || version != 1)
+                schema.ValueKind != JsonValueKind.Number || !schema.TryGetInt32(out var version) || version != 1)
                 throw new JsonException();
             RejectDuplicateProperties(document.RootElement);
             var flow = JsonSerializer.Deserialize(flowJson, PreviewTestingJsonContext.Default.MauiFlow)

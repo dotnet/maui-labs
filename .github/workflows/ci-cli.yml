@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.claude/skills/**'
+      - 'plugins/dotnet-maui-tooling/skills/maui-devflow-ci-triage/**'
       - 'src/Cli/**'
       - 'src/DevFlow/Microsoft.Maui.DevFlow.Client/**'
       - 'src/DevFlow/Microsoft.Maui.DevFlow.Driver/**'
@@ -20,6 +21,7 @@ on:
     branches: [main]
     paths:
       - '.claude/skills/**'
+      - 'plugins/dotnet-maui-tooling/skills/maui-devflow-ci-triage/**'
       - 'src/Cli/**'
       - 'src/DevFlow/Microsoft.Maui.DevFlow.Client/**'
       - 'src/DevFlow/Microsoft.Maui.DevFlow.Driver/**'
