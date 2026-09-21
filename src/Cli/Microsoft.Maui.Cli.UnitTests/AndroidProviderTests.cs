@@ -97,11 +97,34 @@ public class SdkManagerTests : IDisposable
 	}
 
 	[Fact]
-	public void ResolveSdkManagerPath_ReturnsNull_WhenSdkManagerIsMissing()
+	public void SdkManagerPath_ReturnsNull_WhenSdkManagerIsMissing()
 	{
 		Directory.CreateDirectory(Path.Combine(_tempDir, "cmdline-tools", "latest", "bin"));
 
-		Assert.Null(SdkManager.ResolveSdkManagerPath(_tempDir));
+		using var sdkManager = new SdkManager(() => _tempDir, () => null);
+
+		Assert.Null(sdkManager.SdkManagerPath);
+	}
+
+	[Fact]
+	public void SdkManagerPath_IgnoresBareCmdlineToolsBinLayout()
+	{
+		// A very common Windows mistake is extracting Google's command-line tools zip straight into
+		// <sdk>/cmdline-tools, producing <sdk>/cmdline-tools/bin/sdkmanager instead of the required
+		// <sdk>/cmdline-tools/<version|latest>/bin layout. The upstream sdkmanager operations
+		// (install/list/licenses) do not recognise the bare layout, so neither must our availability
+		// check — otherwise `maui android install` reports "SDK Tools already installed", skips
+		// bootstrapping the proper command-line tools, and then fails with
+		// "sdkmanager not found. Run BootstrapAsync first." (issue #366).
+		var barePath = Path.Combine(_tempDir, "cmdline-tools", "bin",
+			OperatingSystem.IsWindows() ? "sdkmanager.bat" : "sdkmanager");
+		Directory.CreateDirectory(Path.GetDirectoryName(barePath)!);
+		File.WriteAllText(barePath, string.Empty);
+
+		using var sdkManager = new SdkManager(() => _tempDir, () => null);
+
+		Assert.Null(sdkManager.SdkManagerPath);
+		Assert.False(sdkManager.IsAvailable);
 	}
 }
 
