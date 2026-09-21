@@ -76,3 +76,19 @@ indeterminate when a source fingerprint or other required fact is missing.
 Matching facts are not attestation, qualification, a broker reproduction record
 or a grant. The skill stops at an owner-bound handoff; it does not recommend
 unavailable fork execution/repair commands.
+
+## Diagnostic qualification tooling
+
+`maui devflow qualification assess <input.json>` is opt-in through
+`DEVFLOW_PREVIEW_QUALIFICATION=true` and disabled by the `qualification` kill
+switch. It reads at most 1 MiB, never contacts an app, and returns JSON.
+Exit 1 means disabled/invalid input; exit 2 means **not-qualified**, including
+when supplied numeric claims satisfy all metric gates. There is no qualifying
+exit 0 in this initial diagnostic-only increment.
+
+The deterministic corpus is `tests/DevFlow/Goal4Foundation`. It checks the
+fork policy's 95% Wilson precision lower bound, 100-evaluation minima, zero
+false heals across 300 no-repair cases, 90% classification, 99% selector and
+per-flow first-attempt stability, ECE <= 0.05 and host p95 <= 250ms.
+It does not certify provenance, reviews, privacy testing, first-attempt integrity,
+device overhead or platform execution. Caller-supplied claims are never attestation.

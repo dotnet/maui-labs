@@ -1758,6 +1758,7 @@ public class DevFlowCommands
             });
         });
         devflowCommand.Add(commandsCmd);
+        devflowCommand.Add(Testing.PreviewQualificationCommands.Create());
 
         // ===== MCP server command =====
         var mcpCmd = new Command("mcp", "Start MCP (Model Context Protocol) server for AI agent integration via stdio");

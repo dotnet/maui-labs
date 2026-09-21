@@ -126,9 +126,26 @@ public class Goal4FoundationTests
         Assert.False(report.IndependentlyVerified);
     }
 
+    [Fact]
+    public async Task Runner_MissingAssertionReceiptCannotPass()
+    {
+        var report = await new PreviewFlowRunner(new Host { OmitAssertion = true }, true).RunAsync(Plan());
+        Assert.Equal(PreviewFlowOutcome.Failed, report.Outcome);
+        Assert.False(report.IndependentlyVerified);
+    }
+
+    [Fact]
+    public async Task Runner_HostFailureStillAttemptsCleanupAndDoesNotLeakErrorText()
+    {
+        var report = await new PreviewFlowRunner(new Host { Throw = true, CleanupThrows = true }, true).RunAsync(Plan());
+        Assert.Equal(PreviewFlowOutcome.UnknownCompletion, report.Outcome);
+        Assert.Equal("host-execution-failed", report.FailureCode);
+        Assert.Equal("cleanup-failed", report.CleanupFailureCode);
+    }
+
     private sealed class Host : IPreviewFlowHost
     {
-        public bool Approve = true, Cancel, Clean = true, Independent = true;
+        public bool Approve = true, Cancel, Clean = true, Independent = true, OmitAssertion, Throw, CleanupThrows;
         public int Dispatches, Grants;
         public Task<bool> ConsumeRunGrantAsync(PreviewFlowPlan plan, CancellationToken cancellationToken)
         { Grants++; return Task.FromResult(Approve); }
@@ -136,11 +153,14 @@ public class Goal4FoundationTests
         {
             Dispatches++;
             if (Cancel) throw new OperationCanceledException();
+            if (Throw) throw new IOException("private host text must not be exported");
             return Task.FromResult(new FlowReplayReport
-            { Ok = true, Total = 1, Passed = 1, Results = [new() { Seq = 1, Ok = true }] });
+            { Ok = true, Total = 1, Passed = 1, Results = [new() { Seq = 1, Action = FlowActions.Assert,
+                Ok = true, Asserts = OmitAssertion ? [] : [new() { Kind = "exists", Ok = true }] }] });
         }
         public Task<PreviewOracleResult> VerifyBusinessOutcomeAsync(CancellationToken cancellationToken) =>
             Task.FromResult(new PreviewOracleResult(Independent, true));
-        public Task<bool> CleanupAsync(CancellationToken cancellationToken) => Task.FromResult(Clean);
+        public Task<bool> CleanupAsync(CancellationToken cancellationToken) =>
+            CleanupThrows ? throw new IOException("private cleanup error") : Task.FromResult(Clean);
     }
 }

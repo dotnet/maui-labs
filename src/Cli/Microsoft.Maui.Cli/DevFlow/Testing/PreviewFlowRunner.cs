@@ -6,7 +6,7 @@ internal enum PreviewFlowOutcome { Passed, Failed, UnknownCompletion }
 
 internal sealed record PreviewFlowEvidence(
     string PlanDigest, string FlowDigest, PreviewFlowOutcome Outcome,
-    bool IndependentlyVerified, bool CleanupComplete, string? FailureCode)
+    bool IndependentlyVerified, bool CleanupComplete, string? FailureCode, string? CleanupFailureCode = null)
 {
     public string Qualification => "not-qualified";
     public bool DiagnosticOnly => true;
@@ -30,6 +30,7 @@ internal interface IPreviewFlowHost
 /// <summary>Host-only, single-attempt execution. Not wired to CLI, MCP or Inspector mutation routes.</summary>
 internal sealed class PreviewFlowRunner(IPreviewFlowHost host, bool enabled = false)
 {
+    private readonly IPreviewFlowHost _host = host ?? throw new ArgumentNullException(nameof(host));
     private int _dispatched;
 
     public async Task<PreviewFlowEvidence> RunAsync(PreviewFlowPlan plan, CancellationToken cancellationToken = default)
@@ -40,18 +41,24 @@ internal sealed class PreviewFlowRunner(IPreviewFlowHost host, bool enabled = fa
         if (Interlocked.CompareExchange(ref _dispatched, 1, 0) != 0)
             throw new InvalidOperationException("A run cannot be retried or continued.");
         cancellationToken.ThrowIfCancellationRequested();
-        if (!await host.ConsumeRunGrantAsync(plan, cancellationToken).ConfigureAwait(false))
+        if (!await _host.ConsumeRunGrantAsync(plan, cancellationToken).ConfigureAwait(false))
             throw new UnauthorizedAccessException("A current exact-scope native human run grant is required.");
 
         PreviewFlowEvidence evidence;
         try
         {
-            var report = await host.ReplayAsync(plan.CopyFlow(), cancellationToken).ConfigureAwait(false);
+            var expected = plan.CopyFlow();
+            var report = await _host.ReplayAsync(plan.CopyFlow(), cancellationToken).ConfigureAwait(false);
             var passed = report.Ok && report.Failed == 0 && report.Total == plan.CopyFlow().Steps.Count &&
                 report.Passed == report.Total && report.Results.Count == report.Total &&
-                report.Results.All(step => step.Ok);
+                report.Results.Zip(expected.Steps).All(pair =>
+                    pair.First.Ok && pair.First.Seq == pair.Second.Seq && pair.First.Action == pair.Second.Action &&
+                    pair.First.Asserts.Count == (pair.Second.Asserts?.Count ?? 0) &&
+                    pair.First.Asserts.Zip(pair.Second.Asserts ?? []).All(assertion =>
+                        !assertion.Second.Verify || (assertion.First.Kind == assertion.Second.Kind &&
+                            assertion.First.Ok == true && !assertion.First.Skipped)));
             var oracle = passed
-                ? await host.VerifyBusinessOutcomeAsync(cancellationToken).ConfigureAwait(false)
+                ? await _host.VerifyBusinessOutcomeAsync(cancellationToken).ConfigureAwait(false)
                 : new PreviewOracleResult(false, false);
             evidence = new(plan.PlanDigest, plan.FlowDigest,
                 passed ? PreviewFlowOutcome.Passed : PreviewFlowOutcome.Failed,
@@ -62,8 +69,21 @@ internal sealed class PreviewFlowRunner(IPreviewFlowHost host, bool enabled = fa
             evidence = new(plan.PlanDigest, plan.FlowDigest, PreviewFlowOutcome.UnknownCompletion,
                 false, false, "unknown-completion");
         }
+        catch (Exception)
+        {
+            // The host may have dispatched before its response failed. Never retry or emit raw data.
+            evidence = new(plan.PlanDigest, plan.FlowDigest, PreviewFlowOutcome.UnknownCompletion,
+                false, false, "host-execution-failed");
+        }
         // Cleanup is a separate result, never a replacement for the immutable primary outcome.
-        var cleaned = await host.CleanupAsync(CancellationToken.None).ConfigureAwait(false);
-        return evidence with { CleanupComplete = cleaned };
+        try
+        {
+            var cleaned = await _host.CleanupAsync(CancellationToken.None).ConfigureAwait(false);
+            return evidence with { CleanupComplete = cleaned, CleanupFailureCode = cleaned ? null : "cleanup-incomplete" };
+        }
+        catch (Exception)
+        {
+            return evidence with { CleanupFailureCode = "cleanup-failed" };
+        }
     }
 }
