@@ -1758,11 +1758,19 @@ public class DevFlowCommands
             });
         });
         devflowCommand.Add(commandsCmd);
+        devflowCommand.Add(Testing.PreviewQualificationCommands.Create());
 
         // ===== MCP server command =====
         var mcpCmd = new Command("mcp", "Start MCP (Model Context Protocol) server for AI agent integration via stdio");
         mcpCmd.Aliases.Add("mcp-serve");
-        mcpCmd.SetAction(async (ctx, ct) => { await Mcp.McpServerHost.RunAsync(); });
+        var profileOption = new Option<string>("--profile")
+        {
+            Description = "full (existing automation) or test-agent (opt-in inert drafts only)",
+            DefaultValueFactory = _ => "full"
+        };
+        profileOption.AcceptOnlyFromAmong("full", "test-agent");
+        mcpCmd.Add(profileOption);
+        mcpCmd.SetAction(async (ctx, ct) => { await Mcp.McpServerHost.RunAsync(ctx.GetValue(profileOption)!); });
         devflowCommand.Add(mcpCmd);
 
         _devflowCommand = devflowCommand;

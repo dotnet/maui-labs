@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "repair": { "successes": 0, "total": 0 },
+  "classification": { "successes": 0, "total": 0 },
+  "selectors": { "successes": 0, "total": 0 },
+  "falseHeals": 0,
+  "noRepairEvaluations": 0,
+  "physicalAndroid": false,
+  "calibrationEce": 1,
+  "hostOperationP95Ms": 0,
+  "privacyEscapes": 0,
+  "tier1Flows": []
+}

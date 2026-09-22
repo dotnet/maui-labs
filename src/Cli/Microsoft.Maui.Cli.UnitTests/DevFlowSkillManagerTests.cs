@@ -24,6 +24,7 @@ public sealed class DevFlowSkillManagerTests
         Assert.True(File.Exists(Path.Combine(workspace.Path, ".claude", "skills", "maui-devflow-session-review", "SKILL.md")));
         Assert.True(File.Exists(Path.Combine(workspace.Path, ".claude", "skills", "maui-devflow-session-review", "references", "friction-rubric.md")));
         Assert.False(File.Exists(Path.Combine(workspace.Path, ".claude", "skills", "maui-devflow-connect", "SKILL.md")));
+        Assert.False(File.Exists(Path.Combine(workspace.Path, ".claude", "skills", "maui-devflow-ci-triage", "SKILL.md")));
         Assert.False(File.Exists(Path.Combine(workspace.Path, ".maui", "devflow-skills.lock.json")));
 
         var statePath = GetStatePathFromResults(result);
@@ -48,8 +49,24 @@ public sealed class DevFlowSkillManagerTests
 
         var statuses = await DevFlowSkillManager.CheckAsync("project", "claude", online: false, cancellationToken: CancellationToken.None);
         var skills = Assert.IsType<JsonArray>(statuses["skills"]);
-        Assert.All(skills.OfType<JsonObject>(), skill => Assert.Equal("up-to-date", skill["status"]?.GetValue<string>()));
+        Assert.All(skills.OfType<JsonObject>(), skill => Assert.Equal(
+            skill["skillId"]?.GetValue<string>() == "maui-devflow-ci-triage" ? "missing" : "up-to-date",
+            skill["status"]?.GetValue<string>()));
         Assert.DoesNotContain(skills.OfType<JsonObject>(), skill => skill["skillId"]?.GetValue<string>() == "maui-devflow-connect");
+    }
+
+    [Fact]
+    public async Task InstallAll_ExplicitlyIncludesDiagnosticSkillAndItsResolver()
+    {
+        using var workspace = TemporaryWorkspace.Create();
+        await DevFlowSkillManager.InstallAsync("project", "github", force: false, allowDowngrade: false, CancellationToken.None);
+        var script = Path.Combine(workspace.Path, ".github", "skills", "maui-devflow-ci-triage",
+            "scripts", "Resolve-DevFlowCiFailureIssue.ps1");
+        var assembly = typeof(DevFlowSkillManager).Assembly;
+        var resource = Assert.Single(assembly.GetManifestResourceNames(), name =>
+            name.Replace('\\', '/') == "devflow.skills/maui-devflow-ci-triage/scripts/Resolve-DevFlowCiFailureIssue.ps1");
+        using var reader = new StreamReader(assembly.GetManifestResourceStream(resource)!);
+        Assert.Equal(await reader.ReadToEndAsync(), await File.ReadAllTextAsync(script));
     }
 
     [Fact]
@@ -562,7 +579,9 @@ public sealed class DevFlowSkillManagerTests
         var result = await DevFlowSkillManager.CheckAsync("project", "claude", online: false, cancellationToken: CancellationToken.None);
 
         var skills = Assert.IsType<JsonArray>(result["skills"]);
-        Assert.All(skills.OfType<JsonObject>(), skill => Assert.Equal("unknown-or-unmanaged", skill["status"]?.GetValue<string>()));
+        Assert.All(skills.OfType<JsonObject>(), skill => Assert.Equal(
+            skill["skillId"]?.GetValue<string>() == "maui-devflow-ci-triage" ? "missing" : "unknown-or-unmanaged",
+            skill["status"]?.GetValue<string>()));
     }
 
     [Fact]
