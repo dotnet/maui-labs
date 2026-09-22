@@ -123,6 +123,12 @@ public class App : Application
 
 ## Samples
 
+Blazor Hybrid hosts need a Windows SDK-versioned target framework, such as
+`net10.0-windows10.0.17763.0`, so WebView2 can load the `Microsoft.Windows.SDK.NET`
+projection assembly. Copy `wwwroot` content to both build and publish output; without
+`wwwroot/index.html`, the WebView can start but cannot load the Blazor host page.
+The `Windows.WPF.Sample` project includes both settings.
+
 See the `samples/` directory for working examples:
 - **ControlGallery** — Full control gallery exercising all implemented handlers (used by UI tests)
 - **Maui.Controls.Sample.Blazor** — Blazor Hybrid WebView on WPF

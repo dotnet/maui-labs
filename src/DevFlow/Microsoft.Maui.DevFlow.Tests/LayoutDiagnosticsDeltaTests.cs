@@ -33,6 +33,18 @@ public class LayoutDiagnosticsDeltaTests
     }
 
     [Fact]
+    public void Build_FilteredCountChanges_EmitsSummaryDelta()
+    {
+        var previous = Result();
+        var current = Result();
+        current.Summary.Filtered = 1;
+
+        var delta = Assert.IsType<LayoutDiagnosticsDelta>(LayoutDiagnosticsDeltaBuilder.Build(previous, current));
+
+        Assert.Equal(1, delta.Summary.Filtered);
+    }
+
+    [Fact]
     public void Build_DuplicateFingerprints_FallsBackToFullRefresh()
     {
         var previous = Result(

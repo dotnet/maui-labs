@@ -62,7 +62,7 @@
           "devflow"
         ],
         "displayName": "MAUI DevFlow: Data Snapshot",
-        "modelDescription": "Returns the bounded, redacted point-in-time Data snapshot the user added from the MAUI DevFlow Inspector (Logs, Network, Preferences, Device, Sensors, file metadata, or native Alerts). Use the included followUpTools identifiers to query DevFlow MCP for fresher or deeper detail when needed.",
+        "modelDescription": "Returns the bounded, redacted point-in-time Data snapshot the user added from the MAUI DevFlow Inspector (Layout diagnostics, Logs, Network, Preferences, Device, Sensors, file metadata, or native Alerts). Use the included followUpTools identifiers to query DevFlow MCP for fresher or deeper detail when needed.",
         "canBeReferencedInPrompt": true,
         "toolReferenceName": "mauiData",
         "icon": "$(attach)",

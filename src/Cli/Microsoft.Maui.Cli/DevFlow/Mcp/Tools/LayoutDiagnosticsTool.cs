@@ -11,14 +11,14 @@ namespace Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
 public sealed class LayoutDiagnosticsTool
 {
     [McpServerTool(Name = "maui_layout_diagnostics"),
-     Description("Inspect the current rendered MAUI UI for clipped or off-window elements, lost content overflow, text that is not fully rendered, geometric overlap, and visual or interaction occlusion. Use after navigation, XAML/layout edits, window resize, orientation, theme, font-scale, localization, or platform changes. This returns native layout evidence that screenshots cannot provide; use maui_element or maui_tree with the returned IDs for follow-up.")]
+     Description("Inspect the current rendered MAUI UI for clipped or off-window elements, lost content overflow, text that is not fully rendered, geometric overlap, and visual or interaction occlusion. Rule set 1.1 also checks managed minimum/maximum constraints, desired-size discrepancies, and children outside their direct layout parent. Desired-size and parent overflow are informational observations, not proof of clipping; set minimumSeverity=info to return them, or inspect summary.filtered for omitted detections. Use after navigation, XAML/layout edits, window resize, orientation, theme, font-scale, localization, or platform changes. Use maui_element or maui_tree with returned IDs for follow-up.")]
     public static async Task<string> Inspect(
         McpAgentSession session,
         [Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null,
         [Description("Inspection profile: agent (high signal), strict, exhaustive, or ci")] string profile = "agent",
         [Description("Root element ID to inspect (default: the whole realized tree)")] string? rootElementId = null,
         [Description("Comma-separated rule IDs to run, or omit for all rules")] string? checks = null,
-        [Description("Minimum severity: info, minor, moderate, serious, or critical")] string minimumSeverity = "minor",
+        [Description("Minimum severity: info, minor, moderate, serious, or critical. Use info for desired-size and child-outside-parent observations; lower-severity detections are counted in summary.filtered.")] string minimumSeverity = "minor",
         [Description("Include full geometry, clip-chain, text, and overlap evidence (default: compact agent response)")] bool includeEvidence = false,
         [Description("Maximum findings to return in the agent response (1-500)")] int maxFindings = 100,
         [Description("Wait for stable geometry before analyzing")] bool waitForStable = true,

@@ -780,6 +780,11 @@ html[data-reduced-motion="true"] *, html[data-reduced-motion="true"] *::before, 
   background: rgba(197, 134, 192, 0.06);
 }
 
+.diagnostic-region-parent {
+  border: 2px dashed #9cdcfe;
+  background: rgba(156, 220, 254, 0.04);
+}
+
 .diagnostic-region-overlap {
   border: 2px solid #dcdcaa;
   background: rgba(220, 220, 170, 0.15);
@@ -805,6 +810,13 @@ svg .diagnostic-region-clip {
   fill: rgba(197, 134, 192, 0.06);
 }
 
+svg .diagnostic-region-parent {
+  stroke: #9cdcfe;
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  fill: rgba(156, 220, 254, 0.04);
+}
+
 svg .diagnostic-region-overlap {
   stroke: #dcdcaa;
   stroke-width: 2;
@@ -815,6 +827,45 @@ svg .diagnostic-region-overlap {
   outline: 3px solid #c586c0;
   outline-offset: -3px;
 }
+
+/* Dock-native Layout list, details, coverage and compact scan controls. */
+#df-dock-body:has(.df-layout-panel) { overflow: hidden; padding: 0; }
+.df-layout-panel { position: relative; display: flex; height: 100%; min-height: 0; flex-direction: column; color: var(--df-fg); }
+.df-layout-action-strip { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; padding: 5px 8px; border-bottom: 1px solid var(--df-border); background: var(--df-surface-2); }
+.df-layout-action-strip [hidden] { display: none; }
+.df-layout-spacer { flex: 1; }
+.df-layout-count, .df-layout-live { white-space: nowrap; font-size: 11px; }
+.df-layout-panel #diagnostics-summary { color: var(--df-muted); }
+.df-layout-content { min-height: 0; flex: 1; overflow: auto; }
+.df-layout-coverage-button { color: var(--df-muted); }
+.df-layout-filter-menu { position: static; }
+.df-layout-filter-menu > summary { cursor: pointer; list-style: none; }
+.df-layout-filter-menu > summary::-webkit-details-marker { display: none; }
+.df-layout-filter-popover { display: grid; gap: 7px; position: absolute; right: 8px; z-index: 30; width: min(300px, calc(100% - 16px)); box-sizing: border-box; overflow: auto; padding: 10px; border: 1px solid var(--df-border); border-radius: var(--df-radius); background: var(--df-surface); box-shadow: var(--df-shadow); }
+.df-layout-field { display: grid; gap: 3px; font-size: 11px; }
+.df-layout-finding-row.diagnostic-item { display: grid; grid-template-columns: auto minmax(140px, 1fr) minmax(80px, 32%) auto; align-items: center; width: 100%; gap: 7px; margin: 0; padding: 5px 8px; border: 0; border-bottom: 1px solid var(--df-border); border-left: 3px solid var(--df-muted); border-radius: 0; background: transparent; color: var(--df-fg); text-align: left; cursor: pointer; }
+.df-layout-finding-row:hover, .df-layout-finding-row:focus-visible { background: var(--df-hover); }
+.df-layout-finding-row.df-layout-violation { border-left-color: var(--df-error); }
+.df-layout-finding-row.df-layout-observation { border-left-color: var(--df-warn); }
+.df-layout-row-main { display: grid; gap: 2px; min-width: 0; }
+.df-layout-row-main strong, .df-layout-row-main span, .df-layout-row-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.df-layout-row-meta, .df-layout-context { color: var(--df-muted); font-size: 10px; }
+.df-layout-pill { display: inline-block; border: 1px solid var(--df-border); border-radius: 10px; padding: 2px 5px; font-size: 10px; white-space: nowrap; }
+.df-layout-pill.df-layout-violation { color: var(--df-error); }
+.df-layout-pill.df-layout-observation { color: var(--df-warn); }
+.df-layout-detail, .df-layout-summary, .df-layout-notice { padding: 6px 10px; margin: 0; }
+.df-layout-detail h3 { margin: 3px 0 6px; font-size: 13px; }
+.df-layout-detail p { margin: 7px 0; }
+.df-layout-detail-actions { display: flex; gap: 5px; flex-wrap: wrap; margin: 8px 0; }
+.df-layout-notice { border-left: 3px solid var(--df-warn); background: var(--df-surface-2); font-size: 11px; }
+.df-layout-coverage-table, .df-layout-evidence-table { border-collapse: collapse; width: 100%; font-size: 11px; }
+.df-layout-coverage-table th, .df-layout-coverage-table td, .df-layout-evidence-table td { padding: 5px 8px; border-bottom: 1px solid var(--df-border); text-align: left; vertical-align: top; }
+.df-layout-coverage-table code { display: block; color: var(--df-muted); font-size: 10px; }
+.df-layout-limitations { margin: 8px 10px; padding-left: 15px; font-size: 11px; }
+.df-layout-detail pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 10px; }
+body[data-host-layout="narrow"] .df-layout-row-meta { display: none; }
+body[data-host-layout="narrow"] .df-layout-finding-row.diagnostic-item { grid-template-columns: auto minmax(0, 1fr) auto; }
+body[data-host-layout="narrow"] .df-layout-action-strip { flex-wrap: wrap; }
 
 .severity-critical,
 .severity-serious {
