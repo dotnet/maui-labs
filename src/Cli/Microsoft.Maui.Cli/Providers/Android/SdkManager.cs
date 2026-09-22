@@ -40,10 +40,15 @@ public partial class SdkManager : IDisposable
 	}
 
 	public SdkManager(Func<string?> getSdkPath, Func<string?> getJdkPath, bool verbose = false)
+		: this(getSdkPath, getJdkPath, new XatSdkManager(logger: CreateLogger(verbose)))
+	{
+	}
+
+	internal SdkManager(Func<string?> getSdkPath, Func<string?> getJdkPath, XatSdkManager sdkManager)
 	{
 		_getSdkPath = getSdkPath;
 		_getJdkPath = getJdkPath;
-		_sdkManager = new XatSdkManager(logger: CreateLogger(verbose));
+		_sdkManager = sdkManager;
 	}
 
 	(string? SdkPath, string? JdkPath) SyncPaths()
@@ -60,12 +65,8 @@ public partial class SdkManager : IDisposable
 		get
 		{
 			SyncPaths();
-			// Delegate to the upstream resolver so our availability detection always agrees with the
-			// sdkmanager the upstream install/list/license operations actually invoke. Recognising a
-			// location upstream rejects (e.g. a bare cmdline-tools/bin extracted from Google's zip
-			// without the required version/latest subfolder) would make us report the SDK as ready,
-			// skip bootstrapping the modern command-line tools, and then fail in InstallAsync with
-			// "sdkmanager not found. Run BootstrapAsync first." (see issue #366).
+			// Availability must use the same resolver as install/list/license operations,
+			// or an unsupported layout can incorrectly bypass bootstrap.
 			return _sdkManager.FindSdkManagerPath();
 		}
 	}
