@@ -430,6 +430,16 @@ import { createElementTreeController } from './inspector-tree.js';
     return traits.includes('textinput') || traits.includes('editable');
   }
 
+  function canEditTextInput(el) {
+    if (!isTextInput(el) || el.getAttribute('data-isEnabled') === 'false' ||
+        el.getAttribute('data-isReadOnly') === 'true') return false;
+    // A tap recognizer may open a picker or navigate away. Drive that action, not an editor.
+    const gestures = (el.dataset.gestures || '').toLowerCase().split(',');
+    if (gestures.includes('tap')) return false;
+    const capabilities = (el.dataset.capabilities || '').toLowerCase().split(',').filter(Boolean);
+    return capabilities.length === 0 || capabilities.includes('set-value');
+  }
+
   function ensureCanDrive() {
     if (!connected) {
       setStatus(disconnectedStatus);
@@ -592,6 +602,7 @@ import { createElementTreeController } from './inspector-tree.js';
   }
 
   function openEditor(targetEl) {
+    if (!canEditTextInput(targetEl)) return;
     if (activeEditor?.dataset.commitInProgress === 'true') return;
     closeEditor(false);
     const elementId = targetEl.getAttribute('data-id');
@@ -651,6 +662,37 @@ import { createElementTreeController } from './inspector-tree.js';
     setTimeout(() => { editor.focus(); editor.select(); }, 0);
   }
 
+  function pulseActionTarget(el) {
+    if (!el || !el.classList) return;
+    el.classList.remove('df-action-target');
+    void el.offsetWidth;
+    el.classList.add('df-action-target');
+    setTimeout(() => el.classList.remove('df-action-target'), 700);
+  }
+
+  async function sendInspectorTap(x, y, targetEl) {
+    const targetId = isTapTargetOverlay(targetEl) ? targetEl.getAttribute('data-id') : null;
+    const targetLabel = targetEl ? elementLabel(targetEl) : null;
+    const payload = { x, y, ...getElementCaptureMetadata(targetEl) };
+    if (targetId) payload.elementId = targetId;
+
+    const response = await inspectorApi.postDetailed('/api/tap', payload);
+    const result = response.body;
+    if (!response.ok || !result || result.ok !== true) {
+      const reason = result && typeof result.reason === 'string'
+        ? result.reason
+        : 'The app did not accept the tap.';
+      setStatus(`Tap did not run — ${reason}`);
+      return { ok: false, result, target: targetEl };
+    }
+
+    const actual = result.elementId ? (elById(result.elementId) || targetEl) : targetEl;
+    pulseActionTarget(actual);
+    const label = actual ? elementLabel(actual) : targetLabel;
+    setStatus(label ? `Tap sent to ${label}.` : 'Tap sent to the app.');
+    return { ok: true, result, target: actual || targetEl };
+  }
+
   viewport.addEventListener('click', async (e) => {
     if (isDragging) return;
     // If the user clicks back into the active editor, ignore.
@@ -676,7 +718,9 @@ import { createElementTreeController } from './inspector-tree.js';
 
     let textEl = underCursor;
     while (textEl && textEl !== viewport && !isTextInput(textEl)) textEl = textEl.parentElement;
-    if (textEl && textEl !== viewport && isTextInput(textEl)) {
+    if (textEl && textEl !== viewport && canEditTextInput(textEl)) {
+      const { x: tx, y: ty } = toAppCoords(e.clientX, e.clientY);
+      sendInspectorTap(tx, ty, textEl).catch(err => console.error('Tap failed:', err));
       openEditor(textEl);
       return;
     }
@@ -684,22 +728,20 @@ import { createElementTreeController } from './inspector-tree.js';
     // Capture the tap target BEFORE driving (a navigation can destroy it) so a recorded step
     // carries the durable selector of the element the user targeted. We drive by coordinate (works
     // for any element, interactive or not) and record the hit element — replay resolves by selector.
-    const tapEl = underCursor && underCursor.closest ? underCursor.closest('.devflow-element') : null;
+    const tapEl = hoverHitTest(e.clientX, e.clientY) ||
+      (underCursor && underCursor.closest ? underCursor.closest('.devflow-element') : null);
     const { x, y } = toAppCoords(e.clientX, e.clientY);
 
     try {
-      const resp = await fetch(`${basePath}/api/tap`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ x, y })
-      });
+      const tap = await sendInspectorTap(x, y, tapEl);
       if (recordingId) {
-        if (tapEl && resp.ok) await recordStep('tap', tapEl);
-        else if (!tapEl) setStatus('Tap not recorded — no element under the cursor.');
+        if (tap.ok && tap.target) await recordStep('tap', tap.target);
+        else if (!tap.target) setStatus('Tap not recorded — no element under the cursor.');
       }
       scheduleRefresh(400);
     } catch (err) {
       console.error('Tap failed:', err);
+      setStatus('Tap did not run — the Inspector could not reach the app.');
     }
   });
 
@@ -1278,40 +1320,43 @@ import { createElementTreeController } from './inspector-tree.js';
   }
   function setHover(el) {
     if (hoveredEl === el) return;
-    if (hoveredEl) hoveredEl.classList.remove('df-hover', 'df-hover-noninteractive');
+    if (hoveredEl) hoveredEl.classList.remove('df-hover', 'df-hover-noninteractive', 'df-hover-interactive');
     hoveredEl = el;
     if (!el) { if (badgeEl) badgeEl.style.display = 'none'; return; }
     el.classList.add('df-hover');
     const interactable = isInteractableOverlay(el);
+    const tapTarget = isTapTargetOverlay(el);
     el.classList.toggle('df-hover-noninteractive', !interactable);
+    el.classList.toggle('df-hover-interactive', tapTarget);
     const b = ensureBadge();
     b.classList.toggle('df-badge-noninteractive', !interactable);
+    const kind = tapTarget
+      ? 'Interactive element'
+      : (interactable ? 'Scrollable element' : 'Visual element');
+    b.dataset.kind = tapTarget ? 'interactive' : (interactable ? 'scrollable' : 'visual');
     const w = Math.round(parseFloat(el.style.width) || el.offsetWidth);
     const h = Math.round(parseFloat(el.style.height) || el.offsetHeight);
-    b.textContent = (el.getAttribute('data-type') || 'Element') + ' ' + w + '×' + h;
-    b.style.left = el.offsetLeft + 'px';
-    b.style.top = Math.max(0, el.offsetTop - 18) + 'px';
+    b.textContent = `${kind}: ${el.getAttribute('data-type') || 'Element'} ${w}×${h}`;
     b.style.display = 'block';
+    const viewportWidth = parseFloat(viewport.dataset.width) || viewport.offsetWidth || 0;
+    const viewportHeight = parseFloat(viewport.dataset.height) || viewport.offsetHeight || 0;
+    const maxLeft = Math.max(0, viewportWidth - b.offsetWidth);
+    const maxTop = Math.max(0, viewportHeight - b.offsetHeight);
+    b.style.left = Math.min(Math.max(0, el.offsetLeft), maxLeft) + 'px';
+    b.style.top = Math.min(Math.max(0, el.offsetTop - b.offsetHeight - 2), maxTop) + 'px';
   }
   function isInteractableOverlay(el) {
     if (!el || !el.classList || !el.classList.contains('devflow-element')) return false;
     return el.dataset.interactable === 'true';
   }
+  function isTapTargetOverlay(el) {
+    if (!isInteractableOverlay(el)) return false;
+    return (el.dataset.traits || '').split(',')
+      .some((trait) => trait.trim().toLowerCase() === 'interactive');
+  }
   function hoverHitTest(clientX, clientY) {
-    const nodes = mode === 'interact'
-      ? document.elementsFromPoint(clientX, clientY)
-      : [document.elementFromPoint(clientX, clientY)];
-    const seen = new Set();
-    let nonInteractiveFallback = null;
-    for (const node of nodes) {
-      const overlay = (node && node.closest) ? node.closest('.devflow-element') : null;
-      if (!overlay || seen.has(overlay)) continue;
-      seen.add(overlay);
-      if (mode !== 'interact') return overlay;
-      if (isInteractableOverlay(overlay)) return overlay;
-      nonInteractiveFallback ??= overlay;
-    }
-    return nonInteractiveFallback;
+    const node = document.elementFromPoint(clientX, clientY);
+    return node && node.closest ? node.closest('.devflow-element') : null;
   }
   viewport.addEventListener('pointermove', (e) => {
     if (isGesturing || activeEditor) return;
@@ -2025,7 +2070,10 @@ import { createElementTreeController } from './inspector-tree.js';
         body: JSON.stringify({ elementId: id }),
       });
       const j = r.ok ? await r.json().catch(() => null) : null;
-      if (!j || !j.ok || !j.file) { setStatus('No source available for this element.'); return; }
+      if (!j || !j.ok || !j.file) {
+        setStatus((j && j.error) || 'No source available for this element.');
+        return;
+      }
       if (hostHas('openSource') && postToHost('devflow:openSource', {
         file: j.file,
         line: j.line || 1,
@@ -2101,8 +2149,11 @@ import { createElementTreeController } from './inspector-tree.js';
       if (hostHas('copilotContext')) {
         setStatus(`Adding ${kind === 'combined' ? 'selection and workflow' : kind} context to Copilot…`);
         const result = await requestHost('devflow:attachCopilot', { context: kind, payload }, 10000);
-        setStatus(result && result.ok
+        const successMessage = result && result.ok
           ? (result.message || 'Added Inspector context to Copilot.')
+          : null;
+        setStatus(result && result.ok
+          ? `${successMessage} Copilot can request mutation control with maui_take_control.`
           : ((result && result.error) || 'The host could not add Inspector context to Copilot.'));
         return;
       }
@@ -2285,7 +2336,8 @@ import { createElementTreeController } from './inspector-tree.js';
       setStatus(`Adding ${dockSnapshot.title} to Copilot…`);
       const result = await requestHost('devflow:attachData', { snapshot: dockSnapshot }, 12000);
       setStatus(result.ok
-        ? (result.message || `Added ${dockSnapshot.title} to Copilot.`)
+        ? `${result.message || `Added ${dockSnapshot.title} to Copilot.`} ` +
+          'Copilot can request mutation control with maui_take_control.'
         : (result.error || `Could not add ${dockSnapshot.title} to Copilot.`));
       return;
     }
@@ -3108,6 +3160,7 @@ import { createElementTreeController } from './inspector-tree.js';
     const dw = parseFloat(viewport.dataset.width) || viewport.offsetWidth || 1;
     const dh = parseFloat(viewport.dataset.height) || viewport.offsetHeight || 1;
     if (!stage || !vpWrap) return;
+    vpWrap.classList.toggle('df-fit-active', fitMode);
     let s = 1;
     if (fitMode) {
       const availW = vpWrap.clientWidth, availH = vpWrap.clientHeight;
