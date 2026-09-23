@@ -18,8 +18,14 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Maui.DevFlow.Agent;
 using OpenAI;
 
+#if WINDOWS
+using System.Runtime.Versioning;
+#endif
 #if IOS || MACCATALYST || WINDOWS
 using Microsoft.Maui.Essentials.AI;
+#endif
+#if WINDOWS
+using System.Runtime.Versioning;
 #endif
 
 namespace AIExtensions.Sample.ChatPlayground;
@@ -76,9 +82,7 @@ public static class MauiProgram
     {
 #if WINDOWS
         if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 26100))
-            services.AddSingleton<IChatClient>(serviceProvider => CreateWindowsChatClient(
-                serviceProvider.GetRequiredService<ILoggerFactory>(),
-                serviceProvider.GetRequiredService<IChatRecordingSession>()));
+            services.AddSingleton<IChatClient>(CreateWindowsChatClient);
 #endif
 #if IOS || MACCATALYST
         if (OperatingSystem.IsIOSVersionAtLeast(26) || OperatingSystem.IsMacCatalystVersionAtLeast(26))
@@ -220,17 +224,18 @@ public static class MauiProgram
         return endpoint;
     }
 #if WINDOWS
-    private static IChatClient CreateWindowsChatClient(ILoggerFactory loggerFactory, IChatRecordingSession recording) =>
+    [SupportedOSPlatform("windows10.0.26100.0")]
+    private static IChatClient CreateWindowsChatClient(IServiceProvider services) =>
         new PhiSilicaChatClient()
             .AsBuilder()
-            .UseRecording(recording)
+            .UseRecording(services.GetRequiredService<IChatRecordingSession>())
             .UseDescriptor(new ChatClientDescriptor(
                 "Phi Silica",
                 "Windows Copilot Runtime is supported on this OS. The first request checks whether the on-device model is ready.",
                 SupportsImageInput: true))
-            .UseLogging(loggerFactory)
-            .Use(inner => new PhiSilicaToolCallingClient(inner))
+            .UseLogging(services.GetRequiredService<ILoggerFactory>())
             .UseFunctionInvocation()
+            .Use(inner => new PhiSilicaToolCallingClient(inner))
             .Build();
 #endif
 

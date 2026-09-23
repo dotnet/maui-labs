@@ -56,7 +56,7 @@ decoding, in two phases:
 
 1. **Selection.** One constrained call against a schema whose only property is a `tool_name` enum
    listing the available tools plus `none`.
-2. **Arguments.** If a tool was chosen, a second constrained call against *that tool''s own*
+2. **Arguments.** If a tool was chosen, a second constrained call against *that tool's own*
    parameter schema. If `none` was chosen the request is passed through so the model answers
    normally, preserving any `ResponseFormat` the caller asked for.
 
@@ -64,6 +64,21 @@ The result is emitted as `FunctionCallContent`, so the standard `UseFunctionInvo
 executes the call and re-invokes the client with the result in history. `ChatToolMode.None` bypasses
 tool selection; `RequireAny` forces the first call but permits a final answer after a tool result.
 Completed calls are scoped to the current user turn, so earlier turns cannot block a new request.
+
+In `ChatClientBuilder`, function invocation must wrap the Phi Silica adapter so it sees the
+adapter's tool calls. Reversing these two steps displays a tool call without executing it:
+
+```csharp
+new PhiSilicaChatClient()
+    .AsBuilder()
+    .UseFunctionInvocation()
+    .Use(inner => new PhiSilicaToolCallingClient(inner))
+    .Build();
+```
+
+The model can select an unrelated tool in `Auto` mode even when the user did not ask for one.
+Turn off the sample's tool checkboxes or set `ChatToolMode.None` for requests where tool
+invocation is not wanted; native structured JSON generation works without the adapter.
 
 ### Why two phases
 
@@ -191,9 +206,12 @@ search.
 
 ## Packaging requirements
 
-Phi Silica requires the `systemAIModels` capability, which is only granted to packaged apps. Running
-unpackaged makes `LanguageModel.GetReadyState()` return `AccessDenied`, so `WindowsPackageType=None`
-must not be set. `Microsoft.Windows.SDK.BuildTools.WinApp` is referenced so `dotnet run` registers
+Phi Silica requires the `systemAIModels` and `runFullTrust` capabilities in an MSIX package.
+The playground manifest must target both `Windows.Universal` and `Windows.Desktop`:
+targeting only `Windows.Desktop` caused `LanguageModel.GetReadyState()` to return
+`CapabilityMissing` on a device where the test app (targeting both families) could generate
+responses. Running unpackaged also prevents access, so `WindowsPackageType=None` must not be
+set. `Microsoft.Windows.SDK.BuildTools.WinApp` is referenced so `dotnet run` registers
 the loose MSIX layout and activates the app by AUMID.
 
 `AppxOSMinVersionReplaceManifestVersion` and `AppxOSMaxVersionTestedReplaceManifestVersion` are set to

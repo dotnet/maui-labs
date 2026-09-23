@@ -83,28 +83,37 @@ internal static class PhiSilicaModelFactory
 	{
 		var readyState = getReadyState();
 
-		if (readyState is AIFeatureReadyState.DisabledByUser or AIFeatureReadyState.NotSupportedOnCurrentSystem)
+		if (readyState is not AIFeatureReadyState.Ready and not AIFeatureReadyState.NotReady)
 		{
 			var message = readyState switch
 			{
 				AIFeatureReadyState.NotSupportedOnCurrentSystem => "Not supported on current system",
 				AIFeatureReadyState.DisabledByUser => "Disabled by user",
-				_ => "Unknown reason"
+				AIFeatureReadyState.CapabilityMissing => "Missing systemAIModels capability",
+				AIFeatureReadyState.NotCompatibleWithSystemHardware => "Not compatible with system hardware",
+				AIFeatureReadyState.OSUpdateNeeded => "OS update needed",
+				_ => readyState.ToString()
 			};
 			throw new NotSupportedException($"{featureName} is not available: {message}");
 		}
 
 		if (readyState is AIFeatureReadyState.NotReady)
 		{
-			var operation = await ensureReadyAsync();
+			var result = await ensureReadyAsync();
 
-			if (operation.Status is not AIFeatureReadyResultState.Success)
-				throw new NotSupportedException($"{featureName} is not available");
+			if (result.Status is not AIFeatureReadyResultState.Success)
+			{
+				var reason = string.IsNullOrWhiteSpace(result.ErrorDisplayText)
+					? result.Status.ToString()
+					: $"{result.Status}: {result.ErrorDisplayText}";
+				throw new NotSupportedException($"{featureName} could not be made ready: {reason}", result.ExtendedError);
+			}
 		}
 
-		if (getReadyState() is not AIFeatureReadyState.Ready)
+		var finalState = getReadyState();
+		if (finalState is not AIFeatureReadyState.Ready)
 		{
-			throw new NotSupportedException($"{featureName} is not available");
+			throw new NotSupportedException($"{featureName} is not available after setup: {finalState}");
 		}
 	}
 }

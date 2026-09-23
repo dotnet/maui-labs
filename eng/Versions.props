@@ -34,7 +34,7 @@
     <MicrosoftExtensionsLoggingDebugVersion>10.0.5</MicrosoftExtensionsLoggingDebugVersion>
     <MicrosoftExtensionsConfigurationJsonVersion>10.0.5</MicrosoftExtensionsConfigurationJsonVersion>
     <MicrosoftExtensionsConfigurationUserSecretsVersion>10.0.5</MicrosoftExtensionsConfigurationUserSecretsVersion>
-    <SystemTextJsonVersion>10.0.5</SystemTextJsonVersion>
+    <SystemTextJsonVersion>10.0.6</SystemTextJsonVersion>
   </PropertyGroup>
   <PropertyGroup Label="AI">
     <MicrosoftExtensionsAIVersion>10.4.1</MicrosoftExtensionsAIVersion>
