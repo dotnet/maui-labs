@@ -47,10 +47,14 @@ preview runner (`.github/workflows/ci-essentialsai.yml`).
 Consequence: `#available` alone is not enough — the symbols are missing from the 26.x SDK, so the
 Swift shim will not compile there. The code below is written to compile under the **27.0 SDK** and
 to throw a clear error at runtime below 27.0. The GitHub and official native-build jobs select
-the Xcode 27 preview runner and .NET 10 workload `10.0.401`; builds of the existing unsuffixed
-Apple TFMs and the opt-in 27.0 TFMs pass locally against Xcode 27.0. Hosted CI still needs to
-confirm this preview runner and workload combination. All the required symbols are **confirmed
-present in the Xcode 27.0 Beta 4 SDK** (verified via the FoundationModels swiftinterface).
+the Xcode 27 preview runner and .NET 10 workload `10.0.401`. The workload's unsuffixed Apple
+TFMs use 26.5 packs, whose Xcode version check rejects Xcode 27; the native build explicitly
+passes `ValidateXcodeVersion=false` while retaining runtime OS 27 guards. Hosted device tests
+instead opt in to the 27.0 Mac Catalyst TFM on the macOS 27 runner. Local builds of the
+unsuffixed and opt-in 27.0 TFMs pass against Xcode 27.0. Hosted CI still needs to confirm this
+combination; the initial unsuffixed device-test run on macOS 27 timed out without test results.
+All required symbols are **confirmed present in the Xcode 27.0 Beta 4 SDK** (verified via the
+FoundationModels swiftinterface).
 
 ### Building against Xcode 27 side-by-side (no `xcode-select` switch)
 Xcode 27 can be installed alongside the active 26.x. Point individual commands at it with the

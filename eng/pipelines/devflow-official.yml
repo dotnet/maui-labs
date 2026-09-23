@@ -257,7 +257,8 @@ extends:
                   --build \
                   --prepareMachine \
                   --ci \
-                  --projects $(Build.SourcesDirectory)/src/AI/EssentialsAI.slnf
+                  --projects $(Build.SourcesDirectory)/src/AI/EssentialsAI.slnf \
+                  /p:ValidateXcodeVersion=false
               displayName: Build EssentialsAI (macOS)
               env:
                 # Use the same SDK root that received the workload installation.
