@@ -26,6 +26,9 @@ public sealed partial class ChatAreaViewModel : ObservableObject
     [ObservableProperty] private string prompt = string.Empty;
     [ObservableProperty] private bool isBusy;
     [ObservableProperty] private string statusMessage = "Choose a client and send a prompt.";
+    [ObservableProperty] private string emptyTitle = "Start a real chat request";
+    [ObservableProperty] private string emptySubtitle = "Choose a client, configure options, and send a prompt.";
+    [ObservableProperty] private bool isLiveClient = true;
     [ObservableProperty] private bool isImageSupported;
     [ObservableProperty] private ImageSource? selectedImagePreview;
     [ObservableProperty] private string selectedImageName = string.Empty;
@@ -37,6 +40,8 @@ public sealed partial class ChatAreaViewModel : ObservableObject
 
     /// <summary>Gets whether the message list is empty.</summary>
     public bool IsEmpty => Messages.Count == 0;
+
+    public bool IsRecordingClient => !IsLiveClient;
 
     /// <summary>Gets whether a request is active.</summary>
     public bool IsIdle => !IsBusy;
@@ -137,6 +142,8 @@ public sealed partial class ChatAreaViewModel : ObservableObject
         OnPropertyChanged(nameof(IsEmpty));
 
     partial void OnPromptChanged(string value) => RefreshCommands();
+
+    partial void OnIsLiveClientChanged(bool value) => OnPropertyChanged(nameof(IsRecordingClient));
 
     partial void OnCanSendChanged(bool value) => SendCommand?.NotifyCanExecuteChanged();
 

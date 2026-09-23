@@ -106,6 +106,17 @@ internal static class ChatRecordingSerializer
         return message;
     }
 
+    public static IReadOnlyList<ChatMessage> ReadRequestMessages(JsonObject request) =>
+        (request["messages"]?.AsArray() ?? throw new InvalidDataException("The recorded request has no messages."))
+            .Select(message => ReadMessage(message?.AsObject() ?? throw new InvalidDataException("The recorded request contains a null message.")))
+            .ToList();
+
+    public static string? ReadInstructions(JsonObject request) =>
+        request["options"]?["instructions"]?.GetValue<string>();
+
+    public static bool IsStructuredJson(JsonObject request) =>
+        request["options"]?["responseFormat"]?["kind"]?.GetValue<string>() == "json";
+
     public static ChatResponse ReadResponse(JsonObject node)
     {
         var response = new ChatResponse(
@@ -139,7 +150,36 @@ internal static class ChatRecordingSerializer
         var recording = JsonSerializer.Deserialize<ChatRecording>(json, JsonOptions)
             ?? throw new InvalidDataException("The recording file is empty.");
         Validate(recording);
+        ValidatePlayback(recording);
         return recording;
+    }
+
+    public static async Task<ChatRecording> DeserializeAsync(Stream stream, CancellationToken cancellationToken)
+    {
+        var recording = await JsonSerializer.DeserializeAsync<ChatRecording>(stream, JsonOptions, cancellationToken)
+            ?? throw new InvalidDataException("The recording file is empty.");
+        Validate(recording);
+        ValidatePlayback(recording);
+        return recording;
+    }
+
+    private static void ValidatePlayback(ChatRecording recording)
+    {
+        foreach (var interaction in recording.Interactions)
+        {
+            _ = ReadRequestMessages(interaction.Request);
+            _ = ReadInstructions(interaction.Request);
+            _ = IsStructuredJson(interaction.Request);
+            if (interaction.IsStreaming)
+            {
+                foreach (var update in interaction.Updates)
+                    _ = ReadUpdate(update);
+            }
+            else
+            {
+                _ = ReadResponse(interaction.Response!);
+            }
+        }
     }
 
     public static void Validate(ChatRecording recording)
@@ -147,10 +187,14 @@ internal static class ChatRecordingSerializer
         ArgumentNullException.ThrowIfNull(recording);
         if (recording.Format != ChatRecording.FormatName || recording.SchemaVersion != ChatRecording.CurrentSchemaVersion)
             throw new InvalidDataException($"Unsupported recording format '{recording.Format}' version {recording.SchemaVersion}. This sample supports {ChatRecording.FormatName} v{ChatRecording.CurrentSchemaVersion}.");
+        if (recording.Interactions is null)
+            throw new InvalidDataException("The recording has no interactions list.");
 
         for (var index = 0; index < recording.Interactions.Count; index++)
         {
             var interaction = recording.Interactions[index];
+            if (interaction is null || interaction.Request is null || interaction.Updates is null)
+                throw new InvalidDataException($"Interaction {index + 1} is incomplete.");
             if (interaction.Sequence != index)
                 throw new InvalidDataException($"Interaction {index + 1} has sequence {interaction.Sequence}; expected {index}.");
             if (interaction.IsStreaming == (interaction.Response is not null))

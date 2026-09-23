@@ -19,25 +19,37 @@ public sealed class ChatClientService
     /// <summary>Gets the selected client, or a specific reason it is unavailable.</summary>
     public ChatClientSelection GetClient(ChatClientKind kind)
     {
-        var key = kind == ChatClientKind.Cloud ? ChatClientKeys.Cloud : ChatClientKeys.Local;
+        if (kind == ChatClientKind.Recording)
+            return new(kind, new ReplayChatClient(_recording), new(
+                "Recording",
+                _recording.HasReplayRemaining
+                    ? $"Replay {_recording.ReplayPosition + 1}/{_recording.InteractionCount}; no model will be invoked."
+                    : _recording.InteractionCount == 0
+                        ? "The recording is empty. Record a response or choose a recording file."
+                        : "No more interactions. Restart replay or clear the recording.",
+                SupportsImageInput: true));
+
+        if (kind is not (ChatClientKind.Local or ChatClientKind.Cloud))
+            throw new ArgumentOutOfRangeException(nameof(kind));
         try
         {
-            var client = _services.GetRequiredKeyedService<IChatClient>(key);
+            var client = _services.GetRequiredKeyedService<IChatClient>(kind);
             var descriptor = client.GetService<ChatClientDescriptor>()
                 ?? throw new InvalidOperationException("The configured chat client did not expose its descriptor.");
-            return new(client, descriptor);
+            return new(kind, client, descriptor);
         }
         catch (InvalidOperationException exception)
         {
-            return new(null, CreateUnavailableDescriptor(kind, exception.Message));
+            return new(kind, null, CreateUnavailableDescriptor(kind, exception.Message));
         }
     }
 
-    /// <summary>Applies the current recording mode to either selected keyed provider.</summary>
-    public IChatClient GetRequestClient(ChatClientSelection selection) => _recording.Mode switch
+    /// <summary>Records either real provider when enabled, or returns a provider-free replay client.</summary>
+    public IChatClient GetRequestClient(ChatClientSelection selection) => selection.Kind switch
     {
-        RecordingMode.Replay => new ReplayChatClient(_recording),
-        RecordingMode.Record => new RecordingChatClient(selection.Client
+        ChatClientKind.Recording => selection.Client
+            ?? throw new InvalidOperationException("The recording client is unavailable."),
+        _ when _recording.IsRecordingEnabled => new RecordingChatClient(selection.Client
             ?? throw new InvalidOperationException("A real provider is required to record."), _recording),
         _ => selection.Client ?? throw new InvalidOperationException("The selected provider is unavailable."),
     };

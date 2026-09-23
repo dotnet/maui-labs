@@ -16,7 +16,12 @@
                 <RadioButton Content="Cloud (Azure OpenAI)" GroupName="Client" IsChecked="{Binding IsCloudSelected}" IsEnabled="{Binding CanSelectClient}" AutomationId="CloudClientRadio" />
                 <views:InfoTip Text="{Binding CloudProviderInfo}" />
             </HorizontalStackLayout>
+            <HorizontalStackLayout Spacing="4">
+                <RadioButton Content="Recording" GroupName="Client" IsChecked="{Binding IsRecordingSelected}" IsEnabled="{Binding CanSelectClient}" AutomationId="RecordingClientRadio" />
+                <views:InfoTip Text="{Binding RecordingProviderInfo}" />
+            </HorizontalStackLayout>
 
+            <VerticalStackLayout Spacing="12" IsEnabled="{Binding IsRealClientSelected}">
             <BoxView HeightRequest="1" Color="{StaticResource BorderColor}" />
             <Label Text="RESPONSE" FontSize="12" FontAttributes="Bold" TextColor="{StaticResource MutedText}" />
             <HorizontalStackLayout Spacing="4">
@@ -29,33 +34,72 @@
                 <Label Text="Structured JSON" VerticalOptions="Center" />
                 <views:InfoTip Text="Request JSON matching the playground response schema." />
             </HorizontalStackLayout>
+            </VerticalStackLayout>
 
             <BoxView HeightRequest="1" Color="{StaticResource BorderColor}" />
             <Label Text="RECORDING" FontSize="12" FontAttributes="Bold" TextColor="{StaticResource MutedText}" />
             <HorizontalStackLayout Spacing="6" IsEnabled="{Binding CanSelectClient}">
-                <RadioButton Content="Live" GroupName="RecordingMode" IsChecked="{Binding IsLive}" AutomationId="RecordingLiveRadio" />
-                <RadioButton Content="Record" GroupName="RecordingMode" IsChecked="{Binding IsRecord}" AutomationId="RecordingRecordRadio" />
-                <RadioButton Content="Replay" GroupName="RecordingMode" IsChecked="{Binding IsReplay}" AutomationId="RecordingReplayRadio" />
+                <ImageButton Source="record.png" Command="{Binding ToggleRecordingCommand}" IsVisible="{Binding CanStartRecording}"
+                             WidthRequest="44" HeightRequest="44" Padding="10" BackgroundColor="{StaticResource Primary}" CornerRadius="8"
+                             SemanticProperties.Description="Start recording real-client responses"
+                             ToolTipProperties.Text="Start recording"
+                             AutomationId="StartRecordingButton" />
+                <ImageButton Source="stop.png" Command="{Binding ToggleRecordingCommand}" IsVisible="{Binding CanStopRecording}"
+                             WidthRequest="44" HeightRequest="44" Padding="10" BackgroundColor="#B91C1C" CornerRadius="8"
+                             SemanticProperties.Description="Stop recording real-client responses"
+                             ToolTipProperties.Text="Stop recording"
+                             AutomationId="StopRecordingButton" />
+                <ImageButton Source="reset.png" Command="{Binding NewRecordingCommand}" IsVisible="{Binding IsRealClientSelected}"
+                             WidthRequest="44" HeightRequest="44" Padding="10" BackgroundColor="#64748B" CornerRadius="8"
+                             SemanticProperties.Description="Start a new recording, clearing the current one"
+                             ToolTipProperties.Text="New recording"
+                             AutomationId="NewRecordingButton" />
+                <ImageButton Source="folder.png" Command="{Binding ChooseRecordingFileCommand}" IsVisible="{Binding CanChooseRecordingFile}"
+                             WidthRequest="44" HeightRequest="44" Padding="10" BackgroundColor="{StaticResource Primary}" CornerRadius="8"
+                             SemanticProperties.Description="Choose a recording JSON file"
+                             ToolTipProperties.Text="Choose a recording file"
+                             AutomationId="ChooseRecordingFileButton" />
+                <ImageButton Source="close.png" Command="{Binding ClearRecordingCommand}" IsVisible="{Binding CanClearRecording}"
+                             WidthRequest="44" HeightRequest="44" Padding="10" BackgroundColor="#64748B" CornerRadius="8"
+                             SemanticProperties.Description="Clear the current recording"
+                             ToolTipProperties.Text="Clear recording"
+                             AutomationId="ClearRecordingButton" />
+                <ImageButton Source="play.png" Command="{Binding PlayRecordingCommand}" IsVisible="{Binding CanClearRecording}"
+                             WidthRequest="44" HeightRequest="44" Padding="10" BackgroundColor="{StaticResource Primary}" CornerRadius="8"
+                             SemanticProperties.Description="Play the next recorded interaction"
+                             ToolTipProperties.Text="Play next interaction"
+                             AutomationId="PlayRecordingButton">
+                    <ImageButton.Triggers>
+                        <Trigger TargetType="ImageButton" Property="IsEnabled" Value="False">
+                            <Setter Property="BackgroundColor" Value="#CBD5E1" />
+                        </Trigger>
+                    </ImageButton.Triggers>
+                </ImageButton>
+                <ImageButton Source="reset.png" Command="{Binding RestartReplayCommand}" IsVisible="{Binding CanClearRecording}"
+                             WidthRequest="44" HeightRequest="44" Padding="10" BackgroundColor="{StaticResource Primary}" CornerRadius="8"
+                             SemanticProperties.Description="Restart replay from the beginning"
+                             ToolTipProperties.Text="Restart replay"
+                             AutomationId="RestartReplayButton" />
+                <ImageButton Source="save.png" Command="{Binding SaveCommand}" IsVisible="{Binding HasRecording}"
+                             WidthRequest="44" HeightRequest="44" Padding="10" BackgroundColor="{StaticResource Primary}" CornerRadius="8"
+                             SemanticProperties.Description="Save the current recording"
+                             ToolTipProperties.Text="Save recording"
+                             AutomationId="SaveRecordingButton">
+                    <ImageButton.Triggers>
+                        <Trigger TargetType="ImageButton" Property="IsEnabled" Value="False">
+                            <Setter Property="BackgroundColor" Value="#CBD5E1" />
+                        </Trigger>
+                    </ImageButton.Triggers>
+                </ImageButton>
                 <views:InfoTip Text="{Binding StorageInfo}" />
             </HorizontalStackLayout>
             <VerticalStackLayout Spacing="6" IsEnabled="{Binding CanSelectClient}">
-                <Label Text="{Binding TapeSummary}" FontSize="11" TextColor="{StaticResource MutedText}" LineBreakMode="WordWrap" />
-                <HorizontalStackLayout Spacing="6">
-                    <Button Text="New" Command="{Binding NewRecordingCommand}" AutomationId="NewRecordingButton" />
-                    <Button Text="Save" Command="{Binding SaveCommand}" AutomationId="SaveRecordingButton" />
-                    <Button Text="Load" Command="{Binding LoadCommand}" AutomationId="LoadRecordingButton" />
-                </HorizontalStackLayout>
-                <Button Text="Restart replay" Command="{Binding RestartReplayCommand}" HorizontalOptions="Start" AutomationId="RestartReplayButton">
-                    <Button.Triggers>
-                        <Trigger TargetType="Button" Property="IsEnabled" Value="False">
-                            <Setter Property="BackgroundColor" Value="#CBD5E1" />
-                            <Setter Property="TextColor" Value="#475569" />
-                        </Trigger>
-                    </Button.Triggers>
-                </Button>
+                <Label Text="{Binding TapeSummary}" IsVisible="{Binding IsRealClientSelected}" FontSize="11" TextColor="{StaticResource MutedText}" LineBreakMode="WordWrap" />
+                <Label Text="{Binding PlaybackSummary}" IsVisible="{Binding IsRecordingSelected}" FontSize="11" TextColor="{StaticResource MutedText}" LineBreakMode="WordWrap" />
                 <Label Text="{Binding RecordingStatus}" FontSize="11" TextColor="{StaticResource MutedText}" LineBreakMode="WordWrap" />
             </VerticalStackLayout>
 
+            <VerticalStackLayout Spacing="12" IsEnabled="{Binding IsRealClientSelected}">
             <BoxView HeightRequest="1" Color="{StaticResource BorderColor}" />
             <Label Text="CONVERSATION" FontSize="12" FontAttributes="Bold" TextColor="{StaticResource MutedText}" />
             <HorizontalStackLayout Spacing="4">
@@ -140,6 +184,7 @@
                 <views:InfoTip Grid.Row="7" Grid.Column="2" Text="Stops generation when any comma-separated sequence appears." />
                 <Entry Grid.Row="7" Grid.Column="3" Text="{Binding StopSequences}" Placeholder="comma-separated" AutomationId="StopSequencesEntry" />
             </Grid>
+            </VerticalStackLayout>
         </VerticalStackLayout>
     </ScrollView>
 </ContentView>

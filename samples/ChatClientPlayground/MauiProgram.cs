@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.ClientModel;
 using Azure.AI.OpenAI;
+using ChatClientPlayground.Models;
 using ChatClientPlayground.Services;
 using ChatClientPlayground.ViewModels;
 using Microsoft.Extensions.AI;
@@ -56,13 +57,13 @@ public static class MauiProgram
 
     private static void AddLocalChatClientSlot(IServiceCollection services)
     {
-        services.AddKeyedSingleton<IChatClient>(ChatClientKeys.Local, static (serviceProvider, _) =>
+        services.AddKeyedSingleton<IChatClient>(ChatClientKind.Local, static (serviceProvider, _) =>
             CreateLocalChatClient(serviceProvider.GetRequiredService<ILoggerFactory>()));
     }
 
     private static void AddCloudChatClientSlot(IServiceCollection services, IConfiguration configuration)
     {
-        services.AddKeyedSingleton<IChatClient>(ChatClientKeys.Cloud, (serviceProvider, _) =>
+        services.AddKeyedSingleton<IChatClient>(ChatClientKind.Cloud, (serviceProvider, _) =>
             CreateCloudChatClient(
                 configuration["AI:Endpoint"],
                 configuration["AI:ApiKey"],

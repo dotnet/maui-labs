@@ -8,4 +8,7 @@ public enum ChatClientKind
 
     /// <summary>A remotely hosted provider configured through local user secrets.</summary>
     Cloud,
+
+    /// <summary>Replays the active recording without a provider.</summary>
+    Recording,
 }

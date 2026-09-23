@@ -1,18 +1,18 @@
 # ChatClientPlayground
 
-`ChatClientPlayground` is a single-page .NET MAUI reference sample for exercising real `Microsoft.Extensions.AI` `IChatClient` features. It switches at runtime between keyed device-local and cloud slots. It contains no mock clients, canned responses, or cloud fallback.
+`ChatClientPlayground` is a single-page .NET MAUI reference sample for exercising real `Microsoft.Extensions.AI` `IChatClient` features. It switches at runtime between keyed device-local and cloud slots, or a provider-free recording playback client. Live requests contain no mock clients, canned responses, or cloud fallback.
 
 > **Local-only credential warning:** Debug builds embed the existing shared local `secrets.json` so a device app can read it. Release builds do not embed user secrets. Never distribute, publish, share, or commit a Debug build that embeds secrets.
 
 ## Architecture
 
-- `MauiProgram` is the composition root. It registers exactly two real keyed `IChatClient` factories under `ChatClientKeys.Local` and `ChatClientKeys.Cloud`, wrapping each with logging, `UseFunctionInvocation()`, and `DescribedChatClient`.
+- `MauiProgram` is the composition root. It registers exactly two real keyed `IChatClient` factories under `ChatClientKind.Local` and `ChatClientKind.Cloud`, wrapping each with logging, `UseFunctionInvocation()`, and `DescribedChatClient`.
 - `DescribedChatClient` exposes its metadata-only `ChatClientDescriptor` through `GetService<ChatClientDescriptor>()` while forwarding every other service request to its real inner client. A factory throws a precise error rather than registering a fake client when its slot cannot be constructed.
-- `Services/ChatClientService` resolves a `ChatClientKind` to `ChatClientSelection` (the real client plus descriptor, or an actionable unavailable state). `MainViewModel` does not access `IServiceProvider`.
+- `Services/ChatClientService` resolves a `ChatClientKind` to `ChatClientSelection` (a real client, the provider-free recording client, or an actionable unavailable state). `MainViewModel` does not access `IServiceProvider`.
 - `Services/ImageInputService` copies a picked image into memory or loads the packaged sample image so both paths create the same image message.
 - `Services/PlaygroundTools` exposes deterministic local date/time and calculator `AIFunctionFactory.Create` tools.
 - `Models/PlaygroundJsonContext` provides source-generated, trim-safe schema metadata for explicit-schema JSON responses.
-- `Services/ChatClientService` resolves either keyed provider and applies the same Live, Record, or Replay client behavior to both local and cloud requests. `Services/ChatRecordingService` owns the in-memory tape and atomic app-local save/load; the serializer and client wrappers live beside the other services, with their recording data types in `Models/`. This sample-contained subset does not reference the recording project used by other work.
+- `Services/ChatClientService` optionally wraps either keyed real provider to record its responses and resolves the Recording client directly for playback. `Services/ChatRecordingService` manages one active recording and replay cursor, atomically auto-saves completed interactions to app cache, and replaces the active recording when a file is selected. The serializer and client wrappers live beside the other services, with their data types in `Models/`. This sample-contained subset does not reference the recording project used by other work.
 - `ViewModels/SettingsPaneViewModel` and `ChatAreaViewModel` are registered in DI. `MainViewModel` receives both explicitly, wires their commands/events, and owns portable `List<ChatMessage>`, cancellation, request execution, and tool/response presentation. Settings owns provider, `ChatOptions`, and recording controls; Chat owns messages, composer, and attachment UI state.
 - `MainPage` composes compiled-binding `SettingsPane` and `ChatArea` child view models. `ChatArea` keeps a `CollectionView` with `ItemSizingStrategy="MeasureAllItems"` and `KeepLastItemInView`; changed streaming items invalidate their own and the collection's measure before a delayed index-based scroll. Debug builds include the DevFlow agent.
 
@@ -43,13 +43,9 @@ System instructions are not displayed until a request actually uses them. The ch
 
 ## Recording and replay
 
-The **RECORDING** section has three modes:
+With **Local provider** or **Cloud** selected, the **RECORDING** section shows a round **Start recording** icon to record real streaming or non-streaming responses; the square **Stop recording** icon turns recording off without discarding it. Each completed interaction auto-saves to `FileSystem.CacheDirectory/chat-playground.autosave.json`. The reset icon starts a new empty recording; the save icon appears when a recording exists and copies it atomically to `FileSystem.AppDataDirectory/chat-playground.recording.json`. The icon tooltips and info tip explain these actions and paths. The OS may clear app cache; save recordings you need to keep. Debug recordings can contain private content; review them before sharing.
 
-- **Live** sends requests to the selected real provider without changing the tape.
-- **Record** sends the exact same streaming or non-streaming call to whichever real keyed provider is selected (local or cloud), then adds that interaction to the in-memory tape.
-- **Replay** consumes the tape in order through a `ReplayChatClient`; it has no provider reference and never invokes a local or cloud model. Replay is available even when the selected provider is unavailable. Image admission is consequently based on strict matching against the recorded `DataContent`, rather than provider image metadata.
-
-Use **New** to discard the in-memory tape, **Save** to atomically write it, **Load** to replace the in-memory tape from disk, and **Restart replay** to reset its cursor. The stable app-local path is `FileSystem.AppDataDirectory/chat-playground.recording.json`, shown in the recording info tip. **Clear conversation** intentionally keeps the tape; while Replay is selected, it restarts the cursor so repeating the recorded conversation is straightforward.
+Select the third **Recording** client to play the active recording without invoking either model, even if a provider is unavailable. The **RECORDING** section then shows only playback actions: when the recording is empty, the folder icon chooses a JSON file; loading validates it and atomically replaces the cached active recording. When it contains interactions, the folder changes to **Clear recording**, which empties it before a different file can be selected. **Play** renders the next recorded interaction and its original request; the reset icon restarts from the beginning, and the save icon remains available for a populated recording. Live response, tool, generation, and chat-composer controls are disabled while Recording is selected. Switch to Local or Cloud to continue chatting with the replayed conversation history and your existing live settings. **Clear conversation** keeps the recording and restarts replay from the beginning. The low-level replay client still strictly matches message and option data against recorded `DataContent` when called through `IChatClient`.
 
 The on-disk data identifies `chat-client-playground-recording` schema version 1 and is validated when loaded. The canonical request matcher compares messages, contents, and supported options at a JSON path and reports the first mismatch (for example, `$.messages[1].contents[0].text`). Each interaction records whether it was streaming, so replay rejects calling the wrong `IChatClient` API. Non-streaming recording calls the inner `GetResponseAsync` directly; it is never silently converted to streaming.
 
@@ -78,7 +74,7 @@ For `AI:Endpoint`, use either the Azure OpenAI resource root (for example, `http
 Replace the local factory in `MauiProgram` with Windows AI, Android CoreAI, or any custom real `IChatClient`, then wrap it with its descriptor:
 
 ```csharp
-builder.Services.AddKeyedSingleton<IChatClient>(ChatClientKeys.Local, static (services, _) =>
+builder.Services.AddKeyedSingleton<IChatClient>(ChatClientKind.Local, static (services, _) =>
     new DescribedChatClient(
         new MyLocalChatClient()
         .AsBuilder()

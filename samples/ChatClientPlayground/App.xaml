@@ -27,6 +27,16 @@
                 <Setter Property="CornerRadius" Value="8" />
                 <Setter Property="Padding" Value="14,8" />
             </Style>
+            <Style TargetType="RadioButton">
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="MinimumHeightRequest">
+                    <Setter.Value>
+                        <OnPlatform x:TypeArguments="x:Double" Default="44">
+                            <On Platform="MacCatalyst,WinUI" Value="32" />
+                        </OnPlatform>
+                    </Setter.Value>
+                </Setter>
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

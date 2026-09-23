@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.ComponentModel;
@@ -37,6 +38,7 @@ public partial class MainViewModel : ObservableObject
         Chat = chat;
         Chat.SendCommand = new AsyncRelayCommand(SendAsync, () => Chat.CanSend);
         Chat.CancelCommand = new RelayCommand(Cancel, () => Chat.IsBusy);
+        Settings.PlayRecordingCommand = new AsyncRelayCommand(PlayRecordingAsync, CanPlayRecording);
         Settings.PropertyChanged += SettingsPropertyChanged;
         Chat.PropertyChanged += ChatPropertyChanged;
         ApplyClientSelection(_chatClients.GetClient(Settings.SelectedClient));
@@ -58,13 +60,12 @@ public partial class MainViewModel : ObservableObject
         var selection = _selectedClient;
         var descriptor = selection.Descriptor;
         var attachment = Chat.SelectedImage;
-        var isReplay = _recording.Mode == RecordingMode.Replay;
-        if (isReplay && !_recording.HasReplayRemaining)
+        if (selection.Kind == ChatClientKind.Recording)
         {
-            Chat.StatusMessage = "Replay reached the end of the recording. Restart replay, load a recording, or switch modes.";
+            Chat.StatusMessage = "Use Play in the Recording section to replay an interaction.";
             return;
         }
-        if (!isReplay && (!selection.IsAvailable || selection.Client is null))
+        if (!selection.IsAvailable || selection.Client is null)
         {
             Chat.StatusMessage = descriptor.Status;
             return;
@@ -74,12 +75,12 @@ public partial class MainViewModel : ObservableObject
             Chat.StatusMessage = "Enter a prompt or attach an image before sending.";
             return;
         }
-        if (!isReplay && !descriptor.SupportsImageInput && HistoryContainsImage)
+        if (!descriptor.SupportsImageInput && HistoryContainsImage)
         {
             Chat.StatusMessage = $"This conversation contains image input. {descriptor.DisplayName} cannot replay image messages; clear the conversation or switch to a provider that supports images.";
             return;
         }
-        if (!isReplay && attachment is not null && !descriptor.SupportsImageInput)
+        if (attachment is not null && !descriptor.SupportsImageInput)
         {
             Chat.StatusMessage = $"{descriptor.DisplayName} does not support image input. Switch to a provider that supports images or remove the image.";
             return;
@@ -130,11 +131,9 @@ public partial class MainViewModel : ObservableObject
                 await SendResponseAsync(client, options, useStructuredJson, requestGeneration, requestCancellation.Token);
 
             if (IsCurrentRequest(requestGeneration))
-                Chat.StatusMessage = isReplay
-                    ? $"Replay complete ({_recording.ReplayPosition}/{_recording.InteractionCount})."
-                    : _recording.Mode == RecordingMode.Record
-                        ? $"Response complete and recorded ({_recording.InteractionCount} interactions)."
-                        : "Response complete.";
+                Chat.StatusMessage = _recording.IsRecordingEnabled
+                    ? $"Response complete and recorded ({_recording.InteractionCount} interactions)."
+                    : "Response complete.";
         }
         catch (OperationCanceledException)
         {
@@ -165,6 +164,120 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    private bool CanPlayRecording() =>
+        Settings.SelectedClient == ChatClientKind.Recording &&
+        _recording.HasReplayRemaining && !Chat.IsBusy && !Settings.IsBusy;
+
+    private async Task PlayRecordingAsync()
+    {
+        if (!CanPlayRecording())
+            return;
+
+        var generation = ++_requestGeneration;
+        using var cancellation = new CancellationTokenSource();
+        _requestCancellation = cancellation;
+        Chat.IsBusy = true;
+        Settings.IsBusy = true;
+        Chat.StatusMessage = "Replaying recorded interaction…";
+
+        try
+        {
+            var interaction = _recording.PeekNext();
+            RenderRecordedRequest(interaction.Request);
+            var structured = ChatRecordingSerializer.IsStructuredJson(interaction.Request);
+            if (interaction.IsStreaming)
+                await RenderStreamingUpdatesAsync(ReadRecordedUpdates(interaction, cancellation.Token), structured, generation);
+            else
+                PresentResponse(ChatRecordingSerializer.ReadResponse(
+                    interaction.Response ?? throw new InvalidDataException("The recording has no response.")), structured);
+
+            if (IsCurrentRequest(generation))
+            {
+                _recording.CompleteReplay(interaction);
+                Chat.StatusMessage = $"Replay complete ({_recording.ReplayPosition}/{_recording.InteractionCount}). Switch to a live client to continue.";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            if (IsCurrentRequest(generation))
+                Chat.StatusMessage = "Replay cancelled.";
+        }
+        catch (Exception exception)
+        {
+            if (IsCurrentRequest(generation))
+            {
+                Chat.StatusMessage = $"Replay failed: {exception.Message}";
+                AddError($"Replay failed: {exception.Message}");
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(_requestCancellation, cancellation))
+                _requestCancellation = null;
+            if (IsCurrentRequest(generation))
+            {
+                Chat.IsBusy = false;
+                Settings.IsBusy = false;
+            }
+        }
+    }
+
+    private void RenderRecordedRequest(System.Text.Json.Nodes.JsonObject request)
+    {
+        var messages = ChatRecordingSerializer.ReadRequestMessages(request);
+        _history.Clear();
+        _history.AddRange(messages);
+        Chat.Messages.Clear();
+        _systemInstructionsMessage = null;
+        UpdateSystemInstructions(ChatRecordingSerializer.ReadInstructions(request));
+
+        var pending = new List<ChatMessage>();
+        void Flush()
+        {
+            RenderResponseMessages(pending, renderText: true, "Text");
+            pending.Clear();
+        }
+
+        foreach (var message in messages)
+        {
+            if (message.Role.Value == ChatRole.User.Value)
+            {
+                Flush();
+                var text = string.Concat(message.Contents.OfType<TextContent>().Select(content => content.Text));
+                var image = message.Contents.OfType<DataContent>().FirstOrDefault();
+                Chat.Messages.Add(new ChatMessageViewModel
+                {
+                    IsUser = true,
+                    Label = "You",
+                    Text = string.IsNullOrWhiteSpace(text) ? image is null ? "(Empty message)" : "Attached image" : text,
+                    ImageSource = image is null ? null : CreateImageSource(image.Data.ToArray()),
+                });
+            }
+            else if (message.Role.Value == ChatRole.System.Value)
+            {
+                Flush();
+                UpdateSystemInstructions(string.Concat(message.Contents.OfType<TextContent>().Select(content => content.Text)));
+            }
+            else
+            {
+                pending.Add(message);
+            }
+        }
+        Flush();
+    }
+
+    private static async IAsyncEnumerable<ChatResponseUpdate> ReadRecordedUpdates(
+        RecordedInteraction interaction,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        foreach (var update in interaction.Updates)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return ChatRecordingSerializer.ReadUpdate(update);
+            await Task.Yield();
+        }
+    }
+
     private async Task SendResponseAsync(
         IChatClient client,
         ChatOptions options,
@@ -176,6 +289,11 @@ public partial class MainViewModel : ObservableObject
         if (!IsCurrentRequest(requestGeneration))
             return;
 
+        PresentResponse(response, useStructuredJson);
+    }
+
+    private void PresentResponse(ChatResponse response, bool useStructuredJson)
+    {
         _history.AddRange(response.Messages);
         var responseText = RenderResponseMessages(response.Messages, renderText: !useStructuredJson, "Text");
         if (useStructuredJson)
@@ -187,12 +305,18 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    private async Task SendStreamingAsync(
+    private Task SendStreamingAsync(
         IChatClient client,
         ChatOptions options,
         bool useStructuredJson,
         long requestGeneration,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) =>
+        RenderStreamingUpdatesAsync(client.GetStreamingResponseAsync(_history, options, cancellationToken), useStructuredJson, requestGeneration);
+
+    private async Task RenderStreamingUpdatesAsync(
+        IAsyncEnumerable<ChatResponseUpdate> updates,
+        bool useStructuredJson,
+        long requestGeneration)
     {
         ChatMessage? activeTextHistoryMessage = null;
         ChatMessageViewModel? activeTextBubble = null;
@@ -205,7 +329,7 @@ public partial class MainViewModel : ObservableObject
 
         try
         {
-            await foreach (var update in client.GetStreamingResponseAsync(_history, options, cancellationToken))
+            await foreach (var update in updates)
             {
                 if (!IsCurrentRequest(requestGeneration))
                     return;
@@ -486,14 +610,14 @@ public partial class MainViewModel : ObservableObject
     private bool CanSend()
     {
         var selection = _selectedClient;
-        if (Chat.IsBusy ||
+        if (Chat.IsBusy || Settings.IsBusy ||
             string.IsNullOrWhiteSpace(Chat.Prompt) && !Chat.HasSelectedImage)
         {
             return false;
         }
 
-        if (_recording.Mode == RecordingMode.Replay)
-            return _recording.HasReplayRemaining;
+        if (selection.Kind == ChatClientKind.Recording)
+            return false;
 
         if (!selection.IsAvailable ||
             (Chat.HasSelectedImage && !selection.Descriptor.SupportsImageInput) ||
@@ -511,12 +635,15 @@ public partial class MainViewModel : ObservableObject
     {
         _selectedClient = selection;
         var descriptor = selection.Descriptor;
-        var isReplay = _recording.Mode == RecordingMode.Replay;
-        Chat.IsImageSupported = isReplay || descriptor.SupportsImageInput;
+        var isReplay = selection.Kind == ChatClientKind.Recording;
+        Chat.IsLiveClient = !isReplay;
+        Chat.EmptyTitle = isReplay ? "Replay a recorded chat" : "Start a real chat request";
+        Chat.EmptySubtitle = isReplay
+            ? "Use Play in the Recording section to see the next interaction."
+            : "Choose a client, configure options, and send a prompt.";
+        Chat.IsImageSupported = !isReplay && descriptor.SupportsImageInput;
         Chat.StatusMessage = isReplay
-            ? _recording.HasReplayRemaining
-                ? $"Replay ready ({_recording.ReplayPosition + 1}/{_recording.InteractionCount}); no provider will be invoked."
-                : "Replay is at the end of the recording. Restart replay or load a recording."
+            ? descriptor.Status
             : !descriptor.SupportsImageInput && Chat.HasSelectedImage
             ? $"{descriptor.Status} The pending image cannot be sent by {descriptor.DisplayName}."
             : !descriptor.SupportsImageInput && HistoryContainsImage
@@ -528,7 +655,6 @@ public partial class MainViewModel : ObservableObject
     private void SettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(SettingsPaneViewModel.SelectedClient) or
-            nameof(SettingsPaneViewModel.Mode) or
             nameof(SettingsPaneViewModel.InteractionCount) or
             nameof(SettingsPaneViewModel.ReplayPosition))
             ApplyClientSelection(_chatClients.GetClient(Settings.SelectedClient));
@@ -550,6 +676,7 @@ public partial class MainViewModel : ObservableObject
     {
         Chat.CanSend = CanSend();
         Chat.RefreshCommands();
+        Settings.PlayRecordingCommand?.NotifyCanExecuteChanged();
     }
 
     private void Cancel()
@@ -567,11 +694,11 @@ public partial class MainViewModel : ObservableObject
         _history.Clear();
         Chat.Messages.Clear();
         _systemInstructionsMessage = null;
-        if (_recording.Mode == RecordingMode.Replay)
+        if (Settings.SelectedClient == ChatClientKind.Recording)
             _recording.RestartReplay();
         Chat.IsBusy = false;
         Settings.IsBusy = false;
-        Chat.StatusMessage = _recording.Mode == RecordingMode.Replay
+        Chat.StatusMessage = Settings.SelectedClient == ChatClientKind.Recording
             ? "Conversation cleared and replay restarted."
             : "Conversation cleared.";
         UpdateChatCanSend();

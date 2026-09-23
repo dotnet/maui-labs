@@ -5,7 +5,7 @@
 xmlns:views="clr-namespace:ChatClientPlayground.Views"
              x:Class="ChatClientPlayground.Views.ChatArea"
              x:DataType="viewModels:ChatAreaViewModel">
-    <Grid RowDefinitions="*,Auto" RowSpacing="12">
+    <Grid RowDefinitions="*,Auto" RowSpacing="12" Padding="0,0,0,18">
         <Grid>
             <CollectionView x:Name="MessagesView"
                             ItemsSource="{Binding Messages}"
@@ -46,8 +46,8 @@ xmlns:views="clr-namespace:ChatClientPlayground.Views"
                                  Padding="28"
                                  HorizontalOptions="Center"
                                  VerticalOptions="Center">
-                <Label Text="Start a real chat request" FontSize="18" HorizontalTextAlignment="Center" />
-                <Label Text="Choose a client, configure options, and send a prompt." TextColor="{StaticResource MutedText}" HorizontalTextAlignment="Center" />
+                <Label Text="{Binding EmptyTitle}" FontSize="18" HorizontalTextAlignment="Center" />
+                <Label Text="{Binding EmptySubtitle}" TextColor="{StaticResource MutedText}" HorizontalTextAlignment="Center" />
             </VerticalStackLayout>
         </Grid>
 
@@ -80,7 +80,7 @@ xmlns:views="clr-namespace:ChatClientPlayground.Views"
             </VerticalStackLayout>
         </Border>
 
-        <Border Grid.Row="1"
+        <Border Grid.Row="1" IsVisible="{Binding IsLiveClient}"
                 BackgroundColor="{StaticResource PanelBackground}"
                 Stroke="{StaticResource BorderColor}"
                 StrokeShape="RoundRectangle 12"
@@ -150,5 +150,9 @@ xmlns:views="clr-namespace:ChatClientPlayground.Views"
                 </Grid>
             </VerticalStackLayout>
         </Border>
+        <Label Grid.Row="1" IsVisible="{Binding IsRecordingClient}"
+               Text="Use Play in Recording to replay. Switch to Local or Cloud to continue chatting."
+               FontSize="12" TextColor="{StaticResource MutedText}"
+               HorizontalTextAlignment="Center" />
     </Grid>
 </ContentView>

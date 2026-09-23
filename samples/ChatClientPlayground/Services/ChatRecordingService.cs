@@ -1,10 +1,12 @@
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using ChatClientPlayground.Models;
+using Microsoft.Extensions.Logging;
 
 namespace ChatClientPlayground.Services;
 
-/// <summary>Owns the in-memory tape, its replay cursor, and stable app-local persistence.</summary>
+/// <summary>Auto-saves and replays the active recording.</summary>
 public sealed class ChatRecordingService
 {
     private readonly object _gate = new();
@@ -13,8 +15,27 @@ public sealed class ChatRecordingService
 
     public event EventHandler? Changed;
 
-    public RecordingMode Mode { get; private set; }
+    public ChatRecordingService(ILogger<ChatRecordingService> logger)
+    {
+        if (File.Exists(CachePath))
+        {
+            try
+            {
+                _recording = ChatRecordingSerializer.Deserialize(File.ReadAllText(CachePath, Encoding.UTF8));
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or InvalidDataException or FormatException or NotSupportedException)
+            {
+                CacheLoadError = $"Could not restore the last recording: {exception.Message}";
+                logger.LogWarning(exception, "Could not restore the last playground recording.");
+            }
+        }
+
+    }
+
+    public bool IsRecordingEnabled { get; private set; }
+    public string? CacheLoadError { get; }
     public string Path { get; } = System.IO.Path.Combine(FileSystem.AppDataDirectory, "chat-playground.recording.json");
+    public string CachePath { get; } = System.IO.Path.Combine(FileSystem.CacheDirectory, "chat-playground.autosave.json");
 
     public int InteractionCount
     {
@@ -31,10 +52,10 @@ public sealed class ChatRecordingService
         get { lock (_gate) return _cursor < _recording.Interactions.Count; }
     }
 
-    public void SetMode(RecordingMode mode)
+    public void SetRecordingEnabled(bool enabled)
     {
         lock (_gate)
-            Mode = mode;
+            IsRecordingEnabled = enabled;
         NotifyChanged();
     }
 
@@ -42,7 +63,9 @@ public sealed class ChatRecordingService
     {
         lock (_gate)
         {
-            _recording = new ChatRecording();
+            var recording = new ChatRecording();
+            WriteAtomic(CachePath, ChatRecordingSerializer.Serialize(recording));
+            _recording = recording;
             _cursor = 0;
         }
         NotifyChanged();
@@ -57,17 +80,12 @@ public sealed class ChatRecordingService
 
     public void AddResponse(JsonObject request, Microsoft.Extensions.AI.ChatResponse response)
     {
-        lock (_gate)
+        AddInteraction(new RecordedInteraction
         {
-            _recording.Interactions.Add(new RecordedInteraction
-            {
-                Sequence = _recording.Interactions.Count,
-                IsStreaming = false,
-                Request = request,
-                Response = ChatRecordingSerializer.Response(response),
-            });
-        }
-        NotifyChanged();
+            IsStreaming = false,
+            Request = request,
+            Response = ChatRecordingSerializer.Response(response),
+        });
     }
 
     public RecordedInteraction BeginStreaming(JsonObject request) => new()
@@ -82,14 +100,35 @@ public sealed class ChatRecordingService
             interaction.Updates.Add(update);
     }
 
-    public void CompleteStreaming(RecordedInteraction interaction)
+    public void CompleteStreaming(RecordedInteraction interaction) => AddInteraction(interaction);
+
+    private void AddInteraction(RecordedInteraction interaction)
     {
         lock (_gate)
         {
             interaction.Sequence = _recording.Interactions.Count;
             _recording.Interactions.Add(interaction);
+            try
+            {
+                WriteAtomic(CachePath, ChatRecordingSerializer.Serialize(_recording));
+            }
+            catch
+            {
+                _recording.Interactions.RemoveAt(_recording.Interactions.Count - 1);
+                throw;
+            }
         }
         NotifyChanged();
+    }
+
+    public RecordedInteraction PeekNext()
+    {
+        lock (_gate)
+        {
+            if (_cursor >= _recording.Interactions.Count)
+                throw new InvalidOperationException("Replay reached the end of the recording. Restart replay to play again.");
+            return _recording.Interactions[_cursor];
+        }
     }
 
     public RecordedInteraction PeekNext(bool isStreaming, JsonObject request)
@@ -98,7 +137,7 @@ public sealed class ChatRecordingService
         lock (_gate)
         {
             if (_cursor >= _recording.Interactions.Count)
-                throw new InvalidOperationException("Replay reached the end of the recording. Load or record more interactions, or restart replay.");
+                throw new InvalidOperationException("Replay reached the end of the recording. Record more interactions or restart replay.");
 
             interaction = _recording.Interactions[_cursor];
             if (interaction.IsStreaming != isStreaming)
@@ -133,32 +172,36 @@ public sealed class ChatRecordingService
         lock (_gate)
             json = ChatRecordingSerializer.Serialize(_recording);
 
-        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path)!);
-        var stagingPath = Path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        WriteAtomic(Path, json);
+    }
+
+    public async Task LoadFileAsync(Stream stream, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        var recording = await ChatRecordingSerializer.DeserializeAsync(stream, cancellationToken);
+        lock (_gate)
+        {
+            WriteAtomic(CachePath, ChatRecordingSerializer.Serialize(recording));
+            _recording = recording;
+            _cursor = 0;
+        }
+        NotifyChanged();
+    }
+
+    private static void WriteAtomic(string path, string json)
+    {
+        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+        var stagingPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
             File.WriteAllText(stagingPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-            File.Move(stagingPath, Path, overwrite: true);
+            File.Move(stagingPath, path, overwrite: true);
         }
         finally
         {
             if (File.Exists(stagingPath))
                 File.Delete(stagingPath);
         }
-    }
-
-    public void Load()
-    {
-        if (!File.Exists(Path))
-            throw new FileNotFoundException("No saved playground recording exists yet.", Path);
-
-        var recording = ChatRecordingSerializer.Deserialize(File.ReadAllText(Path, Encoding.UTF8));
-        lock (_gate)
-        {
-            _recording = recording;
-            _cursor = 0;
-        }
-        NotifyChanged();
     }
 
     private void NotifyChanged() => Changed?.Invoke(this, EventArgs.Empty);
