@@ -20,6 +20,7 @@
     <Project Path="samples/DevFlow.Sample.WPF/DevFlow.Sample.WPF.csproj" />
     <Project Path="samples/DevFlow.Sample/DevFlow.Sample.csproj" />
     <Project Path="samples/EssentialsAISample/EssentialsAISample.csproj" />
+    <Project Path="samples/ChatClientPlayground/ChatClientPlayground.csproj" />
   </Folder>
   <Folder Name="/src/" />
   <Folder Name="/src/AI/">
