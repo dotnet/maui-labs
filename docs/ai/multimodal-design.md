@@ -3,8 +3,8 @@
 Status: **Image input implemented on the Apple backend; live vision completion still requires
 an OS 27 device with a ready vision model.** This document records the design and verified API
 signatures for multimodal prompting in `Microsoft.Maui.Essentials.AI`, mapped onto
-`Microsoft.Extensions.AI` (M.E.AI) abstractions. Examples describing `AppleImage` helpers or CI
-changes below are proposals, not shipped API.
+`Microsoft.Extensions.AI` (M.E.AI) abstractions. Examples describing `AppleImage` helpers below
+are proposals, not shipped API.
 
 > Scope: **images in** only. Image *generation* (images out, via `ImagePlayground`) is a separate
 > effort — it builds on today's toolchain and does not depend on anything here. It is intentionally
@@ -36,8 +36,8 @@ describe, classify, OCR/extract, compare — exposed through the existing
 ## 1. Toolchain feasibility (verified)
 
 Verified by grepping the `FoundationModels` `.swiftinterface` in the installed Xcode 26.6
-(macOS 26.5) SDK and cross-checking Apple's docs. CI currently pins **Xcode 26.3**
-(`.github/workflows/ci-essentialsai.yml`).
+(macOS 26.5) SDK and cross-checking Apple's docs. Essentials.AI CI now selects the **Xcode 27**
+preview runner (`.github/workflows/ci-essentialsai.yml`).
 
 | Symbol | Availability | In 26.x SDK? |
 |---|---|---|
@@ -46,10 +46,11 @@ Verified by grepping the `FoundationModels` `.swiftinterface` in the installed X
 
 Consequence: `#available` alone is not enough — the symbols are missing from the 26.x SDK, so the
 Swift shim will not compile there. The code below is written to compile under the **27.0 SDK** and
-to throw a clear error at runtime below 27.0. **The GitHub and official native-build jobs still
-pin Xcode 26.3 and must move to a supported Xcode 27 runner and .NET 10 workload** before this
-feature can pass those pipelines. All the required symbols are
-**confirmed present in the Xcode 27.0 Beta 4 SDK** (verified via the FoundationModels swiftinterface).
+to throw a clear error at runtime below 27.0. The GitHub and official native-build jobs select
+the Xcode 27 preview runner and .NET 10 workload `10.0.401`; builds of the existing unsuffixed
+Apple TFMs and the opt-in 27.0 TFMs pass locally against Xcode 27.0. Hosted CI still needs to
+confirm this preview runner and workload combination. All the required symbols are **confirmed
+present in the Xcode 27.0 Beta 4 SDK** (verified via the FoundationModels swiftinterface).
 
 ### Building against Xcode 27 side-by-side (no `xcode-select` switch)
 Xcode 27 can be installed alongside the active 26.x. Point individual commands at it with the
@@ -527,11 +528,11 @@ var msg = new ChatMessage(ChatRole.User, [
   OS support; runtime model readiness is determined by the request itself.
 - `GenerationOptions(sampling:)` was renamed to `samplingMode:` to compile without the Xcode 27
   deprecation warning.
-- `.github/workflows/ci-essentialsai.yml` and the official pipeline require an Xcode 27 native
-  runner (GitHub's preview label is `xcode-27`) and a matching .NET 10 workload. The current 26.3
-  pins cannot compile the Swift shim (`Attachment` / `Transcript.Segment.attachment` are absent).
-  The official native-build job and Windows packaging of its Apple artifacts must be validated
-  together before release.
+- `.github/workflows/ci-essentialsai.yml` and the official pipeline now use the `xcode-27`
+  preview runner and .NET 10 workload `10.0.401` for native builds. The Windows packaging jobs
+  use the same workload version and receive the native artifacts from the macOS build. Validate
+  hosted CI and official signing before release; the earlier Xcode 26.3 pins could not compile
+  the Swift shim (`Attachment` / `Transcript.Segment.attachment` are absent).
 - No new frameworks to link — `FoundationModels` is a system framework resolved by the Swift shim.
 - Update `PublicAPI/**/PublicAPI.Unshipped.txt` for `AppleImage.*` (and any other new public API).
 - `README.md` platform matrix: add an "Image input (27.0+)" row.

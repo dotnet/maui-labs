@@ -28,17 +28,17 @@ on:
       - 'NuGet.config'
 
 jobs:
-  # Step 1: Build on macOS — compiles Swift xcframeworks, produces .resources.zip,
+  # Step 1: Build on Xcode 27 — compiles Swift xcframeworks, produces .resources.zip,
   # and uploads them as native-apple-essentialsai artifact via _build.yml.
   build-macos:
     uses: ./.github/workflows/_build.yml
     with:
       project-path: src/AI/EssentialsAI.slnf
       project-name: essentialsai
-      os: '["macos-latest"]'
+      os: '["xcode-27"]'
       run-tests: true
       pack: true
-      xcode-version: '26.3'
+      workload-version: '10.0.401'
       android-project: src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj
 
   # Step 2: Build on Windows — downloads native .resources.zip from macOS build
@@ -52,6 +52,7 @@ jobs:
       os: '["windows-latest"]'
       run-tests: true
       pack: true
+      workload-version: '10.0.401'
       pre-build-artifact: native-apple-essentialsai
       android-project: src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj
 
@@ -63,4 +64,5 @@ jobs:
       project-name: essentialsai
       target-framework: net10.0-maccatalyst
       filter: 'RequiresModel!=true'
-      xcode-version: '26.3'
+      os: xcode-27
+      workload-version: '10.0.401'

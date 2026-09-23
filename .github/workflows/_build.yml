@@ -108,7 +108,7 @@ jobs:
         shell: cmd
 
       - name: Install Android SDK dependencies (macOS)
-        if: inputs.install-workloads && matrix.os == 'macos-latest'
+        if: inputs.install-workloads && runner.os == 'macOS'
         run: ./eng/common/dotnet.sh build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="$ANDROID_HOME" -p:AcceptAndroidSDKLicenses=true ${{ inputs.android-project }}
 
       # cibuild.cmd/.sh hardcode -pack -publish, and Arcade's publish step errors out with
@@ -128,7 +128,7 @@ jobs:
         shell: cmd
 
       - name: Build and Test (macOS)
-        if: matrix.os == 'macos-latest'
+        if: runner.os == 'macOS'
         run: >
           ./eng/common/build.sh
           --restore --build --test --ci
