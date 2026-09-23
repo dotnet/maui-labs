@@ -43,10 +43,10 @@ jobs:
     with:
       project-path: samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj
       project-name: ai-chat-playground
-      os: '["macos-26"]'
+      os: '["xcode-27"]'
       run-tests: false
       pack: false
       install-workloads: true
       workload-version: '10.0.401'
-      xcode-version: '26.6'
+      allow-xcode-preview: true
       android-project: src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj

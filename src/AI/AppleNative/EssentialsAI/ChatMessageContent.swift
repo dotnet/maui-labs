@@ -65,7 +65,7 @@ public class ImageContentNative: AIContentNative {
     @objc public init(data: Data, mimeType: String, orientationRaw: Int32, label: String?) {
         self.data = data
         self.mimeType = mimeType
-        self.orientationRaw = orientationRaw
+        self.orientationRaw = orientationRaw == 0 ? Self.imageOrientation(from: data) : orientationRaw
         self.label = label
         super.init()
     }
@@ -90,6 +90,14 @@ public class ImageContentNative: AIContentNative {
     static func decodeCGImage(from data: Data) -> CGImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
         return CGImageSourceCreateImageAtIndex(source, 0, nil)
+    }
+
+    private static func imageOrientation(from data: Data) -> Int32 {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any],
+              let raw = properties[kCGImagePropertyOrientation as String] as? NSNumber,
+              (1...8).contains(raw.intValue) else { return 0 }
+        return raw.int32Value
     }
 }
 

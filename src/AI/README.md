@@ -13,13 +13,13 @@ On-device AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://
 
 ### Platform Support
 
-| Platform | Chat (IChatClient) | Embeddings (IEmbeddingGenerator) |
-|----------|-------------------|----------------------------------|
-| iOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
-| Mac Catalyst 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
-| macOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
-| Android | 🔜 Coming soon | 🔜 Coming soon |
-| Windows | 🔜 Coming soon | 🔜 Coming soon |
+| Platform | Chat (IChatClient) | Image input | Embeddings (IEmbeddingGenerator) |
+|----------|-------------------|-------------|----------------------------------|
+| iOS 26+ | ✅ Apple Intelligence | 27+ with vision-capable model | ✅ NL Embeddings |
+| Mac Catalyst 26+ | ✅ Apple Intelligence | 27+ with vision-capable model | ✅ NL Embeddings |
+| macOS 26+ | ✅ Apple Intelligence | 27+ with vision-capable model | ✅ NL Embeddings |
+| Android | 🔜 Coming soon | Not available | 🔜 Coming soon |
+| Windows | 🔜 Coming soon | Not available | 🔜 Coming soon |
 
 ## Quick Start
 
