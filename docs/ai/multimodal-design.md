@@ -1,8 +1,10 @@
 # Multimodal Image Input for Microsoft.Maui.Essentials.AI — Design Spec
 
-Status: **Draft / not yet implemented.** This spec covers adding **image input** (multimodal
-prompting) to the Apple backend of `Microsoft.Maui.Essentials.AI`, mapped onto
-`Microsoft.Extensions.AI` (M.E.AI) abstractions.
+Status: **Image input implemented on the Apple backend; live vision completion still requires
+an OS 27 device with a ready vision model.** This document records the design and verified API
+signatures for multimodal prompting in `Microsoft.Maui.Essentials.AI`, mapped onto
+`Microsoft.Extensions.AI` (M.E.AI) abstractions. Examples describing `AppleImage` helpers or CI
+changes below are proposals, not shipped API.
 
 > Scope: **images in** only. Image *generation* (images out, via `ImagePlayground`) is a separate
 > effort — it builds on today's toolchain and does not depend on anything here. It is intentionally
@@ -24,9 +26,10 @@ describe, classify, OCR/extract, compare — exposed through the existing
   `if #available(… 27.0, *)`, and bumping CI's `xcode-version` to 27.x.
 - Wire shape in M.E.AI is the standard `DataContent` / `UriContent` on `ChatMessage.Contents`, plus
   the `AIContent.RawRepresentation` native-handle fast path.
-- Work: a new native `ImageContentNative`, its binding, three touch-points in `ChatClient.swift`
-  (current prompt, history entry, history read-back), and image cases in
-  `AppleIntelligenceChatClient.ToNative(AIContent)`.
+- Implemented: a native `ImageContentNative` and binding, current-prompt and history attachment
+  conversion, native `CGImage` / `UIImage` / `NSImage` fast paths, and image cases in
+  `AppleIntelligenceChatClient.ToNative(AIContent)`. `samples/ChatClientPlayground` enables
+  image input for the local Apple provider on iOS/Mac Catalyst 27+ and for Azure.
 
 ---
 
@@ -50,16 +53,15 @@ to throw a clear error at runtime below 27.0. **CI `xcode-version` must move to 
 ### Building against Xcode 27 side-by-side (no `xcode-select` switch)
 Xcode 27 can be installed alongside the active 26.x. Point individual commands at it with the
 `DEVELOPER_DIR` environment variable — this overrides the `xcode-select` default for just that
-process:
+process. The .NET 10 Xcode 27 preview workload also needs an explicit 27.0 Apple TFM:
 ```bash
-export DEVELOPER_DIR=/Applications/Xcode-27.0.0-Beta.4.app/Contents/Developer
-# e.g. build only the Apple TFMs of the native + managed library:
-DEVELOPER_DIR=$DEVELOPER_DIR dotnet build src/AI/EssentialsAI.slnf -f net10.0-maccatalyst
+DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer \
+  dotnet build src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj \
+  -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true -p:ValidateXcodeVersion=false
 ```
-Caveats when building (not just inspecting) against a beta SDK: the installed MAUI/`net10.0-*`
-workload must accept the newer Xcode/SDK; you may need `<SupportedOSPlatformVersion>` / Info.plist
-minimums that stay at 26.0 (deployment target) while the *SDK* is 27.0. Runtime `Attachment` use is
-`#available`-gated regardless.
+The preview Mac Catalyst workload requires a minimum deployment target of 17.0; the OS 27
+requirement for image input is enforced separately at runtime. Text prompting remains available
+on eligible OS 26 devices.
 
 ---
 
@@ -518,14 +520,12 @@ var msg = new ChatMessage(ChatRole.User, [
 - `AppleIntelligenceChatClient` stays `[SupportedOSPlatform("ios26.0")]` etc.; the chat client keeps
   working for text on 26.x. Image content requires 27.0 at runtime, enforced natively — document
   that a `NotSupportedException`-equivalent `NSErrorException` is thrown below 27.0.
-- **Gate on capability, not just OS.** Before sending image content, the Swift shim should check
-  `if #available(… 27.0, *), SystemLanguageModel.default.capabilities.contains(.vision)` and throw a
-  clear "this model build does not support image input" error otherwise. Consider surfacing this to
-  callers (e.g. an `AppleIntelligence.SupportsImageInput` bool) so apps can degrade gracefully.
-- **Maintenance catch (surfaced by the 27 SDK):** `GenerationOptions(sampling:)` — which the current
-  `ChatClient.swift` `prepareSession` already uses — is **deprecated in 27.0**, renamed
-  `init(samplingMode:temperature:maximumResponseTokens:)`. It still compiles (a deprecation warning),
-  but rename `sampling:` → `samplingMode:` when we move the build to Xcode 27.
+- **Gate on capability, not just OS.** The Swift shim checks
+  `SystemLanguageModel.default.capabilities.contains(.vision)` for image requests on OS 27+ and
+  throws a clear error when vision is unavailable. The playground advertises image input based on
+  OS support; runtime model readiness is determined by the request itself.
+- `GenerationOptions(sampling:)` was renamed to `samplingMode:` to compile without the Xcode 27
+  deprecation warning.
 - `.github/workflows/ci-essentialsai.yml`: bump `xcode-version` to **27.x** for `build-macos` and
   `device-tests-maccatalyst`. Without this the Swift shim will not compile (`Attachment` /
   `Transcript.Segment.attachment` are absent from the 26.x SDK).

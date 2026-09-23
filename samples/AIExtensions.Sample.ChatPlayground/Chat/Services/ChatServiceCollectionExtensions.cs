@@ -50,6 +50,8 @@ internal static class ChatServiceCollectionExtensions
                 "apple-intelligence-chat",
                 "Apple Intelligence",
                 "Apple Intelligence is supported on this OS. The first request confirms that the local model is enabled and available.",
+                SupportsImageInput: OperatingSystem.IsIOSVersionAtLeast(27) ||
+                    OperatingSystem.IsMacCatalystVersionAtLeast(27),
                 SupportsToolCalling: true))
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
             .UseFunctionInvocation()

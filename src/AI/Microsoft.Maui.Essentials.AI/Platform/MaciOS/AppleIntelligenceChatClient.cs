@@ -539,7 +539,7 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 		if (image.CgImage is { } cg)
 			return new DataContent(EncodePng(cg), "image/png") { RawRepresentation = cg };
 
-		return new DataContent(ReadOnlyMemory<byte>.Empty, mediaType);
+		throw new InvalidDataException("The native image attachment has no image payload or file URL.");
 	}
 
 	private static byte[] EncodePng(CGImage image)
