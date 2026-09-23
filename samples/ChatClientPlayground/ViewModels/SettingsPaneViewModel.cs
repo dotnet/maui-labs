@@ -64,7 +64,9 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
     public bool IsRecord { get => Mode == RecordingMode.Record; set { if (value) Mode = RecordingMode.Record; } }
     public bool IsReplay { get => Mode == RecordingMode.Replay; set { if (value) Mode = RecordingMode.Replay; } }
     public bool CanRestartReplay => InteractionCount > 0;
-    public string TapeSummary => $"{InteractionCount} interaction{(InteractionCount == 1 ? string.Empty : "s")} · replay {ReplayPosition}/{InteractionCount}";
+    public string TapeSummary => InteractionCount == 0
+        ? "No recorded interactions"
+        : $"{InteractionCount} interaction{(InteractionCount == 1 ? string.Empty : "s")} · replay {ReplayPosition}/{InteractionCount}";
     public string StorageInfo => $"Recordings are saved app-locally. Path: {StoragePath}";
     public bool IsLocalSelected { get => SelectedClient == ChatClientKind.Local; set { if (value) SelectedClient = ChatClientKind.Local; } }
     public bool IsCloudSelected { get => SelectedClient == ChatClientKind.Cloud; set { if (value) SelectedClient = ChatClientKind.Cloud; } }

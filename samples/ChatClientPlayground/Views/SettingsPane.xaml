@@ -38,16 +38,23 @@
                 <RadioButton Content="Replay" GroupName="RecordingMode" IsChecked="{Binding IsReplay}" AutomationId="RecordingReplayRadio" />
                 <views:InfoTip Text="{Binding StorageInfo}" />
             </HorizontalStackLayout>
-            <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="4" IsEnabled="{Binding CanSelectClient}">
-                <Label Text="{Binding TapeSummary}" FontSize="11" TextColor="{StaticResource MutedText}" VerticalOptions="Center" LineBreakMode="TailTruncation" />
-                <Button Grid.Column="1" Text="New" Command="{Binding NewRecordingCommand}" AutomationId="NewRecordingButton" />
-                <Button Grid.Column="2" Text="Save" Command="{Binding SaveCommand}" AutomationId="SaveRecordingButton" />
-                <Button Grid.Column="3" Text="Load" Command="{Binding LoadCommand}" AutomationId="LoadRecordingButton" />
-            </Grid>
-            <HorizontalStackLayout Spacing="6" IsEnabled="{Binding CanSelectClient}">
-                <Button Text="Restart replay" Command="{Binding RestartReplayCommand}" AutomationId="RestartReplayButton" />
-                <Label Text="{Binding RecordingStatus}" FontSize="11" TextColor="{StaticResource MutedText}" VerticalOptions="Center" LineBreakMode="TailTruncation" />
-            </HorizontalStackLayout>
+            <VerticalStackLayout Spacing="6" IsEnabled="{Binding CanSelectClient}">
+                <Label Text="{Binding TapeSummary}" FontSize="11" TextColor="{StaticResource MutedText}" LineBreakMode="WordWrap" />
+                <HorizontalStackLayout Spacing="6">
+                    <Button Text="New" Command="{Binding NewRecordingCommand}" AutomationId="NewRecordingButton" />
+                    <Button Text="Save" Command="{Binding SaveCommand}" AutomationId="SaveRecordingButton" />
+                    <Button Text="Load" Command="{Binding LoadCommand}" AutomationId="LoadRecordingButton" />
+                </HorizontalStackLayout>
+                <Button Text="Restart replay" Command="{Binding RestartReplayCommand}" HorizontalOptions="Start" AutomationId="RestartReplayButton">
+                    <Button.Triggers>
+                        <Trigger TargetType="Button" Property="IsEnabled" Value="False">
+                            <Setter Property="BackgroundColor" Value="#CBD5E1" />
+                            <Setter Property="TextColor" Value="#475569" />
+                        </Trigger>
+                    </Button.Triggers>
+                </Button>
+                <Label Text="{Binding RecordingStatus}" FontSize="11" TextColor="{StaticResource MutedText}" LineBreakMode="WordWrap" />
+            </VerticalStackLayout>
 
             <BoxView HeightRequest="1" Color="{StaticResource BorderColor}" />
             <Label Text="CONVERSATION" FontSize="12" FontAttributes="Bold" TextColor="{StaticResource MutedText}" />
@@ -91,7 +98,7 @@
 
             <BoxView HeightRequest="1" Color="{StaticResource BorderColor}" />
             <Label Text="GENERATION" FontSize="12" FontAttributes="Bold" TextColor="{StaticResource MutedText}" />
-            <Label Text="Enable a checkbox to set that nullable provider option; unchecked leaves it unset. Decimal values use '.'." FontSize="11" TextColor="{StaticResource MutedText}" />
+            <Label Text="Unchecked settings use provider defaults. Use '.' for decimals." FontSize="11" TextColor="{StaticResource MutedText}" />
             <Grid ColumnDefinitions="Auto,*,Auto,110" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="4" RowSpacing="8">
                 <CheckBox IsChecked="{Binding EnableTemperature}" AutomationId="EnableTemperatureCheckBox" />
                 <Label Grid.Column="1" Text="Temperature" VerticalOptions="Center" />
