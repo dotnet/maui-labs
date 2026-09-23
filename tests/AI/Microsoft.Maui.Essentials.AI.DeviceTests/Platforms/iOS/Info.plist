@@ -23,7 +23,7 @@
 			<array>
 				<dict>
 					<key>UISceneConfigurationName</key>
-					<string>Default Configuration</string>
+					<string>__MAUI_DEFAULT_SCENE_CONFIGURATION__</string>
 					<key>UISceneDelegateClassName</key>
 					<string>SceneDelegate</string>
 				</dict>
