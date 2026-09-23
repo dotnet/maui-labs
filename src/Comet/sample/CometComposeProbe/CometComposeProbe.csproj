@@ -175,4 +175,5 @@
   </ItemGroup>
 
   <Import Project="StandaloneBarista.targets" />
+  <Import Project="..\..\eng\ComposeAndroid.targets" />
 </Project>

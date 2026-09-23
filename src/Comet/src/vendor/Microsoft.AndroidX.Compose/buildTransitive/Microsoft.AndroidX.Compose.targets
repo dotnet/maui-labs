@@ -1,0 +1,265 @@
+<Project>
+  <PropertyGroup>
+    <_MicrosoftAndroidXComposeProguardConfiguration
+        Condition="'$(_MicrosoftAndroidXComposeProguardConfiguration)' == ''">$(MSBuildThisFileDirectory)Microsoft.AndroidX.Compose.pro</_MicrosoftAndroidXComposeProguardConfiguration>
+    <_MicrosoftAndroidXComposeBaselineProfile
+        Condition="'$(_MicrosoftAndroidXComposeBaselineProfile)' == ''">$(MSBuildThisFileDirectory)Microsoft.AndroidX.Compose.baseline-prof.txt</_MicrosoftAndroidXComposeBaselineProfile>
+    <MicrosoftAndroidXComposeEnableBaselineProfile
+        Condition="'$(MicrosoftAndroidXComposeEnableBaselineProfile)' == ''">true</MicrosoftAndroidXComposeEnableBaselineProfile>
+    <_MicrosoftAndroidXComposeProfileDirectory>$(IntermediateOutputPath)microsoft-androidx-compose\art-profile\</_MicrosoftAndroidXComposeProfileDirectory>
+    <_MicrosoftAndroidXComposeMergedProfile>$(_MicrosoftAndroidXComposeProfileDirectory)merged-baseline-prof.txt</_MicrosoftAndroidXComposeMergedProfile>
+    <_MicrosoftAndroidXComposeExpandedProfile>$(_MicrosoftAndroidXComposeProfileDirectory)expanded-baseline-prof.txt</_MicrosoftAndroidXComposeExpandedProfile>
+    <_MicrosoftAndroidXComposeRewrittenProfile>$(_MicrosoftAndroidXComposeProfileDirectory)rewritten-baseline-prof.txt</_MicrosoftAndroidXComposeRewrittenProfile>
+    <_MicrosoftAndroidXComposeApplicationClassesJar>$(_MicrosoftAndroidXComposeProfileDirectory)application-classes.jar</_MicrosoftAndroidXComposeApplicationClassesJar>
+    <_MicrosoftAndroidXComposeProfileApkDirectory>$(_MicrosoftAndroidXComposeProfileDirectory)apk\</_MicrosoftAndroidXComposeProfileApkDirectory>
+    <_MicrosoftAndroidXComposeProfileApk>$(_MicrosoftAndroidXComposeProfileDirectory)profile.apk</_MicrosoftAndroidXComposeProfileApk>
+    <_MicrosoftAndroidXComposeBinaryProfile>$(_MicrosoftAndroidXComposeProfileDirectory)baseline.prof</_MicrosoftAndroidXComposeBinaryProfile>
+    <_MicrosoftAndroidXComposeBinaryProfileMetadata>$(_MicrosoftAndroidXComposeProfileDirectory)baseline.profm</_MicrosoftAndroidXComposeBinaryProfileMetadata>
+    <_MicrosoftAndroidXComposeStrictProfileDump>$(_MicrosoftAndroidXComposeProfileDirectory)strict-baseline-prof.txt</_MicrosoftAndroidXComposeStrictProfileDump>
+    <_MicrosoftAndroidXComposeProfileState>$(_MicrosoftAndroidXComposeProfileDirectory)enabled.txt</_MicrosoftAndroidXComposeProfileState>
+    <_MicrosoftAndroidXComposeProfileInputsState>$(_MicrosoftAndroidXComposeProfileDirectory)inputs.txt</_MicrosoftAndroidXComposeProfileInputsState>
+    <AndroidStoreUncompressedFileExtensions>$(AndroidStoreUncompressedFileExtensions);.prof;.profm</AndroidStoreUncompressedFileExtensions>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(AndroidApplication)' == 'true'
+                        And '$(MicrosoftAndroidXComposeEnableBaselineProfile)' == 'true'">
+    <AndroidArtProfile Include="$(_MicrosoftAndroidXComposeBaselineProfile)" />
+  </ItemGroup>
+
+  <Target Name="_AddMicrosoftAndroidXComposeProguardConfiguration"
+          BeforeTargets="_CalculateProguardConfigurationFiles"
+          Condition="'$(AndroidApplication)' == 'true'">
+    <Error Condition="!Exists('$(_MicrosoftAndroidXComposeProguardConfiguration)')"
+           Text="Microsoft.AndroidX.Compose ProGuard configuration '$(_MicrosoftAndroidXComposeProguardConfiguration)' was not found." />
+    <ItemGroup>
+      <ProguardConfiguration Include="$(_MicrosoftAndroidXComposeProguardConfiguration)" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="_TrackMicrosoftAndroidXComposeBaselineProfileState"
+          BeforeTargets="_CompileToDalvik;_BuildApkEmbed"
+          Condition="'$(AndroidApplication)' == 'true'
+                     And '$(AndroidLinkTool)' == 'r8'">
+    <MakeDir Directories="$(_MicrosoftAndroidXComposeProfileDirectory)" />
+    <WriteLinesToFile File="$(_MicrosoftAndroidXComposeProfileState)"
+                      Lines="$(MicrosoftAndroidXComposeEnableBaselineProfile)"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+    <PropertyGroup>
+      <_CompileToDalvikInputs>$(_CompileToDalvikInputs);$(_MicrosoftAndroidXComposeProfileState)</_CompileToDalvikInputs>
+      <_BuildApkEmbedInputs>$(_BuildApkEmbedInputs);$(_MicrosoftAndroidXComposeProfileState)</_BuildApkEmbedInputs>
+    </PropertyGroup>
+    <ItemGroup>
+      <FileWrites Include="$(_MicrosoftAndroidXComposeProfileState)" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="_ValidateMicrosoftAndroidXComposeBaselineProfile"
+          AfterTargets="_CompileJava"
+          BeforeTargets="_CompileToDalvik"
+          Condition="'$(MicrosoftAndroidXComposeEnableBaselineProfile)' == 'true'
+                     And '$(AndroidApplication)' == 'true'
+                     And '$(AndroidLinkTool)' == 'r8'">
+    <PropertyGroup>
+      <_MicrosoftAndroidXComposeProfgenClasspath
+          Condition="'$(MicrosoftAndroidXComposeProfgenClasspath)' != ''">$(MicrosoftAndroidXComposeProfgenClasspath)</_MicrosoftAndroidXComposeProfgenClasspath>
+      <_MicrosoftAndroidXComposeProfgenClasspath
+          Condition="'$(_MicrosoftAndroidXComposeProfgenClasspath)' == ''">$(_AndroidSdkDirectory)cmdline-tools\latest\lib\profgen-classpath.jar</_MicrosoftAndroidXComposeProfgenClasspath>
+      <_MicrosoftAndroidXComposeJavaExe
+          Condition="$([MSBuild]::IsOSPlatform('windows'))">$(JavaToolPath)\java.exe</_MicrosoftAndroidXComposeJavaExe>
+      <_MicrosoftAndroidXComposeJavaExe
+          Condition="!$([MSBuild]::IsOSPlatform('windows'))">$(JavaToolPath)/java</_MicrosoftAndroidXComposeJavaExe>
+      <_MicrosoftAndroidXComposeProfgenClasspathArgument>$([System.String]::Copy('$(_MicrosoftAndroidXComposeProfgenClasspath)').Replace('\', '/'))</_MicrosoftAndroidXComposeProfgenClasspathArgument>
+      <_MicrosoftAndroidXComposeMergedProfileArgument>$([System.String]::Copy('$(_MicrosoftAndroidXComposeMergedProfile)').Replace('\', '/'))</_MicrosoftAndroidXComposeMergedProfileArgument>
+      <_MicrosoftAndroidXComposeExpandedProfileArgument>$([System.String]::Copy('$(_MicrosoftAndroidXComposeExpandedProfile)').Replace('\', '/'))</_MicrosoftAndroidXComposeExpandedProfileArgument>
+    </PropertyGroup>
+    <Error Condition="'@(AndroidArtProfile)' == ''"
+           Text="Microsoft.AndroidX.Compose Baseline Profile support is enabled, but no AndroidArtProfile items were provided." />
+    <Error Condition="!Exists('%(AndroidArtProfile.Identity)')"
+           Text="Android ART profile '%(AndroidArtProfile.Identity)' was not found." />
+    <Error Condition="!Exists('$(_MicrosoftAndroidXComposeProfgenClasspath)')"
+           Text="profgen was not found at '$(_MicrosoftAndroidXComposeProfgenClasspath)'. Install the latest Android SDK Command-line Tools, set MicrosoftAndroidXComposeProfgenClasspath, or disable MicrosoftAndroidXComposeEnableBaselineProfile." />
+    <Error Condition="!Exists('$(_MicrosoftAndroidXComposeJavaExe)')"
+           Text="Java was not found at '$(_MicrosoftAndroidXComposeJavaExe)'." />
+    <ItemGroup>
+      <_MicrosoftAndroidXComposeProfileProgram Include="$(_MicrosoftAndroidXComposeApplicationClassesJar)"
+                                                Condition="Exists('$(_AndroidIntermediateClassesZip)')" />
+      <_MicrosoftAndroidXComposeProfileProgram Include="@(_JavaLibrariesToCompileForApp)"
+                                                Condition="'%(_JavaLibrariesToCompileForApp.Extension)' == '.jar'
+                                                           And Exists('%(_JavaLibrariesToCompileForApp.Identity)')" />
+      <_MicrosoftAndroidXComposeProfileProgram Update="@(_MicrosoftAndroidXComposeProfileProgram)">
+        <ArgumentPath>$([System.String]::Copy('%(FullPath)').Replace('\', '/'))</ArgumentPath>
+      </_MicrosoftAndroidXComposeProfileProgram>
+    </ItemGroup>
+    <Error Condition="'@(_MicrosoftAndroidXComposeProfileProgram)' == ''"
+           Text="No Java program archives were available for Microsoft.AndroidX.Compose Baseline Profile expansion." />
+  </Target>
+
+  <Target Name="_MergeMicrosoftAndroidXComposeBaselineProfiles"
+          DependsOnTargets="_TrackMicrosoftAndroidXComposeBaselineProfileInputs"
+          Inputs="$(_MicrosoftAndroidXComposeProfileInputsState);@(AndroidArtProfile)"
+          Outputs="$(_MicrosoftAndroidXComposeMergedProfile)"
+          Condition="'$(MicrosoftAndroidXComposeEnableBaselineProfile)' == 'true'
+                     And '$(AndroidApplication)' == 'true'
+                     And '$(AndroidLinkTool)' == 'r8'">
+    <MakeDir Directories="$(_MicrosoftAndroidXComposeProfileDirectory)" />
+    <ReadLinesFromFile File="%(AndroidArtProfile.Identity)">
+      <Output TaskParameter="Lines" ItemName="_MicrosoftAndroidXComposeProfileLine" />
+    </ReadLinesFromFile>
+    <RemoveDuplicates Inputs="@(_MicrosoftAndroidXComposeProfileLine)">
+      <Output TaskParameter="Filtered" ItemName="_MicrosoftAndroidXComposeUniqueProfileLine" />
+    </RemoveDuplicates>
+    <WriteLinesToFile File="$(_MicrosoftAndroidXComposeMergedProfile)"
+                      Lines="@(_MicrosoftAndroidXComposeUniqueProfileLine)"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+  </Target>
+
+  <Target Name="_TrackMicrosoftAndroidXComposeBaselineProfileInputs"
+          DependsOnTargets="_ValidateMicrosoftAndroidXComposeBaselineProfile"
+          Condition="'$(MicrosoftAndroidXComposeEnableBaselineProfile)' == 'true'
+                     And '$(AndroidApplication)' == 'true'
+                     And '$(AndroidLinkTool)' == 'r8'">
+    <WriteLinesToFile File="$(_MicrosoftAndroidXComposeProfileInputsState)"
+                      Lines="@(AndroidArtProfile->'%(FullPath)')"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <FileWrites Include="$(_MicrosoftAndroidXComposeProfileInputsState)" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="_ExpandMicrosoftAndroidXComposeBaselineProfile"
+          DependsOnTargets="_MergeMicrosoftAndroidXComposeBaselineProfiles"
+          Inputs="$(_MicrosoftAndroidXComposeMergedProfile);$(_AndroidIntermediateClassesZip);@(_JavaLibrariesToCompileForApp)"
+          Outputs="$(_MicrosoftAndroidXComposeExpandedProfile)"
+          Condition="'$(MicrosoftAndroidXComposeEnableBaselineProfile)' == 'true'
+                     And '$(AndroidApplication)' == 'true'
+                     And '$(AndroidLinkTool)' == 'r8'">
+    <Copy SourceFiles="$(_AndroidIntermediateClassesZip)"
+          DestinationFiles="$(_MicrosoftAndroidXComposeApplicationClassesJar)"
+          SkipUnchangedFiles="true"
+          Condition="Exists('$(_AndroidIntermediateClassesZip)')" />
+    <ItemGroup>
+      <_MicrosoftAndroidXComposeExpandArgument Include="-classpath" />
+      <_MicrosoftAndroidXComposeExpandArgument Include="&quot;$(_MicrosoftAndroidXComposeProfgenClasspathArgument)&quot;" />
+      <_MicrosoftAndroidXComposeExpandArgument Include="com.android.tools.profgen.cli.MainKt" />
+      <_MicrosoftAndroidXComposeExpandArgument Include="expandWildcards" />
+      <_MicrosoftAndroidXComposeExpandArgument Include="--profile" />
+      <_MicrosoftAndroidXComposeExpandArgument Include="&quot;$(_MicrosoftAndroidXComposeMergedProfileArgument)&quot;" />
+      <_MicrosoftAndroidXComposeExpandArgument Include="--output" />
+      <_MicrosoftAndroidXComposeExpandArgument Include="&quot;$(_MicrosoftAndroidXComposeExpandedProfileArgument)&quot;" />
+      <_MicrosoftAndroidXComposeExpandArgument Include="@(_MicrosoftAndroidXComposeProfileProgram->'&quot;%(ArgumentPath)&quot;')" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(_MicrosoftAndroidXComposeProfileDirectory)expand.args"
+                      Lines="@(_MicrosoftAndroidXComposeExpandArgument)"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+    <Exec Command="&quot;$(_MicrosoftAndroidXComposeJavaExe)&quot; &quot;@$(_MicrosoftAndroidXComposeProfileDirectory)expand.args&quot;" />
+  </Target>
+
+  <Target Name="_ConfigureMicrosoftAndroidXComposeBaselineProfileForR8"
+          DependsOnTargets="_ExpandMicrosoftAndroidXComposeBaselineProfile"
+          BeforeTargets="_CompileToDalvik"
+          Condition="'$(MicrosoftAndroidXComposeEnableBaselineProfile)' == 'true'
+                     And '$(AndroidApplication)' == 'true'
+                     And '$(AndroidLinkTool)' == 'r8'">
+    <PropertyGroup>
+      <AndroidR8ExtraArguments>$(AndroidR8ExtraArguments)
+--art-profile
+$(_MicrosoftAndroidXComposeExpandedProfile)
+$(_MicrosoftAndroidXComposeRewrittenProfile)</AndroidR8ExtraArguments>
+      <_CompileToDalvikInputs>$(_CompileToDalvikInputs);@(AndroidArtProfile);$(_MicrosoftAndroidXComposeExpandedProfile)</_CompileToDalvikInputs>
+    </PropertyGroup>
+  </Target>
+
+  <Target Name="_GenerateMicrosoftAndroidXComposeBinaryBaselineProfile"
+          Inputs="$(_MicrosoftAndroidXComposeRewrittenProfile);@(_DexFile)"
+          Outputs="$(_MicrosoftAndroidXComposeBinaryProfile);$(_MicrosoftAndroidXComposeBinaryProfileMetadata);$(_MicrosoftAndroidXComposeStrictProfileDump)"
+          Condition="'$(MicrosoftAndroidXComposeEnableBaselineProfile)' == 'true'
+                     And '$(AndroidApplication)' == 'true'
+                     And '$(AndroidLinkTool)' == 'r8'">
+    <Error Condition="!Exists('$(_MicrosoftAndroidXComposeRewrittenProfile)')"
+           Text="R8 did not produce the rewritten ART profile '$(_MicrosoftAndroidXComposeRewrittenProfile)'." />
+    <RemoveDir Directories="$(_MicrosoftAndroidXComposeProfileApkDirectory)" />
+    <MakeDir Directories="$(_MicrosoftAndroidXComposeProfileApkDirectory)" />
+    <Copy SourceFiles="@(_DexFile)"
+          DestinationFiles="@(_DexFile->'$(_MicrosoftAndroidXComposeProfileApkDirectory)%(Filename)%(Extension)')" />
+    <Delete Files="$(_MicrosoftAndroidXComposeProfileApk)" />
+    <ZipDirectory SourceDirectory="$(_MicrosoftAndroidXComposeProfileApkDirectory)"
+                  DestinationFile="$(_MicrosoftAndroidXComposeProfileApk)"
+                  Overwrite="true" />
+    <PropertyGroup>
+      <_MicrosoftAndroidXComposeRewrittenProfileArgument>$([System.String]::Copy('$(_MicrosoftAndroidXComposeRewrittenProfile)').Replace('\', '/'))</_MicrosoftAndroidXComposeRewrittenProfileArgument>
+      <_MicrosoftAndroidXComposeProfileApkArgument>$([System.String]::Copy('$(_MicrosoftAndroidXComposeProfileApk)').Replace('\', '/'))</_MicrosoftAndroidXComposeProfileApkArgument>
+      <_MicrosoftAndroidXComposeBinaryProfileArgument>$([System.String]::Copy('$(_MicrosoftAndroidXComposeBinaryProfile)').Replace('\', '/'))</_MicrosoftAndroidXComposeBinaryProfileArgument>
+      <_MicrosoftAndroidXComposeBinaryProfileMetadataArgument>$([System.String]::Copy('$(_MicrosoftAndroidXComposeBinaryProfileMetadata)').Replace('\', '/'))</_MicrosoftAndroidXComposeBinaryProfileMetadataArgument>
+      <_MicrosoftAndroidXComposeStrictProfileDumpArgument>$([System.String]::Copy('$(_MicrosoftAndroidXComposeStrictProfileDump)').Replace('\', '/'))</_MicrosoftAndroidXComposeStrictProfileDumpArgument>
+    </PropertyGroup>
+    <ItemGroup>
+      <_MicrosoftAndroidXComposeBinArgument Include="-classpath" />
+      <_MicrosoftAndroidXComposeBinArgument Include="&quot;$(_MicrosoftAndroidXComposeProfgenClasspathArgument)&quot;" />
+      <_MicrosoftAndroidXComposeBinArgument Include="com.android.tools.profgen.cli.MainKt" />
+      <_MicrosoftAndroidXComposeBinArgument Include="bin" />
+      <_MicrosoftAndroidXComposeBinArgument Include="&quot;$(_MicrosoftAndroidXComposeRewrittenProfileArgument)&quot;" />
+      <_MicrosoftAndroidXComposeBinArgument Include="--apk" />
+      <_MicrosoftAndroidXComposeBinArgument Include="&quot;$(_MicrosoftAndroidXComposeProfileApkArgument)&quot;" />
+      <_MicrosoftAndroidXComposeBinArgument Include="--output" />
+      <_MicrosoftAndroidXComposeBinArgument Include="&quot;$(_MicrosoftAndroidXComposeBinaryProfileArgument)&quot;" />
+      <_MicrosoftAndroidXComposeBinArgument Include="--output-meta" />
+      <_MicrosoftAndroidXComposeBinArgument Include="&quot;$(_MicrosoftAndroidXComposeBinaryProfileMetadataArgument)&quot;" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(_MicrosoftAndroidXComposeProfileDirectory)bin.args"
+                      Lines="@(_MicrosoftAndroidXComposeBinArgument)"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+    <Exec Command="&quot;$(_MicrosoftAndroidXComposeJavaExe)&quot; &quot;@$(_MicrosoftAndroidXComposeProfileDirectory)bin.args&quot;" />
+    <ItemGroup>
+      <_MicrosoftAndroidXComposeDumpArgument Include="-classpath" />
+      <_MicrosoftAndroidXComposeDumpArgument Include="&quot;$(_MicrosoftAndroidXComposeProfgenClasspathArgument)&quot;" />
+      <_MicrosoftAndroidXComposeDumpArgument Include="com.android.tools.profgen.cli.MainKt" />
+      <_MicrosoftAndroidXComposeDumpArgument Include="dumpProfile" />
+      <_MicrosoftAndroidXComposeDumpArgument Include="--profile" />
+      <_MicrosoftAndroidXComposeDumpArgument Include="&quot;$(_MicrosoftAndroidXComposeBinaryProfileArgument)&quot;" />
+      <_MicrosoftAndroidXComposeDumpArgument Include="--apk" />
+      <_MicrosoftAndroidXComposeDumpArgument Include="&quot;$(_MicrosoftAndroidXComposeProfileApkArgument)&quot;" />
+      <_MicrosoftAndroidXComposeDumpArgument Include="--strict" />
+      <_MicrosoftAndroidXComposeDumpArgument Include="--output" />
+      <_MicrosoftAndroidXComposeDumpArgument Include="&quot;$(_MicrosoftAndroidXComposeStrictProfileDumpArgument)&quot;" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(_MicrosoftAndroidXComposeProfileDirectory)dump.args"
+                      Lines="@(_MicrosoftAndroidXComposeDumpArgument)"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+    <Exec Command="&quot;$(_MicrosoftAndroidXComposeJavaExe)&quot; &quot;@$(_MicrosoftAndroidXComposeProfileDirectory)dump.args&quot;" />
+  </Target>
+
+  <Target Name="_PackageMicrosoftAndroidXComposeBinaryBaselineProfile"
+          AfterTargets="_CompileDex"
+          BeforeTargets="_BuildApkEmbed"
+          DependsOnTargets="_GenerateMicrosoftAndroidXComposeBinaryBaselineProfile"
+          Condition="'$(MicrosoftAndroidXComposeEnableBaselineProfile)' == 'true'
+                     And '$(AndroidApplication)' == 'true'
+                     And '$(AndroidLinkTool)' == 'r8'">
+    <ItemGroup Condition="'$(AndroidPackageFormat)' != 'aab'">
+      <FilesToAddToArchive Remove="$(_MicrosoftAndroidXComposeBinaryProfile);$(_MicrosoftAndroidXComposeBinaryProfileMetadata)" />
+      <FilesToAddToArchive Include="$(_MicrosoftAndroidXComposeBinaryProfile)">
+        <ArchivePath>assets/dexopt/baseline.prof</ArchivePath>
+      </FilesToAddToArchive>
+      <FilesToAddToArchive Include="$(_MicrosoftAndroidXComposeBinaryProfileMetadata)">
+        <ArchivePath>assets/dexopt/baseline.profm</ArchivePath>
+      </FilesToAddToArchive>
+    </ItemGroup>
+    <ItemGroup Condition="'$(AndroidPackageFormat)' == 'aab'">
+      <AndroidAppBundleMetaDataFile Remove="com.android.tools.build.profiles/baseline.prof:$(_MicrosoftAndroidXComposeBinaryProfile);com.android.tools.build.profiles/baseline.profm:$(_MicrosoftAndroidXComposeBinaryProfileMetadata)" />
+      <AndroidAppBundleMetaDataFile Include="com.android.tools.build.profiles/baseline.prof:$(_MicrosoftAndroidXComposeBinaryProfile)" />
+      <AndroidAppBundleMetaDataFile Include="com.android.tools.build.profiles/baseline.profm:$(_MicrosoftAndroidXComposeBinaryProfileMetadata)" />
+    </ItemGroup>
+    <PropertyGroup>
+      <_BuildApkEmbedInputs>$(_BuildApkEmbedInputs);$(_MicrosoftAndroidXComposeBinaryProfile);$(_MicrosoftAndroidXComposeBinaryProfileMetadata)</_BuildApkEmbedInputs>
+    </PropertyGroup>
+    <ItemGroup>
+      <FileWrites Include="$(_MicrosoftAndroidXComposeMergedProfile);$(_MicrosoftAndroidXComposeExpandedProfile);$(_MicrosoftAndroidXComposeRewrittenProfile);$(_MicrosoftAndroidXComposeProfileApk);$(_MicrosoftAndroidXComposeBinaryProfile);$(_MicrosoftAndroidXComposeBinaryProfileMetadata);$(_MicrosoftAndroidXComposeStrictProfileDump)" />
+    </ItemGroup>
+  </Target>
+</Project>
