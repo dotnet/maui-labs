@@ -10,7 +10,7 @@
     <IsBindingProject>true</IsBindingProject>
     <!-- CA1416: Apple Intelligence APIs require iOS/macOS 26+ but the library supports
          older OS versions with runtime guards. Suppress to avoid errors in Release builds. -->
-    <NoWarn>$(NoWarn);CA1416</NoWarn>
+    <NoWarn>$(NoWarn);CA1416;XCODE_27_0_PREVIEW</NoWarn>
   </PropertyGroup>
   <PropertyGroup>
     <!-- NuGet package information -->
