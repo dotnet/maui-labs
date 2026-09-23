@@ -1,6 +1,6 @@
 #if WINDOWS
-using EssentialsAISample.Services;
 using Microsoft.Extensions.AI;
+using Microsoft.Maui.Essentials.AI;
 using Xunit;
 
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;

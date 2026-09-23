@@ -5,24 +5,26 @@ and which parts of the Windows App SDK surface are used to do it.
 
 ## Windows App SDK version
 
-The Windows targets pin `Microsoft.WindowsAppSDK` to **2.2.2-experimental9**
-(`MicrosoftWindowsAppSDKVersion` in `eng/Versions.props`). This is deliberate and constrained:
+The Windows targets pin `Microsoft.WindowsAppSDK` to **2.4.1-experimental**
+(`MicrosoftWindowsAppSDKVersion` in `eng/Versions.props`):
 
-| | 2.3.1 (latest stable) | 2.2.2-experimental9 (used here) |
+| | 2.5.1 (stable) | 2.4.1-experimental (used here) |
 |---|---|---|
-| `Microsoft.WindowsAppSDK.AI` | 2.3.4 | 2.2.6-experimental |
-| Structured JSON output | `LanguageModel` | `LanguageModelExperimental` |
-| `ImageGenerator` (text to image) | not present | present |
-| `Microsoft.Windows.AI.Speech` | not present | present |
-| `AppContentIndexer` semantic search | unavailable | available |
+| `Microsoft.WindowsAppSDK.AI` | 2.5.5 | 2.4.8-experimental |
+| `Microsoft.WindowsAppSDK.Search` | 2.5.5 | 2.4.8-experimental |
+| Structured JSON output | `LanguageModel` | `LanguageModel` |
+| `ImageGenerator` (text to image) | not available | available |
+| `AppContentIndexer` | limited-access features | experimental features |
 
-`Microsoft.WindowsAppSDK.Search`, which contains `AppContentIndexer`, declares an **exact** dependency
-on `Microsoft.WindowsAppSDK.AI`. The only umbrella version whose AI package satisfies
-`Microsoft.WindowsAppSDK.Search 2.2.6-experimental` is `2.2.2-experimental9`. Combining the search
-package with the stable 2.3.x line produces `NU1608` and is not supported.
+The umbrella package brings in compatible AI and Search packages; referencing an older Search
+package directly creates an exact-version conflict with its AI dependency. The stable SDK now
+supports structured output, but image generation is still experimental, as are the general
+content-indexing features used by the existing sample. This pin is therefore not suitable for a
+Microsoft Store release. Use nuget.org for local development until these versions are mirrored
+to the repository feeds.
 
-`Microsoft.WindowsAppSDK.Search` is only published on nuget.org, which is why `nuget.org` is listed as
-a source in `NuGet.config`.
+See the [Windows App SDK release notes](https://learn.microsoft.com/windows/apps/windows-app-sdk/release-notes/)
+for API promotion and experimental-channel limitations.
 
 Because the SDK line is experimental, Windows projects set `SelfContained` and
 `WindowsAppSDKSelfContained` so the runtime is bundled into the MSIX rather than resolved from a
@@ -31,7 +33,7 @@ framework package.
 ## Structured output
 
 `PhiSilicaChatClient` honours `ChatOptions.ResponseFormat`. When a `ChatResponseFormatJson` carries a
-schema, the request is routed to `LanguageModelExperimental.GenerateStructuredJsonResponseAsync`,
+schema, the request is routed to `LanguageModel.GenerateStructuredJsonResponseAsync`,
 which constrains generation at the runtime level. Nothing is scraped out of free-form text and there
 is no code-fence stripping.
 
@@ -39,19 +41,18 @@ Two consequences of the WinRT shape are worth knowing:
 
 - There is no `LanguageModelContext` overload for structured generation, so the system prompt is
   prepended to the prompt text instead of being supplied as context.
-- The API is on `LanguageModelExperimental`, not `LanguageModel`. Constructing it raises `CS8305`,
-  which is acknowledged with a scoped `#pragma` at the call site. Disposing that wrapper also closes
-  the underlying `LanguageModel`, so one instance is cached per client rather than created per
-  request.
-- Unlike `GenerateResponseAsync`, structured generation reports no incremental progress — the
-  constrained JSON is only available from the completed result, so it is emitted as a single update.
+- Structured output became a stable `LanguageModel` API in Windows App SDK 2.3.1, so no
+  `LanguageModelExperimental` wrapper or experimental options conversion is required.
+- The client handles both incremental progress and a completed-only response, whichever the
+  installed Windows AI model reports.
 
 Requests without a schema continue to use `LanguageModel.GenerateResponseAsync` with a real context.
 
 ## Tool calling
 
-Windows App SDK exposes no function-calling API, so `PhiSilicaToolCallingClient`
-(`samples/EssentialsAISample/Services/`) builds it on top of constrained decoding, in two phases:
+Windows App SDK exposes no function-calling API, so the opt-in `PhiSilicaToolCallingClient`
+(`src/AI/Microsoft.Maui.Essentials.AI/Platform/Windows/`) builds it on top of constrained
+decoding, in two phases:
 
 1. **Selection.** One constrained call against a schema whose only property is a `tool_name` enum
    listing the available tools plus `none`.
@@ -60,8 +61,9 @@ Windows App SDK exposes no function-calling API, so `PhiSilicaToolCallingClient`
    normally, preserving any `ResponseFormat` the caller asked for.
 
 The result is emitted as `FunctionCallContent`, so the standard `UseFunctionInvocation()` middleware
-executes the call and re-invokes the client with the result in history. Chaining therefore falls out
-of the same loop, and it can always terminate because `none` is always available.
+executes the call and re-invokes the client with the result in history. `ChatToolMode.None` bypasses
+tool selection; `RequireAny` forces the first call but permits a final answer after a tool result.
+Completed calls are scoped to the current user turn, so earlier turns cannot block a new request.
 
 ### Why two phases
 
@@ -130,16 +132,9 @@ trimming, summarizing the history, or starting a new conversation.
 
 ### Failure handling
 
-Constrained generation occasionally fails outright on a long conversation, reporting a status such
-as `ResponseInvalidJson`, even for a tool and schema that succeed on a shorter prompt. Rather than
-turn that into a hard failure, the client degrades:
-
-- if selection fails, it answers with whatever has already been gathered;
-- if argument extraction fails, the call is still reported but without arguments, so the caller sees
-  which tool was chosen and invoking it surfaces a clear missing-argument error.
-
-Neither path retries. A second generation on an already slow request costs more time than it
-recovers, and measurably pushed long runs past their limits.
+Constrained-generation failures and invalid tool arguments propagate to the caller rather than
+silently returning a success-shaped answer or invoking a tool without its required arguments.
+The exact-repeat guard and per-turn call limit still bound indecisive model loops.
 
 ### Streaming
 
@@ -162,7 +157,7 @@ When several images are requested the seed is offset per image so the results di
 `ImageGenerationOptions.ImageSize` and `ImageGenerationResponseFormat.Uri` throw — the model chooses
 its own output size, and generation is on-device so there is no hosted URI to return.
 
-The sample wires this into chat with `ChatClientBuilder.UseImageGeneration(...)`, so a
+The existing EssentialsAISample wires this into chat with `ChatClientBuilder.UseImageGeneration(...)`, so a
 `HostedImageGenerationTool` in `ChatOptions.Tools` is handled automatically and asking the model to
 draw something returns a real image inline.
 
@@ -182,7 +177,7 @@ runs locally; nothing is uploaded.
 
 ## Semantic search
 
-`AppContentIndexerSearchService` in the sample implements `ISemanticSearchService` on
+`AppContentIndexerSearchService` in EssentialsAISample implements `ISemanticSearchService` on
 `Microsoft.Windows.Search.AppContentIndex.AppContentIndexer`. The OS owns embedding, chunking and
 ranking, and the index is per-app and persistent.
 
@@ -212,5 +207,5 @@ stays at `19041` for build compatibility.
 - **Model identity.** `LanguageModel` exposes no name, version or capability metadata, so behaviour
   cannot be varied by model.
 - **Semantic embeddings.** No `IEmbeddingGenerator` implementation; see above.
-- **Speech.** `Microsoft.Windows.AI.Speech` is present in this SDK line and would support
-  `ISpeechToTextClient`, but is not wired up yet.
+- **Native tool calling.** The published `LanguageModel` API has no function-call interface;
+  the constrained-output client above is an opt-in adapter, not a hidden model capability.

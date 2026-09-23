@@ -18,7 +18,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Maui.DevFlow.Agent;
 using OpenAI;
 
-#if IOS || MACCATALYST
+#if IOS || MACCATALYST || WINDOWS
 using Microsoft.Maui.Essentials.AI;
 #endif
 
@@ -74,6 +74,12 @@ public static class MauiProgram
 #pragma warning disable MEAI001 // Azure chat uses an optional experimental image generator.
     private static void AddChatClients(IServiceCollection services, IConfiguration configuration)
     {
+#if WINDOWS
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 26100))
+            services.AddSingleton<IChatClient>(serviceProvider => CreateWindowsChatClient(
+                serviceProvider.GetRequiredService<ILoggerFactory>(),
+                serviceProvider.GetRequiredService<IChatRecordingSession>()));
+#endif
 #if IOS || MACCATALYST
         if (OperatingSystem.IsIOSVersionAtLeast(26) || OperatingSystem.IsMacCatalystVersionAtLeast(26))
             services.AddSingleton<IChatClient>(serviceProvider => CreateLocalChatClient(
@@ -213,6 +219,20 @@ public static class MauiProgram
                 "AI:Endpoint must be an absolute OpenAI-compatible endpoint ending in /openai/v1/.");
         return endpoint;
     }
+#if WINDOWS
+    private static IChatClient CreateWindowsChatClient(ILoggerFactory loggerFactory, IChatRecordingSession recording) =>
+        new PhiSilicaChatClient()
+            .AsBuilder()
+            .UseRecording(recording)
+            .UseDescriptor(new ChatClientDescriptor(
+                "Phi Silica",
+                "Windows Copilot Runtime is supported on this OS. The first request checks whether the on-device model is ready.",
+                SupportsImageInput: true))
+            .UseLogging(loggerFactory)
+            .Use(inner => new PhiSilicaToolCallingClient(inner))
+            .UseFunctionInvocation()
+            .Build();
+#endif
 
 #if IOS || MACCATALYST
     private static IChatClient CreateLocalChatClient(ILoggerFactory loggerFactory, IChatRecordingSession recording)

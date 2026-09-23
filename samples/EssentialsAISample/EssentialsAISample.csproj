@@ -78,8 +78,6 @@
   <!-- Windows Phi Silica: Copilot Runtime WinRT AI APIs -->
   <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
     <PackageReference Include="Microsoft.WindowsAppSDK" />
-    <!-- AppContentIndexer semantic search (ships separately from the umbrella package) -->
-    <PackageReference Include="Microsoft.WindowsAppSDK.Search" />
     <!-- Enables dotnet run for packaged MSIX apps (registers loose layout, activates via AUMID) -->
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" PrivateAssets="all" />
   </ItemGroup>

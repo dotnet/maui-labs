@@ -6,7 +6,6 @@ using Microsoft.Extensions.AI;
 using Microsoft.Windows.AI.ContentSafety;
 using Microsoft.Windows.AI.Imaging;
 using Microsoft.Windows.AI.Text;
-using Microsoft.Windows.AI.Text.Experimental;
 using Windows.Foundation;
 
 namespace Microsoft.Maui.Essentials.AI;
@@ -34,17 +33,6 @@ public sealed class PhiSilicaChatClient : IChatClient
 	/// carries image content.
 	/// </summary>
 	private Task<ImageDescriptionGenerator>? _imageDescriptionTask;
-
-	/// <summary>
-	/// Lazily-created experimental wrapper used for schema-constrained generation.
-	/// </summary>
-	/// <remarks>
-	/// Disposing the wrapper also closes the underlying <see cref="LanguageModel"/>, so a single
-	/// instance is cached for the lifetime of the client instead of being created per request.
-	/// </remarks>
-#pragma warning disable CS8305 // LanguageModelExperimental has no stable equivalent in this SDK line.
-	private LanguageModelExperimental? _experimentalModel;
-#pragma warning restore CS8305
 
 	/// <summary>
 	/// Lazily-initialized metadata describing the implementation.
@@ -109,9 +97,8 @@ public sealed class PhiSilicaChatClient : IChatClient
 		// already provides incremental deltas via the Progress callback.
 		var handler = new StreamingResponseHandler();
 
-		// A JSON schema turns this into a constrained generation. GenerateStructuredJsonResponseAsync
-		// lives on LanguageModelExperimental and has no LanguageModelContext overload, so the system
-		// prompt is folded into the prompt text.
+		// Structured generation has no LanguageModelContext overload, so the system prompt
+		// is folded into the prompt text.
 		var jsonSchema = GetConstraintSchema(options);
 
 		LanguageModelContext? context = null;
@@ -124,19 +111,11 @@ public sealed class PhiSilicaChatClient : IChatClient
 					? prompt
 					: $"{systemPrompt}{Environment.NewLine}{Environment.NewLine}{prompt}";
 
-				// CS8305: schema-constrained generation is only exposed on the experimental
-				// LanguageModelExperimental surface in Windows App SDK 2.2.x. There is no stable
-				// equivalent on this SDK line, so the warning is acknowledged rather than avoided.
-#pragma warning disable CS8305
-				var structuredModel = _experimentalModel ??= new LanguageModelExperimental(model);
-
-				var structuredOperation = structuredModel.GenerateStructuredJsonResponseAsync(
+				var structuredOperation = model.GenerateStructuredJsonResponseAsync(
 					structuredPrompt,
 					jsonSchema,
-					LanguageModelOptionsExperimental.GetForLanguageModelOptions(modelOptions));
+					modelOptions);
 
-				// Structured generation does not report incremental progress: the constrained JSON
-				// is only available from the completed result.
 				WireUp(structuredOperation, handler, cancellationToken, static result => result.Status switch
 				{
 					GenerateStructuredJsonResponseStatus.Complete => result.Text,
@@ -148,7 +127,6 @@ public sealed class PhiSilicaChatClient : IChatClient
 				});
 
 				cancel = structuredOperation.Cancel;
-#pragma warning restore CS8305
 			}
 			else
 			{
@@ -231,8 +209,7 @@ public sealed class PhiSilicaChatClient : IChatClient
 			{
 				try
 				{
-					// Structured generation reports no progress and delivers everything here, while
-					// text generation has already streamed its content, so only the status matters.
+					// If progress was already reported, only inspect the final status.
 					var text = readResult(op.GetResults());
 
 					if (!reportedProgress)
@@ -372,20 +349,11 @@ public sealed class PhiSilicaChatClient : IChatClient
 	/// <inheritdoc />
 	void IDisposable.Dispose()
 	{
-		// The image description model is always created by this instance, so it is always disposed.
 		if (_imageDescriptionTask is { } imageDescriptionTask)
 			DisposeWhenReady(imageDescriptionTask);
 
 		if (_ownsModel)
-		{
-			// Disposing the experimental wrapper also closes the underlying model, so it is only
-			// safe to dispose when this instance owns that model.
-#pragma warning disable CS8305
-			_experimentalModel?.Dispose();
-#pragma warning restore CS8305
-
 			DisposeWhenReady(_modelTask);
-		}
 	}
 
 	private static void DisposeWhenReady<T>(Task<T> task)

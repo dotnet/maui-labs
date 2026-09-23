@@ -24,7 +24,7 @@
     <MicrosoftAspNetCoreComponentsWebViewMauiVersion>$(MicrosoftMauiControlsVersion)</MicrosoftAspNetCoreComponentsWebViewMauiVersion>
   </PropertyGroup>
   <PropertyGroup Label="Dotnet Runtime / Extensions">
-    <MicrosoftExtensionsDependencyInjectionVersion>10.0.5</MicrosoftExtensionsDependencyInjectionVersion>
+    <MicrosoftExtensionsDependencyInjectionVersion>10.0.6</MicrosoftExtensionsDependencyInjectionVersion>
     <MicrosoftExtensionsConfigurationVersion>10.0.5</MicrosoftExtensionsConfigurationVersion>
     <MicrosoftExtensionsHttpVersion>10.0.5</MicrosoftExtensionsHttpVersion>
     <MicrosoftExtensionsHostingVersion>10.0.5</MicrosoftExtensionsHostingVersion>
@@ -94,13 +94,8 @@
     <MicrosoftAgentsAIHostingVersion>1.0.0-preview.260225.1</MicrosoftAgentsAIHostingVersion>
     <!-- DeviceRunners (device test runner OSS replacement) -->
     <DeviceRunnersVersion>0.1.0-preview.12</DeviceRunnersVersion>
-    <!-- Windows App SDK: Copilot Runtime (Phi Silica) WinRT AI APIs.
-         Pinned to the 2.2.x line: Microsoft.WindowsAppSDK.Search (AppContentIndexer) pins
-         Microsoft.WindowsAppSDK.AI to an exact version, and 2.2.x is also the last line that
-         ships Microsoft.Windows.AI.Speech. -->
-    <MicrosoftWindowsAppSDKVersion>2.2.2-experimental9</MicrosoftWindowsAppSDKVersion>
-    <!-- Windows App SDK Search: AppContentIndexer (not part of the umbrella package) -->
-    <MicrosoftWindowsAppSDKSearchVersion>2.2.6-experimental</MicrosoftWindowsAppSDKSearchVersion>
+    <!-- The experimental umbrella package includes the matching AI, Search, and image-generation APIs. -->
+    <MicrosoftWindowsAppSDKVersion>2.4.1-experimental</MicrosoftWindowsAppSDKVersion>
     <!-- Windows: enables dotnet run for packaged MSIX apps -->
     <MicrosoftWindowsSDKBuildToolsWinAppVersion>0.3.0</MicrosoftWindowsSDKBuildToolsWinAppVersion>
   </PropertyGroup>

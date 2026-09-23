@@ -1,12 +1,9 @@
-#if WINDOWS
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Microsoft.Extensions.AI;
-using Microsoft.Maui.Essentials.AI;
 
-namespace EssentialsAISample.Services;
+namespace Microsoft.Maui.Essentials.AI;
 
 /// <summary>
 /// Adds function calling to Phi Silica.
@@ -88,7 +85,7 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 		CancellationToken cancellationToken = default)
 	{
 		var tools = GetFunctions(options);
-		if (tools is null)
+		if (tools is null || options?.ToolMode == ChatToolMode.None)
 			return await base.GetResponseAsync(messages, options, cancellationToken);
 
 		var conversation = messages as IReadOnlyList<ChatMessage> ?? [.. messages];
@@ -113,7 +110,7 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 		CancellationToken cancellationToken = default)
 	{
 		// Without tools there is nothing to rewrite, so stream straight through.
-		if (GetFunctions(options) is null)
+		if (GetFunctions(options) is null || options?.ToolMode == ChatToolMode.None)
 			return base.GetStreamingResponseAsync(messages, options, cancellationToken);
 
 		return StreamToolResponseAsync(messages, options, cancellationToken);
@@ -156,6 +153,7 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 		CancellationToken cancellationToken)
 	{
 		var completed = GetCompletedCalls(messages);
+		var requiresFirstTool = options?.ToolMode == ChatToolMode.RequireAny && completed.Count == 0;
 
 		// Stop once the chain has done enough work, so an indecisive model cannot spin.
 		if (completed.Count >= MaxToolCallsPerChain)
@@ -191,37 +189,29 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 		}
 		else
 		{
-			instructions.AppendLine($"Choose {NoToolName} if no tool is needed.");
+			instructions.AppendLine(requiresFirstTool
+				? "Choose the tool that best answers the request."
+				: $"Choose {NoToolName} if no tool is needed.");
 		}
 
-		var names = candidates.Select(t => t.Name).Append(NoToolName);
+		var names = requiresFirstTool
+			? candidates.Select(t => t.Name)
+			: candidates.Select(t => t.Name).Append(NoToolName);
 		var schema = BuildSelectionSchema(names);
 
-		string? response;
-		try
-		{
-			response = await RequestAsync(
-				messages, instructions.ToString(), schema, "tool_selection", options, cancellationToken);
-		}
-		catch (PhiSilicaContextWindowException)
-		{
-			// The conversation no longer fits, so no further tool call is possible. Answering with
-			// what has been gathered is the only useful move left.
-			return null;
-		}
-		catch (InvalidOperationException)
-		{
-			// Constrained generation can fail outright once a chain has accumulated enough history,
-			// reporting a status such as ResponseInvalidJson. Failing to decide is not a reason to
-			// fail the whole request, so fall back to answering with what has been gathered.
-			return null;
-		}
+		var response = await RequestAsync(
+			messages, instructions.ToString(), schema, "tool_selection", options, cancellationToken);
 
 		var chosen = ReadString(response, "tool_name");
-		if (string.IsNullOrEmpty(chosen) || chosen.Equals(NoToolName, StringComparison.OrdinalIgnoreCase))
+		if (chosen.Equals(NoToolName, StringComparison.OrdinalIgnoreCase))
+		{
+			if (requiresFirstTool)
+				throw new InvalidOperationException("Phi Silica selected no tool when a tool call was required.");
 			return null;
+		}
 
-		return candidates.FirstOrDefault(t => t.Name.Equals(chosen, StringComparison.OrdinalIgnoreCase));
+		return candidates.FirstOrDefault(t => t.Name.Equals(chosen, StringComparison.OrdinalIgnoreCase))
+			?? throw new InvalidOperationException($"Phi Silica selected an unknown tool: {chosen}.");
 	}
 
 	/// <summary>
@@ -231,7 +221,7 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 	{
 		var completed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-		foreach (var message in messages)
+		foreach (var message in CurrentTurn(messages))
 		{
 			foreach (var content in message.Contents)
 			{
@@ -251,7 +241,7 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 		var names = new List<string>();
 		var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-		foreach (var message in messages)
+		foreach (var message in CurrentTurn(messages))
 		{
 			foreach (var content in message.Contents)
 			{
@@ -276,7 +266,7 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 		var used = new List<string>();
 		var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-		foreach (var message in messages)
+		foreach (var message in CurrentTurn(messages))
 		{
 			foreach (var content in message.Contents)
 			{
@@ -299,6 +289,17 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 		return used;
 	}
 
+	private static IEnumerable<ChatMessage> CurrentTurn(IReadOnlyList<ChatMessage> messages)
+	{
+		for (var i = messages.Count - 1; i >= 0; i--)
+		{
+			if (messages[i].Role == ChatRole.User)
+				return messages.Skip(i);
+		}
+
+		return messages;
+	}
+
 	private static string Signature(string name, IDictionary<string, object?>? arguments)
 	{
 		if (arguments is not { Count: > 0 })
@@ -313,26 +314,29 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 
 	private static JsonElement BuildSelectionSchema(IEnumerable<string> toolNames)
 	{
-		var values = new JsonArray();
-		foreach (var name in toolNames)
-			values.Add(JsonValue.Create(name));
-
-		var schema = new JsonObject
+		using var stream = new MemoryStream();
+		using (var writer = new Utf8JsonWriter(stream))
 		{
-			["type"] = "object",
-			["additionalProperties"] = false,
-			["properties"] = new JsonObject
-			{
-				["tool_name"] = new JsonObject
-				{
-					["type"] = "string",
-					["enum"] = values
-				}
-			},
-			["required"] = new JsonArray { "tool_name" }
-		};
+			writer.WriteStartObject();
+			writer.WriteString("type", "object");
+			writer.WriteBoolean("additionalProperties", false);
+			writer.WriteStartObject("properties");
+			writer.WriteStartObject("tool_name");
+			writer.WriteString("type", "string");
+			writer.WriteStartArray("enum");
+			foreach (var name in toolNames)
+				writer.WriteStringValue(name);
+			writer.WriteEndArray();
+			writer.WriteEndObject();
+			writer.WriteEndObject();
+			writer.WriteStartArray("required");
+			writer.WriteStringValue("tool_name");
+			writer.WriteEndArray();
+			writer.WriteEndObject();
+		}
 
-		return ToElement(schema);
+		using var document = JsonDocument.Parse(stream.ToArray());
+		return document.RootElement.Clone();
 	}
 
 	// ═══════════════════════════════════════════════════════════
@@ -372,39 +376,23 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 			instructions.Append("Use the arguments for a part of the request that has not been done yet.");
 		}
 
-		string? response = null;
-		try
-		{
-			response = await RequestAsync(
-				messages, instructions.ToString(), schema, tool.Name, options, cancellationToken);
-		}
-		catch (InvalidOperationException)
-		{
-			// Constrained generation occasionally fails outright on a long conversation, reporting
-			// a status such as ResponseInvalidJson. Report the call without arguments rather than
-			// failing the request: the caller then sees which tool was chosen, and invoking it
-			// surfaces a clear missing-argument error. Retrying here is deliberately avoided, since
-			// a second generation on an already slow request costs more than it recovers.
-		}
+		var response = await RequestAsync(
+			messages, instructions.ToString(), schema, tool.Name, options, cancellationToken);
 
 		return new FunctionCallContent(callId, tool.Name, ReadArguments(response));
 	}
 
-	private static Dictionary<string, object?>? ReadArguments(string? response)
+	private static Dictionary<string, object?> ReadArguments(string? response)
 	{
 		if (string.IsNullOrWhiteSpace(response))
-			return null;
+			throw new InvalidOperationException("Phi Silica did not return tool arguments.");
 
-		try
-		{
-#pragma warning disable IL3050, IL2026 // Sample code; the argument shape is not known at compile time.
-			return JsonSerializer.Deserialize<Dictionary<string, object?>>(response);
-#pragma warning restore IL3050, IL2026
-		}
-		catch (JsonException)
-		{
-			return null;
-		}
+		using var document = JsonDocument.Parse(response);
+		if (document.RootElement.ValueKind != JsonValueKind.Object)
+			throw new InvalidOperationException("Phi Silica returned tool arguments that are not a JSON object.");
+
+		return document.RootElement.EnumerateObject()
+			.ToDictionary(property => property.Name, property => (object?)property.Value.Clone());
 	}
 
 	// ═══════════════════════════════════════════════════════════
@@ -472,31 +460,19 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 		properties.ValueKind == JsonValueKind.Object &&
 		properties.EnumerateObject().Any();
 
-	private static string? ReadString(string? json, string propertyName)
+	private static string ReadString(string? json, string propertyName)
 	{
 		if (string.IsNullOrWhiteSpace(json))
-			return null;
+			throw new InvalidOperationException("Phi Silica did not return a tool selection.");
 
-		try
-		{
-			using var document = JsonDocument.Parse(json);
+		using var document = JsonDocument.Parse(json);
 
-			return document.RootElement.ValueKind == JsonValueKind.Object &&
-				document.RootElement.TryGetProperty(propertyName, out var value) &&
-				value.ValueKind == JsonValueKind.String
-					? value.GetString()
-					: null;
-		}
-		catch (JsonException)
-		{
-			return null;
-		}
+		return document.RootElement.ValueKind == JsonValueKind.Object &&
+			document.RootElement.TryGetProperty(propertyName, out var value) &&
+			value.ValueKind == JsonValueKind.String &&
+			value.GetString() is { Length: > 0 } choice
+				? choice
+				: throw new InvalidOperationException("Phi Silica returned a tool selection without a tool_name.");
 	}
 
-	private static JsonElement ToElement(JsonNode node)
-	{
-		using var document = JsonDocument.Parse(node.ToJsonString());
-		return document.RootElement.Clone();
-	}
 }
-#endif
