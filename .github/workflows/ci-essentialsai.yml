@@ -15,11 +15,11 @@ on:
       - 'NuGet.config'
   pull_request:
     types: [opened, synchronize, reopened, edited]
-    branches: [main]
     paths:
       - 'src/AI/**'
       - 'tests/AI/**'
       - 'samples/EssentialsAISample/**'
+      - 'samples/ChatClientPlayground/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -39,6 +39,7 @@ jobs:
       run-tests: true
       pack: true
       workload-version: '10.0.401'
+      allow-xcode-preview: true
       android-project: src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj
 
   # Step 2: Build on Windows — downloads native .resources.zip from macOS build
@@ -62,7 +63,8 @@ jobs:
     with:
       project-path: tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj
       project-name: essentialsai
-      target-framework: net10.0-maccatalyst
+      target-framework: net10.0-maccatalyst27.0
       filter: 'RequiresModel!=true'
       os: xcode-27
       workload-version: '10.0.401'
+      use-xcode27-preview: true
