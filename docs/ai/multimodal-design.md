@@ -23,7 +23,7 @@ describe, classify, OCR/extract, compare — exposed through the existing
 - FoundationModels multimodal input is the `Attachment` API + a new `Transcript` attachment segment.
 - **Both are `iOS/macOS 27.0` and still beta**, and are **absent from the Xcode 26.x SDK** (verified).
   So this feature requires building the Swift shim with the **Xcode 27 SDK**, gating usage with
-  `if #available(… 27.0, *)`, and bumping CI's `xcode-version` to 27.x.
+  `if #available(… 27.0, *)`, and moving native CI builds to an Xcode 27 runner/workload.
 - Wire shape in M.E.AI is the standard `DataContent` / `UriContent` on `ChatMessage.Contents`, plus
   the `AIContent.RawRepresentation` native-handle fast path.
 - Implemented: a native `ImageContentNative` and binding, current-prompt and history attachment
@@ -46,8 +46,9 @@ Verified by grepping the `FoundationModels` `.swiftinterface` in the installed X
 
 Consequence: `#available` alone is not enough — the symbols are missing from the 26.x SDK, so the
 Swift shim will not compile there. The code below is written to compile under the **27.0 SDK** and
-to throw a clear error at runtime below 27.0. **CI `xcode-version` must move to 27.x** (both the
-`build-macos` and `device-tests-maccatalyst` jobs) when this lands. All the required symbols are
+to throw a clear error at runtime below 27.0. **The GitHub and official native-build jobs still
+pin Xcode 26.3 and must move to a supported Xcode 27 runner and .NET 10 workload** before this
+feature can pass those pipelines. All the required symbols are
 **confirmed present in the Xcode 27.0 Beta 4 SDK** (verified via the FoundationModels swiftinterface).
 
 ### Building against Xcode 27 side-by-side (no `xcode-select` switch)
@@ -526,9 +527,11 @@ var msg = new ChatMessage(ChatRole.User, [
   OS support; runtime model readiness is determined by the request itself.
 - `GenerationOptions(sampling:)` was renamed to `samplingMode:` to compile without the Xcode 27
   deprecation warning.
-- `.github/workflows/ci-essentialsai.yml`: bump `xcode-version` to **27.x** for `build-macos` and
-  `device-tests-maccatalyst`. Without this the Swift shim will not compile (`Attachment` /
-  `Transcript.Segment.attachment` are absent from the 26.x SDK).
+- `.github/workflows/ci-essentialsai.yml` and the official pipeline require an Xcode 27 native
+  runner (GitHub's preview label is `xcode-27`) and a matching .NET 10 workload. The current 26.3
+  pins cannot compile the Swift shim (`Attachment` / `Transcript.Segment.attachment` are absent).
+  The official native-build job and Windows packaging of its Apple artifacts must be validated
+  together before release.
 - No new frameworks to link — `FoundationModels` is a system framework resolved by the Swift shim.
 - Update `PublicAPI/**/PublicAPI.Unshipped.txt` for `AppleImage.*` (and any other new public API).
 - `README.md` platform matrix: add an "Image input (27.0+)" row.
