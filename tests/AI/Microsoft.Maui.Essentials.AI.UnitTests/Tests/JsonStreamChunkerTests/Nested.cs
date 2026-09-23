@@ -89,6 +89,132 @@ public partial class JsonStreamChunkerTests
 		}
 
 		[Fact]
+		public void Process_ArrayOfStringsGrowsBesideOtherProperties_ProducesValidJson()
+		{
+			var chunker = new JsonStreamChunker();
+			var lines = new[]
+			{
+				"""{"summary":"","category":"","keyPoints":[],"sentiment":""}""",
+				"""{"summary":"Hello! How can I assist you today?","category":"greeting","keyPoints":["Hello!"],"sentiment":"positive"}""",
+				"""{"summary":"Hello! How can I assist you today?","category":"greeting","keyPoints":["Hello!","assistance"],"sentiment":"positive"}"""
+			};
+
+			var chunks = new List<string>();
+			foreach (var line in lines)
+				chunks.Add(chunker.Process(line));
+			chunks.Add(chunker.Flush());
+			var concatenated = string.Concat(chunks);
+
+			Assert.True(IsValidJson(concatenated),
+				$"Invalid JSON: {concatenated}\n\nChunks:\n[{string.Join("], [", chunks)}]");
+			var doc = JsonDocument.Parse(concatenated);
+			var keyPoints = doc.RootElement.GetProperty("keyPoints");
+			Assert.Equal("Hello!", keyPoints[0].GetString());
+			Assert.Equal("assistance", keyPoints[1].GetString());
+		}
+
+		[Fact]
+		public void Flush_MultiplePendingContainersGrowTogether_PreservesFinalContents()
+		{
+			var chunker = new JsonStreamChunker();
+			var chunks = new List<string>
+			{
+				chunker.Process("""{"a":[],"b":[]}"""),
+				chunker.Process("""{"a":["A"],"b":["B"]}"""),
+				chunker.Flush()
+			};
+
+			var concatenated = string.Concat(chunks);
+
+			Assert.True(IsValidJson(concatenated),
+				$"Invalid JSON: {concatenated}\n\nChunks:\n[{string.Join("], [", chunks)}]");
+			var doc = JsonDocument.Parse(concatenated);
+			Assert.Equal("A", doc.RootElement.GetProperty("a")[0].GetString());
+			Assert.Equal("B", doc.RootElement.GetProperty("b")[0].GetString());
+		}
+
+		[Fact]
+		public void Process_OpenNestedStringAndPendingArrays_ProducesValidJson()
+		{
+			var chunker = new JsonStreamChunker();
+			var lines = new[]
+			{
+				"""{"left":{"text":"a"}}""",
+				"""{"left":{"text":"ab"},"right":["x","y"],"other":[]}""",
+				"""{"left":{"text":"abc"},"right":["x","y"],"other":[1]}"""
+			};
+
+			var chunks = new List<string>();
+			foreach (var line in lines)
+				chunks.Add(chunker.Process(line));
+			chunks.Add(chunker.Flush());
+			var concatenated = string.Concat(chunks);
+
+			Assert.True(IsValidJson(concatenated),
+				$"Invalid JSON: {concatenated}\n\nChunks:\n[{string.Join("], [", chunks)}]");
+			var doc = JsonDocument.Parse(concatenated);
+			Assert.Equal("abc", doc.RootElement.GetProperty("left").GetProperty("text").GetString());
+			Assert.Equal("x", doc.RootElement.GetProperty("right")[0].GetString());
+			Assert.Equal("y", doc.RootElement.GetProperty("right")[1].GetString());
+			Assert.Equal(1, doc.RootElement.GetProperty("other")[0].GetInt32());
+		}
+
+		[Fact]
+		public void Process_PendingArrayStringGrowsInPlaceThenAddsItem_ProducesValidJson()
+		{
+			var chunker = new JsonStreamChunker();
+			var lines = new[]
+			{
+				"""{"title":"","tags":[]}""",
+				"""{"title":"Trip","tags":["su"]}""",
+				"""{"title":"Trip p","tags":["sum"]}""",
+				"""{"title":"Trip plan","tags":["summer"]}""",
+				"""{"title":"Trip plan","tags":["summer","beach"]}"""
+			};
+
+			var chunks = new List<string>();
+			foreach (var line in lines)
+				chunks.Add(chunker.Process(line));
+			chunks.Add(chunker.Flush());
+			var concatenated = string.Concat(chunks);
+
+			Assert.True(IsValidJson(concatenated),
+				$"Invalid JSON: {concatenated}\n\nChunks:\n[{string.Join("], [", chunks)}]");
+			var doc = JsonDocument.Parse(concatenated);
+			Assert.Equal("Trip plan", doc.RootElement.GetProperty("title").GetString());
+			Assert.Equal("summer", doc.RootElement.GetProperty("tags")[0].GetString());
+			Assert.Equal("beach", doc.RootElement.GetProperty("tags")[1].GetString());
+		}
+
+		[Fact]
+		public void Process_PendingValuesPauseBeforeGrowing_PreservesFinalValues()
+		{
+			var chunker = new JsonStreamChunker();
+			var lines = new[]
+			{
+				"""{"summary":"","category":"","keyPoints":[],"sentiment":""}""",
+				"""{"summary":"Hello","category":"","keyPoints":[],"sentiment":""}""",
+				"""{"summary":"Hello there","category":"","keyPoints":[],"sentiment":""}""",
+				"""{"summary":"Hello there friend.","category":"greeting","keyPoints":["hi","yo"],"sentiment":"positive"}"""
+			};
+
+			var chunks = new List<string>();
+			foreach (var line in lines)
+				chunks.Add(chunker.Process(line));
+			chunks.Add(chunker.Flush());
+			var concatenated = string.Concat(chunks);
+
+			Assert.True(IsValidJson(concatenated),
+				$"Invalid JSON: {concatenated}\n\nChunks:\n[{string.Join("], [", chunks)}]");
+			var doc = JsonDocument.Parse(concatenated);
+			Assert.Equal("Hello there friend.", doc.RootElement.GetProperty("summary").GetString());
+			Assert.Equal("greeting", doc.RootElement.GetProperty("category").GetString());
+			Assert.Equal("hi", doc.RootElement.GetProperty("keyPoints")[0].GetString());
+			Assert.Equal("yo", doc.RootElement.GetProperty("keyPoints")[1].GetString());
+			Assert.Equal("positive", doc.RootElement.GetProperty("sentiment").GetString());
+		}
+
+		[Fact]
 		public void Process_EmptyObjectInArray_ProducesValidJson()
 		{
 			// Test pattern from mount-fuji line 35: {"activities": [{}, ...]}

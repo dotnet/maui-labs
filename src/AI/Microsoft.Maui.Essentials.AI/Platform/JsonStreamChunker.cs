@@ -50,8 +50,7 @@ internal sealed class JsonStreamChunker : StreamChunkerBase
 	private readonly Dictionary<string, string> _pendingStrings = new();
 
 	/// <summary>Containers (arrays/objects) waiting for next chunk to see if they grow.</summary>
-	/// <remarks>Key is path, Value is true for array, false for object.</remarks>
-	private readonly Dictionary<string, bool> _pendingContainers = new();
+	private readonly Dictionary<string, PendingContainer> _pendingContainers = new();
 
 	/// <summary>All paths we've already output (for comma management).</summary>
 	private readonly HashSet<string> _emittedPaths = new();
@@ -61,6 +60,9 @@ internal sealed class JsonStreamChunker : StreamChunkerBase
 
 	/// <summary>Represents a JSON value with its kind and content.</summary>
 	private record struct JsonValue(JsonValueKind Kind, string? StringValue, string? RawValue);
+
+	/// <summary>Retains the latest complete value for a deferred container.</summary>
+	private readonly record struct PendingContainer(bool IsArray, JsonElement Value);
 
 	// ═══════════════════════════════════════════════════════════════════════════════════════════
 	// HELPER: Is this a "growable" value type?
@@ -72,6 +74,21 @@ internal sealed class JsonStreamChunker : StreamChunkerBase
 	/// </summary>
 	private static bool IsGrowable(JsonValueKind kind) =>
 		kind == JsonValueKind.String || kind == JsonValueKind.Array || kind == JsonValueKind.Object;
+
+	private void SetPendingContainer(string path, bool isArray, JsonElement value) =>
+		_pendingContainers[path] = new PendingContainer(isArray, value.Clone());
+
+	private void RefreshPendingContainers(JsonElement root)
+	{
+		foreach (var path in _pendingContainers.Keys.ToArray())
+		{
+			if (GetElementAtPath(root, path) is not { } value)
+				continue;
+
+			var pending = _pendingContainers[path];
+			_pendingContainers[path] = pending with { Value = value.Clone() };
+		}
+	}
 
 	/// <summary>
 	/// Closes any currently open string by emitting the closing quote.
@@ -111,16 +128,17 @@ internal sealed class JsonStreamChunker : StreamChunkerBase
 			.OrderBy(kvp => kvp.Key)
 			.ToList();
 
-		foreach (var (path, isArray) in containersToEmit)
+		foreach (var (path, pending) in containersToEmit)
 		{
 			var (containerParent, propName) = SplitPath(path);
+			CloseOpenString(sb);
 			CloseStructuresDownTo(sb, containerParent);
 
 			if (HasEmittedSiblingAt(containerParent))
 				sb.Append(',');
 
 			sb.Append("\"" + Escape(propName) + "\":");
-			sb.Append(isArray ? "[]" : "{}");
+			EmitCompleteValue(sb, pending.Value, path);
 			_emittedPaths.Add(path);
 			_pendingContainers.Remove(path);
 		}
@@ -156,6 +174,7 @@ internal sealed class JsonStreamChunker : StreamChunkerBase
 
 		using (doc)
 		{
+			RefreshPendingContainers(doc.RootElement);
 			var currState = FlattenJson(doc.RootElement, "");
 
 			string result;
@@ -198,16 +217,17 @@ internal sealed class JsonStreamChunker : StreamChunkerBase
 		// Emit any pending containers that never got disambiguated
 		if (_pendingContainers.Count > 0)
 		{
-			foreach (var (path, isArray) in _pendingContainers.OrderBy(p => p.Key))
+			foreach (var (path, pending) in _pendingContainers.OrderBy(p => p.Key))
 			{
 				var (parentPath, propName) = SplitPath(path);
+				CloseOpenString(sb);
 				CloseStructuresDownTo(sb, parentPath);
 
 				if (HasEmittedSiblingAt(parentPath))
 					sb.Append(',');
 
 				sb.Append("\"" + Escape(propName) + "\":");
-				sb.Append(isArray ? "[]" : "{}");
+				EmitCompleteValue(sb, pending.Value, path);
 				_emittedPaths.Add(path);
 			}
 			_pendingContainers.Clear();
@@ -342,14 +362,14 @@ internal sealed class JsonStreamChunker : StreamChunkerBase
 	/// </summary>
 	/// <remarks>
 	/// When we had multiple new growables at the same level, we couldn't tell which was partial.
-	/// Now we can compare: items that didn't change are complete, the one that changed is the active one.
+	/// Root items stay deferred through unchanged snapshots because they may resume later. Nested
+	/// unchanged items complete eagerly so their parent structure can close before traversal moves on.
 	/// </remarks>
 	private void ResolvePendingItems(StringBuilder sb, Dictionary<string, JsonValue> currState, JsonElement currElem)
 	{
 		// Determine which pending item changed
-		string? changedStringPath = null;
-		string? changedStringValue = null;
-		string? changedContainerPath = null;
+		var changedStrings = new List<(string Path, string Value)>();
+		var changedContainers = new List<(string Path, bool IsArray)>();
 		var completeStrings = new List<(string Path, string Value)>();
 		var completeContainers = new List<(string Path, bool IsArray)>();
 
@@ -360,57 +380,55 @@ internal sealed class JsonStreamChunker : StreamChunkerBase
 				continue;
 
 			var currValue = currVal.StringValue ?? "";
-			if (currValue == storedValue)
+			var parentPath = GetParentPath(path);
+			if (string.IsNullOrEmpty(parentPath) &&
+				HasNewSiblingAt(parentPath, _prevState!, currState))
 			{
-				// Unchanged - this one is complete
 				completeStrings.Add((path, currValue));
 			}
-			else
-			{
-				// Changed - this is the active/partial string
-				changedStringPath = path;
-				changedStringValue = currValue;
-			}
+			else if (currValue != storedValue)
+				changedStrings.Add((path, currValue));
+			else if (!string.IsNullOrEmpty(parentPath))
+				completeStrings.Add((path, currValue));
 		}
 
 		// Check pending containers
-		foreach (var (path, isArray) in _pendingContainers)
+		foreach (var (path, pending) in _pendingContainers)
 		{
-			bool containerChanged = HasContainerGrown(path, _prevState!, currState);
-			if (containerChanged)
+			var parentPath = GetParentPath(path);
+			if (string.IsNullOrEmpty(parentPath) &&
+				HasNewSiblingAt(parentPath, _prevState!, currState))
 			{
-				// Container grew - it's the active one
-				changedContainerPath = path;
+				completeContainers.Add((path, pending.IsArray));
 			}
-			else
-			{
-				// Unchanged - complete
-				completeContainers.Add((path, isArray));
-			}
+			else if (HasContainerGrown(path, _prevState!, currState))
+				changedContainers.Add((path, pending.IsArray));
+			else if (!string.IsNullOrEmpty(parentPath))
+				completeContainers.Add((path, pending.IsArray));
 		}
 
-		// Emit all complete items first
-		// Sort by path to maintain consistent order
-		var allComplete = completeStrings.Select(s => (s.Path, IsString: true, Value: s.Value, IsArray: false))
-			.Concat(completeContainers.Select(c => (c.Path, IsString: false, Value: "", c.IsArray)))
-			.OrderBy(x => x.Path)
+		var allComplete = completeStrings.Select(item =>
+				(item.Path, IsString: true, Value: item.Value, IsArray: false))
+			.Concat(completeContainers.Select(item =>
+				(item.Path, IsString: false, Value: "", item.IsArray)))
+			.OrderBy(item => item.Path)
 			.ToList();
 
 		foreach (var item in allComplete)
 		{
 			if (item.IsString)
-			{
 				EmitPendingString(sb, item.Path, item.Value, keepOpen: false);
-			}
 			else
-			{
-				EmitPendingContainer(sb, item.Path, item.IsArray, currElem, currState, complete: true);
-			}
+				EmitPendingContainer(sb, item.Path, item.IsArray, currElem, complete: true);
 		}
 
-		// Emit the changed item (potentially still open/growing)
-		if (changedStringPath != null && changedStringValue != null)
+		// A single changed growable is the active value and can stream. When several
+		// grow together, keep all of them pending until a later snapshot disambiguates
+		// which one is still active.
+		var changedCount = changedStrings.Count + changedContainers.Count;
+		if (changedCount == 1 && changedStrings.Count == 1)
 		{
+			var (changedStringPath, changedStringValue) = changedStrings[0];
 			EmitPendingString(sb, changedStringPath, changedStringValue, keepOpen: true);
 
 			// Check if it should be closed due to sibling
@@ -420,10 +438,15 @@ internal sealed class JsonStreamChunker : StreamChunkerBase
 				_openStringPath = null;
 			}
 		}
-		else if (changedContainerPath != null)
+		else if (changedCount == 1)
 		{
-			bool isArray = _pendingContainers[changedContainerPath];
-			EmitPendingContainer(sb, changedContainerPath, isArray, currElem, currState, complete: false);
+			var (changedContainerPath, isArray) = changedContainers[0];
+			EmitPendingContainer(sb, changedContainerPath, isArray, currElem, complete: false);
+		}
+		else
+		{
+			foreach (var (path, value) in changedStrings)
+				_pendingStrings[path] = value;
 		}
 
 		// Remove only the items that were pending when we entered this method.
@@ -431,13 +454,13 @@ internal sealed class JsonStreamChunker : StreamChunkerBase
 		// when processing nested content.
 		foreach (var (path, _) in completeStrings)
 			_pendingStrings.Remove(path);
-		if (changedStringPath != null)
-			_pendingStrings.Remove(changedStringPath);
+		if (changedCount == 1 && changedStrings.Count == 1)
+			_pendingStrings.Remove(changedStrings[0].Path);
 
 		foreach (var (path, _) in completeContainers)
 			_pendingContainers.Remove(path);
-		if (changedContainerPath != null)
-			_pendingContainers.Remove(changedContainerPath);
+		if (changedCount == 1 && changedContainers.Count == 1)
+			_pendingContainers.Remove(changedContainers[0].Path);
 	}
 
 	/// <summary>
@@ -449,17 +472,30 @@ internal sealed class JsonStreamChunker : StreamChunkerBase
 		var prevChildren = prevState.Keys.Where(k => k.StartsWith(path + ".") || k.StartsWith(path + "[")).ToHashSet();
 		var currChildren = currState.Keys.Where(k => k.StartsWith(path + ".") || k.StartsWith(path + "[")).ToHashSet();
 
-		// Container grew if there are new keys that weren't in prevChildren
-		// This handles the case where days[0] (empty object) becomes days[0].activities[0].title
-		return !currChildren.SetEquals(prevChildren);
+		if (!currChildren.SetEquals(prevChildren))
+			return true;
+
+		// A growable child can change without adding a path, such as an array's last
+		// string extending from "su" to "summer".
+		foreach (var key in currChildren)
+		{
+			if (!prevState.TryGetValue(key, out var previousValue) ||
+				currState[key] != previousValue)
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/// <summary>
 	/// Emits a pending container (array or object) that has been resolved.
 	/// </summary>
-	private void EmitPendingContainer(StringBuilder sb, string path, bool isArray, JsonElement currElem, Dictionary<string, JsonValue> currState, bool complete)
+	private void EmitPendingContainer(StringBuilder sb, string path, bool isArray, JsonElement currElem, bool complete)
 	{
 		var (parentPath, propName) = SplitPath(path);
+		CloseOpenString(sb);
 		CloseStructuresDownTo(sb, parentPath);
 
 		if (HasEmittedSiblingAt(parentPath))
@@ -476,14 +512,12 @@ internal sealed class JsonStreamChunker : StreamChunkerBase
 			sb.Append('[');
 			if (complete)
 			{
-				// Emit complete array content
 				if (elem.HasValue && elem.Value.ValueKind == JsonValueKind.Array)
 					EmitCompleteArrayContent(sb, elem.Value, path);
 				sb.Append(']');
 			}
 			else
 			{
-				// Array is still growing - push to open structures
 				_openStructures.Push((path, true));
 				if (elem.HasValue && elem.Value.ValueKind == JsonValueKind.Array)
 					EmitArrayContent(sb, elem.Value, path);
@@ -494,14 +528,12 @@ internal sealed class JsonStreamChunker : StreamChunkerBase
 			sb.Append('{');
 			if (complete)
 			{
-				// Emit complete object content
 				if (elem.HasValue && elem.Value.ValueKind == JsonValueKind.Object)
 					EmitCompleteObjectContent(sb, elem.Value, path);
 				sb.Append('}');
 			}
 			else
 			{
-				// Object is still growing - push to open structures
 				_openStructures.Push((path, false));
 				if (elem.HasValue && elem.Value.ValueKind == JsonValueKind.Object)
 					EmitObjectContent(sb, elem.Value, path);
@@ -518,7 +550,11 @@ internal sealed class JsonStreamChunker : StreamChunkerBase
 		foreach (var item in elem.EnumerateArray())
 		{
 			if (idx > 0)
+			{
+				CloseOpenString(sb);
+				CloseStructuresDownTo(sb, path);
 				sb.Append(',');
+			}
 
 			var itemPath = path + "[" + idx + "]";
 			_emittedPaths.Add(itemPath);
@@ -687,8 +723,10 @@ internal sealed class JsonStreamChunker : StreamChunkerBase
 
 			if (prevProps.Contains(prop.Name))
 			{
-				// Existing property - recurse into non-strings (strings handled elsewhere)
-				if (prop.Value.ValueKind != JsonValueKind.String)
+				// Existing property - recurse into emitted non-strings. Pending containers
+				// must remain opaque until their property name and opening structure are emitted.
+				if (prop.Value.ValueKind != JsonValueKind.String &&
+					!_pendingContainers.ContainsKey(propPath))
 					ProcessNewContent(sb, prevState, currState, prop.Value, propPath);
 			}
 			else
@@ -749,8 +787,8 @@ internal sealed class JsonStreamChunker : StreamChunkerBase
 			// Multiple growables - add all to pending
 			foreach (var (_, value, propPath) in newStringProps)
 				_pendingStrings[propPath] = value.GetString() ?? "";
-			foreach (var (_, _, propPath, isArray) in newContainerProps)
-				_pendingContainers[propPath] = isArray;
+			foreach (var (_, value, propPath, isArray) in newContainerProps)
+				SetPendingContainer(propPath, isArray, value);
 		}
 	}
 
@@ -947,7 +985,7 @@ internal sealed class JsonStreamChunker : StreamChunkerBase
 				else
 				{
 					// Multiple growables at this level - add container to pending
-					_pendingContainers[propPath] = isArray;
+					SetPendingContainer(propPath, isArray, prop.Value);
 				}
 			}
 			else
@@ -1087,8 +1125,8 @@ internal sealed class JsonStreamChunker : StreamChunkerBase
 			// Multiple growables - add all to pending
 			foreach (var (_, value, propPath) in stringProps)
 				_pendingStrings[propPath] = value;
-			foreach (var (_, _, propPath, isArray) in containerProps)
-				_pendingContainers[propPath] = isArray;
+			foreach (var (_, value, propPath, isArray) in containerProps)
+				SetPendingContainer(propPath, isArray, value);
 		}
 	}
 
@@ -1101,7 +1139,11 @@ internal sealed class JsonStreamChunker : StreamChunkerBase
 		foreach (var item in elem.EnumerateArray())
 		{
 			if (idx > 0)
+			{
+				CloseOpenString(sb);
+				CloseStructuresDownTo(sb, path);
 				sb.Append(',');
+			}
 
 			var itemPath = path + "[" + idx + "]";
 			_emittedPaths.Add(itemPath);
