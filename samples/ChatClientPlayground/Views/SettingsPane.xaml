@@ -33,20 +33,20 @@
             <BoxView HeightRequest="1" Color="{StaticResource BorderColor}" />
             <Label Text="RECORDING" FontSize="12" FontAttributes="Bold" TextColor="{StaticResource MutedText}" />
             <HorizontalStackLayout Spacing="6" IsEnabled="{Binding CanSelectClient}">
-                <RadioButton Content="Live" GroupName="RecordingMode" IsChecked="{Binding Recording.IsLive}" AutomationId="RecordingLiveRadio" />
-                <RadioButton Content="Record" GroupName="RecordingMode" IsChecked="{Binding Recording.IsRecord}" AutomationId="RecordingRecordRadio" />
-                <RadioButton Content="Replay" GroupName="RecordingMode" IsChecked="{Binding Recording.IsReplay}" AutomationId="RecordingReplayRadio" />
-                <views:InfoTip Text="{Binding Recording.StorageInfo}" />
+                <RadioButton Content="Live" GroupName="RecordingMode" IsChecked="{Binding IsLive}" AutomationId="RecordingLiveRadio" />
+                <RadioButton Content="Record" GroupName="RecordingMode" IsChecked="{Binding IsRecord}" AutomationId="RecordingRecordRadio" />
+                <RadioButton Content="Replay" GroupName="RecordingMode" IsChecked="{Binding IsReplay}" AutomationId="RecordingReplayRadio" />
+                <views:InfoTip Text="{Binding StorageInfo}" />
             </HorizontalStackLayout>
             <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="4" IsEnabled="{Binding CanSelectClient}">
-                <Label Text="{Binding Recording.TapeSummary}" FontSize="11" TextColor="{StaticResource MutedText}" VerticalOptions="Center" LineBreakMode="TailTruncation" />
-                <Button Grid.Column="1" Text="New" Command="{Binding Recording.NewRecordingCommand}" AutomationId="NewRecordingButton" />
-                <Button Grid.Column="2" Text="Save" Command="{Binding Recording.SaveCommand}" AutomationId="SaveRecordingButton" />
-                <Button Grid.Column="3" Text="Load" Command="{Binding Recording.LoadCommand}" AutomationId="LoadRecordingButton" />
+                <Label Text="{Binding TapeSummary}" FontSize="11" TextColor="{StaticResource MutedText}" VerticalOptions="Center" LineBreakMode="TailTruncation" />
+                <Button Grid.Column="1" Text="New" Command="{Binding NewRecordingCommand}" AutomationId="NewRecordingButton" />
+                <Button Grid.Column="2" Text="Save" Command="{Binding SaveCommand}" AutomationId="SaveRecordingButton" />
+                <Button Grid.Column="3" Text="Load" Command="{Binding LoadCommand}" AutomationId="LoadRecordingButton" />
             </Grid>
             <HorizontalStackLayout Spacing="6" IsEnabled="{Binding CanSelectClient}">
-                <Button Text="Restart replay" Command="{Binding Recording.RestartReplayCommand}" AutomationId="RestartReplayButton" />
-                <Label Text="{Binding Recording.Status}" FontSize="11" TextColor="{StaticResource MutedText}" VerticalOptions="Center" LineBreakMode="TailTruncation" />
+                <Button Text="Restart replay" Command="{Binding RestartReplayCommand}" AutomationId="RestartReplayButton" />
+                <Label Text="{Binding RecordingStatus}" FontSize="11" TextColor="{StaticResource MutedText}" VerticalOptions="Center" LineBreakMode="TailTruncation" />
             </HorizontalStackLayout>
 
             <BoxView HeightRequest="1" Color="{StaticResource BorderColor}" />

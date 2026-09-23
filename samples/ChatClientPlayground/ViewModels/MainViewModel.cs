@@ -38,7 +38,6 @@ public partial class MainViewModel : ObservableObject
         Chat.SendCommand = new AsyncRelayCommand(SendAsync, () => Chat.CanSend);
         Chat.CancelCommand = new RelayCommand(Cancel, () => Chat.IsBusy);
         Settings.PropertyChanged += SettingsPropertyChanged;
-        Settings.Recording.PropertyChanged += RecordingPropertyChanged;
         Chat.PropertyChanged += ChatPropertyChanged;
         ApplyClientSelection(_chatClients.GetClient(Settings.SelectedClient));
     }
@@ -528,24 +527,13 @@ public partial class MainViewModel : ObservableObject
 
     private void SettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(SettingsPaneViewModel.SelectedClient))
+        if (e.PropertyName is nameof(SettingsPaneViewModel.SelectedClient) or
+            nameof(SettingsPaneViewModel.Mode) or
+            nameof(SettingsPaneViewModel.InteractionCount) or
+            nameof(SettingsPaneViewModel.ReplayPosition))
             ApplyClientSelection(_chatClients.GetClient(Settings.SelectedClient));
         else
             UpdateChatCanSend();
-    }
-
-    private void RecordingPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName is nameof(RecordingViewModel.Mode) or
-            nameof(RecordingViewModel.InteractionCount) or
-            nameof(RecordingViewModel.ReplayPosition))
-        {
-            ApplyClientSelection(_chatClients.GetClient(Settings.SelectedClient));
-        }
-        else
-        {
-            UpdateChatCanSend();
-        }
     }
 
     private void ChatPropertyChanged(object? sender, PropertyChangedEventArgs e)

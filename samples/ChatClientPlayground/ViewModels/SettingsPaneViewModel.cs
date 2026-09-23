@@ -3,6 +3,7 @@ using System.Text.Json;
 using ChatClientPlayground.Models;
 using ChatClientPlayground.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.AI;
 
 namespace ChatClientPlayground.ViewModels;
@@ -12,12 +13,15 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
 {
     private static JsonSerializerOptions StructuredJson => PlaygroundJsonContext.Default.Options;
     private readonly ChatClientService _chatClients;
+    private readonly ChatRecordingService _recording;
 
     /// <summary>Initializes the settings state.</summary>
-    public SettingsPaneViewModel(ChatClientService chatClients, RecordingViewModel recording)
+    public SettingsPaneViewModel(ChatClientService chatClients, ChatRecordingService recording)
     {
         _chatClients = chatClients;
-        Recording = recording;
+        _recording = recording;
+        _recording.Changed += (_, _) => MainThread.BeginInvokeOnMainThread(RefreshRecording);
+        RefreshRecording();
         RefreshClientStatus();
     }
 
@@ -48,9 +52,20 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
     [ObservableProperty] private bool enableStopSequences;
     [ObservableProperty] private string stopSequences = string.Empty;
     [ObservableProperty] private string clientStatus = string.Empty;
+    [ObservableProperty] private RecordingMode mode;
+    [ObservableProperty] private string recordingStatus = "Live requests are not recorded.";
+    [ObservableProperty] private int interactionCount;
+    [ObservableProperty] private int replayPosition;
+    [ObservableProperty] private string storagePath = string.Empty;
 
     /// <summary>Gets whether provider selection is allowed.</summary>
     public bool CanSelectClient => !IsBusy;
+    public bool IsLive { get => Mode == RecordingMode.Live; set { if (value) Mode = RecordingMode.Live; } }
+    public bool IsRecord { get => Mode == RecordingMode.Record; set { if (value) Mode = RecordingMode.Record; } }
+    public bool IsReplay { get => Mode == RecordingMode.Replay; set { if (value) Mode = RecordingMode.Replay; } }
+    public bool CanRestartReplay => InteractionCount > 0;
+    public string TapeSummary => $"{InteractionCount} interaction{(InteractionCount == 1 ? string.Empty : "s")} · replay {ReplayPosition}/{InteractionCount}";
+    public string StorageInfo => $"Recordings are saved app-locally. Path: {StoragePath}";
     public bool IsLocalSelected { get => SelectedClient == ChatClientKind.Local; set { if (value) SelectedClient = ChatClientKind.Local; } }
     public bool IsCloudSelected { get => SelectedClient == ChatClientKind.Cloud; set { if (value) SelectedClient = ChatClientKind.Cloud; } }
     public bool IsToolModeAuto { get => ToolMode == "Auto"; set { if (value) ToolMode = "Auto"; } }
@@ -61,9 +76,6 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
     public bool IsMultipleToolCallsDisallowed { get => MultipleToolCallsMode == Models.MultipleToolCallsMode.Disallow; set { if (value) MultipleToolCallsMode = Models.MultipleToolCallsMode.Disallow; } }
     public string LocalProviderInfo => _chatClients.GetClient(ChatClientKind.Local).Descriptor.Status;
     public string CloudProviderInfo => _chatClients.GetClient(ChatClientKind.Cloud).Descriptor.Status;
-    /// <summary>Gets the contained recording control state.</summary>
-    public RecordingViewModel Recording { get; }
-
     /// <summary>Creates request options using the current settings and supplied real tools.</summary>
     public ChatOptions CreateChatOptions(IList<AITool> tools)
     {
@@ -105,6 +117,59 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
         ClientStatus = _chatClients.GetClient(SelectedClient).Descriptor.Status;
         OnPropertyChanged(nameof(LocalProviderInfo));
         OnPropertyChanged(nameof(CloudProviderInfo));
+    }
+
+    [RelayCommand]
+    private void NewRecording()
+    {
+        _recording.NewRecording();
+        RecordingStatus = "New in-memory recording created.";
+    }
+
+    [RelayCommand]
+    private void Save()
+    {
+        try
+        {
+            _recording.Save();
+            RecordingStatus = $"Saved {InteractionCount} interaction(s).";
+        }
+        catch (Exception exception)
+        {
+            RecordingStatus = $"Save failed: {exception.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void Load()
+    {
+        try
+        {
+            _recording.Load();
+            RecordingStatus = $"Loaded {InteractionCount} interaction(s); replay is ready.";
+        }
+        catch (Exception exception)
+        {
+            RecordingStatus = $"Load failed: {exception.Message}";
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanRestartReplay))]
+    private void RestartReplay()
+    {
+        _recording.RestartReplay();
+        RecordingStatus = "Replay restarted at interaction 1.";
+    }
+
+    private void RefreshRecording()
+    {
+        Mode = _recording.Mode;
+        InteractionCount = _recording.InteractionCount;
+        ReplayPosition = _recording.ReplayPosition;
+        StoragePath = _recording.Path;
+        OnPropertyChanged(nameof(TapeSummary));
+        OnPropertyChanged(nameof(StorageInfo));
+        RestartReplayCommand.NotifyCanExecuteChanged();
     }
 
     private IList<string>? OptionalStopSequences()
@@ -151,6 +216,22 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
         RefreshClientStatus();
         OnPropertyChanged(nameof(IsLocalSelected));
         OnPropertyChanged(nameof(IsCloudSelected));
+    }
+
+    partial void OnModeChanged(RecordingMode value)
+    {
+        _recording.SetMode(value);
+        RecordingStatus = value switch
+        {
+            RecordingMode.Live => "Live requests are not recorded.",
+            RecordingMode.Record => "Requests will be recorded in memory.",
+            _ => InteractionCount == 0
+                ? "Replay needs a loaded or recorded interaction."
+                : $"Replay is ready at interaction {ReplayPosition + 1} of {InteractionCount}.",
+        };
+        OnPropertyChanged(nameof(IsLive));
+        OnPropertyChanged(nameof(IsRecord));
+        OnPropertyChanged(nameof(IsReplay));
     }
 
     partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(CanSelectClient));

@@ -38,7 +38,6 @@ public static class MauiProgram
         builder.Services.AddSingleton<ImageInputService>();
         builder.Services.AddSingleton<PlaygroundTools>();
         builder.Services.AddSingleton<ChatRecordingService>();
-        builder.Services.AddSingleton<RecordingViewModel>();
         builder.Services.AddSingleton<SettingsPaneViewModel>();
         builder.Services.AddSingleton<ChatAreaViewModel>();
         builder.Services.AddSingleton<MainViewModel>();
