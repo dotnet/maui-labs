@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:viewModels="clr-namespace:AIExtensions.Sample.ChatPlayground.ViewModels"
+             xmlns:views="clr-namespace:AIExtensions.Sample.ChatPlayground.Views"
+             x:Class="AIExtensions.Sample.ChatPlayground.MainPage"
+             x:DataType="viewModels:MainViewModel"
+             Title="IChatClient Playground"
+             BackgroundColor="{StaticResource PageBackground}">
+    <Grid SafeAreaEdges="None">
+        <Grid x:Name="RootGrid" RowDefinitions="*" Padding="12" ColumnSpacing="12" SafeAreaEdges="Container">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="SettingsColumn" Width="330" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Border x:Name="SettingsPanel" Grid.Column="0" ZIndex="10"
+                    BackgroundColor="{StaticResource PanelBackground}"
+                    Stroke="{StaticResource BorderColor}"
+                    StrokeShape="RoundRectangle 12"
+                    AutomationId="SettingsSidebar">
+                <Grid RowDefinitions="Auto,*">
+                    <Grid Padding="16,16,16,0" ColumnDefinitions="*,Auto">
+                        <Label Text="Playground settings" FontSize="20" FontAttributes="Bold" />
+                        <ImageButton x:Name="CloseSettingsButton" Grid.Column="1"
+                                     Source="close.png" IsVisible="False"
+                                     Clicked="CloseSettingsClicked"
+                                     Style="{StaticResource AttachmentButton}"
+                                     SemanticProperties.Description="Close settings"
+                                     ToolTipProperties.Text="Close settings"
+                                     AutomationId="CloseSettingsButton" />
+                    </Grid>
+                    <views:SettingsPane Grid.Row="1" BindingContext="{Binding Settings}" />
+                </Grid>
+            </Border>
+
+            <Grid x:Name="ChatPanel" Grid.Column="1" RowDefinitions="Auto,*" RowSpacing="12">
+                <Border BackgroundColor="{StaticResource PanelBackground}"
+                        Stroke="{StaticResource BorderColor}"
+                        StrokeShape="RoundRectangle 12" Padding="16">
+                    <Grid x:Name="HeaderGrid" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                        <ImageButton x:Name="OpenSettingsButton"
+                                     Source="settings.png" IsVisible="False"
+                                     Clicked="OpenSettingsClicked"
+                                     Style="{StaticResource AttachmentButton}"
+                                     SemanticProperties.Description="Open settings"
+                                     ToolTipProperties.Text="Open settings"
+                                     AutomationId="OpenSettingsButton" />
+                        <VerticalStackLayout x:Name="HeaderContent" Grid.Column="1" Spacing="2">
+                            <Label Text="IChatClient Playground" FontSize="22" FontAttributes="Bold" />
+                            <Label Text="{Binding Chat.StatusMessage}" FontSize="12"
+                                   TextColor="{StaticResource MutedText}"
+                                   AutomationId="RequestStatusLabel" />
+                        </VerticalStackLayout>
+                        <HorizontalStackLayout Grid.Column="2" VerticalOptions="Start">
+                            <VerticalStackLayout Margin="4,0" Spacing="2">
+                                <ImageButton Source="add.png"
+                                             Style="{StaticResource ChatActionButton}"
+                                             Command="{Binding NewChatCommand}"
+                                             SemanticProperties.Description="Start a new chat, replacing the current temporary chat"
+                                             ToolTipProperties.Text="New chat (save the current chat first to keep it)"
+                                             AutomationId="NewChatButton" />
+                                <Label Text="New" Style="{StaticResource ChatActionLabel}" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Margin="4,0" Spacing="2">
+                                <ImageButton x:Name="SaveChatButton" Source="save.png"
+                                             Style="{StaticResource ChatActionButton}"
+                                             Command="{Binding SaveChatCommand}"
+                                             CommandParameter="{x:Reference SaveChatButton}"
+                                             SemanticProperties.Description="Export the current chat as a JSON file"
+                                             ToolTipProperties.Text="Save chat to a file"
+                                             AutomationId="SaveChatButton" />
+                                <Label Text="Save" Style="{StaticResource ChatActionLabel}" />
+                            </VerticalStackLayout>
+                        </HorizontalStackLayout>
+                    </Grid>
+                </Border>
+
+                <views:ChatArea x:Name="ChatArea" Grid.Row="1" BindingContext="{Binding Chat}" />
+            </Grid>
+        </Grid>
+    </Grid>
+</ContentPage>

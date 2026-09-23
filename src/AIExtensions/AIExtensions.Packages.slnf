@@ -2,7 +2,6 @@
   "solution": {
     "path": "../../MauiLabs.slnx",
     "projects": [
-      "samples\\AIExtensions.Sample.ChatPlayground\\AIExtensions.Sample.ChatPlayground.csproj",
       "src\\AIExtensions\\Microsoft.Maui.AI.Attributes\\Microsoft.Maui.AI.Attributes.csproj",
       "src\\AIExtensions\\Microsoft.Maui.AI.Attributes.Generators\\Microsoft.Maui.AI.Attributes.Generators.csproj",
       "tests\\AIExtensions\\Microsoft.Maui.AI.Attributes.Tests\\Microsoft.Maui.AI.Attributes.Tests.csproj",

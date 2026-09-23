@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:viewModels="clr-namespace:AIExtensions.Sample.ChatPlayground.ViewModels"
+             xmlns:views="clr-namespace:AIExtensions.Sample.ChatPlayground.Views"
+             xmlns:controls="clr-namespace:AIExtensions.Sample.ChatPlayground.Controls"
+             x:Class="AIExtensions.Sample.ChatPlayground.Views.ChatArea"
+             x:DataType="viewModels:ChatAreaViewModel">
+    <Grid RowDefinitions="*,Auto" RowSpacing="12">
+        <Grid>
+            <CollectionView x:Name="MessagesView"
+                            ItemsSource="{Binding Messages}"
+                            ItemSizingStrategy="MeasureAllItems"
+                            ItemsUpdatingScrollMode="KeepLastItemInView"
+                            AutomationId="ChatMessages">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="viewModels:ChatMessageViewModel">
+                        <views:MessageBubble Margin="4,6"
+                                             Padding="12"
+                                             Stroke="{StaticResource BorderColor}"
+                                             StrokeShape="RoundRectangle 12"
+                                             HorizontalOptions="Start"
+                                             BackgroundColor="{StaticResource AssistantBubble}">
+                            <Border.Triggers>
+                                <DataTrigger TargetType="Border" Binding="{Binding IsUser}" Value="True">
+                                    <Setter Property="HorizontalOptions" Value="End" />
+                                    <Setter Property="BackgroundColor" Value="{StaticResource UserBubble}" />
+                                </DataTrigger>
+                                <DataTrigger TargetType="Border" Binding="{Binding IsError}" Value="True">
+                                    <Setter Property="BackgroundColor" Value="{StaticResource ErrorBubble}" />
+                                </DataTrigger>
+                                <DataTrigger TargetType="Border" Binding="{Binding IsSystem}" Value="True">
+                                    <Setter Property="HorizontalOptions" Value="Center" />
+                                    <Setter Property="BackgroundColor" Value="#F1F5F9" />
+                                </DataTrigger>
+                                <DataTrigger TargetType="Border" Binding="{Binding IsTool}" Value="True">
+                                    <Setter Property="BackgroundColor" Value="{StaticResource ToolBubble}" />
+                                </DataTrigger>
+                            </Border.Triggers>
+                            <VerticalStackLayout Spacing="6">
+                                <Label Text="{Binding Label}" FontAttributes="Bold" FontSize="11"
+                                       TextColor="{StaticResource MutedText}" />
+                                <Label Text="{Binding Text}" LineBreakMode="WordWrap" />
+                                <Image Source="{Binding ImageSource}"
+                                       IsVisible="{Binding HasImage}"
+                                       WidthRequest="220"
+                                       MaximumHeightRequest="240"
+                                       Aspect="AspectFit"
+                                       HorizontalOptions="End"
+                                       AutomationId="MessageImage" />
+                                <Label Text="{Binding DetailText}" IsVisible="{Binding HasDetails}"
+                                       FontSize="12" LineBreakMode="WordWrap" />
+                            </VerticalStackLayout>
+                        </views:MessageBubble>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+            <VerticalStackLayout IsVisible="{Binding IsEmpty}"
+                                 Padding="28"
+                                 HorizontalOptions="Center"
+                                 VerticalOptions="Center">
+                <Label Text="{Binding EmptyTitle}" FontSize="18" HorizontalTextAlignment="Center" />
+                <Label Text="{Binding EmptySubtitle}" TextColor="{StaticResource MutedText}"
+                       HorizontalTextAlignment="Center" />
+            </VerticalStackLayout>
+        </Grid>
+
+        <Border Grid.Row="1"
+                BackgroundColor="{StaticResource PanelBackground}"
+                Stroke="{StaticResource BorderColor}"
+                StrokeShape="RoundRectangle 12"
+                Padding="12">
+            <VerticalStackLayout Spacing="8">
+                <Grid IsVisible="{Binding HasSelectedImage}" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                    <Grid.Triggers>
+                        <DataTrigger TargetType="Grid" Binding="{Binding IsReplayClient}" Value="True">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </Grid.Triggers>
+                    <Image Source="{Binding SelectedImagePreview}" WidthRequest="56" HeightRequest="56"
+                           Aspect="AspectFill" />
+                    <Label Grid.Column="1" Text="{Binding SelectedImageName}" VerticalOptions="Center"
+                           LineBreakMode="TailTruncation" />
+                    <ImageButton Grid.Column="2"
+                                 Source="close.png"
+                                 Command="{Binding RemoveImageCommand}"
+                                 Style="{StaticResource AttachmentButton}"
+                                 SemanticProperties.Description="Remove selected image"
+                                 ToolTipProperties.Text="Remove image"
+                                 AutomationId="RemoveImageButton" />
+                </Grid>
+                <Grid IsVisible="{Binding IsLiveClient}" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                    <ImageButton x:Name="AddAttachmentButton"
+                                 Source="add.png"
+                                 Style="{StaticResource AttachmentButton}"
+                                 IsEnabled="{Binding IsImageSupported}"
+                                 SemanticProperties.Description="Add an image attachment"
+                                 ToolTipProperties.Text="Add image"
+                                 AutomationId="AddAttachmentButton">
+                        <controls:PopupMenu.Content>
+                            <VerticalStackLayout Spacing="8" x:DataType="viewModels:ChatAreaViewModel">
+                                <Label Text="ADD IMAGE" FontSize="11" FontAttributes="Bold"
+                                       TextColor="{StaticResource MutedText}" />
+                                <Button Text="Choose image"
+                                        ImageSource="image.png"
+                                        Command="{Binding ChooseImageCommand}"
+                                        SemanticProperties.Description="Choose an image from the device"
+                                        ToolTipProperties.Text="Open the system image picker"
+                                        AutomationId="ChooseImageMenuItem" />
+                                <Button Text="Use sample image"
+                                        ImageSource="sampleimage.png"
+                                        Command="{Binding UseSampleImageCommand}"
+                                        SemanticProperties.Description="Use the packaged sample image"
+                                        ToolTipProperties.Text="Attach the packaged sample image"
+                                        AutomationId="UseSampleImageMenuItem" />
+                            </VerticalStackLayout>
+                        </controls:PopupMenu.Content>
+                    </ImageButton>
+                    <Entry x:Name="PromptEntry"
+                           Grid.Column="1"
+                           Text="{Binding Prompt}"
+                           MinimumWidthRequest="0"
+                           Placeholder="Ask the selected real chat client…"
+                           ReturnType="Send"
+                           ReturnCommand="{Binding SendCommand}"
+                           AutomationId="PromptEntry" />
+                    <Grid x:Name="SendOrStopSlot" Grid.Column="2" WidthRequest="44" HeightRequest="44">
+                        <ImageButton x:Name="SendButton"
+                                     Source="send.png"
+                                     Command="{Binding SendCommand}"
+                                     IsVisible="{Binding IsIdle}"
+                                     Style="{StaticResource AttachmentButton}"
+                                     SemanticProperties.Description="Send message"
+                                     ToolTipProperties.Text="Send message"
+                                     AutomationId="SendButton" />
+                        <ImageButton x:Name="StopButton"
+                                     Source="stop.png"
+                                     Command="{Binding CancelCommand}"
+                                     IsVisible="{Binding IsBusy}"
+                                     WidthRequest="44"
+                                     HeightRequest="44"
+                                     Padding="10"
+                                     CornerRadius="22"
+                                     BackgroundColor="#B91C1C"
+                                     SemanticProperties.Description="Stop response"
+                                     ToolTipProperties.Text="Stop response"
+                                     AutomationId="StopButton" />
+                    </Grid>
+                </Grid>
+                <FlexLayout IsVisible="{Binding IsReplayClient}"
+                            Wrap="Wrap" AlignItems="Center">
+                    <Button Text="Load" ImageSource="folder.png"
+                            Command="{Binding LoadChatCommand}"
+                            Style="{StaticResource ReplayActionButtonStyle}"
+                            Margin="0,0,8,8"
+                            SemanticProperties.Description="Load a saved chat for replay"
+                            AutomationId="LoadChatButton" />
+                    <Button Text="Restart" ImageSource="restart.png"
+                            Command="{Binding RestartReplayCommand}"
+                            Style="{StaticResource ReplayActionButtonStyle}"
+                            Margin="0,0,8,8"
+                            SemanticProperties.Description="Rewind to the beginning without deleting the recording"
+                            AutomationId="RestartReplayButton" />
+                    <Button Text="Play all" ImageSource="play.png"
+                            Command="{Binding PlayReplayCommand}"
+                            Style="{StaticResource ReplayActionButtonStyle}"
+                            Margin="0,0,8,8"
+                            SemanticProperties.Description="Replay the entire saved chat without calling a model"
+                            AutomationId="PlayReplayButton" />
+                    <Button Text="Next turn" ImageSource="next.png"
+                            Command="{Binding NextReplayCommand}"
+                            Style="{StaticResource ReplayActionButtonStyle}"
+                            Margin="0,0,8,8"
+                            SemanticProperties.Description="Replay the next saved chat turn"
+                            AutomationId="NextReplayButton" />
+                    <Button Text="Stop" ImageSource="stop.png"
+                            Command="{Binding CancelCommand}" IsVisible="{Binding IsBusy}"
+                            Style="{StaticResource ReplayActionButtonStyle}"
+                            Margin="0,0,8,8"
+                            BackgroundColor="#B91C1C"
+                            SemanticProperties.Description="Stop replaying the saved chat"
+                            AutomationId="StopReplayButton" />
+                </FlexLayout>
+            </VerticalStackLayout>
+        </Border>
+    </Grid>
+</ContentView>

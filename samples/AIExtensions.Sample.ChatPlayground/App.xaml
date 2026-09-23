@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Application xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="AIExtensions.Sample.ChatPlayground.App">
+    <Application.Resources>
+        <ResourceDictionary>
+            <Color x:Key="PageBackground">#F7F8FC</Color>
+            <Color x:Key="PanelBackground">#FFFFFF</Color>
+            <Color x:Key="BorderColor">#D9DFEA</Color>
+            <Color x:Key="MutedText">#5F6B7A</Color>
+            <Color x:Key="Primary">#2563EB</Color>
+            <Color x:Key="DisabledActionBackground">#CBD5E1</Color>
+            <Color x:Key="UserBubble">#DBEAFE</Color>
+            <Color x:Key="AssistantBubble">#FFFFFF</Color>
+            <Color x:Key="ErrorBubble">#FEE2E2</Color>
+            <Color x:Key="ToolBubble">#EEF4FF</Color>
+            <Style TargetType="Label">
+                <Setter Property="TextColor" Value="#172033" />
+            </Style>
+            <Style TargetType="Entry">
+                <Setter Property="BackgroundColor" Value="#FFFFFF" />
+                <Setter Property="TextColor" Value="#172033" />
+                <Setter Property="HeightRequest" Value="38" />
+            </Style>
+            <Style x:Key="PrimaryButtonStyle" TargetType="Button">
+                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                <Setter Property="TextColor" Value="White" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Padding" Value="14,8" />
+                <Style.Triggers>
+                    <Trigger TargetType="Button" Property="IsEnabled" Value="False">
+                        <Setter Property="BackgroundColor" Value="{StaticResource DisabledActionBackground}" />
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+            <Style TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}" />
+            <Style x:Key="ReplayActionButtonStyle" TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}">
+                <Setter Property="WidthRequest" Value="136" />
+                <Setter Property="HeightRequest" Value="44" />
+            </Style>
+            <Style TargetType="RadioButton">
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="MinimumHeightRequest" Value="{OnPlatform 44, MacCatalyst=32, WinUI=32}" />
+            </Style>
+            <Style x:Key="ChatActionButton" TargetType="ImageButton">
+                <Setter Property="WidthRequest" Value="44" />
+                <Setter Property="HeightRequest" Value="44" />
+                <Setter Property="Padding" Value="10" />
+                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Style.Triggers>
+                    <Trigger TargetType="ImageButton" Property="IsEnabled" Value="False">
+                        <Setter Property="BackgroundColor" Value="{StaticResource DisabledActionBackground}" />
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+            <Style x:Key="AttachmentButton" TargetType="ImageButton" BasedOn="{StaticResource ChatActionButton}">
+                <Setter Property="CornerRadius" Value="22" />
+            </Style>
+            <Style x:Key="ChatActionLabel" TargetType="Label">
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="TextColor" Value="{StaticResource MutedText}" />
+                <Setter Property="HorizontalTextAlignment" Value="Center" />
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
