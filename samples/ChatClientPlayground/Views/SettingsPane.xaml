@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:viewModels="clr-namespace:ChatClientPlayground.ViewModels"
+             xmlns:views="clr-namespace:ChatClientPlayground.Views"
+             x:Class="ChatClientPlayground.Views.SettingsPane"
+             x:DataType="viewModels:SettingsPaneViewModel">
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="12">
+            <Label Text="CLIENT" FontSize="12" FontAttributes="Bold" TextColor="{StaticResource MutedText}" />
+            <HorizontalStackLayout Spacing="4">
+                <RadioButton Content="Local provider" GroupName="Client" IsChecked="{Binding IsLocalSelected}" IsEnabled="{Binding CanSelectClient}" AutomationId="LocalClientRadio" />
+                <views:InfoTip Text="{Binding LocalProviderInfo}" />
+            </HorizontalStackLayout>
+            <HorizontalStackLayout Spacing="4">
+                <RadioButton Content="Cloud (Azure OpenAI)" GroupName="Client" IsChecked="{Binding IsCloudSelected}" IsEnabled="{Binding CanSelectClient}" AutomationId="CloudClientRadio" />
+                <views:InfoTip Text="{Binding CloudProviderInfo}" />
+            </HorizontalStackLayout>
+
+            <BoxView HeightRequest="1" Color="{StaticResource BorderColor}" />
+            <Label Text="RESPONSE" FontSize="12" FontAttributes="Bold" TextColor="{StaticResource MutedText}" />
+            <HorizontalStackLayout Spacing="4">
+                <CheckBox IsChecked="{Binding UseStreaming}" AutomationId="StreamingCheckBox" />
+                <Label Text="Streaming" VerticalOptions="Center" />
+                <views:InfoTip Text="Update the response as text arrives." />
+            </HorizontalStackLayout>
+            <HorizontalStackLayout Spacing="4">
+                <CheckBox IsChecked="{Binding UseStructuredJson}" AutomationId="StructuredJsonCheckBox" />
+                <Label Text="Structured JSON" VerticalOptions="Center" />
+                <views:InfoTip Text="Request JSON matching the playground response schema." />
+            </HorizontalStackLayout>
+
+            <BoxView HeightRequest="1" Color="{StaticResource BorderColor}" />
+            <Label Text="RECORDING" FontSize="12" FontAttributes="Bold" TextColor="{StaticResource MutedText}" />
+            <HorizontalStackLayout Spacing="6" IsEnabled="{Binding CanSelectClient}">
+                <RadioButton Content="Live" GroupName="RecordingMode" IsChecked="{Binding Recording.IsLive}" AutomationId="RecordingLiveRadio" />
+                <RadioButton Content="Record" GroupName="RecordingMode" IsChecked="{Binding Recording.IsRecord}" AutomationId="RecordingRecordRadio" />
+                <RadioButton Content="Replay" GroupName="RecordingMode" IsChecked="{Binding Recording.IsReplay}" AutomationId="RecordingReplayRadio" />
+                <views:InfoTip Text="{Binding Recording.StorageInfo}" />
+            </HorizontalStackLayout>
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="4" IsEnabled="{Binding CanSelectClient}">
+                <Label Text="{Binding Recording.TapeSummary}" FontSize="11" TextColor="{StaticResource MutedText}" VerticalOptions="Center" LineBreakMode="TailTruncation" />
+                <Button Grid.Column="1" Text="New" Command="{Binding Recording.NewRecordingCommand}" AutomationId="NewRecordingButton" />
+                <Button Grid.Column="2" Text="Save" Command="{Binding Recording.SaveCommand}" AutomationId="SaveRecordingButton" />
+                <Button Grid.Column="3" Text="Load" Command="{Binding Recording.LoadCommand}" AutomationId="LoadRecordingButton" />
+            </Grid>
+            <HorizontalStackLayout Spacing="6" IsEnabled="{Binding CanSelectClient}">
+                <Button Text="Restart replay" Command="{Binding Recording.RestartReplayCommand}" AutomationId="RestartReplayButton" />
+                <Label Text="{Binding Recording.Status}" FontSize="11" TextColor="{StaticResource MutedText}" VerticalOptions="Center" LineBreakMode="TailTruncation" />
+            </HorizontalStackLayout>
+
+            <BoxView HeightRequest="1" Color="{StaticResource BorderColor}" />
+            <Label Text="CONVERSATION" FontSize="12" FontAttributes="Bold" TextColor="{StaticResource MutedText}" />
+            <HorizontalStackLayout Spacing="4">
+                <Label Text="System instructions" FontSize="12" VerticalOptions="Center" />
+                <views:InfoTip Text="Instructions are sent with the next request and shown once in the chat." />
+            </HorizontalStackLayout>
+            <Editor Text="{Binding Instructions}" AutoSize="TextChanges" MinimumHeightRequest="70" AutomationId="InstructionsEditor" />
+            <HorizontalStackLayout Spacing="4">
+                <Label Text="Tools" FontSize="12" FontAttributes="Bold" VerticalOptions="Center" />
+                <views:InfoTip Text="Enable deterministic in-app functions the model may call." />
+            </HorizontalStackLayout>
+            <HorizontalStackLayout Spacing="4">
+                <CheckBox IsChecked="{Binding UseDateTimeTool}" AutomationId="DateTimeToolCheckBox" />
+                <Label Text="Current local date/time" VerticalOptions="Center" />
+                <views:InfoTip Text="Returns the device's current local ISO 8601 timestamp." />
+            </HorizontalStackLayout>
+            <HorizontalStackLayout Spacing="4">
+                <CheckBox IsChecked="{Binding UseCalculatorTool}" AutomationId="CalculatorToolCheckBox" />
+                <Label Text="Calculator" VerticalOptions="Center" />
+                <views:InfoTip Text="Performs one add, subtract, multiply, or divide operation." />
+            </HorizontalStackLayout>
+            <HorizontalStackLayout Spacing="4">
+                <Label Text="Tool mode" VerticalOptions="Center" />
+                <views:InfoTip Text="Controls whether the provider may or must call an enabled tool." />
+            </HorizontalStackLayout>
+            <HorizontalStackLayout Spacing="6">
+                <RadioButton Content="Auto" GroupName="ToolMode" IsChecked="{Binding IsToolModeAuto}" AutomationId="ToolModeAutoRadio" />
+                <RadioButton Content="None" GroupName="ToolMode" IsChecked="{Binding IsToolModeNone}" AutomationId="ToolModeNoneRadio" />
+                <RadioButton Content="Require any" GroupName="ToolMode" IsChecked="{Binding IsToolModeRequireAny}" AutomationId="ToolModeRequireAnyRadio" />
+            </HorizontalStackLayout>
+            <HorizontalStackLayout Spacing="4">
+                <Label Text="Multiple tool calls" VerticalOptions="Center" />
+                <views:InfoTip Text="Default leaves the provider option unset; Allow and Disallow send an explicit value." />
+            </HorizontalStackLayout>
+            <HorizontalStackLayout Spacing="6">
+                <RadioButton Content="Default" GroupName="MultipleToolCalls" IsChecked="{Binding IsMultipleToolCallsDefault}" AutomationId="MultipleToolCallsDefaultRadio" />
+                <RadioButton Content="Allow" GroupName="MultipleToolCalls" IsChecked="{Binding IsMultipleToolCallsAllowed}" AutomationId="MultipleToolCallsAllowRadio" />
+                <RadioButton Content="Disallow" GroupName="MultipleToolCalls" IsChecked="{Binding IsMultipleToolCallsDisallowed}" AutomationId="MultipleToolCallsDisallowRadio" />
+            </HorizontalStackLayout>
+
+            <BoxView HeightRequest="1" Color="{StaticResource BorderColor}" />
+            <Label Text="GENERATION" FontSize="12" FontAttributes="Bold" TextColor="{StaticResource MutedText}" />
+            <Label Text="Enable a checkbox to set that nullable provider option; unchecked leaves it unset. Decimal values use '.'." FontSize="11" TextColor="{StaticResource MutedText}" />
+            <Grid ColumnDefinitions="Auto,*,Auto,110" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="4" RowSpacing="8">
+                <CheckBox IsChecked="{Binding EnableTemperature}" AutomationId="EnableTemperatureCheckBox" />
+                <Label Grid.Column="1" Text="Temperature" VerticalOptions="Center" />
+                <views:InfoTip Grid.Column="2" Text="Controls response randomness; unset leaves provider default." />
+                <Entry Grid.Column="3" Text="{Binding Temperature}" Keyboard="Numeric" AutomationId="TemperatureEntry" />
+
+                <CheckBox Grid.Row="1" IsChecked="{Binding EnableTopP}" AutomationId="EnableTopPCheckBox" />
+                <Label Grid.Row="1" Grid.Column="1" Text="Top P" VerticalOptions="Center" />
+                <views:InfoTip Grid.Row="1" Grid.Column="2" Text="Limits sampling to the most likely probability mass." />
+                <Entry Grid.Row="1" Grid.Column="3" Text="{Binding TopP}" Keyboard="Numeric" AutomationId="TopPEntry" />
+
+                <CheckBox Grid.Row="2" IsChecked="{Binding EnableTopK}" AutomationId="EnableTopKCheckBox" />
+                <Label Grid.Row="2" Grid.Column="1" Text="Top K" VerticalOptions="Center" />
+                <views:InfoTip Grid.Row="2" Grid.Column="2" Text="Limits sampling to the K most likely tokens." />
+                <Entry Grid.Row="2" Grid.Column="3" Text="{Binding TopK}" Keyboard="Numeric" AutomationId="TopKEntry" />
+
+                <CheckBox Grid.Row="3" IsChecked="{Binding EnableMaxOutputTokens}" AutomationId="EnableMaxOutputTokensCheckBox" />
+                <Label Grid.Row="3" Grid.Column="1" Text="Max tokens" VerticalOptions="Center" />
+                <views:InfoTip Grid.Row="3" Grid.Column="2" Text="Caps generated output tokens." />
+                <Entry Grid.Row="3" Grid.Column="3" Text="{Binding MaxOutputTokens}" Keyboard="Numeric" AutomationId="MaxOutputTokensEntry" />
+
+                <CheckBox Grid.Row="4" IsChecked="{Binding EnableFrequencyPenalty}" AutomationId="EnableFrequencyPenaltyCheckBox" />
+                <Label Grid.Row="4" Grid.Column="1" Text="Frequency penalty" VerticalOptions="Center" />
+                <views:InfoTip Grid.Row="4" Grid.Column="2" Text="Discourages repeating tokens already used." />
+                <Entry Grid.Row="4" Grid.Column="3" Text="{Binding FrequencyPenalty}" Keyboard="Numeric" AutomationId="FrequencyPenaltyEntry" />
+
+                <CheckBox Grid.Row="5" IsChecked="{Binding EnablePresencePenalty}" AutomationId="EnablePresencePenaltyCheckBox" />
+                <Label Grid.Row="5" Grid.Column="1" Text="Presence penalty" VerticalOptions="Center" />
+                <views:InfoTip Grid.Row="5" Grid.Column="2" Text="Encourages introducing new topics or tokens." />
+                <Entry Grid.Row="5" Grid.Column="3" Text="{Binding PresencePenalty}" Keyboard="Numeric" AutomationId="PresencePenaltyEntry" />
+
+                <CheckBox Grid.Row="6" IsChecked="{Binding EnableSeed}" AutomationId="EnableSeedCheckBox" />
+                <Label Grid.Row="6" Grid.Column="1" Text="Seed" VerticalOptions="Center" />
+                <views:InfoTip Grid.Row="6" Grid.Column="2" Text="Requests repeatable sampling when the provider supports it." />
+                <Entry Grid.Row="6" Grid.Column="3" Text="{Binding Seed}" Keyboard="Numeric" AutomationId="SeedEntry" />
+
+                <CheckBox Grid.Row="7" IsChecked="{Binding EnableStopSequences}" AutomationId="EnableStopSequencesCheckBox" />
+                <Label Grid.Row="7" Grid.Column="1" Text="Stop sequences" VerticalOptions="Center" />
+                <views:InfoTip Grid.Row="7" Grid.Column="2" Text="Stops generation when any comma-separated sequence appears." />
+                <Entry Grid.Row="7" Grid.Column="3" Text="{Binding StopSequences}" Placeholder="comma-separated" AutomationId="StopSequencesEntry" />
+            </Grid>
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentView>

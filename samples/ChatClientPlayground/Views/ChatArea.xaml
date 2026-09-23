@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:viewModels="clr-namespace:ChatClientPlayground.ViewModels"
+xmlns:views="clr-namespace:ChatClientPlayground.Views"
+             x:Class="ChatClientPlayground.Views.ChatArea"
+             x:DataType="viewModels:ChatAreaViewModel">
+    <Grid RowDefinitions="*,Auto" RowSpacing="12">
+        <Grid>
+            <CollectionView x:Name="MessagesView"
+                            ItemsSource="{Binding Messages}"
+                            ItemSizingStrategy="MeasureAllItems"
+                            ItemsUpdatingScrollMode="KeepLastItemInView"
+                            AutomationId="ChatMessages">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="viewModels:ChatMessageViewModel">
+                        <views:MessageBubble Margin="4,6"
+                                             Padding="12"
+                                             Stroke="{StaticResource BorderColor}"
+                                             StrokeShape="RoundRectangle 12"
+                                             HorizontalOptions="Start"
+                                             BackgroundColor="{StaticResource AssistantBubble}">
+                            <Border.Triggers>
+                                <DataTrigger TargetType="Border" Binding="{Binding IsUser}" Value="True"><Setter Property="HorizontalOptions" Value="End" /><Setter Property="BackgroundColor" Value="{StaticResource UserBubble}" /></DataTrigger>
+                                <DataTrigger TargetType="Border" Binding="{Binding IsError}" Value="True"><Setter Property="BackgroundColor" Value="{StaticResource ErrorBubble}" /></DataTrigger>
+                                <DataTrigger TargetType="Border" Binding="{Binding IsSystem}" Value="True"><Setter Property="HorizontalOptions" Value="Center" /><Setter Property="BackgroundColor" Value="#F1F5F9" /></DataTrigger>
+                                <DataTrigger TargetType="Border" Binding="{Binding IsTool}" Value="True"><Setter Property="BackgroundColor" Value="{StaticResource ToolBubble}" /></DataTrigger>
+                            </Border.Triggers>
+                            <VerticalStackLayout Spacing="6">
+                                <Label Text="{Binding Label}" FontAttributes="Bold" FontSize="11" TextColor="{StaticResource MutedText}" />
+                                <Label Text="{Binding Text}" LineBreakMode="WordWrap" />
+                                <Image Source="{Binding ImageSource}"
+                                       IsVisible="{Binding HasImage}"
+                                       WidthRequest="220"
+                                       MaximumHeightRequest="240"
+                                       Aspect="AspectFit"
+                                       HorizontalOptions="End"
+                                       AutomationId="MessageImage" />
+                                <Label Text="{Binding DetailText}" IsVisible="{Binding HasDetails}" FontSize="12" LineBreakMode="WordWrap" />
+                            </VerticalStackLayout>
+                        </views:MessageBubble>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+            <VerticalStackLayout IsVisible="{Binding IsEmpty}"
+                                 Padding="28"
+                                 HorizontalOptions="Center"
+                                 VerticalOptions="Center">
+                <Label Text="Start a real chat request" FontSize="18" HorizontalTextAlignment="Center" />
+                <Label Text="Choose a client, configure options, and send a prompt." TextColor="{StaticResource MutedText}" HorizontalTextAlignment="Center" />
+            </VerticalStackLayout>
+        </Grid>
+
+        <Border x:Name="AttachmentMenu"
+                Grid.Row="0"
+                ZIndex="2"
+                IsVisible="{Binding IsAttachmentMenuOpen}"
+                HorizontalOptions="Start"
+                VerticalOptions="End"
+                Margin="12,0,0,8"
+                Padding="6"
+                BackgroundColor="{StaticResource PanelBackground}"
+                Stroke="{StaticResource BorderColor}"
+                StrokeShape="RoundRectangle 10">
+            <VerticalStackLayout Spacing="4">
+                <Button Text="Choose image"
+                        ImageSource="image.png"
+                        Command="{Binding ChooseImageCommand}"
+                        BackgroundColor="#64748B"
+                        SemanticProperties.Description="Choose an image from the device"
+                        ToolTipProperties.Text="Open the system image picker"
+                        AutomationId="ChooseImageMenuItem" />
+                <Button Text="Use sample image"
+                        ImageSource="sampleimage.png"
+                        Command="{Binding UseSampleImageCommand}"
+                        BackgroundColor="#64748B"
+                        SemanticProperties.Description="Use the packaged sample image"
+                        ToolTipProperties.Text="Attach the packaged sample image"
+                        AutomationId="UseSampleImageMenuItem" />
+            </VerticalStackLayout>
+        </Border>
+
+        <Border Grid.Row="1"
+                BackgroundColor="{StaticResource PanelBackground}"
+                Stroke="{StaticResource BorderColor}"
+                StrokeShape="RoundRectangle 12"
+                Padding="12">
+            <VerticalStackLayout Spacing="8">
+                <Grid IsVisible="{Binding HasSelectedImage}" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                    <Image Source="{Binding SelectedImagePreview}" WidthRequest="56" HeightRequest="56" Aspect="AspectFill" />
+                    <Label Grid.Column="1" Text="{Binding SelectedImageName}" VerticalOptions="Center" LineBreakMode="TailTruncation" />
+                    <ImageButton Grid.Column="2"
+                                 Source="close.png"
+                                 Command="{Binding RemoveImageCommand}"
+                                 WidthRequest="44"
+                                 HeightRequest="44"
+                                 Padding="10"
+                                 BackgroundColor="#64748B"
+                                 CornerRadius="22"
+                                 SemanticProperties.Description="Remove selected image"
+                                 ToolTipProperties.Text="Remove image"
+                                 AutomationId="RemoveImageButton" />
+                </Grid>
+                <Grid x:Name="ComposerGrid" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" RowSpacing="8">
+                    <ImageButton x:Name="AddAttachmentButton"
+                                 Source="add.png"
+                                 Command="{Binding ToggleAttachmentMenuCommand}"
+                                 IsEnabled="{Binding IsImageSupported}"
+                                 WidthRequest="44"
+                                 HeightRequest="44"
+                                 Padding="10"
+                                 CornerRadius="22"
+                                 BackgroundColor="{StaticResource Primary}"
+                                 SemanticProperties.Description="Add an image attachment"
+                                 ToolTipProperties.Text="Add image"
+                                 AutomationId="AddAttachmentButton" />
+                    <Entry x:Name="PromptEntry"
+                           Grid.Column="1"
+                           Text="{Binding Prompt}"
+                           Placeholder="Ask the selected real chat client…"
+                           ReturnType="Send"
+                           ReturnCommand="{Binding SendCommand}"
+                           AutomationId="PromptEntry" />
+                    <Grid x:Name="SendOrStopSlot" Grid.Column="2" WidthRequest="44" HeightRequest="44">
+                        <ImageButton x:Name="SendButton"
+                                     Source="send.png"
+                                     Command="{Binding SendCommand}"
+                                     IsVisible="{Binding IsIdle}"
+                                     WidthRequest="44"
+                                     HeightRequest="44"
+                                     Padding="10"
+                                     CornerRadius="22"
+                                     BackgroundColor="{StaticResource Primary}"
+                                     SemanticProperties.Description="Send message"
+                                     ToolTipProperties.Text="Send message"
+                                     AutomationId="SendButton" />
+                        <ImageButton x:Name="StopButton"
+                                     Source="stop.png"
+                                     Command="{Binding CancelCommand}"
+                                     IsVisible="{Binding IsBusy}"
+                                     WidthRequest="44"
+                                     HeightRequest="44"
+                                     Padding="10"
+                                     CornerRadius="22"
+                                     BackgroundColor="#B91C1C"
+                                     SemanticProperties.Description="Stop response"
+                                     ToolTipProperties.Text="Stop response"
+                                     AutomationId="StopButton" />
+                    </Grid>
+                </Grid>
+            </VerticalStackLayout>
+        </Border>
+    </Grid>
+</ContentView>
