@@ -89,7 +89,7 @@ let response = try await session.respond {
 }
 ```
 Note: there is **no `UIImage` / `NSImage` init** — funnel through `CGImage` (iOS: `UIImage.cgImage`;
-macOS: `NSImage` → `CGImageSource`) or use `imageURL`. The framework auto-scales and color-converts;
+macOS: `NSImage.AsCGImage`) or use `imageURL`. The framework auto-scales and color-converts;
 no manual preprocessing needed.
 
 ### PromptBuilder mechanics (stable, from the 26.x SDK)
@@ -170,10 +170,10 @@ support later).
 ### Wire shape
 `ChatMessage.Contents` already carries the standard multimodal shapes:
 - `DataContent` — in-memory bytes + media type (`image/png`, `image/jpeg`, …), or a data URI.
-- `UriContent` — a `Uri` + media type (we support `file://`; see Open Questions for remote URLs).
+- `UriContent` — a `Uri` + media type (`file://` is supported; remote URLs are rejected).
 
-`AppleIntelligenceChatClient.ToNative(AIContent)` currently throws on anything that isn't
-`TextContent`; we add image cases.
+`AppleIntelligenceChatClient.ToNative(AIContent)` accepts text, tools, image `DataContent`, and
+local-file image `UriContent`; unsupported content throws rather than silently disappearing.
 
 ### Native-handle pass-through (the "attach a real CGImage/UIImage" feature)
 Every `AIContent` (including `DataContent`) has:
@@ -214,7 +214,11 @@ entries (attachments via `Transcript.Segment.attachment`). Both paths are handle
 4. All `Attachment` / transcript-attachment usage is gated with `if #available(… 27.0, *)`; below
    that the shim throws a clear `NSError`, surfaced on the .NET side as an `NSErrorException`.
 
-### 4.1 Swift — new file `AppleNative/EssentialsAI/ImageContent.swift`
+The following snippets illustrate the original design. The implementations in
+`AppleNative/EssentialsAI/ChatMessageContent.swift`, `ChatClient.swift`, and
+`Platform/MaciOS/AppleIntelligenceChatClient.cs` are authoritative.
+
+### 4.1 Swift — `AppleNative/EssentialsAI/ChatMessageContent.swift`
 ```swift
 import Foundation
 import CoreGraphics
@@ -305,7 +309,7 @@ private func toPrompt(message: ChatMessageNative) throws -> Prompt {
     let fragments: [Prompt] = try message.contents.map { content in
         switch content {
         case let textContent as TextContentNative:
-            return Prompt(textContent.text)
+            return Prompt { textContent.text }
 
         case let imageContent as ImageContentNative:
             if #available(iOS 27.0, macCatalyst 27.0, macOS 27.0, visionOS 27.0, *) {
@@ -546,7 +550,8 @@ var msg = new ChatMessage(ChatRole.User, [
 Model-free device tests (run on Mac Catalyst in CI):
 - `ToNative` maps `DataContent` / `UriContent` (image mime) → `ImageContentNative` selecting the
   correct payload branch (cgImage vs data vs url).
-- `RawRepresentation is CGImage / UIImage / NSImage` fast path chosen over bytes.
+- `RawRepresentation is CGImage / UIImage` fast path chosen over bytes; the macOS-only `NSImage`
+  path is compiled but not exercised by these Mac Catalyst tests.
 - Non-image `DataContent` still throws; remote http `UriContent` throws the documented error.
 - Encoded EXIF orientation and native `UIImage` orientation survive conversion.
 - An image in assistant transcript history fails explicitly on OS 26 rather than being dropped.
@@ -554,7 +559,7 @@ Model-free device tests (run on Mac Catalyst in CI):
   bytes and `RawRepresentation` set; callers can set `RawRepresentation` directly today.
 
 Device tests (`RequiresModel=true`, gated to 27.0):
-- Attach an image + "describe this image"; assert a non-empty response.
+- Attach a red image + ask for its dominant basic color; require the answer to identify red.
 - Attach two images + "compare"; assert both are referenced (manual macOS 27 follow-up).
 - Multi-turn: send an image, then a follow-up question that relies on it (manual macOS 27
   follow-up; exercises the `Transcript.Segment.attachment` history path).
