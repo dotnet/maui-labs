@@ -7,9 +7,14 @@ namespace ChatClientPlayground.Services;
 public sealed class ChatClientService
 {
     private readonly IServiceProvider _services;
+    private readonly ChatRecordingService _recording;
 
     /// <summary>Initializes the keyed client resolver.</summary>
-    public ChatClientService(IServiceProvider services) => _services = services;
+    public ChatClientService(IServiceProvider services, ChatRecordingService recording)
+    {
+        _services = services;
+        _recording = recording;
+    }
 
     /// <summary>Gets the selected client, or a specific reason it is unavailable.</summary>
     public ChatClientSelection GetClient(ChatClientKind kind)
@@ -27,6 +32,15 @@ public sealed class ChatClientService
             return new(null, CreateUnavailableDescriptor(kind, exception.Message));
         }
     }
+
+    /// <summary>Applies the current recording mode to either selected keyed provider.</summary>
+    public IChatClient GetRequestClient(ChatClientSelection selection) => _recording.Mode switch
+    {
+        RecordingMode.Replay => new ReplayChatClient(_recording),
+        RecordingMode.Record => new RecordingChatClient(selection.Client
+            ?? throw new InvalidOperationException("A real provider is required to record."), _recording),
+        _ => selection.Client ?? throw new InvalidOperationException("The selected provider is unavailable."),
+    };
 
     private static ChatClientDescriptor CreateUnavailableDescriptor(ChatClientKind kind, string status) =>
         kind == ChatClientKind.Cloud

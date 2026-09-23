@@ -12,7 +12,7 @@
 - `Services/ImageInputService` copies a picked image into memory or loads the packaged sample image so both paths create the same image message.
 - `Services/PlaygroundTools` exposes deterministic local date/time and calculator `AIFunctionFactory.Create` tools.
 - `Models/PlaygroundJsonContext` provides source-generated, trim-safe schema metadata for explicit-schema JSON responses.
-- `Features/Recording/` is a deliberately self-contained sample subset for recording, atomic app-local save/load, and strict replay. It does not reference the recording project used by other work.
+- `Services/ChatClientService` resolves either keyed provider and applies the same Live, Record, or Replay client behavior to both local and cloud requests. `Services/ChatRecordingService` owns the in-memory tape and atomic app-local save/load; the serializer and client wrappers live beside the other services, with their recording data types in `Models/`. This sample-contained subset does not reference the recording project used by other work.
 - `ViewModels/SettingsPaneViewModel` and `ChatAreaViewModel` are registered in DI. `MainViewModel` receives both explicitly, wires their commands/events, and owns portable `List<ChatMessage>`, cancellation, request execution, and tool/response presentation. Settings owns provider and `ChatOptions` state; Chat owns messages, composer, and attachment UI state.
 - `MainPage` composes compiled-binding `SettingsPane` and `ChatArea` child view models. `ChatArea` keeps a `CollectionView` with `ItemSizingStrategy="MeasureAllItems"` and `KeepLastItemInView`; changed streaming items invalidate their own and the collection's measure before a delayed index-based scroll. Debug builds include the DevFlow agent.
 
@@ -46,7 +46,7 @@ System instructions are not displayed until a request actually uses them. The ch
 The **RECORDING** section has three modes:
 
 - **Live** sends requests to the selected real provider without changing the tape.
-- **Record** sends the exact same streaming or non-streaming call to the selected real provider, then adds that interaction to the in-memory tape.
+- **Record** sends the exact same streaming or non-streaming call to whichever real keyed provider is selected (local or cloud), then adds that interaction to the in-memory tape.
 - **Replay** consumes the tape in order through a `ReplayChatClient`; it has no provider reference and never invokes a local or cloud model. Replay is available even when the selected provider is unavailable. Image admission is consequently based on strict matching against the recorded `DataContent`, rather than provider image metadata.
 
 Use **New** to discard the in-memory tape, **Save** to atomically write it, **Load** to replace the in-memory tape from disk, and **Restart replay** to reset its cursor. The stable app-local path is `FileSystem.AppDataDirectory/chat-playground.recording.json`, shown in the recording info tip. **Clear conversation** intentionally keeps the tape; while Replay is selected, it restarts the cursor so repeating the recorded conversation is straightforward.

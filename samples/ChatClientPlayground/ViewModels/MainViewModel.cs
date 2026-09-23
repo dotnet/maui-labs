@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.ComponentModel;
-using ChatClientPlayground.Features.Recording;
 using ChatClientPlayground.Models;
 using ChatClientPlayground.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -16,7 +15,7 @@ public partial class MainViewModel : ObservableObject
 {
     private readonly ChatClientService _chatClients;
     private readonly PlaygroundTools _tools;
-    private readonly ChatRecordingFeature _recording;
+    private readonly ChatRecordingService _recording;
     private readonly List<ChatMessage> _history = [];
     private ChatClientSelection _selectedClient = null!;
     private CancellationTokenSource? _requestCancellation;
@@ -27,7 +26,7 @@ public partial class MainViewModel : ObservableObject
     public MainViewModel(
         ChatClientService chatClients,
         PlaygroundTools tools,
-        ChatRecordingFeature recording,
+        ChatRecordingService recording,
         SettingsPaneViewModel settings,
         ChatAreaViewModel chat)
     {
@@ -125,7 +124,7 @@ public partial class MainViewModel : ObservableObject
 
         try
         {
-            var client = GetEffectiveClient(selection);
+            var client = _chatClients.GetRequestClient(selection);
             if (Settings.UseStreaming)
                 await SendStreamingAsync(client, options, useStructuredJson, requestGeneration, requestCancellation.Token);
             else
@@ -589,14 +588,6 @@ public partial class MainViewModel : ObservableObject
             : "Conversation cleared.";
         UpdateChatCanSend();
     }
-
-    private IChatClient GetEffectiveClient(ChatClientSelection selection) => _recording.Mode switch
-    {
-        RecordingMode.Replay => new ReplayChatClient(_recording),
-        RecordingMode.Record => new RecordingChatClient(selection.Client
-            ?? throw new InvalidOperationException("A real provider is required to record."), _recording),
-        _ => selection.Client ?? throw new InvalidOperationException("The selected provider is unavailable."),
-    };
 
     private bool IsCurrentRequest(long requestGeneration) => requestGeneration == _requestGeneration;
 

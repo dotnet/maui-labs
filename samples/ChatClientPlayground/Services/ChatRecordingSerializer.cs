@@ -1,53 +1,9 @@
-using System.Runtime.CompilerServices;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using ChatClientPlayground.Models;
 using Microsoft.Extensions.AI;
 
-namespace ChatClientPlayground.Features.Recording;
-
-/// <summary>Describes which client boundary the playground uses for a request.</summary>
-public enum RecordingMode
-{
-    Live,
-    Record,
-    Replay,
-}
-
-/// <summary>Self-contained, versioned data written by the playground.</summary>
-public sealed class ChatRecording
-{
-    public const string FormatName = "chat-client-playground-recording";
-    public const int CurrentSchemaVersion = 1;
-
-    public string Format { get; set; } = FormatName;
-    public int SchemaVersion { get; set; } = CurrentSchemaVersion;
-    public List<RecordedInteraction> Interactions { get; set; } = [];
-}
-
-/// <summary>One complete IChatClient operation and its canonical request data.</summary>
-public sealed class RecordedInteraction
-{
-    public int Sequence { get; set; }
-    public bool IsStreaming { get; set; }
-    public JsonObject Request { get; set; } = new();
-    public List<JsonObject> Updates { get; set; } = [];
-    public JsonObject? Response { get; set; }
-}
-
-/// <summary>Thrown when a replay request does not match the recorded tape.</summary>
-public sealed class ChatRecordingMismatchException : InvalidOperationException
-{
-    public ChatRecordingMismatchException(int interaction, string path, JsonNode? expected, JsonNode? actual)
-        : base($"Chat playground recording interaction {interaction + 1} mismatched at {path}. Expected {expected?.ToJsonString() ?? "null"}; actual {actual?.ToJsonString() ?? "null"}.")
-    {
-        Interaction = interaction;
-        Path = path;
-    }
-
-    public int Interaction { get; }
-    public string Path { get; }
-}
+namespace ChatClientPlayground.Services;
 
 /// <summary>Canonical JSON conversion for the intentionally small subset used by this sample.</summary>
 internal static class ChatRecordingSerializer
@@ -412,93 +368,5 @@ internal static class ChatRecordingSerializer
     {
         if (properties is { Count: > 0 })
             throw new NotSupportedException($"Chat playground recording cannot persist {name}.");
-    }
-}
-
-/// <summary>Records a real client without changing whether the caller chose streaming.</summary>
-public sealed class RecordingChatClient(IChatClient inner, ChatRecordingFeature feature) : DelegatingChatClient(inner)
-{
-    public override async Task<ChatResponse> GetResponseAsync(
-        IEnumerable<ChatMessage> messages,
-        ChatOptions? options = null,
-        CancellationToken cancellationToken = default)
-    {
-        var snapshot = messages.ToList();
-        var response = await base.GetResponseAsync(snapshot, options, cancellationToken).ConfigureAwait(false);
-        feature.AddResponse(ChatRecordingSerializer.Request(snapshot, options), response);
-        return response;
-    }
-
-    public override async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-        IEnumerable<ChatMessage> messages,
-        ChatOptions? options = null,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        var snapshot = messages.ToList();
-        var interaction = feature.BeginStreaming(ChatRecordingSerializer.Request(snapshot, options));
-        var completed = false;
-        try
-        {
-            await foreach (var update in base.GetStreamingResponseAsync(snapshot, options, cancellationToken)
-                .WithCancellation(cancellationToken).ConfigureAwait(false))
-            {
-                feature.AddUpdate(interaction, ChatRecordingSerializer.Update(update));
-                yield return update;
-            }
-            completed = true;
-        }
-        finally
-        {
-            if (completed)
-                feature.CompleteStreaming(interaction);
-        }
-    }
-}
-
-/// <summary>Replays a recording only; it has no provider and therefore cannot contact one.</summary>
-public sealed class ReplayChatClient(ChatRecordingFeature feature) : IChatClient
-{
-    public Task<ChatResponse> GetResponseAsync(
-        IEnumerable<ChatMessage> messages,
-        ChatOptions? options = null,
-        CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        var interaction = feature.PeekNext(false, ChatRecordingSerializer.Request(messages, options));
-        var response = ChatRecordingSerializer.ReadResponse(
-            interaction.Response ?? throw new InvalidDataException("The non-streaming recording has no response."));
-        feature.CompleteReplay(interaction);
-        return Task.FromResult(response);
-    }
-
-    public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-        IEnumerable<ChatMessage> messages,
-        ChatOptions? options = null,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        var interaction = feature.PeekNext(true, ChatRecordingSerializer.Request(messages, options));
-        var completed = false;
-        try
-        {
-            foreach (var update in interaction.Updates)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                yield return ChatRecordingSerializer.ReadUpdate(update);
-                await Task.Yield();
-            }
-            completed = true;
-        }
-        finally
-        {
-            if (completed)
-                feature.CompleteReplay(interaction);
-        }
-    }
-
-    public object? GetService(Type serviceType, object? serviceKey = null) =>
-        serviceType == typeof(IChatClient) && serviceKey is null ? this : null;
-
-    public void Dispose()
-    {
     }
 }

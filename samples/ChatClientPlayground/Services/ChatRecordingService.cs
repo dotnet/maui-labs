@@ -1,10 +1,11 @@
 using System.Text;
 using System.Text.Json.Nodes;
+using ChatClientPlayground.Models;
 
-namespace ChatClientPlayground.Features.Recording;
+namespace ChatClientPlayground.Services;
 
 /// <summary>Owns the in-memory tape, its replay cursor, and stable app-local persistence.</summary>
-public sealed class ChatRecordingFeature
+public sealed class ChatRecordingService
 {
     private readonly object _gate = new();
     private ChatRecording _recording = new();

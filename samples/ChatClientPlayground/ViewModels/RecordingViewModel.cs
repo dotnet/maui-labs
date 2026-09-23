@@ -1,4 +1,5 @@
-using ChatClientPlayground.Features.Recording;
+using ChatClientPlayground.Models;
+using ChatClientPlayground.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -7,12 +8,12 @@ namespace ChatClientPlayground.ViewModels;
 /// <summary>Exposes the sample-contained recording tape controls in the settings pane.</summary>
 public sealed partial class RecordingViewModel : ObservableObject
 {
-    private readonly ChatRecordingFeature _feature;
+    private readonly ChatRecordingService _recording;
 
-    public RecordingViewModel(ChatRecordingFeature feature)
+    public RecordingViewModel(ChatRecordingService recording)
     {
-        _feature = feature;
-        _feature.Changed += (_, _) => MainThread.BeginInvokeOnMainThread(Refresh);
+        _recording = recording;
+        _recording.Changed += (_, _) => MainThread.BeginInvokeOnMainThread(Refresh);
         Refresh();
     }
 
@@ -32,7 +33,7 @@ public sealed partial class RecordingViewModel : ObservableObject
     [RelayCommand]
     private void NewRecording()
     {
-        _feature.NewRecording();
+        _recording.NewRecording();
         Status = "New in-memory recording created.";
     }
 
@@ -41,7 +42,7 @@ public sealed partial class RecordingViewModel : ObservableObject
     {
         try
         {
-            _feature.Save();
+            _recording.Save();
             Status = $"Saved {InteractionCount} interaction(s).";
         }
         catch (Exception exception)
@@ -55,7 +56,7 @@ public sealed partial class RecordingViewModel : ObservableObject
     {
         try
         {
-            _feature.Load();
+            _recording.Load();
             Status = $"Loaded {InteractionCount} interaction(s); replay is ready.";
         }
         catch (Exception exception)
@@ -67,13 +68,13 @@ public sealed partial class RecordingViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanRestartReplay))]
     private void RestartReplay()
     {
-        _feature.RestartReplay();
+        _recording.RestartReplay();
         Status = "Replay restarted at interaction 1.";
     }
 
     partial void OnModeChanged(RecordingMode value)
     {
-        _feature.SetMode(value);
+        _recording.SetMode(value);
         Status = value switch
         {
             RecordingMode.Live => "Live requests are not recorded.",
@@ -89,10 +90,10 @@ public sealed partial class RecordingViewModel : ObservableObject
 
     private void Refresh()
     {
-        Mode = _feature.Mode;
-        InteractionCount = _feature.InteractionCount;
-        ReplayPosition = _feature.ReplayPosition;
-        StoragePath = _feature.Path;
+        Mode = _recording.Mode;
+        InteractionCount = _recording.InteractionCount;
+        ReplayPosition = _recording.ReplayPosition;
+        StoragePath = _recording.Path;
         OnPropertyChanged(nameof(TapeSummary));
         OnPropertyChanged(nameof(StorageInfo));
         RestartReplayCommand.NotifyCanExecuteChanged();

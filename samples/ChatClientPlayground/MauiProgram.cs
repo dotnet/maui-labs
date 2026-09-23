@@ -1,7 +1,6 @@
 using System.Reflection;
 using System.ClientModel;
 using Azure.AI.OpenAI;
-using ChatClientPlayground.Features.Recording;
 using ChatClientPlayground.Services;
 using ChatClientPlayground.ViewModels;
 using Microsoft.Extensions.AI;
@@ -38,7 +37,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<ChatClientService>();
         builder.Services.AddSingleton<ImageInputService>();
         builder.Services.AddSingleton<PlaygroundTools>();
-        builder.Services.AddSingleton<ChatRecordingFeature>();
+        builder.Services.AddSingleton<ChatRecordingService>();
         builder.Services.AddSingleton<RecordingViewModel>();
         builder.Services.AddSingleton<SettingsPaneViewModel>();
         builder.Services.AddSingleton<ChatAreaViewModel>();
