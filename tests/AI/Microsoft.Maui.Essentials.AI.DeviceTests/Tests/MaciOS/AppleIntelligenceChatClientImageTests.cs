@@ -252,14 +252,14 @@ public class AppleIntelligenceChatClientImageTests
 		{
 			new(ChatRole.User,
 			[
-				new TextContent("What is the dominant color of this image? Answer in one word."),
+				new TextContent("What is the dominant basic color of this image? Answer with one English color word."),
 				new DataContent(new byte[] { 0 }, "image/png") { RawRepresentation = image },
 			]),
 		};
 
 		var response = await client.GetResponseAsync(messages);
 
-		Assert.False(string.IsNullOrWhiteSpace(response.Text));
+		Assert.Contains("red", response.Text, StringComparison.OrdinalIgnoreCase);
 	}
 }
 #endif
