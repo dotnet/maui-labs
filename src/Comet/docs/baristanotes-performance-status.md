@@ -1,7 +1,7 @@
 # BaristaNotes performance status
 
-Status at 2026-09-23: **startup investigation paused; page-transition and
-rendering measurement is the next focus**.
+Status at 2026-09-23: **the applied ART-profile startup rerun is complete.
+Page-transition and rendering measurements remain pending**.
 
 This records bounded experiments, not a general framework ranking.
 The comparison uses Original BaristaNotes (MAUI, MauiReactor and EF Core/SQLite)
@@ -52,20 +52,27 @@ discarded from the evidence. All valid slow measured launches are retained.
 | Baseline, 100 drinks | Comet baseline | 876.5 | 891.4 | 901.05 | 879.13 | 12.96 |
 | Baseline, 1,000 drinks | Original | 329.5 | 966.2 | 980.65 | 594.93 | 325.27 |
 | Baseline, 1,000 drinks | Comet baseline | 891.0 | 912.1 | 919.05 | 894.17 | 15.38 |
-| Latest, 100 drinks | Original, unchanged APK | 310.0 | 675.1 | 683.70 | 359.30 | 129.63 |
-| Latest, 100 drinks | Combined Comet candidate | 709.0 | 726.6 | 732.55 | 710.63 | 12.23 |
+| Combined candidate, 100 drinks | Original, unchanged APK | 310.0 | 675.1 | 683.70 | 359.30 | 129.63 |
+| Combined candidate, 100 drinks | Combined Comet candidate | 709.0 | 726.6 | 732.55 | 710.63 | 12.23 |
+| Applied ART profile, 100 drinks | Original, unchanged APK | 317.0 | 693.5 | 702.40 | 391.27 | 156.41 |
+| Applied ART profile, 100 drinks | Comet with applied profile | 693.5 | 709.3 | 713.10 | 695.27 | 11.14 |
+| Applied ART profile, 1,000 drinks | Original, unchanged APK | 321.5 | 979.2 | 982.10 | 493.67 | 296.19 |
+| Applied ART profile, 1,000 drinks | Comet with applied profile | 704.5 | 771.2 | 780.15 | 713.60 | 28.99 |
 
 | Study | Comet minus Original median | Paired 95% interval |
 |---|---:|---|
 | Baseline, 100 drinks | +564.0 ms | +560.0 to +576.0 ms |
 | Baseline, 1,000 drinks | +561.5 ms | -55.0 to +576.0 ms |
-| Latest, 100 drinks | +399.0 ms | +387.5 to +407.0 ms |
+| Combined candidate, 100 drinks | +399.0 ms | +387.5 to +407.0 ms |
+| Applied ART profile, 100 drinks | +376.5 ms | +368.5 to +384.0 ms |
+| Applied ART profile, 1,000 drinks | +383.0 ms | +369.0 to +392.5 ms |
 
-The 1,000-drink interval includes zero: inconclusive, not equivalent.
+The baseline 1,000-drink interval includes zero: inconclusive, not equivalent.
 Original's larger variation has no accepted root cause.
-The latest effect is +128.71%, with a paired interval of +120.72% to +132.79%.
+The combined-candidate effect was +128.71%, with a paired interval of
++120.72% to +132.79%.
 
-The latest Comet median is 167.5 ms, or 19.11%, below its historical median.
+The combined Comet median was 167.5 ms, or 19.11%, below its baseline median.
 Those runs were not concurrent. This is descriptive, not a paired causal
 estimate. Payload removal and inset filtering changed together; their
 individual timing contributions were not measured.
@@ -74,9 +81,83 @@ The estimator is the difference of app medians, not the median of pair
 differences. The analysis preserves pairs within the three observed blocks,
 uses 2,000 bootstrap resamples with seed `20260922`, and type-7 percentiles.
 Intervals describe these observed blocks, not a population of devices.
-The latest study had 72 launches: two pilot, ten conditioning and sixty
-measured; no exclusions or retries. Independent full replay produced
-byte-identical analysis and measured inputs.
+The combined-candidate study and both complete profile studies each had
+72 timing-protocol launches: two pilot, ten conditioning and sixty measured;
+no timing exclusions or retries.
+Independent replay reproduced the measured inputs and analysis.
+
+## Applied ART-profile rerun
+
+The profiled APK was built from `d2b1c2e3bbd5a12eb913be6915e1e0609f3ad58e`
+plus the reviewed 12-file profile update. The profile and build targets come
+from upstream `8be2f82fa16abb2bb1180b04a38e4de943b749e9`; see
+[vendor provenance](../src/vendor/VENDORED.md). The existing Comet facade
+was not replaced. The rerun used the same RC1 comparison toolchain and the
+Pixel 5 only, without an emulator step.
+
+The install included a checksum-matched API 34 `.dm` file. Android reported
+Comet as `speed-profile/install-dm` and Original as `verify/install`.
+Required ART states were checked before and after each pilot, conditioning
+phase and measured block: 20 boundary records per complete study.
+This establishes applied profile-guided compilation, not only a profile
+file packaged in the APK. No forced compilation or ART reset was used.
+
+The new 100-drink difference is +118.77%, with a paired 95% interval of
++113.58% to +123.20%. For 1,000 drinks it is +119.13%, with an interval of
++110.81% to +123.04%.
+
+| Dataset | Block | Pairs | Original median ms | Comet median ms |
+|---|---:|---:|---:|---:|
+| 100 | 1 | 10 | 316.5 | 700.0 |
+| 100 | 2 | 10 | 316.5 | 696.0 |
+| 100 | 3 | 10 | 320.5 | 692.0 |
+| 1,000 | 1 | 10 | 320.0 | 701.5 |
+| 1,000 | 2 | 10 | 328.0 | 717.5 |
+| 1,000 | 3 | 10 | 324.0 | 703.0 |
+
+Each block has five Original-first and five Comet-first pairs. The separate
+1,000-drink block 2 and 3 intervals include zero; those block comparisons
+are inconclusive. The pooled interval remains conditional on these three
+observed blocks. Original's 1,015 ms maximum remains in the data. Original
+has a lower median but a higher p90 than Comet in the 1,000-drink sample.
+
+Comet's 100-drink median is 15.5 ms (2.19%) below the earlier combined
+candidate's 709 ms. Its 1,000-drink median is 186.5 ms (20.93%) below the
+891 ms baseline. These nonconcurrent comparisons do not isolate the
+profile's effect. The latter also includes the earlier packaging and inset
+changes. The rebuilt source includes the committed navigation correction
+and a new test package identity.
+
+The first 1,000-drink attempt reached its cutoff after two complete pairs
+and one valid unpaired Original observation. The next Comet launch was
+refused before it started. All records remain saved. The separately
+authorized full study did not append, replace, or pool those observations.
+It used the same installed APKs and existing fixture namespaces without
+another build, install, import, or repeat of the completed 100-drink study.
+
+The 100-drink condition records showed 25.2-26.1 C against a 26.1 C baseline.
+The full 1,000-drink records showed 25.9-26.8 C against a 25.6 C baseline.
+Battery stayed at 100%, with USB power and thermal status NONE.
+All three animation scales stayed at zero. The full 1,000-drink pilot ran
+from 20:01:45 to 20:01:57 UTC and the batch from 20:01:57 to 20:09:00 UTC.
+Data checks and restoration finished at 20:09:08 UTC. The final scoped
+check at 20:10:20 UTC recorded HOME, no comparison processes, unchanged
+APKs/settings/display, and the required ART states. This is a recorded
+observation, not a current device check.
+
+Preparation of the full 1,000-drink follow-up used four untimed main
+launches: one Original and three Comet. Two Comet inspections failed with
+a null accessibility root. The successful check used bounded same-PID
+observations without repeating navigation. The third Comet launch had no
+separate preceding authorization record. Later permission was not applied
+retroactively; the observed evidence was accepted for future collection,
+with this deviation recorded. All failed attempts remain saved, and no
+preparation value is a timing sample.
+
+Independent raw replay reproduced both complete studies. The 1,000-drink
+replay matched 15 outputs byte-for-byte, including samples, dispositions,
+analysis and charts. No new TTFD, usable-content, transition, rendering or
+memory result is claimed.
 
 ## APK size and baseline memory
 
@@ -86,6 +167,10 @@ byte-identical analysis and measured inputs.
 | Baseline Comet | 37,655,924 |
 | Barista-only payload candidate | 26,294,642 |
 | Combined payload and inset candidate | 26,298,738 |
+| Applied ART-profile candidate | 26,311,173 |
+
+The profiled APK is 12,435 bytes larger than the combined candidate.
+Its 11,613-byte install-time `.dm` is separate and is not included in APK size.
 
 Combined saves 11,357,186 bytes (30.16%) versus baseline Comet and is 28.97%
 smaller than Original. The source inventory found 97 unrelated sample files,
@@ -114,7 +199,8 @@ These are not memory-at-TTID results and do not belong to the combined APK.
 
 ## What the earlier traces show
 
-These are pre-optimization diagnostics, not a breakdown of the latest 709 ms.
+These are pre-optimization diagnostics, not a breakdown of the combined
+candidate's 709 ms or the new profiled medians.
 The trace-on `Displayed` values, 921/934/920 ms, are not formal timing samples.
 Parent, child and GC intervals overlap; do not add the following rows.
 
@@ -184,6 +270,10 @@ unchanged exports from its completed operation, not a fresh live database
 export. Its native content and selected fixture passed every launch.
 Both apps were restored to Review and stopped after collection. This is
 historical state, not a current device check.
+Private default Review values, ordering and database byte equality were
+not compared in the profile reruns. Preservation evidence is limited to
+the recorded operations, fixture/receipt checks, native observations and
+selector restoration; it is not a general loss-free claim.
 
 The measured APK identities are:
 
@@ -192,6 +282,8 @@ The measured APK identities are:
 | Original | `73de0a0bde231f489fd828bcc31cc8456e660683a9f69e486e4d7cab5b36b7af` |
 | Baseline Comet | `ec272ab0d602514848a7b5aba8dbc4a6cb5dc8a11bdab26c6fb1d9fa441c8e99` |
 | Combined Comet | `04ca980a4c6cc1d7e628f16d9fee55dbf9da9a509cd8946e9011e3626a418013` |
+| Profiled Comet | `9bdb8a3837b840e19083a365ff28783cc9e0ac2c74bc4379b3f988294c045a32` |
+| Profiled Comet install-time DM | `3cd6833f4035634a5cc76129fe2fa41ec889a53f17d4e752eb67c05fdcbcad22` |
 
 These identify measured artifacts, not a promise that rebuilding a later
 commit produces identical APK bytes.
@@ -234,8 +326,18 @@ Start with `comparison-report-02/startup-resume.md`,
 `comparison-report-02/page-performance-resume.md` and
 `comparison-report-02/comparison-summary.md`. The original baseline report,
 failed attempts and all accepted records remain unchanged.
-The latest full analysis is `ttid-insets-100-report-01/analysis/analysis.json`,
+The earlier combined analysis is `ttid-insets-100-report-01/analysis/analysis.json`,
 SHA-256 `c2c8be8eb0b95e7ce07bf2aa0bb1df1f23c9880945704b38ba08a9a2729b7baf`.
+
+The profile-rerun records are:
+
+| File under the evidence directory | SHA-256 |
+|---|---|
+| `ttid-art-profile-01/report-100-02/analysis/analysis.json` | `b737d4fcc2f5f77dd774907e8e0ad05e2837b7132b547f2f40c5a8424c418f2d` |
+| `ttid-art-profile-01/coordinator-replay-100-01/verification.json` | `d695e5c57740c9dbfc5771c5b38707cb2ca838fbaa93c2f7e52ed5fb4e014f23` |
+| `ttid-art-profile-1000-followup-01/report-1000-01/analysis/analysis.json` | `652786e415c1fd2f4cc53e9775ac4ab63194e73644d67d0862214e0d81eac83c` |
+| `ttid-art-profile-1000-followup-01/review-01/raw-replay-01-verification.json` | `9e78f67f8e4c9471a49bc019b15f1ad091f434336d036ff032736877f2370372` |
+| `ttid-art-profile-1000-followup-01/handoff-01/handoff.json` | `9fafe7ad0f88574d9a774552c89f758133ac3c2934cae531aa0b9e28198c8638` |
 
 Before resuming startup, obtain the user's direction. Use new output folders
 and fresh bounded device authorization; all earlier windows are expired.

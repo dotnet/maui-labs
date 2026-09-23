@@ -43,3 +43,43 @@ disposal. Portable mode retains the top inset; the separate Android-branch
 host helper tests Android edge filtering. These are not native rendering,
 keyboard, device, or startup-time checks. Run `BaristaLifecycleTests=true`
 in a separate process; the two modes cannot share comparison storage.
+
+## Android ART baseline profiles
+
+Release R8 builds now include the vendored Compose library baseline profile.
+This also applies to standalone BaristaNotes and its NativeAOT comparison
+profiles. It changes the generated artifact; do not attach a new build to an
+old timing result.
+
+From `src/Comet`, build an APK without changing installed apps:
+
+```sh
+dotnet publish sample/CometComposeProbe/CometComposeProbe.csproj \
+  -f net11.0-android -c Release \
+  -p:CometSample=baristanotes -p:EnableProbeAot=true \
+  -p:AndroidPackageFormat=apk -p:AndroidPackageFormats=apk
+python3 tools/check_compose_art_profile.py path/to/BaristaNotes-Signed.apk
+```
+
+For an unprofiled control, repeat with
+`-p:MicrosoftAndroidXComposeEnableBaselineProfile=false`, then check that
+artifact with `--expect-absent`. Keep both APKs and their SHA-256 values.
+The opt-out does not disable the JNI/R8 correctness rules.
+
+The build requires the Android SDK command-line tools' `profgen-classpath.jar`.
+Override its path with `MicrosoftAndroidXComposeProfgenClasspath` if needed.
+Profile generation uses the final DEX and a strict `profgen` readback; the archive
+checker checks packaging, not ART compilation on a device.
+
+For any later sideloaded performance experiment, record the actual ART state.
+Jonathan's [Pixel 5 experiment](https://github.com/jonathanpeppers/Microsoft.AndroidX.Compose/issues/346#issuecomment-5779434779)
+used a checksum-matched install-time `.dm` with explicit `v0_1_5_s` format.
+The earlier default/v010 sidecar remained `verify/install-dm` and did not test
+applied compilation. Confirm `speed-profile/install-dm` for the intended
+profiled state, and recheck after each measured phase. This sidecar correction
+does not change the format of the packaged `baseline.prof` asset.
+
+Do not uninstall, clear app data, reset ART, or overwrite existing comparison
+apps to prepare a test. Device experiments require separate approval and an
+isolated app identity. No startup or transition improvement is claimed by this
+build-support update.
