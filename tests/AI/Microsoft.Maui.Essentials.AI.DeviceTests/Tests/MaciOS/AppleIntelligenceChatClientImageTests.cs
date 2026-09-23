@@ -52,7 +52,7 @@ public class AppleIntelligenceChatClientImageTests
 	[Fact]
 	public void ToNative_EncodedImage_PreservesExifOrientation()
 	{
-		using var image = CreateTestImage();
+		using var image = CreateTestImage(2, 3);
 		using var jpeg = new NSMutableData();
 		using var destination = CGImageDestination.Create(jpeg, "public.jpeg", 1)!;
 		using var properties = NSDictionary<NSString, NSObject>.FromObjectsAndKeys(
@@ -64,6 +64,13 @@ public class AppleIntelligenceChatClientImageTests
 
 		Assert.Equal(6, native.OrientationRaw);
 		Assert.NotNull(native.Data);
+
+		var portable = Assert.IsType<DataContent>(AppleIntelligenceChatClient.FromNative(native));
+		Assert.Equal("image/png", portable.MediaType);
+		var oriented = Assert.IsType<CGImage>(portable.RawRepresentation);
+		Assert.Equal((nint)3, oriented.Width);
+		Assert.Equal((nint)2, oriented.Height);
+		Assert.Equal(0, AppleIntelligenceChatClient.ToNative(portable).OrientationRaw);
 	}
 
 	[Fact]
@@ -159,6 +166,55 @@ public class AppleIntelligenceChatClientImageTests
 		Assert.NotNull(decoded);
 		Assert.Equal((nint)3, decoded!.Width);
 		Assert.Equal((nint)3, decoded.Height);
+	}
+
+	[Theory]
+	[InlineData(2, 2, 3)]
+	[InlineData(6, 3, 2)]
+	[InlineData(8, 3, 2)]
+	public void FromNative_OrientedImage_NormalizesPortableAndNativePixels(int orientation, int width, int height)
+	{
+		using var image = CreateTestImage(2, 3);
+		var native = new ImageContentNative(image, orientation, null);
+
+		var portable = Assert.IsType<DataContent>(AppleIntelligenceChatClient.FromNative(native));
+		var oriented = Assert.IsType<CGImage>(portable.RawRepresentation);
+		Assert.Equal((nint)width, oriented.Width);
+		Assert.Equal((nint)height, oriented.Height);
+		Assert.Equal(0, AppleIntelligenceChatClient.ToNative(portable).OrientationRaw);
+
+		using var png = NSData.FromArray(portable.Data.ToArray());
+		using var source = CGImageSource.FromData(png);
+		using var decoded = source!.CreateImage(0, new CGImageOptions());
+		Assert.Equal((nint)width, decoded!.Width);
+		Assert.Equal((nint)height, decoded.Height);
+	}
+
+	[Fact]
+	public void FromNative_OrientedFile_NormalizesPixels()
+	{
+		using var image = CreateTestImage(2, 3);
+		using var png = new NSMutableData();
+		using var destination = CGImageDestination.Create(png, "public.png", 1)!;
+		destination.AddImage(image);
+		Assert.True(destination.Close());
+
+		var path = Path.GetTempFileName();
+		try
+		{
+			File.WriteAllBytes(path, png.ToArray());
+			var native = new ImageContentNative(NSUrl.FromFilename(path), 6, null);
+
+			var portable = Assert.IsType<DataContent>(AppleIntelligenceChatClient.FromNative(native));
+			var oriented = Assert.IsType<CGImage>(portable.RawRepresentation);
+			Assert.Equal((nint)3, oriented.Width);
+			Assert.Equal((nint)2, oriented.Height);
+			Assert.Equal("image/png", portable.MediaType);
+		}
+		finally
+		{
+			File.Delete(path);
+		}
 	}
 
 	[Fact]
@@ -263,14 +319,11 @@ public class AppleIntelligenceChatClientImageTests
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithImageAttachment_ReturnsDescription()
 	{
-		// Multimodal image input needs the runtime OS to be 27.0+ (the 27.0 SDK only enables
-		// compilation). Skip on older runtimes so this doesn't false-fail off-device.
-		if (!OperatingSystem.IsMacCatalystVersionAtLeast(27) &&
-			!OperatingSystem.IsIOSVersionAtLeast(27) &&
-			!OperatingSystem.IsMacOSVersionAtLeast(27))
-		{
-			return;
-		}
+		Assert.True(
+			OperatingSystem.IsMacCatalystVersionAtLeast(27) ||
+			OperatingSystem.IsIOSVersionAtLeast(27) ||
+			OperatingSystem.IsMacOSVersionAtLeast(27),
+			"Live image inference requires an OS 27 runtime and a ready vision-capable model, not just the 27 SDK.");
 
 		using var image = CreateTestImage(64, 64);
 		var client = new AppleIntelligenceChatClient();
