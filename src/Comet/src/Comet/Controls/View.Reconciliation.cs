@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using Comet.Reactive;
 
@@ -357,6 +358,10 @@ public partial class View
 		}
 	}
 
+	[UnconditionalSuppressMessage(
+		"Trimming",
+		"IL2070",
+		Justification = "View carries the matching property preservation contract; the linker does not propagate it through Type.BaseType traversal.")]
 	static bool IsDeclarativeMember(Type declaringType, FieldInfo field)
 	{
 		var fieldType = field.FieldType;

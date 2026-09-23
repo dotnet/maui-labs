@@ -1,4 +1,5 @@
 using Android.Runtime;
+using Java.Interop;
 
 namespace AndroidX.Compose;
 
@@ -17,6 +18,7 @@ namespace AndroidX.Compose;
 /// <see cref="LinkAnnotation"/>, and so future generator-emitted
 /// bridges can accept it via the standard reference-type handle path.
 /// </remarks>
+[JniTypeSignature("androidx/compose/ui/text/AnnotatedString", GenerateJavaPeer = false)]
 public sealed class AnnotatedString : Java.Lang.Object
 {
     AnnotatedString(IntPtr handle, JniHandleOwnership transfer)

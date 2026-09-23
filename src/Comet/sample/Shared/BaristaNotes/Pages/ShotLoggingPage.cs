@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using Comet;
+using Comet.Backend;
 using Comet.Reactive;
 using Microsoft.Maui;
 using Microsoft.Maui.Graphics;
@@ -101,6 +102,9 @@ public sealed class ShotLoggingPage : View
     readonly Signal<long?> _leaveRequestGeneration = new(null);
     readonly EditorLeaveGuard _leaveGuard = new();
     readonly ActionCommand _backCommand;
+    readonly Signal<int> _editorInsetsVersion = new(0);
+    PropertySubscription<Thickness>? _editorInsetsProjection;
+    CometWindowMetrics? _editorInsetsOwner;
 
     List<int> _accessoryIds = new();
     List<decimal> _numericValues = new();
@@ -367,6 +371,8 @@ public sealed class ShotLoggingPage : View
         if (disposing)
         {
             Interlocked.Increment(ref _loadVersion);
+            _editorInsetsProjection?.Dispose();
+            _editorInsetsVersion.Dispose();
             _navigation.NotifyShotEditorDisposed(this);
         }
         base.Dispose(disposing);
@@ -416,7 +422,7 @@ public sealed class ShotLoggingPage : View
 
     View EditorGrid()
     {
-        var safeArea = BaristaSafeAreaLayout.GetInsets(this);
+        var safeArea = EditorInsets();
         var contentGrid = new Grid(
             columns: new object[] { "*", "*", "*", "*" },
             rows: BaristaEdgeFrame.CreateEqualDataRows(BaristaEdgeFrame.NewDrinkContentRowCount),
@@ -480,6 +486,26 @@ public sealed class ShotLoggingPage : View
         .Background(CoffeeTheme.SurfaceColor)
         .IgnoreSafeArea()
         .AutomationId("new_drink_edge_frame");
+    }
+
+    Thickness EditorInsets()
+    {
+        var owner = this.GetWindowMetrics();
+        if (_editorInsetsProjection is null || !ReferenceEquals(owner, _editorInsetsOwner))
+        {
+            _editorInsetsProjection?.Dispose();
+            _editorInsetsOwner = owner;
+            // Keep full-inset reads out of the body scope. Only changed editor edges
+            // notify the body; the normal editor does not consume the bottom inset.
+            _editorInsetsProjection = new PropertySubscription<Thickness>(() =>
+            {
+                var safeArea = BaristaSafeAreaLayout.GetInsets(this);
+                return new Thickness(safeArea.Left, safeArea.Top, safeArea.Right, 0);
+            });
+            _editorInsetsProjection.PropertyChangedCallback = _ => _editorInsetsVersion.Value++;
+        }
+        _ = _editorInsetsVersion.Value;
+        return _editorInsetsProjection.Value;
     }
 
     static View Tile(

@@ -5,6 +5,8 @@ using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using System.Threading;
 using System.Threading.Tasks;
 using CometBaristaNotes.Services.DTOs;
@@ -38,13 +40,9 @@ public sealed record AzureOpenAIAdviceConfiguration
     };
 }
 
-public sealed class AzureOpenAIAdviceAdapter : IAIAdviceAdapter
+public sealed partial class AzureOpenAIAdviceAdapter : IAIAdviceAdapter
 {
     private const string SourceName = "via Azure OpenAI";
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true
-    };
 
     private readonly HttpClient _httpClient;
     private readonly AzureOpenAIAdviceConfiguration _configuration;
@@ -72,7 +70,7 @@ public sealed class AzureOpenAIAdviceAdapter : IAIAdviceAdapter
             prompt,
             structuredJson: true,
             cancellationToken);
-        var payload = Deserialize<ShotAdvicePayload>(content);
+        var payload = Deserialize(content, JsonContext.Default.ShotAdvicePayload);
         return new AIAdviceResponseDto
         {
             Success = payload.Adjustments.Count > 0,
@@ -106,10 +104,10 @@ public sealed class AzureOpenAIAdviceAdapter : IAIAdviceAdapter
         var content = await CompleteAsync(
             "You are an expert coffee brewing coach. Return JSON with numeric dose, output, " +
             "and duration fields, a grindSetting string, and optional confidence string.",
-            JsonSerializer.Serialize(context, JsonOptions),
+            JsonSerializer.Serialize(context, JsonContext.Default.BeanRecommendationContextDto),
             structuredJson: true,
             cancellationToken);
-        var payload = Deserialize<BeanRecommendationPayload>(content);
+        var payload = Deserialize(content, JsonContext.Default.BeanRecommendationPayload);
         return new AIRecommendationDto
         {
             Success =
@@ -141,26 +139,12 @@ public sealed class AzureOpenAIAdviceAdapter : IAIAdviceAdapter
         var requestUri = new Uri(
             endpoint,
             $"openai/deployments/{deployment}/chat/completions?api-version={apiVersion}");
-        var messages = new[]
-        {
-            new { role = "system", content = systemPrompt },
-            new { role = "user", content = userPrompt }
-        };
-        object payload = structuredJson
-            ? new
-            {
-                messages,
-                temperature = 0.2,
-                response_format = new { type = "json_object" }
-            }
-            : new { messages, temperature = 0.2 };
-
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_configuration.Timeout);
         using var request = new HttpRequestMessage(HttpMethod.Post, requestUri);
         request.Headers.TryAddWithoutValidation("api-key", _configuration.ApiKey);
         request.Content = new StringContent(
-            JsonSerializer.Serialize(payload, JsonOptions),
+            SerializeChatRequest(systemPrompt, userPrompt, structuredJson),
             Encoding.UTF8,
             "application/json");
         using var response = await _httpClient.SendAsync(request, timeout.Token);
@@ -188,17 +172,52 @@ public sealed class AzureOpenAIAdviceAdapter : IAIAdviceAdapter
         return content.GetString()!;
     }
 
-    private static T Deserialize<T>(string content)
+    private static T Deserialize<T>(string content, JsonTypeInfo<T> typeInfo)
     {
         try
         {
-            return JsonSerializer.Deserialize<T>(content, JsonOptions)
+            return JsonSerializer.Deserialize(content, typeInfo)
                 ?? throw new InvalidDataException("AI response was empty.");
         }
         catch (JsonException exception)
         {
             throw new InvalidDataException("AI response was not valid JSON.", exception);
         }
+    }
+
+    private static string SerializeChatRequest(
+        string systemPrompt,
+        string userPrompt,
+        bool structuredJson)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            writer.WritePropertyName("messages");
+            writer.WriteStartArray();
+            WriteMessage(writer, "system", systemPrompt);
+            WriteMessage(writer, "user", userPrompt);
+            writer.WriteEndArray();
+            writer.WriteNumber("temperature", 0.2);
+            if (structuredJson)
+            {
+                writer.WritePropertyName("response_format");
+                writer.WriteStartObject();
+                writer.WriteString("type", "json_object");
+                writer.WriteEndObject();
+            }
+            writer.WriteEndObject();
+        }
+        return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    private static void WriteMessage(Utf8JsonWriter writer, string role, string content)
+    {
+        writer.WriteStartObject();
+        writer.WriteString("role", role);
+        writer.WriteString("content", content);
+        writer.WriteEndObject();
     }
 
     private void EnsureConfigured()
@@ -221,6 +240,12 @@ public sealed class AzureOpenAIAdviceAdapter : IAIAdviceAdapter
         public decimal Duration { get; init; }
         public string? Confidence { get; init; }
     }
+
+    [JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
+    [JsonSerializable(typeof(BeanRecommendationContextDto))]
+    [JsonSerializable(typeof(ShotAdvicePayload))]
+    [JsonSerializable(typeof(BeanRecommendationPayload))]
+    private sealed partial class JsonContext : JsonSerializerContext;
 }
 
 public sealed class AIProviderRateLimitException()

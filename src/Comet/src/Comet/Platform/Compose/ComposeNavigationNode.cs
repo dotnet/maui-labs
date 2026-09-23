@@ -15,7 +15,7 @@ namespace Comet.Platform.Compose
 	/// <see cref="IBackendManagesOwnContent"/> — the bridge doesn't materialize the
 	/// NavigationView's content as a static child).
 	/// </summary>
-	sealed class ComposeNavigationNode : ComposeNode, IBackendRetainsLogicalContentOnOwnerTransfer
+	sealed class ComposeNavigationNode : ComposeNode, IBackendRetainsLogicalContentOnOwnerTransfer, IBackendContentActivation
 	{
 		NavigationView _nav;
 		readonly List<View> _stack = new();
@@ -23,6 +23,7 @@ namespace Comet.Platform.Compose
 		readonly MutableState<int> _version = new(0);
 		View? _visibleTop;
 		ICommand? _observedBackCommand;
+		bool _contentActive = true;
 
 		public ComposeNavigationNode(NavigationView nav, BackendContext context)
 		{
@@ -99,6 +100,8 @@ namespace Comet.Platform.Compose
 
 		void SetVisibleTop(View? next)
 		{
+			if (!_contentActive && next is not null)
+				return;
 			if (ReferenceEquals(_visibleTop, next))
 			{
 				ObserveBackCommand(next);
@@ -227,8 +230,28 @@ namespace Comet.Platform.Compose
 
 		void ReflowTopScreen()
 		{
+			if (!_contentActive)
+				return;
 			if (PrepareCurrentScreen(out var rematerialized) is not null && rematerialized)
 				_version.Value++;
+		}
+
+		public void SetContentActive(bool active)
+		{
+			if (_contentActive == active)
+				return;
+			_contentActive = active;
+			if (!active)
+			{
+				SetVisibleTop(null);
+				return;
+			}
+
+			// ContentSwitcher activation is driven by a reactive index change. Run appearance
+			// callbacks now, then let this node's once-per-flush ReflowTopScreen lay out any
+			// resulting current data. Laying out here as well repeated the full retained page
+			// pass immediately before AfterFlush, which was especially costly for grid-heavy roots.
+			SetVisibleTop(_stack.Count > 0 ? _stack[^1] : null);
 		}
 
 		ComposeNode MaterializeScreen(View view)
@@ -253,6 +276,8 @@ namespace Comet.Platform.Compose
 
 		public override void Render(IComposer composer)
 		{
+			if (!_contentActive)
+				return;
 			_ = _version.Value; // subscribe so push/pop recomposes
 			var node = PrepareCurrentScreen(out _);
 			if (node is null)

@@ -20,11 +20,12 @@ namespace Comet.Platform.SwiftUI
 	/// the Compose backend — which needs a distinct class per control — the SwiftUI shim is
 	/// kind-driven, so one node type parameterized by a kind string suffices.
 	/// </summary>
-	sealed class SwiftUINode : ICometBackendNode, ISwiftUINativeNode
+	sealed class SwiftUINode : ICometBackendNode, IBackendMeasureCache, ISwiftUINativeNode
 	{
 		readonly CometNode _native;
 		readonly List<ICometBackendNode> _children = new();
 		readonly string _kind;
+		readonly BackendMeasureCache _measureCache = new();
 		ICometEventSink? _sink;
 
 		// Tracked so MeasureBaseline can compute the first-baseline offset from UIFont
@@ -81,6 +82,7 @@ namespace Comet.Platform.SwiftUI
 
 		public void ApplyProperty(PropertyId id, in PropertyValue value)
 		{
+			InvalidateMeasureCache();
 			if (ApplyCommonProperty(_native, id, in value))
 				return;
 
@@ -290,6 +292,7 @@ namespace Comet.Platform.SwiftUI
 
 		public void InsertChild(int index, ICometBackendNode child)
 		{
+			InvalidateMeasureCache();
 			var c = (ISwiftUINativeNode)child;
 			_children.Insert(index, (ICometBackendNode)c);
 			CometSwiftUIHost.InsertChild(_native, index, c.Native);
@@ -297,12 +300,14 @@ namespace Comet.Platform.SwiftUI
 
 		public void RemoveChildAt(int index)
 		{
+			InvalidateMeasureCache();
 			_children.RemoveAt(index);
 			CometSwiftUIHost.RemoveChild(_native, index);
 		}
 
 		public void MoveChild(int fromIndex, int toIndex)
 		{
+			InvalidateMeasureCache();
 			var c = _children[fromIndex];
 			_children.RemoveAt(fromIndex);
 			CometSwiftUIHost.RemoveChild(_native, fromIndex);
@@ -319,6 +324,11 @@ namespace Comet.Platform.SwiftUI
 			var size = CometSwiftUIHost.MeasureNode(_native, widthConstraint, heightConstraint);
 			return new Size(size.Width, size.Height);
 		}
+
+		Size IBackendMeasureCache.MeasureCached(double widthConstraint, double heightConstraint)
+			=> _measureCache.GetOrMeasure(widthConstraint, heightConstraint, Measure);
+
+		public void InvalidateMeasureCache() => _measureCache.Clear();
 
 		public void Arrange(Rect frame)
 			=> CometSwiftUIHost.SetFrame(_native, frame.X, frame.Y, frame.Width, frame.Height);
@@ -342,7 +352,11 @@ namespace Comet.Platform.SwiftUI
 
 		// Baseline-height inset (gold baselineHeight): pad the leaf content down so its first baseline
 		// lands at the requested offset — the iOS counterpart of ComposeNode's _contentTopInset.
-		public void SetContentTopInset(double dp) => CometSwiftUIHost.SetDouble(_native, "contenttopinset", dp);
+		public void SetContentTopInset(double dp)
+		{
+			InvalidateMeasureCache();
+			CometSwiftUIHost.SetDouble(_native, "contenttopinset", dp);
+		}
 
 		public void SetEventSink(ICometEventSink? sink) => _sink = sink;
 		public void Dispose() { }

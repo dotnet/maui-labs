@@ -368,6 +368,21 @@ namespace Comet.Tests.Backend
 		}
 
 		[Fact]
+		public void NavigationView_PopToRoot_AtExactRoot_DoesNotInvokeContentReset()
+		{
+			var root = new Text("root");
+			var nav = new NavigationView { root };
+			var resetCalls = 0;
+			nav.SetBackendNavigationStack(new[] { root });
+			nav.SetPerformContentReset(_ => resetCalls++);
+
+			nav.PopToRoot();
+
+			Assert.Equal(0, resetCalls);
+			Assert.Equal(new[] { root }, nav.GetBackendNavigationStack());
+		}
+
+		[Fact]
 		public async Task Image_EmitsLocalFileStreamAndCircularClip()
 		{
 			var fileNode = Bridge(new Image(new FileImageSource { File = "/data/avatar.png" })

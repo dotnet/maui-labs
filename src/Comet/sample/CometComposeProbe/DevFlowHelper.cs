@@ -13,16 +13,6 @@ using Microsoft.Maui.DevFlow.Agent.Core;
 
 namespace CometComposeProbe
 {
-	// PixelCopyListener lives outside #if DEBUG so Xamarin.Android generates its JNI typemap
-	// entry unconditionally. The build tool only registers Java.Lang.Object subclasses it sees
-	// in every build; a type hidden behind #if DEBUG is skipped in the Release codegen pass.
-	sealed class PixelCopyListener : Java.Lang.Object, PixelCopy.IOnPixelCopyFinishedListener
-	{
-		readonly Action<int> _callback;
-		public PixelCopyListener(Action<int> callback) => _callback = callback;
-		public void OnPixelCopyFinished(int copyResult) => _callback(copyResult);
-	}
-
 #if DEBUG
 	/// <summary>
 	/// Bootstraps the DevFlow in-app agent for CometComposeProbe without requiring UseMaui.
@@ -342,10 +332,12 @@ namespace CometComposeProbe
 
 		Task<byte[]?> CaptureFullScreenAsync()
 		{
+			if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
+				return Comet.Platform.Compose.ComposeDevAgentHost.CaptureScreenshotAsync(_activity);
+
 			var tcs = new TaskCompletionSource<byte[]?>();
 
-			// RunOnUiThread: PixelCopyListener (Java.Lang.Object) must be instantiated on a
-			// JNI-attached thread. The HTTP handler thread pool is not registered with the JVM.
+			// Preserve the debug helper's pre-API-26 software capture path.
 			_activity.RunOnUiThread(() =>
 			{
 				try
@@ -360,47 +352,19 @@ namespace CometComposeProbe
 
 					var bmp = Bitmap.CreateBitmap(decorView.Width, decorView.Height, Bitmap.Config.Argb8888!)!;
 
-					if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
+					try
 					{
-						PixelCopy.Request(
-							win,
-							bmp,
-							new PixelCopyListener(result =>
-							{
-								try
-								{
-									if (result == 0)
-									{
-										using var ms = new MemoryStream();
-										bmp.Compress(Bitmap.CompressFormat.Png!, 90, ms);
-										tcs.SetResult(ms.ToArray());
-									}
-									else
-									{
-										Android.Util.Log.Warn("CometProbe", $"PixelCopy failed: {result}");
-										tcs.SetResult(null);
-									}
-								}
-								finally { bmp.Recycle(); }
-							}),
-							new Handler(Looper.MainLooper!));
+						decorView.Draw(new Canvas(bmp));
+						using var ms = new MemoryStream();
+						bmp.Compress(Bitmap.CompressFormat.Png!, 90, ms);
+						tcs.SetResult(ms.ToArray());
 					}
-					else
+					catch (Exception ex)
 					{
-						try
-						{
-							decorView.Draw(new Canvas(bmp));
-							using var ms = new MemoryStream();
-							bmp.Compress(Bitmap.CompressFormat.Png!, 90, ms);
-							tcs.SetResult(ms.ToArray());
-						}
-						catch (Exception ex)
-						{
-							Android.Util.Log.Warn("CometProbe", $"Canvas fallback failed: {ex.Message}");
-							tcs.SetResult(null);
-						}
-						finally { bmp.Recycle(); }
+						Android.Util.Log.Warn("CometProbe", $"Canvas fallback failed: {ex.Message}");
+						tcs.SetResult(null);
 					}
+					finally { bmp.Recycle(); }
 				}
 				catch (Exception ex)
 				{

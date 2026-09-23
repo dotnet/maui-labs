@@ -16,7 +16,7 @@ namespace Comet.Platform.SwiftUI
 	/// the top screen is materialized as this node's single child, which the shim's
 	/// "navigation" kind renders. <c>Navigate</c> pushes and <c>Pop</c> pops, re-rendering.
 	/// </summary>
-	sealed class SwiftUINavigationNode : ICometBackendNode, IBackendRetainsLogicalContentOnOwnerTransfer, ISwiftUINativeNode
+	sealed class SwiftUINavigationNode : ICometBackendNode, IBackendRetainsLogicalContentOnOwnerTransfer, IBackendContentActivation, ISwiftUINativeNode
 	{
 		NavigationView _nav;
 		readonly CometNode _native;
@@ -27,6 +27,7 @@ namespace Comet.Platform.SwiftUI
 		readonly OwnedContentSlot<ICometBackendNode> _screen;
 		View? _visibleTop;
 		bool _activeNodeAttached;
+		bool _contentActive = true;
 		double _frameW;
 		double _frameH;
 		bool _hasFrame;
@@ -218,7 +219,7 @@ namespace Comet.Platform.SwiftUI
 		// text inputs provide their own keyboard-dismiss accessory.
 		void RelayoutTop()
 		{
-			if (_stack.Count == 0)
+			if (!_contentActive || _stack.Count == 0)
 				return;
 			var top = _stack[_stack.Count - 1];
 			ApplyBackButtonBehavior();
@@ -303,11 +304,30 @@ namespace Comet.Platform.SwiftUI
 
 		void SetVisibleTop(View? next)
 		{
+			if (!_contentActive && next is not null)
+				return;
 			if (ReferenceEquals(_visibleTop, next))
 				return;
 			_visibleTop?.ViewDidDisappear();
 			_visibleTop = next;
 			_visibleTop?.ViewDidAppear();
+		}
+
+		public void SetContentActive(bool active)
+		{
+			if (_contentActive == active)
+				return;
+			_contentActive = active;
+			if (!active)
+			{
+				SetVisibleTop(null);
+				return;
+			}
+
+			// ContentSwitcher activation is driven by a reactive index change. Deliver appearance
+			// callbacks first, then let the subscribed AfterFlush pass lay out the current data once.
+			// Relayout here previously duplicated the complete retained page layout in the same turn.
+			SetVisibleTop(_stack.Count > 0 ? _stack[^1] : null);
 		}
 
 		public void ApplyProperty(PropertyId id, in PropertyValue value) { }

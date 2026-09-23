@@ -104,4 +104,24 @@ namespace Comet.Backend
 	/// this contract because their content is materialized only by their own lifecycle.
 	/// </summary>
 	public interface IBackendReconcilesOwnContent : IBackendManagesOwnContent { }
+
+	/// <summary>
+	/// Optional lifecycle for retained content that can be detached from its native host
+	/// without being disposed. Route caches use it to pause inactive subtree layout and
+	/// deliver appearance callbacks again when that subtree is shown.
+	/// </summary>
+	internal interface IBackendContentActivation
+	{
+		void SetContentActive(bool active);
+	}
+
+	/// <summary>
+	/// Optional constraint-keyed intrinsic measurement cache for retained backend leaves.
+	/// Property and structural mutations must invalidate the cache before the next layout.
+	/// </summary>
+	internal interface IBackendMeasureCache
+	{
+		Size MeasureCached(double widthConstraint, double heightConstraint);
+		void InvalidateMeasureCache();
+	}
 }

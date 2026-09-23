@@ -1,5 +1,6 @@
 #nullable enable
 using System.Collections.Generic;
+using System.Linq;
 using Comet;
 using Comet.Backend;
 using Microsoft.Maui.Graphics;
@@ -26,6 +27,41 @@ namespace Comet.Tests.Backend
 		static FakeBackendNode Node(View v) => (FakeBackendNode)v.Node!;
 
 		[Fact]
+		public void RetainedLeafMeasurement_ReusesConstraints_InvalidatesMutations_AndStillArranges()
+		{
+			var node = new CachingFakeBackendNode("Text");
+			node.MeasureFunc = (width, _) => new Size(width, 24);
+
+			CometBackendLayoutEngine.MeasureNode(node, 200, 100);
+			CometBackendLayoutEngine.MeasureNode(node, 200, 100);
+			Assert.Equal(1, node.MeasureCount);
+
+			node.Arrange(new Rect(0, 0, 200, 24));
+			node.Arrange(new Rect(0, 0, 240, 24));
+			Assert.Equal(2, node.Log.Count(entry => entry.StartsWith("arrange ")));
+			Assert.Equal(240, node.ArrangedFrame!.Value.Width, 3);
+
+			foreach (var (id, value) in new[]
+			{
+				(PropertyIds.Text_Value, PropertyValue.From("cortado")),
+				(PropertyIds.Text_FontSize, PropertyValue.From(20d)),
+				(PropertyIds.Padding, PropertyValue.FromObject(new Microsoft.Maui.Thickness(4))),
+				(PropertyIds.IsVisible, PropertyValue.From(false)),
+			})
+			{
+				var before = node.MeasureCount;
+				node.ApplyProperty(id, in value);
+				CometBackendLayoutEngine.MeasureNode(node, 200, 100);
+				Assert.True(node.MeasureCount > before);
+			}
+
+			var beforeConstraintChange = node.MeasureCount;
+			CometBackendLayoutEngine.MeasureNode(node, 240, 100);
+
+			Assert.True(node.MeasureCount > beforeConstraintChange);
+		}
+
+		[Fact]
 		public void RefreshView_ContentFillsAllocatedGridRow()
 		{
 			var list = new CollectionView();
@@ -44,6 +80,38 @@ namespace Comet.Tests.Backend
 
 			Assert.Equal(new Rect(0, 100, 400, 700), Node(refresh).ArrangedFrame);
 			Assert.Equal(new Rect(0, 0, 400, 700), Node(list).ArrangedFrame);
+		}
+
+		sealed class CachingFakeBackendNode : FakeBackendNode, IBackendMeasureCache
+		{
+			readonly BackendMeasureCache _cache = new();
+
+			public CachingFakeBackendNode(string kind)
+				: base(kind)
+			{
+			}
+
+			public int MeasureCount { get; private set; }
+
+			public override void ApplyProperty(PropertyId id, in PropertyValue value)
+			{
+				InvalidateMeasureCache();
+				base.ApplyProperty(id, in value);
+			}
+
+			public override Size Measure(double widthConstraint, double heightConstraint)
+			{
+				MeasureCount++;
+				return base.Measure(widthConstraint, heightConstraint);
+			}
+
+			Size IBackendMeasureCache.MeasureCached(double widthConstraint, double heightConstraint)
+				=> _cache.GetOrMeasure(widthConstraint, heightConstraint, Measure);
+
+			public void InvalidateMeasureCache()
+			{
+				_cache.Clear();
+			}
 		}
 
 		[Fact]

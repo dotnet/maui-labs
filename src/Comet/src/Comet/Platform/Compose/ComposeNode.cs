@@ -23,10 +23,11 @@ namespace Comet.Platform.Compose
 	/// <see cref="_childVersion"/>, which container renders read so a child
 	/// insert/remove/move recomposes the container.
 	/// </remarks>
-	abstract class ComposeNode : ComposableNode, ICometBackendNode
+	abstract class ComposeNode : ComposableNode, ICometBackendNode, IBackendMeasureCache
 	{
 		protected readonly List<ComposeNode> Children = new();
 		readonly MutableState<int> _childVersion = new(0);
+		readonly BackendMeasureCache _measureCache = new();
 		ICometEventSink? _sink;
 		readonly MutableState<bool> _hasTap = new(false);
 
@@ -179,6 +180,7 @@ namespace Comet.Platform.Compose
 
 		public void ApplyProperty(PropertyId id, in PropertyValue value)
 		{
+			InvalidateMeasureCache();
 			if (id == PropertyIds.HasTapGesture)
 				_hasTap.Value = value.AsBool;
 			else if (id == PropertyIds.HasLongPressGesture)
@@ -443,18 +445,21 @@ namespace Comet.Platform.Compose
 
 		public void InsertChild(int index, ICometBackendNode child)
 		{
+			InvalidateMeasureCache();
 			Children.Insert(index, (ComposeNode)child);
 			_childVersion.Value++;
 		}
 
 		public void RemoveChildAt(int index)
 		{
+			InvalidateMeasureCache();
 			Children.RemoveAt(index);
 			_childVersion.Value++;
 		}
 
 		public void MoveChild(int fromIndex, int toIndex)
 		{
+			InvalidateMeasureCache();
 			var node = Children[fromIndex];
 			Children.RemoveAt(fromIndex);
 			Children.Insert(toIndex, node);
@@ -465,12 +470,20 @@ namespace Comet.Platform.Compose
 		// Container nodes defer to Yoga and need no intrinsic size.
 		public virtual Size Measure(double widthConstraint, double heightConstraint) => Size.Zero;
 
+		Size IBackendMeasureCache.MeasureCached(double widthConstraint, double heightConstraint)
+			=> this is IBackendManagesOwnContent
+				? Measure(widthConstraint, heightConstraint)
+				: _measureCache.GetOrMeasure(widthConstraint, heightConstraint, Measure);
+
+		public void InvalidateMeasureCache() => _measureCache.Clear();
+
 		// First text baseline (Dp from the top), for baseline-aligned rows; null = no text baseline.
 		public virtual double? MeasureBaseline(double width, double height) => null;
 
 		// baselineHeight content inset (Dp): the engine grew the box by this and we pad the top to match.
 		public void SetContentTopInset(double dp)
 		{
+			InvalidateMeasureCache();
 			_contentTopInset = (float)dp;
 			_frameVersion.Value++;
 		}

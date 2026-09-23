@@ -6,6 +6,9 @@ responsive. Every recommendation is grounded in the actual implementation of
 `ReactiveScheduler`, `Signal<T>`, `PropertySubscription<T>`, and the view diff
 algorithm.
 
+For measured app results and their limits, see the
+[BaristaNotes performance status](baristanotes-performance-status.md).
+
 
 ## How Rebuilds Work
 

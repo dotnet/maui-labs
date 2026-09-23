@@ -18,8 +18,9 @@ namespace Comet.Backend
 	/// running its own native flexbox — so a given Comet tree lays out identically everywhere.
 	/// </summary>
 	/// <remarks>
-	/// <para>Each leaf's intrinsic size is obtained by crossing into native exactly once via the
-	/// node's <c>Measure</c> (e.g. a SwiftUI <c>Text</c> or Compose text measures itself); the
+	/// <para>Each leaf's intrinsic size is obtained through the node's <c>Measure</c> contract
+	/// (e.g. a SwiftUI <c>Text</c> or Compose text measures itself). Retained leaves may cache
+	/// constraint-matched answers until a property or structural mutation invalidates them; the
 	/// stack/flex math runs in C#. The computed frame is parent-relative and pushed via
 	/// <c>Arrange</c>. Own-content nodes (lists, navigation) are treated as leaves here — they
 	/// virtualize/host their own children natively.</para>
@@ -46,6 +47,14 @@ namespace Comet.Backend
 			yoga.CalculateLayout((float)available.Width, (float)available.Height);
 			Arrange(root, yoga);
 		}
+
+		internal static Size MeasureNode(
+			ICometBackendNode node,
+			double widthConstraint,
+			double heightConstraint)
+			=> node is IBackendMeasureCache cache
+				? cache.MeasureCached(widthConstraint, heightConstraint)
+				: node.Measure(widthConstraint, heightConstraint);
 
 		/// <summary>Lays out <paramref name="content"/> at a fixed <paramref name="width"/> with
 		/// its height wrapping the content, pushes the computed frames onto the node tree, and
@@ -197,7 +206,9 @@ namespace Comet.Backend
 				{
 					var w = Resolve(availableWidth, widthMode);
 					var h = Resolve(availableHeight, heightMode);
-					var size = leaf.Node?.Measure(w, h) ?? Size.Zero;
+					var size = leaf.Node is { } backendNode
+						? MeasureNode(backendNode, w, h)
+						: Size.Zero;
 					return new YogaSize((float)size.Width, (float)size.Height + baselinePad);
 				};
 

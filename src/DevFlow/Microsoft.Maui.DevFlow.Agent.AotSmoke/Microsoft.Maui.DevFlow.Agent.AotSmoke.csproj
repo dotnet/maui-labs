@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+    <PublishAot Condition="'$(AotSmoke)' == 'true'">true</PublishAot>
+    <DefineConstants Condition="'$(IncludeMauiBackend)' == 'true'">$(DefineConstants);MAUI_BACKEND_SMOKE</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Microsoft.Maui.DevFlow.Agent.Abstractions/Microsoft.Maui.DevFlow.Agent.Abstractions.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(IncludeMauiBackend)' == 'true'">
+    <ProjectReference Include="../Microsoft.Maui.DevFlow.Agent.Core/Microsoft.Maui.DevFlow.Agent.Core.csproj" />
+  </ItemGroup>
+</Project>

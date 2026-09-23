@@ -15,6 +15,8 @@ namespace CometBaristaNotes.Services;
 /// </summary>
 public static class BaristaServiceLocator
 {
+    static readonly object Sync = new();
+    static bool _exclusiveStore;
     static IBaristaDataStore? _store;
     static IDataChangeNotifier? _notifier;
     static IPreferencesService? _preferences;
@@ -53,61 +55,90 @@ public static class BaristaServiceLocator
         IRecipeSourcingService? recipeSourcingService = null,
         IAIAdviceService? aiAdviceService = null,
         AzureOpenAIAdviceConfiguration? aiAdviceConfiguration = null,
-        HttpClient? aiAdviceHttpClient = null)
+        HttpClient? aiAdviceHttpClient = null,
+        bool requireExclusiveStore = false)
     {
-        _store = store;
-        _notifier = notifier;
-        _preferences = preferences;
-        _imageProcessingService = imageProcessingService ?? new LocalImageProcessingService();
-        _beanService = null;
-        _bagService = null;
-        _equipmentService = null;
-        _profileService = null;
-        _rangeService = null;
-        _grindTranslationService = null;
-        _recipeService = null;
-        _recipeSourcingService = recipeSourcingService;
-        _aiAdviceService = aiAdviceService;
-        _aiAdviceConfiguration = aiAdviceConfiguration;
-        _aiAdviceHttpClient = aiAdviceHttpClient;
+        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(notifier);
+        requireExclusiveStore |= BaristaAppStorage.Current.ValidateBinding(store);
+        lock (Sync)
+        {
+            if (_store is not null && !ReferenceEquals(_store, store)
+                && (_exclusiveStore || requireExclusiveStore))
+                throw new InvalidOperationException(
+                    "A comparison store cannot share the static Barista service locator with another active store. Dispose the owning services first.");
+            _exclusiveStore |= requireExclusiveStore;
+            _store = store;
+            _notifier = notifier;
+            _preferences = preferences;
+            _imageProcessingService = imageProcessingService ?? new LocalImageProcessingService();
+            _beanService = null;
+            _bagService = null;
+            _equipmentService = null;
+            _profileService = null;
+            _rangeService = null;
+            _grindTranslationService = null;
+            _recipeService = null;
+            _recipeSourcingService = recipeSourcingService;
+            _aiAdviceService = aiAdviceService;
+            _aiAdviceConfiguration = aiAdviceConfiguration;
+            _aiAdviceHttpClient = aiAdviceHttpClient;
+        }
     }
 
     public static bool Reset(IBaristaDataStore expectedStore)
     {
         ArgumentNullException.ThrowIfNull(expectedStore);
-        if (!ReferenceEquals(_store, expectedStore))
-            return false;
+        lock (Sync)
+        {
+            if (!ReferenceEquals(_store, expectedStore))
+                return false;
 
-        _store = null;
-        _notifier = null;
-        _preferences = null;
-        _imageProcessingService = null;
-        _beanService = null;
-        _bagService = null;
-        _equipmentService = null;
-        _profileService = null;
-        _rangeService = null;
-        _grindTranslationService = null;
-        _recipeService = null;
-        _recipeSourcingService = null;
-        _aiAdviceService = null;
-        _aiAdviceConfiguration = null;
-        _recipeHttpClient = null;
-        _aiAdviceHttpClient = null;
-        return true;
+            _store = null;
+            _notifier = null;
+            _preferences = null;
+            _imageProcessingService = null;
+            _beanService = null;
+            _bagService = null;
+            _equipmentService = null;
+            _profileService = null;
+            _rangeService = null;
+            _grindTranslationService = null;
+            _recipeService = null;
+            _recipeSourcingService = null;
+            _aiAdviceService = null;
+            _aiAdviceConfiguration = null;
+            _recipeHttpClient = null;
+            _aiAdviceHttpClient = null;
+            _exclusiveStore = false;
+            return true;
+        }
     }
 
-    /// <summary>Lazy-init from the singleton <see cref="InMemoryDataStore"/>
-    /// created in BaristaNotesApp. If not explicitly initialized,
-    /// creates a fresh store (for standalone page testing).</summary>
+    /// <summary>Standalone pages use the same startup storage selection as the app.</summary>
     static void EnsureInitialized()
     {
-        if (_store is not null) return;
-        var store = new SqliteDataStore(SqliteDataStore.GetDefaultPath());
-        _store = store;
-        _preferences = new PreferencesService(store.CreatePreferencesStore());
-        _notifier = new DataChangeNotifier();
-        _imageProcessingService = new LocalImageProcessingService();
+        lock (Sync)
+        {
+            if (_store is not null) return;
+            var store = BaristaAppStorage.Current.OpenStore();
+            try
+            {
+                var exclusiveStore = BaristaAppStorage.Current.ValidateBinding(store);
+                var preferences = new PreferencesService(store.CreatePreferencesStore());
+                var images = new LocalImageProcessingService();
+                _store = store;
+                _preferences = preferences;
+                _notifier = new DataChangeNotifier();
+                _imageProcessingService = images;
+                _exclusiveStore = exclusiveStore;
+            }
+            catch
+            {
+                store.Dispose();
+                throw;
+            }
+        }
     }
 
     public static IBeanService BeanService

@@ -1,16 +1,44 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Comet;
+using Comet.Reactive;
+using CometSamples.BaristaNotes;
 using CometBaristaNotes.Models.Enums;
 using CometBaristaNotes.Services;
 using Xunit;
+using ReactiveEffect = Comet.Reactive.Effect;
 
 namespace Comet.Tests.BaristaNotes;
 
 public sealed class BaristaNotesUiStateRegressionTests
 {
+    [Fact]
+    public void SectionTransition_InlineFlushObservesOnlyAtomicRoutingPairs()
+    {
+        ThreadHelper.SetFireOnMainThread(action => action?.Invoke());
+        var section = new Signal<BaristaSection>(BaristaSection.NewDrink);
+        var sectionIndex = new Signal<int>((int)BaristaSection.NewDrink);
+        var observed = new List<(BaristaSection Section, int Index)>();
+        using var effect = new ReactiveEffect(
+            () => observed.Add((section.Value, sectionIndex.Value)));
+
+        BaristaSectionTransition.Set(
+            section,
+            sectionIndex,
+            BaristaSection.Activity);
+
+        Assert.Contains(
+            (BaristaSection.Activity, (int)BaristaSection.Activity),
+            observed);
+        Assert.All(
+            observed,
+            pair => Assert.Equal((int)pair.Section, pair.Index));
+    }
+
     [Fact]
     public void SourceForms_ExplicitlyOwnBorderlessNativeInputChrome()
     {

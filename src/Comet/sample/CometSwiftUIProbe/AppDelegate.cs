@@ -4,6 +4,7 @@ using Comet.DevTools;
 using Comet.Platform.SwiftUI;
 using Comet.Reactive;
 using CometSamples.BaristaNotes.Components;
+using CometSamples.BaristaNotes.Diagnostics;
 using CoreFoundation;
 using Foundation;
 using Microsoft.Maui.Graphics;
@@ -62,11 +63,18 @@ namespace CometSwiftUIProbe
 					CometBaristaNotes.Services.AzureOpenAiVisionAnalyzer.FromEnvironment());
 			}
 
+#if COMET_RUNTIME_DIAGNOSTICS
+			var nativeAotSmoke = NativeAotSmokeChecks.RunAsync().GetAwaiter().GetResult();
+			System.Console.WriteLine($"[CometNativeAotSmoke] {nativeAotSmoke}");
+#endif
+
 			// Dev agent on the DevFlow CLI's default port: `maui devflow ui tree/tap` connects
 			// straight to localhost:9223 on the iOS sim, so the stock CLI drives this Comet app.
 			// Start BEFORE materializing so the registry tracks every node as the tree is built.
+#if DEBUG || COMET_RUNTIME_DIAGNOSTICS
 			_agent = new CometDevAgent(CometDevAgent.DevFlowPort, a => DispatchQueue.MainQueue.DispatchAsync(a));
 			_agent.Start();
+#endif
 
 			// Use Google's Material Icons font (bundled, registered via Info.plist UIAppFonts) as the
 			// cross-platform icon set, so Icon("mic") etc. draw the SAME Material glyph as Android.
@@ -152,11 +160,9 @@ namespace CometSwiftUIProbe
 		// The screen comes from SIMCTL_CHILD_COMET_SCREEN (the smoke scripts — the iOS twin
 		// of the Android probe's intent extra) or, for the standalone per-sample installs
 		// (-p:CometSample=…), from the bundle id (com.comet.sample.<name>).
-		static string Screen =>
-			System.Environment.GetEnvironmentVariable("COMET_SCREEN")
-			?? (NSBundle.MainBundle.BundleIdentifier is { } bid && bid.StartsWith("com.comet.sample.")
-				? bid.Substring("com.comet.sample.".Length)
-				: "jetchat");
+		static string Screen => CometSamples.SampleScreenResolver.Resolve(
+			System.Environment.GetEnvironmentVariable("COMET_SCREEN"),
+			NSBundle.MainBundle.BundleIdentifier);
 
 		View BuildUi() => Screen switch
 		{

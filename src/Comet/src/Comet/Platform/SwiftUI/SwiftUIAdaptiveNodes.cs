@@ -155,45 +155,145 @@ namespace Comet.Platform.SwiftUI
 		}
 	}
 
-	/// <summary>iOS ContentSwitcher: swap the active route subtree on index patches.</summary>
-	sealed class SwiftUIContentSwitcherNode : SwiftUIHostedCompositionNode
+	/// <summary>iOS ContentSwitcher: retain each route generation and attach only the
+	/// active native root. Returning to a route reuses its composed subtree.</summary>
+	sealed class SwiftUIContentSwitcherNode :
+		ICometBackendNode,
+		IBackendRetainsLogicalContentOnOwnerTransfer,
+		ISwiftUINativeNode
 	{
 		ContentSwitcher _switcher;
-		int _index;
+		readonly RetainedContentCache<ICometBackendNode> _content;
+		readonly CometNode _native = CometSwiftUIHost.MakeNode("navigation");
+		Size _frameDp;
+		int _activeIndex = -1;
+		ICometBackendNode? _attachedNode;
 
 		public SwiftUIContentSwitcherNode(ContentSwitcher switcher, BackendContext context)
-			: base(context) => _switcher = switcher;
+		{
+			_switcher = switcher;
+			_content = new RetainedContentCache<ICometBackendNode>(switcher, context);
+			ReactiveScheduler.AfterFlush += RelayoutActive;
+		}
 
-		public override void OnOwnerViewChanged(View newView, bool isHotReload)
+		public CometNode Native => _native;
+
+		public void OnOwnerViewChanged(View newView, bool isHotReload)
 		{
 			if (newView is not ContentSwitcher switcher)
 				return;
+
 			_switcher = switcher;
-			_index = switcher.Index.Peek();
-			if (IsBuilt && (isHotReload || !string.IsNullOrEmpty(newView.GetKey())))
-				Refresh();
+			_content.TransferOwner(
+				switcher,
+				switcher.Views,
+				isHotReload || !string.IsNullOrEmpty(newView.GetKey()));
+			if (isHotReload || !string.IsNullOrEmpty(newView.GetKey()))
+				DetachActive();
+			ShowIndex(switcher.Index.Peek());
 		}
 
-		protected override View BuildContent()
+		public void ApplyProperty(PropertyId id, in PropertyValue value)
 		{
-			var views = _switcher.Views;
-			return _index >= 0 && _index < views.Count ? views[_index] : new VStack();
-		}
-
-		bool _applied;
-
-		public override void ApplyProperty(PropertyId id, in PropertyValue value)
-		{
-			if (id != PropertyIds.ContentSwitcher_Index)
+			if (id == PropertyIds.ContentSwitcher_Index)
 			{
-				base.ApplyProperty(id, in value);
+				ShowIndex(value.AsInt);
 				return;
 			}
-			if (_applied && value.AsInt == _index)
-				return;   // re-pushed unchanged (a re-materialize) — keep the built subtree
-			_applied = true;
-			_index = value.AsInt;
-			Refresh();
+
+			if (id == PropertyIds.BackgroundColor)
+				CometSwiftUIHost.SetColor(_native, "background",
+					value.AsColor is { } c
+						? ((uint)(c.Alpha * 255) << 24) | ((uint)(c.Red * 255) << 16) |
+							((uint)(c.Green * 255) << 8) | (uint)(c.Blue * 255)
+						: 0);
+		}
+
+		void ShowIndex(int index)
+		{
+			if (index < 0 || index >= _switcher.Views.Count)
+			{
+				DetachActive();
+				return;
+			}
+
+			var (node, retainedView) = _content.GetOrMaterialize(index, _switcher.Views[index]);
+			if (node is not ISwiftUINativeNode nativeNode)
+				throw new InvalidOperationException("ContentSwitcher content must materialize to a SwiftUI native node.");
+
+			if (_activeIndex != index || !ReferenceEquals(_attachedNode, node))
+			{
+				if (_activeIndex >= 0 && _activeIndex != index)
+					_content.SetActive(_activeIndex, false);
+				CometSwiftUIHost.ClearChildren(_native);
+				CometSwiftUIHost.InsertChild(_native, 0, nativeNode.Native);
+				_activeIndex = index;
+				_attachedNode = node;
+			}
+
+			_content.SetActive(index, true);
+			Layout(retainedView);
+		}
+
+		void RelayoutActive()
+		{
+			if (_activeIndex < 0 ||
+				!_content.TryGet(_activeIndex, out _, out var retainedView) ||
+				retainedView is null)
+				return;
+			Layout(retainedView);
+		}
+
+		void Layout(View retainedView)
+		{
+			var size = _frameDp.Width > 0 ? _frameDp : ScreenDp();
+			CometBackendLayoutEngine.Layout(retainedView, size);
+		}
+
+		void DetachActive()
+		{
+			if (_activeIndex >= 0)
+				_content.SetActive(_activeIndex, false);
+			CometSwiftUIHost.ClearChildren(_native);
+			_activeIndex = -1;
+			_attachedNode = null;
+		}
+
+		static Size ScreenDp()
+		{
+			var bounds = UIKit.UIScreen.MainScreen.Bounds;
+			return new Size(bounds.Width, bounds.Height);
+		}
+
+		public Size Measure(double widthConstraint, double heightConstraint)
+		{
+			var screen = ScreenDp();
+			double width = double.IsFinite(widthConstraint) && widthConstraint > 0
+				? widthConstraint
+				: screen.Width;
+			double height = double.IsFinite(heightConstraint) && heightConstraint > 0
+				? heightConstraint
+				: screen.Height;
+			return new Size(width, height);
+		}
+
+		public void Arrange(Rect frame)
+		{
+			CometSwiftUIHost.SetFrame(_native, frame.X, frame.Y, frame.Width, frame.Height);
+			_frameDp = new Size(frame.Width, frame.Height);
+			ShowIndex(_switcher.Index.Peek());
+		}
+
+		public void InsertChild(int index, ICometBackendNode child) { }
+		public void RemoveChildAt(int index) { }
+		public void MoveChild(int fromIndex, int toIndex) { }
+		public void SetEventSink(ICometEventSink? sink) { }
+
+		public void Dispose()
+		{
+			ReactiveScheduler.AfterFlush -= RelayoutActive;
+			DetachActive();
+			_content.Dispose();
 		}
 	}
 

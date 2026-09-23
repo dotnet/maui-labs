@@ -1,0 +1,21 @@
+<Project>
+  <PropertyGroup Condition="'$(CometSample)' == 'baristanotes'">
+    <DefineConstants>$(DefineConstants);COMET_BARISTA_ONLY</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(CometSample)' == 'baristanotes'">
+    <!-- These folders contain the other sample screens, not Barista features. -->
+    <Compile Remove="..\Shared\Jetchat\*.cs;..\Shared\Reply\*.cs;..\Shared\JetNews\*.cs;..\Shared\Jetsnack\*.cs;..\Shared\Jetcaster\*.cs;HotReloadDemo.cs" />
+    <!-- The existing host uses this color generator for its native MaterialTheme. -->
+    <Compile Include="..\Shared\Jetchat\JetchatTheme.cs" Link="Shared\Jetchat\JetchatTheme.cs" />
+
+    <!-- Keep exact font files. MaterialIcons is the Material Symbols alias in Barista. -->
+    <_BaristaFont Include="Assets\fonts\manrope_regular.ttf;Assets\fonts\manrope_semibold.ttf;Assets\fonts\material_symbols.ttf;Assets\fonts\coffee_icons.ttf" />
+    <_OtherSampleAsset Include="Assets\**\*" Exclude="@(_BaristaFont)" />
+    <AndroidAsset Remove="@(_OtherSampleAsset)" />
+    <AndroidAsset Remove="..\Shared\Jetcaster\fixtures\*.rss" />
+
+    <!-- Only local probe art is removed; XML, launcher and library resources stay. -->
+    <AndroidResource Remove="Resources\drawable\**\*;..\Shared\Jetcaster\fixtures\*_art.jpg" />
+  </ItemGroup>
+</Project>

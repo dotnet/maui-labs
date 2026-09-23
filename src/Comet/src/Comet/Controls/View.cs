@@ -34,6 +34,13 @@ namespace Comet
 		public IElementHandler NewHandler { get; }
 	}
 
+	[DynamicallyAccessedMembers(
+		DynamicallyAccessedMemberTypes.PublicFields |
+		DynamicallyAccessedMemberTypes.NonPublicFields |
+		DynamicallyAccessedMemberTypes.NonPublicMethods |
+		DynamicallyAccessedMemberTypes.PublicProperties |
+		DynamicallyAccessedMemberTypes.NonPublicProperties |
+		DynamicallyAccessedMemberTypes.PublicConstructors)]
 	public partial class View : ContextualObject, IDisposable, IView, IHotReloadableView, ISafeAreaView, IContentTypeHash, IAnimator, ITitledElement, IGestureView, IVisualTreeElement, IPadding
 	{
 		static internal readonly WeakList<IView> ActiveViews = new WeakList<IView>();
@@ -718,7 +725,7 @@ namespace Comet
 					value = viewThatWasReplaced.GetEnvironment(item.Key);
 				}
 				if (value is not null)
-					this.SetDeepPropertyValue(item.Field, value);
+					this.SetDirectPropertyValue(item.Field, value);
 			}
 		}
 		public bool IsDisposed => disposedValue;
@@ -1111,7 +1118,7 @@ namespace Comet
 				return;
 			TransferHotReloadStateToCore(newView);
 		}
-		[UnconditionalSuppressMessage("Trimming", "IL2070",
+		[UnconditionalSuppressMessage("Trimming", "IL2075",
 			Justification = "Hot reload is debug-only; trimming/AOT are disabled in debug builds")]
 		protected virtual void TransferHotReloadStateToCore(View newView)
 		{

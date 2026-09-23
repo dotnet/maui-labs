@@ -21,10 +21,9 @@ namespace Comet.Platform.Compose
 	/// The agent binds localhost, so external tooling reaches it via
 	/// <c>adb forward tcp:9223 tcp:9223</c> (a FIXED port a smoke script can rely on,
 	/// unlike the broker-assigned MAUI-agent port that changes each launch). Screenshots
-	/// are not served on Android — use <c>adb screencap</c> (the deployed smoke-script
-	/// convention) or the probe's MAUI-agent PixelCopy route.
+	/// use PixelCopy to capture the activity's rendered window on Android 8.0 and later.
 	/// </remarks>
-	public static class ComposeDevAgentHost
+	public static partial class ComposeDevAgentHost
 	{
 		static CometDevAgent? _agent;
 
@@ -33,7 +32,7 @@ namespace Comet.Platform.Compose
 		public static CometDevAgent? Agent => _agent;
 
 		/// <summary>
-		/// Registers the drag injector and starts the agent. Call BEFORE materializing the
+		/// Registers window capture and input injectors, then starts the agent. Call BEFORE materializing the
 		/// root view — <see cref="CometDevAgent.Start"/> enables <see cref="CometDevRegistry"/>
 		/// tracking, and views materialized while it is disabled never enter the tree.
 		/// Safe to call again on activity re-creation (the injector rebinds to the new
@@ -41,6 +40,8 @@ namespace Comet.Platform.Compose
 		/// </summary>
 		public static void Start(global::Android.App.Activity activity, int port = CometDevAgent.DevFlowPort)
 		{
+			CometDevRegistry.ScreenshotProviderAsync = () => CaptureScreenshotAsync(activity);
+
 			CometDevRegistry.DragInjector = (x1, y1, x2, y2, durationMs) =>
 				InjectDrag(activity, x1, y1, x2, y2, durationMs);
 

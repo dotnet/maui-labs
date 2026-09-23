@@ -95,10 +95,10 @@ namespace Comet
 			try
 			{
 				var type = typeof(T);
-				var typeName = val?.GetType().Name;
-				if ((typeName == "State`1" || typeName == "Reactive`1") && type.Name != "State`1" && type.Name != "Reactive`1")
+				if (val is Comet.Reactive.IUntypedValue valueSource &&
+					!type.IsInstanceOfType(val))
 				{
-					return val.GetPropValue<T>("Value");
+					return valueSource.UntypedValue.Cast<T>();
 				}
 				if (type == typeof(string))
 				{

@@ -16,9 +16,19 @@ namespace Comet.Internal
 
 			if (obj is T t)
 				return t;
+
+			// Convert.ChangeType is only meaningful between IConvertible types. Environment
+			// readers deliberately probe several unrelated representations (Paint, Color,
+			// string); sending every failed probe through ChangeType made the retained layout
+			// hot path pay for a managed exception and native unwind before returning default.
+			var targetType = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
+			if (obj is not IConvertible ||
+				!typeof(IConvertible).IsAssignableFrom(targetType))
+				return default;
+
 			try
 			{
-				return (T)Convert.ChangeType(obj, typeof(T));
+				return (T)Convert.ChangeType(obj, targetType);
 			}
 			catch
 			{
@@ -44,7 +54,6 @@ namespace Comet.Internal
 			// than the companion app (project reference).
 			var bodyMethod = view.GetType().GetMethods(
 					System.Reflection.BindingFlags.NonPublic |
-					System.Reflection.BindingFlags.Public |
 					System.Reflection.BindingFlags.Instance)
 				.FirstOrDefault(m => m.GetCustomAttributes(false)
 					.Any(a => a.GetType().FullName == "Comet.BodyAttribute"));
@@ -52,11 +61,18 @@ namespace Comet.Internal
 			if (bodyMethod is null)
 			{
 				// Fall back to type-based matching (same-assembly case)
+				bodyMethod = view.GetType().GetDeepNonPublicMethodInfo(typeof(BodyAttribute));
+			}
+
+			if (bodyMethod is null && System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
+			{
+				// Preserve the legacy public/protected [Body] lookup on ordinary runtimes.
+				// NativeAOT uses the non-public metadata rooted by View.
 				bodyMethod = view.GetType().GetDeepMethodInfo(typeof(BodyAttribute));
 			}
 
 			if (bodyMethod is not null)
-				return (Func<View>)Delegate.CreateDelegate(typeof(Func<View>), view, bodyMethod.Name);
+				return bodyMethod.CreateDelegate<Func<View>>(view);
 			return null;
 		}
 		public static void ResetGlobalEnvironment(this View view) => View.Environment.Clear();

@@ -124,7 +124,17 @@ namespace Comet.DevTools
 			if (qi >= 0) bare = bare.Substring(0, qi);
 			if (method == "GET" && (bare == "/api/v1/ui/screenshot" || bare == "/screenshot"))
 			{
-				var png = RunOnMainBytes(() => CometDevRegistry.ScreenshotProvider?.Invoke());
+				byte[]? png;
+				try
+				{
+					png = CaptureScreenshotAsync().WaitAsync(TimeSpan.FromSeconds(10)).GetAwaiter().GetResult();
+				}
+				catch (Exception ex)
+				{
+					Console.WriteLine($"[CometDevAgent] Screenshot failed: {ex}");
+					WriteResponse(stream, 503, $"{{\"ok\":false,\"error\":{JsonEncode(ex.Message)}}}");
+					return;
+				}
 				if (png is { Length: > 0 })
 					WriteBinaryResponse(stream, png, "image/png");
 				else
@@ -152,16 +162,21 @@ namespace Comet.DevTools
 			}
 		}
 
-		byte[]? RunOnMainBytes(Func<byte[]?> work)
+		Task<byte[]?> CaptureScreenshotAsync()
 		{
-			var tcs = new TaskCompletionSource<byte[]?>();
-			_dispatchToMain(() =>
+			var tcs = new TaskCompletionSource<byte[]?>(TaskCreationOptions.RunContinuationsAsynchronously);
+			_dispatchToMain(async () =>
 			{
-				try { tcs.SetResult(work()); }
-				catch { tcs.SetResult(null); }
+				try
+				{
+					var provider = CometDevRegistry.ScreenshotProviderAsync;
+					tcs.SetResult(provider is not null
+						? await provider()
+						: CometDevRegistry.ScreenshotProvider?.Invoke());
+				}
+				catch (Exception ex) { tcs.SetException(ex); }
 			});
-			try { return tcs.Task.GetAwaiter().GetResult(); }
-			catch { return null; }
+			return tcs.Task;
 		}
 
 		static void WriteBinaryResponse(NetworkStream stream, byte[] payload, string contentType)

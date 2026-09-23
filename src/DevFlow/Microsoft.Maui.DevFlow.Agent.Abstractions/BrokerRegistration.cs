@@ -133,7 +133,7 @@ public class BrokerRegistration : IDisposable
             // Read response
             var buffer = new byte[1024];
             var result = await _ws.ReceiveAsync(buffer, connectCts.Token);
-            var response = JsonSerializer.Deserialize<RegistrationResponse>(
+            var response = AgentJson.Deserialize<RegistrationResponse>(
                 Encoding.UTF8.GetString(buffer, 0, result.Count));
 
             if (response?.Type == "registered" && response.Port > 0)
@@ -221,7 +221,7 @@ public class BrokerRegistration : IDisposable
 
                 var buffer = new byte[1024];
                 var result = await candidate.ReceiveAsync(buffer, cts.Token);
-                var response = JsonSerializer.Deserialize<RegistrationResponse>(
+                var response = AgentJson.Deserialize<RegistrationResponse>(
                     Encoding.UTF8.GetString(buffer, 0, result.Count));
 
                 if (response?.Type == "registered")
@@ -297,7 +297,7 @@ public class BrokerRegistration : IDisposable
 
         try
         {
-            var json = JsonSerializer.Serialize(request, _leaseJsonOptions);
+            var json = AgentJson.Serialize(request, _leaseJsonOptions);
             using var response = await PostBrokerAsync(
                 $"/api/leases/{Uri.EscapeDataString(_agentId)}",
                 json).ConfigureAwait(false);
@@ -307,7 +307,7 @@ public class BrokerRegistration : IDisposable
             if (string.IsNullOrWhiteSpace(body))
                 return MutationLeaseStatus.Failure("The DevFlow broker did not return a lease response.");
 
-            var result = JsonSerializer.Deserialize<MutationLeaseStatus>(body, _leaseJsonOptions);
+            var result = AgentJson.Deserialize<MutationLeaseStatus>(body, _leaseJsonOptions);
             if (result is null)
                 return MutationLeaseStatus.Failure("The DevFlow broker returned an invalid lease response.");
             if (result is not null && !response.IsSuccessStatusCode)
@@ -329,14 +329,14 @@ public class BrokerRegistration : IDisposable
 
         try
         {
-            var json = JsonSerializer.Serialize(request, _leaseJsonOptions);
+            var json = AgentJson.Serialize(request, _leaseJsonOptions);
             using var response = await PostBrokerAsync(
                 $"/api/recordings/{Uri.EscapeDataString(_agentId)}",
                 json).ConfigureAwait(false);
             var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(body))
                 return null;
-            var result = JsonSerializer.Deserialize<MutationRecordingStatus>(body, _leaseJsonOptions);
+            var result = AgentJson.Deserialize<MutationRecordingStatus>(body, _leaseJsonOptions);
             if (result is not null && !response.IsSuccessStatusCode)
                 result.Ok = false;
             return result;
@@ -435,23 +435,23 @@ public class BrokerRegistration : IDisposable
         lifetimeCts?.Dispose();
     }
 
-    private string BuildRegistrationJson() => JsonSerializer.Serialize(new
+    private string BuildRegistrationJson() => AgentJson.Serialize(new Dictionary<string, object?>
     {
-        type = "register",
-        project = _project,
-        tfm = _tfm,
-        platform = _platform,
-        appName = _appName,
-        currentPort = CurrentPort,
-        framework = Framework,
-        uiFramework = UiFramework,
-        version = typeof(BrokerRegistration).Assembly
+        ["type"] = "register",
+        ["project"] = _project,
+        ["tfm"] = _tfm,
+        ["platform"] = _platform,
+        ["appName"] = _appName,
+        ["currentPort"] = CurrentPort,
+        ["framework"] = Framework,
+        ["uiFramework"] = UiFramework,
+        ["version"] = typeof(BrokerRegistration).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
-        sessionId = _sessionId,
-        processId = Environment.ProcessId
+        ["sessionId"] = _sessionId,
+        ["processId"] = Environment.ProcessId
     });
 
-    private record RegistrationResponse
+    internal record RegistrationResponse
     {
         [JsonPropertyName("type")]
         public string Type { get; init; } = "";
