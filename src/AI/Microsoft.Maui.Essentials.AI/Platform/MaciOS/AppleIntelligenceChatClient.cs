@@ -3,6 +3,7 @@ using System.Runtime.Versioning;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using CoreGraphics;
+using CoreImage;
 using ImageIO;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -546,6 +547,20 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 
 	internal static AIContent FromNative(ImageContentNative image)
 	{
+		if (image.OrientationRaw is < 0 or > 8)
+			throw new InvalidDataException($"Unsupported EXIF orientation: {image.OrientationRaw}.");
+
+		if (image.OrientationRaw > 1)
+		{
+			using var decoded = image.CgImage is null ? DecodeImage(image) : null;
+			using var source = CIImage.FromCGImage(image.CgImage ?? decoded!);
+			using var oriented = source.CreateByApplyingOrientation((CGImagePropertyOrientation)image.OrientationRaw);
+			using var context = new CIContext();
+			var rendered = context.CreateCGImage(oriented, oriented.Extent)
+				?? throw new InvalidDataException("Failed to render the oriented native image.");
+			return new DataContent(EncodePng(rendered), "image/png") { RawRepresentation = rendered };
+		}
+
 		var mediaType = image.MimeType ?? "image/png";
 
 		if (image.ImageUrl?.AbsoluteString is { } uri)
@@ -558,6 +573,17 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			return new DataContent(EncodePng(cg), "image/png") { RawRepresentation = cg };
 
 		throw new InvalidDataException("The native image attachment has no image payload or file URL.");
+	}
+
+	private static CGImage DecodeImage(ImageContentNative image)
+	{
+		using var source = image.Data is { } data
+			? CGImageSource.FromData(data)
+			: image.ImageUrl is { IsFileUrl: true } url
+				? CGImageSource.FromUrl(url)
+				: throw new InvalidDataException("An oriented native image requires bytes or a local file URL.");
+		return source?.CreateImage(0, new CGImageOptions())
+			?? throw new InvalidDataException("Failed to decode the oriented native image.");
 	}
 
 	private static byte[] EncodePng(CGImage image)

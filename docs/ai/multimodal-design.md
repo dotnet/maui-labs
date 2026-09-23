@@ -492,7 +492,10 @@ private static ImageContentNative ToImageNative(UriContent uri)
 ```
 The platform-specific file uses `NSImage.AsCGImage` for the macOS fast path. The shipped client
 maps `UIImage.Orientation` and reads encoded image EXIF orientation; a bare `CGImage` has no
-orientation metadata.
+orientation metadata. When a native transcript image has a non-default EXIF orientation, the
+read-back path physically orients its pixels before returning PNG `DataContent` and a `CGImage`
+fast path. This keeps portable recordings and a later Apple request aligned; an oriented
+read-back image is PNG even when its original payload was a JPEG or file URL.
 
 ### 4.5 Public convenience helper
 ```csharp
@@ -554,12 +557,16 @@ Model-free device tests (run on Mac Catalyst in CI):
   path is compiled but not exercised by these Mac Catalyst tests.
 - Non-image `DataContent` still throws; remote http `UriContent` throws the documented error.
 - Encoded EXIF orientation and native `UIImage` orientation survive conversion.
+- Oriented native images round-trip as upright PNG bytes and an upright `CGImage` without losing
+  orientation when resent.
 - An image in assistant transcript history fails explicitly on OS 26 rather than being dropped.
 - A future `AppleImage.AsAIContent(...)` convenience helper would produce a `DataContent` with both
   bytes and `RawRepresentation` set; callers can set `RawRepresentation` directly today.
 
-Device tests (`RequiresModel=true`, gated to 27.0):
+Device tests (`RequiresModel=true`, excluded from CI and requiring a 27.0 runtime):
 - Attach a red image + ask for its dominant basic color; require the answer to identify red.
+- Running this live test on OS 26 fails with a prerequisite error rather than passing without
+  sending an image. It still needs a ready vision-capable model on OS 27.
 - Attach two images + "compare"; assert both are referenced (manual macOS 27 follow-up).
 - Multi-turn: send an image, then a follow-up question that relies on it (manual macOS 27
   follow-up; exercises the `Transcript.Segment.attachment` history path).
