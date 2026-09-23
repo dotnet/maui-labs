@@ -334,7 +334,10 @@ namespace Comet.Layout
 				var contentHeightConstraint = double.IsInfinity(outerHeightConstraint)
 					? outerHeightConstraint
 					: Math.Max(0, outerHeightConstraint - padding.VerticalThickness);
-				size = node.Measure(contentWidthConstraint, contentHeightConstraint);
+				size = Comet.Backend.CometBackendLayoutEngine.MeasureNode(
+					node,
+					contentWidthConstraint,
+					contentHeightConstraint);
 				size.Width += padding.HorizontalThickness;
 				size.Height += padding.VerticalThickness;
 			}

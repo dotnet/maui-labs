@@ -15,26 +15,35 @@ namespace Comet.Platform.Compose
 	sealed class ComposeContentSwitcherNode : ComposeNode, IBackendRetainsLogicalContentOnOwnerTransfer
 	{
 		ContentSwitcher _switcher;
-		readonly BackendContext _context;
+		readonly RetainedContentCache<ComposeNode> _content;
 		readonly MutableState<int> _index = new(0);
 		readonly MutableState<int> _contentVersion = new(0);
-		ComposeNode?[] _nodes = System.Array.Empty<ComposeNode?>();
 		int _indexValue;
+		int _activeIndex = -1;
+		ComposeNode? _activeNode;
 
 		public ComposeContentSwitcherNode(ContentSwitcher switcher, BackendContext context)
 		{
 			_switcher = switcher;
-			_context = context;
+			_content = new RetainedContentCache<ComposeNode>(switcher, context);
 			Comet.Reactive.ReactiveScheduler.AfterFlush += ReflowContent;
 		}
 
 		public override void Dispose()
-			=> Comet.Reactive.ReactiveScheduler.AfterFlush -= ReflowContent;
+		{
+			Comet.Reactive.ReactiveScheduler.AfterFlush -= ReflowContent;
+			if (_activeIndex >= 0)
+				_content.SetActive(_activeIndex, false);
+			_content.Dispose();
+			base.Dispose();
+		}
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
 		{
 			if (id == PropertyIds.ContentSwitcher_Index)
 			{
+				if (_activeIndex >= 0 && _activeIndex != value.AsInt)
+					_content.SetActive(_activeIndex, false);
 				_indexValue = value.AsInt;
 				_index.Value = value.AsInt;
 				// Materialize + lay the newly active view before it composes.
@@ -47,10 +56,17 @@ namespace Comet.Platform.Compose
 			if (newView is not ContentSwitcher switcher)
 				return;
 			_switcher = switcher;
-			if (!isHotReload && string.IsNullOrEmpty(newView.GetKey()))
-				return;
-			_nodes = System.Array.Empty<ComposeNode?>();
-			_contentVersion.Value++;
+			_content.TransferOwner(
+				switcher,
+				switcher.Views,
+				isHotReload || !string.IsNullOrEmpty(newView.GetKey()));
+			if (isHotReload || !string.IsNullOrEmpty(newView.GetKey()))
+			{
+				_activeIndex = -1;
+				_activeNode = null;
+				_contentVersion.Value++;
+			}
+			EnsureActive();
 		}
 
 		Size BoundsDp()
@@ -64,28 +80,33 @@ namespace Comet.Platform.Compose
 		void EnsureActive()
 		{
 			var views = _switcher.Views;
-			if (_nodes.Length != views.Count)
-			{
-				var resized = new ComposeNode?[views.Count];
-				System.Array.Copy(_nodes, resized, System.Math.Min(_nodes.Length, views.Count));
-				_nodes = resized;
-			}
 			int i = _indexValue;
 			if (i < 0 || i >= views.Count)
 				return;
-			_nodes[i] ??= (ComposeNode)CometBackendBridge.Materialize(views[i], _context);
+			var (node, _) = _content.GetOrMaterialize(i, views[i]);
+			var replacedActiveNode = _activeIndex == i &&
+				_activeNode is not null &&
+				!ReferenceEquals(_activeNode, node);
+			_content.SetActive(i, true);
+			_activeIndex = i;
+			_activeNode = node;
+			if (replacedActiveNode)
+				_contentVersion.Value++;
 			LayoutActive();
 		}
 
 		void LayoutActive()
 		{
 			int i = _indexValue;
-			if (i < 0 || i >= _switcher.Views.Count || _nodes.Length <= i || _nodes[i] is null)
+			if (i < 0 ||
+				i >= _switcher.Views.Count ||
+				!_content.TryGet(i, out _, out var activeView) ||
+				activeView is null)
 				return;
 			var bounds = BoundsDp();
 			if (bounds.Width <= 0)
 				return;
-			CometBackendLayoutEngine.Layout(_switcher.Views[i], bounds);
+			CometBackendLayoutEngine.Layout(activeView, bounds);
 		}
 
 		void ReflowContent() => LayoutActive();
@@ -105,7 +126,7 @@ namespace Comet.Platform.Compose
 
 			var box = new Box();
 			((ComposableNode)box).Modifier = BuildNodeModifier() ?? Modifier.Companion.FillMaxSize();
-			if (index >= 0 && index < _nodes.Length && _nodes[index] is { } active)
+			if (_content.TryGet(index, out var active, out _) && active is not null)
 				box.Add(active);
 			box.Render(composer);
 		}

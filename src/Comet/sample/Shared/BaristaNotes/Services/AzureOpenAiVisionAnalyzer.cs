@@ -342,28 +342,8 @@ public sealed class AzureOpenAiVisionAnalyzer : IBaristaVisionAnalyzer, IVisionS
         request.Headers.Add("api-key", _configuration.ApiKey);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
-        var content = new List<object> { new { type = "text", text = userPrompt } };
-        content.AddRange(images.Select(image => (object)new
-        {
-            type = "image_url",
-            image_url = new
-            {
-                url = $"data:{NormalizeContentType(image.ContentType)};base64,{Convert.ToBase64String(image.Bytes)}",
-            },
-        }));
-        var payload = new
-        {
-            messages = new object[]
-            {
-                new { role = "system", content = systemPrompt },
-                new { role = "user", content },
-            },
-            response_format = new { type = "json_object" },
-            temperature = 0,
-            max_tokens = 600,
-        };
         request.Content = new StringContent(
-            JsonSerializer.Serialize(payload),
+            SerializeRequest(systemPrompt, userPrompt, images),
             Encoding.UTF8,
             "application/json");
 
@@ -403,6 +383,55 @@ public sealed class AzureOpenAiVisionAnalyzer : IBaristaVisionAnalyzer, IVisionS
         {
             return new(VisionRequestStatus.Error, null, $"Vision request failed: {ex.Message}");
         }
+    }
+
+    static string SerializeRequest(
+        string systemPrompt,
+        string userPrompt,
+        IReadOnlyList<PhotoAsset> images)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            writer.WritePropertyName("messages");
+            writer.WriteStartArray();
+            writer.WriteStartObject();
+            writer.WriteString("role", "system");
+            writer.WriteString("content", systemPrompt);
+            writer.WriteEndObject();
+            writer.WriteStartObject();
+            writer.WriteString("role", "user");
+            writer.WritePropertyName("content");
+            writer.WriteStartArray();
+            writer.WriteStartObject();
+            writer.WriteString("type", "text");
+            writer.WriteString("text", userPrompt);
+            writer.WriteEndObject();
+            foreach (var image in images)
+            {
+                writer.WriteStartObject();
+                writer.WriteString("type", "image_url");
+                writer.WritePropertyName("image_url");
+                writer.WriteStartObject();
+                writer.WriteString(
+                    "url",
+                    $"data:{NormalizeContentType(image.ContentType)};base64,{Convert.ToBase64String(image.Bytes)}");
+                writer.WriteEndObject();
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+            writer.WriteEndArray();
+            writer.WritePropertyName("response_format");
+            writer.WriteStartObject();
+            writer.WriteString("type", "json_object");
+            writer.WriteEndObject();
+            writer.WriteNumber("temperature", 0);
+            writer.WriteNumber("max_tokens", 600);
+            writer.WriteEndObject();
+        }
+        return Encoding.UTF8.GetString(stream.ToArray());
     }
 
     Uri BuildRequestUri(string deployment)

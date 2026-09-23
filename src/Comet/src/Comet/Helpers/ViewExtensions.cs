@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection;
 using Comet.Internal;
@@ -93,7 +94,22 @@ namespace Comet
 			return collectionView;
 		}
 
+		[RequiresUnreferencedCode(
+			"Reading attributed fields on arbitrary objects requires runtime field metadata. " +
+			"Use the View overload for Comet views in trimmed applications.")]
 		public static List<FieldInfo> GetFieldsWithAttribute(this object obj, Type attribute)
+		{
+			if (obj is View view)
+				return GetFieldsWithAttribute(view, attribute);
+
+			var type = obj.GetType();
+			return type
+				.GetFields(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance)
+				.Where(x => Attribute.IsDefined(x, attribute))
+				.ToList();
+		}
+
+		public static List<FieldInfo> GetFieldsWithAttribute(this View obj, Type attribute)
 		{
 			var type = obj.GetType();
 			var fields = type.GetFields(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance).Where(x => Attribute.IsDefined(x, attribute)).ToList();

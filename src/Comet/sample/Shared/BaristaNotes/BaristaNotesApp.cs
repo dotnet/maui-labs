@@ -20,13 +20,6 @@ using CometBaristaNotes.Services.Voice;
 
 namespace CometSamples.BaristaNotes;
 
-public enum BaristaSection
-{
-    NewDrink,
-    Activity,
-    Settings,
-}
-
 public enum BaristaModalKind
 {
     None,
@@ -50,6 +43,7 @@ public sealed class BaristaNavigationCoordinator
     int _sectionActivationVersion;
 
     public Signal<BaristaSection> Section { get; } = new(BaristaSection.NewDrink);
+    public Signal<int> SectionIndex { get; } = new((int)BaristaSection.NewDrink);
     public Signal<bool> IsImmersive { get; } = new(false);
     public Signal<bool> IsEditingShot { get; } = new(false);
     public Signal<bool> ModalOpen { get; } = new(false);
@@ -69,6 +63,9 @@ public sealed class BaristaNavigationCoordinator
 
     public void SetActivityPage(ActivityFeedPage page) => _activityPage = page;
 
+    void SetSection(BaristaSection section)
+        => BaristaSectionTransition.Set(Section, SectionIndex, section);
+
     public bool ApplyActivityPeriodFilter(string? period, string? filter)
     {
         return _activityPage?.ApplyProgrammaticFilter(period, filter) ?? true;
@@ -86,6 +83,7 @@ public sealed class BaristaNavigationCoordinator
 
     public void SwitchTo(BaristaSection section, bool activateVoice = false)
     {
+        using var hold = ReactiveScheduler.HoldFlushes();
         var activationVersion = Interlocked.Increment(ref _sectionActivationVersion);
         var previousSection = Section.Value;
         var leavingNewDrink = previousSection == BaristaSection.NewDrink;
@@ -104,7 +102,7 @@ public sealed class BaristaNavigationCoordinator
             _resetSettingsNavigation();
         else if (section != BaristaSection.NewDrink)
             NavigationFor(section)?.PopToRoot();
-        Section.Value = section;
+        SetSection(section);
         if (section == BaristaSection.NewDrink)
         {
             ActiveShotEditor?.RefreshForActivation();
@@ -240,7 +238,7 @@ public sealed class BaristaNavigationCoordinator
             : null;
         ClearTransientSurface();
         ResetNewDrinkNavigation();
-        Section.Value = BaristaSection.NewDrink;
+        SetSection(BaristaSection.NewDrink);
         IsEditingShot.Value = true;
         if (initialShot is not null && _rootShotEditor is { } rootShotEditor)
         {
@@ -292,7 +290,7 @@ public sealed class BaristaNavigationCoordinator
             _rootShotEditor!.ResetForNewDrink();
             IsEditingShot.Value = false;
             if (returnSection.HasValue)
-                Section.Value = returnSection.Value;
+                SetSection(returnSection.Value);
             return;
         }
 
@@ -312,7 +310,7 @@ public sealed class BaristaNavigationCoordinator
         ClearTransientSurface();
         IsEditingShot.Value = false;
         if (returnSection.HasValue)
-            Section.Value = returnSection.Value;
+            SetSection(returnSection.Value);
     }
 
     public void BeginTransientSurface(Action clear)
@@ -725,7 +723,7 @@ public sealed class BaristaNavigationCoordinator
     }
 }
 
-public sealed class BaristaNotesApp : View
+public sealed class BaristaNotesApp : View, IAsyncDisposable
 {
     readonly Signal<string?> _initializationError = new(null);
     readonly Signal<bool> _photoBusy = new(false);
@@ -746,6 +744,11 @@ public sealed class BaristaNotesApp : View
     Task<PhotoWorkflowOutcome>? _photoWorkflowTask;
     AIAdvicePanel? _aiAdvicePanel;
     bool _disposed;
+    Task _serviceDisposal = Task.CompletedTask;
+
+    public BaristaServices Services => _services ??
+        throw new InvalidOperationException("Barista services are not available.");
+    internal bool HasActiveActivityFilters => _activityPage.HasActiveFilters;
 
     public BaristaNotesApp()
         => InitializeShell();
@@ -754,6 +757,8 @@ public sealed class BaristaNotesApp : View
     {
         try
         {
+            if (!_serviceDisposal.IsCompletedSuccessfully)
+                throw new InvalidOperationException("Previous Barista service cleanup has not completed.", _serviceDisposal.Exception);
             var services = new BaristaServices();
             _services = services;
             _navigation = new BaristaNavigationCoordinator(services);
@@ -819,7 +824,7 @@ public sealed class BaristaNotesApp : View
                 if (failedVoiceCallbacks is null)
                     failedServices.Dispose();
                 else
-                    _ = DisposeOwnedServicesAsync(failedServices, failedVoiceCallbacks);
+                    _serviceDisposal = DisposeOwnedServicesAsync(failedServices, failedVoiceCallbacks);
             }
             _navigation = null!;
             _initializationError.Value = ex.GetBaseException().Message;
@@ -952,12 +957,14 @@ public sealed class BaristaNotesApp : View
         var immersive = _navigation.IsImmersive.Value;
         var showSharedActions = !immersive && section != BaristaSection.Settings;
         var modalKind = _navigation.ModalKind.Value;
-        var navigation = section switch
-        {
-            BaristaSection.NewDrink => _newDrinkNavigation,
-            BaristaSection.Activity => _activityNavigation,
-            _ => _settingsNavigation,
-        };
+        var navigation = new ContentSwitcher(
+            _navigation.SectionIndex,
+            new View[]
+            {
+                _newDrinkNavigation,
+                _activityNavigation,
+                _settingsNavigation,
+            });
 
         var shell = new Grid(
             columns: new object[] { "*" },
@@ -1302,15 +1309,26 @@ public sealed class BaristaNotesApp : View
             ownedServices = _services;
             _services = null;
         }
-        base.Dispose(disposing);
-
-        if (ownedServices is not null)
+        try
         {
-            if (voiceCallbacks is null)
-                ownedServices.Dispose();
-            else
-                _ = DisposeOwnedServicesAsync(ownedServices, voiceCallbacks);
+            base.Dispose(disposing);
         }
+        finally
+        {
+            if (ownedServices is not null)
+            {
+                if (voiceCallbacks is null)
+                    ownedServices.Dispose();
+                else
+                    _serviceDisposal = DisposeOwnedServicesAsync(ownedServices, voiceCallbacks);
+            }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { Dispose(); }
+        finally { await _serviceDisposal; }
     }
 
     internal static async Task DisposeOwnedServicesAsync(
@@ -1320,9 +1338,6 @@ public sealed class BaristaNotesApp : View
         try
         {
             await BaristaVoiceIntegration.UnbindAsync(voiceCallbacks);
-        }
-        catch (Exception)
-        {
         }
         finally
         {

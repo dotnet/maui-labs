@@ -9,7 +9,17 @@
     <Nullable>disable</Nullable>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(BaristaLifecycleTests)' == 'true' Or '$(BaristaInsetTests)' == 'true'">
+    <DefineConstants>$(DefineConstants);BARISTA_LIFECYCLE_TESTS</DefineConstants>
+    <!-- Match the app's non-friend assembly boundary for protected control overrides. -->
+    <AssemblyName>Comet.BaristaLifecycle.Tests</AssemblyName>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
   <ItemGroup>
+    <Compile Include="..\..\sample\Shared\SampleScreenResolver.cs" LinkBase="Samples" />
+    <Compile Include="..\..\sample\CometComposeProbe\BaristaNotes\Comparison\BaristaLifecycleControl.cs" LinkBase="BaristaNotes\Comparison" />
     <PackageReference Include="Microsoft.Maui.Core" Version="$(MauiVersion)" />
     <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
     <PackageReference Include="Microsoft.Maui.Graphics" Version="$(MauiVersion)" />
@@ -22,6 +32,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\tools\perf\baristanotes\Comet\Contract\BaristaComparison.Contract.csproj" />
+    <Compile Include="..\..\tools\perf\baristanotes\Comet\*.cs" LinkBase="BaristaNotes\Comparison" />
     <ProjectReference Include="..\..\src\Comet.SourceGenerator\Comet.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\src\Comet.Layout.Yoga\Comet.Layout.Yoga.csproj" />
   </ItemGroup>
@@ -46,8 +58,25 @@
          Their callback interfaces (IBaristaVoiceCallbacks, IBaristaPhotoWorkflowCallbacks) are
          thoroughly tested via test doubles in BaristaNotesVoiceDefectTests, BaristaNotesVoiceTests,
          BaristaNotesIntegrationTests, and BaristaNotesPhotoWorkflowTests. -->
-    <Compile Remove="..\..\sample\Shared\BaristaNotes\Services\Voice\AppVoiceCallbacks.cs" />
-    <Compile Remove="..\..\sample\Shared\BaristaNotes\Services\AppPhotoWorkflowCallbacks.cs" />
+    <Compile Remove="..\..\sample\Shared\BaristaNotes\Services\Voice\AppVoiceCallbacks.cs" Condition="'$(BaristaLifecycleTests)' != 'true' And '$(BaristaInsetTests)' != 'true'" />
+    <Compile Remove="..\..\sample\Shared\BaristaNotes\Services\AppPhotoWorkflowCallbacks.cs" Condition="'$(BaristaLifecycleTests)' != 'true' And '$(BaristaInsetTests)' != 'true'" />
   </ItemGroup>
+
+  <ItemGroup Condition="'$(BaristaLifecycleTests)' == 'true' Or '$(BaristaInsetTests)' == 'true'">
+    <Compile Include="BaristaNotes\BaristaHostLifecycleTests.cs" Condition="'$(BaristaLifecycleTests)' == 'true'" />
+    <Compile Include="BaristaNotes\BaristaEditorInsetDependencyTests.cs" Condition="'$(BaristaInsetTests)' == 'true'" />
+    <Compile Include="Backend\FakeBackendNode.cs" Condition="'$(BaristaInsetTests)' == 'true'" />
+    <Compile Include="..\..\sample\Shared\BaristaNotes\BaristaNotesApp.cs" LinkBase="BaristaNotes" />
+    <Compile Include="..\..\sample\Shared\BaristaNotes\Pages\**\*.cs" LinkBase="BaristaNotes\Pages" />
+    <Compile Include="..\..\sample\Shared\BaristaNotes\Diagnostics\**\*.cs" LinkBase="BaristaNotes\Diagnostics" />
+    <Compile Include="..\..\sample\Shared\BaristaNotes\Components\**\*.cs"
+             Exclude="..\..\sample\Shared\BaristaNotes\Components\SourceComponents.cs"
+             LinkBase="BaristaNotes\Components" />
+  </ItemGroup>
+
+  <Target Name="ValidateBaristaHostTestMode" BeforeTargets="CoreCompile"
+          Condition="'$(BaristaLifecycleTests)' == 'true' And '$(BaristaInsetTests)' == 'true'">
+    <Error Text="Run BaristaLifecycleTests and BaristaInsetTests in separate processes: comparison storage can only be selected once per process." />
+  </Target>
 
 </Project>

@@ -562,6 +562,54 @@ namespace Comet.Tests
 		}
 
 		[Fact]
+		public void NativeAlertActions_HiddenOwnerRejectsStableIdUntilReactivated()
+		{
+			CometDevRegistry.Reset();
+			CometDevRegistry.Enabled = true;
+			try
+			{
+				var calls = 0;
+				var dialog = CreateDiscardDialog(() => calls++);
+				CometDevRegistry.Register(dialog, null!, null);
+				using var actions = new NativeAlertSemanticActions(
+					dialog,
+					new AlertDialogActionDispatcher(dialog),
+					() => { });
+				actions.UpdateOpenState(true);
+				var agent = new CometDevAgent(9223, action => action());
+				var actionId = QuerySingleId(agent, "automationId=RangeDiscardConfirm");
+
+				CometDevRegistry.SetSubtreeActive(dialog, false);
+
+				Assert.Empty(QueryElements(agent, "automationId=RangeDiscardConfirm"));
+				var hiddenTap = agent.RouteResponse(
+					"POST",
+					"/api/v1/ui/actions/tap",
+					$"{{\"elementId\":\"{actionId}\"}}");
+				using (var hiddenJson = JsonDocument.Parse(hiddenTap.Json))
+					Assert.False(hiddenJson.RootElement.GetProperty("ok").GetBoolean());
+				Assert.Equal(0, calls);
+
+				CometDevRegistry.SetSubtreeActive(dialog, true);
+
+				Assert.Equal(
+					actionId,
+					QuerySingleId(agent, "automationId=RangeDiscardConfirm"));
+				var activeTap = agent.RouteResponse(
+					"POST",
+					"/api/v1/ui/actions/tap",
+					$"{{\"elementId\":\"{actionId}\"}}");
+				Assert.Equal(200, activeTap.StatusCode);
+				Assert.Equal(1, calls);
+			}
+			finally
+			{
+				CometDevRegistry.Enabled = false;
+				CometDevRegistry.Reset();
+			}
+		}
+
+		[Fact]
 		public void AlertDispatcher_ExposesDistinctTitleAndMessage()
 		{
 			var dialog = new AlertDialog(

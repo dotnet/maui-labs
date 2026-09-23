@@ -14,8 +14,6 @@ namespace CometSamples.BaristaNotes.Pages;
 
 public class SettingsPage : View
 {
-    const string ThemePreferenceKey = "baristanotes_theme";
-
     readonly BaristaServices _services;
     readonly IPreferencesService _preferences;
     readonly IDrinkValueRangeService _ranges;
@@ -54,7 +52,7 @@ public class SettingsPage : View
             services.Preferences);
         _preferences = services.Preferences;
         _ranges = services.RangeService;
-        _themeMode = new Signal<CoffeeThemeMode>(LoadThemeMode());
+        _themeMode = new Signal<CoffeeThemeMode>(services.ThemePreferences.Load());
         _temperatureUnit = services.TemperatureUnit;
         _temperatureUnit.Value = _preferences.GetTemperatureUnit();
         CoffeeTheme.SetMode(_themeMode.Value);
@@ -193,15 +191,7 @@ public class SettingsPage : View
     {
         _themeMode.Value = mode;
         CoffeeTheme.SetMode(mode);
-        Microsoft.Maui.Storage.Preferences.Set(ThemePreferenceKey, mode.ToString());
-    }
-
-    static CoffeeThemeMode LoadThemeMode()
-    {
-        var saved = Microsoft.Maui.Storage.Preferences.Get(ThemePreferenceKey, "System");
-        return Enum.TryParse<CoffeeThemeMode>(saved, out var mode)
-            ? mode
-            : CoffeeThemeMode.System;
+        _services.ThemePreferences.Save(mode);
     }
 
     View TemperaturePickerRow() => new Grid(

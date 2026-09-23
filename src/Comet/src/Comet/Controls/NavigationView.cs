@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics.CodeAnalysis;
 using Comet.Backend;
 
 namespace Comet
@@ -46,6 +47,9 @@ namespace Comet
 		public void Navigate<TView>() where TView : View, new()
 			=> Navigate(new TView());
 
+		[RequiresUnreferencedCode(
+			"Property-based navigation parameters require runtime property metadata. " +
+			"Use Navigate<TView, TParameters> in trimmed applications.")]
 		public void Navigate<TView>(object parameters) where TView : View, new()
 		{
 			var view = new TView();
@@ -53,8 +57,15 @@ namespace Comet
 			Navigate(view);
 		}
 
-		public void Navigate<TView, TParameters>(TParameters parameters) where TView : View, new()
-			=> Navigate<TView>((object)parameters);
+		public void Navigate<TView,
+			[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TParameters>(
+			TParameters parameters)
+			where TView : View, new()
+		{
+			var view = new TView();
+			NavigationParameterHelper.Apply(view, parameters);
+			Navigate(view);
+		}
 
 		public void SetPerformPop(Action action) => PerformPop = action;
 		public void SetPerformPop(NavigationView navView)
@@ -350,13 +361,17 @@ namespace Comet
 		/// </summary>
 		public void PopToRoot()
 		{
+			var stack = GetBackendNavigationStack().ToList();
+			if (stack.Count == 0 && Content is null ||
+				stack.Count == 1 && ReferenceEquals(stack[0], Content))
+				return;
+
 			if (PerformContentReset is not null && Content is not null)
 			{
 				PerformContentReset(Content);
 				return;
 			}
 
-			var stack = GetBackendNavigationStack().ToList();
 			if (stack.Count <= 1)
 				return;
 			NavigationStackLifecycle.ResetToRoot(

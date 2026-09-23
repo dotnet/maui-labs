@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 using Comet.Backend;
 using Microsoft.Maui.Graphics;
 
@@ -27,6 +28,7 @@ namespace Comet.DevTools
 		{
 			public int Id;
 			public int ParentId = -1;
+			public bool Active = true;
 			public WeakReference<View> View = null!;
 		}
 
@@ -56,6 +58,12 @@ namespace Comet.DevTools
 		/// the agent's <c>/ui/screenshot</c> endpoint. Null when the platform can't snapshot.
 		/// </summary>
 		public static Func<byte[]?>? ScreenshotProvider { get; set; }
+
+		/// <summary>
+		/// Asynchronous PNG capture, invoked on the UI thread without blocking it.
+		/// Takes precedence over <see cref="ScreenshotProvider"/> when set.
+		/// </summary>
+		public static Func<Task<byte[]?>>? ScreenshotProviderAsync { get; set; }
 
 		/// <summary>
 		/// Optional platform hook for the native window geometry currently hosting Comet.
@@ -117,19 +125,34 @@ namespace Comet.DevTools
 			lock (_gate)
 			{
 				int parentId = -1;
+				bool active = true;
 				if (parent is not null && _viewIds.TryGetValue(parent, out var pBox))
+				{
 					parentId = pBox.Value;
+					if (_byId.TryGetValue(parentId, out var parentEntry))
+						active = parentEntry.Active;
+				}
 
 				if (_viewIds.TryGetValue(view, out var existing))
 				{
 					if (_byId.TryGetValue(existing.Value, out var e))
+					{
 						e.ParentId = parentId;
+						if (!active)
+							e.Active = false;
+					}
 					return;
 				}
 
 				int id = _next++;
 				_viewIds.Add(view, new StrongBox<int>(id));
-				_byId[id] = new Entry { Id = id, ParentId = parentId, View = new WeakReference<View>(view) };
+				_byId[id] = new Entry
+				{
+					Id = id,
+					ParentId = parentId,
+					Active = active,
+					View = new WeakReference<View>(view),
+				};
 			}
 		}
 
@@ -229,9 +252,12 @@ namespace Comet.DevTools
 			lock (_gate)
 			{
 				if (_semanticActions.TryGetValue(id, out var entry) &&
-					entry.Owner.TryGetTarget(out _))
+					entry.Owner.TryGetTarget(out _) &&
+					IsSemanticActionParentActiveLocked(entry))
 					invoke = entry.Invoke;
-				else
+				else if (!_semanticActions.TryGetValue(id, out entry) ||
+					!entry.Owner.TryGetTarget(out _) ||
+					!_byId.ContainsKey(entry.ParentId))
 					_semanticActions.Remove(id);
 			}
 
@@ -240,6 +266,11 @@ namespace Comet.DevTools
 			invoke();
 			return true;
 		}
+
+		static bool IsSemanticActionParentActiveLocked(SemanticActionEntry entry)
+			=> _byId.TryGetValue(entry.ParentId, out var parent) &&
+				parent.Active &&
+				parent.View.TryGetTarget(out _);
 
 		/// <summary>Transfers the registry identity (stable ID + parent link) from
 		/// <paramref name="oldView"/> to <paramref name="newView"/>, so the diff's
@@ -287,22 +318,34 @@ namespace Comet.DevTools
 			}
 		}
 
+		/// <summary>
+		/// Marks a retained subtree as active or inactive without discarding its stable ids.
+		/// Inactive cached routes stay materialized but are omitted from snapshots and cannot
+		/// be resolved for synthetic input until reactivated.
+		/// </summary>
+		internal static void SetSubtreeActive(View root, bool active)
+		{
+			if (!Enabled || root is null)
+				return;
+			lock (_gate)
+			{
+				if (!_viewIds.TryGetValue(root, out var rootBox))
+					return;
+
+				var viewIds = CollectSubtreeIdsLocked(rootBox.Value);
+				foreach (var id in viewIds)
+					if (_byId.TryGetValue(id, out var entry))
+						entry.Active = active;
+			}
+		}
+
 		static void RemoveSubtreeLocked(int rootId, bool includeRoot)
 		{
 			// Collect view identities first. Semantic action proxies are lifecycle-bound to
 			// their native owner, not materialized view children: includeRoot:false is used
 			// to clean a retained own-content generation and must not remove the owner's
 			// active native alert actions.
-			var viewIds = new HashSet<int> { rootId };
-			bool grew = true;
-			while (grew)
-			{
-				grew = false;
-				foreach (var e in _byId.Values)
-					if (viewIds.Contains(e.ParentId) && viewIds.Add(e.Id))
-						grew = true;
-			}
-
+			var viewIds = CollectSubtreeIdsLocked(rootId);
 			if (!includeRoot)
 				viewIds.Remove(rootId);
 
@@ -324,12 +367,28 @@ namespace Comet.DevTools
 				_semanticActions.Remove(id);
 		}
 
+		static HashSet<int> CollectSubtreeIdsLocked(int rootId)
+		{
+			var viewIds = new HashSet<int> { rootId };
+			bool grew = true;
+			while (grew)
+			{
+				grew = false;
+				foreach (var e in _byId.Values)
+					if (viewIds.Contains(e.ParentId) && viewIds.Add(e.Id))
+						grew = true;
+			}
+			return viewIds;
+		}
+
 		/// <summary>Resolves a tracked id back to its live view, or null if collected.</summary>
 		public static View? Find(int id)
 		{
 			lock (_gate)
 			{
-				if (_byId.TryGetValue(id, out var e) && e.View.TryGetTarget(out var v))
+				if (_byId.TryGetValue(id, out var e) &&
+					e.Active &&
+					e.View.TryGetTarget(out var v))
 					return v;
 				return null;
 			}
@@ -389,7 +448,7 @@ namespace Comet.DevTools
 
 			foreach (var e in entries)
 			{
-				if (!e.View.TryGetTarget(out var view))
+				if (!e.Active || !e.View.TryGetTarget(out var view))
 					continue;
 
 				var props = ReadProps(view);
@@ -435,6 +494,9 @@ namespace Comet.DevTools
 			{
 				if (!action.Owner.TryGetTarget(out _))
 					continue;
+				lock (_gate)
+					if (!IsSemanticActionParentActiveLocked(action))
+						continue;
 				list.Add(new NodeInfo
 				{
 					Id = action.Id,

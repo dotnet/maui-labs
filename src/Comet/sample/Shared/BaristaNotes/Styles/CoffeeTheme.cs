@@ -1,5 +1,6 @@
 #nullable enable
 using Comet.Reactive;
+using CometBaristaNotes.Services;
 using Microsoft.Maui.Graphics;
 
 namespace CometSamples.BaristaNotes.Styles;
@@ -54,7 +55,16 @@ public static class CoffeeTheme
     /// <summary>Reactive user-selected theme mode.
     /// Read <see cref="IsLight"/> (which touches <c>Mode.Value</c>) inside a Comet
     /// <c>body()</c> to subscribe to theme changes.</summary>
-    public static readonly Signal<CoffeeThemeMode> Mode = new(CoffeeThemeMode.System);
+    static readonly Signal<CoffeeThemeMode> _mode = new(CoffeeThemeMode.System);
+
+    public static Signal<CoffeeThemeMode> Mode
+    {
+        get
+        {
+            BaristaAppStorage.Current.MarkResolutionStarted();
+            return _mode;
+        }
+    }
 
     /// <summary>Whether we are in light mode. Reading this inside a Comet body()
     /// subscribes that view to theme change notifications via the <see cref="Mode"/>

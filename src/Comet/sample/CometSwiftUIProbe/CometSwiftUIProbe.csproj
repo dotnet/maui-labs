@@ -17,6 +17,7 @@
          property doesn't leak into plain-classlib dependencies (NETSDK1203) — the same
          global-property trap Phase 4 hit with PublishTrimmed. -->
     <PublishAot Condition="'$(EnableProbeAot)' == 'true'">true</PublishAot>
+    <DefineConstants Condition="'$(EnableProbeRuntimeDiagnostics)' == 'true'">$(DefineConstants);COMET_RUNTIME_DIAGNOSTICS</DefineConstants>
   </PropertyGroup>
 
   <!-- Standalone per-sample apps: -p:CometSample=reply (or jetchat) builds this probe as
@@ -29,6 +30,20 @@
     <ApplicationTitle>Comet $(CometSample.Substring(0,1).ToUpperInvariant())$(CometSample.Substring(1))</ApplicationTitle>
     <IntermediateOutputPath>obj/sample-$(CometSample)/</IntermediateOutputPath>
     <OutputPath>bin/sample-$(CometSample)/</OutputPath>
+  </PropertyGroup>
+
+  <!-- Optional side-by-side identity for NativeAOT runtime verification. Keep
+       the sample name last because AppDelegate derives the startup screen from it. -->
+  <PropertyGroup Condition="'$(EnableProbeAotTestIdentity)' == 'true' and '$(CometSample)' != ''">
+    <ApplicationId>com.comet.sample.aot.$(CometSample)</ApplicationId>
+    <ApplicationTitle>Comet $(CometSample.Substring(0,1).ToUpperInvariant())$(CometSample.Substring(1)) NativeAOT</ApplicationTitle>
+  </PropertyGroup>
+
+  <!-- Keep NativeAOT compiler inputs separate from the normal sample profile,
+       including simulator builds that cannot be published with NativeAOT. -->
+  <PropertyGroup Condition="'$(EnableProbeAot)' == 'true' and '$(CometSample)' != ''">
+    <IntermediateOutputPath>obj/sample-$(CometSample)-nativeaot/</IntermediateOutputPath>
+    <OutputPath>bin/sample-$(CometSample)-nativeaot/</OutputPath>
   </PropertyGroup>
 
   <!-- App icon: one asset catalog per variant, each holding an AppIcon.appiconset with a
@@ -50,6 +65,7 @@
     <!-- Google's Material 3 dynamic-color algorithm (HCT -> tonal palettes -> roles), in C#,
          so the SAME M3 scheme is generated from a seed on both platforms (Apache-2.0). -->
     <PackageReference Include="MaterialColorUtilities" Version="0.3.0" />
+    <Compile Include="..\Shared\SampleScreenResolver.cs" Link="Shared\SampleScreenResolver.cs" />
     <!-- Shared faithful Jetchat sample (identical tree on both backends). -->
     <Compile Include="..\Shared\Jetchat\*.cs" Link="Shared\Jetchat\%(Filename)%(Extension)" />
     <!-- Shared Reply sample (M1). -->

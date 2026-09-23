@@ -44,7 +44,7 @@ internal interface IViewBoundPropertySubscription : IDisposable
 /// from body-level dependency tracking.
 /// </para>
 /// </remarks>
-public sealed class PropertySubscription<T> : IReactiveSubscriber, IPropertySubscriptionFlushable, IViewBoundPropertySubscription
+public sealed class PropertySubscription<T> : IReactiveSubscriber, IPropertySubscriptionFlushable, IViewBoundPropertySubscription, IUntypedValue
 {
 	readonly Func<T>? _compute;
 	readonly EqualityComparer<T> _comparer;
@@ -67,6 +67,8 @@ public sealed class PropertySubscription<T> : IReactiveSubscriber, IPropertySubs
 
 	/// <summary>Current evaluated value (compatible with Binding&lt;T&gt; API).</summary>
 	public T CurrentValue => _currentValue;
+
+	object? IUntypedValue.UntypedValue => _currentValue;
 
 	/// <summary>Whether this is a static (non-reactive) subscription.</summary>
 	public bool IsStatic => _compute is null;

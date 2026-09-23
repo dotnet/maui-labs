@@ -10,6 +10,7 @@ using Comet;
 using Comet.Platform.Compose;
 using Comet.Reactive;
 using CometSamples.BaristaNotes.Components;
+using CometSamples.BaristaNotes.Diagnostics;
 using CometBaristaNotes.Services.Voice;
 using CometComposeProbe.BaristaNotes;
 using Microsoft.Maui;
@@ -33,13 +34,14 @@ namespace CometComposeProbe
 		/// <summary>Which sample to show: the `--es screen` intent extra (the smoke scripts /
 		/// dev loop), else derived from the package id (`com.comet.sample.&lt;name&gt;` — the
 		/// standalone per-sample installs), else Jetchat.</summary>
-		string Screen =>
-			Intent?.GetStringExtra("screen")
-			?? (PackageName is { } pkg && pkg.StartsWith("com.comet.sample.")
-				? pkg.Substring("com.comet.sample.".Length)
-				: "jetchat");
+		string Screen => CometSamples.SampleScreenResolver.Resolve(
+			Intent?.GetStringExtra("screen"),
+			PackageName);
 		AndroidSpeechRecognitionAdapter? _baristaSpeech;
 		bool _baristaThemeSubscribed;
+		static readonly CometBaristaNotes.Services.BaristaHostOwnership BaristaOwnership = new();
+		CometBaristaNotes.Services.BaristaHostRoot<CometSamples.BaristaNotes.BaristaNotesApp>? _baristaHost;
+		ComposeBackendRoot? _baristaBackend;
 #if DEBUG
 		/// <summary>The logical root, exposed so the hot-reload demo receiver can log reload state.</summary>
 		internal static View? RootView;
@@ -56,16 +58,41 @@ namespace CometComposeProbe
 
 			ThreadHelper.SetFireOnMainThread(a => RunOnUiThread(a));
 
+#if BARISTA_PERF || COMET_BARISTA_ONLY
+			if (Screen != "baristanotes")
+			{
+#if COMET_BARISTA_ONLY
+				Android.Util.Log.Error("CometProbe", "This build only supports the BaristaNotes screen.");
+#else
+				Android.Util.Log.Error("CometProbe", "Comparison builds only support the BaristaNotes screen.");
+#endif
+				Finish();
+				return;
+			}
+#endif
 			if (Screen == "baristanotes")
 			{
-				_baristaSpeech = new AndroidSpeechRecognitionAdapter(this);
 				try
 				{
+					_baristaHost = new(DetachBaristaNative, ShutdownBaristaPlatformAsync
+#if BARISTA_PERF
+						, BaristaNotes.Comparison.BaristaFixtureHost.WaitForIdleAsync
+#endif
+					);
+					await BaristaOwnership.AcquireAsync(this, ReleaseBaristaAsync);
+					if (IsFinishing || IsDestroyed || !BaristaOwnership.IsOwner(this))
+						return;
+#if BARISTA_PERF
+					BaristaNotes.Comparison.BaristaFixtureHost.Initialize(this);
+#endif
+					_baristaSpeech = new AndroidSpeechRecognitionAdapter(this);
 					await BaristaVoiceIntegration.ConfigurePlatformAsync(_baristaSpeech);
+					if (IsFinishing || IsDestroyed || !BaristaOwnership.IsOwner(this))
+						return;
 				}
 				catch (Exception ex)
 				{
-					Android.Util.Log.Error("CometProbe", "Voice initialization failed: " + ex);
+					Android.Util.Log.Error("CometProbe", "Barista host initialization failed: " + ex);
 					Finish();
 					return;
 				}
@@ -85,7 +112,18 @@ namespace CometComposeProbe
 			// Must be on BEFORE any View is constructed: view registration and the
 			// active-view list (what TriggerReload targets) are gated on IsEnabled.
 			Microsoft.Maui.HotReload.MauiHotReloadHelper.IsEnabled = true;
+#endif
 
+#if COMET_RUNTIME_DIAGNOSTICS
+			var nativeAotSmoke = await NativeAotSmokeChecks.RunAsync();
+			Android.Util.Log.Info("CometNativeAotSmoke", nativeAotSmoke);
+#endif
+
+			if (Screen == "baristanotes" &&
+				(IsFinishing || IsDestroyed || !BaristaOwnership.IsOwner(this)))
+				return;
+
+#if DEBUG || COMET_RUNTIME_DIAGNOSTICS
 			// The Comet-tree dev agent (DevFlow wire-compatible tree/elements/tap/fill +
 			// real MotionEvent drags) must also start BEFORE the UI is built — it enables
 			// CometDevRegistry tracking, and views materialized earlier never enter the
@@ -104,6 +142,7 @@ namespace CometComposeProbe
 				Android.Graphics.Typeface Asset(string name) =>
 					Android.Graphics.Typeface.CreateFromAsset(Assets, "fonts/" + name);
 
+#if !COMET_BARISTA_ONLY
 				ComposeFontRegistry.Register("Montserrat", 400, Asset("montserrat_regular.ttf"));
 				ComposeFontRegistry.Register("Montserrat", 500, Asset("montserrat_medium.ttf"));
 				ComposeFontRegistry.Register("Montserrat", 600, Asset("montserrat_semibold.ttf"));
@@ -113,6 +152,7 @@ namespace CometComposeProbe
 				// Google's Material Icons font as the cross-platform icon set (same glyphs as iOS).
 				ComposeFontRegistry.Register(CometSamples.Jetchat.JetchatIcons.Font, 400, Asset("material_icons.ttf"));
 				CometSamples.Jetchat.JetchatIcons.Register();
+#endif
 
 				if (Screen == "baristanotes")
 				{
@@ -158,31 +198,44 @@ namespace CometComposeProbe
 				// (Button, ripples) are seeded identically. Brand seed by default; flip SeedFromContent to
 				// derive the scheme from the profile photo (content-based Material You — same generator,
 				// image seed — identical to iOS's SeedFromContent path).
+#if COMET_BARISTA_ONLY
+				MaterialColorUtilities.Schemes.Scheme<uint> s =
+					CometSamples.Jetchat.JetchatTheme.ApplyDynamicScheme(CometSamples.Jetchat.JetchatTheme.SeedColor, dark);
+#else
 				const bool SeedFromContent = false;
 				MaterialColorUtilities.Schemes.Scheme<uint> s =
 					SeedFromContent && PixelsFromDrawable(Resource.Drawable.ali) is { } px
 						? CometSamples.Jetchat.JetchatTheme.ApplyDynamicSchemeFromPixels(px, dark)
 						: CometSamples.Jetchat.JetchatTheme.ApplyDynamicScheme(CometSamples.Jetchat.JetchatTheme.SeedColor, dark);
+#endif
 				scheme = ComposeSchemeFromSeed(s, dark);
 			}
 
 			// Per-sample theming: the Reply screen uses Reply's OWN static scheme
 			// (gold: ContrastAwareReplyTheme, dynamicColor=false) — the real M3 widgets
 			// (NavigationBar/Rail, drawer sheets) derive their container colors from it.
+#if !COMET_BARISTA_ONLY
 			bool replyScreen = Screen == "reply";
+#endif
 			bool baristaScreen = Screen == "baristanotes";
+#if !COMET_BARISTA_ONLY
 			if (replyScreen)
 				scheme = CometSamples.Reply.ReplyTheme.ComposeScheme();
 			else if (Screen == "jetnews")
 				scheme = CometSamples.JetNews.JetNewsTheme.ComposeScheme();
 			else if (Screen == "jetcaster")
 				scheme = CometSamples.Jetcaster.JetcasterTheme.ComposeScheme();
+#endif
 
 			// Status bar: Surface (matches the header bar).
 			// Nav bar: SurfaceTinted (matches the footer/UserInput bar so the background is seamless).
-			var surf = replyScreen
+			var surf =
+#if !COMET_BARISTA_ONLY
+				replyScreen
 				? CometSamples.Reply.ReplyTheme.Background
-				: baristaScreen
+				:
+#endif
+				baristaScreen
 					? CometSamples.BaristaNotes.Styles.CoffeeTheme.SurfaceColor
 					: CometSamples.Jetchat.JetchatTheme.Surface;
 			var statusTint = Android.Graphics.Color.Argb(
@@ -190,9 +243,13 @@ namespace CometComposeProbe
 				(int)(surf.Red * 255),
 				(int)(surf.Green * 255),
 				(int)(surf.Blue * 255));
-			var footerSurf = replyScreen
+			var footerSurf =
+#if !COMET_BARISTA_ONLY
+				replyScreen
 				? CometSamples.Reply.ReplyTheme.SurfaceContainer
-				: baristaScreen
+				:
+#endif
+				baristaScreen
 					? CometSamples.BaristaNotes.Styles.CoffeeTheme.SurfaceColor
 					: CometSamples.Jetchat.JetchatTheme.SurfaceTinted;
 			var navTint = Android.Graphics.Color.Argb(255, (int)(footerSurf.Red * 255), (int)(footerSurf.Green * 255), (int)(footerSurf.Blue * 255));
@@ -202,6 +259,8 @@ namespace CometComposeProbe
 				Window.DecorView.SetBackgroundColor(statusTint);
 			SetSystemBarIconAppearance(!dark, !dark);
 
+			if (IsFinishing || IsDestroyed)
+				return;
 			var root = BuildUi();
 			if (baristaScreen)
 			{
@@ -213,12 +272,14 @@ namespace CometComposeProbe
 			RootView = root;
 #endif
 
+#if !COMET_BARISTA_ONLY
 			// Link taps in chat bubbles open the system browser (the gold's uriHandler.openUri).
 			CometSamples.Jetchat.JetchatConversation.OpenUrl = url =>
 			{
 				try { StartActivity(new Android.Content.Intent(Android.Content.Intent.ActionView, Android.Net.Uri.Parse(url))); }
 				catch (Exception ex) { Android.Util.Log.Warn("CometProbe", "open url failed: " + ex.Message); }
 			};
+#endif
 
 			var backend = new ComposeBackendRoot(new EmptyServiceProvider())
 			{
@@ -231,8 +292,18 @@ namespace CometComposeProbe
 					return theme;
 				},
 			};
+			if (baristaScreen)
+				_baristaBackend = backend;
 			var composeView = backend.CreateView(this, root);
 			SetContentView(composeView);
+#if BARISTA_PERF
+			if (_baristaHost?.Root is { } baristaRoot)
+				ObserveLifecycleTask(BaristaNotes.Comparison.BaristaFixtureHost.Start(this, baristaRoot),
+					"Barista fixture operation");
+#endif
+#if BARISTA_PERF && COMET_RUNTIME_DIAGNOSTICS
+			PublishLifecycleControl();
+#endif
 #if DEBUG
 			DevFlowHelper.Start(this, composeView);
 #endif
@@ -240,7 +311,7 @@ namespace CometComposeProbe
 
 		protected override void OnStop()
 		{
-			if (Screen == "baristanotes")
+			if (Screen == "baristanotes" && BaristaOwnership.IsOwner(this))
 				ObserveLifecycleTask(
 					BaristaVoiceIntegration.OnAppBackgroundedAsync(),
 					"Voice background deactivation");
@@ -249,16 +320,41 @@ namespace CometComposeProbe
 
 		protected override void OnDestroy()
 		{
+#if BARISTA_PERF && COMET_RUNTIME_DIAGNOSTICS
+			WithdrawLifecycleControl();
+#endif
 			if (Screen == "baristanotes")
+				ObserveLifecycleTask(BaristaOwnership.ReleaseAsync(this), "Barista root teardown");
+			base.OnDestroy();
+		}
+
+		System.Threading.Tasks.Task ReleaseBaristaAsync() =>
+			_baristaHost?.DisposeAsync().AsTask() ?? System.Threading.Tasks.Task.CompletedTask;
+
+		void DetachBaristaNative()
+		{
+			if (_baristaThemeSubscribed)
 			{
-				if (_baristaThemeSubscribed)
-				{
-					CometSamples.BaristaNotes.Styles.CoffeeTheme.Mode.PropertyChanged -= OnBaristaThemeChanged;
-					_baristaThemeSubscribed = false;
-				}
-				ObserveLifecycleTask(
-					BaristaVoiceIntegration.ShutdownAsync(),
-					"Voice shutdown");
+				CometSamples.BaristaNotes.Styles.CoffeeTheme.Mode.PropertyChanged -= OnBaristaThemeChanged;
+				_baristaThemeSubscribed = false;
+			}
+			var backend = _baristaBackend;
+			_baristaBackend = null;
+#if DEBUG
+			if (ReferenceEquals(RootView, _baristaHost?.Root))
+				RootView = null;
+#endif
+			backend?.Dispose();
+		}
+
+		async System.Threading.Tasks.Task ShutdownBaristaPlatformAsync()
+		{
+			try
+			{
+				await BaristaVoiceIntegration.ShutdownAsync();
+			}
+			finally
+			{
 				_baristaSpeech = null;
 				var photos = _baristaPhotos;
 				photos?.Dispose();
@@ -268,11 +364,14 @@ namespace CometComposeProbe
 				if (ReferenceEquals(ProfilePhotoMedia.PickFromLibrary?.Target, photos))
 					ProfilePhotoMedia.PickFromLibrary = null;
 			}
-			base.OnDestroy();
 		}
 
 		void OnBaristaThemeChanged(object? sender, PropertyChangedEventArgs e) =>
-			RunOnUiThread(ApplyBaristaSystemBars);
+			RunOnUiThread(() =>
+			{
+				if (_baristaThemeSubscribed && BaristaOwnership.IsOwner(this))
+					ApplyBaristaSystemBars();
+			});
 
 		void ApplyBaristaSystemBars()
 		{
@@ -381,7 +480,9 @@ namespace CometComposeProbe
 		// The faithful Jetchat conversation screen (shared tree, identical on iOS). A ~24dp top
 		// inset clears the status bar. The screen comes from the `--es screen` extra (smokes)
 		// or the standalone per-sample package id — see <see cref="Screen"/>.
-#if DEBUG
+#if COMET_BARISTA_ONLY
+		View BuildUi() => _baristaHost!.Create(() => new CometSamples.BaristaNotes.BaristaNotesApp());
+#elif DEBUG
 		// A [Body] root is what hot reload targets (see HotReloadDemo.cs).
 		View BuildUi() => Screen switch
 		{
@@ -389,7 +490,7 @@ namespace CometComposeProbe
 			"jetnews" => new CometSamples.JetNews.JetNewsRoot(),
 			"jetsnack" => new CometSamples.Jetsnack.JetsnackRoot(topInset: 52),
 			"jetcaster" => BuildJetcaster(),
-			"baristanotes" => new CometSamples.BaristaNotes.BaristaNotesApp(),
+			"baristanotes" => _baristaHost!.Create(() => new CometSamples.BaristaNotes.BaristaNotesApp()),
 			_ => new JetchatRoot(),
 		};
 #else
@@ -399,11 +500,12 @@ namespace CometComposeProbe
 			"jetnews" => new CometSamples.JetNews.JetNewsRoot(),
 			"jetsnack" => new CometSamples.Jetsnack.JetsnackRoot(topInset: 52),
 			"jetcaster" => BuildJetcaster(),
-			"baristanotes" => new CometSamples.BaristaNotes.BaristaNotesApp(),
+			"baristanotes" => _baristaHost!.Create(() => new CometSamples.BaristaNotes.BaristaNotesApp()),
 			_ => CometSamples.Jetchat.JetchatConversation.Build(topInset: 24),
 		};
 #endif
 
+#if !COMET_BARISTA_ONLY
 		static bool _robotoFlexRegistered;
 
 		// Fixture mode: parse the six bundled feed snapshots — and load Jetcaster's
@@ -426,6 +528,7 @@ namespace CometComposeProbe
 				name => Assets!.Open("jetcaster/" + name));
 			return new CometSamples.Jetcaster.JetcasterRoot(topInset: 52);
 		}
+#endif
 
 		sealed class EmptyServiceProvider : IServiceProvider
 		{

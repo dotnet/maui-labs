@@ -1,4 +1,5 @@
 using Android.Runtime;
+using System.Diagnostics.CodeAnalysis;
 
 namespace AndroidX.Compose;
 
@@ -46,7 +47,11 @@ public sealed class SpanStyle
     /// <summary>Text decoration (Underline, LineThrough, etc.). Leave <see langword="null"/> to inherit.</summary>
     public TextDecoration? Decoration { get; set; }
 
-    static T? Cast<T>(Java.Lang.Object? wrapper) where T : Java.Lang.Object =>
+    static T? Cast<
+        [DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicConstructors |
+            DynamicallyAccessedMemberTypes.NonPublicConstructors)] T>(
+        Java.Lang.Object? wrapper) where T : Java.Lang.Object =>
         wrapper is null ? null : Java.Lang.Object.GetObject<T>(wrapper.Handle, JniHandleOwnership.DoNotTransfer);
 
     /// <summary>
