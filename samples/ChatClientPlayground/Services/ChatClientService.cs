@@ -26,7 +26,7 @@ public sealed class ChatClientService
                     ? $"Replay {_recording.ReplayPosition + 1}/{_recording.InteractionCount}; no model will be invoked."
                     : _recording.InteractionCount == 0
                         ? "The recording is empty. Record a response or choose a recording file."
-                        : "No more interactions. Restart replay or clear the recording.",
+                        : "Playback complete. Rewind to replay or clear the recording.",
                 SupportsImageInput: true));
 
         if (kind is not (ChatClientKind.Local or ChatClientKind.Cloud))

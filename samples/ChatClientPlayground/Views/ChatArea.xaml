@@ -151,7 +151,7 @@ xmlns:views="clr-namespace:ChatClientPlayground.Views"
             </VerticalStackLayout>
         </Border>
         <Label Grid.Row="1" IsVisible="{Binding IsRecordingClient}"
-               Text="Use Play in Recording to replay. Switch to Local or Cloud to continue chatting."
+               Text="{Binding RecordingHint}"
                FontSize="12" TextColor="{StaticResource MutedText}"
                HorizontalTextAlignment="Center" />
     </Grid>

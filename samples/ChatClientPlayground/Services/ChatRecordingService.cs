@@ -126,7 +126,7 @@ public sealed class ChatRecordingService
         lock (_gate)
         {
             if (_cursor >= _recording.Interactions.Count)
-                throw new InvalidOperationException("Replay reached the end of the recording. Restart replay to play again.");
+                throw new InvalidOperationException("Replay reached the end of the recording. Rewind to play again.");
             return _recording.Interactions[_cursor];
         }
     }

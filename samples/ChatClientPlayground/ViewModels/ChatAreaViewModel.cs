@@ -28,6 +28,7 @@ public sealed partial class ChatAreaViewModel : ObservableObject
     [ObservableProperty] private string statusMessage = "Choose a client and send a prompt.";
     [ObservableProperty] private string emptyTitle = "Start a real chat request";
     [ObservableProperty] private string emptySubtitle = "Choose a client, configure options, and send a prompt.";
+    [ObservableProperty] private string recordingHint = string.Empty;
     [ObservableProperty] private bool isLiveClient = true;
     [ObservableProperty] private bool isImageSupported;
     [ObservableProperty] private ImageSource? selectedImagePreview;

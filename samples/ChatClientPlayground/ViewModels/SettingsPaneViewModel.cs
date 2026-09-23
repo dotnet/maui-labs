@@ -67,7 +67,9 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
     public bool CanStartRecording => IsRealClientSelected && !RecordRequests;
     public bool CanStopRecording => IsRealClientSelected && RecordRequests;
     public bool CanChooseRecordingFile => IsRecordingSelected && !HasRecording;
-    public bool CanClearRecording => IsRecordingSelected && HasRecording;
+    public bool CanClearRecording => HasRecording;
+    public bool ShowPlayRecording => IsRecordingSelected && HasRecording && ReplayPosition < InteractionCount;
+    public bool ShowRestartReplay => IsRecordingSelected && ReplayPosition > 0;
     public bool CanRestartReplay => HasRecording;
     public bool CanSaveRecording => HasRecording;
     public string TapeSummary => InteractionCount == 0
@@ -146,21 +148,18 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
     private void ToggleRecording() => RecordRequests = !RecordRequests;
 
     [RelayCommand]
-    private void NewRecording() => ResetRecording("New recording started.", "New recording");
-
-    [RelayCommand]
-    private void ClearRecording() => ResetRecording("Recording cleared.", "Clear recording");
-
-    private void ResetRecording(string successMessage, string action)
+    private void ClearRecording()
     {
         try
         {
             _recording.NewRecording();
-            RecordingStatus = successMessage;
+            RecordingStatus = RecordRequests
+                ? "Recording cleared; new responses will still be recorded."
+                : "Recording cleared.";
         }
         catch (Exception exception)
         {
-            RecordingStatus = $"{action} failed: {exception.Message}";
+            RecordingStatus = $"Clear recording failed: {exception.Message}";
         }
     }
 
@@ -211,7 +210,7 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
     private void RestartReplay()
     {
         _recording.RestartReplay();
-        RecordingStatus = "Replay restarted at interaction 1.";
+        RecordingStatus = "Rewound to interaction 1.";
     }
 
     private void RefreshRecording()
@@ -283,6 +282,8 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
         OnPropertyChanged(nameof(CanStopRecording));
         OnPropertyChanged(nameof(CanChooseRecordingFile));
         OnPropertyChanged(nameof(CanClearRecording));
+        OnPropertyChanged(nameof(ShowPlayRecording));
+        OnPropertyChanged(nameof(ShowRestartReplay));
     }
 
     partial void OnRecordRequestsChanged(bool value)
@@ -298,6 +299,14 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
         OnPropertyChanged(nameof(HasRecording));
         OnPropertyChanged(nameof(CanChooseRecordingFile));
         OnPropertyChanged(nameof(CanClearRecording));
+        OnPropertyChanged(nameof(ShowPlayRecording));
+        OnPropertyChanged(nameof(ShowRestartReplay));
+    }
+
+    partial void OnReplayPositionChanged(int value)
+    {
+        OnPropertyChanged(nameof(ShowPlayRecording));
+        OnPropertyChanged(nameof(ShowRestartReplay));
     }
 
     partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(CanSelectClient));

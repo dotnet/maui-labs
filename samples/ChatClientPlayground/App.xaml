@@ -37,6 +37,23 @@
                     </Setter.Value>
                 </Setter>
             </Style>
+            <Style x:Key="RecordingActionButton" TargetType="ImageButton">
+                <Setter Property="WidthRequest" Value="44" />
+                <Setter Property="HeightRequest" Value="44" />
+                <Setter Property="Padding" Value="10" />
+                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Style.Triggers>
+                    <Trigger TargetType="ImageButton" Property="IsEnabled" Value="False">
+                        <Setter Property="BackgroundColor" Value="#CBD5E1" />
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+            <Style x:Key="RecordingActionLabel" TargetType="Label">
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="TextColor" Value="{StaticResource MutedText}" />
+                <Setter Property="HorizontalTextAlignment" Value="Center" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

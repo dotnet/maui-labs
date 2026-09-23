@@ -194,7 +194,9 @@ public partial class MainViewModel : ObservableObject
             if (IsCurrentRequest(generation))
             {
                 _recording.CompleteReplay(interaction);
-                Chat.StatusMessage = $"Replay complete ({_recording.ReplayPosition}/{_recording.InteractionCount}). Switch to a live client to continue.";
+                Chat.StatusMessage = _recording.HasReplayRemaining
+                    ? $"Replay {_recording.ReplayPosition}/{_recording.InteractionCount} complete. Play the next interaction or switch to a live client."
+                    : $"Replay complete ({_recording.ReplayPosition}/{_recording.InteractionCount}). Rewind to replay or switch to a live client.";
             }
         }
         catch (OperationCanceledException)
@@ -637,10 +639,19 @@ public partial class MainViewModel : ObservableObject
         var descriptor = selection.Descriptor;
         var isReplay = selection.Kind == ChatClientKind.Recording;
         Chat.IsLiveClient = !isReplay;
-        Chat.EmptyTitle = isReplay ? "Replay a recorded chat" : "Start a real chat request";
+        Chat.EmptyTitle = isReplay
+            ? Settings.HasRecording ? "Replay a recorded chat" : "No recording loaded"
+            : "Start a real chat request";
         Chat.EmptySubtitle = isReplay
-            ? "Use Play in the Recording section to see the next interaction."
+            ? Settings.HasRecording
+                ? "Use Play in the Recording section to see the next interaction."
+                : "Use Load in the Recording section to choose a file, or record a response with Local or Cloud."
             : "Choose a client, configure options, and send a prompt.";
+        Chat.RecordingHint = !Settings.HasRecording
+            ? "Load a file in Recording, or switch to Local or Cloud to record a response."
+            : Settings.ReplayPosition >= Settings.InteractionCount
+                ? "Playback complete. Rewind to replay, or switch to Local or Cloud to continue chatting."
+                : "Use Play in Recording to replay. Switch to Local or Cloud to continue chatting.";
         Chat.IsImageSupported = !isReplay && descriptor.SupportsImageInput;
         Chat.StatusMessage = isReplay
             ? descriptor.Status
