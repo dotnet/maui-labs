@@ -28,7 +28,7 @@ describe, classify, OCR/extract, compare — exposed through the existing
   the `AIContent.RawRepresentation` native-handle fast path.
 - Implemented: a native `ImageContentNative` and binding, current-prompt and history attachment
   conversion, native `CGImage` / `UIImage` / `NSImage` fast paths, and image cases in
-  `AppleIntelligenceChatClient.ToNative(AIContent)`. `samples/ChatClientPlayground` enables
+  `AppleIntelligenceChatClient.ToNative(AIContent)`. `samples/AIExtensions.Sample.ChatPlayground` enables
   image input for the local Apple provider on iOS/Mac Catalyst 27+ and for Azure.
 
 ---
@@ -235,7 +235,7 @@ public class ImageContentNative: AIContentNative {
         super.init()
     }
     @objc public init(data: Data, mimeType: String, orientationRaw: Int32, label: String?) {
-        self.data = data; self.mimeType = mimeType; self.orientationRaw = orientationRaw; self.label = label
+        self.data = data; self.mimeType = mimeType; self.orientationRaw = orientationRaw == 0 ? Self.imageOrientation(from: data) : orientationRaw; self.label = label
         super.init()
     }
     @objc public init(imageURL: URL, orientationRaw: Int32, label: String?) {
@@ -486,9 +486,9 @@ private static ImageContentNative ToImageNative(UriContent uri)
         "Remote http(s) image URLs are not downloaded automatically.");
 }
 ```
-Helpers to add in the platform-specific file: `ToCGImage(NSImage)` (`AsTiff()` →
-`CGImageSource…`) for macOS. (EXIF orientation mapping from `UIImage.Orientation` is an optional
-refinement; v1 passes `0` = unset.)
+The platform-specific file uses `NSImage.AsCGImage` for the macOS fast path. The shipped client
+maps `UIImage.Orientation` and reads encoded image EXIF orientation; a bare `CGImage` has no
+orientation metadata.
 
 ### 4.5 Public convenience helper
 ```csharp
@@ -538,24 +538,26 @@ var msg = new ChatMessage(ChatRole.User, [
   hosted CI and official signing before release; the earlier Xcode 26.3 pins could not compile
   the Swift shim (`Attachment` / `Transcript.Segment.attachment` are absent).
 - No new frameworks to link — `FoundationModels` is a system framework resolved by the Swift shim.
-- Update `PublicAPI/**/PublicAPI.Unshipped.txt` for `AppleImage.*` (and any other new public API).
-- `README.md` platform matrix: add an "Image input (27.0+)" row.
+- If an `AppleImage.*` convenience API is added later, update `PublicAPI/**/PublicAPI.Unshipped.txt`.
+- Both contributor and NuGet READMEs distinguish text chat on Apple 26 from image input on 27+.
 
 ## 6. Tests
 
-Managed-only (no model; run in CI):
+Model-free device tests (run on Mac Catalyst in CI):
 - `ToNative` maps `DataContent` / `UriContent` (image mime) → `ImageContentNative` selecting the
   correct payload branch (cgImage vs data vs url).
 - `RawRepresentation is CGImage / UIImage / NSImage` fast path chosen over bytes.
 - Non-image `DataContent` still throws; remote http `UriContent` throws the documented error.
-- `AppleImage.AsAIContent(...)` produces a `DataContent` with both bytes and
-  `RawRepresentation` set.
+- Encoded EXIF orientation and native `UIImage` orientation survive conversion.
+- An image in assistant transcript history fails explicitly on OS 26 rather than being dropped.
+- A future `AppleImage.AsAIContent(...)` convenience helper would produce a `DataContent` with both
+  bytes and `RawRepresentation` set; callers can set `RawRepresentation` directly today.
 
 Device tests (`RequiresModel=true`, gated to 27.0):
 - Attach an image + "describe this image"; assert a non-empty response.
-- Attach two images + "compare"; assert both are referenced.
-- Multi-turn: send an image, then a follow-up question in the next turn that relies on it (exercises
-  the `Transcript.Segment.attachment` history path).
+- Attach two images + "compare"; assert both are referenced (manual macOS 27 follow-up).
+- Multi-turn: send an image, then a follow-up question that relies on it (manual macOS 27
+  follow-up; exercises the `Transcript.Segment.attachment` history path).
 
 ## 7. Open questions
 
@@ -565,8 +567,8 @@ Device tests (`RequiresModel=true`, gated to 27.0):
    history helpers above are final.
 2. **Remote image URLs.** v1 rejects http(s) `UriContent` (only in-memory bytes or `file://`). Do we
    want auto-download, or keep callers responsible for fetching bytes?
-3. **EXIF orientation.** v1 passes `0` (unset). Map `UIImage.Orientation` → EXIF 1…8 as a follow-up
-   if we see rotated-image issues.
+3. ~~EXIF orientation.~~ **Resolved** for `UIImage` native handles and encoded image bytes:
+   pass the UIImage-to-EXIF orientation or read ImageIO image properties, respectively.
 4. **Extra fast-paths.** `CIImage` / `CVPixelBuffer` `RawRepresentation` fast paths (via the
    corresponding `Attachment` inits) can be added later; v1 funnels everything through `CGImage`.
 5. **Vision tools.** `OCRTool` / `BarcodeReaderTool` (from the Vision framework) can be attached to a

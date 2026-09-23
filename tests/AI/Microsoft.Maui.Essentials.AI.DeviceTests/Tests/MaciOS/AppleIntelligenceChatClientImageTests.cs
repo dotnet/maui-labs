@@ -1,6 +1,7 @@
 #if IOS || MACCATALYST
 using CoreGraphics;
 using Foundation;
+using ImageIO;
 using Microsoft.Extensions.AI;
 using UIKit;
 using Xunit;
@@ -49,6 +50,23 @@ public class AppleIntelligenceChatClientImageTests
 	}
 
 	[Fact]
+	public void ToNative_EncodedImage_PreservesExifOrientation()
+	{
+		using var image = CreateTestImage();
+		using var jpeg = new NSMutableData();
+		using var destination = CGImageDestination.Create(jpeg, "public.jpeg", 1)!;
+		using var properties = NSDictionary<NSString, NSObject>.FromObjectsAndKeys(
+			[NSNumber.FromInt32(6)], [ImageIO.CGImageProperties.Orientation]);
+		destination.AddImage(image, properties);
+		Assert.True(destination.Close());
+
+		var native = AppleIntelligenceChatClient.ToNative(new DataContent(jpeg.ToArray(), "image/jpeg"));
+
+		Assert.Equal(6, native.OrientationRaw);
+		Assert.NotNull(native.Data);
+	}
+
+	[Fact]
 	public void ToNative_DataContentWithNativeHandle_UsesZeroCopyFastPath()
 	{
 		using var image = CreateTestImage();
@@ -65,13 +83,28 @@ public class AppleIntelligenceChatClientImageTests
 	public void ToNative_DataContentWithUIImage_UsesNativeImage()
 	{
 		using var image = CreateTestImage();
-		using var uiImage = new UIImage(image);
+		using var uiImage = new UIImage(image, 1, UIImageOrientation.Right);
 		var content = new DataContent(new byte[] { 0 }, "image/png") { RawRepresentation = uiImage };
 
 		var native = AppleIntelligenceChatClient.ToNative(content);
 
 		Assert.NotNull(native.CgImage);
 		Assert.Null(native.Data);
+		Assert.Equal(6, native.OrientationRaw);
+	}
+
+	[Fact]
+	public void ToNative_UriContentWithUIImage_PreservesOrientation()
+	{
+		using var image = CreateTestImage();
+		using var uiImage = new UIImage(image, 1, UIImageOrientation.LeftMirrored);
+		var content = new UriContent("file:///tmp/image.png", "image/png") { RawRepresentation = uiImage };
+
+		var native = AppleIntelligenceChatClient.ToNative(content);
+
+		Assert.NotNull(native.CgImage);
+		Assert.Null(native.ImageUrl);
+		Assert.Equal(5, native.OrientationRaw);
 	}
 
 	[Fact]
@@ -154,6 +187,29 @@ public class AppleIntelligenceChatClientImageTests
 				new TextContent("Describe this image."),
 				new DataContent(new byte[] { 0 }, "image/png") { RawRepresentation = image },
 			]),
+		};
+
+		var error = await Assert.ThrowsAsync<NSErrorException>(() => client.GetResponseAsync(messages));
+		Assert.Contains("27.0", error.Message);
+	}
+
+	[Fact]
+	public async Task GetResponseAsync_WithImageInAssistantHistoryOnOlderOS_ReportsUnsupported()
+	{
+		if (OperatingSystem.IsIOSVersionAtLeast(27) || OperatingSystem.IsMacCatalystVersionAtLeast(27))
+			return;
+
+		using var image = CreateTestImage();
+		var client = new AppleIntelligenceChatClient();
+		var messages = new List<ChatMessage>
+		{
+			new(ChatRole.User, "What is in this image?"),
+			new(ChatRole.Assistant,
+			[
+				new TextContent("Here is the image."),
+				new DataContent(new byte[] { 0 }, "image/png") { RawRepresentation = image },
+			]),
+			new(ChatRole.User, "What color was it?"),
 		};
 
 		var error = await Assert.ThrowsAsync<NSErrorException>(() => client.GetResponseAsync(messages));

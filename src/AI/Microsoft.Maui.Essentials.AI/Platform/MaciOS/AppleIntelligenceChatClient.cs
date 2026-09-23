@@ -494,19 +494,8 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 
 	internal static ImageContentNative ToNative(DataContent data)
 	{
-		// Fast path: the caller attached a native image handle via RawRepresentation (zero-copy).
-		switch (data.RawRepresentation)
-		{
-			case CGImage cg:
-				return new ImageContentNative(cg, 0, null);
-#if IOS || MACCATALYST
-			case UIKit.UIImage ui when ui.CGImage is { } uiCg:
-				return new ImageContentNative(uiCg, 0, null);
-#elif MACOS
-			case AppKit.NSImage ns when ToCGImage(ns) is { } nsCg:
-				return new ImageContentNative(nsCg, 0, null);
-#endif
-		}
+		if (ToNativeImage(data.RawRepresentation) is { } native)
+			return native;
 
 		// Byte fallback: the Swift shim decodes the bytes to a CGImage.
 		var bytes = data.Data.ToArray();
@@ -515,8 +504,8 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 
 	internal static ImageContentNative ToNative(UriContent uri)
 	{
-		if (uri.RawRepresentation is CGImage cg)
-			return new ImageContentNative(cg, 0, null);
+		if (ToNativeImage(uri.RawRepresentation) is { } native)
+			return native;
 
 		if (uri.Uri.IsFile)
 			return new ImageContentNative(NSUrl.FromFilename(uri.Uri.LocalPath), 0, null);
@@ -524,6 +513,35 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 		throw new NotSupportedException(
 			"Apple Intelligence image prompts require in-memory DataContent or a file:// UriContent. " +
 			"Remote http(s) image URLs are not downloaded automatically.");
+	}
+
+	private static ImageContentNative? ToNativeImage(object? representation)
+	{
+		switch (representation)
+		{
+			case CGImage cg:
+				return new ImageContentNative(cg, 0, null);
+#if IOS || MACCATALYST
+			case UIKit.UIImage ui when ui.CGImage is { } cg:
+				return new ImageContentNative(cg, ui.Orientation switch
+				{
+					UIKit.UIImageOrientation.Up => 1,
+					UIKit.UIImageOrientation.UpMirrored => 2,
+					UIKit.UIImageOrientation.Down => 3,
+					UIKit.UIImageOrientation.DownMirrored => 4,
+					UIKit.UIImageOrientation.LeftMirrored => 5,
+					UIKit.UIImageOrientation.Right => 6,
+					UIKit.UIImageOrientation.RightMirrored => 7,
+					UIKit.UIImageOrientation.Left => 8,
+					_ => throw new ArgumentOutOfRangeException(nameof(representation), "Unsupported UIImage orientation.")
+				}, null);
+#elif MACOS
+			case AppKit.NSImage ns when ToCGImage(ns) is { } cg:
+				return new ImageContentNative(cg, 0, null);
+#endif
+			default:
+				return null;
+		}
 	}
 
 	internal static AIContent FromNative(ImageContentNative image)

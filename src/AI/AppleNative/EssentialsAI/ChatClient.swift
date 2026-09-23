@@ -414,7 +414,7 @@ public class ChatClientNative: NSObject {
         case .user:
             return [try toUserEntry(message)]
         case .assistant:
-            return toAssistantEntries(message)
+            return try toAssistantEntries(message)
         case .system:
             return [try toSystemEntry(message)]
         case .tool:
@@ -449,11 +449,11 @@ public class ChatClientNative: NSObject {
         return .prompt(Transcript.Prompt(segments: segments))
     }
 
-    private func toAssistantEntries(_ message: ChatMessageNative) -> [Transcript.Entry] {
+    private func toAssistantEntries(_ message: ChatMessageNative) throws -> [Transcript.Entry] {
         // Process contents in order, flushing batches when the content type changes.
         // This preserves interleaving: [text, funcCall, text] → [.response, .toolCalls, .response]
         var entries: [Transcript.Entry] = []
-        var pendingTextSegments: [Transcript.Segment] = []
+        var pendingResponseSegments: [Transcript.Segment] = []
         var pendingToolCalls: [Transcript.ToolCall] = []
 
         for content in message.contents {
@@ -462,19 +462,27 @@ public class ChatClientNative: NSObject {
                     entries.append(.toolCalls(Transcript.ToolCalls(pendingToolCalls)))
                     pendingToolCalls = []
                 }
-                pendingTextSegments.append(.text(Transcript.TextSegment(content: textContent.text)))
+                pendingResponseSegments.append(.text(Transcript.TextSegment(content: textContent.text)))
+            } else if let imageContent = content as? ImageContentNative {
+                if !pendingToolCalls.isEmpty {
+                    entries.append(.toolCalls(Transcript.ToolCalls(pendingToolCalls)))
+                    pendingToolCalls = []
+                }
+                pendingResponseSegments.append(try toSegment(imageContent))
             } else if let funcCall = content as? FunctionCallContentNative {
-                if !pendingTextSegments.isEmpty {
-                    entries.append(.response(Transcript.Response(assetIDs: [], segments: pendingTextSegments)))
-                    pendingTextSegments = []
+                if !pendingResponseSegments.isEmpty {
+                    entries.append(.response(Transcript.Response(assetIDs: [], segments: pendingResponseSegments)))
+                    pendingResponseSegments = []
                 }
                 let argsContent = (try? GeneratedContent(json: funcCall.arguments)) ?? GeneratedContent(funcCall.arguments)
                 pendingToolCalls.append(Transcript.ToolCall(id: funcCall.callId, toolName: funcCall.name, arguments: argsContent))
+            } else {
+                throw NSError.chatError(.invalidContent, description: "Unsupported content type in assistant history: \(type(of: content))")
             }
         }
 
-        if !pendingTextSegments.isEmpty {
-            entries.append(.response(Transcript.Response(assetIDs: [], segments: pendingTextSegments)))
+        if !pendingResponseSegments.isEmpty {
+            entries.append(.response(Transcript.Response(assetIDs: [], segments: pendingResponseSegments)))
         }
         if !pendingToolCalls.isEmpty {
             entries.append(.toolCalls(Transcript.ToolCalls(pendingToolCalls)))
