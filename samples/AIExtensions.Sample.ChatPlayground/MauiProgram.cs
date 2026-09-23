@@ -37,6 +37,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<PlaygroundTools>();
         builder.Services.AddSingleton(serviceProvider => new ChatRecordingService(
             serviceProvider.GetRequiredService<ILogger<ChatRecordingService>>(),
+            FileSystem.AppDataDirectory,
             FileSystem.CacheDirectory));
         builder.Services.AddSingleton<SettingsPaneViewModel>();
         builder.Services.AddSingleton<ChatAreaViewModel>();

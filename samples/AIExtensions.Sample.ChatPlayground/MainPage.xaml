@@ -6,7 +6,7 @@
              x:Class="AIExtensions.Sample.ChatPlayground.MainPage"
              x:DataType="viewModels:MainViewModel"
              Title="IChatClient Playground"
-             BackgroundColor="{StaticResource PageBackground}">
+             BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}">
     <Grid SafeAreaEdges="None">
         <Grid x:Name="RootGrid" RowDefinitions="*" Padding="12" ColumnSpacing="12" SafeAreaEdges="Container">
             <Grid.ColumnDefinitions>
@@ -14,9 +14,17 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
+            <BoxView x:Name="SettingsBackdrop" Grid.ColumnSpan="2" ZIndex="9"
+                     Color="{AppThemeBinding Light={StaticResource OverlayScrim}, Dark={StaticResource OverlayScrimDark}}"
+                     IsVisible="False"
+                     AutomationId="SettingsDismissOverlay">
+                <BoxView.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="SettingsBackdropTapped" />
+                </BoxView.GestureRecognizers>
+            </BoxView>
             <Border x:Name="SettingsPanel" Grid.Column="0" ZIndex="10"
-                    BackgroundColor="{StaticResource PanelBackground}"
-                    Stroke="{StaticResource BorderColor}"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource PanelBackground}, Dark={StaticResource PanelBackgroundDark}}"
+                    Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}"
                     StrokeShape="RoundRectangle 12"
                     AutomationId="SettingsSidebar">
                 <Grid RowDefinitions="Auto,*">
@@ -35,8 +43,8 @@
             </Border>
 
             <Grid x:Name="ChatPanel" Grid.Column="1" RowDefinitions="Auto,*" RowSpacing="12">
-                <Border BackgroundColor="{StaticResource PanelBackground}"
-                        Stroke="{StaticResource BorderColor}"
+                <Border BackgroundColor="{AppThemeBinding Light={StaticResource PanelBackground}, Dark={StaticResource PanelBackgroundDark}}"
+                        Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}"
                         StrokeShape="RoundRectangle 12" Padding="16">
                     <Grid x:Name="HeaderGrid" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
                         <ImageButton x:Name="OpenSettingsButton"
@@ -49,7 +57,7 @@
                         <VerticalStackLayout x:Name="HeaderContent" Grid.Column="1" Spacing="2">
                             <Label Text="IChatClient Playground" FontSize="22" FontAttributes="Bold" />
                             <Label Text="{Binding Chat.StatusMessage}" FontSize="12"
-                                   TextColor="{StaticResource MutedText}"
+                                   Style="{StaticResource MutedLabel}"
                                    AutomationId="RequestStatusLabel" />
                         </VerticalStackLayout>
                         <HorizontalStackLayout Grid.Column="2" VerticalOptions="Start">

@@ -17,29 +17,33 @@
                     <DataTemplate x:DataType="viewModels:ChatMessageViewModel">
                         <views:MessageBubble Margin="4,6"
                                              Padding="12"
-                                             Stroke="{StaticResource BorderColor}"
+                                             Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}"
                                              StrokeShape="RoundRectangle 12"
                                              HorizontalOptions="Start"
-                                             BackgroundColor="{StaticResource AssistantBubble}">
+                                             BackgroundColor="{AppThemeBinding Light={StaticResource AssistantBubble}, Dark={StaticResource AssistantBubbleDark}}">
                             <Border.Triggers>
                                 <DataTrigger TargetType="Border" Binding="{Binding IsUser}" Value="True">
                                     <Setter Property="HorizontalOptions" Value="End" />
-                                    <Setter Property="BackgroundColor" Value="{StaticResource UserBubble}" />
+                                    <Setter Property="BackgroundColor"
+                                            Value="{AppThemeBinding Light={StaticResource UserBubble}, Dark={StaticResource UserBubbleDark}}" />
                                 </DataTrigger>
                                 <DataTrigger TargetType="Border" Binding="{Binding IsError}" Value="True">
-                                    <Setter Property="BackgroundColor" Value="{StaticResource ErrorBubble}" />
+                                    <Setter Property="BackgroundColor"
+                                            Value="{AppThemeBinding Light={StaticResource ErrorBubble}, Dark={StaticResource ErrorBubbleDark}}" />
                                 </DataTrigger>
                                 <DataTrigger TargetType="Border" Binding="{Binding IsSystem}" Value="True">
                                     <Setter Property="HorizontalOptions" Value="Center" />
-                                    <Setter Property="BackgroundColor" Value="#F1F5F9" />
+                                    <Setter Property="BackgroundColor"
+                                            Value="{AppThemeBinding Light={StaticResource SystemBubble}, Dark={StaticResource SystemBubbleDark}}" />
                                 </DataTrigger>
                                 <DataTrigger TargetType="Border" Binding="{Binding IsTool}" Value="True">
-                                    <Setter Property="BackgroundColor" Value="{StaticResource ToolBubble}" />
+                                    <Setter Property="BackgroundColor"
+                                            Value="{AppThemeBinding Light={StaticResource ToolBubble}, Dark={StaticResource ToolBubbleDark}}" />
                                 </DataTrigger>
                             </Border.Triggers>
                             <VerticalStackLayout Spacing="6">
                                 <Label Text="{Binding Label}" FontAttributes="Bold" FontSize="11"
-                                       TextColor="{StaticResource MutedText}" />
+                                       Style="{StaticResource MutedLabel}" />
                                 <Label Text="{Binding Text}" LineBreakMode="WordWrap" />
                                 <Image Source="{Binding ImageSource}"
                                        IsVisible="{Binding HasImage}"
@@ -60,14 +64,14 @@
                                  HorizontalOptions="Center"
                                  VerticalOptions="Center">
                 <Label Text="{Binding EmptyTitle}" FontSize="18" HorizontalTextAlignment="Center" />
-                <Label Text="{Binding EmptySubtitle}" TextColor="{StaticResource MutedText}"
+                <Label Text="{Binding EmptySubtitle}" Style="{StaticResource MutedLabel}"
                        HorizontalTextAlignment="Center" />
             </VerticalStackLayout>
         </Grid>
 
         <Border Grid.Row="1"
-                BackgroundColor="{StaticResource PanelBackground}"
-                Stroke="{StaticResource BorderColor}"
+                BackgroundColor="{AppThemeBinding Light={StaticResource PanelBackground}, Dark={StaticResource PanelBackgroundDark}}"
+                Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}"
                 StrokeShape="RoundRectangle 12"
                 Padding="12">
             <VerticalStackLayout Spacing="8">
@@ -100,7 +104,7 @@
                         <controls:PopupMenu.Content>
                             <VerticalStackLayout Spacing="8" x:DataType="viewModels:ChatAreaViewModel">
                                 <Label Text="ADD IMAGE" FontSize="11" FontAttributes="Bold"
-                                       TextColor="{StaticResource MutedText}" />
+                                       Style="{StaticResource MutedLabel}" />
                                 <Button Text="Choose image"
                                         ImageSource="image.png"
                                         Command="{Binding ChooseImageCommand}"
@@ -141,7 +145,7 @@
                                      HeightRequest="44"
                                      Padding="10"
                                      CornerRadius="22"
-                                     BackgroundColor="#B91C1C"
+                                     BackgroundColor="{StaticResource StopActionBackground}"
                                      SemanticProperties.Description="Stop response"
                                      ToolTipProperties.Text="Stop response"
                                      AutomationId="StopButton" />
@@ -177,7 +181,7 @@
                             Command="{Binding CancelCommand}" IsVisible="{Binding IsBusy}"
                             Style="{StaticResource ReplayActionButtonStyle}"
                             Margin="0,0,8,8"
-                            BackgroundColor="#B91C1C"
+                            BackgroundColor="{StaticResource StopActionBackground}"
                             SemanticProperties.Description="Stop replaying the saved chat"
                             AutomationId="StopReplayButton" />
                 </FlexLayout>

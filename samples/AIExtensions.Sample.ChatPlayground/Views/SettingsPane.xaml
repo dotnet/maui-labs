@@ -8,7 +8,7 @@
              x:DataType="viewModels:SettingsPaneViewModel">
     <ScrollView>
         <VerticalStackLayout Padding="16" Spacing="12">
-            <Label Text="CLIENT" FontSize="12" FontAttributes="Bold" TextColor="{StaticResource MutedText}" />
+            <Label Text="CLIENT" Style="{StaticResource SectionHeading}" />
             <VerticalStackLayout Spacing="4" IsEnabled="{Binding CanSelectClient}"
                                  RadioButtonGroup.GroupName="Client"
                                  RadioButtonGroup.SelectedValue="{Binding SelectedClient, Mode=TwoWay}"
@@ -25,9 +25,21 @@
                 </BindableLayout.ItemTemplate>
             </VerticalStackLayout>
 
+            <Label Text="Replay uses the options saved with each turn. Select a live client to change settings."
+                   Style="{StaticResource MutedLabel}"
+                   IsVisible="{Binding SelectedDescriptor.IsReplay}"
+                   AutomationId="ReplayOptionsHint" />
+
             <VerticalStackLayout Spacing="12" IsEnabled="{Binding CanEditOptions}" AutomationId="ChatOptionsPanel">
-                <BoxView HeightRequest="1" Color="{StaticResource BorderColor}" />
-                <Label Text="RESPONSE" FontSize="12" FontAttributes="Bold" TextColor="{StaticResource MutedText}" />
+                <VerticalStackLayout.Triggers>
+                    <DataTrigger TargetType="VerticalStackLayout"
+                                 Binding="{Binding SelectedDescriptor.IsReplay}" Value="True">
+                        <Setter Property="IsVisible" Value="False" />
+                    </DataTrigger>
+                </VerticalStackLayout.Triggers>
+                <BoxView HeightRequest="1"
+                         Color="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}" />
+                <Label Text="RESPONSE" Style="{StaticResource SectionHeading}" />
                 <HorizontalStackLayout Spacing="4">
                     <CheckBox IsChecked="{Binding UseStreaming}" AutomationId="StreamingCheckBox" />
                     <Label Text="Streaming" VerticalOptions="Center" />
@@ -44,8 +56,9 @@
                     <controls:InfoTip Text="Request a visible summary; private reasoning is never displayed." />
                 </HorizontalStackLayout>
 
-                <BoxView HeightRequest="1" Color="{StaticResource BorderColor}" />
-                <Label Text="CONVERSATION" FontSize="12" FontAttributes="Bold" TextColor="{StaticResource MutedText}" />
+                <BoxView HeightRequest="1"
+                         Color="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}" />
+                <Label Text="CONVERSATION" Style="{StaticResource SectionHeading}" />
                 <HorizontalStackLayout Spacing="4">
                     <Label Text="System instructions" FontSize="12" VerticalOptions="Center" />
                     <controls:InfoTip Text="Instructions are sent with the next request and shown once in the chat." />
@@ -101,10 +114,11 @@
                                  AutomationId="MultipleToolCallsDisallowRadio" />
                 </HorizontalStackLayout>
 
-                <BoxView HeightRequest="1" Color="{StaticResource BorderColor}" />
-                <Label Text="GENERATION" FontSize="12" FontAttributes="Bold" TextColor="{StaticResource MutedText}" />
+                <BoxView HeightRequest="1"
+                         Color="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}" />
+                <Label Text="GENERATION" Style="{StaticResource SectionHeading}" />
                 <Label Text="Unchecked settings use provider defaults. Use '.' for decimals."
-                       FontSize="11" TextColor="{StaticResource MutedText}" />
+                       FontSize="11" Style="{StaticResource MutedLabel}" />
                 <Grid ColumnDefinitions="Auto,*,Auto,110"
                       RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
                       ColumnSpacing="4" RowSpacing="8">

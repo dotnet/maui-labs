@@ -76,7 +76,7 @@ public partial class MainViewModel : ObservableObject
     /// <summary>Restores the auto-saved conversation after the page is displayed.</summary>
     public async Task RestoreCachedChatAsync()
     {
-        if (_recording.CacheLoadError is { } error)
+        if (_recording.RestoreError is { } error)
         {
             Chat.StatusMessage = error;
             return;
@@ -138,7 +138,7 @@ public partial class MainViewModel : ObservableObject
             }
             else
             {
-                RestartReplay();
+                await ReplayAllAsync();
             }
         }
         catch (Exception exception)
@@ -286,7 +286,11 @@ public partial class MainViewModel : ObservableObject
             }
 
             if (IsCurrentRequest(requestGeneration))
-                Chat.StatusMessage = $"Response complete and auto-saved ({_recording.InteractionCount} interactions).";
+            {
+                var count = _recording.InteractionCount;
+                Chat.StatusMessage = $"Response complete and auto-saved " +
+                    $"({count} {(count == 1 ? "interaction" : "interactions")}).";
+            }
         }
         catch (OperationCanceledException)
         {

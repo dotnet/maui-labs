@@ -1,6 +1,6 @@
 # AIExtensions.Sample.ChatPlayground
 
-`AIExtensions.Sample.ChatPlayground` is a single-page .NET MAUI reference sample for exercising real `Microsoft.Extensions.AI` `IChatClient` features. It lists the registered clients using each client's descriptor; the sample configures Apple Intelligence and Azure OpenAI. Live requests contain no mock responses, canned responses, or cloud fallback. Every completed interaction is automatically recorded in a temporary chat file.
+`AIExtensions.Sample.ChatPlayground` is a single-page .NET MAUI reference sample for exercising real `Microsoft.Extensions.AI` `IChatClient` features. It lists the registered clients using each client's descriptor; the sample configures Apple Intelligence and Azure OpenAI. Live requests contain no mock responses, canned responses, or cloud fallback. Every completed interaction is automatically recorded in app-private storage.
 
 > **Local-only credential warning:** Debug builds embed the existing shared local `secrets.json` so a device app can read it. Release builds do not embed user secrets. Never distribute, publish, share, or commit a Debug build that embeds secrets.
 
@@ -38,7 +38,7 @@ Streaming is enabled by default. Structured JSON uses `ChatResponseFormat.ForJso
 
 ## Controls and tools
 
-The sidebar exposes instructions, Streaming and Structured JSON checkboxes, individual tools, and inline tool mode radios (`Auto`, `None`, `Require any`). These bind to `ChatToolMode` directly. The multiple-tool-calls choice uses a nullable boolean: `Default` leaves `AllowMultipleToolCalls` null, while `Allow` and `Disallow` send explicit values. Generation controls include Temperature, TopP, TopK, MaxOutputTokens, FrequencyPenalty, PresencePenalty, Seed, and comma-separated StopSequences. Check a setting's box to send it; leave it unchecked to keep the provider option unset. Decimal settings use `.` as the separator so requests are consistent across device locales. Tap the circular info icon beside a setting or client for its explanation; desktop users can also hover for a tooltip. Settings are disabled while Replay is selected because playback uses the saved request options.
+The sidebar exposes instructions, Streaming and Structured JSON checkboxes, individual tools, and inline tool mode radios (`Auto`, `None`, `Require any`). These bind to `ChatToolMode` directly. The multiple-tool-calls choice uses a nullable boolean: `Default` leaves `AllowMultipleToolCalls` null, while `Allow` and `Disallow` send explicit values. Generation controls include Temperature, TopP, TopK, MaxOutputTokens, FrequencyPenalty, PresencePenalty, Seed, and comma-separated StopSequences. Check a setting's box to send it; leave it unchecked to keep the provider option unset. Decimal settings use `.` as the separator so requests are consistent across device locales. Tap the circular info icon beside a setting or client for its explanation; desktop users can also hover for a tooltip. Replay hides live request options and explains that playback uses the options saved with each turn.
 
 The Azure chat client offers a **Reasoning summary** checkbox (on by default) that asks for a medium-effort visible summary. A model may omit a summary, especially for simple prompts. Only returned `TextReasoningContent.Text` is displayed; opaque `ProtectedData` is never shown as text. Other chat clients are not sent reasoning options.
 
@@ -52,9 +52,9 @@ System instructions are not displayed until a request actually uses them. The ch
 
 ## Auto-save, load, and replay
 
-Every completed real-client response, streaming or non-streaming, is recorded and atomically auto-saved to `FileSystem.CacheDirectory/chat-playground.autosave.json`. The header keeps **New** and **Save** beside the title. **New** replaces the current temporary chat with a blank one; use **Save** first if you need to keep the previous chat. **Save** prepares a JSON snapshot in cache and opens the system share sheet so you can save a durable copy to Files or another destination. Opening the share sheet does not itself confirm that you exported the file. The OS may evict cache, so export chats you need to keep. Recordings may contain private prompts, tool arguments/results, and inline image bytes; review them before sharing.
+Every completed real-client response, streaming or non-streaming, is recorded and atomically auto-saved to `FileSystem.AppDataDirectory/chat-playground.autosave.json`. Existing autosaves in `FileSystem.CacheDirectory` migrate on startup if no app-data autosave exists. The header keeps **New** and **Save** beside the title. **New** replaces the current chat with a blank one; use **Save** first if you need to keep the previous chat. **Save** prepares a JSON snapshot in cache and opens the system share sheet so you can save a copy to Files or another destination. Opening the share sheet does not itself confirm that you exported the file. The OS may evict the temporary export; clearing app data or uninstalling removes the autosave, so export chats you need to keep. App data can be included in device backups. Recordings may contain private prompts, tool arguments/results, and inline image bytes; review them and your backup settings before recording or sharing sensitive content.
 
-Selecting **Replay** replaces the composer with **Load**, **Restart**, **Play all**, and **Next turn**. Load validates a saved JSON file, replaces the active chat, and leaves it rewound for stepping without contacting a model. Restart clears the displayed transcript and rewinds the current recording without deleting it; Next turn advances one interaction, and Play all restarts from the beginning and plays every turn. On app startup, an auto-saved chat is played into view with Replay selected. Replay stays selected afterward; choose a real client to continue the chat once every turn has played. Live sending is blocked during partial playback or after Restart to avoid appending a response to incomplete history. **Stop** cancels playback and lets you retry. Save, Restart, Play all, and Next turn are disabled for an empty chat; Load is still available. A cancelled file picker or invalid file leaves the current chat intact.
+Selecting **Replay** replaces the composer with **Load**, **Restart**, **Play all**, and **Next turn**. Load validates a saved JSON file and automatically plays its complete chat into view without contacting a model. Restart clears the displayed transcript and rewinds the current recording without deleting it; Next turn advances one interaction, and Play all restarts from the beginning and plays every turn. On app startup, an auto-saved chat is also played into view with Replay selected. Replay stays selected afterward; choose a real client to continue the chat once every turn has played. Live sending is blocked during partial playback or after Restart to avoid appending a response to incomplete history. **Stop** cancels playback and lets you retry. Save, Restart, Play all, and Next turn are disabled for an empty chat; Load is still available. A cancelled file picker or invalid file leaves the current chat intact.
 
 `ReplayChatClient` verifies each request's messages and streaming mode before returning its saved response. Live and replayed responses use the same `IChatClient` execution and rendering path; only the user-message source differs (composer input versus saved request).
 
@@ -128,6 +128,10 @@ xcrun simctl list devices booted
 ./eng/common/dotnet.sh build -t:Run samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
   -f net10.0-ios -p:RuntimeIdentifier=iossimulator-arm64 "-p:_DeviceName=:v2:udid=<simulator-udid>"
 
+# On Android, configure Azure OpenAI first; Apple Intelligence is not available.
+./eng/common/dotnet.sh build -t:Run samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
+  -f net10.0-android "-p:AdbTarget=-s <device-serial>"
+
 # Target the correct agent when both apps are running.
 maui devflow list
 maui devflow --agent-port "<port>" ui query --automationId RequestStatusLabel
@@ -138,4 +142,4 @@ maui devflow --agent-port "<port>" ui query --automationId RequestStatusLabel
 
 Mac Catalyst builds include `com.apple.security.files.user-selected.read-write` for the Load and Choose image pickers while sandboxed; MAUI opens selected documents in place, even though this sample only reads them. Debug builds also include the `com.apple.security.network.server` entitlement required by DevFlow's local server.
 
-At compact widths, the settings sidebar becomes an overlay opened from the **Settings** button so the chat area remains usable on phones. The composer keeps its add, prompt, and send controls on one line.
+The UI follows the device's light or dark appearance. At compact widths, the settings sidebar opens as a full-width phone overlay (or a sidebar-sized tablet overlay) with a backdrop that blocks accidental chat actions. The composer keeps its add, prompt, and send controls on one line.

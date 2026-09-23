@@ -14,30 +14,39 @@ public sealed class ChatRecordingService
 
     public event EventHandler? Changed;
 
-    public ChatRecordingService(ILogger<ChatRecordingService> logger, string cacheDirectory)
+    public ChatRecordingService(
+        ILogger<ChatRecordingService> logger,
+        string dataDirectory,
+        string exportDirectory)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(cacheDirectory);
-        ExportPath = System.IO.Path.Combine(cacheDirectory, "chat-playground.json");
-        CachePath = System.IO.Path.Combine(cacheDirectory, "chat-playground.autosave.json");
+        ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(exportDirectory);
+        ExportPath = System.IO.Path.Combine(exportDirectory, "chat-playground.json");
+        AutosavePath = System.IO.Path.Combine(dataDirectory, "chat-playground.autosave.json");
+        var legacyPath = System.IO.Path.Combine(exportDirectory, "chat-playground.autosave.json");
+        var restorePath = File.Exists(AutosavePath) ? AutosavePath : legacyPath;
 
-        if (File.Exists(CachePath))
+        if (File.Exists(restorePath))
         {
             try
             {
-                _recording = ChatRecordingSerializer.Deserialize(File.ReadAllText(CachePath, Encoding.UTF8));
+                var json = File.ReadAllText(restorePath, Encoding.UTF8);
+                _recording = ChatRecordingSerializer.Deserialize(json);
+                if (restorePath != AutosavePath)
+                    WriteAtomic(AutosavePath, json);
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
                 JsonException or InvalidDataException or FormatException or ArgumentException or NotSupportedException)
             {
-                CacheLoadError = $"Could not restore the last recording: {exception.Message}";
+                RestoreError = $"Could not restore the last recording: {exception.Message}";
                 logger.LogWarning(exception, "Could not restore the last playground recording.");
             }
         }
     }
 
-    public string? CacheLoadError { get; }
+    public string? RestoreError { get; }
     public string ExportPath { get; }
-    public string CachePath { get; }
+    public string AutosavePath { get; }
 
     public int InteractionCount
     {
@@ -59,7 +68,7 @@ public sealed class ChatRecordingService
         lock (_gate)
         {
             var recording = new ChatRecording();
-            WriteAtomic(CachePath, ChatRecordingSerializer.Serialize(recording));
+            WriteAtomic(AutosavePath, ChatRecordingSerializer.Serialize(recording));
             _recording = recording;
             _cursor = 0;
         }
@@ -105,7 +114,7 @@ public sealed class ChatRecordingService
             _recording.Interactions.Add(interaction);
             try
             {
-                WriteAtomic(CachePath, ChatRecordingSerializer.Serialize(_recording));
+                WriteAtomic(AutosavePath, ChatRecordingSerializer.Serialize(_recording));
             }
             catch
             {
@@ -179,7 +188,7 @@ public sealed class ChatRecordingService
         var recording = await ChatRecordingSerializer.DeserializeAsync(stream, cancellationToken);
         lock (_gate)
         {
-            WriteAtomic(CachePath, ChatRecordingSerializer.Serialize(recording));
+            WriteAtomic(AutosavePath, ChatRecordingSerializer.Serialize(recording));
             _recording = recording;
             _cursor = 0;
         }

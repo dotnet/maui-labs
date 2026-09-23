@@ -288,7 +288,7 @@ public sealed class RecordedChatReplayTests
         recording.AddUpdate(streaming, ChatRecordingSerializer.Update(update));
         recording.CompleteStreaming(streaming);
 
-        var serialized = File.ReadAllText(recording.CachePath);
+        var serialized = File.ReadAllText(recording.AutosavePath);
         var saved = ChatRecordingSerializer.Deserialize(serialized);
         Assert.Equal(2, saved.Interactions.Count);
         using (var input = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(serialized)))
@@ -447,7 +447,7 @@ public sealed class RecordedChatReplayTests
         Assert.Equal("Echo", descriptor.DisplayName);
         Assert.False(descriptor.IsReplay);
         Assert.Equal(2, recording.InteractionCount);
-        var saved = ChatRecordingSerializer.Deserialize(File.ReadAllText(recording.CachePath));
+        var saved = ChatRecordingSerializer.Deserialize(File.ReadAllText(recording.AutosavePath));
         Assert.True(JsonNode.DeepEquals(saved.Interactions[0].Response, ChatRecordingSerializer.Response(response)));
         Assert.True(JsonNode.DeepEquals(saved.Interactions[1].Updates[0], ChatRecordingSerializer.Update(Assert.Single(updates))));
     }
@@ -466,6 +466,37 @@ public sealed class RecordedChatReplayTests
         await Assert.ThrowsAsync<InvalidDataException>(() => recording.LoadFileAsync(stream));
         Assert.Equal(1, recording.InteractionCount);
         Assert.Equal(0, recording.ReplayPosition);
+    }
+
+    [Fact]
+    public void LegacyCacheAutosave_MigratesToPersistentAppDataAndSurvivesCacheEviction()
+    {
+        using var directory = new RecordingDirectory();
+        Directory.CreateDirectory(directory.ExportDirectory);
+        File.Copy(FixturePath("no-tools.json"),
+            Path.Combine(directory.ExportDirectory, "chat-playground.autosave.json"));
+
+        var recording = directory.CreateService();
+        Assert.Equal(1, recording.InteractionCount);
+        Assert.Equal(Path.Combine(directory.DataDirectory, "chat-playground.autosave.json"),
+            recording.AutosavePath);
+        Assert.Equal(Path.Combine(directory.ExportDirectory, "chat-playground.json"), recording.ExportPath);
+        Assert.True(File.Exists(recording.AutosavePath));
+
+        Directory.Delete(directory.ExportDirectory, recursive: true);
+        Assert.Equal(1, directory.CreateService().InteractionCount);
+    }
+
+    [Fact]
+    public void NewRecording_DoesNotRestoreStaleLegacyCacheOnRestart()
+    {
+        using var directory = new RecordingDirectory();
+        Directory.CreateDirectory(directory.ExportDirectory);
+        File.Copy(FixturePath("no-tools.json"),
+            Path.Combine(directory.ExportDirectory, "chat-playground.autosave.json"));
+
+        directory.CreateService().NewRecording();
+        Assert.Equal(0, directory.CreateService().InteractionCount);
     }
 
     private static string FixturePath(string fileName) =>
@@ -495,8 +526,11 @@ public sealed class RecordedChatReplayTests
     {
         private readonly string _path = Path.Combine(Path.GetTempPath(), $"chat-playground-tests-{Guid.NewGuid():N}");
 
+        public string DataDirectory => Path.Combine(_path, "data");
+        public string ExportDirectory => Path.Combine(_path, "cache");
+
         public ChatRecordingService CreateService() =>
-            new(NullLogger<ChatRecordingService>.Instance, _path);
+            new(NullLogger<ChatRecordingService>.Instance, DataDirectory, ExportDirectory);
 
         public void Dispose()
         {

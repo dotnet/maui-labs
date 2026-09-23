@@ -4,7 +4,7 @@
              x:Class="AIExtensions.Sample.ChatPlayground.Controls.InfoTip"
              x:Name="Root">
     <ImageButton x:Name="InfoButton"
-                 Source="info.png"
+                 Source="{AppThemeBinding Light=info.png, Dark=info_dark.png}"
                  BackgroundColor="Transparent"
                  Clicked="InfoButtonClicked"
                  Padding="{OnPlatform 12, MacCatalyst=6, WinUI=6}"
