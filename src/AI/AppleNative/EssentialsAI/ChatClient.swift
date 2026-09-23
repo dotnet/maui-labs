@@ -247,6 +247,11 @@ public class ChatClientNative: NSObject {
         let otherMessages = Array(messages.dropLast())
 
         let model = SystemLanguageModel.default
+        if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *),
+           messages.contains(where: { message in message.contents.contains(where: { $0 is ImageContentNative }) }),
+           !model.capabilities.contains(.vision) {
+            throw NSError.chatError(.invalidContent, description: "The Apple Intelligence model does not support image input.")
+        }
 
         // Wrap the (Sendable) watcher's methods in explicit @Sendable closures so the partially
         // applied references carry Sendable-correctness through to ToolNative.

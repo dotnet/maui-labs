@@ -2,6 +2,7 @@
 using CoreGraphics;
 using Foundation;
 using Microsoft.Extensions.AI;
+using UIKit;
 using Xunit;
 
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
@@ -61,6 +62,19 @@ public class AppleIntelligenceChatClientImageTests
 	}
 
 	[Fact]
+	public void ToNative_DataContentWithUIImage_UsesNativeImage()
+	{
+		using var image = CreateTestImage();
+		using var uiImage = new UIImage(image);
+		var content = new DataContent(new byte[] { 0 }, "image/png") { RawRepresentation = uiImage };
+
+		var native = AppleIntelligenceChatClient.ToNative(content);
+
+		Assert.NotNull(native.CgImage);
+		Assert.Null(native.Data);
+	}
+
+	[Fact]
 	public void ToNative_FileUri_ProducesImageUrl()
 	{
 		var content = new UriContent("file:///tmp/example.png", "image/png");
@@ -112,6 +126,38 @@ public class AppleIntelligenceChatClientImageTests
 		Assert.NotNull(decoded);
 		Assert.Equal((nint)3, decoded!.Width);
 		Assert.Equal((nint)3, decoded.Height);
+	}
+
+	[Fact]
+	public void FromNative_EmptyImage_Throws()
+	{
+		var native = new ImageContentNative(NSData.FromArray([]), "image/png", 0, null)
+		{
+			Data = null,
+		};
+
+		Assert.Throws<InvalidDataException>(() => AppleIntelligenceChatClient.FromNative(native));
+	}
+
+	[Fact]
+	public async Task GetResponseAsync_WithImageOnOlderOS_ReportsUnsupported()
+	{
+		if (OperatingSystem.IsIOSVersionAtLeast(27) || OperatingSystem.IsMacCatalystVersionAtLeast(27))
+			return;
+
+		using var image = CreateTestImage();
+		var client = new AppleIntelligenceChatClient();
+		var messages = new List<ChatMessage>
+		{
+			new(ChatRole.User,
+			[
+				new TextContent("Describe this image."),
+				new DataContent(new byte[] { 0 }, "image/png") { RawRepresentation = image },
+			]),
+		};
+
+		var error = await Assert.ThrowsAsync<NSErrorException>(() => client.GetResponseAsync(messages));
+		Assert.Contains("27.0", error.Message);
 	}
 
 	[Fact]
