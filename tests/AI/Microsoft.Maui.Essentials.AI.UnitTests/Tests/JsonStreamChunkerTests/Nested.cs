@@ -215,6 +215,147 @@ public partial class JsonStreamChunkerTests
 		}
 
 		[Fact]
+		public void Process_NestedPendingStringsPauseThenResume_PreservesFinalValues()
+		{
+			var chunker = new JsonStreamChunker();
+			var lines = new[]
+			{
+				"""{"outer":{"a":"start","b":"other"}}""",
+				"""{"outer":{"a":"start","b":"other"}}""",
+				"""{"outer":{"a":"started","b":"other"}}"""
+			};
+
+			var chunks = lines.Select(chunker.Process).ToList();
+			chunks.Add(chunker.Flush());
+			var concatenated = string.Concat(chunks);
+
+			Assert.Equal("", chunks[1]);
+			Assert.True(IsValidJson(concatenated),
+				$"Invalid JSON: {concatenated}\n\nChunks:\n[{string.Join("], [", chunks)}]");
+			using var doc = JsonDocument.Parse(concatenated);
+			Assert.Equal("started", doc.RootElement.GetProperty("outer").GetProperty("a").GetString());
+			Assert.Equal("other", doc.RootElement.GetProperty("outer").GetProperty("b").GetString());
+		}
+
+		[Fact]
+		public void Process_NestedPendingContainersPauseThenResume_PreservesFinalContents()
+		{
+			var chunker = new JsonStreamChunker();
+			var lines = new[]
+			{
+				"""{"outer":{"a":["start"],"b":{"name":"other"}}}""",
+				"""{"outer":{"a":["start"],"b":{"name":"other"}}}""",
+				"""{"outer":{"a":["started","next"],"b":{"name":"other"}}}"""
+			};
+
+			var chunks = lines.Select(chunker.Process).ToList();
+			chunks.Add(chunker.Flush());
+			var concatenated = string.Concat(chunks);
+
+			Assert.Equal("", chunks[1]);
+			Assert.True(IsValidJson(concatenated),
+				$"Invalid JSON: {concatenated}\n\nChunks:\n[{string.Join("], [", chunks)}]");
+			using var doc = JsonDocument.Parse(concatenated);
+			Assert.Equal("started", doc.RootElement.GetProperty("outer").GetProperty("a")[0].GetString());
+			Assert.Equal("next", doc.RootElement.GetProperty("outer").GetProperty("a")[1].GetString());
+			Assert.Equal("other", doc.RootElement.GetProperty("outer").GetProperty("b").GetProperty("name").GetString());
+		}
+
+		[Fact]
+		public void Process_PendingNestedStrings_ParentCloses_EmitsWithinParent()
+		{
+			var chunker = new JsonStreamChunker();
+			var lines = new[]
+			{
+				"""{"outer":{"a":"","b":""}}""",
+				"""{"outer":{"a":"first","b":"second"},"after":true}"""
+			};
+
+			var chunks = lines.Select(chunker.Process).ToList();
+			chunks.Add(chunker.Flush());
+			var concatenated = string.Concat(chunks);
+
+			Assert.True(IsValidJson(concatenated),
+				$"Invalid JSON: {concatenated}\n\nChunks:\n[{string.Join("], [", chunks)}]");
+			using var doc = JsonDocument.Parse(concatenated);
+			Assert.Equal("first", doc.RootElement.GetProperty("outer").GetProperty("a").GetString());
+			Assert.Equal("second", doc.RootElement.GetProperty("outer").GetProperty("b").GetString());
+			Assert.True(doc.RootElement.GetProperty("after").GetBoolean());
+		}
+
+		[Fact]
+		public void Process_PendingNestedContainers_ParentCloses_EmitsWithinParent()
+		{
+			var chunker = new JsonStreamChunker();
+			var lines = new[]
+			{
+				"""{"outer":{"a":[],"b":{}}}""",
+				"""{"outer":{"a":[1],"b":{"value":2}},"after":true}"""
+			};
+
+			var chunks = lines.Select(chunker.Process).ToList();
+			chunks.Add(chunker.Flush());
+			var concatenated = string.Concat(chunks);
+
+			Assert.True(IsValidJson(concatenated),
+				$"Invalid JSON: {concatenated}\n\nChunks:\n[{string.Join("], [", chunks)}]");
+			using var doc = JsonDocument.Parse(concatenated);
+			Assert.Equal(1, doc.RootElement.GetProperty("outer").GetProperty("a")[0].GetInt32());
+			Assert.Equal(2, doc.RootElement.GetProperty("outer").GetProperty("b").GetProperty("value").GetInt32());
+			Assert.True(doc.RootElement.GetProperty("after").GetBoolean());
+		}
+
+		[Fact]
+		public void Process_PendingNestedStrings_NextArrayItem_EmitsWithinPreviousItem()
+		{
+			var chunker = new JsonStreamChunker();
+			var lines = new[]
+			{
+				"""{"items":[{"inner":{"a":"","b":""}}]}""",
+				"""{"items":[{"inner":{"a":"first","b":"second"}},{"inner":{"a":"next","b":"later"}}]}"""
+			};
+
+			var chunks = lines.Select(chunker.Process).ToList();
+			chunks.Add(chunker.Flush());
+			var concatenated = string.Concat(chunks);
+
+			Assert.True(IsValidJson(concatenated),
+				$"Invalid JSON: {concatenated}\n\nChunks:\n[{string.Join("], [", chunks)}]");
+			using var doc = JsonDocument.Parse(concatenated);
+			var items = doc.RootElement.GetProperty("items");
+			Assert.Equal("first", items[0].GetProperty("inner").GetProperty("a").GetString());
+			Assert.Equal("second", items[0].GetProperty("inner").GetProperty("b").GetString());
+			Assert.Equal("next", items[1].GetProperty("inner").GetProperty("a").GetString());
+			Assert.Equal("later", items[1].GetProperty("inner").GetProperty("b").GetString());
+		}
+
+		[Fact]
+		public void Process_PendingNestedStringAndRootSiblings_EmitsEachOnce()
+		{
+			var chunker = new JsonStreamChunker();
+			var lines = new[]
+			{
+				"""{"outer":{"a":"","b":""}}""",
+				"""{"outer":{"a":"","b":""},"alpha":"","beta":""}""",
+				"""{"outer":{"a":"value","b":""},"alpha":"","beta":"","final":1}"""
+			};
+
+			var chunks = lines.Select(chunker.Process).ToList();
+			chunks.Add(chunker.Flush());
+			var concatenated = string.Concat(chunks);
+
+			Assert.True(IsValidJson(concatenated),
+				$"Invalid JSON: {concatenated}\n\nChunks:\n[{string.Join("], [", chunks)}]");
+			using var doc = JsonDocument.Parse(concatenated);
+			Assert.Equal("value", doc.RootElement.GetProperty("outer").GetProperty("a").GetString());
+			Assert.Equal("", doc.RootElement.GetProperty("outer").GetProperty("b").GetString());
+			Assert.Equal("", doc.RootElement.GetProperty("alpha").GetString());
+			Assert.Equal("", doc.RootElement.GetProperty("beta").GetString());
+			Assert.Equal(1, doc.RootElement.GetProperty("final").GetInt32());
+			Assert.Equal(4, doc.RootElement.EnumerateObject().Count());
+		}
+
+		[Fact]
 		public void Process_EmptyObjectInArray_ProducesValidJson()
 		{
 			// Test pattern from mount-fuji line 35: {"activities": [{}, ...]}
