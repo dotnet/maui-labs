@@ -4,8 +4,9 @@
              xmlns:viewModels="clr-namespace:AIExtensions.Sample.ChatPlayground.ViewModels"
              xmlns:search="clr-namespace:AIExtensions.Sample.ChatPlayground.Features.Search"
              x:Class="AIExtensions.Sample.ChatPlayground.Views.ChatLibraryView"
-             x:DataType="viewModels:ChatLibraryViewModel">
-    <Grid IsVisible="{Binding IsOpen}" SafeAreaEdges="Container">
+             x:DataType="viewModels:ChatLibraryViewModel"
+             IsVisible="{Binding IsOpen}">
+    <Grid SafeAreaEdges="Container">
         <BoxView Color="{AppThemeBinding Light={StaticResource OverlayScrim}, Dark={StaticResource OverlayScrimDark}}"
                  AutomationId="ChatLibraryDismissOverlay">
             <BoxView.GestureRecognizers>
