@@ -44,6 +44,121 @@ public sealed class BuildTargetsTests
     }
 
     [Fact]
+    public async Task MauiAppProjectReference_ProjectReferenceArtifacts_UsesStandardMetadataAndExposesArtifactItem()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var result = await BuildWorkspaceAsync(
+            workspace,
+            """
+            <MauiAppProjectReference Include="..\App\App.csproj"
+                                     SetTargetFramework="TargetFramework=net10.0" />
+            """,
+            useProjectReferenceArtifacts: true);
+
+        Assert.True(result.ExitCode == 0, result.Output);
+        AssertArtifactItem(workspace, expectedName: "App", expectedTargetFramework: "");
+
+        var metadata = File.ReadAllText(Path.Combine(workspace.TestProjectDirectory, "maui-test-project-reference-metadata.txt")).Trim();
+        Assert.Equal("false|true|all|none|true|GetApplicationArtifacts|MauiAppArtifact|TargetFramework=net10.0|", metadata);
+    }
+
+    [Fact]
+    public async Task StandardProjectReference_ProjectReferenceArtifacts_ExposesArtifactWithoutMarker()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var result = await BuildWorkspaceAsync(
+            workspace,
+            """
+            <ProjectReference Include="..\App\App.csproj"
+                              ReferenceOutputAssembly="false"
+                              BuildReference="true"
+                              PrivateAssets="all"
+                              IncludeAssets="none"
+                              SkipGetTargetFrameworkProperties="true"
+                              Targets="GetApplicationArtifacts"
+                              OutputItemType="MauiAppArtifact"
+                              SetTargetFramework="TargetFramework=net10.0" />
+            """,
+            useProjectReferenceArtifacts: true);
+
+        Assert.True(result.ExitCode == 0, result.Output);
+        AssertArtifactItem(workspace, expectedName: "App", expectedTargetFramework: "");
+    }
+
+    [Fact]
+    public async Task MauiAppProjectReference_PackedPackage_RestoresAppAndExposesArtifactItem()
+    {
+        using var workspace = TestWorkspace.Create();
+        var packageSource = Path.Combine(workspace.Root, "feed");
+        Directory.CreateDirectory(packageSource);
+
+        var packageProject = Path.Combine(
+            TestWorkspace.GetRepoRoot(),
+            "src",
+            "AppProjectReference",
+            "Microsoft.Maui.Build.AppProjectReference",
+            "Microsoft.Maui.Build.AppProjectReference.csproj");
+        const string packageVersion = "1.0.0-test";
+
+        var packResult = await RunDotNetAsync(
+            workspace.Root,
+            "pack",
+            packageProject,
+            "--output",
+            packageSource,
+            "-p:PackageVersion=" + packageVersion,
+            "-v:minimal");
+        Assert.True(packResult.ExitCode == 0, packResult.Output);
+
+        workspace.WriteProjects(
+            """
+            <MauiAppProjectReference Include="..\App\App.csproj"
+                                     SetTargetFramework="TargetFramework=net10.0" />
+            """,
+            useProjectReferenceArtifacts: true,
+            packageSource: packageSource,
+            packageVersion: packageVersion);
+
+        var result = await RunDotNetAsync(
+            workspace.Root,
+            "build",
+            workspace.TestProjectPath,
+            "-v:minimal",
+            "-p:RestorePackagesPath=" + Path.Combine(workspace.Root, "packages"));
+
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.True(File.Exists(Path.Combine(workspace.AppProjectDirectory, "obj", "project.assets.json")), result.Output);
+        AssertArtifactItem(workspace, expectedName: "App", expectedTargetFramework: "");
+    }
+
+    [Fact]
+    public async Task MauiAppProjectReference_ProjectReferenceArtifacts_GraphBuildSucceeds()
+    {
+        using var workspace = TestWorkspace.Create();
+        workspace.WriteProjects(
+            """
+            <MauiAppProjectReference Include="..\App\App.csproj"
+                                     SetTargetFramework="TargetFramework=net10.0" />
+            """,
+            useProjectReferenceArtifacts: true);
+
+        var result = await RunDotNetAsync(
+            workspace.Root,
+            "msbuild",
+            workspace.TestProjectPath,
+            "-graphBuild",
+            "-restore",
+            "-t:Build",
+            "-v:minimal",
+            "-p:RestorePackagesPath=" + Path.Combine(workspace.Root, "packages"));
+
+        Assert.True(result.ExitCode == 0, result.Output);
+        AssertArtifactItem(workspace, expectedName: "App", expectedTargetFramework: "");
+    }
+
+    [Fact]
     public async Task MauiAppProjectReference_DefaultOutputRoot_IsRelativeToHostProject()
     {
         using var workspace = TestWorkspace.Create();
@@ -379,16 +494,26 @@ public sealed class BuildTargetsTests
     private static StringComparison PathComparison
         => OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
-    private static async Task<ProcessResult> BuildWorkspaceAsync(TestWorkspace workspace, string projectReferenceXml, bool setOutputRoot = true)
-        => await BuildWorkspaceAsync(workspace, projectReferenceXml, customAfterTargetsXml: null, setOutputRoot: setOutputRoot);
+    private static async Task<ProcessResult> BuildWorkspaceAsync(
+        TestWorkspace workspace,
+        string projectReferenceXml,
+        bool setOutputRoot = true,
+        bool useProjectReferenceArtifacts = false)
+        => await BuildWorkspaceAsync(
+            workspace,
+            projectReferenceXml,
+            customAfterTargetsXml: null,
+            setOutputRoot: setOutputRoot,
+            useProjectReferenceArtifacts: useProjectReferenceArtifacts);
 
     private static async Task<ProcessResult> BuildWorkspaceAsync(
         TestWorkspace workspace,
         string projectReferenceXml,
         string? customAfterTargetsXml,
-        bool setOutputRoot = true)
+        bool setOutputRoot = true,
+        bool useProjectReferenceArtifacts = false)
     {
-        workspace.WriteProjects(projectReferenceXml, customAfterTargetsXml, setOutputRoot);
+        workspace.WriteProjects(projectReferenceXml, customAfterTargetsXml, setOutputRoot, useProjectReferenceArtifacts);
 
         return await RunDotNetAsync(
             workspace.Root,
@@ -405,7 +530,8 @@ public sealed class BuildTargetsTests
         bool expectedInstallable = false,
         bool expectedLaunchable = false,
         bool expectSingleArtifact = true,
-        bool expectedArtifactIsDirectory = false)
+        bool expectedArtifactIsDirectory = false,
+        string expectedTargetFramework = "net10.0")
     {
         var artifactsPath = Path.Combine(workspace.TestProjectDirectory, "maui-test-app-artifacts.txt");
         Assert.True(File.Exists(artifactsPath), "Expected artifact capture at " + artifactsPath);
@@ -428,8 +554,12 @@ public sealed class BuildTargetsTests
         else
             Assert.True(File.Exists(parts[1]), "Expected app artifact file at " + parts[1]);
 
-        Assert.Equal(Path.GetFullPath(workspace.AppProjectPath), Path.GetFullPath(parts[2]));
-        Assert.Equal("net10.0", parts[3]);
+        var expectedProjectPath = NormalizePathForComparison(workspace.AppProjectPath);
+        var actualProjectPath = NormalizePathForComparison(parts[2]);
+        Assert.True(
+            string.Equals(expectedProjectPath, actualProjectPath, PathComparison),
+            $"Expected project path '{expectedProjectPath}', actual '{actualProjectPath}'.");
+        Assert.Equal(expectedTargetFramework, parts[3]);
         Assert.Equal(expectedArtifactType, parts[4]);
         Assert.Equal("com.example.testapp", parts[5]);
         Assert.Equal(expectedInstallable.ToString().ToLowerInvariant(), parts[6]);
@@ -448,6 +578,14 @@ public sealed class BuildTargetsTests
         var parts = line.Split('|');
         Assert.Equal(8, parts.Length);
         return parts[1];
+    }
+
+    private static string NormalizePathForComparison(string path)
+    {
+        var fullPath = Path.GetFullPath(path);
+        return !OperatingSystem.IsWindows() && fullPath.StartsWith("/private/", StringComparison.Ordinal)
+            ? fullPath["/private".Length..]
+            : fullPath;
     }
 
     private static async Task<ProcessResult> RunDotNetAsync(string workingDirectory, params string[] arguments)
@@ -545,7 +683,13 @@ public sealed class BuildTargetsTests
             return new TestWorkspace(root);
         }
 
-        public void WriteProjects(string projectReferenceXml, string? customAfterTargetsXml = null, bool setOutputRoot = true)
+        public void WriteProjects(
+            string projectReferenceXml,
+            string? customAfterTargetsXml = null,
+            bool setOutputRoot = true,
+            bool useProjectReferenceArtifacts = false,
+            string? packageSource = null,
+            string? packageVersion = null)
         {
             Directory.CreateDirectory(AppProjectDirectory);
             Directory.CreateDirectory(TestProjectDirectory);
@@ -577,6 +721,17 @@ public sealed class BuildTargetsTests
                                       Lines="Fake appinstaller for tests."
                                       Overwrite="true" />
                   </Target>
+
+                  <Target Name="GetApplicationArtifacts"
+                          DependsOnTargets="Build"
+                          Returns="@(ApplicationArtifact)">
+                    <ItemGroup>
+                      <ApplicationArtifact Include="$(TargetPath)">
+                        <PackageFormat>dll</PackageFormat>
+                        <ApplicationId>$(ApplicationId)</ApplicationId>
+                      </ApplicationArtifact>
+                    </ItemGroup>
+                  </Target>
                 </Project>
                 """);
 
@@ -589,26 +744,44 @@ public sealed class BuildTargetsTests
             if (customAfterTargetsXml is not null)
                 File.WriteAllText(CustomAfterTargetsPath, customAfterTargetsXml);
 
-            var repoRoot = FindRepoRoot();
+            var repoRoot = GetRepoRoot();
             var propsPath = Path.Combine(repoRoot, "src", "AppProjectReference", "Microsoft.Maui.Build.AppProjectReference", "build", "Microsoft.Maui.Build.AppProjectReference.props");
             var targetsPath = Path.Combine(repoRoot, "src", "AppProjectReference", "Microsoft.Maui.Build.AppProjectReference", "build", "Microsoft.Maui.Build.AppProjectReference.targets");
             var outputRoot = Path.Combine(Root, "test-app-output") + Path.DirectorySeparatorChar;
             var outputRootProperty = setOutputRoot
                 ? $"    <MauiAppRefOutputRoot>{XmlEscape(outputRoot)}</MauiAppRefOutputRoot>"
                 : "";
+            var projectReferenceArtifactsProperty = useProjectReferenceArtifacts
+                ? "    <MauiAppRefUseProjectReferenceArtifacts>true</MauiAppRefUseProjectReferenceArtifacts>"
+                : "";
+            var propsImport = packageSource is null
+                ? $"  <Import Project=\"{XmlEscape(propsPath)}\" />"
+                : "";
+            var targetsImport = packageSource is null
+                ? $"  <Import Project=\"{XmlEscape(targetsPath)}\" />"
+                : "";
+            var packageReference = packageSource is null
+                ? ""
+                : $"    <PackageReference Include=\"Microsoft.Maui.Build.AppProjectReference\" Version=\"{XmlEscape(packageVersion ?? throw new ArgumentNullException(nameof(packageVersion)))}\" />";
+            var restoreSourceProperty = packageSource is null
+                ? ""
+                : $"    <RestoreSources>{XmlEscape(packageSource)}</RestoreSources>";
 
             File.WriteAllText(
                 TestProjectPath,
                 $$"""
                 <Project Sdk="Microsoft.NET.Sdk">
-                  <Import Project="{{XmlEscape(propsPath)}}" />
+                {{propsImport}}
 
                   <PropertyGroup>
                     <TargetFramework>net10.0</TargetFramework>
                 {{outputRootProperty}}
+                {{projectReferenceArtifactsProperty}}
+                {{restoreSourceProperty}}
                   </PropertyGroup>
 
                   <ItemGroup>
+                {{packageReference}}
                 {{Indent(projectReferenceXml, 4)}}
                   </ItemGroup>
 
@@ -623,7 +796,15 @@ public sealed class BuildTargetsTests
                                       Overwrite="true" />
                   </Target>
 
-                  <Import Project="{{XmlEscape(targetsPath)}}" />
+                  <Target Name="CaptureMauiAppProjectReferenceMetadata"
+                          BeforeTargets="AssignProjectConfiguration"
+                          Condition="'$(MauiAppRefUseProjectReferenceArtifacts)' == 'true'">
+                    <WriteLinesToFile File="$(MSBuildProjectDirectory)\maui-test-project-reference-metadata.txt"
+                                      Lines="@(ProjectReference->'%(ReferenceOutputAssembly)|%(BuildReference)|%(PrivateAssets)|%(IncludeAssets)|%(SkipGetTargetFrameworkProperties)|%(Targets)|%(OutputItemType)|%(SetTargetFramework)|%(AdditionalProperties)')"
+                                      Overwrite="true" />
+                  </Target>
+
+                {{targetsImport}}
                 </Project>
                 """);
         }
@@ -643,7 +824,7 @@ public sealed class BuildTargetsTests
             }
         }
 
-        private static string FindRepoRoot()
+        public static string GetRepoRoot()
         {
             var directory = new DirectoryInfo(AppContext.BaseDirectory);
             while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "MauiLabs.slnx")))
