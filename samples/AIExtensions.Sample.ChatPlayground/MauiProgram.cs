@@ -140,13 +140,14 @@ public static class MauiProgram
         if (OperatingSystem.IsIOSVersionAtLeast(13) ||
             OperatingSystem.IsMacCatalystVersionAtLeast(13, 1))
         {
-            services.AddSingleton(new ChatEmbeddingProvider(
-                new ChatSearchDescriptor(
+            services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(_ =>
+                new DescribedEmbeddingGenerator(
+                    () => new NLEmbeddingGenerator(),
+                    new ChatSearchDescriptor(
                     "apple-natural-language", "Apple on-device index",
                     "Search by meaning with Apple's on-device NaturalLanguage embeddings.",
                     $"apple/natural-language/english/{typeof(NLEmbeddingGenerator).Assembly.GetName().Version}/{Environment.OSVersion.Version}",
-                    ChatSearchDataLocation.OnDevice),
-                () => new NLEmbeddingGenerator()));
+                    ChatSearchDataLocation.OnDevice)));
         }
 #endif
         var embeddingDeployment = configuration["AI:EmbeddingDeploymentName"];
@@ -159,21 +160,22 @@ public static class MauiProgram
 
             var endpoint = RequireOpenAIEndpoint(configuration["AI:Endpoint"]);
             var revision = configuration["AI:EmbeddingIndexRevision"] ?? "initial";
-            services.AddSingleton(new ChatEmbeddingProvider(
-                new ChatSearchDescriptor(
+            services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(_ =>
+                new DescribedEmbeddingGenerator(
+                    () => CreateOpenAIClient(endpoint, apiKey)
+                        .GetEmbeddingClient(embeddingDeployment).AsIEmbeddingGenerator(),
+                    new ChatSearchDescriptor(
                     $"azure/{embeddingDeployment}", $"Azure OpenAI: {embeddingDeployment}",
                     "Semantic search sends saved text and buffered queries to Azure.",
                     $"azure/{endpoint.AbsoluteUri}/{embeddingDeployment}/{revision}",
-                    ChatSearchDataLocation.Remote),
-                () => CreateOpenAIClient(endpoint, apiKey)
-                    .GetEmbeddingClient(embeddingDeployment).AsIEmbeddingGenerator()));
+                    ChatSearchDataLocation.Remote)));
         }
 
         services.AddSingleton(serviceProvider => new ChatSearchService(
             serviceProvider.GetRequiredService<IChatLibrary>(),
             serviceProvider.GetRequiredService<ILogger<ChatSearchService>>(),
             FileSystem.AppDataDirectory,
-            serviceProvider.GetServices<ChatEmbeddingProvider>()));
+            serviceProvider.GetServices<IEmbeddingGenerator<string, Embedding<float>>>()));
     }
 
     private static Uri RequireOpenAIEndpoint(string? value)

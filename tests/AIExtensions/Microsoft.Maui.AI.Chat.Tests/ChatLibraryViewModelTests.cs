@@ -169,15 +169,15 @@ public sealed class ChatLibraryViewModelTests
 
         public ChatSearchService CreateSearch(TestEmbeddings? apple = null, TestEmbeddings? azure = null)
         {
-            var providers = new List<ChatEmbeddingProvider>();
+            var providers = new List<IEmbeddingGenerator<string, Embedding<float>>>();
             if (apple is not null)
-                providers.Add(new ChatEmbeddingProvider(
+                providers.Add(new DescribedEmbeddingGenerator(() => apple,
                     new ChatSearchDescriptor(AppleId, "Apple index", "Local search",
-                        "apple/test", ChatSearchDataLocation.OnDevice), () => apple));
+                        "apple/test", ChatSearchDataLocation.OnDevice)));
             if (azure is not null)
-                providers.Add(new ChatEmbeddingProvider(
+                providers.Add(new DescribedEmbeddingGenerator(() => azure,
                     new ChatSearchDescriptor(AzureId, "Azure index", "Remote search",
-                        "azure/test", ChatSearchDataLocation.Remote), () => azure));
+                        "azure/test", ChatSearchDataLocation.Remote)));
             return new ChatSearchService(_recording, NullLogger<ChatSearchService>.Instance,
                 _root, providers);
         }

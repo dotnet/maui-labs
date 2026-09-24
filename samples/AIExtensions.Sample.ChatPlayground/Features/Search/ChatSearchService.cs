@@ -35,33 +35,34 @@ public sealed class ChatSearchService : IDisposable
     private readonly IChatLibrary _library;
     private readonly ILogger<ChatSearchService> _logger;
     private readonly string _indexDirectory;
-    private readonly Dictionary<string, ChatEmbeddingProvider> _providers;
+    private readonly Dictionary<string, IEmbeddingGenerator<string, Embedding<float>>> _generators;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Dictionary<string, StoredIndex> _cache = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, IEmbeddingGenerator<string, Embedding<float>>> _generators =
-        new(StringComparer.Ordinal);
 
     public ChatSearchService(
         IChatLibrary library,
         ILogger<ChatSearchService> logger,
         string dataDirectory,
-        IEnumerable<ChatEmbeddingProvider> providers)
+        IEnumerable<IEmbeddingGenerator<string, Embedding<float>>> generators)
     {
         ArgumentNullException.ThrowIfNull(library);
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
-        ArgumentNullException.ThrowIfNull(providers);
-        var registered = providers.ToArray();
-        if (registered.Any(provider => provider is null) ||
-            registered.Select(provider => provider.Descriptor.Id).Distinct(StringComparer.Ordinal).Count() != registered.Length ||
-            registered.Select(provider => provider.Descriptor.IndexIdentity).Distinct(StringComparer.Ordinal).Count() != registered.Length)
-            throw new ArgumentException("Embedding providers must have distinct IDs and model identities.", nameof(providers));
+        ArgumentNullException.ThrowIfNull(generators);
+        var registered = generators.Select(generator => (
+            Generator: generator,
+            Descriptor: generator?.GetService<ChatSearchDescriptor>()
+                ?? throw new ArgumentException("Each embedding generator must expose a search descriptor.", nameof(generators))))
+            .ToArray();
+        if (registered.Select(item => item.Descriptor.Id).Distinct(StringComparer.Ordinal).Count() != registered.Length ||
+            registered.Select(item => item.Descriptor.IndexIdentity).Distinct(StringComparer.Ordinal).Count() != registered.Length)
+            throw new ArgumentException("Embedding generators must have distinct IDs and model identities.", nameof(generators));
 
         _library = library;
         _logger = logger;
         _indexDirectory = Path.Combine(dataDirectory, "chat-playground", "indexes");
-        _providers = registered.ToDictionary(provider => provider.Descriptor.Id, StringComparer.Ordinal);
-        SearchModes = [ChatSearchDescriptor.Contains, .. registered.Select(provider => provider.Descriptor)];
+        _generators = registered.ToDictionary(item => item.Descriptor.Id, item => item.Generator, StringComparer.Ordinal);
+        SearchModes = [ChatSearchDescriptor.Contains, .. registered.Select(item => item.Descriptor)];
     }
 
     public IReadOnlyList<ChatSearchDescriptor> SearchModes { get; }
@@ -69,13 +70,20 @@ public sealed class ChatSearchService : IDisposable
     /// <summary>Searches using the selected backend, building only that backend's missing index.</summary>
     public async Task<ChatSearchResults> SearchAsync(
         string query, string searchModeId, CancellationToken cancellationToken = default,
-        IProgress<ChatSearchProgress>? progress = null)
+        IProgress<ChatSearchProgress>? progress = null, int? dimensions = null)
     {
+        if (dimensions is <= 0)
+            throw new ArgumentOutOfRangeException(nameof(dimensions), "Embedding dimensions must be positive.");
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             query = query.Trim();
             var (modelKey, generator) = GetProvider(searchModeId);
+            var options = dimensions is null ? null : new EmbeddingGenerationOptions { Dimensions = dimensions };
+            if (generator is null && options is not null)
+                throw new ArgumentException("Contains does not use embedding dimensions.", nameof(dimensions));
+            if (options is not null)
+                modelKey += $"/dimensions/{dimensions}";
             var notices = new List<string>();
 
             var chats = _library.ListChats().Where(chat => chat.InteractionCount > 0).ToArray();
@@ -86,7 +94,7 @@ public sealed class ChatSearchService : IDisposable
                 var chat = chats[i];
                 var completed = i;
                 indexes.Add((chat, await EnsureIndexAsync(
-                    chat, modelKey, generator, notices, cancellationToken,
+                    chat, modelKey, generator, options, notices, cancellationToken,
                     (chunks, total) => progress?.Report(new ChatSearchProgress(
                         completed, chats.Length, chat.Title, chunks, total, IsIndexing: true)))
                     .ConfigureAwait(false)));
@@ -98,7 +106,7 @@ public sealed class ChatSearchService : IDisposable
             if (query.Length > 0 && generator is not null && indexes.Any(item => item.Index.Chunks.Count > 0))
             {
                 queryVector = await Task.Run(
-                    () => generator.GenerateVectorAsync(query, cancellationToken: cancellationToken),
+                    () => generator.GenerateVectorAsync(query, options, cancellationToken),
                     cancellationToken).ConfigureAwait(false);
                 ValidateVector(queryVector.Span, dimension: 0);
                 for (var i = 0; i < indexes.Count; i++)
@@ -110,7 +118,7 @@ public sealed class ChatSearchService : IDisposable
                     notices.Add($"Rebuilt the outdated search vectors for {chat.Title}.");
                     var completed = i;
                     indexes[i] = (chat, await EnsureIndexAsync(
-                        chat, modelKey, generator, notices, cancellationToken,
+                        chat, modelKey, generator, options, notices, cancellationToken,
                         (chunks, total) => progress?.Report(new ChatSearchProgress(
                             completed, chats.Length, chat.Title, chunks, total, IsIndexing: true)),
                         rebuild: true)
@@ -187,20 +195,14 @@ public sealed class ChatSearchService : IDisposable
     {
         if (searchModeId == ChatSearchDescriptor.ContainsId)
             return (ChatSearchDescriptor.Contains.IndexIdentity, null);
-        if (!_providers.TryGetValue(searchModeId, out var provider))
-            throw new ArgumentException("The selected search method is not registered.", nameof(searchModeId));
         if (!_generators.TryGetValue(searchModeId, out var generator))
-        {
-            generator = provider.CreateGenerator()
-                ?? throw new InvalidOperationException(
-                    $"The {provider.Descriptor.DisplayName} embedding provider returned no generator.");
-            _generators.Add(searchModeId, generator);
-        }
-        return (provider.Descriptor.IndexIdentity, generator);
+            throw new ArgumentException("The selected search method is not registered.", nameof(searchModeId));
+        return (generator.GetService<ChatSearchDescriptor>()!.IndexIdentity, generator);
     }
 
     private async Task<StoredIndex> EnsureIndexAsync(
         SavedChat chat, string modelKey, IEmbeddingGenerator<string, Embedding<float>>? generator,
+        EmbeddingGenerationOptions? options,
         List<string> notices, CancellationToken cancellationToken,
         Action<int, int>? indexProgress = null, bool rebuild = false)
     {
@@ -266,7 +268,7 @@ public sealed class ChatSearchService : IDisposable
             {
                 var embeddings = await Task.Run(
                     () => generator.GenerateAsync(
-                        batch.Select(chunk => chunk.Text), cancellationToken: cancellationToken),
+                        batch.Select(chunk => chunk.Text), options, cancellationToken),
                     cancellationToken).ConfigureAwait(false);
                 if (embeddings.Count != batch.Length)
                     throw new InvalidDataException("The embedding provider returned the wrong number of vectors.");
@@ -446,8 +448,6 @@ public sealed class ChatSearchService : IDisposable
 
     public void Dispose()
     {
-        foreach (var generator in _generators.Values.Distinct<IEmbeddingGenerator<string, Embedding<float>>>(ReferenceEqualityComparer.Instance))
-            generator.Dispose();
         _gate.Dispose();
     }
 

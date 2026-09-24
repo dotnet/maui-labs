@@ -7,6 +7,7 @@ internal sealed class TestEmbeddings(
     : IEmbeddingGenerator<string, Embedding<float>>
 {
     public List<string> Inputs { get; } = [];
+    public List<int?> RequestedDimensions { get; } = [];
 
     public async Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(
         IEnumerable<string> values, EmbeddingGenerationOptions? options = null,
@@ -20,6 +21,7 @@ internal sealed class TestEmbeddings(
         {
             cancellationToken.ThrowIfCancellationRequested();
             Inputs.Add(text);
+            RequestedDimensions.Add(options?.Dimensions);
             result.Add(new Embedding<float>(embed(text)));
         }
         return result;

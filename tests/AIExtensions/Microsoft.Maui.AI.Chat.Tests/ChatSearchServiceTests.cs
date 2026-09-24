@@ -12,6 +12,25 @@ public sealed class ChatSearchServiceTests
     private const string AppleId = "apple-test";
     private const string AzureId = "azure-test";
 
+    [Fact]
+    public async Task DescribedGenerator_ExposesMetadataBeforeInitializingTheModel()
+    {
+        var initialized = false;
+        using var generator = new DescribedEmbeddingGenerator(
+            () =>
+            {
+                initialized = true;
+                return new TestEmbeddings(TextVector);
+            },
+            new ChatSearchDescriptor(AppleId, "Apple test", "On-device embedding",
+                "apple/test", ChatSearchDataLocation.OnDevice));
+
+        Assert.Equal(AppleId, generator.GetService<ChatSearchDescriptor>()!.Id);
+        Assert.False(initialized);
+        await generator.GenerateAsync(["cobalt"]);
+        Assert.True(initialized);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -261,6 +280,31 @@ public sealed class ChatSearchServiceTests
     }
 
     [Fact]
+    public async Task RequestedDimensions_AreSharedByIndexAndQueryButNeverReuseAnotherSpace()
+    {
+        using var directory = new SearchDirectory();
+        var recording = directory.CreateRecording();
+        await using (var input = File.OpenRead(FixturePath("no-tools.json")))
+            await recording.LoadFileAsync(input);
+
+        var generator = new TestEmbeddings(TextVector);
+        using var search = directory.CreateSearch(recording, local: () => generator);
+        await search.SearchAsync("pigment", AppleId);
+        var defaultCalls = generator.Inputs.Count;
+        await search.SearchAsync("pigment", AppleId, dimensions: 3);
+        Assert.Equal(defaultCalls * 2, generator.Inputs.Count);
+        Assert.All(generator.RequestedDimensions.Take(defaultCalls), dimension => Assert.Null(dimension));
+        Assert.All(generator.RequestedDimensions.Skip(defaultCalls), dimension => Assert.Equal(3, dimension));
+        Assert.Equal(2, Directory.GetFiles(directory.IndexDirectory,
+            recording.ActiveChatId + ".json", SearchOption.AllDirectories).Length);
+
+        await search.SearchAsync("pigment", AppleId);
+        Assert.Equal(defaultCalls + 1, generator.RequestedDimensions.Count(dimension => dimension is null));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            search.SearchAsync("pigment", AppleId, dimensions: 0));
+    }
+
+    [Fact]
     public async Task ReadOnlyLibrary_IsEnoughToSearchWithoutARecordingCoordinator()
     {
         using var directory = new SearchDirectory();
@@ -454,9 +498,10 @@ public sealed class ChatSearchServiceTests
     private static string FixturePath(string name) =>
         Path.Combine(AppContext.BaseDirectory, "TestData", name);
 
-    private static ChatEmbeddingProvider TestProvider(
+    private static IEmbeddingGenerator<string, Embedding<float>> TestProvider(
         string id, string identity, ChatSearchDataLocation location, TestEmbeddings generator) =>
-        new(new ChatSearchDescriptor(id, id, "Test embedding model", identity, location), () => generator);
+        new DescribedEmbeddingGenerator(() => generator,
+            new ChatSearchDescriptor(id, id, "Test embedding model", identity, location));
 
     private sealed class InlineLibrary(ChatRecording recording) : IChatLibrary
     {
@@ -495,17 +540,15 @@ public sealed class ChatSearchServiceTests
             Func<IEmbeddingGenerator<string, Embedding<float>>>? azure = null,
             string? localIdentity = null)
         {
-            var providers = new List<ChatEmbeddingProvider>();
+            var providers = new List<IEmbeddingGenerator<string, Embedding<float>>>();
             if (local is not null)
-                providers.Add(new ChatEmbeddingProvider(
+                providers.Add(new DescribedEmbeddingGenerator(local,
                     new ChatSearchDescriptor(AppleId, "Apple test", "Local search",
-                        localIdentity ?? "apple/natural-language/en/test", ChatSearchDataLocation.OnDevice),
-                    local));
+                        localIdentity ?? "apple/natural-language/en/test", ChatSearchDataLocation.OnDevice)));
             if (azure is not null)
-                providers.Add(new ChatEmbeddingProvider(
+                providers.Add(new DescribedEmbeddingGenerator(azure,
                     new ChatSearchDescriptor(AzureId, "Azure test", "Remote search",
-                        "azure/text-embedding-3-small/test", ChatSearchDataLocation.Remote),
-                    azure));
+                        "azure/text-embedding-3-small/test", ChatSearchDataLocation.Remote)));
             return new ChatSearchService(recording, NullLogger<ChatSearchService>.Instance,
                 DataDirectory, providers);
         }
