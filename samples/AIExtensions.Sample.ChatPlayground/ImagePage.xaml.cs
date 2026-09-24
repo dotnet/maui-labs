@@ -3,11 +3,11 @@ using AIExtensions.Sample.ChatPlayground.ViewModels;
 
 namespace AIExtensions.Sample.ChatPlayground;
 
-public partial class EmbeddingPage : ContentPage
+public partial class ImagePage : ContentPage
 {
     private readonly ResponsiveSettingsLayout _settingsLayout;
 
-    public EmbeddingPage(EmbeddingPlaygroundViewModel viewModel)
+    public ImagePage(ImagePlaygroundViewModel viewModel)
     {
         InitializeComponent();
         BindingContext = viewModel;

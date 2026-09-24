@@ -25,6 +25,7 @@ public partial class App : Application
             {
                 chat,
                 services.GetRequiredService<EmbeddingPage>(),
+                services.GetRequiredService<ImagePage>(),
             },
         };
         pages.CurrentPageChanged += (_, _) =>

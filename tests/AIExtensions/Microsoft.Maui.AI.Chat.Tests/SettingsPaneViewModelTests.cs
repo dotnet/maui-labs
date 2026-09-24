@@ -36,6 +36,18 @@ public sealed class SettingsPaneViewModelTests
     }
 
     [Fact]
+    public void Constructor_OnlyReplayClient_SelectsReplayWithoutLiveProvider()
+    {
+        using var replay = CreateClient("Replay", isReplay: true);
+
+        var settings = new SettingsPaneViewModel([replay]);
+
+        Assert.Same(replay, settings.SelectedClient);
+        Assert.False(settings.CanEditOptions);
+        Assert.Equal("Replay ready", settings.ClientStatus);
+    }
+
+    [Fact]
     public void CreateChatOptions_UsesBuiltInToolModesAndRejectsUnsupportedModes()
     {
         using var client = CreateClient("Live", isReplay: false);

@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:viewModels="clr-namespace:AIExtensions.Sample.ChatPlayground.ViewModels"
+             x:Class="AIExtensions.Sample.ChatPlayground.ImagePage"
+             x:DataType="viewModels:ImagePlaygroundViewModel"
+             Title="Images"
+             BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}">
+    <Grid SafeAreaEdges="None">
+        <Grid x:Name="RootGrid" ColumnDefinitions="300,*" ColumnSpacing="12" Padding="12"
+              SafeAreaEdges="Container">
+            <BoxView x:Name="SettingsBackdrop" Grid.ColumnSpan="2" ZIndex="9"
+                     Color="{AppThemeBinding Light={StaticResource OverlayScrim}, Dark={StaticResource OverlayScrimDark}}"
+                     IsVisible="False">
+                <BoxView.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="CloseSettings" />
+                </BoxView.GestureRecognizers>
+            </BoxView>
+            <Border x:Name="SettingsPanel" Grid.Column="0" ZIndex="10"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource PanelBackground}, Dark={StaticResource PanelBackgroundDark}}"
+                    Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}"
+                    StrokeShape="RoundRectangle 12">
+                <Grid RowDefinitions="Auto,*">
+                    <Grid Padding="16,16,16,0" ColumnDefinitions="*,Auto">
+                        <Label Text="Image settings" FontSize="20" FontAttributes="Bold" />
+                        <ImageButton x:Name="CloseSettingsButton" Grid.Column="1" Source="close.png"
+                                     Clicked="CloseSettings" IsVisible="False"
+                                     Style="{StaticResource AttachmentButton}"
+                                     SemanticProperties.Description="Close image settings" />
+                    </Grid>
+                    <ScrollView Grid.Row="1">
+                        <VerticalStackLayout Padding="16" Spacing="12">
+                            <Label Text="GENERATOR" Style="{StaticResource SectionHeading}" />
+                            <VerticalStackLayout Spacing="4"
+                                                 IsEnabled="{Binding IsIdle}"
+                                                 RadioButtonGroup.GroupName="ImageGenerator"
+                                                 RadioButtonGroup.SelectedValue="{Binding SelectedOption, Mode=TwoWay}"
+                                                 BindableLayout.ItemsSource="{Binding Generators}">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="viewModels:ImageGeneratorOption">
+                                        <VerticalStackLayout Spacing="2">
+                                            <RadioButton Content="{Binding Descriptor.DisplayName}"
+                                                         Value="{Binding .}"
+                                                         AutomationId="{Binding AutomationId}" />
+                                            <Label Text="{Binding Descriptor.Description}"
+                                                   Style="{StaticResource MutedLabel}"
+                                                   FontSize="12" Margin="36,0,0,6" />
+                                        </VerticalStackLayout>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+                            <BoxView HeightRequest="1"
+                                     Color="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}" />
+                            <Label Text="OPTIONS" Style="{StaticResource SectionHeading}" />
+                            <Label Text="Leave an option unset to use the provider default. An unsupported option is reported by the provider."
+                                   Style="{StaticResource MutedLabel}" FontSize="12" />
+                            <Label Text="Image count" FontSize="12" />
+                            <Entry Text="{Binding Count}" Placeholder="Provider default"
+                                   Keyboard="Numeric" IsEnabled="{Binding IsIdle}"
+                                   AutomationId="ImageCountEntry" />
+                            <Label Text="Image size" FontSize="12" />
+                            <Picker ItemsSource="{Binding ImageSizes}"
+                                    ItemDisplayBinding="{Binding DisplayName}"
+                                    SelectedItem="{Binding SelectedSize, Mode=TwoWay}"
+                                    IsEnabled="{Binding IsIdle}"
+                                    AutomationId="ImageSizePicker" />
+                            <Label Text="Output format" FontSize="12" />
+                            <Picker ItemsSource="{Binding MediaTypes}"
+                                    SelectedItem="{Binding SelectedMediaType, Mode=TwoWay}"
+                                    IsEnabled="{Binding IsIdle}"
+                                    AutomationId="ImageFormatPicker" />
+                        </VerticalStackLayout>
+                    </ScrollView>
+                </Grid>
+            </Border>
+
+            <Grid x:Name="ResultsPanel" Grid.Column="1" RowDefinitions="Auto,Auto,*" RowSpacing="12">
+                <Border Padding="16" StrokeShape="RoundRectangle 12"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource PanelBackground}, Dark={StaticResource PanelBackgroundDark}}"
+                        Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                        <ImageButton x:Name="OpenSettingsButton" Source="settings.png" IsVisible="False"
+                                     Clicked="OpenSettings" Style="{StaticResource AttachmentButton}"
+                                     SemanticProperties.Description="Open image settings" />
+                        <VerticalStackLayout Grid.Column="1" Spacing="2">
+                            <Label Text="IImageGenerator Playground" FontAttributes="Bold" FontSize="20" />
+                            <Label Text="Generate or edit images with a real registered generator."
+                                   Style="{StaticResource MutedLabel}" FontSize="12" />
+                        </VerticalStackLayout>
+                    </Grid>
+                </Border>
+
+                <Border Grid.Row="1" Padding="12" StrokeShape="RoundRectangle 12"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource PanelBackground}, Dark={StaticResource PanelBackgroundDark}}"
+                        Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}">
+                    <VerticalStackLayout Spacing="8">
+                        <Label Text="PROMPT" Style="{StaticResource SectionHeading}" />
+                        <Editor Text="{Binding Prompt}" AutoSize="TextChanges"
+                                MinimumHeightRequest="76" MaximumHeightRequest="150"
+                                Placeholder="Describe an image to create or how to edit the original"
+                                AutomationId="ImagePromptEditor" />
+                        <FlexLayout IsVisible="{Binding SupportsEdits}" Wrap="Wrap" AlignItems="Center">
+                            <Button Text="Choose image" Command="{Binding ChooseImageCommand}"
+                                    Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,4"
+                                    AutomationId="ImageChooseOriginalButton" />
+                            <Button Text="Sample image" Command="{Binding UseSampleImageCommand}"
+                                    Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,4"
+                                    AutomationId="ImageUseSampleButton" />
+                            <Button Text="Remove image" Command="{Binding RemoveImageCommand}"
+                                    IsVisible="{Binding HasOriginalImage}"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    AutomationId="ImageRemoveOriginalButton" />
+                        </FlexLayout>
+                        <HorizontalStackLayout IsVisible="{Binding HasOriginalImage}" Spacing="8">
+                            <Image Source="{Binding OriginalImagePreview}" WidthRequest="56" HeightRequest="56"
+                                   Aspect="AspectFill" />
+                            <Label Text="{Binding OriginalImageName}" VerticalOptions="Center"
+                                   LineBreakMode="TailTruncation" AutomationId="ImageOriginalName" />
+                        </HorizontalStackLayout>
+                        <FlexLayout Wrap="Wrap" AlignItems="Center">
+                            <Button Text="Generate image" Command="{Binding GenerateCommand}"
+                                    Margin="0,0,8,4" AutomationId="GenerateImageButton" />
+                            <Button Text="Cancel" Command="{Binding CancelCommand}"
+                                    IsVisible="{Binding IsBusy}"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    AutomationId="CancelImageButton" />
+                        </FlexLayout>
+                        <Label Text="{Binding StatusMessage}" Style="{StaticResource MutedLabel}"
+                               FontSize="12" AutomationId="ImageStatusLabel" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border Grid.Row="2" Padding="12" StrokeShape="RoundRectangle 12"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource PanelBackground}, Dark={StaticResource PanelBackgroundDark}}"
+                        Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}">
+                    <Grid RowDefinitions="Auto,*" RowSpacing="8">
+                        <Label Text="GENERATED IMAGES" Style="{StaticResource SectionHeading}" />
+                        <CollectionView Grid.Row="1" ItemsSource="{Binding GeneratedImages}"
+                                        ItemSizingStrategy="MeasureAllItems"
+                                        AutomationId="ImageResults">
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate x:DataType="viewModels:GeneratedImageViewModel">
+                                    <Border Margin="0,6" Padding="8" StrokeShape="RoundRectangle 8"
+                                            BackgroundColor="{AppThemeBinding Light={StaticResource InputBackground}, Dark={StaticResource InputBackgroundDark}}">
+                                        <VerticalStackLayout Spacing="6">
+                                            <Image Source="{Binding Source}" HeightRequest="360"
+                                                   Aspect="AspectFit" AutomationId="GeneratedImagePreview" />
+                                            <Label Text="{Binding Description}" Style="{StaticResource MutedLabel}"
+                                                   FontSize="12" />
+                                        </VerticalStackLayout>
+                                    </Border>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                            <CollectionView.EmptyView>
+                                <Label Text="Generated images appear here. They are not added to saved chats."
+                                       Style="{StaticResource MutedLabel}" Margin="12"
+                                       HorizontalTextAlignment="Center" />
+                            </CollectionView.EmptyView>
+                        </CollectionView>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Grid>
+    </Grid>
+</ContentPage>

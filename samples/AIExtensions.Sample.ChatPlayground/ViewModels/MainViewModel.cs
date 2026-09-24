@@ -64,7 +64,8 @@ public partial class MainViewModel : ObservableObject
     public IAsyncRelayCommand NewChatCommand =>
         _newChatCommand ??= new AsyncRelayCommand(NewChatAsync, CanChangeChat);
     public IAsyncRelayCommand BrowseChatsCommand =>
-        _browseChatsCommand ??= new AsyncRelayCommand(Library.ShowAsync, CanChangeChat);
+        _browseChatsCommand ??= new AsyncRelayCommand(Library.ShowAsync,
+            CanBrowseChats, AsyncRelayCommandOptions.AllowConcurrentExecutions);
     public IAsyncRelayCommand ImportFileCommand =>
         _importFileCommand ??= new AsyncRelayCommand(ImportChatFileAsync, CanChangeChat);
     public IAsyncRelayCommand<View> ExportChatCommand =>
@@ -101,6 +102,8 @@ public partial class MainViewModel : ObservableObject
     }
 
     private bool CanChangeChat() => !Chat.IsBusy && !Settings.IsBusy && !Library.IsBusy;
+    // Searching must not disable the popup's anchor while its contents are in use.
+    private bool CanBrowseChats() => !Chat.IsBusy && !Settings.IsBusy;
     private bool CanUseChat() => CanChangeChat() && _recording.InteractionCount > 0;
     private bool CanPlayReplay() => CanUseChat() && ReferenceEquals(_selectedClient, _replayClient);
     private bool CanReplayNext() => CanPlayReplay() && _recording.HasReplayRemaining;

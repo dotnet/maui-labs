@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.ClientModel;
+using AIExtensions.Sample.ChatPlayground.Features.Images;
 using AIExtensions.Sample.ChatPlayground.Features.Library;
 using AIExtensions.Sample.ChatPlayground.Features.Recording;
 using AIExtensions.Sample.ChatPlayground.Features.Search;
@@ -28,6 +29,7 @@ public static class MauiProgram
         builder.UseMauiApp<App>();
         builder.Configuration.AddEmbeddedUserSecrets();
         builder.Services.AddSingleton<IConfiguration>(builder.Configuration);
+        AddImageGenerators(builder.Services, builder.Configuration);
         AddChatClients(builder.Services, builder.Configuration);
 
 #if DEBUG
@@ -44,19 +46,23 @@ public static class MauiProgram
         builder.Services.AddSingleton<IChatLibrary>(provider => provider.GetRequiredService<ChatLibraryService>());
         builder.Services.AddSingleton<IChatRecordingSession>(provider => provider.GetRequiredService<ChatLibraryService>());
         AddChatSearch(builder.Services, builder.Configuration);
+        builder.Services.AddSingleton<ImageGenerationService>();
         builder.Services.AddSingleton(serviceProvider =>
             new ChatSearchSettings(serviceProvider.GetRequiredService<ChatSearchService>().SearchModes));
         builder.Services.AddSingleton<SettingsPaneViewModel>();
         builder.Services.AddSingleton<ChatAreaViewModel>();
         builder.Services.AddSingleton<ChatLibraryViewModel>();
         builder.Services.AddSingleton<EmbeddingPlaygroundViewModel>();
+        builder.Services.AddSingleton<ImagePlaygroundViewModel>();
         builder.Services.AddSingleton<MainViewModel>();
         builder.Services.AddTransient<MainPage>();
         builder.Services.AddTransient<EmbeddingPage>();
+        builder.Services.AddTransient<ImagePage>();
 
         return builder.Build();
     }
 
+#pragma warning disable MEAI001 // Azure chat uses an optional experimental image generator.
     private static void AddChatClients(IServiceCollection services, IConfiguration configuration)
     {
 #if IOS || MACCATALYST
@@ -65,24 +71,19 @@ public static class MauiProgram
                 serviceProvider.GetRequiredService<ILoggerFactory>(),
                 serviceProvider.GetRequiredService<IChatRecordingSession>()));
 #endif
-        if (!string.IsNullOrWhiteSpace(configuration["AI:Endpoint"]) ||
-            !string.IsNullOrWhiteSpace(configuration["AI:ApiKey"]) ||
-            !string.IsNullOrWhiteSpace(configuration["AI:DeploymentName"]) ||
-            !string.IsNullOrWhiteSpace(configuration["AI:ImageDeploymentName"]))
+        if (!string.IsNullOrWhiteSpace(configuration["AI:DeploymentName"]))
         {
             services.AddSingleton<IChatClient>(serviceProvider => CreateCloudChatClient(
                 configuration["AI:Endpoint"],
                 configuration["AI:ApiKey"],
                 configuration["AI:DeploymentName"],
-                configuration["AI:ImageDeploymentName"],
+                serviceProvider.GetServices<IImageGenerator>()
+                    .FirstOrDefault(generator =>
+                        generator.GetService<ImageGeneratorDescriptor>()?.Id ==
+                        $"azure/{configuration["AI:ImageDeploymentName"]}"),
                 serviceProvider.GetRequiredService<ILoggerFactory>(),
                 serviceProvider.GetRequiredService<IChatRecordingSession>()));
         }
-
-        if (!services.Any(service => service.ServiceType == typeof(IChatClient)))
-            throw new InvalidOperationException(
-                "No real chat client is configured. Use iOS or Mac Catalyst 26+ or configure " +
-                "AI:Endpoint, AI:ApiKey, AI:DeploymentName, and AI:ImageDeploymentName.");
 
         services.AddSingleton<IChatClient>(serviceProvider =>
             new ReplayChatClient(serviceProvider.GetRequiredService<IChatRecordingSession>())
@@ -94,42 +95,43 @@ public static class MauiProgram
                     IsReplay: true))
                 .Build());
     }
+#pragma warning restore MEAI001
 
 #pragma warning disable MEAI001, OPENAI001 // Responses and image adapters are experimental in the installed SDK.
     private static IChatClient CreateCloudChatClient(
         string? endpointValue,
         string? apiKey,
         string? deploymentName,
-        string? imageDeploymentName,
+        IImageGenerator? imageGenerator,
         ILoggerFactory loggerFactory,
         IChatRecordingSession recording)
     {
         if (string.IsNullOrWhiteSpace(endpointValue) ||
             string.IsNullOrWhiteSpace(apiKey) ||
-            string.IsNullOrWhiteSpace(deploymentName) ||
-            string.IsNullOrWhiteSpace(imageDeploymentName))
+            string.IsNullOrWhiteSpace(deploymentName))
         {
             throw new InvalidOperationException(
-                "Configure AI:Endpoint, AI:ApiKey, AI:DeploymentName, and AI:ImageDeploymentName in the shared local user secrets.");
+                "Configure AI:Endpoint, AI:ApiKey, and AI:DeploymentName in the shared local user secrets.");
         }
 
         var endpoint = RequireOpenAIEndpoint(endpointValue);
         var openAIClient = CreateOpenAIClient(endpoint, apiKey);
-        var generator = openAIClient.GetImageClient(imageDeploymentName).AsIImageGenerator();
+        var imageDeployment = imageGenerator?.GetService<ImageGeneratorDescriptor>()?.DisplayName;
         // Recording wraps the tool and image middleware so the saved response is the one shown in chat.
-        var client = openAIClient.GetResponsesClient().AsIChatClient(deploymentName)
+        var builder = openAIClient.GetResponsesClient().AsIChatClient(deploymentName)
             .AsBuilder()
             .UseRecording(recording)
             .UseDescriptor(new ChatClientDescriptor(
                 "Azure OpenAI",
-                $"Azure OpenAI deployment '{deploymentName}' is ready. Image generation uses '{imageDeploymentName}'.",
+                $"Azure OpenAI deployment '{deploymentName}' is ready." +
+                    (imageDeployment is null ? string.Empty : $" Image generation uses {imageDeployment}."),
                 SupportsImageInput: true,
                 SupportsReasoningSummary: true,
-                SupportsImageGeneration: true))
-            .UseLogging(loggerFactory)
-            .UseImageGenerationPreservingInputs(generator)
-            .UseFunctionInvocation()
-            .Build();
+                SupportsImageGeneration: imageGenerator is not null))
+            .UseLogging(loggerFactory);
+        if (imageGenerator is not null)
+            builder.UseImageGenerationPreservingInputs(imageGenerator);
+        var client = builder.UseFunctionInvocation().Build();
 
         return client;
     }
@@ -137,6 +139,26 @@ public static class MauiProgram
     private static OpenAIClient CreateOpenAIClient(Uri endpoint, string apiKey) =>
         new(new ApiKeyCredential(apiKey), new OpenAIClientOptions { Endpoint = endpoint });
 #pragma warning restore MEAI001, OPENAI001
+
+    private static void AddImageGenerators(IServiceCollection services, IConfiguration configuration)
+    {
+        var deployment = configuration["AI:ImageDeploymentName"];
+        if (string.IsNullOrWhiteSpace(deployment))
+            return;
+
+        var apiKey = configuration["AI:ApiKey"];
+        if (string.IsNullOrWhiteSpace(apiKey))
+            throw new InvalidOperationException("AI:ImageDeploymentName requires AI:ApiKey and AI:Endpoint.");
+        var endpoint = RequireOpenAIEndpoint(configuration["AI:Endpoint"]);
+#pragma warning disable MEAI001 // The installed OpenAI image adapter is experimental.
+        services.AddSingleton<IImageGenerator>(_ => new DescribedImageGenerator(
+            () => CreateOpenAIClient(endpoint, apiKey).GetImageClient(deployment).AsIImageGenerator(),
+            new ImageGeneratorDescriptor(
+                $"azure/{deployment}", $"Azure OpenAI: {deployment}",
+                "Generates or edits images with the configured Azure deployment. Prompts and original images leave this device; requests may incur charges.",
+                SupportsEdits: true, IsRemote: true)));
+#pragma warning restore MEAI001
+    }
 
     private static void AddChatSearch(IServiceCollection services, IConfiguration configuration)
     {

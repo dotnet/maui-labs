@@ -10,7 +10,7 @@
     <Grid SafeAreaEdges="None">
         <Grid x:Name="RootGrid" RowDefinitions="*" Padding="12" ColumnSpacing="12" SafeAreaEdges="Container">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition x:Name="SettingsColumn" Width="330" />
+                <ColumnDefinition Width="330" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 

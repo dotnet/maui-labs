@@ -21,7 +21,7 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
                 ?? throw new InvalidOperationException($"Chat client {index} did not expose a ChatClientDescriptor."),
             index)).ToArray();
         SelectedClient = Clients.FirstOrDefault(option => !option.Descriptor.IsReplay)?.Client
-            ?? throw new InvalidOperationException("At least one real chat client must be registered.");
+            ?? Clients.Single(option => option.Descriptor.IsReplay).Client;
     }
 
     public IReadOnlyList<ChatClientOption> Clients { get; }
