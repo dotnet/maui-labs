@@ -11,53 +11,44 @@ public partial class ChatLibraryViewModel : ObservableObject
     private static readonly TimeSpan DefaultSearchDelay = TimeSpan.FromMilliseconds(400);
 
     private readonly ChatSearchService _search;
+    private readonly ChatSearchSettings _settings;
     private readonly TimeSpan _searchDelay;
     private CancellationTokenSource? _searchCancellation;
     private IAsyncRelayCommand? _searchNowCommand;
     private IAsyncRelayCommand<ChatSearchHit>? _openChatCommand;
-    private IRelayCommand? _closeCommand;
-    private IAsyncRelayCommand? _importFileCommand;
 
-    public ChatLibraryViewModel(ChatSearchService search, TimeSpan? searchDelay = null)
+    public ChatLibraryViewModel(
+        ChatSearchService search, ChatSearchSettings settings, TimeSpan? searchDelay = null)
     {
         _search = search;
+        _settings = settings;
         _searchDelay = searchDelay ?? DefaultSearchDelay;
         if (_searchDelay < TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(searchDelay));
     }
 
     public ObservableCollection<ChatSearchHit> Results { get; } = [];
-    public IReadOnlyList<ChatSearchDescriptor> SearchModes => _search.SearchModes;
-    public double SearchPickerHeight => Math.Min(300, SearchModes.Count * 88);
-    public long VisitId { get; private set; }
 
     [ObservableProperty] private bool isOpen;
     [ObservableProperty] private bool isBusy;
     [ObservableProperty] private bool isIndexing;
-    [ObservableProperty] private ChatSearchDescriptor selectedMode = ChatSearchDescriptor.Contains;
     [ObservableProperty] private string query = string.Empty;
     [ObservableProperty] private string statusMessage = string.Empty;
     [ObservableProperty] private string indexProgressMessage = string.Empty;
     [ObservableProperty] private bool hasSearchError;
 
-    public string SearchIndexLabel => $"Search with: {SelectedMode.DisplayName}";
+    public string SearchIndexLabel => $"Using {_settings.SelectedMode.DisplayName}";
     public bool IsEmpty => Results.Count == 0 && !IsBusy;
     public string EmptyMessage => HasSearchError
         ? "Search failed. Check the status below or try another method."
         : Query.Length == 0
             ? "No saved chats yet. Import a file or start a chat."
-            : SelectedMode.Id == ChatSearchDescriptor.ContainsId
+            : _settings.SelectedMode.Id == ChatSearchDescriptor.ContainsId
                 ? "No saved chats contain that text. Try different words."
                 : "No similar chats found. Try different words or Contains.";
-    public string SearchModeDescription => SelectedMode.Description;
+    public string SearchModeDescription => _settings.SelectedMode.Description;
 
     public Func<string, Task>? OpenChatAsync { get; set; }
-
-    public IAsyncRelayCommand? ImportFileCommand
-    {
-        get => _importFileCommand;
-        set => SetProperty(ref _importFileCommand, value);
-    }
 
     public IAsyncRelayCommand SearchNowCommand =>
         _searchNowCommand ??= new AsyncRelayCommand(() => RefreshAsync(debounce: false));
@@ -66,25 +57,13 @@ public partial class ChatLibraryViewModel : ObservableObject
         _openChatCommand ??= new AsyncRelayCommand<ChatSearchHit>(OpenAsync,
             hit => IsOpen && !IsBusy && hit is not null);
 
-    public IRelayCommand CloseCommand => _closeCommand ??= new RelayCommand(Close);
-
     public async Task ShowAsync()
     {
-        SelectedMode = ChatSearchDescriptor.Contains;
         Query = string.Empty;
-        VisitId++;
         IsOpen = true;
-        await RefreshAsync(debounce: false);
-    }
-
-    public async Task SelectModeAsync(ChatSearchDescriptor selected)
-    {
-        ArgumentNullException.ThrowIfNull(selected);
-        if (!SearchModes.Contains(selected))
-            throw new ArgumentException("The selected search method is not registered.", nameof(selected));
-        if (!IsOpen)
-            return;
-        SelectedMode = selected;
+        OnPropertyChanged(nameof(SearchIndexLabel));
+        OnPropertyChanged(nameof(SearchModeDescription));
+        OnPropertyChanged(nameof(EmptyMessage));
         await RefreshAsync(debounce: false);
     }
 
@@ -111,7 +90,7 @@ public partial class ChatLibraryViewModel : ObservableObject
         _searchCancellation?.Cancel();
         using var cancellation = new CancellationTokenSource();
         _searchCancellation = cancellation;
-        var selected = SelectedMode;
+        var selected = _settings.SelectedMode;
         var text = Query;
         StatusMessage = selected.Id == ChatSearchDescriptor.ContainsId
             ? "Filtering saved chats..."
@@ -124,14 +103,18 @@ public partial class ChatLibraryViewModel : ObservableObject
                 await Task.Delay(_searchDelay, cancellation.Token);
             var progress = new Progress<ChatSearchProgress>(value =>
             {
-                if (!ReferenceEquals(_searchCancellation, cancellation) || !IsOpen || SelectedMode != selected)
+                if (!ReferenceEquals(_searchCancellation, cancellation) || !IsOpen)
                     return;
                 IsIndexing = value.IsIndexing;
                 if (value.IsIndexing)
+                {
                     IndexProgressMessage = $"Indexing {value.CompletedChats + 1}/{value.TotalChats} chats " +
                         $"({value.IndexedChunks}/{value.TotalChunks} excerpts): {value.ChatTitle}";
+                    StatusMessage = IndexProgressMessage;
+                }
             });
-            var result = await _search.SearchAsync(text, selected.Id, cancellation.Token, progress);
+            var result = await _search.SearchAsync(
+                text, selected.Id, cancellation.Token, progress, _settings.SelectedDimensions);
             if (!ReferenceEquals(_searchCancellation, cancellation))
                 return;
             SetResults(result.Hits);
@@ -151,35 +134,8 @@ public partial class ChatLibraryViewModel : ObservableObject
                 StatusMessage = $"{selected.DisplayName} search failed: {exception.Message}";
                 HasSearchError = true;
                 IsIndexing = false;
-                if (selected.Id != ChatSearchDescriptor.ContainsId)
-                {
-                    try
-                    {
-                        var keywords = await _search.SearchAsync(
-                            text, ChatSearchDescriptor.ContainsId, cancellation.Token);
-                        if (!ReferenceEquals(_searchCancellation, cancellation))
-                            return;
-                        SelectedMode = ChatSearchDescriptor.Contains;
-                        SetResults(keywords.Hits);
-                        StatusMessage += " Switched to Contains and showing local text matches.";
-                    }
-                    catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
-                    {
-                    }
-                    catch (Exception fallbackException)
-                    {
-                        if (!ReferenceEquals(_searchCancellation, cancellation))
-                            return;
-                        Results.Clear();
-                        OnPropertyChanged(nameof(IsEmpty));
-                        StatusMessage += $" Contains search also failed: {fallbackException.Message}";
-                    }
-                }
-                else
-                {
-                    Results.Clear();
-                    OnPropertyChanged(nameof(IsEmpty));
-                }
+                Results.Clear();
+                OnPropertyChanged(nameof(IsEmpty));
             }
         }
         finally
@@ -206,13 +162,6 @@ public partial class ChatLibraryViewModel : ObservableObject
         OnPropertyChanged(nameof(EmptyMessage));
         if (IsOpen)
             _ = RefreshAsync(debounce: true);
-    }
-
-    partial void OnSelectedModeChanged(ChatSearchDescriptor value)
-    {
-        OnPropertyChanged(nameof(SearchIndexLabel));
-        OnPropertyChanged(nameof(SearchModeDescription));
-        OnPropertyChanged(nameof(EmptyMessage));
     }
 
     partial void OnIsBusyChanged(bool value)

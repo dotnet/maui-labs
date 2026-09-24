@@ -31,6 +31,61 @@ public sealed class ChatSearchServiceTests
         Assert.True(initialized);
     }
 
+    [Fact]
+    public async Task EmbeddingPlayground_SharesGeneratorSelectionAndDimensionsWithSavedChatSearch()
+    {
+        using var directory = new SearchDirectory();
+        var recording = directory.CreateRecording();
+        await using (var input = File.OpenRead(FixturePath("no-tools.json")))
+            await recording.LoadFileAsync(input);
+        var generator = new TestEmbeddings(TextVector);
+        var described = TestProvider(AppleId, "apple/test", ChatSearchDataLocation.OnDevice, generator);
+        using var search = new ChatSearchService(recording, NullLogger<ChatSearchService>.Instance,
+            directory.DataDirectory, [described]);
+        var settings = new ChatSearchSettings(search.SearchModes);
+        var playground = new AIExtensions.Sample.ChatPlayground.ViewModels.EmbeddingPlaygroundViewModel(
+            search, settings, [described]);
+
+        Assert.Equal(ChatSearchDescriptor.Contains, settings.SelectedMode);
+        Assert.False(playground.GenerateVectorCommand.CanExecute(null));
+        playground.SelectedMode = search.SearchModes.Single(mode => mode.Id == AppleId);
+        playground.Dimensions = "3";
+        playground.VectorText = "cobalt";
+        await playground.GenerateVectorCommand.ExecuteAsync(null);
+        Assert.Contains("2 dimensions", playground.VectorSummary);
+
+        await playground.IndexChatsCommand.ExecuteAsync(null);
+        Assert.Contains("Saved-chat index is ready", playground.StatusMessage);
+        playground.Query = "pigment";
+        await playground.SearchChatsCommand.ExecuteAsync(null);
+        Assert.Single(playground.Results);
+        Assert.Equal(AppleId, settings.SelectedMode.Id);
+        Assert.All(generator.RequestedDimensions, dimension => Assert.Equal(3, dimension));
+    }
+
+    [Fact]
+    public async Task EmbeddingPlayground_InvalidSettingsReportErrorWithoutSilentFallback()
+    {
+        using var directory = new SearchDirectory();
+        var generator = new TestEmbeddings(TextVector);
+        var described = TestProvider(AppleId, "apple/test", ChatSearchDataLocation.OnDevice, generator);
+        using var search = new ChatSearchService(directory.CreateRecording(),
+            NullLogger<ChatSearchService>.Instance, directory.DataDirectory, [described]);
+        var settings = new ChatSearchSettings(search.SearchModes);
+        var playground = new AIExtensions.Sample.ChatPlayground.ViewModels.EmbeddingPlaygroundViewModel(
+            search, settings, [described])
+        {
+            SelectedMode = search.SearchModes.Single(mode => mode.Id == AppleId),
+            Dimensions = "invalid",
+            Query = "cobalt",
+        };
+
+        await playground.SearchChatsCommand.ExecuteAsync(null);
+        Assert.Contains("Dimensions must be a positive integer", playground.StatusMessage);
+        Assert.Empty(generator.Inputs);
+        Assert.Equal(AppleId, settings.SelectedMode.Id);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

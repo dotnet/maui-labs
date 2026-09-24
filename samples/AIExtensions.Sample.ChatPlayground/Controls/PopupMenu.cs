@@ -16,7 +16,8 @@ public static class PopupMenu
     public static void Dismiss(View anchor)
     {
         var root = FindRoot(anchor);
-        if (root.GetValue(ActiveMenuProperty) is MenuSession session && session.Anchor == anchor)
+        if (root.GetValue(ActiveMenuProperty) is MenuSession session &&
+            (session.Anchor == anchor || session.Content == anchor))
             session.Close();
     }
 
@@ -99,6 +100,7 @@ public static class PopupMenu
         }
 
         public View Anchor { get; }
+        public View Content => _menuContent;
 
         public void Open()
         {
@@ -107,6 +109,7 @@ public static class PopupMenu
             _overlay.ZIndex = 100;
             _root.Children.Add(_overlay);
             _overlay.SizeChanged += OverlaySizeChanged;
+            _menuContent.SizeChanged += ContentSizeChanged;
             Anchor.SizeChanged += AnchorSizeChanged;
             Anchor.PropertyChanged += AnchorPropertyChanged;
             Anchor.Unloaded += AnchorUnloaded;
@@ -116,6 +119,7 @@ public static class PopupMenu
         public void Close()
         {
             _overlay.SizeChanged -= OverlaySizeChanged;
+            _menuContent.SizeChanged -= ContentSizeChanged;
             _overlay.DismissRequested -= DismissRequested;
             Anchor.SizeChanged -= AnchorSizeChanged;
             Anchor.PropertyChanged -= AnchorPropertyChanged;
@@ -124,12 +128,12 @@ public static class PopupMenu
                 button.Clicked -= ActionClicked;
             foreach (var button in _imageActionButtons)
                 button.Clicked -= ActionClicked;
+            if (ReferenceEquals(_root.GetValue(ActiveMenuProperty), this))
+                _root.ClearValue(ActiveMenuProperty);
             _root.Children.Remove(_overlay);
             _overlay.MenuContent = null;
             if (_requestedWidth >= 0)
                 _menuContent.WidthRequest = _requestedWidth;
-            if (ReferenceEquals(_root.GetValue(ActiveMenuProperty), this))
-                _root.ClearValue(ActiveMenuProperty);
         }
 
         private void SubscribeActions(View view)
@@ -161,6 +165,7 @@ public static class PopupMenu
         private void DismissRequested(object? sender, EventArgs e) => Close();
         private void AnchorUnloaded(object? sender, EventArgs e) => Close();
         private void OverlaySizeChanged(object? sender, EventArgs e) => PositionMenu();
+        private void ContentSizeChanged(object? sender, EventArgs e) => PositionMenu();
         private void AnchorSizeChanged(object? sender, EventArgs e) => PositionMenu();
 
         private void AnchorPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

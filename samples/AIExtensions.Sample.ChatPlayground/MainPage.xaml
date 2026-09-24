@@ -5,7 +5,7 @@
              xmlns:views="clr-namespace:AIExtensions.Sample.ChatPlayground.Views"
              x:Class="AIExtensions.Sample.ChatPlayground.MainPage"
              x:DataType="viewModels:MainViewModel"
-             Title="IChatClient Playground"
+             Title="Chat"
              BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}">
     <Grid SafeAreaEdges="None">
         <Grid x:Name="RootGrid" RowDefinitions="*" Padding="12" ColumnSpacing="12" SafeAreaEdges="Container">
@@ -73,6 +73,15 @@
                                 <Label Text="New" Style="{StaticResource ChatActionLabel}" />
                             </VerticalStackLayout>
                             <VerticalStackLayout Margin="4,0" Spacing="2">
+                                <ImageButton Source="folder.png"
+                                             Style="{StaticResource ChatActionButton}"
+                                             Command="{Binding ImportFileCommand}"
+                                             SemanticProperties.Description="Import a saved chat JSON file"
+                                             ToolTipProperties.Text="Import a saved chat file"
+                                             AutomationId="ImportChatFileButton" />
+                                <Label Text="Import" Style="{StaticResource ChatActionLabel}" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Margin="4,0" Spacing="2">
                                 <ImageButton x:Name="ExportChatButton" Source="export.png"
                                              Style="{StaticResource ChatActionButton}"
                                              Command="{Binding ExportChatCommand}"
@@ -86,9 +95,10 @@
                     </Grid>
                 </Border>
 
-                <views:ChatArea x:Name="ChatArea" Grid.Row="1" BindingContext="{Binding Chat}" />
+                <views:ChatArea x:Name="ChatArea" Grid.Row="1"
+                                BindingContext="{Binding Chat}"
+                                Library="{Binding Source={RelativeSource AncestorType={x:Type viewModels:MainViewModel}}, Path=Library}" />
             </Grid>
         </Grid>
-        <views:ChatLibraryView BindingContext="{Binding Library}" ZIndex="20" />
     </Grid>
 </ContentPage>

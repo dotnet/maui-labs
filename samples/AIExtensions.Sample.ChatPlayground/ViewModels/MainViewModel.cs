@@ -46,7 +46,6 @@ public partial class MainViewModel : ObservableObject
         Chat.RestartReplayCommand = RestartReplayCommand;
         Chat.BrowseChatsCommand = BrowseChatsCommand;
         Library.OpenChatAsync = OpenLibraryChatAsync;
-        Library.ImportFileCommand = ImportFileCommand;
         Settings.PropertyChanged += SettingsPropertyChanged;
         Chat.PropertyChanged += ChatPropertyChanged;
         Library.PropertyChanged += LibraryPropertyChanged;

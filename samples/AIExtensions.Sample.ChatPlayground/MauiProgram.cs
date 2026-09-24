@@ -44,11 +44,15 @@ public static class MauiProgram
         builder.Services.AddSingleton<IChatLibrary>(provider => provider.GetRequiredService<ChatLibraryService>());
         builder.Services.AddSingleton<IChatRecordingSession>(provider => provider.GetRequiredService<ChatLibraryService>());
         AddChatSearch(builder.Services, builder.Configuration);
+        builder.Services.AddSingleton(serviceProvider =>
+            new ChatSearchSettings(serviceProvider.GetRequiredService<ChatSearchService>().SearchModes));
         builder.Services.AddSingleton<SettingsPaneViewModel>();
         builder.Services.AddSingleton<ChatAreaViewModel>();
         builder.Services.AddSingleton<ChatLibraryViewModel>();
+        builder.Services.AddSingleton<EmbeddingPlaygroundViewModel>();
         builder.Services.AddSingleton<MainViewModel>();
         builder.Services.AddTransient<MainPage>();
+        builder.Services.AddTransient<EmbeddingPage>();
 
         return builder.Build();
     }

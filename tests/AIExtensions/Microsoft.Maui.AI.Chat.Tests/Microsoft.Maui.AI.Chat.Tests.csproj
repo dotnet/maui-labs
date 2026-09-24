@@ -32,6 +32,7 @@
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\PlaygroundChatClientBuilderExtensions.cs" Link="Services\PlaygroundChatClientBuilderExtensions.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\ViewModels\SettingsPaneViewModel.cs" Link="ViewModels\SettingsPaneViewModel.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\ViewModels\ChatLibraryViewModel.cs" Link="ViewModels\ChatLibraryViewModel.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\ViewModels\EmbeddingPlaygroundViewModel.cs" Link="ViewModels\EmbeddingPlaygroundViewModel.cs" />
   </ItemGroup>
 
   <ItemGroup>

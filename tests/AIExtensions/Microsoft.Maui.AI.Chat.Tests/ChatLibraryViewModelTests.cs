@@ -13,33 +13,36 @@ public sealed class ChatLibraryViewModelTests
     private const string AzureId = "azure-test";
 
     [Fact]
-    public async Task FindChats_StartsWithContainsAndIndexesOnlyTheSelectedBackend()
+    public async Task FindChats_UsesEmbeddingPageSelectionWithoutChangingIt()
     {
         using var directory = new SearchDirectory();
         var apple = new TestEmbeddings(_ => [1f, 0f]);
         var azure = new TestEmbeddings(_ => [0f, 1f]);
         using var search = directory.CreateSearch(apple, azure);
-        var library = new ChatLibraryViewModel(search);
+        var settings = new ChatSearchSettings(search.SearchModes);
+        var library = new ChatLibraryViewModel(search, settings);
 
         await library.ShowAsync();
-        Assert.Equal(ChatSearchDescriptor.ContainsId, library.SelectedMode.Id);
-        Assert.Equal("Search with: Contains", library.SearchIndexLabel);
-        Assert.Equal(3, library.SearchModes.Count);
-        Assert.Equal(ChatSearchDataLocation.Remote, FindMode(library, AzureId).DataLocation);
+        Assert.Equal(ChatSearchDescriptor.ContainsId, settings.SelectedMode.Id);
+        Assert.Equal("Using Contains", library.SearchIndexLabel);
+        Assert.Equal(3, settings.SearchModes.Count);
+        Assert.Equal(ChatSearchDataLocation.Remote, FindMode(settings, AzureId).DataLocation);
         Assert.Empty(apple.Inputs);
         Assert.Empty(azure.Inputs);
 
-        await library.SelectModeAsync(FindMode(library, AppleId));
-        Assert.Equal("Search with: Apple index", library.SearchIndexLabel);
+        library.Close();
+        settings.SelectedMode = FindMode(settings, AppleId);
+        await library.ShowAsync();
+        Assert.Equal("Using Apple index", library.SearchIndexLabel);
         Assert.NotEmpty(apple.Inputs);
         Assert.Empty(azure.Inputs);
 
-        await library.SelectModeAsync(FindMode(library, AzureId));
-        Assert.Equal("Search with: Azure index", library.SearchIndexLabel);
-        Assert.NotEmpty(azure.Inputs);
         library.Close();
+        settings.SelectedMode = FindMode(settings, AzureId);
         await library.ShowAsync();
-        Assert.Equal(ChatSearchDescriptor.ContainsId, library.SelectedMode.Id);
+        Assert.Equal("Using Azure index", library.SearchIndexLabel);
+        Assert.NotEmpty(azure.Inputs);
+        Assert.Equal(AzureId, settings.SelectedMode.Id);
     }
 
     [Fact]
@@ -48,9 +51,12 @@ public sealed class ChatLibraryViewModelTests
         using var directory = new SearchDirectory();
         var apple = new TestEmbeddings(_ => [1f, 0f]);
         using var search = directory.CreateSearch(apple);
-        var library = new ChatLibraryViewModel(search, TimeSpan.FromMilliseconds(80));
+        var settings = new ChatSearchSettings(search.SearchModes)
+        {
+            SelectedMode = search.SearchModes.Single(mode => mode.Id == AppleId),
+        };
+        var library = new ChatLibraryViewModel(search, settings, TimeSpan.FromMilliseconds(80));
         await library.ShowAsync();
-        await library.SelectModeAsync(FindMode(library, AppleId));
         apple.Inputs.Clear();
 
         library.Query = "pi";
@@ -59,7 +65,7 @@ public sealed class ChatLibraryViewModelTests
         await WaitForAsync(() => !library.IsBusy && library.StatusMessage.Contains("found"));
 
         Assert.Equal(["pigment"], apple.Inputs);
-        Assert.Equal(AppleId, library.SelectedMode.Id);
+        Assert.Equal(AppleId, settings.SelectedMode.Id);
     }
 
     [Fact]
@@ -74,10 +80,13 @@ public sealed class ChatLibraryViewModelTests
             await release.Task.WaitAsync(cancellationToken);
         });
         using var search = directory.CreateSearch(apple);
-        var library = new ChatLibraryViewModel(search);
-        await library.ShowAsync();
+        var settings = new ChatSearchSettings(search.SearchModes)
+        {
+            SelectedMode = search.SearchModes.Single(mode => mode.Id == AppleId),
+        };
+        var library = new ChatLibraryViewModel(search, settings);
 
-        var selecting = library.SelectModeAsync(FindMode(library, AppleId));
+        var selecting = library.ShowAsync();
         await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await WaitForAsync(() => library.IsIndexing);
         Assert.Contains("Indexing 1/1 chats", library.IndexProgressMessage);
@@ -88,23 +97,25 @@ public sealed class ChatLibraryViewModelTests
     }
 
     [Fact]
-    public async Task FailedEmbeddingSearch_ReportsErrorAndSwitchesToLocalContains()
+    public async Task FailedEmbeddingSearch_ReportsErrorWithoutChangingTheMethod()
     {
         using var directory = new SearchDirectory();
         using var search = directory.CreateSearch(new TestEmbeddings(_ => [0f, 0f]));
-        var library = new ChatLibraryViewModel(search);
+        var settings = new ChatSearchSettings(search.SearchModes)
+        {
+            SelectedMode = search.SearchModes.Single(mode => mode.Id == AppleId),
+        };
+        var library = new ChatLibraryViewModel(search, settings);
         await library.ShowAsync();
-        await library.SelectModeAsync(FindMode(library, AppleId));
 
-        Assert.Equal(ChatSearchDescriptor.ContainsId, library.SelectedMode.Id);
+        Assert.Equal(AppleId, settings.SelectedMode.Id);
         Assert.True(library.HasSearchError);
         Assert.Contains("search failed", library.StatusMessage);
-        Assert.Contains("Switched to Contains", library.StatusMessage);
-        Assert.Single(library.Results);
+        Assert.Empty(library.Results);
     }
 
     [Fact]
-    public async Task SwitchingBackend_CancelsOldIndexingWithoutReplacingNewResults()
+    public async Task ClosingFind_CancelsIndexingAndReopeningUsesCurrentSettings()
     {
         using var directory = new SearchDirectory();
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -114,36 +125,40 @@ public sealed class ChatLibraryViewModelTests
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
         });
         using var search = directory.CreateSearch(blocked);
-        var library = new ChatLibraryViewModel(search);
-        await library.ShowAsync();
+        var settings = new ChatSearchSettings(search.SearchModes)
+        {
+            SelectedMode = search.SearchModes.Single(mode => mode.Id == AppleId),
+        };
+        var library = new ChatLibraryViewModel(search, settings);
 
-        var selecting = library.SelectModeAsync(FindMode(library, AppleId));
+        var selecting = library.ShowAsync();
         await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        await library.SelectModeAsync(ChatSearchDescriptor.Contains);
+        library.Close();
+        settings.SelectedMode = ChatSearchDescriptor.Contains;
         await selecting;
-        Assert.Equal(ChatSearchDescriptor.ContainsId, library.SelectedMode.Id);
+        await library.ShowAsync();
+        Assert.Equal(ChatSearchDescriptor.ContainsId, settings.SelectedMode.Id);
         Assert.False(library.IsBusy);
         Assert.False(library.IsIndexing);
         Assert.Single(library.Results);
     }
 
     [Fact]
-    public async Task MissingBackend_CannotBeSelected()
+    public void MissingBackend_CannotBeSelectedInSharedSettings()
     {
         using var directory = new SearchDirectory();
         using var search = directory.CreateSearch();
-        var library = new ChatLibraryViewModel(search);
+        var settings = new ChatSearchSettings(search.SearchModes);
 
-        await library.ShowAsync();
-        Assert.Single(library.SearchModes);
-        await Assert.ThrowsAsync<ArgumentException>(() => library.SelectModeAsync(
+        Assert.Single(settings.SearchModes);
+        Assert.Throws<ArgumentException>(() => settings.SelectedMode =
             new ChatSearchDescriptor("missing", "Missing", "Not configured", "missing/model",
-                ChatSearchDataLocation.OnDevice)));
-        Assert.Equal(ChatSearchDescriptor.ContainsId, library.SelectedMode.Id);
+                ChatSearchDataLocation.OnDevice));
+        Assert.Equal(ChatSearchDescriptor.ContainsId, settings.SelectedMode.Id);
     }
 
-    private static ChatSearchDescriptor FindMode(ChatLibraryViewModel library, string id) =>
-        Assert.Single(library.SearchModes, mode => mode.Id == id);
+    private static ChatSearchDescriptor FindMode(ChatSearchSettings settings, string id) =>
+        Assert.Single(settings.SearchModes, mode => mode.Id == id);
 
     private static async Task WaitForAsync(Func<bool> condition)
     {
