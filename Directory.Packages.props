@@ -40,6 +40,7 @@
   <!-- Roslyn (for source generators) -->
   <ItemGroup Label="Roslyn">
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="$(MicrosoftCodeAnalysisCSharpVersion)" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="5.6.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="$(MicrosoftCodeAnalysisAnalyzersVersion)" />
   </ItemGroup>
 
@@ -100,6 +101,11 @@
   <!-- Testing (Microsoft.NET.Test.Sdk and xunit.runner.visualstudio are
        implicitly provided by the Arcade SDK — do not define PackageVersion for them) -->
   <ItemGroup Label="Testing">
+    <PackageVersion Include="Microsoft.Testing.Platform" Version="$(MicrosoftTestingPlatformVersion)" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.TrxReport" Version="$(MicrosoftTestingPlatformVersion)" />
+    <PackageVersion Include="MSTest" Version="$(MSTestVersion)" />
+    <PackageVersion Include="NUnit" Version="$(NUnitVersion)" />
+    <PackageVersion Include="NUnit3TestAdapter" Version="$(NUnit3TestAdapterVersion)" />
     <PackageVersion Include="xunit" Version="$(XunitVersion)" />
     <PackageVersion Include="xunit.runner.utility" Version="$(XunitVersion)" />
     <PackageVersion Include="coverlet.collector" Version="$(CoverletCollectorVersion)" />
