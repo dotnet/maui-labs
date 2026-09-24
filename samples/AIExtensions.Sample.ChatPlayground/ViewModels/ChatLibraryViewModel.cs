@@ -25,21 +25,33 @@ public partial class ChatLibraryViewModel(ChatSearchService search) : Observable
     [ObservableProperty] private string statusMessage = string.Empty;
     [ObservableProperty] private bool hasSearchError;
 
+    public bool HasAppleEmbeddings => search.HasLocalEmbeddings;
     public bool HasAzureEmbeddings => search.HasAzureEmbeddings;
+    public bool HasSemanticSearch => UseAzureEmbeddings ? HasAzureEmbeddings : HasAppleEmbeddings;
     public bool CanEnableAzure => HasAzureEmbeddings && !UseAzureEmbeddings;
+    public bool CanDisableAzure => UseAzureEmbeddings;
+    public string SearchIndexLabel => UseAzureEmbeddings
+        ? "Azure OpenAI index"
+        : HasAppleEmbeddings ? "Apple on-device index" : "Text-only search";
+    public string DisableAzureLabel => HasAppleEmbeddings ? "Use Apple" : "Text only";
+    public string DisableAzureDescription => HasAppleEmbeddings
+        ? "Switch to Apple's on-device search index"
+        : "Stop using Azure and filter saved chats by text only";
     public bool IsEmpty => Results.Count == 0 && !IsBusy;
     public string EmptyMessage => HasSearchError
         ? "Search could not complete. Check the status below."
         : Query.Length == 0
             ? "No saved chats yet. Import a file or start a chat."
-            : "No saved chats match. Try different words or press Search.";
+            : HasSemanticSearch
+                ? "No text matches. Try other words or Find similar."
+                : "No saved chats match. Try different words.";
     public string SearchModeDescription => UseAzureEmbeddings
-        ? "Azure semantic search sends saved chat text and search terms to your configured deployment."
-        : search.HasLocalEmbeddings
-            ? "Text filters locally. Press Search for private on-device semantic matches."
-            : search.HasAzureEmbeddings
-                ? "Text filters locally. Enable Azure to search by meaning."
-                : "Text filters locally. Configure AI:EmbeddingDeploymentName to enable semantic search.";
+        ? "Text filters locally. Indexing and Find similar send saved text and queries to Azure."
+        : HasAppleEmbeddings
+            ? "Text filters locally. Find similar uses Apple's on-device NaturalLanguage index."
+            : HasAzureEmbeddings
+                ? "Type to filter locally. Enable Azure for meaning-based search."
+                : "Type to filter locally. Configure AI:EmbeddingDeploymentName for meaning-based search.";
 
     public Func<string, Task>? OpenChatAsync { get; set; }
 
@@ -51,7 +63,7 @@ public partial class ChatLibraryViewModel(ChatSearchService search) : Observable
 
     public IAsyncRelayCommand SemanticSearchCommand =>
         _semanticSearchCommand ??= new AsyncRelayCommand(() => RefreshAsync(semantic: true),
-            () => IsOpen && !IsBusy && !string.IsNullOrWhiteSpace(Query));
+            () => IsOpen && !IsBusy && HasSemanticSearch && !string.IsNullOrWhiteSpace(Query));
 
     public IAsyncRelayCommand<ChatSearchHit> OpenChatCommand =>
         _openChatCommand ??= new AsyncRelayCommand<ChatSearchHit>(OpenAsync,
@@ -68,6 +80,8 @@ public partial class ChatLibraryViewModel(ChatSearchService search) : Observable
 
     public async Task SelectAzureAsync(bool enabled)
     {
+        if (enabled && !HasAzureEmbeddings)
+            throw new InvalidOperationException("Azure semantic search is not configured.");
         UseAzureEmbeddings = enabled;
         await RefreshAsync(semantic: false);
     }
@@ -92,6 +106,9 @@ public partial class ChatLibraryViewModel(ChatSearchService search) : Observable
         _searchCancellation?.Cancel();
         using var cancellation = new CancellationTokenSource();
         _searchCancellation = cancellation;
+        StatusMessage = semantic
+            ? UseAzureEmbeddings ? "Searching and indexing with Azure..." : "Searching Apple's on-device index..."
+            : "Filtering saved chats...";
         IsBusy = true;
         try
         {
@@ -175,7 +192,14 @@ public partial class ChatLibraryViewModel(ChatSearchService search) : Observable
     partial void OnUseAzureEmbeddingsChanged(bool value)
     {
         OnPropertyChanged(nameof(CanEnableAzure));
+        OnPropertyChanged(nameof(CanDisableAzure));
+        OnPropertyChanged(nameof(HasSemanticSearch));
+        OnPropertyChanged(nameof(SearchIndexLabel));
+        OnPropertyChanged(nameof(DisableAzureLabel));
+        OnPropertyChanged(nameof(DisableAzureDescription));
         OnPropertyChanged(nameof(SearchModeDescription));
+        OnPropertyChanged(nameof(EmptyMessage));
+        SemanticSearchCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnIsBusyChanged(bool value)

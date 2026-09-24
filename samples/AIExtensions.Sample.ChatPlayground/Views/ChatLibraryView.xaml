@@ -6,7 +6,7 @@
              x:Class="AIExtensions.Sample.ChatPlayground.Views.ChatLibraryView"
              x:DataType="viewModels:ChatLibraryViewModel"
              IsVisible="{Binding IsOpen}">
-    <Grid SafeAreaEdges="Container">
+    <Grid x:Name="DialogHost" SafeAreaEdges="Container">
         <BoxView Color="{AppThemeBinding Light={StaticResource OverlayScrim}, Dark={StaticResource OverlayScrimDark}}"
                  AutomationId="ChatLibraryDismissOverlay">
             <BoxView.GestureRecognizers>
@@ -41,26 +41,42 @@
                            ReturnType="Search"
                            ReturnCommand="{Binding SemanticSearchCommand}"
                            AutomationId="ChatLibrarySearchEntry" />
-                    <Button Grid.Column="1" Text="Search" ImageSource="search.png"
+                    <Button Grid.Column="1" Text="Find similar" ImageSource="search.png"
                             Command="{Binding SemanticSearchCommand}"
-                            SemanticProperties.Description="Search saved chats by meaning when available or by text"
+                            IsVisible="{Binding HasSemanticSearch}"
+                            SemanticProperties.Description="Find saved chats by meaning using the selected search index"
                             AutomationId="ChatLibrarySemanticSearchButton" />
                 </Grid>
 
-                <VerticalStackLayout Grid.Row="2" Spacing="4">
-                    <Label Text="{Binding SearchModeDescription}" Style="{StaticResource MutedLabel}"
-                           FontSize="12" />
-                    <Button Text="Enable Azure search" IsVisible="{Binding CanEnableAzure}"
-                            Clicked="EnableAzureClicked"
-                            Style="{StaticResource SecondaryButtonStyle}"
-                            SemanticProperties.Description="Ask for consent before sending saved chat text to Azure"
-                            AutomationId="EnableAzureSearchButton" />
-                    <Button Text="Use private search" IsVisible="{Binding UseAzureEmbeddings}"
-                            Clicked="DisableAzureClicked"
-                            Style="{StaticResource SecondaryButtonStyle}"
-                            SemanticProperties.Description="Stop sending saved chat text to Azure"
-                            AutomationId="DisableAzureSearchButton" />
-                </VerticalStackLayout>
+                <Border Grid.Row="2" Padding="10,8"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource InputBackground}, Dark={StaticResource InputBackgroundDark}}"
+                        Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}"
+                        StrokeShape="RoundRectangle 8">
+                    <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto"
+                          ColumnSpacing="8" RowSpacing="4">
+                        <Label Text="{Binding SearchIndexLabel}" FontAttributes="Bold"
+                               FontSize="13" VerticalOptions="Center"
+                               AutomationId="ChatLibraryIndexProvider" />
+                        <Button Grid.Column="1" Text="Enable Azure"
+                                IsVisible="{Binding CanEnableAzure}"
+                                Clicked="EnableAzureClicked"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                HeightRequest="{OnPlatform 44, MacCatalyst=36, WinUI=36}"
+                                SemanticProperties.Description="Ask for consent before sending saved chat text to Azure"
+                                AutomationId="EnableAzureSearchButton" />
+                        <Button Grid.Column="1" Text="{Binding DisableAzureLabel}"
+                                IsVisible="{Binding CanDisableAzure}"
+                                Clicked="DisableAzureClicked"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                HeightRequest="{OnPlatform 44, MacCatalyst=36, WinUI=36}"
+                                SemanticProperties.Description="{Binding DisableAzureDescription}"
+                                AutomationId="DisableAzureSearchButton" />
+                        <Label Grid.Row="1" Grid.ColumnSpan="2"
+                               Text="{Binding SearchModeDescription}"
+                               Style="{StaticResource MutedLabel}" FontSize="12"
+                               AutomationId="ChatLibraryIndexDescription" />
+                    </Grid>
+                </Border>
 
                 <Grid Grid.Row="3">
                     <CollectionView ItemsSource="{Binding Results}"
@@ -111,8 +127,10 @@
                     <Label Text="{Binding StatusMessage}" Style="{StaticResource MutedLabel}"
                            FontSize="12" VerticalOptions="Center"
                            AutomationId="ChatLibraryStatus" />
-                    <Button Grid.Column="1" Text="Import file" ImageSource="folder.png"
+                    <Button Grid.Column="1" Text="Import file"
                             Command="{Binding ImportFileCommand}"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            HeightRequest="{OnPlatform 44, MacCatalyst=40, WinUI=40}"
                             SemanticProperties.Description="Import a saved chat JSON file"
                             AutomationId="ImportChatFileButton" />
                 </Grid>

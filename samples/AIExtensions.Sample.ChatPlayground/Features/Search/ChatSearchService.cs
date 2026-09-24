@@ -131,7 +131,8 @@ public sealed class ChatSearchService : IDisposable
                 var titleMatches = query.Length > 0 &&
                     chat.Title.Contains(query, StringComparison.OrdinalIgnoreCase);
                 var bestScore = titleMatches ? 0.5f : float.NegativeInfinity;
-                var snippet = index.Chunks.FirstOrDefault();
+                var snippet = index.Chunks.LastOrDefault(chunk => !chunk.IsUser) ??
+                    index.Chunks.FirstOrDefault();
 
                 foreach (var chunk in index.Chunks)
                 {

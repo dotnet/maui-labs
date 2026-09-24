@@ -9,6 +9,22 @@ namespace Microsoft.Maui.AI.Chat.Tests;
 public sealed class ChatSearchServiceTests
 {
     [Fact]
+    public async Task BrowsingSavedChats_ShowsAssistantExcerptInsteadOfRepeatingTitle()
+    {
+        using var directory = new SearchDirectory();
+        var recording = directory.CreateRecording();
+        await using (var input = File.OpenRead(FixturePath("no-tools.json")))
+            await recording.LoadFileAsync(input);
+
+        using var search = directory.CreateSearch(recording);
+        var result = await search.SearchAsync(string.Empty, semantic: false, useAzure: false);
+
+        var hit = Assert.Single(result.Hits);
+        Assert.StartsWith("Reply with exactly", hit.Title);
+        Assert.Equal("Assistant: cobalt", hit.Snippet);
+    }
+
+    [Fact]
     public async Task SearchAsync_OnlyIndexesNewTurnText_NotPreviousHistoryOrImageBytes()
     {
         using var directory = new SearchDirectory();

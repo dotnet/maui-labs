@@ -11,7 +11,7 @@ public partial class ChatLibraryView : ContentView
     public ChatLibraryView()
     {
         InitializeComponent();
-        SizeChanged += (_, _) => UpdateDialogSize();
+        DialogHost.SizeChanged += (_, _) => UpdateDialogSize();
     }
 
     protected override void OnBindingContextChanged()
@@ -29,9 +29,10 @@ public partial class ChatLibraryView : ContentView
 
     private void UpdateDialogSize()
     {
-        if (Height > 0)
+        if (DialogHost.Height > 0)
             DialogPanel.HeightRequest = Math.Min(620,
-                Math.Min(Math.Max(0, Height - 24), 285 + Math.Min(_viewModel?.Results.Count ?? 0, 3) * 96));
+                Math.Min(Math.Max(0, DialogHost.Height - 24),
+                    315 + Math.Max(1, Math.Min(_viewModel?.Results.Count ?? 0, 3)) * 96));
     }
 
     private async void EnableAzureClicked(object? sender, EventArgs e)

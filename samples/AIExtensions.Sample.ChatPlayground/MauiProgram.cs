@@ -43,10 +43,14 @@ public static class MauiProgram
         AddChatSearch(builder.Services, builder.Configuration);
         builder.Services.AddSingleton<SettingsPaneViewModel>();
         builder.Services.AddSingleton<ChatAreaViewModel>();
-        builder.Services.AddSingleton(serviceProvider => new ChatLibraryViewModel(
-            serviceProvider.GetRequiredService<ChatSearchService>())
+        builder.Services.AddSingleton(serviceProvider =>
         {
-            UseAzureEmbeddings = Preferences.Default.Get(ChatLibraryViewModel.AzureConsentPreferenceKey, false),
+            var search = serviceProvider.GetRequiredService<ChatSearchService>();
+            return new ChatLibraryViewModel(search)
+            {
+                UseAzureEmbeddings = search.HasAzureEmbeddings &&
+                    Preferences.Default.Get(ChatLibraryViewModel.AzureConsentPreferenceKey, false),
+            };
         });
         builder.Services.AddSingleton<MainViewModel>();
         builder.Services.AddTransient<MainPage>();
