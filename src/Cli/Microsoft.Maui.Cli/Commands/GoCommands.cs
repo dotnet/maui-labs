@@ -3,6 +3,8 @@
 
 using System.CommandLine;
 using System.CommandLine.Parsing;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
 
 namespace Microsoft.Maui.Cli.Commands;
 
@@ -93,7 +95,7 @@ public static class GoCommands
 				return 1;
 			}
 #if NET10_0_OR_GREATER
-			return await Microsoft.Maui.Go.Server.GoDevServer.RunSingleFileAsync(filePath, port, showQr, ct);
+			return await RunGoServerAsync(filePath, port, showQr, ct);
 #else
 			Console.Error.WriteLine("Error: 'maui go' dev server requires the .NET 10 build of the CLI.");
 			return 1;
@@ -121,14 +123,73 @@ public static class GoCommands
 		// Single .cs file → single-file mode
 		if (csFiles.Length == 1)
 		{
-			return await Microsoft.Maui.Go.Server.GoDevServer.RunSingleFileAsync(csFiles[0], port, showQr, ct);
+			return await RunGoServerAsync(csFiles[0], port, showQr, ct);
 		}
 
 		// Multiple .cs files → project mode (look for .csproj)
 		var csproj = Directory.GetFiles(cwd, "*.csproj").FirstOrDefault();
 		if (csproj is not null)
 		{
-			return await Microsoft.Maui.Go.Server.GoDevServer.RunAsync(cwd, port, showQr, ct);
+			return await RunGoServerAsync(cwd, port, showQr, ct);
+		}
+
+		static async Task<int> RunGoServerAsync(string target, int port, bool showQr, CancellationToken ct)
+		{
+			if (RuntimeFeature.IsDynamicCodeSupported)
+			{
+				return target.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+					? await Microsoft.Maui.Go.Server.GoDevServer.RunSingleFileAsync(target, port, showQr, ct)
+					: await Microsoft.Maui.Go.Server.GoDevServer.RunAsync(target, port, showQr, ct);
+			}
+
+			var serverPath = Path.Combine(
+				AppContext.BaseDirectory,
+				"go-server",
+				"Microsoft.Maui.Go.Server.dll");
+			if (!File.Exists(serverPath))
+			{
+				Console.Error.WriteLine($"Error: MAUI Go server was not found at '{serverPath}'.");
+				return 1;
+			}
+
+			var startInfo = new ProcessStartInfo("dotnet")
+			{
+				UseShellExecute = false,
+				WorkingDirectory = Directory.GetCurrentDirectory(),
+			};
+			startInfo.ArgumentList.Add(serverPath);
+			startInfo.ArgumentList.Add(target);
+			startInfo.ArgumentList.Add("--port");
+			startInfo.ArgumentList.Add(port.ToString(System.Globalization.CultureInfo.InvariantCulture));
+			if (!showQr)
+				startInfo.ArgumentList.Add("--no-qr");
+
+			using var process = Process.Start(startInfo);
+			if (process is null)
+			{
+				Console.Error.WriteLine("Error: Failed to start the MAUI Go server.");
+				return 1;
+			}
+
+			try
+			{
+				await process.WaitForExitAsync(ct);
+			}
+			catch (OperationCanceledException) when (ct.IsCancellationRequested)
+			{
+				try
+				{
+					if (!process.HasExited)
+						process.Kill(entireProcessTree: true);
+				}
+				catch (InvalidOperationException) when (process.HasExited)
+				{
+				}
+
+				await process.WaitForExitAsync(CancellationToken.None);
+				throw;
+			}
+			return process.ExitCode;
 		}
 
 		// Multiple .cs files but no .csproj — ask the author to disambiguate.
