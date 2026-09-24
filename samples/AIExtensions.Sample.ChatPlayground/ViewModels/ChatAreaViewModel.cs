@@ -82,10 +82,10 @@ public sealed partial class ChatAreaViewModel : ObservableObject
         set => SetProperty(ref _restartReplayCommand, value);
     }
 
-    public IAsyncRelayCommand? LoadChatCommand
+    public IAsyncRelayCommand? BrowseChatsCommand
     {
-        get => _loadChatCommand;
-        set => SetProperty(ref _loadChatCommand, value);
+        get => _browseChatsCommand;
+        set => SetProperty(ref _browseChatsCommand, value);
     }
 
     public IAsyncRelayCommand ChooseImageCommand =>
@@ -99,7 +99,7 @@ public sealed partial class ChatAreaViewModel : ObservableObject
     private IAsyncRelayCommand? _playReplayCommand;
     private IAsyncRelayCommand? _nextReplayCommand;
     private IRelayCommand? _restartReplayCommand;
-    private IAsyncRelayCommand? _loadChatCommand;
+    private IAsyncRelayCommand? _browseChatsCommand;
     private IAsyncRelayCommand? _chooseImageCommand;
     private IAsyncRelayCommand? _useSampleImageCommand;
     private IRelayCommand? _removeImageCommand;

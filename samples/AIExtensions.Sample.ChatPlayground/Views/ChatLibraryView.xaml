@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:viewModels="clr-namespace:AIExtensions.Sample.ChatPlayground.ViewModels"
+             xmlns:search="clr-namespace:AIExtensions.Sample.ChatPlayground.Features.Search"
+             x:Class="AIExtensions.Sample.ChatPlayground.Views.ChatLibraryView"
+             x:DataType="viewModels:ChatLibraryViewModel">
+    <Grid IsVisible="{Binding IsOpen}" SafeAreaEdges="Container">
+        <BoxView Color="{AppThemeBinding Light={StaticResource OverlayScrim}, Dark={StaticResource OverlayScrimDark}}"
+                 AutomationId="ChatLibraryDismissOverlay">
+            <BoxView.GestureRecognizers>
+                <TapGestureRecognizer Command="{Binding CloseCommand}" />
+            </BoxView.GestureRecognizers>
+        </BoxView>
+        <Border x:Name="DialogPanel"
+                MaximumWidthRequest="560"
+                Margin="12"
+                Padding="16"
+                HorizontalOptions="Fill"
+                VerticalOptions="Center"
+                BackgroundColor="{AppThemeBinding Light={StaticResource PanelBackground}, Dark={StaticResource PanelBackgroundDark}}"
+                Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}"
+                StrokeShape="RoundRectangle 12"
+                AutomationId="ChatLibraryDialog">
+            <Border.Shadow>
+                <Shadow Brush="Black" Offset="0,6" Opacity="0.2" Radius="12" />
+            </Border.Shadow>
+            <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="12">
+                <Grid ColumnDefinitions="*,Auto">
+                    <Label Text="Find a chat" FontAttributes="Bold" FontSize="20" VerticalOptions="Center" />
+                    <ImageButton Grid.Column="1" Source="close.png"
+                                 Command="{Binding CloseCommand}"
+                                 Style="{StaticResource AttachmentButton}"
+                                 SemanticProperties.Description="Close saved chats"
+                                 AutomationId="CloseChatLibraryButton" />
+                </Grid>
+
+                <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <Entry Text="{Binding Query}" Placeholder="Filter saved chats"
+                           ReturnType="Search"
+                           ReturnCommand="{Binding SemanticSearchCommand}"
+                           AutomationId="ChatLibrarySearchEntry" />
+                    <Button Grid.Column="1" Text="Search" ImageSource="search.png"
+                            Command="{Binding SemanticSearchCommand}"
+                            SemanticProperties.Description="Search saved chats by meaning when available or by text"
+                            AutomationId="ChatLibrarySemanticSearchButton" />
+                </Grid>
+
+                <VerticalStackLayout Grid.Row="2" Spacing="4">
+                    <Label Text="{Binding SearchModeDescription}" Style="{StaticResource MutedLabel}"
+                           FontSize="12" />
+                    <Button Text="Enable Azure search" IsVisible="{Binding CanEnableAzure}"
+                            Clicked="EnableAzureClicked"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            SemanticProperties.Description="Ask for consent before sending saved chat text to Azure"
+                            AutomationId="EnableAzureSearchButton" />
+                    <Button Text="Use private search" IsVisible="{Binding UseAzureEmbeddings}"
+                            Clicked="DisableAzureClicked"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            SemanticProperties.Description="Stop sending saved chat text to Azure"
+                            AutomationId="DisableAzureSearchButton" />
+                </VerticalStackLayout>
+
+                <Grid Grid.Row="3">
+                    <CollectionView ItemsSource="{Binding Results}"
+                                    ItemSizingStrategy="MeasureAllItems"
+                                    AutomationId="ChatLibraryResults">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="search:ChatSearchHit">
+                                <Border Margin="0,3" Padding="12"
+                                        BackgroundColor="{AppThemeBinding Light={StaticResource InputBackground}, Dark={StaticResource InputBackgroundDark}}"
+                                        Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}"
+                                        StrokeShape="RoundRectangle 8"
+                                        AutomationId="{Binding Id, StringFormat='SavedChat-{0}'}"
+                                        SemanticProperties.Description="{Binding Title, StringFormat='Open saved chat: {0}'}"
+                                        SemanticProperties.Hint="Replays this conversation without contacting a model">
+                                    <Border.GestureRecognizers>
+                                        <TapGestureRecognizer
+                                            Command="{Binding Source={RelativeSource AncestorType={x:Type viewModels:ChatLibraryViewModel}}, Path=OpenChatCommand}"
+                                            CommandParameter="{Binding .}" />
+                                    </Border.GestureRecognizers>
+                                    <VerticalStackLayout Spacing="3">
+                                        <Label Text="{Binding Title}" FontAttributes="Bold" LineBreakMode="TailTruncation" />
+                                        <Label Text="{Binding Snippet}" Style="{StaticResource MutedLabel}"
+                                               MaxLines="2" LineBreakMode="TailTruncation" />
+                                        <Label Text="{Binding Details}" Style="{StaticResource MutedLabel}"
+                                               FontSize="11" />
+                                    </VerticalStackLayout>
+                                </Border>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                        <CollectionView.EmptyView>
+                            <Label Text="{Binding EmptyMessage}"
+                                   IsVisible="{Binding IsEmpty}"
+                                   Style="{StaticResource MutedLabel}"
+                                   HorizontalTextAlignment="Center"
+                                   VerticalOptions="Center"
+                                   Margin="12"
+                                   AutomationId="ChatLibraryEmpty" />
+                        </CollectionView.EmptyView>
+                    </CollectionView>
+                    <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}"
+                                       Color="{StaticResource Primary}"
+                                       WidthRequest="28" HeightRequest="28"
+                                       VerticalOptions="Center" HorizontalOptions="Center"
+                                       AutomationId="ChatLibraryLoading" />
+                </Grid>
+
+                <Grid Grid.Row="4" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <Label Text="{Binding StatusMessage}" Style="{StaticResource MutedLabel}"
+                           FontSize="12" VerticalOptions="Center"
+                           AutomationId="ChatLibraryStatus" />
+                    <Button Grid.Column="1" Text="Import file" ImageSource="folder.png"
+                            Command="{Binding ImportFileCommand}"
+                            SemanticProperties.Description="Import a saved chat JSON file"
+                            AutomationId="ImportChatFileButton" />
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
+</ContentView>

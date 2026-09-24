@@ -473,18 +473,35 @@ public sealed class RecordedChatReplayTests
     {
         using var directory = new RecordingDirectory();
         Directory.CreateDirectory(directory.ExportDirectory);
-        File.Copy(FixturePath("no-tools.json"),
-            Path.Combine(directory.ExportDirectory, "chat-playground.autosave.json"));
+        var legacyPath = Path.Combine(directory.ExportDirectory, "chat-playground.autosave.json");
+        File.Copy(FixturePath("no-tools.json"), legacyPath);
 
         var recording = directory.CreateService();
         Assert.Equal(1, recording.InteractionCount);
-        Assert.Equal(Path.Combine(directory.DataDirectory, "chat-playground.autosave.json"),
-            recording.AutosavePath);
+        Assert.StartsWith(Path.Combine(directory.DataDirectory, "chat-playground", "chats") +
+            Path.DirectorySeparatorChar, recording.AutosavePath);
         Assert.Equal(Path.Combine(directory.ExportDirectory, "chat-playground.json"), recording.ExportPath);
-        Assert.True(File.Exists(recording.AutosavePath));
+        Assert.Equal(File.ReadAllBytes(FixturePath("no-tools.json")), File.ReadAllBytes(recording.AutosavePath));
+        Assert.False(File.Exists(legacyPath));
 
         Directory.Delete(directory.ExportDirectory, recursive: true);
         Assert.Equal(1, directory.CreateService().InteractionCount);
+    }
+
+    [Fact]
+    public void PersistentAutosave_MigratesWithoutChangingTheRecordedBytes()
+    {
+        using var directory = new RecordingDirectory();
+        Directory.CreateDirectory(directory.DataDirectory);
+        var oldPath = Path.Combine(directory.DataDirectory, "chat-playground.autosave.json");
+        File.Copy(FixturePath("multi-turn-image-in-out.json"), oldPath);
+
+        var recording = directory.CreateService();
+        Assert.Equal(2, recording.InteractionCount);
+        Assert.Equal(File.ReadAllBytes(FixturePath("multi-turn-image-in-out.json")),
+            File.ReadAllBytes(recording.AutosavePath));
+        Assert.False(File.Exists(oldPath));
+        Assert.Equal(2, directory.CreateService().InteractionCount);
     }
 
     [Fact]
@@ -495,8 +512,116 @@ public sealed class RecordedChatReplayTests
         File.Copy(FixturePath("no-tools.json"),
             Path.Combine(directory.ExportDirectory, "chat-playground.autosave.json"));
 
-        directory.CreateService().NewRecording();
-        Assert.Equal(0, directory.CreateService().InteractionCount);
+        var recording = directory.CreateService();
+        var previousId = recording.ActiveChatId;
+        recording.NewRecording();
+
+        var restored = directory.CreateService();
+        Assert.Equal(0, restored.InteractionCount);
+        Assert.NotEqual(previousId, restored.ActiveChatId);
+        Assert.Contains(restored.ListChats(), chat => chat.Id == previousId && chat.InteractionCount == 1);
+        restored.OpenChat(previousId);
+        Assert.Equal(1, restored.InteractionCount);
+    }
+
+    [Fact]
+    public async Task ImportedChats_RemainIndependentAndCanBeReopenedAfterRestart()
+    {
+        using var directory = new RecordingDirectory();
+        var recording = directory.CreateService();
+        await using (var first = File.OpenRead(FixturePath("no-tools.json")))
+            await recording.LoadFileAsync(first);
+        var firstId = recording.ActiveChatId;
+        await using (var second = File.OpenRead(FixturePath("multi-turn-tools.json")))
+            await recording.LoadFileAsync(second);
+        var secondId = recording.ActiveChatId;
+        Assert.NotEqual(firstId, secondId);
+
+        recording.OpenChat(firstId);
+        Assert.Equal(1, recording.InteractionCount);
+        recording.NewRecording();
+        var latestId = recording.ActiveChatId;
+        Assert.Equal(0, recording.InteractionCount);
+
+        var restored = directory.CreateService();
+        Assert.Equal(latestId, restored.ActiveChatId);
+        Assert.Contains(restored.ListChats(), chat => chat.Id == firstId && chat.InteractionCount == 1);
+        Assert.Contains(restored.ListChats(), chat => chat.Id == secondId && chat.InteractionCount == 2);
+        restored.OpenChat(secondId);
+        Assert.Equal(2, restored.InteractionCount);
+        Assert.Equal(0, restored.ReplayPosition);
+    }
+
+    [Fact]
+    public async Task OpenChat_UnknownId_DoesNotReplaceActiveChat()
+    {
+        using var directory = new RecordingDirectory();
+        var recording = directory.CreateService();
+        await using (var source = File.OpenRead(FixturePath("no-tools.json")))
+            await recording.LoadFileAsync(source);
+        var activeId = recording.ActiveChatId;
+
+        Assert.Throws<ArgumentException>(() => recording.OpenChat(Guid.NewGuid().ToString("N")));
+        Assert.Equal(activeId, recording.ActiveChatId);
+        Assert.Equal(1, recording.InteractionCount);
+    }
+
+    [Fact]
+    public async Task ReopenActiveChat_ThenAppendAndImport_RetainsItsUpdatedCatalogSummary()
+    {
+        using var directory = new RecordingDirectory();
+        var recording = directory.CreateService();
+        await using (var source = File.OpenRead(FixturePath("no-tools.json")))
+            await recording.LoadFileAsync(source);
+        var previousId = recording.ActiveChatId;
+
+        recording.OpenChat(previousId);
+        recording.AddResponse(
+            ChatRecordingSerializer.Request([new ChatMessage(ChatRole.User, "One more question")], null),
+            new ChatResponse([new ChatMessage(ChatRole.Assistant, "Another answer")]));
+        await using (var source = File.OpenRead(FixturePath("multi-turn-tools.json")))
+            await recording.LoadFileAsync(source);
+
+        Assert.Contains(recording.ListChats(), chat => chat.Id == previousId && chat.InteractionCount == 2);
+        var restored = directory.CreateService();
+        restored.OpenChat(previousId);
+        Assert.Equal(2, restored.InteractionCount);
+    }
+
+    [Fact]
+    public async Task DamagedCatalog_ReportsRestoreErrorWithoutOverwritingSavedChats()
+    {
+        using var directory = new RecordingDirectory();
+        var recording = directory.CreateService();
+        await using (var source = File.OpenRead(FixturePath("no-tools.json")))
+            await recording.LoadFileAsync(source);
+        var path = recording.AutosavePath;
+        var original = File.ReadAllBytes(path);
+        File.WriteAllText(Path.Combine(directory.DataDirectory, "chat-playground", "catalog.json"), "{ damaged");
+
+        var restored = directory.CreateService();
+        Assert.Contains("Could not restore the chat library", restored.RestoreError);
+        Assert.Throws<InvalidOperationException>(() => restored.NewRecording());
+        Assert.Equal(original, File.ReadAllBytes(path));
+    }
+
+    [Fact]
+    public async Task CatalogWithNullEntry_ReportsRestoreErrorWithoutOverwritingSavedChats()
+    {
+        using var directory = new RecordingDirectory();
+        var recording = directory.CreateService();
+        await using (var source = File.OpenRead(FixturePath("no-tools.json")))
+            await recording.LoadFileAsync(source);
+        var path = recording.AutosavePath;
+        var original = File.ReadAllBytes(path);
+        var catalogPath = Path.Combine(directory.DataDirectory, "chat-playground", "catalog.json");
+        var catalog = JsonNode.Parse(File.ReadAllText(catalogPath))!;
+        catalog["Chats"]!.AsArray().Add(null);
+        File.WriteAllText(catalogPath, catalog.ToJsonString());
+
+        var restored = directory.CreateService();
+        Assert.Contains("Could not restore the chat library", restored.RestoreError);
+        Assert.Equal(original, File.ReadAllBytes(path));
     }
 
     private static string FixturePath(string fileName) =>

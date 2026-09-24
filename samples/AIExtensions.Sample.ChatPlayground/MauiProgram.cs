@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.ClientModel;
 using AIExtensions.Sample.ChatPlayground.Features.Recording;
+using AIExtensions.Sample.ChatPlayground.Features.Search;
 using AIExtensions.Sample.ChatPlayground.Services;
 using AIExtensions.Sample.ChatPlayground.ViewModels;
 using Microsoft.Extensions.AI;
@@ -39,8 +40,14 @@ public static class MauiProgram
             serviceProvider.GetRequiredService<ILogger<ChatRecordingService>>(),
             FileSystem.AppDataDirectory,
             FileSystem.CacheDirectory));
+        AddChatSearch(builder.Services, builder.Configuration);
         builder.Services.AddSingleton<SettingsPaneViewModel>();
         builder.Services.AddSingleton<ChatAreaViewModel>();
+        builder.Services.AddSingleton(serviceProvider => new ChatLibraryViewModel(
+            serviceProvider.GetRequiredService<ChatSearchService>())
+        {
+            UseAzureEmbeddings = Preferences.Default.Get(ChatLibraryViewModel.AzureConsentPreferenceKey, false),
+        });
         builder.Services.AddSingleton<MainViewModel>();
         builder.Services.AddTransient<MainPage>();
 
@@ -103,10 +110,7 @@ public static class MauiProgram
                 "Configure AI:Endpoint, AI:ApiKey, AI:DeploymentName, and AI:ImageDeploymentName in the shared local user secrets.");
         }
 
-        if (!Uri.TryCreate(endpointValue, UriKind.Absolute, out var endpoint) ||
-            !endpoint.AbsolutePath.TrimEnd('/').EndsWith("/openai/v1", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("AI:Endpoint must be an absolute OpenAI-compatible endpoint ending in /openai/v1/.");
-
+        var endpoint = RequireOpenAIEndpoint(endpointValue);
         var openAIClient = CreateOpenAIClient(endpoint, apiKey);
         var generator = openAIClient.GetImageClient(imageDeploymentName).AsIImageGenerator();
         // Recording wraps the tool and image middleware so the saved response is the one shown in chat.
@@ -130,6 +134,50 @@ public static class MauiProgram
     private static OpenAIClient CreateOpenAIClient(Uri endpoint, string apiKey) =>
         new(new ApiKeyCredential(apiKey), new OpenAIClientOptions { Endpoint = endpoint });
 #pragma warning restore MEAI001, OPENAI001
+
+    private static void AddChatSearch(IServiceCollection services, IConfiguration configuration)
+    {
+        Func<IEmbeddingGenerator<string, Embedding<float>>>? localFactory = null;
+        string? localModelKey = null;
+#if IOS || MACCATALYST
+        if (OperatingSystem.IsIOSVersionAtLeast(13) ||
+            OperatingSystem.IsMacCatalystVersionAtLeast(13, 1))
+        {
+            localFactory = () => new NLEmbeddingGenerator();
+            localModelKey = $"apple/natural-language/english/{Environment.OSVersion.Version}";
+        }
+#endif
+        Func<IEmbeddingGenerator<string, Embedding<float>>>? azureFactory = null;
+        string? azureModelKey = null;
+        var embeddingDeployment = configuration["AI:EmbeddingDeploymentName"];
+        if (!string.IsNullOrWhiteSpace(embeddingDeployment))
+        {
+            var apiKey = configuration["AI:ApiKey"];
+            if (string.IsNullOrWhiteSpace(apiKey))
+                throw new InvalidOperationException(
+                    "AI:EmbeddingDeploymentName requires AI:ApiKey and AI:Endpoint.");
+
+            var endpoint = RequireOpenAIEndpoint(configuration["AI:Endpoint"]);
+            azureFactory = () => CreateOpenAIClient(endpoint, apiKey)
+                .GetEmbeddingClient(embeddingDeployment).AsIEmbeddingGenerator();
+            azureModelKey = $"azure/{endpoint.AbsoluteUri}/{embeddingDeployment}";
+        }
+
+        services.AddSingleton(serviceProvider => new ChatSearchService(
+            serviceProvider.GetRequiredService<ChatRecordingService>(),
+            serviceProvider.GetRequiredService<ILogger<ChatSearchService>>(),
+            FileSystem.AppDataDirectory,
+            localFactory, localModelKey, azureFactory, azureModelKey));
+    }
+
+    private static Uri RequireOpenAIEndpoint(string? value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var endpoint) ||
+            !endpoint.AbsolutePath.TrimEnd('/').EndsWith("/openai/v1", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "AI:Endpoint must be an absolute OpenAI-compatible endpoint ending in /openai/v1/.");
+        return endpoint;
+    }
 
 #if IOS || MACCATALYST
     private static IChatClient CreateLocalChatClient(ILoggerFactory loggerFactory, ChatRecordingService recording)

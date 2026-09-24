@@ -85,4 +85,16 @@ public partial class MainPage : ContentPage
 
     private void SettingsBackdropTapped(object? sender, TappedEventArgs e) =>
         CloseSettingsClicked(sender, e);
+
+    /// <inheritdoc />
+    protected override bool OnBackButtonPressed()
+    {
+        if (BindingContext is MainViewModel { Library.IsOpen: true } viewModel)
+        {
+            viewModel.Library.Close();
+            return true;
+        }
+
+        return base.OnBackButtonPressed();
+    }
 }

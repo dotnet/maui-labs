@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using AIExtensions.Sample.ChatPlayground.Features.Chat;
 using AIExtensions.Sample.ChatPlayground.Features.Recording;
+using AIExtensions.Sample.ChatPlayground.Features.Search;
 using AIExtensions.Sample.ChatPlayground.Models;
 using AIExtensions.Sample.ChatPlayground.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -16,6 +17,7 @@ public partial class MainViewModel : ObservableObject
 {
     private readonly PlaygroundTools _tools;
     private readonly ChatRecordingService _recording;
+    private readonly ChatSearchService _search;
     private readonly ChatConversation _conversation = new();
     private readonly IChatClient _replayClient;
     private IChatClient? _selectedClient;
@@ -28,22 +30,29 @@ public partial class MainViewModel : ObservableObject
     public MainViewModel(
         PlaygroundTools tools,
         ChatRecordingService recording,
+        ChatSearchService search,
         SettingsPaneViewModel settings,
-        ChatAreaViewModel chat)
+        ChatAreaViewModel chat,
+        ChatLibraryViewModel library)
     {
         _tools = tools;
         _recording = recording;
+        _search = search;
         Settings = settings;
         Chat = chat;
+        Library = library;
         _replayClient = settings.Clients.Single(option => option.Descriptor.IsReplay).Client;
         Chat.SendCommand = new AsyncRelayCommand(SendAsync, () => Chat.CanSend);
         Chat.CancelCommand = new RelayCommand(Cancel, () => Chat.IsBusy);
         Chat.PlayReplayCommand = ReplayChatCommand;
         Chat.NextReplayCommand = NextReplayCommand;
         Chat.RestartReplayCommand = RestartReplayCommand;
-        Chat.LoadChatCommand = LoadChatCommand;
+        Chat.BrowseChatsCommand = BrowseChatsCommand;
+        Library.OpenChatAsync = OpenLibraryChatAsync;
+        Library.ImportFileCommand = ImportFileCommand;
         Settings.PropertyChanged += SettingsPropertyChanged;
         Chat.PropertyChanged += ChatPropertyChanged;
+        Library.PropertyChanged += LibraryPropertyChanged;
         _recording.Changed += (_, _) => MainThread.BeginInvokeOnMainThread(RefreshOperationCommands);
         ApplyClientSelection(Settings.SelectedClient);
     }
@@ -54,11 +63,16 @@ public partial class MainViewModel : ObservableObject
     /// <summary>Gets the chat-area state.</summary>
     public ChatAreaViewModel Chat { get; }
 
-    public IRelayCommand NewChatCommand => _newChatCommand ??= new RelayCommand(NewChat, CanChangeChat);
-    public IAsyncRelayCommand LoadChatCommand =>
-        _loadChatCommand ??= new AsyncRelayCommand(LoadChatAsync, CanChangeChat);
-    public IAsyncRelayCommand<View> SaveChatCommand =>
-        _saveChatCommand ??= new AsyncRelayCommand<View>(SaveChatAsync, _ => CanUseChat());
+    public ChatLibraryViewModel Library { get; }
+
+    public IAsyncRelayCommand NewChatCommand =>
+        _newChatCommand ??= new AsyncRelayCommand(NewChatAsync, CanChangeChat);
+    public IAsyncRelayCommand BrowseChatsCommand =>
+        _browseChatsCommand ??= new AsyncRelayCommand(Library.ShowAsync, CanChangeChat);
+    public IAsyncRelayCommand ImportFileCommand =>
+        _importFileCommand ??= new AsyncRelayCommand(ImportChatFileAsync, CanChangeChat);
+    public IAsyncRelayCommand<View> ExportChatCommand =>
+        _exportChatCommand ??= new AsyncRelayCommand<View>(ExportChatAsync, _ => CanUseChat());
     public IAsyncRelayCommand ReplayChatCommand =>
         _replayChatCommand ??= new AsyncRelayCommand(ReplayChatAsync, CanPlayReplay);
     public IAsyncRelayCommand NextReplayCommand =>
@@ -66,9 +80,10 @@ public partial class MainViewModel : ObservableObject
     public IRelayCommand RestartReplayCommand =>
         _restartReplayCommand ??= new RelayCommand(RestartReplay, CanPlayReplay);
 
-    private IRelayCommand? _newChatCommand;
-    private IAsyncRelayCommand? _loadChatCommand;
-    private IAsyncRelayCommand<View>? _saveChatCommand;
+    private IAsyncRelayCommand? _newChatCommand;
+    private IAsyncRelayCommand? _browseChatsCommand;
+    private IAsyncRelayCommand? _importFileCommand;
+    private IAsyncRelayCommand<View>? _exportChatCommand;
     private IAsyncRelayCommand? _replayChatCommand;
     private IAsyncRelayCommand? _nextReplayCommand;
     private IRelayCommand? _restartReplayCommand;
@@ -89,61 +104,109 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    private bool CanChangeChat() => !Chat.IsBusy && !Settings.IsBusy;
+    private bool CanChangeChat() => !Chat.IsBusy && !Settings.IsBusy && !Library.IsBusy;
     private bool CanUseChat() => CanChangeChat() && _recording.InteractionCount > 0;
     private bool CanPlayReplay() => CanUseChat() && ReferenceEquals(_selectedClient, _replayClient);
     private bool CanReplayNext() => CanPlayReplay() && _recording.HasReplayRemaining;
 
-    private void NewChat()
+    private async Task NewChatAsync()
     {
+        var created = false;
+        string? newId = null;
         try
         {
+            var previousId = _recording.ActiveChatId;
             _recording.NewRecording();
+            created = true;
+            newId = _recording.ActiveChatId;
             ClearVisibleChat();
             _replayIncomplete = false;
             Chat.StatusMessage = ReferenceEquals(_selectedClient, _replayClient)
                 ? "New chat started. Select a live client to send a message."
-                : $"New chat started. Responses will be auto-saved.{ImageAvailabilityHint}";
+                : $"New chat started. The previous chat is kept in Chats.{ImageAvailabilityHint}";
             RefreshOperationCommands();
+            var notice = await _search.IndexChatAsync(previousId, Library.UseAzureEmbeddings);
+            if (notice is not null)
+            {
+                if (ActiveEmptyChatIs(newId))
+                    Chat.StatusMessage += " " + notice;
+                else
+                    Library.StatusMessage = notice;
+            }
         }
         catch (Exception exception)
         {
-            Chat.StatusMessage = $"New chat failed: {exception.Message}";
+            if (!created)
+                Chat.StatusMessage = $"New chat failed: {exception.Message}";
+            else if (ActiveEmptyChatIs(newId))
+                Chat.StatusMessage = $"New chat was saved, but search indexing failed: {exception.Message}. Find chats to retry.";
+            else
+                Library.StatusMessage = $"Search indexing failed: {exception.Message}. Find chats to retry.";
         }
     }
 
-    private async Task LoadChatAsync()
+    private bool ActiveEmptyChatIs(string? id) =>
+        id is not null && _recording.ActiveChatId == id &&
+        _recording.InteractionCount == 0 && !Chat.IsBusy;
+
+    private async Task OpenLibraryChatAsync(string id)
+    {
+        try
+        {
+            _recording.OpenChat(id);
+            Library.Close();
+            Settings.SelectedClient = _replayClient;
+            await ReplayAllAsync();
+        }
+        catch (Exception exception)
+        {
+            Library.StatusMessage = $"Could not open saved chat: {exception.Message}";
+        }
+    }
+
+    private async Task ImportChatFileAsync()
     {
         Settings.IsBusy = true;
         try
         {
             var file = await FilePicker.Default.PickAsync(new PickOptions
             {
-                PickerTitle = "Load a saved chat",
+                PickerTitle = "Import a saved chat",
             });
             if (file is null)
             {
-                Chat.StatusMessage = "Load cancelled; current chat unchanged.";
+                Library.StatusMessage = "Import cancelled; current chat unchanged.";
                 return;
             }
 
             await using var input = await file.OpenReadAsync();
             await _recording.LoadFileAsync(input);
+            Library.Close();
             Settings.SelectedClient = _replayClient;
             if (_recording.InteractionCount == 0)
             {
                 ClearVisibleChat();
                 _replayIncomplete = false;
-                Chat.StatusMessage = "Loaded an empty chat. Select a live client to send a message.";
+                Chat.StatusMessage = "Imported an empty chat. Select a live client to send a message.";
             }
             else
             {
                 await ReplayAllAsync();
+                try
+                {
+                    var notice = await _search.IndexChatAsync(_recording.ActiveChatId, Library.UseAzureEmbeddings);
+                    if (notice is not null)
+                        Chat.StatusMessage += " " + notice;
+                }
+                catch (Exception exception)
+                {
+                    Chat.StatusMessage += $" Search indexing failed: {exception.Message}. Find chats to retry.";
+                }
             }
         }
         catch (Exception exception)
         {
-            Chat.StatusMessage = $"Load chat failed: {exception.Message}";
+            Library.StatusMessage = $"Import failed: {exception.Message}";
         }
         finally
         {
@@ -151,21 +214,21 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    private async Task SaveChatAsync(View? source)
+    private async Task ExportChatAsync(View? source)
     {
         if (source is null)
         {
-            Chat.StatusMessage = "Export chat failed: the Save button is unavailable.";
+            Chat.StatusMessage = "Export chat failed: the Export button is unavailable.";
             return;
         }
 
         Settings.IsBusy = true;
         try
         {
-            var path = _recording.Save();
+            var path = _recording.Export();
             await Share.Default.RequestAsync(new ShareFileRequest
             {
-                Title = "Export chat as JSON",
+                Title = "Export current chat as JSON",
                 File = new ShareFile(path),
                 PresentationSourceBounds = GetPageBounds(source),
             });
@@ -478,7 +541,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (descriptor.IsReplay)
             return _recording.InteractionCount == 0
-                ? "No chat recorded yet. Select a live client to start one."
+                ? "No current chat. Press Find chats to open one or select a live client."
                 : "Replay is ready. Press Play all or Next turn.";
 
         if (_replayIncomplete)
@@ -516,6 +579,12 @@ public partial class MainViewModel : ObservableObject
             UpdateChatCanSend();
     }
 
+    private void LibraryPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ChatLibraryViewModel.IsBusy))
+            RefreshOperationCommands();
+    }
+
     private void UpdateChatCanSend() => Chat.CanSend = CanSend();
 
     private void RefreshOperationCommands()
@@ -523,8 +592,9 @@ public partial class MainViewModel : ObservableObject
         // Composer commands refresh in ChatAreaViewModel; these depend on recording and busy state.
         UpdateChatCanSend();
         NewChatCommand.NotifyCanExecuteChanged();
-        LoadChatCommand.NotifyCanExecuteChanged();
-        SaveChatCommand.NotifyCanExecuteChanged();
+        BrowseChatsCommand.NotifyCanExecuteChanged();
+        ImportFileCommand.NotifyCanExecuteChanged();
+        ExportChatCommand.NotifyCanExecuteChanged();
         ReplayChatCommand.NotifyCanExecuteChanged();
         NextReplayCommand.NotifyCanExecuteChanged();
         RestartReplayCommand.NotifyCanExecuteChanged();

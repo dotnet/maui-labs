@@ -65,20 +65,20 @@
                                 <ImageButton Source="add.png"
                                              Style="{StaticResource ChatActionButton}"
                                              Command="{Binding NewChatCommand}"
-                                             SemanticProperties.Description="Start a new chat, replacing the current temporary chat"
-                                             ToolTipProperties.Text="New chat (save the current chat first to keep it)"
+                                             SemanticProperties.Description="Start a new chat and keep the current one in saved chats"
+                                             ToolTipProperties.Text="New chat (the current chat stays in Chats)"
                                              AutomationId="NewChatButton" />
                                 <Label Text="New" Style="{StaticResource ChatActionLabel}" />
                             </VerticalStackLayout>
                             <VerticalStackLayout Margin="4,0" Spacing="2">
-                                <ImageButton x:Name="SaveChatButton" Source="save.png"
+                                <ImageButton x:Name="ExportChatButton" Source="export.png"
                                              Style="{StaticResource ChatActionButton}"
-                                             Command="{Binding SaveChatCommand}"
-                                             CommandParameter="{x:Reference SaveChatButton}"
+                                             Command="{Binding ExportChatCommand}"
+                                             CommandParameter="{x:Reference ExportChatButton}"
                                              SemanticProperties.Description="Export the current chat as a JSON file"
-                                             ToolTipProperties.Text="Save chat to a file"
-                                             AutomationId="SaveChatButton" />
-                                <Label Text="Save" Style="{StaticResource ChatActionLabel}" />
+                                             ToolTipProperties.Text="Export the current chat to a file"
+                                             AutomationId="ExportChatButton" />
+                                <Label Text="Export" Style="{StaticResource ChatActionLabel}" />
                             </VerticalStackLayout>
                         </HorizontalStackLayout>
                     </Grid>
@@ -87,5 +87,6 @@
                 <views:ChatArea x:Name="ChatArea" Grid.Row="1" BindingContext="{Binding Chat}" />
             </Grid>
         </Grid>
+        <views:ChatLibraryView BindingContext="{Binding Library}" ZIndex="20" />
     </Grid>
 </ContentPage>

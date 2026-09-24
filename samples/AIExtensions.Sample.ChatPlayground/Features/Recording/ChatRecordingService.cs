@@ -1,5 +1,3 @@
-using System.Text;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 
@@ -9,6 +7,7 @@ namespace AIExtensions.Sample.ChatPlayground.Features.Recording;
 public sealed class ChatRecordingService
 {
     private readonly object _gate = new();
+    private readonly ChatLibraryStore? _library;
     private ChatRecording _recording = new();
     private int _cursor;
 
@@ -22,31 +21,49 @@ public sealed class ChatRecordingService
         ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(exportDirectory);
         ExportPath = System.IO.Path.Combine(exportDirectory, "chat-playground.json");
-        AutosavePath = System.IO.Path.Combine(dataDirectory, "chat-playground.autosave.json");
-        var legacyPath = System.IO.Path.Combine(exportDirectory, "chat-playground.autosave.json");
-        var restorePath = File.Exists(AutosavePath) ? AutosavePath : legacyPath;
-
-        if (File.Exists(restorePath))
+        try
         {
-            try
-            {
-                var json = File.ReadAllText(restorePath, Encoding.UTF8);
-                _recording = ChatRecordingSerializer.Deserialize(json);
-                if (restorePath != AutosavePath)
-                    WriteAtomic(AutosavePath, json);
-            }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
-                JsonException or InvalidDataException or FormatException or ArgumentException or NotSupportedException)
-            {
-                RestoreError = $"Could not restore the last recording: {exception.Message}";
-                logger.LogWarning(exception, "Could not restore the last playground recording.");
-            }
+            _library = new ChatLibraryStore(logger, dataDirectory, exportDirectory);
+            _recording = _library.Current;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
+            System.Text.Json.JsonException or InvalidDataException or FormatException or
+            ArgumentException or NotSupportedException)
+        {
+            RestoreError = $"Could not restore the chat library: {exception.Message}";
+            logger.LogWarning(exception, "Could not restore the playground chat library.");
         }
     }
 
     public string? RestoreError { get; }
     public string ExportPath { get; }
-    public string AutosavePath { get; }
+    public string AutosavePath => Library.ActivePath;
+    public string ActiveChatId => Library.ActiveId;
+
+    private ChatLibraryStore Library => _library
+        ?? throw new InvalidOperationException(RestoreError ?? "The chat library is unavailable.");
+
+    public IReadOnlyList<SavedChat> ListChats()
+    {
+        lock (_gate)
+            return Library.List(_recording);
+    }
+
+    public ChatRecording ReadChat(string id)
+    {
+        lock (_gate)
+            return Library.Read(id);
+    }
+
+    public void OpenChat(string id)
+    {
+        lock (_gate)
+        {
+            _recording = Library.Open(id, _recording);
+            _cursor = 0;
+        }
+        NotifyChanged();
+    }
 
     public int InteractionCount
     {
@@ -67,9 +84,7 @@ public sealed class ChatRecordingService
     {
         lock (_gate)
         {
-            var recording = new ChatRecording();
-            WriteAtomic(AutosavePath, ChatRecordingSerializer.Serialize(recording));
-            _recording = recording;
+            _recording = Library.New(_recording);
             _cursor = 0;
         }
         NotifyChanged();
@@ -114,7 +129,7 @@ public sealed class ChatRecordingService
             _recording.Interactions.Add(interaction);
             try
             {
-                WriteAtomic(AutosavePath, ChatRecordingSerializer.Serialize(_recording));
+                Library.Save(_recording);
             }
             catch
             {
@@ -172,13 +187,13 @@ public sealed class ChatRecordingService
         NotifyChanged();
     }
 
-    public string Save()
+    public string Export()
     {
         string json;
         lock (_gate)
             json = ChatRecordingSerializer.Serialize(_recording);
 
-        WriteAtomic(ExportPath, json);
+        ChatLibraryStore.WriteAtomic(ExportPath, json);
         return ExportPath;
     }
 
@@ -188,27 +203,10 @@ public sealed class ChatRecordingService
         var recording = await ChatRecordingSerializer.DeserializeAsync(stream, cancellationToken);
         lock (_gate)
         {
-            WriteAtomic(AutosavePath, ChatRecordingSerializer.Serialize(recording));
-            _recording = recording;
+            _recording = Library.Import(recording);
             _cursor = 0;
         }
         NotifyChanged();
-    }
-
-    private static void WriteAtomic(string path, string json)
-    {
-        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
-        var stagingPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        try
-        {
-            File.WriteAllText(stagingPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-            File.Move(stagingPath, path, overwrite: true);
-        }
-        finally
-        {
-            if (File.Exists(stagingPath))
-                File.Delete(stagingPath);
-        }
     }
 
     private void NotifyChanged() => Changed?.Invoke(this, EventArgs.Empty);

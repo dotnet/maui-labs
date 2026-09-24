@@ -153,12 +153,12 @@
                 </Grid>
                 <FlexLayout IsVisible="{Binding IsReplayClient}"
                             Wrap="Wrap" AlignItems="Center">
-                    <Button Text="Load" ImageSource="folder.png"
-                            Command="{Binding LoadChatCommand}"
+                    <Button Text="Find chats" ImageSource="search.png"
+                            Command="{Binding BrowseChatsCommand}"
                             Style="{StaticResource ReplayActionButtonStyle}"
                             Margin="0,0,8,8"
-                            SemanticProperties.Description="Load a saved chat for replay"
-                            AutomationId="LoadChatButton" />
+                            SemanticProperties.Description="Search saved chats or import a chat file"
+                            AutomationId="FindChatsButton" />
                     <Button Text="Restart" ImageSource="restart.png"
                             Command="{Binding RestartReplayCommand}"
                             Style="{StaticResource ReplayActionButtonStyle}"
