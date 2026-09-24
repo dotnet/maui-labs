@@ -11,6 +11,7 @@
     <PackageVersion Include="Microsoft.Maui.Controls.Compatibility" Version="$(MicrosoftMauiControlsCompatibilityVersion)" />
     <PackageVersion Include="Microsoft.Maui.Core" Version="$(MicrosoftMauiControlsVersion)" />
     <PackageVersion Include="Microsoft.Maui.Essentials" Version="$(MicrosoftMauiEssentialsVersion)" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="$(MicrosoftAspNetCoreComponentsWebViewVersion)" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebView" Version="$(MicrosoftAspNetCoreComponentsWebViewVersion)" />
     <PackageVersion Include="Microsoft.Maui.Controls.Maps" Version="$(MicrosoftMauiControlsMapsVersion)" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MicrosoftAspNetCoreComponentsWebViewMauiVersion)" />
@@ -19,6 +20,8 @@
   <!-- Microsoft Extensions (versions from eng/Versions.props, flowing via maestro) -->
   <ItemGroup Label="Extensions">
     <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="$(MicrosoftExtensionsConfigurationVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="$(MicrosoftExtensionsConfigurationVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="$(MicrosoftExtensionsConfigurationVersion)" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(MicrosoftExtensionsDependencyInjectionVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="$(MicrosoftExtensionsHostingVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="$(MicrosoftExtensionsHttpVersion)" />
@@ -31,16 +34,20 @@
 
   <!-- AI (Microsoft.Extensions.AI + Azure OpenAI) -->
   <ItemGroup Label="AI">
+    <PackageVersion Include="CommunityToolkit.Maui.Core" Version="14.0.1" />
     <PackageVersion Include="Microsoft.Extensions.AI" Version="$(MicrosoftExtensionsAIVersion)" />
     <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="$(MicrosoftExtensionsAIOpenAIVersion)" />
     <PackageVersion Include="Azure.AI.OpenAI" Version="$(AzureAIOpenAIVersion)" />
+    <PackageVersion Include="Azure.Identity" Version="$(AzureIdentityVersion)" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="$(CommunityToolkitMvvmVersion)" />
+    <PackageVersion Include="Plugin.Maui.Audio" Version="4.0.0" />
   </ItemGroup>
 
   <!-- Roslyn (for source generators) -->
   <ItemGroup Label="Roslyn">
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="$(MicrosoftCodeAnalysisCSharpVersion)" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="$(MicrosoftCodeAnalysisAnalyzersVersion)" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="4.14.0" />
   </ItemGroup>
 
   <!-- DevFlow dependencies (pinned, third party) -->
@@ -82,9 +89,12 @@
     <PackageVersion Include="Microsoft.Agents.AI.Hosting" Version="$(MicrosoftAgentsAIHostingVersion)" />
     <PackageVersion Include="Microsoft.Agents.AI.Workflows" Version="$(MicrosoftAgentsAIWorkflowsVersion)" />
     <PackageVersion Include="Microsoft.Agents.AI.Workflows.Generators" Version="$(MicrosoftAgentsAIWorkflowsGeneratorsVersion)" />
+    <PackageVersion Include="Microsoft.Agents.AI.OpenAI" Version="1.15.0" />
+    <PackageVersion Include="AGUI.Server" Version="0.0.6" />
+    <PackageVersion Include="AGUI.Client" Version="0.0.6" />
     <!-- Sample app: additional packages (pinned) -->
     <PackageVersion Include="Markdig" Version="0.31.0" />
-    <PackageVersion Include="OpenAI" Version="2.9.1" />
+    <PackageVersion Include="OpenAI" Version="2.11.0" />
     <!-- Unit tests -->
     <PackageVersion Include="NSubstitute" Version="5.3.0" />
     <!-- Benchmarks -->
@@ -96,6 +106,8 @@
     <PackageVersion Include="DeviceRunners.VisualRunners.Maui" Version="$(DeviceRunnersVersion)" />
     <PackageVersion Include="DeviceRunners.Testing.Targets" Version="$(DeviceRunnersVersion)" />
   </ItemGroup>
+
+
 
   <!-- Testing (Microsoft.NET.Test.Sdk and xunit.runner.visualstudio are
        implicitly provided by the Arcade SDK — do not define PackageVersion for them) -->

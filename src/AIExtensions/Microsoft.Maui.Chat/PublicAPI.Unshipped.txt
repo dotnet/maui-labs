@@ -1,0 +1,312 @@
+#nullable enable
+Microsoft.Maui.Chat.ChatAttachment
+Microsoft.Maui.Chat.ChatAttachment.AltText.get -> string?
+Microsoft.Maui.Chat.ChatAttachment.ByteCount.get -> long
+Microsoft.Maui.Chat.ChatAttachment.ChatAttachment(string! fileName, string! mediaType, System.ReadOnlyMemory<byte> data) -> void
+Microsoft.Maui.Chat.ChatAttachment.ChatAttachment(string! fileName, string! mediaType, System.ReadOnlyMemory<byte> data, string? altText) -> void
+Microsoft.Maui.Chat.ChatAttachment.ChatAttachment(string! fileName, string! mediaType, System.Uri! uri) -> void
+Microsoft.Maui.Chat.ChatAttachment.ChatAttachment(string! fileName, string! mediaType, System.Uri! uri, string? altText) -> void
+Microsoft.Maui.Chat.ChatAttachment.Data.get -> System.ReadOnlyMemory<byte>
+Microsoft.Maui.Chat.ChatAttachment.FileName.get -> string!
+Microsoft.Maui.Chat.ChatAttachment.IsAudio.get -> bool
+Microsoft.Maui.Chat.ChatAttachment.IsImage.get -> bool
+Microsoft.Maui.Chat.ChatAttachment.IsVideo.get -> bool
+Microsoft.Maui.Chat.ChatAttachment.MediaType.get -> string!
+Microsoft.Maui.Chat.ChatAttachment.ToContent() -> Microsoft.Maui.Chat.MediaMessageContent!
+Microsoft.Maui.Chat.ChatAttachment.Uri.get -> System.Uri?
+Microsoft.Maui.Chat.ChatAudioRecordedEventArgs
+Microsoft.Maui.Chat.ChatAudioRecordedEventArgs.ChatAudioRecordedEventArgs(Microsoft.Maui.Chat.ChatAttachment! recording) -> void
+Microsoft.Maui.Chat.ChatAudioRecordedEventArgs.Recording.get -> Microsoft.Maui.Chat.ChatAttachment!
+Microsoft.Maui.Chat.ChatAudioTranscribedEventArgs
+Microsoft.Maui.Chat.ChatAudioTranscribedEventArgs.ChatAudioTranscribedEventArgs(Microsoft.Maui.Chat.ChatAttachment! recording, string! text) -> void
+Microsoft.Maui.Chat.ChatAudioTranscribedEventArgs.Recording.get -> Microsoft.Maui.Chat.ChatAttachment!
+Microsoft.Maui.Chat.ChatAudioTranscribedEventArgs.Text.get -> string!
+Microsoft.Maui.Chat.ChatComposerController
+Microsoft.Maui.Chat.ChatComposerController.AddAttachment(Microsoft.Maui.Chat.ChatAttachment! attachment) -> void
+Microsoft.Maui.Chat.ChatComposerController.AllowAttachments.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.AllowAttachments.set -> void
+Microsoft.Maui.Chat.ChatComposerController.AllowAudioCapture.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.AllowAudioCapture.set -> void
+Microsoft.Maui.Chat.ChatComposerController.AllowLiveSpeech.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.AllowLiveSpeech.set -> void
+Microsoft.Maui.Chat.ChatComposerController.AttachAudioRecording.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.AttachAudioRecording.set -> void
+Microsoft.Maui.Chat.ChatComposerController.AttachmentFileTypes.get -> object?
+Microsoft.Maui.Chat.ChatComposerController.AttachmentFileTypes.set -> void
+Microsoft.Maui.Chat.ChatComposerController.AttachmentPicker.get -> Microsoft.Maui.Chat.IChatAttachmentPicker?
+Microsoft.Maui.Chat.ChatComposerController.AttachmentPicker.set -> void
+Microsoft.Maui.Chat.ChatComposerController.Attachments.get -> System.Collections.ObjectModel.ReadOnlyObservableCollection<Microsoft.Maui.Chat.ChatAttachment!>!
+Microsoft.Maui.Chat.ChatComposerController.AudioRecorded -> System.EventHandler<Microsoft.Maui.Chat.ChatAudioRecordedEventArgs!>?
+Microsoft.Maui.Chat.ChatComposerController.AudioRecorder.get -> Microsoft.Maui.Chat.IChatAudioRecorder?
+Microsoft.Maui.Chat.ChatComposerController.AudioRecorder.set -> void
+Microsoft.Maui.Chat.ChatComposerController.AudioTranscribed -> System.EventHandler<Microsoft.Maui.Chat.ChatAudioTranscribedEventArgs!>?
+Microsoft.Maui.Chat.ChatComposerController.AudioTranscriber.get -> Microsoft.Maui.Chat.IChatAudioTranscriber?
+Microsoft.Maui.Chat.ChatComposerController.AudioTranscriber.set -> void
+Microsoft.Maui.Chat.ChatComposerController.CanPickAttachments.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.CanStop.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.CanSubmit.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.CanToggleAudioCapture.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.CanToggleLiveSpeech.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.CancelAudioCaptureAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Microsoft.Maui.Chat.ChatComposerController.Changed -> System.Action?
+Microsoft.Maui.Chat.ChatComposerController.ChatComposerController() -> void
+Microsoft.Maui.Chat.ChatComposerController.ClearAcceptedDraft(Microsoft.Maui.Chat.ChatDraft! draft) -> void
+Microsoft.Maui.Chat.ChatComposerController.Conversation.get -> Microsoft.Maui.Chat.ChatConversation?
+Microsoft.Maui.Chat.ChatComposerController.Conversation.set -> void
+Microsoft.Maui.Chat.ChatComposerController.ContinuousLiveSpeech.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.ContinuousLiveSpeech.set -> void
+Microsoft.Maui.Chat.ChatComposerController.CreateDraft() -> Microsoft.Maui.Chat.ChatDraft!
+Microsoft.Maui.Chat.ChatComposerController.Dispose() -> void
+Microsoft.Maui.Chat.ChatComposerController.ErrorMessage.get -> string?
+Microsoft.Maui.Chat.ChatComposerController.IsAudioActive.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.IsAudioStarting.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.IsComposing.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.IsConversationBusy.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.IsListening.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.IsLiveSpeechEnabled.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.IsRecordingAudio.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.IsSending.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.IsSpeechActive.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.IsSpeechStarting.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.IsSpeechStopping.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.IsTranscribingAudio.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.LiveSpeechAutoSubmit.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.LiveSpeechAutoSubmit.set -> void
+Microsoft.Maui.Chat.ChatComposerController.MaximumAttachmentBytes.get -> long
+Microsoft.Maui.Chat.ChatComposerController.MaximumAttachmentBytes.set -> void
+Microsoft.Maui.Chat.ChatComposerController.MaximumAttachmentCount.get -> int
+Microsoft.Maui.Chat.ChatComposerController.MaximumAttachmentCount.set -> void
+Microsoft.Maui.Chat.ChatComposerController.MaximumAudioBytes.get -> long
+Microsoft.Maui.Chat.ChatComposerController.MaximumAudioBytes.set -> void
+Microsoft.Maui.Chat.ChatComposerController.MaximumTotalAttachmentBytes.get -> long
+Microsoft.Maui.Chat.ChatComposerController.MaximumTotalAttachmentBytes.set -> void
+Microsoft.Maui.Chat.ChatComposerController.NotifyChanged() -> void
+Microsoft.Maui.Chat.ChatComposerController.PickAttachmentsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Microsoft.Maui.Chat.ChatComposerController.PropertyChanged -> System.ComponentModel.PropertyChangedEventHandler?
+Microsoft.Maui.Chat.ChatComposerController.RemoveAttachment(Microsoft.Maui.Chat.ChatAttachment! attachment) -> bool
+Microsoft.Maui.Chat.ChatComposerController.ReplaceExistingAudio.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.ReplaceExistingAudio.set -> void
+Microsoft.Maui.Chat.ChatComposerController.SetComposing(bool value) -> void
+Microsoft.Maui.Chat.ChatComposerController.SetErrorMessage(string? value) -> void
+Microsoft.Maui.Chat.ChatComposerController.SetStatusMessage(string? value) -> void
+Microsoft.Maui.Chat.ChatComposerController.ShowInterimAudioTranscript.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.ShowInterimAudioTranscript.set -> void
+Microsoft.Maui.Chat.ChatComposerController.ShowInterimSpeechText.get -> bool
+Microsoft.Maui.Chat.ChatComposerController.ShowInterimSpeechText.set -> void
+Microsoft.Maui.Chat.ChatComposerController.SpeechRecognitionCulture.get -> System.Globalization.CultureInfo!
+Microsoft.Maui.Chat.ChatComposerController.SpeechRecognitionCulture.set -> void
+Microsoft.Maui.Chat.ChatComposerController.SpeechRecognized -> System.EventHandler<Microsoft.Maui.Chat.ChatSpeechRecognitionEventArgs!>?
+Microsoft.Maui.Chat.ChatComposerController.SpeechRecognizer.get -> Microsoft.Maui.Chat.IChatSpeechRecognizer?
+Microsoft.Maui.Chat.ChatComposerController.SpeechRecognizer.set -> void
+Microsoft.Maui.Chat.ChatComposerController.StartAudioCaptureAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Microsoft.Maui.Chat.ChatComposerController.StartLiveSpeechAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Microsoft.Maui.Chat.ChatComposerController.Status.get -> Microsoft.Maui.Chat.ChatConversationStatus
+Microsoft.Maui.Chat.ChatComposerController.StatusMessage.get -> string?
+Microsoft.Maui.Chat.ChatComposerController.StopAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Microsoft.Maui.Chat.ChatComposerController.StopAudioCaptureAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Microsoft.Maui.Chat.ChatComposerController.StopLiveSpeechAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Microsoft.Maui.Chat.ChatComposerController.SubmitAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Microsoft.Maui.Chat.ChatComposerController.Text.get -> string!
+Microsoft.Maui.Chat.ChatComposerController.Text.set -> void
+Microsoft.Maui.Chat.ChatComposerController.ToggleAudioCaptureAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Microsoft.Maui.Chat.ChatComposerController.ToggleLiveSpeechAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Microsoft.Maui.Chat.ChatContentPresentation
+Microsoft.Maui.Chat.ChatContentPresentation.Bare = 1 -> Microsoft.Maui.Chat.ChatContentPresentation
+Microsoft.Maui.Chat.ChatContentPresentation.Bubble = 0 -> Microsoft.Maui.Chat.ChatContentPresentation
+Microsoft.Maui.Chat.ChatConversation
+Microsoft.Maui.Chat.ChatConversation.CancelAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Microsoft.Maui.Chat.ChatConversation.ChatConversation() -> void
+Microsoft.Maui.Chat.ChatConversation.LocalParticipant.get -> Microsoft.Maui.Chat.ChatParticipant?
+Microsoft.Maui.Chat.ChatConversation.LocalParticipant.set -> void
+Microsoft.Maui.Chat.ChatConversation.MessageList.get -> System.Collections.ObjectModel.ObservableCollection<Microsoft.Maui.Chat.ConversationMessage!>!
+Microsoft.Maui.Chat.ChatConversation.Messages.get -> System.Collections.ObjectModel.ReadOnlyObservableCollection<Microsoft.Maui.Chat.ConversationMessage!>!
+Microsoft.Maui.Chat.ChatConversation.Participants.get -> System.Collections.ObjectModel.ObservableCollection<Microsoft.Maui.Chat.ChatParticipant!>!
+Microsoft.Maui.Chat.ChatConversation.RaiseChange(Microsoft.Maui.Chat.ChatConversationChange change) -> void
+Microsoft.Maui.Chat.ChatConversation.SendAsync(Microsoft.Maui.Chat.ChatDraft! draft, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+Microsoft.Maui.Chat.ChatConversation.Status.get -> Microsoft.Maui.Chat.ChatConversationStatus
+Microsoft.Maui.Chat.ChatConversation.Status.set -> void
+Microsoft.Maui.Chat.ChatConversation.Subscribe(System.Action<Microsoft.Maui.Chat.ChatConversationChange>! onChange) -> System.IDisposable!
+Microsoft.Maui.Chat.ChatConversation.TypingParticipants.get -> System.Collections.ObjectModel.ObservableCollection<Microsoft.Maui.Chat.ChatParticipant!>!
+Microsoft.Maui.Chat.ChatConversationChange
+Microsoft.Maui.Chat.ChatConversationChange.ChatConversationChange() -> void
+Microsoft.Maui.Chat.ChatConversationChange.Content.get -> Microsoft.Maui.Chat.MessageContent?
+Microsoft.Maui.Chat.ChatConversationChange.Index.get -> int
+Microsoft.Maui.Chat.ChatConversationChange.Kind.get -> Microsoft.Maui.Chat.ChatConversationChangeKind
+Microsoft.Maui.Chat.ChatConversationChange.Message.get -> Microsoft.Maui.Chat.ConversationMessage?
+Microsoft.Maui.Chat.ChatConversationChange.Status.get -> Microsoft.Maui.Chat.ChatConversationStatus
+Microsoft.Maui.Chat.ChatConversationChangeKind
+Microsoft.Maui.Chat.ChatConversationChangeKind.ContentAdded = 4 -> Microsoft.Maui.Chat.ChatConversationChangeKind
+Microsoft.Maui.Chat.ChatConversationChangeKind.ContentChanged = 6 -> Microsoft.Maui.Chat.ChatConversationChangeKind
+Microsoft.Maui.Chat.ChatConversationChangeKind.ContentRemoved = 5 -> Microsoft.Maui.Chat.ChatConversationChangeKind
+Microsoft.Maui.Chat.ChatConversationChangeKind.MessageAdded = 1 -> Microsoft.Maui.Chat.ChatConversationChangeKind
+Microsoft.Maui.Chat.ChatConversationChangeKind.MessageChanged = 3 -> Microsoft.Maui.Chat.ChatConversationChangeKind
+Microsoft.Maui.Chat.ChatConversationChangeKind.MessageRemoved = 2 -> Microsoft.Maui.Chat.ChatConversationChangeKind
+Microsoft.Maui.Chat.ChatConversationChangeKind.Reset = 0 -> Microsoft.Maui.Chat.ChatConversationChangeKind
+Microsoft.Maui.Chat.ChatConversationChangeKind.StatusChanged = 7 -> Microsoft.Maui.Chat.ChatConversationChangeKind
+Microsoft.Maui.Chat.ChatConversationStatus
+Microsoft.Maui.Chat.ChatConversationStatus.AwaitingInput = 2 -> Microsoft.Maui.Chat.ChatConversationStatus
+Microsoft.Maui.Chat.ChatConversationStatus.Busy = 1 -> Microsoft.Maui.Chat.ChatConversationStatus
+Microsoft.Maui.Chat.ChatConversationStatus.Error = 3 -> Microsoft.Maui.Chat.ChatConversationStatus
+Microsoft.Maui.Chat.ChatConversationStatus.Idle = 0 -> Microsoft.Maui.Chat.ChatConversationStatus
+Microsoft.Maui.Chat.ChatDraft
+Microsoft.Maui.Chat.ChatDraft.Attachments.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Maui.Chat.ChatAttachment!>!
+Microsoft.Maui.Chat.ChatDraft.ChatDraft(string? text, System.Collections.Generic.IEnumerable<Microsoft.Maui.Chat.ChatAttachment!>? attachments = null) -> void
+Microsoft.Maui.Chat.ChatDraft.CreateContents() -> System.Collections.Generic.IReadOnlyList<Microsoft.Maui.Chat.MessageContent!>!
+Microsoft.Maui.Chat.ChatDraft.HasText.get -> bool
+Microsoft.Maui.Chat.ChatDraft.IsEmpty.get -> bool
+Microsoft.Maui.Chat.ChatDraft.Text.get -> string!
+Microsoft.Maui.Chat.ChatParticipant
+Microsoft.Maui.Chat.ChatParticipant.Avatar.get -> object?
+Microsoft.Maui.Chat.ChatParticipant.Avatar.set -> void
+Microsoft.Maui.Chat.ChatParticipant.ChatParticipant(string! id, string? displayName = null, Microsoft.Maui.Chat.ChatParticipantKind kind = Microsoft.Maui.Chat.ChatParticipantKind.Remote) -> void
+Microsoft.Maui.Chat.ChatParticipant.DisplayName.get -> string!
+Microsoft.Maui.Chat.ChatParticipant.DisplayName.set -> void
+Microsoft.Maui.Chat.ChatParticipant.Id.get -> string!
+Microsoft.Maui.Chat.ChatParticipant.Initials.get -> string!
+Microsoft.Maui.Chat.ChatParticipant.IsLocal.get -> bool
+Microsoft.Maui.Chat.ChatParticipant.Kind.get -> Microsoft.Maui.Chat.ChatParticipantKind
+Microsoft.Maui.Chat.ChatParticipant.Kind.set -> void
+Microsoft.Maui.Chat.ChatParticipantKind
+Microsoft.Maui.Chat.ChatParticipantKind.Agent = 2 -> Microsoft.Maui.Chat.ChatParticipantKind
+Microsoft.Maui.Chat.ChatParticipantKind.Local = 0 -> Microsoft.Maui.Chat.ChatParticipantKind
+Microsoft.Maui.Chat.ChatParticipantKind.Remote = 1 -> Microsoft.Maui.Chat.ChatParticipantKind
+Microsoft.Maui.Chat.ChatParticipantKind.System = 3 -> Microsoft.Maui.Chat.ChatParticipantKind
+Microsoft.Maui.Chat.ChatSpeechRecognitionErrorKind
+Microsoft.Maui.Chat.ChatSpeechRecognitionErrorKind.Aborted = 2 -> Microsoft.Maui.Chat.ChatSpeechRecognitionErrorKind
+Microsoft.Maui.Chat.ChatSpeechRecognitionErrorKind.Fatal = 6 -> Microsoft.Maui.Chat.ChatSpeechRecognitionErrorKind
+Microsoft.Maui.Chat.ChatSpeechRecognitionErrorKind.LanguageNotSupported = 4 -> Microsoft.Maui.Chat.ChatSpeechRecognitionErrorKind
+Microsoft.Maui.Chat.ChatSpeechRecognitionErrorKind.NoSpeech = 1 -> Microsoft.Maui.Chat.ChatSpeechRecognitionErrorKind
+Microsoft.Maui.Chat.ChatSpeechRecognitionErrorKind.None = 0 -> Microsoft.Maui.Chat.ChatSpeechRecognitionErrorKind
+Microsoft.Maui.Chat.ChatSpeechRecognitionErrorKind.PermissionDenied = 3 -> Microsoft.Maui.Chat.ChatSpeechRecognitionErrorKind
+Microsoft.Maui.Chat.ChatSpeechRecognitionErrorKind.Transient = 5 -> Microsoft.Maui.Chat.ChatSpeechRecognitionErrorKind
+Microsoft.Maui.Chat.ChatSpeechRecognitionEventArgs
+Microsoft.Maui.Chat.ChatSpeechRecognitionEventArgs.ChatSpeechRecognitionEventArgs(string? text, bool isFinal) -> void
+Microsoft.Maui.Chat.ChatSpeechRecognitionEventArgs.ChatSpeechRecognitionEventArgs(string? text, bool isFinal, Microsoft.Maui.Chat.ChatSpeechRecognitionErrorKind errorKind, System.Exception? exception) -> void
+Microsoft.Maui.Chat.ChatSpeechRecognitionEventArgs.ErrorKind.get -> Microsoft.Maui.Chat.ChatSpeechRecognitionErrorKind
+Microsoft.Maui.Chat.ChatSpeechRecognitionEventArgs.Exception.get -> System.Exception?
+Microsoft.Maui.Chat.ChatSpeechRecognitionEventArgs.IsFinal.get -> bool
+Microsoft.Maui.Chat.ChatSpeechRecognitionEventArgs.Text.get -> string!
+Microsoft.Maui.Chat.ChatSuggestion
+Microsoft.Maui.Chat.ChatSuggestion.ChatSuggestion(string! label, string? prompt = null, string? icon = null) -> void
+Microsoft.Maui.Chat.ChatSuggestion.DisplayText.get -> string!
+Microsoft.Maui.Chat.ChatSuggestion.HasIcon.get -> bool
+Microsoft.Maui.Chat.ChatSuggestion.Icon.get -> string?
+Microsoft.Maui.Chat.ChatSuggestion.Icon.init -> void
+Microsoft.Maui.Chat.ChatSuggestion.Label.get -> string!
+Microsoft.Maui.Chat.ChatSuggestion.Prompt.get -> string!
+Microsoft.Maui.Chat.ConversationMessage
+Microsoft.Maui.Chat.ConversationMessage.AddContent<T>(T! content) -> T!
+Microsoft.Maui.Chat.ConversationMessage.Contents.get -> System.Collections.ObjectModel.ObservableCollection<Microsoft.Maui.Chat.MessageContent!>!
+Microsoft.Maui.Chat.ConversationMessage.ConversationMessage(Microsoft.Maui.Chat.ChatParticipant! participant) -> void
+Microsoft.Maui.Chat.ConversationMessage.ConversationMessage(Microsoft.Maui.Chat.ChatParticipant! participant, string? id, System.DateTimeOffset? createdAt) -> void
+Microsoft.Maui.Chat.ConversationMessage.ConversationMessage(Microsoft.Maui.Chat.ChatParticipant! participant, string? text) -> void
+Microsoft.Maui.Chat.ConversationMessage.ConversationMessage(Microsoft.Maui.Chat.ChatParticipant! participant, string? text, string? id, System.DateTimeOffset? createdAt) -> void
+Microsoft.Maui.Chat.ConversationMessage.CreatedAt.get -> System.DateTimeOffset
+Microsoft.Maui.Chat.ConversationMessage.ErrorText.get -> string?
+Microsoft.Maui.Chat.ConversationMessage.ErrorText.set -> void
+Microsoft.Maui.Chat.ConversationMessage.Id.get -> string!
+Microsoft.Maui.Chat.ConversationMessage.Participant.get -> Microsoft.Maui.Chat.ChatParticipant!
+Microsoft.Maui.Chat.ConversationMessage.Status.get -> Microsoft.Maui.Chat.ConversationMessageStatus
+Microsoft.Maui.Chat.ConversationMessage.Status.set -> void
+Microsoft.Maui.Chat.ConversationMessageStatus
+Microsoft.Maui.Chat.ConversationMessageStatus.Delivered = 3 -> Microsoft.Maui.Chat.ConversationMessageStatus
+Microsoft.Maui.Chat.ConversationMessageStatus.Draft = 0 -> Microsoft.Maui.Chat.ConversationMessageStatus
+Microsoft.Maui.Chat.ConversationMessageStatus.Failed = 5 -> Microsoft.Maui.Chat.ConversationMessageStatus
+Microsoft.Maui.Chat.ConversationMessageStatus.Read = 4 -> Microsoft.Maui.Chat.ConversationMessageStatus
+Microsoft.Maui.Chat.ConversationMessageStatus.Sending = 1 -> Microsoft.Maui.Chat.ConversationMessageStatus
+Microsoft.Maui.Chat.ConversationMessageStatus.Sent = 2 -> Microsoft.Maui.Chat.ConversationMessageStatus
+Microsoft.Maui.Chat.IChatAttachmentPicker
+Microsoft.Maui.Chat.IChatAttachmentPicker.PickAsync(object? fileTypes, long maxBytesPerFile, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Microsoft.Maui.Chat.ChatAttachment!>!>!
+Microsoft.Maui.Chat.IChatAudioRecorder
+Microsoft.Maui.Chat.IChatAudioRecorder.CancelAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Microsoft.Maui.Chat.IChatAudioRecorder.IsRecording.get -> bool
+Microsoft.Maui.Chat.IChatAudioRecorder.IsSupported.get -> bool
+Microsoft.Maui.Chat.IChatAudioRecorder.StartAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Microsoft.Maui.Chat.IChatAudioRecorder.StopAsync(long maximumBytes, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Maui.Chat.ChatAttachment?>!
+Microsoft.Maui.Chat.IChatAudioTranscriber
+Microsoft.Maui.Chat.IChatAudioTranscriber.TranscribeAsync(Microsoft.Maui.Chat.ChatAttachment! recording, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string?>
+Microsoft.Maui.Chat.IChatSpeechRecognizer
+Microsoft.Maui.Chat.IChatSpeechRecognizer.IsListening.get -> bool
+Microsoft.Maui.Chat.IChatSpeechRecognizer.IsSupported.get -> bool
+Microsoft.Maui.Chat.IChatSpeechRecognizer.RecognitionChanged -> System.EventHandler<Microsoft.Maui.Chat.ChatSpeechRecognitionEventArgs!>?
+Microsoft.Maui.Chat.IChatSpeechRecognizer.RequestPermissionsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+Microsoft.Maui.Chat.IChatSpeechRecognizer.StartAsync(System.Globalization.CultureInfo! culture, bool reportPartialResults, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Microsoft.Maui.Chat.IChatSpeechRecognizer.StopAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Microsoft.Maui.Chat.MediaMessageContent
+Microsoft.Maui.Chat.MediaMessageContent.AltText.get -> string?
+Microsoft.Maui.Chat.MediaMessageContent.AltText.set -> void
+Microsoft.Maui.Chat.MediaMessageContent.ByteCount.get -> long
+Microsoft.Maui.Chat.MediaMessageContent.Data.get -> System.ReadOnlyMemory<byte>
+Microsoft.Maui.Chat.MediaMessageContent.DisplayName.get -> string!
+Microsoft.Maui.Chat.MediaMessageContent.FileName.get -> string?
+Microsoft.Maui.Chat.MediaMessageContent.FileName.set -> void
+Microsoft.Maui.Chat.MediaMessageContent.HasData.get -> bool
+Microsoft.Maui.Chat.MediaMessageContent.IsAudio.get -> bool
+Microsoft.Maui.Chat.MediaMessageContent.IsImage.get -> bool
+Microsoft.Maui.Chat.MediaMessageContent.IsVideo.get -> bool
+Microsoft.Maui.Chat.MediaMessageContent.MediaMessageContent(System.ReadOnlyMemory<byte> data, string! mediaType) -> void
+Microsoft.Maui.Chat.MediaMessageContent.MediaMessageContent(System.ReadOnlyMemory<byte> data, string! mediaType, string? id) -> void
+Microsoft.Maui.Chat.MediaMessageContent.MediaMessageContent(System.Uri! uri, string! mediaType) -> void
+Microsoft.Maui.Chat.MediaMessageContent.MediaMessageContent(System.Uri! uri, string! mediaType, string? id) -> void
+Microsoft.Maui.Chat.MediaMessageContent.MediaType.get -> string!
+Microsoft.Maui.Chat.MediaMessageContent.PixelHeight.get -> int
+Microsoft.Maui.Chat.MediaMessageContent.PixelHeight.set -> void
+Microsoft.Maui.Chat.MediaMessageContent.PixelWidth.get -> int
+Microsoft.Maui.Chat.MediaMessageContent.PixelWidth.set -> void
+Microsoft.Maui.Chat.MediaMessageContent.Uri.get -> System.Uri?
+Microsoft.Maui.Chat.MessageContent
+Microsoft.Maui.Chat.MessageContent.ContentChanged -> System.EventHandler?
+Microsoft.Maui.Chat.MessageContent.Id.get -> string!
+Microsoft.Maui.Chat.MessageContent.MessageContent(string? id = null) -> void
+Microsoft.Maui.Chat.MessageContent.Presentation.get -> Microsoft.Maui.Chat.ChatContentPresentation
+Microsoft.Maui.Chat.MessageContent.Presentation.set -> void
+Microsoft.Maui.Chat.MessageContent.RaiseContentChanged() -> void
+Microsoft.Maui.Chat.ObservableChatConversation
+Microsoft.Maui.Chat.ObservableChatConversation.AddContent<T>(Microsoft.Maui.Chat.ConversationMessage! message, T! content) -> T!
+Microsoft.Maui.Chat.ObservableChatConversation.AddMessage(Microsoft.Maui.Chat.ChatParticipant! participant, string? text) -> Microsoft.Maui.Chat.ConversationMessage!
+Microsoft.Maui.Chat.ObservableChatConversation.AddMessage(Microsoft.Maui.Chat.ConversationMessage! message) -> Microsoft.Maui.Chat.ConversationMessage!
+Microsoft.Maui.Chat.ObservableChatConversation.CancelHandler.get -> System.Func<Microsoft.Maui.Chat.ObservableChatConversation!, System.Threading.CancellationToken, System.Threading.Tasks.Task!>?
+Microsoft.Maui.Chat.ObservableChatConversation.CancelHandler.set -> void
+Microsoft.Maui.Chat.ObservableChatConversation.NotifyContentChanged(Microsoft.Maui.Chat.ConversationMessage! message, Microsoft.Maui.Chat.MessageContent! content) -> void
+Microsoft.Maui.Chat.ObservableChatConversation.ObservableChatConversation() -> void
+Microsoft.Maui.Chat.ObservableChatConversation.ObservableChatConversation(Microsoft.Maui.Chat.ChatParticipant! localParticipant) -> void
+Microsoft.Maui.Chat.ObservableChatConversation.RemoveMessage(Microsoft.Maui.Chat.ConversationMessage! message) -> bool
+Microsoft.Maui.Chat.ObservableChatConversation.Reset() -> void
+Microsoft.Maui.Chat.ObservableChatConversation.SendHandler.get -> System.Func<Microsoft.Maui.Chat.ObservableChatConversation!, Microsoft.Maui.Chat.ChatDraft!, System.Threading.CancellationToken, System.Threading.Tasks.Task<bool>!>?
+Microsoft.Maui.Chat.ObservableChatConversation.SendHandler.set -> void
+Microsoft.Maui.Chat.ObservableChatConversation.SetStatus(Microsoft.Maui.Chat.ChatConversationStatus status) -> void
+Microsoft.Maui.Chat.ObservableChatObject
+Microsoft.Maui.Chat.ObservableChatObject.ObservableChatObject() -> void
+Microsoft.Maui.Chat.ObservableChatObject.OnPropertyChanged(string? propertyName = null) -> void
+Microsoft.Maui.Chat.ObservableChatObject.PropertyChanged -> System.ComponentModel.PropertyChangedEventHandler?
+Microsoft.Maui.Chat.ObservableChatObject.SetProperty<T>(ref T field, T value, string? propertyName = null) -> bool
+Microsoft.Maui.Chat.StructuredTextMessageContent<TDocument>
+Microsoft.Maui.Chat.StructuredTextMessageContent<TDocument>.Document.get -> TDocument
+Microsoft.Maui.Chat.StructuredTextMessageContent<TDocument>.Replace(string? text, TDocument document) -> void
+Microsoft.Maui.Chat.StructuredTextMessageContent<TDocument>.StructuredTextMessageContent(string? text, TDocument document, string? id = null) -> void
+Microsoft.Maui.Chat.TextMessageContent
+Microsoft.Maui.Chat.TextMessageContent.Append(string? text) -> void
+Microsoft.Maui.Chat.TextMessageContent.IsEmpty.get -> bool
+Microsoft.Maui.Chat.TextMessageContent.Text.get -> string!
+Microsoft.Maui.Chat.TextMessageContent.Text.set -> void
+Microsoft.Maui.Chat.TextMessageContent.TextMessageContent() -> void
+Microsoft.Maui.Chat.TextMessageContent.TextMessageContent(string? text, string? id = null) -> void
+abstract Microsoft.Maui.Chat.ChatConversation.SendCoreAsync(Microsoft.Maui.Chat.ChatDraft! draft, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
+const Microsoft.Maui.Chat.ChatComposerController.DefaultAttachmentErrorMessage = "That attachment could not be added." -> string!
+const Microsoft.Maui.Chat.ChatComposerController.DefaultAudioCaptureErrorMessage = "The audio recording could not be completed." -> string!
+const Microsoft.Maui.Chat.ChatComposerController.DefaultSendErrorMessage = "Your message could not be sent. Please try again." -> string!
+const Microsoft.Maui.Chat.ChatComposerController.DefaultSpeechRecognitionErrorMessage = "Live voice could not continue." -> string!
+override Microsoft.Maui.Chat.ObservableChatConversation.CanCancel.get -> bool
+override Microsoft.Maui.Chat.ObservableChatConversation.CancelCoreAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+override Microsoft.Maui.Chat.ObservableChatConversation.SendCoreAsync(Microsoft.Maui.Chat.ChatDraft! draft, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
+static Microsoft.Maui.Chat.ChatConversationChange.ContentAdded(Microsoft.Maui.Chat.ConversationMessage! message, Microsoft.Maui.Chat.MessageContent! content, int index) -> Microsoft.Maui.Chat.ChatConversationChange
+static Microsoft.Maui.Chat.ChatConversationChange.ContentChanged(Microsoft.Maui.Chat.ConversationMessage! message, Microsoft.Maui.Chat.MessageContent! content) -> Microsoft.Maui.Chat.ChatConversationChange
+static Microsoft.Maui.Chat.ChatConversationChange.ContentRemoved(Microsoft.Maui.Chat.ConversationMessage! message, Microsoft.Maui.Chat.MessageContent! content, int index) -> Microsoft.Maui.Chat.ChatConversationChange
+static Microsoft.Maui.Chat.ChatConversationChange.MessageAdded(Microsoft.Maui.Chat.ConversationMessage! message, int index) -> Microsoft.Maui.Chat.ChatConversationChange
+static Microsoft.Maui.Chat.ChatConversationChange.MessageChanged(Microsoft.Maui.Chat.ConversationMessage! message) -> Microsoft.Maui.Chat.ChatConversationChange
+static Microsoft.Maui.Chat.ChatConversationChange.MessageRemoved(Microsoft.Maui.Chat.ConversationMessage! message, int index) -> Microsoft.Maui.Chat.ChatConversationChange
+static Microsoft.Maui.Chat.ChatConversationChange.Reset() -> Microsoft.Maui.Chat.ChatConversationChange
+static Microsoft.Maui.Chat.ChatConversationChange.StatusChanged(Microsoft.Maui.Chat.ChatConversationStatus status) -> Microsoft.Maui.Chat.ChatConversationChange
+virtual Microsoft.Maui.Chat.ChatConversation.CanCancel.get -> bool
+virtual Microsoft.Maui.Chat.ChatConversation.CanSend(Microsoft.Maui.Chat.ChatDraft? draft) -> bool
+virtual Microsoft.Maui.Chat.ChatConversation.CancelCoreAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!

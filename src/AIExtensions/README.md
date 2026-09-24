@@ -7,8 +7,30 @@ AI integration packages for .NET MAUI, built on [`Microsoft.Extensions.AI`](http
 | Package | Description |
 |---------|-------------|
 | [`Microsoft.Maui.AI.Attributes`](Microsoft.Maui.AI.Attributes/) | Source-generated AI tool contexts — `[ExportAIFunction]`, DI binding, AOT-safe |
+| [`Microsoft.Maui.AI.Chat`](Microsoft.Maui.AI.Chat/) | Headless chat engine — streaming blocks, tools/approval/UI actions, typed state, thread restore/retry, reasoning, media, and `[ToolBlock]` generation |
+| [`Microsoft.Maui.AI.Chat.Presentation`](Microsoft.Maui.AI.Chat.Presentation/) | Shared projection from an AI agent session to the provider-neutral chat conversation model |
+| [`Microsoft.Maui.AI.Chat.Controls`](Microsoft.Maui.AI.Chat.Controls/) | Native MAUI chat UI — zero-config `CopilotChatView`, virtualized `MessageListView`, XAML block templates, multimodal input, stop/retry, and theming |
+| [`Microsoft.Maui.Chat`](Microsoft.Maui.Chat/) | Renderer-neutral conversations, messages, multimodal contracts, and the shared `ChatComposerController` |
+| [`Microsoft.Maui.AI.Chat.Controls.Blazor`](Microsoft.Maui.AI.Chat.Controls.Blazor/) | Blazor Hybrid AI chat UI with built-in block renderers and override registrations |
+| [`Microsoft.Maui.Chat.Controls`](Microsoft.Maui.Chat.Controls/) | Provider-neutral `ChatView` for human, group, and agent participants with files, audio capture, live speech, and no AI dependency |
+| [`Microsoft.Maui.Chat.Controls.Blazor`](Microsoft.Maui.Chat.Controls.Blazor/) | Provider-neutral Blazor Hybrid chat controls: `<ChatView>` shell, streaming, participant chrome, and a `MessageContentRenderer<T>` seam. Same neutral conversation model, no AI dependency |
 
-- [Full documentation](Microsoft.Maui.AI.Attributes/README.md) — API reference, samples, and equivalence rules
+`Microsoft.Maui.AI.Chat` supports caller-provided `IConversationThread` persistence, history
+restore, retry, and coherent clear/reset behavior. No storage provider is built in:
+applications own persistence and serialization. The engine and thread contracts are deliberately
+single-thread-affine and not thread-safe; callers serialize access on their owning application
+thread.
+
+- [Attributes documentation](Microsoft.Maui.AI.Attributes/README.md) — API reference, samples, and equivalence rules
+- [Chat engine documentation](Microsoft.Maui.AI.Chat/README.md) — engine, blocks, persistence, typed state, and ToolBlock generation
+- [Chat controls documentation](Microsoft.Maui.AI.Chat.Controls/README.md) — drop-in control, templates, attachments, and customization
+- [Chat core documentation](Microsoft.Maui.Chat/README.md) — shared model and composer controller
+- [Chat presentation documentation](Microsoft.Maui.AI.Chat.Presentation/README.md) — shared AI block projection for native and Blazor renderers
+- [AI Blazor chat documentation](Microsoft.Maui.AI.Chat.Controls.Blazor/README.md) — AI renderers for the provider-neutral Blazor chat shell
+- [Neutral chat documentation](Microsoft.Maui.Chat.Controls/README.md) — reusable human/group chat model, controls, and templates
+- [Neutral Blazor Hybrid chat documentation](Microsoft.Maui.Chat.Controls.Blazor/README.md) — same neutral conversation model rendered through a Blazor Hybrid `<ChatView>`
+- [Chat recording/replay utility](Microsoft.Maui.AI.Chat.Recording/README.md) — nonshipping semantic `IChatClient` fixtures for deterministic tests and offline samples
+- [Chat upstream notes](Microsoft.Maui.AI.Chat/UPSTREAM-CHANGES.md) — how the chat engine relates to the ASP.NET AI Components it forked from
 
 ## Samples
 
@@ -16,7 +38,10 @@ AI integration packages for .NET MAUI, built on [`Microsoft.Extensions.AI`](http
 |--------|-------------|
 | [`AIExtensions.Sample.Hello`](../../samples/AIExtensions.Sample.Hello/) | Minimal end-to-end usage |
 | [`AIExtensions.Sample.DIParameters`](../../samples/AIExtensions.Sample.DIParameters/) | DI parameter binding with `[FromServices]` |
-| [`AIExtensions.Sample.Garden`](../../samples/AIExtensions.Sample.Garden/) | Full MAUI chat app with navigation, cart, approval flow |
+| [`ChatControls.Sample`](../../samples/ChatControls.Sample/) | One provider-neutral conversation rendered side-by-side through native XAML and Blazor Hybrid chat surfaces, with participants, delivery states, typing, media, attachments, custom content, and theme overrides |
+| [`AIExtensions.Sample.Garden`](../../samples/AIExtensions.Sample.Garden/) | Full MAUI AI chat app: Azure OpenAI, custom product/order blocks, generated `[ToolBlock]`, approvals, UI state, attachments, image generation, raw-block preview, and template switching |
+| [`AIChat.Client.Sample`](../../samples/AIChat.Client.Sample/) | Direct Azure OpenAI MAUI Razor client with strict record/replay modes and one shared native/Blazor session |
+| [`AIChat.ClientServer.Sample`](../../samples/AIChat.ClientServer.Sample/) | AG-UI server plus MAUI Razor client covering all server scenarios and typed state |
 
 ## CI
 
