@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.ClientModel;
+using AIExtensions.Sample.ChatPlayground.Features.Library;
 using AIExtensions.Sample.ChatPlayground.Features.Recording;
 using AIExtensions.Sample.ChatPlayground.Features.Search;
 using AIExtensions.Sample.ChatPlayground.Services;
@@ -36,22 +37,16 @@ public static class MauiProgram
 
         builder.Services.AddSingleton<ImageInputService>();
         builder.Services.AddSingleton<PlaygroundTools>();
-        builder.Services.AddSingleton(serviceProvider => new ChatRecordingService(
-            serviceProvider.GetRequiredService<ILogger<ChatRecordingService>>(),
+        builder.Services.AddSingleton(serviceProvider => new ChatLibraryService(
+            serviceProvider.GetRequiredService<ILogger<ChatLibraryService>>(),
             FileSystem.AppDataDirectory,
             FileSystem.CacheDirectory));
+        builder.Services.AddSingleton<IChatLibrary>(provider => provider.GetRequiredService<ChatLibraryService>());
+        builder.Services.AddSingleton<IChatRecordingSession>(provider => provider.GetRequiredService<ChatLibraryService>());
         AddChatSearch(builder.Services, builder.Configuration);
         builder.Services.AddSingleton<SettingsPaneViewModel>();
         builder.Services.AddSingleton<ChatAreaViewModel>();
-        builder.Services.AddSingleton(serviceProvider =>
-        {
-            var search = serviceProvider.GetRequiredService<ChatSearchService>();
-            return new ChatLibraryViewModel(search)
-            {
-                UseAzureEmbeddings = search.HasAzureEmbeddings &&
-                    Preferences.Default.Get(ChatLibraryViewModel.AzureConsentPreferenceKey, false),
-            };
-        });
+        builder.Services.AddSingleton<ChatLibraryViewModel>();
         builder.Services.AddSingleton<MainViewModel>();
         builder.Services.AddTransient<MainPage>();
 
@@ -64,7 +59,7 @@ public static class MauiProgram
         if (OperatingSystem.IsIOSVersionAtLeast(26) || OperatingSystem.IsMacCatalystVersionAtLeast(26))
             services.AddSingleton<IChatClient>(serviceProvider => CreateLocalChatClient(
                 serviceProvider.GetRequiredService<ILoggerFactory>(),
-                serviceProvider.GetRequiredService<ChatRecordingService>()));
+                serviceProvider.GetRequiredService<IChatRecordingSession>()));
 #endif
         if (!string.IsNullOrWhiteSpace(configuration["AI:Endpoint"]) ||
             !string.IsNullOrWhiteSpace(configuration["AI:ApiKey"]) ||
@@ -77,7 +72,7 @@ public static class MauiProgram
                 configuration["AI:DeploymentName"],
                 configuration["AI:ImageDeploymentName"],
                 serviceProvider.GetRequiredService<ILoggerFactory>(),
-                serviceProvider.GetRequiredService<ChatRecordingService>()));
+                serviceProvider.GetRequiredService<IChatRecordingSession>()));
         }
 
         if (!services.Any(service => service.ServiceType == typeof(IChatClient)))
@@ -86,7 +81,7 @@ public static class MauiProgram
                 "AI:Endpoint, AI:ApiKey, AI:DeploymentName, and AI:ImageDeploymentName.");
 
         services.AddSingleton<IChatClient>(serviceProvider =>
-            new ReplayChatClient(serviceProvider.GetRequiredService<ChatRecordingService>())
+            new ReplayChatClient(serviceProvider.GetRequiredService<IChatRecordingSession>())
                 .AsBuilder()
                 .UseDescriptor(new ChatClientDescriptor(
                     "Replay",
@@ -103,7 +98,7 @@ public static class MauiProgram
         string? deploymentName,
         string? imageDeploymentName,
         ILoggerFactory loggerFactory,
-        ChatRecordingService recording)
+        IChatRecordingSession recording)
     {
         if (string.IsNullOrWhiteSpace(endpointValue) ||
             string.IsNullOrWhiteSpace(apiKey) ||
@@ -141,18 +136,19 @@ public static class MauiProgram
 
     private static void AddChatSearch(IServiceCollection services, IConfiguration configuration)
     {
-        Func<IEmbeddingGenerator<string, Embedding<float>>>? localFactory = null;
-        string? localModelKey = null;
 #if IOS || MACCATALYST
         if (OperatingSystem.IsIOSVersionAtLeast(13) ||
             OperatingSystem.IsMacCatalystVersionAtLeast(13, 1))
         {
-            localFactory = () => new NLEmbeddingGenerator();
-            localModelKey = $"apple/natural-language/english/{Environment.OSVersion.Version}";
+            services.AddSingleton(new ChatEmbeddingProvider(
+                new ChatSearchDescriptor(
+                    "apple-natural-language", "Apple on-device index",
+                    "Search by meaning with Apple's on-device NaturalLanguage embeddings.",
+                    $"apple/natural-language/english/{typeof(NLEmbeddingGenerator).Assembly.GetName().Version}/{Environment.OSVersion.Version}",
+                    ChatSearchDataLocation.OnDevice),
+                () => new NLEmbeddingGenerator()));
         }
 #endif
-        Func<IEmbeddingGenerator<string, Embedding<float>>>? azureFactory = null;
-        string? azureModelKey = null;
         var embeddingDeployment = configuration["AI:EmbeddingDeploymentName"];
         if (!string.IsNullOrWhiteSpace(embeddingDeployment))
         {
@@ -162,16 +158,22 @@ public static class MauiProgram
                     "AI:EmbeddingDeploymentName requires AI:ApiKey and AI:Endpoint.");
 
             var endpoint = RequireOpenAIEndpoint(configuration["AI:Endpoint"]);
-            azureFactory = () => CreateOpenAIClient(endpoint, apiKey)
-                .GetEmbeddingClient(embeddingDeployment).AsIEmbeddingGenerator();
-            azureModelKey = $"azure/{endpoint.AbsoluteUri}/{embeddingDeployment}";
+            var revision = configuration["AI:EmbeddingIndexRevision"] ?? "initial";
+            services.AddSingleton(new ChatEmbeddingProvider(
+                new ChatSearchDescriptor(
+                    $"azure/{embeddingDeployment}", $"Azure OpenAI: {embeddingDeployment}",
+                    "Semantic search sends saved text and buffered queries to Azure.",
+                    $"azure/{endpoint.AbsoluteUri}/{embeddingDeployment}/{revision}",
+                    ChatSearchDataLocation.Remote),
+                () => CreateOpenAIClient(endpoint, apiKey)
+                    .GetEmbeddingClient(embeddingDeployment).AsIEmbeddingGenerator()));
         }
 
         services.AddSingleton(serviceProvider => new ChatSearchService(
-            serviceProvider.GetRequiredService<ChatRecordingService>(),
+            serviceProvider.GetRequiredService<IChatLibrary>(),
             serviceProvider.GetRequiredService<ILogger<ChatSearchService>>(),
             FileSystem.AppDataDirectory,
-            localFactory, localModelKey, azureFactory, azureModelKey));
+            serviceProvider.GetServices<ChatEmbeddingProvider>()));
     }
 
     private static Uri RequireOpenAIEndpoint(string? value)
@@ -184,7 +186,7 @@ public static class MauiProgram
     }
 
 #if IOS || MACCATALYST
-    private static IChatClient CreateLocalChatClient(ILoggerFactory loggerFactory, ChatRecordingService recording)
+    private static IChatClient CreateLocalChatClient(ILoggerFactory loggerFactory, IChatRecordingSession recording)
     {
 #pragma warning disable CA1416
         var client = new AppleIntelligenceChatClient(loggerFactory)

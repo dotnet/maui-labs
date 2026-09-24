@@ -46,7 +46,8 @@
                 <Border BackgroundColor="{AppThemeBinding Light={StaticResource PanelBackground}, Dark={StaticResource PanelBackgroundDark}}"
                         Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}"
                         StrokeShape="RoundRectangle 12" Padding="16">
-                    <Grid x:Name="HeaderGrid" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                    <Grid x:Name="HeaderGrid" RowDefinitions="Auto,Auto"
+                          ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" RowSpacing="4">
                         <ImageButton x:Name="OpenSettingsButton"
                                      Source="settings.png" IsVisible="False"
                                      Clicked="OpenSettingsClicked"
@@ -60,7 +61,8 @@
                                    Style="{StaticResource MutedLabel}"
                                    AutomationId="RequestStatusLabel" />
                         </VerticalStackLayout>
-                        <HorizontalStackLayout Grid.Column="2" VerticalOptions="Start">
+                        <HorizontalStackLayout x:Name="HeaderActions" Grid.Column="2"
+                                               HorizontalOptions="End" VerticalOptions="Start">
                             <VerticalStackLayout Margin="4,0" Spacing="2">
                                 <ImageButton Source="add.png"
                                              Style="{StaticResource ChatActionButton}"

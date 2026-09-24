@@ -7,6 +7,7 @@ public partial class MainPage : ContentPage
 {
     private const double CompactLayoutWidth = 760;
     private bool _isCompact;
+    private bool _isNarrowHeader;
     private bool _restored;
 
     /// <summary>Initializes the page with its view model.</summary>
@@ -30,6 +31,14 @@ public partial class MainPage : ContentPage
     private void PageSizeChanged(object? sender, EventArgs e)
     {
         var useCompactLayout = Width > 0 && Width < CompactLayoutWidth;
+        var useNarrowHeader = Width > 0 && Width < 480;
+        if (useNarrowHeader != _isNarrowHeader)
+        {
+            _isNarrowHeader = useNarrowHeader;
+            Grid.SetRow(HeaderActions, useNarrowHeader ? 1 : 0);
+            Grid.SetColumn(HeaderActions, useNarrowHeader ? 1 : 2);
+        }
+
         if (useCompactLayout)
         {
             // Phones fill the available width; tablets retain a sidebar-sized settings overlay.

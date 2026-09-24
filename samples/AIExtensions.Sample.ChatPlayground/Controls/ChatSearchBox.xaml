@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:controls="clr-namespace:AIExtensions.Sample.ChatPlayground.Controls"
+             xmlns:search="clr-namespace:AIExtensions.Sample.ChatPlayground.Features.Search"
+             xmlns:viewModels="clr-namespace:AIExtensions.Sample.ChatPlayground.ViewModels"
+             x:Class="AIExtensions.Sample.ChatPlayground.Controls.ChatSearchBox"
+             x:DataType="viewModels:ChatLibraryViewModel">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="6">
+        <Entry Text="{Binding Query}"
+               Placeholder="Search saved chats"
+               ClearButtonVisibility="WhileEditing"
+               ReturnType="Search"
+               ReturnCommand="{Binding SearchNowCommand}"
+               AutomationId="ChatLibrarySearchEntry" />
+        <Button x:Name="SearchMethodButton" Grid.Row="1"
+                Text="{Binding SearchIndexLabel}"
+                Style="{StaticResource SecondaryButtonStyle}"
+                HeightRequest="{OnPlatform 44, MacCatalyst=40, WinUI=40}"
+                SemanticProperties.Hint="Choose a local or remote search method"
+                AutomationId="ChatLibraryIndexProvider">
+            <controls:PopupMenu.Content>
+                <Grid RowDefinitions="Auto,*" RowSpacing="8" WidthRequest="300"
+                      x:DataType="viewModels:ChatLibraryViewModel">
+                    <Label Text="SEARCH METHOD" Style="{StaticResource SectionHeading}" />
+                    <CollectionView Grid.Row="1"
+                                    ItemsSource="{Binding SearchModes}"
+                                    HeightRequest="{Binding SearchPickerHeight}"
+                                    ItemSizingStrategy="MeasureAllItems"
+                                    SelectionMode="None"
+                                    AutomationId="ChatLibrarySearchMethods">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="search:ChatSearchDescriptor">
+                                <Grid RowDefinitions="Auto,Auto" RowSpacing="2" Margin="0,3">
+                                    <Button Text="{Binding DisplayName}"
+                                            Clicked="SelectModeClicked"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            HorizontalOptions="Fill"
+                                            HeightRequest="44"
+                                            AutomationId="{Binding Id, StringFormat='SearchMode-{0}'}" />
+                                    <Label Grid.Row="1" Text="{Binding Description}"
+                                           Style="{StaticResource MutedLabel}"
+                                           FontSize="12" MaxLines="2" />
+                                </Grid>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                    </CollectionView>
+                </Grid>
+            </controls:PopupMenu.Content>
+        </Button>
+        <Label Grid.Row="2"
+               Text="{Binding SearchModeDescription}"
+               Style="{StaticResource MutedLabel}"
+               FontSize="12"
+               AutomationId="ChatLibraryIndexDescription" />
+        <Grid Grid.Row="3" ColumnDefinitions="Auto,*" ColumnSpacing="8"
+              IsVisible="{Binding IsIndexing}">
+            <ActivityIndicator IsRunning="{Binding IsIndexing}"
+                               Color="{StaticResource Primary}"
+                               WidthRequest="20" HeightRequest="20"
+                               AutomationId="ChatLibraryIndexingSpinner" />
+            <Label Grid.Column="1"
+                   Text="{Binding IndexProgressMessage}"
+                   Style="{StaticResource MutedLabel}" FontSize="12"
+                   MaxLines="2" LineBreakMode="TailTruncation"
+                   AutomationId="ChatLibraryIndexProgress" />
+        </Grid>
+    </Grid>
+</ContentView>

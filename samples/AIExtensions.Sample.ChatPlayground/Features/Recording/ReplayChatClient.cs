@@ -4,7 +4,7 @@ using Microsoft.Extensions.AI;
 namespace AIExtensions.Sample.ChatPlayground.Features.Recording;
 
 /// <summary>Replays without a provider reference, so neither model can be contacted.</summary>
-public sealed class ReplayChatClient(ChatRecordingService recording) : IChatClient
+public sealed class ReplayChatClient(IChatRecordingSession recording) : IChatClient
 {
     public Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages,

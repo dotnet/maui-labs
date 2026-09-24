@@ -4,11 +4,17 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using AIExtensions.Sample.ChatPlayground.Features.Library;
 using AIExtensions.Sample.ChatPlayground.Features.Recording;
+using AIExtensions.Sample.ChatPlayground.Features.Storage;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
 namespace AIExtensions.Sample.ChatPlayground.Features.Search;
+
+public sealed record ChatSearchProgress(
+    int CompletedChats, int TotalChats, string ChatTitle,
+    int IndexedChunks, int TotalChunks, bool IsIndexing);
 
 /// <summary>A saved chat and the turn excerpt that best matches a search.</summary>
 public sealed record ChatSearchHit(
@@ -23,86 +29,69 @@ public sealed record ChatSearchResults(IReadOnlyList<ChatSearchHit> Hits, bool I
 /// <summary>Keeps replaceable, model-specific text indexes outside portable chat recordings.</summary>
 public sealed class ChatSearchService : IDisposable
 {
-    private const int IndexVersion = 1;
+    private const int IndexVersion = 2;
     private const int MaxChunkCharacters = 360;
-    private readonly ChatRecordingService _recording;
+    private const int MaxSnippetCharacters = 180;
+    private readonly IChatLibrary _library;
     private readonly ILogger<ChatSearchService> _logger;
     private readonly string _indexDirectory;
-    private readonly Func<IEmbeddingGenerator<string, Embedding<float>>>? _localFactory;
-    private readonly Func<IEmbeddingGenerator<string, Embedding<float>>>? _azureFactory;
-    private readonly string? _localModelKey;
-    private readonly string? _azureModelKey;
+    private readonly Dictionary<string, ChatEmbeddingProvider> _providers;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Dictionary<string, StoredIndex> _cache = new(StringComparer.Ordinal);
-    private IEmbeddingGenerator<string, Embedding<float>>? _local;
-    private IEmbeddingGenerator<string, Embedding<float>>? _azure;
+    private readonly Dictionary<string, IEmbeddingGenerator<string, Embedding<float>>> _generators =
+        new(StringComparer.Ordinal);
 
     public ChatSearchService(
-        ChatRecordingService recording,
+        IChatLibrary library,
         ILogger<ChatSearchService> logger,
         string dataDirectory,
-        Func<IEmbeddingGenerator<string, Embedding<float>>>? localFactory = null,
-        string? localModelKey = null,
-        Func<IEmbeddingGenerator<string, Embedding<float>>>? azureFactory = null,
-        string? azureModelKey = null)
+        IEnumerable<ChatEmbeddingProvider> providers)
     {
-        if ((localFactory is null) != (localModelKey is null) ||
-            (azureFactory is null) != (azureModelKey is null))
-            throw new ArgumentException("Each embedding provider needs both a factory and a model identity.");
+        ArgumentNullException.ThrowIfNull(library);
+        ArgumentNullException.ThrowIfNull(logger);
+        ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
+        ArgumentNullException.ThrowIfNull(providers);
+        var registered = providers.ToArray();
+        if (registered.Any(provider => provider is null) ||
+            registered.Select(provider => provider.Descriptor.Id).Distinct(StringComparer.Ordinal).Count() != registered.Length ||
+            registered.Select(provider => provider.Descriptor.IndexIdentity).Distinct(StringComparer.Ordinal).Count() != registered.Length)
+            throw new ArgumentException("Embedding providers must have distinct IDs and model identities.", nameof(providers));
 
-        _recording = recording;
+        _library = library;
         _logger = logger;
         _indexDirectory = Path.Combine(dataDirectory, "chat-playground", "indexes");
-        _localFactory = localFactory;
-        _azureFactory = azureFactory;
-        _localModelKey = localModelKey;
-        _azureModelKey = azureModelKey;
+        _providers = registered.ToDictionary(provider => provider.Descriptor.Id, StringComparer.Ordinal);
+        SearchModes = [ChatSearchDescriptor.Contains, .. registered.Select(provider => provider.Descriptor)];
     }
 
-    public bool HasLocalEmbeddings => _localFactory is not null;
-    public bool HasAzureEmbeddings => _azureFactory is not null;
+    public IReadOnlyList<ChatSearchDescriptor> SearchModes { get; }
 
-    /// <summary>Indexes an archived chat without holding up recording or replacing its data.</summary>
-    public async Task<string?> IndexChatAsync(string chatId, bool useAzure, CancellationToken cancellationToken = default)
-    {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            var chat = _recording.ListChats().Single(item => item.Id == chatId);
-            if (chat.InteractionCount == 0)
-                return null;
-            var notices = new List<string>();
-            var (modelKey, generator) = GetProvider(useAzure, semantic: true);
-            await EnsureIndexAsync(chat, modelKey, generator, notices, cancellationToken)
-                .ConfigureAwait(false);
-            return notices.Count == 0 ? null : string.Join(" ", notices.Distinct());
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    /// <summary>Filters locally while typing; semantic search runs only on explicit request.</summary>
+    /// <summary>Searches using the selected backend, building only that backend's missing index.</summary>
     public async Task<ChatSearchResults> SearchAsync(
-        string query, bool semantic, bool useAzure, CancellationToken cancellationToken = default)
+        string query, string searchModeId, CancellationToken cancellationToken = default,
+        IProgress<ChatSearchProgress>? progress = null)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             query = query.Trim();
-            var (modelKey, generator) = GetProvider(useAzure, semantic);
+            var (modelKey, generator) = GetProvider(searchModeId);
             var notices = new List<string>();
-            if (semantic && generator is null)
-                notices.Add("Semantic search is unavailable; showing keyword matches.");
 
-            var chats = _recording.ListChats().Where(chat => chat.InteractionCount > 0).ToArray();
+            var chats = _library.ListChats().Where(chat => chat.InteractionCount > 0).ToArray();
             var indexes = new List<(SavedChat Chat, StoredIndex Index)>(chats.Length);
-            foreach (var chat in chats)
+            for (var i = 0; i < chats.Length; i++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                var chat = chats[i];
+                var completed = i;
                 indexes.Add((chat, await EnsureIndexAsync(
-                    chat, modelKey, generator, notices, cancellationToken).ConfigureAwait(false)));
+                    chat, modelKey, generator, notices, cancellationToken,
+                    (chunks, total) => progress?.Report(new ChatSearchProgress(
+                        completed, chats.Length, chat.Title, chunks, total, IsIndexing: true)))
+                    .ConfigureAwait(false)));
+                progress?.Report(new ChatSearchProgress(
+                    i + 1, chats.Length, chat.Title, 0, 0, IsIndexing: false));
             }
 
             ReadOnlyMemory<float> queryVector = default;
@@ -119,9 +108,15 @@ public sealed class ChatSearchService : IDisposable
                         continue;
 
                     notices.Add($"Rebuilt the outdated search vectors for {chat.Title}.");
+                    var completed = i;
                     indexes[i] = (chat, await EnsureIndexAsync(
-                        chat, modelKey, generator, notices, cancellationToken, rebuild: true)
+                        chat, modelKey, generator, notices, cancellationToken,
+                        (chunks, total) => progress?.Report(new ChatSearchProgress(
+                            completed, chats.Length, chat.Title, chunks, total, IsIndexing: true)),
+                        rebuild: true)
                         .ConfigureAwait(false));
+                    progress?.Report(new ChatSearchProgress(
+                        i + 1, chats.Length, chat.Title, 0, 0, IsIndexing: false));
                 }
             }
 
@@ -157,7 +152,7 @@ public sealed class ChatSearchService : IDisposable
                 if (query.Length == 0 || bestScore > float.NegativeInfinity)
                 {
                     var excerpt = snippet is null ? chat.Title :
-                        $"{(snippet.IsUser ? "You" : "Assistant")}: {snippet.Text}";
+                        $"{(snippet.IsUser ? "You" : "Assistant")}: {Excerpt(snippet.Text, query)}";
                     hits.Add(new ChatSearchHit(chat.Id, chat.Title, excerpt,
                         chat.InteractionCount, chat.UpdatedAtUtc,
                         query.Length == 0 ? 0 : bestScore));
@@ -167,7 +162,7 @@ public sealed class ChatSearchService : IDisposable
             return new ChatSearchResults(
                 hits.OrderByDescending(hit => hit.Score).ThenByDescending(hit => hit.UpdatedAtUtc)
                     .Take(40).ToArray(),
-                generator is not null && semantic,
+                generator is not null && query.Length > 0,
                 notices.Count == 0 ? null : string.Join(" ", notices.Distinct()));
         }
         finally
@@ -176,26 +171,38 @@ public sealed class ChatSearchService : IDisposable
         }
     }
 
-    private (string ModelKey, IEmbeddingGenerator<string, Embedding<float>>? Generator) GetProvider(
-        bool useAzure, bool semantic)
+    private static string Excerpt(string text, string query)
     {
-        if (!semantic)
-            return ("text-v1", null);
-        if (useAzure)
+        if (text.Length <= MaxSnippetCharacters)
+            return text;
+        var match = query.Length == 0 ? -1 : text.IndexOf(query, StringComparison.OrdinalIgnoreCase);
+        var start = match < 0 ? 0 : Math.Min(Math.Max(0, match - 40), text.Length - MaxSnippetCharacters);
+        return (start == 0 ? string.Empty : "...") +
+            text.Substring(start, MaxSnippetCharacters) +
+            (start + MaxSnippetCharacters == text.Length ? string.Empty : "...");
+    }
+
+    private (string ModelKey, IEmbeddingGenerator<string, Embedding<float>>? Generator) GetProvider(
+        string searchModeId)
+    {
+        if (searchModeId == ChatSearchDescriptor.ContainsId)
+            return (ChatSearchDescriptor.Contains.IndexIdentity, null);
+        if (!_providers.TryGetValue(searchModeId, out var provider))
+            throw new ArgumentException("The selected search method is not registered.", nameof(searchModeId));
+        if (!_generators.TryGetValue(searchModeId, out var generator))
         {
-            if (_azureFactory is null)
-                throw new InvalidOperationException(
-                    "Azure semantic search needs AI:EmbeddingDeploymentName in local user secrets.");
-            return (_azureModelKey!, _azure ??= _azureFactory());
+            generator = provider.CreateGenerator()
+                ?? throw new InvalidOperationException(
+                    $"The {provider.Descriptor.DisplayName} embedding provider returned no generator.");
+            _generators.Add(searchModeId, generator);
         }
-        return _localFactory is null
-            ? ("text-v1", null)
-            : (_localModelKey!, _local ??= _localFactory());
+        return (provider.Descriptor.IndexIdentity, generator);
     }
 
     private async Task<StoredIndex> EnsureIndexAsync(
         SavedChat chat, string modelKey, IEmbeddingGenerator<string, Embedding<float>>? generator,
-        List<string> notices, CancellationToken cancellationToken, bool rebuild = false)
+        List<string> notices, CancellationToken cancellationToken,
+        Action<int, int>? indexProgress = null, bool rebuild = false)
     {
         // Keep endpoint and model identity out of filenames and the persisted index.
         var key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(modelKey)));
@@ -239,11 +246,12 @@ public sealed class ChatSearchService : IDisposable
         var chunks = await Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var recording = _recording.ReadChat(chat.Id);
+            var recording = _library.ReadChat(chat.Id);
             if (recording.Interactions.Count != chat.InteractionCount)
                 throw new InvalidDataException($"The chat library metadata for {chat.Title} is out of date.");
-            return Extract(recording, index.InteractionCount);
+            return Extract(recording, index.InteractionCount, generator is not null);
         }, cancellationToken).ConfigureAwait(false);
+        indexProgress?.Invoke(0, chunks.Count);
         var updated = new StoredIndex
         {
             ModelKey = key,
@@ -253,6 +261,7 @@ public sealed class ChatSearchService : IDisposable
         };
         if (generator is not null)
         {
+            var indexed = 0;
             foreach (var batch in chunks.Chunk(32))
             {
                 var embeddings = await Task.Run(
@@ -268,14 +277,18 @@ public sealed class ChatSearchService : IDisposable
                     updated.Dimension = vector.Length;
                     batch[i].Vector = vector;
                 }
+                indexed += batch.Length;
+                indexProgress?.Invoke(indexed, chunks.Count);
             }
         }
 
         updated.Chunks.AddRange(chunks);
         await Task.Run(() =>
-            ChatLibraryStore.WriteAtomic(path, JsonSerializer.Serialize(updated)), cancellationToken)
+            AtomicFile.WriteAllText(path, JsonSerializer.Serialize(updated)), cancellationToken)
             .ConfigureAwait(false);
         _cache[cacheKey] = updated;
+        if (generator is null)
+            indexProgress?.Invoke(chunks.Count, chunks.Count);
         return updated;
     }
 
@@ -289,40 +302,108 @@ public sealed class ChatSearchService : IDisposable
             throw new InvalidDataException("The embedding provider returned an empty, invalid, or incompatible vector.");
     }
 
-    private static List<SearchChunk> Extract(ChatRecording recording, int start)
+    private static List<SearchChunk> Extract(ChatRecording recording, int start, bool forEmbeddings)
     {
         var chunks = new List<SearchChunk>();
         for (var turn = start; turn < recording.Interactions.Count; turn++)
         {
             var interaction = recording.Interactions[turn];
-            // Requests include all earlier turns; only the latest user message belongs to this one.
-            var user = ChatRecordingSerializer.ReadRequestMessages(interaction.Request)
-                .LastOrDefault(message => message.Role == ChatRole.User);
-            if (user is not null)
-                AddText(user.Contents.OfType<TextContent>().Select(content => content.Text), isUser: true);
-
-            var assistantText = interaction.IsStreaming
-                ? interaction.Updates.Select(ChatRecordingSerializer.ReadUpdate)
-                    .SelectMany(update => update.Contents).OfType<TextContent>()
-                    .Select(content => content.Text)
-                : ChatRecordingSerializer.ReadResponse(interaction.Response!).Messages
-                    .Where(message => message.Role == ChatRole.Assistant)
-                    .SelectMany(message => message.Contents).OfType<TextContent>()
-                    .Select(content => content.Text);
-            AddText([string.Concat(assistantText)], isUser: false);
-
-            void AddText(IEnumerable<string?> parts, bool isUser)
+            var alreadyIndexed = new Dictionary<(bool IsUser, string Text), int>();
+            if (turn > 0)
             {
-                foreach (var text in SplitText(string.Join(" ", parts)))
-                    chunks.Add(new SearchChunk { Turn = turn, IsUser = isUser, Text = text });
+                foreach (var text in RequestTexts(recording.Interactions[turn - 1]))
+                    Count(alreadyIndexed, text);
+                foreach (var text in AssistantTexts(recording.Interactions[turn - 1]))
+                    Count(alreadyIndexed, (false, text));
+            }
+
+            var seenInRequest = new Dictionary<(bool IsUser, string Text), int>();
+            foreach (var text in RequestTexts(interaction))
+            {
+                if (Count(seenInRequest, text) > alreadyIndexed.GetValueOrDefault(text))
+                    AddText(text.Text, text.IsUser);
+            }
+            foreach (var text in AssistantTexts(interaction))
+                AddText(text, isUser: false);
+
+            void AddText(string text, bool isUser)
+            {
+                foreach (var part in forEmbeddings ? SplitText(text) : [text])
+                    chunks.Add(new SearchChunk { Turn = turn, IsUser = isUser, Text = part });
             }
         }
         return chunks;
     }
 
-    private static IEnumerable<string> SplitText(string value)
+    private static int Count(
+        Dictionary<(bool IsUser, string Text), int> counts, (bool IsUser, string Text) message)
     {
-        var normalized = Regex.Replace(value, @"\s+", " ").Trim();
+        var count = counts.GetValueOrDefault(message) + 1;
+        counts[message] = count;
+        return count;
+    }
+
+    private static IEnumerable<(bool IsUser, string Text)> RequestTexts(RecordedInteraction interaction)
+    {
+        foreach (var message in ChatRecordingSerializer.ReadRequestMessages(interaction.Request))
+        {
+            if (message.Role != ChatRole.User && message.Role != ChatRole.Assistant)
+                continue;
+            var text = NormalizeText(message.Role == ChatRole.User
+                ? string.Join(" ", message.Contents.OfType<TextContent>().Select(content => content.Text))
+                : string.Concat(message.Contents.OfType<TextContent>().Select(content => content.Text)));
+            if (text.Length > 0)
+                yield return (message.Role == ChatRole.User, text);
+        }
+    }
+
+#pragma warning disable MEAI001 // Image-tool boundaries must not merge unrelated assistant messages.
+    private static IEnumerable<string> AssistantTexts(RecordedInteraction interaction)
+    {
+        if (!interaction.IsStreaming)
+        {
+            foreach (var message in ChatRecordingSerializer.ReadResponse(interaction.Response!).Messages)
+            {
+                if (message.Role != ChatRole.Assistant)
+                    continue;
+                var text = NormalizeText(string.Concat(
+                    message.Contents.OfType<TextContent>().Select(content => content.Text)));
+                if (text.Length > 0)
+                    yield return text;
+            }
+            yield break;
+        }
+
+        var current = new StringBuilder();
+        foreach (var update in interaction.Updates.Select(ChatRecordingSerializer.ReadUpdate))
+        {
+            foreach (var content in update.Contents)
+            {
+                if (content is TextContent text &&
+                    (update.Role is null || update.Role == ChatRole.Assistant))
+                    current.Append(text.Text);
+                else if (content is FunctionCallContent or FunctionResultContent or
+                    ImageGenerationToolCallContent || update.Role == ChatRole.Tool ||
+                    update.Role == ChatRole.System || update.Role == ChatRole.User)
+                {
+                    var message = NormalizeText(current.ToString());
+                    if (message.Length > 0)
+                        yield return message;
+                    current.Clear();
+                }
+            }
+        }
+        var last = NormalizeText(current.ToString());
+        if (last.Length > 0)
+            yield return last;
+    }
+#pragma warning restore MEAI001
+
+    private static string NormalizeText(string value) =>
+        Regex.Replace(value, @"\s+", " ").Trim();
+
+    private static IEnumerable<string> SplitText(string normalized)
+    {
         var paragraph = new StringBuilder();
         foreach (var sentence in Regex.Split(normalized, @"(?<=[.!?])\s+"))
         {
@@ -365,8 +446,8 @@ public sealed class ChatSearchService : IDisposable
 
     public void Dispose()
     {
-        _local?.Dispose();
-        _azure?.Dispose();
+        foreach (var generator in _generators.Values.Distinct<IEmbeddingGenerator<string, Embedding<float>>>(ReferenceEqualityComparer.Instance))
+            generator.Dispose();
         _gate.Dispose();
     }
 

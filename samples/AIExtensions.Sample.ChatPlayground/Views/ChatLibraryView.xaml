@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:controls="clr-namespace:AIExtensions.Sample.ChatPlayground.Controls"
              xmlns:viewModels="clr-namespace:AIExtensions.Sample.ChatPlayground.ViewModels"
              xmlns:search="clr-namespace:AIExtensions.Sample.ChatPlayground.Features.Search"
              x:Class="AIExtensions.Sample.ChatPlayground.Views.ChatLibraryView"
@@ -26,7 +27,7 @@
             <Border.Shadow>
                 <Shadow Brush="Black" Offset="0,6" Opacity="0.2" Radius="12" />
             </Border.Shadow>
-            <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="12">
+            <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="12">
                 <Grid ColumnDefinitions="*,Auto">
                     <Label Text="Find a chat" FontAttributes="Bold" FontSize="20" VerticalOptions="Center" />
                     <ImageButton Grid.Column="1" Source="close.png"
@@ -36,49 +37,9 @@
                                  AutomationId="CloseChatLibraryButton" />
                 </Grid>
 
-                <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                    <Entry Text="{Binding Query}" Placeholder="Filter saved chats"
-                           ReturnType="Search"
-                           ReturnCommand="{Binding SemanticSearchCommand}"
-                           AutomationId="ChatLibrarySearchEntry" />
-                    <Button Grid.Column="1" Text="Find similar" ImageSource="search.png"
-                            Command="{Binding SemanticSearchCommand}"
-                            IsVisible="{Binding HasSemanticSearch}"
-                            SemanticProperties.Description="Find saved chats by meaning using the selected search index"
-                            AutomationId="ChatLibrarySemanticSearchButton" />
-                </Grid>
+                <controls:ChatSearchBox Grid.Row="1" />
 
-                <Border Grid.Row="2" Padding="10,8"
-                        BackgroundColor="{AppThemeBinding Light={StaticResource InputBackground}, Dark={StaticResource InputBackgroundDark}}"
-                        Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}"
-                        StrokeShape="RoundRectangle 8">
-                    <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto"
-                          ColumnSpacing="8" RowSpacing="4">
-                        <Label Text="{Binding SearchIndexLabel}" FontAttributes="Bold"
-                               FontSize="13" VerticalOptions="Center"
-                               AutomationId="ChatLibraryIndexProvider" />
-                        <Button Grid.Column="1" Text="Enable Azure"
-                                IsVisible="{Binding CanEnableAzure}"
-                                Clicked="EnableAzureClicked"
-                                Style="{StaticResource SecondaryButtonStyle}"
-                                HeightRequest="{OnPlatform 44, MacCatalyst=36, WinUI=36}"
-                                SemanticProperties.Description="Ask for consent before sending saved chat text to Azure"
-                                AutomationId="EnableAzureSearchButton" />
-                        <Button Grid.Column="1" Text="{Binding DisableAzureLabel}"
-                                IsVisible="{Binding CanDisableAzure}"
-                                Clicked="DisableAzureClicked"
-                                Style="{StaticResource SecondaryButtonStyle}"
-                                HeightRequest="{OnPlatform 44, MacCatalyst=36, WinUI=36}"
-                                SemanticProperties.Description="{Binding DisableAzureDescription}"
-                                AutomationId="DisableAzureSearchButton" />
-                        <Label Grid.Row="1" Grid.ColumnSpan="2"
-                               Text="{Binding SearchModeDescription}"
-                               Style="{StaticResource MutedLabel}" FontSize="12"
-                               AutomationId="ChatLibraryIndexDescription" />
-                    </Grid>
-                </Border>
-
-                <Grid Grid.Row="3">
+                <Grid Grid.Row="2">
                     <CollectionView ItemsSource="{Binding Results}"
                                     ItemSizingStrategy="MeasureAllItems"
                                     AutomationId="ChatLibraryResults">
@@ -123,7 +84,7 @@
                                        AutomationId="ChatLibraryLoading" />
                 </Grid>
 
-                <Grid Grid.Row="4" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <Grid Grid.Row="3" ColumnDefinitions="*,Auto" ColumnSpacing="8">
                     <Label Text="{Binding StatusMessage}" Style="{StaticResource MutedLabel}"
                            FontSize="12" VerticalOptions="Center"
                            AutomationId="ChatLibraryStatus" />

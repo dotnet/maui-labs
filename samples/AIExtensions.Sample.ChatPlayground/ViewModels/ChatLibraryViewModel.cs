@@ -6,52 +6,50 @@ using CommunityToolkit.Mvvm.Input;
 namespace AIExtensions.Sample.ChatPlayground.ViewModels;
 
 /// <summary>Searches saved conversations without changing the active chat until one is opened.</summary>
-public partial class ChatLibraryViewModel(ChatSearchService search) : ObservableObject
+public partial class ChatLibraryViewModel : ObservableObject
 {
-    public const string AzureConsentPreferenceKey = "chat-playground-azure-search-consent";
+    private static readonly TimeSpan DefaultSearchDelay = TimeSpan.FromMilliseconds(400);
 
+    private readonly ChatSearchService _search;
+    private readonly TimeSpan _searchDelay;
     private CancellationTokenSource? _searchCancellation;
-    private IAsyncRelayCommand? _semanticSearchCommand;
+    private IAsyncRelayCommand? _searchNowCommand;
     private IAsyncRelayCommand<ChatSearchHit>? _openChatCommand;
     private IRelayCommand? _closeCommand;
     private IAsyncRelayCommand? _importFileCommand;
 
+    public ChatLibraryViewModel(ChatSearchService search, TimeSpan? searchDelay = null)
+    {
+        _search = search;
+        _searchDelay = searchDelay ?? DefaultSearchDelay;
+        if (_searchDelay < TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(searchDelay));
+    }
+
     public ObservableCollection<ChatSearchHit> Results { get; } = [];
+    public IReadOnlyList<ChatSearchDescriptor> SearchModes => _search.SearchModes;
+    public double SearchPickerHeight => Math.Min(300, SearchModes.Count * 88);
+    public long VisitId { get; private set; }
 
     [ObservableProperty] private bool isOpen;
     [ObservableProperty] private bool isBusy;
-    [ObservableProperty] private bool useAzureEmbeddings;
+    [ObservableProperty] private bool isIndexing;
+    [ObservableProperty] private ChatSearchDescriptor selectedMode = ChatSearchDescriptor.Contains;
     [ObservableProperty] private string query = string.Empty;
     [ObservableProperty] private string statusMessage = string.Empty;
+    [ObservableProperty] private string indexProgressMessage = string.Empty;
     [ObservableProperty] private bool hasSearchError;
 
-    public bool HasAppleEmbeddings => search.HasLocalEmbeddings;
-    public bool HasAzureEmbeddings => search.HasAzureEmbeddings;
-    public bool HasSemanticSearch => UseAzureEmbeddings ? HasAzureEmbeddings : HasAppleEmbeddings;
-    public bool CanEnableAzure => HasAzureEmbeddings && !UseAzureEmbeddings;
-    public bool CanDisableAzure => UseAzureEmbeddings;
-    public string SearchIndexLabel => UseAzureEmbeddings
-        ? "Azure OpenAI index"
-        : HasAppleEmbeddings ? "Apple on-device index" : "Text-only search";
-    public string DisableAzureLabel => HasAppleEmbeddings ? "Use Apple" : "Text only";
-    public string DisableAzureDescription => HasAppleEmbeddings
-        ? "Switch to Apple's on-device search index"
-        : "Stop using Azure and filter saved chats by text only";
+    public string SearchIndexLabel => $"Search with: {SelectedMode.DisplayName}";
     public bool IsEmpty => Results.Count == 0 && !IsBusy;
     public string EmptyMessage => HasSearchError
-        ? "Search could not complete. Check the status below."
+        ? "Search failed. Check the status below or try another method."
         : Query.Length == 0
             ? "No saved chats yet. Import a file or start a chat."
-            : HasSemanticSearch
-                ? "No text matches. Try other words or Find similar."
-                : "No saved chats match. Try different words.";
-    public string SearchModeDescription => UseAzureEmbeddings
-        ? "Text filters locally. Indexing and Find similar send saved text and queries to Azure."
-        : HasAppleEmbeddings
-            ? "Text filters locally. Find similar uses Apple's on-device NaturalLanguage index."
-            : HasAzureEmbeddings
-                ? "Type to filter locally. Enable Azure for meaning-based search."
-                : "Type to filter locally. Configure AI:EmbeddingDeploymentName for meaning-based search.";
+            : SelectedMode.Id == ChatSearchDescriptor.ContainsId
+                ? "No saved chats contain that text. Try different words."
+                : "No similar chats found. Try different words or Contains.";
+    public string SearchModeDescription => SelectedMode.Description;
 
     public Func<string, Task>? OpenChatAsync { get; set; }
 
@@ -61,9 +59,8 @@ public partial class ChatLibraryViewModel(ChatSearchService search) : Observable
         set => SetProperty(ref _importFileCommand, value);
     }
 
-    public IAsyncRelayCommand SemanticSearchCommand =>
-        _semanticSearchCommand ??= new AsyncRelayCommand(() => RefreshAsync(semantic: true),
-            () => IsOpen && !IsBusy && HasSemanticSearch && !string.IsNullOrWhiteSpace(Query));
+    public IAsyncRelayCommand SearchNowCommand =>
+        _searchNowCommand ??= new AsyncRelayCommand(() => RefreshAsync(debounce: false));
 
     public IAsyncRelayCommand<ChatSearchHit> OpenChatCommand =>
         _openChatCommand ??= new AsyncRelayCommand<ChatSearchHit>(OpenAsync,
@@ -73,23 +70,29 @@ public partial class ChatLibraryViewModel(ChatSearchService search) : Observable
 
     public async Task ShowAsync()
     {
-        IsOpen = true;
+        SelectedMode = ChatSearchDescriptor.Contains;
         Query = string.Empty;
-        await RefreshAsync(semantic: false);
+        VisitId++;
+        IsOpen = true;
+        await RefreshAsync(debounce: false);
     }
 
-    public async Task SelectAzureAsync(bool enabled)
+    public async Task SelectModeAsync(ChatSearchDescriptor selected)
     {
-        if (enabled && !HasAzureEmbeddings)
-            throw new InvalidOperationException("Azure semantic search is not configured.");
-        UseAzureEmbeddings = enabled;
-        await RefreshAsync(semantic: false);
+        ArgumentNullException.ThrowIfNull(selected);
+        if (!SearchModes.Contains(selected))
+            throw new ArgumentException("The selected search method is not registered.", nameof(selected));
+        if (!IsOpen)
+            return;
+        SelectedMode = selected;
+        await RefreshAsync(debounce: false);
     }
 
     public void Close()
     {
         _searchCancellation?.Cancel();
         IsOpen = false;
+        IsIndexing = false;
     }
 
     private async Task OpenAsync(ChatSearchHit? hit)
@@ -101,18 +104,34 @@ public partial class ChatLibraryViewModel(ChatSearchService search) : Observable
         await OpenChatAsync(hit.Id);
     }
 
-    private async Task RefreshAsync(bool semantic)
+    private async Task RefreshAsync(bool debounce)
     {
+        if (!IsOpen)
+            return;
         _searchCancellation?.Cancel();
         using var cancellation = new CancellationTokenSource();
         _searchCancellation = cancellation;
-        StatusMessage = semantic
-            ? UseAzureEmbeddings ? "Searching and indexing with Azure..." : "Searching Apple's on-device index..."
-            : "Filtering saved chats...";
+        var selected = SelectedMode;
+        var text = Query;
+        StatusMessage = selected.Id == ChatSearchDescriptor.ContainsId
+            ? "Filtering saved chats..."
+            : $"Searching {selected.DisplayName}...";
         IsBusy = true;
+        IsIndexing = false;
         try
         {
-            var result = await search.SearchAsync(Query, semantic, UseAzureEmbeddings, cancellation.Token);
+            if (debounce)
+                await Task.Delay(_searchDelay, cancellation.Token);
+            var progress = new Progress<ChatSearchProgress>(value =>
+            {
+                if (!ReferenceEquals(_searchCancellation, cancellation) || !IsOpen || SelectedMode != selected)
+                    return;
+                IsIndexing = value.IsIndexing;
+                if (value.IsIndexing)
+                    IndexProgressMessage = $"Indexing {value.CompletedChats + 1}/{value.TotalChats} chats " +
+                        $"({value.IndexedChunks}/{value.TotalChunks} excerpts): {value.ChatTitle}";
+            });
+            var result = await _search.SearchAsync(text, selected.Id, cancellation.Token, progress);
             if (!ReferenceEquals(_searchCancellation, cancellation))
                 return;
             SetResults(result.Hits);
@@ -129,18 +148,20 @@ public partial class ChatLibraryViewModel(ChatSearchService search) : Observable
         {
             if (ReferenceEquals(_searchCancellation, cancellation))
             {
-                StatusMessage = $"Chat search failed: {exception.Message}";
-                if (semantic)
+                StatusMessage = $"{selected.DisplayName} search failed: {exception.Message}";
+                HasSearchError = true;
+                IsIndexing = false;
+                if (selected.Id != ChatSearchDescriptor.ContainsId)
                 {
                     try
                     {
-                        var keywords = await search.SearchAsync(Query, semantic: false,
-                            useAzure: false, cancellationToken: cancellation.Token);
+                        var keywords = await _search.SearchAsync(
+                            text, ChatSearchDescriptor.ContainsId, cancellation.Token);
                         if (!ReferenceEquals(_searchCancellation, cancellation))
                             return;
+                        SelectedMode = ChatSearchDescriptor.Contains;
                         SetResults(keywords.Hits);
-                        StatusMessage += " Showing keyword matches instead.";
-                        HasSearchError = false;
+                        StatusMessage += " Switched to Contains and showing local text matches.";
                     }
                     catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
                     {
@@ -151,15 +172,13 @@ public partial class ChatLibraryViewModel(ChatSearchService search) : Observable
                             return;
                         Results.Clear();
                         OnPropertyChanged(nameof(IsEmpty));
-                        StatusMessage += $" Keyword search also failed: {fallbackException.Message}";
-                        HasSearchError = true;
+                        StatusMessage += $" Contains search also failed: {fallbackException.Message}";
                     }
                 }
                 else
                 {
                     Results.Clear();
                     OnPropertyChanged(nameof(IsEmpty));
-                    HasSearchError = true;
                 }
             }
         }
@@ -169,6 +188,7 @@ public partial class ChatLibraryViewModel(ChatSearchService search) : Observable
             {
                 _searchCancellation = null;
                 IsBusy = false;
+                IsIndexing = false;
             }
         }
     }
@@ -184,34 +204,25 @@ public partial class ChatLibraryViewModel(ChatSearchService search) : Observable
     partial void OnQueryChanged(string value)
     {
         OnPropertyChanged(nameof(EmptyMessage));
-        SemanticSearchCommand.NotifyCanExecuteChanged();
         if (IsOpen)
-            _ = RefreshAsync(semantic: false);
+            _ = RefreshAsync(debounce: true);
     }
 
-    partial void OnUseAzureEmbeddingsChanged(bool value)
+    partial void OnSelectedModeChanged(ChatSearchDescriptor value)
     {
-        OnPropertyChanged(nameof(CanEnableAzure));
-        OnPropertyChanged(nameof(CanDisableAzure));
-        OnPropertyChanged(nameof(HasSemanticSearch));
         OnPropertyChanged(nameof(SearchIndexLabel));
-        OnPropertyChanged(nameof(DisableAzureLabel));
-        OnPropertyChanged(nameof(DisableAzureDescription));
         OnPropertyChanged(nameof(SearchModeDescription));
         OnPropertyChanged(nameof(EmptyMessage));
-        SemanticSearchCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnIsBusyChanged(bool value)
     {
         OnPropertyChanged(nameof(IsEmpty));
-        SemanticSearchCommand.NotifyCanExecuteChanged();
         OpenChatCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnIsOpenChanged(bool value)
     {
-        SemanticSearchCommand.NotifyCanExecuteChanged();
         OpenChatCommand.NotifyCanExecuteChanged();
     }
 

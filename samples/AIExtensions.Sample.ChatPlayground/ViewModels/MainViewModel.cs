@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using AIExtensions.Sample.ChatPlayground.Features.Chat;
+using AIExtensions.Sample.ChatPlayground.Features.Library;
 using AIExtensions.Sample.ChatPlayground.Features.Recording;
-using AIExtensions.Sample.ChatPlayground.Features.Search;
 using AIExtensions.Sample.ChatPlayground.Models;
 using AIExtensions.Sample.ChatPlayground.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -16,8 +16,7 @@ namespace AIExtensions.Sample.ChatPlayground.ViewModels;
 public partial class MainViewModel : ObservableObject
 {
     private readonly PlaygroundTools _tools;
-    private readonly ChatRecordingService _recording;
-    private readonly ChatSearchService _search;
+    private readonly ChatLibraryService _recording;
     private readonly ChatConversation _conversation = new();
     private readonly IChatClient _replayClient;
     private IChatClient? _selectedClient;
@@ -29,15 +28,13 @@ public partial class MainViewModel : ObservableObject
     /// <summary>Initializes the child view models and request orchestration.</summary>
     public MainViewModel(
         PlaygroundTools tools,
-        ChatRecordingService recording,
-        ChatSearchService search,
+        ChatLibraryService recording,
         SettingsPaneViewModel settings,
         ChatAreaViewModel chat,
         ChatLibraryViewModel library)
     {
         _tools = tools;
         _recording = recording;
-        _search = search;
         Settings = settings;
         Chat = chat;
         Library = library;
@@ -109,45 +106,24 @@ public partial class MainViewModel : ObservableObject
     private bool CanPlayReplay() => CanUseChat() && ReferenceEquals(_selectedClient, _replayClient);
     private bool CanReplayNext() => CanPlayReplay() && _recording.HasReplayRemaining;
 
-    private async Task NewChatAsync()
+    private Task NewChatAsync()
     {
-        var created = false;
-        string? newId = null;
         try
         {
-            var previousId = _recording.ActiveChatId;
             _recording.NewRecording();
-            created = true;
-            newId = _recording.ActiveChatId;
             ClearVisibleChat();
             _replayIncomplete = false;
             Chat.StatusMessage = ReferenceEquals(_selectedClient, _replayClient)
                 ? "New chat started. Select a live client to send a message."
                 : $"New chat started. The previous chat is kept in Chats.{ImageAvailabilityHint}";
             RefreshOperationCommands();
-            var notice = await _search.IndexChatAsync(previousId, Library.UseAzureEmbeddings);
-            if (notice is not null)
-            {
-                if (ActiveEmptyChatIs(newId))
-                    Chat.StatusMessage += " " + notice;
-                else
-                    Library.StatusMessage = notice;
-            }
         }
         catch (Exception exception)
         {
-            if (!created)
-                Chat.StatusMessage = $"New chat failed: {exception.Message}";
-            else if (ActiveEmptyChatIs(newId))
-                Chat.StatusMessage = $"New chat was saved, but search indexing failed: {exception.Message}. Find chats to retry.";
-            else
-                Library.StatusMessage = $"Search indexing failed: {exception.Message}. Find chats to retry.";
+            Chat.StatusMessage = $"New chat failed: {exception.Message}";
         }
+        return Task.CompletedTask;
     }
-
-    private bool ActiveEmptyChatIs(string? id) =>
-        id is not null && _recording.ActiveChatId == id &&
-        _recording.InteractionCount == 0 && !Chat.IsBusy;
 
     private async Task OpenLibraryChatAsync(string id)
     {
@@ -192,16 +168,6 @@ public partial class MainViewModel : ObservableObject
             else
             {
                 await ReplayAllAsync();
-                try
-                {
-                    var notice = await _search.IndexChatAsync(_recording.ActiveChatId, Library.UseAzureEmbeddings);
-                    if (notice is not null)
-                        Chat.StatusMessage += " " + notice;
-                }
-                catch (Exception exception)
-                {
-                    Chat.StatusMessage += $" Search indexing failed: {exception.Message}. Find chats to retry.";
-                }
             }
         }
         catch (Exception exception)

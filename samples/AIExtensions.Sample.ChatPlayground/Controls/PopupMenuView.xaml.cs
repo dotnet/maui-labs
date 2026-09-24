@@ -34,6 +34,9 @@ public partial class PopupMenuView : ContentView
     public Size MeasureMenu(double width, double height) =>
         Panel.Measure(width, height);
 
+    public double HorizontalPadding =>
+        Panel.Padding.Left + Panel.Padding.Right + 2 * Panel.StrokeThickness;
+
     public void SetMenuPosition(Rect bounds) =>
         PopupBounds = bounds;
 

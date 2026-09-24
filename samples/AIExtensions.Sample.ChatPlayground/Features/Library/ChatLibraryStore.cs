@@ -1,10 +1,11 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using AIExtensions.Sample.ChatPlayground.Features.Recording;
+using AIExtensions.Sample.ChatPlayground.Features.Storage;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Logging;
 
-namespace AIExtensions.Sample.ChatPlayground.Features.Recording;
+namespace AIExtensions.Sample.ChatPlayground.Features.Library;
 
 /// <summary>Metadata for one saved conversation, independent of the recording format.</summary>
 public sealed record SavedChat(
@@ -22,7 +23,7 @@ internal sealed class ChatLibraryStore
     private readonly string _catalogPath;
     private ChatCatalog _catalog;
 
-    public ChatLibraryStore(ILogger logger, string dataDirectory, string cacheDirectory)
+    public ChatLibraryStore(string dataDirectory)
     {
         _chatsDirectory = Path.Combine(dataDirectory, "chat-playground", "chats");
         _catalogPath = Path.Combine(dataDirectory, "chat-playground", "catalog.json");
@@ -37,45 +38,27 @@ internal sealed class ChatLibraryStore
             return;
         }
 
-        var persistentAutosave = Path.Combine(dataDirectory, "chat-playground.autosave.json");
-        var cacheAutosave = Path.Combine(cacheDirectory, "chat-playground.autosave.json");
-        var legacyPath = File.Exists(persistentAutosave) ? persistentAutosave : cacheAutosave;
-        var legacyRecording = File.Exists(legacyPath)
-            ? ChatRecordingSerializer.Deserialize(File.ReadAllText(legacyPath, Encoding.UTF8))
-            : new ChatRecording();
-
-        // Commit validated legacy bytes to a new chat before removing the old autosave.
+        var recording = new ChatRecording();
         var id = Guid.NewGuid().ToString("N");
         var path = RecordingPath(id);
-        if (File.Exists(legacyPath))
-            CopyAtomic(legacyPath, path);
-        else
-            WriteAtomic(path, ChatRecordingSerializer.Serialize(legacyRecording));
+        AtomicFile.WriteAllText(path, ChatRecordingSerializer.Serialize(recording));
 
         _catalog = new ChatCatalog
         {
             Version = CatalogVersion,
             ActiveId = id,
-            Chats = [CreateSummary(id, legacyRecording, DateTimeOffset.UtcNow)],
+            Chats = [CreateSummary(id, recording, DateTimeOffset.UtcNow)],
         };
-        WriteCatalog(_catalog);
-        Current = legacyRecording;
-
-        if (File.Exists(legacyPath))
+        try
         {
-            try
-            {
-                File.Delete(legacyPath);
-            }
-            catch (IOException exception)
-            {
-                logger.LogWarning(exception, "Could not remove the migrated chat autosave.");
-            }
-            catch (UnauthorizedAccessException exception)
-            {
-                logger.LogWarning(exception, "Could not remove the migrated chat autosave.");
-            }
+            WriteCatalog(_catalog);
         }
+        catch
+        {
+            File.Delete(path);
+            throw;
+        }
+        Current = recording;
     }
 
     public ChatRecording Current { get; private set; }
@@ -92,7 +75,7 @@ internal sealed class ChatLibraryStore
     }
 
     public void Save(ChatRecording recording) =>
-        WriteAtomic(ActivePath, ChatRecordingSerializer.Serialize(recording));
+        AtomicFile.WriteAllText(ActivePath, ChatRecordingSerializer.Serialize(recording));
 
     public ChatRecording New(ChatRecording previous)
     {
@@ -105,7 +88,7 @@ internal sealed class ChatLibraryStore
         var catalog = WithRefreshedActive(previous);
         catalog.ActiveId = id;
         catalog.Chats.Add(CreateSummary(id, recording, DateTimeOffset.UtcNow));
-        WriteAtomic(path, ChatRecordingSerializer.Serialize(recording));
+        AtomicFile.WriteAllText(path, ChatRecordingSerializer.Serialize(recording));
         try
         {
             WriteCatalog(catalog);
@@ -145,7 +128,7 @@ internal sealed class ChatLibraryStore
         var catalog = WithRefreshedActive(Current);
         catalog.ActiveId = id;
         catalog.Chats.Add(CreateSummary(id, recording, DateTimeOffset.UtcNow));
-        WriteAtomic(path, ChatRecordingSerializer.Serialize(recording));
+        AtomicFile.WriteAllText(path, ChatRecordingSerializer.Serialize(recording));
         try
         {
             WriteCatalog(catalog);
@@ -230,38 +213,7 @@ internal sealed class ChatLibraryStore
     private string RecordingPath(string id) => Path.Combine(_chatsDirectory, id + ".json");
 
     private void WriteCatalog(ChatCatalog catalog) =>
-        WriteAtomic(_catalogPath, JsonSerializer.Serialize(catalog));
-
-    internal static void WriteAtomic(string path, string json)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var stagingPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        try
-        {
-            File.WriteAllText(stagingPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-            File.Move(stagingPath, path, overwrite: true);
-        }
-        finally
-        {
-            if (File.Exists(stagingPath))
-                File.Delete(stagingPath);
-        }
-    }
-
-    private static void CopyAtomic(string source, string destination)
-    {
-        var stagingPath = destination + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        try
-        {
-            File.Copy(source, stagingPath);
-            File.Move(stagingPath, destination, overwrite: true);
-        }
-        finally
-        {
-            if (File.Exists(stagingPath))
-                File.Delete(stagingPath);
-        }
-    }
+        AtomicFile.WriteAllText(_catalogPath, JsonSerializer.Serialize(catalog));
 
     private sealed class ChatCatalog
     {

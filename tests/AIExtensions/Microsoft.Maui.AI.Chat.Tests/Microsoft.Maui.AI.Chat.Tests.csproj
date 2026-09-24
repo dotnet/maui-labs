@@ -18,8 +18,12 @@
   <ItemGroup>
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Recording\**\*.cs"
              Link="Recording\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Library\**\*.cs"
+             Link="Library\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Search\**\*.cs"
              Link="Search\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Storage\**\*.cs"
+             Link="Storage\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Chat\**\*.cs"
              Link="Chat\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Models\PlaygroundJsonContext.cs" Link="Models\PlaygroundJsonContext.cs" />

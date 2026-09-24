@@ -1,10 +1,12 @@
 using System.Text.Json.Nodes;
+using AIExtensions.Sample.ChatPlayground.Features.Recording;
+using AIExtensions.Sample.ChatPlayground.Features.Storage;
 using Microsoft.Extensions.Logging;
 
-namespace AIExtensions.Sample.ChatPlayground.Features.Recording;
+namespace AIExtensions.Sample.ChatPlayground.Features.Library;
 
-/// <summary>Auto-saves and replays the active recording.</summary>
-public sealed class ChatRecordingService
+/// <summary>Owns the active chat's storage and provides a portable record/replay session.</summary>
+public sealed class ChatLibraryService : IChatLibrary, IChatRecordingSession
 {
     private readonly object _gate = new();
     private readonly ChatLibraryStore? _library;
@@ -13,8 +15,8 @@ public sealed class ChatRecordingService
 
     public event EventHandler? Changed;
 
-    public ChatRecordingService(
-        ILogger<ChatRecordingService> logger,
+    public ChatLibraryService(
+        ILogger<ChatLibraryService> logger,
         string dataDirectory,
         string exportDirectory)
     {
@@ -23,7 +25,7 @@ public sealed class ChatRecordingService
         ExportPath = System.IO.Path.Combine(exportDirectory, "chat-playground.json");
         try
         {
-            _library = new ChatLibraryStore(logger, dataDirectory, exportDirectory);
+            _library = new ChatLibraryStore(dataDirectory);
             _recording = _library.Current;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
@@ -193,7 +195,7 @@ public sealed class ChatRecordingService
         lock (_gate)
             json = ChatRecordingSerializer.Serialize(_recording);
 
-        ChatLibraryStore.WriteAtomic(ExportPath, json);
+        AtomicFile.WriteAllText(ExportPath, json);
         return ExportPath;
     }
 

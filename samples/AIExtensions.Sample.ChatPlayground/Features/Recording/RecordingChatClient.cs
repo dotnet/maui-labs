@@ -4,7 +4,7 @@ using Microsoft.Extensions.AI;
 namespace AIExtensions.Sample.ChatPlayground.Features.Recording;
 
 /// <summary>Records a selected real provider without changing its streaming behavior.</summary>
-public sealed class RecordingChatClient(IChatClient inner, ChatRecordingService recording) : DelegatingChatClient(inner)
+public sealed class RecordingChatClient(IChatClient inner, IChatRecordingSession recording) : DelegatingChatClient(inner)
 {
     public override async Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages,

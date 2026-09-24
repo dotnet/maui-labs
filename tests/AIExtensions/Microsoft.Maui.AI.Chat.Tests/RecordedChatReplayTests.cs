@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using System.Runtime.CompilerServices;
 using AIExtensions.Sample.ChatPlayground.Features.Chat;
+using AIExtensions.Sample.ChatPlayground.Features.Library;
 using AIExtensions.Sample.ChatPlayground.Features.Recording;
 using AIExtensions.Sample.ChatPlayground.Services;
 using Microsoft.Extensions.AI;
@@ -469,50 +470,12 @@ public sealed class RecordedChatReplayTests
     }
 
     [Fact]
-    public void LegacyCacheAutosave_MigratesToPersistentAppDataAndSurvivesCacheEviction()
+    public async Task NewRecording_RemainsActiveAfterRestart()
     {
         using var directory = new RecordingDirectory();
-        Directory.CreateDirectory(directory.ExportDirectory);
-        var legacyPath = Path.Combine(directory.ExportDirectory, "chat-playground.autosave.json");
-        File.Copy(FixturePath("no-tools.json"), legacyPath);
-
         var recording = directory.CreateService();
-        Assert.Equal(1, recording.InteractionCount);
-        Assert.StartsWith(Path.Combine(directory.DataDirectory, "chat-playground", "chats") +
-            Path.DirectorySeparatorChar, recording.AutosavePath);
-        Assert.Equal(Path.Combine(directory.ExportDirectory, "chat-playground.json"), recording.ExportPath);
-        Assert.Equal(File.ReadAllBytes(FixturePath("no-tools.json")), File.ReadAllBytes(recording.AutosavePath));
-        Assert.False(File.Exists(legacyPath));
-
-        Directory.Delete(directory.ExportDirectory, recursive: true);
-        Assert.Equal(1, directory.CreateService().InteractionCount);
-    }
-
-    [Fact]
-    public void PersistentAutosave_MigratesWithoutChangingTheRecordedBytes()
-    {
-        using var directory = new RecordingDirectory();
-        Directory.CreateDirectory(directory.DataDirectory);
-        var oldPath = Path.Combine(directory.DataDirectory, "chat-playground.autosave.json");
-        File.Copy(FixturePath("multi-turn-image-in-out.json"), oldPath);
-
-        var recording = directory.CreateService();
-        Assert.Equal(2, recording.InteractionCount);
-        Assert.Equal(File.ReadAllBytes(FixturePath("multi-turn-image-in-out.json")),
-            File.ReadAllBytes(recording.AutosavePath));
-        Assert.False(File.Exists(oldPath));
-        Assert.Equal(2, directory.CreateService().InteractionCount);
-    }
-
-    [Fact]
-    public void NewRecording_DoesNotRestoreStaleLegacyCacheOnRestart()
-    {
-        using var directory = new RecordingDirectory();
-        Directory.CreateDirectory(directory.ExportDirectory);
-        File.Copy(FixturePath("no-tools.json"),
-            Path.Combine(directory.ExportDirectory, "chat-playground.autosave.json"));
-
-        var recording = directory.CreateService();
+        await using (var input = File.OpenRead(FixturePath("no-tools.json")))
+            await recording.LoadFileAsync(input);
         var previousId = recording.ActiveChatId;
         recording.NewRecording();
 
@@ -654,8 +617,8 @@ public sealed class RecordedChatReplayTests
         public string DataDirectory => Path.Combine(_path, "data");
         public string ExportDirectory => Path.Combine(_path, "cache");
 
-        public ChatRecordingService CreateService() =>
-            new(NullLogger<ChatRecordingService>.Instance, DataDirectory, ExportDirectory);
+        public ChatLibraryService CreateService() =>
+            new(NullLogger<ChatLibraryService>.Instance, DataDirectory, ExportDirectory);
 
         public void Dispose()
         {

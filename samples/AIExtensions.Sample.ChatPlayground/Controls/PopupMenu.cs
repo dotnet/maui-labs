@@ -13,6 +13,13 @@ public static class PopupMenu
 
     public static void SetContent(BindableObject button, View? content) => button.SetValue(ContentProperty, content);
 
+    public static void Dismiss(View anchor)
+    {
+        var root = FindRoot(anchor);
+        if (root.GetValue(ActiveMenuProperty) is MenuSession session && session.Anchor == anchor)
+            session.Close();
+    }
+
     private static void OnContentChanged(BindableObject bindable, object oldValue, object newValue)
     {
         if (bindable is not Button and not ImageButton)
@@ -44,12 +51,7 @@ public static class PopupMenu
         if (sender is not View anchor || GetContent(anchor) is not View content)
             return;
 
-        var page = anchor.Parent;
-        while (page is not null && page is not ContentPage)
-            page = page.Parent;
-        if (page is not ContentPage { Content: Grid root })
-            throw new InvalidOperationException("PopupMenu requires a ContentPage with a Grid root.");
-
+        var root = FindRoot(anchor);
         if (root.GetValue(ActiveMenuProperty) is MenuSession previous)
         {
             previous.Close();
@@ -62,10 +64,22 @@ public static class PopupMenu
         session.Open();
     }
 
+    private static Grid FindRoot(View anchor)
+    {
+        var page = anchor.Parent;
+        while (page is not null && page is not ContentPage)
+            page = page.Parent;
+        if (page is not ContentPage { Content: Grid root })
+            throw new InvalidOperationException("PopupMenu requires a ContentPage with a Grid root.");
+        return root;
+    }
+
     private sealed class MenuSession
     {
         private readonly Grid _root;
         private readonly PopupMenuView _overlay;
+        private readonly View _menuContent;
+        private readonly double _requestedWidth;
         private readonly List<Button> _actionButtons = [];
         private readonly List<ImageButton> _imageActionButtons = [];
 
@@ -73,6 +87,8 @@ public static class PopupMenu
         {
             _root = root;
             Anchor = anchor;
+            _menuContent = content;
+            _requestedWidth = content.WidthRequest;
             _overlay = new PopupMenuView
             {
                 BindingContext = anchor.BindingContext,
@@ -110,6 +126,8 @@ public static class PopupMenu
                 button.Clicked -= ActionClicked;
             _root.Children.Remove(_overlay);
             _overlay.MenuContent = null;
+            if (_requestedWidth >= 0)
+                _menuContent.WidthRequest = _requestedWidth;
             if (ReferenceEquals(_root.GetValue(ActiveMenuProperty), this))
                 _root.ClearValue(ActiveMenuProperty);
         }
@@ -160,8 +178,18 @@ public static class PopupMenu
             const double inset = 12;
             var availableWidth = Math.Max(0, _overlay.Width - inset * 2);
             var availableHeight = Math.Max(0, _overlay.Height - inset * 2);
+            if (_requestedWidth >= 0)
+            {
+                var fittedWidth = Math.Min(
+                    _requestedWidth, Math.Max(0, availableWidth - _overlay.HorizontalPadding));
+                if (_menuContent.WidthRequest != fittedWidth)
+                    _menuContent.WidthRequest = fittedWidth;
+            }
             var desired = _overlay.MeasureMenu(availableWidth, availableHeight);
-            var width = Math.Min(availableWidth, Math.Max(200, desired.Width));
+            // CollectionView templates can under-measure on iOS; honor an explicit menu width.
+            var requestedPanelWidth = _requestedWidth >= 0
+                ? _menuContent.WidthRequest + _overlay.HorizontalPadding : 0;
+            var width = Math.Min(availableWidth, Math.Max(200, Math.Max(desired.Width, requestedPanelWidth)));
             var height = Math.Min(availableHeight, desired.Height);
 
             // Convert the anchor through scrolled ancestors into overlay coordinates before clamping.
