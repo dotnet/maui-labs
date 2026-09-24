@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:viewModels="clr-namespace:AIExtensions.Sample.ChatPlayground.ViewModels"
+             xmlns:controls="clr-namespace:AIExtensions.Sample.ChatPlayground.Controls"
+             x:Class="AIExtensions.Sample.ChatPlayground.Views.ChatComposer"
+             x:DataType="viewModels:ChatAreaViewModel">
+    <Border Style="{StaticResource ComposerPanel}">
+        <VerticalStackLayout Spacing="8">
+            <Grid IsVisible="{Binding HasSelectedImage}" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                <Image Source="{Binding SelectedImagePreview}" WidthRequest="56" HeightRequest="56"
+                       Aspect="AspectFill" />
+                <Label Grid.Column="1" Text="{Binding SelectedImageName}" VerticalOptions="Center"
+                       LineBreakMode="TailTruncation" />
+                <ImageButton Grid.Column="2" Source="close.png" Command="{Binding RemoveImageAction}"
+                             Style="{StaticResource AttachmentButton}"
+                             SemanticProperties.Description="Remove selected image"
+                             AutomationId="RemoveImageButton" />
+            </Grid>
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                <ImageButton Source="add.png" Style="{StaticResource AttachmentButton}"
+                             IsEnabled="{Binding IsImageSupported}"
+                             SemanticProperties.Description="Add an image attachment"
+                             AutomationId="AddAttachmentButton">
+                    <controls:PopupMenu.Content>
+                        <VerticalStackLayout Spacing="8" x:DataType="viewModels:ChatAreaViewModel">
+                            <Label Text="ADD IMAGE" Style="{StaticResource SectionHeading}" />
+                            <Button Text="Choose image" ImageSource="image.png"
+                                    Command="{Binding ChooseImageAction}"
+                                    AutomationId="ChooseImageMenuItem" />
+                            <Button Text="Use sample image" ImageSource="sampleimage.png"
+                                    Command="{Binding UseSampleImageAction}"
+                                    AutomationId="UseSampleImageMenuItem" />
+                        </VerticalStackLayout>
+                    </controls:PopupMenu.Content>
+                </ImageButton>
+                <Entry Grid.Column="1" Text="{Binding Prompt}" MinimumWidthRequest="0"
+                       Placeholder="Ask the selected real chat client"
+                       ReturnType="Send" ReturnCommand="{Binding SendCommand}"
+                       AutomationId="PromptEntry" />
+                <Grid Grid.Column="2" WidthRequest="44" HeightRequest="44">
+                    <ImageButton Source="send.png" Command="{Binding SendCommand}"
+                                 IsVisible="{Binding IsIdle}" Style="{StaticResource AttachmentButton}"
+                                 SemanticProperties.Description="Send message" AutomationId="SendButton" />
+                    <ImageButton Source="stop.png" Command="{Binding CancelCommand}"
+                                 IsVisible="{Binding IsBusy}" Style="{StaticResource CancelActionButton}"
+                                 SemanticProperties.Description="Stop response" AutomationId="StopButton" />
+                </Grid>
+            </Grid>
+        </VerticalStackLayout>
+    </Border>
+</ContentView>

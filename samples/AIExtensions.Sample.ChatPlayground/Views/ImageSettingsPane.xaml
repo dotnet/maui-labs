@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:viewModels="clr-namespace:AIExtensions.Sample.ChatPlayground.ViewModels"
+             xmlns:controls="clr-namespace:AIExtensions.Sample.ChatPlayground.Controls"
+             x:Class="AIExtensions.Sample.ChatPlayground.Views.ImageSettingsPane"
+             x:DataType="viewModels:ImageSettingsViewModel">
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="12">
+            <HorizontalStackLayout Spacing="4">
+                <Label Text="GENERATOR" Style="{StaticResource SectionHeading}" VerticalOptions="Center" />
+                <controls:InfoTip Text="Select a real IImageGenerator. The selected provider receives the prompt and any original image; cloud requests may incur charges." />
+            </HorizontalStackLayout>
+            <VerticalStackLayout Spacing="4" IsEnabled="{Binding IsIdle}"
+                                 RadioButtonGroup.GroupName="ImageGenerator"
+                                 RadioButtonGroup.SelectedValue="{Binding SelectedOption, Mode=TwoWay}"
+                                 BindableLayout.ItemsSource="{Binding Generators}">
+                <BindableLayout.ItemTemplate>
+                    <DataTemplate x:DataType="viewModels:ImageGeneratorOption">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                            <RadioButton HorizontalOptions="Fill"
+                                         Value="{Binding .}"
+                                         Content="{Binding Descriptor.DisplayName}"
+                                         AutomationId="{Binding AutomationId}" />
+                            <controls:InfoTip Grid.Column="1" Text="{Binding Descriptor.Description}" />
+                        </Grid>
+                    </DataTemplate>
+                </BindableLayout.ItemTemplate>
+            </VerticalStackLayout>
+            <BoxView HeightRequest="1"
+                     Color="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}" />
+            <HorizontalStackLayout Spacing="4">
+                <Label Text="IMAGE SIZE" Style="{StaticResource SectionHeading}" VerticalOptions="Center" />
+                <controls:InfoTip Text="Optional request size. Leave unset for the provider default; unsupported sizes are reported by the provider." />
+            </HorizontalStackLayout>
+            <Picker ItemsSource="{Binding ImageSizes}" ItemDisplayBinding="{Binding DisplayName}"
+                    SelectedItem="{Binding SelectedSize, Mode=TwoWay}" IsEnabled="{Binding IsIdle}"
+                    AutomationId="ImageSizePicker" />
+            <HorizontalStackLayout Spacing="4">
+                <Label Text="OUTPUT FORMAT" Style="{StaticResource SectionHeading}" VerticalOptions="Center" />
+                <controls:InfoTip Text="Optional image media type. Leave unset for the provider default; unsupported formats are reported by the provider." />
+            </HorizontalStackLayout>
+            <Picker ItemsSource="{Binding MediaTypes}"
+                    SelectedItem="{Binding SelectedMediaType, Mode=TwoWay}"
+                    IsEnabled="{Binding IsIdle}" AutomationId="ImageFormatPicker" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentView>

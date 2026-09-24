@@ -1,9 +1,9 @@
 using System.Reflection;
 using System.ClientModel;
+using AIExtensions.Sample.ChatPlayground.Features.Chat;
+using AIExtensions.Sample.ChatPlayground.Features.Embeddings;
 using AIExtensions.Sample.ChatPlayground.Features.Images;
-using AIExtensions.Sample.ChatPlayground.Features.Library;
 using AIExtensions.Sample.ChatPlayground.Features.Recording;
-using AIExtensions.Sample.ChatPlayground.Features.Search;
 using AIExtensions.Sample.ChatPlayground.Services;
 using AIExtensions.Sample.ChatPlayground.ViewModels;
 using Microsoft.Extensions.AI;
@@ -39,19 +39,22 @@ public static class MauiProgram
 
         builder.Services.AddSingleton<ImageInputService>();
         builder.Services.AddSingleton<PlaygroundTools>();
-        builder.Services.AddSingleton(serviceProvider => new ChatLibraryService(
-            serviceProvider.GetRequiredService<ILogger<ChatLibraryService>>(),
+        builder.Services.AddSingleton(serviceProvider => new ChatSessionService(
+            serviceProvider.GetRequiredService<ILogger<ChatSessionService>>(),
             FileSystem.AppDataDirectory,
             FileSystem.CacheDirectory));
-        builder.Services.AddSingleton<IChatLibrary>(provider => provider.GetRequiredService<ChatLibraryService>());
-        builder.Services.AddSingleton<IChatRecordingSession>(provider => provider.GetRequiredService<ChatLibraryService>());
-        AddChatSearch(builder.Services, builder.Configuration);
+        builder.Services.AddSingleton<IChatRecordingSession>(provider => provider.GetRequiredService<ChatSessionService>());
+        AddEmbeddingGenerators(builder.Services, builder.Configuration);
+        builder.Services.AddSingleton(_ => new DocumentStore(FileSystem.AppDataDirectory));
+        builder.Services.AddSingleton(serviceProvider => new DocumentSearchService(
+            serviceProvider.GetRequiredService<DocumentStore>(),
+            serviceProvider.GetRequiredService<ILogger<DocumentSearchService>>(),
+            FileSystem.AppDataDirectory));
         builder.Services.AddSingleton<ImageGenerationService>();
-        builder.Services.AddSingleton(serviceProvider =>
-            new ChatSearchSettings(serviceProvider.GetRequiredService<ChatSearchService>().SearchModes));
+        builder.Services.AddSingleton<EmbeddingSettingsViewModel>();
+        builder.Services.AddSingleton<ImageSettingsViewModel>();
         builder.Services.AddSingleton<SettingsPaneViewModel>();
         builder.Services.AddSingleton<ChatAreaViewModel>();
-        builder.Services.AddSingleton<ChatLibraryViewModel>();
         builder.Services.AddSingleton<EmbeddingPlaygroundViewModel>();
         builder.Services.AddSingleton<ImagePlaygroundViewModel>();
         builder.Services.AddSingleton<MainViewModel>();
@@ -154,13 +157,13 @@ public static class MauiProgram
         services.AddSingleton<IImageGenerator>(_ => new DescribedImageGenerator(
             () => CreateOpenAIClient(endpoint, apiKey).GetImageClient(deployment).AsIImageGenerator(),
             new ImageGeneratorDescriptor(
-                $"azure/{deployment}", $"Azure OpenAI: {deployment}",
+                $"azure/{deployment}", "Azure OpenAI",
                 "Generates or edits images with the configured Azure deployment. Prompts and original images leave this device; requests may incur charges.",
-                SupportsEdits: true, IsRemote: true)));
+                SupportsEdits: true)));
 #pragma warning restore MEAI001
     }
 
-    private static void AddChatSearch(IServiceCollection services, IConfiguration configuration)
+    private static void AddEmbeddingGenerators(IServiceCollection services, IConfiguration configuration)
     {
 #if IOS || MACCATALYST
         if (OperatingSystem.IsIOSVersionAtLeast(13) ||
@@ -169,11 +172,10 @@ public static class MauiProgram
             services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(_ =>
                 new DescribedEmbeddingGenerator(
                     () => new NLEmbeddingGenerator(),
-                    new ChatSearchDescriptor(
-                    "apple-natural-language", "Apple on-device index",
-                    "Search by meaning with Apple's on-device NaturalLanguage embeddings.",
-                    $"apple/natural-language/english/{typeof(NLEmbeddingGenerator).Assembly.GetName().Version}/{Environment.OSVersion.Version}",
-                    ChatSearchDataLocation.OnDevice)));
+                    new EmbeddingGeneratorDescriptor(
+                    "apple-natural-language", "Apple NaturalLanguage",
+                    "On-device English sentence embeddings from Apple's NaturalLanguage framework.",
+                    $"apple/natural-language/english/{typeof(NLEmbeddingGenerator).Assembly.GetName().Version}/{Environment.OSVersion.Version}")));
         }
 #endif
         var embeddingDeployment = configuration["AI:EmbeddingDeploymentName"];
@@ -190,18 +192,11 @@ public static class MauiProgram
                 new DescribedEmbeddingGenerator(
                     () => CreateOpenAIClient(endpoint, apiKey)
                         .GetEmbeddingClient(embeddingDeployment).AsIEmbeddingGenerator(),
-                    new ChatSearchDescriptor(
-                    $"azure/{embeddingDeployment}", $"Azure OpenAI: {embeddingDeployment}",
-                    "Semantic search sends saved text and buffered queries to Azure.",
-                    $"azure/{endpoint.AbsoluteUri}/{embeddingDeployment}/{revision}",
-                    ChatSearchDataLocation.Remote)));
+                    new EmbeddingGeneratorDescriptor(
+                    $"azure/{embeddingDeployment}", "Azure OpenAI",
+                    $"Embeddings use deployment '{embeddingDeployment}'. Imported document text and search queries are sent to Azure.",
+                    $"azure/{endpoint.AbsoluteUri}/{embeddingDeployment}/{revision}")));
         }
-
-        services.AddSingleton(serviceProvider => new ChatSearchService(
-            serviceProvider.GetRequiredService<IChatLibrary>(),
-            serviceProvider.GetRequiredService<ILogger<ChatSearchService>>(),
-            FileSystem.AppDataDirectory,
-            serviceProvider.GetServices<IEmbeddingGenerator<string, Embedding<float>>>()));
     }
 
     private static Uri RequireOpenAIEndpoint(string? value)

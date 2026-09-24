@@ -1,6 +1,8 @@
 using System.Drawing;
 using AIExtensions.Sample.ChatPlayground.Features.Images;
 using AIExtensions.Sample.ChatPlayground.Models;
+using AIExtensions.Sample.ChatPlayground.Services;
+using AIExtensions.Sample.ChatPlayground.ViewModels;
 using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat.Tests;
@@ -20,7 +22,7 @@ public sealed class ImageGenerationServiceTests
                 created++;
                 return provider;
             },
-            new ImageGeneratorDescriptor("test", "Test image", "On device", true, false));
+            new ImageGeneratorDescriptor("test", "Test image", "On device", true));
 
         Assert.Equal("test", generator.GetService<ImageGeneratorDescriptor>()?.Id);
         Assert.Same(generator, generator.GetService<IImageGenerator>());
@@ -38,14 +40,17 @@ public sealed class ImageGenerationServiceTests
         Assert.Throws<ArgumentException>(() => new DescribedImageGenerator(
             () => new TestImageGenerator((_, _, _) =>
                 Task.FromResult(new ImageGenerationResponse([]))),
-            new ImageGeneratorDescriptor("", "Test", "On device", true, false)));
+            new ImageGeneratorDescriptor("", "Test", "On device", true)));
     }
 
     [Fact]
     public async Task GenerateAsync_WithOriginalAndOptions_PassesThemToGenerator()
     {
         var original = new ImageAttachment("input.png", "image/png", [3, 4]);
-        var options = ImageGenerationService.CreateOptions("2", new Size(1024, 1024), "image/jpeg")!;
+        var settings = CreateSettings();
+        settings.SelectedSize = settings.ImageSizes.Single(size => size.Size == new Size(1024, 1024));
+        settings.SelectedMediaType = "image/jpeg";
+        var options = settings.CreateOptions()!;
         var imageUri = new Uri("https://example.test/image.png");
         var generator = new TestImageGenerator((request, receivedOptions, _) =>
         {
@@ -69,32 +74,43 @@ public sealed class ImageGenerationServiceTests
     }
 
     [Fact]
-    public void CreateOptions_UsesDefaultsOrExplicitSettings()
+    public void ImageSettings_CreateOptions_UsesDefaultsOrExplicitSettings()
     {
-        Assert.Null(ImageGenerationService.CreateOptions("", null, "Provider default"));
-        var options = ImageGenerationService.CreateOptions("2", new Size(1536, 1024), "image/webp");
-        Assert.Equal(2, options?.Count);
+        var settings = CreateSettings();
+        Assert.Null(settings.CreateOptions());
+        settings.SelectedSize = settings.ImageSizes.Single(size => size.Size == new Size(1536, 1024));
+        settings.SelectedMediaType = "image/webp";
+
+        var options = settings.CreateOptions();
+
+        Assert.Null(options?.Count);
         Assert.Equal(new Size(1536, 1024), options?.ImageSize);
         Assert.Equal("image/webp", options?.MediaType);
         Assert.Null(options?.ResponseFormat);
     }
 
-    [Theory]
-    [InlineData("0")]
-    [InlineData("-2")]
-    [InlineData("1.5")]
-    [InlineData("abc")]
-    public void CreateOptions_InvalidCount_Throws(string count) =>
-        Assert.Throws<ArgumentException>(() => ImageGenerationService.CreateOptions(
-            count, null, "Provider default"));
+    [Fact]
+    public void ImageSettings_InvalidSizeOrMediaType_Throws()
+    {
+        var settings = CreateSettings();
+        settings.SelectedSize = new ImageSizeOption("Invalid size", new Size(0, 1024));
+        Assert.Throws<ArgumentException>(settings.CreateOptions);
+        settings.SelectedSize = settings.ImageSizes[0];
+        settings.SelectedMediaType = "image/bmp";
+        Assert.Throws<ArgumentException>(settings.CreateOptions);
+    }
 
     [Fact]
-    public void CreateOptions_InvalidSizeOrMediaType_Throws()
+    public void ImageSettings_RejectsDuplicateGeneratorIds()
     {
-        Assert.Throws<ArgumentException>(() => ImageGenerationService.CreateOptions(
-            "", new Size(0, 1024), "Provider default"));
-        Assert.Throws<ArgumentException>(() => ImageGenerationService.CreateOptions(
-            "", null, "image/bmp"));
+        var provider = new TestImageGenerator((_, _, _) =>
+            Task.FromResult(new ImageGenerationResponse([])));
+        Assert.Throws<ArgumentException>(() => new ImageSettingsViewModel([
+            new DescribedImageGenerator(() => provider,
+                new ImageGeneratorDescriptor("same", "First", "First provider", true)),
+            new DescribedImageGenerator(() => provider,
+                new ImageGeneratorDescriptor("same", "Second", "Second provider", false)),
+        ]));
     }
 
     [Fact]
@@ -129,6 +145,12 @@ public sealed class ImageGenerationServiceTests
             new ImageGenerationService().GenerateAsync(
                 generator, "a robot", null, cancellationToken: cancellation.Token));
     }
+
+    private static ImageSettingsViewModel CreateSettings() =>
+        new([new DescribedImageGenerator(
+            () => new TestImageGenerator((_, _, _) =>
+                Task.FromResult(new ImageGenerationResponse([]))),
+            new ImageGeneratorDescriptor("test", "Test generator", "Test description", true))]);
 
     private sealed class TestImageGenerator(
         Func<ImageGenerationRequest, ImageGenerationOptions?, CancellationToken, Task<ImageGenerationResponse>> generate)

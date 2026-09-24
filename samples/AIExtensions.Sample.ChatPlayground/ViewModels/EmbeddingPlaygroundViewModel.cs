@@ -1,177 +1,167 @@
 using System.Collections.ObjectModel;
-using System.Globalization;
-using AIExtensions.Sample.ChatPlayground.Features.Search;
+using System.ComponentModel;
+using AIExtensions.Sample.ChatPlayground.Features.Embeddings;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Microsoft.Extensions.AI;
 
 namespace AIExtensions.Sample.ChatPlayground.ViewModels;
 
-/// <summary>Exercises the selected embedding generator and indexes saved chats with that same model.</summary>
+/// <summary>Imports text documents and searches their separate, model-specific indexes.</summary>
 public sealed partial class EmbeddingPlaygroundViewModel : ObservableObject
 {
-    private readonly ChatSearchService _search;
-    private readonly ChatSearchSettings _settings;
-    private readonly IReadOnlyDictionary<string, IEmbeddingGenerator<string, Embedding<float>>> _generators;
-    private CancellationTokenSource? _cancellation;
+    private readonly DocumentStore _documents;
+    private readonly DocumentSearchService _search;
 
     public EmbeddingPlaygroundViewModel(
-        ChatSearchService search, ChatSearchSettings settings,
-        IEnumerable<IEmbeddingGenerator<string, Embedding<float>>> generators)
+        DocumentStore documents, DocumentSearchService search, EmbeddingSettingsViewModel settings)
     {
+        _documents = documents;
         _search = search;
-        _settings = settings;
-        _generators = generators.ToDictionary(
-            generator => generator.GetService<ChatSearchDescriptor>()!.Id, StringComparer.Ordinal);
-    }
-
-    public IReadOnlyList<ChatSearchDescriptor> SearchModes => _settings.SearchModes;
-    public ObservableCollection<ChatSearchHit> Results { get; } = [];
-
-    public ChatSearchDescriptor SelectedMode
-    {
-        get => _settings.SelectedMode;
-        set
+        Settings = settings;
+        Settings.PropertyChanged += SettingsPropertyChanged;
+        Settings.IndexCleared += (_, _) =>
         {
-            if (_settings.SelectedMode == value)
-                return;
-            _settings.SelectedMode = value;
             Results.Clear();
-            VectorPreview = string.Empty;
-            VectorSummary = string.Empty;
-            StatusMessage = $"Selected {value.DisplayName}. Index or search saved chats with this method.";
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(IsEmbeddingSelected));
-            OnPropertyChanged(nameof(SelectedModeDescription));
-            GenerateVectorCommand.NotifyCanExecuteChanged();
-        }
-    }
-
-    public string Dimensions
-    {
-        get => _settings.Dimensions;
-        set
+            ShowingSearchResults = false;
+            StatusMessage = "Index cleared. Imported documents are unchanged; index them to search again.";
+        };
+        Settings.DocumentsCleared += (_, _) =>
         {
-            if (_settings.Dimensions == value)
-                return;
-            _settings.Dimensions = value;
+            Documents.Clear();
             Results.Clear();
-            VectorPreview = string.Empty;
-            VectorSummary = string.Empty;
-            OnPropertyChanged();
-        }
+            ShowingSearchResults = false;
+            StatusMessage = "Imported documents and indexes cleared.";
+        };
+        StatusMessage = "Import a Markdown or text document, then index it in settings.";
     }
 
-    public bool IsEmbeddingSelected => SelectedMode.Id != ChatSearchDescriptor.ContainsId;
-    public string SelectedModeDescription => SelectedMode.Description;
+    public EmbeddingSettingsViewModel Settings { get; }
+    public ObservableCollection<ImportedDocument> Documents { get; } = [];
+    public ObservableCollection<DocumentSearchHit> Results { get; } = [];
 
-    [ObservableProperty] private string vectorText = string.Empty;
     [ObservableProperty] private string query = string.Empty;
-    [ObservableProperty] private string statusMessage = "Select a method, then index or search your saved chats.";
-    [ObservableProperty] private string vectorSummary = string.Empty;
-    [ObservableProperty] private string vectorPreview = string.Empty;
+    [ObservableProperty] private string statusMessage = string.Empty;
+    [ObservableProperty] private bool showingSearchResults;
     [ObservableProperty] private bool isBusy;
-    [ObservableProperty] private bool isIndexing;
-    [ObservableProperty] private string indexProgressMessage = string.Empty;
 
     public bool IsIdle => !IsBusy;
+    public string ResultsHeading => ShowingSearchResults ? "SEARCH RESULTS" : "IMPORTED DOCUMENTS";
+    public IAsyncRelayCommand Search => SearchDocumentsCommand;
+    public System.Windows.Input.ICommand CancelSearch => SearchDocumentsCancelCommand;
 
-    public IAsyncRelayCommand GenerateVectorCommand =>
-        _generateVectorCommand ??= new AsyncRelayCommand(GenerateVectorAsync, () => !IsBusy && IsEmbeddingSelected);
-    public IAsyncRelayCommand IndexChatsCommand =>
-        _indexChatsCommand ??= new AsyncRelayCommand(IndexChatsAsync, () => !IsBusy);
-    public IAsyncRelayCommand SearchChatsCommand =>
-        _searchChatsCommand ??= new AsyncRelayCommand(SearchChatsAsync, () => !IsBusy);
-    public IRelayCommand CancelCommand =>
-        _cancelCommand ??= new RelayCommand(() => _cancellation?.Cancel(), () => IsBusy);
-
-    private IAsyncRelayCommand? _generateVectorCommand;
-    private IAsyncRelayCommand? _indexChatsCommand;
-    private IAsyncRelayCommand? _searchChatsCommand;
-    private IRelayCommand? _cancelCommand;
-
-    private Task IndexChatsAsync() => RunAsync(async cancellationToken =>
+    public async Task LoadDocumentsAsync()
     {
-        var result = await _search.SearchAsync(string.Empty, SelectedMode.Id, cancellationToken,
-            CreateProgress(cancellationToken), _settings.SelectedDimensions);
-        StatusMessage = $"Saved-chat index is ready for {SelectedMode.DisplayName}." +
-            (result.Notice is null ? string.Empty : $" {result.Notice}");
-    });
-
-    private Task SearchChatsAsync() => RunAsync(async cancellationToken =>
-    {
-        var result = await _search.SearchAsync(Query, SelectedMode.Id, cancellationToken,
-            CreateProgress(cancellationToken), _settings.SelectedDimensions);
-        Results.Clear();
-        foreach (var hit in result.Hits)
-            Results.Add(hit);
-        StatusMessage = $"{result.Hits.Count} {(result.Hits.Count == 1 ? "chat" : "chats")} found" +
-            (result.IsSemantic ? " by meaning." : ".") +
-            (result.Notice is null ? string.Empty : $" {result.Notice}");
-    });
-
-    private Task GenerateVectorAsync() => RunAsync(async cancellationToken =>
-    {
-        if (string.IsNullOrWhiteSpace(VectorText))
-            throw new ArgumentException("Enter text to embed.");
-        if (!_generators.TryGetValue(SelectedMode.Id, out var generator))
-            throw new InvalidOperationException("Choose an embedding generator, not Contains.");
-
-        var options = _settings.SelectedDimensions is { } dimensions
-            ? new EmbeddingGenerationOptions { Dimensions = dimensions }
-            : null;
-        var vector = await generator.GenerateVectorAsync(VectorText.Trim(), options, cancellationToken);
-        if (vector.IsEmpty)
-            throw new InvalidDataException("The generator returned no embedding.");
-        VectorSummary = $"{vector.Length} dimensions from {SelectedMode.DisplayName}";
-        VectorPreview = string.Join(", ", vector.Span[..Math.Min(12, vector.Length)]
-            .ToArray().Select(value => value.ToString("G5", CultureInfo.InvariantCulture))) +
-            (vector.Length > 12 ? ", ..." : string.Empty);
-        StatusMessage = "Embedding generated. Index and search saved chats to compare vectors.";
-    });
-
-    private IProgress<ChatSearchProgress> CreateProgress(CancellationToken cancellationToken) =>
-        new Progress<ChatSearchProgress>(progress =>
-    {
-        if (!IsBusy || _cancellation?.Token != cancellationToken)
-            return;
-        IsIndexing = progress.IsIndexing;
-        if (progress.IsIndexing)
-            IndexProgressMessage = $"Indexing {progress.CompletedChats + 1}/{progress.TotalChats}: " +
-                $"{progress.IndexedChunks}/{progress.TotalChunks} excerpts from {progress.ChatTitle}";
-    });
-
-    private async Task RunAsync(Func<CancellationToken, Task> action)
-    {
-        using var cancellation = new CancellationTokenSource();
-        _cancellation = cancellation;
-        IsBusy = true;
         try
         {
-            await action(cancellation.Token);
-        }
-        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
-        {
-            StatusMessage = "Operation cancelled.";
+            var documents = await _documents.ListAsync();
+            Documents.Clear();
+            foreach (var document in documents)
+                Documents.Add(document);
+            if (!ShowingSearchResults)
+                StatusMessage = $"{documents.Count} imported {(documents.Count == 1 ? "document" : "documents")}." +
+                    (Settings.HasGenerator ? " Index documents in settings to search." : string.Empty);
         }
         catch (Exception exception)
         {
-            StatusMessage = $"Operation failed: {exception.Message}";
+            StatusMessage = $"Could not load documents: {exception.Message}";
+        }
+    }
+
+    public async Task ImportDocumentAsync(string fileName, Stream source, CancellationToken cancellationToken = default)
+    {
+        if (IsBusy || Settings.IsBusy)
+        {
+            StatusMessage = "Wait for the current document operation to finish before importing.";
+            return;
+        }
+        IsBusy = true;
+        Settings.IsBusy = true;
+        try
+        {
+            var document = await _documents.ImportAsync(fileName, source, cancellationToken);
+            Documents.Insert(0, document);
+            Results.Clear();
+            ShowingSearchResults = false;
+            StatusMessage = $"Imported {document.Name}. Index documents in settings to search it.";
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            StatusMessage = "Document import cancelled.";
+        }
+        catch (Exception exception)
+        {
+            StatusMessage = $"Document import failed: {exception.Message}";
         }
         finally
         {
-            _cancellation = null;
-            IsIndexing = false;
+            Settings.IsBusy = false;
             IsBusy = false;
         }
     }
 
+    private bool CanSearch() => !IsBusy && !Settings.IsBusy &&
+        Settings.HasGenerator && !string.IsNullOrWhiteSpace(Query);
+
+    [RelayCommand(CanExecute = nameof(CanSearch), IncludeCancelCommand = true)]
+    private async Task SearchDocumentsAsync(CancellationToken cancellationToken)
+    {
+        var option = Settings.SelectedOption ?? throw new InvalidOperationException("Choose an embedding generator.");
+        IsBusy = true;
+        Settings.IsBusy = true;
+        StatusMessage = $"Searching with {option.Descriptor.DisplayName}...";
+        try
+        {
+            var result = await _search.SearchAsync(
+                Query, option.Generator, option.Descriptor.IndexIdentity, Settings.SelectedDimensions,
+                cancellationToken);
+            Results.Clear();
+            foreach (var hit in result.Hits)
+                Results.Add(hit);
+            ShowingSearchResults = true;
+            StatusMessage = $"{result.Hits.Count} closest {(result.Hits.Count == 1 ? "document" : "documents")}" +
+                (result.QueryDimensions > 0 ? $" ({result.QueryDimensions}-dimensional query)." : ".") +
+                (string.IsNullOrEmpty(result.Notice) ? string.Empty : $" {result.Notice}");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            StatusMessage = "Search cancelled.";
+        }
+        catch (Exception exception)
+        {
+            Results.Clear();
+            ShowingSearchResults = false;
+            StatusMessage = $"Search failed: {exception.Message}";
+        }
+        finally
+        {
+            Settings.IsBusy = false;
+            IsBusy = false;
+        }
+    }
+
+    private void SettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(EmbeddingSettingsViewModel.SelectedOption) or
+            nameof(EmbeddingSettingsViewModel.Dimensions))
+        {
+            Results.Clear();
+            ShowingSearchResults = false;
+            StatusMessage = Settings.HasGenerator
+                ? "Index documents for the selected model and dimensions, then search."
+                : "Configure an embedding generator to search imported documents.";
+        }
+        if (e.PropertyName is nameof(EmbeddingSettingsViewModel.SelectedOption) or
+            nameof(EmbeddingSettingsViewModel.IsBusy))
+            SearchDocumentsCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnQueryChanged(string value) => SearchDocumentsCommand.NotifyCanExecuteChanged();
+
+    partial void OnShowingSearchResultsChanged(bool value) => OnPropertyChanged(nameof(ResultsHeading));
+
     partial void OnIsBusyChanged(bool value)
     {
         OnPropertyChanged(nameof(IsIdle));
-        GenerateVectorCommand.NotifyCanExecuteChanged();
-        IndexChatsCommand.NotifyCanExecuteChanged();
-        SearchChatsCommand.NotifyCanExecuteChanged();
-        CancelCommand.NotifyCanExecuteChanged();
+        SearchDocumentsCommand.NotifyCanExecuteChanged();
     }
 }

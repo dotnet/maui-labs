@@ -3,102 +3,69 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:viewModels="clr-namespace:AIExtensions.Sample.ChatPlayground.ViewModels"
              xmlns:views="clr-namespace:AIExtensions.Sample.ChatPlayground.Views"
+             xmlns:controls="clr-namespace:AIExtensions.Sample.ChatPlayground.Controls"
              x:Class="AIExtensions.Sample.ChatPlayground.MainPage"
              x:DataType="viewModels:MainViewModel"
              Title="Chat"
              BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}">
-    <Grid SafeAreaEdges="None">
-        <Grid x:Name="RootGrid" RowDefinitions="*" Padding="12" ColumnSpacing="12" SafeAreaEdges="Container">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="330" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-
-            <BoxView x:Name="SettingsBackdrop" Grid.ColumnSpan="2" ZIndex="9"
-                     Color="{AppThemeBinding Light={StaticResource OverlayScrim}, Dark={StaticResource OverlayScrimDark}}"
-                     IsVisible="False"
-                     AutomationId="SettingsDismissOverlay">
-                <BoxView.GestureRecognizers>
-                    <TapGestureRecognizer Tapped="SettingsBackdropTapped" />
-                </BoxView.GestureRecognizers>
-            </BoxView>
-            <Border x:Name="SettingsPanel" Grid.Column="0" ZIndex="10"
-                    BackgroundColor="{AppThemeBinding Light={StaticResource PanelBackground}, Dark={StaticResource PanelBackgroundDark}}"
-                    Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}"
-                    StrokeShape="RoundRectangle 12"
-                    AutomationId="SettingsSidebar">
-                <Grid RowDefinitions="Auto,*">
-                    <Grid Padding="16,16,16,0" ColumnDefinitions="*,Auto">
-                        <Label Text="Playground settings" FontSize="20" FontAttributes="Bold" />
-                        <ImageButton x:Name="CloseSettingsButton" Grid.Column="1"
-                                     Source="close.png" IsVisible="False"
-                                     Clicked="CloseSettingsClicked"
-                                     Style="{StaticResource AttachmentButton}"
-                                     SemanticProperties.Description="Close settings"
-                                     ToolTipProperties.Text="Close settings"
-                                     AutomationId="CloseSettingsButton" />
-                    </Grid>
-                    <views:SettingsPane Grid.Row="1" BindingContext="{Binding Settings}" />
+    <Grid>
+        <controls:PlaygroundPageLayout HeaderTitle="Chat"
+                                       HeaderInfo="Send messages with the selected real client. Replay plays only the current chat offline; More imports or exports that recording."
+                                       HeaderStatus="{Binding Chat.StatusMessage}"
+                                       StatusAutomationId="RequestStatusLabel"
+                                       SidebarTitle="Chat settings">
+            <controls:PlaygroundPageLayout.HeaderActions>
+                <HorizontalStackLayout Spacing="4">
+                    <VerticalStackLayout Spacing="2">
+                        <ImageButton Source="add.png" Style="{StaticResource ChatActionButton}"
+                                     Command="{Binding NewChatAction}"
+                                     SemanticProperties.Description="Start a new chat, replacing the current autosave"
+                                     ToolTipProperties.Text="Export this chat before starting a new one"
+                                     AutomationId="NewChatButton" />
+                        <Label Text="New" Style="{StaticResource ChatActionLabel}" />
+                    </VerticalStackLayout>
+                    <VerticalStackLayout Spacing="2">
+                        <ImageButton x:Name="MoreButton" Source="more.png"
+                                     Style="{StaticResource ChatActionButton}"
+                                     SemanticProperties.Description="Import or export the current chat"
+                                     AutomationId="ChatMoreButton">
+                            <controls:PopupMenu.Content>
+                                <VerticalStackLayout Spacing="8" x:DataType="viewModels:MainViewModel">
+                                    <Label Text="CURRENT CHAT" Style="{StaticResource SectionHeading}" />
+                                    <Button Text="Import from file" ImageSource="folder.png"
+                                            Command="{Binding ImportFileAction}"
+                                            SemanticProperties.Description="Replace the current chat with a recording from a file"
+                                            AutomationId="ImportChatFileButton" />
+                                    <Button Text="Load example" ImageSource="play.png"
+                                            Command="{Binding LoadSampleAction}"
+                                            SemanticProperties.Description="Replace the current chat with a bundled image and tool-call recording"
+                                            AutomationId="LoadSampleChatButton" />
+                                    <Button Text="Export to file" ImageSource="export.png"
+                                            Command="{Binding ExportChatAction}"
+                                            CommandParameter="{x:Reference MoreButton}"
+                                            AutomationId="ExportChatButton" />
+                                </VerticalStackLayout>
+                            </controls:PopupMenu.Content>
+                        </ImageButton>
+                        <Label Text="More" Style="{StaticResource ChatActionLabel}" />
+                    </VerticalStackLayout>
+                </HorizontalStackLayout>
+            </controls:PlaygroundPageLayout.HeaderActions>
+            <controls:PlaygroundPageLayout.SettingsContent>
+                <views:SettingsPane BindingContext="{Binding Settings}" />
+            </controls:PlaygroundPageLayout.SettingsContent>
+            <controls:PlaygroundPageLayout.MainContent>
+                <views:ChatArea BindingContext="{Binding Chat}" />
+            </controls:PlaygroundPageLayout.MainContent>
+            <controls:PlaygroundPageLayout.InputContent>
+                <Grid>
+                    <ContentView IsVisible="{Binding Chat.IsLiveClient}"
+                                 AutomationId="LiveComposerPresenter">
+                        <views:ChatComposer BindingContext="{Binding Chat}" />
+                    </ContentView>
+                    <views:ReplayControls IsVisible="{Binding Chat.IsReplayClient}" />
                 </Grid>
-            </Border>
-
-            <Grid x:Name="ChatPanel" Grid.Column="1" RowDefinitions="Auto,*" RowSpacing="12">
-                <Border BackgroundColor="{AppThemeBinding Light={StaticResource PanelBackground}, Dark={StaticResource PanelBackgroundDark}}"
-                        Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}"
-                        StrokeShape="RoundRectangle 12" Padding="16">
-                    <Grid x:Name="HeaderGrid" RowDefinitions="Auto,Auto"
-                          ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" RowSpacing="4">
-                        <ImageButton x:Name="OpenSettingsButton"
-                                     Source="settings.png" IsVisible="False"
-                                     Clicked="OpenSettingsClicked"
-                                     Style="{StaticResource AttachmentButton}"
-                                     SemanticProperties.Description="Open settings"
-                                     ToolTipProperties.Text="Open settings"
-                                     AutomationId="OpenSettingsButton" />
-                        <VerticalStackLayout x:Name="HeaderContent" Grid.Column="1" Spacing="2">
-                            <Label Text="IChatClient Playground" FontSize="22" FontAttributes="Bold" />
-                            <Label Text="{Binding Chat.StatusMessage}" FontSize="12"
-                                   Style="{StaticResource MutedLabel}"
-                                   AutomationId="RequestStatusLabel" />
-                        </VerticalStackLayout>
-                        <HorizontalStackLayout x:Name="HeaderActions" Grid.Column="2"
-                                               HorizontalOptions="End" VerticalOptions="Start">
-                            <VerticalStackLayout Margin="4,0" Spacing="2">
-                                <ImageButton Source="add.png"
-                                             Style="{StaticResource ChatActionButton}"
-                                             Command="{Binding NewChatCommand}"
-                                             SemanticProperties.Description="Start a new chat and keep the current one in saved chats"
-                                             ToolTipProperties.Text="New chat (the current chat stays in Chats)"
-                                             AutomationId="NewChatButton" />
-                                <Label Text="New" Style="{StaticResource ChatActionLabel}" />
-                            </VerticalStackLayout>
-                            <VerticalStackLayout Margin="4,0" Spacing="2">
-                                <ImageButton Source="folder.png"
-                                             Style="{StaticResource ChatActionButton}"
-                                             Command="{Binding ImportFileCommand}"
-                                             SemanticProperties.Description="Import a saved chat JSON file"
-                                             ToolTipProperties.Text="Import a saved chat file"
-                                             AutomationId="ImportChatFileButton" />
-                                <Label Text="Import" Style="{StaticResource ChatActionLabel}" />
-                            </VerticalStackLayout>
-                            <VerticalStackLayout Margin="4,0" Spacing="2">
-                                <ImageButton x:Name="ExportChatButton" Source="export.png"
-                                             Style="{StaticResource ChatActionButton}"
-                                             Command="{Binding ExportChatCommand}"
-                                             CommandParameter="{x:Reference ExportChatButton}"
-                                             SemanticProperties.Description="Export the current chat as a JSON file"
-                                             ToolTipProperties.Text="Export the current chat to a file"
-                                             AutomationId="ExportChatButton" />
-                                <Label Text="Export" Style="{StaticResource ChatActionLabel}" />
-                            </VerticalStackLayout>
-                        </HorizontalStackLayout>
-                    </Grid>
-                </Border>
-
-                <views:ChatArea x:Name="ChatArea" Grid.Row="1"
-                                BindingContext="{Binding Chat}"
-                                Library="{Binding Source={RelativeSource AncestorType={x:Type viewModels:MainViewModel}}, Path=Library}" />
-            </Grid>
-        </Grid>
+            </controls:PlaygroundPageLayout.InputContent>
+        </controls:PlaygroundPageLayout>
     </Grid>
 </ContentPage>

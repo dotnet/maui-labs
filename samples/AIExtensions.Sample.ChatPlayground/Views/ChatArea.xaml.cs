@@ -4,20 +4,9 @@ using AIExtensions.Sample.ChatPlayground.ViewModels;
 
 namespace AIExtensions.Sample.ChatPlayground.Views;
 
-/// <summary>Displays dynamically measured chat messages and the composer.</summary>
+/// <summary>Displays and scrolls dynamically measured chat messages.</summary>
 public partial class ChatArea : ContentView
 {
-    public static readonly BindableProperty LibraryProperty = BindableProperty.Create(
-        nameof(Library), typeof(ChatLibraryViewModel), typeof(ChatArea), null,
-        propertyChanged: (view, _, value) =>
-            ((ChatArea)view).FindChatsView.BindingContext = value);
-
-    public ChatLibraryViewModel? Library
-    {
-        get => (ChatLibraryViewModel?)GetValue(LibraryProperty);
-        set => SetValue(LibraryProperty, value);
-    }
-
     private readonly HashSet<ChatMessageViewModel> _observedMessages = [];
     private ChatAreaViewModel? _viewModel;
     private bool _scrollPending;

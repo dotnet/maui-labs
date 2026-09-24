@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:viewModels="clr-namespace:AIExtensions.Sample.ChatPlayground.ViewModels"
+             xmlns:controls="clr-namespace:AIExtensions.Sample.ChatPlayground.Controls"
+             x:Class="AIExtensions.Sample.ChatPlayground.Views.EmbeddingSettingsPane"
+             x:DataType="viewModels:EmbeddingSettingsViewModel">
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="12">
+            <HorizontalStackLayout Spacing="4">
+                <Label Text="GENERATOR" Style="{StaticResource SectionHeading}" VerticalOptions="Center" />
+                <controls:InfoTip Text="One real IEmbeddingGenerator indexes imported documents and embeds search queries. Cloud generators send document text and queries off-device." />
+            </HorizontalStackLayout>
+            <VerticalStackLayout Spacing="4" IsEnabled="{Binding IsIdle}"
+                                 RadioButtonGroup.GroupName="EmbeddingGenerator"
+                                 RadioButtonGroup.SelectedValue="{Binding SelectedOption, Mode=TwoWay}"
+                                 BindableLayout.ItemsSource="{Binding Generators}">
+                <BindableLayout.ItemTemplate>
+                    <DataTemplate x:DataType="viewModels:EmbeddingGeneratorOption">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                            <RadioButton HorizontalOptions="Fill"
+                                         Value="{Binding .}"
+                                         Content="{Binding Descriptor.DisplayName}"
+                                         AutomationId="{Binding AutomationId}" />
+                            <controls:InfoTip Grid.Column="1" Text="{Binding Descriptor.Description}" />
+                        </Grid>
+                    </DataTemplate>
+                </BindableLayout.ItemTemplate>
+            </VerticalStackLayout>
+            <BoxView HeightRequest="1"
+                     Color="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}" />
+            <HorizontalStackLayout Spacing="4">
+                <Label Text="DIMENSIONS (OPTIONAL)" Style="{StaticResource SectionHeading}" VerticalOptions="Center" />
+                <controls:InfoTip Text="Leave blank for the model default. Each requested dimension count has its own index; providers may reject unsupported values." />
+            </HorizontalStackLayout>
+            <Entry Text="{Binding Dimensions}" Placeholder="Model default" Keyboard="Numeric"
+                   IsEnabled="{Binding IsIdle}" AutomationId="EmbeddingDimensionsEntry" />
+            <HorizontalStackLayout Spacing="4">
+                <Label Text="DOCUMENTS" Style="{StaticResource SectionHeading}" VerticalOptions="Center" />
+                <controls:InfoTip Text="Import Markdown or plain text from the header. Index documents sends text to the selected generator. Search reads that model's saved vectors; Clear index keeps your documents." />
+            </HorizontalStackLayout>
+            <FlexLayout Wrap="Wrap" AlignItems="Center">
+                <Button Text="Index documents" Command="{Binding IndexDocuments}"
+                        Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,8"
+                        AutomationId="IndexDocumentsButton" />
+                <Button Text="Clear index" Command="{Binding ClearIndex}"
+                        Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,8"
+                        AutomationId="ClearIndexButton" />
+                <Button Text="Clear documents" Command="{Binding ClearDocuments}"
+                        Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,8"
+                        SemanticProperties.Description="Delete imported documents and all their indexes"
+                        AutomationId="ClearDocumentsButton" />
+                <Button Text="Cancel" Command="{Binding CancelIndex}"
+                        IsVisible="{Binding IsBusy}"
+                        Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,8"
+                        AutomationId="CancelIndexButton" />
+            </FlexLayout>
+            <Label Text="{Binding IndexProgressMessage}" IsVisible="{Binding IsBusy}"
+                   Style="{StaticResource MutedLabel}" FontSize="12" />
+            <Label Text="{Binding StatusMessage}" Style="{StaticResource MutedLabel}"
+                   FontSize="12" AutomationId="EmbeddingSettingsStatus" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentView>

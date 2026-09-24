@@ -1,10 +1,10 @@
 using Microsoft.Extensions.AI;
 
-namespace AIExtensions.Sample.ChatPlayground.Features.Images;
+namespace AIExtensions.Sample.ChatPlayground.Services;
 
 #pragma warning disable MEAI001 // IImageGenerator is experimental in the installed SDK.
 public sealed record ImageGeneratorDescriptor(
-    string Id, string DisplayName, string Description, bool SupportsEdits, bool IsRemote);
+    string Id, string DisplayName, string Description, bool SupportsEdits);
 
 /// <summary>Exposes image-provider metadata without creating the provider until first use.</summary>
 public sealed class DescribedImageGenerator : IImageGenerator

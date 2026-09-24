@@ -1,28 +1,28 @@
 using Microsoft.Extensions.AI;
 
-namespace AIExtensions.Sample.ChatPlayground.Features.Search;
+namespace AIExtensions.Sample.ChatPlayground.Services;
 
-/// <summary>Exposes an embedding model's index identity without opening it until generation.</summary>
+/// <summary>UI label and exact vector-space identity for one registered embedding generator.</summary>
+public sealed record EmbeddingGeneratorDescriptor(
+    string Id, string DisplayName, string Description, string IndexIdentity);
+
+/// <summary>Exposes UI metadata without opening the embedding model until it is used.</summary>
 public sealed class DescribedEmbeddingGenerator : IEmbeddingGenerator<string, Embedding<float>>
 {
     private readonly Lazy<IEmbeddingGenerator<string, Embedding<float>>> _inner;
-    private readonly ChatSearchDescriptor _descriptor;
+    private readonly EmbeddingGeneratorDescriptor _descriptor;
 
     public DescribedEmbeddingGenerator(
         Func<IEmbeddingGenerator<string, Embedding<float>>> createGenerator,
-        ChatSearchDescriptor descriptor)
+        EmbeddingGeneratorDescriptor descriptor)
     {
         ArgumentNullException.ThrowIfNull(createGenerator);
         ArgumentNullException.ThrowIfNull(descriptor);
-        if (string.IsNullOrWhiteSpace(descriptor.Id) || descriptor.Id == ChatSearchDescriptor.ContainsId ||
+        if (string.IsNullOrWhiteSpace(descriptor.Id) ||
             string.IsNullOrWhiteSpace(descriptor.DisplayName) ||
             string.IsNullOrWhiteSpace(descriptor.Description) ||
-            string.IsNullOrWhiteSpace(descriptor.IndexIdentity) ||
-            descriptor.IndexIdentity == ChatSearchDescriptor.Contains.IndexIdentity ||
-            !Enum.IsDefined(descriptor.DataLocation))
-        {
-            throw new ArgumentException("An embedding generator needs an ID, label, description, data location, and model identity.", nameof(descriptor));
-        }
+            string.IsNullOrWhiteSpace(descriptor.IndexIdentity))
+            throw new ArgumentException("An embedding generator needs an ID, label, description, and model identity.", nameof(descriptor));
 
         _descriptor = descriptor;
         _inner = new Lazy<IEmbeddingGenerator<string, Embedding<float>>>(
@@ -38,7 +38,7 @@ public sealed class DescribedEmbeddingGenerator : IEmbeddingGenerator<string, Em
     public object? GetService(Type serviceType, object? serviceKey = null)
     {
         ArgumentNullException.ThrowIfNull(serviceType);
-        if (serviceKey is null && serviceType == typeof(ChatSearchDescriptor))
+        if (serviceKey is null && serviceType == typeof(EmbeddingGeneratorDescriptor))
             return _descriptor;
         if (serviceKey is null && serviceType.IsInstanceOfType(this))
             return this;

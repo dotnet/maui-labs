@@ -18,21 +18,14 @@ public partial class App : Application
             throw new InvalidOperationException("An activation state is required to create the playground window.");
 
         var services = activationState.Context.Services;
-        var chat = services.GetRequiredService<MainPage>();
-        var pages = new TabbedPage
+        return new Window(new TabbedPage
         {
             Children =
             {
-                chat,
+                services.GetRequiredService<MainPage>(),
                 services.GetRequiredService<EmbeddingPage>(),
                 services.GetRequiredService<ImagePage>(),
             },
-        };
-        pages.CurrentPageChanged += (_, _) =>
-        {
-            if (pages.CurrentPage != chat)
-                ((ViewModels.MainViewModel)chat.BindingContext).Library.Close();
-        };
-        return new Window(pages);
+        });
     }
 }

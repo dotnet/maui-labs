@@ -18,10 +18,8 @@
   <ItemGroup>
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Recording\**\*.cs"
              Link="Recording\%(RecursiveDir)%(Filename)%(Extension)" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Library\**\*.cs"
-             Link="Library\%(RecursiveDir)%(Filename)%(Extension)" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Search\**\*.cs"
-             Link="Search\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Embeddings\**\*.cs"
+             Link="Embeddings\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Images\**\*.cs"
              Link="Images\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Storage\**\*.cs"
@@ -32,14 +30,19 @@
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Models\PlaygroundResponse.cs" Link="Models\PlaygroundResponse.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Models\ImageAttachment.cs" Link="Models\ImageAttachment.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\ChatClientDescriptor.cs" Link="Services\ChatClientDescriptor.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\EmbeddingGeneratorDescriptor.cs" Link="Services\EmbeddingGeneratorDescriptor.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\ImageGeneratorDescriptor.cs" Link="Services\ImageGeneratorDescriptor.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\PlaygroundChatClientBuilderExtensions.cs" Link="Services\PlaygroundChatClientBuilderExtensions.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\ViewModels\SettingsPaneViewModel.cs" Link="ViewModels\SettingsPaneViewModel.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\ViewModels\ChatLibraryViewModel.cs" Link="ViewModels\ChatLibraryViewModel.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\ViewModels\EmbeddingPlaygroundViewModel.cs" Link="ViewModels\EmbeddingPlaygroundViewModel.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\ViewModels\EmbeddingSettingsViewModel.cs" Link="ViewModels\EmbeddingSettingsViewModel.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\ViewModels\ImageSettingsViewModel.cs" Link="ViewModels\ImageSettingsViewModel.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <Content Include="TestData\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Resources\Raw\playground_chat.json"
+             Link="TestData\multi-turn-image-in-out.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Resources\Raw\playground_sample.png"
              Link="TestData\playground_sample.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

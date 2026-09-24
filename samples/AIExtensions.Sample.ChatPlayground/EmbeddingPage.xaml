@@ -2,158 +2,129 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:viewModels="clr-namespace:AIExtensions.Sample.ChatPlayground.ViewModels"
-             xmlns:search="clr-namespace:AIExtensions.Sample.ChatPlayground.Features.Search"
+             xmlns:views="clr-namespace:AIExtensions.Sample.ChatPlayground.Views"
+             xmlns:controls="clr-namespace:AIExtensions.Sample.ChatPlayground.Controls"
+             xmlns:documents="clr-namespace:AIExtensions.Sample.ChatPlayground.Features.Embeddings"
              x:Class="AIExtensions.Sample.ChatPlayground.EmbeddingPage"
              x:DataType="viewModels:EmbeddingPlaygroundViewModel"
              Title="Embeddings"
              BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}">
-    <Grid SafeAreaEdges="None">
-        <Grid x:Name="RootGrid" ColumnDefinitions="300,*" ColumnSpacing="12" Padding="12"
-              SafeAreaEdges="Container">
-            <BoxView x:Name="SettingsBackdrop" Grid.ColumnSpan="2" ZIndex="9"
-                     Color="{AppThemeBinding Light={StaticResource OverlayScrim}, Dark={StaticResource OverlayScrimDark}}"
-                     IsVisible="False">
-                <BoxView.GestureRecognizers>
-                    <TapGestureRecognizer Tapped="CloseSettings" />
-                </BoxView.GestureRecognizers>
-            </BoxView>
-            <Border x:Name="SettingsPanel" Grid.Column="0" ZIndex="10"
-                    BackgroundColor="{AppThemeBinding Light={StaticResource PanelBackground}, Dark={StaticResource PanelBackgroundDark}}"
-                    Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}"
-                    StrokeShape="RoundRectangle 12">
-                <Grid RowDefinitions="Auto,*">
-                    <Grid Padding="16,16,16,0" ColumnDefinitions="*,Auto">
-                        <Label Text="Embedding settings" FontSize="20" FontAttributes="Bold" />
-                        <ImageButton x:Name="CloseSettingsButton" Grid.Column="1" Source="close.png"
-                                     Clicked="CloseSettings"
-                                     IsVisible="False"
-                                     Style="{StaticResource AttachmentButton}"
-                                     SemanticProperties.Description="Close embedding settings" />
-                    </Grid>
-                    <ScrollView Grid.Row="1">
-                        <VerticalStackLayout Padding="16" Spacing="12">
-                            <Label Text="SEARCH METHOD" Style="{StaticResource SectionHeading}" />
-                            <VerticalStackLayout Spacing="4"
-                                                 IsEnabled="{Binding IsIdle}"
-                                                 RadioButtonGroup.GroupName="EmbeddingMethod"
-                                                 RadioButtonGroup.SelectedValue="{Binding SelectedMode, Mode=TwoWay}"
-                                                 BindableLayout.ItemsSource="{Binding SearchModes}">
-                                <BindableLayout.ItemTemplate>
-                                    <DataTemplate x:DataType="search:ChatSearchDescriptor">
-                                        <VerticalStackLayout Spacing="2">
-                                            <RadioButton Content="{Binding DisplayName}" Value="{Binding .}"
-                                                         AutomationId="{Binding Id, StringFormat='EmbeddingMode-{0}'}" />
-                                            <Label Text="{Binding Description}" Style="{StaticResource MutedLabel}"
-                                                   FontSize="12" Margin="36,0,0,6" />
-                                        </VerticalStackLayout>
-                                    </DataTemplate>
-                                </BindableLayout.ItemTemplate>
+    <Grid>
+        <controls:PlaygroundPageLayout HeaderTitle="Embeddings"
+                                       HeaderInfo="IEmbeddingGenerator indexes imported Markdown or text documents. Search uses that same model's stored vectors; documents never become chats."
+                                       HeaderStatus="{Binding StatusMessage}"
+                                       StatusAutomationId="EmbeddingStatusLabel"
+                                       SidebarTitle="Embedding settings">
+            <controls:PlaygroundPageLayout.HeaderActions>
+                <VerticalStackLayout Spacing="2">
+                    <ImageButton Source="folder.png" Style="{StaticResource ChatActionButton}"
+                                 SemanticProperties.Description="Import a Markdown or text document"
+                                 AutomationId="ImportDocumentButton">
+                        <controls:PopupMenu.Content>
+                            <VerticalStackLayout Spacing="8">
+                                <Label Text="IMPORT DOCUMENT" Style="{StaticResource SectionHeading}" />
+                                <Button Text="Choose file" Clicked="ImportDocumentClicked"
+                                        AutomationId="ChooseDocumentButton" />
+                                <Button Text="Use sample document" Clicked="ImportSampleDocumentClicked"
+                                        AutomationId="SampleDocumentButton" />
                             </VerticalStackLayout>
-                            <Label Text="Contains matches text locally without generating a vector. Other methods use the selected real IEmbeddingGenerator for both saved-chat indexing and queries."
-                                   Style="{StaticResource MutedLabel}" FontSize="12" />
-                            <Label Text="DIMENSIONS (OPTIONAL)" Style="{StaticResource SectionHeading}"
-                                   IsVisible="{Binding IsEmbeddingSelected}" />
-                            <Entry Text="{Binding Dimensions}" Placeholder="Model default"
-                                   Keyboard="Numeric" IsEnabled="{Binding IsIdle}"
-                                   IsVisible="{Binding IsEmbeddingSelected}"
-                                   AutomationId="EmbeddingDimensionsEntry" />
-                            <Label Text="Changing dimensions makes a separate chat index. Providers may ignore unsupported dimensions."
-                                   Style="{StaticResource MutedLabel}" FontSize="12"
-                                   IsVisible="{Binding IsEmbeddingSelected}" />
-                            <Label Text="{Binding SelectedModeDescription}" Style="{StaticResource MutedLabel}"
-                                   FontSize="12" AutomationId="EmbeddingProviderDescription" />
-                        </VerticalStackLayout>
-                    </ScrollView>
-                </Grid>
-            </Border>
-
-            <Grid x:Name="ResultsPanel" Grid.Column="1"
-                  RowDefinitions="Auto,Auto,Auto,*" RowSpacing="12">
-                <Border Padding="16" StrokeShape="RoundRectangle 12"
-                        BackgroundColor="{AppThemeBinding Light={StaticResource PanelBackground}, Dark={StaticResource PanelBackgroundDark}}"
-                        Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}">
-                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                        <ImageButton x:Name="OpenSettingsButton" Source="settings.png" IsVisible="False"
-                                     Clicked="OpenSettings" Style="{StaticResource AttachmentButton}"
-                                     SemanticProperties.Description="Open embedding settings" />
-                        <VerticalStackLayout Grid.Column="1" Spacing="2">
-                            <Label Text="IEmbeddingGenerator Playground" FontAttributes="Bold" FontSize="20" />
-                            <Label Text="Create vectors and search saved chats using the selected model."
-                                   Style="{StaticResource MutedLabel}" FontSize="12" />
-                        </VerticalStackLayout>
-                    </Grid>
-                </Border>
-
-                <Border Grid.Row="1" Padding="12" StrokeShape="RoundRectangle 12"
-                        IsVisible="{Binding IsEmbeddingSelected}"
-                        BackgroundColor="{AppThemeBinding Light={StaticResource PanelBackground}, Dark={StaticResource PanelBackgroundDark}}"
-                        Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}">
-                    <VerticalStackLayout Spacing="6">
-                        <Label Text="GENERATE AN EMBEDDING" Style="{StaticResource SectionHeading}" />
-                        <Entry Text="{Binding VectorText}" Placeholder="Text to embed"
-                               ReturnType="Done" AutomationId="EmbeddingTextEntry" />
-                        <Button Text="Generate vector" Command="{Binding GenerateVectorCommand}"
-                                Style="{StaticResource SecondaryButtonStyle}"
-                                AutomationId="GenerateVectorButton" />
-                        <Label Text="{Binding VectorSummary}" AutomationId="EmbeddingVectorSummary" />
-                        <Label Text="{Binding VectorPreview}" Style="{StaticResource MutedLabel}"
-                               FontSize="12" LineBreakMode="TailTruncation" MaxLines="2" />
-                    </VerticalStackLayout>
-                </Border>
-
-                <Border Grid.Row="2" Padding="12" StrokeShape="RoundRectangle 12"
-                        BackgroundColor="{AppThemeBinding Light={StaticResource PanelBackground}, Dark={StaticResource PanelBackgroundDark}}"
-                        Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}">
-                    <VerticalStackLayout Spacing="8">
-                        <Label Text="INDEX AND SEARCH SAVED CHATS" Style="{StaticResource SectionHeading}" />
-                        <Entry Text="{Binding Query}" Placeholder="Search chats"
-                               ReturnCommand="{Binding SearchChatsCommand}" ReturnType="Search"
-                               AutomationId="EmbeddingSearchEntry" />
-                        <FlexLayout Wrap="Wrap" AlignItems="Center">
-                            <Button Text="Index chats" Command="{Binding IndexChatsCommand}"
-                                    Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,4"
-                                    AutomationId="IndexChatsButton" />
-                            <Button Text="Search" Command="{Binding SearchChatsCommand}"
-                                    Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,4"
-                                    AutomationId="EmbeddingSearchButton" />
-                            <Button Text="Cancel" Command="{Binding CancelCommand}"
-                                    IsVisible="{Binding IsBusy}"
-                                    Style="{StaticResource SecondaryButtonStyle}"
-                                    AutomationId="CancelEmbeddingButton" />
-                        </FlexLayout>
-                        <Label Text="{Binding IndexProgressMessage}" IsVisible="{Binding IsIndexing}"
-                               Style="{StaticResource MutedLabel}" FontSize="12" />
-                        <Label Text="{Binding StatusMessage}" Style="{StaticResource MutedLabel}"
-                               FontSize="12" AutomationId="EmbeddingStatusLabel" />
-                    </VerticalStackLayout>
-                </Border>
-
-                <Border Grid.Row="3" Padding="12" StrokeShape="RoundRectangle 12"
-                        BackgroundColor="{AppThemeBinding Light={StaticResource PanelBackground}, Dark={StaticResource PanelBackgroundDark}}"
-                        Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}">
+                        </controls:PopupMenu.Content>
+                    </ImageButton>
+                    <Label Text="Import" Style="{StaticResource ChatActionLabel}" />
+                </VerticalStackLayout>
+            </controls:PlaygroundPageLayout.HeaderActions>
+            <controls:PlaygroundPageLayout.SettingsContent>
+                <views:EmbeddingSettingsPane BindingContext="{Binding Settings}" />
+            </controls:PlaygroundPageLayout.SettingsContent>
+            <controls:PlaygroundPageLayout.MainContent>
+                <Border Style="{StaticResource ComposerPanel}">
                     <Grid RowDefinitions="Auto,*" RowSpacing="6">
-                        <Label Text="RESULTS" Style="{StaticResource SectionHeading}" />
-                        <CollectionView Grid.Row="1" ItemsSource="{Binding Results}"
-                                        ItemSizingStrategy="MeasureAllItems"
-                                        AutomationId="EmbeddingSearchResults">
-                            <CollectionView.ItemTemplate>
-                                <DataTemplate x:DataType="search:ChatSearchHit">
-                                    <Border Margin="0,3" Padding="8" StrokeShape="RoundRectangle 8"
-                                            BackgroundColor="{AppThemeBinding Light={StaticResource InputBackground}, Dark={StaticResource InputBackgroundDark}}">
-                                        <VerticalStackLayout Spacing="2">
-                                            <Label Text="{Binding Title}" FontAttributes="Bold" LineBreakMode="TailTruncation" />
-                                            <Label Text="{Binding Snippet}" Style="{StaticResource MutedLabel}"
-                                                   MaxLines="2" LineBreakMode="TailTruncation" />
-                                            <Label Text="{Binding Details}" Style="{StaticResource MutedLabel}"
-                                                   FontSize="11" />
-                                        </VerticalStackLayout>
-                                    </Border>
-                                </DataTemplate>
-                            </CollectionView.ItemTemplate>
-                        </CollectionView>
+                        <Label Text="{Binding ResultsHeading}" Style="{StaticResource SectionHeading}" />
+                        <Grid Grid.Row="1">
+                            <CollectionView ItemsSource="{Binding Documents}"
+                                            ItemSizingStrategy="MeasureAllItems"
+                                            AutomationId="ImportedDocuments">
+                                <CollectionView.Triggers>
+                                    <DataTrigger TargetType="CollectionView"
+                                                 Binding="{Binding ShowingSearchResults}" Value="True">
+                                        <Setter Property="IsVisible" Value="False" />
+                                    </DataTrigger>
+                                </CollectionView.Triggers>
+                                <CollectionView.ItemTemplate>
+                                    <DataTemplate x:DataType="documents:ImportedDocument">
+                                        <Border Margin="0,3" Padding="10" StrokeShape="RoundRectangle 8"
+                                                BackgroundColor="{AppThemeBinding Light={StaticResource InputBackground}, Dark={StaticResource InputBackgroundDark}}">
+                                            <VerticalStackLayout Spacing="2">
+                                                <Label Text="{Binding Name}" FontAttributes="Bold"
+                                                       LineBreakMode="TailTruncation" />
+                                                <Label Text="{Binding Details}" Style="{StaticResource MutedLabel}"
+                                                       FontSize="11" />
+                                            </VerticalStackLayout>
+                                        </Border>
+                                    </DataTemplate>
+                                </CollectionView.ItemTemplate>
+                                <CollectionView.EmptyView>
+                                    <Label Text="Import a Markdown or plain text document to begin."
+                                           Style="{StaticResource MutedLabel}" Margin="12"
+                                           HorizontalTextAlignment="Center"
+                                           AutomationId="DocumentsEmptyLabel" />
+                                </CollectionView.EmptyView>
+                            </CollectionView>
+                            <CollectionView ItemsSource="{Binding Results}"
+                                            IsVisible="{Binding ShowingSearchResults}"
+                                            ItemSizingStrategy="MeasureAllItems"
+                                            AutomationId="EmbeddingSearchResults">
+                                <CollectionView.ItemTemplate>
+                                    <DataTemplate x:DataType="documents:DocumentSearchHit">
+                                        <Border Margin="0,3" Padding="10" StrokeShape="RoundRectangle 8"
+                                                BackgroundColor="{AppThemeBinding Light={StaticResource InputBackground}, Dark={StaticResource InputBackgroundDark}}">
+                                            <VerticalStackLayout Spacing="2">
+                                                <Label Text="{Binding Name}" FontAttributes="Bold"
+                                                       LineBreakMode="TailTruncation" />
+                                                <Label Text="{Binding Snippet}" Style="{StaticResource MutedLabel}"
+                                                       MaxLines="2" LineBreakMode="TailTruncation" />
+                                                <Label Text="{Binding Details}" Style="{StaticResource MutedLabel}"
+                                                       FontSize="11" />
+                                            </VerticalStackLayout>
+                                        </Border>
+                                    </DataTemplate>
+                                </CollectionView.ItemTemplate>
+                                <CollectionView.EmptyView>
+                                    <Label Text="No indexed documents match."
+                                           Style="{StaticResource MutedLabel}" Margin="12"
+                                           HorizontalTextAlignment="Center"
+                                           AutomationId="EmbeddingResultsEmptyLabel" />
+                                </CollectionView.EmptyView>
+                            </CollectionView>
+                            <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}"
+                                               Color="{StaticResource Primary}"
+                                               HorizontalOptions="Center" VerticalOptions="Center"
+                                               AutomationId="EmbeddingLoading" />
+                        </Grid>
                     </Grid>
                 </Border>
-            </Grid>
-        </Grid>
+            </controls:PlaygroundPageLayout.MainContent>
+            <controls:PlaygroundPageLayout.InputContent>
+                <Border Style="{StaticResource ComposerPanel}">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Entry Text="{Binding Query}" Placeholder="Search imported documents"
+                               ReturnCommand="{Binding Search}" ReturnType="Search"
+                               AutomationId="EmbeddingSearchEntry" />
+                        <Grid Grid.Column="1" WidthRequest="44" HeightRequest="44">
+                            <ImageButton Source="search.png" Command="{Binding Search}"
+                                         IsVisible="{Binding IsIdle}"
+                                         Style="{StaticResource AttachmentButton}"
+                                         SemanticProperties.Description="Search documents"
+                                         AutomationId="EmbeddingSearchButton" />
+                            <ImageButton Source="stop.png" Command="{Binding CancelSearch}"
+                                         IsVisible="{Binding IsBusy}"
+                                         Style="{StaticResource CancelActionButton}"
+                                         SemanticProperties.Description="Cancel document search"
+                                         AutomationId="CancelEmbeddingButton" />
+                        </Grid>
+                    </Grid>
+                </Border>
+            </controls:PlaygroundPageLayout.InputContent>
+        </controls:PlaygroundPageLayout>
     </Grid>
 </ContentPage>

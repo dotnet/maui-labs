@@ -1,7 +1,5 @@
-using System.Globalization;
 using AIExtensions.Sample.ChatPlayground.Models;
 using Microsoft.Extensions.AI;
-using Size = System.Drawing.Size;
 
 namespace AIExtensions.Sample.ChatPlayground.Features.Images;
 
@@ -20,8 +18,7 @@ public sealed class ImageGenerationService
 
         var request = original is null
             ? new ImageGenerationRequest(prompt.Trim())
-            : new ImageGenerationRequest(prompt.Trim(),
-                [new DataContent(original.Bytes, original.MediaType)]);
+            : new ImageGenerationRequest(prompt.Trim(), [new DataContent(original.Bytes, original.MediaType)]);
         var response = await generator.GenerateAsync(request, options, cancellationToken).ConfigureAwait(false);
         var images = new List<GeneratedImage>();
         foreach (var content in response.Contents)
@@ -42,31 +39,6 @@ public sealed class ImageGenerationService
         if (images.Count == 0)
             throw new InvalidDataException("The image generator returned no images.");
         return images;
-    }
-
-    public static ImageGenerationOptions? CreateOptions(string count, Size? size, string mediaType)
-    {
-        int? parsedCount = null;
-        if (!string.IsNullOrWhiteSpace(count))
-        {
-            if (!int.TryParse(count, NumberStyles.None, CultureInfo.InvariantCulture, out var value) || value <= 0)
-                throw new ArgumentException("Image count must be a positive integer or blank for the provider default.", nameof(count));
-            parsedCount = value;
-        }
-        if (size is { Width: <= 0 } or { Height: <= 0 })
-            throw new ArgumentException("Image width and height must be positive.", nameof(size));
-        if (mediaType is not ("Provider default" or "image/png" or "image/jpeg" or "image/webp"))
-            throw new ArgumentException("Choose a supported image format.", nameof(mediaType));
-
-        if (parsedCount is null && size is null && mediaType == "Provider default")
-            return null;
-
-        return new ImageGenerationOptions
-        {
-            Count = parsedCount,
-            ImageSize = size,
-            MediaType = mediaType == "Provider default" ? null : mediaType,
-        };
     }
 }
 #pragma warning restore MEAI001

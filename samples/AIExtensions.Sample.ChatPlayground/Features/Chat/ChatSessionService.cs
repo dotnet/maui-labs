@@ -1,71 +1,46 @@
+using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using AIExtensions.Sample.ChatPlayground.Features.Recording;
 using AIExtensions.Sample.ChatPlayground.Features.Storage;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
-namespace AIExtensions.Sample.ChatPlayground.Features.Library;
+namespace AIExtensions.Sample.ChatPlayground.Features.Chat;
 
-/// <summary>Owns the active chat's storage and provides a portable record/replay session.</summary>
-public sealed class ChatLibraryService : IChatLibrary, IChatRecordingSession
+/// <summary>Autosaves one current chat and supplies its record/replay session.</summary>
+public sealed class ChatSessionService : IChatRecordingSession
 {
     private readonly object _gate = new();
-    private readonly ChatLibraryStore? _library;
     private ChatRecording _recording = new();
     private int _cursor;
 
-    public event EventHandler? Changed;
-
-    public ChatLibraryService(
-        ILogger<ChatLibraryService> logger,
-        string dataDirectory,
-        string exportDirectory)
+    public ChatSessionService(ILogger<ChatSessionService> logger, string dataDirectory, string exportDirectory)
     {
+        ArgumentNullException.ThrowIfNull(logger);
         ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(exportDirectory);
-        ExportPath = System.IO.Path.Combine(exportDirectory, "chat-playground.json");
+        AutosavePath = Path.Combine(dataDirectory, "chat-playground", "current.json");
+        ExportPath = Path.Combine(exportDirectory, "chat-playground.json");
         try
         {
-            _library = new ChatLibraryStore(dataDirectory);
-            _recording = _library.Current;
+            if (File.Exists(AutosavePath))
+                _recording = ChatRecordingSerializer.Deserialize(File.ReadAllText(AutosavePath, Encoding.UTF8));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
-            System.Text.Json.JsonException or InvalidDataException or FormatException or
-            ArgumentException or NotSupportedException)
+            JsonException or InvalidDataException or FormatException or ArgumentException or NotSupportedException)
         {
-            RestoreError = $"Could not restore the chat library: {exception.Message}";
-            logger.LogWarning(exception, "Could not restore the playground chat library.");
+            RestoreError = $"Could not restore the current chat: {exception.Message} " +
+                "Import a recording or start a new chat to replace the damaged file.";
+            logger.LogWarning(exception, "Could not restore the playground's current chat.");
         }
     }
 
-    public string? RestoreError { get; }
+    public event EventHandler? Changed;
+
+    public string? RestoreError { get; private set; }
+    public string AutosavePath { get; }
     public string ExportPath { get; }
-    public string AutosavePath => Library.ActivePath;
-    public string ActiveChatId => Library.ActiveId;
-
-    private ChatLibraryStore Library => _library
-        ?? throw new InvalidOperationException(RestoreError ?? "The chat library is unavailable.");
-
-    public IReadOnlyList<SavedChat> ListChats()
-    {
-        lock (_gate)
-            return Library.List(_recording);
-    }
-
-    public ChatRecording ReadChat(string id)
-    {
-        lock (_gate)
-            return Library.Read(id);
-    }
-
-    public void OpenChat(string id)
-    {
-        lock (_gate)
-        {
-            _recording = Library.Open(id, _recording);
-            _cursor = 0;
-        }
-        NotifyChanged();
-    }
 
     public int InteractionCount
     {
@@ -86,8 +61,11 @@ public sealed class ChatLibraryService : IChatLibrary, IChatRecordingSession
     {
         lock (_gate)
         {
-            _recording = Library.New(_recording);
+            if (_recording.Interactions.Count > 0 || RestoreError is not null)
+                AtomicFile.WriteAllText(AutosavePath, ChatRecordingSerializer.Serialize(new ChatRecording()));
+            _recording = new ChatRecording();
             _cursor = 0;
+            RestoreError = null;
         }
         NotifyChanged();
     }
@@ -99,15 +77,13 @@ public sealed class ChatLibraryService : IChatLibrary, IChatRecordingSession
         NotifyChanged();
     }
 
-    public void AddResponse(JsonObject request, Microsoft.Extensions.AI.ChatResponse response)
-    {
+    public void AddResponse(JsonObject request, ChatResponse response) =>
         AddInteraction(new RecordedInteraction
         {
             IsStreaming = false,
             Request = request,
             Response = ChatRecordingSerializer.Response(response),
         });
-    }
 
     public RecordedInteraction BeginStreaming(JsonObject request) => new()
     {
@@ -127,15 +103,16 @@ public sealed class ChatLibraryService : IChatLibrary, IChatRecordingSession
     {
         lock (_gate)
         {
+            if (RestoreError is not null)
+                throw new InvalidOperationException(RestoreError);
             interaction.Sequence = _recording.Interactions.Count;
             _recording.Interactions.Add(interaction);
             try
             {
-                Library.Save(_recording);
+                AtomicFile.WriteAllText(AutosavePath, ChatRecordingSerializer.Serialize(_recording));
             }
             catch
             {
-                // A failed auto-save must not leave an interaction visible only in memory.
                 _recording.Interactions.RemoveAt(_recording.Interactions.Count - 1);
                 throw;
             }
@@ -155,35 +132,30 @@ public sealed class ChatLibraryService : IChatLibrary, IChatRecordingSession
 
     public RecordedInteraction PeekNext(bool isStreaming, JsonObject request)
     {
-        RecordedInteraction interaction;
         lock (_gate)
         {
             if (_cursor >= _recording.Interactions.Count)
-                throw new InvalidOperationException("Replay reached the end of the recording. Record more interactions or restart replay.");
+                throw new InvalidOperationException(
+                    "Replay reached the end of the recording. Record more interactions or restart replay.");
 
-            interaction = _recording.Interactions[_cursor];
+            var interaction = _recording.Interactions[_cursor];
             if (interaction.IsStreaming != isStreaming)
                 throw new ChatRecordingMismatchException(
-                    _cursor,
-                    "$.isStreaming",
-                    JsonValue.Create(interaction.IsStreaming),
-                    JsonValue.Create(isStreaming));
+                    _cursor, "$.isStreaming",
+                    JsonValue.Create(interaction.IsStreaming), JsonValue.Create(isStreaming));
 
             ChatRecordingSerializer.AssertEqual(_cursor, interaction.Request, request);
+            return interaction;
         }
-        return interaction;
     }
 
     public void CompleteReplay(RecordedInteraction interaction)
     {
         lock (_gate)
         {
-            // Only the interaction just consumed may advance the replay cursor.
             if (_cursor >= _recording.Interactions.Count ||
                 !ReferenceEquals(_recording.Interactions[_cursor], interaction))
-            {
                 throw new InvalidOperationException("Replay state changed before the interaction completed.");
-            }
             _cursor++;
         }
         NotifyChanged();
@@ -193,7 +165,11 @@ public sealed class ChatLibraryService : IChatLibrary, IChatRecordingSession
     {
         string json;
         lock (_gate)
+        {
+            if (RestoreError is not null)
+                throw new InvalidOperationException(RestoreError);
             json = ChatRecordingSerializer.Serialize(_recording);
+        }
 
         AtomicFile.WriteAllText(ExportPath, json);
         return ExportPath;
@@ -203,10 +179,13 @@ public sealed class ChatLibraryService : IChatLibrary, IChatRecordingSession
     {
         ArgumentNullException.ThrowIfNull(stream);
         var recording = await ChatRecordingSerializer.DeserializeAsync(stream, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         lock (_gate)
         {
-            _recording = Library.Import(recording);
+            AtomicFile.WriteAllText(AutosavePath, ChatRecordingSerializer.Serialize(recording));
+            _recording = recording;
             _cursor = 0;
+            RestoreError = null;
         }
         NotifyChanged();
     }

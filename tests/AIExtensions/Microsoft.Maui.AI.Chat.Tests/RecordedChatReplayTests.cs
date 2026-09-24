@@ -1,7 +1,6 @@
 using System.Text.Json.Nodes;
 using System.Runtime.CompilerServices;
 using AIExtensions.Sample.ChatPlayground.Features.Chat;
-using AIExtensions.Sample.ChatPlayground.Features.Library;
 using AIExtensions.Sample.ChatPlayground.Features.Recording;
 using AIExtensions.Sample.ChatPlayground.Services;
 using Microsoft.Extensions.AI;
@@ -476,115 +475,92 @@ public sealed class RecordedChatReplayTests
         var recording = directory.CreateService();
         await using (var input = File.OpenRead(FixturePath("no-tools.json")))
             await recording.LoadFileAsync(input);
-        var previousId = recording.ActiveChatId;
+        var currentPath = recording.AutosavePath;
         recording.NewRecording();
 
         var restored = directory.CreateService();
         Assert.Equal(0, restored.InteractionCount);
-        Assert.NotEqual(previousId, restored.ActiveChatId);
-        Assert.Contains(restored.ListChats(), chat => chat.Id == previousId && chat.InteractionCount == 1);
-        restored.OpenChat(previousId);
-        Assert.Equal(1, restored.InteractionCount);
+        Assert.Equal(currentPath, restored.AutosavePath);
+        Assert.Empty(ChatRecordingSerializer.Deserialize(File.ReadAllText(currentPath)).Interactions);
     }
 
     [Fact]
-    public async Task ImportedChats_RemainIndependentAndCanBeReopenedAfterRestart()
+    public async Task ImportingFile_ReplacesTheCurrentChatAndPersistsAcrossRestart()
     {
         using var directory = new RecordingDirectory();
         var recording = directory.CreateService();
         await using (var first = File.OpenRead(FixturePath("no-tools.json")))
             await recording.LoadFileAsync(first);
-        var firstId = recording.ActiveChatId;
+        Assert.Equal(1, recording.InteractionCount);
         await using (var second = File.OpenRead(FixturePath("multi-turn-tools.json")))
             await recording.LoadFileAsync(second);
-        var secondId = recording.ActiveChatId;
-        Assert.NotEqual(firstId, secondId);
-
-        recording.OpenChat(firstId);
-        Assert.Equal(1, recording.InteractionCount);
-        recording.NewRecording();
-        var latestId = recording.ActiveChatId;
-        Assert.Equal(0, recording.InteractionCount);
+        Assert.Equal(2, recording.InteractionCount);
 
         var restored = directory.CreateService();
-        Assert.Equal(latestId, restored.ActiveChatId);
-        Assert.Contains(restored.ListChats(), chat => chat.Id == firstId && chat.InteractionCount == 1);
-        Assert.Contains(restored.ListChats(), chat => chat.Id == secondId && chat.InteractionCount == 2);
-        restored.OpenChat(secondId);
         Assert.Equal(2, restored.InteractionCount);
         Assert.Equal(0, restored.ReplayPosition);
+        Assert.Equal(2, ChatRecordingSerializer.Deserialize(File.ReadAllText(restored.Export())).Interactions.Count);
     }
 
     [Fact]
-    public async Task OpenChat_UnknownId_DoesNotReplaceActiveChat()
+    public async Task LoadedChat_AppendedResponseIsAutosaved()
     {
         using var directory = new RecordingDirectory();
         var recording = directory.CreateService();
         await using (var source = File.OpenRead(FixturePath("no-tools.json")))
             await recording.LoadFileAsync(source);
-        var activeId = recording.ActiveChatId;
 
-        Assert.Throws<ArgumentException>(() => recording.OpenChat(Guid.NewGuid().ToString("N")));
-        Assert.Equal(activeId, recording.ActiveChatId);
-        Assert.Equal(1, recording.InteractionCount);
-    }
-
-    [Fact]
-    public async Task ReopenActiveChat_ThenAppendAndImport_RetainsItsUpdatedCatalogSummary()
-    {
-        using var directory = new RecordingDirectory();
-        var recording = directory.CreateService();
-        await using (var source = File.OpenRead(FixturePath("no-tools.json")))
-            await recording.LoadFileAsync(source);
-        var previousId = recording.ActiveChatId;
-
-        recording.OpenChat(previousId);
         recording.AddResponse(
             ChatRecordingSerializer.Request([new ChatMessage(ChatRole.User, "One more question")], null),
             new ChatResponse([new ChatMessage(ChatRole.Assistant, "Another answer")]));
-        await using (var source = File.OpenRead(FixturePath("multi-turn-tools.json")))
-            await recording.LoadFileAsync(source);
 
-        Assert.Contains(recording.ListChats(), chat => chat.Id == previousId && chat.InteractionCount == 2);
         var restored = directory.CreateService();
-        restored.OpenChat(previousId);
         Assert.Equal(2, restored.InteractionCount);
+        Assert.Equal(2, ChatRecordingSerializer.Deserialize(File.ReadAllText(restored.AutosavePath)).Interactions.Count);
     }
 
     [Fact]
-    public async Task DamagedCatalog_ReportsRestoreErrorWithoutOverwritingSavedChats()
+    public async Task DamagedCurrentChat_ReportsRestoreErrorWithoutOverwritingIt()
     {
         using var directory = new RecordingDirectory();
         var recording = directory.CreateService();
         await using (var source = File.OpenRead(FixturePath("no-tools.json")))
             await recording.LoadFileAsync(source);
         var path = recording.AutosavePath;
-        var original = File.ReadAllBytes(path);
-        File.WriteAllText(Path.Combine(directory.DataDirectory, "chat-playground", "catalog.json"), "{ damaged");
+        File.WriteAllText(path, "{ damaged");
+        var damaged = File.ReadAllBytes(path);
 
         var restored = directory.CreateService();
-        Assert.Contains("Could not restore the chat library", restored.RestoreError);
-        Assert.Throws<InvalidOperationException>(() => restored.NewRecording());
-        Assert.Equal(original, File.ReadAllBytes(path));
+        Assert.Contains("Could not restore the current chat", restored.RestoreError);
+        Assert.Throws<InvalidOperationException>(() => restored.AddResponse(
+            ChatRecordingSerializer.Request([new ChatMessage(ChatRole.User, "Hello")], null),
+            new ChatResponse([new ChatMessage(ChatRole.Assistant, "Hello")])));
+        Assert.Equal(damaged, File.ReadAllBytes(path));
+        restored.NewRecording();
+        Assert.Null(restored.RestoreError);
+        Assert.Empty(ChatRecordingSerializer.Deserialize(File.ReadAllText(path)).Interactions);
     }
 
     [Fact]
-    public async Task CatalogWithNullEntry_ReportsRestoreErrorWithoutOverwritingSavedChats()
+    public async Task CurrentChatWithNullInteraction_CanBeReplacedByAnImportedFile()
     {
         using var directory = new RecordingDirectory();
         var recording = directory.CreateService();
         await using (var source = File.OpenRead(FixturePath("no-tools.json")))
             await recording.LoadFileAsync(source);
         var path = recording.AutosavePath;
-        var original = File.ReadAllBytes(path);
-        var catalogPath = Path.Combine(directory.DataDirectory, "chat-playground", "catalog.json");
-        var catalog = JsonNode.Parse(File.ReadAllText(catalogPath))!;
-        catalog["Chats"]!.AsArray().Add(null);
-        File.WriteAllText(catalogPath, catalog.ToJsonString());
+        var current = JsonNode.Parse(File.ReadAllText(path))!;
+        current["interactions"]!.AsArray().Add(null);
+        File.WriteAllText(path, current.ToJsonString());
+        var damaged = File.ReadAllBytes(path);
 
         var restored = directory.CreateService();
-        Assert.Contains("Could not restore the chat library", restored.RestoreError);
-        Assert.Equal(original, File.ReadAllBytes(path));
+        Assert.Contains("Could not restore the current chat", restored.RestoreError);
+        Assert.Equal(damaged, File.ReadAllBytes(path));
+        await using var source2 = File.OpenRead(FixturePath("no-tools.json"));
+        await restored.LoadFileAsync(source2);
+        Assert.Null(restored.RestoreError);
+        Assert.Equal(1, restored.InteractionCount);
     }
 
     private static string FixturePath(string fileName) =>
@@ -617,8 +593,8 @@ public sealed class RecordedChatReplayTests
         public string DataDirectory => Path.Combine(_path, "data");
         public string ExportDirectory => Path.Combine(_path, "cache");
 
-        public ChatLibraryService CreateService() =>
-            new(NullLogger<ChatLibraryService>.Instance, DataDirectory, ExportDirectory);
+        public ChatSessionService CreateService() =>
+            new(NullLogger<ChatSessionService>.Instance, DataDirectory, ExportDirectory);
 
         public void Dispose()
         {

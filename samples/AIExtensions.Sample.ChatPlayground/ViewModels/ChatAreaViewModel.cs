@@ -64,45 +64,12 @@ public sealed partial class ChatAreaViewModel : ObservableObject
         set => SetProperty(ref _cancelCommand, value);
     }
 
-    public IAsyncRelayCommand? PlayReplayCommand
-    {
-        get => _playReplayCommand;
-        set => SetProperty(ref _playReplayCommand, value);
-    }
-
-    public IAsyncRelayCommand? NextReplayCommand
-    {
-        get => _nextReplayCommand;
-        set => SetProperty(ref _nextReplayCommand, value);
-    }
-
-    public IRelayCommand? RestartReplayCommand
-    {
-        get => _restartReplayCommand;
-        set => SetProperty(ref _restartReplayCommand, value);
-    }
-
-    public IAsyncRelayCommand? BrowseChatsCommand
-    {
-        get => _browseChatsCommand;
-        set => SetProperty(ref _browseChatsCommand, value);
-    }
-
-    public IAsyncRelayCommand ChooseImageCommand =>
-        _chooseImageCommand ??= new AsyncRelayCommand(ChooseImageAsync, CanAttachImage);
-    public IAsyncRelayCommand UseSampleImageCommand =>
-        _useSampleImageCommand ??= new AsyncRelayCommand(UseSampleImageAsync, CanAttachImage);
-    public IRelayCommand RemoveImageCommand => _removeImageCommand ??= new RelayCommand(ClearSelectedImage);
+    public IAsyncRelayCommand ChooseImageAction => ChooseImageCommand;
+    public IAsyncRelayCommand UseSampleImageAction => UseSampleImageCommand;
+    public IRelayCommand RemoveImageAction => RemoveImageCommand;
 
     private IAsyncRelayCommand? _sendCommand;
     private IRelayCommand? _cancelCommand;
-    private IAsyncRelayCommand? _playReplayCommand;
-    private IAsyncRelayCommand? _nextReplayCommand;
-    private IRelayCommand? _restartReplayCommand;
-    private IAsyncRelayCommand? _browseChatsCommand;
-    private IAsyncRelayCommand? _chooseImageCommand;
-    private IAsyncRelayCommand? _useSampleImageCommand;
-    private IRelayCommand? _removeImageCommand;
 
     /// <summary>Clears the pending image after it has been added to protocol history.</summary>
     public void ClearSelectedImage()
@@ -121,6 +88,7 @@ public sealed partial class ChatAreaViewModel : ObservableObject
         UseSampleImageCommand.NotifyCanExecuteChanged();
     }
 
+    [RelayCommand(CanExecute = nameof(CanAttachImage))]
     private async Task ChooseImageAsync()
     {
         try
@@ -135,6 +103,7 @@ public sealed partial class ChatAreaViewModel : ObservableObject
         }
     }
 
+    [RelayCommand(CanExecute = nameof(CanAttachImage))]
     private async Task UseSampleImageAsync()
     {
         try
@@ -156,6 +125,9 @@ public sealed partial class ChatAreaViewModel : ObservableObject
         OnPropertyChanged(nameof(HasSelectedImage));
         StatusMessage = $"Image ready: {SelectedImageName}";
     }
+
+    [RelayCommand]
+    private void RemoveImage() => ClearSelectedImage();
 
     private void MessagesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
         OnPropertyChanged(nameof(IsEmpty));

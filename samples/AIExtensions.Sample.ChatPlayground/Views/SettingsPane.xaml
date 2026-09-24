@@ -24,12 +24,10 @@
                     </DataTemplate>
                 </BindableLayout.ItemTemplate>
             </VerticalStackLayout>
-
-            <Label Text="Replay uses the options saved with each turn. Select a live client to change settings."
-                   Style="{StaticResource MutedLabel}"
+            <Label Text="Replay is read-only and uses the saved options for each turn."
+                   Style="{StaticResource MutedLabel}" FontSize="12"
                    IsVisible="{Binding SelectedDescriptor.IsReplay}"
                    AutomationId="ReplayOptionsHint" />
-
             <VerticalStackLayout Spacing="12" IsEnabled="{Binding CanEditOptions}" AutomationId="ChatOptionsPanel">
                 <VerticalStackLayout.Triggers>
                     <DataTrigger TargetType="VerticalStackLayout"
