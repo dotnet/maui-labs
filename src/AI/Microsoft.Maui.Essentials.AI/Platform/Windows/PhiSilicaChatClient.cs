@@ -466,6 +466,18 @@ public sealed class PhiSilicaChatClient : IChatClient
 #pragma warning restore IL3050, IL2026
 					promptParts.Add($"[Tool result: {resultStr}]");
 				}
+#pragma warning disable MEAI001 // Image-generation tool content is experimental in Microsoft.Extensions.AI.
+				else if (content is ImageGenerationToolCallContent)
+				{
+					promptParts.Add($"{rolePrefix}[Image generation requested]");
+				}
+				else if (content is ImageGenerationToolResultContent imageResult)
+				{
+					var count = imageResult.Outputs?.OfType<DataContent>()
+						.Count(image => image.HasTopLevelMediaType("image")) ?? 0;
+					promptParts.Add($"[Image generation result: {count} image(s)]");
+				}
+#pragma warning restore MEAI001
 				else if (content is not TextContent)
 				{
 					throw new ArgumentException($"Unsupported content type: {content.GetType().Name}", nameof(history));

@@ -183,6 +183,12 @@ to the model; image-generation middleware preserves original image inputs while 
 call, so asking the model to draw something can return a real image inline. The checkbox controls
 whether this expensive, experimental tool is available for a request.
 
+The image model is prepared on first use, not when the chat client is created. Cancelling a request
+while Windows prepares the model stops waiting for it; Windows may continue preparing the model in
+the background. An unavailable model reports its readiness failure rather than a generated image.
+For later turns, Phi Silica keeps image-generation tool activity as text in its prompt; the
+text-only model cannot inspect generated pixels without a separate image-description request.
+
 ## Image input
 
 Phi Silica is text-only, so images cannot be passed to it the way a cloud multimodal model accepts

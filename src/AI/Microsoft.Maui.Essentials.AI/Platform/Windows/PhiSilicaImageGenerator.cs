@@ -82,7 +82,8 @@ public sealed class PhiSilicaImageGenerator : IImageGenerator
 
 		ValidateOptions(options);
 
-		var generator = await _generatorTask.Value.ConfigureAwait(false);
+		cancellationToken.ThrowIfCancellationRequested();
+		var generator = await _generatorTask.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
 		var sources = await DecodeSourceImagesAsync(request.OriginalImages).ConfigureAwait(false);
 
 		try
