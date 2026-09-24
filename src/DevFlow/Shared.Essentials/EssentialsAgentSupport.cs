@@ -378,6 +378,13 @@ internal sealed class EssentialsAgentSupport
     public string GetAppDataBasePath()
         => FileSystem.AppDataDirectory;
 
+    /// <summary>
+    /// Where the OS lets the app cache things it can afford to lose. Worth browsing - it is where
+    /// half the "why is my app 400MB" questions are answered.
+    /// </summary>
+    public string GetCacheBasePath()
+        => FileSystem.CacheDirectory;
+
 
     public async Task<HttpResponse> HandlePlatformAppInfo(HttpRequest request)
     {

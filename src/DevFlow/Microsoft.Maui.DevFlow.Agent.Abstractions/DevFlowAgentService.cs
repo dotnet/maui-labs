@@ -141,6 +141,17 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         => Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 
     /// <summary>
+    /// Base path used to resolve the cache storage root - where half the "why is my app 400MB"
+    /// questions are answered, and worth browsing even though the OS may empty it at any moment.
+    /// </summary>
+    /// <returns>
+    /// The app's own cache directory, or null when the backend does not know it. Null by default: the
+    /// shared temp directory is not this app's cache, and advertising it as one would hand out a
+    /// writable root over files that belong to everything else on the machine.
+    /// </returns>
+    protected virtual string? GetCacheBasePath() => null;
+
+    /// <summary>
     /// Releases backend owned resources during <see cref="Dispose"/>.
     /// </summary>
     protected virtual void DisposeBackendResources()
@@ -365,7 +376,9 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         capabilities["storage.secure"] = Capability(1, IsStorageSupported,
             ["get", "set", "delete", "clear"], reason);
         capabilities["storage.files"] = Capability(1, true,
-            ["roots", "list", "download", "upload", "delete"], null);
+            ["roots", "list", "download", "upload", "delete", "create-directory", "delete-directory", "move", "raw-transfer"], null);
+        capabilities["storage.sqlite"] = Capability(1, true,
+            ["schema", "query", "rows", "insert-row", "update-row", "delete-row", "create"], null);
         capabilities["invoke"] = Capability(1, true, ["actions"], null);
         var themeCapability = Capability(1, IsThemeSupported, ["get", "set"], reason);
         capabilities["theme"] = themeCapability;
