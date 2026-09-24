@@ -135,6 +135,18 @@
         "jobs": {
           "type": "boolean",
           "description": "Whether platform background jobs are supported by this agent."
+        },
+        "theme": {
+          "type": "boolean",
+          "description": "Whether app theme endpoints are backed by an implementation."
+        },
+        "mutationLease": {
+          "type": "boolean",
+          "description": "Whether mutating endpoints require a DevFlow mutation lease."
+        },
+        "syntheticTouch": {
+          "type": "boolean",
+          "description": "Whether gestures can be delivered as synthesised touches to raw-touch views such as GraphicsView. True only on iOS and Mac Catalyst when AgentOptions.EnableSyntheticTouch is set."
         }
       },
       "additionalProperties": true

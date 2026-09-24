@@ -1423,6 +1423,41 @@ public class DevFlowAgentServiceLifecycleTests
         }
     }
 
+    [Fact]
+    public async Task BaseAgent_ReportsSyntheticTouchUnsupportedEvenWhenTheOptionIsSet()
+    {
+        // The option only means something to a backend that implements the tier (iOS and
+        // Mac Catalyst); everywhere else the status must not simply echo it.
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port, EnableSyntheticTouch = true });
+        using var client = new AgentClient("localhost", port);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+
+        var status = await WaitForStatusAsync(client);
+        Assert.NotNull(status?.Capabilities);
+        Assert.False(status!.Capabilities!.SyntheticTouch);
+    }
+
+    [Fact]
+    public async Task Agent_ReportsSyntheticTouchFromTheBackend()
+    {
+        var port = GetFreePort();
+        using var service = new SyntheticTouchAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+
+        var status = await WaitForStatusAsync(client);
+        Assert.NotNull(status?.Capabilities);
+        Assert.True(status!.Capabilities!.SyntheticTouch);
+    }
+
+    private sealed class SyntheticTouchAgentService(AgentOptions options) : MauiDevFlowAgentService(options)
+    {
+        protected override bool IsSyntheticTouchSupported => true;
+    }
+
     private sealed class ListOnlyJobsAgentService(AgentOptions options) : MauiDevFlowAgentService(options)
     {
         protected override bool IsJobsSupported => true;

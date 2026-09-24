@@ -442,6 +442,18 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
 #endif
     }
 
+    protected override bool IsSyntheticTouchSupported
+    {
+        get
+        {
+#if IOS || MACCATALYST
+            return _options.EnableSyntheticTouch;
+#else
+            return base.IsSyntheticTouchSupported;
+#endif
+        }
+    }
+
     protected override bool IsJobsSupported
     {
         get
