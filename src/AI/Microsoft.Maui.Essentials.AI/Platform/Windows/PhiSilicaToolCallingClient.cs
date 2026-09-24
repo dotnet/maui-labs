@@ -89,16 +89,8 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 			return await base.GetResponseAsync(messages, options, cancellationToken);
 
 		var conversation = messages as IReadOnlyList<ChatMessage> ?? [.. messages];
-
-		var selected = await SelectToolAsync(conversation, tools, options, cancellationToken);
-		if (selected is null)
-			return await AnswerAsync(conversation, options, cancellationToken);
-
-		var call = await BuildToolCallAsync(conversation, selected, options, cancellationToken);
-
-		// Repeating a call that has already been answered would loop forever, so treat an exact
-		// repeat as the model having nothing left to ask for.
-		if (GetCompletedCalls(conversation).Contains(Signature(call.Name, call.Arguments)))
+		var call = await GetNextToolCallAsync(conversation, tools, options, cancellationToken);
+		if (call is null)
 			return await AnswerAsync(conversation, options, cancellationToken);
 
 		return new ChatResponse(new ChatMessage(ChatRole.Assistant, [call]));
@@ -109,23 +101,48 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 		ChatOptions? options = null,
 		CancellationToken cancellationToken = default)
 	{
-		// Without tools there is nothing to rewrite, so stream straight through.
-		if (GetFunctions(options) is null || options?.ToolMode == ChatToolMode.None)
+		var tools = GetFunctions(options);
+		if (tools is null || options?.ToolMode == ChatToolMode.None)
 			return base.GetStreamingResponseAsync(messages, options, cancellationToken);
 
-		return StreamToolResponseAsync(messages, options, cancellationToken);
+		return StreamToolResponseAsync(messages, tools, options, cancellationToken);
 	}
 
 	private async IAsyncEnumerable<ChatResponseUpdate> StreamToolResponseAsync(
 		IEnumerable<ChatMessage> messages,
+		List<AIFunction> tools,
 		ChatOptions? options,
 		[EnumeratorCancellation] CancellationToken cancellationToken)
 	{
-		// A partial tool call is not actionable, so the response is resolved before streaming.
-		var response = await GetResponseAsync(messages, options, cancellationToken);
+		var conversation = messages as IReadOnlyList<ChatMessage> ?? [.. messages];
+		var call = await GetNextToolCallAsync(conversation, tools, options, cancellationToken);
+		if (call is not null)
+		{
+			yield return new ChatResponseUpdate { Role = ChatRole.Assistant, Contents = [call] };
+			yield break;
+		}
 
-		foreach (var message in response.Messages)
-			yield return new ChatResponseUpdate { Role = message.Role, Contents = [.. message.Contents] };
+		await foreach (var update in base.GetStreamingResponseAsync(
+			conversation, WithoutTools(options), cancellationToken).WithCancellation(cancellationToken))
+			yield return update;
+	}
+
+	private async Task<FunctionCallContent?> GetNextToolCallAsync(
+		IReadOnlyList<ChatMessage> conversation,
+		List<AIFunction> tools,
+		ChatOptions? options,
+		CancellationToken cancellationToken)
+	{
+		var selected = await SelectToolAsync(conversation, tools, options, cancellationToken);
+		if (selected is null)
+			return null;
+
+		var call = await BuildToolCallAsync(conversation, selected, options, cancellationToken);
+
+		// An exact repeat would keep the function-invocation middleware in a loop.
+		return GetCompletedCalls(conversation).Contains(Signature(call.Name, call.Arguments))
+			? null
+			: call;
 	}
 
 	private static List<AIFunction>? GetFunctions(ChatOptions? options)
@@ -404,15 +421,17 @@ public sealed class PhiSilicaToolCallingClient : DelegatingChatClient
 	/// <see cref="ChatOptions.ResponseFormat"/> is preserved so structured output still works, and
 	/// the tools are removed so this middleware is not re-entered.
 	/// </summary>
-	private async Task<ChatResponse> AnswerAsync(
+	private Task<ChatResponse> AnswerAsync(
 		IReadOnlyList<ChatMessage> messages,
 		ChatOptions? options,
-		CancellationToken cancellationToken)
+		CancellationToken cancellationToken) =>
+		base.GetResponseAsync(messages, WithoutTools(options), cancellationToken);
+
+	private static ChatOptions WithoutTools(ChatOptions? options)
 	{
 		var answerOptions = options?.Clone() ?? new ChatOptions();
 		answerOptions.Tools = null;
-
-		return await base.GetResponseAsync(messages, answerOptions, cancellationToken);
+		return answerOptions;
 	}
 
 	// ═══════════════════════════════════════════════════════════

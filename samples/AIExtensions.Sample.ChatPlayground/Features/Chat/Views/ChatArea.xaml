@@ -14,8 +14,9 @@
                             AutomationId="ChatMessages">
                 <CollectionView.ItemTemplate>
                     <DataTemplate x:DataType="viewModels:ChatMessageViewModel">
-                        <views:MessageBubble Margin="4,6"
-                                             Padding="12"
+                        <Grid Padding="6,6">
+                            <views:MessageBubble Padding="12"
+                                             MaximumWidthRequest="640"
                                              Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}"
                                              StrokeShape="RoundRectangle 12"
                                              HorizontalOptions="Start"
@@ -54,7 +55,8 @@
                                 <Label Text="{Binding DetailText}" IsVisible="{Binding HasDetails}"
                                        FontSize="12" LineBreakMode="WordWrap" />
                             </VerticalStackLayout>
-                        </views:MessageBubble>
+                            </views:MessageBubble>
+                        </Grid>
                     </DataTemplate>
                 </CollectionView.ItemTemplate>
             </CollectionView>

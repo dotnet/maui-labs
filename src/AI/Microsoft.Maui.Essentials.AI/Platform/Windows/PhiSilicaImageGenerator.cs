@@ -35,7 +35,7 @@ public sealed class PhiSilicaImageGenerator : IImageGenerator
 	private const string DefaultModelId = "windows-image-generator";
 
 	/// <summary>Lazily-initialized task that creates the underlying <see cref="WindowsImageGenerator"/>.</summary>
-	private readonly Task<WindowsImageGenerator> _generatorTask;
+	private readonly Lazy<Task<WindowsImageGenerator>> _generatorTask;
 
 	/// <summary>Whether this instance owns the <see cref="WindowsImageGenerator"/> and must dispose it.</summary>
 	private readonly bool _ownsGenerator;
@@ -48,7 +48,7 @@ public sealed class PhiSilicaImageGenerator : IImageGenerator
 	/// </summary>
 	public PhiSilicaImageGenerator()
 	{
-		_generatorTask = PhiSilicaModelFactory.CreateImageGeneratorAsync();
+		_generatorTask = new(PhiSilicaModelFactory.CreateImageGeneratorAsync);
 		_ownsGenerator = true;
 	}
 
@@ -65,7 +65,7 @@ public sealed class PhiSilicaImageGenerator : IImageGenerator
 	{
 		ArgumentNullException.ThrowIfNull(generator);
 
-		_generatorTask = Task.FromResult(generator);
+		_generatorTask = new(() => Task.FromResult(generator));
 		_ownsGenerator = false;
 	}
 
@@ -82,7 +82,7 @@ public sealed class PhiSilicaImageGenerator : IImageGenerator
 
 		ValidateOptions(options);
 
-		var generator = await _generatorTask.ConfigureAwait(false);
+		var generator = await _generatorTask.Value.ConfigureAwait(false);
 		var sources = await DecodeSourceImagesAsync(request.OriginalImages).ConfigureAwait(false);
 
 		try
@@ -144,13 +144,14 @@ public sealed class PhiSilicaImageGenerator : IImageGenerator
 	/// <inheritdoc />
 	void IDisposable.Dispose()
 	{
-		if (!_ownsGenerator)
+		if (!_ownsGenerator || !_generatorTask.IsValueCreated)
 			return;
 
-		if (_generatorTask.IsCompletedSuccessfully)
-			_generatorTask.Result.Dispose();
+		var task = _generatorTask.Value;
+		if (task.IsCompletedSuccessfully)
+			task.Result.Dispose();
 		else
-			_generatorTask.ContinueWith(
+			task.ContinueWith(
 				t => { if (t.IsCompletedSuccessfully) t.Result.Dispose(); },
 				TaskContinuationOptions.ExecuteSynchronously);
 	}

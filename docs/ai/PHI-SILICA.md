@@ -153,8 +153,13 @@ The exact-repeat guard and per-turn call limit still bound indecisive model loop
 
 ### Streaming
 
-A partial tool call is not actionable, so requests carrying tools resolve the response fully and then
-emit it, rather than streaming tokens.
+A partial tool call is not actionable, so tool selection and argument generation finish before a
+function call is emitted. Once the model chooses `none` (including after an invoked tool returns),
+the adapter forwards the final answer through the native streaming API with the tools removed.
+Text and structured JSON updates can then arrive incrementally; the preceding selection phase
+still adds latency before the first answer update. The number of progress updates depends on the
+installed model.
+
 ## Image generation
 
 `PhiSilicaImageGenerator` implements `IImageGenerator` over `Microsoft.Windows.AI.Imaging.ImageGenerator`.
@@ -172,9 +177,11 @@ When several images are requested the seed is offset per image so the results di
 `ImageGenerationOptions.ImageSize` and `ImageGenerationResponseFormat.Uri` throw — the model chooses
 its own output size, and generation is on-device so there is no hosted URI to return.
 
-The existing EssentialsAISample wires this into chat with `ChatClientBuilder.UseImageGeneration(...)`, so a
-`HostedImageGenerationTool` in `ChatOptions.Tools` is handled automatically and asking the model to
-draw something returns a real image inline.
+Both EssentialsAISample and the chat playground register the generator in their chat-client
+builders. The playground's **Generate or edit image** checkbox offers a `HostedImageGenerationTool`
+to the model; image-generation middleware preserves original image inputs while handling the tool
+call, so asking the model to draw something can return a real image inline. The checkbox controls
+whether this expensive, experimental tool is available for a request.
 
 ## Image input
 

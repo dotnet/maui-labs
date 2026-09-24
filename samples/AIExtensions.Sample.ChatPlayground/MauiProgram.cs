@@ -232,8 +232,10 @@ public static class MauiProgram
             .UseDescriptor(new ChatClientDescriptor(
                 "Phi Silica",
                 "Windows Copilot Runtime is supported on this OS. The first request checks whether the on-device model is ready.",
-                SupportsImageInput: true))
+                SupportsImageInput: true,
+                SupportsImageGeneration: true))
             .UseLogging(services.GetRequiredService<ILoggerFactory>())
+            .UseImageGenerationPreservingInputs(new PhiSilicaImageGenerator())
             .UseFunctionInvocation()
             .Use(inner => new PhiSilicaToolCallingClient(inner))
             .Build();
