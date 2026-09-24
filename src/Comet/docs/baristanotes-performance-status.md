@@ -1,12 +1,29 @@
-# BaristaNotes performance status
+# BaristaNotes performance investigation report
 
-Status at 2026-09-23: **the applied ART-profile startup rerun is complete.
-Page-transition and rendering measurements remain pending**.
+Closeout at 2026-09-24: **startup, APK size, the full memory study and the
+requested two-route page study are recorded here.** The page study has ten
+samples per app and route with 1,000 drinks. The earlier larger page-test
+plan is stopped, not complete. No new device measurements ran for this report.
 
 This records bounded experiments, not a general framework ranking.
 The comparison uses Original BaristaNotes (MAUI, MauiReactor and EF Core/SQLite)
 and the Comet rewrite (Jetpack Compose and its SQLite store).
 It does not isolate framework overhead.
+
+## Main results
+
+| Measure | Result | Scope |
+|---|---|---|
+| Page transition: New Drink -> Activity | Comet median 1,490.6 ms; Original 1,854.5 ms. Comet was 19.6% lower. | Ten samples per app, 1,000 drinks; instrumented builds. |
+| Page transition: Activity -> Settings | Comet median 399.9 ms; Original 247.8 ms. Comet was 61.3% higher. | Ten samples per app, 1,000 drinks; Original requests an extra draw. |
+| Memory, full study | Comet used 20.6-23.6% less proportional set size (PSS). | Ten paired process runs per dataset, three screen states, 100 and 1,000 drinks. |
+| Startup, applied ART profile | Comet median TTID 693.5/704.5 ms; Original 317.0/321.5 ms. | 100/1,000 drinks; first display, not usable-page time. |
+| Signed APK size, applied ART profile | Comet 26,311,173 bytes; Original 37,023,552 bytes. | Startup/memory artifacts, not the later page-instrumented APKs. |
+
+Comet did not win every measure. It used less memory and had a lower Activity
+transition median, but a higher Settings transition median and higher startup
+TTID. These separate studies used different artifacts and methods. Do not
+combine them into one overall score.
 
 ## Product goal
 
@@ -19,6 +36,129 @@ intermediate blank page. A plain .NET for Android app could help separate
 runtime and higher-level costs, but no such BaristaNotes app has been built
 or authorized as part of the next step. There is no matched Kotlin Compose,
 Flutter or React Native result in this study.
+
+## Page transitions: 1,000 drinks
+
+The 2026-09-24 study collected 40 successful Pixel 5 measurements: two apps,
+two routes and ten samples per app/route. Both apps were Release, Android
+arm64, .NET 11 Native AOT builds. No failed Pixel trial or slow value was
+removed. These results replace the earlier screenshot-based readings, which
+used unequal data and included host and image-transfer time.
+
+| Route | Original p50, ms | Comet p50, ms | Original p90, ms | Comet p90, ms |
+|---|---:|---:|---:|---:|
+| Shot / New Drink -> Activity | 1,854.5 | 1,490.6 | 1,873.3 | 1,624.9 |
+| Activity -> Settings | 247.8 | 399.9 | 253.2 | 450.2 |
+
+Comet was faster in nine of ten numbered Activity pairs. Its 2,165.3 ms
+Activity sample remains included. Original was faster in all ten Settings
+pairs. The percentage changes compare app medians, not the median of paired
+percentage changes.
+
+### Timing boundary and content checks
+
+The timer starts at the existing navigation action-handler entry and ends
+at the Android frame-commit callback for content that passed the app-state
+and native-view checks. Both timestamps use
+`SystemClock.ElapsedRealtimeNanos()`.
+
+The Activity check requires the active Activity page, completed loading,
+the All filter, `1000 shots`, the expected first 50 records, and matching
+visible native rows, text and layout. The Settings check requires completed
+preference/theme state and matching native content and layout.
+
+No screenshot, USB round trip or host wait is inside the interval. A native
+tree lookup finds the button before the tap. The host waits 15 seconds after
+the action before it reads the result; this wait is not part of the duration.
+Input-event-to-handler delay is excluded. The callback does not identify the
+exact time that pixels reach the display.
+
+### Data and conditions
+
+Both apps used `barista-perf-v2-1000`. Current database readback was validated
+before each trial in both apps. The common input SHA-256 is
+`58643ebd288f83b11259226b711bd0062d7b249ef369d18c39c2950b238aa115`;
+the common data-content SHA-256 is
+`eb97125e964e9504ce498e1f1bd85d297a1234d56eb2db00e7b5c14da68f092f`.
+
+Each app/route/sample used a fresh process: 40 distinct process IDs.
+Settings trials first navigated New Drink -> Activity outside the measured
+interval. Normal preloading and caching stayed enabled. Database validation
+reads data before navigation, so these are not cold-storage measurements.
+Odd-numbered pairs ran Comet first; even-numbered pairs ran Original first.
+
+Collection ran from 21:36 to 21:56 UTC. Sample 1 for each route came from the
+initial Pixel check. Its app observations were several minutes apart while
+the final Original emulator check finished. Samples 2-10 used the same
+builds in alternating app order.
+
+All three system animation scales were zero and stayed unchanged. The phone
+was USB powered at 100% battery. Temperature was 25.8 C during preparation
+and 26.7 C after collection; thermal status was 0 at the checks. Both timing
+apps were stopped after collection and their stored datasets were retained.
+These are recorded conditions, not a current device check.
+
+### Samples and histogram
+
+All values below are milliseconds, rounded to one decimal for display.
+Statistics use the full-precision records. The p50 is the median; p90 is
+nearest rank, the ninth sorted value from ten samples. This differs from
+the type-7 percentile method in the startup studies. Ten samples do not
+support a reliable p99 or a statistical significance claim.
+
+| Sample | Original New Drink -> Activity | Comet New Drink -> Activity | Original Activity -> Settings | Comet Activity -> Settings |
+|---|---:|---:|---:|---:|
+| 1 | 1859.2 | 1524.3 | 260.3 | 386.0 |
+| 2 | 1823.7 | 1352.7 | 246.8 | 414.2 |
+| 3 | 1851.4 | 2165.3 | 241.8 | 399.4 |
+| 4 | 1856.3 | 1456.9 | 252.2 | 395.3 |
+| 5 | 1833.8 | 1526.5 | 241.5 | 450.2 |
+| 6 | 1854.1 | 1115.1 | 246.1 | 451.6 |
+| 7 | 1843.9 | 1346.8 | 253.2 | 397.8 |
+| 8 | 1873.3 | 1399.3 | 244.2 | 400.4 |
+| 9 | 1855.0 | 1559.8 | 248.9 | 423.5 |
+| 10 | 1878.0 | 1624.9 | 249.3 | 392.8 |
+
+Bins include the lower boundary and exclude the upper boundary.
+
+| Duration bin | Original New Drink -> Activity | Comet New Drink -> Activity | Original Activity -> Settings | Comet Activity -> Settings |
+|---|---:|---:|---:|---:|
+| 0-250 ms | 0 | 0 | 7 | 0 |
+| 250-500 ms | 0 | 0 | 3 | 10 |
+| 500-1,000 ms | 0 | 0 | 0 | 0 |
+| 1,000-1,500 ms | 0 | 5 | 0 | 0 |
+| 1,500-2,000 ms | 10 | 4 | 0 | 0 |
+| 2,000 ms or more | 0 | 1 | 0 | 0 |
+
+### Measurement limits and artifact identity
+
+Original's normal startup preload was initially rejected as a previous
+Activity visit. That test-only restriction was removed. The Settings
+observer was also corrected to retain candidate-frame evidence and check
+the accepted frame.
+
+**Original requests a draw after Settings passes its content check.** A
+same-value state update could otherwise leave the callback waiting for
+another hardware frame. Its measured duration includes this request; Comet
+did not need it. Native content inspection and observer code also run inside
+the interval. Their implementations differ, and their overhead was not
+measured separately. These are instrumented-app observations, not pure
+render time. The cause of the Settings difference is not established.
+
+The APKs contain the same fixture asset and their respective native
+libraries, `libBaristaNotes.so` and `libCometComposeProbe.so`. They used SDK
+`11.0.100-rc.1.26425.128`. Existing Original trimming/AOT warnings were not
+suppressed. Comet contains its ART baseline profile, but this page study
+does not establish an applied ART compilation mode.
+
+| Page-study artifact | SHA-256 |
+|---|---|
+| Original, instrumented | `12e6809b39f6a8042a5e7d177133c36fb906d2546b299ba18db78558957376b1` |
+| Comet, instrumented | `9054675443a202c76298be19615bffe0dc8a4dd4ab137c45653362fd8d9c556c` |
+
+Earlier emulator failures remain separate development evidence, not Pixel
+samples. No input-queue delay, jank, observer-cost comparison, or physical
+presentation time was measured.
 
 ## First display is not a usable page
 
@@ -156,8 +296,9 @@ preparation value is a timing sample.
 
 Independent raw replay reproduced both complete studies. The 1,000-drink
 replay matched 15 outputs byte-for-byte, including samples, dispositions,
-analysis and charts. No new TTFD, usable-content, transition, rendering or
-memory result is claimed.
+analysis and charts. Those startup studies did not measure TTFD, usable
+content, transitions, rendering or memory. The later page and memory
+studies are reported separately.
 
 ## APK size and baseline memory
 
@@ -196,6 +337,90 @@ PSS was 27.14% lower for baseline Comet. Its paired percentage interval was
 each reduced to the median of three `dumpsys meminfo --local PID` snapshots.
 The sixty snapshots are not sixty independent samples. No forced GC was used.
 These are not memory-at-TTID results and do not belong to the combined APK.
+
+## Full memory study: 100 and 1,000 drinks
+
+The 2026-09-24 study used the clean Original and applied-profile Comet APKs
+listed below, not the later page-instrumented builds. It completed 40 app
+runs: ten paired process runs per dataset, with three states in each run.
+The 120 run/state observations used 360 snapshot groups and 640 navigation
+actions. No command failed and no sample was excluded or retried. The
+earlier eight-run pilot is separate and is not included.
+
+PSS includes private resident memory plus the process's proportional share
+of shared memory. Each run/state value is the median of three snapshots
+after a ten-second settle. Each table value is then the median of ten
+independent process-run values. Android-reported kB are divided by 1,024
+to obtain MiB. Effects are calculated before rounding.
+
+| Drinks | Screen state | Original PSS, MiB | Comet PSS, MiB | Difference, MiB | Difference | Paired 95% interval, MiB |
+|---|---|---:|---:|---:|---:|---:|
+| 100 | Initial New Drink | 169.27 | 132.95 | -36.32 | -21.46% | -36.83 to -34.52 |
+| 100 | First Activity visit | 173.05 | 137.36 | -35.68 | -20.62% | -36.36 to -35.23 |
+| 100 | Activity after repeated navigation | 183.62 | 145.78 | -37.84 | -20.61% | -39.05 to -36.79 |
+| 1,000 | Initial New Drink | 176.91 | 135.21 | -41.70 | -23.57% | -41.82 to -40.45 |
+| 1,000 | First Activity visit | 182.53 | 139.66 | -42.87 | -23.49% | -43.66 to -42.67 |
+| 1,000 | Activity after repeated navigation | 190.85 | 150.04 | -40.81 | -21.39% | -42.09 to -39.48 |
+
+Differences are Comet minus Original medians. The analysis uses 2,000 paired
+bootstrap draws with seed `20260922`. It resamples complete paired process
+runs, keeping their states and metrics together. There is one observed block
+per dataset, with five Original-first and five Comet-first pairs. All six
+PSS intervals exclude zero in these blocks; they do not establish results
+for other devices.
+
+Repeated navigation means five cycles of Activity -> Settings -> New Drink
+-> Activity after the first Activity visit. Both apps retain more PSS after
+this sequence. This does not establish a memory leak.
+
+### Supporting memory measures
+
+Private dirty counts modified private pages. Resident set size (RSS) counts
+resident pages for the main process; it is not added across processes.
+Each run had one verified app process.
+
+| Drinks | Screen state | Original private dirty, MiB | Comet private dirty, MiB | Original main RSS, MiB | Comet main RSS, MiB |
+|---|---|---:|---:|---:|---:|
+| 100 | Initial New Drink | 106.85 | 76.06 | 281.76 | 246.14 |
+| 100 | First Activity visit | 109.93 | 79.05 | 286.23 | 251.61 |
+| 100 | Activity after repeated navigation | 120.11 | 87.38 | 297.00 | 260.45 |
+| 1,000 | Initial New Drink | 113.22 | 78.04 | 289.01 | 248.30 |
+| 1,000 | First Activity visit | 119.25 | 81.06 | 295.50 | 253.58 |
+| 1,000 | Activity after repeated navigation | 126.99 | 90.96 | 304.20 | 264.38 |
+
+### OS PSS categories after repeated navigation
+
+Values are MiB, using the same median-of-three then median-of-ten reduction.
+Native Heap and Private Other have the largest differences in this state.
+These Android labels do not identify C# allocations or isolate framework cost.
+
+| Category | 100 Original | 100 Comet | 1,000 Original | 1,000 Comet |
+|---|---:|---:|---:|---:|
+| Java Heap | 7.113 | 12.492 | 6.959 | 12.449 |
+| Native Heap | 22.992 | 10.633 | 23.477 | 10.693 |
+| Code | 57.398 | 52.510 | 57.160 | 52.672 |
+| Stack | 0.572 | 0.436 | 0.582 | 0.439 |
+| Graphics | 43.771 | 43.250 | 43.621 | 43.076 |
+| Private Other | 46.404 | 20.721 | 52.785 | 24.748 |
+| System | 6.253 | 6.079 | 6.256 | 6.114 |
+| Sum of category medians | 184.505 | 146.120 | 190.840 | 150.192 |
+| Median total PSS | 183.616 | 145.779 | 190.854 | 150.040 |
+
+The categories sum to total PSS in each of the 360 raw snapshots. Their
+medians need not sum to median total PSS. No category was rescaled.
+
+Collection ran from 04:10:50 to 06:15:05 UTC; cleanup ended at 06:15:11 UTC.
+No new APK, install, import, reset, forced garbage collection or ART change
+was needed. Comet remained `speed-profile/install-dm`; Original remained
+`verify/install`. Both datasets passed the recorded checks. Review was
+restored and both apps were stopped. This is historical state.
+
+The saved offline replay reproduced 103,724 generated files exactly, with
+four further bound input files checked and no device commands. Separate
+checks covered the numeric summaries and category reductions. The analyzer
+retains legacy `pilot` / `PILOT_NOT_FINAL` labels, but the memory contract
+states `phase: collection`: all 18 metric/state/dataset cells have ten pairs.
+This does not mean that the separate page-test matrix is complete.
 
 ## What the earlier traces show
 
@@ -251,7 +476,7 @@ animation scales at zero. Process-cold means the selected package's processes
 were absent; storage, shader/page caches and ART profiles were not reset.
 Do not infer animated-transition smoothness from this configuration.
 
-The experimental Android Native AOT builds used SDK
+The startup and memory Android Native AOT builds used SDK
 `11.0.100-rc.1.26425.128`, workload set `11.0.100-rc.1.26458.5`,
 Android pack `37.0.0-rc.1.2257`, runtime `11.0.0-rc.1.26428.117`,
 and explicit MAUI packages `11.0.0-preview.7.26406.9`.
@@ -264,18 +489,19 @@ Original uses a disclosed local `Microsoft.Data.Sqlite.Core`
 [dotnet/efcore#38971](https://github.com/dotnet/efcore/pull/38971), not an
 official package. Its source repository was unchanged.
 
-Both apps passed full fixture and native-content checks. In the latest
-collection Comet had fresh before/after canonical exports; Original had
+Both apps passed full fixture and native-content checks. In the profile
+startup reruns and full memory study, Comet had fresh canonical exports; Original had
 unchanged exports from its completed operation, not a fresh live database
 export. Its native content and selected fixture passed every launch.
 Both apps were restored to Review and stopped after collection. This is
 historical state, not a current device check.
 Private default Review values, ordering and database byte equality were
-not compared in the profile reruns. Preservation evidence is limited to
+not compared in those studies. The later page trials checked current database
+readback in both apps. Preservation evidence is limited to
 the recorded operations, fixture/receipt checks, native observations and
 selector restoration; it is not a general loss-free claim.
 
-The measured APK identities are:
+The startup and memory APK identities are:
 
 | Artifact | SHA-256 |
 |---|---|
@@ -288,44 +514,49 @@ The measured APK identities are:
 These identify measured artifacts, not a promise that rebuilding a later
 commit produces identical APK bytes.
 
-## Next: page transitions and rendering
+## Committed progress and remaining questions
 
-The first bounded slice is New Drink -> Activity with 100 drinks.
-The existing wider plan has all six root-switch directions, Equipment
-list/detail, existing-drink editing and the temperature picker, separately
-for 100/1,000 drinks and first-use/warm conditions.
+The implementation progress is already retained in these commits:
 
-The primary proposed interval is entry to the app's existing action handler
-through its qualified native-ready frame-commit notification. Keep current
-data-readiness and native control/layout milestones separately.
-This includes UI-thread callback delivery delay, excludes input delivery
-before handler entry, and is not exact buffer submission or physical display.
-Pure CPU/GPU render duration, jank and input responsiveness need distinct
-evidence; none has an accepted result in this comparison.
+| Commit | Changes |
+|---|---|
+| `d2b1c2e3bbd5a12eb913be6915e1e0609f3ad58e` | Retained section roots, layout/measurement caches, narrower editor inset updates, smaller standalone sample payload, Native AOT support, fixture tools and regression checks. |
+| `ad4fd380b8629b339929eb70309f6042f9f92719` | Pinned Compose ART-profile generation and packaging, profile checks, and accepted Pixel 5 startup results. |
 
-The schema-2 shared observer passed source/host checks. A Comet adapter exists
-only as a source candidate based on an older snapshot, with one Activity
-action per owner; Original needs its matching adapter. The earlier analyzer
-still expects schema 1. Complete and review matching adapters and explicit
-versioned ingestion before new artifact, accuracy and overhead gates.
-Do not relabel historical v1 events or timing samples as schema 2.
+This closeout updates documentation only. Page-observer changes and the
+larger experimental test system remain in isolated evidence snapshots, not
+in these product commits. They are not additional product performance fixes.
+
+The requested ten-sample, 1,000-drink, two-route study replaced the earlier
+100-drink/30-pair plan. The wider 14-hop, two-dataset, first-use/warm matrix
+was not completed and is not required to close this request.
+
+Open questions are usable startup/TTFD, input-event-to-handler delay,
+observer overhead, the Settings difference, current bridge costs, unmeasured
+routes and warm transitions, jank, and physical presentation. The results
+above do not resolve those questions. Additional experiments need a separate
+scope; no further collection is scheduled by this report.
 
 Earlier ordinary Debug transition diagnostics used host tap-to-DevFlow-registry
 observation, not native rendering or presentation. Their gains motivated
 retained section roots and layout caches, but are not the Pixel Native AOT
 app-pair benchmark. Keep the data sets separate.
 
-## Resume evidence
+## Retained evidence
 
 Full raw data, signed APKs, isolated source snapshots and detailed handoffs
 are retained outside the repository in the originating session's
-`android-aot-comparison/20260921-pixel5-v2` evidence directory. They are not
-distributed by this repository document.
+`files/android-aot-comparison/20260921-pixel5-v2` evidence directory, under
+session ID `aac04559-3f94-4b1c-bd96-ff00e87f411e`. This report retains the
+results, rounded page samples, histogram and limits in the repository.
+The full raw archive and experimental test system are not distributed here.
 
 Start with `comparison-report-02/startup-resume.md`,
-`comparison-report-02/page-performance-resume.md` and
+`comparison-report-02/page-timings-1000.md` and
 `comparison-report-02/comparison-summary.md`. The original baseline report,
-failed attempts and all accepted records remain unchanged.
+failed attempts and all accepted records remain unchanged. The summary
+also contains old progress entries; this report's closeout scope and the
+separate page-timing report supersede those earlier pending-work statements.
 The earlier combined analysis is `ttid-insets-100-report-01/analysis/analysis.json`,
 SHA-256 `c2c8be8eb0b95e7ce07bf2aa0bb1df1f23c9880945704b38ba08a9a2729b7baf`.
 
@@ -339,7 +570,19 @@ The profile-rerun records are:
 | `ttid-art-profile-1000-followup-01/review-01/raw-replay-01-verification.json` | `9e78f67f8e4c9471a49bc019b15f1ad091f434336d036ff032736877f2370372` |
 | `ttid-art-profile-1000-followup-01/handoff-01/handoff.json` | `9fafe7ad0f88574d9a774552c89f758133ac3c2934cae531aa0b9e28198c8638` |
 
-Before resuming startup, obtain the user's direction. Use new output folders
+The new records below are relative to
+`page-performance-resume-20260923-01/` inside the same evidence directory.
+
+| File | SHA-256 |
+|---|---|
+| `run1000/samples.csv` | `76de5b9e632415a5463629134ad78562316aacc2c8ceb37d0216fbd82f0a3613` |
+| `run1000/summary.json` | `db347835386c38e6dacb8259dfc8124411e7408e62665445c6c88a0d5a7d53a6` |
+| `run1000/apk-identities.json` | `dd2f7498dd91bfc0e1dc92ac123317280c06cc90057bab0a979327d89437078f` |
+| `memory/implementation-03/full-collection-01/coordinator-replay-01/analysis/analysis.json` | `c78b7985d8f3fb766f40f24a373115d8aeee77be50d9fbf93841c18daed30cec` |
+| `memory/implementation-03/full-collection-01/coordinator-replay-01/analysis/samples.csv` | `addead072db1ec71274a0d249ad9fbeab947b218e05d17866ac5b08b95d5e32e` |
+| `memory/implementation-03/full-collection-01/coordinator-replay-01/verification.json` | `1aad3b6ca23022311ee54949432303dfd569e4221e8da8090b43344a66c0c50e` |
+
+Before resuming measurement, obtain the user's direction. Use new output folders
 and fresh bounded device authorization; all earlier windows are expired.
 Do not clear data, repeat completed imports, reset runtime profiles or reuse
 unverified device state. Preserve matched fixtures, all valid slow trials,

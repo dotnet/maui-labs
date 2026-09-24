@@ -7,7 +7,8 @@ responsive. Every recommendation is grounded in the actual implementation of
 algorithm.
 
 For measured app results and their limits, see the
-[BaristaNotes performance status](baristanotes-performance-status.md).
+[BaristaNotes performance investigation report](baristanotes-performance-status.md).
+It records Pixel 5 startup, APK size, memory and page-transition results.
 
 
 ## How Rebuilds Work
