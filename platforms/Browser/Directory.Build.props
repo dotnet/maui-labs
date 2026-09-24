@@ -1,0 +1,24 @@
+<Project>
+  <Import Project="../../Directory.Build.props" />
+
+  <PropertyGroup>
+    <LangVersion>preview</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <MauiVersion>10.0.41</MauiVersion>
+    <!-- ASP.NET Core packages used by the Blazor WebAssembly sample and test app -->
+    <AspNetCoreVersion>10.0.3</AspNetCoreVersion>
+  </PropertyGroup>
+
+  <!-- Common NuGet package properties for all src/ projects -->
+  <PropertyGroup>
+    <Authors>Microsoft</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/dotnet/maui-labs/tree/main/platforms/Browser</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/dotnet/maui-labs.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- Use product-specific README instead of repo-root one -->
+    <PackRepoRootReadme>false</PackRepoRootReadme>
+  </PropertyGroup>
+</Project>

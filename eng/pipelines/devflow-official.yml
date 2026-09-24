@@ -36,6 +36,10 @@ parameters:
   displayName: 'Publish macOS AppKit packages to NuGet.org'
   type: boolean
   default: false
+- name: publishBrowserNuget
+  displayName: 'Publish Browser packages to NuGet.org'
+  type: boolean
+  default: false
 - name: publishAIExtensionsNuget
   displayName: 'Publish AI Extensions packages to NuGet.org'
   type: boolean
@@ -400,7 +404,35 @@ extends:
                 -projects $(Build.SourcesDirectory)\platforms\MacOS\MacOS-libs.slnf
                 $(_OfficialBuildArgs)
               displayName: Build, Test and Pack macOS AppKit
-       
+
+          # Browser Essentials is a plain net10.0 library — no workloads needed.
+          # Only the shipping csproj builds here; the Playwright browser tests run
+          # in GitHub Actions CI and are excluded from the official build (CFS
+          # network isolation blocks the Chromium download).
+          - job: Browser
+            displayName: Browser - Windows
+            pool:
+              name: NetCore1ESPool-Internal
+              demands: ImageOverride -equals windows.vs2026.amd64
+            strategy:
+              matrix:
+                Release:
+                  _BuildConfig: Release
+                  _OfficialBuildArgs: /p:DotNetSignType=$(_SignType)
+                    /p:TeamName=$(_TeamName)
+                    /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
+            steps:
+            - task: UseDotNet@2
+              displayName: Install .NET SDK
+              inputs:
+                version: 10.0.301
+            - script: eng\common\cibuild.cmd
+                -configuration $(_BuildConfig)
+                -prepareMachine
+                -projects $(Build.SourcesDirectory)\platforms\Browser\src\Browser.Essentials\Browser.Essentials.csproj
+                $(_OfficialBuildArgs)
+              displayName: Build and Pack Browser Essentials
+
     - template: /eng/common/templates-official/post-build/post-build.yml@self
       parameters:
         enableSourceLinkValidation: false
@@ -735,6 +767,61 @@ extends:
               useDotNetTask: false
               packagesToPush: '$(Pipeline.Workspace)/WpfPackages/*.nupkg'
               packageParentPath: '$(Pipeline.Workspace)/WpfPackages'
+              nuGetFeedType: external
+              publishFeedCredentials: 'nuget.org (dotnetframework)'
+
+    # Publish Browser packages to NuGet.org
+    - ${{ if eq(parameters.publishBrowserNuget, true) }}:
+      - stage: publish_browser_nuget
+        displayName: 'Publish Browser to NuGet.org'
+        dependsOn:
+        - Validate
+        - publish_using_darc
+        jobs:
+        - job: PrepareArtifacts
+          displayName: 'Prepare Browser Artifacts'
+          timeoutInMinutes: 15
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026.amd64
+            os: windows
+          templateContext:
+            outputs:
+            - output: pipelineArtifact
+              displayName: Publish Browser Packages
+              targetPath: '$(Pipeline.Workspace)/BrowserPackages'
+              artifactName: BrowserPackagesForNuGet
+          steps:
+          - download: current
+            artifact: PackageArtifacts
+            displayName: Download PackageArtifacts
+          - powershell: |
+              New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/BrowserPackages'
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.Platforms.Browser.*.nupkg' '$(Pipeline.Workspace)/BrowserPackages/' -Verbose -ErrorAction Stop
+            displayName: Filter Browser packages
+
+        - job: PublishNuGet
+          displayName: 'Push Browser to NuGet.org'
+          dependsOn: PrepareArtifacts
+          timeoutInMinutes: 30
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026.amd64
+            os: windows
+          templateContext:
+            type: releaseJob
+            isProduction: true
+            inputs:
+            - input: pipelineArtifact
+              artifactName: BrowserPackagesForNuGet
+              targetPath: '$(Pipeline.Workspace)/BrowserPackages'
+          steps:
+          - task: 1ES.PublishNuget@1
+            displayName: 'Push Browser to NuGet.org'
+            inputs:
+              useDotNetTask: false
+              packagesToPush: '$(Pipeline.Workspace)/BrowserPackages/*.nupkg'
+              packageParentPath: '$(Pipeline.Workspace)/BrowserPackages'
               nuGetFeedType: external
               publishFeedCredentials: 'nuget.org (dotnetframework)'
 

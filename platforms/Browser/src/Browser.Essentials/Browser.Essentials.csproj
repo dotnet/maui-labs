@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Microsoft.Maui.Platforms.Browser.Essentials</RootNamespace>
+    <AssemblyName>Microsoft.Maui.Platforms.Browser.Essentials</AssemblyName>
+    <PackageId>Microsoft.Maui.Platforms.Browser.Essentials</PackageId>
+    <Version>$(PlatformMauiBrowserEssentialsVersion)</Version>
+    <Description>MAUI Essentials implementations for the browser (WebAssembly) — preferences, secure storage, clipboard, geolocation, sensors, and more using standard web APIs via [JSImport] interop. Works in Blazor WebAssembly and plain wasm browser apps.</Description>
+    <PackageTags>maui;browser;wasm;webassembly;blazor;essentials;clipboard;preferences</PackageTags>
+    <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
+    <!-- Required by the [JSImport]/[JSExport] source generator -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- All interop is annotated [SupportedOSPlatform("browser")]; surface analyzer support -->
+    <SupportedPlatform Include="browser" />
+    <!-- The in-browser test suite validates interop internals (e.g. encryption at rest) -->
+    <InternalsVisibleTo Include="Browser.Essentials.TestApp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Essentials" Version="$(MauiVersion)" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Interop\BrowserEssentials.js" LogicalName="BrowserEssentials.js" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>
