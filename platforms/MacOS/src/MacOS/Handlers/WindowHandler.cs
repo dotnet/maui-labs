@@ -131,6 +131,7 @@ public partial class WindowHandler : ElementHandler<IWindow, NSWindow>
     MacOSToolbarManager? _toolbarManager;
     MacOSModalManager? _modalManager;
     MacOSWindowDelegate? _windowDelegate;
+    readonly WindowCloseCoordinator _closeCoordinator = new();
     static int _windowCascadeOffset;
 
     public WindowHandler() : base(Mapper)
@@ -138,19 +139,16 @@ public partial class WindowHandler : ElementHandler<IWindow, NSWindow>
     }
 
     /// <summary>
-    /// Called by MacOSWindowDelegate when the NSWindow is closed (red button or programmatically).
+    /// Called when the NSWindow is closed or the application terminates.
     /// Fires IWindow.Destroying() and removes the window from the tracked list.
     /// </summary>
     internal void OnWindowClosed(NSWindow? closedNsWindow)
     {
-        if (VirtualView is IWindow window)
+        var macApp = IPlatformApplication.Current as MacOSMauiApplication;
+        if (_closeCoordinator.Close(this, window => macApp?.RemoveWindow(window)))
         {
-            window.Destroying();
-
-            if (IPlatformApplication.Current is MacOSMauiApplication macApp)
+            if (macApp is { IsTerminating: false })
             {
-                macApp.RemoveWindow(window);
-
                 // Re-activate the next remaining window so it regains key status
                 foreach (var w in macApp.Windows)
                 {
@@ -165,6 +163,25 @@ public partial class WindowHandler : ElementHandler<IWindow, NSWindow>
 
         UnsubscribeModalEvents();
         UnsubscribePageChanges();
+    }
+
+    protected override void DisconnectHandler(NSWindow platformView)
+    {
+        if (platformView.Delegate == _windowDelegate)
+            platformView.Delegate = null;
+        _windowDelegate = null;
+
+        UnsubscribeModalEvents();
+        UnsubscribePageChanges();
+        _observedContent = null;
+        if (_contentContainer != null)
+            _contentContainer.ContentView = null;
+
+        if (((IElementHandler)this).VirtualView is IWindow window &&
+            IPlatformApplication.Current is MacOSMauiApplication macApp)
+            macApp.RemoveWindow(window);
+
+        base.DisconnectHandler(platformView);
     }
 
     protected override NSWindow CreatePlatformElement()

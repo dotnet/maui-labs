@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Microsoft.Maui.Platforms.MacOS.Tests</RootNamespace>
+    <AssemblyName>Microsoft.Maui.Platforms.MacOS.Tests</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="xunit" />
+  </ItemGroup>
+
+  <!-- Link the production lifecycle code without referencing the AppKit-only assembly.
+       These tests use real MAUI windows and handlers and require no native workloads. -->
+  <ItemGroup>
+    <Compile Include="../../src/MacOS/Platform/WindowCloseCoordinator.cs"
+             Link="Platform/WindowCloseCoordinator.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>
