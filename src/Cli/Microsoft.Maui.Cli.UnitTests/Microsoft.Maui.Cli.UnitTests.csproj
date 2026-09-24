@@ -24,4 +24,9 @@
     <ProjectReference Include="..\Microsoft.Maui.Cli\Microsoft.Maui.Cli.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="ProfileTestProcess.cs" />
+    <None Include="ProfileTestProcess.cs" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

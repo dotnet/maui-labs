@@ -15,6 +15,7 @@ internal static class DotnetTraceRunner
 		string outputPath,
 		TraceOutputFormat outputFormat,
 		ProfileTransportConfiguration transport,
+		string? diagnosticPortEndpoint,
 		Device device,
 		string? traceProfile,
 		TimeSpan? duration,
@@ -24,6 +25,7 @@ internal static class DotnetTraceRunner
 		IOutputFormatter formatter,
 		bool useJson,
 		bool verbose,
+		Action? onFinalizationStarted,
 		CancellationToken cancellationToken)
 	{
 		var startInfo = new ProcessStartInfo
@@ -44,7 +46,8 @@ internal static class DotnetTraceRunner
 			duration,
 			stoppingEventProvider,
 			stoppingEventName,
-			stoppingEventPayloadFilter).ToArray();
+			stoppingEventPayloadFilter,
+			diagnosticPortEndpoint).ToArray();
 		ProfileCommandDiagnostics.ConfigureDotnetToolStartInfo(startInfo, "dotnet-trace", traceArgs, out var commandLine);
 		ProfileCommandProcessHelpers.WriteVerbose(formatter, useJson, verbose, $"Trace command: {commandLine}");
 
@@ -64,8 +67,22 @@ internal static class DotnetTraceRunner
 				"Failed to start dotnet-trace.");
 		}
 
-		return MonitoredProcess.Attach(process, formatter, useJson, verbose, "trace", cancellationToken);
+		return MonitoredProcess.Attach(
+			process,
+			formatter,
+			useJson,
+			verbose,
+			"trace",
+			cancellationToken,
+			onStdoutLine: line =>
+			{
+				if (IsFinalizationStartedMessage(line))
+					onFinalizationStarted?.Invoke();
+			});
 	}
+
+	internal static bool IsFinalizationStartedMessage(string line)
+		=> line.StartsWith("Stopping the trace.", StringComparison.Ordinal);
 
 	internal static IEnumerable<string> BuildTraceArguments(
 		string outputPath,
@@ -75,13 +92,27 @@ internal static class DotnetTraceRunner
 		TimeSpan? duration,
 		string? stoppingEventProvider,
 		string? stoppingEventName,
-		string? stoppingEventPayloadFilter)
+		string? stoppingEventPayloadFilter,
+		string? diagnosticPortEndpoint = null)
 	{
 		var args = new List<string>
 		{
-			"collect",
-			"--dsrouter",
-			transport.DsrouterKind,
+			"collect"
+		};
+
+		if (string.IsNullOrWhiteSpace(diagnosticPortEndpoint))
+		{
+			args.Add("--dsrouter");
+			args.Add(transport.DsrouterKind);
+		}
+		else
+		{
+			args.Add("--diagnostic-port");
+			args.Add($"{diagnosticPortEndpoint},connect");
+		}
+
+		args.AddRange(
+		[
 			"--format",
 			outputFormat switch
 			{
@@ -91,7 +122,7 @@ internal static class DotnetTraceRunner
 			"--output",
 			outputPath,
 			"--resume-runtime"
-		};
+		]);
 
 		var requiresExtraRuntimeProviders = outputFormat == TraceOutputFormat.Mibc;
 
@@ -170,6 +201,7 @@ internal static class DotnetTraceRunner
 		string outputPath,
 		TraceOutputFormat outputFormat,
 		ProfileTransportConfiguration transport,
+		string? diagnosticPortEndpoint,
 		Device device,
 		string? traceProfile,
 		TimeSpan? duration,
@@ -179,6 +211,7 @@ internal static class DotnetTraceRunner
 		IOutputFormatter formatter,
 		bool useJson,
 		bool verbose,
+		Action? onFinalizationStarted,
 		CancellationToken cancellationToken)
 	{
 		var startedAt = Stopwatch.GetTimestamp();
@@ -191,6 +224,7 @@ internal static class DotnetTraceRunner
 				outputPath,
 				outputFormat,
 				transport,
+				diagnosticPortEndpoint,
 				device,
 				traceProfile,
 				duration,
@@ -200,6 +234,7 @@ internal static class DotnetTraceRunner
 				formatter,
 				useJson,
 				verbose,
+				onFinalizationStarted,
 				cancellationToken);
 
 			try

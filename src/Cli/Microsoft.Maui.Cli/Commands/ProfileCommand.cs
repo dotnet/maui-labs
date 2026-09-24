@@ -26,7 +26,7 @@ public static class ProfileCommand
 	internal static readonly TimeSpan s_exitControlConnectTimeout = TimeSpan.FromSeconds(5);
 	internal static readonly TimeSpan s_exitControlCommandTimeout = TimeSpan.FromSeconds(10);
 	internal static readonly TimeSpan s_traceStopInterruptDelay = TimeSpan.FromSeconds(5);
-	internal static readonly TimeSpan s_traceStopTimeout = TimeSpan.FromSeconds(15);
+	internal static readonly TimeSpan s_defaultTraceStopTimeout = TimeSpan.FromMinutes(2);
 	internal const int DefaultDiagnosticPort = 9000;
 	internal const int ExitControlPortOffset = 1;
 	internal const string ProfilingHelperPackageId = "Microsoft.Maui.ProfilingHelper";
@@ -109,6 +109,11 @@ public static class ProfileCommand
 			Description = "Preferred TCP port for the diagnostic connection. If it's busy, the next free port is used.",
 			DefaultValueFactory = _ => DefaultDiagnosticPort
 		};
+		var traceStopTimeoutOption = new Option<TimeSpan>("--trace-stop-timeout")
+		{
+			Description = "Maximum time to wait for dotnet-trace rundown, flush, and finalization after a stop request.",
+			DefaultValueFactory = _ => s_defaultTraceStopTimeout
+		};
 		var stoppingEventProviderOption = new Option<string?>("--stopping-event-provider-name")
 		{
 			Description = "Optional event provider name for an event-based stop condition. " +
@@ -136,6 +141,7 @@ public static class ProfileCommand
 			traceProfileOption,
 			noBuildOption,
 			diagnosticPortOption,
+			traceStopTimeoutOption,
 			stoppingEventProviderOption,
 			stoppingEventNameOption,
 			stoppingEventPayloadFilterOption
@@ -155,6 +161,7 @@ public static class ProfileCommand
 				traceProfileOption,
 				noBuildOption,
 				diagnosticPortOption,
+				traceStopTimeoutOption,
 				stoppingEventProviderOption,
 				stoppingEventNameOption,
 				stoppingEventPayloadFilterOption,
@@ -213,6 +220,11 @@ public static class ProfileCommand
 			Description = "Preferred TCP port for the diagnostic connection. If it's busy, the next free port is used.",
 			DefaultValueFactory = _ => DefaultDiagnosticPort
 		};
+		var traceStopTimeoutOption = new Option<TimeSpan>("--trace-stop-timeout")
+		{
+			Description = "Maximum time to wait for dotnet-trace rundown, flush, and finalization after a stop request.",
+			DefaultValueFactory = _ => s_defaultTraceStopTimeout
+		};
 
 		var command = new Command(
 			"manual",
@@ -230,7 +242,8 @@ public static class ProfileCommand
 			durationOption,
 			traceProfileOption,
 			noBuildOption,
-			diagnosticPortOption
+			diagnosticPortOption,
+			traceStopTimeoutOption
 		};
 
 		command.SetAction((ParseResult parseResult, CancellationToken cancellationToken) =>
@@ -247,6 +260,7 @@ public static class ProfileCommand
 				traceProfileOption,
 				noBuildOption,
 				diagnosticPortOption,
+				traceStopTimeoutOption,
 				cancellationToken));
 
 		return command;
@@ -265,6 +279,7 @@ public static class ProfileCommand
 		Option<string?> traceProfileOption,
 		Option<bool> noBuildOption,
 		Option<int> diagnosticPortOption,
+		Option<TimeSpan> traceStopTimeoutOption,
 		CancellationToken cancellationToken)
 	{
 		var formatter = Program.GetFormatter(parseResult);
@@ -297,6 +312,8 @@ public static class ProfileCommand
 			}
 
 			var duration = parseResult.GetValue(durationOption);
+			var traceStopTimeout = parseResult.GetValue(traceStopTimeoutOption);
+			ValidateTraceStopTimeout(traceStopTimeout);
 
 			ValidateDnxAvailable();
 
@@ -334,6 +351,7 @@ public static class ProfileCommand
 					parseResult.GetValue(traceProfileOption),
 					parseResult.GetValue(noBuildOption),
 					parseResult.GetValue(diagnosticPortOption),
+					traceStopTimeout,
 					duration,
 					StoppingEventProvider: null,
 					StoppingEventName: null,
@@ -378,6 +396,7 @@ public static class ProfileCommand
 		Option<string?> traceProfileOption,
 		Option<bool> noBuildOption,
 		Option<int> diagnosticPortOption,
+		Option<TimeSpan> traceStopTimeoutOption,
 		Option<string?> stoppingEventProviderOption,
 		Option<string?> stoppingEventNameOption,
 		Option<string?> stoppingEventPayloadFilterOption,
@@ -419,6 +438,8 @@ public static class ProfileCommand
 				parseResult.GetValue(stoppingEventPayloadFilterOption));
 
 			var duration = parseResult.GetValue(durationOption);
+			var traceStopTimeout = parseResult.GetValue(traceStopTimeoutOption);
+			ValidateTraceStopTimeout(traceStopTimeout);
 			var stoppingEvent = ResolveStoppingEventConfiguration(
 				duration,
 				parseResult.GetValue(stoppingEventProviderOption),
@@ -473,6 +494,7 @@ public static class ProfileCommand
 				parseResult.GetValue(traceProfileOption),
 				parseResult.GetValue(noBuildOption),
 				parseResult.GetValue(diagnosticPortOption),
+				traceStopTimeout,
 				duration,
 				stoppingEvent.ProviderName,
 				stoppingEvent.EventName,
@@ -571,6 +593,7 @@ public static class ProfileCommand
 		string? traceProfile,
 		bool noBuild,
 		int diagnosticPort,
+		TimeSpan traceStopTimeout,
 		TimeSpan? duration,
 		string? stoppingEventProvider,
 		string? stoppingEventName,
@@ -591,6 +614,7 @@ public static class ProfileCommand
 				traceProfile,
 				noBuild,
 				diagnosticPort,
+				traceStopTimeout,
 				duration,
 				stoppingEventProvider,
 				stoppingEventName,
@@ -600,6 +624,16 @@ public static class ProfileCommand
 				useJson,
 				verbose),
 			cancellationToken);
+
+	internal static void ValidateTraceStopTimeout(TimeSpan timeout)
+	{
+		if (timeout <= TimeSpan.Zero)
+		{
+			throw new MauiToolException(
+				ErrorCodes.InvalidArgument,
+				"--trace-stop-timeout must be greater than zero.");
+		}
+	}
 
 	internal static string[] BuildCompileArguments(
 		string projectPath,
@@ -630,7 +664,8 @@ public static class ProfileCommand
 		TimeSpan? duration,
 		string? stoppingEventProvider,
 		string? stoppingEventName,
-		string? stoppingEventPayloadFilter)
+		string? stoppingEventPayloadFilter,
+		string? diagnosticPortEndpoint = null)
 		=> DotnetTraceRunner.BuildTraceArguments(
 			outputPath,
 			outputFormat,
@@ -639,7 +674,8 @@ public static class ProfileCommand
 			duration,
 			stoppingEventProvider,
 			stoppingEventName,
-			stoppingEventPayloadFilter);
+			stoppingEventPayloadFilter,
+			diagnosticPortEndpoint);
 
 	internal static bool CanResolveDiagnosticsTool(string? installedToolPath, string? cachedToolDll)
 		=> ProfileCommandDiagnostics.CanResolveDiagnosticsTool(installedToolPath, cachedToolDll);
@@ -801,7 +837,8 @@ public static class ProfileCommand
 				DiagnosticAddress: device.IsEmulator ? "10.0.2.2" : IPAddress.Loopback.ToString(),
 				DiagnosticListenMode: "connect",
 				DsrouterKind: device.IsEmulator ? "android-emu" : "android",
-				RequiresManualExitControlPortRouting: !device.IsEmulator),
+				RequiresManualExitControlPortRouting: !device.IsEmulator,
+				RequiresExplicitDsrouter: !device.IsEmulator),
 			Platforms.iOS => new ProfileTransportConfiguration(
 				Platform: Platforms.iOS,
 				DiagnosticAddress: IPAddress.Loopback.ToString(),
