@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding.Tests</AssemblyName>
+    <RootNamespace>Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <NoWarn>$(NoWarn);MAUIAI0001</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\AI\Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding\Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding.csproj" />
+  </ItemGroup>
+
+</Project>
