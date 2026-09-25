@@ -28,10 +28,16 @@ public class SdkManagerRecoveryTests
 		var barePath = Path.Combine(sdkPath, "cmdline-tools", "bin", toolName);
 		var installedPath = Path.Combine(sdkPath, "cmdline-tools", "16.0", "bin", toolName);
 		var originalServices = Program.Services;
+		var originalOut = Console.Out;
+		var originalError = Console.Error;
+		using var standardOutput = new StringWriter();
+		using var standardError = new StringWriter();
 		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
 		try
 		{
+			Console.SetOut(standardOutput);
+			Console.SetError(standardError);
 			Directory.CreateDirectory(Path.GetDirectoryName(barePath)!);
 			File.WriteAllText(barePath, "unsupported layout");
 			Directory.CreateDirectory(Path.Combine(sdkPath, "licenses"));
@@ -93,13 +99,17 @@ public class SdkManagerRecoveryTests
 
 			var command = Program.BuildRootCommand();
 			var result = command.Parse([
-				"android", "install", "--json", "false", "--ci",
+				"android", "install", "--json", "--ci",
 				"--sdk-install-path", sdkPath, "--packages", "platform-tools"
 			]);
 			Assert.Empty(result.Errors);
 			var exitCode = await result.InvokeAsync(cancellationToken: timeout.Token);
 
-			Assert.Equal(toolExitCode == 0 ? 0 : 1, exitCode);
+			var expectedExitCode = toolExitCode == 0 ? 0 : 1;
+			Assert.True(expectedExitCode == exitCode,
+				$"Expected exit code {expectedExitCode}, but received {exitCode}.{Environment.NewLine}" +
+				$"stdout:{Environment.NewLine}{standardOutput}{Environment.NewLine}" +
+				$"stderr:{Environment.NewLine}{standardError}");
 			Assert.Equal(1, manifestRequests);
 			Assert.Equal(1, archiveRequests);
 			Assert.Equal(installedPath, sdkManager.SdkManagerPath);
@@ -111,6 +121,8 @@ public class SdkManagerRecoveryTests
 		}
 		finally
 		{
+			Console.SetOut(originalOut);
+			Console.SetError(originalError);
 			Program.Services = originalServices;
 			if (Directory.Exists(sdkPath))
 				Directory.Delete(sdkPath, recursive: true);
