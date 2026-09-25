@@ -70,6 +70,7 @@ namespace Comet.Platform.Compose
 		{
 			if (_built)
 				return;
+			using var hold = Comet.Reactive.ReactiveScheduler.HoldFlushes();
 			_built = true;
 			var tabs = _tabView.Tabs;
 			_contentNodes = new ComposeNode?[tabs.Count];
@@ -100,6 +101,7 @@ namespace Comet.Platform.Compose
 			catch
 			{
 				generation.Dispose();
+				_built = false;
 				throw;
 			}
 			HookMetrics();

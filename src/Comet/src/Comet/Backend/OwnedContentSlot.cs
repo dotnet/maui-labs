@@ -63,6 +63,8 @@ namespace Comet.Backend
 			if (view is null)
 				throw new ArgumentNullException(nameof(view));
 
+			// A flush may reenter this host. Publish all three ownership fields first.
+			using var hold = Comet.Reactive.ReactiveScheduler.HoldFlushes();
 			Clear();
 			var generation = new OwnedContentGeneration(_owner, _factory, _context);
 			try

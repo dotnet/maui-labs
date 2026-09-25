@@ -56,17 +56,27 @@ namespace Comet.Platform.Compose
 		{
 			if (_disposed || _generation is not null)
 				return;
+			using var hold = Comet.Reactive.ReactiveScheduler.HoldFlushes();
 
 			// Materialize the slot views once. They carry no Yoga frame, so Material lays them out
 			// inside the dialog natively (intrinsic sizing), exactly like Compose's AlertDialog slots.
 			var generation = new OwnedContentGeneration(_dialog, _context);
-			_text = (ComposeNode)generation.Materialize(_dialog.Text);
-			_confirm = (ComposeNode)generation.Materialize(_dialog.ConfirmButton);
-			if (_dialog.Title is not null)
-				_title = (ComposeNode)generation.Materialize(_dialog.Title);
-			if (_dialog.DismissButton is not null)
-				_dismiss = (ComposeNode)generation.Materialize(_dialog.DismissButton);
-			_generation = generation;
+			try
+			{
+				_text = (ComposeNode)generation.Materialize(_dialog.Text);
+				_confirm = (ComposeNode)generation.Materialize(_dialog.ConfirmButton);
+				if (_dialog.Title is not null)
+					_title = (ComposeNode)generation.Materialize(_dialog.Title);
+				if (_dialog.DismissButton is not null)
+					_dismiss = (ComposeNode)generation.Materialize(_dialog.DismissButton);
+				_generation = generation;
+			}
+			catch
+			{
+				_text = _confirm = _title = _dismiss = null;
+				generation.Dispose();
+				throw;
+			}
 		}
 
 		void ReleaseContent()

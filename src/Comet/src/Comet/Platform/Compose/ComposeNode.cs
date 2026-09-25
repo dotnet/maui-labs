@@ -180,7 +180,7 @@ namespace Comet.Platform.Compose
 
 		public void ApplyProperty(PropertyId id, in PropertyValue value)
 		{
-			InvalidateMeasureCache();
+			_measureCache.ApplyProperty(id, in value);
 			if (id == PropertyIds.HasTapGesture)
 				_hasTap.Value = value.AsBool;
 			else if (id == PropertyIds.HasLongPressGesture)

@@ -223,6 +223,7 @@ namespace Comet
 		public static T SetEnvironment<T>(this T contextualObject, string styleId, string key, object value, bool cascades = true, ControlState state = ControlState.Default)
 			where T : ContextualObject
 		{
+			using var hold = cascades ? ReactiveScheduler.HoldFlushes() : null;
 			key = ContextualObject.GetControlStateKey(state, key);
 			var typedKey = string.IsNullOrWhiteSpace(styleId) ? key : $"{styleId}.{key}";
 			contextualObject.SetValue(typedKey, value, cascades);
@@ -236,6 +237,7 @@ namespace Comet
 		public static T SetEnvironment<T>(this T contextualObject, Type type, string key, object value, bool cascades = true, ControlState state = ControlState.Default)
 			where T : ContextualObject
 		{
+			using var hold = cascades ? ReactiveScheduler.HoldFlushes() : null;
 			key = ContextualObject.GetControlStateKey(state, key);
 			var typedKey = ContextualObject.GetTypedKey(type, key);
 			contextualObject.SetValue(typedKey, value, cascades);
@@ -249,6 +251,9 @@ namespace Comet
 		public static T SetEnvironment<T>(this T contextualObject, string key, object value, bool cascades = true, ControlState state = ControlState.Default)
 			where T : ContextualObject
 		{
+			// Environment notification can flush inline. Apply the backend property
+			// before that flush measures and arranges the updated view.
+			using var hold = cascades ? ReactiveScheduler.HoldFlushes() : null;
 			key = ContextualObject.GetControlStateKey(state, key);
 			if (!contextualObject.SetValue(key, value, cascades))
 				return contextualObject;
