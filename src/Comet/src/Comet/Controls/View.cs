@@ -667,15 +667,8 @@ namespace Comet
 
 		void SetEnvironmentFields()
 		{
-			var fields = this.GetFieldsWithAttribute(typeof(EnvironmentAttribute));
-			if (!fields.Any())
-				return;
-			foreach (var f in fields)
-			{
-				var attribute = f.GetCustomAttributes(true).OfType<EnvironmentAttribute>().FirstOrDefault();
-				var key = attribute.Key ?? f.Name;
-				usedEnvironmentData.Add((f.Name, key));
-			}
+			foreach (var field in EnvironmentFieldCache.Get(this))
+				usedEnvironmentData.Add(field);
 		}
 		void PopulateFromEnvironment()
 		{

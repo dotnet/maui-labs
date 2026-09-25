@@ -49,5 +49,6 @@ internal static class CometMetadataUpdateHandler
 	internal static void ClearCache(Type[]? updatedTypes)
 	{
 		Internal.Extensions.ClearBodyMethodCache();
+		Internal.EnvironmentFieldCache.Clear();
 	}
 }

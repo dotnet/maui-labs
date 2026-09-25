@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 using Microsoft.Maui.Graphics;
 
 namespace Comet.Backend
@@ -15,6 +16,35 @@ namespace Comet.Backend
 		readonly Entry[] _entries = new Entry[Capacity];
 		int _count;
 		int _next;
+		Dictionary<PropertyId, PropertyValue>? _measurementProperties;
+
+		public void ApplyProperty(PropertyId id, in PropertyValue value)
+		{
+			if (id == PropertyIds.Opacity || id == PropertyIds.BackgroundColor ||
+				id == PropertyIds.TranslationX || id == PropertyIds.TranslationY ||
+				id == PropertyIds.AutomationId || id == PropertyIds.ClipShape ||
+				id == PropertyIds.CornerRadius || id == PropertyIds.HasTapGesture ||
+				id == PropertyIds.HasLongPressGesture || id == PropertyIds.HasRecordGesture ||
+				id == PropertyIds.Text_Color || id == PropertyIds.Button_TextColor)
+				return;
+
+			// Declarative updates replay unchanged properties too. Only compare known
+			// immutable measurement inputs; mutable payloads and unknown ids stay conservative.
+			if (id == PropertyIds.Padding ||
+				id == PropertyIds.Text_Value || id == PropertyIds.Text_FontSize ||
+				id == PropertyIds.Text_FontFamily || id == PropertyIds.Text_FontWeight ||
+				id == PropertyIds.Text_MaxLines || id == PropertyIds.Text_LineHeight ||
+				id == PropertyIds.Text_LineBreak || id == PropertyIds.Text_LineBreakMode ||
+				id == PropertyIds.Text_Italic || id == PropertyIds.Text_CharacterSpacing ||
+				id == PropertyIds.Text_HorizontalAlignment || id == PropertyIds.Text_VerticalAlignment)
+			{
+				_measurementProperties ??= new();
+				if (_measurementProperties.TryGetValue(id, out var previous) && previous.Equals(value))
+					return;
+				_measurementProperties[id] = value;
+			}
+			Clear();
+		}
 
 		public Size GetOrMeasure(
 			double widthConstraint,

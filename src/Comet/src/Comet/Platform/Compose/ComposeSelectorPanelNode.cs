@@ -60,6 +60,7 @@ namespace Comet.Platform.Compose
 		{
 			if (_initialized)
 				return;
+			using var hold = Comet.Reactive.ReactiveScheduler.HoldFlushes();
 			_initialized = true;
 
 			var panels = _panel.Panels;
