@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using Comet.Reflection;
 using Microsoft.Maui;
 using Microsoft.Maui.HotReload;
@@ -49,6 +51,36 @@ namespace Comet.Internal
 
 		public static Func<View> GetBody(this View view)
 		{
+			var type = view.GetType();
+			BodyMethod cached;
+			lock (BodyMethods)
+			{
+				if (!BodyMethods.TryGetValue(type, out cached))
+				{
+					cached = new BodyMethod(FindBodyMethod(view));
+					BodyMethods.Add(type, cached);
+				}
+			}
+
+			// Cache metadata, including misses, but bind the delegate to each instance.
+			return cached.Method?.CreateDelegate<Func<View>>(view);
+		}
+
+		static readonly ConditionalWeakTable<Type, BodyMethod> BodyMethods = new();
+
+		sealed class BodyMethod(MethodInfo method)
+		{
+			public MethodInfo Method { get; } = method;
+		}
+
+		internal static void ClearBodyMethodCache()
+		{
+			lock (BodyMethods)
+				BodyMethods.Clear();
+		}
+
+		static MethodInfo FindBodyMethod(View view)
+		{
 			// Match [Body] attribute by name, not by type identity, because the user's
 			// dynamically-loaded assembly may reference a different Comet assembly (NuGet)
 			// than the companion app (project reference).
@@ -71,9 +103,7 @@ namespace Comet.Internal
 				bodyMethod = view.GetType().GetDeepMethodInfo(typeof(BodyAttribute));
 			}
 
-			if (bodyMethod is not null)
-				return bodyMethod.CreateDelegate<Func<View>>(view);
-			return null;
+			return bodyMethod;
 		}
 		public static void ResetGlobalEnvironment(this View view) => View.Environment.Clear();
 

@@ -10,6 +10,14 @@ The comparison uses Original BaristaNotes (MAUI, MauiReactor and EF Core/SQLite)
 and the Comet rewrite (Jetpack Compose and its SQLite store).
 It does not isolate framework overhead.
 
+The separate [Android scrolling investigation](baristanotes-scroll-performance.md)
+records the initial five Pixel traces and a later implementation with three
+matched Release runs per build. With 1,000 saved shots, first-scroll p95
+deadline overrun fell from 182-186 ms to -0.64-1.43 ms. The changes batch row
+construction, cache body metadata, retain unchanged rows during paging and
+restore automatic paging. The report includes the remaining jank and capture
+limits; these results are not a general framework ranking.
+
 ## Main results
 
 | Measure | Result | Scope |

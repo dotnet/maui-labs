@@ -68,20 +68,26 @@ namespace Comet.Platform.SwiftUI
 				if (_visibleRows.Count == 0)
 					return;
 				int min = int.MaxValue;
+				int max = -1;
 				foreach (var r in _visibleRows)
+				{
 					if (r < min) min = r;
+					if (r > max) max = r;
+				}
 				if (min != _lastMinVisible)
 				{
 					// Equal-min churn (rows realizing at the bottom) leaves the signal alone.
 					_list.LastScrolledBackward.Value = min < _lastMinVisible;
 					_lastMinVisible = min;
 				}
+				if (_list is CollectionView collection)
+					collection.NotifyVisibleIndex(max);
 			});
 		}
 
 		public void ApplyProperty(PropertyId id, in PropertyValue value)
 		{
-			if (id == PropertyIds.List_Version)
+			if (id == PropertyIds.List_Version || id == PropertyIds.List_InvalidateFrom)
 				Rebuild();
 		}
 

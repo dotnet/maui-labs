@@ -246,8 +246,7 @@ public sealed class ActivityFeedPage : View
                 .AutomationId("activity_empty");
         }
 
-        var items = BuildRows();
-        var list = new CollectionView<object>(() => items)
+        var list = new CollectionView<object>(BuildRows)
         {
             ViewFor = RenderRow,
             ItemsLayout = ItemsLayout.Vertical(),
@@ -267,7 +266,7 @@ public sealed class ActivityFeedPage : View
     IReadOnlyList<object> BuildRows()
     {
         var rows = _shots.Cast<object>().ToList();
-        if (_hasMore || _isLoadingMore.Value || _loadMoreError.Value is not null)
+        if (_hasMore)
             rows.Add(ActivityLoadMoreRow.Instance);
         return rows;
     }
@@ -275,7 +274,7 @@ public sealed class ActivityFeedPage : View
     View RenderRow(object item) => item switch
     {
         ShotRecordDto shot => new ActivityShotRow(shot, () => _openShot?.Invoke(shot)),
-        _ => LoadMoreRow(),
+        _ => new View { Body = LoadMoreRow },
     };
 
     View LoadMoreRow()
@@ -373,7 +372,6 @@ public sealed class ActivityFeedPage : View
         {
             _isLoadingMore.Value = true;
             _loadMoreError.Value = null;
-            _shotList?.ReloadData();
             var nextPage = _pageIndex + 1;
             var filters = _activeFilters.ToDto();
             var page = filters.HasFilters
@@ -386,7 +384,7 @@ public sealed class ActivityFeedPage : View
             _pageIndex = nextPage;
             _hasMore = page.HasNextPage;
             _filteredShotCount.Value = page.TotalCount;
-            _rowsVersion.Value++;
+            _shotList?.RefreshItems();
         }
         catch (Exception ex)
         {
@@ -398,7 +396,7 @@ public sealed class ActivityFeedPage : View
             if (requestVersion == _requestVersion)
             {
                 _isLoadingMore.Value = false;
-                _shotList?.ReloadData();
+                _shotList?.RefreshItems();
             }
         }
     }
