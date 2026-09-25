@@ -61,6 +61,29 @@ validated as positive but is not forwarded as a native output limit.
 The playground accordingly offers no Windows Chat image attachment or tool
 controls.
 
+### Conversation context experiment
+
+The native `LanguageModelContext` retains prompts **and generated responses**
+across calls, so a continuing conversation can send only the next user prompt.
+The current `IChatClient` adapter instead receives an entire caller-supplied
+history and creates a fresh context for each response. Reusing one context
+without checking that history would mix independent conversations or ignore
+edited messages. The native API cannot insert arbitrary past assistant/tool
+messages into a context, and structured JSON generation has no context
+overload.
+
+An opt-in packaged device test compares the current adapter, a fresh native
+context with the same serialized history, and a reused native context sent
+only the new prompt. Run it on a Windows AI-capable machine from the repo root:
+
+```powershell
+dotnet test tests\AI\Microsoft.Maui.Essentials.AI.DeviceTests\Microsoft.Maui.Essentials.AI.DeviceTests.csproj -f net10.0-windows10.0.19041.0 -p:TestingMode=XHarness -p:EnableWindowsAIContextBenchmark=true -p:DeviceRunnersDataTimeout=300 --filter WindowsAIContextBenchmarkTests --logger trx
+```
+
+The test records per-turn latency, input length, and recall of synthetic codes
+in its TRX output and an app-private `windows-ai-context-benchmark.tsv`. It does
+not gate a build on a hardware-dependent timing threshold.
+
 ## Image generation
 
 `WindowsAIImageGenerator` supports text-to-image (no source image) and
