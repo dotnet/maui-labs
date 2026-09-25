@@ -1,5 +1,5 @@
-using AIExtensions.Sample.ChatPlayground.Services;
-using AIExtensions.Sample.ChatPlayground.ViewModels;
+using AIExtensions.Sample.ChatPlayground.Features.Chat.Services;
+using AIExtensions.Sample.ChatPlayground.Features.Chat.ViewModels;
 using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat.Tests;

@@ -1,11 +1,16 @@
 using System.Reflection;
 using System.ClientModel;
-using AIExtensions.Sample.ChatPlayground.Features.Chat;
-using AIExtensions.Sample.ChatPlayground.Features.Embeddings;
-using AIExtensions.Sample.ChatPlayground.Features.Images;
-using AIExtensions.Sample.ChatPlayground.Features.Recording;
-using AIExtensions.Sample.ChatPlayground.Services;
-using AIExtensions.Sample.ChatPlayground.ViewModels;
+using AIExtensions.Sample.ChatPlayground.Features.Chat.Recording;
+using AIExtensions.Sample.ChatPlayground.Features.Chat.Services;
+using AIExtensions.Sample.ChatPlayground.Features.Chat.ViewModels;
+using AIExtensions.Sample.ChatPlayground.Features.Chat.Views;
+using AIExtensions.Sample.ChatPlayground.Features.Embeddings.Services;
+using AIExtensions.Sample.ChatPlayground.Features.Embeddings.ViewModels;
+using AIExtensions.Sample.ChatPlayground.Features.Embeddings.Views;
+using AIExtensions.Sample.ChatPlayground.Features.Images.Services;
+using AIExtensions.Sample.ChatPlayground.Features.Images.ViewModels;
+using AIExtensions.Sample.ChatPlayground.Features.Images.Views;
+using AIExtensions.Sample.ChatPlayground.Shared.Services;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -57,10 +62,11 @@ public static class MauiProgram
         builder.Services.AddSingleton<ChatAreaViewModel>();
         builder.Services.AddSingleton<EmbeddingPlaygroundViewModel>();
         builder.Services.AddSingleton<ImagePlaygroundViewModel>();
-        builder.Services.AddSingleton<MainViewModel>();
-        builder.Services.AddTransient<MainPage>();
+        builder.Services.AddSingleton<ChatViewModel>();
+        builder.Services.AddTransient<ChatPage>();
         builder.Services.AddTransient<EmbeddingPage>();
         builder.Services.AddTransient<ImagePage>();
+        builder.Services.AddTransient<PlaygroundTabs>();
 
         return builder.Build();
     }

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="AIExtensions.Sample.ChatPlayground.Shared.Controls.PopupMenuView">
+    <ContentView.ControlTemplate>
+        <ControlTemplate>
+            <AbsoluteLayout>
+                <BoxView Color="{AppThemeBinding Light={StaticResource OverlayScrim}, Dark={StaticResource OverlayScrimDark}}"
+                         AbsoluteLayout.LayoutBounds="0,0,1,1"
+                         AbsoluteLayout.LayoutFlags="All"
+                         AutomationId="PopupMenuDismissOverlay">
+                    <BoxView.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="BackdropTapped" />
+                    </BoxView.GestureRecognizers>
+                </BoxView>
+                <Border x:Name="PART_Panel"
+                        AbsoluteLayout.LayoutBounds="{TemplateBinding PopupBounds}"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource PanelBackground}, Dark={StaticResource PanelBackgroundDark}}"
+                        Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}"
+                        StrokeShape="RoundRectangle 12"
+                        Padding="14"
+                        AutomationId="PopupMenuPanel">
+                    <Border.Shadow>
+                        <Shadow Brush="Black" Offset="0,6" Opacity="0.2" Radius="12" />
+                    </Border.Shadow>
+                    <ContentPresenter />
+                </Border>
+            </AbsoluteLayout>
+        </ControlTemplate>
+    </ContentView.ControlTemplate>
+</ContentView>

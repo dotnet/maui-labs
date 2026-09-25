@@ -1,8 +1,9 @@
 using System.Text;
 using System.Text.Json.Nodes;
-using AIExtensions.Sample.ChatPlayground.Features.Chat;
-using AIExtensions.Sample.ChatPlayground.Features.Embeddings;
-using AIExtensions.Sample.ChatPlayground.Features.Recording;
+using AIExtensions.Sample.ChatPlayground.Features.Chat.Recording;
+using AIExtensions.Sample.ChatPlayground.Features.Chat.Services;
+using AIExtensions.Sample.ChatPlayground.Features.Embeddings.Models;
+using AIExtensions.Sample.ChatPlayground.Features.Embeddings.Services;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 

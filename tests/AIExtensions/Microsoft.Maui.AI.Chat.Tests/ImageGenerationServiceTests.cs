@@ -1,8 +1,7 @@
 using System.Drawing;
-using AIExtensions.Sample.ChatPlayground.Features.Images;
-using AIExtensions.Sample.ChatPlayground.Models;
-using AIExtensions.Sample.ChatPlayground.Services;
-using AIExtensions.Sample.ChatPlayground.ViewModels;
+using AIExtensions.Sample.ChatPlayground.Features.Images.Services;
+using AIExtensions.Sample.ChatPlayground.Features.Images.ViewModels;
+using AIExtensions.Sample.ChatPlayground.Shared.Models;
 using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat.Tests;

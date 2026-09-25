@@ -1,7 +1,6 @@
 using System.Text;
-using AIExtensions.Sample.ChatPlayground.Features.Embeddings;
-using AIExtensions.Sample.ChatPlayground.Services;
-using AIExtensions.Sample.ChatPlayground.ViewModels;
+using AIExtensions.Sample.ChatPlayground.Features.Embeddings.Services;
+using AIExtensions.Sample.ChatPlayground.Features.Embeddings.ViewModels;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 

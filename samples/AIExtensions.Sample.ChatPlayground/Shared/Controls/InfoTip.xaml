@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="AIExtensions.Sample.ChatPlayground.Shared.Controls.InfoTip"
+             x:Name="Root">
+    <ImageButton x:Name="InfoButton"
+                 Source="{AppThemeBinding Light=info.png, Dark=info_dark.png}"
+                 BackgroundColor="Transparent"
+                 Clicked="InfoButtonClicked"
+                 Padding="{OnPlatform 12, MacCatalyst=6, WinUI=6}"
+                 WidthRequest="{OnPlatform 44, MacCatalyst=32, WinUI=32}"
+                 HeightRequest="{OnPlatform 44, MacCatalyst=32, WinUI=32}"
+                 AutomationId="SettingInfoButton" />
+</ContentView>

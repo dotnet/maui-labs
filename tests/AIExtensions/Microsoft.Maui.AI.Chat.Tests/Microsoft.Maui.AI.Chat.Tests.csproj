@@ -16,27 +16,32 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Recording\**\*.cs"
-             Link="Recording\%(RecursiveDir)%(Filename)%(Extension)" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Embeddings\**\*.cs"
-             Link="Embeddings\%(RecursiveDir)%(Filename)%(Extension)" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Images\**\*.cs"
-             Link="Images\%(RecursiveDir)%(Filename)%(Extension)" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Storage\**\*.cs"
-             Link="Storage\%(RecursiveDir)%(Filename)%(Extension)" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Chat\**\*.cs"
-             Link="Chat\%(RecursiveDir)%(Filename)%(Extension)" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Models\PlaygroundJsonContext.cs" Link="Models\PlaygroundJsonContext.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Models\PlaygroundResponse.cs" Link="Models\PlaygroundResponse.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Models\ImageAttachment.cs" Link="Models\ImageAttachment.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\ChatClientDescriptor.cs" Link="Services\ChatClientDescriptor.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\EmbeddingGeneratorDescriptor.cs" Link="Services\EmbeddingGeneratorDescriptor.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\ImageGeneratorDescriptor.cs" Link="Services\ImageGeneratorDescriptor.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\PlaygroundChatClientBuilderExtensions.cs" Link="Services\PlaygroundChatClientBuilderExtensions.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\ViewModels\SettingsPaneViewModel.cs" Link="ViewModels\SettingsPaneViewModel.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\ViewModels\EmbeddingPlaygroundViewModel.cs" Link="ViewModels\EmbeddingPlaygroundViewModel.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\ViewModels\EmbeddingSettingsViewModel.cs" Link="ViewModels\EmbeddingSettingsViewModel.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\ViewModels\ImageSettingsViewModel.cs" Link="ViewModels\ImageSettingsViewModel.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Chat\Models\*.cs"
+             Link="Chat\Models\%(Filename)%(Extension)" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Chat\Recording\*.cs"
+             Link="Chat\Recording\%(Filename)%(Extension)" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Chat\Services\*.cs"
+             Link="Chat\Services\%(Filename)%(Extension)" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Chat\ViewModels\SettingsPaneViewModel.cs"
+             Link="Chat\ViewModels\SettingsPaneViewModel.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Embeddings\Models\*.cs"
+             Link="Embeddings\Models\%(Filename)%(Extension)" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Embeddings\Services\*.cs"
+             Link="Embeddings\Services\%(Filename)%(Extension)" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Embeddings\ViewModels\EmbeddingPlaygroundViewModel.cs"
+             Link="Embeddings\ViewModels\EmbeddingPlaygroundViewModel.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Embeddings\ViewModels\EmbeddingSettingsViewModel.cs"
+             Link="Embeddings\ViewModels\EmbeddingSettingsViewModel.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Images\Models\*.cs"
+             Link="Images\Models\%(Filename)%(Extension)" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Images\Services\*.cs"
+             Link="Images\Services\%(Filename)%(Extension)" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Features\Images\ViewModels\ImageSettingsViewModel.cs"
+             Link="Images\ViewModels\ImageSettingsViewModel.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Shared\Models\*.cs"
+             Link="Shared\Models\%(Filename)%(Extension)" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Shared\Storage\*.cs"
+             Link="Shared\Storage\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

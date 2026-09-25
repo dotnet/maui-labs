@@ -1,5 +1,5 @@
 using System.Runtime.CompilerServices;
-using AIExtensions.Sample.ChatPlayground.Services;
+using AIExtensions.Sample.ChatPlayground.Features.Chat.Services;
 using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat.Tests;

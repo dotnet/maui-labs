@@ -86,13 +86,12 @@ by this page. No image model is simulated when none is registered.
 
 | Area | Responsibility |
 | --- | --- |
-| `MauiProgram`, `Services/` | Register real chat, embedding, and image abstractions. Lazy wrappers expose UI descriptors through `GetService`; they do not create models until used. |
-| `Features/Chat/` | Provider-agnostic conversation executor, response projection, transcript changes, and the current-chat autosave session. |
-| `Features/Recording/` | Versioned, sample-contained record/replay protocol and `IChatClient` wrappers, independent of views and document search. |
-| `Features/Embeddings/` | Lazy document store and explicit per-model index/search with no MAUI or chat dependency. |
-| `Features/Images/` | One portable generation call accepting the selected `IImageGenerator` and optional original image. |
-| `Features/Storage/` | Shared atomic file writer. |
-| `ViewModels/`, `Views/`, `Controls/` | Separate chat, embedding, and image presentation state; page-specific settings and composer views; shared page layout, info tip, and anchored menus. |
+| `App`, `MauiProgram`, `PlaygroundTabs` | Register real clients and generators, resolve the Chat, Embeddings, and Images pages through DI, and compose the tabbed root for each window. |
+| `Features/Chat/{Views,ViewModels,Models,Services}/` | Chat page, settings, composer, transcript models, provider-agnostic conversation executor, and current-chat autosave. |
+| `Features/Chat/Recording/` | Versioned, sample-contained record/replay protocol and `IChatClient` wrappers, independent of document indexing. |
+| `Features/Embeddings/{Views,ViewModels,Models,Services}/` | Document page and settings, lazy document store, and explicit per-model index/search; portable services have no MAUI or chat dependency. |
+| `Features/Images/{Views,ViewModels,Models,Services}/` | Image page and settings plus one portable generation call accepting the selected `IImageGenerator`. |
+| `Shared/{Controls,Models,Services,Storage}/` | Reused page layout, info tip, menus, image input, and atomic file writing. |
 
 Presentation descriptors are attached to each generator or chat client, not
 passed into portable services. To add another embedding model, register its

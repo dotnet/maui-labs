@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:viewModels="clr-namespace:AIExtensions.Sample.ChatPlayground.Features.Chat.ViewModels"
+             xmlns:views="clr-namespace:AIExtensions.Sample.ChatPlayground.Features.Chat.Views"
+             x:Class="AIExtensions.Sample.ChatPlayground.Features.Chat.Views.ChatArea"
+             x:DataType="viewModels:ChatAreaViewModel">
+    <Grid>
+        <Grid>
+            <CollectionView x:Name="MessagesView"
+                            ItemsSource="{Binding Messages}"
+                            ItemSizingStrategy="MeasureAllItems"
+                            ItemsUpdatingScrollMode="KeepLastItemInView"
+                            AutomationId="ChatMessages">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="viewModels:ChatMessageViewModel">
+                        <views:MessageBubble Margin="4,6"
+                                             Padding="12"
+                                             Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}"
+                                             StrokeShape="RoundRectangle 12"
+                                             HorizontalOptions="Start"
+                                             BackgroundColor="{AppThemeBinding Light={StaticResource AssistantBubble}, Dark={StaticResource AssistantBubbleDark}}">
+                            <Border.Triggers>
+                                <DataTrigger TargetType="Border" Binding="{Binding IsUser}" Value="True">
+                                    <Setter Property="HorizontalOptions" Value="End" />
+                                    <Setter Property="BackgroundColor"
+                                            Value="{AppThemeBinding Light={StaticResource UserBubble}, Dark={StaticResource UserBubbleDark}}" />
+                                </DataTrigger>
+                                <DataTrigger TargetType="Border" Binding="{Binding IsError}" Value="True">
+                                    <Setter Property="BackgroundColor"
+                                            Value="{AppThemeBinding Light={StaticResource ErrorBubble}, Dark={StaticResource ErrorBubbleDark}}" />
+                                </DataTrigger>
+                                <DataTrigger TargetType="Border" Binding="{Binding IsSystem}" Value="True">
+                                    <Setter Property="HorizontalOptions" Value="Center" />
+                                    <Setter Property="BackgroundColor"
+                                            Value="{AppThemeBinding Light={StaticResource SystemBubble}, Dark={StaticResource SystemBubbleDark}}" />
+                                </DataTrigger>
+                                <DataTrigger TargetType="Border" Binding="{Binding IsTool}" Value="True">
+                                    <Setter Property="BackgroundColor"
+                                            Value="{AppThemeBinding Light={StaticResource ToolBubble}, Dark={StaticResource ToolBubbleDark}}" />
+                                </DataTrigger>
+                            </Border.Triggers>
+                            <VerticalStackLayout Spacing="6">
+                                <Label Text="{Binding Label}" FontAttributes="Bold" FontSize="11"
+                                       Style="{StaticResource MutedLabel}" />
+                                <Label Text="{Binding Text}" LineBreakMode="WordWrap" />
+                                <Image Source="{Binding ImageSource}"
+                                       IsVisible="{Binding HasImage}"
+                                       WidthRequest="220"
+                                       MaximumHeightRequest="240"
+                                       Aspect="AspectFit"
+                                       HorizontalOptions="End"
+                                       AutomationId="MessageImage" />
+                                <Label Text="{Binding DetailText}" IsVisible="{Binding HasDetails}"
+                                       FontSize="12" LineBreakMode="WordWrap" />
+                            </VerticalStackLayout>
+                        </views:MessageBubble>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+            <VerticalStackLayout IsVisible="{Binding IsEmpty}"
+                                 Padding="28"
+                                 HorizontalOptions="Center"
+                                 VerticalOptions="Center">
+                <Label Text="{Binding EmptyTitle}" FontSize="18" HorizontalTextAlignment="Center" />
+                <Label Text="{Binding EmptySubtitle}" Style="{StaticResource MutedLabel}"
+                       HorizontalTextAlignment="Center" />
+            </VerticalStackLayout>
+        </Grid>
+
+    </Grid>
+</ContentView>
