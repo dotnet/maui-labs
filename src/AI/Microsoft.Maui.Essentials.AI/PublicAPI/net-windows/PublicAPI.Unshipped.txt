@@ -1,1 +1,12 @@
 ﻿#nullable enable
+[MAUIAI0001]Microsoft.Extensions.AI.WindowsAIExtensions
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.WindowsAIChatClient
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.WindowsAIChatClient.GetResponseAsync(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! chatMessages, Microsoft.Extensions.AI.ChatOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.ChatResponse!>!
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.WindowsAIChatClient.GetStreamingResponseAsync(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! chatMessages, Microsoft.Extensions.AI.ChatOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.WindowsAIChatClient.WindowsAIChatClient() -> void
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.WindowsAIChatClient.WindowsAIChatClient(Microsoft.Windows.AI.Text.LanguageModel! model) -> void
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.WindowsAIImageGenerator
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.WindowsAIImageGenerator.GenerateAsync(Microsoft.Extensions.AI.ImageGenerationRequest! request, Microsoft.Extensions.AI.ImageGenerationOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.ImageGenerationResponse!>!
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.WindowsAIImageGenerator.WindowsAIImageGenerator() -> void
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.WindowsAIImageGenerator.WindowsAIImageGenerator(Microsoft.Windows.AI.Imaging.ImageGenerator! generator) -> void
+[MAUIAI0001]static Microsoft.Extensions.AI.WindowsAIExtensions.AsIChatClient(this Microsoft.Windows.AI.Text.LanguageModel! model) -> Microsoft.Extensions.AI.IChatClient!

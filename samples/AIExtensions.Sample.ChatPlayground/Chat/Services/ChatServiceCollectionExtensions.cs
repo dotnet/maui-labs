@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OpenAI;
 
-#if IOS || MACCATALYST
+#if IOS || MACCATALYST || WINDOWS
 using System.Runtime.Versioning;
 using Microsoft.Maui.Essentials.AI;
 #endif
@@ -26,6 +26,11 @@ internal static class ChatServiceCollectionExtensions
         services.AddSingleton<ChatViewModel>();
         services.AddTransient<Page, ChatPage>();
 
+#if WINDOWS
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 26100))
+            services.AddSingleton<IChatClient>(CreateWindowsChatClient);
+#endif
+
 #if IOS || MACCATALYST
         if (OperatingSystem.IsIOSVersionAtLeast(26) || OperatingSystem.IsMacCatalystVersionAtLeast(26))
             services.AddSingleton<IChatClient>(CreateAppleChatClient);
@@ -38,6 +43,20 @@ internal static class ChatServiceCollectionExtensions
 
         return services;
     }
+
+#if WINDOWS
+    [SupportedOSPlatform("windows10.0.26100.0")]
+    private static IChatClient CreateWindowsChatClient(IServiceProvider serviceProvider) =>
+        new WindowsAIChatClient()
+            .AsBuilder()
+            .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
+            .UseDescriptor(new ChatClientDescriptor(
+                "windows-ai-chat",
+                "Windows AI",
+                "Windows AI checks model readiness on first use. Tool calling and image input are unavailable."))
+            .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
+            .Build();
+#endif
 
 #if IOS || MACCATALYST
     [SupportedOSPlatform("ios26.0")]
