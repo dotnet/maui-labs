@@ -13,6 +13,21 @@ This sample demonstrates how to integrate Large Language Models (LLMs) into a .N
 - **Conditional Translation**: Automatic translation when non-English output is requested
 - **Cross-Platform**: Runs on iOS, Android, Windows, and macOS
 
+On Windows, the Windows AI language model supports basic chat and structured JSON, and the on-device
+image generator is registered separately. The public Windows language-model API
+does not support function calling: the chat screen does not offer landmark or
+weather tools, and the tool-dependent itinerary workflow is not available with
+the native client. Requests that supply tools report an unsupported-operation error.
+To try the experimental structured-JSON tool adapter on Windows, set
+`AI:EnablePhiToolCalling` to `true` in user secrets. This enables function
+invocation for chat and the itinerary clients, along with on-device image
+generation in chat. Auto tool selection is not reliable: even "hello" has
+triggered unrelated date, calculator, and image calls. Leave the flag unset
+to keep native chat and the separately registered image generator unchanged.
+Windows semantic search uses the OS AppContentIndexer; unlike the chat and image
+models, it does not expose embeddings to the app. This Windows sample requires a
+packaged MSIX with the `systemAIModels` capability and Windows 11 24H2 or later.
+
 ## Setup
 
 To run this sample, you need to configure Azure OpenAI credentials using user secrets.

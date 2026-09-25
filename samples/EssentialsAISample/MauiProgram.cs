@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using EssentialsAISample.AI;
 using EssentialsAISample.Pages;
 using EssentialsAISample.Services;
@@ -24,6 +24,7 @@ public static class MauiProgram
 		var builder = MauiApp.CreateBuilder();
 
 		builder.Configuration.AddUserSecrets();
+		builder.Services.AddSingleton<IConfiguration>(builder.Configuration);
 
 		builder.UseMauiApp<App>();
 
@@ -41,6 +42,8 @@ public static class MauiProgram
 		// Register AI agents and workflow
 #if IOS || MACCATALYST
 		builder.AddAppleIntelligenceServices();
+#elif WINDOWS
+		builder.AddWindowsAIServices();
 #else
 		builder.AddOpenAIServices();
 #endif
@@ -64,9 +67,12 @@ public static class MauiProgram
 		builder.Services.AddHttpClient<WeatherService>();
 		builder.Services.AddSingleton<ChatService>();
 
-		// Semantic search — uses whatever IEmbeddingGenerator is registered (Apple NL or OpenAI)
+		// Semantic search — uses whatever IEmbeddingGenerator is registered (Apple NL or OpenAI).
+		// On Windows, AddWindowsAIServices registers AppContentIndexerSearchService instead.
+#if !WINDOWS
 		builder.Services.AddSingleton<ISemanticSearchService>(sp =>
 			new EmbeddingSearchService(sp.GetRequiredService<IEmbeddingGenerator<string, Embedding<float>>>()));
+#endif
 
 		// Configure Logging
 		builder.Services.AddLogging();
@@ -151,6 +157,57 @@ public static class MauiProgram
 		// but this line is kept in case the common registration is removed in the future)
 
 		return builder;
+	}
+#pragma warning restore CA1416
+#endif
+
+#if WINDOWS
+#pragma warning disable CA1416 // Validate platform compatibility - this sample requires Windows 10.0.26100.0+
+	private static MauiAppBuilder AddWindowsAIServices(this MauiAppBuilder builder)
+	{
+		var setting = builder.Configuration["AI:EnablePhiToolCalling"];
+		var enableToolCalling = false;
+		if (setting is not null && !bool.TryParse(setting, out enableToolCalling))
+			throw new InvalidOperationException("AI:EnablePhiToolCalling must be true or false.");
+
+		// Register the native Windows AI language client.
+		builder.Services.AddSingleton<WindowsAIChatClient>();
+
+		// Semantic search via the OS AppContentIndexer (embedding + chunking handled by Windows)
+		builder.Services.AddSingleton<ISemanticSearchService, AppContentIndexerSearchService>();
+
+		// On-device image generation (text to image, image to image, and inpainting)
+		builder.Services.AddSingleton<IImageGenerator, WindowsAIImageGenerator>();
+
+		// Register the Windows AI client as IChatClient to allow direct use
+		builder.Services.AddSingleton<IChatClient>(sp =>
+			CreateWindowsAIChatClient(sp, enableToolCalling));
+
+		// Register the Agent Framework wrapper as "local-model"
+		builder.Services.AddKeyedSingleton<IChatClient>("local-model", (sp, _) =>
+			CreateWindowsAIChatClient(sp, enableToolCalling));
+
+		// Register "cloud-model" with buffering
+		builder.Services.AddKeyedSingleton<IChatClient>("cloud-model", (sp, _) =>
+			CreateWindowsAIChatClient(sp, enableToolCalling, buffered: true));
+
+		return builder;
+	}
+
+	private static IChatClient CreateWindowsAIChatClient(IServiceProvider services, bool enableToolCalling, bool buffered = false)
+	{
+		var client = services.GetRequiredService<WindowsAIChatClient>()
+			.AsBuilder();
+		if (enableToolCalling)
+		{
+			client.UseImageGeneration(services.GetRequiredService<IImageGenerator>())
+				.UseFunctionInvocation()
+				.Use(inner => new WindowsAIToolCallingClient(inner));
+		}
+		if (buffered)
+			client.Use(inner => new BufferedChatClient(inner));
+
+		return client.UseLogging(services.GetRequiredService<ILoggerFactory>()).Build();
 	}
 #pragma warning restore CA1416
 #endif
