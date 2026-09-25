@@ -13,12 +13,6 @@ This sample demonstrates how to integrate Large Language Models (LLMs) into a .N
 - **Conditional Translation**: Automatic translation when non-English output is requested
 - **Cross-Platform**: Runs on iOS, Android, Windows, and macOS
 
-On Windows, Phi Silica supports basic chat and structured JSON, and the on-device
-image generator is registered separately. The public Windows language-model API
-does not support function calling: the chat screen does not offer landmark or
-weather tools, and the tool-dependent itinerary workflow is not available with
-Phi Silica. Requests that supply tools report an unsupported-operation error.
-
 ## Setup
 
 To run this sample, you need to configure Azure OpenAI credentials using user secrets.

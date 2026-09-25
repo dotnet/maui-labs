@@ -43,9 +43,10 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
-  <!-- Windows Phi Silica: Copilot Runtime WinRT AI APIs -->
+  <!-- Windows AI WinRT APIs -->
   <ItemGroup Condition=" $(TargetFramework.Contains('-windows')) ">
-    <PackageReference Include="Microsoft.WindowsAppSDK" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.AI" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" />
   </ItemGroup>
   <!-- Exclude Apple-only files from non-Apple TFMs (including net10.0 base) -->
   <ItemGroup Condition="!$(TargetFramework.Contains('-ios')) AND !$(TargetFramework.Contains('-maccatalyst')) AND !$(TargetFramework.Contains('-macos'))">

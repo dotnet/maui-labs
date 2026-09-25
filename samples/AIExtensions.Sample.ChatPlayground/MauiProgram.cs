@@ -20,6 +20,7 @@ using OpenAI;
 
 #if WINDOWS
 using System.Runtime.Versioning;
+using AIExtensions.Sample.ChatPlayground.Platforms.Windows;
 #endif
 #if IOS || MACCATALYST || WINDOWS
 using Microsoft.Maui.Essentials.AI;
@@ -31,7 +32,7 @@ namespace AIExtensions.Sample.ChatPlayground;
 public static class MauiProgram
 {
 #if WINDOWS
-    private const string WindowsImageGeneratorId = "windows/phi-silica";
+    private const string WindowsImageGeneratorId = "windows/phi-silica"; // Preserve saved provider selections.
 #endif
 
     /// <summary>Creates the MAUI application.</summary>
@@ -83,7 +84,19 @@ public static class MauiProgram
     {
 #if WINDOWS
         if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 26100))
-            services.AddSingleton<IChatClient>(CreateWindowsChatClient);
+        {
+            var setting = configuration["AI:EnableWindowsImageDescriptions"];
+            var enableImageDescriptions = false;
+            if (setting is not null && !bool.TryParse(setting, out enableImageDescriptions))
+                throw new InvalidOperationException("AI:EnableWindowsImageDescriptions must be true or false.");
+            if (enableImageDescriptions)
+                services.AddSingleton<WindowsAIImageDescriber>();
+
+            services.AddSingleton<IChatClient>(provider =>
+                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 26100)
+                    ? CreateWindowsChatClient(provider, enableImageDescriptions)
+                    : throw new PlatformNotSupportedException("Windows AI requires Windows 11 24H2 or later."));
+        }
 #endif
 #if IOS || MACCATALYST
         if (OperatingSystem.IsIOSVersionAtLeast(26) || OperatingSystem.IsMacCatalystVersionAtLeast(26))
@@ -167,10 +180,10 @@ public static class MauiProgram
         if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 26100))
             services.AddSingleton<IImageGenerator>(_ => new DescribedImageGenerator(
                 () => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 26100)
-                    ? new PhiSilicaImageGenerator()
-                    : throw new PlatformNotSupportedException("Windows Copilot Runtime requires Windows 11 24H2 or later."),
+                    ? new WindowsAIImageGenerator()
+                    : throw new PlatformNotSupportedException("Windows AI requires Windows 11 24H2 or later."),
                 new ImageGeneratorDescriptor(
-                    WindowsImageGeneratorId, "Windows Copilot Runtime",
+                    WindowsImageGeneratorId, "Windows AI",
                     "Generates or edits images on this device. The first request checks whether the Windows image model is ready.",
                     SupportsEdits: true)));
 #pragma warning restore MEAI001
@@ -239,17 +252,25 @@ public static class MauiProgram
     }
 #if WINDOWS
     [SupportedOSPlatform("windows10.0.26100.0")]
-    private static IChatClient CreateWindowsChatClient(IServiceProvider services) =>
-        new PhiSilicaChatClient()
+    private static IChatClient CreateWindowsChatClient(IServiceProvider services, bool enableImageDescriptions)
+    {
+        var builder = new WindowsAIChatClient()
             .AsBuilder()
             .UseRecording(services.GetRequiredService<IChatRecordingSession>())
             .UseDescriptor(new ChatClientDescriptor(
-                "Phi Silica",
-                "Windows Copilot Runtime is supported on this OS. The first request checks model readiness. Tool calling is not available.",
-                SupportsImageInput: true,
-                SupportsToolCalling: false))
-            .UseLogging(services.GetRequiredService<ILoggerFactory>())
-            .Build();
+                "Windows AI",
+                "Windows AI checks model readiness on first use. Tool calling and direct image input are unavailable." +
+                    (enableImageDescriptions
+                        ? " Image attachments are described on-device before the text-only model receives their captions; it does not see the image alongside your question."
+                        : " Set AI:EnableWindowsImageDescriptions=true to enable on-device image captioning in this playground."),
+                SupportsImageInput: enableImageDescriptions,
+                SupportsToolCalling: false));
+
+        if (enableImageDescriptions)
+            builder.UseImageDescriptions(services.GetRequiredService<WindowsAIImageDescriber>().DescribeAsync);
+
+        return builder.UseLogging(services.GetRequiredService<ILoggerFactory>()).Build();
+    }
 #endif
 
 #if IOS || MACCATALYST

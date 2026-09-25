@@ -5,12 +5,12 @@ using Xunit;
 
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 
-public class PhiSilicaImageGeneratorTests
+public class WindowsAIImageGeneratorTests
 {
 	[Fact]
 	public async Task GenerateAsync_CancelledBeforeSetup_DoesNotStartModel()
 	{
-		using var generator = new PhiSilicaImageGenerator();
+		using var generator = new WindowsAIImageGenerator();
 		using var cancellation = new CancellationTokenSource();
 		cancellation.Cancel();
 

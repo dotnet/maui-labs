@@ -26,7 +26,7 @@ namespace Microsoft.Maui.Essentials.AI;
 /// </list>
 /// </remarks>
 [SupportedOSPlatform("windows10.0.26100.0")]
-public sealed class PhiSilicaImageGenerator : IImageGenerator
+public sealed class WindowsAIImageGenerator : IImageGenerator
 {
 	/// <summary>The provider name for this image generator.</summary>
 	private const string ProviderName = "windows";
@@ -44,16 +44,16 @@ public sealed class PhiSilicaImageGenerator : IImageGenerator
 	private ImageGeneratorMetadata? _metadata;
 
 	/// <summary>
-	/// Initializes a new instance of the <see cref="PhiSilicaImageGenerator"/> class.
+	/// Initializes a new instance of the <see cref="WindowsAIImageGenerator"/> class.
 	/// </summary>
-	public PhiSilicaImageGenerator()
+	public WindowsAIImageGenerator()
 	{
-		_generatorTask = new(PhiSilicaModelFactory.CreateImageGeneratorAsync);
+		_generatorTask = new(WindowsAIModelFactory.CreateImageGeneratorAsync);
 		_ownsGenerator = true;
 	}
 
 	/// <summary>
-	/// Initializes a new instance of the <see cref="PhiSilicaImageGenerator"/> class with the
+	/// Initializes a new instance of the <see cref="WindowsAIImageGenerator"/> class with the
 	/// specified <see cref="WindowsImageGenerator"/>.
 	/// </summary>
 	/// <param name="generator">The <see cref="WindowsImageGenerator"/> to use.</param>
@@ -61,7 +61,7 @@ public sealed class PhiSilicaImageGenerator : IImageGenerator
 	/// When using this constructor, the caller remains responsible for disposing the generator.
 	/// </remarks>
 	/// <exception cref="ArgumentNullException">Thrown when <paramref name="generator"/> is <see langword="null"/>.</exception>
-	public PhiSilicaImageGenerator(WindowsImageGenerator generator)
+	public WindowsAIImageGenerator(WindowsImageGenerator generator)
 	{
 		ArgumentNullException.ThrowIfNull(generator);
 
@@ -88,7 +88,7 @@ public sealed class PhiSilicaImageGenerator : IImageGenerator
 
 		try
 		{
-			var mediaType = options?.MediaType ?? PhiSilicaImageBuffers.DefaultMediaType;
+			var mediaType = options?.MediaType ?? WindowsAIImageBuffers.DefaultMediaType;
 			var count = options?.Count ?? 1;
 			var contents = new List<AIContent>(count);
 
@@ -103,7 +103,7 @@ public sealed class PhiSilicaImageGenerator : IImageGenerator
 					throw new InvalidOperationException($"Image generation failed: {result.Status}", result.ExtendedError);
 
 				using var image = result.Image;
-				var bytes = await PhiSilicaImageBuffers.EncodeAsync(image, mediaType).ConfigureAwait(false);
+				var bytes = await WindowsAIImageBuffers.EncodeAsync(image, mediaType).ConfigureAwait(false);
 
 				contents.Add(new DataContent(bytes, mediaType));
 			}
@@ -184,7 +184,7 @@ public sealed class PhiSilicaImageGenerator : IImageGenerator
 					throw new NotSupportedException(
 						$"Only {nameof(DataContent)} images are supported. Unsupported content: {content.GetType().Name}.");
 
-				buffers.Add(await PhiSilicaImageBuffers.DecodeAsync(data.Data).ConfigureAwait(false));
+				buffers.Add(await WindowsAIImageBuffers.DecodeAsync(data.Data).ConfigureAwait(false));
 			}
 
 			return buffers;

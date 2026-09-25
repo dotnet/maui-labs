@@ -1,7 +1,9 @@
-# Windows Copilot Runtime (Phi Silica) in Microsoft.Maui.Essentials.AI
+# Windows AI APIs in Microsoft.Maui.Essentials.AI
 
-How the Windows on-device AI models are mapped onto the `Microsoft.Extensions.AI` abstractions,
-and which parts of the Windows App SDK surface are used to do it.
+The Windows AI API family (`Microsoft.Windows.AI.*`) is part of Microsoft Foundry on Windows.
+`LanguageModel` selects a model provided by the OS; its current implementation may use Phi Silica,
+but this is not a model-selection API or a guarantee about future models. The image generator and
+image describer are separate models, not Phi Silica.
 
 ## Windows App SDK version
 
@@ -11,16 +13,15 @@ The Windows targets pin `Microsoft.WindowsAppSDK` to **2.4.1-experimental**
 | | 2.5.1 (stable) | 2.4.1-experimental (used here) |
 |---|---|---|
 | `Microsoft.WindowsAppSDK.AI` | 2.5.5 | 2.4.8-experimental |
-| `Microsoft.WindowsAppSDK.Search` | 2.5.5 | 2.4.8-experimental |
 | Structured JSON output | `LanguageModel` | `LanguageModel` |
 | `ImageGenerator` (text to image) | not available | available |
-| `AppContentIndexer` | limited-access features | experimental features |
 
-The umbrella package brings in compatible AI and Search packages; referencing an older Search
-package directly creates an exact-version conflict with its AI dependency. The stable SDK now
-supports structured output, but image generation is still experimental, as are the general
-content-indexing features used by the existing sample. This pin is therefore not suitable for a
-Microsoft Store release. Use nuget.org for local development until these versions are mirrored
+The library references `Microsoft.WindowsAppSDK.AI` directly at **2.4.8-experimental** and its
+Foundation dependency at **2.3.11-experimental**; its package graph does not include Search.
+`Microsoft.WindowsAppSDK` remains centrally pinned to 2.4.1-experimental for Windows MAUI app
+compatibility, and an app that references that umbrella package can still bring in Search. Stable
+2.5.1 provides structured output but not this image-generation API. The experimental pin is not
+suitable for a Microsoft Store release. Local development may require packages not yet mirrored
 to the repository feeds.
 
 See the [Windows App SDK release notes](https://learn.microsoft.com/windows/apps/windows-app-sdk/release-notes/)
@@ -32,7 +33,7 @@ framework package.
 
 ## Structured output
 
-`PhiSilicaChatClient` honours `ChatOptions.ResponseFormat`. When a `ChatResponseFormatJson` carries a
+`WindowsAIChatClient` honors `ChatOptions.ResponseFormat`. When a `ChatResponseFormatJson` carries a
 schema, the request is routed to `LanguageModel.GenerateStructuredJsonResponseAsync`,
 which constrains generation at the runtime level. Nothing is scraped out of free-form text and there
 is no code-fence stripping.
@@ -50,7 +51,7 @@ Requests without a schema continue to use `LanguageModel.GenerateResponseAsync` 
 
 ### Closed schemas
 
-`PhiSilicaChatClient` closes every schema with `additionalProperties: false`, applied recursively,
+`WindowsAIChatClient` closes every schema with `additionalProperties: false`, applied recursively,
 before constraining generation for any structured-output request.
 
 Constrained decoding only forbids what the schema forbids, and schemas generated from a type by
@@ -64,10 +65,11 @@ deserializing the result yields null. Closing the schema also measurably reduced
 ## Tool calling
 
 The public Windows App SDK `LanguageModel` API does not expose function calling. This baseline
-does not emulate it: `PhiSilicaChatClient` rejects nonempty `ChatOptions.Tools` or tool-only
+does not emulate it: `WindowsAIChatClient` rejects nonempty `ChatOptions.Tools` or tool-only
 options with `NotSupportedException`, rather than ignoring them or calling unrelated tools.
-The playground hides tool controls when Phi Silica is selected; Azure and Apple retain their
-own tool support. The experimental constrained-JSON tool adapter is deferred to a separate PR.
+The playground hides tool controls when Windows AI is selected; Azure and Apple retain their
+own tool support. An experimental constrained-JSON tool adapter lives in the separate draft
+[follow-up PR #523](https://github.com/dotnet/maui-labs/pull/523).
 The standalone Images page still invokes the native on-device image generator directly.
 
 ## Context window
@@ -75,11 +77,10 @@ The standalone Images page still invokes the native on-device image generator di
 The context window is shared by the system prompt, the accumulated history and the new prompt, and
 the API does not truncate automatically, so a long conversation can outgrow it.
 
-`PhiSilicaChatClient.GetPromptFitAsync` reports this before a request is sent, wrapping
-`LanguageModel.GetUsablePromptLength`, which returns the character index at which the prompt stops
-fitting. When a request is sent anyway and the model reports `PromptLargerThanContext`, the client
-throws `PhiSilicaContextWindowException` so it can be told apart from an ordinary failure. Recover by
-trimming, summarizing the history, or starting a new conversation.
+When Windows reports `PromptLargerThanContext`, the client throws `InvalidOperationException` with
+the underlying error and actionable instructions to shorten the history or start a new chat.
+The underlying WinRT `LanguageModel.GetUsablePromptLength` remains available to apps that need
+their own prompt-fitting policy; the `IChatClient` wrapper does not expose another fitting API.
 
 ## Streaming
 
@@ -89,7 +90,7 @@ model.
 
 ## Image generation
 
-`PhiSilicaImageGenerator` implements `IImageGenerator` over `Microsoft.Windows.AI.Imaging.ImageGenerator`.
+`WindowsAIImageGenerator` implements `IImageGenerator` over `Microsoft.Windows.AI.Imaging.ImageGenerator`.
 The number of images in `ImageGenerationRequest.OriginalImages` selects the operation:
 
 | Images | Windows API | Behaviour |
@@ -104,39 +105,40 @@ When several images are requested the seed is offset per image so the results di
 `ImageGenerationOptions.ImageSize` and `ImageGenerationResponseFormat.Uri` throw — the model chooses
 its own output size, and generation is on-device so there is no hosted URI to return.
 
-Both EssentialsAISample and the chat playground register the generator for direct
-`IImageGenerator` use; the playground's standalone **Images** page invokes it. Phi Silica Chat
-does not offer an image-generation tool, since the native language model cannot call tools.
+The chat playground registers the generator for direct `IImageGenerator` use; its standalone
+**Images** page invokes it. Windows AI Chat does not offer an image-generation tool, since the
+native language model cannot call tools.
 
 The image model is prepared on first use, not when the chat client is created. Cancelling a request
 while Windows prepares the model stops waiting for it; Windows may continue preparing the model in
 the background. An unavailable model reports its readiness failure rather than a generated image.
-When resuming an older chat containing image-generation tool activity, Phi Silica preserves that
+When resuming an older chat containing image-generation tool activity, Windows AI preserves that
 activity as text in its prompt; the text-only model cannot inspect generated pixels without a
 separate image-description request.
 
 ## Image input
 
-Phi Silica is text-only, so images cannot be passed to it the way a cloud multimodal model accepts
-them. Instead `PhiSilicaChatClient` runs any image `DataContent` through the on-device
-`ImageDescriptionGenerator` and splices the resulting caption into the prompt in place of the image:
+The native `LanguageModel` does not accept images. `WindowsAIChatClient` rejects image `DataContent`
+instead of silently substituting captions for true multimodal inference. The chat playground has
+an **opt-in sample-only** decorator: configure `AI:EnableWindowsImageDescriptions=true` to use
+`ImageDescriptionGenerator` to replace image inputs with text captions before calling the chat
+client. Its recording wrapper preserves the original attached image:
 
 ```text
 User: [Image: A photograph of a bridge over a river at dusk...]
 User: What time of day was this taken?
 ```
 
-The description model is created lazily, only when a request actually carries an image. Everything
-runs locally; nothing is uploaded.
+The description model is created lazily, only when a request carries an image. The language model
+sees the caption and question as text, **not the pixels and question jointly**. Both models run
+on-device. With the option off (the default), the playground hides image attachments for Windows
+AI Chat; Azure's image-input behavior is unaffected.
 
 ## Semantic search
 
-`AppContentIndexerSearchService` in EssentialsAISample implements `ISemanticSearchService` on
-`Microsoft.Windows.Search.AppContentIndex.AppContentIndexer`. The OS owns embedding, chunking and
-ranking, and the index is per-app and persistent.
-
-This is not exposed as an `IEmbeddingGenerator` because the indexer never returns vectors — it is a
-closed hybrid semantic and lexical index.
+`AppContentIndexer` (Windows Search) is not in this baseline; its existing sample integration is
+deferred to #523. The indexer does not expose vectors, so it cannot implement
+`IEmbeddingGenerator<string, Embedding<float>>`.
 
 `LanguageModel.GenerateEmbeddingVectors` is **not** a substitute. It returns a list of
 `EmbeddingVector` per prompt whose counterpart is `GenerateResponseFromEmbeddingsAsync`; these are
@@ -145,7 +147,7 @@ search.
 
 ## Packaging requirements
 
-Phi Silica requires the `systemAIModels` and `runFullTrust` capabilities in an MSIX package.
+Windows AI models require the `systemAIModels` and `runFullTrust` capabilities in an MSIX package.
 The playground manifest must target both `Windows.Universal` and `Windows.Desktop`:
 targeting only `Windows.Desktop` caused `LanguageModel.GetReadyState()` to return
 `CapabilityMissing` on a device where the test app (targeting both families) could generate
@@ -161,7 +163,21 @@ stays at `19041` for build compatibility.
 
 ## Not available
 
-- **Model identity.** `LanguageModel` exposes no name, version or capability metadata, so behaviour
+- **Model identity.** `LanguageModel` exposes no name, version or capability metadata, so behavior
   cannot be varied by model.
 - **Semantic embeddings.** No `IEmbeddingGenerator` implementation; see above.
 - **Native tool calling.** The published `LanguageModel` API has no function-call interface.
+- **Direct multimodal chat.** The public `LanguageModel` has no image-input overload.
+
+## Other Microsoft.Extensions.AI abstractions
+
+The installed `Microsoft.Extensions.AI.Abstractions` **10.5.2** also includes
+`ISpeechToTextClient`, `ITextToSpeechClient`, `IRealtimeClient`, `IHostedFileClient`, and
+`IChatReducer` in addition to chat, image generation, and embeddings. Windows AI
+[SpeechRecognitionModel](https://learn.microsoft.com/windows/ai/apis/speech-recognition) is a
+plausible basis for a future speech-to-text adapter, with its own model download, consent, audio,
+and streaming requirements. Windows also has separate speech-synthesis APIs, but neither speech
+interface is wired here. `IRealtimeClient` describes a duplex session rather than a one-way
+language-model stream; `IHostedFileClient` is for hosted files; `IChatReducer` is middleware for
+history reduction. None is an equivalent for direct multimodal chat, semantic vectors, or native
+tool calling.

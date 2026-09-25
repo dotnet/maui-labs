@@ -4,23 +4,22 @@ using System.Runtime.Versioning;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.AI;
 using Microsoft.Windows.AI.ContentSafety;
-using Microsoft.Windows.AI.Imaging;
 using Microsoft.Windows.AI.Text;
 using Windows.Foundation;
 
 namespace Microsoft.Maui.Essentials.AI;
 
 /// <summary>
-/// Provides an <see cref="IChatClient"/> implementation based on native Windows Copilot Runtime (Phi Silica)
+/// Provides an <see cref="IChatClient"/> implementation backed by the Windows AI language model.
 /// </summary>
 [SupportedOSPlatform("windows10.0.26100.0")]
-public sealed class PhiSilicaChatClient : IChatClient
+public sealed class WindowsAIChatClient : IChatClient
 {
 	/// <summary>The provider name for this chat client.</summary>
 	private const string ProviderName = "windows";
 
 	/// <summary>The default model identifier.</summary>
-	private const string DefaultModelId = "phi-silica";
+	private const string DefaultModelId = "windows-ai-language-model";
 
 	/// <summary>Lazily-initialized task that creates the underlying <see cref="LanguageModel"/>.</summary>
 	private Task<LanguageModel> _modelTask;
@@ -29,30 +28,24 @@ public sealed class PhiSilicaChatClient : IChatClient
 	private readonly bool _ownsModel;
 
 	/// <summary>
-	/// Lazily-initialized on-device image description model, created only when a request actually
-	/// carries image content.
-	/// </summary>
-	private Task<ImageDescriptionGenerator>? _imageDescriptionTask;
-
-	/// <summary>
 	/// Lazily-initialized metadata describing the implementation.
 	/// </summary>
 	private ChatClientMetadata? _metadata;
 
 	/// <summary>
-	/// Initializes a new instance of the <see cref="PhiSilicaChatClient"/> class.
+	/// Initializes a new instance of the <see cref="WindowsAIChatClient"/> class.
 	/// </summary>
 	/// <remarks>
 	/// The client will create a <see cref="LanguageModel"/> and reuse it for all requests.
 	/// </remarks>
-	public PhiSilicaChatClient()
+	public WindowsAIChatClient()
 	{
-		_modelTask = PhiSilicaModelFactory.CreateModelAsync();
+		_modelTask = WindowsAIModelFactory.CreateModelAsync();
 		_ownsModel = true;
 	}
 
 	/// <summary>
-	/// Initializes a new instance of the <see cref="PhiSilicaChatClient"/> class
+	/// Initializes a new instance of the <see cref="WindowsAIChatClient"/> class
 	/// with the specified <see cref="LanguageModel"/>.
 	/// </summary>
 	/// <param name="model">The <see cref="LanguageModel"/> to use for chat interactions.</param>
@@ -61,7 +54,7 @@ public sealed class PhiSilicaChatClient : IChatClient
 	/// and will not dispose it. The caller is responsible for disposing the model.
 	/// </remarks>
 	/// <exception cref="ArgumentNullException">Thrown when <paramref name="model"/> is <see langword="null"/>.</exception>
-	public PhiSilicaChatClient(LanguageModel model)
+	public WindowsAIChatClient(LanguageModel model)
 	{
 		ArgumentNullException.ThrowIfNull(model);
 		_modelTask = Task.FromResult(model);
@@ -86,7 +79,7 @@ public sealed class PhiSilicaChatClient : IChatClient
 
 		var (systemPrompt, history) = NormalizeChatMessages(chatMessages, options);
 
-		var prompt = await ConvertToPromptAsync(history);
+		var prompt = ConvertToPrompt(history);
 		if (history.Count == 0 && string.IsNullOrEmpty(systemPrompt))
 			throw new ArgumentException("At least one message with content is required.", nameof(chatMessages));
 
@@ -119,8 +112,9 @@ public sealed class PhiSilicaChatClient : IChatClient
 				{
 					GenerateStructuredJsonResponseStatus.Complete => result.Text,
 					GenerateStructuredJsonResponseStatus.PromptLargerThanContext =>
-						throw new PhiSilicaContextWindowException(
-							"The prompt is larger than the model's context window.", result.ExtendedError),
+						throw new InvalidOperationException(
+							"The prompt is larger than the Windows AI language model's context window. Shorten the conversation or start a new one.",
+							result.ExtendedError),
 					_ => throw new InvalidOperationException(
 						$"Structured response generation failed: {result.Status}", result.ExtendedError)
 				});
@@ -141,8 +135,9 @@ public sealed class PhiSilicaChatClient : IChatClient
 				// completing quietly with no content.
 				WireUp(operation, handler, cancellationToken, static result =>
 					result.Status is LanguageModelResponseStatus.PromptLargerThanContext
-						? throw new PhiSilicaContextWindowException(
-							"The prompt is larger than the model's context window.", result.ExtendedError)
+						? throw new InvalidOperationException(
+							"The prompt is larger than the Windows AI language model's context window. Shorten the conversation or start a new one.",
+							result.ExtendedError)
 						: result.Text);
 
 				cancel = operation.Cancel;
@@ -282,45 +277,6 @@ public sealed class PhiSilicaChatClient : IChatClient
 		}
 	}
 
-	/// <summary>
-	/// Determines how much of a conversation fits in the model's context window.
-	/// </summary>
-	/// <param name="chatMessages">The conversation to measure.</param>
-	/// <param name="options">The options that would be used for the request.</param>
-	/// <param name="cancellationToken">A token to cancel the operation.</param>
-	/// <returns>
-	/// The number of characters of the flattened prompt that fit. When
-	/// <see cref="PhiSilicaPromptFit.Fits"/> is <see langword="true"/> the whole conversation fits;
-	/// otherwise it must be trimmed, summarized, or restarted before it can be sent.
-	/// </returns>
-	/// <remarks>
-	/// The context window is shared by the system prompt, the accumulated history and the new
-	/// prompt, and the API does not truncate automatically, so long conversations otherwise fail
-	/// with <see cref="PhiSilicaContextWindowException"/>.
-	/// </remarks>
-	public async Task<PhiSilicaPromptFit> GetPromptFitAsync(
-		IEnumerable<ChatMessage> chatMessages,
-		ChatOptions? options = null,
-		CancellationToken cancellationToken = default)
-	{
-		ArgumentNullException.ThrowIfNull(chatMessages);
-		ValidateOptions(options);
-
-		var model = await _modelTask;
-
-		var (systemPrompt, history) = NormalizeChatMessages(chatMessages, options);
-		var prompt = await ConvertToPromptAsync(history);
-
-		cancellationToken.ThrowIfCancellationRequested();
-
-		if (string.IsNullOrEmpty(systemPrompt))
-			return new PhiSilicaPromptFit(prompt.Length, (long)model.GetUsablePromptLength(prompt));
-
-		using var context = model.CreateContext(systemPrompt, new ContentFilterOptions());
-
-		return new PhiSilicaPromptFit(prompt.Length, (long)model.GetUsablePromptLength(context, prompt));
-	}
-
 	/// <inheritdoc />
 	object? IChatClient.GetService(Type serviceType, object? serviceKey)
 	{
@@ -349,9 +305,6 @@ public sealed class PhiSilicaChatClient : IChatClient
 	/// <inheritdoc />
 	void IDisposable.Dispose()
 	{
-		if (_imageDescriptionTask is { } imageDescriptionTask)
-			DisposeWhenReady(imageDescriptionTask);
-
 		if (_ownsModel)
 			DisposeWhenReady(_modelTask);
 	}
@@ -367,30 +320,8 @@ public sealed class PhiSilicaChatClient : IChatClient
 				TaskContinuationOptions.ExecuteSynchronously);
 	}
 
-	/// <summary>
-	/// Produces a text description of an image using the on-device Windows image description model.
-	/// </summary>
-	/// <param name="image">The image content to describe.</param>
-	/// <returns>A caption describing the image.</returns>
-	/// <exception cref="InvalidOperationException">Thrown when the image could not be described.</exception>
-	private async Task<string> DescribeImageAsync(DataContent image)
-	{
-		var generator = await (_imageDescriptionTask ??= PhiSilicaModelFactory.CreateImageDescriptionGeneratorAsync());
-
-		using var buffer = await PhiSilicaImageBuffers.DecodeAsync(image.Data);
-
-		var result = await generator.DescribeAsync(
-			buffer,
-			ImageDescriptionKind.DetailedDescription,
-			new ContentFilterOptions());
-
-		if (result.Status is not ImageDescriptionResultStatus.Complete)
-			throw new InvalidOperationException($"Image description failed: {result.Status}");
-
-		return result.Description;
-	}
-
-	private static (string SystemPrompt, List<ChatMessage> History) NormalizeChatMessages(		IEnumerable<ChatMessage> chatMessages,
+	private static (string SystemPrompt, List<ChatMessage> History) NormalizeChatMessages(
+		IEnumerable<ChatMessage> chatMessages,
 		ChatOptions? options = null)
 	{
 		var messages = chatMessages.ToList();
@@ -414,13 +345,7 @@ public sealed class PhiSilicaChatClient : IChatClient
 	/// <summary>
 	/// Flattens the conversation into the single prompt string the language model accepts.
 	/// </summary>
-	/// <remarks>
-	/// Phi Silica is a text-only model, so image content cannot be passed through the way a cloud
-	/// multimodal model would accept it. Instead each image is run through the on-device Windows
-	/// image description model and the resulting caption is spliced into the prompt in place of the
-	/// image. Everything stays local; nothing is uploaded.
-	/// </remarks>
-	private async Task<string> ConvertToPromptAsync(IEnumerable<ChatMessage> history)
+	private static string ConvertToPrompt(IEnumerable<ChatMessage> history)
 	{
 		var promptParts = new List<string>();
 
@@ -442,8 +367,8 @@ public sealed class PhiSilicaChatClient : IChatClient
 				}
 				else if (content is DataContent data && data.HasTopLevelMediaType("image"))
 				{
-					var description = await DescribeImageAsync(data);
-					promptParts.Add($"{rolePrefix}[Image: {description}]");
+					throw new NotSupportedException(
+						"The Windows AI language model accepts text only. Describe images separately before passing them to this client.");
 				}
 				else if (content is FunctionCallContent functionCall)
 				{
@@ -521,9 +446,9 @@ public sealed class PhiSilicaChatClient : IChatClient
 			throw new ArgumentOutOfRangeException(nameof(options), "MaxOutputTokens must be greater than zero.");
 
 		if (options.Tools is { Count: > 0 })
-			throw new NotSupportedException("Phi Silica does not support tool calling through the Windows App SDK.");
+			throw new NotSupportedException("The Windows AI language model does not support tool calling through the Windows App SDK.");
 		if ((options.ToolMode is not null && options.ToolMode != ChatToolMode.Auto &&
 			options.ToolMode != ChatToolMode.None) || options.AllowMultipleToolCalls is not null)
-			throw new NotSupportedException("Phi Silica does not support tool-calling options through the Windows App SDK.");
+			throw new NotSupportedException("The Windows AI language model does not support tool-calling options through the Windows App SDK.");
 	}
 }

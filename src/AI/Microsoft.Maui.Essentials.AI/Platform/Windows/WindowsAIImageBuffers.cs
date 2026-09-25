@@ -10,7 +10,7 @@ namespace Microsoft.Maui.Essentials.AI;
 /// used by the Windows AI imaging APIs.
 /// </summary>
 [SupportedOSPlatform("windows10.0.26100.0")]
-internal static class PhiSilicaImageBuffers
+internal static class WindowsAIImageBuffers
 {
 	/// <summary>The media type used when no other type is requested.</summary>
 	public const string DefaultMediaType = "image/png";

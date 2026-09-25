@@ -4,10 +4,10 @@ using Microsoft.Windows.AI.Text;
 namespace Microsoft.Extensions.AI;
 
 /// <summary>
-/// Provides extension methods for converting Windows Copilot Runtime (Phi Silica) types
+/// Provides extension methods for converting Windows AI types
 /// to Microsoft.Extensions.AI abstractions.
 /// </summary>
-public static class PhiSilicaExtensions
+public static class WindowsAIExtensions
 {
 	/// <summary>
 	/// Wraps an existing <see cref="LanguageModel"/> instance as an
@@ -22,6 +22,6 @@ public static class PhiSilicaExtensions
 	/// <exception cref="ArgumentNullException">Thrown when <paramref name="model"/> is <see langword="null"/>.</exception>
 	public static IChatClient AsIChatClient(this LanguageModel model)
 	{
-		return new PhiSilicaChatClient(model);
+		return new WindowsAIChatClient(model);
 	}
 }

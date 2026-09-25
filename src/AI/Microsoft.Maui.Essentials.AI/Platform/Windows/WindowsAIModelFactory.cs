@@ -5,28 +5,28 @@ using System.Runtime.Versioning;
 using Windows.Foundation;
 
 // CS8305: the Windows AI imaging models (ImageGenerator, ImageDescriptionGenerator) are marked
-// [Experimental] in WinRT metadata. Windows App SDK 2.2.x exposes no stable equivalent.
+// [Experimental] in WinRT metadata. Stable Windows App SDK 2.5 does not expose image generation.
 #pragma warning disable CS8305
 
 namespace Microsoft.Maui.Essentials.AI;
 
 /// <summary>
-/// Factory for creating and ensuring readiness of Windows Copilot Runtime (Phi Silica) <see cref="LanguageModel"/> instances.
+/// Factory for creating and ensuring readiness of Windows AI model instances.
 /// </summary>
 [SupportedOSPlatform("windows10.0.26100.0")]
-internal static class PhiSilicaModelFactory
+internal static class WindowsAIModelFactory
 {
 	/// <summary>
-	/// Creates a <see cref="LanguageModel"/> instance, ensuring the Windows Copilot Runtime (Phi Silica) is ready.
+	/// Creates a <see cref="LanguageModel"/> instance, ensuring the Windows AI language model is ready.
 	/// </summary>
 	/// <returns>A ready-to-use <see cref="LanguageModel"/> instance.</returns>
 	/// <exception cref="NotSupportedException">
-	/// Thrown when Phi Silica is not supported on the current system, disabled by the user, or not ready.
+	/// Thrown when the language model is not supported on the current system, disabled by the user, or not ready.
 	/// </exception>
 	public static async Task<LanguageModel> CreateModelAsync()
 	{
 		await EnsureReadyAsync(
-			"Phi Silica (Windows Copilot Runtime)",
+			"Windows AI language model",
 			LanguageModel.GetReadyState,
 			LanguageModel.EnsureReadyAsync);
 
@@ -48,24 +48,6 @@ internal static class PhiSilicaModelFactory
 			ImageGenerator.EnsureReadyAsync);
 
 		return await ImageGenerator.CreateAsync();
-	}
-
-	/// <summary>
-	/// Creates an <see cref="ImageDescriptionGenerator"/> instance, ensuring the Windows image
-	/// description model is ready.
-	/// </summary>
-	/// <returns>A ready-to-use <see cref="ImageDescriptionGenerator"/> instance.</returns>
-	/// <exception cref="NotSupportedException">
-	/// Thrown when image description is not supported on the current system, disabled by the user, or not ready.
-	/// </exception>
-	public static async Task<ImageDescriptionGenerator> CreateImageDescriptionGeneratorAsync()
-	{
-		await EnsureReadyAsync(
-			"Windows image description",
-			ImageDescriptionGenerator.GetReadyState,
-			ImageDescriptionGenerator.EnsureReadyAsync);
-
-		return await ImageDescriptionGenerator.CreateAsync();
 	}
 
 	/// <summary>

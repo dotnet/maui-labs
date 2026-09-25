@@ -156,17 +156,21 @@ import, restart, autosave, and damage recovery; independent document
 import/index/search/clear, model isolation, invalid vectors, and cancellation;
 and image generation/edit behavior. They run without a device or credentials.
 
-### Windows Copilot Runtime
+### Windows AI APIs
 
-On Windows 11 24H2+ the packaged sample offers **Phi Silica** in Chat and
-**Windows Copilot Runtime** in Images without Azure credentials. The Images page
-uses the local generator directly. Phi Silica Chat does not offer tools, including
+On Windows 11 24H2+ the packaged sample offers **Windows AI** in Chat and
+**Windows AI** in Images without Azure credentials. The Images page
+uses the local generator directly. Windows AI Chat does not offer tools, including
 the image-generation tool; its tool settings are hidden. Azure and Apple retain
-their existing tool capabilities. Direct Phi Silica requests with tools fail
+their existing tool capabilities. Direct Windows AI requests with tools fail
 explicitly rather than silently ignoring them or calling unrelated tools.
-Model readiness is checked on first use; image input in Chat also requires the
-Windows image-description model. An unavailable model or unsupported request
-reports an error rather than silently switching providers. Leave image size at
+Model readiness is checked on first use. Direct image input to the text-only Windows language
+model is unsupported. To allow attachments **in this playground only**, opt into on-device image
+description: `dotnet user-secrets --id 2727d4aa-a3a5-484b-9447-91604761972b set "AI:EnableWindowsImageDescriptions" "true"`.
+This substitutes captions in the request; the model does **not** jointly reason over image pixels
+and the question. With the setting off (the default), the attachment option is hidden for Windows
+AI Chat. An unavailable model or unsupported request reports an error rather than silently
+switching providers. Leave image size at
 **Provider default** for the Windows generator; it does not accept an explicit
 size. The Windows App SDK version used here is experimental.
 
@@ -179,5 +183,5 @@ experimental Windows App SDK runtime:
 dotnet run --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj -f net10.0-windows10.0.19041.0
 ```
 
-See [Phi Silica integration notes](../../docs/ai/PHI-SILICA.md) for native structured
+See [Windows AI integration notes](../../docs/ai/WINDOWS-AI.md) for native structured
 output, streaming, model availability, and other Windows-specific limitations.
