@@ -201,6 +201,18 @@ namespace Comet
 			return view;
 		}
 
+		internal override void ReleaseCachedRow(int index, View content)
+		{
+			foreach (var pair in CurrentViews)
+			{
+				if (pair.Key.section != 0 || pair.Key.row != index || !ReferenceEquals(pair.Value, content))
+					continue;
+				CurrentViews.Remove(pair.Key);
+				content.Dispose();
+				return;
+			}
+		}
+
 		public override void Add(View view) => throw new NotSupportedException("You cannot add a View directly to a Typed CollectionView");
 
 		PropertySubscription<T> _selectedItem;
@@ -264,6 +276,30 @@ namespace Comet
 		public SelectionMode SelectionMode { get; set; } = SelectionMode.Single;
 
 		public ItemSizingStrategy ItemSizingStrategy { get; set; } = ItemSizingStrategy.MeasureAllItems;
+
+		int _retainedItemLimit;
+
+		/// <summary>
+		/// Optional Android vertical-list row-cache budget. Zero retains visited rows
+		/// until reload/disposal. A positive value evicts least-recently-used rows only
+		/// after Compose releases them, so native-retained rows may exceed the budget.
+		/// Evicted templates are recreated; keep persistent row state in the item model.
+		/// Configure before materialization. Other list backends retain their existing policy.
+		/// </summary>
+		public int RetainedItemLimit
+		{
+			get => _retainedItemLimit;
+			set
+			{
+				if (value < 0)
+					throw new ArgumentOutOfRangeException(nameof(value), "A retained item limit cannot be negative.");
+				if (Node is not null && value != _retainedItemLimit)
+					throw new InvalidOperationException("Configure the retained item limit before materializing the list.");
+				_retainedItemLimit = value;
+			}
+		}
+
+		internal virtual void ReleaseCachedRow(int index, View content) { }
 
 		// Infinite scroll support
 		public int RemainingItemsThreshold { get; set; } = 0;

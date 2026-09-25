@@ -86,6 +86,13 @@ public sealed class LazyColumn<T> : ComposableNode
     public PaddingValues? ContentPadding { get; set; }
 
     /// <summary>
+    /// Optional native-content lease acquired before an item renders. The lease is
+    /// released when Compose forgets or abandons that exact content, including prefetch.
+    /// Acquisition must not launch work or mutate Compose state.
+    /// </summary>
+    public Func<T, ComposableNode, IDisposable>? RetainItem { get; set; }
+
+    /// <summary>
     /// When a parent layout (typically <see cref="Scaffold"/>) hands us
     /// a runtime <c>PaddingValues</c>, route it into LazyColumn's own
     /// <c>contentPadding:</c> parameter instead of letting the base
@@ -143,7 +150,11 @@ public sealed class LazyColumn<T> : ComposableNode
                 itemContent: ComposableLambdas.Instantiate4((_, indexBoxed, comp) =>
                 {
                     var i = ((Java.Lang.Integer)indexBoxed!).IntValue();
-                    _itemContent(_items[i]).Render(comp);
+                    var item = _items[i];
+                    var node = _itemContent(item);
+                    if (RetainItem is { } retain)
+                        LazyItemLease.Remember(comp, node, () => retain(item, node));
+                    node.Render(comp);
                 }));
         });
 

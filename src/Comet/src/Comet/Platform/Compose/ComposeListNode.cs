@@ -46,6 +46,11 @@ namespace Comet.Platform.Compose
 		{
 			_list = list;
 			_rowCache = new NativeListRowCache(context);
+			_rowCache.Evicted = (index, content) =>
+			{
+				if (_list is CollectionView collection)
+					collection.ReleaseCachedRow(index, content);
+			};
 		}
 
 		/// <summary>The node was transferred to a new ListView (ordinary re-render or hot reload).
@@ -112,6 +117,7 @@ namespace Comet.Platform.Compose
 			// observers entirely for those flavors instead of watching a detached state
 			// that never changes.
 			bool scrollBridge = !horizontal && gridMin <= 0;
+			_rowCache.Capacity = scrollBridge ? (_list as CollectionView)?.RetainedItemLimit ?? 0 : 0;
 
 			var listState = composer.RememberLazyListState();
 			int count = _list.Sections() > 0 ? _list.Rows(0) : 0;
@@ -359,6 +365,16 @@ namespace Comet.Platform.Compose
 				ContentPadding = contentPadding,
 				SnapToCenter = _list.SnapToCenter,
 			};
+			if (_rowCache.Capacity > 0)
+			{
+				lazy.RetainItem = (index, node) =>
+				{
+					var row = GetRow(index);
+					if (!ReferenceEquals(row.Node, node))
+						throw new System.InvalidOperationException("Native list content changed while acquiring its lease.");
+					return _rowCache.Retain(index, row);
+				};
+			}
 
 			// Position + size the list from its Yoga frame (offset below the top bar, sized to the
 			// remaining height) so it scrolls within its slot rather than laying out at the origin.
