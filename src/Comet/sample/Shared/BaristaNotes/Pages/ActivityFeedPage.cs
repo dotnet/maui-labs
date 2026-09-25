@@ -250,6 +250,7 @@ public sealed class ActivityFeedPage : View
         {
             ViewFor = RenderRow,
             ItemsLayout = ItemsLayout.Vertical(),
+            RetainedItemLimit = 150,
             RemainingItemsThreshold = 5,
             RemainingItemsThresholdReached = () =>
             {
