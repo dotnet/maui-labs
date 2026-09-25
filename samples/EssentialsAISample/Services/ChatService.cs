@@ -3,11 +3,19 @@ using System.Text;
 using System.Text.Json;
 using EssentialsAISample.Models;
 using Microsoft.Extensions.AI;
+#if WINDOWS
+using Microsoft.Maui.Essentials.AI;
+#endif
 
 namespace EssentialsAISample.Services;
 
 public class ChatService
 {
+	const string BasicSystemPrompt =
+		"You are a helpful travel assistant. Tool-based landmark searches, weather lookups and trip planning " +
+		"are unavailable with this on-device model. Answer general questions without claiming to have looked " +
+		"up current information or performed an action.";
+
 	static string SystemPrompt => $"""
 		You are a helpful travel assistant for the .NET MAUI Trip Planner app. You have access to 21 world landmarks across 7 continents and can help users:
 		- Search and discover destinations
@@ -29,6 +37,7 @@ public class ChatService
 	readonly TaggingService _taggingService;
 	readonly IDispatcher _dispatcher;
 	readonly IList<AITool> _tools;
+	readonly bool _supportsToolCalling;
 
 	public event Action<Landmark>? NavigateToTripRequested;
 
@@ -43,6 +52,12 @@ public class ChatService
 		_weatherService = weatherService;
 		_taggingService = taggingService;
 		_dispatcher = dispatcher;
+#if WINDOWS
+		_supportsToolCalling = !OperatingSystem.IsWindowsVersionAtLeast(10, 0, 26100) ||
+			chatClient.GetService<PhiSilicaChatClient>() is null;
+#else
+		_supportsToolCalling = true;
+#endif
 
 		_tools =
 		[
@@ -63,10 +78,11 @@ public class ChatService
 	{
 		// Prepend system prompt without mutating the caller's list
 		IEnumerable<ChatMessage> effectiveMessages = (messages.Count == 0 || messages[0].Role != ChatRole.System)
-			? messages.Prepend(new ChatMessage(ChatRole.System, SystemPrompt))
+			? messages.Prepend(new ChatMessage(ChatRole.System,
+				_supportsToolCalling ? SystemPrompt : BasicSystemPrompt))
 			: messages;
 
-		var options = new ChatOptions { Tools = _tools };
+		var options = new ChatOptions { Tools = _supportsToolCalling ? _tools : null };
 
 		return _toolClient.GetStreamingResponseAsync(effectiveMessages, options, cancellationToken);
 	}

@@ -9,7 +9,8 @@ public sealed record ChatClientDescriptor(
     bool SupportsImageInput,
     bool SupportsReasoningSummary = false,
     bool SupportsImageGeneration = false,
-    bool IsReplay = false);
+    bool IsReplay = false,
+    bool SupportsToolCalling = true);
 
 /// <summary>Exposes the descriptor through the IChatClient service-discovery API.</summary>
 public sealed class DescribedChatClient : DelegatingChatClient

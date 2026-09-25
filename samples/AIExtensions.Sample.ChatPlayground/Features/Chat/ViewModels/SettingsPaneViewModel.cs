@@ -90,11 +90,14 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
     /// <summary>Creates request options using the current settings and supplied real tools.</summary>
     public ChatOptions CreateChatOptions(IList<AITool> tools)
     {
-        if (ToolMode != ChatToolMode.Auto &&
+        var supportsToolCalling = SelectedDescriptor?.SupportsToolCalling == true;
+        if (!supportsToolCalling && tools.Count > 0)
+            throw new NotSupportedException("The selected chat client does not support tool calling.");
+        if (supportsToolCalling && ToolMode != ChatToolMode.Auto &&
             ToolMode != ChatToolMode.None &&
             ToolMode != ChatToolMode.RequireAny)
             throw new ArgumentOutOfRangeException(nameof(ToolMode), "Select a supported tool mode.");
-        if (ToolMode == ChatToolMode.RequireAny && tools.Count == 0)
+        if (supportsToolCalling && ToolMode == ChatToolMode.RequireAny && tools.Count == 0)
             throw new ArgumentException("Require any needs at least one enabled tool.");
 
         var options = new ChatOptions
@@ -108,9 +111,9 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
             PresencePenalty = OptionalFloat(EnablePresencePenalty, PresencePenalty, "Presence penalty"),
             Seed = OptionalLong(EnableSeed, Seed, "Seed"),
             StopSequences = OptionalStopSequences(),
-            Tools = tools,
-            AllowMultipleToolCalls = AllowMultipleToolCalls,
-            ToolMode = ToolMode,
+            Tools = supportsToolCalling ? tools : null,
+            AllowMultipleToolCalls = supportsToolCalling ? AllowMultipleToolCalls : null,
+            ToolMode = supportsToolCalling ? ToolMode : ChatToolMode.None,
         };
         if (UseReasoningSummary && SelectedDescriptor?.SupportsReasoningSummary == true)
             options.Reasoning = new ReasoningOptions

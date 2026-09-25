@@ -84,6 +84,31 @@ public sealed class SettingsPaneViewModelTests
         Assert.Null(settings.CreateChatOptions([]).AllowMultipleToolCalls);
     }
 
+    [Fact]
+    public void CreateChatOptions_ClientWithoutToolCalling_DoesNotForwardHiddenToolSettings()
+    {
+        using var live = CreateClient("Live", isReplay: false);
+        using var noTools = new StubChatClient().AsBuilder()
+            .UseDescriptor(new ChatClientDescriptor(
+                "No tools", "Ready", SupportsImageInput: true, SupportsToolCalling: false))
+            .Build();
+        var settings = new SettingsPaneViewModel([live, noTools]);
+        settings.ToolMode = ChatToolMode.RequireAny;
+        settings.AllowMultipleToolCalls = true;
+        settings.SelectedClient = noTools;
+
+        var options = settings.CreateChatOptions([]);
+        Assert.Null(options.Tools);
+        Assert.Same(ChatToolMode.None, options.ToolMode);
+        Assert.Null(options.AllowMultipleToolCalls);
+
+        var tool = AIFunctionFactory.Create(() => "unexpected");
+        Assert.Throws<NotSupportedException>(() => settings.CreateChatOptions([tool]));
+
+        settings.SelectedClient = live;
+        Assert.Same(ChatToolMode.RequireAny, settings.CreateChatOptions([tool]).ToolMode);
+    }
+
     private static IChatClient CreateClient(string name, bool isReplay) =>
         new StubChatClient().AsBuilder()
             .UseDescriptor(new ChatClientDescriptor(

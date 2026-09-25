@@ -159,8 +159,11 @@ and image generation/edit behavior. They run without a device or credentials.
 ### Windows Copilot Runtime
 
 On Windows 11 24H2+ the packaged sample offers **Phi Silica** in Chat and
-**Windows Copilot Runtime** in Images without Azure credentials. Both the Images
-page and the Chat image-generation tool use the same local image generator.
+**Windows Copilot Runtime** in Images without Azure credentials. The Images page
+uses the local generator directly. Phi Silica Chat does not offer tools, including
+the image-generation tool; its tool settings are hidden. Azure and Apple retain
+their existing tool capabilities. Direct Phi Silica requests with tools fail
+explicitly rather than silently ignoring them or calling unrelated tools.
 Model readiness is checked on first use; image input in Chat also requires the
 Windows image-description model. An unavailable model or unsupported request
 reports an error rather than silently switching providers. Leave image size at
@@ -176,5 +179,5 @@ experimental Windows App SDK runtime:
 dotnet run --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj -f net10.0-windows10.0.19041.0
 ```
 
-See [Phi Silica integration notes](../../docs/ai/PHI-SILICA.md) for tool-calling,
-streaming, model availability, and other Windows-specific limitations.
+See [Phi Silica integration notes](../../docs/ai/PHI-SILICA.md) for native structured
+output, streaming, model availability, and other Windows-specific limitations.

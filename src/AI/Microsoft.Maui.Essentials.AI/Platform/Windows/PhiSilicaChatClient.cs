@@ -81,6 +81,7 @@ public sealed class PhiSilicaChatClient : IChatClient
 		ChatOptions? options = null,
 		[EnumeratorCancellation] CancellationToken cancellationToken = default)
 	{
+		ValidateOptions(options);
 		var model = await _modelTask;
 
 		var (systemPrompt, history) = NormalizeChatMessages(chatMessages, options);
@@ -88,8 +89,6 @@ public sealed class PhiSilicaChatClient : IChatClient
 		var prompt = await ConvertToPromptAsync(history);
 		if (history.Count == 0 && string.IsNullOrEmpty(systemPrompt))
 			throw new ArgumentException("At least one message with content is required.", nameof(chatMessages));
-
-		ValidateOptions(options);
 
 		var modelOptions = ConvertToLanguageModelOptions(options);
 
@@ -305,6 +304,7 @@ public sealed class PhiSilicaChatClient : IChatClient
 		CancellationToken cancellationToken = default)
 	{
 		ArgumentNullException.ThrowIfNull(chatMessages);
+		ValidateOptions(options);
 
 		var model = await _modelTask;
 
@@ -520,16 +520,10 @@ public sealed class PhiSilicaChatClient : IChatClient
 		if (options.MaxOutputTokens is <= 0)
 			throw new ArgumentOutOfRangeException(nameof(options), "MaxOutputTokens must be greater than zero.");
 
-		// Validate tool types — only AIFunction tools are supported
 		if (options.Tools is { Count: > 0 })
-		{
-			var unsupportedTools = options.Tools.Where(t => t is not AIFunction).ToList();
-			if (unsupportedTools.Count > 0)
-			{
-				throw new NotSupportedException(
-					$"Only AIFunction tools are supported by Phi Silica. " +
-					$"Unsupported tools: {string.Join(", ", unsupportedTools.Select(t => t.GetType().Name))}");
-			}
-		}
+			throw new NotSupportedException("Phi Silica does not support tool calling through the Windows App SDK.");
+		if ((options.ToolMode is not null && options.ToolMode != ChatToolMode.Auto &&
+			options.ToolMode != ChatToolMode.None) || options.AllowMultipleToolCalls is not null)
+			throw new NotSupportedException("Phi Silica does not support tool-calling options through the Windows App SDK.");
 	}
 }

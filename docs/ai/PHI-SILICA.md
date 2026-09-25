@@ -48,75 +48,10 @@ Two consequences of the WinRT shape are worth knowing:
 
 Requests without a schema continue to use `LanguageModel.GenerateResponseAsync` with a real context.
 
-## Tool calling
-
-Windows App SDK exposes no function-calling API, so the opt-in `PhiSilicaToolCallingClient`
-(`src/AI/Microsoft.Maui.Essentials.AI/Platform/Windows/`) builds it on top of constrained
-decoding, in two phases:
-
-1. **Selection.** One constrained call against a schema whose only property is a `tool_name` enum
-   listing the available tools plus `none`.
-2. **Arguments.** If a tool was chosen, a second constrained call against *that tool's own*
-   parameter schema. If `none` was chosen the request is passed through so the model answers
-   normally, preserving any `ResponseFormat` the caller asked for.
-
-The result is emitted as `FunctionCallContent`, so the standard `UseFunctionInvocation()` middleware
-executes the call and re-invokes the client with the result in history. `ChatToolMode.None` bypasses
-tool selection; `RequireAny` forces the first call but permits a final answer after a tool result.
-Completed calls are scoped to the current user turn, so earlier turns cannot block a new request.
-
-In `ChatClientBuilder`, function invocation must wrap the Phi Silica adapter so it sees the
-adapter's tool calls. Reversing these two steps displays a tool call without executing it:
-
-```csharp
-new PhiSilicaChatClient()
-    .AsBuilder()
-    .UseFunctionInvocation()
-    .Use(inner => new PhiSilicaToolCallingClient(inner))
-    .Build();
-```
-
-The model can select an unrelated tool in `Auto` mode even when the user did not ask for one.
-Turn off the sample's tool checkboxes or set `ChatToolMode.None` for requests where tool
-invocation is not wanted; native structured JSON generation works without the adapter.
-
-### Why two phases
-
-The obvious design is one combined schema: a single object carrying a `tool_call`/`text`
-discriminator, the tool name, the arguments and the answer text. Probing the on-device model showed
-that this is unreliable.
-
-- It skipped prerequisite calls and invented placeholder arguments such as `"USER_ID"`.
-- Part-way through a chain it gave up and asked the user for data it should have fetched.
-- Wording had outsized effects. Adding "if you can answer, put the answer in the text property" was
-  enough to make it *describe* a tool in prose instead of calling it.
-
-Asking one small question at a time is both more accurate and faster — selection lands in about two
-seconds — and giving the argument phase the tool''s real schema means `required` parameters are
-actually filled in.
-
-### Telling the model what has already run
-
-On a follow-up turn the selection prompt names the tools that have already been called. This is what
-makes multi-tool requests work at all. Left to infer progress from the transcript, the model reads
-any tool result as "the request is answered" and either stops early or simply repeats the call it
-just made — asked for "the weather and the time" it fetched the weather twice and never called the
-time tool.
-
-The wording was chosen by measuring candidates against three follow-up cases: a second tool still
-needed, the request already satisfied, and the same tool needed again for a second subject. Only
-naming the completed calls got all three right; phrasings that merely stressed "check every part"
-kept going when they should have stopped.
-
-The argument phase gets the same treatment in reverse: when a tool is being called again it is told
-which argument sets have already been used, so it moves on to the next subject instead of
-re-extracting the first one.
-
 ### Closed schemas
 
 `PhiSilicaChatClient` closes every schema with `additionalProperties: false`, applied recursively,
-before constraining generation. This is not specific to tool calling: it applies to all structured
-output.
+before constraining generation for any structured-output request.
 
 Constrained decoding only forbids what the schema forbids, and schemas generated from a type by
 `ChatResponseFormat.ForJsonSchema<T>()` are open — no `required`, no `additionalProperties`. Given an
@@ -126,18 +61,19 @@ schema, so nothing fails and no status is reported, but the declared property is
 deserializing the result yields null. Closing the schema also measurably reduced
 `ResponseInvalidJson` failures, since the decoder has less room to wander.
 
-### Deterministic sampling
+## Tool calling
 
-Both phases run with temperature 0, top-p 1 and top-k 1. Picking a tool and extracting its arguments
-have one right answer, but the Windows AI defaults are tuned for creative writing — temperature 0.9,
-top-p 0.9, top-k 40 — and the model is
-[documented](https://learn.microsoft.com/en-us/windows/ai/apis/phi-silica-best-practices) as highly
-sensitive to randomness, with temperature 0 being deterministic on a given machine.
+The public Windows App SDK `LanguageModel` API does not expose function calling. This baseline
+does not emulate it: `PhiSilicaChatClient` rejects nonempty `ChatOptions.Tools` or tool-only
+options with `NotSupportedException`, rather than ignoring them or calling unrelated tools.
+The playground hides tool controls when Phi Silica is selected; Azure and Apple retain their
+own tool support. The experimental constrained-JSON tool adapter is deferred to a separate PR.
+The standalone Images page still invokes the native on-device image generator directly.
 
-### Context window
+## Context window
 
 The context window is shared by the system prompt, the accumulated history and the new prompt, and
-the API does not truncate automatically, so a long tool chain can outgrow it.
+the API does not truncate automatically, so a long conversation can outgrow it.
 
 `PhiSilicaChatClient.GetPromptFitAsync` reports this before a request is sent, wrapping
 `LanguageModel.GetUsablePromptLength`, which returns the character index at which the prompt stops
@@ -145,20 +81,11 @@ fitting. When a request is sent anyway and the model reports `PromptLargerThanCo
 throws `PhiSilicaContextWindowException` so it can be told apart from an ordinary failure. Recover by
 trimming, summarizing the history, or starting a new conversation.
 
-### Failure handling
+## Streaming
 
-Constrained-generation failures and invalid tool arguments propagate to the caller rather than
-silently returning a success-shaped answer or invoking a tool without its required arguments.
-The exact-repeat guard and per-turn call limit still bound indecisive model loops.
-
-### Streaming
-
-A partial tool call is not actionable, so tool selection and argument generation finish before a
-function call is emitted. Once the model chooses `none` (including after an invoked tool returns),
-the adapter forwards the final answer through the native streaming API with the tools removed.
-Text and structured JSON updates can then arrive incrementally; the preceding selection phase
-still adds latency before the first answer update. The number of progress updates depends on the
-installed model.
+Text and structured JSON updates use the Windows AI progress callback and can arrive
+incrementally without a tool-selection phase. The number of updates depends on the installed
+model.
 
 ## Image generation
 
@@ -177,17 +104,16 @@ When several images are requested the seed is offset per image so the results di
 `ImageGenerationOptions.ImageSize` and `ImageGenerationResponseFormat.Uri` throw — the model chooses
 its own output size, and generation is on-device so there is no hosted URI to return.
 
-Both EssentialsAISample and the chat playground register the generator in their chat-client
-builders. The playground's **Generate or edit image** checkbox offers a `HostedImageGenerationTool`
-to the model; image-generation middleware preserves original image inputs while handling the tool
-call, so asking the model to draw something can return a real image inline. The checkbox controls
-whether this expensive, experimental tool is available for a request.
+Both EssentialsAISample and the chat playground register the generator for direct
+`IImageGenerator` use; the playground's standalone **Images** page invokes it. Phi Silica Chat
+does not offer an image-generation tool, since the native language model cannot call tools.
 
 The image model is prepared on first use, not when the chat client is created. Cancelling a request
 while Windows prepares the model stops waiting for it; Windows may continue preparing the model in
 the background. An unavailable model reports its readiness failure rather than a generated image.
-For later turns, Phi Silica keeps image-generation tool activity as text in its prompt; the
-text-only model cannot inspect generated pixels without a separate image-description request.
+When resuming an older chat containing image-generation tool activity, Phi Silica preserves that
+activity as text in its prompt; the text-only model cannot inspect generated pixels without a
+separate image-description request.
 
 ## Image input
 
@@ -238,5 +164,4 @@ stays at `19041` for build compatibility.
 - **Model identity.** `LanguageModel` exposes no name, version or capability metadata, so behaviour
   cannot be varied by model.
 - **Semantic embeddings.** No `IEmbeddingGenerator` implementation; see above.
-- **Native tool calling.** The published `LanguageModel` API has no function-call interface;
-  the constrained-output client above is an opt-in adapter, not a hidden model capability.
+- **Native tool calling.** The published `LanguageModel` API has no function-call interface.

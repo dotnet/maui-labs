@@ -177,14 +177,9 @@ public static class MauiProgram
 		builder.Services.AddSingleton<IChatClient>(sp =>
 		{
 			var phiClient = sp.GetRequiredService<PhiSilicaChatClient>();
-			var imageGenerator = sp.GetRequiredService<IImageGenerator>();
 			var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
 			return phiClient
 				.AsBuilder()
-				// Handles HostedImageGenerationTool, so asking the model to draw something
-				// runs the on-device image model and returns the image inline.
-				.UseImageGeneration(imageGenerator)
-				.Use(cc => new PhiSilicaToolCallingClient(cc))
 				.UseLogging(loggerFactory)
 				.Build();
 		});
@@ -193,12 +188,9 @@ public static class MauiProgram
 		builder.Services.AddKeyedSingleton<IChatClient>("local-model", (sp, _) =>
 		{
 			var phiClient = sp.GetRequiredService<PhiSilicaChatClient>();
-			var imageGenerator = sp.GetRequiredService<IImageGenerator>();
 			var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
 			return phiClient
 				.AsBuilder()
-				.UseImageGeneration(imageGenerator)
-				.Use(cc => new PhiSilicaToolCallingClient(cc))
 				.UseLogging(loggerFactory)
 				.Build();
 		});
@@ -207,12 +199,9 @@ public static class MauiProgram
 		builder.Services.AddKeyedSingleton<IChatClient>("cloud-model", (sp, _) =>
 		{
 			var phiClient = sp.GetRequiredService<PhiSilicaChatClient>();
-			var imageGenerator = sp.GetRequiredService<IImageGenerator>();
 			var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
 			return phiClient
 				.AsBuilder()
-				.UseImageGeneration(imageGenerator)
-				.Use(cc => new PhiSilicaToolCallingClient(cc))
 				.Use(cc => new BufferedChatClient(cc))
 				.UseLogging(loggerFactory)
 				.Build();

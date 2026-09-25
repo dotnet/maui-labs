@@ -238,7 +238,6 @@ public static class MauiProgram
         return endpoint;
     }
 #if WINDOWS
-#pragma warning disable MEAI001 // The selected Windows image generator is an experimental IImageGenerator.
     [SupportedOSPlatform("windows10.0.26100.0")]
     private static IChatClient CreateWindowsChatClient(IServiceProvider services) =>
         new PhiSilicaChatClient()
@@ -246,17 +245,11 @@ public static class MauiProgram
             .UseRecording(services.GetRequiredService<IChatRecordingSession>())
             .UseDescriptor(new ChatClientDescriptor(
                 "Phi Silica",
-                "Windows Copilot Runtime is supported on this OS. The first request checks whether the on-device model is ready.",
+                "Windows Copilot Runtime is supported on this OS. The first request checks model readiness. Tool calling is not available.",
                 SupportsImageInput: true,
-                SupportsImageGeneration: true))
+                SupportsToolCalling: false))
             .UseLogging(services.GetRequiredService<ILoggerFactory>())
-            .UseImageGenerationPreservingInputs(
-                services.GetServices<IImageGenerator>().Single(generator =>
-                    generator.GetService<ImageGeneratorDescriptor>()?.Id == WindowsImageGeneratorId))
-            .UseFunctionInvocation()
-            .Use(inner => new PhiSilicaToolCallingClient(inner))
             .Build();
-#pragma warning restore MEAI001
 #endif
 
 #if IOS || MACCATALYST

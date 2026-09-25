@@ -418,6 +418,8 @@ public partial class ChatViewModel : ObservableObject
     private List<AITool> CreateEnabledTools()
     {
         var tools = new List<AITool>();
+        if (SelectedDescriptor?.SupportsToolCalling != true)
+            return tools;
         if (Settings.UseDateTimeTool)
             tools.Add(_tools.CurrentLocalDateTime);
         if (Settings.UseCalculatorTool)
@@ -454,7 +456,8 @@ public partial class ChatViewModel : ObservableObject
             return false;
         }
 
-        return Settings.ToolMode != ChatToolMode.RequireAny ||
+        return !descriptor.SupportsToolCalling ||
+            Settings.ToolMode != ChatToolMode.RequireAny ||
             Settings.UseDateTimeTool ||
             Settings.UseCalculatorTool ||
             (Settings.UseImageGenerationTool && descriptor.SupportsImageGeneration);
