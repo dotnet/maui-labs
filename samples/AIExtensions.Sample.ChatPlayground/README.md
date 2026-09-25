@@ -160,10 +160,14 @@ and image generation/edit behavior. They run without a device or credentials.
 
 On Windows 11 24H2+ the packaged sample offers **Windows AI** in Chat and
 **Windows AI** in Images without Azure credentials. The Images page
-uses the local generator directly. Windows AI Chat does not offer tools, including
-the image-generation tool; its tool settings are hidden. Azure and Apple retain
-their existing tool capabilities. Direct Windows AI requests with tools fail
-explicitly rather than silently ignoring them or calling unrelated tools.
+uses the local generator directly. By default Windows AI Chat uses the native
+client only: tools (including image generation) are hidden, and native requests
+with tools fail explicitly. Set `AI:EnablePhiToolCalling=true` in local
+configuration to try the **experimental** two-phase function and on-device
+image-tool adapter. This remains opt-in because Auto selection may call
+unrelated tools even for a simple "hello"; it is not reliable. Azure and Apple
+retain their existing tool capabilities, and the standalone Windows Images
+provider works with or without the flag.
 Model readiness is checked on first use. Direct image input to the text-only Windows language
 model is unsupported. To allow attachments **in this playground only**, opt into on-device image
 description: `dotnet user-secrets --id 2727d4aa-a3a5-484b-9447-91604761972b set "AI:EnableWindowsImageDescriptions" "true"`.

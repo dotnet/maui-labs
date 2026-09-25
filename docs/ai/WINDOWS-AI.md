@@ -64,13 +64,44 @@ deserializing the result yields null. Closing the schema also measurably reduced
 
 ## Tool calling
 
-The public Windows App SDK `LanguageModel` API does not expose function calling. This baseline
-does not emulate it: `WindowsAIChatClient` rejects nonempty `ChatOptions.Tools` or tool-only
-options with `NotSupportedException`, rather than ignoring them or calling unrelated tools.
-The playground hides tool controls when Windows AI is selected; Azure and Apple retain their
-own tool support. An experimental constrained-JSON tool adapter lives in the separate draft
-[follow-up PR #523](https://github.com/dotnet/maui-labs/pull/523).
-The standalone Images page still invokes the native on-device image generator directly.
+The public Windows App SDK `LanguageModel` API does not expose function calling.
+`WindowsAIChatClient` is the **native-only** public client: it rejects nonempty
+`ChatOptions.Tools` and tool-only options with `NotSupportedException`. This guard remains in
+place even when the experimental adapter is present. Without the adapter, the playground hides
+Windows AI's tool controls; Azure and Apple retain their existing tool support.
+
+`WindowsAIToolCallingClient` is a separate, **experimental** `IChatClient` middleware that
+emulates function calling with schema-constrained JSON generation. It selects a `tool_name` from
+the available functions or `none`, then fills the selected function's arguments using its JSON
+schema. It emits `FunctionCallContent` for the standard function-invocation middleware to execute.
+Each request forwarded to the native client removes `Tools`, `ToolMode`, and
+`AllowMultipleToolCalls`; it never enables native function calling. `ChatToolMode.None` skips
+selection, and `RequireAny` forces an initial selection before permitting a final answer.
+
+The chat playground and EssentialsAISample enable this layer **only** with
+`AI:EnablePhiToolCalling=true` in their local configuration (default: off). Do not set the flag
+in a distributed build without explicitly accepting the research behavior. The playground also
+offers its on-device image generator as an inline tool only under this opt-in; the standalone
+**Images** page is available regardless of the flag. Direct image input remains unsupported;
+the playground separately offers on-device captions with
+`AI:EnableWindowsImageDescriptions=true` (also default: off). The function-invocation middleware
+must wrap the adapter so it can execute its calls:
+
+```csharp
+new WindowsAIChatClient()
+    .AsBuilder()
+    .UseFunctionInvocation()
+    .Use(inner => new WindowsAIToolCallingClient(inner))
+    .Build();
+```
+
+**Tool selection is not reliable.** In earlier device experiments, `Auto` selected and invoked
+the date, calculator, and image tools for a simple "hello". The two-phase adapter, deterministic
+selection settings, repeat guard, and per-turn call limit do not solve this accuracy problem.
+Disable the tool checkboxes or select `ChatToolMode.None` when tools should not run; do not
+depend on `Auto` for safety, cost control, or correct intent detection. Selection and argument
+generation finish before a tool call is emitted, then final text or structured JSON streams
+through the native client. This is a draft research layer, not a claim of dependable tool use.
 
 ## Context window
 
@@ -105,9 +136,12 @@ When several images are requested the seed is offset per image so the results di
 `ImageGenerationOptions.ImageSize` and `ImageGenerationResponseFormat.Uri` throw — the model chooses
 its own output size, and generation is on-device so there is no hosted URI to return.
 
-The chat playground registers the generator for direct `IImageGenerator` use; its standalone
-**Images** page invokes it. Windows AI Chat does not offer an image-generation tool, since the
-native language model cannot call tools.
+Both EssentialsAISample and the chat playground register the generator for direct
+`IImageGenerator` use; the playground's standalone **Images** page invokes it with or without
+the experimental flag. When opted in, the playground's chat client uses the image-generation
+middleware to offer a `HostedImageGenerationTool` to the adapter; the native language model
+itself still cannot call tools. Function invocation must wrap the image middleware and the Windows AI
+adapter in that order so function calls and generated images reach the conversation.
 
 The image model is prepared on first use, not when the chat client is created. Cancelling a request
 while Windows prepares the model stops waiting for it; Windows may continue preparing the model in
@@ -136,8 +170,9 @@ AI Chat; Azure's image-input behavior is unaffected.
 
 ## Semantic search
 
-`AppContentIndexer` (Windows Search) is not in this baseline; its existing sample integration is
-deferred to #523. The indexer does not expose vectors, so it cannot implement
+`AppContentIndexer` (Windows Search) is not in the native Windows AI library's API.
+EssentialsAISample integrates it in this optional sample layer for semantic search.
+The indexer does not expose vectors, so it cannot implement
 `IEmbeddingGenerator<string, Embedding<float>>`.
 
 `LanguageModel.GenerateEmbeddingVectors` is **not** a substitute. It returns a list of
@@ -166,7 +201,8 @@ stays at `19041` for build compatibility.
 - **Model identity.** `LanguageModel` exposes no name, version or capability metadata, so behavior
   cannot be varied by model.
 - **Semantic embeddings.** No `IEmbeddingGenerator` implementation; see above.
-- **Native tool calling.** The published `LanguageModel` API has no function-call interface.
+- **Native tool calling.** The published `LanguageModel` API has no function-call interface;
+  the opt-in adapter only emulates it and does not change the native client API.
 - **Direct multimodal chat.** The public `LanguageModel` has no image-input overload.
 
 ## Other Microsoft.Extensions.AI abstractions

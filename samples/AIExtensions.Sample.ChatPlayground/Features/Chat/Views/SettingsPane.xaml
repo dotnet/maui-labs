@@ -66,7 +66,7 @@
                 <VerticalStackLayout IsVisible="{Binding SelectedDescriptor.SupportsToolCalling}" Spacing="12">
                     <HorizontalStackLayout Spacing="4">
                         <Label Text="Tools" FontSize="12" FontAttributes="Bold" VerticalOptions="Center" />
-                        <controls:InfoTip Text="Call enabled functions; Azure images use the configured deployment." />
+                        <controls:InfoTip Text="Call enabled functions. The selected provider determines which image generator is used." />
                     </HorizontalStackLayout>
                     <HorizontalStackLayout Spacing="4">
                         <CheckBox IsChecked="{Binding UseDateTimeTool}" AutomationId="DateTimeToolCheckBox" />
@@ -81,11 +81,11 @@
                     <HorizontalStackLayout Spacing="4" IsVisible="{Binding SelectedDescriptor.SupportsImageGeneration}">
                         <CheckBox IsChecked="{Binding UseImageGenerationTool}" AutomationId="ImageGenerationToolCheckBox" />
                         <Label Text="Generate or edit image" VerticalOptions="Center" />
-                        <controls:InfoTip Text="Let Azure generate or edit images; results stay in this conversation." />
+                        <controls:InfoTip Text="Let the selected provider generate or edit images; results stay in this conversation." />
                     </HorizontalStackLayout>
                     <HorizontalStackLayout Spacing="4">
                         <Label Text="Tool mode" VerticalOptions="Center" />
-                        <controls:InfoTip Text="Controls whether the provider may or must call an enabled tool." />
+                        <controls:InfoTip Text="Controls whether an enabled tool may or must be called. Experimental Windows AI selection can call unrelated tools in Auto mode." />
                     </HorizontalStackLayout>
                     <HorizontalStackLayout Spacing="6"
                                            RadioButtonGroup.GroupName="ToolMode"

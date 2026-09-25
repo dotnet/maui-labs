@@ -92,9 +92,14 @@ public static class MauiProgram
             if (enableImageDescriptions)
                 services.AddSingleton<WindowsAIImageDescriber>();
 
+            setting = configuration["AI:EnablePhiToolCalling"];
+            var enableToolCalling = false;
+            if (setting is not null && !bool.TryParse(setting, out enableToolCalling))
+                throw new InvalidOperationException("AI:EnablePhiToolCalling must be true or false.");
+
             services.AddSingleton<IChatClient>(provider =>
                 OperatingSystem.IsWindowsVersionAtLeast(10, 0, 26100)
-                    ? CreateWindowsChatClient(provider, enableImageDescriptions)
+                    ? CreateWindowsChatClient(provider, enableImageDescriptions, enableToolCalling)
                     : throw new PlatformNotSupportedException("Windows AI requires Windows 11 24H2 or later."));
         }
 #endif
@@ -251,26 +256,44 @@ public static class MauiProgram
         return endpoint;
     }
 #if WINDOWS
+#pragma warning disable MEAI001 // The selected Windows image generator is an experimental IImageGenerator.
     [SupportedOSPlatform("windows10.0.26100.0")]
-    private static IChatClient CreateWindowsChatClient(IServiceProvider services, bool enableImageDescriptions)
+    private static IChatClient CreateWindowsChatClient(
+        IServiceProvider services, bool enableImageDescriptions, bool enableToolCalling)
     {
         var builder = new WindowsAIChatClient()
             .AsBuilder()
             .UseRecording(services.GetRequiredService<IChatRecordingSession>())
             .UseDescriptor(new ChatClientDescriptor(
                 "Windows AI",
-                "Windows AI checks model readiness on first use. Tool calling and direct image input are unavailable." +
+                "Windows AI checks model readiness on first use. Direct image input is unavailable." +
+                    (enableToolCalling
+                        ? " Experimental tool selection may invoke unrelated tools, even for simple prompts."
+                        : " Tool calling is unavailable; set AI:EnablePhiToolCalling=true to try the experimental adapter.") +
                     (enableImageDescriptions
                         ? " Image attachments are described on-device before the text-only model receives their captions; it does not see the image alongside your question."
                         : " Set AI:EnableWindowsImageDescriptions=true to enable on-device image captioning in this playground."),
                 SupportsImageInput: enableImageDescriptions,
-                SupportsToolCalling: false));
+                SupportsImageGeneration: enableToolCalling,
+                SupportsToolCalling: enableToolCalling));
 
         if (enableImageDescriptions)
             builder.UseImageDescriptions(services.GetRequiredService<WindowsAIImageDescriber>().DescribeAsync);
 
-        return builder.UseLogging(services.GetRequiredService<ILoggerFactory>()).Build();
+        builder.UseLogging(services.GetRequiredService<ILoggerFactory>());
+
+        if (enableToolCalling)
+        {
+            builder.UseImageGenerationPreservingInputs(
+                    services.GetServices<IImageGenerator>().Single(generator =>
+                        generator.GetService<ImageGeneratorDescriptor>()?.Id == WindowsImageGeneratorId))
+                .UseFunctionInvocation()
+                .Use(inner => new WindowsAIToolCallingClient(inner));
+        }
+
+        return builder.Build();
     }
+#pragma warning restore MEAI001
 #endif
 
 #if IOS || MACCATALYST

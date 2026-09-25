@@ -1,0 +1,502 @@
+using System.Runtime.CompilerServices;
+using System.Text;
+using System.Text.Json;
+using Microsoft.Extensions.AI;
+
+namespace Microsoft.Maui.Essentials.AI;
+
+/// <summary>
+/// Experiments with function calling above the native Windows AI language client.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Windows App SDK exposes schema-constrained JSON generation but no function-calling API, so tool
+/// calling can be experimented with on top of constrained decoding. This adapter does that in two phases,
+/// then emits <see cref="FunctionCallContent"/> so the standard <c>UseFunctionInvocation</c>
+/// middleware can execute the call.
+/// </para>
+/// <list type="number">
+/// <item><description>
+/// <b>Selection.</b> One constrained call against a schema whose only property is a
+/// <c>tool_name</c> enum listing the tools plus <c>none</c>.
+/// </description></item>
+/// <item><description>
+/// <b>Arguments.</b> If a tool was chosen, a second constrained call against that tool's own
+/// parameter schema. If <c>none</c> was chosen, the request is passed through so the model answers
+/// normally.
+/// </description></item>
+/// </list>
+/// <para>
+/// The split matters. Probing the on-device model showed that a single combined schema — one object
+/// carrying a <c>tool_call</c>/<c>text</c> discriminator, the tool name, the arguments and the
+/// answer text — can make the model unreliable: it skips prerequisite calls, invents placeholder
+/// argument values such as <c>"USER_ID"</c>, and abandons multi-step chains by asking the user for
+/// data it should have fetched. Asking one small question at a time and giving the argument phase
+/// the tool's real schema helps fill in required parameters. Tool selection remains experimental,
+/// including for simple prompts that may not need a tool.
+/// </para>
+/// <para>
+/// Schemas are closed with <c>additionalProperties: false</c> before they reach the model. That is
+/// done by <c>WindowsAIChatClient</c> for every constrained request, because without it the model
+/// invents property names — it produced <c>body</c>, <c>response</c> and <c>message</c> in place of
+/// a declared <c>text</c> property — and constrained decoding permits them, which silently yields
+/// empty results.
+/// </para>
+/// <para>Usage: <c>new WindowsAIToolCallingClient(new WindowsAIChatClient())</c></para>
+/// </remarks>
+public sealed class WindowsAIToolCallingClient : DelegatingChatClient
+{
+	/// <summary>Sentinel choice meaning the model wants to answer without a tool.</summary>
+	private const string NoToolName = "none";
+
+	/// <summary>
+	/// Upper bound on tool calls in a single chain, counted from the conversation history.
+	/// </summary>
+	/// <remarks>
+	/// The model decides for itself when to stop by choosing <see cref="NoToolName"/>, but a small
+	/// model does not always take that exit. Since the function invocation middleware feeds each
+	/// result back and asks again, an indecisive model would otherwise keep selecting tools until
+	/// that middleware hits its own iteration cap, which on device means minutes of stalling. This
+	/// bounds the work instead.
+	/// </remarks>
+	private const int MaxToolCallsPerChain = 5;
+
+	/// <summary>
+	/// Sampling settings for the two constrained phases.
+	/// </summary>
+	/// <remarks>
+	/// Picking a tool and extracting its arguments are classification and extraction problems with
+	/// one right answer, not creative writing. The Windows AI defaults are tuned for the latter
+	/// (temperature 0.9, top-p 0.9, top-k 40) and the model is documented as highly sensitive to
+	/// randomness, so those defaults make tool calling needlessly unstable. Sampling is pinned to
+	/// the most deterministic setting available instead.
+	/// </remarks>
+	private const float DeterministicTemperature = 0f;
+
+	private const float DeterministicTopP = 1f;
+
+	private const int DeterministicTopK = 1;
+
+	public WindowsAIToolCallingClient(IChatClient inner) : base(inner) { }
+
+	public override async Task<ChatResponse> GetResponseAsync(
+		IEnumerable<ChatMessage> messages,
+		ChatOptions? options = null,
+		CancellationToken cancellationToken = default)
+	{
+		var tools = GetFunctions(options);
+		if (tools is null || options?.ToolMode == ChatToolMode.None)
+			return await base.GetResponseAsync(messages, WithoutTools(options), cancellationToken);
+
+		var conversation = messages as IReadOnlyList<ChatMessage> ?? [.. messages];
+		var call = await GetNextToolCallAsync(conversation, tools, options, cancellationToken);
+		if (call is null)
+			return await AnswerAsync(conversation, options, cancellationToken);
+
+		return new ChatResponse(new ChatMessage(ChatRole.Assistant, [call]));
+	}
+
+	public override IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+		IEnumerable<ChatMessage> messages,
+		ChatOptions? options = null,
+		CancellationToken cancellationToken = default)
+	{
+		var tools = GetFunctions(options);
+		if (tools is null || options?.ToolMode == ChatToolMode.None)
+			return base.GetStreamingResponseAsync(messages, WithoutTools(options), cancellationToken);
+
+		return StreamToolResponseAsync(messages, tools, options, cancellationToken);
+	}
+
+	private async IAsyncEnumerable<ChatResponseUpdate> StreamToolResponseAsync(
+		IEnumerable<ChatMessage> messages,
+		List<AIFunction> tools,
+		ChatOptions? options,
+		[EnumeratorCancellation] CancellationToken cancellationToken)
+	{
+		var conversation = messages as IReadOnlyList<ChatMessage> ?? [.. messages];
+		var call = await GetNextToolCallAsync(conversation, tools, options, cancellationToken);
+		if (call is not null)
+		{
+			yield return new ChatResponseUpdate { Role = ChatRole.Assistant, Contents = [call] };
+			yield break;
+		}
+
+		await foreach (var update in base.GetStreamingResponseAsync(
+			conversation, WithoutTools(options), cancellationToken).WithCancellation(cancellationToken))
+			yield return update;
+	}
+
+	private async Task<FunctionCallContent?> GetNextToolCallAsync(
+		IReadOnlyList<ChatMessage> conversation,
+		List<AIFunction> tools,
+		ChatOptions? options,
+		CancellationToken cancellationToken)
+	{
+		var selected = await SelectToolAsync(conversation, tools, options, cancellationToken);
+		if (selected is null)
+			return null;
+
+		var call = await BuildToolCallAsync(conversation, selected, options, cancellationToken);
+
+		// An exact repeat would keep the function-invocation middleware in a loop.
+		return GetCompletedCalls(conversation).Contains(Signature(call.Name, call.Arguments))
+			? null
+			: call;
+	}
+
+	private static List<AIFunction>? GetFunctions(ChatOptions? options)
+	{
+		if (options?.Tools is not { Count: > 0 })
+			return null;
+
+		if (options.Tools.Any(tool => tool is not AIFunction))
+			throw new NotSupportedException(
+				"The experimental Windows AI tool-calling adapter only supports AIFunction tools.");
+
+		var functions = options.Tools.OfType<AIFunction>().ToList();
+
+		return functions;
+	}
+
+	// ═══════════════════════════════════════════════════════════
+	// PHASE 1: SELECTION
+	// ═══════════════════════════════════════════════════════════
+
+	/// <summary>
+	/// Asks the model which tool to call, if any.
+	/// </summary>
+	/// <returns>The chosen tool, or <see langword="null"/> to answer without a tool.</returns>
+	private async Task<AIFunction?> SelectToolAsync(
+		IReadOnlyList<ChatMessage> messages,
+		List<AIFunction> tools,
+		ChatOptions? options,
+		CancellationToken cancellationToken)
+	{
+		var completed = GetCompletedCalls(messages);
+		var requiresFirstTool = options?.ToolMode == ChatToolMode.RequireAny && completed.Count == 0;
+
+		// Stop once the chain has done enough work, so an indecisive model cannot spin.
+		if (completed.Count >= MaxToolCallsPerChain)
+			return null;
+
+		// Offering the model a tool it has already used is fine — the same tool with different
+		// arguments is legitimate, for example fetching the weather for a second city. Exact
+		// repeats are caught once the arguments are known.
+		var candidates = tools;
+
+		var instructions = new StringBuilder();
+		instructions.AppendLine("Decide which tool to call next.");
+		instructions.AppendLine();
+		instructions.AppendLine("Available tools:");
+
+		foreach (var tool in candidates)
+			instructions.AppendLine($"- {tool.Name}: {tool.Description}");
+
+		instructions.AppendLine();
+
+		// Naming the completed calls is what makes multi-tool requests work. Left to infer it from
+		// the transcript, the model reads any tool result as "done" and either stops early or
+		// repeats the call it just made. Told plainly what has run, it compares the request against
+		// that list and picks up whatever is still missing.
+		var completedNames = GetCompletedToolNames(messages);
+		if (completedNames.Count > 0)
+		{
+			instructions.AppendLine($"Already called: {string.Join(", ", completedNames)}.");
+			instructions.AppendLine("Do not repeat a call that has already been made.");
+			instructions.AppendLine(
+				"If the user asked for something that the completed calls do not cover, choose the tool that covers it.");
+			instructions.AppendLine($"Otherwise choose {NoToolName}.");
+		}
+		else
+		{
+			instructions.AppendLine(requiresFirstTool
+				? "Choose the tool that best answers the request."
+				: $"Choose {NoToolName} if no tool is needed.");
+		}
+
+		var names = requiresFirstTool
+			? candidates.Select(t => t.Name)
+			: candidates.Select(t => t.Name).Append(NoToolName);
+		var schema = BuildSelectionSchema(names);
+
+		var response = await RequestAsync(
+			messages, instructions.ToString(), schema, "tool_selection", options, cancellationToken);
+
+		var chosen = ReadString(response, "tool_name");
+		if (chosen.Equals(NoToolName, StringComparison.OrdinalIgnoreCase))
+		{
+			if (requiresFirstTool)
+				throw new InvalidOperationException("Windows AI selected no tool when a tool call was required.");
+			return null;
+		}
+
+		return candidates.FirstOrDefault(t => t.Name.Equals(chosen, StringComparison.OrdinalIgnoreCase))
+			?? throw new InvalidOperationException($"Windows AI selected an unknown tool: {chosen}.");
+	}
+
+	/// <summary>
+	/// Signatures of the tool calls already present in the conversation, used to detect repeats.
+	/// </summary>
+	private static HashSet<string> GetCompletedCalls(IReadOnlyList<ChatMessage> messages)
+	{
+		var completed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+		foreach (var message in CurrentTurn(messages))
+		{
+			foreach (var content in message.Contents)
+			{
+				if (content is FunctionCallContent call && !string.IsNullOrEmpty(call.Name))
+					completed.Add(Signature(call.Name, call.Arguments));
+			}
+		}
+
+		return completed;
+	}
+
+	/// <summary>
+	/// The distinct tool names already called in the conversation, in the order they first appear.
+	/// </summary>
+	private static List<string> GetCompletedToolNames(IReadOnlyList<ChatMessage> messages)
+	{
+		var names = new List<string>();
+		var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+		foreach (var message in CurrentTurn(messages))
+		{
+			foreach (var content in message.Contents)
+			{
+				if (content is FunctionCallContent call &&
+					!string.IsNullOrEmpty(call.Name) &&
+					seen.Add(call.Name))
+				{
+					names.Add(call.Name);
+				}
+			}
+		}
+
+		return names;
+	}
+
+	/// <summary>
+	/// The argument sets already used for one tool, so the argument phase can move on to whatever
+	/// the request still needs rather than re-extracting the first subject.
+	/// </summary>
+	private static List<string> GetCompletedArguments(IReadOnlyList<ChatMessage> messages, string toolName)
+	{
+		var used = new List<string>();
+		var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+		foreach (var message in CurrentTurn(messages))
+		{
+			foreach (var content in message.Contents)
+			{
+				if (content is not FunctionCallContent call ||
+					!string.Equals(call.Name, toolName, StringComparison.OrdinalIgnoreCase) ||
+					call.Arguments is not { Count: > 0 })
+				{
+					continue;
+				}
+
+				var description = string.Join(", ", call.Arguments
+					.OrderBy(a => a.Key, StringComparer.Ordinal)
+					.Select(a => $"{a.Key}={a.Value}"));
+
+				if (seen.Add(description))
+					used.Add(description);
+			}
+		}
+
+		return used;
+	}
+
+	private static IEnumerable<ChatMessage> CurrentTurn(IReadOnlyList<ChatMessage> messages)
+	{
+		for (var i = messages.Count - 1; i >= 0; i--)
+		{
+			if (messages[i].Role == ChatRole.User)
+				return messages.Skip(i);
+		}
+
+		return messages;
+	}
+
+	private static string Signature(string name, IDictionary<string, object?>? arguments)
+	{
+		if (arguments is not { Count: > 0 })
+			return name;
+
+		var parts = arguments
+			.OrderBy(a => a.Key, StringComparer.Ordinal)
+			.Select(a => $"{a.Key}={a.Value}");
+
+		return $"{name}({string.Join(",", parts)})";
+	}
+
+	private static JsonElement BuildSelectionSchema(IEnumerable<string> toolNames)
+	{
+		using var stream = new MemoryStream();
+		using (var writer = new Utf8JsonWriter(stream))
+		{
+			writer.WriteStartObject();
+			writer.WriteString("type", "object");
+			writer.WriteBoolean("additionalProperties", false);
+			writer.WriteStartObject("properties");
+			writer.WriteStartObject("tool_name");
+			writer.WriteString("type", "string");
+			writer.WriteStartArray("enum");
+			foreach (var name in toolNames)
+				writer.WriteStringValue(name);
+			writer.WriteEndArray();
+			writer.WriteEndObject();
+			writer.WriteEndObject();
+			writer.WriteStartArray("required");
+			writer.WriteStringValue("tool_name");
+			writer.WriteEndArray();
+			writer.WriteEndObject();
+		}
+
+		using var document = JsonDocument.Parse(stream.ToArray());
+		return document.RootElement.Clone();
+	}
+
+	// ═══════════════════════════════════════════════════════════
+	// PHASE 2: ARGUMENTS
+	// ═══════════════════════════════════════════════════════════
+
+	/// <summary>
+	/// Fills in the chosen tool's parameters using the tool's own schema.
+	/// </summary>
+	private async Task<FunctionCallContent> BuildToolCallAsync(
+		IReadOnlyList<ChatMessage> messages,
+		AIFunction tool,
+		ChatOptions? options,
+		CancellationToken cancellationToken)
+	{
+		var callId = Guid.NewGuid().ToString("N")[..16];
+
+		// WindowsAIChatClient closes the schema before constraining generation, so the tool's own
+		// schema can be passed through as-is.
+		var schema = tool.JsonSchema;
+		if (!HasProperties(schema))
+			return new FunctionCallContent(callId, tool.Name, new Dictionary<string, object?>());
+
+		var instructions = new StringBuilder();
+		instructions.Append(
+			$"Work out the arguments for the {tool.Name} tool ({tool.Description}). " +
+			"Use the request and any tool results above. Fill in every required argument.");
+
+		// When the same tool is being used again, the request has more than one subject — several
+		// cities, say. Without knowing which have been done, the model re-extracts the first one and
+		// the chain stalls on a repeat.
+		var used = GetCompletedArguments(messages, tool.Name);
+		if (used.Count > 0)
+		{
+			instructions.AppendLine();
+			instructions.AppendLine($"Already done: {string.Join("; ", used)}.");
+			instructions.Append("Use the arguments for a part of the request that has not been done yet.");
+		}
+
+		var response = await RequestAsync(
+			messages, instructions.ToString(), schema, tool.Name, options, cancellationToken);
+
+		return new FunctionCallContent(callId, tool.Name, ReadArguments(response));
+	}
+
+	private static Dictionary<string, object?> ReadArguments(string? response)
+	{
+		if (string.IsNullOrWhiteSpace(response))
+			throw new InvalidOperationException("Windows AI did not return tool arguments.");
+
+		using var document = JsonDocument.Parse(response);
+		if (document.RootElement.ValueKind != JsonValueKind.Object)
+			throw new InvalidOperationException("Windows AI returned tool arguments that are not a JSON object.");
+
+		return document.RootElement.EnumerateObject()
+			.ToDictionary(property => property.Name, property => (object?)property.Value.Clone());
+	}
+
+	// ═══════════════════════════════════════════════════════════
+	// ANSWERING
+	// ═══════════════════════════════════════════════════════════
+
+	/// <summary>
+	/// Produces the final answer once no further tool is needed. The caller's own
+	/// <see cref="ChatOptions.ResponseFormat"/> is preserved so structured output still works, and
+	/// the tool-related options are removed before reaching the native client.
+	/// </summary>
+	private Task<ChatResponse> AnswerAsync(
+		IReadOnlyList<ChatMessage> messages,
+		ChatOptions? options,
+		CancellationToken cancellationToken) =>
+		base.GetResponseAsync(messages, WithoutTools(options), cancellationToken);
+
+	private static ChatOptions WithoutTools(ChatOptions? options)
+	{
+		var answerOptions = options?.Clone() ?? new ChatOptions();
+		answerOptions.Tools = null;
+		answerOptions.ToolMode = null;
+		answerOptions.AllowMultipleToolCalls = null;
+		return answerOptions;
+	}
+
+	// ═══════════════════════════════════════════════════════════
+	// MODEL ACCESS
+	// ═══════════════════════════════════════════════════════════
+
+	/// <summary>
+	/// Runs one schema-constrained request, prepending <paramref name="instructions"/> as a system
+	/// message and replacing the caller's tool-related options and response format for the duration.
+	/// </summary>
+	private async Task<string?> RequestAsync(
+		IReadOnlyList<ChatMessage> messages,
+		string instructions,
+		JsonElement schema,
+		string schemaName,
+		ChatOptions? options,
+		CancellationToken cancellationToken)
+	{
+		var request = new List<ChatMessage>(messages.Count + 1)
+		{
+			new(ChatRole.System, instructions)
+		};
+		request.AddRange(messages);
+
+		var requestOptions = WithoutTools(options);
+		requestOptions.ResponseFormat = ChatResponseFormat.ForJsonSchema(schema, schemaName);
+		requestOptions.Temperature = DeterministicTemperature;
+		requestOptions.TopP = DeterministicTopP;
+		requestOptions.TopK = DeterministicTopK;
+
+		var response = await base.GetResponseAsync(request, requestOptions, cancellationToken);
+
+		return response.Text;
+	}
+
+	// ═══════════════════════════════════════════════════════════
+	// SCHEMA HELPERS
+	// ═══════════════════════════════════════════════════════════
+
+	/// <summary>Whether a parameter schema declares any properties to fill in.</summary>
+	private static bool HasProperties(JsonElement schema) =>
+		schema.ValueKind == JsonValueKind.Object &&
+		schema.TryGetProperty("properties", out var properties) &&
+		properties.ValueKind == JsonValueKind.Object &&
+		properties.EnumerateObject().Any();
+
+	private static string ReadString(string? json, string propertyName)
+	{
+		if (string.IsNullOrWhiteSpace(json))
+			throw new InvalidOperationException("Windows AI did not return a tool selection.");
+
+		using var document = JsonDocument.Parse(json);
+
+		return document.RootElement.ValueKind == JsonValueKind.Object &&
+			document.RootElement.TryGetProperty(propertyName, out var value) &&
+			value.ValueKind == JsonValueKind.String &&
+			value.GetString() is { Length: > 0 } choice
+				? choice
+				: throw new InvalidOperationException("Windows AI returned a tool selection without a tool_name.");
+	}
+
+}
