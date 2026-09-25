@@ -83,10 +83,13 @@ public class SdkManagerTests : IDisposable
 			Directory.Delete(_tempDir, recursive: true);
 	}
 
-	[Fact]
-	public void SdkManagerPath_FindsVersionedCmdlineToolsLayout()
+	[Theory]
+	[InlineData("cmdline-tools", "16.0")]
+	[InlineData("cmdline-tools", "latest")]
+	[InlineData("tools", "")]
+	public void SdkManagerPath_FindsSupportedLayouts(string directory, string version)
 	{
-		var sdkManagerPath = Path.Combine(_tempDir, "cmdline-tools", "16.0", "bin",
+		var sdkManagerPath = Path.Combine(_tempDir, directory, version, "bin",
 			OperatingSystem.IsWindows() ? "sdkmanager.bat" : "sdkmanager");
 		Directory.CreateDirectory(Path.GetDirectoryName(sdkManagerPath)!);
 		File.WriteAllText(sdkManagerPath, string.Empty);
@@ -97,11 +100,28 @@ public class SdkManagerTests : IDisposable
 	}
 
 	[Fact]
-	public void ResolveSdkManagerPath_ReturnsNull_WhenSdkManagerIsMissing()
+	public void SdkManagerPath_ReturnsNull_WhenSdkManagerIsMissing()
 	{
 		Directory.CreateDirectory(Path.Combine(_tempDir, "cmdline-tools", "latest", "bin"));
 
-		Assert.Null(SdkManager.ResolveSdkManagerPath(_tempDir));
+		using var sdkManager = new SdkManager(() => _tempDir, () => null);
+
+		Assert.Null(sdkManager.SdkManagerPath);
+	}
+
+	[Fact]
+	public void SdkManagerPath_IgnoresBareCmdlineToolsBinLayout()
+	{
+		// The upstream resolver rejects this layout; accepting it here would skip bootstrap.
+		var barePath = Path.Combine(_tempDir, "cmdline-tools", "bin",
+			OperatingSystem.IsWindows() ? "sdkmanager.bat" : "sdkmanager");
+		Directory.CreateDirectory(Path.GetDirectoryName(barePath)!);
+		File.WriteAllText(barePath, string.Empty);
+
+		using var sdkManager = new SdkManager(() => _tempDir, () => null);
+
+		Assert.Null(sdkManager.SdkManagerPath);
+		Assert.False(sdkManager.IsAvailable);
 	}
 }
 

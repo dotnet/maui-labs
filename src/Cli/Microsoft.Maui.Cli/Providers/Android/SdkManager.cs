@@ -40,10 +40,15 @@ public partial class SdkManager : IDisposable
 	}
 
 	public SdkManager(Func<string?> getSdkPath, Func<string?> getJdkPath, bool verbose = false)
+		: this(getSdkPath, getJdkPath, new XatSdkManager(logger: CreateLogger(verbose)))
+	{
+	}
+
+	internal SdkManager(Func<string?> getSdkPath, Func<string?> getJdkPath, XatSdkManager sdkManager)
 	{
 		_getSdkPath = getSdkPath;
 		_getJdkPath = getJdkPath;
-		_sdkManager = new XatSdkManager(logger: CreateLogger(verbose));
+		_sdkManager = sdkManager;
 	}
 
 	(string? SdkPath, string? JdkPath) SyncPaths()
@@ -59,63 +64,16 @@ public partial class SdkManager : IDisposable
 	{
 		get
 		{
-			var (sdkPath, _) = SyncPaths();
-			return ResolveSdkManagerPath(sdkPath) ?? _sdkManager.FindSdkManagerPath();
+			SyncPaths();
+			// Availability must use the same resolver as install/list/license operations,
+			// or an unsupported layout can incorrectly bypass bootstrap.
+			return _sdkManager.FindSdkManagerPath();
 		}
 	}
 
 	public bool IsAvailable => !string.IsNullOrEmpty(SdkManagerPath);
 
 	public void Dispose() => _sdkManager.Dispose();
-
-	internal static string? ResolveSdkManagerPath(string? sdkPath)
-	{
-		if (string.IsNullOrEmpty(sdkPath))
-			return null;
-
-		var ext = OperatingSystem.IsWindows() ? ".bat" : "";
-
-		static string? FindToolInDirectory(string directoryPath, string extension)
-		{
-			var toolPath = Path.Combine(directoryPath, "bin", "sdkmanager" + extension);
-			return File.Exists(toolPath) ? toolPath : null;
-		}
-
-		var cmdlineToolsDir = Path.Combine(sdkPath, "cmdline-tools");
-		if (Directory.Exists(cmdlineToolsDir))
-		{
-			var subdirs = new List<(string path, Version version)>();
-			foreach (var dir in Directory.GetDirectories(cmdlineToolsDir))
-			{
-				var name = Path.GetFileName(dir);
-				if (string.IsNullOrEmpty(name) || name.Equals("latest", StringComparison.OrdinalIgnoreCase))
-					continue;
-
-				Version.TryParse(name, out var version);
-				subdirs.Add((dir, version ?? new Version(0, 0)));
-			}
-
-			subdirs.Sort((a, b) => b.version.CompareTo(a.version));
-
-			foreach (var (dir, _) in subdirs)
-			{
-				var toolPath = FindToolInDirectory(dir, ext);
-				if (toolPath != null)
-					return toolPath;
-			}
-
-			var latestPath = FindToolInDirectory(Path.Combine(cmdlineToolsDir, "latest"), ext);
-			if (latestPath != null)
-				return latestPath;
-
-			var directPath = FindToolInDirectory(cmdlineToolsDir, ext);
-			if (directPath != null)
-				return directPath;
-		}
-
-		var legacyPath = Path.Combine(sdkPath, "tools", "bin", "sdkmanager" + ext);
-		return File.Exists(legacyPath) ? legacyPath : null;
-	}
 
 	public async Task<List<SdkPackage>> GetInstalledPackagesAsync(CancellationToken cancellationToken = default)
 	{
@@ -199,10 +157,10 @@ public partial class SdkManager : IDisposable
 				return;
 			}
 
-			// Reuse the already-synced sdkPath to resolve the sdkmanager path once (avoids the
-			// extra SyncPaths() call the SdkManagerPath property would trigger). EnsureAvailable()
-			// above guarantees this resolves to a non-null path.
-			var sdkManagerPath = ResolveSdkManagerPath(sdkPath) ?? _sdkManager.FindSdkManagerPath()!;
+			// The paths were already synced at the top of this method, so ask the upstream resolver
+			// directly for the sdkmanager it will invoke. EnsureAvailable() above guarantees this
+			// resolves to a non-null path.
+			var sdkManagerPath = _sdkManager.FindSdkManagerPath()!;
 
 			// Install one package at a time so we can report per-package progress. Installing
 			// individually also keeps the streamed percentage meaningful (it resets per package).
