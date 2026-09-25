@@ -44,11 +44,10 @@ internal static class CometMetadataUpdateHandler
 	}
 
 	/// <summary>
-	/// Called when cached data may be stale. No Comet-specific cache to clear.
+	/// Called when cached data may be stale, including inherited body metadata.
 	/// </summary>
 	internal static void ClearCache(Type[]? updatedTypes)
 	{
-		// No Comet-specific caches to clear.
-		// MauiHotReloadHelper manages its own state.
+		Internal.Extensions.ClearBodyMethodCache();
 	}
 }

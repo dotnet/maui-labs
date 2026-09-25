@@ -23,16 +23,14 @@ namespace Comet.Platform.Compose
 	sealed class ComposeListNode : ComposeNode, IBackendManagesOwnContent
 	{
 		IListView _list;
-		readonly BackendContext _context;
 		readonly MutableState<int> _version = new(0);
 
 		// Compose re-invokes a LazyColumn item's content on every recomposition (and the list
 		// recomposes per scroll frame), so materializing + Yoga-laying-out the row in the item
 		// lambda re-did that work for every visible row every frame. Cache the materialized node per
-		// row so a recomposition is O(1); invalidate when the data version or the row width changes.
-		readonly System.Collections.Generic.Dictionary<int, NativeListRow> _rowCache = new();
-		OwnedContentGeneration? _rowGeneration;
-		int _cachedVersion = -1;
+		// row so a recomposition is O(1). Reload/width changes clear all rows; incremental
+		// item updates invalidate only the changed suffix.
+		readonly NativeListRowCache _rowCache;
 		double _cachedWidth = -1;
 
 		// Scroll-state bridge: a remembered LazyListState surfaces scroll position to C#. A
@@ -47,13 +45,13 @@ namespace Comet.Platform.Compose
 		public ComposeListNode(IListView list, BackendContext context)
 		{
 			_list = list;
-			_context = context;
+			_rowCache = new NativeListRowCache(context);
 		}
 
 		/// <summary>The node was transferred to a new ListView (ordinary re-render or hot reload).
 		/// Re-point at the new list and re-bind the JumpToBottom scroller + ScrolledAway signal to
-		/// it; bump the version so the new list's data is read (Render's version check drops the
-		/// stale row cache). Initial scroll remains one-shot for the retained native node, so
+		/// it; the following List_Version patch releases the previous owner's rows.
+		/// Initial scroll remains one-shot for the retained native node, so
 		/// ordinary row updates preserve the user's current scroll position.</summary>
 		public override void OnOwnerViewChanged(View newView, bool isHotReload)
 		{
@@ -72,26 +70,24 @@ namespace Comet.Platform.Compose
 				ReleaseRows();
 				_version.Value++; // recompose against the latest rows
 			}
+			else if (id == PropertyIds.List_InvalidateFrom)
+			{
+				_rowCache.InvalidateFrom(value.AsInt);
+				_version.Value++;
+			}
 		}
 
 		void ReleaseRows()
 		{
-			_rowGeneration?.Dispose();
-			_rowGeneration = null;
-			foreach (var row in _rowCache.Values)
-				row.Dispose();
-			_rowCache.Clear();
+			_rowCache.Dispose();
 		}
 
 		NativeListRow GetRow(int index)
 		{
-			if (_rowCache.TryGetValue(index, out var row))
+			if (_rowCache.TryGet(index, out var row))
 				return row;
 
-			var generation = _rowGeneration ??=
-				new OwnedContentGeneration((View)_list, _context);
-			row = NativeListRow.Materialize(_list.ViewFor(0, index), generation);
-			_rowCache[index] = row;
+			row = _rowCache.GetOrCreate(index, (View)_list, () => _list.ViewFor(0, index));
 			return row;
 		}
 
@@ -160,6 +156,21 @@ namespace Comet.Platform.Compose
 			// the list leaves the composition.
 			var capturedList = _list;
 			var capturedState = listState;
+			if (scrollBridge && _list is CollectionView collection)
+			{
+				composer.LaunchedEffect("Comet.RemainingItems", version, async ct =>
+				{
+					await foreach (var lastVisible in ComposeExtensions.SnapshotFlow(
+						() => capturedState.LastVisibleItemIndex).WithCancellation(ct))
+					{
+						Comet.ThreadHelper.RunOnMainThread(() =>
+						{
+							if (!ct.IsCancellationRequested && ReferenceEquals(collection, _list))
+								collection.NotifyVisibleIndex(lastVisible);
+						});
+					}
+				});
+			}
 			if (scrollBridge)
 			{
 				composer.LaunchedEffect(true, async ct =>
@@ -215,11 +226,10 @@ namespace Comet.Platform.Compose
 			bool yoga = HasFrame;
 			double rowWidth = RowWidth;
 
-			// Drop the cache when the rows or the width change (otherwise we'd render stale layout).
-			if (version != _cachedVersion || rowWidth != _cachedWidth)
+			// Width changes require new layout even when the data prefix is unchanged.
+			if (rowWidth != _cachedWidth)
 			{
 				ReleaseRows();
-				_cachedVersion = version;
 				_cachedWidth = rowWidth;
 			}
 

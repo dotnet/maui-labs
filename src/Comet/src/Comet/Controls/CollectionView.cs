@@ -6,6 +6,7 @@ using System.Collections.Specialized;
 using System.Linq;
 using Comet.Internal;
 using Comet.Reactive;
+using Comet.Backend;
 using Microsoft.Maui;
 
 namespace Comet
@@ -62,6 +63,7 @@ namespace Comet
 		}
 
 		IReadOnlyList<T> currentItems;
+		bool _updatingItems;
 
 		public CollectionView(Func<IReadOnlyList<T>> items) : this()
 		{
@@ -79,22 +81,9 @@ namespace Comet
 
 		public CollectionView()
 		{
-			if (ListView.HandlerSupportsVirtualization)
-			{
-				CurrentViews = new FixedSizeDictionary<(int section, int row, object item), View>(150)
-				{
-					OnDequeue = (pair) =>
-					{
-						var view = pair.Value;
-						if (view?.ViewHandler?.PlatformView is null)
-							view.Dispose();
-						else
-							CurrentViews[pair.Key] = view;
-					}
-				};
-			}
-			else
-				CurrentViews = new Dictionary<(int section, int row, object item), View>();
+			// Native list nodes retain materialized rows. Evicting a template here
+			// would dispose content that the backend still owns.
+			CurrentViews = new Dictionary<(int section, int row, object item), View>();
 
 			ShouldDisposeViews = true;
 		}
@@ -103,9 +92,8 @@ namespace Comet
 		{
 			if (property == nameof(Items))
 			{
-				DisposeObservable();
-				currentItems = Items?.CurrentValue;
-				SetupObservable();
+				if (_updatingItems)
+					return;
 				ReloadData();
 			}
 			base.ViewPropertyChanged(property, value);
@@ -128,6 +116,62 @@ namespace Comet
 			if (!(currentItems is ObservableCollection<T> observable))
 				return;
 			observable.CollectionChanged -= Observable_CollectionChanged;
+		}
+
+		/// <summary>
+		/// Re-reads the source while retaining templates for equal items at unchanged
+		/// indices. Use immutable items; call ReloadData after editing an item in place.
+		/// </summary>
+		public void RefreshItems() => UpdateItems(preserveRows: true);
+
+		public override void ReloadData() => UpdateItems(preserveRows: false);
+
+		void UpdateItems(bool preserveRows)
+		{
+			if (_updatingItems)
+				return;
+			_updatingItems = true;
+			using var hold = ReactiveScheduler.HoldFlushes();
+			try
+			{
+				if (!preserveRows)
+					ResetRemainingItemsThreshold();
+				DisposeObservable();
+				_items?.Reevaluate();
+				currentItems = _items?.CurrentValue;
+				SetupObservable();
+
+				int firstChanged = preserveRows ? currentItems?.Count ?? 0 : 0;
+				if (preserveRows && currentItems is not null)
+				{
+					foreach (var key in CurrentViews.Keys)
+					{
+						if (key.section != 0 || key.row >= currentItems.Count ||
+							!EqualityComparer<T>.Default.Equals((T)key.item, currentItems[key.row]))
+							firstChanged = Math.Min(firstChanged, key.section == 0 ? key.row : 0);
+					}
+				}
+
+				var stale = CurrentViews.Where(pair => pair.Key.row >= firstChanged).ToArray();
+				foreach (var pair in stale)
+					CurrentViews.Remove(pair.Key);
+				try
+				{
+					if (preserveRows && Node is { } node)
+						node.ApplyProperty(PropertyIds.List_InvalidateFrom, PropertyValue.From(firstChanged));
+					else
+						base.ReloadData();
+				}
+				finally
+				{
+					foreach (var pair in stale)
+						pair.Value?.Dispose();
+				}
+			}
+			finally
+			{
+				_updatingItems = false;
+			}
 		}
 
 		public Func<T, View> ViewFor { get; set; }
@@ -227,5 +271,42 @@ namespace Comet
 		public Action RemainingItemsThresholdReached { get; set; }
 
 		public Action<int> RemainingItemsThresholdReachedCommand { get; set; }
+
+		int _lastNotifiedCount = -1;
+		bool _wasWithinThreshold;
+		bool _notifyingThreshold;
+
+		internal void ResetRemainingItemsThreshold()
+		{
+			_lastNotifiedCount = -1;
+			_wasWithinThreshold = false;
+		}
+
+		internal void NotifyVisibleIndex(int lastVisibleIndex)
+		{
+			if (IsDisposed || _notifyingThreshold)
+				return;
+			int count = ((IListView)this).Rows(0);
+			if (RemainingItemsThreshold < 0 || count == 0 || lastVisibleIndex < 0 ||
+				lastVisibleIndex >= count || count - lastVisibleIndex - 1 > RemainingItemsThreshold)
+			{
+				_wasWithinThreshold = false;
+				return;
+			}
+			if (_wasWithinThreshold && count == _lastNotifiedCount)
+				return;
+			_wasWithinThreshold = true;
+			_lastNotifiedCount = count;
+			_notifyingThreshold = true;
+			try
+			{
+				RemainingItemsThresholdReached?.Invoke();
+				RemainingItemsThresholdReachedCommand?.Invoke(lastVisibleIndex);
+			}
+			finally
+			{
+				_notifyingThreshold = false;
+			}
+		}
 	}
 }

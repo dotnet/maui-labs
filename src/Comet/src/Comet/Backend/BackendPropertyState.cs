@@ -224,6 +224,7 @@ namespace Comet.Backend
 			[PropertyIds.Slider_Minimum] = PropertyValue.From(0d),
 			[PropertyIds.Slider_Maximum] = PropertyValue.From(1d),
 			[PropertyIds.List_Version] = PropertyValue.From(0),
+			[PropertyIds.List_InvalidateFrom] = PropertyValue.From(0),
 
 			[PropertyIds.Icon_Symbol] = PropertyValue.From(string.Empty),
 			[PropertyIds.Icon_Tint] = PropertyValue.From((Color?)null),
