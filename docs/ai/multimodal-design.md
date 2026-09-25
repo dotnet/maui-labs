@@ -51,8 +51,8 @@ the Xcode 27 preview runner and .NET 10 workload `10.0.401`. The workload's unsu
 TFMs use 26.5 packs, whose Xcode version check rejects Xcode 27; the native build explicitly
 passes `ValidateXcodeVersion=false` while retaining runtime OS 27 guards. Hosted device tests
 instead opt in to the 27.0 Mac Catalyst TFM on the macOS 27 runner. Local builds of the
-unsuffixed and opt-in 27.0 TFMs pass against Xcode 27.0. Hosted CI still needs to confirm this
-combination; the initial unsuffixed device-test run on macOS 27 timed out without test results.
+unsuffixed and opt-in 27.0 TFMs pass against Xcode 27.0. An earlier exact-head hosted run
+confirmed the native build and device tests; hosted CI on the current stacked base is pending.
 All required symbols are **confirmed present in the Xcode 27.0 Beta 4 SDK** (verified via the
 FoundationModels swiftinterface).
 
@@ -585,31 +585,6 @@ Device tests (`RequiresModel=true`, excluded from CI and requiring a 27.0 runtim
    corresponding `Attachment` inits) can be added later; v1 funnels everything through `CGImage`.
 5. **Vision tools.** `OCRTool` / `BarcodeReaderTool` (from the Vision framework) can be attached to a
    session for OCR/barcode workflows — a natural follow-up once image input lands.
-
-## 8. Also in the 27.0 headers (noted, out of scope for images-in)
-
-Surfaced while reading the FoundationModels swiftinterface — not needed for image input, but worth
-tracking as future Essentials.AI work:
-
-- **Availability & model config (already shipped in 26.x, still unused):** `SystemLanguageModel`
-  `availability` / `isAvailable` / `Availability`; `init(useCase: .general, guardrails: .default)`
-  with `UseCase` (`.contentTagging`) and `Guardrails`; `contextSize`, `supportedLanguages`,
-  `supportsLocale(_:)`, `tokenCount(for:)`.
-- **Token usage:** `LanguageModelSession.usage` (`Usage` with input/output token counts) → maps to
-  M.E.AI `ChatResponse.Usage` / `UsageDetails`, which we currently don't populate.
-- **Session lifecycle:** `prewarm(promptPrefix:)`, `isResponding`, `transcriptErrorHandlingPolicy`.
-- **Tool-calling mode (new 27.0):** `GenerationOptions.ToolCallingMode` (`.allowed` / `.required` /
-  `.disallowed`) → maps to M.E.AI `ChatOptions.ToolMode`.
-- **Sampling (new 27.0):** `SamplingMode.random(probabilityThreshold:seed:)` (top-p) in addition to
-  `random(top:seed:)`.
-- **Context / metadata (new 27.0):** `ContextOptions` (incl. `includeSchemaInPrompt`) and a
-  `metadata:` parameter on the newer `respond` / `streamResponse` overloads.
-- **Feedback (new 27.0):** `LanguageModelFeedback` (`Sentiment`, `Issue.Category`) +
-  `session.logFeedbackAttachment(...)`.
-- **Advanced composition (new 27.0):** dynamic profiles / dynamic instructions
-  (`init(profile:history:)`, `init(model:dynamicInstructions:history:)`), session properties
-  (`@SessionPropertyEntry`), the pluggable `LanguageModel` protocol, and
-  `PrivateCloudComputeLanguageModel` (server-side inference with quota).
 
 ## References (authoritative sources)
 
