@@ -56,6 +56,11 @@
     <DefineConstants>$(DefineConstants);MODE_XHARNESS</DefineConstants>
   </PropertyGroup>
 
+  <!-- Explicitly opt in: this packaged benchmark makes many real on-device model calls. -->
+  <PropertyGroup Condition="'$(EnableWindowsAIContextBenchmark)' == 'true'">
+    <DefineConstants>$(DefineConstants);WINDOWS_AI_CONTEXT_BENCHMARK</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup Condition="'$(TestingMode)' == 'XHarness'">
     <PackageReference Include="DeviceRunners.XHarness.Xunit" />
     <PackageReference Include="DeviceRunners.XHarness.Maui" />
