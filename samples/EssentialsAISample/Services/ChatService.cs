@@ -4,9 +4,6 @@ using System.Text.Json;
 using EssentialsAISample.Models;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
-#if WINDOWS
-using Microsoft.Maui.Essentials.AI;
-#endif
 
 namespace EssentialsAISample.Services;
 
@@ -59,9 +56,7 @@ public class ChatService
 		var enableToolCalling = false;
 		if (toolSetting is not null && !bool.TryParse(toolSetting, out enableToolCalling))
 			throw new InvalidOperationException("AI:EnablePhiToolCalling must be true or false.");
-		_supportsToolCalling = !OperatingSystem.IsWindowsVersionAtLeast(10, 0, 26100) ||
-			chatClient.GetService<WindowsAIChatClient>() is null ||
-			enableToolCalling;
+		_supportsToolCalling = enableToolCalling;
 #else
 		_supportsToolCalling = true;
 #endif

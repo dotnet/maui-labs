@@ -30,13 +30,14 @@ packaged MSIX with the `systemAIModels` capability and Windows 11 24H2 or later.
 
 ## Setup
 
-To run this sample, you need to configure Azure OpenAI credentials using user secrets.
+The packaged Windows sample uses on-device Windows AI without Azure credentials.
+For deployments using Azure OpenAI, configure credentials using user secrets.
 
 ### Configure User Secrets
 
 1. Navigate to the sample directory:
    ```bash
-   cd src/AI/samples/Essentials.AI.Sample
+   cd samples/EssentialsAISample
    ```
 
 2. Initialize user secrets (if not already done):

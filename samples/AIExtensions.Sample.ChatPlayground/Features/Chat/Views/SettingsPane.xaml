@@ -85,7 +85,7 @@
                     </HorizontalStackLayout>
                     <HorizontalStackLayout Spacing="4">
                         <Label Text="Tool mode" VerticalOptions="Center" />
-                        <controls:InfoTip Text="Controls whether an enabled tool may or must be called. Experimental Phi Silica selection can call unrelated tools in Auto mode." />
+                        <controls:InfoTip Text="Controls whether an enabled tool may or must be called. Experimental Windows AI selection can call unrelated tools in Auto mode." />
                     </HorizontalStackLayout>
                     <HorizontalStackLayout Spacing="6"
                                            RadioButtonGroup.GroupName="ToolMode"

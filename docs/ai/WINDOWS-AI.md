@@ -170,8 +170,9 @@ AI Chat; Azure's image-input behavior is unaffected.
 
 ## Semantic search
 
-`AppContentIndexer` (Windows Search) is not in this baseline; its existing sample integration is
-deferred to #523. The indexer does not expose vectors, so it cannot implement
+`AppContentIndexer` (Windows Search) is not in the native Windows AI library's API.
+EssentialsAISample integrates it in this optional sample layer for semantic search.
+The indexer does not expose vectors, so it cannot implement
 `IEmbeddingGenerator<string, Embedding<float>>`.
 
 `LanguageModel.GenerateEmbeddingVectors` is **not** a substitute. It returns a list of

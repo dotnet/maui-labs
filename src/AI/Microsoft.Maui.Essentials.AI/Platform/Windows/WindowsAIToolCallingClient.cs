@@ -152,7 +152,7 @@ public sealed class WindowsAIToolCallingClient : DelegatingChatClient
 
 		if (options.Tools.Any(tool => tool is not AIFunction))
 			throw new NotSupportedException(
-				"Phi Silica's experimental tool-calling adapter only supports AIFunction tools.");
+				"The experimental Windows AI tool-calling adapter only supports AIFunction tools.");
 
 		var functions = options.Tools.OfType<AIFunction>().ToList();
 
@@ -227,12 +227,12 @@ public sealed class WindowsAIToolCallingClient : DelegatingChatClient
 		if (chosen.Equals(NoToolName, StringComparison.OrdinalIgnoreCase))
 		{
 			if (requiresFirstTool)
-				throw new InvalidOperationException("Phi Silica selected no tool when a tool call was required.");
+				throw new InvalidOperationException("Windows AI selected no tool when a tool call was required.");
 			return null;
 		}
 
 		return candidates.FirstOrDefault(t => t.Name.Equals(chosen, StringComparison.OrdinalIgnoreCase))
-			?? throw new InvalidOperationException($"Phi Silica selected an unknown tool: {chosen}.");
+			?? throw new InvalidOperationException($"Windows AI selected an unknown tool: {chosen}.");
 	}
 
 	/// <summary>
@@ -406,11 +406,11 @@ public sealed class WindowsAIToolCallingClient : DelegatingChatClient
 	private static Dictionary<string, object?> ReadArguments(string? response)
 	{
 		if (string.IsNullOrWhiteSpace(response))
-			throw new InvalidOperationException("Phi Silica did not return tool arguments.");
+			throw new InvalidOperationException("Windows AI did not return tool arguments.");
 
 		using var document = JsonDocument.Parse(response);
 		if (document.RootElement.ValueKind != JsonValueKind.Object)
-			throw new InvalidOperationException("Phi Silica returned tool arguments that are not a JSON object.");
+			throw new InvalidOperationException("Windows AI returned tool arguments that are not a JSON object.");
 
 		return document.RootElement.EnumerateObject()
 			.ToDictionary(property => property.Name, property => (object?)property.Value.Clone());
@@ -487,7 +487,7 @@ public sealed class WindowsAIToolCallingClient : DelegatingChatClient
 	private static string ReadString(string? json, string propertyName)
 	{
 		if (string.IsNullOrWhiteSpace(json))
-			throw new InvalidOperationException("Phi Silica did not return a tool selection.");
+			throw new InvalidOperationException("Windows AI did not return a tool selection.");
 
 		using var document = JsonDocument.Parse(json);
 
@@ -496,7 +496,7 @@ public sealed class WindowsAIToolCallingClient : DelegatingChatClient
 			value.ValueKind == JsonValueKind.String &&
 			value.GetString() is { Length: > 0 } choice
 				? choice
-				: throw new InvalidOperationException("Phi Silica returned a tool selection without a tool_name.");
+				: throw new InvalidOperationException("Windows AI returned a tool selection without a tool_name.");
 	}
 
 }
