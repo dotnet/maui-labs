@@ -24,15 +24,16 @@ using System.Runtime.Versioning;
 #if IOS || MACCATALYST || WINDOWS
 using Microsoft.Maui.Essentials.AI;
 #endif
-#if WINDOWS
-using System.Runtime.Versioning;
-#endif
 
 namespace AIExtensions.Sample.ChatPlayground;
 
 /// <summary>Configures dependency injection and developer-only diagnostics.</summary>
 public static class MauiProgram
 {
+#if WINDOWS
+    private const string WindowsImageGeneratorId = "windows/phi-silica";
+#endif
+
     /// <summary>Creates the MAUI application.</summary>
     public static MauiApp CreateMauiApp()
     {
@@ -161,6 +162,19 @@ public static class MauiProgram
 
     private static void AddImageGenerators(IServiceCollection services, IConfiguration configuration)
     {
+#if WINDOWS
+#pragma warning disable MEAI001 // The Windows image generator implements experimental IImageGenerator.
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 26100))
+            services.AddSingleton<IImageGenerator>(_ => new DescribedImageGenerator(
+                () => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 26100)
+                    ? new PhiSilicaImageGenerator()
+                    : throw new PlatformNotSupportedException("Windows Copilot Runtime requires Windows 11 24H2 or later."),
+                new ImageGeneratorDescriptor(
+                    WindowsImageGeneratorId, "Windows Copilot Runtime",
+                    "Generates or edits images on this device. The first request checks whether the Windows image model is ready.",
+                    SupportsEdits: true)));
+#pragma warning restore MEAI001
+#endif
         var deployment = configuration["AI:ImageDeploymentName"];
         if (string.IsNullOrWhiteSpace(deployment))
             return;
@@ -224,6 +238,7 @@ public static class MauiProgram
         return endpoint;
     }
 #if WINDOWS
+#pragma warning disable MEAI001 // The selected Windows image generator is an experimental IImageGenerator.
     [SupportedOSPlatform("windows10.0.26100.0")]
     private static IChatClient CreateWindowsChatClient(IServiceProvider services) =>
         new PhiSilicaChatClient()
@@ -235,10 +250,13 @@ public static class MauiProgram
                 SupportsImageInput: true,
                 SupportsImageGeneration: true))
             .UseLogging(services.GetRequiredService<ILoggerFactory>())
-            .UseImageGenerationPreservingInputs(new PhiSilicaImageGenerator())
+            .UseImageGenerationPreservingInputs(
+                services.GetServices<IImageGenerator>().Single(generator =>
+                    generator.GetService<ImageGeneratorDescriptor>()?.Id == WindowsImageGeneratorId))
             .UseFunctionInvocation()
             .Use(inner => new PhiSilicaToolCallingClient(inner))
             .Build();
+#pragma warning restore MEAI001
 #endif
 
 #if IOS || MACCATALYST
