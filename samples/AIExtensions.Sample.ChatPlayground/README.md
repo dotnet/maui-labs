@@ -54,10 +54,11 @@ text may leave the device and incur charges.
 - **Chat:** Choose a provider, send text, and switch between streaming and
   single-response modes. Try schema-constrained JSON output. Apple and Azure
   support optional tools; Azure can accept images and can create images through
-  a separately configured image-generation tool. Apple image input is enabled
-  only on iOS/Mac Catalyst 27+ with a ready vision-capable model; on 26, Apple
-  text chat remains available but the attachment button is disabled. Apple
-  does not generate images or silently fall back to Azure.
+  a separately configured image-generation tool. Apple's attachment button
+  is enabled on iOS/Mac Catalyst 27+, but sending requires a ready
+  vision-capable model; on 26, Apple text chat remains available while the
+  button is disabled. Apple does not generate images or silently fall back
+  to Azure.
 - **Embeddings:** Import documents, create an index, and search it. Apple
   on-device and configured Azure providers are available. Imported content
   and indexes are separate from chats.
