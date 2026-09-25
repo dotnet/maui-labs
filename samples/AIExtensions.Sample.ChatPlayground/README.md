@@ -2,7 +2,8 @@
 
 A .NET MAUI sample for trying `Microsoft.Extensions.AI` across on-device and
 optional Azure OpenAI providers. The app runs on Android, iOS, Mac Catalyst,
-and Windows (not native macOS); available providers vary by platform.
+and Windows (not native macOS); Apple and Windows offer on-device models,
+while available providers vary by platform.
 
 ## Features
 
@@ -13,13 +14,16 @@ optional tools. `Microsoft.Maui.Essentials.AI` provides on-device text chat
 through `AppleIntelligenceChatClient`. On iOS and Mac Catalyst 27+, image
 attachments require a ready vision-capable model. Azure uses the Responses
 API and also supports image input, reasoning summaries, and an optional
-image-generation tool. Apple does not generate images or fall back to Azure.
+image-generation tool. Windows AI supports text and schema-constrained JSON
+but not image input or native tool calling. Apple does not generate images or
+fall back to Azure.
 
 Chat displays the model ID reported by the provider, including during replay.
 Save the current chat locally, import or export recordings, and replay them
 offline. The **More** menu includes a bundled example; **New** replaces the
 current recording. Uncheck tools you do not need, or choose **None** to disable
-tool calls.
+tool calls. The date/time, calculator, and connection-status sample tools are
+available to providers that support calling them.
 
 The header's **Logs** button toggles the local, bounded diagnostics sidebar
 (also available on Embeddings and Images). It groups built-in logs and spans
@@ -37,7 +41,9 @@ Import documents, build an index, and search it using Apple's on-device
 
 ### Images
 
-Generate images from text or edit a source image with a configured Azure provider.
+Generate images from text or edit a source image with Windows AI on a
+supported Copilot+ PC, or with a configured Azure provider. Windows AI image
+generation may download a large optional model.
 
 Chat, Embeddings, and Images each have their own tab and services. Replay
 works without credentials or a model.
@@ -58,6 +64,19 @@ iOS or Mac Catalyst 26+ on a supported device with the model enabled. Apple
 image input requires 27+ and a ready vision-capable model. Apple embeddings
 require the English sentence-embedding asset, which may be absent on
 simulators. Azure-backed features also run on Android and Windows.
+
+On Windows 11 24H2 (build 26100+) with supported hardware, run the app
+**packaged** to access on-device models. The project includes the
+`systemAIModels` capability and BuildTools.WinApp for MSIX `dotnet run`:
+
+```powershell
+dotnet run --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj -f net10.0-windows10.0.19041.0
+```
+
+Do not add `WindowsPackageType=None` to make the Windows build easier: an
+unpackaged app cannot access the Windows AI models. See
+[Windows AI support](../../docs/ai/WINDOWS-AI.md) for SDK versions, packaging,
+and feature limitations.
 
 ## Optional Azure configuration
 

@@ -2,15 +2,15 @@
 
 On-device AI for .NET MAUI apps using platform-native models — no cloud required.
 
-This package provides [`Microsoft.Extensions.AI`](https://learn.microsoft.com/dotnet/ai/ai-extensions) abstractions (`IChatClient`, `IEmbeddingGenerator`) backed by on-device AI capabilities:
+This package provides [`Microsoft.Extensions.AI`](https://learn.microsoft.com/dotnet/ai/ai-extensions) abstractions (`IChatClient`, `IEmbeddingGenerator`, experimental `IImageGenerator`) backed by on-device AI capabilities:
 
-| Platform | Chat (IChatClient) | Image input | Embeddings (IEmbeddingGenerator) |
-|----------|-------------------|-------------|----------------------------------|
-| iOS 26+ | ✅ Apple Intelligence (Foundation Models) | 27+ with vision-capable model | ✅ NL Embeddings |
-| Mac Catalyst 26+ | ✅ Apple Intelligence | 27+ with vision-capable model | ✅ NL Embeddings |
-| macOS 26+ | ✅ Apple Intelligence | 27+ with vision-capable model | ✅ NL Embeddings |
-| Android | 🔜 Coming soon | Not available | 🔜 Coming soon |
-| Windows | 🔜 Coming soon | Not available | 🔜 Coming soon |
+| Platform | Chat (`IChatClient`) | Image input | Embeddings (`IEmbeddingGenerator`) | Image generation (`IImageGenerator`) |
+|----------|----------------------|-------------|--------------------------------------|----------------------------------------|
+| iOS 26+ | Apple Intelligence | 27+ with vision-capable model | NL Embeddings | Not available |
+| Mac Catalyst 26+ | Apple Intelligence | 27+ with vision-capable model | NL Embeddings | Not available |
+| macOS 26+ | Apple Intelligence | 27+ with vision-capable model | NL Embeddings | Not available |
+| Android | Not yet available | Not available | Not yet available | Not available |
+| Windows 11 24H2+ | Windows AI language model | Not available | Not available | Windows AI image model (experimental) |
 
 ## Getting Started
 
@@ -29,6 +29,13 @@ builder.UseMauiApp<App>();
 // Register Apple Intelligence chat client (iOS/macOS/Mac Catalyst)
 builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
 ```
+
+For a packaged Windows app with the `systemAIModels` capability, register
+`new WindowsAIChatClient()` instead, or `new WindowsAIImageGenerator()` as an
+`IImageGenerator`. The Windows language model accepts text and structured JSON,
+not image inputs or function calls. The [Chat Playground](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)
+demonstrates Windows chat and image generation alongside Apple and optional
+Azure providers.
 
 ### 3. Use in your app
 
@@ -95,6 +102,9 @@ async tool code inherit any active chat trace/span, including one created by
 - MAUI workload (`dotnet workload install maui`)
 - Apple Intelligence requires iOS 26+, macOS 26+, or Mac Catalyst 26+
 - Image input additionally requires iOS, macOS, or Mac Catalyst 27+ with a ready vision model
+- Windows AI requires Windows 11 24H2+, a packaged MSIX app with `systemAIModels`,
+  and an available on-device model. Image generation currently requires an
+  experimental Windows App SDK; this is not a Microsoft Store-ready dependency.
 
 ## Status
 
@@ -105,4 +115,5 @@ async tool code inherit any active chat trace/span, including one created by
 - [Source code](https://github.com/dotnet/maui-labs/tree/main/src/AI)
 - [Sample app](https://github.com/dotnet/maui-labs/tree/main/samples/EssentialsAISample)
 - [Image-input playground and macOS 27 test checklist](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)
+- [Windows AI integration notes](https://github.com/dotnet/maui-labs/blob/main/docs/ai/WINDOWS-AI.md)
 - [Microsoft.Extensions.AI documentation](https://learn.microsoft.com/dotnet/ai/ai-extensions)
