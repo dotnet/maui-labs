@@ -525,6 +525,210 @@ View body()
    into separate `View` subclasses so they diff independently.
 
 
+## Native-backend follow-up: September 24, 2026
+
+The [BaristaNotes scrolling work](baristanotes-scroll-performance.md) exposed
+five broader opportunities. This Android-first follow-up implements four,
+fixes a property/layout ordering defect, and defers physical-iOS work as
+requested. Measurements ran September 24 CDT / September 25 UTC.
+
+### Measured changes
+
+Pixel 5, Android 14, Release arm64 Native AOT, identical isolated .NET 11 RC
+toolchain and Android `speed` compilation. Each build ran in three fresh
+processes, with six repetitions per operation. Repetition zero was a predefined
+warmup. The table reports the median of the three process medians over the
+remaining five repetitions, retaining all slow measured samples.
+
+| Operation | Before, ms | After, ms | Before managed bytes | After managed bytes |
+|---|---:|---:|---:|---:|
+| Construct two tabs, 12 labels each | 18.866 | 11.768 | 1,939,904 | 656,632 |
+| Construct dialog slots, 12 labels | 4.331 | 2.965 | 594,776 | 246,568 |
+| Construct selector panel, 12 labels | 4.136 | 2.727 | 579,656 | 231,144 |
+| 100 text-color updates plus measurement | 16.248 | 7.051 | 488,296 | 427,496 |
+| 100 font-size updates plus measurement, control case | 52.817 | 53.590 | 3,457,688 | 3,460,088 |
+| Construct/dispose 1,000 views with two environment fields | 61.870 | 2.348 | 6,075,936 | 880,000 |
+
+These are **framework-operation microbenchmarks**, not frame timing,
+tap-to-display latency or an application-wide speedup. The construction
+measurement calls the real backend content-installation method with a
+mounted probe root; resulting reactive flushes run real layout. It does not
+time Compose drawing. Managed allocation counts do not include Java/native
+heap allocations. Only one physical device was measured.
+
+1. **Install hosted content atomically.** Compose tab, alert-dialog and
+   selector-panel construction now hold reactive flushes until their fields
+   are populated. The shared `OwnedContentSlot` does the same before exposing
+   its node, logical view and generation. Tab construction went from 25
+   flushes to one; dialog and selector construction went from 12 to one.
+   Existing nested holds compose with these scopes. A blanket hold inside
+   every `Materialize` call would release too early, before the caller had
+   installed the result; the ownership boundary is the important detail.
+2. **Keep measurements for paint-only updates.** The Compose node's
+   measurement cache now ignores explicitly classified visual properties and
+   recognizes replayed, unchanged immutable text/padding inputs. Updates still
+   reach the native control; geometry changes, mutable payloads, new
+   constraints and unknown property IDs remain conservative. This is not a
+   global layout-skipping scheme. The font-size control still remeasures and
+   was not faster.
+3. **Cache environment-field metadata, not view state.** Discovery is cached
+   per runtime type, including empty results, using a weak-key table. Each
+   view retains its own resolved keys and field values. Hot Reload clears
+   the cache, including derived-type entries when a base type changes.
+
+### Correctness found during visual verification
+
+An environment write could schedule an inline flush **before**
+`ContextPropertyChanged` applied the new font to the backend. The regression
+test observed font size 18 during the flush after requesting 30. On the
+emulator, text painted at the new size but kept its old 115-by-23 layout
+allocation until another action, visibly clipping it.
+
+The three environment-write overloads now hold flushes through property
+application for cascading writes, which can schedule the early flush.
+Non-cascading writes do not acquire an unnecessary hold. The focused test
+observes 30 in the first flush. DevFlow
+inspection confirmed that a color-only change retained the original bounds,
+while increasing the font immediately changed them to 188-by-39; screenshots
+confirmed the text was no longer clipped.
+
+Native tab switching and dialog open/close were also exercised. The dialog's
+separate window was verified with Android accessibility inspection: the
+activity-window screenshot alone does not include that window.
+
+### iOS boundary and bounded row retention
+
+**4. iOS native-list construction remains deferred.** `SwiftUIListNode.Rebuild`
+still creates every loaded managed row and rebuilds on suffix invalidation.
+The shared changes compile for iOS, but there was no physical-iOS measurement.
+Do not extrapolate the Android gains or change the SwiftUI lifecycle without
+that baseline.
+
+**5. Bounded retention is now opt-in and native-lifetime-aware.** Set
+`CollectionView.RetainedItemLimit` before materialization to enable an Android
+vertical-list budget. The default is zero (retain visited rows), so existing
+stateful lists do not silently lose state. BaristaNotes opts into 150 because
+its shot-row content is recreated from the saved shot model.
+
+Compose's remembered item observer reserves the exact row generation before
+it renders and releases it on both forgotten and abandoned composition,
+including canceled prefetch. Least-recently-used rows are evicted only when
+they have no native retainers. Backend generation disposal and logical-template
+removal are coordinated. An old generation's delayed release cannot unpin a
+replacement row. Native-retained rows can temporarily exceed the budget.
+
+For lists opting in, durable row state belongs in the item model: an evicted
+template is recreated on return. The setting cannot change after the list has
+been materialized. Other platform/list flavors retain their existing policy.
+
+Three matched Pixel process pairs used the same Native AOT diagnostic APK
+and the same 1,000-row traversal, changing only the limit from zero to 150.
+The traversal visited every row, returned to row zero, verified the recreated
+content, then disposed the list. Both native rows and templates stayed at 150
+after the budget was reached; both modes released the native cache on disposal.
+
+| Lifetime measure, median of three processes | Limit 0 | Limit 150 |
+|---|---:|---:|
+| Retained native rows after visiting 1,000 rows | 1,000 | 150 |
+| Retained templates | 1,000 | 150 |
+| Managed heap sample at the final traversal checkpoint, bytes | 19,181,416 | 10,475,736 |
+| Process PSS after returning to the start, `dumpsys meminfo` KB | 164,338 | 155,627 |
+| Native cache entries after list disposal | 0 | 0 |
+
+The row-count reduction is 85%; the observed process PSS reduction is about
+5.3%. Managed heap samples use `GC.GetTotalMemory(false)` and are not retained
+heap proofs. No forced GC or heap-size guarantee is implied.
+
+Eviction has a real repeat-scroll cost. A separate three-pair trace check,
+scrolling the old beginning after traversing all 1,000 rows, recorded zero app
+deadline misses per run with everything cached and two per run with the
+150-row budget. Median miss rate was 0% versus 0.64%; p95 overrun was -11.69
+versus -11.21 ms. These are simple diagnostic rows, not Barista shot rows.
+The policy trades some recreation work for bounded residency; it is not an
+unconditional scrolling optimization.
+
+The actual BaristaNotes app also passed a deep emulator scroll to shots around
+626 and reverse scrolling back to shot 1,000, exercising eviction and
+reconstruction while retaining its 1,000 saved-shot dataset.
+
+### Actual BaristaNotes regression check
+
+Three additional matched runs per build exercised the existing 1,000-shot
+BaristaNotes fixture and the same four-gesture first-scroll protocol.
+The comparison baseline is the **already optimized** scrolling build, not
+the original slow build.
+
+| First-scroll statistic, median of three runs | Before this follow-up | After |
+|---|---:|---:|
+| App deadline-miss rate | 3.96% | 4.35% |
+| p95 deadline overrun | -0.35 ms | -0.91 ms |
+| p99 deadline overrun | 32.09 ms | 32.76 ms |
+| App deadline-miss count | 10 | 10 |
+
+This does **not** demonstrate a further scrolling improvement or establish
+statistical non-regression. The candidate produced fewer frames in two runs;
+the rate increased despite the same median miss count. Both builds continued
+automatic paging. Gesture input was identical; final scroll distances were
+not always equal. The small study and the existing trace setup/discard notices remain
+limitations. The retained code changes are supported by the targeted
+operation measurements and correctness checks, not a claim of additional
+scrolling speedup.
+
+After enabling the cache budget, another three matched BaristaNotes runs per
+build compared the already-improved unbounded build with the bounded build:
+
+| Statistic, median of three runs | Unbounded | Limit 150 |
+|---|---:|---:|
+| First-scroll app deadline-miss rate | 4.44% | 4.33% |
+| First-scroll p95 deadline overrun | -0.22 ms | -0.84 ms |
+| First-scroll p99 deadline overrun | 33.55 ms | 31.05 ms |
+| Cached downward-scroll app miss rate | 0.41% | 0.41% |
+
+This short route does not itself exceed the 150-row budget; it checks the
+cost of native lifetime tracking and unchanged paging behavior. The separate
+1,000-row traversal and return-scroll measurements above cover eviction.
+These small diagnostic studies do not establish statistical equivalence.
+
+### Evidence and verification
+
+The baseline is a separate archive of commit `1b74efda`; working-tree edits
+were not reverted to build it. Both diagnostic builds use the same small,
+temporary C# fixture. It and its build overrides stay outside the repository;
+there is no new benchmark package, server or CI system.
+
+| Artifact | SHA-256 |
+|---|---|
+| Matched framework baseline APK | `22c4ec4adbef0246cf3761a221b84957247266f1e2e760e05ec1eb2aedcad723` |
+| Matched framework candidate APK | `c93e6675346381481ec0fa8107dbc4178ac4b5a9f44160ca52830b0612a82567` |
+| BaristaNotes areas 1-3 APK, no diagnostic fixture | `8f43d3679ab6475808b7740cd0629d4a131af8b583091db6c94a932b80671705` |
+| Bounded/unbounded lifetime diagnostic APK | `d963e11986940402c352e6681100db94b74b8207136b519fb58ae6b22800091e` |
+| Final BaristaNotes APK, limit 150, no diagnostic fixture | `3777aaca67758200e484279bb55494588b334515313819289f0788a9b545a442` |
+
+Evidence is retained in session `c34609dd-7e0c-4040-8097-ec029694a210/files/`:
+`framework-scoped{1,2,3}-{before,after}/`, `framework-scoped-summary.json`,
+`framework-scoped-scroll-{before,after}-{1,2,3}/`, the diagnostic fixture snapshots,
+`measure-framework.py`, and the `framework-*` build/test logs and screenshots.
+Earlier unscoped-hold runs are retained as development evidence, not substituted
+for these final-source measurements.
+Battery was 100% with 24.1 C and thermal status 0 across the six framework runs.
+No user app data or system animation settings were reset.
+
+The additional lifetime records are `cache-pixel-{unbounded,bounded}-{1,2,3}/`,
+`cache-return-{unbounded,bounded}-{1,2,3}/`,
+`cache-scroll-{before,after}-{1,2,3}/`, `cache-lifetime-summary.json`, and
+`measure-lifetime.py`. The diagnostic app is isolated from saved user data.
+
+The targeted host suite passed 530 tests with two existing skips. Tests cover
+atomic installation, partial-generation cleanup, color-versus-geometry
+measurement invalidation, mutable/unknown payloads, metadata caching and
+inherited bindings, hot-reload invalidation, and the font-update ordering
+regression. Cache tests cover native retention above budget, multiple owners,
+duplicate releases, LRU selection, coordinated template disposal, stale
+generation callbacks, default state retention and configuration validation.
+Android Native AOT, Mac Catalyst host and iOS compilation passed. Physical iOS
+performance remains deferred by the agreed Android-first scope.
+
+
 ## Summary
 
 | Technique | When to use | Impact |
