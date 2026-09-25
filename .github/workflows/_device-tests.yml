@@ -110,16 +110,6 @@ jobs:
             ${{ inputs.filter != '' && format('--filter "{0}"', inputs.filter) || '' }} \
             ${{ inputs.dotnet-args }} ${{ inputs.allow-xcode-preview && '-p:ValidateXcodeVersion=false' || '' }}
 
-      - name: Diagnose Apple preview test startup
-        if: failure() && inputs.use-xcode27-preview && runner.os == 'macOS'
-        run: |
-          reports="$HOME/Library/Logs/DiagnosticReports"
-          if [ -d "$reports" ]; then
-            find "$reports" -maxdepth 1 -type f \
-              \( -name 'AI Tests*.ips' -o -name 'Microsoft.Maui.Essentials.AI.DeviceTests*.ips' \) \
-              -print -exec sed -n '1,160p' {} \;
-          fi
-
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v7
