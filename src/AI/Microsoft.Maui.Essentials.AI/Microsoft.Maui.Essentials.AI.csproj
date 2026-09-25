@@ -12,6 +12,10 @@
     <!-- CA1416: Apple Intelligence APIs require iOS/macOS 26+ but the library supports
          older OS versions with runtime guards. Suppress to avoid errors in Release builds. -->
     <NoWarn>$(NoWarn);CA1416;XCODE_27_0_PREVIEW</NoWarn>
+    <!-- Prevent MSBuild from overriding the MaxVersionTested set in Package.appxmanifest
+         (needed for the systemAIModels capability declaration to survive restore) -->
+    <AppxOSMinVersionReplaceManifestVersion>false</AppxOSMinVersionReplaceManifestVersion>
+    <AppxOSMaxVersionTestedReplaceManifestVersion>false</AppxOSMaxVersionTestedReplaceManifestVersion>
   </PropertyGroup>
   <PropertyGroup>
     <!-- NuGet package information -->
@@ -39,9 +43,18 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
+  <!-- Windows AI WinRT APIs -->
+  <ItemGroup Condition=" $(TargetFramework.Contains('-windows')) ">
+    <PackageReference Include="Microsoft.WindowsAppSDK.AI" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" />
+  </ItemGroup>
   <!-- Exclude Apple-only files from non-Apple TFMs (including net10.0 base) -->
   <ItemGroup Condition="!$(TargetFramework.Contains('-ios')) AND !$(TargetFramework.Contains('-maccatalyst')) AND !$(TargetFramework.Contains('-macos'))">
     <Compile Remove="Platform\MaciOS\**\*.cs" />
+  </ItemGroup>
+  <!-- Exclude Windows-only files from non-Windows TFMs -->
+  <ItemGroup Condition="!$(TargetFramework.Contains('-windows'))">
+    <Compile Remove="Platform\Windows\**\*.cs" />
   </ItemGroup>
   <ItemGroup Condition=" $(TargetFramework.Contains('-ios')) or $(TargetFramework.Contains('-maccatalyst')) or $(TargetFramework.Contains('-macos')) ">
     <XcodeProject Include="..\AppleNative\EssentialsAI\EssentialsAI.xcodeproj">
