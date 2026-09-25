@@ -1,7 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using AIExtensions.Sample.ChatPlayground.Features.Chat.Models;
-using AIExtensions.Sample.ChatPlayground.Features.Chat.Services;
+using AIExtensions.Sample.ChatPlayground;
 using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat.Tests;

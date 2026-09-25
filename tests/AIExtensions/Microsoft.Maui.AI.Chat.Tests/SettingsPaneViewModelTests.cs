@@ -1,11 +1,16 @@
-using AIExtensions.Sample.ChatPlayground.Features.Chat.Services;
-using AIExtensions.Sample.ChatPlayground.Features.Chat.ViewModels;
+using AIExtensions.Sample.ChatPlayground;
 using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat.Tests;
 
 public sealed class SettingsPaneViewModelTests
 {
+    [Fact]
+    public void ChatDescriptor_ToolCallingIsOptIn()
+    {
+        Assert.False(new ChatClientDescriptor("test", "Test", "Ready").SupportsToolCalling);
+    }
+
     [Fact]
     public void SelectedClient_ExposesActualClientAndItsDescriptor()
     {
@@ -33,6 +38,15 @@ public sealed class SettingsPaneViewModelTests
         using var client = new StubChatClient();
 
         Assert.Throws<InvalidOperationException>(() => new SettingsPaneViewModel([client]));
+    }
+
+    [Fact]
+    public void Constructor_DuplicateClientIds_Throws()
+    {
+        using var first = CreateClient("Live", isReplay: false);
+        using var second = CreateClient("Live", isReplay: false);
+
+        Assert.Throws<ArgumentException>(() => new SettingsPaneViewModel([first, second]));
     }
 
     [Fact]
@@ -84,11 +98,37 @@ public sealed class SettingsPaneViewModelTests
         Assert.Null(settings.CreateChatOptions([]).AllowMultipleToolCalls);
     }
 
+    [Fact]
+    public void CreateChatOptions_ClientWithoutToolCalling_DoesNotForwardHiddenToolSettings()
+    {
+        using var live = CreateClient("Live", isReplay: false);
+        using var noTools = new DescribedChatClient(
+            new StubChatClient(),
+            new ChatClientDescriptor(
+                "no-tools", "No tools", "Ready", SupportsImageInput: true, SupportsToolCalling: false));
+        var settings = new SettingsPaneViewModel([live, noTools]);
+        settings.ToolMode = ChatToolMode.RequireAny;
+        settings.AllowMultipleToolCalls = true;
+        settings.SelectedClient = noTools;
+
+        var options = settings.CreateChatOptions([]);
+        Assert.Null(options.Tools);
+        Assert.Same(ChatToolMode.None, options.ToolMode);
+        Assert.Null(options.AllowMultipleToolCalls);
+
+        var tool = AIFunctionFactory.Create(() => "unexpected");
+        Assert.Throws<NotSupportedException>(() => settings.CreateChatOptions([tool]));
+
+        settings.SelectedClient = live;
+        Assert.Same(ChatToolMode.RequireAny, settings.CreateChatOptions([tool]).ToolMode);
+    }
+
     private static IChatClient CreateClient(string name, bool isReplay) =>
-        new StubChatClient().AsBuilder()
-            .UseDescriptor(new ChatClientDescriptor(
-                name, $"{name} ready", SupportsImageInput: false, IsReplay: isReplay))
-            .Build();
+        new DescribedChatClient(
+            new StubChatClient(),
+            new ChatClientDescriptor(
+                name.ToLowerInvariant(), name, $"{name} ready",
+                IsReplay: isReplay, SupportsToolCalling: !isReplay));
 
     private sealed class StubChatClient : IChatClient
     {

@@ -1,10 +1,9 @@
 using System.Runtime.CompilerServices;
-using AIExtensions.Sample.ChatPlayground.Features.Chat.Services;
+using AIExtensions.Sample.ChatPlayground;
 using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat.Tests;
 
-#pragma warning disable MEAI001 // Image generation tools and middleware are experimental in the installed SDK.
 public sealed class ImageGenerationPipelineTests
 {
     [Theory]
@@ -15,10 +14,9 @@ public sealed class ImageGenerationPipelineTests
         var image = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "TestData", "playground_sample.png"));
         var provider = new TestChatClient();
         var generator = new TestImageGenerator(image);
-        using var client = provider.AsBuilder()
-            .UseImageGenerationPreservingInputs(generator)
-            .UseFunctionInvocation()
-            .Build();
+        using var client = new ImageGeneratingChatClient(
+            provider.AsBuilder().UseFunctionInvocation().Build(),
+            generator, ImageGeneratingChatClient.DataContentHandling.GeneratedImages);
 
         var input = new DataContent(image, "image/png");
         var messages = new[] { new ChatMessage(ChatRole.User, [new TextContent("Generate a robot"), input]) };
@@ -104,4 +102,3 @@ public sealed class ImageGenerationPipelineTests
         public void Dispose() { }
     }
 }
-#pragma warning restore MEAI001

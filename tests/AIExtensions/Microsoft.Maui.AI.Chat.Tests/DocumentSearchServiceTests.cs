@@ -1,9 +1,6 @@
 using System.Text;
 using System.Text.Json.Nodes;
-using AIExtensions.Sample.ChatPlayground.Features.Chat.Recording;
-using AIExtensions.Sample.ChatPlayground.Features.Chat.Services;
-using AIExtensions.Sample.ChatPlayground.Features.Embeddings.Models;
-using AIExtensions.Sample.ChatPlayground.Features.Embeddings.Services;
+using AIExtensions.Sample.ChatPlayground;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -96,7 +93,7 @@ public sealed class DocumentSearchServiceTests
     }
 
     [Fact]
-    public async Task ModelIdentityAndDimensions_KeepArbitraryVectorSpacesSeparate()
+    public async Task GeneratorIdAndDimensions_KeepArbitraryVectorSpacesSeparate()
     {
         using var directory = new DocumentDirectory();
         using var store = directory.CreateStore();

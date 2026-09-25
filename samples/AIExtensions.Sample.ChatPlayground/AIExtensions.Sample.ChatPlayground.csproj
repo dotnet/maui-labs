@@ -7,8 +7,9 @@
     <UseMaui>true</UseMaui>
     <SingleProject>true</SingleProject>
     <IsPackable>false</IsPackable>
+    <EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>
     <MauiXamlInflator>SourceGen</MauiXamlInflator>
-    <NoWarn>$(NoWarn);MAUIAI0001</NoWarn>
+    <NoWarn>$(NoWarn);MAUIAI0001;MEAI001;OPENAI001</NoWarn>
     <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst'))">maccatalyst-x64</RuntimeIdentifier>
     <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst')) and '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'arm64'">maccatalyst-arm64</RuntimeIdentifier>
     <ApplicationTitle>Chat Client Playground</ApplicationTitle>
@@ -30,6 +31,7 @@
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="Microsoft.Extensions.AI" />
     <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
     <PackageReference Include="Microsoft.Maui.Controls" />

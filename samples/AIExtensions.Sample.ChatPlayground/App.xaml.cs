@@ -17,6 +17,6 @@ public partial class App : Application
         if (activationState is null)
             throw new InvalidOperationException("An activation state is required to create the playground window.");
 
-        return new Window(activationState.Context.Services.GetRequiredService<PlaygroundTabs>());
+        return activationState.Context.Services.GetRequiredService<MainWindow>();
     }
 }

@@ -1,6 +1,5 @@
 using System.Text;
-using AIExtensions.Sample.ChatPlayground.Features.Embeddings.Services;
-using AIExtensions.Sample.ChatPlayground.Features.Embeddings.ViewModels;
+using AIExtensions.Sample.ChatPlayground;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -15,7 +14,7 @@ public sealed class DocumentViewModelTests
         using var store = directory.CreateStore();
         using var search = directory.CreateSearch(store);
         var generator = new TestEmbeddings(_ => [1f, 0f]);
-        var described = Describe("apple", "apple/english", generator);
+        var described = Describe("apple/english", generator);
         var settings = new EmbeddingSettingsViewModel(search, [described]) { Dimensions = "3" };
         var playground = new EmbeddingPlaygroundViewModel(store, search, settings) { Query = "blue bird" };
         using var input = new MemoryStream(Encoding.UTF8.GetBytes("# Field notes\nBlue birds sing."));
@@ -51,6 +50,32 @@ public sealed class DocumentViewModelTests
     }
 
     [Fact]
+    public async Task SavedIndex_RemainsSearchableAfterRestartWithSameGeneratorId()
+    {
+        const string generatorId = "apple-natural-language";
+        using var directory = new DocumentDirectory();
+        using var store = directory.CreateStore();
+        using var input = new MemoryStream(Encoding.UTF8.GetBytes("A blue bird."));
+        var document = await store.ImportAsync("notes.md", input);
+        using (var originalSearch = directory.CreateSearch(store))
+        {
+            await originalSearch.IndexDocumentsAsync(new TestEmbeddings(_ => [1f, 0f]), generatorId);
+        }
+
+        using var restoredSearch = directory.CreateSearch(store);
+        var generator = new TestEmbeddings(_ => [1f, 0f]);
+        var settings = new EmbeddingSettingsViewModel(restoredSearch, [Describe(generatorId, generator)]);
+        var playground = new EmbeddingPlaygroundViewModel(store, restoredSearch, settings) { Query = "bird" };
+
+        await playground.Search.ExecuteAsync(null);
+
+        Assert.Equal(document.Id, Assert.Single(playground.Results).Id);
+        Assert.Single(generator.Inputs);
+        await settings.ClearIndex.ExecuteAsync(null);
+        Assert.Empty(Directory.GetFiles(directory.IndexDirectory, "*.json", SearchOption.AllDirectories));
+    }
+
+    [Fact]
     public async Task NoGenerator_AllowsImportAndClearButDoesNotPretendSearchWorks()
     {
         using var directory = new DocumentDirectory();
@@ -77,7 +102,7 @@ public sealed class DocumentViewModelTests
         using var store = directory.CreateStore();
         using var search = directory.CreateSearch(store);
         var generator = new TestEmbeddings(_ => [1f, 0f]);
-        var settings = new EmbeddingSettingsViewModel(search, [Describe("apple", "apple/english", generator)])
+        var settings = new EmbeddingSettingsViewModel(search, [Describe("apple/english", generator)])
         {
             Dimensions = "invalid",
         };
@@ -98,7 +123,7 @@ public sealed class DocumentViewModelTests
     }
 
     [Fact]
-    public void Settings_RejectsDuplicateDescriptorsForTheSameModel()
+    public void Settings_RejectsDuplicateModelIds()
     {
         using var directory = new DocumentDirectory();
         using var store = directory.CreateStore();
@@ -106,8 +131,8 @@ public sealed class DocumentViewModelTests
 
         Assert.Throws<ArgumentException>(() => new EmbeddingSettingsViewModel(search,
         [
-            Describe("local", "apple/english", new TestEmbeddings(_ => [1f, 0f])),
-            Describe("local-two", "apple/english", new TestEmbeddings(_ => [1f, 0f])),
+            Describe("apple/english", new TestEmbeddings(_ => [1f, 0f])),
+            Describe("apple/english", new TestEmbeddings(_ => [1f, 0f])),
         ]));
     }
 
@@ -125,7 +150,7 @@ public sealed class DocumentViewModelTests
             await Task.Delay(Timeout.InfiniteTimeSpan, token);
         });
         using var search = directory.CreateSearch(store);
-        var settings = new EmbeddingSettingsViewModel(search, [Describe("apple", "apple/english", blocked)]);
+        var settings = new EmbeddingSettingsViewModel(search, [Describe("apple/english", blocked)]);
 
         var indexing = settings.IndexDocuments.ExecuteAsync(null);
         await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -136,8 +161,8 @@ public sealed class DocumentViewModelTests
         Assert.False(Directory.Exists(directory.IndexDirectory));
     }
 
-    private static DescribedEmbeddingGenerator Describe(string id, string identity, TestEmbeddings generator) =>
-        new(() => generator, new EmbeddingGeneratorDescriptor(id, id, "Test embedding provider", identity));
+    private static DescribedEmbeddingGenerator Describe(string id, TestEmbeddings generator) =>
+        new(generator, new EmbeddingGeneratorDescriptor(id, id, "Test embedding provider"));
 
     private sealed class DocumentDirectory : IDisposable
     {

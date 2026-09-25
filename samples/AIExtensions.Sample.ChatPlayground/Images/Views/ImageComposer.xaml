@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
+             x:Class="AIExtensions.Sample.ChatPlayground.ImageComposer"
+             x:DataType="local:ImagePlaygroundViewModel">
+    <Border Style="{StaticResource ComposerPanel}">
+        <VerticalStackLayout Spacing="8">
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8"
+                  IsVisible="{Binding HasOriginalImage}">
+                <Image Source="{Binding OriginalImagePreview}" WidthRequest="56" HeightRequest="56"
+                       Aspect="AspectFill" />
+                <Label Grid.Column="1" Text="{Binding OriginalImageName}"
+                       VerticalOptions="Center" LineBreakMode="TailTruncation"
+                       AutomationId="ImageOriginalName" />
+                <ImageButton Grid.Column="2" Source="close.png"
+                             Command="{Binding RemoveOriginalImage}"
+                             Style="{StaticResource AttachmentButton}"
+                             SemanticProperties.Description="Remove original image"
+                             AutomationId="ImageRemoveOriginalButton" />
+            </Grid>
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                <ImageButton Source="add.png" Style="{StaticResource AttachmentButton}"
+                             IsEnabled="{Binding SupportsEdits}"
+                             SemanticProperties.Description="Add an original image to edit"
+                             AutomationId="ImageChooseOriginalButton">
+                    <local:PopupMenu.Content>
+                        <VerticalStackLayout Spacing="8" x:DataType="local:ImagePlaygroundViewModel">
+                            <Label Text="ADD ORIGINAL IMAGE" Style="{StaticResource SectionHeading}" />
+                            <Button Text="Choose image" Command="{Binding ChooseImage}"
+                                    AutomationId="ImageChooseOriginalMenuItem" />
+                            <Button Text="Use sample image" Command="{Binding UseSampleImage}"
+                                    AutomationId="ImageUseSampleButton" />
+                        </VerticalStackLayout>
+                    </local:PopupMenu.Content>
+                </ImageButton>
+                <Editor Grid.Column="1" Text="{Binding Prompt}" AutoSize="TextChanges"
+                        MinimumHeightRequest="44" MaximumHeightRequest="120"
+                        Placeholder="Describe an image to create or edit"
+                        AutomationId="ImagePromptEditor" />
+                <Grid Grid.Column="2" WidthRequest="44" HeightRequest="44"
+                      VerticalOptions="End">
+                    <ImageButton Source="send.png" Command="{Binding Generate}"
+                                 IsVisible="{Binding IsIdle}"
+                                 Style="{StaticResource AttachmentButton}"
+                                 SemanticProperties.Description="Generate image"
+                                 AutomationId="GenerateImageButton" />
+                    <ImageButton Source="stop.png" Command="{Binding CancelGeneration}"
+                                 IsVisible="{Binding IsBusy}"
+                                 Style="{StaticResource CancelActionButton}"
+                                 SemanticProperties.Description="Cancel image generation"
+                                 AutomationId="CancelImageButton" />
+                </Grid>
+            </Grid>
+        </VerticalStackLayout>
+    </Border>
+</ContentView>

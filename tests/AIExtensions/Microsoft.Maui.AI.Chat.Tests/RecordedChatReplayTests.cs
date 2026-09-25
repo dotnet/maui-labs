@@ -1,8 +1,6 @@
 using System.Text.Json.Nodes;
 using System.Runtime.CompilerServices;
-using AIExtensions.Sample.ChatPlayground.Features.Chat.Models;
-using AIExtensions.Sample.ChatPlayground.Features.Chat.Recording;
-using AIExtensions.Sample.ChatPlayground.Features.Chat.Services;
+using AIExtensions.Sample.ChatPlayground;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -293,33 +291,38 @@ public sealed class RecordedChatReplayTests
         Assert.Equal(2, saved.Interactions.Count);
         using (var input = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(serialized)))
             await recording.LoadFileAsync(input);
-        var replay = new ReplayChatClient(recording);
-        var messages = ChatRecordingSerializer.ReadRequestMessages(request);
-        var replayedResponse = await replay.GetResponseAsync(messages);
-        Assert.Equal(image, Assert.Single(Assert.Single(replayedResponse.Messages[1].Contents
-            .OfType<ImageGenerationToolResultContent>()).Outputs!.OfType<DataContent>()).Data.ToArray());
-
+        using var replay = new ReplayChatClient(recording);
         var replayedUpdates = new List<ChatResponseUpdate>();
-        await foreach (var replayedUpdate in replay.GetStreamingResponseAsync(messages))
+        await foreach (var replayedUpdate in replay.GetStreamingResponseAsync([]))
             replayedUpdates.Add(replayedUpdate);
-        Assert.Equal(image, Assert.Single(Assert.Single(replayedUpdates).Contents
-            .OfType<ImageGenerationToolResultContent>().Single().Outputs!.OfType<DataContent>()).Data.ToArray());
+        Assert.Equal(image, Assert.Single(Assert.Single(replayedUpdates
+            .SelectMany(item => item.Contents).OfType<ImageGenerationToolResultContent>())
+            .Outputs!.OfType<DataContent>()).Data.ToArray());
+        Assert.Equal(1, recording.ReplayPosition);
+
+        var replayedResponse = await replay.GetResponseAsync([]);
+        Assert.Equal(image, Assert.Single(Assert.Single(replayedResponse.Messages
+            .SelectMany(message => message.Contents).OfType<ImageGenerationToolResultContent>())
+            .Outputs!.OfType<DataContent>()).Data.ToArray());
+        Assert.Equal(2, recording.ReplayPosition);
     }
     #pragma warning restore MEAI001
 
     [Fact]
-    public async Task Replay_DifferentMessage_ReportsFirstMismatchWithoutAdvancing()
+    public async Task Replay_DifferentMessage_ReturnsSavedResponse()
     {
         using var directory = new RecordingDirectory();
         var recording = directory.CreateService();
         await using (var source = File.OpenRead(FixturePath("no-tools.json")))
             await recording.LoadFileAsync(source);
 
-        var replay = new ReplayChatClient(recording);
-        var mismatch = await Assert.ThrowsAsync<ChatRecordingMismatchException>(
-            () => replay.GetResponseAsync([new ChatMessage(ChatRole.User, "not the recorded prompt")]));
-        Assert.StartsWith("$.messages", mismatch.Path);
-        Assert.Equal(0, recording.ReplayPosition);
+        var saved = ChatRecordingSerializer.Deserialize(File.ReadAllText(FixturePath("no-tools.json")));
+        using var replay = new ReplayChatClient(recording);
+        var response = await replay.GetResponseAsync([new ChatMessage(ChatRole.User, "not the recorded prompt")]);
+
+        Assert.True(JsonNode.DeepEquals(
+            saved.Interactions[0].Response, ChatRecordingSerializer.Response(response)));
+        Assert.Equal(1, recording.ReplayPosition);
     }
 
     [Fact]
@@ -344,27 +347,47 @@ public sealed class RecordedChatReplayTests
     }
 
     [Fact]
-    public async Task Replay_MismatchedSecondTurn_DoesNotAdvancePastFirst()
+    public async Task Replay_ConvertsBothResponseModesAndIgnoresCallerMessages()
     {
         using var directory = new RecordingDirectory();
         var recording = directory.CreateService();
         await using (var source = File.OpenRead(FixturePath("multi-turn-tools.json")))
             await recording.LoadFileAsync(source);
 
-        var saved = ChatRecordingSerializer.Deserialize(File.ReadAllText(FixturePath("multi-turn-tools.json")));
         using var replay = new ReplayChatClient(recording);
-        var first = saved.Interactions[0];
-        await foreach (var _ in replay.GetStreamingResponseAsync(
-            ChatRecordingSerializer.ReadRequestMessages(first.Request),
-            ChatRecordingSerializer.ReadOptions(first.Request))) { }
+        var wrongMessages = new[] { new ChatMessage(ChatRole.User, "Not the recorded conversation") };
+        var firstResponse = await replay.GetResponseAsync(wrongMessages);
+        var firstContents = firstResponse.Messages.SelectMany(message => message.Contents).ToArray();
+        var calculatorCall = Assert.Single(firstContents.OfType<FunctionCallContent>());
+        Assert.Equal("calculate", calculatorCall.Name);
+        Assert.Equal(calculatorCall.CallId, Assert.Single(firstContents.OfType<FunctionResultContent>()).CallId);
         Assert.Equal(1, recording.ReplayPosition);
 
-        var second = saved.Interactions[1];
-        var messages = ChatRecordingSerializer.ReadRequestMessages(second.Request).ToList();
-        messages[0] = new ChatMessage(ChatRole.User, "Not the recorded first message");
-        var mismatch = await Assert.ThrowsAsync<ChatRecordingMismatchException>(
-            () => replay.GetResponseAsync(messages, ChatRecordingSerializer.ReadOptions(second.Request)));
-        Assert.StartsWith("$.messages", mismatch.Path);
+        var updates = new List<ChatResponseUpdate>();
+        await foreach (var update in replay.GetStreamingResponseAsync(wrongMessages))
+            updates.Add(update);
+        var secondContents = updates.SelectMany(update => update.Contents).ToArray();
+        var dateCall = Assert.Single(secondContents.OfType<FunctionCallContent>());
+        Assert.Equal("get_current_local_datetime", dateCall.Name);
+        Assert.Equal(dateCall.CallId, Assert.Single(secondContents.OfType<FunctionResultContent>()).CallId);
+        Assert.Equal(2, recording.ReplayPosition);
+    }
+
+    [Fact]
+    public async Task Replay_IncompleteConvertedStream_DoesNotAdvance()
+    {
+        using var directory = new RecordingDirectory();
+        var recording = directory.CreateService();
+        await using (var source = File.OpenRead(FixturePath("multi-turn-tools.json")))
+            await recording.LoadFileAsync(source);
+
+        using var replay = new ReplayChatClient(recording);
+        _ = await replay.GetResponseAsync([]);
+        Assert.Equal(1, recording.ReplayPosition);
+
+        await using (var enumerator = replay.GetStreamingResponseAsync([]).GetAsyncEnumerator())
+            Assert.True(await enumerator.MoveNextAsync());
+
         Assert.Equal(1, recording.ReplayPosition);
     }
 
@@ -415,10 +438,9 @@ public sealed class RecordedChatReplayTests
     {
         using var directory = new RecordingDirectory();
         var recording = directory.CreateService();
-        using var client = new ReplayChatClient(recording)
-            .AsBuilder()
-            .UseDescriptor(new ChatClientDescriptor("Replay", "Offline", SupportsImageInput: false, IsReplay: true))
-            .Build();
+        using var client = new DescribedChatClient(
+            new ReplayChatClient(recording),
+            new ChatClientDescriptor("replay", "Replay", "Offline", IsReplay: true));
 
         var descriptor = Assert.IsType<ChatClientDescriptor>(client.GetService<ChatClientDescriptor>());
         Assert.True(descriptor.IsReplay);
@@ -427,15 +449,13 @@ public sealed class RecordedChatReplayTests
     }
 
     [Fact]
-    public async Task RecordingBuilder_RecordsBothResponseModesAndExposesDescriptor()
+    public async Task RecordingClient_RecordsBothResponseModesAndExposesDescriptor()
     {
         using var directory = new RecordingDirectory();
         var recording = directory.CreateService();
-        using var client = new EchoChatClient()
-            .AsBuilder()
-            .UseRecording(recording)
-            .UseDescriptor(new ChatClientDescriptor("Echo", "Ready", SupportsImageInput: false))
-            .Build();
+        using var client = new DescribedChatClient(
+            new RecordingChatClient(new EchoChatClient(), recording),
+            new ChatClientDescriptor("echo", "Echo", "Ready"));
 
         var messages = new[] { new ChatMessage(ChatRole.User, "Hello") };
         var response = await client.GetResponseAsync(messages);

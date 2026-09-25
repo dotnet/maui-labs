@@ -1,7 +1,5 @@
 using System.Drawing;
-using AIExtensions.Sample.ChatPlayground.Features.Images.Services;
-using AIExtensions.Sample.ChatPlayground.Features.Images.ViewModels;
-using AIExtensions.Sample.ChatPlayground.Shared.Models;
+using AIExtensions.Sample.ChatPlayground;
 using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat.Tests;
@@ -10,36 +8,20 @@ namespace Microsoft.Maui.AI.Chat.Tests;
 public sealed class ImageGenerationServiceTests
 {
     [Fact]
-    public async Task DescribedGenerator_ExposesMetadataWithoutInitializingProvider()
+    public async Task DescribedGenerator_ExposesMetadataAndDelegatesToProvider()
     {
-        var created = 0;
         var provider = new TestImageGenerator((_, _, _) =>
             Task.FromResult(new ImageGenerationResponse([new DataContent(new byte[] { 1, 2 }, "image/png")])));
         using var generator = new DescribedImageGenerator(
-            () =>
-            {
-                created++;
-                return provider;
-            },
+            provider,
             new ImageGeneratorDescriptor("test", "Test image", "On device", true));
 
         Assert.Equal("test", generator.GetService<ImageGeneratorDescriptor>()?.Id);
         Assert.Same(generator, generator.GetService<IImageGenerator>());
-        Assert.Equal(0, created);
 
         var images = await new ImageGenerationService().GenerateAsync(generator, "a robot", null);
         Assert.Equal(new byte[] { 1, 2 }, Assert.Single(images).Bytes);
-        Assert.Equal(1, created);
         Assert.Equal(1, provider.CallCount);
-    }
-
-    [Fact]
-    public void DescribedGenerator_InvalidDescriptor_Throws()
-    {
-        Assert.Throws<ArgumentException>(() => new DescribedImageGenerator(
-            () => new TestImageGenerator((_, _, _) =>
-                Task.FromResult(new ImageGenerationResponse([]))),
-            new ImageGeneratorDescriptor("", "Test", "On device", true)));
     }
 
     [Fact]
@@ -105,9 +87,9 @@ public sealed class ImageGenerationServiceTests
         var provider = new TestImageGenerator((_, _, _) =>
             Task.FromResult(new ImageGenerationResponse([])));
         Assert.Throws<ArgumentException>(() => new ImageSettingsViewModel([
-            new DescribedImageGenerator(() => provider,
+            new DescribedImageGenerator(provider,
                 new ImageGeneratorDescriptor("same", "First", "First provider", true)),
-            new DescribedImageGenerator(() => provider,
+            new DescribedImageGenerator(provider,
                 new ImageGeneratorDescriptor("same", "Second", "Second provider", false)),
         ]));
     }
@@ -147,7 +129,7 @@ public sealed class ImageGenerationServiceTests
 
     private static ImageSettingsViewModel CreateSettings() =>
         new([new DescribedImageGenerator(
-            () => new TestImageGenerator((_, _, _) =>
+            new TestImageGenerator((_, _, _) =>
                 Task.FromResult(new ImageGenerationResponse([]))),
             new ImageGeneratorDescriptor("test", "Test generator", "Test description", true))]);
 
