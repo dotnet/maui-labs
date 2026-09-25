@@ -17,6 +17,9 @@ internal sealed class WindowsAIImageDescriber : IDisposable
     public async Task<string> DescribeAsync(DataContent image, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (image.Data.IsEmpty)
+            throw new ArgumentException("Windows image descriptions require inline image bytes.", nameof(image));
+
         var generator = await _generator.Value.WaitAsync(cancellationToken);
 
         using var stream = new InMemoryRandomAccessStream();
@@ -24,6 +27,7 @@ internal sealed class WindowsAIImageDescriber : IDisposable
         {
             writer.WriteBytes(image.Data.ToArray());
             await writer.StoreAsync();
+            await writer.FlushAsync();
             writer.DetachStream();
         }
 

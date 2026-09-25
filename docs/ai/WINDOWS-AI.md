@@ -171,7 +171,7 @@ stays at `19041` for build compatibility.
 
 ## Other Microsoft.Extensions.AI abstractions
 
-The installed `Microsoft.Extensions.AI.Abstractions` **10.5.2** also includes
+The installed `Microsoft.Extensions.AI.Abstractions` **10.4.1** also includes
 `ISpeechToTextClient`, `ITextToSpeechClient`, `IRealtimeClient`, `IHostedFileClient`, and
 `IChatReducer` in addition to chat, image generation, and embeddings. Windows AI
 [SpeechRecognitionModel](https://learn.microsoft.com/windows/ai/apis/speech-recognition) is a

@@ -447,8 +447,8 @@ public sealed class WindowsAIChatClient : IChatClient
 
 		if (options.Tools is { Count: > 0 })
 			throw new NotSupportedException("The Windows AI language model does not support tool calling through the Windows App SDK.");
-		if ((options.ToolMode is not null && options.ToolMode != ChatToolMode.Auto &&
-			options.ToolMode != ChatToolMode.None) || options.AllowMultipleToolCalls is not null)
+
+		if ((options.ToolMode is not null && options.ToolMode != ChatToolMode.Auto && options.ToolMode != ChatToolMode.None) || options.AllowMultipleToolCalls is not null)
 			throw new NotSupportedException("The Windows AI language model does not support tool-calling options through the Windows App SDK.");
 	}
 }
