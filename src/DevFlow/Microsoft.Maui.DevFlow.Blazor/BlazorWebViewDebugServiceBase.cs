@@ -627,17 +627,17 @@ public abstract class BlazorWebViewDebugServiceBase : IDisposable
         private string HandleBrowserMethod(string method, int id)
         {
             if (method == "Browser.getVersion")
-                return System.Text.Json.JsonSerializer.Serialize(new
+                return new System.Text.Json.Nodes.JsonObject
                 {
-                    id,
-                    result = new
+                    ["id"] = id,
+                    ["result"] = new System.Text.Json.Nodes.JsonObject
                     {
-                        protocolVersion = "1.3",
-                        product = "MAUI Blazor WebView/1.0",
-                        userAgent = "Microsoft.Maui.DevFlow",
-                        jsVersion = ""
+                        ["protocolVersion"] = "1.3",
+                        ["product"] = "MAUI Blazor WebView/1.0",
+                        ["userAgent"] = "Microsoft.Maui.DevFlow",
+                        ["jsVersion"] = ""
                     }
-                });
+                }.ToJsonString();
             return $"{{\"id\":{id},\"result\":{{}}}}";
         }
 
@@ -777,7 +777,11 @@ public abstract class BlazorWebViewDebugServiceBase : IDisposable
             if (string.IsNullOrEmpty(result)) return null;
             if (result.StartsWith("\"") && result.EndsWith("\""))
             {
-                try { return System.Text.Json.JsonSerializer.Deserialize<string>(result); }
+                try
+                {
+                    using var document = System.Text.Json.JsonDocument.Parse(result);
+                    return document.RootElement.GetString();
+                }
                 catch { }
             }
             return result;
