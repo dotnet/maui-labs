@@ -515,10 +515,10 @@ public partial class DevFlowAgentService
     protected object BuildExtensionsMarker()
     {
         var metadata = BuildExtensionMetadata();
-        return new Dictionary<string, object?>
+        return new
         {
-            ["count"] = metadata.Count,
-            ["hash"] = ComputeExtensionHash(metadata)
+            count = metadata.Count,
+            hash = ComputeExtensionHash(metadata)
         };
     }
 
@@ -528,24 +528,24 @@ public partial class DevFlowAgentService
 
         foreach (var extension in _options.Extensions.OrderBy(e => e.Namespace, StringComparer.Ordinal))
         {
-            extensions[extension.Namespace] = new Dictionary<string, object?>
+            extensions[extension.Namespace] = new
             {
-                ["version"] = extension.Version,
-                ["description"] = extension.Description,
-                ["tools"] = extension.Tools.Select(tool => new Dictionary<string, object?>
+                version = extension.Version,
+                description = extension.Description,
+                tools = extension.Tools.Select(tool => new
                 {
-                    ["name"] = tool.Name,
-                    ["description"] = tool.Description,
-                    ["method"] = tool.Method,
-                    ["path"] = tool.Path,
-                    ["parameters"] = tool.Parameters,
-                    ["returns"] = tool.Returns,
-                    ["annotations"] = tool.Annotations is null ? null : new Dictionary<string, object?>
+                    name = tool.Name,
+                    description = tool.Description,
+                    method = tool.Method,
+                    path = tool.Path,
+                    parameters = tool.Parameters,
+                    returns = tool.Returns,
+                    annotations = tool.Annotations is null ? null : new
                     {
-                        ["readOnly"] = tool.Annotations.ReadOnly,
-                        ["idempotent"] = tool.Annotations.Idempotent,
-                        ["destructive"] = tool.Annotations.Destructive,
-                        ["category"] = tool.Annotations.Category
+                        readOnly = tool.Annotations.ReadOnly,
+                        idempotent = tool.Annotations.Idempotent,
+                        destructive = tool.Annotations.Destructive,
+                        category = tool.Annotations.Category
                     }
                 }).ToArray()
             };
@@ -556,7 +556,7 @@ public partial class DevFlowAgentService
 
     protected static string ComputeExtensionHash(Dictionary<string, object> metadata)
     {
-        var json = AgentJson.Serialize(metadata);
+        var json = JsonSerializer.Serialize(metadata);
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(json));
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
@@ -722,22 +722,22 @@ public partial class DevFlowAgentService
     protected object BuildProfilerCapabilitiesPayload()
     {
         var capabilities = _profilerCollector.GetCapabilities();
-        return new Dictionary<string, object?>
+        return new
         {
-            ["available"] = IsProfilerFeatureAvailable,
-            ["supportedInBuild"] = true,
-            ["featureEnabled"] = _options.EnableProfiler,
-            ["platform"] = capabilities.Platform,
-            ["managedMemorySupported"] = capabilities.ManagedMemorySupported,
-            ["nativeMemorySupported"] = capabilities.NativeMemorySupported,
-            ["gcSupported"] = capabilities.GcSupported,
-            ["cpuPercentSupported"] = capabilities.CpuPercentSupported,
-            ["fpsSupported"] = capabilities.FpsSupported,
-            ["frameTimingsEstimated"] = capabilities.FrameTimingsEstimated,
-            ["nativeFrameTimingsSupported"] = capabilities.NativeFrameTimingsSupported,
-            ["jankEventsSupported"] = capabilities.JankEventsSupported,
-            ["uiThreadStallSupported"] = capabilities.UiThreadStallSupported,
-            ["threadCountSupported"] = capabilities.ThreadCountSupported
+            available = IsProfilerFeatureAvailable,
+            supportedInBuild = true,
+            featureEnabled = _options.EnableProfiler,
+            platform = capabilities.Platform,
+            managedMemorySupported = capabilities.ManagedMemorySupported,
+            nativeMemorySupported = capabilities.NativeMemorySupported,
+            gcSupported = capabilities.GcSupported,
+            cpuPercentSupported = capabilities.CpuPercentSupported,
+            fpsSupported = capabilities.FpsSupported,
+            frameTimingsEstimated = capabilities.FrameTimingsEstimated,
+            nativeFrameTimingsSupported = capabilities.NativeFrameTimingsSupported,
+            jankEventsSupported = capabilities.JankEventsSupported,
+            uiThreadStallSupported = capabilities.UiThreadStallSupported,
+            threadCountSupported = capabilities.ThreadCountSupported
         };
     }
 
@@ -776,7 +776,7 @@ public partial class DevFlowAgentService
             return HttpResponse.Error("sampleIntervalMs must be between 50 and 60000");
 
         var session = await StartProfilerAsync(intervalMs);
-        return HttpResponse.Json(new Dictionary<string, object?> { ["session"] = session, ["capabilities"] = BuildProfilerCapabilitiesPayload() });
+        return HttpResponse.Json(new { session, capabilities = BuildProfilerCapabilitiesPayload() });
     }
 
     protected async Task<HttpResponse> HandleProfilerStop(HttpRequest request)
@@ -786,7 +786,7 @@ public partial class DevFlowAgentService
             return validationError;
 
         var session = await StopProfilerAsync();
-        return HttpResponse.Json(new Dictionary<string, object?> { ["session"] = session, ["stoppedAtUtc"] = DateTime.UtcNow });
+        return HttpResponse.Json(new { session, stoppedAtUtc = DateTime.UtcNow });
     }
 
     protected Task<HttpResponse> HandleProfilerSamples(HttpRequest request)
@@ -966,13 +966,13 @@ public partial class DevFlowAgentService
                 TsUtc = sample.TsUtc,
                 Type = "ui.frame.jank.native",
                 Name = sample.FrameSource,
-                PayloadJson = AgentJson.Serialize(new Dictionary<string, object?>
+                PayloadJson = JsonSerializer.Serialize(new
                 {
-                    ["jankFrames"] = sample.JankFrameCount,
-                    ["frameTimeMsP95"] = sample.FrameTimeMsP95,
-                    ["worstFrameTimeMs"] = sample.WorstFrameTimeMs,
-                    ["frameSource"] = sample.FrameSource,
-                    ["frameQuality"] = sample.FrameQuality
+                    jankFrames = sample.JankFrameCount,
+                    frameTimeMsP95 = sample.FrameTimeMsP95,
+                    worstFrameTimeMs = sample.WorstFrameTimeMs,
+                    frameSource = sample.FrameSource,
+                    frameQuality = sample.FrameQuality
                 })
             });
         }
@@ -984,12 +984,12 @@ public partial class DevFlowAgentService
                 TsUtc = sample.TsUtc,
                 Type = "ui.thread.stall.native",
                 Name = sample.FrameSource,
-                PayloadJson = AgentJson.Serialize(new Dictionary<string, object?>
+                PayloadJson = JsonSerializer.Serialize(new
                 {
-                    ["stallCount"] = sample.UiThreadStallCount,
-                    ["worstFrameTimeMs"] = sample.WorstFrameTimeMs,
-                    ["frameSource"] = sample.FrameSource,
-                    ["frameQuality"] = sample.FrameQuality
+                    stallCount = sample.UiThreadStallCount,
+                    worstFrameTimeMs = sample.WorstFrameTimeMs,
+                    frameSource = sample.FrameSource,
+                    frameQuality = sample.FrameQuality
                 })
             });
         }
@@ -1024,28 +1024,28 @@ public partial class DevFlowAgentService
             ThreadId = Environment.CurrentManagedThreadId,
             Screen = GetCurrentRouteLocation(),
             ElementPath = actionElementPath,
-            TagsJson = AgentJson.Serialize(new Dictionary<string, object?>
+            TagsJson = JsonSerializer.Serialize(new
             {
-                ["frameTimeMsP95"] = frameMs.Value,
-                ["fps"] = sample.Fps,
-                ["frameSource"] = sample.FrameSource,
-                ["frameQuality"] = sample.FrameQuality,
-                ["jankFrameCount"] = sample.JankFrameCount,
-                ["uiThreadStallCount"] = sample.UiThreadStallCount,
-                ["worstFrameTimeMs"] = sample.WorstFrameTimeMs,
-                ["actionName"] = actionName,
-                ["actionLagMs"] = actionLagMs
+                frameTimeMsP95 = frameMs.Value,
+                fps = sample.Fps,
+                frameSource = sample.FrameSource,
+                frameQuality = sample.FrameQuality,
+                jankFrameCount = sample.JankFrameCount,
+                uiThreadStallCount = sample.UiThreadStallCount,
+                worstFrameTimeMs = sample.WorstFrameTimeMs,
+                actionName,
+                actionLagMs
             })
         });
     }
 
     protected void PublishUiEvent(string type, object data)
     {
-        var payload = AgentJson.Serialize(new Dictionary<string, object?>
+        var payload = JsonSerializer.Serialize(new
         {
-            ["type"] = type,
-            ["timestamp"] = DateTimeOffset.UtcNow.ToString("O"),
-            ["data"] = data
+            type,
+            timestamp = DateTimeOffset.UtcNow.ToString("O"),
+            data
         });
 
         lock (_uiEventSubscriptionGate)
@@ -1244,7 +1244,7 @@ public partial class DevFlowAgentService
             ThreadId = Environment.CurrentManagedThreadId,
             Screen = route,
             ElementPath = elementPath,
-            TagsJson = tags == null ? null : AgentJson.Serialize(tags),
+            TagsJson = tags == null ? null : JsonSerializer.Serialize(tags),
             Error = error
         };
 
@@ -1265,12 +1265,12 @@ public partial class DevFlowAgentService
             TsUtc = startTimestampUtc,
             Type = "network.request.start",
             Name = markerName,
-            PayloadJson = AgentJson.Serialize(new Dictionary<string, object?>
+            PayloadJson = JsonSerializer.Serialize(new
             {
-                ["id"] = entry.Id,
-                ["method"] = entry.Method,
-                ["url"] = entry.Url,
-                ["host"] = entry.Host
+                id = entry.Id,
+                method = entry.Method,
+                url = entry.Url,
+                host = entry.Host
             })
         });
 
@@ -1279,14 +1279,14 @@ public partial class DevFlowAgentService
             TsUtc = endTimestampUtc,
             Type = "network.request.end",
             Name = markerName,
-            PayloadJson = AgentJson.Serialize(new Dictionary<string, object?>
+            PayloadJson = JsonSerializer.Serialize(new
             {
-                ["id"] = entry.Id,
-                ["method"] = entry.Method,
-                ["url"] = entry.Url,
-                ["statusCode"] = entry.StatusCode,
-                ["durationMs"] = entry.DurationMs,
-                ["error"] = entry.Error
+                id = entry.Id,
+                method = entry.Method,
+                url = entry.Url,
+                statusCode = entry.StatusCode,
+                durationMs = entry.DurationMs,
+                error = entry.Error
             })
         });
 
@@ -1303,12 +1303,12 @@ public partial class DevFlowAgentService
                 Status = string.IsNullOrWhiteSpace(entry.Error) ? "ok" : "error",
                 ThreadId = Environment.CurrentManagedThreadId,
                 Screen = GetCurrentRouteLocation(),
-                TagsJson = AgentJson.Serialize(new Dictionary<string, object?>
+                TagsJson = JsonSerializer.Serialize(new
                 {
-                    ["id"] = entry.Id,
-                    ["method"] = entry.Method,
-                    ["host"] = entry.Host,
-                    ["statusCode"] = entry.StatusCode
+                    id = entry.Id,
+                    method = entry.Method,
+                    host = entry.Host,
+                    statusCode = entry.StatusCode
                 }),
                 Error = entry.Error
             });
@@ -1387,11 +1387,11 @@ public partial class DevFlowAgentService
     {
         // Send replay of recent entries
         var recent = NetworkStore.GetRecent(100);
-        var replayMsg = AgentJson.Serialize(new Dictionary<string, object?>
+        var replayMsg = JsonSerializer.Serialize(new
         {
-            ["type"] = "replay",
-            ["timestamp"] = DateTimeOffset.UtcNow.ToString("O"),
-            ["entries"] = recent.Select(e => e.ToSummary())
+            type = "replay",
+            timestamp = DateTimeOffset.UtcNow.ToString("O"),
+            entries = recent.Select(e => e.ToSummary())
         });
         await AgentHttpServer.WebSocketSendTextAsync(stream, replayMsg, ct);
 
@@ -1421,22 +1421,22 @@ public partial class DevFlowAgentService
                         {
                             var id = idEl.GetString();
                             var entry = id != null ? NetworkStore.GetById(id) : null;
-                            var resp = AgentJson.Serialize(new Dictionary<string, object?>
+                            var resp = JsonSerializer.Serialize(new
                             {
-                                ["type"] = "details",
-                                ["timestamp"] = DateTimeOffset.UtcNow.ToString("O"),
-                                ["entry"] = entry
+                                type = "details",
+                                timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                                entry
                             });
                             await AgentHttpServer.WebSocketSendTextAsync(stream, resp, cts.Token);
                         }
                         else if (msgType == "clear")
                         {
                             await AgentHttpServer.WebSocketSendTextAsync(stream,
-                                AgentJson.Serialize(new Dictionary<string, object?>
+                                JsonSerializer.Serialize(new
                                 {
-                                    ["type"] = "error",
-                                    ["timestamp"] = DateTimeOffset.UtcNow.ToString("O"),
-                                    ["error"] = "Network clear requires the mutation-lease-protected HTTP endpoint."
+                                    type = "error",
+                                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                                    error = "Network clear requires the mutation-lease-protected HTTP endpoint."
                                 }), cts.Token);
                         }
                     }
@@ -1452,11 +1452,11 @@ public partial class DevFlowAgentService
                 {
                     try
                     {
-                        var json = AgentJson.Serialize(new Dictionary<string, object?>
+                        var json = JsonSerializer.Serialize(new
                         {
-                            ["type"] = "request",
-                            ["timestamp"] = DateTimeOffset.UtcNow.ToString("O"),
-                            ["entry"] = entry.ToSummary()
+                            type = "request",
+                            timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                            entry = entry.ToSummary()
                         });
                         await AgentHttpServer.WebSocketSendTextAsync(stream, json, cts.Token);
                     }
@@ -1506,11 +1506,11 @@ public partial class DevFlowAgentService
         if (replayCount > 0)
         {
             var recent = _logProvider.Reader.Read(replayCount, 0, sourceFilter);
-            var replayMsg = AgentJson.Serialize(new Dictionary<string, object?>
+            var replayMsg = JsonSerializer.Serialize(new
             {
-                ["type"] = "replay",
-                ["timestamp"] = DateTimeOffset.UtcNow.ToString("O"),
-                ["entries"] = recent
+                type = "replay",
+                timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                entries = recent
             });
             await AgentHttpServer.WebSocketSendTextAsync(stream, replayMsg, ct);
         }
@@ -1547,11 +1547,11 @@ public partial class DevFlowAgentService
                 {
                     try
                     {
-                        var json = AgentJson.Serialize(new Dictionary<string, object?>
+                        var json = JsonSerializer.Serialize(new
                         {
-                            ["type"] = "log",
-                            ["timestamp"] = DateTimeOffset.UtcNow.ToString("O"),
-                            ["entry"] = entry
+                            type = "log",
+                            timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                            entry
                         });
                         await AgentHttpServer.WebSocketSendTextAsync(stream, json, cts.Token);
                     }
@@ -1590,11 +1590,11 @@ public partial class DevFlowAgentService
         if (string.IsNullOrWhiteSpace(requestedSessionId))
         {
             await AgentHttpServer.WebSocketSendTextAsync(stream,
-                AgentJson.Serialize(new Dictionary<string, object?>
+                JsonSerializer.Serialize(new
                 {
-                    ["type"] = "error",
-                    ["timestamp"] = DateTimeOffset.UtcNow.ToString("O"),
-                    ["error"] = "sessionId query parameter is required"
+                    type = "error",
+                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                    error = "sessionId query parameter is required"
                 }), ct);
             return;
         }
@@ -1635,11 +1635,11 @@ public partial class DevFlowAgentService
                 var currentSession = _profilerSessions.CurrentSession;
                 if (currentSession == null)
                 {
-                    await AgentHttpServer.WebSocketSendTextAsync(stream, AgentJson.Serialize(new Dictionary<string, object?>
+                    await AgentHttpServer.WebSocketSendTextAsync(stream, JsonSerializer.Serialize(new
                     {
-                        ["type"] = "stopped",
-                        ["timestamp"] = DateTimeOffset.UtcNow.ToString("O"),
-                        ["data"] = new Dictionary<string, object?> { ["sessionId"] = requestedSessionId }
+                        type = "stopped",
+                        timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                        data = new { sessionId = requestedSessionId }
                     }), cts.Token);
                     break;
                 }
@@ -1647,11 +1647,11 @@ public partial class DevFlowAgentService
                 if (!requestedSessionId.Equals("current", StringComparison.OrdinalIgnoreCase) &&
                     !requestedSessionId.Equals(currentSession.SessionId, StringComparison.Ordinal))
                 {
-                    await AgentHttpServer.WebSocketSendTextAsync(stream, AgentJson.Serialize(new Dictionary<string, object?>
+                    await AgentHttpServer.WebSocketSendTextAsync(stream, JsonSerializer.Serialize(new
                     {
-                        ["type"] = "error",
-                        ["timestamp"] = DateTimeOffset.UtcNow.ToString("O"),
-                        ["error"] = $"Profiler session '{requestedSessionId}' not found"
+                        type = "error",
+                        timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                        error = $"Profiler session '{requestedSessionId}' not found"
                     }), cts.Token);
                     break;
                 }
@@ -1668,21 +1668,21 @@ public partial class DevFlowAgentService
                     spanCursor = batch.SpanCursor;
                     sentInitialBatch = true;
 
-                    await AgentHttpServer.WebSocketSendTextAsync(stream, AgentJson.Serialize(new Dictionary<string, object?>
+                    await AgentHttpServer.WebSocketSendTextAsync(stream, JsonSerializer.Serialize(new
                     {
-                        ["type"] = "batch",
-                        ["timestamp"] = DateTimeOffset.UtcNow.ToString("O"),
-                        ["data"] = batch
+                        type = "batch",
+                        timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                        data = batch
                     }), cts.Token);
                 }
 
                 if (!batch.IsActive)
                 {
-                    await AgentHttpServer.WebSocketSendTextAsync(stream, AgentJson.Serialize(new Dictionary<string, object?>
+                    await AgentHttpServer.WebSocketSendTextAsync(stream, JsonSerializer.Serialize(new
                     {
-                        ["type"] = "stopped",
-                        ["timestamp"] = DateTimeOffset.UtcNow.ToString("O"),
-                        ["data"] = new Dictionary<string, object?> { ["sessionId"] = batch.SessionId }
+                        type = "stopped",
+                        timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                        data = new { sessionId = batch.SessionId }
                     }), cts.Token);
                     break;
                 }
@@ -1736,30 +1736,30 @@ public partial class DevFlowAgentService
         try
         {
             var now = DateTimeOffset.UtcNow.ToString("O");
-            subscription.Queue.Enqueue(AgentJson.Serialize(new Dictionary<string, object?>
+            subscription.Queue.Enqueue(JsonSerializer.Serialize(new
             {
-                ["type"] = "lifecycle",
-                ["timestamp"] = now,
-                ["data"] = new Dictionary<string, object?>
+                type = "lifecycle",
+                timestamp = now,
+                data = new
                 {
-                    ["state"] = IsAppBound ? "started" : "stopped",
-                    ["timestamp"] = now
+                    state = IsAppBound ? "started" : "stopped",
+                    timestamp = now
                 }
             }));
 
             var currentRoute = GetCurrentRouteLocation();
             if (!string.IsNullOrWhiteSpace(currentRoute))
             {
-                subscription.Queue.Enqueue(AgentJson.Serialize(new Dictionary<string, object?>
+                subscription.Queue.Enqueue(JsonSerializer.Serialize(new
                 {
-                    ["type"] = "navigation",
-                    ["timestamp"] = now,
-                    ["data"] = new Dictionary<string, object?>
+                    type = "navigation",
+                    timestamp = now,
+                    data = new
                     {
-                        ["from"] = (string?)null,
-                        ["to"] = currentRoute,
-                        ["route"] = currentRoute,
-                        ["timestamp"] = now
+                        from = (string?)null,
+                        to = currentRoute,
+                        route = currentRoute,
+                        timestamp = now
                     }
                 }));
             }
@@ -1884,7 +1884,7 @@ public partial class DevFlowAgentService
     }
 
     protected static string BuildCdpCommand(int id, string method, object? parameters = null)
-        => AgentJson.Serialize(new Dictionary<string, object?> { ["id"] = id, ["method"] = method, ["params"] = parameters });
+        => JsonSerializer.Serialize(new { id, method, @params = parameters });
 
     protected static string? TryGetCdpError(JsonElement root)
     {
@@ -1909,10 +1909,10 @@ public partial class DevFlowAgentService
 
     protected async Task<JsonElement?> EvaluateWebViewExpressionAsync(CdpWebViewInfo webView, string expression, int id = 99996)
     {
-        var resultJson = await webView.CommandHandler(BuildCdpCommand(id, "Runtime.evaluate", new Dictionary<string, object?>
+        var resultJson = await webView.CommandHandler(BuildCdpCommand(id, "Runtime.evaluate", new
         {
-            ["expression"] = expression,
-            ["returnByValue"] = true
+            expression,
+            returnByValue = true
         }));
 
         using var doc = JsonDocument.Parse(resultJson);
@@ -1926,10 +1926,10 @@ public partial class DevFlowAgentService
         // Some bridges (notably Android's Chobitsu-backed path) do not reliably honor
         // returnByValue for arrays/objects and instead hand back an object reference.
         // Fall back to JSON.stringify() so callers still get structured data.
-        var fallbackJson = await webView.CommandHandler(BuildCdpCommand(id + 1, "Runtime.evaluate", new Dictionary<string, object?>
+        var fallbackJson = await webView.CommandHandler(BuildCdpCommand(id + 1, "Runtime.evaluate", new
         {
-            ["expression"] = $"JSON.stringify(({expression}))",
-            ["returnByValue"] = true
+            expression = $"JSON.stringify(({expression}))",
+            returnByValue = true
         }));
 
         using var fallbackDoc = JsonDocument.Parse(fallbackJson);
@@ -1951,7 +1951,7 @@ public partial class DevFlowAgentService
                     }
                     catch
                     {
-                        return AgentJson.SerializeToElement(json);
+                        return JsonSerializer.SerializeToElement(json);
                     }
                 }
             }
@@ -2006,7 +2006,7 @@ public partial class DevFlowAgentService
 
         try
         {
-            var resultJson = await webView!.CommandHandler(BuildCdpCommand(99995, "Page.navigate", new Dictionary<string, object?> { ["url"] = body.Url }));
+            var resultJson = await webView!.CommandHandler(BuildCdpCommand(99995, "Page.navigate", new { url = body.Url }));
             using var doc = JsonDocument.Parse(resultJson);
             var cdpError = TryGetCdpError(doc.RootElement);
             if (!string.IsNullOrWhiteSpace(cdpError))
@@ -2016,19 +2016,19 @@ public partial class DevFlowAgentService
             // therefore /webview/contexts) reporting the pre-navigation URL.
             webView.Url = body.Url;
             UpdateCdpWebView(webView.Index, url: body.Url);
-            PublishUiEvent("navigation", new Dictionary<string, object?>
+            PublishUiEvent("navigation", new
             {
-                ["from"] = (string?)null,
-                ["to"] = body.Url,
-                ["route"] = body.Url,
-                ["timestamp"] = DateTimeOffset.UtcNow.ToString("O")
+                from = (string?)null,
+                to = body.Url,
+                route = body.Url,
+                timestamp = DateTimeOffset.UtcNow.ToString("O")
             });
 
-            return HttpResponse.Json(new Dictionary<string, object?>
+            return HttpResponse.Json(new
             {
-                ["success"] = true,
-                ["contextId"] = webviewId ?? webView.Index.ToString(),
-                ["url"] = body.Url
+                success = true,
+                contextId = webviewId ?? webView.Index.ToString(),
+                url = body.Url
             });
         }
         catch (Exception ex)
@@ -2050,7 +2050,7 @@ public partial class DevFlowAgentService
 
         try
         {
-            var selectorJson = AgentJson.Serialize(body.Selector);
+            var selectorJson = JsonSerializer.Serialize(body.Selector);
             var value = await EvaluateWebViewExpressionAsync(
                 webView!,
                 $@"(function() {{
@@ -2100,8 +2100,8 @@ public partial class DevFlowAgentService
 
         try
         {
-            var selectorJson = AgentJson.Serialize(body.Selector);
-            var textJson = AgentJson.Serialize(body.Text);
+            var selectorJson = JsonSerializer.Serialize(body.Selector);
+            var textJson = JsonSerializer.Serialize(body.Text);
             var value = await EvaluateWebViewExpressionAsync(
                 webView!,
                 $@"(function() {{
@@ -2134,13 +2134,13 @@ public partial class DevFlowAgentService
                     : HttpResponse.Error(errorMessage ?? "WebView fill failed");
             }
 
-            PublishUiEvent("treeChange", new Dictionary<string, object?>
+            PublishUiEvent("treeChange", new
             {
-                ["changeType"] = "modified",
-                ["elementId"] = body.Selector,
-                ["elementType"] = "webview-input",
-                ["parentId"] = (string?)null,
-                ["timestamp"] = DateTimeOffset.UtcNow.ToString("O")
+                changeType = "modified",
+                elementId = body.Selector,
+                elementType = "webview-input",
+                parentId = (string?)null,
+                timestamp = DateTimeOffset.UtcNow.ToString("O")
             });
 
             return new HttpResponse
@@ -2168,25 +2168,25 @@ public partial class DevFlowAgentService
 
         try
         {
-            var resultJson = await webView!.CommandHandler(BuildCdpCommand(99994, "Input.insertText", new Dictionary<string, object?> { ["text"] = body.Text }));
+            var resultJson = await webView!.CommandHandler(BuildCdpCommand(99994, "Input.insertText", new { text = body.Text }));
             using var doc = JsonDocument.Parse(resultJson);
             var cdpError = TryGetCdpError(doc.RootElement);
             if (!string.IsNullOrWhiteSpace(cdpError))
                 return HttpResponse.Error($"WebView text input failed: {cdpError}");
 
-            PublishUiEvent("treeChange", new Dictionary<string, object?>
+            PublishUiEvent("treeChange", new
             {
-                ["changeType"] = "modified",
-                ["elementId"] = body.ContextId ?? webviewId ?? webView.Index.ToString(),
-                ["elementType"] = "webview-input",
-                ["parentId"] = (string?)null,
-                ["timestamp"] = DateTimeOffset.UtcNow.ToString("O")
+                changeType = "modified",
+                elementId = body.ContextId ?? webviewId ?? webView.Index.ToString(),
+                elementType = "webview-input",
+                parentId = (string?)null,
+                timestamp = DateTimeOffset.UtcNow.ToString("O")
             });
 
-            return HttpResponse.Json(new Dictionary<string, object?>
+            return HttpResponse.Json(new
             {
-                ["success"] = true,
-                ["textLength"] = body.Text.Length
+                success = true,
+                textLength = body.Text.Length
             });
         }
         catch (Exception ex)
@@ -2211,7 +2211,7 @@ public partial class DevFlowAgentService
 
         try
         {
-            var selectorJson = AgentJson.Serialize(body.Selector);
+            var selectorJson = JsonSerializer.Serialize(body.Selector);
             var value = await EvaluateWebViewExpressionAsync(
                 webView!,
                 $@"(function() {{
@@ -2264,11 +2264,11 @@ public partial class DevFlowAgentService
             if (nativeCapture != null)
                 return nativeCapture;
 
-            var cdpCommand = AgentJson.Serialize(new Dictionary<string, object?>
+            var cdpCommand = JsonSerializer.Serialize(new
             {
-                ["id"] = 99997,
-                ["method"] = "Page.captureScreenshot",
-                ["params"] = new Dictionary<string, object?> { ["format"] = "png" }
+                id = 99997,
+                method = "Page.captureScreenshot",
+                @params = new { format = "png" }
             });
 
             var resultJson = await webView.CommandHandler(cdpCommand);
@@ -2295,25 +2295,25 @@ public partial class DevFlowAgentService
     protected async Task<HttpResponse> HandleCdpWebViews(HttpRequest request)
     {
         var activeAutomationIds = await GetActiveWebViewAutomationIdsAsync();
-        var webviews = GetCdpWebViewsSnapshot().Select(w => new Dictionary<string, object?>
+        var webviews = GetCdpWebViewsSnapshot().Select(w => new
         {
-            ["id"] = !string.IsNullOrWhiteSpace(w.AutomationId)
+            id = !string.IsNullOrWhiteSpace(w.AutomationId)
                 ? w.AutomationId
                 : !string.IsNullOrWhiteSpace(w.ElementId)
                     ? w.ElementId
                     : w.Index.ToString(),
-            ["index"] = w.Index,
-            ["automationId"] = w.AutomationId,
-            ["elementId"] = w.ElementId,
-            ["url"] = w.Url,
-            ["title"] = (string?)null,
-            ["ready"] = w.IsReady,
-            ["isReady"] = w.IsReady,
-            ["active"] = !string.IsNullOrWhiteSpace(w.AutomationId) &&
+            index = w.Index,
+            automationId = w.AutomationId,
+            elementId = w.ElementId,
+            url = w.Url,
+            title = (string?)null,
+            ready = w.IsReady,
+            isReady = w.IsReady,
+            active = !string.IsNullOrWhiteSpace(w.AutomationId) &&
                 activeAutomationIds.Contains(w.AutomationId),
         }).ToList();
 
-        return HttpResponse.Json(new Dictionary<string, object?> { ["webviews"] = webviews });
+        return HttpResponse.Json(new { webviews });
     }
 
     protected async Task<HttpResponse> HandleCdpSource(HttpRequest request)
@@ -2325,11 +2325,11 @@ public partial class DevFlowAgentService
 
         try
         {
-            var cdpCommand = AgentJson.Serialize(new Dictionary<string, object?>
+            var cdpCommand = System.Text.Json.JsonSerializer.Serialize(new
             {
-                ["id"] = 99999,
-                ["method"] = "Runtime.evaluate",
-                ["params"] = new Dictionary<string, object?> { ["expression"] = "document.documentElement.outerHTML", ["returnByValue"] = true }
+                id = 99999,
+                method = "Runtime.evaluate",
+                @params = new { expression = "document.documentElement.outerHTML", returnByValue = true }
             });
 
             var resultJson = await webView.CommandHandler(cdpCommand);
@@ -2438,9 +2438,9 @@ public partial class DevFlowAgentService
     {
         try
         {
-            return Task.FromResult(HttpResponse.Json(new Dictionary<string, object?>
+            return Task.FromResult(HttpResponse.Json(new
             {
-                ["roots"] = GetFileStorageRoots().Select(ToFileStorageRootDescriptor).ToArray()
+                roots = GetFileStorageRoots().Select(ToFileStorageRootDescriptor).ToArray()
             }));
         }
         catch (Exception)
@@ -2450,18 +2450,18 @@ public partial class DevFlowAgentService
     }
 
     protected static object ToFileStorageRootDescriptor(FileStorageRoot root)
-        => new Dictionary<string, object?>
+        => new
         {
-            ["id"] = root.Id,
-            ["displayName"] = root.DisplayName,
-            ["kind"] = root.Kind,
-            ["isWritable"] = root.IsWritable,
-            ["isReadOnly"] = root.IsReadOnly,
-            ["isPersistent"] = root.IsPersistent,
-            ["isBackedUp"] = root.IsBackedUp,
-            ["mayBeClearedBySystem"] = root.MayBeClearedBySystem,
-            ["isUserVisible"] = root.IsUserVisible,
-            ["supportedOperations"] = root.SupportedOperations.ToArray()
+            id = root.Id,
+            displayName = root.DisplayName,
+            kind = root.Kind,
+            isWritable = root.IsWritable,
+            isReadOnly = root.IsReadOnly,
+            isPersistent = root.IsPersistent,
+            isBackedUp = root.IsBackedUp,
+            mayBeClearedBySystem = root.MayBeClearedBySystem,
+            isUserVisible = root.IsUserVisible,
+            supportedOperations = root.SupportedOperations.ToArray()
         };
 
     protected FileStorageRoot ResolveFileStorageRoot(HttpRequest request, string operation)
@@ -2495,41 +2495,41 @@ public partial class DevFlowAgentService
             FileStoragePathResolver.EnsureNoReparsePointTraversal(resolved.BasePath, resolved.FullPath, includeTarget: true);
 
             if (!Directory.Exists(resolved.FullPath))
-                return Task.FromResult(HttpResponse.Json(new Dictionary<string, object?>
+                return Task.FromResult(HttpResponse.Json(new
                 {
-                    ["root"] = root.Id,
-                    ["path"] = resolved.RelativePath,
-                    ["entries"] = Array.Empty<object>()
+                    root = root.Id,
+                    path = resolved.RelativePath,
+                    entries = Array.Empty<object>()
                 }));
 
             var entries = new List<object>();
             foreach (var dir in Directory.GetDirectories(resolved.FullPath))
             {
                 var info = new DirectoryInfo(dir);
-                entries.Add(new Dictionary<string, object?>
+                entries.Add(new
                 {
-                    ["name"] = info.Name,
-                    ["type"] = "directory",
-                    ["lastModified"] = info.LastWriteTimeUtc.ToString("O")
+                    name = info.Name,
+                    type = "directory",
+                    lastModified = info.LastWriteTimeUtc.ToString("O")
                 });
             }
             foreach (var file in Directory.GetFiles(resolved.FullPath))
             {
                 var info = new FileInfo(file);
-                entries.Add(new Dictionary<string, object?>
+                entries.Add(new
                 {
-                    ["name"] = info.Name,
-                    ["type"] = "file",
-                    ["size"] = info.Length,
-                    ["lastModified"] = info.LastWriteTimeUtc.ToString("O")
+                    name = info.Name,
+                    type = "file",
+                    size = info.Length,
+                    lastModified = info.LastWriteTimeUtc.ToString("O")
                 });
             }
 
-            return Task.FromResult(HttpResponse.Json(new Dictionary<string, object?>
+            return Task.FromResult(HttpResponse.Json(new
             {
-                ["root"] = root.Id,
-                ["path"] = resolved.RelativePath,
-                ["entries"] = entries
+                root = root.Id,
+                path = resolved.RelativePath,
+                entries
             }));
         }
         catch (Exception ex)
@@ -2559,13 +2559,13 @@ public partial class DevFlowAgentService
             var contentBase64 = Convert.ToBase64String(bytes);
             var info = new FileInfo(resolved.FullPath);
 
-            return HttpResponse.Json(new Dictionary<string, object?>
+            return HttpResponse.Json(new
             {
-                ["root"] = root.Id,
-                ["path"] = resolved.RelativePath,
-                ["size"] = info.Length,
-                ["lastModified"] = info.LastWriteTimeUtc.ToString("O"),
-                ["contentBase64"] = contentBase64
+                root = root.Id,
+                path = resolved.RelativePath,
+                size = info.Length,
+                lastModified = info.LastWriteTimeUtc.ToString("O"),
+                contentBase64
             });
         }
         catch (InvalidOperationException ex)
@@ -2613,13 +2613,13 @@ public partial class DevFlowAgentService
             await File.WriteAllBytesAsync(resolved.FullPath, bytes);
             var info = new FileInfo(resolved.FullPath);
 
-            return HttpResponse.Json(new Dictionary<string, object?>
+            return HttpResponse.Json(new
             {
-                ["success"] = true,
-                ["root"] = root.Id,
-                ["path"] = resolved.RelativePath,
-                ["size"] = info.Length,
-                ["lastModified"] = info.LastWriteTimeUtc.ToString("O")
+                success = true,
+                root = root.Id,
+                path = resolved.RelativePath,
+                size = info.Length,
+                lastModified = info.LastWriteTimeUtc.ToString("O")
             });
         }
         catch (InvalidOperationException ex)
@@ -2648,12 +2648,12 @@ public partial class DevFlowAgentService
                 return Task.FromResult(HttpResponse.NotFound($"File not found: {relativePath}"));
 
             File.Delete(resolved.FullPath);
-            return Task.FromResult(HttpResponse.Json(new Dictionary<string, object?>
+            return Task.FromResult(HttpResponse.Json(new
             {
-                ["success"] = true,
-                ["root"] = root.Id,
-                ["path"] = resolved.RelativePath,
-                ["message"] = $"File deleted: {resolved.RelativePath}"
+                success = true,
+                root = root.Id,
+                path = resolved.RelativePath,
+                message = $"File deleted: {resolved.RelativePath}"
             }));
         }
         catch (InvalidOperationException ex)
@@ -2802,7 +2802,7 @@ public partial class DevFlowAgentService
     {
         var jobs = await GetPlatformJobsAsync();
         if (jobs == null)
-            return HttpResponse.Json(new Dictionary<string, object?> { ["platform"] = PlatformName, ["supported"] = false, ["jobs"] = Array.Empty<object>() });
+            return HttpResponse.Json(new { platform = PlatformName, supported = false, jobs = Array.Empty<object>() });
 
         return HttpResponse.Json(jobs);
     }

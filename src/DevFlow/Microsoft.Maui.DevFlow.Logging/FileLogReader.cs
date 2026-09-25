@@ -96,17 +96,17 @@ public class FileLogReader
                 if (string.IsNullOrWhiteSpace(line)) continue;
                 try
                 {
-                    var entry = JsonSerializer.Deserialize(line, FileLogJsonContext.Default.FileLogEntry);
+                    var entry = JsonSerializer.Deserialize<FileLogEntry>(line);
                     if (entry != null)
                         entries.Add(entry);
                 }
-                catch (JsonException)
+                catch
                 {
                     // Skip malformed lines
                 }
             }
         }
-        catch (IOException)
+        catch
         {
             // File may have been deleted during rotation
         }

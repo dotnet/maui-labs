@@ -217,17 +217,17 @@ public class GtkBlazorWebViewDebugService : IDisposable
         private static string HandleBrowserMethod(string method, int id)
         {
             if (method == "Browser.getVersion")
-                return new System.Text.Json.Nodes.JsonObject
+                return System.Text.Json.JsonSerializer.Serialize(new
                 {
-                    ["id"] = id,
-                    ["result"] = new System.Text.Json.Nodes.JsonObject
+                    id,
+                    result = new
                     {
-                        ["protocolVersion"] = "1.3",
-                        ["product"] = "MAUI Blazor WebView (WebKitGTK)/1.0",
-                        ["userAgent"] = "Microsoft.Maui.DevFlow.Gtk",
-                        ["jsVersion"] = ""
+                        protocolVersion = "1.3",
+                        product = "MAUI Blazor WebView (WebKitGTK)/1.0",
+                        userAgent = "Microsoft.Maui.DevFlow.Gtk",
+                        jsVersion = ""
                     }
-                }.ToJsonString();
+                });
             return $"{{\"id\":{id},\"result\":{{}}}}";
         }
 
@@ -447,11 +447,7 @@ public class GtkBlazorWebViewDebugService : IDisposable
         if (string.IsNullOrEmpty(result)) return null;
         if (result.StartsWith("\"") && result.EndsWith("\""))
         {
-            try
-            {
-                using var document = System.Text.Json.JsonDocument.Parse(result);
-                return document.RootElement.GetString();
-            }
+            try { return System.Text.Json.JsonSerializer.Deserialize<string>(result); }
             catch { }
         }
         return result;

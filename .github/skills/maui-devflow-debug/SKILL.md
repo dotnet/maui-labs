@@ -1,12 +1,15 @@
 ---
 name: maui-devflow-debug
 description: >-
-  Run DevFlow inspect-and-fix loops for MAUI apps. USE FOR: launch, device
-  selection, agent recovery, broker/port/adb, tree/screenshot, Blazor CDP, and
-  iterative UI debugging. DO NOT USE FOR: first-time setup or non-MAUI
-  automation. INVOKES: DevFlow `maui_*` MCP tools when available; `maui
-  devflow` CLI as fallback; `dotnet`, `adb`, and `simctl` for build, deployment,
-  and connectivity work.
+  Run build, deploy, inspect, and fix loops for .NET MAUI apps that already have
+  MAUI DevFlow integrated. USE FOR: launching MAUI apps, selecting devices or
+  emulators, waiting for or recovering agent connections, broker/port/adb
+  connectivity issues, visual tree inspection, screenshots, UI interaction,
+  Blazor WebView CDP debugging, reading DevFlow logs, and iterative app
+  debugging. DO NOT USE FOR: first-time DevFlow package setup (use
+  maui-devflow-onboard), or generic desktop automation unrelated to MAUI. INVOKES:
+  maui devflow CLI, dotnet CLI, Android adb/android tools, and Apple simctl
+  tools.
 ---
 
 # DevFlow Debug
@@ -28,13 +31,6 @@ packages and `builder.AddMauiDevFlowAgent()` registered.
 
 - If DevFlow packages or `MauiProgram.cs` registration are missing, use `maui-devflow-onboard`.
 - If the failure is a generic build or SDK issue with no DevFlow angle, use normal .NET/MAUI diagnostics.
-
-## Optional Session Feedback Nudge
-
-If you have retried the same MAUI DevFlow workflow several times, tried multiple
-workarounds, or are ending a long DevFlow-assisted debugging session, ask
-whether the user wants to run `maui-devflow-session-review` to summarize friction
-for MAUI DevFlow product feedback. Do not run it automatically.
 
 ## Core Loop
 
@@ -64,27 +60,12 @@ for MAUI DevFlow product feedback. Do not run it automatically.
 
    ```bash
    maui devflow wait
-   maui devflow agent status
    maui devflow ui tree --depth 3 --fields "id,type,text,automationId"
    ```
 
-   Treat `agent status` as the runtime truth for reachability and app identity.
-   `diagnose` is broader environment state; it can report broker/project details
-   without proving the current app is reachable.
-
    If `wait`, `list`, or `ui tree` cannot connect after the app is running, load `references/connectivity.md` and recover the broker/agent connection before continuing.
 
-6. Prefer AutomationId-first validation for UI flows:
-
-   ```bash
-   maui devflow ui query --automationId save-button
-   maui devflow ui tap <element-id-from-query>
-   ```
-
-   If important controls do not have stable `AutomationId`s, add them before
-   relying on text, coordinates, screenshots, or brittle tree positions.
-
-7. Inspect, interact, capture evidence, then edit the app and repeat from launch.
+6. Inspect, interact, capture evidence, then edit the app and repeat from launch.
 
 ## Critical Anti-patterns
 
@@ -93,7 +74,6 @@ for MAUI DevFlow product feedback. Do not run it automatically.
 - Do not kill an async `dotnet build -t:Run` or `dotnet run` shell while you still need the app; that often kills the app.
 - Do not reuse a busy simulator/emulator when multiple MAUI apps or agents may be running.
 - Do not debug Blazor WebView DOM issues through the native visual tree alone; use the WebView/CDP commands.
-- Do not drive key app flows by coordinates when AutomationIds are available or can be added.
 
 ## Stop Signals
 
