@@ -96,12 +96,16 @@
                 <Setter Property="HorizontalOptions" Value="Start" />
                 <Setter Property="FontSize" Value="12" />
             </Style>
+            <Style TargetType="CheckBox">
+                <Setter Property="MinimumWidthRequest" Value="{OnPlatform -1, WinUI=0}" />
+            </Style>
             <Style x:Key="ReplayActionButtonStyle" TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}">
                 <Setter Property="WidthRequest" Value="136" />
                 <Setter Property="HeightRequest" Value="44" />
             </Style>
             <Style TargetType="RadioButton">
                 <Setter Property="Padding" Value="0" />
+                <Setter Property="MinimumWidthRequest" Value="{OnPlatform -1, WinUI=0}" />
                 <Setter Property="BackgroundColor"
                         Value="{AppThemeBinding Light={StaticResource PanelBackground}, Dark={StaticResource PanelBackgroundDark}}" />
                 <Setter Property="TextColor"
