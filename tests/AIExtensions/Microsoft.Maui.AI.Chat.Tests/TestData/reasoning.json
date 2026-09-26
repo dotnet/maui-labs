@@ -1,0 +1,63 @@
+{
+  "format": "chat-client-playground-recording",
+  "schemaVersion": 2,
+  "interactions": [
+    {
+      "sequence": 0,
+      "isStreaming": false,
+      "request": {
+        "messages": [
+          {
+            "role": "user",
+            "contents": [
+              {
+                "$type": "text",
+                "text": "Think through the following scheduling puzzle and explain only the answer: Alice is available Tuesday or Thursday, Ben only Thursday, and Cara only Tuesday. Assign one person per day so that all three can attend a two-day workshop, or say why it is impossible."
+              }
+            ]
+          }
+        ],
+        "options": {
+          "reasoning": {
+            "effort": "Medium",
+            "output": "Summary"
+          },
+          "toolMode": {
+            "$type": "none"
+          }
+        }
+      },
+      "updates": [],
+      "response": {
+        "messages": [
+          {
+            "createdAt": "2026-09-23T15:58:38+00:00",
+            "role": "assistant",
+            "contents": [
+              {
+                "$type": "reasoning",
+                "text": "**Evaluating workshop attendance**\n\nI'm analyzing the workshop attendance scenario involving three people scheduled over two days. Since there's only room for two people each day, it's impossible for all three to attend simultaneously. The availability of each person, like Alice and her potential attendance on both days, adds complexity, but the assignment constraint means only one can attend each day. Therefore, it's impossible for everyone to participate."
+              },
+              {
+                "$type": "text",
+                "text": "Impossible: two days with one person assigned per day provide only two slots, but all three people must attend."
+              }
+            ],
+            "messageId": "msg_0aba5910c45b437a006ab3f732ecc48194a2fa09d7841fe77a"
+          }
+        ],
+        "responseId": "resp_0aba5910c45b437a006ab3f72ee0a48194a14b5e0ed22b5204",
+        "conversationId": "resp_0aba5910c45b437a006ab3f72ee0a48194a14b5e0ed22b5204",
+        "modelId": "gpt-6-luna",
+        "createdAt": "2026-09-23T15:58:38+00:00",
+        "usage": {
+          "inputTokenCount": 57,
+          "outputTokenCount": 155,
+          "totalTokenCount": 212,
+          "cachedInputTokenCount": 0,
+          "reasoningTokenCount": 127
+        }
+      }
+    }
+  ]
+}

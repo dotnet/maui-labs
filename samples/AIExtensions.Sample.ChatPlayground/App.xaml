@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Application xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="AIExtensions.Sample.ChatPlayground.App">
+    <Application.Resources>
+        <ResourceDictionary>
+            <Color x:Key="PageBackground">#F7F8FC</Color>
+            <Color x:Key="PageBackgroundDark">#0F1722</Color>
+            <Color x:Key="PanelBackground">#FFFFFF</Color>
+            <Color x:Key="PanelBackgroundDark">#1B2738</Color>
+            <Color x:Key="InputBackground">#F1F5F9</Color>
+            <Color x:Key="InputBackgroundDark">#26374D</Color>
+            <Color x:Key="BorderColor">#D9DFEA</Color>
+            <Color x:Key="BorderColorDark">#3B4C62</Color>
+            <Color x:Key="TextPrimary">#172033</Color>
+            <Color x:Key="TextPrimaryDark">#EDF2FA</Color>
+            <Color x:Key="MutedText">#596575</Color>
+            <Color x:Key="MutedTextDark">#B0BDD0</Color>
+            <Color x:Key="Primary">#2563EB</Color>
+            <Color x:Key="DisabledActionBackground">#64748B</Color>
+            <Color x:Key="DisabledActionBackgroundDark">#475569</Color>
+            <Color x:Key="StopActionBackground">#B91C1C</Color>
+            <Color x:Key="OverlayScrim">#550F172A</Color>
+            <Color x:Key="OverlayScrimDark">#99000000</Color>
+            <Color x:Key="UserBubble">#DBEAFE</Color>
+            <Color x:Key="UserBubbleDark">#17385C</Color>
+            <Color x:Key="AssistantBubble">#FFFFFF</Color>
+            <Color x:Key="AssistantBubbleDark">#243449</Color>
+            <Color x:Key="ErrorBubble">#FEE2E2</Color>
+            <Color x:Key="ErrorBubbleDark">#4D2531</Color>
+            <Color x:Key="ToolBubble">#EEF4FF</Color>
+            <Color x:Key="ToolBubbleDark">#233650</Color>
+            <Color x:Key="SystemBubble">#F1F5F9</Color>
+            <Color x:Key="SystemBubbleDark">#2B394D</Color>
+            <Style TargetType="Label">
+                <Setter Property="TextColor"
+                        Value="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}" />
+            </Style>
+            <Style x:Key="MutedLabel" TargetType="Label">
+                <Setter Property="TextColor"
+                        Value="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextDark}}" />
+            </Style>
+            <Style x:Key="SectionHeading" TargetType="Label" BasedOn="{StaticResource MutedLabel}">
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="FontAttributes" Value="Bold" />
+            </Style>
+            <Style x:Key="PlaygroundPanel" TargetType="Border">
+                <Setter Property="BackgroundColor"
+                        Value="{AppThemeBinding Light={StaticResource PanelBackground}, Dark={StaticResource PanelBackgroundDark}}" />
+                <Setter Property="Stroke"
+                        Value="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}" />
+                <Setter Property="StrokeShape" Value="RoundRectangle 12" />
+            </Style>
+            <Style x:Key="ComposerPanel" TargetType="Border" BasedOn="{StaticResource PlaygroundPanel}">
+                <Setter Property="Padding" Value="12" />
+            </Style>
+            <Style TargetType="Entry">
+                <Setter Property="BackgroundColor"
+                        Value="{AppThemeBinding Light={StaticResource InputBackground}, Dark={StaticResource InputBackgroundDark}}" />
+                <Setter Property="TextColor"
+                        Value="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}" />
+                <Setter Property="PlaceholderColor"
+                        Value="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextDark}}" />
+                <Setter Property="HeightRequest" Value="{OnPlatform 44, MacCatalyst=38, WinUI=38}" />
+            </Style>
+            <Style TargetType="Editor">
+                <Setter Property="BackgroundColor"
+                        Value="{AppThemeBinding Light={StaticResource InputBackground}, Dark={StaticResource InputBackgroundDark}}" />
+                <Setter Property="TextColor"
+                        Value="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}" />
+            </Style>
+            <Style x:Key="PrimaryButtonStyle" TargetType="Button">
+                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                <Setter Property="TextColor" Value="White" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Padding" Value="14,8" />
+                <Style.Triggers>
+                    <Trigger TargetType="Button" Property="IsEnabled" Value="False">
+                        <Setter Property="BackgroundColor"
+                                Value="{AppThemeBinding Light={StaticResource DisabledActionBackground}, Dark={StaticResource DisabledActionBackgroundDark}}" />
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+            <Style TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}" />
+            <Style x:Key="SecondaryButtonStyle" TargetType="Button">
+                <Setter Property="BackgroundColor"
+                        Value="{AppThemeBinding Light={StaticResource InputBackground}, Dark={StaticResource InputBackgroundDark}}" />
+                <Setter Property="TextColor"
+                        Value="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}" />
+                <Setter Property="BorderColor"
+                        Value="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}" />
+                <Setter Property="BorderWidth" Value="1" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Padding" Value="12,6" />
+                <Setter Property="HeightRequest" Value="36" />
+                <Setter Property="HorizontalOptions" Value="Start" />
+                <Setter Property="FontSize" Value="12" />
+            </Style>
+            <Style x:Key="ReplayActionButtonStyle" TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}">
+                <Setter Property="WidthRequest" Value="136" />
+                <Setter Property="HeightRequest" Value="44" />
+            </Style>
+            <Style TargetType="RadioButton">
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="BackgroundColor"
+                        Value="{AppThemeBinding Light={StaticResource PanelBackground}, Dark={StaticResource PanelBackgroundDark}}" />
+                <Setter Property="TextColor"
+                        Value="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}" />
+                <Setter Property="MinimumHeightRequest" Value="{OnPlatform 44, MacCatalyst=32, WinUI=32}" />
+            </Style>
+            <Style x:Key="ChatActionButton" TargetType="ImageButton">
+                <Setter Property="WidthRequest" Value="44" />
+                <Setter Property="HeightRequest" Value="44" />
+                <Setter Property="Padding" Value="10" />
+                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Style.Triggers>
+                    <Trigger TargetType="ImageButton" Property="IsEnabled" Value="False">
+                        <Setter Property="BackgroundColor"
+                                Value="{AppThemeBinding Light={StaticResource DisabledActionBackground}, Dark={StaticResource DisabledActionBackgroundDark}}" />
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+            <Style x:Key="AttachmentButton" TargetType="ImageButton" BasedOn="{StaticResource ChatActionButton}">
+                <Setter Property="CornerRadius" Value="22" />
+            </Style>
+            <Style x:Key="CancelActionButton" TargetType="ImageButton"
+                   BasedOn="{StaticResource AttachmentButton}">
+                <Setter Property="BackgroundColor" Value="{StaticResource StopActionBackground}" />
+            </Style>
+            <Style x:Key="ChatActionLabel" TargetType="Label" BasedOn="{StaticResource MutedLabel}">
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="HorizontalTextAlignment" Value="Center" />
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

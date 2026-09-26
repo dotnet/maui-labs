@@ -1,0 +1,102 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Microsoft.Maui.AI.Chat.Tests</RootNamespace>
+    <NoWarn>$(NoWarn);MEAI001;OPENAI001</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.Extensions.AI" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="xunit" />
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ChatClientDescriptor.cs"
+             Link="Chat\Services\ChatClientDescriptor.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ChatConversation.cs"
+             Link="Chat\Services\ChatConversation.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ChatRecording.cs"
+             Link="Chat\Services\ChatRecording.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ChatRecordingSerializer.cs"
+             Link="Chat\Services\ChatRecordingSerializer.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ChatResponseProjector.cs"
+             Link="Chat\Services\ChatResponseProjector.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\DescribedChatClient.cs"
+             Link="Chat\Services\DescribedChatClient.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ChatSessionService.cs"
+             Link="Chat\Services\ChatSessionService.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ChatTurnExecutor.cs"
+             Link="Chat\Services\ChatTurnExecutor.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\IChatRecordingSession.cs"
+             Link="Chat\Services\IChatRecordingSession.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\PlaygroundResponse.cs"
+             Link="Chat\Services\PlaygroundResponse.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\PlaygroundTools.cs"
+             Link="Chat\Services\PlaygroundTools.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\RecordingChatClient.cs"
+             Link="Chat\Services\RecordingChatClient.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ReplayChatClient.cs"
+             Link="Chat\Services\ReplayChatClient.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\TranscriptChange.cs"
+             Link="Chat\Services\TranscriptChange.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\TranscriptEmitter.cs"
+             Link="Chat\Services\TranscriptEmitter.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\ViewModels\SettingsPaneViewModel.cs"
+             Link="Chat\ViewModels\SettingsPaneViewModel.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Embeddings\Services\DocumentModels.cs"
+             Link="Embeddings\Services\DocumentModels.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Embeddings\Services\DocumentSearchService.cs"
+             Link="Embeddings\Services\DocumentSearchService.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Embeddings\Services\DocumentStore.cs"
+             Link="Embeddings\Services\DocumentStore.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Embeddings\Services\DescribedEmbeddingGenerator.cs"
+             Link="Embeddings\Services\DescribedEmbeddingGenerator.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Embeddings\Services\EmbeddingGeneratorDescriptor.cs"
+             Link="Embeddings\Services\EmbeddingGeneratorDescriptor.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Embeddings\ViewModels\EmbeddingPlaygroundViewModel.cs"
+             Link="Embeddings\ViewModels\EmbeddingPlaygroundViewModel.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Embeddings\ViewModels\EmbeddingSettingsViewModel.cs"
+             Link="Embeddings\ViewModels\EmbeddingSettingsViewModel.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Images\Services\GeneratedImage.cs"
+             Link="Images\Services\GeneratedImage.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Images\Services\ImageGenerationService.cs"
+             Link="Images\Services\ImageGenerationService.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Images\Services\DescribedImageGenerator.cs"
+             Link="Images\Services\DescribedImageGenerator.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Images\Services\ImageGeneratorDescriptor.cs"
+             Link="Images\Services\ImageGeneratorDescriptor.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Images\ViewModels\ImageSettingsViewModel.cs"
+             Link="Images\ViewModels\ImageSettingsViewModel.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\AISettings.cs"
+             Link="Services\AISettings.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\AtomicFile.cs"
+             Link="Services\AtomicFile.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\ImageAttachment.cs"
+             Link="Services\ImageAttachment.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="TestData\generated-image.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="TestData\image-input.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="TestData\multi-turn-structured.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="TestData\multi-turn-tools.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="TestData\multiple-tools.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="TestData\no-tools.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="TestData\one-tool.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="TestData\reasoning.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="TestData\structured-streaming.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="TestData\structured.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Resources\Raw\playground_chat.json"
+             Link="TestData\multi-turn-image-in-out.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Resources\Raw\playground_sample.png"
+             Link="TestData\playground_sample.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

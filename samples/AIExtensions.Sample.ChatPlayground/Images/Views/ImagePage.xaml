@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
+             x:Class="AIExtensions.Sample.ChatPlayground.ImagePage"
+             x:DataType="local:ImagePlaygroundViewModel"
+             Title="Images"
+             BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}">
+    <Grid>
+        <local:PlaygroundPageLayout HeaderTitle="Images"
+                                       HeaderInfo="IImageGenerator creates an image from a prompt or edits an attached original. The output is not saved as a chat."
+                                       HeaderStatus="{Binding StatusMessage}"
+                                       StatusAutomationId="ImageStatusLabel"
+                                       SidebarTitle="Image settings">
+            <local:PlaygroundPageLayout.SettingsContent>
+                <local:ImageSettingsPane BindingContext="{Binding Settings}" />
+            </local:PlaygroundPageLayout.SettingsContent>
+            <local:PlaygroundPageLayout.MainContent>
+                <local:ImageArea />
+            </local:PlaygroundPageLayout.MainContent>
+            <local:PlaygroundPageLayout.InputContent>
+                <local:ImageComposer />
+            </local:PlaygroundPageLayout.InputContent>
+        </local:PlaygroundPageLayout>
+    </Grid>
+</ContentPage>
