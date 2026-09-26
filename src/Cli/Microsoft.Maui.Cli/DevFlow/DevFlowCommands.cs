@@ -39,6 +39,8 @@ public class DevFlowCommands
     internal static Func<int, Task<Broker.AgentRegistration[]?>> ListBrokerAgentsAsync { get; set; } = Broker.BrokerClient.ListAgentsAsync;
     internal static Func<AndroidDevFlowPortForwarder> CreateAndroidPortForwarder { get; set; } = AndroidDevFlowPortForwarder.CreateDefault;
     internal static Func<bool> IsAndroidAdbLikelyAvailable { get; set; } = AndroidDevFlowPortForwarder.IsAdbLikelyAvailable;
+    internal static Func<string, IAppDriver> RecordingDriverFactory { get; set; } = AppDriverFactory.Create;
+    internal static Func<RecordingState?> ReadRecordingState { get; set; } = RecordingStateManager.Load;
 
     private static IDevFlowOutputWriter Output => s_output ?? throw new InvalidOperationException("DevFlowCommands not initialized. Call CreateDevFlowCommand first.");
 
@@ -647,14 +649,8 @@ public class DevFlowCommands
         });
         recordingCommand.Add(recordingStartCmd);
 
-        var recordingStopCmd = new Command("stop", "Stop active recording");
-        recordingStopCmd.SetAction(async (ctx, ct) =>
-        {
-            var host = ctx.GetValue(agentHostOption)!;
-            var port = ctx.GetValue(agentPortOption);
-            var platform = ctx.GetValue(platformOption)!;
-            await RecordingStopAsync(host, port, platform);
-        });
+        var recordingStopCmd = new Command("stop", "Stop the recording using its saved platform and device");
+        recordingStopCmd.SetAction((ctx, ct) => RecordingStopAsync());
         recordingCommand.Add(recordingStopCmd);
 
         var recordingStatusCmd = new Command("status", "Check if a recording is in progress");
@@ -3668,7 +3664,7 @@ public class DevFlowCommands
             throw new ArgumentException("Specify --device <simulator UDID> for iOS recording.", nameof(device));
         }
 
-        var driver = AppDriverFactory.Create(platform);
+        var driver = RecordingDriverFactory(platform);
         if (driver is iOSSimulatorAppDriver simulator)
             simulator.DeviceUdid = device;
         else if (driver is AndroidAppDriver android)
@@ -3690,12 +3686,13 @@ public class DevFlowCommands
         catch (Exception ex) { WriteError(ex.Message); }
     }
 
-    private static async Task RecordingStopAsync(string host, int port, string platform)
+    private static async Task RecordingStopAsync()
     {
         try
         {
-            var state = RecordingStateManager.Load();
-            using var driver = CreateRecordingDriver(platform, state?.Serial, starting: false);
+            var state = ReadRecordingState()
+                ?? throw new InvalidOperationException("No active recording found.");
+            using var driver = CreateRecordingDriver(state.Platform, state.Serial, starting: false);
             var outputFile = await driver.StopRecordingAsync();
             var size = File.Exists(outputFile) ? new FileInfo(outputFile).Length : 0;
             Console.WriteLine($"Recording saved: {outputFile} ({size} bytes)");
