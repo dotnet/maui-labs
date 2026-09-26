@@ -65,6 +65,11 @@ controls.
 
 The native `LanguageModelContext` retains prompts **and generated responses**
 across calls, so a continuing conversation can send only the next user prompt.
+Microsoft's [Phi Silica platform card](https://learn.microsoft.com/windows/ai/cards/phi-silica-platform-card#limitations)
+describes an **approximately 3.5K-token context window shared by prompts,
+replies, and instructions**. This is not a guaranteed per-call input or output
+allowance. `GetUsablePromptLength` reports the position in a particular prompt
+that fits the *remaining* window, in UTF-16 characters rather than tokens.
 The current `IChatClient` adapter instead receives an entire caller-supplied
 history and creates a fresh context for each response. Reusing one context
 without checking that history would mix independent conversations or ignore
@@ -77,12 +82,20 @@ context with the same serialized history, and a reused native context sent
 only the new prompt. Run it on a Windows AI-capable machine from the repo root:
 
 ```powershell
-dotnet test tests\AI\Microsoft.Maui.Essentials.AI.DeviceTests\Microsoft.Maui.Essentials.AI.DeviceTests.csproj -f net10.0-windows10.0.19041.0 -p:TestingMode=XHarness -p:EnableWindowsAIContextBenchmark=true -p:DeviceRunnersDataTimeout=300 --filter WindowsAIContextBenchmarkTests --logger trx
+dotnet test tests\AI\Microsoft.Maui.Essentials.AI.DeviceTests\Microsoft.Maui.Essentials.AI.DeviceTests.csproj -f net10.0-windows10.0.19041.0 -p:TestingMode=XHarness -p:EnableWindowsAIContextBenchmark=true -p:DeviceRunnersDataTimeout=1200 --filter WindowsAIContextBenchmarkTests --logger trx
 ```
 
-The test records per-turn latency, input length, and recall of synthetic codes
-in its TRX output and an app-private `windows-ai-context-benchmark.tsv`. It does
-not gate a build on a hardware-dependent timing threshold.
+Filter to `CompareSubstantial` for five-turn conversations with substantial
+inputs and either brief or paragraph-length requested replies, or to
+`CompareNearContextLimit` for a five-turn run sized by a native context-fit
+probe with room reserved for replies. The probe is an estimate: native
+conversation formatting and actual reply lengths may differ, so inspect the
+observed fit and response lengths rather than treating the character position
+as an exact token count. The tests record per-turn latency, input length,
+actual response length in characters and words, first-chunk latency, and a
+continuity marker in TRX output and app-private
+`windows-ai-context-benchmark-<scenario>.tsv` files. They do not gate builds
+on a hardware-dependent timing threshold.
 
 ## Image generation
 
