@@ -15,7 +15,8 @@ public sealed class AISettingsTests
                 ["AI:ApiKey"] = "test-key",
                 ["AI:DeploymentName"] = "chat",
                 ["AI:ImageDeploymentName"] = "image",
-                ["AI:EmbeddingDeploymentName"] = "embedding"
+                ["AI:EmbeddingDeploymentName"] = "embedding",
+                ["AI:EnableWindowsImageDescriptions"] = "true"
             })
             .Build();
 
@@ -28,6 +29,29 @@ public sealed class AISettingsTests
         Assert.Equal("chat", settings.DeploymentName);
         Assert.Equal("image", settings.ImageDeploymentName);
         Assert.Equal("embedding", settings.EmbeddingDeploymentName);
+        Assert.True(settings.EnableWindowsImageDescriptions);
+    }
+
+    [Fact]
+    public void Bind_AbsentImageDescriptionFlag_RemainsOff()
+    {
+        var settings = new AISettings();
+        new ConfigurationBuilder().AddInMemoryCollection().Build()
+            .GetSection(AISettings.SectionName).Bind(settings);
+
+        Assert.False(settings.EnableWindowsImageDescriptions);
+    }
+    }
+
+    [Fact]
+    public void Bind_InvalidImageDescriptionFlag_Throws()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["AI:EnableWindowsImageDescriptions"] = "invalid" })
+            .Build();
+
+        Assert.Throws<InvalidOperationException>(() =>
+            configuration.GetSection(AISettings.SectionName).Bind(new AISettings()));
     }
 
     [Fact]

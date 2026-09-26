@@ -28,7 +28,11 @@ internal static class ChatServiceCollectionExtensions
 
 #if WINDOWS
         if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 26100))
+        {
+            if (settings.EnableWindowsImageDescriptions)
+                services.AddSingleton<WindowsAIImageDescriber>();
             services.AddSingleton<IChatClient>(CreateWindowsChatClient);
+        }
 #endif
 
 #if IOS || MACCATALYST
@@ -47,19 +51,31 @@ internal static class ChatServiceCollectionExtensions
 #if WINDOWS
     [SupportedOSPlatform("windows10.0.26100.0")]
     private static IChatClient CreateWindowsChatClient(IServiceProvider serviceProvider)
-        => new WindowsAIChatClient()
+    {
+        var settings = serviceProvider.GetRequiredService<AISettings>();
+        var builder = new WindowsAIChatClient()
             .AsBuilder()
             .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
             .UseDescriptor(new ChatClientDescriptor(
                 "windows-ai-chat",
                 "Windows AI",
                 "Windows AI checks model readiness on first use. Direct image input is unavailable. " +
-                "Experimental tool selection can choose the wrong function or arguments; use only harmless playground tools.",
-                SupportsToolCalling: true))
-            .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
+                "Experimental tool selection can choose the wrong function or arguments; use only harmless playground tools." +
+                    (settings.EnableWindowsImageDescriptions
+                        ? " Images are captioned on-device before the text-only model reads them; it does not see the pixels alongside your question."
+                        : " Set AI:EnableWindowsImageDescriptions=true to enable on-device image captions."),
+                SupportsImageInput: settings.EnableWindowsImageDescriptions,
+                SupportsToolCalling: true));
+
+        if (settings.EnableWindowsImageDescriptions)
+            builder.Use(inner => new ImageDescribingChatClient(
+                inner, serviceProvider.GetRequiredService<WindowsAIImageDescriber>().DescribeAsync));
+
+        return builder.UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
             .UseFunctionInvocation()
             .Use(inner => new WindowsAIToolCallingClient(inner))
             .Build();
+    }
 #endif
 
 #if IOS || MACCATALYST

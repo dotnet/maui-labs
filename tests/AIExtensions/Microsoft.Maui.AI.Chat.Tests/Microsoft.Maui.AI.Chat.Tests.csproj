@@ -31,6 +31,8 @@
              Link="Chat\Services\ChatResponseProjector.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\DescribedChatClient.cs"
              Link="Chat\Services\DescribedChatClient.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ImageDescribingChatClient.cs"
+             Link="Chat\Services\ImageDescribingChatClient.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ChatSessionService.cs"
              Link="Chat\Services\ChatSessionService.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ChatTurnExecutor.cs"
