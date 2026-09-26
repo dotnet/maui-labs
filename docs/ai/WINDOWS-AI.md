@@ -97,6 +97,58 @@ continuity marker in TRX output and app-private
 `windows-ai-context-benchmark-<scenario>.tsv` files. They do not gate builds
 on a hardware-dependent timing threshold.
 
+### Prompt framing experiment
+
+The Windows `LanguageModel` API accepts plain strings and a separate
+`CreateContext(systemPrompt)` argument; Microsoft does not document its
+internal chat template or expose the active tokenizer. Phi Silica is derived
+from Phi-3.5-mini, but the downloadable
+[Phi-3.5](https://huggingface.co/microsoft/Phi-3.5-mini-instruct/raw/main/tokenizer_config.json)
+and [Phi-4 mini](https://huggingface.co/microsoft/Phi-4-mini-instruct/raw/main/tokenizer_config.json)
+templates do **not** establish that literal `<|user|>` or `<|system|>`
+strings are special tokens when passed through the Windows API. Other model
+families have different templates (for example,
+[Qwen's ChatML](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct/raw/main/tokenizer_config.json),
+[Llama 3](https://github.com/meta-llama/llama-models/blob/main/models/llama3_3/prompt_format.md),
+and [Gemma](https://ai.google.dev/gemma/docs/core/prompt-structure)).
+Microsoft also [plans to replace Phi Silica with Aion Instruct](https://learn.microsoft.com/windows/ai/apis/phi-silica),
+so hard-coding a Phi-family template into this OS-backed adapter would be
+especially fragile.
+
+An opt-in packaged benchmark compares the real adapter with these literal
+templates, an assistant-label suffix, and XML-escaped role elements. It also
+compares native system context against system instructions written into a
+plain, Phi-style, or XML prompt. Both cases include a fictional play with
+line-start `Assistant:` and role-like strings *inside the user's text*, plus
+a direct conflict between the system and user instructions. The benchmark
+records latency, required plot facts, system-prefix compliance, and raw
+responses. A capacity probe compares repeated literal Phi markers to
+same-length misspellings: a difference can suggest tokenizer special handling,
+but the API reports **character positions**, not token IDs, and cannot prove
+how Windows wraps messages. The model's own answer about its identity and
+expected template is recorded as an **unverified self-report**. Run from the
+repo root on a Windows AI-capable machine:
+
+```powershell
+dotnet test tests\AI\Microsoft.Maui.Essentials.AI.DeviceTests\Microsoft.Maui.Essentials.AI.DeviceTests.csproj -f net10.0-windows10.0.19041.0 -p:TestingMode=XHarness -p:EnableWindowsAIPromptFormatBenchmark=true -p:DeviceRunnersDataTimeout=900 --filter WindowsAIPromptFormatBenchmarkTests --logger trx
+```
+
+Results are in the TRX and app-private
+`windows-ai-prompt-formats-{history,system}.tsv` files. Template strings in
+this experiment are **not** production recommendations. On this device,
+2,048 repetitions of `<|assistant|>` fit the capacity probe while a
+same-length misspelling fit only about 511; this is consistent with different
+tokenization, **not** proof of chat-role behavior. In two runs of the
+line-start three-act play, the adapter included four of six required plot
+facts, literal Phi formats two of six, and XML-escaped messages six of six;
+the XML responses were slower. These are substring checks over one synthetic
+play, not a semantic accuracy score. Even the native system prompt did not
+enforce its requested prefix when the user explicitly requested a conflicting
+one. None of these observations identifies the Windows model's template,
+guarantees behavior across model updates, or makes in-band delimiters a trust
+boundary. Keep using the native system context and validate outputs when a
+response format is required.
+
 ## Image generation
 
 `WindowsAIImageGenerator` supports text-to-image (no source image) and
