@@ -2,6 +2,9 @@ using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using CoreGraphics;
+using CoreImage;
+using ImageIO;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -352,6 +355,9 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 					functionResult.CallId,
 					functionResult.Result),
 
+			ImageContentNative image =>
+				FromNative(image),
+
 			_ => throw new ArgumentException($"Unsupported content type: {content.GetType().Name}", nameof(content))
 		};
 
@@ -442,6 +448,10 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			TextContent textContent when textContent.Text is not null => [new TextContentNative(textContent.Text)],
 			TextContent => Array.Empty<AIContentNative>(),
 
+			// Image content (analyzed by the model on 27.0+; the native layer throws below that).
+			DataContent data when IsImage(data.MediaType) => [ToNative(data)],
+			UriContent uri when IsImage(uri.MediaType) => [ToNative(uri)],
+
 			// Function call/result content from prior tool-calling turns is converted to native types.
 			// The native Swift layer gracefully skips these when building the Transcript, since Apple's
 			// LanguageModelSession manages tool call state internally.
@@ -478,6 +488,122 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 
 	private static NSNumber? ToNative(long? value) =>
 		value.HasValue ? NSNumber.FromInt64(value.Value) : null;
+
+	// internal for unit testing (InternalsVisibleTo).
+	internal static bool IsImage(string? mediaType) =>
+		mediaType is not null && mediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
+
+	internal static ImageContentNative ToNative(DataContent data)
+	{
+		if (ToNativeImage(data.RawRepresentation) is { } native)
+			return native;
+
+		// Byte fallback: the Swift shim decodes the bytes to a CGImage.
+		var bytes = data.Data.ToArray();
+		return new ImageContentNative(NSData.FromArray(bytes), data.MediaType ?? "image/png", 0, null);
+	}
+
+	internal static ImageContentNative ToNative(UriContent uri)
+	{
+		if (ToNativeImage(uri.RawRepresentation) is { } native)
+			return native;
+
+		if (uri.Uri.IsFile)
+			return new ImageContentNative(NSUrl.FromFilename(uri.Uri.LocalPath), 0, null);
+
+		throw new NotSupportedException(
+			"Apple Intelligence image prompts require in-memory DataContent or a file:// UriContent. " +
+			"Remote http(s) image URLs are not downloaded automatically.");
+	}
+
+	private static ImageContentNative? ToNativeImage(object? representation)
+	{
+		switch (representation)
+		{
+			case CGImage cg:
+				return new ImageContentNative(cg, 0, null);
+#if IOS || MACCATALYST
+			case UIKit.UIImage ui when ui.CGImage is { } cg:
+				return new ImageContentNative(cg, ui.Orientation switch
+				{
+					UIKit.UIImageOrientation.Up => 1,
+					UIKit.UIImageOrientation.UpMirrored => 2,
+					UIKit.UIImageOrientation.Down => 3,
+					UIKit.UIImageOrientation.DownMirrored => 4,
+					UIKit.UIImageOrientation.LeftMirrored => 5,
+					UIKit.UIImageOrientation.Right => 6,
+					UIKit.UIImageOrientation.RightMirrored => 7,
+					UIKit.UIImageOrientation.Left => 8,
+					_ => throw new ArgumentOutOfRangeException(nameof(representation), "Unsupported UIImage orientation.")
+				}, null);
+#elif MACOS
+			case AppKit.NSImage ns when ToCGImage(ns) is { } cg:
+				return new ImageContentNative(cg, 0, null);
+#endif
+			default:
+				return null;
+		}
+	}
+
+	internal static AIContent FromNative(ImageContentNative image)
+	{
+		if (image.OrientationRaw is < 0 or > 8)
+			throw new InvalidDataException($"Unsupported EXIF orientation: {image.OrientationRaw}.");
+
+		if (image.OrientationRaw > 1)
+		{
+			using var decoded = image.CgImage is null ? DecodeImage(image) : null;
+			using var source = CIImage.FromCGImage(image.CgImage ?? decoded!);
+			using var oriented = source.CreateByApplyingOrientation((CGImagePropertyOrientation)image.OrientationRaw);
+			using var context = new CIContext();
+			var rendered = context.CreateCGImage(oriented, oriented.Extent)
+				?? throw new InvalidDataException("Failed to render the oriented native image.");
+			return new DataContent(EncodePng(rendered), "image/png") { RawRepresentation = rendered };
+		}
+
+		var mediaType = image.MimeType ?? "image/png";
+
+		if (image.ImageUrl?.AbsoluteString is { } uri)
+			return new UriContent(uri, mediaType) { RawRepresentation = image.CgImage };
+
+		if (image.Data is { } data)
+			return new DataContent(data.ToArray(), mediaType) { RawRepresentation = image.CgImage };
+
+		if (image.CgImage is { } cg)
+			return new DataContent(EncodePng(cg), "image/png") { RawRepresentation = cg };
+
+		throw new InvalidDataException("The native image attachment has no image payload or file URL.");
+	}
+
+	private static CGImage DecodeImage(ImageContentNative image)
+	{
+		using var source = image.Data is { } data
+			? CGImageSource.FromData(data)
+			: image.ImageUrl is { IsFileUrl: true } url
+				? CGImageSource.FromUrl(url)
+				: throw new InvalidDataException("An oriented native image requires bytes or a local file URL.");
+		return source?.CreateImage(0, new CGImageOptions())
+			?? throw new InvalidDataException("Failed to decode the oriented native image.");
+	}
+
+	private static byte[] EncodePng(CGImage image)
+	{
+		using var data = new NSMutableData();
+		using var destination = CGImageDestination.Create(data, "public.png", 1)
+			?? throw new InvalidOperationException("Failed to create a PNG image destination.");
+		destination.AddImage(image);
+		if (!destination.Close())
+			throw new InvalidOperationException("Failed to encode the image to PNG.");
+		return data.ToArray();
+	}
+
+#if MACOS
+	private static CGImage? ToCGImage(AppKit.NSImage image)
+	{
+		var rect = new CGRect(0, 0, image.Size.Width, image.Size.Height);
+		return image.AsCGImage(ref rect, null, null);
+	}
+#endif
 
 	private sealed partial class AIFunctionToolAdapter(AIFunction function, ILogger logger, CancellationToken cancellationToken, IServiceProvider? services) : AIToolNative
 	{

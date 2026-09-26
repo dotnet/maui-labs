@@ -45,6 +45,16 @@ on:
         type: string
         default: ''
         description: 'Xcode version to select on macOS (e.g. "26.3"). Empty uses runner default.'
+      allow-xcode-preview:
+        required: false
+        type: boolean
+        default: false
+        description: 'Allow a preview Xcode version newer than the installed .NET Apple workload supports.'
+      use-xcode27-preview:
+        required: false
+        type: boolean
+        default: false
+        description: 'Use the opt-in 27.0 Apple target frameworks on a macOS 27 runner.'
       native-deps:
         required: false
         type: string
@@ -59,6 +69,8 @@ on:
 jobs:
   device-tests:
     runs-on: ${{ inputs.os }}
+    env:
+      UseXcode27Preview: ${{ inputs.use-xcode27-preview }}
     steps:
       - uses: actions/checkout@v6
 
@@ -83,7 +95,7 @@ jobs:
         run: |
           cd "$(dirname "${{ inputs.project-path }}")"
           dotnet restore "$(basename "${{ inputs.project-path }}")"
-          dotnet build "$(basename "${{ inputs.project-path }}")" -c Release --no-restore
+          dotnet build "$(basename "${{ inputs.project-path }}")" -f ${{ inputs.target-framework }} -c Release --no-restore ${{ inputs.allow-xcode-preview && '-p:ValidateXcodeVersion=false' || '' }}
 
       - name: Run device tests
         run: |
@@ -96,7 +108,7 @@ jobs:
             --logger trx \
             --results-directory ${{ github.workspace }}/artifacts/TestResults \
             ${{ inputs.filter != '' && format('--filter "{0}"', inputs.filter) || '' }} \
-            ${{ inputs.dotnet-args }}
+            ${{ inputs.dotnet-args }} ${{ inputs.allow-xcode-preview && '-p:ValidateXcodeVersion=false' || '' }}
 
       - name: Upload test results
         if: always()

@@ -7,6 +7,7 @@ on:
       - 'src/AIExtensions/**'
       - 'tests/AIExtensions/**'
       - 'samples/AIExtensions.Sample.ChatPlayground/**'
+      - 'src/AI/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -15,11 +16,11 @@ on:
       - 'NuGet.config'
   pull_request:
     types: [opened, synchronize, reopened, edited]
-    branches: [main]
     paths:
       - 'src/AIExtensions/**'
       - 'tests/AIExtensions/**'
       - 'samples/AIExtensions.Sample.ChatPlayground/**'
+      - 'src/AI/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -42,9 +43,10 @@ jobs:
     with:
       project-path: samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj
       project-name: ai-chat-playground
-      os: '["macos-latest"]'
+      os: '["xcode-27"]'
       run-tests: false
       pack: false
       install-workloads: true
-      xcode-version: '26.3'
+      workload-version: '10.0.401'
+      allow-xcode-preview: true
       android-project: src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj
