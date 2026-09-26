@@ -82,12 +82,6 @@ as tabs. Reusable controls are in `Views/`, and shared configuration, image
 input, and atomic storage are in `Services/`. Chat recording and document
 indexing remain separate.
 
-The portable xUnit tests cover replay of real captured text/structured,
-streaming/non-streaming, tool, image, and reasoning conversations; current-chat
-import, restart, autosave, and damage recovery; independent document
-import/index/search/clear, model isolation, invalid vectors, and cancellation;
-and image generation/edit behavior. They run without a device or credentials.
-
 ### Manual Apple image-input validation (macOS 27)
 
 This is a **human test on macOS 27**, not a verified vision-inference result.
