@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using EssentialsAISample.AI;
 using EssentialsAISample.Pages;
 using EssentialsAISample.Services;
@@ -9,6 +9,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Essentials.AI;
 using System.ClientModel;
 
+#if WINDOWS
+using System.Runtime.Versioning;
+#endif
 #if ENABLE_OPENAI_CLIENT
 using OpenAI;
 using OpenAI.Chat;
@@ -41,6 +44,8 @@ public static class MauiProgram
 		// Register AI agents and workflow
 #if IOS || MACCATALYST
 		builder.AddAppleIntelligenceServices();
+#elif WINDOWS
+		builder.AddWindowsAIServices();
 #else
 		builder.AddOpenAIServices();
 #endif
@@ -153,6 +158,34 @@ public static class MauiProgram
 		return builder;
 	}
 #pragma warning restore CA1416
+#endif
+
+#if WINDOWS
+	private static MauiAppBuilder AddWindowsAIServices(this MauiAppBuilder builder)
+	{
+		// The existing itinerary and semantic search still need a tool-capable
+		// cloud client and embeddings; native Windows AI offers neither.
+		builder.AddOpenAIServices();
+		if (!builder.Services.Any(service =>
+			service.ServiceType == typeof(IEmbeddingGenerator<string, Embedding<float>>)))
+			throw new InvalidOperationException(
+				"Configure AI:DeploymentName, AI:EmbeddingDeploymentName, AI:Endpoint and AI:ApiKey " +
+				"for the itinerary and semantic search in this sample.");
+
+		if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 26100))
+			return builder;
+
+		builder.Services.AddSingleton<IChatClient>(CreateWindowsAIChatClient);
+		builder.Services.AddSingleton<IImageGenerator, WindowsAIImageGenerator>();
+		return builder;
+	}
+
+	[SupportedOSPlatform("windows10.0.26100.0")]
+	private static IChatClient CreateWindowsAIChatClient(IServiceProvider services) =>
+		new WindowsAIChatClient()
+			.AsBuilder()
+			.UseLogging(services.GetRequiredService<ILoggerFactory>())
+			.Build();
 #endif
 
 	private static MauiAppBuilder AddOpenAIServices(this MauiAppBuilder builder)

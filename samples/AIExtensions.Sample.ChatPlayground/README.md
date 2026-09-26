@@ -99,6 +99,14 @@ experimental Windows App SDK runtime while the library uses stable APIs.
 See the [Windows AI language models guide](../../docs/ai/windows-ai-language-models.md)
 for hardware, capability, packaging, and access requirements.
 
+Windows Chat can optionally accept an attached image via a separate on-device
+image-description model: set `AI:EnableWindowsImageDescriptions=true` in local
+user secrets (default off). The recording retains the original attachment,
+but the text-only chat model receives only a caption, not image pixels
+alongside the question. Earlier images may be described again on later turns.
+An unavailable model or invalid image fails visibly; model setup may download
+components. Azure image input is unaffected.
+
 ### Android
 
 The Android app requires API 26+ and supported AICore hardware/configuration for
