@@ -1,11 +1,14 @@
 #nullable enable
 #if ANDROID
 using System;
+using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using Android.Content;
 using AndroidX.Compose;
 using AndroidX.Compose.Runtime;
 using AndroidX.Compose.UI.Platform;
 using Comet.Backend;
+using Comet.DevTools;
 
 namespace Comet.Platform.Compose
 {
@@ -15,12 +18,22 @@ namespace Comet.Platform.Compose
 	/// <see cref="CometBackendBridge"/>, then drives it through one
 	/// <see cref="ComposeView"/> set as the activity/root content.
 	/// </summary>
-	public sealed class ComposeBackendRoot
+	public sealed class ComposeBackendRoot : IDisposable
 	{
+		static ThemeConfigurationCallbacks? themeCallbacks;
+		static readonly ConditionalWeakTable<global::Android.Views.View, ImeInsetListener> InsetOwners = new();
 		readonly BackendContext _context;
+		readonly List<ICometBackendNode> _nodes = new();
+		readonly RootCallbackLifetime _callbacks = new();
+		ComposeView? _composeView;
+		global::Android.Views.View? _decor;
+		ImeInsetListener? _insetListener;
+		Func<CometDevRegistry.NativeWindowMetrics?>? _metricsProvider;
+		bool _created;
 		ComposeNode? _root;
 		View? _layoutRoot;
 		Microsoft.Maui.Graphics.Size _availableDp;
+		Microsoft.Maui.Thickness? _nativeSafeAreaPixels;
 
 		/// <summary>The logical root view: the layout target is re-resolved from it on every
 		/// pass because a (hot) reload rebuilds the view tree — a captured built tree would
@@ -65,19 +78,27 @@ namespace Comet.Platform.Compose
 			public AndroidX.Core.View.WindowInsetsCompat OnApplyWindowInsets(
 				global::Android.Views.View v, AndroidX.Core.View.WindowInsetsCompat insets)
 			{
-				var ime = insets.GetInsets(AndroidX.Core.View.WindowInsetsCompat.Type.Ime()).Bottom;
-				_owner.SetImeInsetDp(ime / ComposeNode.Density);
+				if (!InsetOwners.TryGetValue(v, out var current) || !ReferenceEquals(current, this))
+					return insets;
+				var result = insets;
+				_owner._callbacks.Run(() =>
+				{
+					var ime = insets.GetInsets(AndroidX.Core.View.WindowInsetsCompat.Type.Ime()).Bottom;
+					_owner.SetImeInsetDp(ime / ComposeNode.Density);
 
-				// Safe area (per-root reactive contract): system bars + display cutout — the
-				// insets edge-to-edge content must clear. Equality-gated, safe per dispatch.
-				var bars = insets.GetInsets(
-					AndroidX.Core.View.WindowInsetsCompat.Type.SystemBars()
-					| AndroidX.Core.View.WindowInsetsCompat.Type.DisplayCutout());
-				float d = ComposeNode.Density;
-				Backend.CometWindowMetrics.Shared.UpdateSafeArea(new Microsoft.Maui.Thickness(
-					bars.Left / d, bars.Top / d, bars.Right / d, bars.Bottom / d));
-
-				return AndroidX.Core.View.ViewCompat.OnApplyWindowInsets(v, insets);
+					// Safe area (per-root reactive contract): system bars + display cutout — the
+					// insets edge-to-edge content must clear. Equality-gated, safe per dispatch.
+					var bars = insets.GetInsets(
+						AndroidX.Core.View.WindowInsetsCompat.Type.SystemBars()
+						| AndroidX.Core.View.WindowInsetsCompat.Type.DisplayCutout());
+					_owner._nativeSafeAreaPixels = new Microsoft.Maui.Thickness(
+						bars.Left, bars.Top, bars.Right, bars.Bottom);
+					float d = ComposeNode.Density;
+					Backend.CometWindowMetrics.Shared.UpdateSafeArea(new Microsoft.Maui.Thickness(
+						bars.Left / d, bars.Top / d, bars.Right / d, bars.Bottom / d));
+					result = AndroidX.Core.View.ViewCompat.OnApplyWindowInsets(v, insets);
+				});
+				return result;
 			}
 		}
 
@@ -97,6 +118,15 @@ namespace Comet.Platform.Compose
 		/// hosting <see cref="ComposeView"/> to set as content.</summary>
 		public ComposeView CreateView(Context context, View view)
 		{
+			_callbacks.ThrowIfClosed();
+			if (_created)
+				throw new InvalidOperationException("A Compose root can own only one native composition.");
+			_created = true;
+			if (themeCallbacks is null)
+			{
+				themeCallbacks = new ThemeConfigurationCallbacks();
+				global::Android.App.Application.Context.RegisterComponentCallbacks(themeCallbacks);
+			}
 			var metrics = context.Resources!.DisplayMetrics!;
 			ComposeNode.Density = metrics.Density;
 
@@ -108,7 +138,8 @@ namespace Comet.Platform.Compose
 			// this the registry keeps ghost elements whose disposed views the agent can still
 			// resolve (semantic taps/long-presses then silently no-op on dead views).
 			Comet.DevTools.CometDevRegistry.Reset();
-			_root = (ComposeNode)CometBackendBridge.Materialize(view, _context);
+			using (CometBackendBridge.CollectNodes(_nodes))
+				_root = (ComposeNode)CometBackendBridge.Materialize(view, _context);
 
 			if (UseYogaLayout)
 			{
@@ -121,14 +152,88 @@ namespace Comet.Platform.Compose
 				Comet.Reactive.ReactiveScheduler.AfterFlush += RunLayout;
 			}
 
-			var composeView = new ComposeView(context);
+			var composeView = _composeView = new ComposeView(context);
 			composeView.SetContent(_ => WrapContent is null ? _root : WrapContent(_root));
 
 			// Track the view's ACTUAL size (rotation, split-screen, or an OS that still
 			// resizes for the keyboard). A change recomputes the available size and
 			// schedules a flush so the backend root AND nested own-content hosts
 			// (NavigationView) re-lay-out to it.
-			composeView.LayoutChange += (_, e) =>
+			composeView.LayoutChange += OnLayoutChange;
+
+			// IME inset via the decor: shrinks the available height so the composer/footer
+			// lifts above the soft keyboard (P7). The window itself must do NOTHING for the
+			// IME — without AdjustNothing the system falls back to adjustPan and pans the
+			// whole window up (pushing the top bar off-screen) on top of our reflow.
+			CometDevRegistry.NativeWindowMetricsProvider = null;
+			if (context is global::Android.App.Activity activity && activity.Window is { } window)
+			{
+				window.SetSoftInputMode(global::Android.Views.SoftInput.AdjustNothing);
+				if (window.DecorView is { } decor)
+				{
+					_decor = decor;
+					_insetListener = new ImeInsetListener(this);
+					InsetOwners.AddOrUpdate(decor, _insetListener);
+					AndroidX.Core.View.ViewCompat.SetOnApplyWindowInsetsListener(decor, _insetListener);
+					_metricsProvider = () =>
+					{
+						CometDevRegistry.NativeWindowMetrics? metrics = null;
+						_callbacks.Run(() =>
+						{
+							if (decor.Width > 0 && decor.Height > 0)
+								metrics = new CometDevRegistry.NativeWindowMetrics
+								{
+									Size = new Microsoft.Maui.Graphics.Size(decor.Width, decor.Height),
+									SafeAreaInsets = _nativeSafeAreaPixels,
+									Units = "physicalPixels",
+									Scale = ComposeNode.Density,
+									Source = "Window.DecorView bounds and WindowInsetsCompat(systemBars|displayCutout)",
+								};
+						});
+						return metrics;
+					};
+					CometDevRegistry.NativeWindowMetricsProvider = _metricsProvider;
+				}
+			}
+
+			return composeView;
+		}
+
+		public void Dispose()
+		{
+			_callbacks.Dispose();
+			Comet.Reactive.ReactiveScheduler.AfterFlush -= RunLayout;
+			if (_composeView is not null)
+				_composeView.LayoutChange -= OnLayoutChange;
+			if (_decor is not null && InsetOwners.TryGetValue(_decor, out var current)
+				&& ReferenceEquals(current, _insetListener))
+			{
+				AndroidX.Core.View.ViewCompat.SetOnApplyWindowInsetsListener(_decor, null);
+				InsetOwners.Remove(_decor);
+			}
+			if (ReferenceEquals(CometDevRegistry.NativeWindowMetricsProvider, _metricsProvider))
+				CometDevRegistry.NativeWindowMetricsProvider = null;
+			_metricsProvider = null;
+			_decor = null;
+			_insetListener?.Dispose();
+			_insetListener = null;
+			_logicalRoot = null;
+			_layoutRoot = null;
+			try
+			{
+				_composeView?.DisposeComposition();
+			}
+			finally
+			{
+				_composeView = null;
+				CometBackendBridge.DisposeNodes(_nodes);
+				_root = null;
+				WrapContent = null;
+			}
+		}
+
+		void OnLayoutChange(object? sender, global::Android.Views.View.LayoutChangeEventArgs e) =>
+			_callbacks.Run(() =>
 			{
 				var dp = new Microsoft.Maui.Graphics.Size(
 					(e.Right - e.Left) / ComposeNode.Density,
@@ -136,28 +241,20 @@ namespace Comet.Platform.Compose
 				if (dp.Width <= 0 || dp.Height <= 0 || dp == _viewDp)
 					return;
 				_viewDp = dp;
-				// Window metrics track the RAW view size (per-root reactive contract for
-				// adaptive size-class UI) — deliberately not the IME-shrunk available size:
-				// a soft keyboard must not flip Medium→Compact chrome.
+				// Classify the raw window, not its IME-shrunk content area.
 				Backend.CometWindowMetrics.Shared.Update(dp);
 				RecomputeAvailable();
-			};
+			});
 
-			// IME inset via the decor: shrinks the available height so the composer/footer
-			// lifts above the soft keyboard (P7). The window itself must do NOTHING for the
-			// IME — without AdjustNothing the system falls back to adjustPan and pans the
-			// whole window up (pushing the top bar off-screen) on top of our reflow.
-			if (context is global::Android.App.Activity activity && activity.Window is { } window)
-			{
-				window.SetSoftInputMode(global::Android.Views.SoftInput.AdjustNothing);
-				if (window.DecorView is { } decor)
-					AndroidX.Core.View.ViewCompat.SetOnApplyWindowInsetsListener(decor, new ImeInsetListener(this));
-			}
+		sealed class ThemeConfigurationCallbacks : Java.Lang.Object, global::Android.Content.IComponentCallbacks
+		{
+			public void OnConfigurationChanged(global::Android.Content.Res.Configuration newConfig)
+				=> Comet.Styles.ThemeManager.NotifySystemThemeChanged();
 
-			return composeView;
+			public void OnLowMemory() { }
 		}
 
-		void RunLayout()
+		void RunLayout() => _callbacks.Run(() =>
 		{
 			// Re-resolve the layout target: a (hot) reload rebuilds the view tree, so a
 			// captured built tree goes stale. Read-only (BuiltView, never GetView) — a
@@ -165,7 +262,7 @@ namespace Comet.Platform.Compose
 			_layoutRoot = _logicalRoot?.BuiltView ?? _logicalRoot;
 			if (_layoutRoot is not null)
 				CometBackendLayoutEngine.Layout(_layoutRoot, _availableDp);
-		}
+		});
 	}
 }
 #endif

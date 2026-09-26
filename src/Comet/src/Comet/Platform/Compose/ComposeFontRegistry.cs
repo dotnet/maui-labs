@@ -28,8 +28,12 @@ namespace Comet.Platform.Compose
 		/// Used when no per-weight files are available; <see cref="Resolve"/> synthesizes weights.</summary>
 		public static void Register(string family, Typeface? typeface)
 		{
-			if (!string.IsNullOrEmpty(family) && typeface is not null)
-				Bases[family] = typeface;
+			if (string.IsNullOrEmpty(family) || typeface is null)
+				return;
+
+			FontFamilyRegistry.Register(family, family);
+			Bases[family] = typeface;
+			ClearCachedFamily(family);
 		}
 
 		/// <summary>Registers a real per-weight typeface (e.g. Montserrat at 500 from
@@ -41,10 +45,29 @@ namespace Comet.Platform.Compose
 			if (string.IsNullOrEmpty(family) || typeface is null)
 				return;
 
+			FontFamilyRegistry.Register(family, family);
+			RegisterFace(family, weight, typeface);
+		}
+
+		/// <summary>Registers a source-facing alias and the exact face name carried through the
+		/// shared backend property protocol. This keeps Compose rendering and iOS face resolution
+		/// on the same normalized family while still using the supplied Android typeface.</summary>
+		public static void Register(string alias, string faceName, int weight, Typeface? typeface)
+		{
+			if (string.IsNullOrEmpty(alias) || string.IsNullOrEmpty(faceName) || typeface is null)
+				return;
+
+			FontFamilyRegistry.Register(alias, faceName, (Microsoft.Maui.FontWeight)weight);
+			RegisterFace(faceName, weight, typeface);
+		}
+
+		static void RegisterFace(string family, int weight, Typeface typeface)
+		{
 			if (!Weights.TryGetValue(family, out var byWeight))
 				Weights[family] = byWeight = new SortedDictionary<int, Typeface>();
 			byWeight[weight] = typeface;
 			Bases.TryAdd(family, typeface);
+			ClearCachedFamily(family);
 		}
 
 		/// <summary>Resolves a registered family at the given weight to a (Typeface, FontFamily)
@@ -57,14 +80,15 @@ namespace Comet.Platform.Compose
 			if (string.IsNullOrEmpty(family))
 				return null;
 
-			var key = (family, weight, italic);
+			var resolvedFamily = FontFamilyRegistry.Resolve(family).FaceName;
+			var key = (resolvedFamily, weight, italic);
 			if (Cache.TryGetValue(key, out var cached))
 				return cached;
 
 			(Typeface, FontFamily)? result;
 			try
 			{
-				var typeface = PickTypeface(family, weight);
+				var typeface = PickTypeface(resolvedFamily, weight);
 				// A Typeface-backed FontFamily bypasses Compose's font matching, so a
 				// TextStyle fontStyle=Italic never synthesizes a slant — bake the italic
 				// into the typeface itself (same as the measurement path).
@@ -75,12 +99,22 @@ namespace Comet.Platform.Compose
 			catch (Exception ex)
 			{
 				// The custom-font JNI path failed — degrade to the default font, never crash.
-				global::Android.Util.Log.Warn("CometFont", $"resolve {family}@{weight} failed: {ex.Message}");
+				global::Android.Util.Log.Warn("CometFont", $"resolve {resolvedFamily}@{weight} failed: {ex.Message}");
 				result = null;
 			}
 
 			Cache[key] = result;
 			return result;
+		}
+
+		static void ClearCachedFamily(string family)
+		{
+			var keys = new List<(string, int, bool)>();
+			foreach (var key in Cache.Keys)
+				if (string.Equals(key.Item1, family, StringComparison.OrdinalIgnoreCase))
+					keys.Add(key);
+			foreach (var key in keys)
+				Cache.Remove(key);
 		}
 
 		// Picks the best typeface for a weight: an exact registered weight, else the nearest

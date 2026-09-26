@@ -1,6 +1,7 @@
 #nullable enable
 #if ANDROID
 using System.Collections.Generic;
+using System.Windows.Input;
 using AndroidX.Compose;
 using AndroidX.Compose.Runtime;
 using Comet.Backend;
@@ -14,41 +15,26 @@ namespace Comet.Platform.Compose
 	/// <see cref="IBackendManagesOwnContent"/> — the bridge doesn't materialize the
 	/// NavigationView's content as a static child).
 	/// </summary>
-	sealed class ComposeNavigationNode : ComposeNode, IBackendManagesOwnContent
+	sealed class ComposeNavigationNode : ComposeNode, IBackendRetainsLogicalContentOnOwnerTransfer, IBackendContentActivation
 	{
 		NavigationView _nav;
-		readonly BackendContext _context;
 		readonly List<View> _stack = new();
-		// Each screen is materialized + laid out once and kept while it's on the stack, so pushing
-		// a screen doesn't re-materialize the ones beneath it (and popping back preserves their state).
-		readonly Dictionary<View, ComposableNode> _screens = new();
+		readonly OwnedContentSlot<ComposeNode> _screen;
 		readonly MutableState<int> _version = new(0);
+		View? _visibleTop;
+		ICommand? _observedBackCommand;
+		bool _contentActive = true;
 
 		public ComposeNavigationNode(NavigationView nav, BackendContext context)
 		{
 			_nav = nav;
-			_context = context;
+			_screen = new OwnedContentSlot<ComposeNode>(nav, context);
 
-			// Root screen = the NavigationView's content (already has Navigation/Parent set).
-			if (nav.Content is { } root)
-				_stack.Add(root);
+			_stack.AddRange(nav.GetBackendNavigationStack());
 
-			// Comet's Navigate/Pop drive the stack; bump the version to recompose.
-			nav.SetPerformNavigate(view =>
-			{
-				_stack.Add(view);
-				_version.Value++;
-			});
-			nav.SetPerformPop(() =>
-			{
-				if (_stack.Count > 1)
-				{
-					var popped = _stack[_stack.Count - 1];
-					_stack.RemoveAt(_stack.Count - 1);
-					_screens.Remove(popped);   // it's gone — don't keep it cached
-					_version.Value++;
-				}
-			});
+			AttachNavigation(nav);
+			PrepareCurrentScreen(out _);
+			SetVisibleTop(_stack.Count > 0 ? _stack[^1] : null);
 
 			// Re-lay-out the current screen after every reactive flush so a hosted view whose intrinsic
 			// size changed (e.g. the input-selector panel expanding) reflows — the top-level RunLayout
@@ -57,54 +43,248 @@ namespace Comet.Platform.Compose
 			Comet.Reactive.ReactiveScheduler.AfterFlush += ReflowTopScreen;
 		}
 
+		void AttachNavigation(NavigationView nav)
+		{
+			// Comet's Navigate/Pop drive the stack; bump the version to recompose.
+			nav.SetPerformNavigate(view =>
+			{
+				SetVisibleTop(null);
+				_stack.Add(view);
+				PrepareCurrentScreen(out _);
+				SetVisibleTop(view);
+				_version.Value++;
+			});
+			nav.SetPerformPop(() =>
+			{
+				if (_stack.Count > 1)
+					SetVisibleTop(null);
+				if (NavigationStackLifecycle.TryPop(
+					_stack,
+					(popped, _) => ReleaseRenderedScreen(popped),
+					out _))
+				{
+					nav.SetBackendNavigationStack(_stack);
+					PrepareCurrentScreen(out _);
+					SetVisibleTop(_stack[^1]);
+					_version.Value++;
+				}
+			});
+			nav.SetPerformContentReset(ResetToRoot);
+			nav.SetCurrentViewProvider(() => _stack.Count == 0 ? null! : _stack[_stack.Count - 1]);
+		}
+
+		void ResetToRoot(View root)
+		{
+			SetVisibleTop(null);
+			var retainedRoot = NavigationStackLifecycle.ResetToRoot(
+				_stack,
+				root,
+				(page, _) => ReleaseRenderedScreen(page));
+			_nav.SetBackendNavigationStack(_stack);
+			PrepareCurrentScreen(out _);
+			SetVisibleTop(retainedRoot);
+			_version.Value++;
+		}
+
+		void ReleaseRenderedScreen(View screen)
+		{
+			if (_screen.IsActive(screen))
+				_screen.Clear();
+		}
+
+		void DeactivateRenderedGenerations()
+		{
+			SetVisibleTop(null);
+			_screen.Clear();
+		}
+
+		void SetVisibleTop(View? next)
+		{
+			if (!_contentActive && next is not null)
+				return;
+			if (ReferenceEquals(_visibleTop, next))
+			{
+				ObserveBackCommand(next);
+				return;
+			}
+			_visibleTop?.ViewDidDisappear();
+			_visibleTop = next;
+			ObserveBackCommand(next);
+			_visibleTop?.ViewDidAppear();
+		}
+
 		public override void Dispose()
-			=> Comet.Reactive.ReactiveScheduler.AfterFlush -= ReflowTopScreen;
+		{
+			Comet.Reactive.ReactiveScheduler.AfterFlush -= ReflowTopScreen;
+			ObserveBackCommand(null);
+			DeactivateRenderedGenerations();
+			_screen.Dispose();
+			NavigationStackLifecycle.DisposeAll(_stack, (_, _) => { });
+			base.Dispose();
+		}
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value) { }
 
-		/// <summary>The node was transferred to a new NavigationView. Re-point always; only a hot
-		/// reload resets the stack to the new content and drops materialized screens (the code
-		/// changed). An ordinary re-render preserves the user's navigation position — the pushed
-		/// screens live in <c>_stack</c>, driven by the Navigate/Pop delegates that
-		/// <c>UpdateFromOldView</c> carried over.</summary>
+		/// <summary>Returns the size this navigation node should lay its top screen to:
+		/// the Yoga-arranged frame when available (the NavigationView is inside a grid row
+		/// that gives it less than full screen), else the full viewport as a fallback
+		/// before the first Arrange call.</summary>
+		Microsoft.Maui.Graphics.Size ContentSize()
+			=> HasFrame && FrameWidth > 0 && FrameHeight > 0
+				? new Microsoft.Maui.Graphics.Size(FrameWidth, FrameHeight)
+				: ScreenSizeDp();
+
+		/// <summary>The node was transferred to a new NavigationView. Re-point always and
+		/// preserve the stack when the root is unchanged; switching persistent navigation
+		/// roots (for example a tab) resets to that root's own stack.</summary>
 		public override void OnOwnerViewChanged(View newView, bool isHotReload)
 		{
 			if (newView is not NavigationView nav)
 				return;
-			_nav = nav;
-			if (!isHotReload)
+			var transfer = NavigationStackLifecycle.DetermineOwnerTransfer(
+				_nav,
+				_stack,
+				nav,
+				isHotReload);
+			_nav.SetRetainsLogicalStackAfterOwnerTransfer(
+				transfer == NavigationOwnerTransferAction.SwitchStack);
+			nav.SetRetainsLogicalStackAfterOwnerTransfer(false);
+
+			if (transfer == NavigationOwnerTransferAction.SwitchStack)
+			{
+				_nav.SetBackendNavigationStack(_stack);
+				_nav.DetachBackendCallbacks();
+				DeactivateRenderedGenerations();
+				_stack.Clear();
+				_nav = nav;
+				_screen.TransferOwner(nav);
+				AttachNavigation(nav);
+				_stack.AddRange(nav.GetBackendNavigationStack());
+				nav.SetBackendNavigationStack(_stack);
+				PrepareCurrentScreen(out _);
+				SetVisibleTop(_stack.Count > 0 ? _stack[^1] : null);
+				_version.Value++;
 				return;
-			_stack.Clear();
-			_screens.Clear();
-			if (nav.Content is { } root)
+			}
+
+			if (transfer == NavigationOwnerTransferAction.PreserveStack)
+			{
+				if (_stack.Count > 0 && nav.Content is { } replacementRoot)
+					TransferEquivalentRoot(_stack[0], replacementRoot);
+				nav.SetBackendNavigationStack(_stack);
+				if (!ReferenceEquals(_nav, nav))
+					_nav.DetachBackendCallbacks();
+				_nav = nav;
+				_screen.TransferOwner(nav);
+				AttachNavigation(nav);
+				return;
+			}
+
+			if (!ReferenceEquals(_nav, nav))
+				_nav.DetachBackendCallbacks();
+			DeactivateRenderedGenerations();
+			NavigationStackLifecycle.DisposeAll(_stack, (_, _) => { });
+			_nav = nav;
+			_screen.TransferOwner(nav);
+			AttachNavigation(nav);
+			if (!isHotReload)
+				_stack.AddRange(nav.GetBackendNavigationStack());
+			if (_stack.Count == 0 && nav.Content is { } root)
 				_stack.Add(root);
+			nav.SetBackendNavigationStack(_stack);
+			PrepareCurrentScreen(out _);
+			SetVisibleTop(_stack.Count > 0 ? _stack[^1] : null);
 			_version.Value++;
 		}
 
+		void TransferEquivalentRoot(View oldRoot, View replacementRoot)
+		{
+			if (ReferenceEquals(oldRoot, replacementRoot))
+				return;
+
+			_stack[0] = replacementRoot;
+			if (_screen.TryGet(out var node, out var activeRoot) &&
+				ReferenceEquals(activeRoot, oldRoot))
+				_screen.RetainTransferred(node!, replacementRoot);
+			if (ReferenceEquals(_visibleTop, oldRoot))
+			{
+				_visibleTop = replacementRoot;
+				ObserveBackCommand(replacementRoot);
+			}
+		}
+
+		void ObserveBackCommand(View? view)
+		{
+			var command = view?.GetBackButtonBehavior()?.Command;
+			if (ReferenceEquals(_observedBackCommand, command))
+				return;
+			if (_observedBackCommand is not null)
+				_observedBackCommand.CanExecuteChanged -= OnBackCommandCanExecuteChanged;
+			_observedBackCommand = command;
+			if (_observedBackCommand is not null)
+				_observedBackCommand.CanExecuteChanged += OnBackCommandCanExecuteChanged;
+		}
+
+		void OnBackCommandCanExecuteChanged(object? sender, System.EventArgs e)
+			=> _version.Value++;
+
 		void ReflowTopScreen()
 		{
-			if (_stack.Count == 0)
+			if (!_contentActive)
 				return;
-			var top = _stack[_stack.Count - 1];
-			if (_screens.ContainsKey(top))   // only once it's been materialized + first-laid-out
-				CometBackendLayoutEngine.Layout(top, ScreenSizeDp());
+			if (PrepareCurrentScreen(out var rematerialized) is not null && rematerialized)
+				_version.Value++;
+		}
+
+		public void SetContentActive(bool active)
+		{
+			if (_contentActive == active)
+				return;
+			_contentActive = active;
+			if (!active)
+			{
+				SetVisibleTop(null);
+				return;
+			}
+
+			// ContentSwitcher activation is driven by a reactive index change. Run appearance
+			// callbacks now, then let this node's once-per-flush ReflowTopScreen lay out any
+			// resulting current data. Laying out here as well repeated the full retained page
+			// pass immediately before AfterFlush, which was especially costly for grid-heavy roots.
+			SetVisibleTop(_stack.Count > 0 ? _stack[^1] : null);
+		}
+
+		ComposeNode MaterializeScreen(View view)
+			=> _screen.Materialize(view);
+
+		ComposeNode RematerializeScreen(View view)
+			=> MaterializeScreen(view);
+
+		ComposeNode? PrepareCurrentScreen(out bool rematerialized)
+		{
+			using var hold = Comet.Reactive.ReactiveScheduler.HoldFlushes();
+			return NavigationStackLifecycle.PrepareCurrentForExposure(
+				_stack,
+				view => _screen.TryGet(out var node, out var activeView) &&
+					ReferenceEquals(activeView, view)
+						? node
+						: null,
+				RematerializeScreen,
+				view => CometBackendLayoutEngine.Layout(view, ContentSize()),
+				out rematerialized);
 		}
 
 		public override void Render(IComposer composer)
 		{
+			if (!_contentActive)
+				return;
 			_ = _version.Value; // subscribe so push/pop recomposes
-			if (_stack.Count == 0)
+			var node = PrepareCurrentScreen(out _);
+			if (node is null)
 				return;
 
-			var top = _stack[_stack.Count - 1];
-			if (!_screens.TryGetValue(top, out var node))
-			{
-				// Materialize the screen, then lay it out full-screen with the Yoga engine (the
-				// pushed screen owns the whole viewport, just like the root did).
-				node = (ComposableNode)CometBackendBridge.Materialize(top, _context);
-				CometBackendLayoutEngine.Layout(top, ScreenSizeDp());
-				_screens[top] = node;
-			}
+			if (NavigationStackLifecycle.ShouldRegisterSystemBackHandler(_stack))
+				new AndroidX.Compose.BackHandler(() => _nav.RequestBack()).Render(composer);
 			node.Render(composer);
 		}
 	}

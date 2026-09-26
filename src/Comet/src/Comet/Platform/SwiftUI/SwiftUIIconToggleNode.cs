@@ -30,6 +30,8 @@ namespace Comet.Platform.SwiftUI
 			{
 				_control = control;
 				_checked = control.IsChecked;
+				if (IsBuilt)
+					Refresh();
 			}
 		}
 

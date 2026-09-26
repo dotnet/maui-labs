@@ -21,10 +21,9 @@ namespace Comet.Platform.Compose
 	/// The agent binds localhost, so external tooling reaches it via
 	/// <c>adb forward tcp:9223 tcp:9223</c> (a FIXED port a smoke script can rely on,
 	/// unlike the broker-assigned MAUI-agent port that changes each launch). Screenshots
-	/// are not served on Android — use <c>adb screencap</c> (the deployed smoke-script
-	/// convention) or the probe's MAUI-agent PixelCopy route.
+	/// use PixelCopy to capture the activity's rendered window on Android 8.0 and later.
 	/// </remarks>
-	public static class ComposeDevAgentHost
+	public static partial class ComposeDevAgentHost
 	{
 		static CometDevAgent? _agent;
 
@@ -33,7 +32,7 @@ namespace Comet.Platform.Compose
 		public static CometDevAgent? Agent => _agent;
 
 		/// <summary>
-		/// Registers the drag injector and starts the agent. Call BEFORE materializing the
+		/// Registers window capture and input injectors, then starts the agent. Call BEFORE materializing the
 		/// root view — <see cref="CometDevAgent.Start"/> enables <see cref="CometDevRegistry"/>
 		/// tracking, and views materialized while it is disabled never enter the tree.
 		/// Safe to call again on activity re-creation (the injector rebinds to the new
@@ -41,8 +40,13 @@ namespace Comet.Platform.Compose
 		/// </summary>
 		public static void Start(global::Android.App.Activity activity, int port = CometDevAgent.DevFlowPort)
 		{
+			CometDevRegistry.ScreenshotProviderAsync = () => CaptureScreenshotAsync(activity);
+
 			CometDevRegistry.DragInjector = (x1, y1, x2, y2, durationMs) =>
 				InjectDrag(activity, x1, y1, x2, y2, durationMs);
+
+			CometDevRegistry.ScrollInjector = (elemId, dx, dy) =>
+				ScrollElement(elemId, dx, dy);
 
 			if (_agent is not null)
 				return;
@@ -50,6 +54,40 @@ namespace Comet.Platform.Compose
 			var agent = new CometDevAgent(port, a => activity.RunOnUiThread(a));
 			agent.Start();
 			_agent = agent;
+		}
+
+		/// <summary>
+		/// Scrolls the Compose ScrollState backing the element (or its nearest ScrollView ancestor).
+		/// Receives native-sign deltas (positive dy = scroll down = increase offset). Converts dp to px.
+		/// </summary>
+		static bool ScrollElement(int elemId, double dx, double dy)
+		{
+			var view = CometDevRegistry.Find(elemId);
+			if (view is null) return false;
+
+			// Walk up to find a Comet.ScrollView whose node is a ComposeScrollNode
+			View? current = view;
+			ComposeScrollNode? scrollNode = null;
+			while (current is not null)
+			{
+				if (current is Comet.ScrollView && current.Node is ComposeScrollNode csn)
+				{
+					scrollNode = csn;
+					break;
+				}
+				current = current.Parent as View;
+			}
+			if (scrollNode is null) return false;
+
+			var state = scrollNode.GetScrollState();
+			if (state is null) return false;
+
+			int pxDelta = (int)(dy * ComposeNode.Density);
+			int target = System.Math.Clamp(state.Value + pxDelta, 0, state.MaxValue);
+			if (target == state.Value) return false;
+			// Fire-and-forget: ScrollToAsync is a Compose suspend that runs on the next frame.
+			_ = state.ScrollToAsync(target);
+			return true;
 		}
 
 		/// <summary>

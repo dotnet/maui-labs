@@ -72,6 +72,7 @@ namespace Comet.Backend
 		public static readonly PropertyId Text_LineHeight = new(74);  // explicit line height (sp)
 		public static readonly PropertyId Text_LineBreak = new(75);   // wrap strategy ((int)TextLineBreak)
 		public static readonly PropertyId Text_Italic = new(76);      // FontSlant.Italic
+		public static readonly PropertyId Text_CharacterSpacing = new(77);
 
 		// --- Button (80–95) ---
 		public static readonly PropertyId Button_Text = new(80);
@@ -79,6 +80,7 @@ namespace Comet.Backend
 		public static readonly PropertyId Button_FontSize = new(82);
 		public static readonly PropertyId Button_Outlined = new(83);
 		public static readonly PropertyId Button_TextButton = new(84);   // Material TextButton (no fill/border)
+		public static readonly PropertyId Button_HasExplicitPadding = new(85);
 
 		// --- TextField / Entry (96–111) ---
 		public static readonly PropertyId TextField_Text = new(96);
@@ -91,10 +93,19 @@ namespace Comet.Backend
 		public static readonly PropertyId TextField_ReturnType = new(103);   // soft-keyboard action key (ImeAction)
 		public static readonly PropertyId TextField_Outlined = new(104);     // Material OutlinedTextField
 		public static readonly PropertyId TextField_LeadingIcon = new(105);  // leading icon symbol name
+		public static readonly PropertyId TextField_FocusRequested = new(106);  // DevFlow: request native keyboard focus
 
 		// --- Image (112–127) ---
 		public static readonly PropertyId Image_Source = new(112);
 		public static readonly PropertyId Image_Aspect = new(113);
+		public static readonly PropertyId Image_Data = new(114);
+		public static readonly PropertyId Image_FontGlyph = new(115);
+		public static readonly PropertyId Image_FontFamily = new(116);
+		public static readonly PropertyId Image_FontSize = new(117);
+		public static readonly PropertyId Image_FontWeight = new(118);
+		public static readonly PropertyId Image_FontItalic = new(119);
+		public static readonly PropertyId Image_FontColor = new(120);
+		public static readonly PropertyId Image_FontAutoScaling = new(121);
 
 		// --- Stack layouts (128–143) ---
 		public static readonly PropertyId Stack_Orientation = new(128);
@@ -115,6 +126,7 @@ namespace Comet.Backend
 		// --- List (176–191) ---
 		// Bumped whenever the list's data changes, to recompose the LazyColumn.
 		public static readonly PropertyId List_Version = new(176);
+		public static readonly PropertyId List_InvalidateFrom = new(177);
 
 		// --- Icon (192–207) ---
 		public static readonly PropertyId Icon_Symbol = new(192);
@@ -141,5 +153,20 @@ namespace Comet.Backend
 		public static readonly PropertyId ListDetail_IsDetailOpen = new(257);
 		// ContentSwitcher: the active route/view index.
 		public static readonly PropertyId ContentSwitcher_Index = new(258);
+
+		// --- DatePicker (272–287) ---
+		// Whether the date picker dialog is open (mirrors Dialog_IsOpen pattern).
+		public static readonly PropertyId DatePicker_IsOpen = new(272);
+		// Selected date as ticks (DateTime.Ticks) for cross-platform representation.
+		public static readonly PropertyId DatePicker_SelectedTicks = new(273);
+		public static readonly PropertyId DatePicker_MinimumTicks = new(274);
+		public static readonly PropertyId DatePicker_MaximumTicks = new(275);
+		// Whether IsOpen was supplied, selecting the zero-sized dialog host instead
+		// of the normal inline picker on platforms that support both presentations.
+		public static readonly PropertyId DatePicker_IsDialogMode = new(276);
+
+		// --- RefreshView (288–303) ---
+		public static readonly PropertyId Refresh_IsRefreshing = new(288);
+
 	}
 }

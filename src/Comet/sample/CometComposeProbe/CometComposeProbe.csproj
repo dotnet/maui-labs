@@ -19,6 +19,16 @@
          -p:RuntimeIdentifiers flows to every referenced project and breaks the
          netstandard2.0 source generator's copy step). -->
     <RuntimeIdentifiers Condition="'$(CometSingleRid)' == 'true'">android-arm64</RuntimeIdentifiers>
+    <!-- NativeAOT is an explicit app profile. Set PublishAot here instead of on
+         the command line so it does not flow into the netstandard analyzers. -->
+    <PublishAot Condition="'$(EnableProbeAot)' == 'true'">true</PublishAot>
+    <ProbeAotRuntimeIdentifier Condition="'$(ProbeAotRuntimeIdentifier)' == ''">android-arm64</ProbeAotRuntimeIdentifier>
+    <RuntimeIdentifiers Condition="'$(EnableProbeAot)' == 'true'">$(ProbeAotRuntimeIdentifier)</RuntimeIdentifiers>
+    <!-- Preview 7 defaults NativeAOT to the legacy JavaInterop1 peer shape while
+         its shared GC bridge can dispatch through IGCUserPeer. Match the
+         XAJavaInterop1 shape adopted upstream in dotnet/android#12133. -->
+    <_AndroidJcwCodegenTarget Condition="'$(EnableProbeAot)' == 'true'">XAJavaInterop1</_AndroidJcwCodegenTarget>
+    <DefineConstants Condition="'$(EnableProbeRuntimeDiagnostics)' == 'true'">$(DefineConstants);COMET_RUNTIME_DIAGNOSTICS</DefineConstants>
   </PropertyGroup>
 
   <!-- Standalone per-sample apps: -p:CometSample=reply (or jetchat) builds this probe as
@@ -32,6 +42,68 @@
     <OutputPath>bin/sample-$(CometSample)/</OutputPath>
   </PropertyGroup>
 
+  <!-- Optional side-by-side identity for NativeAOT runtime verification. Keep
+       the sample name last because MainActivity derives the startup screen from it. -->
+  <PropertyGroup Condition="'$(EnableProbeAotTestIdentity)' == 'true' and '$(CometSample)' != ''">
+    <ApplicationId>com.comet.sample.aot.$(CometSample)</ApplicationId>
+    <ApplicationTitle>Comet $(CometSample.Substring(0,1).ToUpperInvariant())$(CometSample.Substring(1)) NativeAOT</ApplicationTitle>
+  </PropertyGroup>
+
+  <!-- NativeAOT keeps compiler inputs in obj across publishes. Isolate the
+       profile so normal/debug package versions cannot accumulate in ILC inputs. -->
+  <PropertyGroup Condition="'$(EnableProbeAot)' == 'true' and '$(CometSample)' != ''">
+    <IntermediateOutputPath>obj/sample-$(CometSample)-nativeaot/</IntermediateOutputPath>
+    <OutputPath>bin/sample-$(CometSample)-nativeaot/</OutputPath>
+  </PropertyGroup>
+
+  <!-- Comparison profiles retain the complete app and existing NativeAOT
+       settings. Only identity, diagnostics, backup and build isolation differ. -->
+  <PropertyGroup Condition="'$(BaristaComparison)' == 'timing' or '$(BaristaComparison)' == 'diagnostic'">
+    <_BaristaComparisonApplicationId Condition="'$(BaristaComparison)' == 'timing'">com.comet.sample.perf.baristanotes</_BaristaComparisonApplicationId>
+    <_BaristaComparisonApplicationId Condition="'$(BaristaComparison)' == 'diagnostic'">com.comet.sample.perf.diag.baristanotes</_BaristaComparisonApplicationId>
+    <ApplicationId>$(_BaristaComparisonApplicationId)</ApplicationId>
+    <ApplicationTitle>Comet BaristaNotes $(BaristaComparison)</ApplicationTitle>
+    <IntermediateOutputPath>$(BaseIntermediateOutputPath)$(Configuration)/</IntermediateOutputPath>
+    <OutputPath>$(BaseOutputPath)$(Configuration)/</OutputPath>
+    <AndroidManifest>Properties/AndroidManifest.Comparison.xml</AndroidManifest>
+    <DefineConstants>$(DefineConstants);BARISTA_PERF</DefineConstants>
+  </PropertyGroup>
+
+  <Target Name="ValidateBaristaComparison"
+          BeforeTargets="Restore;_GenerateRestoreGraphProjectEntry;PrepareForBuild;Publish"
+          Condition="'$(BaristaComparison)' != ''">
+    <Error Condition="'$(BaristaComparison)' != 'timing' and '$(BaristaComparison)' != 'diagnostic'"
+           Text="BaristaComparison must be timing or diagnostic." />
+    <Error Condition="'$(CometSample)' != 'baristanotes'"
+           Text="BaristaComparison requires CometSample=baristanotes; it never selects another sample implicitly." />
+    <Error Condition="'$(Configuration)' != 'Release' or '$(TargetFramework)' != 'net11.0-android'"
+           Text="BaristaComparison requires Release/net11.0-android." />
+    <Error Condition="'$(EnableProbeAot)' != 'true' or '$(PublishAot)' != 'true'"
+           Text="BaristaComparison requires true NativeAOT (EnableProbeAot=true, PublishAot=true)." />
+    <Error Condition="'$(ProbeAotRuntimeIdentifier)' != 'android-arm64' or ('$(RuntimeIdentifier)' != '' and '$(RuntimeIdentifier)' != 'android-arm64') or '$(RuntimeIdentifiers)' != 'android-arm64'"
+           Text="BaristaComparison supports only android-arm64, including ProbeAotRuntimeIdentifier, RuntimeIdentifier and RuntimeIdentifiers." />
+    <Error Condition="'$(AndroidPackageFormat)' != 'apk' or '$(AndroidPackageFormats)' != 'apk'"
+           Text="BaristaComparison requires APK-only packaging." />
+    <Error Condition="'$(EnableProbeAotTestIdentity)' != '' and '$(EnableProbeAotTestIdentity)' != 'false'"
+           Text="BaristaComparison cannot be combined with EnableProbeAotTestIdentity." />
+    <Error Condition="'$(ApplicationId)' != '$(_BaristaComparisonApplicationId)'"
+           Text="BaristaComparison requires its dedicated timing or diagnostic application ID." />
+    <Error Condition="'$(AndroidManifest)' != 'Properties/AndroidManifest.Comparison.xml'"
+           Text="BaristaComparison requires its backup-disabled comparison manifest." />
+    <Error Condition="'$(BaristaComparison)' == 'timing' and '$(EnableProbeRuntimeDiagnostics)' != 'false'"
+           Text="BaristaComparison=timing requires EnableProbeRuntimeDiagnostics=false." />
+    <Error Condition="'$(BaristaComparison)' == 'diagnostic' and '$(EnableProbeRuntimeDiagnostics)' != 'true'"
+           Text="BaristaComparison=diagnostic requires EnableProbeRuntimeDiagnostics=true." />
+    <Error Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(DefineConstants)', '(^|[;,\s])DEBUG([;,\s]|$)'))"
+           Text="BaristaComparison cannot include DEBUG diagnostics or DevFlow." />
+    <Error Condition="'$(BaristaComparison)' == 'timing' and $([System.Text.RegularExpressions.Regex]::IsMatch('$(DefineConstants)', '(^|[;,\s])COMET_RUNTIME_DIAGNOSTICS([;,\s]|$)'))"
+           Text="BaristaComparison=timing cannot include COMET_RUNTIME_DIAGNOSTICS or startup smoke checks." />
+    <Error Condition="'$(BaristaComparison)' == 'diagnostic' and !$([System.Text.RegularExpressions.Regex]::IsMatch('$(DefineConstants)', '(^|[;,\s])COMET_RUNTIME_DIAGNOSTICS([;,\s]|$)'))"
+           Text="BaristaComparison=diagnostic must include COMET_RUNTIME_DIAGNOSTICS." />
+    <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(DefineConstants)', '(^|[;,\s])BARISTA_PERF([;,\s]|$)'))"
+           Text="BaristaComparison must include BARISTA_PERF." />
+  </Target>
+
   <!-- Launcher icon: per-variant art linked in as @mipmap/appicon (the Activity attribute
        references it). Probe = the Comet mark; samples = their gold app's launcher art. -->
   <PropertyGroup>
@@ -41,15 +113,26 @@
   <ItemGroup>
     <AndroidResource Include="Icons\$(CometIconVariant)\appicon.png" Link="Resources\mipmap-xxxhdpi\appicon.png" />
     <AndroidResource Include="Icons\$(CometIconVariant)\strings.xml" Link="Resources\values\comet_app_name.xml" />
+    <ProguardConfiguration Include="proguard-nativeaot.cfg" Condition="'$(EnableProbeAot)' == 'true'" />
+    <!-- Supplying a ProGuard configuration selects R8 in the Preview 7 Android
+         targets. Preserve the coroutine service registrations that Compose uses
+         to resolve Dispatchers.Main from the original Java libraries. -->
+    <AndroidPackagingOptionsInclude Include="META-INF/services/kotlinx.coroutines.CoroutineExceptionHandler" Condition="'$(EnableProbeAot)' == 'true'" />
+    <AndroidPackagingOptionsInclude Include="META-INF/services/kotlinx.coroutines.internal.MainDispatcherFactory" Condition="'$(EnableProbeAot)' == 'true'" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Comet\Comet.csproj" />
     <!-- ComponentActivity host for ComposeView. -->
     <PackageReference Include="Xamarin.AndroidX.Activity" Version="1.13.0.1" />
+    <!-- Bundles libe_sqlite3.so for Android — safety net for devices where the system
+         libsqlite.so is restricted.  SqliteNativeDatabase prefers the system library
+         and falls back to e_sqlite3 when the system lib is unavailable. -->
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3.android" Version="2.1.13" />
     <!-- Google's Material 3 dynamic-color algorithm (HCT -> tonal palettes -> roles), in C#,
          so the SAME M3 scheme is generated from a seed on both platforms (Apache-2.0). -->
     <PackageReference Include="MaterialColorUtilities" Version="0.3.0" />
+    <Compile Include="..\Shared\SampleScreenResolver.cs" Link="Shared\SampleScreenResolver.cs" />
     <!-- Shared faithful Jetchat sample (identical tree on both backends). -->
     <Compile Include="..\Shared\Jetchat\*.cs" Link="Shared\Jetchat\%(Filename)%(Extension)" />
     <!-- Shared Reply sample (M1). -->
@@ -63,7 +146,26 @@
     <Compile Include="..\Shared\Jetcaster\*.cs" Link="Shared\Jetcaster\%(Filename)%(Extension)" />
     <AndroidAsset Include="..\Shared\Jetcaster\fixtures\*.rss" Link="Assets\jetcaster\%(Filename)%(Extension)" />
     <AndroidResource Include="..\Shared\Jetcaster\fixtures\*_art.jpg" Link="Resources\drawable-nodpi\%(Filename)%(Extension)" />
+    <!-- Shared BaristaNotes sample (coffee-themed native-backend app). -->
+    <Compile Include="..\Shared\BaristaNotes\**\*.cs" Link="Shared\BaristaNotes\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
+
+  <ItemGroup Condition="'$(BaristaComparison)' == 'timing' or '$(BaristaComparison)' == 'diagnostic'">
+    <ProjectReference Include="..\..\tools\perf\baristanotes\Comet\Contract\BaristaComparison.Contract.csproj" />
+    <Compile Include="..\..\tools\perf\baristanotes\Comet\*.cs" Link="Comparison\%(Filename)%(Extension)" />
+    <AndroidAsset Include="$(BaristaFixtureInputs)/barista-perf-v2-100.json" Link="Assets/barista-fixtures/barista-perf-v2-100.json" />
+    <AndroidAsset Include="$(BaristaFixtureInputs)/barista-perf-v2-1000.json" Link="Assets/barista-fixtures/barista-perf-v2-1000.json" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(BaristaComparison)' != 'diagnostic'">
+    <Compile Remove="BaristaNotes/Comparison/BaristaLifecycleControl.cs" />
+  </ItemGroup>
+
+  <Target Name="ValidateBaristaFixtureInputs" BeforeTargets="PrepareForBuild"
+          Condition="'$(BaristaComparison)' == 'timing' or '$(BaristaComparison)' == 'diagnostic'">
+    <Error Condition="'$(BaristaFixtureInputs)' == '' or !Exists('$(BaristaFixtureInputs)/barista-perf-v2-100.json') or !Exists('$(BaristaFixtureInputs)/barista-perf-v2-1000.json')"
+           Text="Comparison builds require BaristaFixtureInputs pointing to both approved v2 JSON inputs. Their exact hashes are checked before provisioning." />
+  </Target>
 
   <!-- DevFlow agent for maui devflow screenshot/tap/list — Debug only.
        Agent.Core is pure .NET (no UseMaui required): broker registration + HTTP server.
@@ -72,4 +174,6 @@
     <ProjectReference Include="..\..\..\DevFlow\Microsoft.Maui.DevFlow.Agent.Core\Microsoft.Maui.DevFlow.Agent.Core.csproj" />
   </ItemGroup>
 
+  <Import Project="StandaloneBarista.targets" />
+  <Import Project="..\..\eng\ComposeAndroid.targets" />
 </Project>

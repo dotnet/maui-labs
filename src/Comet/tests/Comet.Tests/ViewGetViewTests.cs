@@ -1,4 +1,8 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
+using System.Linq.Expressions;
+using System.Reflection;
+using Comet.Reflection;
 using Microsoft.Maui;
 using Microsoft.Maui.Graphics;
 using Xunit;
@@ -11,6 +15,15 @@ namespace Comet.Tests
 		public void GetView_ReturnsBody()
 		{
 			var page = new TestPageWithBody();
+			var result = page.GetView();
+			Assert.NotNull(result);
+			Assert.IsType<Text>(result);
+		}
+
+		[Fact]
+		public void GetView_ReturnsPublicBody()
+		{
+			var page = new TestPageWithPublicBody();
 			var result = page.GetView();
 			Assert.NotNull(result);
 			Assert.IsType<Text>(result);
@@ -117,11 +130,44 @@ namespace Comet.Tests
 			Assert.Same(inner, child);
 		}
 
+		[Fact]
+		public void GetPropValue_NonCometIView_ReadsPropertiesThroughLegacyReflection()
+		{
+			IView view = new TestIView();
+
+			Assert.Equal(1d, view.GetPropValue<double>(nameof(IView.Opacity)));
+			Assert.True(view.GetPropValue<bool>(nameof(IView.IsEnabled)));
+			Assert.Equal(
+				((object)view).GetPropValue<Size>(nameof(IView.DesiredSize)),
+				view.GetPropValue<Size>(nameof(IView.DesiredSize)));
+			Assert.Null(view.GetPropValue<object>("Missing"));
+
+			IView nullView = null;
+			Assert.Equal(0d, nullView.GetPropValue<double>(nameof(IView.Opacity)));
+		}
+
+		[Fact]
+		public void GetPropValue_IViewSourceOverload_ExposesTrimmingWarningAndReadsValue()
+		{
+			Expression<Func<IView, double>> getter = view => view.GetPropValue<double>(nameof(IView.Opacity));
+			var call = Assert.IsAssignableFrom<MethodCallExpression>(getter.Body);
+
+			Assert.Equal(typeof(IView), call.Method.GetParameters()[0].ParameterType);
+			Assert.NotNull(call.Method.GetCustomAttribute<RequiresUnreferencedCodeAttribute>());
+			Assert.Equal(1d, getter.Compile()(new TestIView()));
+		}
+
 		// Test page that returns Text as body
 		class TestPageWithBody : View
 		{
 			[Body]
 			View body() => new Text("Hello World");
+		}
+
+		class TestPageWithPublicBody : View
+		{
+			[Body]
+			public View Body() => new Text("Hello World");
 		}
 
 		// Test page that returns MauiViewHost as body

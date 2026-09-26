@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+	<uses-sdk android:minSdkVersion="24" android:targetSdkVersion="37" />
+	<uses-permission android:name="android.permission.INTERNET" />
+	<uses-permission android:name="android.permission.RECORD_AUDIO" />
+	<queries>
+		<intent>
+			<action android:name="android.speech.RecognitionService" />
+		</intent>
+	</queries>
+	<queries>
+		<intent>
+			<action android:name="android.media.action.IMAGE_CAPTURE" />
+		</intent>
+		<intent>
+			<action android:name="android.intent.action.OPEN_DOCUMENT" />
+			<data android:mimeType="image/*" />
+		</intent>
+	</queries>
+	<!-- Keep the normal manifest's permissions and provider; comparison installs
+	     must not restore user data from another installation. -->
+	<application android:label="@string/comet_app_name" android:theme="@android:style/Theme.Material.Light" android:allowBackup="false">
+		<provider
+			android:name="androidx.core.content.FileProvider"
+			android:authorities="${applicationId}.baristanotes.files"
+			android:exported="false"
+			android:grantUriPermissions="true">
+			<meta-data
+				android:name="android.support.FILE_PROVIDER_PATHS"
+				android:resource="@xml/baristanotes_file_paths" />
+		</provider>
+	</application>
+</manifest>
