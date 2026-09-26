@@ -123,7 +123,7 @@ override `ApplicationId` with a unique test ID to isolate app-private data.
    and **Play all** to verify the image turn and follow-up render offline.
    After full replay, select Apple to continue live. Use
    **More > Export to file** to open the share sheet (opening it does not save
-   a file); actually save the JSON, then **New**,
+   a file); choose where to save the JSON, then **New**,
    **More > Import from file**, and select that JSON to restore and replay it.
    Import replaces the sole current chat after validation; there is no chat
    library or Find chats popup.
