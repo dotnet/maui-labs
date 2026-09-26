@@ -12,7 +12,9 @@ platform; saved Chat recordings can be replayed offline.
 
 Install the repo's pinned .NET 10 SDK and MAUI workload. Apple Intelligence
 Chat requires iOS or Mac Catalyst 26+ on a supported device with a compatible
-Xcode; Apple NaturalLanguage embeddings have broader Apple OS support.
+Xcode; Apple NaturalLanguage embeddings have broader Apple OS support but appear
+only when the English sentence-embedding asset is installed (it may be absent
+on simulators).
 Azure-backed features also run on Android and Windows.
 
 From the repository root on macOS, build before running the Mac Catalyst target:
@@ -21,6 +23,10 @@ From the repository root on macOS, build before running the Mac Catalyst target:
 dotnet build samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj -f net10.0-maccatalyst
 dotnet build samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj -t:Run -f net10.0-maccatalyst
 ```
+
+For Xcode 27 preview builds, pass `-p:UseXcode27Preview=true` and select
+`-f net10.0-ios27.0` or `-f net10.0-maccatalyst27.0`. Normal builds retain
+the stable Apple targets. Both Apple apps register MAUI scene delegates.
 
 ## Optional Azure configuration
 

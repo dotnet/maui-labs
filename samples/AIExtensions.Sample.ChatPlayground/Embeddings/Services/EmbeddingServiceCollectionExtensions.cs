@@ -7,6 +7,7 @@ using OpenAI;
 #if IOS || MACCATALYST
 using System.Runtime.Versioning;
 using Microsoft.Maui.Essentials.AI;
+using NaturalLanguage;
 #endif
 
 namespace AIExtensions.Sample.ChatPlayground;
@@ -26,7 +27,11 @@ internal static class EmbeddingServiceCollectionExtensions
 
 #if IOS || MACCATALYST
         if (OperatingSystem.IsIOSVersionAtLeast(13) || OperatingSystem.IsMacCatalystVersionAtLeast(13, 1))
-            services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(_ => CreateAppleEmbeddingGenerator());
+        {
+            using var embedding = NLEmbedding.GetSentenceEmbedding(NLLanguage.English);
+            if (embedding is not null)
+                services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(_ => CreateAppleEmbeddingGenerator());
+        }
 #endif
         if (!string.IsNullOrWhiteSpace(settings.EmbeddingDeploymentName))
             services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(_ => CreateAzureEmbeddingGenerator(settings));

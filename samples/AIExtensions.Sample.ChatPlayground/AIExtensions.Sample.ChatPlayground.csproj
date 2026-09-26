@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFrameworks>net10.0-android;net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
+    <TargetFrameworks Condition="'$(UseXcode27Preview)' == 'true'">net10.0-android;net10.0-ios27.0;net10.0-maccatalyst27.0</TargetFrameworks>
+    <SupportedOSPlatformVersion Condition="'$(UseXcode27Preview)' == 'true' and $(TargetFramework.Contains('-maccatalyst'))">17.0</SupportedOSPlatformVersion>
     <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
     <OutputType>Exe</OutputType>
     <RootNamespace>AIExtensions.Sample.ChatPlayground</RootNamespace>
@@ -9,7 +11,7 @@
     <IsPackable>false</IsPackable>
     <EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>
     <MauiXamlInflator>SourceGen</MauiXamlInflator>
-    <NoWarn>$(NoWarn);MAUIAI0001;MEAI001;OPENAI001</NoWarn>
+    <NoWarn>$(NoWarn);MAUIAI0001;MEAI001;OPENAI001;XCODE_27_0_PREVIEW</NoWarn>
     <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst'))">maccatalyst-x64</RuntimeIdentifier>
     <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst')) and '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'arm64'">maccatalyst-arm64</RuntimeIdentifier>
     <ApplicationTitle>Chat Client Playground</ApplicationTitle>

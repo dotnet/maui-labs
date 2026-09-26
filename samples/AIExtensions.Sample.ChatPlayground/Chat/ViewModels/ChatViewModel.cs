@@ -174,7 +174,7 @@ public partial class ChatViewModel : ObservableObject
                 File = new ShareFile(path),
                 PresentationSourceBounds = GetPageBounds(source),
             });
-            Chat.StatusMessage = "Current chat export opened. Choose Save to Files to keep a copy.";
+            Chat.StatusMessage = "Current chat export opened. Choose where to save or share the JSON file.";
         }
         catch (Exception exception)
         {
@@ -458,7 +458,7 @@ public partial class ChatViewModel : ObservableObject
     private ChatClientDescriptor? SelectedDescriptor => Settings.SelectedDescriptor;
 
     private string ImageAvailabilityHint => SelectedDescriptor is { IsReplay: false, SupportsImageInput: false }
-        ? " Image attachments are unavailable with this client."
+        ? " Image input unavailable."
         : string.Empty;
 
     private void ApplyClientSelection(IChatClient? client)
@@ -503,7 +503,7 @@ public partial class ChatViewModel : ObservableObject
             return $"{descriptor.Description} This conversation contains image content " +
                 $"and cannot be sent to {descriptor.DisplayName}.";
 
-        return $"{descriptor.Description}{ImageAvailabilityHint}";
+        return $"{descriptor.DisplayName} selected.{ImageAvailabilityHint}";
     }
 
     private void SettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
