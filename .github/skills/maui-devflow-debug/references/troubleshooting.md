@@ -1,10 +1,39 @@
 # Troubleshooting
 
 ## Table of Contents
+- [Machine-readable output and error envelope](#machine-readable-output-and-error-envelope)
 - [Connection Refused](#connection-refused--cannot-connect)
+- [Android UI Thread Exceptions](#android-ui-thread-exceptions)
 - [Build Failures](#build-failures)
 - [CDP Not Connecting](#cdp-not-connecting-blazor-hybrid)
 - [Mac Catalyst Permission Dialogs](#mac-catalyst-repeated-permission-dialogs-on-rebuild)
+
+## Machine-readable output and error envelope <a name="machine-readable-output-and-error-envelope"></a>
+
+Always pass `--json` to any `maui` command an agent will parse, and `--ci` for
+non-interactive failure-fast runs.
+
+The full `--json` error envelope contract (schema, code categories, worked examples, PowerShell and Bash consumers) is documented in
+[`src/Cli/README.md` — Error envelope](../../../../../src/Cli/README.md#error-envelope).
+
+**Quick reference** — when a non-DevFlow command fails with `--json`, stdout is a top-level JSON object (no `"error"` wrapper). Note: `maui devflow ...` uses a different JSON error shape and writes errors to stderr.
+
+```json
+{
+  "code": "E2103",
+  "category": "platform",
+  "severity": "error",
+  "message": "Android SDK licenses have not been accepted.",
+  "remediation": {
+    "type": "autofixable",
+    "command": "maui android sdk accept-licenses"
+  }
+}
+```
+
+Optional fields (`remediation`, `context`, `native_error`, `docs_url`, `correlation_id`) are **omitted entirely** when null.
+When `remediation.type` is `autofixable`, run `remediation.command` then retry the original command.
+When `remediation` is absent, surface `message` and stop retrying.
 
 ## Connection Refused / Cannot Connect
 
@@ -22,12 +51,38 @@ If `maui devflow ui status` fails with connection refused:
    With the broker, this is less common since ports are auto-assigned.
 5. **Android?** Did you run `adb reverse tcp:19223 tcp:19223` (for broker) and
    `adb forward tcp:<port> tcp:<port>` (for agent)? Re-run after each deploy.
+   If broker/list is empty, still try direct status:
+   ```bash
+   adb devices
+   adb forward tcp:9223 tcp:9223
+   maui devflow agent status --agent-host localhost --agent-port 9223
+   ```
 6. **Mac Catalyst?** Check entitlements include `network.server` (see setup.md step 5).
 7. **macOS (AppKit)?** Ensure `AddMacOSEssentials()` is called and the app window appeared.
    See [references/macos.md](macos.md) for troubleshooting.
 8. **Linux/GTK?** No special network setup needed — runs directly on localhost. Check if the app started successfully.
 9. **Broker issues?** `maui devflow broker status` to check. `maui devflow broker stop` then
    retry (CLI will auto-restart it).
+
+## Android UI Thread Exceptions
+
+If `maui devflow ui tap`, `fill`, `focus`, or other UI actions fail on Android
+with `CalledFromWrongThreadException`, treat it as likely DevFlow agent action
+dispatch trouble rather than an app logic bug, especially when manual input or
+ADB taps work.
+
+Capture evidence before changing app code:
+
+```bash
+maui devflow agent status --agent-host localhost --agent-port <port>
+maui devflow ui query --automationId <control-id> --agent-host localhost --agent-port <port>
+adb logcat -d -t 300 | grep -i "CalledFromWrongThreadException\\|DevFlow\\|DOTNET"
+```
+
+Report the DevFlow command, target platform, agent version from `agent status`,
+the queried element id/AutomationId, and the logcat exception. Do not work
+around this with coordinate-only automation unless you only need a temporary
+validation fallback.
 
 ## Build Failures
 
