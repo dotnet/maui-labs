@@ -64,6 +64,11 @@
     <PackageReference Include="DeviceRunners.Testing.Targets" />
   </ItemGroup>
 
+  <!-- Opt in: tool evaluations make real on-device model calls. -->
+  <PropertyGroup Condition="'$(EnableWindowsAIToolEvaluation)' == 'true'">
+    <DefineConstants>$(DefineConstants);WINDOWS_AI_TOOL_EVALUATION</DefineConstants>
+  </PropertyGroup>
+
   <!-- Windows AI WinRT APIs -->
   <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
     <PackageReference Include="Microsoft.WindowsAppSDK" VersionOverride="$(MicrosoftWindowsAppSDKVersion_Experimental)" />
