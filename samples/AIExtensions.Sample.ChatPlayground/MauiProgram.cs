@@ -20,6 +20,7 @@ public static class MauiProgram
         builder.Configuration.GetSection(AISettings.SectionName).Bind(aiSettings);
         aiSettings.Validate();
 
+        builder.Services.AddSingleton(aiSettings);
         builder.Services.AddSingleton<ImageInputService>();
         builder.Services.AddChatFeature(aiSettings);
         builder.Services.AddEmbeddingFeature(aiSettings);

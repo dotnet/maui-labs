@@ -65,7 +65,7 @@
                 <VerticalStackLayout IsVisible="{Binding SelectedDescriptor.SupportsToolCalling}" Spacing="12">
                     <HorizontalStackLayout Spacing="4">
                         <Label Text="Tools" FontSize="12" FontAttributes="Bold" VerticalOptions="Center" />
-                        <local:InfoTip Text="Call enabled functions; Azure images use the configured deployment." />
+                        <local:InfoTip Text="Call enabled functions; Azure images use the configured deployment. Windows AI selection is experimental and may misread quoted tool-like text." />
                     </HorizontalStackLayout>
                     <HorizontalStackLayout Spacing="4">
                         <CheckBox IsChecked="{Binding UseDateTimeTool}" AutomationId="DateTimeToolCheckBox" />
@@ -84,7 +84,7 @@
                     </HorizontalStackLayout>
                     <HorizontalStackLayout Spacing="4">
                         <Label Text="Tool mode" VerticalOptions="Center" />
-                        <local:InfoTip Text="Controls whether the provider may or must call an enabled tool." />
+                        <local:InfoTip Text="Controls whether a tool may or must run. Windows AI Auto is experimental and may misread quoted tool-like text." />
                     </HorizontalStackLayout>
                     <HorizontalStackLayout Spacing="6"
                                            RadioButtonGroup.GroupName="ToolMode"

@@ -65,6 +65,10 @@
     <DefineConstants>$(DefineConstants);WINDOWS_AI_PROMPT_FORMAT_BENCHMARK</DefineConstants>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(EnableWindowsAIToolEvaluation)' == 'true'">
+    <DefineConstants>$(DefineConstants);WINDOWS_AI_TOOL_EVALUATION</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup Condition="'$(TestingMode)' == 'XHarness'">
     <PackageReference Include="DeviceRunners.XHarness.Xunit" />
     <PackageReference Include="DeviceRunners.XHarness.Maui" />
