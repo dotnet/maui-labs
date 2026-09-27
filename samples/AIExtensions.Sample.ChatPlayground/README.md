@@ -81,8 +81,12 @@ text may leave the device and incur charges.
   **Auto** makes checked tools available, and a model may call them for
   unrelated prompts. Uncheck unneeded tools to prevent those calls. Azure
   can accept images and create them through a separately configured
-  image-generation tool. Windows Chat supports text and JSON, but not tool
-  calling or image input. Streaming displays partial JSON only if the provider
+  image-generation tool. Windows Chat supports text and JSON, but not native
+  tool calling or image input. The playground always
+  layers its experimental function-calling adapter over the Windows text
+  client. It uses model-selected constrained decisions plus evidence and schema
+  validation, but can still choose the wrong function or derive a wrong
+  schema-valid argument. Streaming displays partial JSON only if the provider
   reports incremental progress; a buffered response appears when it completes.
 - **Embeddings:** Import documents, create an index, and search it. Apple
   on-device and configured Azure providers are available; Windows has no
@@ -98,6 +102,15 @@ recording; **New** replaces the current chat. Replay is read-only and returns
 successive recorded turns without calling a model or checking new prompts.
 Switching from a chat with images to a text-only provider requires clearing
 that chat first.
+
+The Windows adapter emulates tool selection and argument generation with
+schema-constrained JSON, then forwards text-only requests to the native client.
+Descriptions on the sample functions and parameters explain when each tool is
+appropriate. The native client still rejects tools directly. This is a draft
+experiment, not an authorization boundary or a reliable automatic tool
+selector; the playground exposes only harmless demonstration tools whose calls
+can be reviewed. The Windows Chat image-generation tool and image input remain
+unavailable. Existing saved recordings are not modified.
 
 ## Organization
 
