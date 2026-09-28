@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Maui;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Controls.Hosting.WPF;
@@ -128,6 +129,48 @@ public class ShellHandlerTests
 				((IElementHandler)handler).DisconnectHandler();
 			}
 		});
+	}
+
+	[Fact]
+	public void TemplatePage_WhenCreationFails_LogsException()
+	{
+		StaHelper.RunOnSta(() =>
+		{
+			var logger = new ShellTestLogger();
+			using var app = CreateApp(builder => builder.Services.AddSingleton<ILogger<ShellHandler>>(logger));
+			var exception = new InvalidOperationException("Page creation failed");
+			var content = new ShellContent
+			{
+				ContentTemplate = new DataTemplate(() => throw exception),
+			};
+			var shell = new Shell { Items = { content } };
+			var handler = new ShellHandler();
+			handler.SetMauiContext(new WPFMauiContext(app.Services));
+			try
+			{
+				handler.SetVirtualView(shell);
+				Assert.Contains(logger.Entries, entry =>
+					entry.Level == LogLevel.Error &&
+					ReferenceEquals(entry.Exception, exception) &&
+					entry.Message == "Showing current Shell page failed.");
+				Assert.Null(((IShellContentController)content).Page);
+			}
+			finally
+			{
+				((IElementHandler)handler).DisconnectHandler();
+			}
+		});
+	}
+
+	sealed class ShellTestLogger : ILogger<ShellHandler>
+	{
+		public List<(LogLevel Level, Exception? Exception, string Message)> Entries { get; } = [];
+
+		public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+		public bool IsEnabled(LogLevel logLevel) => true;
+		public void Log<TState>(LogLevel logLevel, EventId eventId, TState state,
+			Exception? exception, Func<TState, Exception?, string> formatter)
+			=> Entries.Add((logLevel, exception, formatter(state, exception)));
 	}
 
 	static MauiApp CreateApp(Action<MauiAppBuilder>? configure = null)

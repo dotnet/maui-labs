@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Handlers;
 using Microsoft.Maui.Platform;
@@ -987,7 +988,8 @@ namespace Microsoft.Maui.Handlers.WPF
 			}
 			catch (Exception ex)
 			{
-				System.Diagnostics.Debug.WriteLine($"[Shell] Showing current page failed: {ex}");
+				MauiContext.Services.GetService<ILogger<ShellHandler>>()?
+					.LogError(ex, "Showing current Shell page failed.");
 			}
 		}
 
