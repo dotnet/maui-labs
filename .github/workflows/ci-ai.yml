@@ -48,5 +48,5 @@ jobs:
       pack: false
       install-workloads: true
       workload-version: '10.0.401'
-      allow-xcode-preview: true
+      skip-xcode-version-validation: true
       android-project: src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj
