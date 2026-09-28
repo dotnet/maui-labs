@@ -34,7 +34,7 @@ internal static class WindowsAIModelFactory
 	}
 
 	/// <summary>
-	/// Creates an <see cref="ImageGenerator"/> instance, ensuring the Windows image generation model is ready.
+	/// Creates an <see cref="ImageGenerator"/> instance, ensuring the Windows AI image generation model is ready.
 	/// </summary>
 	/// <returns>A ready-to-use <see cref="ImageGenerator"/> instance.</returns>
 	/// <exception cref="NotSupportedException">
@@ -43,7 +43,7 @@ internal static class WindowsAIModelFactory
 	public static async Task<ImageGenerator> CreateImageGeneratorAsync()
 	{
 		await EnsureReadyAsync(
-			"Windows image generation",
+			"Windows AI image generation",
 			ImageGenerator.GetReadyState,
 			ImageGenerator.EnsureReadyAsync);
 
