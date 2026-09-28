@@ -15,6 +15,10 @@ public sealed class PlaygroundResponse
     [Description("Specific points supporting the summary. Use an empty list when there are no distinct supporting points.")]
     public List<string> KeyPoints { get; set; } = [];
 
+    /// <summary>Gets or sets a broad category for the response.</summary>
+    [Description("A short, broad category for the response, such as General, Technical, or Creative.")]
+    public string Category { get; set; } = string.Empty;
+
     /// <summary>Gets or sets the sentiment or tone of the response.</summary>
     [Description("Classify the overall tone. Use Neutral for objective or factual replies.")]
     public PlaygroundSentiment Sentiment { get; set; }
@@ -32,5 +36,4 @@ public enum PlaygroundSentiment
 /// <summary>Provides trim-safe JSON metadata for the playground's structured response.</summary>
 [JsonSourceGenerationOptions(JsonSerializerDefaults.Web, WriteIndented = true)]
 [JsonSerializable(typeof(PlaygroundResponse))]
-[JsonSerializable(typeof(JsonElement))]
 internal partial class PlaygroundJsonContext : JsonSerializerContext;

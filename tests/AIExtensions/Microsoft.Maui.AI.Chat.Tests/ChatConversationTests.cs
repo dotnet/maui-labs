@@ -64,7 +64,7 @@ public sealed class ChatConversationTests
     [InlineData(true)]
     public async Task ExecuteTurn_StructuredJson_EmitsFormattedFinalText(bool streaming)
     {
-        const string json = """{"summary":"Done","keyPoints":["one"],"category":"test","sentiment":"neutral"}""";
+        const string json = """{"summary":"Done","keyPoints":["one"],"category":"Technical","sentiment":"Neutral"}""";
         var client = new ScriptedClient(
             new ChatResponse([new ChatMessage(ChatRole.Assistant, json)]),
             [
@@ -84,7 +84,8 @@ public sealed class ChatConversationTests
                 change is { EntryKind: TranscriptEntryKind.Assistant, Label: "Structured JSON" }).Text;
         using var document = JsonDocument.Parse(finalText);
         Assert.Equal("Done", document.RootElement.GetProperty("summary").GetString());
-        Assert.Equal("test", document.RootElement.GetProperty("category").GetString());
+        Assert.Equal("Technical", document.RootElement.GetProperty("category").GetString());
+        Assert.Equal("Neutral", document.RootElement.GetProperty("sentiment").GetString());
         Assert.DoesNotContain(events.OfType<TranscriptChange.EntryAdded>(), change =>
             change is { EntryKind: TranscriptEntryKind.Assistant, Label: "Text" });
     }

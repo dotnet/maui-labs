@@ -68,8 +68,8 @@ text may leave the device and incur charges.
 - **Chat:** Choose a provider, send text, and switch between streaming and
   single-response modes. The multiline prompt uses Enter/Return for a new line;
   select **Send** to submit it. Try schema-constrained JSON output with a
-  summary, key points, and a constrained sentiment. Apple and Azure
-  support optional tools; Azure can accept images and can create images through
+  summary, key points, a free-form category, and a constrained sentiment.
+  Apple and Azure support optional tools; Azure can accept images and create them through
   a separately configured image-generation tool. Windows Chat supports text
   and JSON, but not tool calling or image input.
 - **Embeddings:** Import documents, create an index, and search it. Apple
