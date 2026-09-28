@@ -100,11 +100,9 @@ public class BorderHandler : GtkViewHandler<IBorderView, Platform.GtkLayoutPanel
 			css += $"border-radius: {(int)cr.TopLeft}px {(int)cr.TopRight}px {(int)cr.BottomRight}px {(int)cr.BottomLeft}px; ";
 		}
 
-		if (!string.IsNullOrEmpty(css))
-		{
-			handler.PlatformView.SetOverflow(Gtk.Overflow.Hidden);
-			handler.ApplyCss(handler.PlatformView, css);
-		}
+		handler.PlatformView.SetOverflow(!string.IsNullOrEmpty(css) || border.Clip != null
+			? Gtk.Overflow.Hidden : Gtk.Overflow.Visible);
+		handler.UpdateCss(handler.PlatformView, css);
 	}
 
 	static void MapStrokeDash(BorderHandler handler, IBorderView border)

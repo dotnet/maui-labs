@@ -70,6 +70,19 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 - **Lifecycle Events** — `ConfigureLifecycleEvents().AddGtk()` hooks for `OnWindowCreated` and `OnMauiApplicationCreated`.
 - **Desktop integration** — App icons via hicolor icon theme, `.desktop` file generation, `MauiImage`/`MauiFont`/`MauiAsset` resource processing.
 
+### Handler styling
+
+GTK CSS font sizes use logical pixels (`px`), matching MAUI's device-independent
+font sizes. Handler CSS is composed per widget, selector, and mapper, so font,
+color, spacing, background, and border updates preserve one another. Custom
+handlers should pass a complete fragment to `UpdateCss` / `UpdateCssWithSelector`
+on every update, including null or empty CSS to remove that fragment's overrides.
+The optional `property` key defaults to the calling method's name; shared helpers
+must supply distinct keys for independently updated properties. For overlapping
+declarations of equal specificity, the most recently updated fragment wins.
+The original `ApplyCss` / `ApplyCssWithSelector` signatures remain available for
+compiled custom handlers and share a legacy fragment per widget and selector.
+
 ### Essentials (21 of 36 services)
 
 | Status | Services |
@@ -286,6 +299,15 @@ git clone https://github.com/dotnet/maui-labs.git
 cd maui-labs/platforms/Linux.Gtk4
 dotnet restore
 dotnet build
+```
+
+### Managed regression tests
+
+The CSS composition and font CSS tests do not require GTK native libraries or a display.
+From `platforms/Linux.Gtk4`, run:
+
+```bash
+dotnet test tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
 ```
 
 ### Run the sample app

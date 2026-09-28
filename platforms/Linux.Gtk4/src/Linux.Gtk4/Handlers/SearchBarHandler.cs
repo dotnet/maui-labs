@@ -74,8 +74,8 @@ public class SearchBarHandler : GtkViewHandler<ISearchBar, Gtk.SearchEntry>
 
 	public static void MapTextColor(SearchBarHandler handler, ISearchBar searchBar)
 	{
-		if (searchBar.TextColor != null)
-			handler.ApplyCss(handler.PlatformView, $"color: {ToGtkColor(searchBar.TextColor)};");
+		handler.UpdateCss(handler.PlatformView,
+			searchBar.TextColor != null ? $"color: {ToGtkColor(searchBar.TextColor)};" : null);
 	}
 
 	public static void MapFont(SearchBarHandler handler, ISearchBar searchBar)
@@ -84,13 +84,12 @@ public class SearchBarHandler : GtkViewHandler<ISearchBar, Gtk.SearchEntry>
 			return;
 
 		var css = handler.BuildFontCss(textStyle.Font);
-		if (!string.IsNullOrEmpty(css))
-			handler.ApplyCss(handler.PlatformView, css);
+		handler.UpdateCss(handler.PlatformView, css);
 	}
 
 	public static void MapCharacterSpacing(SearchBarHandler handler, ISearchBar searchBar)
 	{
-		handler.ApplyCss(handler.PlatformView, $"letter-spacing: {searchBar.CharacterSpacing}px;");
+		handler.UpdateCss(handler.PlatformView, $"letter-spacing: {searchBar.CharacterSpacing}px;");
 	}
 
 	public static void MapHorizontalTextAlignment(SearchBarHandler handler, ISearchBar searchBar)
@@ -122,16 +121,14 @@ public class SearchBarHandler : GtkViewHandler<ISearchBar, Gtk.SearchEntry>
 
 	public static void MapPlaceholderColor(SearchBarHandler handler, ISearchBar searchBar)
 	{
-		if (searchBar.PlaceholderColor != null)
-			handler.ApplyCssWithSelector(handler.PlatformView, "* > text > placeholder",
-				$"color: {ToGtkColor(searchBar.PlaceholderColor)};");
+		handler.UpdateCssWithSelector(handler.PlatformView, "* > text > placeholder",
+			searchBar.PlaceholderColor != null ? $"color: {ToGtkColor(searchBar.PlaceholderColor)};" : null);
 	}
 
 	public static void MapCancelButtonColor(SearchBarHandler handler, ISearchBar searchBar)
 	{
-		if (searchBar.CancelButtonColor != null)
-			handler.ApplyCssWithSelector(handler.PlatformView, "* > image:last-child",
-				$"color: {ToGtkColor(searchBar.CancelButtonColor)};");
+		handler.UpdateCssWithSelector(handler.PlatformView, "* > image:last-child",
+			searchBar.CancelButtonColor != null ? $"color: {ToGtkColor(searchBar.CancelButtonColor)};" : null);
 	}
 
 	public static void MapIsSpellCheckEnabled(SearchBarHandler handler, ISearchBar searchBar)
