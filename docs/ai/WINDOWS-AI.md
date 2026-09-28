@@ -160,7 +160,7 @@ results; `Creativity`, `MaxInferenceSteps`, and `Seed` can be provided in
 **Not supported:** multiple source images, masks, requested output size, or
 hosted-URI responses. The second image in an `ImageGenerationRequest` is not
 necessarily a mask, so the adapter rejects it instead of interpreting it as
-one. The Windows image model is separate from the Chat language model and
+one. The Windows AI image model is separate from the Chat language model and
 may not be installed even when Chat is ready.
 
 ## Outside this Windows surface

@@ -41,7 +41,7 @@ internal static class ImageServiceCollectionExtensions
             new ImageGeneratorDescriptor(
                 "windows-ai-image-generation",
                 "Windows AI",
-                "Generates or edits images on this device. The first request checks whether the Windows image model is ready.",
+                "Generates or edits images on this device. The first request checks whether the Windows AI image model is ready.",
                 SupportsEdits: true));
 #endif
 
