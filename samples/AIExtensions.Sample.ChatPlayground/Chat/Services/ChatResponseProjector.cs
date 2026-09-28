@@ -207,9 +207,10 @@ internal sealed class ChatResponseProjector(TranscriptEmitter transcript, Action
 
     private static string FormatStructuredJson(string json)
     {
-        var response = JsonSerializer.Deserialize(json, PlaygroundJsonContext.Default.PlaygroundResponse)
-            ?? throw new JsonException("The schema response was empty or could not be deserialized.");
-        return JsonSerializer.Serialize(response, PlaygroundJsonContext.Default.PlaygroundResponse);
+        using var document = JsonDocument.Parse(json);
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+            throw new JsonException("The schema response must be a JSON object.");
+        return JsonSerializer.Serialize(document.RootElement, PlaygroundJsonContext.Default.JsonElement);
     }
 
     private static string FormatValue(object? value) =>

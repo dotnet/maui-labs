@@ -84,6 +84,7 @@ public sealed class ChatConversationTests
                 change is { EntryKind: TranscriptEntryKind.Assistant, Label: "Structured JSON" }).Text;
         using var document = JsonDocument.Parse(finalText);
         Assert.Equal("Done", document.RootElement.GetProperty("summary").GetString());
+        Assert.Equal("test", document.RootElement.GetProperty("category").GetString());
         Assert.DoesNotContain(events.OfType<TranscriptChange.EntryAdded>(), change =>
             change is { EntryKind: TranscriptEntryKind.Assistant, Label: "Text" });
     }
