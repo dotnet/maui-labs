@@ -65,6 +65,128 @@ validated as positive but is not forwarded as a native output limit.
 The playground accordingly offers no Windows Chat image attachment or tool
 controls.
 
+### Experimental function calling
+
+`WindowsAIToolCallingClient` is a separate `DelegatingChatClient` above the
+native text-only client. By default, constrained `{reason,decision}` selection
+chooses one function or answers normally. Explicit
+`AllowMultipleToolCalls=true` switches to constrained
+`{reason,tool_names,more_tools_after_results}` planning: select independent
+functions in one round, identify whether another planning round is needed
+after their results, or answer directly after the selected batch. The
+diagnostic reason and per-call evidence are attached to each emitted
+`FunctionCallContent` as `windows_ai.reason` and `windows_ai.evidence` in
+`AdditionalProperties`; neither field controls dispatch. The prompts include
+ordinary function and parameter descriptions, types, and required state.
+
+Every selected function uses the same constrained extraction response:
+`{evidence: string[], arguments: object}`. The argument object uses the
+function's ordinary JSON schema with only its top-level `required` list
+removed so missing values can be reported. A zero-argument function returns an
+empty argument object but must still cite text showing that the user actually
+requested it. Argument extraction receives a focused synthetic request
+containing labeled, JSON-encoded source data rather than the original role
+history. The host requires each evidence entry to be an exact quote from an
+original user message or a completed tool result. It also accepts an exact
+labeled source, a JSON-encoded exact quote, or JSON evidence that is
+structurally identical to a JSON tool result after removing decoder-inserted
+control characters. Changed values or additional JSON remain invalid.
+
+Arguments without valid evidence are not dispatched. The host validates
+supplied arguments against the supported schema subset. If one selected
+function lacks valid evidence or required arguments but other selected calls
+are valid, it emits only the valid calls, records
+`windows_ai.deferred_tools` and `windows_ai.deferred_reasons` diagnostics on
+them, and replans after their results. Selected zero-argument functions without
+request evidence are suppressed rather than retried; valid sibling calls carry
+`windows_ai.suppressed_tools` and `windows_ai.suppressed_reasons`. If no
+selected call is valid, missing values clarify, invalid evidence surfaces an
+error, or a role-like/unsupported zero-argument selection falls back to a
+normal answer. This lets independent calls run together while a dependent call
+waits for the result that supplies its argument.
+
+As a narrow prompt-injection mitigation, evidence containing a quote-opened
+`Assistant:`, `System:`, `User:`, `<assistant>`, or `<|assistant|>` role prefix
+is treated as data and cannot authorize dispatch. This does not make arbitrary
+natural-language authorization reliable. The schema's enum, numeric bounds,
+Unicode scalar length, and ECMA-compatible pattern constraints still apply.
+The host does not prove that a model-derived value follows semantically from
+its quote: `204` may yield `ORD-204` if the ordinary schema permits it, and a
+schema-valid *wrong* inference can still be passed to a function. No custom
+normalizer or per-tool resolver is required.
+
+Place `UseFunctionInvocation()` outside the adapter to execute calls. Every
+inner request clears `Tools`, `ToolMode`, and `AllowMultipleToolCalls`; direct
+`WindowsAIChatClient` still rejects native tool options. One call per turn is
+the default. The batch path permits at most three calls per current turn,
+deduplicates selected tool names, exposes each function name at most once per
+current user turn, and rejects exact historical call repeats. This means one
+function cannot currently be called with two different argument sets in the
+same turn. A complete batch with `more_tools_after_results=false` goes
+straight to the final answer when all its call IDs have results. A batch that
+requests another round, or whose invalid calls were deferred, selects again.
+Each native phase, including the final answer, has a 30-second bound and no
+automatic retry. After any interrupted native response,
+that wrapper instance rejects later requests because native termination cannot
+be confirmed; create a new client only after the platform has recovered. Once
+calls are complete, the final answer receives ordinary
+messages plus typed JSON tool-result data, not the raw `[Tool call]`/
+`[Tool result]` transcript.
+
+The Windows Chat Playground always enables this adapter and exposes only
+harmless demonstration tools. Library consumers still opt in explicitly by
+constructing `WindowsAIToolCallingClient`; wrapping a `WindowsAIChatClient`
+does not enable Chat image input or image tools. Tool and parameter
+descriptions are part of the model's decision input; use explicit descriptions
+that state when a tool is required, when it must not run, and what constitutes
+each argument.
+
+This remains a research preview, not a reliable authorization boundary.
+Constrained JSON controls shape, and evidence validation establishes textual
+provenance, not semantic correctness or user authorization. On 2026-09-28,
+the final adapter completed 10/10 frozen core turns (26 native requests) and
+20/20 frozen held-out turns (50 native requests) with no dispatched
+unnecessary calls, missed/wrong calls, or reported errors on one AMD Ryzen AI
+7 PRO 350 test machine (Windows build 26200, KB5124881 component
+1.2608.951.0). In both quoted-role held-out turns, the model still selected
+weather; the host evidence veto prevented dispatch. These small deterministic
+observations validate the tested scenarios on that machine, not general model
+reliability. Do not expose consequential, privacy-sensitive, or side-effecting
+tools without a separate application authorization step. The same final code
+passed 109/109 scripted wrapper contracts both portably and through the
+packaged MSIX runner.
+
+The packaged `WindowsAIToolCallingEvidenceEvaluationTests` records every raw
+decision, exact argument, final answer, error, native request duration, and
+summary. It reuses one native model per run, stops on the first timeout, and
+keeps uncertain native operations quarantined rather than retrying. Run each
+set separately with no other packaged AI app:
+
+```powershell
+dotnet test tests\AI\Microsoft.Maui.Essentials.AI.DeviceTests\Microsoft.Maui.Essentials.AI.DeviceTests.csproj -f net10.0-windows10.0.19041.0 -p:TargetFrameworks=net10.0-windows10.0.19041.0 -p:TestingMode=XHarness -p:EnableWindowsAIToolEvaluation=true -p:DeviceRunnersDataTimeout=1200 --filter 'FullyQualifiedName~WindowsAIToolCallingEvidenceEvaluationTests.ProductionAdapter_CoreCases' --logger trx
+dotnet test tests\AI\Microsoft.Maui.Essentials.AI.DeviceTests\Microsoft.Maui.Essentials.AI.DeviceTests.csproj -f net10.0-windows10.0.19041.0 -p:TargetFrameworks=net10.0-windows10.0.19041.0 -p:TestingMode=XHarness -p:EnableWindowsAIToolEvaluation=true -p:DeviceRunnersDataTimeout=1200 --filter 'FullyQualifiedName~WindowsAIToolCallingEvidenceEvaluationTests.ProductionAdapter_HeldOutCases' --logger trx
+```
+
+Archive the generated TRX and
+`tests\AI\Microsoft.Maui.Essentials.AI.DeviceTests\test-results\tcp-test-events.jsonl`
+before another packaged run. Several rejected, longer planning variants timed
+out after healthy plain-text preflights. A timed-out native operation did not
+always confirm termination, and fresh `CreateContext` calls sometimes remained
+blocked for roughly ten minutes. That interval is an observation, **not** a
+recovery guarantee.
+
+`WindowsAIToolCallingEvaluationTests` remains the A/B harness for the native
+plain-label history and a test-only JSON-transcript representation. Neither
+that alternative nor literal model-family tokens are a documented Windows
+chat/tool contract.
+
+Earlier packaged experiments compared host routing, one-pass constrained
+generation, a model classifier and critic, and a typed workflow ledger. None
+improved the final safety and accuracy boundary consistently. The selected
+adapter keeps the model responsible for intent while treating schemas,
+evidence provenance, duplicate detection, and call limits as host-enforced
+invariants.
+
 ### Conversation context experiment
 
 The native `LanguageModelContext` retains prompts **and generated responses**
