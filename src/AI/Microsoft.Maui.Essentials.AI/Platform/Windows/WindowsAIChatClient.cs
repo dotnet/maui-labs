@@ -22,7 +22,7 @@ public sealed class WindowsAIChatClient : IChatClient
 	private const string DefaultModelId = "windows-ai-language-model";
 
 	/// <summary>Lazily-initialized task that creates the underlying <see cref="LanguageModel"/>.</summary>
-	private Task<LanguageModel> _modelTask;
+	private readonly Lazy<Task<LanguageModel>> _modelTask;
 
 	/// <summary>Whether this instance owns the <see cref="LanguageModel"/> and is responsible for disposing it.</summary>
 	private readonly bool _ownsModel;
@@ -40,7 +40,7 @@ public sealed class WindowsAIChatClient : IChatClient
 	/// </remarks>
 	public WindowsAIChatClient()
 	{
-		_modelTask = WindowsAIModelFactory.CreateModelAsync();
+		_modelTask = new(() => Task.Run(WindowsAIModelFactory.CreateModelAsync));
 		_ownsModel = true;
 	}
 
@@ -57,7 +57,7 @@ public sealed class WindowsAIChatClient : IChatClient
 	public WindowsAIChatClient(LanguageModel model)
 	{
 		ArgumentNullException.ThrowIfNull(model);
-		_modelTask = Task.FromResult(model);
+		_modelTask = new(() => Task.FromResult(model));
 		_ownsModel = false;
 	}
 
@@ -75,7 +75,7 @@ public sealed class WindowsAIChatClient : IChatClient
 		[EnumeratorCancellation] CancellationToken cancellationToken = default)
 	{
 		ValidateOptions(options);
-		var model = await _modelTask;
+		var model = await _modelTask.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
 
 		var (systemPrompt, history) = NormalizeChatMessages(chatMessages, options);
 
@@ -103,54 +103,61 @@ public sealed class WindowsAIChatClient : IChatClient
 					? prompt
 					: $"{systemPrompt}{Environment.NewLine}{Environment.NewLine}{prompt}";
 
-				var structuredOperation = model.GenerateStructuredJsonResponseAsync(
-					structuredPrompt,
-					jsonSchema,
-					modelOptions);
-
-				WireUp(structuredOperation, handler, cancellationToken, static result => result.Status switch
+				(cancel, context) = await StartOperationAsync(() =>
 				{
-					GenerateStructuredJsonResponseStatus.Complete => result.Text,
-					GenerateStructuredJsonResponseStatus.PromptLargerThanContext =>
-						throw new InvalidOperationException(
-							"The prompt is larger than the Windows AI language model's context window. Shorten the conversation or start a new one.",
-							result.ExtendedError),
-					_ => throw new InvalidOperationException(
-						$"Structured response generation failed: {result.Status}", result.ExtendedError)
-				});
-
-				cancel = structuredOperation.Cancel;
+					var operation = model.GenerateStructuredJsonResponseAsync(
+						structuredPrompt, jsonSchema, modelOptions);
+					WireUp(operation, handler, cancellationToken, static result => result.Status switch
+					{
+						GenerateStructuredJsonResponseStatus.Complete => result.Text,
+						GenerateStructuredJsonResponseStatus.PromptLargerThanContext =>
+							throw new InvalidOperationException(
+								"The prompt is larger than the Windows AI language model's context window. Shorten the conversation or start a new one.",
+								result.ExtendedError),
+						_ => throw new InvalidOperationException(
+							$"Structured response generation failed: {result.Status}", result.ExtendedError)
+					});
+					return ((Action)operation.Cancel, (LanguageModelContext?)null);
+				}, cancellationToken).ConfigureAwait(false);
 			}
 			else
 			{
-				context = string.IsNullOrEmpty(systemPrompt)
-					? model.CreateContext()
-					: model.CreateContext(systemPrompt, new ContentFilterOptions());
+				(cancel, context) = await StartOperationAsync(() =>
+				{
+					var createdContext = string.IsNullOrEmpty(systemPrompt)
+						? model.CreateContext()
+						: model.CreateContext(systemPrompt, new ContentFilterOptions());
+					try
+					{
+						var operation = model.GenerateResponseAsync(createdContext, prompt, modelOptions);
 
-				var operation = model.GenerateResponseAsync(context, prompt, modelOptions);
-
-				// Text generation streams through Progress, so the result is only inspected to
-				// surface a prompt that did not fit. Other statuses are left alone: the API reports
-				// Error for benign cases such as an empty prompt, and callers rely on those
-				// completing quietly with no content.
-				WireUp(operation, handler, cancellationToken, static result =>
-					result.Status is LanguageModelResponseStatus.PromptLargerThanContext
-						? throw new InvalidOperationException(
-							"The prompt is larger than the Windows AI language model's context window. Shorten the conversation or start a new one.",
-							result.ExtendedError)
-						: result.Text);
-
-				cancel = operation.Cancel;
+						// Other statuses are left alone: the API reports Error for benign
+						// cases such as an empty prompt.
+						WireUp(operation, handler, cancellationToken, static result =>
+							result.Status is LanguageModelResponseStatus.PromptLargerThanContext
+								? throw new InvalidOperationException(
+									"The prompt is larger than the Windows AI language model's context window. Shorten the conversation or start a new one.",
+									result.ExtendedError)
+								: result.Text);
+						return ((Action)operation.Cancel, createdContext);
+					}
+					catch
+					{
+						createdContext.Dispose();
+						throw;
+					}
+				}, cancellationToken).ConfigureAwait(false);
 			}
 
 			var registration = cancellationToken.Register(cancel);
 			try
 			{
-				await foreach (var update in handler.ReadAllAsync(cancellationToken))
+				await foreach (var update in handler.ReadAllAsync(cancellationToken).ConfigureAwait(false))
 				{
 					yield return update;
 				}
 			}
+
 			finally
 			{
 				cancel();
@@ -159,7 +166,44 @@ public sealed class WindowsAIChatClient : IChatClient
 		}
 		finally
 		{
+			handler.Complete();
 			context?.Dispose();
+		}
+	}
+
+	private static async Task<(Action Cancel, LanguageModelContext? Context)> StartOperationAsync(
+		Func<(Action Cancel, LanguageModelContext? Context)> start,
+		CancellationToken cancellationToken)
+	{
+		// WinRT entry points can block before returning their async operation. Keep that
+		// synchronous work off the caller's UI thread and let cancellation release the caller.
+		var startTask = Task.Run(start, cancellationToken);
+		try
+		{
+			return await startTask.WaitAsync(cancellationToken).ConfigureAwait(false);
+		}
+		catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+		{
+			_ = startTask.ContinueWith(task =>
+			{
+				if (task.IsCompletedSuccessfully)
+				{
+					try
+					{
+						task.Result.Cancel();
+					}
+					finally
+					{
+						task.Result.Context?.Dispose();
+					}
+				}
+				else if (task.IsFaulted)
+				{
+					System.Diagnostics.Trace.TraceError(
+						$"Windows AI generation failed after cancellation: {task.Exception}");
+				}
+			}, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+			throw;
 		}
 	}
 
@@ -305,8 +349,8 @@ public sealed class WindowsAIChatClient : IChatClient
 	/// <inheritdoc />
 	void IDisposable.Dispose()
 	{
-		if (_ownsModel)
-			DisposeWhenReady(_modelTask);
+		if (_ownsModel && _modelTask.IsValueCreated)
+			DisposeWhenReady(_modelTask.Value);
 	}
 
 	private static void DisposeWhenReady<T>(Task<T> task)

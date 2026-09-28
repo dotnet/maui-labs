@@ -82,7 +82,8 @@ text may leave the device and incur charges.
   unrelated prompts. Uncheck unneeded tools to prevent those calls. Azure
   can accept images and create them through a separately configured
   image-generation tool. Windows Chat supports text and JSON, but not tool
-  calling or image input.
+  calling or image input. Streaming displays partial JSON only if the provider
+  reports incremental progress; a buffered response appears when it completes.
 - **Embeddings:** Import documents, create an index, and search it. Apple
   on-device and configured Azure providers are available; Windows has no
   embedding provider. Imported content and indexes are separate from chats.
