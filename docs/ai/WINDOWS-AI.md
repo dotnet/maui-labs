@@ -62,8 +62,13 @@ This keeps the UI responsive; it cannot guarantee that a stalled native
 generation operation will finish or that subsequent requests will work.
 On Windows 25H2 build 26200.9448, a structured request was observed to stall
 without progress, and a later plain-text request also stalled after cancellation.
-That observation does not isolate the cause to `required` or
-`additionalProperties`, and the adapter does not synthesize streaming updates.
+Fresh packaged runs also completed a one-field schema and a four-field schema
+with every field required in approximately 4 and 6 seconds, respectively.
+Both recorded only one response update; the required four-field result
+contained every field. Removing `required` from the same four-field schema
+completed but omitted two requested fields. The stall is therefore not
+consistently caused by `required`, and the adapter does not synthesize
+streaming updates when the native operation provides only one result.
 
 **Not supported:** direct image input, native tool calling, and selecting or
 reporting exact model weights. Image data and nonempty `ChatOptions.Tools`
