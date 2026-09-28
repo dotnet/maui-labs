@@ -932,6 +932,37 @@ public class ProfileCommandTests
 		Assert.Contains("DOTNET_JitMinimalJitProfiling=1", contents);
 	}
 
+	[Fact]
+	public void MauiProfilingHelperInjectionTargets_OnlyInjectIntoApplicationProjects()
+	{
+		// The targets are imported into every project via a global
+		// CustomAfterMicrosoftCommonTargets. Library projects must not get the helper or its
+		// AndroidEnvironment file, which an Android library would pack into its .aar and leak
+		// into later non-profiling builds.
+		var targetsPath = Path.GetFullPath(Path.Combine(
+			AppContext.BaseDirectory,
+			"../../../../../src/Cli/Microsoft.Maui.Cli/Build/MauiProfilingHelperInjection.targets"));
+
+		var doc = System.Xml.Linq.XDocument.Load(targetsPath);
+		var conditions = doc.Descendants()
+			.Select(e => (string?)e.Attribute("Condition"))
+			.Where(c => c is not null && c.Contains("MauiProfilingHelperInject", StringComparison.Ordinal))
+			.ToList();
+
+		// Only the gate itself may look at the raw MauiProfilingHelperInject switch...
+		var gate = Assert.Single(conditions, c => c!.Contains("$(MauiProfilingHelperInject)", StringComparison.Ordinal));
+		Assert.Contains("$(_MauiProfilingHelperIsApplication)", gate);
+
+		// ...and every injection block must go through the gate.
+		Assert.All(
+			conditions.Where(c => c != gate),
+			c => Assert.Contains("$(_MauiProfilingHelperShouldInject)", c));
+
+		var isApp = doc.Descendants("_MauiProfilingHelperIsApplication").Single();
+		Assert.Contains("'$(OutputType)' == 'Exe'", (string?)isApp.Attribute("Condition"));
+		Assert.Contains("'$(AndroidApplication)' == 'true'", (string?)isApp.Attribute("Condition"));
+	}
+
 
 	[Fact]
 	public void ResolveProfileTransport_AndroidEmulator_UsesEmulatorLoopbackAlias()

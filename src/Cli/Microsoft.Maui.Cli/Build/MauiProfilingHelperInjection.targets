@@ -26,7 +26,21 @@ return true;
     </Task>
   </UsingTask>
 
-  <PropertyGroup Condition="'$(MauiProfilingHelperInject)' == 'true' and '$(UseMaui)' == 'true'">
+  <!--
+    This file is imported into every project in the build graph (it is passed as a global
+    CustomAfterMicrosoftCommonTargets property), so only inject into the MAUI *application*
+    project. Class libraries with UseMaui=true must not get the helper, its bootstrap source,
+    or the AndroidEnvironment file: an Android library packs AndroidEnvironment files into its
+    .aar, so the profiling-only settings (DOTNET_ReadyToRun=0, TieredPGO instrumentation,
+    MAUI_PROFILING_HELPER, ...) would be embedded again by every later, normal build of any
+    app that consumes a stale build of that library.
+  -->
+  <PropertyGroup>
+    <_MauiProfilingHelperIsApplication Condition="'$(OutputType)' == 'Exe' or '$(OutputType)' == 'WinExe' or '$(AndroidApplication)' == 'true'">true</_MauiProfilingHelperIsApplication>
+    <_MauiProfilingHelperShouldInject Condition="'$(MauiProfilingHelperInject)' == 'true' and '$(UseMaui)' == 'true' and '$(_MauiProfilingHelperIsApplication)' == 'true'">true</_MauiProfilingHelperShouldInject>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(_MauiProfilingHelperShouldInject)' == 'true'">
     <_MauiProfilingHelperAssemblyPath>$(MauiProfilingHelperAssemblyPath)</_MauiProfilingHelperAssemblyPath>
     <_MauiProfilingHelperAssemblyPath Condition="'$(_MauiProfilingHelperAssemblyPath)' == ''">$(MSBuildThisFileDirectory)Microsoft.Maui.ProfilingHelper.dll</_MauiProfilingHelperAssemblyPath>
     <_MauiProfilingHelperSourcePath>$(MSBuildThisFileDirectory)MauiProfilingHelper.AutoInitialize.cs</_MauiProfilingHelperSourcePath>
@@ -37,8 +51,7 @@ return true;
 
   <Target Name="ValidateMauiProfilingHelperInjection"
           BeforeTargets="PrepareForBuild"
-          Condition="'$(MauiProfilingHelperInject)' == 'true'
-            and '$(UseMaui)' == 'true'
+          Condition="'$(_MauiProfilingHelperShouldInject)' == 'true'
             and '$(MauiProfilingHelperInjectBootstrap)' != 'false'">
     <Error Condition="!Exists('$(_MauiProfilingHelperAssemblyPath)')"
            Text="The injected profiling helper assembly was not found at '$(_MauiProfilingHelperAssemblyPath)'." />
@@ -46,8 +59,7 @@ return true;
            Text="The injected profiling helper source file was not found at '$(_MauiProfilingHelperSourcePath)'." />
   </Target>
 
-  <ItemGroup Condition="'$(MauiProfilingHelperInject)' == 'true'
-    and '$(UseMaui)' == 'true'
+  <ItemGroup Condition="'$(_MauiProfilingHelperShouldInject)' == 'true'
     and '$(MauiProfilingHelperInjectBootstrap)' != 'false'">
     <Reference Include="Microsoft.Maui.ProfilingHelper">
       <HintPath>$(_MauiProfilingHelperAssemblyPath)</HintPath>
@@ -59,8 +71,7 @@ return true;
              Visible="false" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(MauiProfilingHelperInject)' == 'true'
-    and '$(UseMaui)' == 'true'
+  <ItemGroup Condition="'$(_MauiProfilingHelperShouldInject)' == 'true'
     and '$(TargetFramework)' != ''
     and $([System.String]::Copy('$(TargetFramework)').Contains('-ios'))">
     <MlaunchEnvironmentVariables Include="MAUI_PROFILING_HELPER=1" />
@@ -72,8 +83,7 @@ return true;
 
   <Target Name="GenerateMauiProfilingHelperEnvironment"
           BeforeTargets="PrepareForBuild"
-          Condition="'$(MauiProfilingHelperInject)' == 'true'
-            and '$(UseMaui)' == 'true'
+          Condition="'$(_MauiProfilingHelperShouldInject)' == 'true'
             and '$(TargetFramework)' != ''
             and $([System.String]::Copy('$(TargetFramework)').Contains('-android'))">
     <Error Condition="'$(MauiProfilingHelperEnableRuntimePgo)' == 'true' and '$(UseMonoRuntime)' == 'true'"
@@ -123,8 +133,7 @@ return true;
 
   <Target Name="EnableMauiProfilingHelperAndroidDebuggable"
           AfterTargets="_GenerateJavaStubs"
-          Condition="'$(MauiProfilingHelperInject)' == 'true'
-            and '$(UseMaui)' == 'true'
+          Condition="'$(_MauiProfilingHelperShouldInject)' == 'true'
             and '$(TargetFramework)' != ''
             and $([System.String]::Copy('$(TargetFramework)').Contains('-android'))
             and '$(MauiProfilingHelperEnableRuntimePgo)' == 'true'">
