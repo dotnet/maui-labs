@@ -9,6 +9,25 @@ This backend uses the platform-agnostic MAUI NuGet packages (`net10.0` fallback 
 
 > **Inspiration:** This project follows the patterns established by [mauiplatforms](https://github.com/Redth/mauiplatforms) (macOS/tvOS backends) and [Maui.Gtk](https://github.com/AathifMahir/Maui.Gtk).
 
+## Shell inspection with DevFlow
+
+Shell creates only the selected page through its content controller. Template pages
+remain cached and attached to the MAUI tree, so DevFlow can inspect their labels and
+buttons without creating inactive pages.
+
+To check this in the sample, open **Shell Navigation**, select **Launch Shell App**,
+then use the sample agent's port:
+
+```powershell
+maui devflow --agent-port <port> ui tree --depth 20
+maui devflow --agent-port <port> ui query --automationId ShellHomeTitle
+maui devflow --agent-port <port> ui query --type Button
+maui devflow --agent-port <port> ui tap --automationId ShellSettingsButton
+```
+
+The tree should include `ShellHomePage` beneath `ShellContent`, the title query
+should find a MAUI `Label`, and tapping the button should navigate to Settings.
+
 ## Screenshots
 
 | Home | Controls | Layouts |
