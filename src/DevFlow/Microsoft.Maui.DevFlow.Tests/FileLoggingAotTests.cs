@@ -13,25 +13,27 @@ public sealed class FileLoggingAotTests : IDisposable
     public void Entry_RoundTripsThroughBufferAndDisk()
     {
         using var gate = new ReaderWriterLockSlim();
-        using var writer = new FileLogWriter(_directory, gate);
-        var reader = new FileLogReader(_directory, gate, writer);
         var entry = new FileLogEntry(
             new DateTime(2026, 9, 21, 12, 0, 0, DateTimeKind.Utc),
             "Warning", "NativeAot", "Espresso \"test\"\nCaf\u00e9", "Exception text", "native");
 
-        gate.EnterReadLock();
-        try
+        using (var writer = new FileLogWriter(_directory, gate))
         {
-            writer.Write(entry);
-            Assert.Equal(entry, Assert.Single(writer.GetBufferedEntries()));
-        }
-        finally
-        {
-            gate.ExitReadLock();
-        }
+            var reader = new FileLogReader(_directory, gate, writer);
+            gate.EnterReadLock();
+            try
+            {
+                writer.Write(entry);
+                Assert.Equal(entry, Assert.Single(writer.GetBufferedEntries()));
+            }
+            finally
+            {
+                gate.ExitReadLock();
+            }
 
-        writer.Flush();
-        Assert.Equal(entry, Assert.Single(reader.Read()));
+            writer.Flush();
+            Assert.Equal(entry, Assert.Single(reader.Read()));
+        }
 
         using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(_directory, "log-current.jsonl")));
         Assert.Equal(new[] { "t", "l", "c", "m", "e", "s" },
@@ -44,14 +46,16 @@ public sealed class FileLoggingAotTests : IDisposable
     public void NullOptionalFields_AreWrittenAndRestored()
     {
         using var gate = new ReaderWriterLockSlim();
-        using var writer = new FileLogWriter(_directory, gate);
-        var reader = new FileLogReader(_directory, gate, writer);
         var entry = new FileLogEntry(DateTime.UtcNow, "Information", "Test", "Message");
 
-        writer.Write(entry);
-        writer.Flush();
+        using (var writer = new FileLogWriter(_directory, gate))
+        {
+            var reader = new FileLogReader(_directory, gate, writer);
+            writer.Write(entry);
+            writer.Flush();
 
-        Assert.Equal(entry, Assert.Single(reader.Read()));
+            Assert.Equal(entry, Assert.Single(reader.Read()));
+        }
         using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(_directory, "log-current.jsonl")));
         Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("e").ValueKind);
         Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("s").ValueKind);

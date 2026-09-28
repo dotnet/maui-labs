@@ -89,6 +89,10 @@ Platform screenshots, native injection, and device/Essentials APIs additionally
 require verification on the target platform; the host smoke below does not render
 a native UI.
 
+The DevFlow PR workflow publishes and runs both the agent smoke (including the
+headless MAUI backend) and the standalone logging smoke as Native AOT executables
+on Linux.
+
 The standalone smoke starts only its own loopback agent and broker fixtures. It
 checks reflection-disabled HTTP/broker/WebSocket serialization and the core UI
 transport contracts. Optional MAUI checks exercise real headless MAUI tree walking,

@@ -78,7 +78,7 @@ agent.SetBrokerRegistration(registration);
 using var logs = new FileLogProvider(Path.Combine(output, "logs"));
 agent.SetLogProvider(logs);
 logs.Writer.Write(new FileLogEntry(DateTime.UtcNow, "Information", "Smoke", "reflection-disabled transport"));
-Check(await registration.TryRegisterAsync() == agentPort, "broker registration assigns a port");
+Check(await registration.TryRegisterAsync(TimeSpan.FromSeconds(10)) == agentPort, "broker registration assigns a port");
 var hello = await registered.Task.WaitAsync(ct);
 Check(hello.GetProperty("type").GetString() == "register", "registration type");
 Check(hello.TryGetProperty("sessionId", out var session) && session.ValueKind == JsonValueKind.Null,

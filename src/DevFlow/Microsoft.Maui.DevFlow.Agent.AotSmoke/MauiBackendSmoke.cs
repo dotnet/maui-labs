@@ -1,4 +1,5 @@
 #if MAUI_BACKEND_SMOKE
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.Maui;
 using Microsoft.Maui.Controls;
@@ -12,13 +13,18 @@ static class MauiBackendSmoke
         var label = new Label { AutomationId = "maui-label", Text = "Label", FontAttributes = FontAttributes.Bold, Opacity = 0.5 };
         button.Clicked += (_, _) => button.Text = "Clicked";
         var custom = new CustomView { AutomationId = "maui-custom", Message = "Custom" };
+#pragma warning disable CS0618 // The inspector still supports legacy Frame properties.
+        var frame = new Frame { AutomationId = "maui-frame" };
+#pragma warning restore CS0618
         MauiAgentInspection.RegisterType<CustomView>();
-        using var agent = new Backend(button, label, custom);
+        using var agent = new Backend(button, label, custom, frame);
         await agent.AssertTreeAsync();
-        await agent.AssertPropertyAsync("maui-label", "Opacity", "0.5");
+        await agent.AssertPropertyAsync("maui-label", "Opacity", label.Opacity.ToString(CultureInfo.CurrentCulture));
         await agent.AssertPropertyAsync("maui-label", "FontAttributes", "Bold");
         await agent.AssertPropertyAsync("maui-custom", "Message", "Custom");
         await agent.AssertPropertyAsync("maui-button", "Shadow.Radius", "12");
+        await agent.AssertPropertyAsync("maui-frame", "CornerRadius", "-1");
+        await agent.AssertPropertyAsync("maui-frame", "HasShadow", "True");
         await agent.AssertTapAsync();
         await agent.AssertPropertyAsync("maui-button", "Text", "Clicked");
         await agent.AssertSetPropertyAsync();
