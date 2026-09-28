@@ -62,8 +62,10 @@ adapter does not truncate history or expose a separate context-window exception.
 reporting exact model weights. Image data and nonempty `ChatOptions.Tools`
 are rejected rather than guessed at or executed. `MaxOutputTokens` is
 validated as positive but is not forwarded as a native output limit.
-The playground accordingly offers no Windows Chat image attachment or tool
-controls.
+The playground hides Windows Chat image attachment by default and can
+optionally caption attachments on-device before sending them as text; native
+image input remains unsupported. Its experimental adapter enables tool
+controls, but the native client still does not accept tools.
 
 ### Experimental function calling
 
@@ -292,9 +294,16 @@ may not be installed even when Chat is ready.
 ## Outside this Windows surface
 
 There is no Windows embedding generator in this package. The Windows
-`AppContentIndexer` is a search/index API, not an `IEmbeddingGenerator`
-that returns portable vectors for the playground's embedding workflow.
-Image description, speech, and other Windows AI APIs are not wrapped here.
+AI client does not supply the embeddings needed by the playground or legacy
+trip planner; the latter still uses Azure OpenAI for semantic search and its
+tool-dependent itinerary workflow. Do not use the unavailable
+`Microsoft.Windows.Search.AppContentIndex` WinRT namespace. Image description
+is not wrapped by this library either: the playground's optional
+`AI:EnableWindowsImageDescriptions=true` setting uses a separate sample-only
+`ImageDescriptionGenerator` and replaces attachments with on-device captions
+for the text-only model. The original attachment stays in the recording;
+the model never sees the image and question jointly. Speech and other Windows
+AI APIs are not wrapped here.
 
 To run and compare providers, see the
 [Chat Playground README](../../samples/AIExtensions.Sample.ChatPlayground/README.md).

@@ -1,4 +1,4 @@
-# Essentials.AI.Sample - Trip Planner
+# EssentialsAISample - Trip Planner
 
 AI-powered travel itinerary generator using Microsoft.Extensions.AI and Microsoft.Agents.AI in .NET MAUI.
 
@@ -13,15 +13,31 @@ This sample demonstrates how to integrate Large Language Models (LLMs) into a .N
 - **Conditional Translation**: Automatic translation when non-English output is requested
 - **Cross-Platform**: Runs on iOS, Android, Windows, and macOS
 
+On Windows 11 24H2+ the chat overlay and travel tips use on-device
+`WindowsAIChatClient` for text-only responses, and the on-device
+`WindowsAIImageGenerator` is registered separately. Native Windows chat cannot
+invoke the sample's landmark/weather/navigation tools or accept images; the
+chat overlay tells the model not to claim it performed those actions. The
+existing itinerary workflow, destination search, and embeddings **still require
+Azure OpenAI** (the configured chat and embedding deployments). No unsupported
+Windows content-indexing API or experimental tool-calling adapter is used.
+Windows builds run packaged with the `systemAIModels` capability; the Windows
+model also requires supported hardware. On earlier Windows versions the sample
+continues to use Azure chat. See [Windows AI support](../../docs/ai/WINDOWS-AI.md).
+
 ## Setup
 
-To run this sample, you need to configure Azure OpenAI credentials using user secrets.
+Configure Azure OpenAI credentials for the itinerary workflow and semantic
+search on Windows (and for cloud-backed platforms). Apple uses its local chat
+and embedding providers instead. Windows native chat alone does not replace
+the workflow or search. Debug builds embed the local secrets file: do not
+share Debug app packages or commit credentials.
 
 ### Configure User Secrets
 
 1. Navigate to the sample directory:
    ```bash
-   cd src/AI/samples/Essentials.AI.Sample
+   cd samples/EssentialsAISample
    ```
 
 2. Initialize user secrets (if not already done):

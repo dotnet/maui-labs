@@ -94,6 +94,15 @@ successive recorded turns without calling a model or checking new prompts.
 Switching from a chat with images to a text-only provider requires clearing
 that chat first.
 
+Windows Chat can optionally accept an attached image through a separate
+on-device image-description model: set `AI:EnableWindowsImageDescriptions=true`
+in local user secrets (default off). The original image remains in the chat
+recording, but the language model sees only a caption alongside the question,
+not the image pixels. This is not multimodal chat. Model setup can download
+components and earlier images in a conversation may be described again on
+later turns; an unavailable model or invalid image fails visibly. Azure image
+input is unaffected.
+
 The Windows adapter emulates tool selection and argument generation with
 schema-constrained JSON, then forwards text-only requests to the native client.
 Descriptions on the sample functions and parameters explain when each tool is
