@@ -41,7 +41,6 @@ public sealed class AISettingsTests
 
         Assert.False(settings.EnableWindowsImageDescriptions);
     }
-    }
 
     [Fact]
     public void Bind_InvalidImageDescriptionFlag_Throws()
