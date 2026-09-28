@@ -290,6 +290,9 @@ emitted by the diagnostics contract.
 Set `DevFlowXamlSourceMapsEnabled=false` to disable source embedding, or enable
 it explicitly for another configuration. Source maps embed developer file paths
 and XAML text and should normally remain disabled for Release/store builds.
+Source maps reuse MAUI's prepared XAML items regardless of target framework,
+including plain .NET GTK heads and macOS AppKit heads. Projects without the MAUI
+Controls build targets can still supply `MauiXaml` items for source mapping.
 
 The request privacy modes are:
 
