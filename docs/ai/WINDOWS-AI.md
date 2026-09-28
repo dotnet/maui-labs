@@ -30,8 +30,8 @@ weights. The two features do not share a model.
 Both adapters check `GetReadyState()` and call `EnsureReadyAsync()` when the
 model is not ready. A missing capability, unsupported hardware, or failed
 setup surfaces as an error, rather than silently switching providers.
-Chat-model setup begins when the client is constructed; image-model setup
-begins with the first generation request. The image adapter can initiate a
+Chat-model setup now begins on the first request; image-model setup
+also begins with the first generation request. The image adapter can initiate a
 large model download: a shipping app should obtain user consent before
 requesting that model.
 
@@ -50,9 +50,20 @@ closes object schemas with declared properties (`additionalProperties: false`)
 to prevent valid-but-unexpected property names from leaving requested fields
 empty. A JSON response format without a schema does not use constrained
 decoding. Streaming uses native progress when provided and emits a final
-response when only a completed result is available. A prompt exceeding the
-native context window raises `InvalidOperationException`; the adapter does
-not truncate history or expose a separate context-window exception.
+response when only a completed result is available.
+Selecting streaming does not force the native structured operation to send
+partial JSON, so a result with no progress appears only when complete. A prompt
+exceeding the native context window raises `InvalidOperationException`; the
+adapter does not truncate history or expose a separate context-window exception.
+The adapter starts model setup and native generation away from the caller's UI
+thread; cancelling while a native entry point is blocked releases the waiting
+caller and cancels the operation if it eventually becomes available.
+This keeps the UI responsive; it cannot guarantee that a stalled native
+generation operation will finish or that subsequent requests will work.
+On Windows 25H2 build 26200.9448, a structured request was observed to stall
+without progress, and a later plain-text request also stalled after cancellation.
+That observation does not isolate the cause to `required` or
+`additionalProperties`, and the adapter does not synthesize streaming updates.
 
 **Not supported:** direct image input, native tool calling, and selecting or
 reporting exact model weights. Image data and nonempty `ChatOptions.Tools`
