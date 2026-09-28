@@ -376,7 +376,7 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			throw new ArgumentOutOfRangeException(nameof(role), $"The role '{role}' is not supported by Apple Intelligence chat APIs.");
 	}
 
-	private ChatOptionsNative? ToNative(ChatOptions? options, CancellationToken cancellationToken)
+	internal ChatOptionsNative? ToNative(ChatOptions? options, CancellationToken cancellationToken)
 	{
 		if (options is null)
 		{
@@ -395,7 +395,9 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			Temperature = ToNative(options.Temperature),
 			MaxOutputTokens = ToNative(options.MaxOutputTokens),
 			ResponseJsonSchema = ToNative(options.ResponseFormat),
-			Tools = ToNative(options.Tools, cancellationToken, _functionInvocationServices)
+			Tools = options.ToolMode == ChatToolMode.None
+				? null
+				: ToNative(options.Tools, cancellationToken, _functionInvocationServices)
 		};
 	}
 
