@@ -38,17 +38,26 @@
                          Color="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}" />
                 <Label Text="RESPONSE" Style="{StaticResource SectionHeading}" />
                 <HorizontalStackLayout Spacing="4">
-                    <CheckBox IsChecked="{Binding UseStreaming}" AutomationId="StreamingCheckBox" />
+                    <Grid WidthRequest="{OnPlatform WinUI=32, Default=-1}">
+                        <CheckBox IsChecked="{Binding UseStreaming}" HorizontalOptions="Center"
+                                  AutomationId="StreamingCheckBox" />
+                    </Grid>
                     <Label Text="Streaming" VerticalOptions="Center" />
                     <local:InfoTip Text="Update the response as text arrives." />
                 </HorizontalStackLayout>
                 <HorizontalStackLayout Spacing="4">
-                    <CheckBox IsChecked="{Binding UseStructuredJson}" AutomationId="StructuredJsonCheckBox" />
+                    <Grid WidthRequest="{OnPlatform WinUI=32, Default=-1}">
+                        <CheckBox IsChecked="{Binding UseStructuredJson}" HorizontalOptions="Center"
+                                  AutomationId="StructuredJsonCheckBox" />
+                    </Grid>
                     <Label Text="Structured JSON" VerticalOptions="Center" />
                     <local:InfoTip Text="Request JSON matching the playground response schema." />
                 </HorizontalStackLayout>
                 <HorizontalStackLayout Spacing="4" IsVisible="{Binding SelectedDescriptor.SupportsReasoningSummary}">
-                    <CheckBox IsChecked="{Binding UseReasoningSummary}" AutomationId="ReasoningSummaryCheckBox" />
+                    <Grid WidthRequest="{OnPlatform WinUI=32, Default=-1}">
+                        <CheckBox IsChecked="{Binding UseReasoningSummary}" HorizontalOptions="Center"
+                                  AutomationId="ReasoningSummaryCheckBox" />
+                    </Grid>
                     <Label Text="Reasoning summary" VerticalOptions="Center" />
                     <local:InfoTip Text="Request a visible summary; private reasoning is never displayed." />
                 </HorizontalStackLayout>

@@ -20,6 +20,9 @@ public sealed class SettingsPaneViewModelTests
 
         Assert.Same(live, settings.SelectedClient);
         Assert.True(settings.CanEditOptions);
+        Assert.True(settings.UseStreaming);
+        Assert.False(settings.UseStructuredJson);
+        Assert.True(settings.UseReasoningSummary);
         Assert.Equal("Live ready", settings.ClientStatus);
         Assert.Equal("ChatClient0Radio", settings.Clients[0].AutomationId);
 

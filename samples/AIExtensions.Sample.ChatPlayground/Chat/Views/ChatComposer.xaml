@@ -35,11 +35,12 @@
                         </VerticalStackLayout>
                     </local:PopupMenu.Content>
                 </ImageButton>
-                <Entry Grid.Column="1" Text="{Binding Prompt}" MinimumWidthRequest="0"
-                       Placeholder="Ask the selected real chat client"
-                       ReturnType="Send" ReturnCommand="{Binding SendCommand}"
-                       AutomationId="PromptEntry" />
-                <Grid Grid.Column="2" WidthRequest="44" HeightRequest="44">
+                <Editor Grid.Column="1" Text="{Binding Prompt}"
+                        AutoSize="TextChanges" MinimumWidthRequest="0"
+                        MinimumHeightRequest="44" MaximumHeightRequest="120"
+                        Placeholder="Ask the selected real chat client"
+                        AutomationId="PromptEntry" />
+                <Grid Grid.Column="2" WidthRequest="44" HeightRequest="44" VerticalOptions="End">
                     <ImageButton Source="send.png" Command="{Binding SendCommand}"
                                  IsVisible="{Binding IsIdle}" Style="{StaticResource AttachmentButton}"
                                  SemanticProperties.Description="Send message" AutomationId="SendButton" />

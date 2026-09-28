@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using AIExtensions.Sample.ChatPlayground;
 using Microsoft.Extensions.AI;
 
@@ -64,7 +65,7 @@ public sealed class ChatConversationTests
     [InlineData(true)]
     public async Task ExecuteTurn_StructuredJson_EmitsFormattedFinalText(bool streaming)
     {
-        const string json = """{"summary":"Done","keyPoints":["one"],"category":"test","sentiment":"neutral"}""";
+        const string json = """{"summary":"Done","keyPoints":["one"],"category":"Technical","sentiment":"Neutral"}""";
         var client = new ScriptedClient(
             new ChatResponse([new ChatMessage(ChatRole.Assistant, json)]),
             [
@@ -84,8 +85,34 @@ public sealed class ChatConversationTests
                 change is { EntryKind: TranscriptEntryKind.Assistant, Label: "Structured JSON" }).Text;
         using var document = JsonDocument.Parse(finalText);
         Assert.Equal("Done", document.RootElement.GetProperty("summary").GetString());
+        Assert.Equal("Technical", document.RootElement.GetProperty("category").GetString());
+        Assert.Equal("Neutral", document.RootElement.GetProperty("sentiment").GetString());
+        Assert.Contains('\n', finalText);
         Assert.DoesNotContain(events.OfType<TranscriptChange.EntryAdded>(), change =>
             change is { EntryKind: TranscriptEntryKind.Assistant, Label: "Text" });
+    }
+
+    [Theory]
+    [InlineData("""{"status":"ok","extra":{"values":[1,true,null]}}""")]
+    [InlineData("""[{"kind":"custom"},42]""")]
+    [InlineData("42")]
+    [InlineData("null")]
+    public async Task ExecuteTurn_StructuredJson_FormatsAnyJsonValue(string json)
+    {
+        var client = new ScriptedClient(
+            new ChatResponse([new ChatMessage(ChatRole.Assistant, json)]), []);
+        var processor = new ChatConversation();
+        var events = new List<TranscriptChange>();
+        await foreach (var change in processor.SendTurnAsync(
+            client, new ChatMessage(ChatRole.User, "Respond with JSON"), "Respond with JSON",
+            null, streaming: false, structuredJson: true))
+            events.Add(change);
+
+        var formatted = Assert.Single(events.OfType<TranscriptChange.EntryAdded>(), change =>
+            change is { EntryKind: TranscriptEntryKind.Assistant, Label: "Structured JSON" }).Text;
+        Assert.True(JsonNode.DeepEquals(JsonNode.Parse(json), JsonNode.Parse(formatted)));
+        if (json[0] is '{' or '[')
+            Assert.Contains('\n', formatted);
     }
 
     [Fact]
