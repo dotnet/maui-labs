@@ -85,7 +85,7 @@ public sealed class WindowsAIImageGenerator : IImageGenerator
 		var originalImages = request.OriginalImages?.ToList();
 		if (originalImages is { Count: > 1 })
 			throw new NotSupportedException(
-				"Windows image generation accepts at most one source image. Multiple images cannot be interpreted as a mask without an explicit mask input.");
+				"Windows AI image generation accepts at most one source image. Multiple images cannot be interpreted as a mask without an explicit mask input.");
 
 		cancellationToken.ThrowIfCancellationRequested();
 		var generator = await _generatorTask.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -171,7 +171,7 @@ public sealed class WindowsAIImageGenerator : IImageGenerator
 			0 => generator.GenerateImageFromTextPrompt(prompt, options),
 			1 => generator.GenerateImageFromImageBuffer(sources[0], prompt, options),
 			_ => throw new NotSupportedException(
-				"Windows image generation accepts at most one source image.")
+				"Windows AI image generation accepts at most one source image.")
 		};
 
 	private static async Task<IReadOnlyList<ImageBuffer>> DecodeSourceImagesAsync(IEnumerable<AIContent>? originalImages)
@@ -242,11 +242,11 @@ public sealed class WindowsAIImageGenerator : IImageGenerator
 		// The model returns raw pixels, so there is no hosted URI to hand back.
 		if (options.ResponseFormat is ImageGenerationResponseFormat.Uri)
 			throw new NotSupportedException(
-				"Windows image generation runs on-device and cannot return hosted image URIs.");
+				"Windows AI image generation runs on-device and cannot return hosted image URIs.");
 
 		// GenerateImageFromTextPrompt has no size parameter — the model picks the output size.
 		if (options.ImageSize is not null)
 			throw new NotSupportedException(
-				"Windows image generation does not support a requested image size.");
+				"Windows AI image generation does not support a requested image size.");
 	}
 }
