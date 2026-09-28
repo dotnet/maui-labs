@@ -7,7 +7,7 @@ namespace Microsoft.Maui.AI.Chat.Tests;
 public sealed class PlaygroundResponseTests
 {
     [Fact]
-    public void JsonSchema_DescribesFieldsAndConstrainsOnlySentiment()
+    public void JsonSchema_RequiresEveryFieldAndConstrainsOnlySentiment()
     {
         var format = Assert.IsType<ChatResponseFormatJson>(
             ChatResponseFormat.ForJsonSchema<PlaygroundResponse>(PlaygroundJsonContext.Default.Options));
@@ -16,6 +16,8 @@ public sealed class PlaygroundResponseTests
 
         Assert.Equal(new[] { "summary", "keyPoints", "category", "sentiment" },
             properties.EnumerateObject().Select(property => property.Name));
+        Assert.Equal(new[] { "summary", "keyPoints", "category", "sentiment" },
+            schema.GetProperty("required").EnumerateArray().Select(value => value.GetString()));
         foreach (var name in new[] { "summary", "keyPoints", "category", "sentiment" })
             Assert.False(string.IsNullOrWhiteSpace(properties.GetProperty(name).GetProperty("description").GetString()));
 
@@ -41,5 +43,14 @@ public sealed class PlaygroundResponseTests
         using var document = JsonDocument.Parse(json);
         Assert.Equal("Creative", document.RootElement.GetProperty("category").GetString());
         Assert.Equal("Positive", document.RootElement.GetProperty("sentiment").GetString());
+    }
+
+    [Fact]
+    public void JsonResponse_MissingRequiredFields_Throws()
+    {
+        const string json = """{"summary":"Done","sentiment":"Neutral"}""";
+
+        Assert.Throws<JsonException>(() =>
+            JsonSerializer.Deserialize(json, PlaygroundJsonContext.Default.PlaygroundResponse));
     }
 }

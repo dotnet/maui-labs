@@ -69,6 +69,9 @@ text may leave the device and incur charges.
   single-response modes. The multiline prompt uses Enter/Return for a new line;
   select **Send** to submit it. Try schema-constrained JSON output with a
   summary, key points, a free-form category, and a constrained sentiment.
+  The generated schema requires all four fields, though key points may be
+  empty. Streaming displays partial JSON only if the provider reports
+  incremental progress; a buffered response appears when it completes.
   Apple and Azure support optional tools; Azure can accept images and create them through
   a separately configured image-generation tool. Windows Chat supports text
   and JSON, but not tool calling or image input.

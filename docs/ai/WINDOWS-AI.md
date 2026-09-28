@@ -50,9 +50,13 @@ closes object schemas with declared properties (`additionalProperties: false`)
 to prevent valid-but-unexpected property names from leaving requested fields
 empty. A JSON response format without a schema does not use constrained
 decoding. Streaming uses native progress when provided and emits a final
-response when only a completed result is available. A prompt exceeding the
-native context window raises `InvalidOperationException`; the adapter does
-not truncate history or expose a separate context-window exception.
+response when only a completed result is available. The playground marks its
+four JSON response fields as required in the generated schema; property
+descriptions and C# default values alone do not require their presence.
+Selecting streaming does not force the native structured operation to send
+partial JSON, so a result with no progress appears only when complete. A prompt
+exceeding the native context window raises `InvalidOperationException`; the
+adapter does not truncate history or expose a separate context-window exception.
 
 **Not supported:** direct image input, native tool calling, and selecting or
 reporting exact model weights. Image data and nonempty `ChatOptions.Tools`
