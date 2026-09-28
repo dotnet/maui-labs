@@ -7,6 +7,7 @@ on:
       - 'src/AIExtensions/**'
       - 'tests/AIExtensions/**'
       - 'samples/AIExtensions.Sample.ChatPlayground/**'
+      - 'src/AI/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -15,11 +16,11 @@ on:
       - 'NuGet.config'
   pull_request:
     types: [opened, synchronize, reopened, edited]
-    branches: [main]
     paths:
       - 'src/AIExtensions/**'
       - 'tests/AIExtensions/**'
       - 'samples/AIExtensions.Sample.ChatPlayground/**'
+      - 'src/AI/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
