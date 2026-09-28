@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - '.github/workflows/ci-linux-gtk4.yml'
       - 'platforms/Linux.Gtk4/**'
       - 'eng/**'
       - 'Directory.Build.props'
@@ -15,6 +16,7 @@ on:
     types: [opened, synchronize, reopened, edited]
     branches: [main]
     paths:
+      - '.github/workflows/ci-linux-gtk4.yml'
       - 'platforms/Linux.Gtk4/**'
       - 'eng/**'
       - 'Directory.Build.props'
@@ -42,3 +44,15 @@ jobs:
         pkg-config
       run-tests: false
       pack: true
+
+  templates:
+    name: Packed template regression checks
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Pack, generate, and build template variants
+        shell: pwsh
+        run: ./eng/smoke-tests/gtk-template-smoke-test.ps1 -BuildApps

@@ -143,6 +143,12 @@ cd MyApp.Linux
 dotnet run
 ```
 
+The packaged template pins its GTK4 package references to the package version produced
+by the same build. Essentials is enabled by default: the generated `MauiProgram.cs`
+calls `AddLinuxGtk4Essentials()` to register Linux services and static API defaults,
+including `SemanticScreenReader`. Use `--essentials false` to omit both the package
+and registration, or `--blazor true` to include the BlazorWebView package.
+
 ### Option 2: Add to an existing project manually
 
 Add the NuGet package:
@@ -190,6 +196,11 @@ public static class MauiProgram
     }
 }
 ```
+
+If you added the optional Essentials package, also import
+`Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Hosting` and call
+`builder.AddLinuxGtk4Essentials()` before `builder.Build()`. Adding the package
+alone does not replace MAUI's portable Essentials implementations.
 
 ## XAML Support
 
@@ -280,6 +291,20 @@ When enabled, the sample project (`samples/Linux.Gtk4.Sample`) conditionally ref
 ```
 
 ## Building from Source
+
+From the repository root, run the template regression checks with PowerShell 7:
+
+```powershell
+pwsh -File eng/smoke-tests/gtk-template-smoke-test.ps1 -BuildApps
+```
+
+This packs the templates with default and overridden package versions, generates
+the default app and all Essentials/Blazor option combinations in isolated template
+hives, and checks their references and registration. `-BuildApps` also packs the
+backend packages, restores/builds the default-version apps, and checks the
+`SemanticScreenReader` DI and static defaults without loading native GTK.
+Omit `-BuildApps` for template-only checks. GTK window rendering and speech output
+still require Linux runtime validation.
 
 ```bash
 git clone https://github.com/dotnet/maui-labs.git
