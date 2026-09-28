@@ -1,4 +1,6 @@
+using Microsoft.Maui.Controls.Hosting.WPF;
 using Microsoft.Maui.Hosting;
+using Microsoft.Maui.Platforms.Windows.WPF.Essentials;
 
 namespace MauiWpfApp;
 
@@ -8,7 +10,8 @@ public static class MauiProgram
     {
         var builder = MauiApp.CreateBuilder();
         builder
-            .UseMauiApp<App>();
+            .UseMauiAppWPF<App>()
+            .UseWPFEssentials();
 
         return builder.Build();
     }

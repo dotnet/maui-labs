@@ -43,83 +43,19 @@ dotnet run
 
 ### Option 2: Add to an existing project manually
 
-#### 1. Create the project
+Follow the [getting-started guide](docs/getting-started.md#using-the-nuget-package-directly)
+for package references and the code-only entry point. Use a `MauiWPFApplication`
+host separate from your MAUI `Application`, with `UseMauiAppWPF<App>()` and
+`UseWPFEssentials()`.
 
-```xml
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
-    <OutputType>WinExe</OutputType>
-    <UseMaui>true</UseMaui>
-    <UseWPF>true</UseWPF>
-    <EnableDefaultXamlItems>false</EnableDefaultXamlItems>
-  </PropertyGroup>
+The packed template selects backend and Essentials packages from its own release
+and explicitly references the backend's MAUI Controls version. Use full release
+versions when configuring references manually: `0.1.0-preview` selects the oldest
+matching preview, not the latest.
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.31" />
-    <PackageReference Include="Microsoft.Maui.Platforms.Windows.WPF" Version="*" />
-    <PackageReference Include="Microsoft.Maui.Platforms.Windows.WPF.Essentials" Version="*" />
-  </ItemGroup>
-</Project>
-```
-
-#### 2. App.xaml
-
-```xml
-<Microsoft.Maui.Platforms.Windows.WPF:MauiWPFApplication
-    x:Class="MyApp.App"
-    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:Microsoft.Maui.Platforms.Windows.WPF="clr-namespace:Microsoft.Maui.Platform.WPF;assembly=Microsoft.Maui.Platforms.Windows.WPF">
-</Microsoft.Maui.Platforms.Windows.WPF:MauiWPFApplication>
-```
-
-#### 3. App.xaml.cs
-
-```csharp
-using Microsoft.Maui.Platform.WPF;
-
-namespace MyApp;
-
-public partial class App : MauiWPFApplication
-{
-    protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
-}
-```
-
-#### 4. MauiProgram.cs
-
-```csharp
-using Microsoft.Maui.Platform.WPF.Hosting;
-using Microsoft.Maui.Essentials.WPF;
-
-public static class MauiProgram
-{
-    public static MauiApp CreateMauiApp()
-    {
-        var builder = MauiApp.CreateBuilder();
-        builder
-            .UseMauiAppWPF<App>()
-            .UseWPFEssentials()
-            .ConfigureFonts(fonts =>
-            {
-                fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
-            });
-
-        return builder.Build();
-    }
-}
-```
-
-#### 5. App class
-
-```csharp
-public class App : Application
-{
-    protected override Window CreateWindow(IActivationState? activationState)
-        => new Window(new MainPage());
-}
-```
+For template development, run `eng\smoke-tests\wpf-template-smoke-test.ps1` on Windows.
+It packs, generates, restores, builds, and launches the template using an isolated
+template hive. See [validation details](docs/getting-started.md#validating-template-changes).
 
 ## Samples
 
