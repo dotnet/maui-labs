@@ -83,8 +83,8 @@
              Link="Documents\Services\DescribedDocumentExtractionClient.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\DocumentRawJson.cs"
              Link="Documents\Services\DocumentRawJson.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\FoundryMistralOcrClient.cs"
-             Link="Documents\Services\FoundryMistralOcrClient.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\FoundryMistralDocumentExtractionClient.cs"
+             Link="Documents\Services\FoundryMistralDocumentExtractionClient.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\FoundryModelDocumentExtractionClient.cs"
              Link="Documents\Services\FoundryModelDocumentExtractionClient.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\ViewModels\DocumentSettingsViewModel.cs"

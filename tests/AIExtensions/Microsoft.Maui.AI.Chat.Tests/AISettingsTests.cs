@@ -11,14 +11,12 @@ public sealed class AISettingsTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["AI:Endpoint"] = "https://example.test/openai/v1/",
+                ["AI:Endpoint"] = "https://resource.openai.azure.com/openai/v1/",
                 ["AI:ApiKey"] = "test-key",
                 ["AI:DeploymentName"] = "chat",
                 ["AI:ImageDeploymentName"] = "image",
                 ["AI:EmbeddingDeploymentName"] = "embedding",
-                ["AI:DocumentDeploymentName"] = "mistral-ocr-4-0",
-                ["AI:FoundryEndpoint"] = "https://foundry.example.test/",
-                ["AI:FoundryApiKey"] = "foundry-key"
+                ["AI:DocumentDeploymentName"] = "mistral-ocr-4-0"
             })
             .Build();
 
@@ -26,27 +24,38 @@ public sealed class AISettingsTests
         configuration.GetSection(AISettings.SectionName).Bind(settings);
         settings.Validate();
 
-        Assert.Equal(new Uri("https://example.test/openai/v1/"), settings.Endpoint);
+        Assert.Equal(new Uri("https://resource.openai.azure.com/openai/v1/"), settings.Endpoint);
         Assert.Equal("test-key", settings.ApiKey);
         Assert.Equal("chat", settings.DeploymentName);
         Assert.Equal("image", settings.ImageDeploymentName);
         Assert.Equal("embedding", settings.EmbeddingDeploymentName);
         Assert.Equal("mistral-ocr-4-0", settings.DocumentDeploymentName);
-        Assert.Equal(new Uri("https://foundry.example.test/"), settings.FoundryEndpoint);
-        Assert.Equal("foundry-key", settings.FoundryApiKey);
+        Assert.Equal(new Uri("https://resource.services.ai.azure.com/"), settings.GetFoundryResourceEndpoint());
     }
 
     [Fact]
-    public void Validate_DocumentDeploymentWithFoundryCredentials_DoesNotRequireOpenAICredentials()
+    public void Validate_DocumentDeploymentUsesSharedAzureCredentials()
     {
         var settings = new AISettings
         {
             DocumentDeploymentName = "mistral-ocr-4-0",
-            FoundryEndpoint = new Uri("https://foundry.example.test/"),
-            FoundryApiKey = "foundry-key"
+            Endpoint = new Uri("https://resource.openai.azure.com/openai/v1/"),
+            ApiKey = "test-key"
         };
 
         settings.Validate();
+        Assert.Equal(new Uri("https://resource.services.ai.azure.com/"), settings.GetFoundryResourceEndpoint());
+    }
+
+    [Fact]
+    public void GetFoundryResourceEndpoint_FoundryHost_StripsOpenAiPath()
+    {
+        var settings = new AISettings
+        {
+            Endpoint = new Uri("https://resource.services.ai.azure.com/openai/v1/")
+        };
+
+        Assert.Equal(new Uri("https://resource.services.ai.azure.com/"), settings.GetFoundryResourceEndpoint());
     }
 
     [Fact]
@@ -95,51 +104,42 @@ public sealed class AISettingsTests
     }
 
     [Fact]
-    public void Validate_FoundryEndpointWithoutKey_Throws()
+    public void Validate_DocumentDeploymentWithoutEndpoint_Throws()
     {
         var settings = new AISettings
         {
-            FoundryEndpoint = new Uri("https://foundry.example.test/")
+            DocumentDeploymentName = "mistral-ocr-4-0",
+            ApiKey = "test-key"
         };
 
         var exception = Assert.Throws<InvalidOperationException>(settings.Validate);
-        Assert.Contains("AI:FoundryApiKey", exception.Message);
+        Assert.Contains("AI:Endpoint", exception.Message);
     }
 
     [Fact]
-    public void Validate_FoundryKeyWithoutEndpoint_Throws()
+    public void Validate_DocumentDeploymentWithoutApiKey_Throws()
     {
         var settings = new AISettings
         {
-            FoundryApiKey = "foundry-key"
+            DocumentDeploymentName = "mistral-ocr-4-0",
+            Endpoint = new Uri("https://resource.openai.azure.com/openai/v1/")
         };
 
         var exception = Assert.Throws<InvalidOperationException>(settings.Validate);
-        Assert.Contains("AI:FoundryEndpoint", exception.Message);
+        Assert.Contains("AI:ApiKey", exception.Message);
     }
 
     [Fact]
-    public void Validate_DocumentDeploymentWithoutFoundryCredentials_Throws()
+    public void Validate_DocumentDeploymentWithUnsupportedHost_Throws()
     {
         var settings = new AISettings
         {
-            DocumentDeploymentName = "mistral-ocr-4-0"
+            DocumentDeploymentName = "mistral-ocr-4-0",
+            Endpoint = new Uri("https://example.test/openai/v1/"),
+            ApiKey = "test-key"
         };
 
         var exception = Assert.Throws<InvalidOperationException>(settings.Validate);
-        Assert.Contains("AI:FoundryEndpoint", exception.Message);
-    }
-
-    [Fact]
-    public void Validate_FoundryCredentialsWithoutDocumentDeployment_Throws()
-    {
-        var settings = new AISettings
-        {
-            FoundryEndpoint = new Uri("https://foundry.example.test/"),
-            FoundryApiKey = "foundry-key"
-        };
-
-        var exception = Assert.Throws<InvalidOperationException>(settings.Validate);
-        Assert.Contains("AI:DocumentDeploymentName", exception.Message);
+        Assert.Contains("Azure OpenAI or Microsoft Foundry", exception.Message);
     }
 }

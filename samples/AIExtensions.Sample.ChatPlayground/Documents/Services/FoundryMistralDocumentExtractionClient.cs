@@ -8,30 +8,27 @@ using ExtractedDocumentPage = Microsoft.Extensions.DocumentExtraction.DocumentPa
 
 namespace AIExtensions.Sample.ChatPlayground;
 
-/// <summary>Calls a Mistral OCR deployment hosted by a Microsoft Foundry resource.</summary>
-internal sealed class FoundryMistralOcrClient : IDocumentExtractionClient
+/// <summary>Calls a Mistral document extraction model deployed to a Microsoft Foundry resource.</summary>
+internal sealed class FoundryMistralDocumentExtractionClient : IDocumentExtractionClient
 {
     private const int MaximumDocumentBytes = 30 * 1024 * 1024;
+    private static readonly Uri s_ocrPath = new("providers/mistral/azure/ocr", UriKind.Relative);
+
     private readonly HttpClient _httpClient;
-    private readonly Uri _endpoint;
-    private readonly string _apiKey;
     private readonly string _defaultModel;
     private readonly bool _disposeHttpClient;
 
-    public FoundryMistralOcrClient(
+    public FoundryMistralDocumentExtractionClient(
         HttpClient httpClient,
-        Uri endpoint,
-        string apiKey,
         string defaultModel = "mistral-ocr-4-0",
         bool disposeHttpClient = false)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
-        _endpoint = NormalizeEndpoint(endpoint ?? throw new ArgumentNullException(nameof(endpoint)));
-        _apiKey = string.IsNullOrWhiteSpace(apiKey)
-            ? throw new ArgumentException("A Foundry API key is required.", nameof(apiKey))
-            : apiKey;
+        if (_httpClient.BaseAddress is null)
+            throw new ArgumentException("The Foundry HttpClient must have a BaseAddress.", nameof(httpClient));
+
         _defaultModel = string.IsNullOrWhiteSpace(defaultModel)
-            ? throw new ArgumentException("A Mistral OCR model ID is required.", nameof(defaultModel))
+            ? throw new ArgumentException("A Mistral document model ID is required.", nameof(defaultModel))
             : defaultModel;
         _disposeHttpClient = disposeHttpClient;
     }
@@ -58,14 +55,13 @@ internal sealed class FoundryMistralOcrClient : IDocumentExtractionClient
 
         var bytes = await ReadAllBytesAsync(document, cancellationToken).ConfigureAwait(false);
         if (bytes.Length > MaximumDocumentBytes)
-            throw new InvalidOperationException("Mistral OCR accepts documents up to 30 MB.");
+            throw new InvalidOperationException("Mistral document extraction accepts documents up to 30 MB.");
 
         var model = string.IsNullOrWhiteSpace(options?.ModelId) ? _defaultModel : options.ModelId;
         var includeImages = GetOption(options, "mistral.includeImages");
 
         // The Foundry Mistral route accepts the complete document as an inline data URL.
-        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(_endpoint, "providers/mistral/azure/ocr"));
-        request.Headers.Add("api-key", _apiKey);
+        using var request = new HttpRequestMessage(HttpMethod.Post, s_ocrPath);
         request.Content = CreateRequestContent(model, mediaType, bytes, includeImages);
 
         using var response = await SendWithRetryAsync(request, cancellationToken).ConfigureAwait(false);
@@ -78,7 +74,7 @@ internal sealed class FoundryMistralOcrClient : IDocumentExtractionClient
         var pages = root.GetProperty("pages").EnumerateArray().ToArray();
 
         if (pages.Length == 0)
-            throw new InvalidDataException("Mistral OCR did not return any pages.");
+            throw new InvalidDataException("The Mistral document model did not return any pages.");
 
         var usage = GetUsage(root, pages.Length);
 
@@ -114,8 +110,8 @@ internal sealed class FoundryMistralOcrClient : IDocumentExtractionClient
         if (serviceType == typeof(DocumentExtractionClientMetadata))
         {
             return new DocumentExtractionClientMetadata(
-                "foundry.mistral-ocr",
-                _endpoint,
+                "foundry.mistral-document",
+                _httpClient.BaseAddress,
                 _defaultModel);
         }
         return null;
@@ -138,8 +134,7 @@ internal sealed class FoundryMistralOcrClient : IDocumentExtractionClient
         // Serverless deployments can return a transient 503 while capacity starts.
         for (var attempt = 1; attempt <= 5; attempt++)
         {
-            using var retry = new HttpRequestMessage(HttpMethod.Post, new Uri(_endpoint, "providers/mistral/azure/ocr"));
-            retry.Headers.Add("api-key", _apiKey);
+            using var retry = new HttpRequestMessage(HttpMethod.Post, s_ocrPath);
             retry.Content = new ByteArrayContent(requestBytes);
             retry.Content.Headers.ContentType = contentType;
 
@@ -153,7 +148,7 @@ internal sealed class FoundryMistralOcrClient : IDocumentExtractionClient
             await Task.Delay(TimeSpan.FromSeconds(attempt * 3), cancellationToken).ConfigureAwait(false);
         }
 
-        throw new InvalidOperationException("Mistral OCR retry loop exited unexpectedly.");
+        throw new InvalidOperationException("The Mistral document retry loop exited unexpectedly.");
     }
 
     private static HttpContent CreateRequestContent(
@@ -466,7 +461,7 @@ internal sealed class FoundryMistralOcrClient : IDocumentExtractionClient
         {
         }
         throw new HttpRequestException(
-            $"Mistral OCR returned {(int)response.StatusCode} ({response.ReasonPhrase}): " +
+            $"Mistral document extraction returned {(int)response.StatusCode} ({response.ReasonPhrase}): " +
             (message ?? body));
     }
 
@@ -484,11 +479,6 @@ internal sealed class FoundryMistralOcrClient : IDocumentExtractionClient
         string key) =>
         options?.AdditionalProperties?.TryGetValue(key, out var value) == true &&
         value is true;
-
-    private static Uri NormalizeEndpoint(Uri endpoint) =>
-        endpoint.AbsoluteUri.EndsWith("/", StringComparison.Ordinal)
-            ? endpoint
-            : new Uri(endpoint.AbsoluteUri + "/", UriKind.Absolute);
 
     private static string? GetString(JsonElement element, string name) =>
         element.TryGetProperty(name, out var value) &&

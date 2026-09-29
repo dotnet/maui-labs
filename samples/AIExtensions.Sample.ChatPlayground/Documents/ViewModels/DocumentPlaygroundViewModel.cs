@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Configuration;
@@ -61,7 +60,6 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
 
     public string InspectionTitle => SelectedInspectionMode switch
     {
-        DocumentInspectionMode.Client => "Document client",
         DocumentInspectionMode.NormalizedJson => "Normalized document JSON",
         DocumentInspectionMode.RawJson => $"Raw {Settings.ClientName} JSON",
         DocumentInspectionMode.SelectedNodeJson => SelectedNode is { } node ? $"Raw JSON - {node.Title}" : "Selected node JSON",
@@ -260,7 +258,6 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         {
             return SelectedInspectionMode switch
             {
-                DocumentInspectionMode.Client => GetClientDetails(),
                 DocumentInspectionMode.NormalizedJson => _result is { } normalizedResult
                     ? DocumentRawJson.SerializeNormalized(normalizedResult)
                     : "Extract a document to inspect normalized JSON.",
@@ -277,27 +274,6 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         {
             return $"Could not inspect the document: {exception.Message}";
         }
-    }
-
-    private string GetClientDetails()
-    {
-        if (Settings.SelectedClient is not { } client || Settings.SelectedDescriptor is not { } descriptor)
-            return "No document client is registered.";
-
-        var metadata = client.GetService<DocumentExtractionClientMetadata>();
-        var text = new StringBuilder()
-            .AppendLine(descriptor.Name)
-            .AppendLine()
-            .AppendLine(descriptor.Description);
-
-        if (metadata?.ProviderName is { Length: > 0 } providerName)
-            text.AppendLine().Append("Provider: ").AppendLine(providerName);
-        if (metadata?.DefaultModelId is { Length: > 0 } modelId)
-            text.Append("Model: ").AppendLine(modelId);
-        if (metadata?.ProviderUri is { } providerUri)
-            text.Append("Endpoint: ").AppendLine(providerUri.ToString());
-
-        return text.ToString().TrimEnd();
     }
 
     private static async Task<DocumentExtractionResult> ExtractAsync(
@@ -425,7 +401,6 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
 
 public enum DocumentInspectionMode
 {
-    Client,
     NormalizedJson,
     RawJson,
     SelectedNodeJson,

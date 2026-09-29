@@ -31,44 +31,30 @@
                 </BindableLayout.ItemTemplate>
             </VerticalStackLayout>
 
-            <BoxView HeightRequest="1"
-                     Color="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}" />
-
-            <VerticalStackLayout Spacing="10"
+            <VerticalStackLayout Spacing="12"
+                                 IsVisible="{Binding HasRequestOptions}"
                                  IsEnabled="{Binding CanEditOptions}">
+                <BoxView HeightRequest="1"
+                         Color="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}" />
                 <Label Text="REQUEST OPTIONS" Style="{StaticResource SectionHeading}" />
-                <Grid ColumnDefinitions="Auto,*,Auto"
-                      RowDefinitions="Auto,Auto,Auto"
-                      ColumnSpacing="4"
-                      RowSpacing="8">
-                    <CheckBox IsChecked="{Binding DetectBarcodes}"
-                              WidthRequest="{OnPlatform 44, MacCatalyst=32, WinUI=32}"
-                              AutomationId="DocumentDetectBarcodesCheckBox" />
-                    <Label Grid.Column="1" Text="Detect barcodes"
-                           VerticalOptions="Center" />
-                    <local:InfoTip Grid.Column="2"
-                                   Text="Ask providers that support barcode recognition to return barcode elements." />
 
-                    <CheckBox Grid.Row="1"
-                              IsChecked="{Binding AutomaticallyDetectLanguage}"
-                              WidthRequest="{OnPlatform 44, MacCatalyst=32, WinUI=32}"
-                              AutomationId="DocumentAutomaticLanguageCheckBox" />
-                    <Label Grid.Row="1" Grid.Column="1"
-                           Text="Detect language"
-                           VerticalOptions="Center" />
-                    <local:InfoTip Grid.Row="1" Grid.Column="2"
-                                   Text="Let providers identify recognized languages when supported." />
-
-                    <CheckBox Grid.Row="2"
-                              IsChecked="{Binding IncludeImages}"
-                              WidthRequest="{OnPlatform 44, MacCatalyst=32, WinUI=32}"
-                              AutomationId="DocumentIncludeImagesCheckBox" />
-                    <Label Grid.Row="2" Grid.Column="1"
-                           Text="Include figure images"
-                           VerticalOptions="Center" />
-                    <local:InfoTip Grid.Row="2" Grid.Column="2"
-                                   Text="Request extracted figure bytes when the provider can return them. This can substantially increase response size." />
-                </Grid>
+                <VerticalStackLayout Spacing="8"
+                                     BindableLayout.ItemsSource="{Binding RequestOptions}">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="local:DocumentBooleanOption">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="4">
+                                <CheckBox IsChecked="{Binding Value}"
+                                          WidthRequest="{OnPlatform 44, MacCatalyst=32, WinUI=32}"
+                                          AutomationId="{Binding AutomationId}" />
+                                <Label Grid.Column="1"
+                                       Text="{Binding Name}"
+                                       VerticalOptions="Center" />
+                                <local:InfoTip Grid.Column="2"
+                                               Text="{Binding Description}" />
+                            </Grid>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
             </VerticalStackLayout>
         </VerticalStackLayout>
     </ScrollView>
