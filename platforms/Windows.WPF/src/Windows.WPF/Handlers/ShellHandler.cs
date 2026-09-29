@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Handlers;
 using Microsoft.Maui.Platform;
@@ -962,21 +963,13 @@ namespace Microsoft.Maui.Handlers.WPF
 					if (section?.Stack?.Count > 1)
 						currentPage = section.Stack[section.Stack.Count - 1];
 
-					// Fall back to ShellContent template
+					// Let Shell cache and parent the selected page so navigation and
+					// visual-tree inspection see the same instance that WPF displays.
 					if (currentPage == null)
 					{
 						var content = section?.CurrentItem;
 						if (content != null)
-						{
-							try { currentPage = ((IShellContentController)content).Page; }
-							catch { }
-
-							if (currentPage == null)
-							{
-								currentPage = content.ContentTemplate?.CreateContent() as Microsoft.Maui.Controls.Page
-									?? content.Content as Microsoft.Maui.Controls.Page;
-							}
-						}
+							currentPage = ((IShellContentController)content).GetOrCreateContent();
 					}
 				}
 
@@ -993,7 +986,11 @@ namespace Microsoft.Maui.Handlers.WPF
 				PlatformView.UpdateBackButtonRegistration(currentPage);
 				PlatformView.ShowPage(platformView as FrameworkElement, title, hasNavStack);
 			}
-			catch { }
+			catch (Exception ex)
+			{
+				MauiContext.Services.GetService<ILogger<ShellHandler>>()?
+					.LogError(ex, "Showing current Shell page failed.");
+			}
 		}
 
 		async void OnShellItemSelected(ShellItem item)
