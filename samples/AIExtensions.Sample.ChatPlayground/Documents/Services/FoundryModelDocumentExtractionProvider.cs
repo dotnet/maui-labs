@@ -10,8 +10,8 @@ internal sealed class FoundryModelDocumentExtractionProvider(
 {
     public DocumentProviderDescriptor Descriptor { get; } = new(
         "foundry-model",
-        $"Foundry model ({deploymentName})",
-        "Cloud semantic extraction through a deployed vision-capable model. PDFs and images are sent to the model. Text and tables are structured, but provider-grade polygons and confidence are unavailable.",
+        $"Vision chat model ({deploymentName})",
+        "Uses the app's existing vision-capable chat deployment for general semantic document extraction. Provider-grade polygons and confidence are unavailable.",
         IsAvailable: true,
         SendsDocumentOffDevice: true);
 
@@ -28,14 +28,14 @@ internal sealed class FoundryModelDocumentExtractionProvider(
 
     public string GetCapabilitiesSummary() =>
         $"""
-        Deployed Microsoft Foundry model
+        Vision-capable chat deployment
 
         Deployment: {deploymentName}
         Input: PDF, PNG, or JPEG through the Responses API
         Output: structured page text, semantic blocks, and tables
         Geometry: unavailable
 
-        The model receives the full document. For PDF input, vision-capable Responses models receive both extracted text and page images. Results are probabilistic and may vary between requests.
+        The model receives the full document. For PDF input, vision-capable Responses models receive both extracted text and page images. Results are probabilistic and may vary between requests. This client is selected explicitly and never invoked as an automatic fallback for another provider.
         """;
 
     public void Dispose() => chatClient.Dispose();

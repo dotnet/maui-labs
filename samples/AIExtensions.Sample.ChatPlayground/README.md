@@ -46,20 +46,27 @@ dotnet user-secrets set "AI:ApiKey" "<key>" --project samples\AIExtensions.Sampl
 dotnet user-secrets set "AI:DeploymentName" "<chat-deployment>" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
 dotnet user-secrets set "AI:ImageDeploymentName" "<image-deployment>" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
 dotnet user-secrets set "AI:EmbeddingDeploymentName" "<embedding-deployment>" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
-dotnet user-secrets set "AI:DocumentModelDeploymentName" "<vision-capable-model-deployment>" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
+dotnet user-secrets set "AI:DocumentDeploymentName" "mistral-ocr-4-0" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
 dotnet user-secrets set "AI:FoundryEndpoint" "https://<foundry-resource>.services.ai.azure.com/" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
 dotnet user-secrets set "AI:FoundryApiKey" "<foundry-resource-key>" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
-dotnet user-secrets set "AI:MistralDocumentModelId" "mistral-ocr-4-0" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
 ```
 
 Only set the deployment names you intend to use: `AI:DeploymentName` enables
 Chat, `AI:ImageDeploymentName` enables Images and Chat's image-generation tool,
 `AI:EmbeddingDeploymentName` enables Embeddings, and
-`AI:DocumentModelDeploymentName` adds a vision-capable Foundry model to the
-Documents provider picker. The endpoint and key are
-required only when at least one Azure deployment name is configured.
-Mistral OCR uses the Foundry resource endpoint and key and defaults to
-`mistral-ocr-4-0`; it does not use the Azure OpenAI-compatible endpoint.
+`AI:DocumentDeploymentName` identifies the specialized Mistral OCR document
+model deployed in the Foundry resource, for example `mistral-ocr-4-0`.
+Documents also exposes the existing `AI:DeploymentName` as a separate general
+vision/chat provider when that deployment supports image input; only
+vision-capable Responses models can accept PDF files. The Azure OpenAI endpoint
+and key are required when at least one Chat, Images, or Embeddings deployment
+name is configured. The Foundry resource endpoint and key are required with
+`AI:DocumentDeploymentName`.
+
+Both cloud Documents clients are registered independently when configured so
+they can be selected and compared in the provider picker. Providers never
+silently retry through one another or resend a failed document to another
+model.
 User secrets are **embedded in Debug builds** for device testing: never
 distribute those builds or commit keys. Azure prompts, images, and indexed
 text may leave the device and incur charges. Documents leave the device when
@@ -136,6 +143,6 @@ with official package references before this sample or provider ships.
 |---|---|
 | Apple Vision | Local/private document-native baseline |
 | Mistral OCR 4 | Specialized document-native model deployed in the Foundry resource |
-| Vision-capable Foundry model | General multimodal/semantic extraction baseline |
+| Vision-capable Foundry model | General multimodal/semantic extraction baseline; reuses the Chat deployment when no document-specific override is set |
 | Azure Document Intelligence | Valuable deterministic service comparison, but excluded from the active demo to avoid requiring a separate service resource |
 | Content Understanding | Valuable analyzer and typed-field comparison, but excluded for now because it demonstrates an analyzer workflow rather than a deployed model |

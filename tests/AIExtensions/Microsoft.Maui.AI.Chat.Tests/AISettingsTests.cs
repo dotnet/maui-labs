@@ -16,10 +16,9 @@ public sealed class AISettingsTests
                 ["AI:DeploymentName"] = "chat",
                 ["AI:ImageDeploymentName"] = "image",
                 ["AI:EmbeddingDeploymentName"] = "embedding",
-                ["AI:DocumentModelDeploymentName"] = "vision",
+                ["AI:DocumentDeploymentName"] = "mistral-ocr-4-0",
                 ["AI:FoundryEndpoint"] = "https://foundry.example.test/",
-                ["AI:FoundryApiKey"] = "foundry-key",
-                ["AI:MistralDocumentModelId"] = "mistral-ocr-4-0"
+                ["AI:FoundryApiKey"] = "foundry-key"
             })
             .Build();
 
@@ -32,10 +31,22 @@ public sealed class AISettingsTests
         Assert.Equal("chat", settings.DeploymentName);
         Assert.Equal("image", settings.ImageDeploymentName);
         Assert.Equal("embedding", settings.EmbeddingDeploymentName);
-        Assert.Equal("vision", settings.DocumentModelDeploymentName);
+        Assert.Equal("mistral-ocr-4-0", settings.DocumentDeploymentName);
         Assert.Equal(new Uri("https://foundry.example.test/"), settings.FoundryEndpoint);
         Assert.Equal("foundry-key", settings.FoundryApiKey);
-        Assert.Equal("mistral-ocr-4-0", settings.MistralDocumentModelId);
+    }
+
+    [Fact]
+    public void Validate_DocumentDeploymentWithFoundryCredentials_DoesNotRequireOpenAICredentials()
+    {
+        var settings = new AISettings
+        {
+            DocumentDeploymentName = "mistral-ocr-4-0",
+            FoundryEndpoint = new Uri("https://foundry.example.test/"),
+            FoundryApiKey = "foundry-key"
+        };
+
+        settings.Validate();
     }
 
     [Fact]
@@ -108,14 +119,27 @@ public sealed class AISettingsTests
     }
 
     [Fact]
-    public void Validate_DocumentModelDeploymentWithoutOpenAICredentials_Throws()
+    public void Validate_DocumentDeploymentWithoutFoundryCredentials_Throws()
     {
         var settings = new AISettings
         {
-            DocumentModelDeploymentName = "vision"
+            DocumentDeploymentName = "mistral-ocr-4-0"
         };
 
         var exception = Assert.Throws<InvalidOperationException>(settings.Validate);
-        Assert.Contains("AI:Endpoint", exception.Message);
+        Assert.Contains("AI:FoundryEndpoint", exception.Message);
+    }
+
+    [Fact]
+    public void Validate_FoundryCredentialsWithoutDocumentDeployment_Throws()
+    {
+        var settings = new AISettings
+        {
+            FoundryEndpoint = new Uri("https://foundry.example.test/"),
+            FoundryApiKey = "foundry-key"
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(settings.Validate);
+        Assert.Contains("AI:DocumentDeploymentName", exception.Message);
     }
 }
