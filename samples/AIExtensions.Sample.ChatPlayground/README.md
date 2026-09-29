@@ -64,7 +64,8 @@ name is configured. The Foundry resource endpoint and key are required with
 `AI:DocumentDeploymentName`.
 
 Both cloud Documents clients are registered independently when configured so
-they can be selected and compared in the provider picker. Providers never
+they can be selected and compared through descriptor-backed radio choices.
+Providers never
 silently retry through one another or resend a failed document to another
 model.
 User secrets are **embedded in Debug builds** for device testing: never
@@ -107,12 +108,14 @@ either Foundry provider is selected.
   Both providers return structured pages, text, tables, barcodes, metadata, and
   geometry; Apple additionally exposes its provider-specific list model. Image inputs show
   a polygon overlay, while PDF inputs show every rendered page. Switch the
-  inspector between Images, JSON, or both panes arranged horizontally or
-  vertically. Selecting an overlay region selects and scrolls to its normalized
-  JSON path; selecting a JSON row highlights and scrolls to its page region.
-  Inspect full normalized JSON, bounded raw Apple JSON, and provider
-  capabilities, or cancel a multi-page PDF while PDFKit renders and recognizes
-  pages sequentially. The selected provider description clearly states whether
+  synchronized two-pane inspector between page previews and the structured
+  result. It stays side-by-side on wider windows and stacks automatically on
+  narrow layouts. Selecting an overlay region selects and scrolls to its
+  normalized JSON path; selecting a result row highlights and scrolls to its
+  page region. Use the header **Inspect** popup to switch between capabilities,
+  normalized JSON, provider raw JSON, and the selected node's raw JSON without
+  leaving the page. Cancel a multi-page PDF while PDFKit renders and recognizes
+  pages sequentially. The selected client description clearly states whether
   document bytes remain local or are sent to Azure.
 
 The app saves one Chat recording locally for replay. Use the Chat **More**

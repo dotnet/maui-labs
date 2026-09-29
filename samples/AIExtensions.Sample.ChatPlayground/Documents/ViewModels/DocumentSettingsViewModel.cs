@@ -13,15 +13,24 @@ public sealed partial class DocumentSettingsViewModel : ObservableObject
     {
         _input = input;
         Providers = providers
-            .Select(static provider => new DocumentProviderOption(provider, provider.Descriptor))
+            .Select(static (provider, index) =>
+                new DocumentProviderOption(provider, provider.Descriptor, index))
             .ToArray();
+        if (Providers.Select(static option => option.Descriptor.Id)
+            .Distinct(StringComparer.Ordinal).Count() != Providers.Count)
+        {
+            throw new ArgumentException(
+                "Document providers need distinct IDs.",
+                nameof(providers));
+        }
+
         SelectedProvider = Providers.FirstOrDefault(static option => option.Descriptor.IsAvailable)
             ?? Providers.FirstOrDefault();
-        SelectedDocumentDetails = "No document selected.";
-        ResultDetails = "No extraction result.";
     }
 
     public IReadOnlyList<DocumentProviderOption> Providers { get; }
+
+    public DocumentProviderDescriptor? SelectedDescriptor => SelectedProvider?.Descriptor;
 
     public string ProviderName => SelectedProvider?.Descriptor.DisplayName ?? "No provider";
 
@@ -29,6 +38,8 @@ public sealed partial class DocumentSettingsViewModel : ObservableObject
         SelectedProvider?.Descriptor.Description ?? "No document extraction provider is registered.";
 
     public bool IsSupported => SelectedProvider?.Descriptor.IsAvailable == true;
+
+    public bool CanSelectProvider => !IsBusy;
 
     public bool CanScan =>
         SelectedProvider?.Descriptor.Id == "apple-vision" &&
@@ -40,25 +51,18 @@ public sealed partial class DocumentSettingsViewModel : ObservableObject
     public bool SendsDocumentOffDevice =>
         SelectedProvider?.Descriptor.SendsDocumentOffDevice == true;
 
-    public IReadOnlyList<string> DisplayModes { get; } = ["Images", "JSON", "Both"];
-
-    public IReadOnlyList<string> LayoutModes { get; } = ["Horizontal", "Vertical"];
-
     [ObservableProperty] private bool detectBarcodes = true;
     [ObservableProperty] private bool automaticallyDetectLanguage = true;
     [ObservableProperty] private bool includeImages;
     [ObservableProperty] private DocumentProviderOption? selectedProvider;
-    [ObservableProperty] private string selectedDisplayMode = "Both";
-    [ObservableProperty] private string selectedLayoutMode = "Horizontal";
     [ObservableProperty] private bool isBusy;
-    [ObservableProperty] private string selectedDocumentDetails;
-    [ObservableProperty] private string resultDetails;
 
     public DocumentExtractionSettings CreateSettings() =>
         new(DetectBarcodes, AutomaticallyDetectLanguage, IncludeImages);
 
     partial void OnSelectedProviderChanged(DocumentProviderOption? value)
     {
+        OnPropertyChanged(nameof(SelectedDescriptor));
         OnPropertyChanged(nameof(ProviderName));
         OnPropertyChanged(nameof(AvailabilityMessage));
         OnPropertyChanged(nameof(IsSupported));
@@ -67,6 +71,9 @@ public sealed partial class DocumentSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(SendsDocumentOffDevice));
     }
 
-    partial void OnIsBusyChanged(bool value) =>
+    partial void OnIsBusyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanSelectProvider));
         OnPropertyChanged(nameof(CanEditOptions));
+    }
 }
