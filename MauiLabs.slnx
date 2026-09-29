@@ -81,6 +81,9 @@
     <Project Path="platforms/MacOS/src/MacOS.Essentials/MacOS.Essentials.csproj" />
     <Project Path="platforms/MacOS/src/MacOS.BlazorWebView/MacOS.BlazorWebView.csproj" />
   </Folder>
+  <Folder Name="/platforms/Linux.Gtk4/">
+    <Project Path="platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj" />
+  </Folder>
   <Folder Name="/platforms/Windows.WPF/">
     <Project Path="platforms/Windows.WPF/src/Windows.WPF/Windows.WPF.csproj" />
     <Project Path="platforms/Windows.WPF/src/Windows.WPF.Essentials/Windows.WPF.Essentials.csproj" />

@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView" />
+    <InternalsVisibleTo Include="Microsoft.Maui.Platforms.Linux.Gtk4.Tests" />
   </ItemGroup>
 
   <ItemGroup>

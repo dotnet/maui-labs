@@ -95,20 +95,12 @@ public class NavigationPageHandler : GtkViewHandler<IStackNavigationView, Gtk.Bo
 			if (navPage.BarBackgroundColor != null)
 				css += $" background-color: {ToGtkColor(navPage.BarBackgroundColor)};";
 
-			if (navPage.BarTextColor != null && _titleLabel != null)
-			{
-				var titleCss = $"color: {ToGtkColor(navPage.BarTextColor)};";
-				ApplyCss(_titleLabel, titleCss);
-			}
-
-			if (navPage.BarTextColor != null && _backButton != null)
-			{
-				var btnCss = $"color: {ToGtkColor(navPage.BarTextColor)};";
-				ApplyCss(_backButton, btnCss);
-			}
+			var textCss = navPage.BarTextColor != null ? $"color: {ToGtkColor(navPage.BarTextColor)};" : null;
+			UpdateCss(_titleLabel, textCss);
+			UpdateCss(_backButton, textCss);
 		}
 
-		ApplyCss(_navBar, css);
+		UpdateCss(_navBar, css);
 	}
 
 	void OnBackClicked(Gtk.Button sender, EventArgs args)

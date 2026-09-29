@@ -40,5 +40,5 @@ jobs:
         gir1.2-gtk-4.0
         gir1.2-webkit-6.0
         pkg-config
-      run-tests: false
+      run-tests: true
       pack: true
