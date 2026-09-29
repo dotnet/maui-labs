@@ -35,14 +35,15 @@ public sealed class DocumentExtractionRunnerTests
             },
         ]);
         var provider = new TestProvider(client);
-        var runner = new DocumentExtractionRunner(provider);
+        var runner = new DocumentExtractionRunner();
         var progress = new CollectingProgress<DocumentExtractionProgress>();
         var input = new DocumentInput("report.pdf", "application/pdf", [1, 2, 3]);
         var settings = new DocumentExtractionSettings(
             DetectBarcodes: false,
-            AutomaticallyDetectLanguage: true);
+            AutomaticallyDetectLanguage: true,
+            IncludeImages: false);
 
-        var result = await runner.ExtractAsync(input, settings, progress);
+        var result = await runner.ExtractAsync(input, provider, settings, progress);
 
         Assert.Equal([1, 2], result.Pages.Select(static page => page.PageNumber));
         Assert.Equal(["first", "second"], result.Pages.Select(static page => page.Text));
@@ -59,13 +60,14 @@ public sealed class DocumentExtractionRunnerTests
     {
         var provider = new TestProvider(
             new TestDocumentClient([]),
-            new("Unavailable", "No provider is registered.", IsAvailable: false));
-        var runner = new DocumentExtractionRunner(provider);
+            new("unavailable", "Unavailable", "No provider is registered.", IsAvailable: false, SendsDocumentOffDevice: false));
+        var runner = new DocumentExtractionRunner();
 
         var exception = await Assert.ThrowsAsync<NotSupportedException>(() =>
             runner.ExtractAsync(
                 new DocumentInput("page.png", "image/png", [1]),
-                new(true, true)));
+                provider,
+                new(true, true, false)));
 
         Assert.Equal("No provider is registered.", exception.Message);
         Assert.False(provider.ClientCreated);
@@ -82,12 +84,14 @@ public sealed class DocumentExtractionRunnerTests
                 started.TrySetResult();
                 await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
             });
-        var runner = new DocumentExtractionRunner(new TestProvider(client));
+        var provider = new TestProvider(client);
+        var runner = new DocumentExtractionRunner();
         using var cancellation = new CancellationTokenSource();
 
         var extraction = runner.ExtractAsync(
             new DocumentInput("page.png", "image/png", [1]),
-            new(true, true),
+            provider,
+            new(true, true, false),
             cancellationToken: cancellation.Token);
         await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
         cancellation.Cancel();
@@ -106,7 +110,12 @@ public sealed class DocumentExtractionRunnerTests
             DocumentProviderDescriptor? descriptor = null)
         {
             _client = client;
-            Descriptor = descriptor ?? new("Test", "Test provider", IsAvailable: true);
+            Descriptor = descriptor ?? new(
+                "test",
+                "Test",
+                "Test provider",
+                IsAvailable: true,
+                SendsDocumentOffDevice: false);
         }
 
         public DocumentProviderDescriptor Descriptor { get; }

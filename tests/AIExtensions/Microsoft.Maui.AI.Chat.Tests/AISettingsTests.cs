@@ -15,7 +15,11 @@ public sealed class AISettingsTests
                 ["AI:ApiKey"] = "test-key",
                 ["AI:DeploymentName"] = "chat",
                 ["AI:ImageDeploymentName"] = "image",
-                ["AI:EmbeddingDeploymentName"] = "embedding"
+                ["AI:EmbeddingDeploymentName"] = "embedding",
+                ["AI:DocumentModelDeploymentName"] = "vision",
+                ["AI:FoundryEndpoint"] = "https://foundry.example.test/",
+                ["AI:FoundryApiKey"] = "foundry-key",
+                ["AI:MistralDocumentModelId"] = "mistral-ocr-4-0"
             })
             .Build();
 
@@ -28,6 +32,10 @@ public sealed class AISettingsTests
         Assert.Equal("chat", settings.DeploymentName);
         Assert.Equal("image", settings.ImageDeploymentName);
         Assert.Equal("embedding", settings.EmbeddingDeploymentName);
+        Assert.Equal("vision", settings.DocumentModelDeploymentName);
+        Assert.Equal(new Uri("https://foundry.example.test/"), settings.FoundryEndpoint);
+        Assert.Equal("foundry-key", settings.FoundryApiKey);
+        Assert.Equal("mistral-ocr-4-0", settings.MistralDocumentModelId);
     }
 
     [Fact]
@@ -73,5 +81,41 @@ public sealed class AISettingsTests
 
         var exception = Assert.Throws<InvalidOperationException>(settings.Validate);
         Assert.Contains("AI:ApiKey", exception.Message);
+    }
+
+    [Fact]
+    public void Validate_FoundryEndpointWithoutKey_Throws()
+    {
+        var settings = new AISettings
+        {
+            FoundryEndpoint = new Uri("https://foundry.example.test/")
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(settings.Validate);
+        Assert.Contains("AI:FoundryApiKey", exception.Message);
+    }
+
+    [Fact]
+    public void Validate_FoundryKeyWithoutEndpoint_Throws()
+    {
+        var settings = new AISettings
+        {
+            FoundryApiKey = "foundry-key"
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(settings.Validate);
+        Assert.Contains("AI:FoundryEndpoint", exception.Message);
+    }
+
+    [Fact]
+    public void Validate_DocumentModelDeploymentWithoutOpenAICredentials_Throws()
+    {
+        var settings = new AISettings
+        {
+            DocumentModelDeploymentName = "vision"
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(settings.Validate);
+        Assert.Contains("AI:Endpoint", exception.Message);
     }
 }

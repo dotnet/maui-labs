@@ -234,7 +234,9 @@ For live app inspection and host setup, see the
 
 For AI Extensions usage and samples, see [`src/AIExtensions/README.md`](src/AIExtensions/README.md),
 the [cross-platform AI playground](samples/AIExtensions.Sample.ChatPlayground/README.md) for
-chat, embeddings, images, Apple Vision documents, portable recording/replay, and document search,
+chat, embeddings, images, and document comparison across local Apple Vision,
+Foundry Mistral OCR 4, and deployed Foundry multimodal models, plus
+portable recording/replay and document search,
 and the
 [`Garden` sample](samples/AIExtensions.Sample.Garden/README.md).
 

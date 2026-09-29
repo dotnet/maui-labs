@@ -40,7 +40,8 @@ public sealed record DocumentPreviewPage(
 /// <summary>Provider-specific settings exposed by the Documents playground.</summary>
 public sealed record DocumentExtractionSettings(
     bool DetectBarcodes,
-    bool AutomaticallyDetectLanguage);
+    bool AutomaticallyDetectLanguage,
+    bool IncludeImages);
 
 /// <summary>Reports one completed page while a document is being extracted.</summary>
 public readonly record struct DocumentExtractionProgress(
@@ -50,9 +51,18 @@ public readonly record struct DocumentExtractionProgress(
 
 /// <summary>Describes the document provider available to the playground.</summary>
 public sealed record DocumentProviderDescriptor(
+    string Id,
     string DisplayName,
     string Description,
-    bool IsAvailable);
+    bool IsAvailable,
+    bool SendsDocumentOffDevice);
+
+public sealed record DocumentProviderOption(
+    IDocumentExtractionProvider Provider,
+    DocumentProviderDescriptor Descriptor)
+{
+    public override string ToString() => Descriptor.DisplayName;
+}
 
 public interface IDocumentExtractionProvider
 {

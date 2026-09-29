@@ -8,7 +8,7 @@
              BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}">
     <Grid>
         <local:PlaygroundPageLayout HeaderTitle="Documents"
-                                    HeaderInfo="IDocumentExtractionClient returns structured pages, text, tables, lists, barcodes, metadata, and provider raw data. This tab uses Apple Vision only and never falls back to another engine."
+                                    HeaderInfo="IDocumentExtractionClient returns structured pages, text, tables, figures, geometry, metadata, and provider raw data. Compare local Apple Vision, Foundry Mistral OCR 4, and a general Foundry vision model; no hidden fallback is used."
                                     HeaderStatus="{Binding StatusMessage}"
                                     StatusAutomationId="DocumentStatusLabel"
                                     SidebarTitle="Document settings">
