@@ -1,10 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Vendored from dotnet/extensions PR #7588 (https://github.com/luisquintanilla/extensions,
-    commit a215825ae2c96723e922e068c226ff77122c7c94). The .cs implementation files in this
-    project are copied byte-for-byte from upstream and must not be edited here; this project
-    file is maui-labs-specific plumbing only.
+    Vendored from dotnet/extensions PR #7588
+    (https://github.com/dotnet/extensions/commit/a215825ae2c96723e922e068c226ff77122c7c94).
+    The .cs implementation files, README.md, and API-baseline JSON are copied byte-for-byte
+    from upstream and must not be edited here. This project file is intentionally
+    maui-labs-specific plumbing because the upstream Arcade build infrastructure is not vendored.
   -->
 
   <PropertyGroup>
