@@ -8,7 +8,7 @@
              BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}">
     <Grid>
         <local:PlaygroundPageLayout HeaderTitle="Documents"
-                                    HeaderInfo="IDocumentExtractionClient returns structured pages, text, tables, figures, geometry, metadata, and provider raw data. Compare local Apple Vision, specialized Mistral OCR 4, and the configured vision-capable chat model."
+                                    HeaderInfo="IDocumentExtractionClient returns structured pages, text, tables, figures, geometry, metadata, and provider raw data. Compare local Apple Vision, a specialized Mistral document model, and the configured vision-capable chat model."
                                     HeaderStatus="{Binding StatusMessage}"
                                     StatusAutomationId="DocumentStatusLabel"
                                     SidebarTitle="Document settings">
@@ -16,8 +16,9 @@
                 <VerticalStackLayout Spacing="2">
                     <ImageButton Source="more.png"
                                  Style="{StaticResource ChatActionButton}"
-                    SemanticProperties.Description="Inspect document client details and JSON"
-                                 AutomationId="DocumentInspectButton">
+                    IsEnabled="{Binding HasResult}"
+                    SemanticProperties.Description="Inspect normalized and provider JSON"
+                    AutomationId="DocumentInspectButton">
                         <local:PopupMenu.Content>
                             <VerticalStackLayout WidthRequest="560"
                                                  Spacing="10"
@@ -27,16 +28,11 @@
                                 <HorizontalStackLayout Spacing="8"
                                                        RadioButtonGroup.GroupName="DocumentInspectionMode"
                                                        RadioButtonGroup.SelectedValue="{Binding SelectedInspectionMode, Mode=TwoWay}">
-                                    <RadioButton Content="Client"
-                                                 Value="{x:Static local:DocumentInspectionMode.Client}"
-                                                 AutomationId="DocumentInspectClientRadio" />
                                     <RadioButton Content="Normalized"
                                                  Value="{x:Static local:DocumentInspectionMode.NormalizedJson}"
-                                                 IsEnabled="{Binding HasResult}"
                                                  AutomationId="DocumentInspectNormalizedRadio" />
                                     <RadioButton Content="Provider raw"
                                                  Value="{x:Static local:DocumentInspectionMode.RawJson}"
-                                                 IsEnabled="{Binding HasResult}"
                                                  AutomationId="DocumentInspectRawRadio" />
                                     <RadioButton Content="Selected node"
                                                  Value="{x:Static local:DocumentInspectionMode.SelectedNodeJson}"

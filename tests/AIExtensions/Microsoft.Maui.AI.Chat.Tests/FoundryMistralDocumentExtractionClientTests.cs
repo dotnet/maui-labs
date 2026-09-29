@@ -6,16 +6,22 @@ using Microsoft.Extensions.DocumentExtraction;
 
 namespace Microsoft.Maui.AI.Chat.Tests;
 
-public sealed class FoundryMistralOcrClientTests
+public sealed class FoundryMistralDocumentExtractionClientTests
 {
-    [Fact]
-    public async Task ExtractAsync_MapsOcr4PagesBlocksTablesAndImages()
+    [Theory]
+    [InlineData("mistral-ocr-4-0")]
+    [InlineData("mistral-document-ai-2512")]
+    public async Task ExtractAsync_CompatibleModel_MapsPagesBlocksTablesAndImages(string modelId)
     {
         var handler = new RecordingHandler(JsonResponse(SuccessResponse));
-        using var client = new FoundryMistralOcrClient(
-            new HttpClient(handler),
-            new Uri("https://foundry.example.test"),
-            "foundry-key",
+        using var httpClient = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://foundry.example.test/")
+        };
+        httpClient.DefaultRequestHeaders.Add("api-key", "foundry-key");
+        using var client = new FoundryMistralDocumentExtractionClient(
+            httpClient,
+            modelId,
             disposeHttpClient: true);
         var options = new DocumentExtractionOptions
         {
@@ -60,7 +66,7 @@ public sealed class FoundryMistralOcrClientTests
         Assert.Equal("foundry-key", request.ApiKey);
         using var requestJson = JsonDocument.Parse(request.Body!);
         var root = requestJson.RootElement;
-        Assert.Equal("mistral-ocr-4-0", root.GetProperty("model").GetString());
+        Assert.Equal(modelId, root.GetProperty("model").GetString());
         Assert.True(root.GetProperty("include_blocks").GetBoolean());
         Assert.True(root.GetProperty("include_image_base64").GetBoolean());
         Assert.Equal("html", root.GetProperty("table_format").GetString());
@@ -73,10 +79,13 @@ public sealed class FoundryMistralOcrClientTests
     public async Task ExtractAsync_OverThirtyMegabytes_ThrowsBeforeRequest()
     {
         var handler = new RecordingHandler(JsonResponse(SuccessResponse));
-        using var client = new FoundryMistralOcrClient(
-            new HttpClient(handler),
-            new Uri("https://foundry.example.test/"),
-            "foundry-key",
+        using var httpClient = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://foundry.example.test/")
+        };
+        httpClient.DefaultRequestHeaders.Add("api-key", "foundry-key");
+        using var client = new FoundryMistralDocumentExtractionClient(
+            httpClient,
             disposeHttpClient: true);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>

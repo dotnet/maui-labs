@@ -33,24 +33,77 @@ public sealed class DocumentSettingsViewModelTests
     }
 
     [Fact]
-    public void CreateOptions_MapsSharedPlaygroundSettings()
+    public void CreateOptions_AppleVision_MapsAppleSettings()
     {
-        using var client = CreateClient("client", "Client");
+        using var client = CreateClient("apple-vision", "Apple Vision");
         var settings = new DocumentSettingsViewModel([client])
         {
             DetectBarcodes = false,
             AutomaticallyDetectLanguage = true,
+        };
+
+        var options = settings.CreateOptions();
+
+        Assert.Equal(
+            ["apple.vision.barcodeDetectionEnabled", "apple.vision.automaticallyDetectLanguage"],
+            settings.RequestOptions.Select(static option => option.Key));
+        Assert.False(Assert.IsType<bool>(options.AdditionalProperties!["apple.vision.barcodeDetectionEnabled"]));
+        Assert.True(Assert.IsType<bool>(options.AdditionalProperties["apple.vision.automaticallyDetectLanguage"]));
+        Assert.False(options.AdditionalProperties.ContainsKey("mistral.includeImages"));
+    }
+
+    [Fact]
+    public void CreateOptions_MistralDocument_MapsImageSetting()
+    {
+        using var client = CreateClient("foundry-mistral-document", "Mistral document");
+        var settings = new DocumentSettingsViewModel([client])
+        {
             IncludeImages = true,
         };
 
         var options = settings.CreateOptions();
 
-        Assert.False(Assert.IsType<bool>(
-            options.AdditionalProperties!["apple.vision.barcodeDetectionEnabled"]));
-        Assert.True(Assert.IsType<bool>(
-            options.AdditionalProperties["apple.vision.automaticallyDetectLanguage"]));
-        Assert.True(Assert.IsType<bool>(
-            options.AdditionalProperties["mistral.includeImages"]));
+        Assert.Equal(["mistral.includeImages"], settings.RequestOptions.Select(static option => option.Key));
+        Assert.True(Assert.IsType<bool>(options.AdditionalProperties!["mistral.includeImages"]));
+        Assert.False(options.AdditionalProperties.ContainsKey("apple.vision.barcodeDetectionEnabled"));
+    }
+
+    [Fact]
+    public void CreateOptions_ClientWithoutSettings_LeavesAdditionalPropertiesUnset()
+    {
+        using var client = CreateClient("foundry-vision-chat", "Vision chat");
+        var settings = new DocumentSettingsViewModel([client]);
+
+        var options = settings.CreateOptions();
+
+        Assert.False(settings.HasRequestOptions);
+        Assert.Null(options.AdditionalProperties);
+    }
+
+    [Fact]
+    public void SelectedOption_ChangesVisibleOptionsAndPreservesValues()
+    {
+        using var apple = CreateClient("apple-vision", "Apple Vision");
+        using var mistral = CreateClient("foundry-mistral-document", "Mistral document");
+        using var vision = CreateClient("foundry-vision-chat", "Vision chat");
+        var settings = new DocumentSettingsViewModel([apple, mistral, vision])
+        {
+            DetectBarcodes = false,
+            IncludeImages = true,
+        };
+
+        settings.SelectedOption = settings.Clients[1];
+        Assert.Equal(["mistral.includeImages"], settings.RequestOptions.Select(static option => option.Key));
+        Assert.True(settings.IncludeImages);
+
+        settings.SelectedOption = settings.Clients[2];
+        Assert.Empty(settings.RequestOptions);
+
+        settings.SelectedOption = settings.Clients[0];
+        Assert.Equal(
+            ["apple.vision.barcodeDetectionEnabled", "apple.vision.automaticallyDetectLanguage"],
+            settings.RequestOptions.Select(static option => option.Key));
+        Assert.False(settings.DetectBarcodes);
     }
 
     private static IDocumentExtractionClient CreateClient(string id, string displayName) =>

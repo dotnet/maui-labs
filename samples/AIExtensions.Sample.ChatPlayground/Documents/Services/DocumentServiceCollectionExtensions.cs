@@ -50,19 +50,28 @@ internal static class DocumentServiceCollectionExtensions
 #endif
 
     private static IDocumentExtractionClient CreateMistralClient(AISettings settings) =>
-        new FoundryMistralOcrClient(
-                new HttpClient(),
-                settings.FoundryEndpoint!,
-                settings.FoundryApiKey!,
+        new FoundryMistralDocumentExtractionClient(
+                CreateFoundryDocumentHttpClient(settings),
                 settings.DocumentDeploymentName!,
                 disposeHttpClient: true)
             .AsBuilder()
             .UseDescriptor(new DocumentExtractionClientDescriptor(
-                "foundry-mistral-ocr",
-                $"Mistral OCR ({settings.DocumentDeploymentName})",
-                $"Specialized Foundry OCR deployment '{settings.DocumentDeploymentName}'. " +
+                "foundry-mistral-document",
+                $"Mistral document ({settings.DocumentDeploymentName})",
+                $"Mistral image-to-text deployment '{settings.DocumentDeploymentName}'. " +
                 "Sends documents to Azure and returns Markdown, tables, figures, confidence, and pixel geometry."))
             .Build();
+
+    private static HttpClient CreateFoundryDocumentHttpClient(AISettings settings)
+    {
+        var client = new HttpClient
+        {
+            BaseAddress = settings.GetFoundryResourceEndpoint(),
+            Timeout = TimeSpan.FromMinutes(5),
+        };
+        client.DefaultRequestHeaders.Add("api-key", settings.ApiKey!);
+        return client;
+    }
 
     private static IDocumentExtractionClient CreateVisionModelClient(AISettings settings)
     {
