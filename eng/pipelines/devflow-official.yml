@@ -13,7 +13,7 @@ pr: none
 
 parameters:
 - name: publishDevFlowNuget
-  displayName: 'Publish DevFlow packages to NuGet.org'
+  displayName: 'Publish DevFlow and required Linux GTK4 packages to NuGet.org'
   type: boolean
   default: false
 - name: publishCliNuget
@@ -414,6 +414,7 @@ extends:
         dependsOn:
         - Validate
         - publish_using_darc
+        - publish_linux_gtk4_nuget
         jobs:
         - job: PrepareArtifacts
           displayName: 'Prepare DevFlow Artifacts'
@@ -433,8 +434,10 @@ extends:
             artifact: PackageArtifacts
             displayName: Download PackageArtifacts
           - powershell: |
+              $ErrorActionPreference = 'Stop'
+              & '$(Build.SourcesDirectory)/eng/scripts/Test-GtkPackageClosure.ps1' -PackageDirectory '$(Pipeline.Workspace)/PackageArtifacts'
               New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/DevFlowPackages'
-              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.DevFlow.*.nupkg' '$(Pipeline.Workspace)/DevFlowPackages/' -Verbose
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.DevFlow.*.nupkg' '$(Pipeline.Workspace)/DevFlowPackages/' -Verbose -ErrorAction Stop
             displayName: Filter DevFlow packages
 
         - job: PublishNuGet
@@ -574,7 +577,7 @@ extends:
               publishFeedCredentials: 'nuget.org (dotnetframework)'
 
     # Publish Linux GTK4 packages to NuGet.org
-    - ${{ if eq(parameters.publishLinuxGtk4Nuget, true) }}:
+    - ${{ if or(eq(parameters.publishLinuxGtk4Nuget, true), eq(parameters.publishDevFlowNuget, true)) }}:
       - stage: publish_linux_gtk4_nuget
         displayName: 'Publish Linux GTK4 to NuGet.org'
         dependsOn:
@@ -600,7 +603,7 @@ extends:
             displayName: Download PackageArtifacts
           - powershell: |
               New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/LinuxGtk4Packages'
-              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.Platforms.Linux.Gtk4.*.nupkg' '$(Pipeline.Workspace)/LinuxGtk4Packages/' -Verbose
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.Platforms.Linux.Gtk4.*.nupkg' '$(Pipeline.Workspace)/LinuxGtk4Packages/' -Verbose -ErrorAction Stop
             displayName: Filter Linux GTK4 packages
 
         - job: PublishNuGet

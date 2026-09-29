@@ -1,3 +1,5 @@
+using Microsoft.Maui.DevFlow.Agent.Core;
+
 namespace Microsoft.Maui.DevFlow.Blazor.Gtk;
 
 /// <summary>
@@ -9,14 +11,54 @@ namespace Microsoft.Maui.DevFlow.Blazor.Gtk;
 public class GtkBlazorWebViewDebugService : IDisposable
 {
     private readonly List<GtkWebViewBridge> _bridges = new();
+    private readonly object _sync = new();
+    private readonly Dictionary<GtkWebViewBridge, int> _registrations = new();
+    private DevFlowAgentService? _agent;
     private bool _disposed;
     private CancellationTokenSource? _discoveryCts;
 
     public Action<string>? LogCallback { get; set; }
     public Action<string, string, string?>? WebViewLogCallback { get; set; }
 
-    public bool IsReady => _bridges.Count > 0 && _bridges[0].IsReady;
-    public IReadOnlyList<GtkWebViewBridge> Bridges => _bridges;
+    public bool IsReady => Bridges.FirstOrDefault()?.IsReady == true;
+    public IReadOnlyList<GtkWebViewBridge> Bridges
+    {
+        get { lock (_sync) return _bridges.ToArray(); }
+    }
+
+    internal void WireToAgent(DevFlowAgentService agent)
+    {
+        lock (_sync)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (ReferenceEquals(_agent, agent)) return;
+            if (_agent != null)
+                throw new InvalidOperationException("The GTK Blazor service is already wired to another agent.");
+            _agent = agent;
+            WebViewLogCallback = (level, message, exception) =>
+                agent.WriteWebViewLog(level, "WebView.Console", message, exception);
+            foreach (var bridge in _bridges)
+                RegisterBridge(bridge);
+        }
+    }
+
+    internal void AddBridge(GtkWebViewBridge bridge)
+    {
+        lock (_sync)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_bridges.Contains(bridge)) return;
+            _bridges.Add(bridge);
+            RegisterBridge(bridge);
+        }
+    }
+
+    private void RegisterBridge(GtkWebViewBridge bridge)
+    {
+        if (_agent != null && !_registrations.ContainsKey(bridge))
+            _registrations.Add(bridge, _agent.RegisterCdpWebView(
+                bridge.SendCdpCommandAsync, () => bridge.IsReady, bridge.AutomationId, bridge.ElementId));
+    }
 
     /// <summary>
     /// Per-WebView bridge encapsulating CDP state and WebKit.WebView reference.
@@ -321,9 +363,14 @@ public class GtkBlazorWebViewDebugService : IDisposable
     /// </summary>
     public void StartWebViewDiscovery()
     {
-        _discoveryCts?.Cancel();
-        _discoveryCts = new CancellationTokenSource();
-        var ct = _discoveryCts.Token;
+        CancellationToken ct;
+        lock (_sync)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_discoveryCts != null) return;
+            _discoveryCts = new CancellationTokenSource();
+            ct = _discoveryCts.Token;
+        }
 
         Task.Run(async () =>
         {
@@ -352,7 +399,7 @@ public class GtkBlazorWebViewDebugService : IDisposable
 
                             Log($"[BlazorDevFlow.Gtk] WebKit.WebView discovered (automationId={automationId})");
                             var bridge = new GtkWebViewBridge(this, webView, automationId);
-                            _bridges.Add(bridge);
+                            AddBridge(bridge);
                             await bridge.InitializeAsync();
                         }
                     }
@@ -430,9 +477,10 @@ public class GtkBlazorWebViewDebugService : IDisposable
     /// </summary>
     public Task<string> SendCdpCommandAsync(string cdpJson)
     {
-        if (_bridges.Count == 0)
+        var bridge = Bridges.FirstOrDefault();
+        if (bridge == null)
             return Task.FromResult("{\"error\":\"No WebViews available\"}");
-        return _bridges[0].SendCdpCommandAsync(cdpJson);
+        return bridge.SendCdpCommandAsync(cdpJson);
     }
 
     private void Log(string message)
@@ -529,11 +577,20 @@ public class GtkBlazorWebViewDebugService : IDisposable
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
-        foreach (var bridge in _bridges)
-            bridge.Dispose();
-        _discoveryCts?.Cancel();
-        _discoveryCts?.Dispose();
+        lock (_sync)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _discoveryCts?.Cancel();
+            _discoveryCts?.Dispose();
+            foreach (var index in _registrations.Values)
+                _agent?.UnregisterCdpWebView(index);
+            _registrations.Clear();
+            foreach (var bridge in _bridges)
+                bridge.Dispose();
+            _bridges.Clear();
+            WebViewLogCallback = null;
+            _agent = null;
+        }
     }
 }
