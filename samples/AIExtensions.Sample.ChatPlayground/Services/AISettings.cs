@@ -10,36 +10,49 @@ public sealed class AISettings
     public string? ImageDeploymentName { get; set; }
     public string? EmbeddingDeploymentName { get; set; }
     public string? DocumentDeploymentName { get; set; }
-    public Uri? FoundryEndpoint { get; set; }
-    public string? FoundryApiKey { get; set; }
 
     public void Validate()
     {
-        var hasOpenAI = !string.IsNullOrWhiteSpace(DeploymentName) ||
+        var hasDeployment = !string.IsNullOrWhiteSpace(DeploymentName) ||
             !string.IsNullOrWhiteSpace(ImageDeploymentName) ||
-            !string.IsNullOrWhiteSpace(EmbeddingDeploymentName);
-        if (hasOpenAI)
-        {
-            if (Endpoint is null)
-                throw new InvalidOperationException("AI:Endpoint is required when an Azure OpenAI deployment is configured.");
-
-            if (string.IsNullOrWhiteSpace(ApiKey))
-                throw new InvalidOperationException("AI:ApiKey is required when an Azure OpenAI deployment is configured.");
-        }
-
-        var hasFoundryResource = FoundryEndpoint is not null ||
-            !string.IsNullOrWhiteSpace(FoundryApiKey) ||
+            !string.IsNullOrWhiteSpace(EmbeddingDeploymentName) ||
             !string.IsNullOrWhiteSpace(DocumentDeploymentName);
-        if (!hasFoundryResource)
+        if (!hasDeployment)
             return;
 
-        if (FoundryEndpoint is null)
-            throw new InvalidOperationException("AI:FoundryEndpoint is required when a document deployment is configured.");
+        if (Endpoint is null)
+            throw new InvalidOperationException("AI:Endpoint is required when an Azure deployment is configured.");
 
-        if (string.IsNullOrWhiteSpace(FoundryApiKey))
-            throw new InvalidOperationException("AI:FoundryApiKey is required when a document deployment is configured.");
+        if (string.IsNullOrWhiteSpace(ApiKey))
+            throw new InvalidOperationException("AI:ApiKey is required when an Azure deployment is configured.");
 
-        if (string.IsNullOrWhiteSpace(DocumentDeploymentName))
-            throw new InvalidOperationException("AI:DocumentDeploymentName is required when Foundry document credentials are configured.");
+        if (!string.IsNullOrWhiteSpace(DocumentDeploymentName))
+            _ = GetFoundryResourceEndpoint();
+    }
+
+    internal Uri GetFoundryResourceEndpoint()
+    {
+        var endpoint = Endpoint ?? throw new InvalidOperationException("AI:Endpoint is required.");
+        var builder = new UriBuilder(endpoint)
+        {
+            Path = "/",
+            Query = string.Empty,
+            Fragment = string.Empty,
+        };
+
+        const string openAiSuffix = ".openai.azure.com";
+        const string foundrySuffix = ".services.ai.azure.com";
+
+        if (builder.Host.EndsWith(openAiSuffix, StringComparison.OrdinalIgnoreCase))
+        {
+            builder.Host = builder.Host[..^openAiSuffix.Length] + foundrySuffix;
+        }
+        else if (!builder.Host.EndsWith(foundrySuffix, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "AI:Endpoint must use an Azure OpenAI or Microsoft Foundry resource host when AI:DocumentDeploymentName is configured.");
+        }
+
+        return builder.Uri;
     }
 }

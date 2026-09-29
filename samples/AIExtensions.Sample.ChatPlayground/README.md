@@ -1,13 +1,15 @@
 # AI Playground
 
 A .NET MAUI sample for comparing `Microsoft.Extensions.AI` providers. It has
-Chat, Embeddings, Images, and Documents tabs. `Microsoft.Maui.Essentials.AI` provides
-`AppleIntelligenceChatClient` for on-device chat and `NLEmbeddingGenerator`
-for on-device embeddings. The Documents tab exercises the experimental
-`Microsoft.Extensions.DocumentExtraction` contract with Apple Vision/PDFKit
-and optional Foundry Mistral OCR 4 and vision-model deployments. Azure OpenAI is optional. The app targets Android, iOS, and Mac
-Catalyst, plus Windows. It does **not** target native macOS. Available providers
-vary by platform; saved Chat recordings can be replayed offline.
+Chat, Embeddings, Images, and Documents tabs. `Microsoft.Maui.Essentials.AI`
+provides `AppleIntelligenceChatClient` for on-device chat and
+`NLEmbeddingGenerator` for on-device embeddings. The Documents tab exercises
+the experimental `Microsoft.Extensions.DocumentExtraction` contract with Apple
+Vision/PDFKit, a compatible Mistral document deployment, and the configured
+vision-capable chat deployment. Azure OpenAI is optional. The app targets
+Android, iOS, Mac Catalyst, and Windows. It does **not** target native macOS.
+Available providers vary by platform; saved Chat recordings can be replayed
+offline.
 
 ## Build and run
 
@@ -16,10 +18,9 @@ Chat requires iOS or Mac Catalyst 26+ on a supported device with a compatible
 Xcode; Apple NaturalLanguage embeddings have broader Apple OS support but appear
 only when the English sentence-embedding asset is installed (it may be absent
 on simulators). Apple Vision document extraction requires iOS or Mac Catalyst
-26+. Mistral OCR 4 provides the specialized cloud Documents provider from a
-Microsoft Foundry resource. Without a configured Foundry provider, Android and
-Windows show availability guidance rather than registering a fake or fallback
-extractor. Azure-backed features also run on Android and Windows.
+26+. A compatible Mistral image-to-text model provides the specialized cloud
+Documents client from the same Microsoft Foundry resource used by the other
+Azure features. Azure-backed features also run on Android and Windows.
 
 From the repository root on macOS, build before running the Mac Catalyst target:
 
@@ -47,27 +48,24 @@ dotnet user-secrets set "AI:DeploymentName" "<chat-deployment>" --project sample
 dotnet user-secrets set "AI:ImageDeploymentName" "<image-deployment>" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
 dotnet user-secrets set "AI:EmbeddingDeploymentName" "<embedding-deployment>" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
 dotnet user-secrets set "AI:DocumentDeploymentName" "mistral-ocr-4-0" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
-dotnet user-secrets set "AI:FoundryEndpoint" "https://<foundry-resource>.services.ai.azure.com/" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
-dotnet user-secrets set "AI:FoundryApiKey" "<foundry-resource-key>" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
 ```
 
 Only set the deployment names you intend to use: `AI:DeploymentName` enables
 Chat, `AI:ImageDeploymentName` enables Images and Chat's image-generation tool,
 `AI:EmbeddingDeploymentName` enables Embeddings, and
-`AI:DocumentDeploymentName` identifies the specialized Mistral OCR document
-model deployed in the Foundry resource, for example `mistral-ocr-4-0`.
+`AI:DocumentDeploymentName` identifies a compatible Mistral image-to-text
+deployment in the same Foundry resource, such as `mistral-ocr-4-0` or
+`mistral-document-ai-2512`.
 Documents also exposes the existing `AI:DeploymentName` as a separate general
 vision/chat provider when that deployment supports image input; only
-vision-capable Responses models can accept PDF files. The Azure OpenAI endpoint
-and key are required when at least one Chat, Images, or Embeddings deployment
-name is configured. The Foundry resource endpoint and key are required with
-`AI:DocumentDeploymentName`.
+vision-capable Responses models can accept PDF files. All Azure clients reuse
+`AI:Endpoint` and `AI:ApiKey`; the app derives the matching
+`*.services.ai.azure.com` resource endpoint for the Mistral document route.
 
 Both cloud Documents clients are registered independently when configured so
 they can be selected and compared through descriptor-backed radio choices.
-Providers never
-silently retry through one another or resend a failed document to another
-model.
+Providers never silently retry through one another or resend a failed document
+to another model.
 User secrets are **embedded in Debug builds** for device testing: never
 distribute those builds or commit keys. Azure prompts, images, and indexed
 text may leave the device and incur charges. Documents leave the device when
@@ -164,7 +162,7 @@ with official package references before this sample or provider ships.
 | Provider | Demo role |
 |---|---|
 | Apple Vision | Local/private document-native baseline |
-| Mistral OCR 4 | Specialized document-native model deployed in the Foundry resource |
-| Vision-capable Foundry model | General multimodal/semantic extraction baseline; reuses the Chat deployment when no document-specific override is set |
+| Mistral document model | Specialized image-to-text model using the Mistral document/OCR API; tested with `mistral-ocr-4-0` |
+| Vision-capable Foundry model | General multimodal/semantic extraction baseline using the configured Chat deployment |
 | Azure Document Intelligence | Valuable deterministic service comparison, but excluded from the active demo to avoid requiring a separate service resource |
 | Content Understanding | Valuable analyzer and typed-field comparison, but excluded for now because it demonstrates an analyzer workflow rather than a deployed model |
