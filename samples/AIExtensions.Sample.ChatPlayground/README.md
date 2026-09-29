@@ -69,7 +69,7 @@ text may leave the device and incur charges.
   single-response modes. The multiline prompt uses Enter/Return for a new line;
   select **Send** to submit it. Structured JSON requests a summary, key points,
   a free-form category, and a constrained sentiment. The common .NET schema
-  leaves fields optional for other providers, while Apple and Azure OpenAI
+  leaves fields optional, while Apple, Windows AI, and Azure OpenAI
   require all four in their native structured-output schemas; key points may
   be empty. The transcript displays the provider's actual JSON, including extra
   fields, without rewriting it through the request schema. Restoring an

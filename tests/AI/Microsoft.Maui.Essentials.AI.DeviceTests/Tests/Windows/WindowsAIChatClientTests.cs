@@ -1,4 +1,5 @@
 #if WINDOWS
+using System.Text.Json;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.Essentials.AI;
 using Xunit;
@@ -32,6 +33,71 @@ public class WindowsAIChatClientStreamingTests : ChatClientStreamingTestsBase<Wi
 // LanguageModel.GenerateStructuredJsonResponseAsync, so no wrapper is needed.
 public class WindowsAIChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<WindowsAIChatClient>
 {
+	[Fact]
+	public void GetConstraintSchema_OptionalNestedProperties_RequiresAllNativeFields()
+	{
+		using var source = JsonDocument.Parse("""
+			{
+			  "type": "object",
+			  "properties": {
+			    "summary": { "type": "string" },
+			    "details": {
+			      "type": "object",
+			      "properties": {
+			        "category": { "type": "string" },
+			        "items": {
+			          "type": "array",
+			          "items": {
+			            "type": "object",
+			            "properties": {
+			              "name": { "type": "string" },
+			              "score": { "type": "integer" }
+			            }
+			          }
+			        }
+			      }
+			    }
+			  },
+			  "required": ["summary"]
+			}
+			""");
+		var options = new ChatOptions
+		{
+			ResponseFormat = ChatResponseFormat.ForJsonSchema(source.RootElement)
+		};
+
+		var nativeSchema = WindowsAIChatClient.GetConstraintSchema(options);
+
+		Assert.NotNull(nativeSchema);
+		using var transformed = JsonDocument.Parse(nativeSchema);
+		var root = transformed.RootElement;
+		AssertStrictObject(root, "summary", "details");
+		var details = root.GetProperty("properties").GetProperty("details");
+		AssertStrictObject(details, "category", "items");
+		var item = details.GetProperty("properties").GetProperty("items").GetProperty("items");
+		AssertStrictObject(item, "name", "score");
+		Assert.Equal(["summary"], source.RootElement.GetProperty("required").EnumerateArray()
+			.Select(value => value.GetString()));
+	}
+
+	[Fact]
+	public void GetConstraintSchema_WithoutSchema_UsesOrdinaryGeneration()
+	{
+		Assert.Null(WindowsAIChatClient.GetConstraintSchema(null));
+		Assert.Null(WindowsAIChatClient.GetConstraintSchema(new ChatOptions
+		{
+			ResponseFormat = ChatResponseFormat.Json
+		}));
+	}
+
+	private static void AssertStrictObject(JsonElement schema, params string[] properties)
+	{
+		Assert.Equal(properties, schema.GetProperty("required").EnumerateArray()
+			.Select(value => value.GetString()));
+		Assert.Equal(properties, schema.GetProperty("properties").EnumerateObject()
+			.Select(value => value.Name));
+		Assert.False(schema.GetProperty("additionalProperties").GetBoolean());
+	}
 }
 public class WindowsAIChatClientValidationTests
 {

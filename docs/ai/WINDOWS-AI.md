@@ -46,12 +46,14 @@ instruction as model context for ordinary text generation.
 For `ChatResponseFormatJson` **with a schema**, it calls the native
 `GenerateStructuredJsonResponseAsync` API. That API lacks a context overload,
 so the system instruction is prepended to the structured prompt. The adapter
-closes object schemas with declared properties (`additionalProperties: false`)
-to prevent valid-but-unexpected property names from leaving requested fields
-empty. A JSON response format without a schema does not use constrained
+transforms the caller's schema for the native model: every declared property
+(including nested object properties) becomes required, and objects disallow
+additional properties. The common playground response type stays optional,
+without `[JsonRequired]` attributes; other providers retain their own schema
+handling. A JSON response format without a schema does not use constrained
 decoding. Streaming uses native progress when provided and emits a final
-response when only a completed result is available.
-Selecting streaming does not force the native structured operation to send
+response when only a completed result is available. Selecting streaming does
+not force the native structured operation to send
 partial JSON, so a result with no progress appears only when complete. A prompt
 exceeding the native context window raises `InvalidOperationException`; the
 adapter does not truncate history or expose a separate context-window exception.
@@ -69,6 +71,11 @@ contained every field. Removing `required` from the same four-field schema
 completed but omitted two requested fields. The stall is therefore not
 consistently caused by `required`, and the adapter does not synthesize
 streaming updates when the native operation provides only one result.
+In a separate headless packaged run, the playground's four-field required
+schema produced no update and timed out after 20 seconds despite a successful
+plain-text request first. Subsequent fresh processes sometimes stalled even
+on plain text. Requiring fields constrains completed responses; it does not
+guarantee that the native operation completes or streams progress.
 
 **Not supported:** direct image input, native tool calling, and selecting or
 reporting exact model weights. Image data and nonempty `ChatOptions.Tools`

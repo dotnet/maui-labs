@@ -1,7 +1,6 @@
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
-using System.Text.Json.Nodes;
 using Microsoft.Extensions.AI;
 using Microsoft.Windows.AI.ContentSafety;
 using Microsoft.Windows.AI.Text;
@@ -31,6 +30,12 @@ public sealed class WindowsAIChatClient : IChatClient
 	/// Lazily-initialized metadata describing the implementation.
 	/// </summary>
 	private ChatClientMetadata? _metadata;
+
+	private static readonly AIJsonSchemaTransformCache SchemaTransformCache = new(new()
+	{
+		DisallowAdditionalProperties = true,
+		RequireAllProperties = true,
+	});
 
 	/// <summary>
 	/// Initializes a new instance of the <see cref="WindowsAIChatClient"/> class.
@@ -277,48 +282,16 @@ public sealed class WindowsAIChatClient : IChatClient
 	/// caller did not ask for structured output.
 	/// </summary>
 	/// <remarks>
-	/// Every object in the schema is closed with <c>additionalProperties: false</c>. Constrained
-	/// decoding only forbids what the schema forbids, and an open schema lets the model answer under
-	/// a property name of its own choosing: asked to fill in a declared <c>text</c> property it has
-	/// produced <c>body</c>, <c>response</c> and <c>message</c> instead. Those replies satisfy the
-	/// schema, so nothing fails, but the declared property is missing and deserializing it yields
-	/// null. Schemas generated from a type by <c>ChatResponseFormat.ForJsonSchema</c> are open by
-	/// default, so this affects ordinary structured output and not just tool calling.
+	/// The native model requires every declared property, including properties in nested objects,
+	/// and disallows additional properties. This does not change the caller's shared response type.
 	/// </remarks>
-	private static string? GetConstraintSchema(ChatOptions? options)
+	internal static string? GetConstraintSchema(ChatOptions? options)
 	{
-		if ((options?.ResponseFormat as ChatResponseFormatJson)?.Schema is not { } schema)
+		if (options?.ResponseFormat is not ChatResponseFormatJson { Schema: not null } format)
 			return null;
 
-		var node = JsonNode.Parse(schema.GetRawText());
-		if (node is null)
-			return schema.GetRawText();
-
-		Close(node);
-
-		return node.ToJsonString();
-
-		static void Close(JsonNode? node)
-		{
-			switch (node)
-			{
-				case JsonObject obj:
-					if (obj.TryGetPropertyValue("properties", out var properties) &&
-						properties is JsonObject)
-					{
-						obj["additionalProperties"] = false;
-					}
-
-					foreach (var property in obj.ToList())
-						Close(property.Value);
-					break;
-
-				case JsonArray array:
-					foreach (var item in array)
-						Close(item);
-					break;
-			}
-		}
+		return SchemaTransformCache.GetOrCreateTransformedSchema(format)?.GetRawText()
+			?? throw new InvalidOperationException("Failed to transform JSON schema for Windows AI structured output.");
 	}
 
 	/// <inheritdoc />
