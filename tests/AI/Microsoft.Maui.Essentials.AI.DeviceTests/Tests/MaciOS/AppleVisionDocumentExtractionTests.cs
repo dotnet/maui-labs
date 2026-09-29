@@ -24,7 +24,7 @@ public class AppleVisionDocumentExtractionTests
 			return;
 		}
 
-		using IDocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
+		using IDocumentExtractionClient client = new AppleVisionDocumentExtractionClient();
 
 		var metadata = client.GetService<DocumentExtractionClientMetadata>();
 		var capabilities = client.GetService<AppleVisionDocumentCapabilities>();
@@ -45,11 +45,11 @@ public class AppleVisionDocumentExtractionTests
 			return;
 		}
 
-		using IDocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
+		using IDocumentExtractionClient client = new AppleVisionDocumentExtractionClient();
 		using var stream = new MemoryStream([1, 2, 3]);
 
 		await Assert.ThrowsAsync<NotSupportedException>(
-			() => client.ExtractAsync(stream, "application/pdf"));
+			() => client.ExtractAsync(stream, "text/plain"));
 	}
 
 	[Fact]
@@ -60,7 +60,7 @@ public class AppleVisionDocumentExtractionTests
 			return;
 		}
 
-		using IDocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
+		using IDocumentExtractionClient client = new AppleVisionDocumentExtractionClient();
 		var image = await MainThread.InvokeOnMainThreadAsync(
 			() => CreateTextImage("APPLE VISION DOCUMENT\n\nThis is a document recognition test."));
 		using var stream = new MemoryStream(image);
@@ -74,12 +74,10 @@ public class AppleVisionDocumentExtractionTests
 		Assert.Equal(DocumentCoordinateUnit.Normalized, page.CoordinateUnit);
 		Assert.Equal(DocumentCoordinateOrigin.BottomLeft, page.CoordinateOrigin);
 		AssertTraversalIsBounded(page);
-		var raw = Assert.IsType<AppleVisionDocumentNodeReference>(page.RawRepresentation);
-		Assert.False(raw.GetRawJson().IsEmpty);
-		using var rawJson = JsonDocument.Parse(raw.GetRawJson());
-		Assert.Equal(JsonValueKind.Array, rawJson.RootElement.ValueKind);
-		Assert.NotEmpty(rawJson.RootElement.EnumerateArray());
-		var json = JsonSerializer.Serialize(result, AppleDocumentExtractionJson.CreateOptions());
+		var raw = Assert.IsType<JsonElement>(page.RawRepresentation);
+		Assert.Equal(JsonValueKind.Array, raw.ValueKind);
+		Assert.NotEmpty(raw.EnumerateArray());
+		var json = JsonSerializer.Serialize(result);
 		Assert.Contains("recognize-documents", json, StringComparison.Ordinal);
 	}
 
@@ -91,7 +89,7 @@ public class AppleVisionDocumentExtractionTests
 			return;
 		}
 
-		using IDocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
+		using IDocumentExtractionClient client = new AppleVisionDocumentExtractionClient();
 		using var stream = new MemoryStream([1, 2, 3]);
 		using var cancellation = new CancellationTokenSource();
 		cancellation.Cancel();
@@ -108,7 +106,7 @@ public class AppleVisionDocumentExtractionTests
 			return;
 		}
 
-		using IDocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
+		using IDocumentExtractionClient client = new AppleVisionDocumentExtractionClient();
 		var image = await MainThread.InvokeOnMainThreadAsync(
 			() => CreateTextImage("YIELD THEN CANCEL"));
 		using var stream = new MemoryStream(image);
@@ -124,14 +122,14 @@ public class AppleVisionDocumentExtractionTests
 	}
 
 	[Fact]
-	public async Task ExtractAsync_NumberedList_MapsAppleListElement()
+	public async Task ExtractAsync_NumberedList_MapsListItemBlocks()
 	{
 		if (!IsSupported())
 		{
 			return;
 		}
 
-		using IDocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
+		using IDocumentExtractionClient client = new AppleVisionDocumentExtractionClient();
 		var image = await MainThread.InvokeOnMainThreadAsync(
 			() => CreateTextImage("SHOPPING LIST\n\n1. Apples\n2. Bananas\n3. Coffee"));
 		using var stream = new MemoryStream(image);
@@ -140,13 +138,17 @@ public class AppleVisionDocumentExtractionTests
 
 		var page = Assert.Single(result.Pages);
 		AssertTraversalIsBounded(page);
-		var list = Assert.Single(page.Elements.OfType<AppleListElement>());
-		Assert.Equal(3, list.Items.Count);
-		Assert.Contains(list.Items, static item => item.Text.Contains("Apples", StringComparison.OrdinalIgnoreCase));
+		var items = page.Elements
+			.OfType<DocumentBlock>()
+			.Where(static block => block.Kind?.Value == "listItem")
+			.ToArray();
+		Assert.Equal(3, items.Length);
+		Assert.Contains(items, static item =>
+			item.Text.Contains("Apples", StringComparison.OrdinalIgnoreCase));
 	}
 
 	[Fact]
-	public async Task ExtractAsync_QrCode_MapsAppleBarcodeElement()
+	public async Task ExtractAsync_QrCode_MapsBarcodeBlock()
 	{
 		if (!IsSupported())
 		{
@@ -161,17 +163,19 @@ public class AppleVisionDocumentExtractionTests
 #endif
 
 		const string payload = "https://example.com/apple-vision";
-		using IDocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
+		using IDocumentExtractionClient client = new AppleVisionDocumentExtractionClient();
 		var image = await MainThread.InvokeOnMainThreadAsync(() => CreateQrImage(payload));
 		using var stream = new MemoryStream(image);
 		var options = new DocumentExtractionOptions()
-			.WithAppleBarcodeDetection(true, symbologies: ["qr"]);
+			.WithBarcodeDetection(true, symbologies: ["qr"]);
 
 		var result = await client.ExtractAsync(stream, "image/png", options);
 
-		var barcode = Assert.Single(result.Pages[0].Elements.OfType<AppleBarcodeElement>());
-		Assert.Equal("qr", barcode.Symbology);
-		Assert.Equal(payload, barcode.PayloadString);
+		var barcode = Assert.Single(
+			result.Pages[0].Elements.OfType<DocumentBlock>(),
+			static block => block.Kind?.Value == "barcode");
+		Assert.Equal("qr", GetStringProperty(barcode, "apple.vision.barcodeSymbology"));
+		Assert.Equal(payload, GetStringProperty(barcode, "apple.vision.barcodePayload"));
 	}
 
 	[Fact]
@@ -182,7 +186,7 @@ public class AppleVisionDocumentExtractionTests
 			return;
 		}
 
-		using IDocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
+		using IDocumentExtractionClient client = new AppleVisionDocumentExtractionClient();
 		var image = await MainThread.InvokeOnMainThreadAsync(CreateTableImage);
 		using var stream = new MemoryStream(image);
 
@@ -198,95 +202,53 @@ public class AppleVisionDocumentExtractionTests
 	}
 
 	[Fact]
-	public void AppleJson_CustomElements_RoundTrip()
+	public void NormalizedResult_UsesDefaultJsonSerialization()
 	{
-		if (!IsSupported())
-		{
-			return;
-		}
-
 		var result = new DocumentExtractionResult(
 		[
 			new DocumentPage(1, "Item one\nhttps://example.com")
 			{
 				Elements =
 				[
-					new AppleListElement(
-					[
-						new AppleListItemElement("Item one")
-						{
-							MarkerString = "1.",
-							MarkerType = "decimal",
-						},
-					]),
-					new AppleBarcodeElement("qr")
+					new DocumentBlock("Item one")
 					{
-						PayloadString = "https://example.com",
-						IsGs1DataCarrier = false,
+						Kind = new DocumentBlockKind("listItem"),
+						AdditionalProperties = new AdditionalPropertiesDictionary
+						{
+							["apple.vision.markerString"] = "1.",
+							["apple.vision.markerType"] = "decimal",
+						},
+					},
+					new DocumentBlock("https://example.com")
+					{
+						Kind = new DocumentBlockKind("barcode"),
+						AdditionalProperties = new AdditionalPropertiesDictionary
+						{
+							["apple.vision.barcodeSymbology"] = "qr",
+							["apple.vision.barcodePayload"] = "https://example.com",
+						},
 					},
 				],
 			},
 		]);
-		var options = AppleDocumentExtractionJson.Default;
 
-		var json = JsonSerializer.Serialize(result, options);
-		var roundTripped = JsonSerializer.Deserialize<DocumentExtractionResult>(json, options);
+		var json = JsonSerializer.Serialize(result);
+		var roundTripped = JsonSerializer.Deserialize<DocumentExtractionResult>(json);
 
-		Assert.True(options.IsReadOnly);
-		Assert.False(AppleDocumentExtractionJson.CreateOptions().IsReadOnly);
 		Assert.NotNull(roundTripped);
 		var page = Assert.Single(roundTripped.Pages);
-		Assert.IsType<AppleListElement>(page.Elements[0]);
-		var barcode = Assert.IsType<AppleBarcodeElement>(page.Elements[1]);
-		Assert.Equal("https://example.com", barcode.PayloadString);
-		Assert.Throws<NotSupportedException>(
-			() => JsonSerializer.Serialize(result, AIJsonUtilities.DefaultOptions));
+		Assert.All(page.Elements, static element => Assert.IsType<DocumentBlock>(element));
 	}
 
 	[Fact]
-	public async Task PdfWrapper_TwoPages_StreamsRenumberedPages()
+	public async Task ExtractAsync_Pdf_RecognizesEveryRenderedPage()
 	{
 		if (!IsSupported())
 		{
 			return;
 		}
 
-		using IDocumentExtractionClient client = new ApplePdfKitRenderingExtractionClient(
-			new StubPageClient());
-		var pdf = await MainThread.InvokeOnMainThreadAsync(
-			() => CreatePdf(["Page one", "Page two"]));
-		using var stream = new MemoryStream(pdf);
-		var updates = new List<DocumentExtractionPageResult>();
-
-		await foreach (var update in client.ExtractPagesAsync(stream, "application/pdf"))
-		{
-			updates.Add(update);
-		}
-
-		Assert.Equal(2, updates.Count);
-		Assert.Equal([1, 2], updates.Select(static update => update.Page.PageNumber));
-		Assert.All(
-			updates,
-			update =>
-			{
-				Assert.Equal(update.Page.PageNumber, update.PagesProcessed);
-				Assert.Equal(2, update.TotalPages);
-				var barcode = Assert.IsType<AppleBarcodeElement>(Assert.Single(update.Page.Elements));
-				Assert.Equal(update.Page.PageNumber, barcode.BoundingRegion?.PageNumber);
-				Assert.IsType<ApplePdfKitPageReference>(update.Page.RawRepresentation);
-			});
-	}
-
-	[Fact]
-	public async Task PdfWrapper_RealVision_RecognizesEveryRenderedPage()
-	{
-		if (!IsSupported())
-		{
-			return;
-		}
-
-		using IDocumentExtractionClient client = new ApplePdfKitRenderingExtractionClient(
-			new AppleVisionRecognizeDocumentsClient());
+		using IDocumentExtractionClient client = new AppleVisionDocumentExtractionClient();
 		var pdf = await MainThread.InvokeOnMainThreadAsync(
 			() => CreatePdf(["ALPHA DOCUMENT", "BETA DOCUMENT"]));
 		using var stream = new MemoryStream(pdf);
@@ -302,15 +264,36 @@ public class AppleVisionDocumentExtractionTests
 	}
 
 	[Fact]
-	public async Task PdfWrapper_RotatedOffsetCrop_RecognizesPageAndReportsRotatedExtent()
+	public async Task ExtractAsync_PdfFromWorkerThread_CompletesEveryPage()
 	{
 		if (!IsSupported())
 		{
 			return;
 		}
 
-		using IDocumentExtractionClient client = new ApplePdfKitRenderingExtractionClient(
-			new AppleVisionRecognizeDocumentsClient());
+		using IDocumentExtractionClient client = new AppleVisionDocumentExtractionClient();
+		var pdf = await MainThread.InvokeOnMainThreadAsync(
+			() => CreatePdf(["WORKER PAGE ONE", "WORKER PAGE TWO"]));
+		using var stream = new MemoryStream(pdf);
+
+		var result = await Task.Run(
+			() => client.ExtractAsync(stream, "application/pdf"))
+			.WaitAsync(TimeSpan.FromSeconds(30));
+
+		Assert.Equal(2, result.Pages.Count);
+		Assert.Contains("ONE", result.Pages[0].Text, StringComparison.OrdinalIgnoreCase);
+		Assert.Contains("TWO", result.Pages[1].Text, StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Fact]
+	public async Task ExtractAsync_RotatedPdf_RecognizesPageAndReportsRotatedExtent()
+	{
+		if (!IsSupported())
+		{
+			return;
+		}
+
+		using IDocumentExtractionClient client = new AppleVisionDocumentExtractionClient();
 		var pdf = await MainThread.InvokeOnMainThreadAsync(CreateRotatedPdf);
 		using var stream = new MemoryStream(pdf);
 
@@ -318,10 +301,16 @@ public class AppleVisionDocumentExtractionTests
 
 		var page = Assert.Single(result.Pages);
 		Assert.Contains("ROTATED", page.Text, StringComparison.OrdinalIgnoreCase);
-		var reference = Assert.IsType<ApplePdfKitPageReference>(page.RawRepresentation);
-		Assert.Equal(90, reference.Rotation);
-		Assert.Equal(744, reference.Bounds.Right, precision: 1);
-		Assert.Equal(564, reference.Bounds.Bottom, precision: 1);
+		Assert.IsType<JsonElement>(page.RawRepresentation);
+		Assert.Equal(90, Assert.IsType<int>(page.AdditionalProperties!["apple.pdf.rotation"]));
+		Assert.Equal(
+			744,
+			Assert.IsType<double>(page.AdditionalProperties["apple.pdf.widthPoints"]),
+			precision: 1);
+		Assert.Equal(
+			564,
+			Assert.IsType<double>(page.AdditionalProperties["apple.pdf.heightPoints"]),
+			precision: 1);
 		Assert.True(
 			Assert.IsType<double>(page.AdditionalProperties!["apple.pdf.effectiveRenderDpi"]) <= 200);
 	}
@@ -344,6 +333,11 @@ public class AppleVisionDocumentExtractionTests
 		Assert.IsType<long>(properties["apple.vision.repeatedContainersPruned"]);
 		Assert.IsType<string[]>(properties["apple.vision.repeatedContainerExamples"]);
 	}
+
+	private static string? GetStringProperty(DocumentElement element, string key) =>
+		element.AdditionalProperties?.TryGetValue(key, out var value) == true
+			? value as string
+			: null;
 
 	private static byte[] CreateTextImage(string text)
 	{
@@ -510,55 +504,6 @@ public class AppleVisionDocumentExtractionTests
 		return data.ToArray();
 	}
 
-	private sealed class StubPageClient : IDocumentExtractionClient
-	{
-		public Task<DocumentExtractionResult> ExtractAsync(
-			Stream document,
-			string mediaType,
-			DocumentExtractionOptions? options = null,
-			CancellationToken cancellationToken = default)
-		{
-			var barcode = new AppleBarcodeElement("qr")
-			{
-				PayloadString = "page",
-				BoundingRegion = new DocumentBoundingRegion(
-					1,
-					[
-						new DocumentPoint(0.1f, 0.9f),
-						new DocumentPoint(0.2f, 0.9f),
-						new DocumentPoint(0.2f, 0.8f),
-						new DocumentPoint(0.1f, 0.8f),
-					]),
-			};
-			return Task.FromResult(new DocumentExtractionResult(
-			[
-				new DocumentPage(1, "page")
-				{
-					Elements = [barcode],
-					CoordinateUnit = DocumentCoordinateUnit.Normalized,
-					CoordinateOrigin = DocumentCoordinateOrigin.BottomLeft,
-				},
-			]));
-		}
-
-		public async IAsyncEnumerable<DocumentExtractionPageResult> ExtractPagesAsync(
-			Stream document,
-			string mediaType,
-			DocumentExtractionOptions? options = null,
-			[System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-		{
-			await Task.Yield();
-			yield return new DocumentExtractionPageResult(
-				(await ExtractAsync(document, mediaType, options, cancellationToken)).Pages[0]);
-		}
-
-		public object? GetService(Type serviceType, object? serviceKey = null) =>
-			serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
-
-		public void Dispose()
-		{
-		}
-	}
 }
 
 #endif

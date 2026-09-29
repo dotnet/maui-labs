@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AIExtensions.Sample.ChatPlayground;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DocumentExtraction;
@@ -52,8 +53,8 @@ public sealed class FoundryModelDocumentExtractionClientTests
         Assert.Equal("EVENT REGISTRATION", title.Text);
         var table = Assert.Single(page.Elements.OfType<DocumentTable>());
         Assert.Equal(4, table.Cells?.Count);
-        var raw = Assert.IsType<FoundryModelDocumentRawReference>(page.RawRepresentation);
-        Assert.Contains("\"pages\"", raw.Json);
+        var raw = Assert.IsType<JsonElement>(page.RawRepresentation);
+        Assert.Equal(JsonValueKind.Array, raw.GetProperty("pages").ValueKind);
         Assert.Equal(3, result.Usage?.InputTokenCount);
         Assert.Equal(5, result.Usage?.OutputTokenCount);
         Assert.Equal(8, result.Usage?.TotalTokenCount);

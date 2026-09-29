@@ -74,7 +74,7 @@ var embeddings = await generator.GenerateAsync(["sunset beach", "mountain hiking
 using Microsoft.Extensions.DocumentExtraction;
 using Microsoft.Maui.Essentials.AI;
 
-using IDocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
+using IDocumentExtractionClient client = new AppleVisionDocumentExtractionClient();
 await using var image = File.OpenRead("invoice.png");
 var result = await client.ExtractAsync(image, "image/png");
 
@@ -85,22 +85,22 @@ foreach (var element in result.Pages[0].Elements)
         case DocumentTable table:
             Console.WriteLine($"Table: {table.RowCount} x {table.ColumnCount}");
             break;
-        case AppleListElement list:
-            Console.WriteLine($"List: {list.Items.Count} items");
+        case DocumentBlock item when item.Kind?.Value == "listItem":
+            Console.WriteLine($"List item: {item.Text}");
             break;
-        case AppleBarcodeElement barcode:
-            Console.WriteLine($"{barcode.Symbology}: {barcode.PayloadString}");
+        case DocumentBlock barcode when barcode.Kind?.Value == "barcode":
+            Console.WriteLine(
+                barcode.AdditionalProperties?["apple.vision.barcodePayload"]);
             break;
     }
 }
 ```
 
-For PDFs, compose PDFKit page rendering with the same raw Vision client:
+The same client accepts PDFs and streams one result per internally rendered
+PDFKit page:
 
 ```csharp
-using IDocumentExtractionClient client =
-    new ApplePdfKitRenderingExtractionClient(
-        new AppleVisionRecognizeDocumentsClient());
+using IDocumentExtractionClient client = new AppleVisionDocumentExtractionClient();
 
 await using var pdf = File.OpenRead("invoice.pdf");
 await foreach (var page in client.ExtractPagesAsync(pdf, "application/pdf"))
@@ -109,9 +109,9 @@ await foreach (var page in client.ExtractPagesAsync(pdf, "application/pdf"))
 }
 ```
 
-The clients never fall back to another recognition engine. Apple-specific
-lists, list items, barcodes, capabilities, and raw Vision JSON remain available
-through the provider types and `RawRepresentation`.
+The client never falls back to another recognition engine. Apple-specific list,
+barcode, detected-data, and diagnostic fields remain available through open
+block kinds, `AdditionalProperties`, and raw `JsonElement` values.
 
 ## Requirements
 
@@ -128,5 +128,4 @@ through the provider types and `RawRepresentation`.
 - [Source code](https://github.com/dotnet/maui-labs/tree/main/src/AI)
 - [Sample app](https://github.com/dotnet/maui-labs/tree/main/samples/EssentialsAISample)
 - [AI Playground](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)
-- [Document extraction sample](https://github.com/dotnet/maui-labs/tree/main/samples/DocumentExtractionSample)
 - [Microsoft.Extensions.AI documentation](https://learn.microsoft.com/dotnet/ai/ai-extensions)

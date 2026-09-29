@@ -16,6 +16,8 @@ public static class MauiProgram
         builder.UseMauiApp<App>();
 
         builder.Configuration.AddEmbeddedUserSecrets();
+        builder.Configuration.AddCommandLine(
+            Environment.GetCommandLineArgs().Skip(1).ToArray());
         var aiSettings = new AISettings();
         builder.Configuration.GetSection(AISettings.SectionName).Bind(aiSettings);
         aiSettings.Validate();

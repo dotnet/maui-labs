@@ -9,7 +9,7 @@ using ExtractedDocumentPage = Microsoft.Extensions.DocumentExtraction.DocumentPa
 namespace AIExtensions.Sample.ChatPlayground;
 
 /// <summary>Uses a vision-capable deployed Foundry model as a low-geometry document extractor.</summary>
-public sealed class FoundryModelDocumentExtractionClient(
+internal sealed class FoundryModelDocumentExtractionClient(
     IChatClient chatClient,
     string deploymentName,
     bool disposeChatClient = false)
@@ -46,6 +46,8 @@ public sealed class FoundryModelDocumentExtractionClient(
         }
 
         var bytes = await ReadAllBytesAsync(document, cancellationToken).ConfigureAwait(false);
+
+        // A general vision model can provide semantic structure, but it must not invent OCR geometry or confidence.
         var prompt = """
             Extract this document into the supplied JSON schema.
 
@@ -76,21 +78,21 @@ public sealed class FoundryModelDocumentExtractionClient(
             .GetResponseAsync([message], chatOptions, cancellationToken)
             .ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        var result = JsonSerializer.Deserialize(
-            response.Text,
-            FoundryDocumentJsonContext.Default.FoundryDocumentResponse)
+
+        using var responseJson = JsonDocument.Parse(response.Text);
+        var rawResponse = responseJson.RootElement.Clone();
+        var result = responseJson.RootElement.Deserialize(FoundryDocumentJsonContext.Default.FoundryDocumentResponse)
             ?? throw new InvalidDataException("The Foundry model returned an empty document result.");
+
         if (result.Pages.Count == 0)
             throw new InvalidDataException("The Foundry model did not return any pages.");
 
-        var rawJson = JsonSerializer.Serialize(
-            result,
-            FoundryDocumentJsonContext.Default.FoundryDocumentResponse);
         for (var index = 0; index < result.Pages.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var page = MapPage(result.Pages[index], index, rawJson);
+            var page = MapPage(result.Pages[index], index, rawResponse);
             var pagesProcessed = index + 1;
+
             yield return new DocumentExtractionPageResult(page)
             {
                 PagesProcessed = pagesProcessed,
@@ -137,32 +139,27 @@ public sealed class FoundryModelDocumentExtractionClient(
             _chatClient.Dispose();
     }
 
-    private static ExtractedDocumentPage MapPage(
-        FoundryDocumentPage source,
-        int pageIndex,
-        string rawJson)
+    private static ExtractedDocumentPage MapPage(FoundryDocumentPage source, int pageIndex, JsonElement rawResponse)
     {
         var elements = new List<DocumentElement>();
-        for (var blockIndex = 0; blockIndex < source.Blocks.Count; blockIndex++)
+
+        foreach (var block in source.Blocks)
         {
-            var block = source.Blocks[blockIndex];
             elements.Add(new DocumentBlock(block.Text)
             {
                 Kind = MapBlockKind(block.Kind),
-                RawRepresentation = new FoundryModelDocumentRawReference(
-                    $"$.pages[{pageIndex}].blocks[{blockIndex}]",
-                    JsonSerializer.Serialize(
-                        block,
-                        FoundryDocumentJsonContext.Default.FoundryDocumentBlock)),
+                RawRepresentation = JsonSerializer.SerializeToElement(
+                    block,
+                    FoundryDocumentJsonContext.Default.FoundryDocumentBlock),
             });
         }
-        for (var tableIndex = 0; tableIndex < source.Tables.Count; tableIndex++)
+
+        foreach (var table in source.Tables)
         {
-            var table = source.Tables[tableIndex];
             elements.Add(new DocumentTable(
                 table.RowCount,
                 table.ColumnCount,
-                table.Cells.Select((cell, cellIndex) => new DocumentTableCell(
+                table.Cells.Select(cell => new DocumentTableCell(
                     cell.RowIndex,
                     cell.ColumnIndex,
                     cell.Content)
@@ -170,18 +167,14 @@ public sealed class FoundryModelDocumentExtractionClient(
                     RowSpan = Math.Max(1, cell.RowSpan),
                     ColumnSpan = Math.Max(1, cell.ColumnSpan),
                     Kind = MapCellKind(cell.Kind),
-                    RawRepresentation = new FoundryModelDocumentRawReference(
-                        $"$.pages[{pageIndex}].tables[{tableIndex}].cells[{cellIndex}]",
-                        JsonSerializer.Serialize(
-                            cell,
-                            FoundryDocumentJsonContext.Default.FoundryDocumentCell)),
+                    RawRepresentation = JsonSerializer.SerializeToElement(
+                        cell,
+                        FoundryDocumentJsonContext.Default.FoundryDocumentCell),
                 }).ToArray())
             {
-                RawRepresentation = new FoundryModelDocumentRawReference(
-                    $"$.pages[{pageIndex}].tables[{tableIndex}]",
-                    JsonSerializer.Serialize(
-                        table,
-                        FoundryDocumentJsonContext.Default.FoundryDocumentTable)),
+                RawRepresentation = JsonSerializer.SerializeToElement(
+                    table,
+                    FoundryDocumentJsonContext.Default.FoundryDocumentTable),
             });
         }
 
@@ -190,7 +183,7 @@ public sealed class FoundryModelDocumentExtractionClient(
             source.Text)
         {
             Elements = elements,
-            RawRepresentation = new FoundryModelDocumentRawReference("$.pages", rawJson),
+            RawRepresentation = rawResponse,
             AdditionalProperties = new AdditionalPropertiesDictionary
             {
                 ["foundry.model.geometryAvailable"] = false,
@@ -233,13 +226,13 @@ public sealed class FoundryModelDocumentExtractionClient(
 }
 
 [Description("Structured document extraction produced by a vision-capable Foundry model.")]
-public sealed class FoundryDocumentResponse
+internal sealed class FoundryDocumentResponse
 {
     [Description("Every document page in source order.")]
     public List<FoundryDocumentPage> Pages { get; set; } = [];
 }
 
-public sealed class FoundryDocumentPage
+internal sealed class FoundryDocumentPage
 {
     [Description("The one-based source page number.")]
     public int PageNumber { get; set; }
@@ -254,7 +247,7 @@ public sealed class FoundryDocumentPage
     public List<FoundryDocumentTable> Tables { get; set; } = [];
 }
 
-public sealed class FoundryDocumentBlock
+internal sealed class FoundryDocumentBlock
 {
     [Description("A concise semantic kind such as title, sectionHeading, paragraph, listItem, pageHeader, pageFooter, or footnote.")]
     public string Kind { get; set; } = "paragraph";
@@ -263,14 +256,14 @@ public sealed class FoundryDocumentBlock
     public string Text { get; set; } = string.Empty;
 }
 
-public sealed class FoundryDocumentTable
+internal sealed class FoundryDocumentTable
 {
     public int RowCount { get; set; }
     public int ColumnCount { get; set; }
     public List<FoundryDocumentCell> Cells { get; set; } = [];
 }
 
-public sealed class FoundryDocumentCell
+internal sealed class FoundryDocumentCell
 {
     public int RowIndex { get; set; }
     public int ColumnIndex { get; set; }

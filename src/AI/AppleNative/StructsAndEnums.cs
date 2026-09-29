@@ -36,15 +36,3 @@ internal enum VisionDocumentClientErrorNative : long
 	InvalidRegionOfInterest = 3,
 	UnsupportedBarcodeSymbology = 4
 }
-
-[Native]
-internal enum VisionDocumentNodeKindNative : long
-{
-	Title = 0,
-	Paragraph = 1,
-	Table = 2,
-	TableCell = 3,
-	List = 4,
-	ListItem = 5,
-	Barcode = 6
-}

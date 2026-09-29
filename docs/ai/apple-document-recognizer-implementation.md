@@ -9,36 +9,41 @@
 
 Implement Apple's Vision
 [`RecognizeDocumentsRequest`](https://developer.apple.com/documentation/vision/recognizedocumentsrequest)
-as a raw `IDocumentExtractionClient` in `Microsoft.Maui.Essentials.AI`.
+as one `IDocumentExtractionClient` in `Microsoft.Maui.Essentials.AI`.
 
-The Vision request accepts one image, so add a separate PDFKit wrapper client
-that renders each PDF page and sends that image to the documents client. Neither
-client performs fallback or chooses a different recognition engine.
+`AppleVisionDocumentExtractionClient` accepts supported images and PDFs. Images
+go directly to `RecognizeDocumentsRequest`; PDF pages are rendered internally
+with PDFKit and passed to that same request. The client never falls back to a
+different OCR engine.
 
-Demonstrate Apple capabilities that are richer than the proposed base
-abstraction with provider-specific elements:
+The public provider surface is intentionally small: one client class plus the
+members required by `IDocumentExtractionClient`. Apple-specific structure uses
+the proposed abstraction's existing extensibility points:
 
-- `AppleBarcodeElement`
-- `AppleListElement`
-- `AppleListItemElement`
+- provider-defined `DocumentBlockKind` values such as `listItem` and `barcode`;
+- `AdditionalProperties` for markers, barcode payloads, detected data, and
+  provider diagnostics;
+- `JsonElement` in `RawRepresentation` for the complete bounded Apple snapshot.
 
-Retain the complete live Apple observation behind native raw references even
-when the normalized model cannot represent every field. Serialized raw
-snapshots are bounded and explicitly report any recursive structure they prune.
+The Swift bridge returns one JSON payload to managed code. It cannot safely use
+Apple's synthesized `Codable` implementation directly: a real checklist PDF
+caused Apple's encoder to recurse through repeated
+`Table.Cell.content`/`List.Item.content` containers and stack overflow. The
+bridge therefore still performs a bounded custom projection before encoding.
 
 ## Goals
 
 - Import and exercise the proposed `Microsoft.Extensions.DocumentExtraction`
   API from `dotnet/extensions` PR #7588.
 - Implement a direct client for `RecognizeDocumentsRequest`.
-- Accept common image formats and return one structured `DocumentPage`.
-- Use PDFKit to turn a PDF into a page stream for the documents client.
+- Accept common image formats and PDFs through the same client.
+- Keep PDFKit rendering private to the Apple client.
 - Map titles, paragraphs, tables, cells, lists, list items, and barcodes.
 - Preserve lines, words, candidates, detected data, geometry, and request
   metadata.
-- Demonstrate custom provider elements and record abstraction limitations.
+- Keep provider-specific data available without adding public element types.
 - Support cancellation, concurrent requests, trimming, and Native AOT.
-- Add an iOS/Mac Catalyst sample and a native AppKit macOS sample.
+- Integrate the client into the cross-platform AI playground.
 - Use only Apple frameworks and the repository's existing Swift bridge.
 
 ## Non-goals
@@ -53,53 +58,38 @@ snapshots are bounded and explicitly report any recursive structure they prune.
 - No DataScanner, ImageAnalyzer, Live Text, or Foundation Models integration.
 - No third-party OCR, PDF, binding, or native dependencies.
 - No visionOS target.
+- No public PDF wrapper, PDF rendering options, raw node wrapper, capabilities
+  type, custom serializer, or Apple-specific document-element subclasses.
 
 ## Selected architecture
 
 ```text
-image/jpeg | image/png | image/heic | image/tiff
+image/jpeg | image/png | image/heic | image/tiff | application/pdf
     |
     v
-AppleVisionRecognizeDocumentsClient
+AppleVisionDocumentExtractionClient
     |
-    v
-RecognizeDocumentsRequest
+    ├─ image: RecognizeDocumentsRequest
+    └─ PDF: internal PDFKit page rendering
+             └─ RecognizeDocumentsRequest per rendered page
     |
     v
 DocumentExtractionResult
     ├─ DocumentBlock
+    │   ├─ title / paragraph
+    │   ├─ provider kind "listItem"
+    │   └─ provider kind "barcode"
     ├─ DocumentTable / DocumentTableCell
-    ├─ AppleListElement / AppleListItemElement
-    └─ AppleBarcodeElement
-
-application/pdf
-    |
-    v
-ApplePdfKitRenderingExtractionClient
-    |
-    ├─ PDFKit opens and iterates pages
-    ├─ each page is rendered to an image
-    └─ each image is passed to AppleVisionRecognizeDocumentsClient
+    └─ JsonElement RawRepresentation
 ```
 
-The clients have distinct media-type contracts:
-
-| Client | Accepted input | Output cadence |
-|---|---|---|
-| `AppleVisionRecognizeDocumentsClient` | Supported `image/*` stream | One page |
-| `ApplePdfKitRenderingExtractionClient` | `application/pdf` stream | One update per PDF page |
-
-## Proposed public types
-
-Names are provisional until implementation review.
-
-### `AppleVisionRecognizeDocumentsClient`
+## Public API
 
 ```csharp
 [SupportedOSPlatform("ios26.0")]
 [SupportedOSPlatform("maccatalyst26.0")]
 [SupportedOSPlatform("macos26.0")]
-public sealed class AppleVisionRecognizeDocumentsClient
+public sealed class AppleVisionDocumentExtractionClient
     : IDocumentExtractionClient
 {
 }
@@ -107,163 +97,17 @@ public sealed class AppleVisionRecognizeDocumentsClient
 
 The client:
 
-- accepts only supported image media types;
-- creates exactly one `RecognizeDocumentsRequest` per invocation;
+- accepts PNG, JPEG, HEIC, TIFF, and PDF streams;
+- creates one `RecognizeDocumentsRequest` for an image or per rendered PDF page;
 - never invokes another Vision request;
-- returns one `DocumentExtractionPageResult` from `ExtractPagesAsync`;
-- implements `ExtractAsync` by aggregating that same page stream;
-- exposes metadata and capabilities through `GetService`;
+- streams one update per page;
+- implements `ExtractAsync` by aggregating the same page stream;
+- exposes standard `DocumentExtractionClientMetadata` through `GetService`;
 - does not dispose the caller's stream.
 
-### `ApplePdfKitRenderingExtractionClient`
-
-```csharp
-public sealed class ApplePdfKitRenderingExtractionClient
-    : DelegatingDocumentExtractionClient
-{
-    public ApplePdfKitRenderingExtractionClient(
-        IDocumentExtractionClient pageClient,
-        ApplePdfKitRenderingOptions? renderingOptions = null);
-}
-```
-
-The wrapper:
-
-- accepts only `application/pdf`;
-- opens the PDF using `PdfDocument(NSData)`;
-- rejects invalid or locked documents explicitly;
-- renders pages sequentially;
-- sends each rendered page to the supplied image client;
-- renumbers the returned page and every nested bounding region to the actual
-  one-based PDF page number;
-- sets `PagesProcessed` and `TotalPages`;
-- yields a page before rendering the next one;
-- never examines `PdfPage.Text`;
-- never substitutes a different inner client.
-
-The wrapper owns and disposes the inner client, matching
-`DelegatingDocumentExtractionClient`.
-
-### `ApplePdfKitRenderingOptions`
-
-```csharp
-public sealed class ApplePdfKitRenderingOptions
-{
-    public double Dpi { get; set; } = 200;
-    public int MaximumPixelDimension { get; set; } = 4096;
-    public PdfDisplayBox DisplayBox { get; set; } = PdfDisplayBox.Crop;
-    public bool IncludeAnnotations { get; set; } = true;
-    public bool RespectCopyPermissions { get; set; } = true;
-}
-```
-
-Render settings are constructor-level wrapper configuration. Per-request
-Vision options remain in `DocumentExtractionOptions`.
-
-## Apple-specific document elements
-
-The custom elements intentionally demonstrate data returned by Apple that has
-no typed home in the base abstraction.
-
-### `AppleBarcodeElement`
-
-```csharp
-public sealed class AppleBarcodeElement : DocumentElement
-{
-    public AppleBarcodeElement(string symbology);
-
-    public string Symbology { get; }
-    public string? PayloadString { get; set; }
-    public ReadOnlyMemory<byte>? PayloadData { get; set; }
-    public bool? IsGs1DataCarrier { get; set; }
-    public bool? IsColorInverted { get; set; }
-    public string? SupplementalPayloadString { get; set; }
-    public ReadOnlyMemory<byte>? SupplementalPayloadData { get; set; }
-    public string? SupplementalCompositeType { get; set; }
-}
-```
-
-Inherited properties carry:
-
-- `BoundingRegion`
-- `Confidence`
-- `RawRepresentation`
-- `AdditionalProperties`
-
-The raw reference retains the complete Apple `BarcodeObservation`, including
-its descriptor and any fields not projected onto the public element.
-
-### `AppleListElement`
-
-```csharp
-public sealed class AppleListElement : DocumentElement
-{
-    public AppleListElement(
-        IReadOnlyList<AppleListItemElement> items);
-
-    public IReadOnlyList<AppleListItemElement> Items { get; }
-}
-```
-
-The list element preserves:
-
-- list geometry;
-- ordered items;
-- the native list container;
-- semantically distinct nested structure exposed through item content.
-
-### `AppleListItemElement`
-
-```csharp
-public sealed class AppleListItemElement : DocumentElement
-{
-    public AppleListItemElement(string text);
-
-    public string Text { get; }
-    public string? ItemString { get; set; }
-    public string? MarkerString { get; set; }
-    public string? MarkerType { get; set; }
-    public IReadOnlyList<DocumentElement> Elements { get; set; } = [];
-}
-```
-
-`Elements` maps semantically distinct children from the item's recursive Apple
-`Container`, allowing an item to contain paragraphs, tables, nested lists, or
-barcodes. It does not repeat the owning item when Vision re-emits that same line
-as duplicate paragraphs and a same-polygon self-list.
-
-The mapper does not assume that this recursive model is an acyclic tree. It
-tracks non-recursive fingerprints for containers on the active ancestor path
-and prunes an exact ancestor re-entry. A depth limit of 64 and a projected-node
-limit of 20,000 remain as last-resort guards.
-
-The raw snapshot retains the first Apple-produced self-list for investigation.
-The normalized mapper filters it only when the child polygon, item text, and
-marker match the owning item. This keeps provider data inspectable while
-preventing duplicate nested UI and serialization output.
-
-`AppleListElement` appears in `DocumentPage.Elements`. Its
-`AppleListItemElement` children remain inside `Items` rather than being repeated
-as top-level elements. Lists inside table cells appear in
-`DocumentTableCell.Elements`.
-
-### Serialization support
-
-Provide an AOT-compatible source-generated JSON context and document-element
-converter that registers:
-
-| Discriminator | Type |
-|---|---|
-| `apple.barcode` | `AppleBarcodeElement` |
-| `apple.list` | `AppleListElement` |
-| `apple.listItem` | `AppleListItemElement` |
-
-`AppleDocumentExtractionJson.Default` exposes cached, read-only options, while
-`CreateOptions()` returns a mutable clone. The sample and Apple-specific
-serialization APIs use these options. The base abstraction's default serializer
-does not know provider-defined derived types; that limitation and its middleware
-impact are tracked in
-[`apple-document-extraction-feedback.md`](apple-document-extraction-feedback.md).
+Everything else is private or internal. In particular, PDF rendering settings,
+capability enumeration, safe-snapshot DTOs, option keys, and the managed mapper
+are implementation details rather than package API.
 
 ## Vision request options
 
@@ -290,17 +134,9 @@ Unsupported languages, revisions, or symbologies produce explicit errors.
 
 ## Capability discovery
 
-`GetService<AppleVisionDocumentCapabilities>()` returns immutable runtime
-capabilities:
-
-```csharp
-public sealed class AppleVisionDocumentCapabilities
-{
-    public IReadOnlyList<string> RecognitionLanguages { get; }
-    public IReadOnlyList<string> BarcodeSymbologies { get; }
-    public IReadOnlyList<int> Revisions { get; }
-}
-```
+The native bridge queries supported languages, barcode symbologies, and request
+revisions for validation and device tests. That capability type remains
+internal rather than expanding the package API.
 
 `DocumentExtractionClientMetadata` reports:
 
@@ -334,7 +170,7 @@ Processing:
 
 ### PDFs
 
-The wrapper accepts only `application/pdf`.
+The PDF path is a private branch inside `AppleVisionDocumentExtractionClient`.
 
 Processing:
 
@@ -347,12 +183,12 @@ Processing:
    - render through `Draw(PdfDisplayBox, CGContext)`;
    - enforce DPI and maximum pixel limits;
    - report both requested and effective DPI when pixel limits clamp a page;
-   - encode or pass the resulting image data to the inner client;
-   - rewrite page numbers recursively;
-   - attach PDF page metadata and raw references;
+   - pass the resulting image data to the same private Vision request method;
+   - map the Vision result directly with the actual one-based page number;
+   - attach PDF page metadata and raw JSON;
    - yield the page and release render resources.
 
-PDFKit's embedded `PdfPage.Text` is intentionally ignored by this wrapper.
+PDFKit's embedded `PdfPage.Text` is intentionally ignored.
 
 ## Mapping `DocumentObservation`
 
@@ -364,13 +200,12 @@ PDFKit's embedded `PdfPage.Text` is intentionally ignored by this wrapper.
 | `document.tables` | `DocumentTable` |
 | table row/column ranges | Cell indexes and spans |
 | table cell `content` | Recursive `DocumentTableCell.Elements` |
-| `document.lists` | `AppleListElement` |
-| list items | `AppleListItemElement` |
-| `document.barcodes` | `AppleBarcodeElement` |
+| list items | `DocumentBlock` with provider kind `listItem` |
+| `document.barcodes` | `DocumentBlock` with provider kind `barcode` |
 | normalized regions | Clockwise `DocumentBoundingRegion.Polygon` |
 | observation confidence | Nearest valid normalized confidence field |
-| detected data | Apple metadata plus raw node reference |
-| lines, words, candidates | Raw node reference plus selected metadata |
+| detected data | `AdditionalProperties` plus raw JSON |
+| lines, words, candidates | Raw JSON plus selected metadata |
 
 ## Reading order
 
@@ -381,7 +216,7 @@ The mapper will:
 
 1. Convert all top-level elements to a common normalized coordinate system.
 2. Apply a deterministic spatial ordering algorithm.
-3. Keep collection/index provenance in the native node reference.
+3. Keep collection/index provenance in `AdditionalProperties` and raw JSON.
 4. Record the ordering strategy in page `AdditionalProperties`.
 5. Validate multi-column, inline-table, nested-list, and barcode cases before
    claiming reading-order fidelity.
@@ -398,51 +233,34 @@ The original Apple collections remain available through `RawRepresentation`.
 
 - `VisionRecognizeDocumentsClientNative`
 - `VisionDocumentOptionsNative`
-- `VisionDocumentPageNative`
-- `VisionDocumentObservationNative`
-- `VisionDocumentNodeNative`
+- `VisionDocumentResultNative`
 - `VisionDocumentCapabilitiesNative`
 
 ### Native result strategy
 
-- Retain one live Swift `DocumentObservation` wrapper per result observation.
-- Project the recursive hierarchy into a flat Objective-C-compatible node array
-  for managed mapping.
+- Project the recursive hierarchy into a bounded JSON-safe snapshot in Swift.
+- Return one `NSData` JSON payload to C#; do not bind per-node native classes.
 - Give every node a stable path and parent path.
 - Normalize polygon winding in one native conversion point.
-- Build lazy JSON from the bounded flat snapshot rather than invoking Apple's
+- Build JSON from the bounded flat snapshot rather than invoking Apple's
   `Codable` implementation, which stack-overflowed on a real-world checklist.
 - Detect repeated containers on the active ancestor path using transcript,
   title, geometry, and direct child counts. Expose projected-node count,
   maximum traversal depth, and pruned-container examples as diagnostics.
 - Reuse `CancellationTokenNative` to wrap the Swift `Task`.
-- Return callbacks on the caller's captured queue, matching the existing Apple
-  Intelligence bridge.
+- Invoke completion directly from the Swift task. Managed continuations already
+  run asynchronously; redispatching to `OperationQueue.current` deadlocked the
+  second page when extraction started from a worker thread.
 
 ## Raw data preservation
 
 ### `RawRepresentation`
 
-Use an `AppleVisionDocumentNodeReference` containing:
-
-- the retained native observation;
-- the stable node path;
-- lazy full-page JSON;
-- lazy subtree JSON;
-- callable character-range geometry.
-
-Attach it to:
-
-- `DocumentPage`;
-- `DocumentBlock`;
-- `DocumentTable`;
-- `DocumentTableCell`;
-- `AppleBarcodeElement`;
-- `AppleListElement`;
-- `AppleListItemElement`.
-
-Leave `DocumentExtractionResult.RawRepresentation` unset because of the
-serialization issue recorded in the feedback document.
+Attach cloned `JsonElement` values from the bounded snapshot to
+`DocumentPage`, `DocumentBlock`, `DocumentTable`, and `DocumentTableCell`.
+This keeps raw provider data inspectable without a provider-specific public
+wrapper type. `DocumentExtractionResult.RawRepresentation` remains unset
+because assembled page streams already preserve page-level raw JSON.
 
 ### `AdditionalProperties`
 
@@ -467,8 +285,8 @@ Keep values small and JSON-safe. Planned keys include:
 - `apple.pdf.displayBox`
 - `apple.pdf.renderDpi`
 
-Typed data belonging to barcodes and lists lives on their custom elements
-rather than being flattened into property bags.
+Typed data belonging to barcodes and lists uses open block kinds and
+provider-prefixed property keys; the bounded raw JSON remains authoritative.
 
 ## Cancellation, concurrency, and disposal
 
@@ -481,32 +299,27 @@ rather than being flattened into property bags.
 - Process PDF pages sequentially by default to bound memory.
 - Release each PDF bitmap before rendering the next page.
 - Never dispose the caller's input stream.
-- Dispose native result handles when their managed references are released.
-- The PDF wrapper owns and disposes its inner client.
+- Dispose the temporary native JSON result after cloning it into managed
+  `JsonElement` values.
 
 ## Sample
 
 Create:
 
-- `samples/DocumentExtractionSample` for iOS and Mac Catalyst.
-- `samples/DocumentExtractionSample.MacOS` using the in-repo AppKit backend and
-  linked shared UI/source.
 - a first-class `Documents` feature in
-  `samples/AIExtensions.Sample.ChatPlayground`, while keeping Android and
-  Windows visible but explicitly unavailable rather than substituting another
-  engine.
+  `samples/AIExtensions.Sample.ChatPlayground`, with Apple registered only on
+  supported Apple OS versions and independently configured cloud clients on
+  every platform.
 
 The sample includes:
 
 - image selection;
 - PDF selection and page rendering;
-- document-camera acquisition on iOS/Mac Catalyst;
 - request option and capability display;
 - extracted page text;
 - a heterogeneous element tree;
 - table and nested-cell views;
-- dedicated barcode detail cards;
-- nested list/list-item views;
+- provider-kind list-item and barcode rows;
 - polygon overlays;
 - raw Apple JSON inspection;
 - DevFlow status, tree, screenshot, and log inspection in Debug builds;
@@ -518,7 +331,7 @@ The integrated AI playground additionally provides:
 - every selected PDF page as a scrollable image preview;
 - a responsive two-pane inspector for page previews and structured results;
 - synchronized selection between image regions and normalized JSON paths;
-- an anchored Inspect popup for capabilities, normalized JSON, complete
+- an anchored Inspect popup for client details, normalized JSON, complete
   provider raw JSON, and selected-node raw JSON without modal navigation;
 - provider selection between local Apple Vision and deployed Foundry Mistral
   OCR 4 using descriptor-backed radio choices and the same
@@ -556,13 +369,12 @@ multi-column reading order, skew, CJK/RTL, and degraded scans.
 
 - Image/PDF media-type validation.
 - Option-key validation and cloning.
-- Custom element construction.
-- Apple JSON resolver round-trips for barcode/list/list-item elements.
-- PDF page-number rewriting across all normalized and custom element types.
+- Default JSON serialization for provider-defined block kinds and properties.
+- Direct client registration and descriptor discovery.
 - Unary/page-stream equivalence.
 - Caller stream ownership.
-- Playground media-type routing, streamed page aggregation, progress, disposal,
-  unavailable-provider behavior, and cancellation.
+- Playground media-type routing, streamed page aggregation, progress, client
+  lifetime, and cancellation.
 
 ### Apple tests
 
@@ -578,7 +390,7 @@ multi-column reading order, skew, CJK/RTL, and degraded scans.
 - Reading-order corpus cases.
 - Cancellation before, during, and after Vision execution.
 - PDF page rendering, rotation, dimensions, progress, and memory bounds.
-- Raw JSON and character-range geometry access.
+- Raw JSON preservation through `JsonElement`.
 
 ## Implemented sequence
 
@@ -587,47 +399,49 @@ multi-column reading order, skew, CJK/RTL, and degraded scans.
    and API-baseline JSONs. The two local project files remain the only deliberate
    divergence because they replace dotnet/extensions Arcade plumbing with
    non-shipping maui-labs project references and shared-helper shims.
-2. Add the Swift documents request, native options, capabilities, result
-   wrappers, and node projection.
-3. Add Objective-C binding definitions and native enums.
-4. Add `AppleVisionRecognizeDocumentsClient`.
-5. Add the normalized mapper and Apple custom elements.
-6. Add the Apple source-generated JSON context and custom-element converter.
-7. Add `ApplePdfKitRenderingExtractionClient`.
-8. Add portable and Apple device tests.
-9. Add the shared MAUI sample and AppKit wrapper sample.
-10. Record implementation friction and proposed abstraction changes in
+2. Add the Swift documents request, native options, capabilities, bounded JSON
+   projection, and one JSON result wrapper.
+3. Bind only the request, options, capabilities, cancellation, and JSON result
+   boundary.
+4. Add `AppleVisionDocumentExtractionClient`.
+5. Add the normalized mapper using standard document elements, open block
+   kinds, `AdditionalProperties`, and raw `JsonElement` values.
+6. Keep PDFKit rendering internal to that client.
+7. Add portable and Apple device tests.
+8. Add the Documents feature to the shared AI playground.
+9. Record implementation friction and proposed abstraction changes in
     `apple-document-extraction-feedback.md`.
 
 ## Validation completed
 
 - Swift framework builds with Xcode 26.6 and the macOS 26.5 SDK.
 - Provider builds for iOS, Mac Catalyst, and macOS.
-- iOS and Mac Catalyst samples build without warnings.
-- The AppKit sample builds and starts with the in-repo macOS backend.
-- The Mac Catalyst sample exposes DevFlow and remains responsive after
+- The AI playground builds for Android, iOS, and Mac Catalyst without warnings.
+- The Mac Catalyst playground exposes DevFlow and remains responsive after
   processing a three-page real-world checklist PDF that previously crashed.
-- That PDF now projects 104, 188, and 77 native nodes for its three pages,
+- Standard `dotnet run -- --page Documents --document ...` arguments select the
+  page and drive deterministic Debug extraction through .NET command-line
+  configuration.
+- That PDF now projects 104, 188, and 77 snapshot nodes for its three pages,
   pruning 10, 24, and 8 repeated list-container traversals respectively at a
-  maximum traversal depth of 2. Exact self-projection filtering reduces the
-  normalized sample tree from 372 to 257 nodes.
+  maximum traversal depth of 2. The standard-element mapper produces 249
+  normalized nodes.
 - Ten corpus tests validate packaged fixtures, headings, tables, semantic data,
   QR/Code 128, mixed layouts, and four list forms. The controlled list fixtures
   reproduce Apple's self-list output without PDF rendering and verify that the
   normalized model removes only exact same-item projections.
-- The trimmed Mac Catalyst sample publishes successfully.
-- Mac Catalyst and iOS simulator device suites cover:
+- Mac Catalyst and iOS simulator suites each pass 22 Apple Vision tests covering:
   - text recognition;
   - tables and cells;
   - numbered lists;
   - QR barcodes;
-  - custom-element JSON;
+  - default normalized JSON;
   - raw Apple JSON;
-  - capabilities;
+  - internal capability discovery;
   - cancellation lifetime;
   - real two-page PDF recognition;
   - rotated PDFs with non-zero crop-box origins;
-  - recursive page-number rewriting.
+  - direct page-number mapping.
 - The Essentials.AI package includes only the two temporary document-extraction
   DLLs for each TFM, with no dependency on unpublished package IDs.
 

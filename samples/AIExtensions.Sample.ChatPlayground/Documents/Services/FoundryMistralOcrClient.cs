@@ -9,7 +9,7 @@ using ExtractedDocumentPage = Microsoft.Extensions.DocumentExtraction.DocumentPa
 namespace AIExtensions.Sample.ChatPlayground;
 
 /// <summary>Calls a Mistral OCR deployment hosted by a Microsoft Foundry resource.</summary>
-public sealed class FoundryMistralOcrClient : IDocumentExtractionClient
+internal sealed class FoundryMistralOcrClient : IDocumentExtractionClient
 {
     private const int MaximumDocumentBytes = 30 * 1024 * 1024;
     private readonly HttpClient _httpClient;
@@ -60,40 +60,34 @@ public sealed class FoundryMistralOcrClient : IDocumentExtractionClient
         if (bytes.Length > MaximumDocumentBytes)
             throw new InvalidOperationException("Mistral OCR accepts documents up to 30 MB.");
 
-        var model = string.IsNullOrWhiteSpace(options?.ModelId)
-            ? _defaultModel
-            : options.ModelId;
+        var model = string.IsNullOrWhiteSpace(options?.ModelId) ? _defaultModel : options.ModelId;
         var includeImages = GetOption(options, "mistral.includeImages");
-        using var request = new HttpRequestMessage(
-            HttpMethod.Post,
-            new Uri(_endpoint, "providers/mistral/azure/ocr"));
+
+        // The Foundry Mistral route accepts the complete document as an inline data URL.
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(_endpoint, "providers/mistral/azure/ocr"));
         request.Headers.Add("api-key", _apiKey);
-        request.Content = CreateRequestContent(
-            model,
-            mediaType,
-            bytes,
-            includeImages);
+        request.Content = CreateRequestContent(model, mediaType, bytes, includeImages);
 
         using var response = await SendWithRetryAsync(request, cancellationToken).ConfigureAwait(false);
         await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
-        await using var responseStream = await response.Content
-            .ReadAsStreamAsync(cancellationToken)
-            .ConfigureAwait(false);
-        using var responseDocument = await JsonDocument
-            .ParseAsync(responseStream, cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
+
+        await using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        using var responseDocument = await JsonDocument.ParseAsync(responseStream, cancellationToken: cancellationToken).ConfigureAwait(false);
         var root = responseDocument.RootElement;
-        var rawJson = root.GetRawText();
+        var rawResponse = root.Clone();
         var pages = root.GetProperty("pages").EnumerateArray().ToArray();
+
         if (pages.Length == 0)
             throw new InvalidDataException("Mistral OCR did not return any pages.");
+
         var usage = GetUsage(root, pages.Length);
 
         for (var index = 0; index < pages.Length; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var page = MapPage(pages[index], index, rawJson);
+            var page = MapPage(pages[index], index, rawResponse);
             var pagesProcessed = index + 1;
+
             yield return new DocumentExtractionPageResult(page)
             {
                 PagesProcessed = pagesProcessed,
@@ -137,31 +131,28 @@ public sealed class FoundryMistralOcrClient : IDocumentExtractionClient
         HttpRequestMessage request,
         CancellationToken cancellationToken)
     {
-        byte[] requestBytes = await request.Content!
-            .ReadAsByteArrayAsync(cancellationToken)
-            .ConfigureAwait(false);
+        var requestBytes = await request.Content!.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
         MediaTypeHeaderValue? contentType = request.Content.Headers.ContentType;
         request.Dispose();
 
+        // Serverless deployments can return a transient 503 while capacity starts.
         for (var attempt = 1; attempt <= 5; attempt++)
         {
-            var retry = new HttpRequestMessage(
-                HttpMethod.Post,
-                new Uri(_endpoint, "providers/mistral/azure/ocr"));
+            using var retry = new HttpRequestMessage(HttpMethod.Post, new Uri(_endpoint, "providers/mistral/azure/ocr"));
             retry.Headers.Add("api-key", _apiKey);
             retry.Content = new ByteArrayContent(requestBytes);
             retry.Content.Headers.ContentType = contentType;
-            var response = await _httpClient.SendAsync(
-                retry,
-                HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken).ConfigureAwait(false);
-            retry.Dispose();
+
+            var response = await _httpClient
+                .SendAsync(retry, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .ConfigureAwait(false);
             if (response.StatusCode != HttpStatusCode.ServiceUnavailable || attempt == 5)
                 return response;
 
             response.Dispose();
             await Task.Delay(TimeSpan.FromSeconds(attempt * 3), cancellationToken).ConfigureAwait(false);
         }
+
         throw new InvalidOperationException("Mistral OCR retry loop exited unexpectedly.");
     }
 
@@ -179,9 +170,7 @@ public sealed class FoundryMistralOcrClient : IDocumentExtractionClient
             writer.WritePropertyName("document");
             writer.WriteStartObject();
             writer.WriteString("type", "document_url");
-            writer.WriteString(
-                "document_url",
-                $"data:{mediaType};base64,{Convert.ToBase64String(document)}");
+            writer.WriteString("document_url", $"data:{mediaType};base64,{Convert.ToBase64String(document)}");
             writer.WriteEndObject();
             writer.WriteBoolean("include_image_base64", includeImages);
             writer.WriteBoolean("include_blocks", true);
@@ -196,10 +185,7 @@ public sealed class FoundryMistralOcrClient : IDocumentExtractionClient
         return content;
     }
 
-    private static ExtractedDocumentPage MapPage(
-        JsonElement source,
-        int pageIndex,
-        string rawJson)
+    private static ExtractedDocumentPage MapPage(JsonElement source, int pageIndex, JsonElement rawResponse)
     {
         var sourceIndex = GetInt32(source, "index") ?? pageIndex;
         var pageNumber = sourceIndex + 1;
@@ -209,30 +195,22 @@ public sealed class FoundryMistralOcrClient : IDocumentExtractionClient
         var tableLookup = GetContentLookup(source, "tables");
         var elements = new List<DocumentElement>();
 
+        // OCR 4 blocks reference separately returned table and image payloads by ID.
         if (source.TryGetProperty("blocks", out var blocks) &&
             blocks.ValueKind == JsonValueKind.Array)
         {
-            var blockIndex = 0;
             foreach (var block in blocks.EnumerateArray())
-            {
-                elements.Add(MapBlock(
-                    block,
-                    blockIndex,
-                    pageIndex,
-                    pageNumber,
-                    imageLookup,
-                    tableLookup));
-                blockIndex++;
-            }
+                elements.Add(MapBlock(block, pageNumber, imageLookup, tableLookup));
         }
         else
         {
             elements.Add(new DocumentBlock(markdown)
             {
                 Kind = DocumentBlockKind.Paragraph,
+                RawRepresentation = source.Clone(),
             });
-            AppendUnreferencedTables(elements, source, pageIndex);
-            AppendUnreferencedImages(elements, source, pageNumber, pageIndex);
+            AppendUnreferencedTables(elements, source);
+            AppendUnreferencedImages(elements, source, pageNumber);
         }
 
         return new ExtractedDocumentPage(pageNumber, markdown)
@@ -241,7 +219,7 @@ public sealed class FoundryMistralOcrClient : IDocumentExtractionClient
             Dimensions = dimensions,
             CoordinateUnit = DocumentCoordinateUnit.Pixel,
             CoordinateOrigin = DocumentCoordinateOrigin.TopLeft,
-            RawRepresentation = new FoundryMistralOcrRawReference("$.pages", rawJson),
+            RawRepresentation = rawResponse,
             AdditionalProperties = new AdditionalPropertiesDictionary
             {
                 ["foundry.mistral.header"] = GetString(source, "header"),
@@ -258,8 +236,6 @@ public sealed class FoundryMistralOcrClient : IDocumentExtractionClient
 
     private static DocumentElement MapBlock(
         JsonElement block,
-        int blockIndex,
-        int pageIndex,
         int pageNumber,
         IReadOnlyDictionary<string, JsonElement> images,
         IReadOnlyDictionary<string, JsonElement> tables)
@@ -267,9 +243,7 @@ public sealed class FoundryMistralOcrClient : IDocumentExtractionClient
         var type = GetString(block, "type") ?? "text";
         var content = GetString(block, "content") ?? string.Empty;
         var region = GetRegion(block, pageNumber);
-        var raw = new FoundryMistralOcrRawReference(
-            $"$.pages[{pageIndex}].blocks[{blockIndex}]",
-            block.GetRawText());
+        var raw = block.Clone();
 
         if (type == "image")
         {
@@ -329,14 +303,12 @@ public sealed class FoundryMistralOcrClient : IDocumentExtractionClient
 
     private static void AppendUnreferencedTables(
         List<DocumentElement> elements,
-        JsonElement page,
-        int pageIndex)
+        JsonElement page)
     {
         if (!page.TryGetProperty("tables", out var tables) ||
             tables.ValueKind != JsonValueKind.Array)
             return;
 
-        var index = 0;
         foreach (var table in tables.EnumerateArray())
         {
             elements.Add(new DocumentTable(
@@ -344,36 +316,28 @@ public sealed class FoundryMistralOcrClient : IDocumentExtractionClient
                 0,
                 markdownRepresentation: GetString(table, "content") ?? string.Empty)
             {
-                RawRepresentation = new FoundryMistralOcrRawReference(
-                    $"$.pages[{pageIndex}].tables[{index}]",
-                    table.GetRawText()),
+                RawRepresentation = table.Clone(),
             });
-            index++;
         }
     }
 
     private static void AppendUnreferencedImages(
         List<DocumentElement> elements,
         JsonElement page,
-        int pageNumber,
-        int pageIndex)
+        int pageNumber)
     {
         if (!page.TryGetProperty("images", out var images) ||
             images.ValueKind != JsonValueKind.Array)
             return;
 
-        var index = 0;
         foreach (var image in images.EnumerateArray())
         {
             elements.Add(new DocumentImage
             {
                 Content = GetImageContent(image),
                 BoundingRegion = GetRegion(image, pageNumber),
-                RawRepresentation = new FoundryMistralOcrRawReference(
-                    $"$.pages[{pageIndex}].images[{index}]",
-                    image.GetRawText()),
+                RawRepresentation = image.Clone(),
             });
-            index++;
         }
     }
 
