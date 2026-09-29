@@ -516,11 +516,13 @@ The sample includes:
 The integrated AI playground additionally provides:
 
 - every selected PDF page as a scrollable image preview;
-- Images, JSON, or combined inspector modes;
-- horizontal or vertical combined layouts;
+- a responsive two-pane inspector for page previews and structured results;
 - synchronized selection between image regions and normalized JSON paths;
+- an anchored Inspect popup for capabilities, normalized JSON, complete
+  provider raw JSON, and selected-node raw JSON without modal navigation;
 - provider selection between local Apple Vision and deployed Foundry Mistral
-  OCR 4 using the same `IDocumentExtractionClient` result model;
+  OCR 4 using descriptor-backed radio choices and the same
+  `IDocumentExtractionClient` result model;
 - optional comparison with a deployed vision-capable Foundry model through the
   Responses API, using a strict page/block/table schema while explicitly
   reporting that model output has no trustworthy geometry. This client reuses

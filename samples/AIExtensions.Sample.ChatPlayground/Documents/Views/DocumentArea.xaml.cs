@@ -5,6 +5,7 @@ namespace AIExtensions.Sample.ChatPlayground;
 public partial class DocumentArea : ContentView
 {
     private DocumentPlaygroundViewModel? _viewModel;
+    private bool? _isVertical;
 
     public DocumentArea()
     {
@@ -15,27 +16,11 @@ public partial class DocumentArea : ContentView
     private void OnBindingContextChanged(object? sender, EventArgs e)
     {
         if (_viewModel is not null)
-        {
             _viewModel.PropertyChanged -= ViewModelPropertyChanged;
-            _viewModel.Settings.PropertyChanged -= SettingsPropertyChanged;
-        }
 
         _viewModel = BindingContext as DocumentPlaygroundViewModel;
         if (_viewModel is not null)
-        {
             _viewModel.PropertyChanged += ViewModelPropertyChanged;
-            _viewModel.Settings.PropertyChanged += SettingsPropertyChanged;
-        }
-        ApplyLayout();
-    }
-
-    private void SettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName is nameof(DocumentSettingsViewModel.SelectedDisplayMode) or
-            nameof(DocumentSettingsViewModel.SelectedLayoutMode))
-        {
-            ApplyLayout();
-        }
     }
 
     private void ViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -52,61 +37,47 @@ public partial class DocumentArea : ContentView
             PreviewPagesView.ScrollTo(preview, position: ScrollToPosition.Center, animate: true);
     }
 
-    private void ApplyLayout()
+    protected override void OnSizeAllocated(double width, double height)
     {
-        if (_viewModel is null)
+        base.OnSizeAllocated(width, height);
+        if (width > 0)
+            ApplyLayout(width < 760);
+    }
+
+    private void ApplyLayout(bool vertical)
+    {
+        if (_isVertical == vertical)
             return;
-
-        var showImages = _viewModel.Settings.SelectedDisplayMode is "Images" or "Both";
-        var showJson = _viewModel.Settings.SelectedDisplayMode is "JSON" or "Both";
-        var horizontal = _viewModel.Settings.SelectedLayoutMode == "Horizontal";
-
-        ImagesPanel.IsVisible = showImages;
-        JsonPanel.IsVisible = showJson;
+        _isVertical = vertical;
         InspectorGrid.ColumnDefinitions.Clear();
         InspectorGrid.RowDefinitions.Clear();
 
-        if (showImages && showJson && horizontal)
-        {
-            InspectorGrid.ColumnDefinitions.Add(new(GridLength.Star));
-            InspectorGrid.ColumnDefinitions.Add(new(GridLength.Star));
-            InspectorGrid.RowDefinitions.Add(new(GridLength.Star));
-            Grid.SetColumn(ImagesPanel, 0);
-            Grid.SetRow(ImagesPanel, 0);
-            Grid.SetColumn(JsonPanel, 1);
-            Grid.SetRow(JsonPanel, 0);
-            Grid.SetColumnSpan(ImagesPanel, 1);
-            Grid.SetColumnSpan(JsonPanel, 1);
-        }
-        else if (showImages && showJson)
+        if (vertical)
         {
             InspectorGrid.ColumnDefinitions.Add(new(GridLength.Star));
             InspectorGrid.RowDefinitions.Add(new(GridLength.Star));
             InspectorGrid.RowDefinitions.Add(new(GridLength.Star));
             Grid.SetColumn(ImagesPanel, 0);
             Grid.SetRow(ImagesPanel, 0);
-            Grid.SetColumn(JsonPanel, 0);
-            Grid.SetRow(JsonPanel, 1);
-            Grid.SetColumnSpan(ImagesPanel, 1);
-            Grid.SetColumnSpan(JsonPanel, 1);
+            Grid.SetColumn(ResultsPanel, 0);
+            Grid.SetRow(ResultsPanel, 1);
+            InspectorGrid.ColumnSpacing = 0;
+            InspectorGrid.RowSpacing = 8;
         }
         else
         {
             InspectorGrid.ColumnDefinitions.Add(new(GridLength.Star));
+            InspectorGrid.ColumnDefinitions.Add(new(GridLength.Star));
             InspectorGrid.RowDefinitions.Add(new(GridLength.Star));
-            var visiblePanel = showImages ? ImagesPanel : JsonPanel;
-            Grid.SetColumn(visiblePanel, 0);
-            Grid.SetRow(visiblePanel, 0);
-            Grid.SetColumnSpan(visiblePanel, 1);
+            Grid.SetColumn(ImagesPanel, 0);
+            Grid.SetRow(ImagesPanel, 0);
+            Grid.SetColumn(ResultsPanel, 1);
+            Grid.SetRow(ResultsPanel, 0);
+            InspectorGrid.ColumnSpacing = 8;
+            InspectorGrid.RowSpacing = 0;
         }
-    }
 
-    private void RawJsonClicked(object? sender, EventArgs e)
-    {
-        if (sender is Button { BindingContext: DocumentResultNode node } &&
-            BindingContext is DocumentPlaygroundViewModel viewModel)
-        {
-            viewModel.ShowNodeJson(node);
-        }
+        Grid.SetColumnSpan(DocumentLoading, vertical ? 1 : 2);
+        Grid.SetRowSpan(DocumentLoading, vertical ? 2 : 1);
     }
 }

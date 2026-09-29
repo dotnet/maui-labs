@@ -59,8 +59,11 @@ public sealed record DocumentProviderDescriptor(
 
 public sealed record DocumentProviderOption(
     IDocumentExtractionProvider Provider,
-    DocumentProviderDescriptor Descriptor)
+    DocumentProviderDescriptor Descriptor,
+    int Index)
 {
+    public string AutomationId => $"DocumentProvider{Index}Radio";
+
     public override string ToString() => Descriptor.DisplayName;
 }
 

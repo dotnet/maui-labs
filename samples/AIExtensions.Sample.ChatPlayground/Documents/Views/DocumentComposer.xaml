@@ -6,50 +6,92 @@
              x:DataType="local:DocumentPlaygroundViewModel">
     <Border Style="{StaticResource ComposerPanel}">
         <VerticalStackLayout Spacing="8">
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                <Label Text="{Binding SelectedFileName}"
-                       VerticalOptions="Center"
-                       LineBreakMode="TailTruncation"
-                       AutomationId="DocumentSelectedFileLabel" />
-                <HorizontalStackLayout Grid.Column="1" Spacing="6">
-                    <Button Text="Choose"
-                            Command="{Binding ChooseDocument}"
-                            Style="{StaticResource SecondaryButtonStyle}"
-                            AutomationId="ChooseDocumentButton" />
-                    <Button Text="Sample"
-                            Command="{Binding UseSampleDocument}"
-                            Style="{StaticResource SecondaryButtonStyle}"
-                            AutomationId="UseSampleDocumentButton" />
-                    <Button Text="Scan"
-                            Command="{Binding ScanDocument}"
-                            IsVisible="{Binding Settings.CanScan}"
-                            Style="{StaticResource SecondaryButtonStyle}"
-                            AutomationId="ScanDocumentButton" />
-                </HorizontalStackLayout>
+            <Grid ColumnDefinitions="Auto,*,Auto"
+                  ColumnSpacing="8"
+                  IsVisible="{Binding HasSelection}">
+                <Image Source="folder.png"
+                       WidthRequest="32"
+                       HeightRequest="32"
+                       VerticalOptions="Center" />
+                <VerticalStackLayout Grid.Column="1"
+                                     Spacing="1"
+                                     VerticalOptions="Center">
+                    <Label Text="{Binding SelectedFileName}"
+                           FontAttributes="Bold"
+                           LineBreakMode="TailTruncation"
+                           AutomationId="DocumentSelectedFileLabel" />
+                    <Label Text="{Binding SelectedDocumentDetails}"
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="11" />
+                </VerticalStackLayout>
+                <ImageButton Grid.Column="2"
+                             Source="close.png"
+                             Command="{Binding RemoveDocument}"
+                             Style="{StaticResource AttachmentButton}"
+                             SemanticProperties.Description="Remove selected document"
+                             AutomationId="RemoveDocumentButton" />
+            </Grid>
+
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                <ImageButton Source="add.png"
+                             Style="{StaticResource AttachmentButton}"
+                             IsEnabled="{Binding IsSupported}"
+                             SemanticProperties.Description="Add a document"
+                             AutomationId="AddDocumentButton">
+                    <local:PopupMenu.Content>
+                        <VerticalStackLayout Spacing="8"
+                                             x:DataType="local:DocumentPlaygroundViewModel">
+                            <Label Text="ADD DOCUMENT"
+                                   Style="{StaticResource SectionHeading}" />
+                            <Button Text="Choose image or PDF"
+                                    ImageSource="folder.png"
+                                    Command="{Binding ChooseDocument}"
+                                    AutomationId="ChooseDocumentButton" />
+                            <Button Text="Use sample document"
+                                    ImageSource="sampleimage.png"
+                                    Command="{Binding UseSampleDocument}"
+                                    AutomationId="UseSampleDocumentButton" />
+                            <Button Text="Scan document"
+                                    ImageSource="image.png"
+                                    Command="{Binding ScanDocument}"
+                                    IsVisible="{Binding CanScan}"
+                                    AutomationId="ScanDocumentButton" />
+                        </VerticalStackLayout>
+                    </local:PopupMenu.Content>
+                </ImageButton>
+                <Border Grid.Column="1"
+                        Padding="12,8"
+                        StrokeThickness="0"
+                        StrokeShape="RoundRectangle 8"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource InputBackground}, Dark={StaticResource InputBackgroundDark}}">
+                    <Label Text="{Binding ComposerHint}"
+                           Style="{StaticResource MutedLabel}"
+                           VerticalOptions="Center"
+                           LineBreakMode="TailTruncation"
+                           AutomationId="DocumentComposerHint" />
+                </Border>
+                <Grid Grid.Column="2"
+                      WidthRequest="44"
+                      HeightRequest="44"
+                      VerticalOptions="End">
+                    <ImageButton Source="send.png"
+                                 Command="{Binding ExtractDocument}"
+                                 IsVisible="{Binding IsIdle}"
+                                 Style="{StaticResource AttachmentButton}"
+                                 SemanticProperties.Description="Extract document"
+                                 AutomationId="ExtractDocumentButton" />
+                    <ImageButton Source="stop.png"
+                                 Command="{Binding CancelExtraction}"
+                                 IsVisible="{Binding IsBusy}"
+                                 Style="{StaticResource CancelActionButton}"
+                                 SemanticProperties.Description="Cancel document extraction"
+                                 AutomationId="CancelDocumentButton" />
+                </Grid>
             </Grid>
 
             <ProgressBar Progress="{Binding Progress}"
                          IsVisible="{Binding IsProgressVisible}"
                          AutomationId="DocumentProgressBar" />
-
-            <Grid ColumnDefinitions="*,Auto">
-                <Label Text="{Binding Settings.AvailabilityMessage}"
-                       Style="{StaticResource MutedLabel}"
-                       FontSize="11"
-                       VerticalOptions="Center"
-                       LineBreakMode="TailTruncation" />
-                <Grid Grid.Column="1" WidthRequest="110" HeightRequest="40">
-                    <Button Text="Extract"
-                            Command="{Binding ExtractDocument}"
-                            IsVisible="{Binding IsIdle}"
-                            AutomationId="ExtractDocumentButton" />
-                    <Button Text="Cancel"
-                            Command="{Binding CancelExtraction}"
-                            IsVisible="{Binding IsBusy}"
-                            BackgroundColor="{StaticResource StopActionBackground}"
-                            AutomationId="CancelDocumentButton" />
-                </Grid>
-            </Grid>
         </VerticalStackLayout>
     </Border>
 </ContentView>
