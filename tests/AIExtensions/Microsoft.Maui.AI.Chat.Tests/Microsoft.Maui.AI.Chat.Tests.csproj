@@ -81,6 +81,16 @@
              Link="Documents\Services\DocumentModels.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\DocumentExtractionRunner.cs"
              Link="Documents\Services\DocumentExtractionRunner.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\DocumentRawJson.cs"
+             Link="Documents\Services\DocumentRawJson.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\FoundryMistralOcrClient.cs"
+             Link="Documents\Services\FoundryMistralOcrClient.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\FoundryMistralOcrRawReference.cs"
+             Link="Documents\Services\FoundryMistralOcrRawReference.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\FoundryModelDocumentExtractionClient.cs"
+             Link="Documents\Services\FoundryModelDocumentExtractionClient.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\FoundryModelDocumentRawReference.cs"
+             Link="Documents\Services\FoundryModelDocumentRawReference.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\AISettings.cs"
              Link="Services\AISettings.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\AtomicFile.cs"

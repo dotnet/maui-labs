@@ -519,6 +519,11 @@ The integrated AI playground additionally provides:
 - Images, JSON, or combined inspector modes;
 - horizontal or vertical combined layouts;
 - synchronized selection between image regions and normalized JSON paths;
+- provider selection between local Apple Vision and deployed Foundry Mistral
+  OCR 4 using the same `IDocumentExtractionClient` result model;
+- optional comparison with a deployed vision-capable Foundry model through the
+  Responses API, using a strict page/block/table schema while explicitly
+  reporting that model output has no trustworthy geometry;
 - a packaged corpus page for repeatable, credential-free DevFlow smoke tests;
 - portable orchestration tests with a fake `IDocumentExtractionClient`.
 
@@ -646,6 +651,11 @@ recommendations are maintained separately in
 - [Pinned proposal interface](https://github.com/dotnet/extensions/blob/a215825ae2c96723e922e068c226ff77122c7c94/src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions/IDocumentExtractionClient.cs)
 - [RecognizeDocumentsRequest](https://developer.apple.com/documentation/vision/recognizedocumentsrequest)
 - [Recognizing tables within a document](https://developer.apple.com/documentation/vision/recognize-tables-within-a-document)
+- [Mistral OCR 4 model card](https://ai.azure.com/catalog/models/mistral-ocr-4-0)
+- [Mistral OCR API](https://docs.mistral.ai/api/endpoint/ocr)
+- [Azure Document Intelligence layout model](https://learn.microsoft.com/azure/ai-services/document-intelligence/prebuilt/layout?view=doc-intel-4.0.0)
+- [Azure Content Understanding](https://learn.microsoft.com/azure/ai-services/content-understanding/overview)
+- [Azure OpenAI Responses API file input](https://learn.microsoft.com/azure/foundry/openai/how-to/responses#file-input)
 - [PDFDocument](https://developer.apple.com/documentation/pdfkit/pdfdocument)
 - [PDFPage](https://developer.apple.com/documentation/pdfkit/pdfpage)
 - [.NET PDFKit bindings](https://github.com/dotnet/macios/blob/0ce310ba92638fee3cdcb575c461a23659bcf2f9/src/pdfkit.cs)
