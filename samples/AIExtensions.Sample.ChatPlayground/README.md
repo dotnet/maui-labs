@@ -18,6 +18,8 @@ image-generation tool. Windows AI supports text and schema-constrained JSON
 but not image input or native tool calling. Apple does not generate images or
 fall back to Azure. Streaming displays partial JSON only if the provider
 reports incremental progress; a buffered response appears when it completes.
+The shared structured-response schema leaves fields optional, while Apple,
+Windows AI, and Azure OpenAI require all declared fields in their native schemas.
 
 Chat displays the model ID reported by the provider, including during replay.
 Save the current chat locally, import or export recordings, and replay them
