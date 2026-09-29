@@ -36,6 +36,8 @@ jobs:
 
   template-smoke:
     runs-on: windows-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v5
