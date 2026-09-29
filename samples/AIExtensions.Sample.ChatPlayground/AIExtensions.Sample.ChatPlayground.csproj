@@ -11,10 +11,11 @@
     <IsPackable>false</IsPackable>
     <EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>
     <MauiXamlInflator>SourceGen</MauiXamlInflator>
-    <NoWarn>$(NoWarn);MAUIAI0001;MEAI001;OPENAI001;XCODE_27_0_PREVIEW</NoWarn>
+    <!-- Apple document APIs are guarded at runtime and the vendored contract is intentionally experimental. -->
+    <NoWarn>$(NoWarn);CA1416;MAUIAI0001;MEAI001;MEDE0001;OPENAI001;XCODE_27_0_PREVIEW</NoWarn>
     <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst'))">maccatalyst-x64</RuntimeIdentifier>
     <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst')) and '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'arm64'">maccatalyst-arm64</RuntimeIdentifier>
-    <ApplicationTitle>Chat Client Playground</ApplicationTitle>
+    <ApplicationTitle>AI Playground</ApplicationTitle>
     <ApplicationId>com.microsoft.maui.chatclientplayground</ApplicationId>
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
@@ -27,6 +28,8 @@
     <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#2563EB" BaseSize="128,128" />
     <MauiImage Include="Resources\Images\*.svg" />
     <MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+    <MauiAsset Include="..\..\tests\AI\Microsoft.Maui.Essentials.AI.DeviceTests\Resources\Raw\DocumentExtraction\mixed-document.png"
+               LogicalName="document_playground_sample.png" />
   </ItemGroup>
 
   <ItemGroup>
@@ -43,6 +46,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj" />
     <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj" />
+    <!-- Microsoft.Maui.Essentials.AI embeds these experimental assemblies in its package, but its
+         PrivateAssets project references are intentionally non-transitive for repo builds. -->
+    <ProjectReference Include="..\..\src\Libraries\Microsoft.Extensions.DocumentExtraction.Abstractions\Microsoft.Extensions.DocumentExtraction.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\Libraries\Microsoft.Extensions.DocumentExtraction\Microsoft.Extensions.DocumentExtraction.csproj" />
   </ItemGroup>
 
   <!-- WARNING: This target embeds the developer's local secrets.json in the app binary.

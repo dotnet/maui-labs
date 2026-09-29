@@ -29,5 +29,7 @@
     </dict>
     <key>XSAppIconAssets</key>
     <string>Assets.xcassets/appicon.appiconset</string>
+    <key>NSCameraUsageDescription</key>
+    <string>Scan a document for on-device Apple Vision extraction.</string>
 </dict>
 </plist>

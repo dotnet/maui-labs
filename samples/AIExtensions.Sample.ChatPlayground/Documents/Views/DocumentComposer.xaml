@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
+             x:Class="AIExtensions.Sample.ChatPlayground.DocumentComposer"
+             x:DataType="local:DocumentPlaygroundViewModel">
+    <Border Style="{StaticResource ComposerPanel}">
+        <VerticalStackLayout Spacing="8">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <Label Text="{Binding SelectedFileName}"
+                       VerticalOptions="Center"
+                       LineBreakMode="TailTruncation"
+                       AutomationId="DocumentSelectedFileLabel" />
+                <HorizontalStackLayout Grid.Column="1" Spacing="6">
+                    <Button Text="Choose"
+                            Command="{Binding ChooseDocument}"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            AutomationId="ChooseDocumentButton" />
+                    <Button Text="Sample"
+                            Command="{Binding UseSampleDocument}"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            AutomationId="UseSampleDocumentButton" />
+                    <Button Text="Scan"
+                            Command="{Binding ScanDocument}"
+                            IsVisible="{Binding Settings.CanScan}"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            AutomationId="ScanDocumentButton" />
+                </HorizontalStackLayout>
+            </Grid>
+
+            <ProgressBar Progress="{Binding Progress}"
+                         IsVisible="{Binding IsProgressVisible}"
+                         AutomationId="DocumentProgressBar" />
+
+            <Grid ColumnDefinitions="*,Auto">
+                <Label Text="{Binding Settings.AvailabilityMessage}"
+                       Style="{StaticResource MutedLabel}"
+                       FontSize="11"
+                       VerticalOptions="Center"
+                       LineBreakMode="TailTruncation" />
+                <Grid Grid.Column="1" WidthRequest="110" HeightRequest="40">
+                    <Button Text="Extract"
+                            Command="{Binding ExtractDocument}"
+                            IsVisible="{Binding IsIdle}"
+                            AutomationId="ExtractDocumentButton" />
+                    <Button Text="Cancel"
+                            Command="{Binding CancelExtraction}"
+                            IsVisible="{Binding IsBusy}"
+                            BackgroundColor="{StaticResource StopActionBackground}"
+                            AutomationId="CancelDocumentButton" />
+                </Grid>
+            </Grid>
+        </VerticalStackLayout>
+    </Border>
+</ContentView>
