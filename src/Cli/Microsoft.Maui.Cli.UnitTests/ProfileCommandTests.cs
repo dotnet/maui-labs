@@ -932,6 +932,37 @@ public class ProfileCommandTests
 		Assert.Contains("DOTNET_JitMinimalJitProfiling=1", contents);
 	}
 
+	[Fact]
+	public async Task MauiProfilingHelperInjectionTargets_GeneratesEnvironmentOnlyForSelectedProject()
+	{
+		var targetsPath = Path.GetFullPath(Path.Combine(
+			AppContext.BaseDirectory,
+			"../../../../../src/Cli/Microsoft.Maui.Cli/Build/MauiProfilingHelperInjection.targets"));
+		var tempDirectory = Path.Combine(Path.GetTempPath(), "maui-profile-injection-tests", Guid.NewGuid().ToString("N"));
+		var appProjectPath = Path.Combine(tempDirectory, "App.proj");
+		var libraryProjectPath = Path.Combine(tempDirectory, "Library.proj");
+		var appIntermediatePath = Path.Combine(tempDirectory, "app-obj");
+		var libraryIntermediatePath = Path.Combine(tempDirectory, "library-obj");
+
+		Directory.CreateDirectory(tempDirectory);
+		try
+		{
+			File.WriteAllText(appProjectPath, CreateProfilingInjectionTestProject(targetsPath, appIntermediatePath));
+			File.WriteAllText(libraryProjectPath, CreateProfilingInjectionTestProject(targetsPath, libraryIntermediatePath));
+
+			var appResult = await RunProfilingInjectionTargetAsync(appProjectPath, appProjectPath);
+			var libraryResult = await RunProfilingInjectionTargetAsync(libraryProjectPath, appProjectPath);
+
+			Assert.True(appResult.ExitCode == 0, appResult.Output);
+			Assert.True(libraryResult.ExitCode == 0, libraryResult.Output);
+			Assert.True(File.Exists(Path.Combine(appIntermediatePath, "MauiProfilingHelper.env")));
+			Assert.False(File.Exists(Path.Combine(libraryIntermediatePath, "MauiProfilingHelper.env")));
+		}
+		finally
+		{
+			Directory.Delete(tempDirectory, recursive: true);
+		}
+	}
 
 	[Fact]
 	public void ResolveProfileTransport_AndroidEmulator_UsesEmulatorLoopbackAlias()
@@ -1171,6 +1202,7 @@ public class ProfileCommandTests
 	{
 		var device = CreateDevice(Platforms.Android, isEmulator: true);
 		var transport = ProfileCommand.ResolveProfileTransport(Platforms.Android, device);
+		var projectPath = TestPath("fake", "MyApp.csproj");
 		var buildInjection = new ProfilingBuildInjection(
 			TargetsPath: TestPath("fake", "MauiProfilingHelperInjection.targets"),
 			AssemblyPath: TestPath("fake", "Microsoft.Maui.ProfilingHelper.dll"),
@@ -1181,7 +1213,7 @@ public class ProfileCommandTests
 			EventPipeOutputPath: "/storage/emulated/0/Android/data/com.example/files/startup.nettrace");
 
 		var args = ProfileCommand.BuildCompileArguments(
-			TestPath("fake", "MyApp.csproj"),
+			projectPath,
 			"net10.0-android",
 			"Release",
 			transport,
@@ -1192,6 +1224,7 @@ public class ProfileCommandTests
 		Assert.Contains("-p:EnableDiagnostics=true", args);
 		Assert.Contains("-p:MauiProfilingHelperExitHost=10.0.2.2", args);
 		Assert.Contains("-p:MauiProfilingHelperExitPort=9001", args);
+		Assert.Contains($"-p:MauiProfilingHelperProjectFullPath={Path.GetFullPath(projectPath)}", args);
 		Assert.Contains("-p:MauiProfilingHelperEnableRuntimePgo=true", args);
 		Assert.Contains("-p:MauiProfilingHelperEventPipeOutputPath=/storage/emulated/0/Android/data/com.example/files/startup.nettrace", args);
 	}
@@ -1709,6 +1742,56 @@ public class ProfileCommandTests
 			});
 
 		return new ProfileTestProcess(monitoredProcess, ready.Task, finalizationStarted.Task);
+	}
+
+	static string CreateProfilingInjectionTestProject(string targetsPath, string intermediateOutputPath)
+		=> $"""
+			<Project>
+			  <PropertyGroup>
+			    <UseMaui>true</UseMaui>
+			    <TargetFramework>net10.0-android</TargetFramework>
+			    <IntermediateOutputPath>{System.Security.SecurityElement.Escape(intermediateOutputPath + Path.DirectorySeparatorChar)}</IntermediateOutputPath>
+			  </PropertyGroup>
+			  <Import Project="{System.Security.SecurityElement.Escape(targetsPath)}" />
+			</Project>
+			""";
+
+	static async Task<(int ExitCode, string Output)> RunProfilingInjectionTargetAsync(string projectPath, string selectedProjectPath)
+	{
+		var dotnetHost = Path.GetFullPath(Path.Combine(
+			System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(),
+			"..",
+			"..",
+			"..",
+			OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet"));
+		var startInfo = new ProcessStartInfo(dotnetHost)
+		{
+			UseShellExecute = false,
+			RedirectStandardOutput = true,
+			RedirectStandardError = true,
+			CreateNoWindow = true
+		};
+		foreach (var argument in new[]
+		{
+			"msbuild",
+			projectPath,
+			"-t:GenerateMauiProfilingHelperEnvironment",
+			"--nologo",
+			"-p:MauiProfilingHelperInject=true",
+			$"-p:MauiProfilingHelperProjectFullPath={selectedProjectPath}"
+		})
+		{
+			startInfo.ArgumentList.Add(argument);
+		}
+
+		using var process = Process.Start(startInfo)
+			?? throw new InvalidOperationException("Failed to start the profiling injection MSBuild test.");
+		var standardOutput = process.StandardOutput.ReadToEndAsync();
+		var standardError = process.StandardError.ReadToEndAsync();
+		await process.WaitForExitAsync();
+		var output = await standardOutput + await standardError;
+
+		return (process.ExitCode, output);
 	}
 
 	static TempFile CreateTempFile(string fileName)

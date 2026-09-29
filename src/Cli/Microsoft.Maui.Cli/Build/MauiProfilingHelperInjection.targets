@@ -26,7 +26,14 @@ return true;
     </Task>
   </UsingTask>
 
-  <PropertyGroup Condition="'$(MauiProfilingHelperInject)' == 'true' and '$(UseMaui)' == 'true'">
+  <!-- CustomAfterMicrosoftCommonTargets flows to project references, so scope injection back to the selected app. -->
+  <PropertyGroup>
+    <_MauiProfilingHelperIsTargetProject Condition="'$(MauiProfilingHelperInject)' == 'true'
+      and '$(MauiProfilingHelperProjectFullPath)' != ''
+      and '$(MauiProfilingHelperProjectFullPath)' == '$(MSBuildProjectFullPath)'">true</_MauiProfilingHelperIsTargetProject>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(_MauiProfilingHelperIsTargetProject)' == 'true' and '$(UseMaui)' == 'true'">
     <_MauiProfilingHelperAssemblyPath>$(MauiProfilingHelperAssemblyPath)</_MauiProfilingHelperAssemblyPath>
     <_MauiProfilingHelperAssemblyPath Condition="'$(_MauiProfilingHelperAssemblyPath)' == ''">$(MSBuildThisFileDirectory)Microsoft.Maui.ProfilingHelper.dll</_MauiProfilingHelperAssemblyPath>
     <_MauiProfilingHelperSourcePath>$(MSBuildThisFileDirectory)MauiProfilingHelper.AutoInitialize.cs</_MauiProfilingHelperSourcePath>
@@ -37,7 +44,7 @@ return true;
 
   <Target Name="ValidateMauiProfilingHelperInjection"
           BeforeTargets="PrepareForBuild"
-          Condition="'$(MauiProfilingHelperInject)' == 'true'
+          Condition="'$(_MauiProfilingHelperIsTargetProject)' == 'true'
             and '$(UseMaui)' == 'true'
             and '$(MauiProfilingHelperInjectBootstrap)' != 'false'">
     <Error Condition="!Exists('$(_MauiProfilingHelperAssemblyPath)')"
@@ -46,7 +53,7 @@ return true;
            Text="The injected profiling helper source file was not found at '$(_MauiProfilingHelperSourcePath)'." />
   </Target>
 
-  <ItemGroup Condition="'$(MauiProfilingHelperInject)' == 'true'
+  <ItemGroup Condition="'$(_MauiProfilingHelperIsTargetProject)' == 'true'
     and '$(UseMaui)' == 'true'
     and '$(MauiProfilingHelperInjectBootstrap)' != 'false'">
     <Reference Include="Microsoft.Maui.ProfilingHelper">
@@ -59,7 +66,7 @@ return true;
              Visible="false" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(MauiProfilingHelperInject)' == 'true'
+  <ItemGroup Condition="'$(_MauiProfilingHelperIsTargetProject)' == 'true'
     and '$(UseMaui)' == 'true'
     and '$(TargetFramework)' != ''
     and $([System.String]::Copy('$(TargetFramework)').Contains('-ios'))">
@@ -72,7 +79,7 @@ return true;
 
   <Target Name="GenerateMauiProfilingHelperEnvironment"
           BeforeTargets="PrepareForBuild"
-          Condition="'$(MauiProfilingHelperInject)' == 'true'
+          Condition="'$(_MauiProfilingHelperIsTargetProject)' == 'true'
             and '$(UseMaui)' == 'true'
             and '$(TargetFramework)' != ''
             and $([System.String]::Copy('$(TargetFramework)').Contains('-android'))">
@@ -123,7 +130,7 @@ return true;
 
   <Target Name="EnableMauiProfilingHelperAndroidDebuggable"
           AfterTargets="_GenerateJavaStubs"
-          Condition="'$(MauiProfilingHelperInject)' == 'true'
+          Condition="'$(_MauiProfilingHelperIsTargetProject)' == 'true'
             and '$(UseMaui)' == 'true'
             and '$(TargetFramework)' != ''
             and $([System.String]::Copy('$(TargetFramework)').Contains('-android'))
