@@ -9,17 +9,15 @@ public sealed class AISettings
     public string? DeploymentName { get; set; }
     public string? ImageDeploymentName { get; set; }
     public string? EmbeddingDeploymentName { get; set; }
-    public string? DocumentModelDeploymentName { get; set; }
+    public string? DocumentDeploymentName { get; set; }
     public Uri? FoundryEndpoint { get; set; }
     public string? FoundryApiKey { get; set; }
-    public string MistralDocumentModelId { get; set; } = "mistral-ocr-4-0";
 
     public void Validate()
     {
         var hasOpenAI = !string.IsNullOrWhiteSpace(DeploymentName) ||
             !string.IsNullOrWhiteSpace(ImageDeploymentName) ||
-            !string.IsNullOrWhiteSpace(EmbeddingDeploymentName) ||
-            !string.IsNullOrWhiteSpace(DocumentModelDeploymentName);
+            !string.IsNullOrWhiteSpace(EmbeddingDeploymentName);
         if (hasOpenAI)
         {
             if (Endpoint is null)
@@ -30,17 +28,18 @@ public sealed class AISettings
         }
 
         var hasFoundryResource = FoundryEndpoint is not null ||
-            !string.IsNullOrWhiteSpace(FoundryApiKey);
+            !string.IsNullOrWhiteSpace(FoundryApiKey) ||
+            !string.IsNullOrWhiteSpace(DocumentDeploymentName);
         if (!hasFoundryResource)
             return;
 
         if (FoundryEndpoint is null)
-            throw new InvalidOperationException("AI:FoundryEndpoint is required when Mistral OCR is configured.");
+            throw new InvalidOperationException("AI:FoundryEndpoint is required when a document deployment is configured.");
 
         if (string.IsNullOrWhiteSpace(FoundryApiKey))
-            throw new InvalidOperationException("AI:FoundryApiKey is required when Mistral OCR is configured.");
+            throw new InvalidOperationException("AI:FoundryApiKey is required when a document deployment is configured.");
 
-        if (string.IsNullOrWhiteSpace(MistralDocumentModelId))
-            throw new InvalidOperationException("AI:MistralDocumentModelId cannot be empty.");
+        if (string.IsNullOrWhiteSpace(DocumentDeploymentName))
+            throw new InvalidOperationException("AI:DocumentDeploymentName is required when Foundry document credentials are configured.");
     }
 }
