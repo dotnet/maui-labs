@@ -14,6 +14,8 @@ internal static class DocumentRawJson
 #if IOS || MACCATALYST
         return rawRepresentation switch
         {
+            FoundryModelDocumentRawReference foundry => () => Format(foundry.Json),
+            FoundryMistralOcrRawReference mistral => () => Format(mistral.Json),
             AppleVisionDocumentNodeReference vision => () => Format(vision.GetRawJsonText()),
             ApplePdfKitPageReference
             {
@@ -42,6 +44,21 @@ internal static class DocumentRawJson
     internal static string SerializePages(DocumentExtractionResult result)
     {
         ArgumentNullException.ThrowIfNull(result);
+
+        if (result.Pages
+            .Select(static page => page.RawRepresentation)
+            .OfType<FoundryModelDocumentRawReference>()
+            .FirstOrDefault() is { } foundry)
+        {
+            return Format(foundry.Json);
+        }
+        if (result.Pages
+            .Select(static page => page.RawRepresentation)
+            .OfType<FoundryMistralOcrRawReference>()
+            .FirstOrDefault() is { } mistral)
+        {
+            return Format(mistral.Json);
+        }
 
         var pages = result.Pages.Select(page =>
         {

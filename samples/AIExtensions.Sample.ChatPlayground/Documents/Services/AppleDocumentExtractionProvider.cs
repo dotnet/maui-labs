@@ -61,34 +61,44 @@ internal sealed class AppleDocumentExtractionProvider : IDocumentExtractionProvi
 #if IOS
         var available = OperatingSystem.IsIOSVersionAtLeast(26);
         return new(
+            "apple-vision",
             "Apple Vision",
             available
                 ? "RecognizeDocumentsRequest runs entirely on-device. PDF pages are rendered with PDFKit and passed to the same Vision client."
                 : "Apple Vision document extraction requires iOS 26 or later. No fallback engine is used.",
-            available);
+            available,
+            SendsDocumentOffDevice: false);
 #elif MACCATALYST
         var available = OperatingSystem.IsMacCatalystVersionAtLeast(26);
         return new(
+            "apple-vision",
             "Apple Vision",
             available
                 ? "RecognizeDocumentsRequest runs entirely on-device. PDF pages are rendered with PDFKit and passed to the same Vision client."
                 : "Apple Vision document extraction requires Mac Catalyst 26 or later. No fallback engine is used.",
-            available);
+            available,
+            SendsDocumentOffDevice: false);
 #elif ANDROID
         return new(
+            "apple-vision",
             "Unavailable on Android",
             "No Android document extraction provider is registered. This playground does not substitute cloud OCR or another local engine.",
-            false);
+            false,
+            SendsDocumentOffDevice: false);
 #elif WINDOWS
         return new(
+            "apple-vision",
             "Unavailable on Windows",
             "No Windows document extraction provider is registered. This playground does not substitute cloud OCR or another local engine.",
-            false);
+            false,
+            SendsDocumentOffDevice: false);
 #else
         return new(
+            "apple-vision",
             "Unavailable",
             "No document extraction provider is registered for this platform.",
-            false);
+            false,
+            SendsDocumentOffDevice: false);
 #endif
     }
 

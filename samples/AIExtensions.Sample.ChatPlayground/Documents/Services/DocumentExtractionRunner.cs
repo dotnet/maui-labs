@@ -2,11 +2,9 @@ using Microsoft.Extensions.DocumentExtraction;
 
 namespace AIExtensions.Sample.ChatPlayground;
 
-/// <summary>Runs one selected document through the registered document provider.</summary>
-public sealed class DocumentExtractionRunner(IDocumentExtractionProvider provider)
+/// <summary>Runs one selected document through a selected document provider.</summary>
+public sealed class DocumentExtractionRunner
 {
-    public DocumentProviderDescriptor Provider => provider.Descriptor;
-
     public static string? GetMediaType(string fileName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
@@ -24,11 +22,13 @@ public sealed class DocumentExtractionRunner(IDocumentExtractionProvider provide
 
     public async Task<DocumentExtractionResult> ExtractAsync(
         DocumentInput input,
+        IDocumentExtractionProvider provider,
         DocumentExtractionSettings settings,
         IProgress<DocumentExtractionProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(provider);
         ArgumentNullException.ThrowIfNull(settings);
 
         if (!provider.Descriptor.IsAvailable)
@@ -54,5 +54,9 @@ public sealed class DocumentExtractionRunner(IDocumentExtractionProvider provide
         return pages.ToDocumentExtractionResult();
     }
 
-    public string GetCapabilitiesSummary() => provider.GetCapabilitiesSummary();
+    public string GetCapabilitiesSummary(IDocumentExtractionProvider provider)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        return provider.GetCapabilitiesSummary();
+    }
 }

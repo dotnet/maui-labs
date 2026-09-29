@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.DocumentExtraction;
@@ -23,6 +24,7 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         _runner = runner;
         _inputService = inputService;
         Settings = settings;
+        Settings.PropertyChanged += SettingsPropertyChanged;
         StatusMessage = settings.IsSupported
             ? "Choose an image or PDF, or load the sample document."
             : settings.AvailabilityMessage;
@@ -129,9 +131,12 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         var pageProgress = new Progress<DocumentExtractionProgress>(OnProgress);
         try
         {
+            var provider = Settings.SelectedProvider?.Provider
+                ?? throw new InvalidOperationException("Choose a document provider.");
             var result = await Task.Run(
                 () => _runner.ExtractAsync(
                     input,
+                    provider,
                     Settings.CreateSettings(),
                     pageProgress,
                     cancellationToken),
@@ -181,7 +186,11 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
     {
         try
         {
-            RequestText("Document provider capabilities", _runner.GetCapabilitiesSummary());
+            var provider = Settings.SelectedProvider?.Provider
+                ?? throw new InvalidOperationException("Choose a document provider.");
+            RequestText(
+                "Document provider capabilities",
+                _runner.GetCapabilitiesSummary(provider));
         }
         catch (Exception exception)
         {
@@ -202,7 +211,9 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
     private void OpenRawJson()
     {
         if (_result is { } result)
-            RequestText("Raw Apple Vision JSON", DocumentRawJson.SerializePages(result));
+            RequestText(
+                $"Raw {Settings.ProviderName} JSON",
+                DocumentRawJson.SerializePages(result));
     }
 
     public void ShowNodeJson(DocumentResultNode node)
@@ -265,6 +276,26 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
 
     private void RequestText(string title, string content) =>
         TextRequested?.Invoke(this, new(title, content));
+
+    private void SettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(DocumentSettingsViewModel.SelectedProvider))
+            return;
+
+        _result = null;
+        Nodes.Clear();
+        SelectedNode = null;
+        foreach (var preview in PreviewPages)
+            preview.SetExtraction(null, []);
+        Settings.ResultDetails = "Not extracted with this provider.";
+        StatusMessage = Settings.IsSupported
+            ? $"Selected {Settings.ProviderName}. Choose or extract a document."
+            : Settings.AvailabilityMessage;
+        OnPropertyChanged(nameof(IsSupported));
+        OnPropertyChanged(nameof(CanScan));
+        OnPropertyChanged(nameof(HasResult));
+        RefreshCommands();
+    }
 
     partial void OnIsBusyChanged(bool value)
     {

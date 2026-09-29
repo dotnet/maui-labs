@@ -8,7 +8,9 @@
         <VerticalStackLayout Padding="16" Spacing="14">
             <VerticalStackLayout Spacing="4">
                 <Label Text="PROVIDER" Style="{StaticResource SectionHeading}" />
-                <Label Text="{Binding Settings.ProviderName}" FontAttributes="Bold" />
+                <Picker ItemsSource="{Binding Settings.Providers}"
+                        SelectedItem="{Binding Settings.SelectedProvider}"
+                        AutomationId="DocumentProviderPicker" />
                 <Label Text="{Binding Settings.AvailabilityMessage}"
                        Style="{StaticResource MutedLabel}" FontSize="12" />
             </VerticalStackLayout>
@@ -26,6 +28,12 @@
                     <CheckBox IsChecked="{Binding Settings.AutomaticallyDetectLanguage}"
                               AutomationId="DocumentAutomaticLanguageCheckBox" />
                     <Label Grid.Column="1" Text="Automatically detect language"
+                           VerticalOptions="Center" />
+                </Grid>
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                    <CheckBox IsChecked="{Binding Settings.IncludeImages}"
+                              AutomationId="DocumentIncludeImagesCheckBox" />
+                    <Label Grid.Column="1" Text="Include extracted figure images"
                            VerticalOptions="Center" />
                 </Grid>
             </VerticalStackLayout>
@@ -66,7 +74,7 @@
                         Command="{Binding ShowNormalizedJson}"
                         Style="{StaticResource SecondaryButtonStyle}"
                         AutomationId="DocumentNormalizedJsonButton" />
-                <Button Text="Raw Apple JSON"
+                <Button Text="Raw provider JSON"
                         Command="{Binding ShowRawJson}"
                         Style="{StaticResource SecondaryButtonStyle}"
                         AutomationId="DocumentRawJsonButton" />
