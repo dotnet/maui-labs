@@ -1,12 +1,13 @@
-# AI Chat Playground
+# AI Playground
 
 A .NET MAUI sample for comparing `Microsoft.Extensions.AI` providers. It has
-Chat, Embeddings, and Images tabs. `Microsoft.Maui.Essentials.AI` provides
+Chat, Embeddings, Images, and Documents tabs. `Microsoft.Maui.Essentials.AI` provides
 `AppleIntelligenceChatClient` for on-device chat and `NLEmbeddingGenerator`
-for on-device embeddings; Azure OpenAI is optional. The app targets Android,
-iOS, and Mac Catalyst, plus a Windows target with Azure and offline Replay
-only. It does **not** target native macOS. Available providers vary by
-platform; saved Chat recordings can be replayed offline.
+for on-device embeddings. The Documents tab exercises the experimental
+`Microsoft.Extensions.DocumentExtraction` contract with Apple Vision and
+PDFKit. Azure OpenAI is optional. The app targets Android, iOS, and Mac
+Catalyst, plus Windows. It does **not** target native macOS. Available providers
+vary by platform; saved Chat recordings can be replayed offline.
 
 ## Build and run
 
@@ -14,7 +15,9 @@ Install the repo's pinned .NET 10 SDK and MAUI workload. Apple Intelligence
 Chat requires iOS or Mac Catalyst 26+ on a supported device with a compatible
 Xcode; Apple NaturalLanguage embeddings have broader Apple OS support but appear
 only when the English sentence-embedding asset is installed (it may be absent
-on simulators).
+on simulators). Apple Vision document extraction requires iOS or Mac Catalyst
+26+. Android and Windows show the Documents tab and its availability guidance,
+but no fake or fallback extractor is registered.
 Azure-backed features also run on Android and Windows.
 
 From the repository root on macOS, build before running the Mac Catalyst target:
@@ -77,6 +80,16 @@ text may leave the device and incur charges.
 - **Images:** Generate from text or edit a single source image and inspect the
   result. Configured Azure providers are offered; there is no on-device image
   provider in this branch. The Images tab does not save generated results.
+- **Documents:** Choose an image or PDF, load the packaged conformance sample,
+  or scan pages with VisionKit where supported. Apple Vision returns structured
+  pages, text, tables, lists, barcodes, metadata, and geometry. Image inputs show
+  a polygon overlay, while PDF inputs show every rendered page. Switch the
+  inspector between Images, JSON, or both panes arranged horizontally or
+  vertically. Selecting an overlay region selects and scrolls to its normalized
+  JSON path; selecting a JSON row highlights and scrolls to its page region.
+  Inspect full normalized JSON, bounded raw Apple JSON, and provider
+  capabilities, or cancel a multi-page PDF while PDFKit renders and recognizes
+  pages sequentially. No document content leaves the device.
 
 The app saves one Chat recording locally for replay. Use the Chat **More**
 menu to load a bundled example without credentials, or import/export a
@@ -87,9 +100,15 @@ that chat first.
 
 ## Organization
 
-`Chat/`, `Embeddings/`, and `Images/` each contain their own services, views,
-and view models. Each feature registers its page and selected real abstractions
-with dependency injection. `MainWindow` composes the three registered pages
-as tabs. Reusable controls are in `Views/`, and shared configuration, image
-input, and atomic storage are in `Services/`. Chat recording and document
-indexing remain separate.
+`Chat/`, `Embeddings/`, `Images/`, and `Documents/` each contain their own
+services, views, and view models. Each feature registers its page and selected
+real abstractions with dependency injection. `MainWindow` composes the four
+registered pages as tabs. Reusable controls are in `Views/`, and shared
+configuration, image input, and atomic storage are in `Services/`. Chat
+recording, embedding document indexing, and document extraction remain
+separate.
+
+The Documents feature currently references a vendored snapshot of the proposed
+`Microsoft.Extensions.DocumentExtraction` API from dotnet/extensions#7588.
+Those non-shipping projects are experimental scaffolding and must be replaced
+with official package references before this sample or provider ships.

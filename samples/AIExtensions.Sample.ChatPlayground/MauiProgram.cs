@@ -24,6 +24,7 @@ public static class MauiProgram
         builder.Services.AddChatFeature(aiSettings);
         builder.Services.AddEmbeddingFeature(aiSettings);
         builder.Services.AddImageFeature(aiSettings);
+        builder.Services.AddDocumentFeature();
         builder.Services.AddTransient<MainWindow>();
 
 #if DEBUG

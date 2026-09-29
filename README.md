@@ -233,8 +233,9 @@ For live app inspection and host setup, see the
 [MAUI DevFlow Inspector guide](docs/DevFlow/inspector.md).
 
 For AI Extensions usage and samples, see [`src/AIExtensions/README.md`](src/AIExtensions/README.md),
-the [`IChatClient` playground](samples/AIExtensions.Sample.ChatPlayground/README.md) for live
-requests, portable recording/replay, and archived-chat search, and the
+the [cross-platform AI playground](samples/AIExtensions.Sample.ChatPlayground/README.md) for
+chat, embeddings, images, Apple Vision documents, portable recording/replay, and document search,
+and the
 [`Garden` sample](samples/AIExtensions.Sample.Garden/README.md).
 
 ## Support

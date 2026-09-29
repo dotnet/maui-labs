@@ -2,6 +2,7 @@ namespace AIExtensions.Sample.ChatPlayground;
 
 public sealed class MainWindow : Window
 {
+    /// <summary>Creates the Chat, Embeddings, Images, and Documents tabs in DI registration order.</summary>
     public MainWindow(IEnumerable<Page> pages)
         : base(CreateTabs(pages))
     {
