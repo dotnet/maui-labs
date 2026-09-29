@@ -12,17 +12,16 @@ internal static class DocumentServiceCollectionExtensions
         AISettings settings)
     {
         services.AddSingleton<IDocumentExtractionProvider, AppleDocumentExtractionProvider>();
-        if (settings.FoundryEndpoint is not null &&
-            !string.IsNullOrWhiteSpace(settings.FoundryApiKey))
+        if (!string.IsNullOrWhiteSpace(settings.DocumentDeploymentName))
         {
             services.AddSingleton<IDocumentExtractionProvider>(_ =>
                 new FoundryMistralOcrProvider(
                     new HttpClient(),
-                    settings.FoundryEndpoint,
-                    settings.FoundryApiKey,
-                    settings.MistralDocumentModelId));
+                    settings.FoundryEndpoint!,
+                    settings.FoundryApiKey!,
+                    settings.DocumentDeploymentName));
         }
-        if (!string.IsNullOrWhiteSpace(settings.DocumentModelDeploymentName))
+        if (!string.IsNullOrWhiteSpace(settings.DeploymentName))
         {
             services.AddSingleton<IDocumentExtractionProvider>(_ =>
             {
@@ -31,8 +30,8 @@ internal static class DocumentServiceCollectionExtensions
                     new OpenAIClientOptions { Endpoint = settings.Endpoint! });
                 return new FoundryModelDocumentExtractionProvider(
                     openAIClient.GetResponsesClient()
-                        .AsIChatClient(settings.DocumentModelDeploymentName),
-                    settings.DocumentModelDeploymentName);
+                        .AsIChatClient(settings.DeploymentName),
+                    settings.DeploymentName);
             });
         }
         services.AddSingleton<DocumentExtractionRunner>();

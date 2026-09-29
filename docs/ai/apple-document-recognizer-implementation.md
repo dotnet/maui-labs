@@ -523,7 +523,13 @@ The integrated AI playground additionally provides:
   OCR 4 using the same `IDocumentExtractionClient` result model;
 - optional comparison with a deployed vision-capable Foundry model through the
   Responses API, using a strict page/block/table schema while explicitly
-  reporting that model output has no trustworthy geometry;
+  reporting that model output has no trustworthy geometry. This client reuses
+  the app's existing Chat deployment when it supports image input;
+- explicit cloud comparison: `AI:DocumentDeploymentName` identifies the
+  specialized Mistral OCR model (for example `mistral-ocr-4-0`), while
+  `AI:DeploymentName` identifies the general vision/chat model. Both clients
+  are independently selectable and failures are never retried through the
+  other client;
 - a packaged corpus page for repeatable, credential-free DevFlow smoke tests;
 - portable orchestration tests with a fake `IDocumentExtractionClient`.
 
