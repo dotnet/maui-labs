@@ -2,6 +2,7 @@
 
 **Proposal reviewed:** `dotnet/extensions` PR #7588
 **Pinned commit:** `a215825ae2c96723e922e068c226ff77122c7c94`
+**Upstream head reverified:** 2026-09-29 (unchanged)
 **Provider:** Apple Vision `RecognizeDocumentsRequest` with explicit PDFKit page
 rendering
 
