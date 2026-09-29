@@ -10,18 +10,18 @@
                 <Label Text="CLIENT"
                        Style="{StaticResource SectionHeading}"
                        VerticalOptions="Center" />
-                <local:InfoTip Text="Each option is an independently registered IDocumentExtractionClient factory. Local Apple Vision stays on-device; Foundry clients send the selected document to Azure." />
+                <local:InfoTip Text="Each option is an independently registered IDocumentExtractionClient. Apple Vision stays on-device; Foundry clients send the selected document to Azure." />
             </HorizontalStackLayout>
             <VerticalStackLayout Spacing="4"
-                                 IsEnabled="{Binding CanSelectProvider}"
-                                 RadioButtonGroup.GroupName="DocumentProvider"
-                                 RadioButtonGroup.SelectedValue="{Binding SelectedProvider, Mode=TwoWay}"
-                                 BindableLayout.ItemsSource="{Binding Providers}">
+                                 IsEnabled="{Binding CanSelectClient}"
+                                 RadioButtonGroup.GroupName="DocumentClient"
+                                 RadioButtonGroup.SelectedValue="{Binding SelectedOption, Mode=TwoWay}"
+                                 BindableLayout.ItemsSource="{Binding Clients}">
                 <BindableLayout.ItemTemplate>
-                    <DataTemplate x:DataType="local:DocumentProviderOption">
+                    <DataTemplate x:DataType="local:DocumentClientOption">
                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
                             <RadioButton HorizontalOptions="Fill"
-                                         Content="{Binding Descriptor.DisplayName}"
+                                         Content="{Binding Descriptor.Name}"
                                          Value="{Binding .}"
                                          AutomationId="{Binding AutomationId}" />
                             <local:InfoTip Grid.Column="1"
@@ -30,10 +30,6 @@
                     </DataTemplate>
                 </BindableLayout.ItemTemplate>
             </VerticalStackLayout>
-            <Label Text="The selected client sends document bytes off-device."
-                   Style="{StaticResource MutedLabel}"
-                   FontSize="12"
-                   IsVisible="{Binding SendsDocumentOffDevice}" />
 
             <BoxView HeightRequest="1"
                      Color="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}" />

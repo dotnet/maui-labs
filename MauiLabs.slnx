@@ -19,8 +19,6 @@
     <Project Path="samples/DevFlow.Sample.Native/MacOS/DevFlow.Sample.Native.MacOS.csproj" />
     <Project Path="samples/DevFlow.Sample.WPF/DevFlow.Sample.WPF.csproj" />
     <Project Path="samples/DevFlow.Sample/DevFlow.Sample.csproj" />
-    <Project Path="samples/DocumentExtractionSample.MacOS/DocumentExtractionSample.MacOS.csproj" />
-    <Project Path="samples/DocumentExtractionSample/DocumentExtractionSample.csproj" />
     <Project Path="samples/EssentialsAISample/EssentialsAISample.csproj" />
     <Project Path="samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj" />
   </Folder>

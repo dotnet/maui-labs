@@ -35,7 +35,7 @@
             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                 <ImageButton Source="add.png"
                              Style="{StaticResource AttachmentButton}"
-                             IsEnabled="{Binding IsSupported}"
+                             IsEnabled="{Binding HasClient}"
                              SemanticProperties.Description="Add a document"
                              AutomationId="AddDocumentButton">
                     <local:PopupMenu.Content>
@@ -51,11 +51,6 @@
                                     ImageSource="sampleimage.png"
                                     Command="{Binding UseSampleDocument}"
                                     AutomationId="UseSampleDocumentButton" />
-                            <Button Text="Scan document"
-                                    ImageSource="image.png"
-                                    Command="{Binding ScanDocument}"
-                                    IsVisible="{Binding CanScan}"
-                                    AutomationId="ScanDocumentButton" />
                         </VerticalStackLayout>
                     </local:PopupMenu.Content>
                 </ImageButton>

@@ -14,7 +14,7 @@ internal static class AppleVisionDocumentCorpus
 		string fileName,
 		DocumentExtractionOptions? options = null)
 	{
-		using IDocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
+		using IDocumentExtractionClient client = new AppleVisionDocumentExtractionClient();
 		await using var stream = await FileSystem.Current.OpenAppPackageFileAsync(
 			$"{AssetRoot}{fileName}");
 		var result = await client.ExtractAsync(stream, "image/png", options);
@@ -26,10 +26,10 @@ internal static class AppleVisionDocumentCorpus
 
 	internal static JsonElement GetRawObservation(DocumentPage page)
 	{
-		var raw = page.RawRepresentation as AppleVisionDocumentNodeReference
-			?? throw new InvalidOperationException("The corpus page has no Apple Vision raw reference.");
-		using var document = JsonDocument.Parse(raw.GetRawJson());
-		var observations = document.RootElement.EnumerateArray().ToArray();
+		var raw = page.RawRepresentation is JsonElement json
+			? json
+			: throw new InvalidOperationException("The corpus page has no Apple Vision raw JSON.");
+		var observations = raw.EnumerateArray().ToArray();
 		return observations.Length == 1
 			? observations[0].Clone()
 			: throw new InvalidOperationException(
@@ -51,13 +51,12 @@ internal static class AppleVisionDocumentCorpus
 			if (element.AdditionalProperties?.TryGetValue(
 				"apple.detectedData",
 				out var value) != true ||
-				value is not string json)
+				value is not JsonElement { ValueKind: JsonValueKind.Array } json)
 			{
 				continue;
 			}
 
-			using var document = JsonDocument.Parse(json);
-			matches.AddRange(document.RootElement
+			matches.AddRange(json
 				.EnumerateArray()
 				.Select(static match => match.Clone()));
 		}
@@ -80,22 +79,6 @@ internal static class AppleVisionDocumentCorpus
 				case DocumentTable table:
 					foreach (var nested in (table.Cells ?? []).SelectMany(static cell =>
 						EnumerateElements(cell.Elements)))
-					{
-						yield return nested;
-					}
-					break;
-				case AppleListElement list:
-					foreach (var item in list.Items)
-					{
-						yield return item;
-						foreach (var nested in EnumerateElements(item.Elements))
-						{
-							yield return nested;
-						}
-					}
-					break;
-				case AppleListItemElement item:
-					foreach (var nested in EnumerateElements(item.Elements))
 					{
 						yield return nested;
 					}

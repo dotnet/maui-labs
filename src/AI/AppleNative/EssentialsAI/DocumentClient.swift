@@ -31,14 +31,12 @@ public class VisionRecognizeDocumentsClientNative: NSObject {
         )
     }
 
-    @objc public func recognizeDocument(
+    @objc     public func recognizeDocument(
         imageData: Data,
         orientation: Int,
         options: VisionDocumentOptionsNative?,
         onComplete: @escaping (VisionDocumentResultNative?, NSError?) -> Void
     ) -> CancellationTokenNative? {
-        let callbackQueue = OperationQueue.current?.underlyingQueue
-
         let task = Task {
             do {
                 try Task.checkCancellation()
@@ -52,18 +50,14 @@ public class VisionRecognizeDocumentsClientNative: NSObject {
                 )
                 try Task.checkCancellation()
 
-                let result = VisionDocumentResultNative(observations)
-                callbackQueue?.async {
-                    onComplete(result, nil)
-                } ?? onComplete(result, nil)
+                let result = try VisionDocumentResultNative(observations)
+                onComplete(result, nil)
             } catch is CancellationError {
                 let error = makeError(
                     .cancelled,
                     description: "The document recognition request was cancelled."
                 )
-                callbackQueue?.async {
-                    onComplete(nil, error)
-                } ?? onComplete(nil, error)
+                onComplete(nil, error)
             } catch {
                 let nativeError = Task.isCancelled
                     ? makeError(
@@ -71,9 +65,7 @@ public class VisionRecognizeDocumentsClientNative: NSObject {
                         description: "The document recognition request was cancelled."
                     )
                     : error as NSError
-                callbackQueue?.async {
-                    onComplete(nil, nativeError)
-                } ?? onComplete(nil, nativeError)
+                onComplete(nil, nativeError)
             }
         }
 

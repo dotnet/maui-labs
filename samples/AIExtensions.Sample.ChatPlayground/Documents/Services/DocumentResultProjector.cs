@@ -2,10 +2,6 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DocumentExtraction;
 using ExtractedDocumentPage = Microsoft.Extensions.DocumentExtraction.DocumentPage;
 
-#if IOS || MACCATALYST
-using Microsoft.Maui.Essentials.AI;
-#endif
-
 namespace AIExtensions.Sample.ChatPlayground;
 
 /// <summary>Projects normalized document elements into rows for the playground tree.</summary>
@@ -78,61 +74,6 @@ public static class DocumentResultProjector
                 }
                 break;
 
-#if IOS || MACCATALYST
-            case AppleListElement list:
-                nodes.Add(new DocumentResultNode
-                {
-                    Depth = depth,
-                    Title = "List",
-                    JsonPath = path,
-                    PageNumber = pageNumber,
-                    Subtitle = $"{list.Items.Count} items",
-                    Metadata = FormatElementMetadata(list),
-                    BoundingRegion = list.BoundingRegion,
-                    RegionKind = DocumentRegionKind.List,
-                    RawJsonFactory = raw,
-                });
-                for (var index = 0; index < list.Items.Count; index++)
-                    AppendElement(nodes, list.Items[index], pageNumber, depth + 1, $"{path}.items[{index}]");
-                break;
-
-            case AppleListItemElement item:
-                nodes.Add(new DocumentResultNode
-                {
-                    Depth = depth,
-                    Title = string.IsNullOrWhiteSpace(item.MarkerString)
-                        ? "List item"
-                        : $"List item {item.MarkerString.Trim()}",
-                    JsonPath = path,
-                    PageNumber = pageNumber,
-                    Subtitle = Truncate(item.Text),
-                    Metadata = JoinMetadata(
-                        item.MarkerType is null ? null : $"marker {item.MarkerType}",
-                        FormatElementMetadata(item)),
-                    BoundingRegion = item.BoundingRegion,
-                    RegionKind = DocumentRegionKind.ListItem,
-                    RawJsonFactory = raw,
-                });
-                if (item.Elements.Count > 0)
-                    AppendElements(nodes, item.Elements, pageNumber, depth + 1, $"{path}.elements");
-                break;
-
-            case AppleBarcodeElement barcode:
-                nodes.Add(new DocumentResultNode
-                {
-                    Depth = depth,
-                    Title = $"Barcode ({barcode.Symbology})",
-                    JsonPath = path,
-                    PageNumber = pageNumber,
-                    Subtitle = Truncate(barcode.PayloadString) ?? "(binary or empty payload)",
-                    Metadata = FormatElementMetadata(barcode),
-                    BoundingRegion = barcode.BoundingRegion,
-                    RegionKind = DocumentRegionKind.Barcode,
-                    RawJsonFactory = raw,
-                });
-                break;
-#endif
-
             case DocumentImage image:
                 nodes.Add(new DocumentResultNode
                 {
@@ -149,16 +90,35 @@ public static class DocumentResultProjector
                 break;
 
             case DocumentBlock block:
+                var kind = block.Kind?.Value;
+                var marker = GetProperty(block.AdditionalProperties, "apple.vision.markerString") as string;
+                var symbology = GetProperty(block.AdditionalProperties, "apple.vision.barcodeSymbology") as string;
                 nodes.Add(new DocumentResultNode
                 {
                     Depth = depth,
-                    Title = block.Kind?.Value ?? "Block",
+                    Title = kind switch
+                    {
+                        "listItem" when !string.IsNullOrWhiteSpace(marker) =>
+                            $"List item {marker.Trim()}",
+                        "listItem" => "List item",
+                        "barcode" => $"Barcode ({symbology ?? "unknown"})",
+                        _ => kind ?? "Block",
+                    },
                     JsonPath = path,
                     PageNumber = pageNumber,
                     Subtitle = Truncate(block.Text),
-                    Metadata = FormatElementMetadata(block),
+                    Metadata = JoinMetadata(
+                        GetProperty(block.AdditionalProperties, "apple.vision.markerType") is string markerType
+                            ? $"marker {markerType}"
+                            : null,
+                        FormatElementMetadata(block)),
                     BoundingRegion = block.BoundingRegion,
-                    RegionKind = DocumentRegionKind.Block,
+                    RegionKind = kind switch
+                    {
+                        "listItem" => DocumentRegionKind.ListItem,
+                        "barcode" => DocumentRegionKind.Barcode,
+                        _ => DocumentRegionKind.Block,
+                    },
                     RawJsonFactory = raw,
                 });
                 break;

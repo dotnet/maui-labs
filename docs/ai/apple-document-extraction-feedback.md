@@ -45,17 +45,14 @@ The base abstraction has no barcode element.
 
 ### Prototype decision
 
-The prototype will intentionally return provider-defined elements:
+The first prototype intentionally returned provider-defined element subclasses
+and confirmed the serialization problem. The implementation was then simplified
+before shipping:
 
-```csharp
-public sealed class AppleBarcodeElement : DocumentElement;
-public sealed class AppleListElement : DocumentElement;
-public sealed class AppleListItemElement : DocumentElement;
-```
-
-An Apple-specific AOT-compatible JSON metadata/resolver helper will register
-the discriminators `apple.barcode`, `apple.list`, and `apple.listItem`. This is
-enough for the sample and consumers that opt into the Apple serializer.
+- barcodes and list items use standard `DocumentBlock` values;
+- `DocumentBlockKind` supplies open provider kinds (`barcode`, `listItem`);
+- provider fields use `AdditionalProperties`;
+- full provider data remains in raw `JsonElement` snapshots.
 
 ### Known limitations
 
@@ -74,10 +71,12 @@ need and make the richer Apple data strongly typed during the prototype.
 
 ### Implementation evidence
 
-The provider now returns `AppleBarcodeElement`, `AppleListElement`, and
-`AppleListItemElement`. An Apple-specific source-generated JSON context and
-converter round-trip all three types successfully. The generic base serializer
-still cannot serialize them, so the middleware limitation remains.
+The original custom-element implementation required a source-generated
+serializer and still failed with generic middleware. The revised standard-block
+implementation serializes with the proposal's default contract and preserves
+the same Apple payload in open kinds, properties, and raw JSON. The finding
+still matters for providers that genuinely need custom hierarchical element
+types.
 
 ### Recommendation
 
@@ -103,18 +102,15 @@ The proposal provides no list element and `DocumentPage.Elements` is flat.
 
 ### Prototype decision
 
-- Map each Apple list to `AppleListElement`.
-- Map each item to `AppleListItemElement`.
-- Preserve marker text/type, geometry, and semantically distinct recursive item
-  content as typed properties.
+- Map each Apple item to a `DocumentBlock` with kind `listItem`.
+- Preserve marker text/type, source path, parent path, geometry, and detected
+  data in `AdditionalProperties`.
 - Filter exact same-item paragraph/list projections from the normalized item
   while retaining them in the raw Apple snapshot.
-- Preserve the complete native list/item container in `RawRepresentation`.
-- Register both custom types through the Apple JSON resolver, subject to the
-  limitations in Finding 1.
+- Preserve the complete bounded list/item snapshot in `RawRepresentation`.
 
 Device recognition of a generated numbered list successfully produced one
-`AppleListElement` with three typed items.
+Vision list with three normalized `listItem` blocks.
 
 A controlled indented-list fixture did not produce nested list hierarchy.
 Vision returned one flat seven-item list while preserving bullet/hyphen marker
@@ -139,7 +135,7 @@ range, or typed details.
 ### Prototype workaround
 
 Store a compact JSON-safe representation on the owning block and keep the
-native match in `RawRepresentation`.
+bounded provider snapshot in `RawRepresentation`.
 
 ### Recommendation
 
@@ -159,7 +155,8 @@ normalized text unit is `DocumentBlock`, with one confidence value.
 ### Prototype workaround
 
 Map selected text and confidence to the block. Preserve observations,
-candidates, and callable range geometry through the native raw cursor.
+candidates, line/word polygons, and recognition languages in raw JSON. The
+prototype no longer exposes a public callable native range-geometry cursor.
 
 ### Recommendation
 
@@ -182,8 +179,8 @@ error fallback.
 
 ### Prototype workaround
 
-Leave result-level `RawRepresentation` unset. Attach native cursors at page,
-element, and cell levels.
+Leave result-level `RawRepresentation` unset. Attach cloned `JsonElement`
+snapshots at page, element, and cell levels.
 
 ### Recommendation
 
@@ -240,7 +237,7 @@ cover:
 - a structured two-column table;
 - a three-item numbered list;
 - a QR barcode with payload and symbology;
-- custom-element JSON round-tripping;
+- default normalized JSON serialization;
 - capability discovery;
 - cancellation before execution;
 - native Swift task cancellation and cancellation after a yielded page (the
@@ -312,9 +309,10 @@ model, not PDF recursion. Two independent consumers exposed the problem:
 
 ### Prototype workaround and evidence
 
-- Retain the live native observation, but never invoke Apple's recursive
-  `Codable` path.
+- Never invoke Apple's recursive `Codable` path.
 - Serialize a safe flat snapshot with `JSONSerialization`.
+- Pass that one JSON payload to managed code instead of binding each native
+  node and observation type.
 - Track a non-recursive container fingerprint made from transcript, title,
   normalized polygon, and direct paragraph/table/list/barcode counts.
 - Prune only when that fingerprint re-enters the active ancestor path.
@@ -334,8 +332,8 @@ DevFlow inspection of the fixed sample showed:
 The cycle-safe app completed all pages, initially displayed 372 normalized tree
 nodes, remained responsive, and no longer crashed. After the controlled corpus
 identified exact list-item self-projections, filtering those duplicates reduced
-the same PDF to 257 normalized nodes without changing the raw projected-node or
-pruning diagnostics.
+the custom-element tree to 257 nodes. The later standard-block mapper produces
+249 nodes without changing the raw projected-node or pruning diagnostics.
 
 Controlled 1600 x 1200 list fixtures then isolated the behavior without PDFKit:
 
@@ -354,7 +352,7 @@ nodes and a same-polygon list containing two identical copies of that item.
 Descendant `content` then re-entered the same semantic container. This confirms
 that the recursion was not introduced by PDF rendering or the managed mapper.
 
-The normalized mapper now treats the owning `AppleListItemElement` as the leaf
+The normalized mapper now treats the owning `listItem` block as the leaf
 for these exact self-projections. A child is filtered only when its polygon,
 text/item string, and marker all match the owner; different nested content still
 maps normally. The raw bounded snapshot retains the Apple-produced duplicates
@@ -365,7 +363,7 @@ for diagnostics.
 The fingerprint and self-projection filter identify semantic equivalence, not
 native object identity. A genuinely nested container with identical text,
 geometry, marker, and direct child counts could also be filtered or pruned and
-reported. The live native observation remains available, but a claim that
+reported. The bounded JSON snapshot remains available, but a claim that
 arbitrary Apple observations can always be completely serialized is not
 supportable with the current OS behavior.
 

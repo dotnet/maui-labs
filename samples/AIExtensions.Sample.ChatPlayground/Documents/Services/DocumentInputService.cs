@@ -8,12 +8,11 @@ using ImageIO;
 using PdfKit;
 using UIKit;
 using UniformTypeIdentifiers;
-using VisionKit;
 #endif
 
 namespace AIExtensions.Sample.ChatPlayground;
 
-/// <summary>Loads images and PDFs from the system picker or VisionKit scanner.</summary>
+/// <summary>Loads images and PDFs from the system picker.</summary>
 public sealed class DocumentInputService
 {
     private const int MaximumDocumentBytes = 75 * 1024 * 1024;
@@ -29,14 +28,6 @@ public sealed class DocumentInputService
 
 #if IOS || MACCATALYST
     private static readonly HashSet<PickerDelegate> s_activePickerDelegates = [];
-    private static readonly HashSet<ScannerDelegate> s_activeScannerDelegates = [];
-#endif
-
-    public bool CanScan =>
-#if IOS || MACCATALYST
-        VNDocumentCameraViewController.Supported;
-#else
-        false;
 #endif
 
     public async Task<DocumentInput?> PickAsync(CancellationToken cancellationToken = default)
@@ -63,7 +54,7 @@ public sealed class DocumentInputService
         if (result is null)
             return null;
 
-        var mediaType = GetMediaType(result.FileName);
+        var mediaType = DocumentMediaTypes.FromFileName(result.FileName);
         if (mediaType is null)
             throw new InvalidOperationException("Choose a PNG, JPEG, HEIC, TIFF, or PDF document.");
 
@@ -86,42 +77,21 @@ public sealed class DocumentInputService
             cancellationToken);
     }
 
-    public async Task<DocumentInput?> ScanAsync(CancellationToken cancellationToken = default)
+    internal async Task<DocumentInput> LoadFileAsync(
+        string path,
+        CancellationToken cancellationToken = default)
     {
-#if IOS || MACCATALYST
-        if (!CanScan)
-            throw new NotSupportedException("The VisionKit document camera is unavailable on this device.");
-
-        using var scan = await ScanAppleDocumentAsync();
-        if (scan is null)
-            return null;
-
-        cancellationToken.ThrowIfCancellationRequested();
-        using var pdf = new PdfDocument();
-        var pageCount = checked((int)scan.PageCount);
-        for (var index = 0; index < pageCount; index++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            using var image = scan.GetImage((nuint)index);
-            using var page = new PdfPage(image);
-            pdf.InsertPage(page, index);
-        }
-
-        using var data = pdf.GetDataRepresentation()
-            ?? throw new InvalidOperationException("Could not create a PDF from the captured pages.");
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        var fileName = Path.GetFileName(path);
+        var mediaType = DocumentMediaTypes.FromFileName(fileName)
+            ?? throw new InvalidOperationException("Choose a PNG, JPEG, HEIC, TIFF, or PDF document.");
+        await using var stream = File.OpenRead(path);
         return await CreateInputAsync(
-            "Scanned document.pdf",
-            "application/pdf",
-            data.ToArray(),
+            fileName,
+            mediaType,
+            await ReadBytesAsync(stream, cancellationToken),
             cancellationToken);
-#else
-        await Task.CompletedTask;
-        throw new PlatformNotSupportedException("Document scanning requires VisionKit on iOS or Mac Catalyst.");
-#endif
     }
-
-    private static string? GetMediaType(string fileName) =>
-        DocumentExtractionRunner.GetMediaType(fileName);
 
     private static Task<DocumentInput> CreateInputAsync(
         string fileName,
@@ -187,22 +157,6 @@ public sealed class DocumentInputService
         return completion.Task;
     }
 
-    private static Task<VNDocumentCameraScan?> ScanAppleDocumentAsync()
-    {
-        var presentingController = Microsoft.Maui.ApplicationModel.Platform.GetCurrentUIViewController()
-            ?? throw new InvalidOperationException("No view controller is available to present the document camera.");
-        var completion = new TaskCompletionSource<VNDocumentCameraScan?>(
-            TaskCreationOptions.RunContinuationsAsynchronously);
-        var controller = new ScannerController();
-        var scannerDelegate = new ScannerDelegate(completion, controller);
-        lock (s_activeScannerDelegates)
-            s_activeScannerDelegates.Add(scannerDelegate);
-        controller.Delegate = scannerDelegate;
-        controller.Disappeared = scannerDelegate.DidDisappear;
-        presentingController.PresentViewController(controller, animated: true, completionHandler: null);
-        return completion.Task;
-    }
-
     private sealed class PickerDelegate(
         TaskCompletionSource<DocumentInput?> completion,
         UIDocumentPickerViewController controller,
@@ -226,7 +180,7 @@ public sealed class DocumentInputService
                 var path = url.Path
                     ?? throw new InvalidOperationException("The selected file does not have a local path.");
                 var fileName = url.LastPathComponent ?? Path.GetFileName(path);
-                var mediaType = GetMediaType(fileName)
+                var mediaType = DocumentMediaTypes.FromFileName(fileName)
                     ?? throw new InvalidOperationException("Choose a PNG, JPEG, HEIC, TIFF, or PDF document.");
                 await using var stream = File.OpenRead(path);
                 Complete(await CreateInputAsync(
@@ -261,62 +215,6 @@ public sealed class DocumentInputService
             controller.Delegate = null!;
             lock (s_activePickerDelegates)
                 s_activePickerDelegates.Remove(this);
-        }
-    }
-
-    private sealed class ScannerController : VNDocumentCameraViewController
-    {
-        internal Action? Disappeared { get; set; }
-
-        public override void ViewDidDisappear(bool animated)
-        {
-            base.ViewDidDisappear(animated);
-            Disappeared?.Invoke();
-        }
-    }
-
-    private sealed class ScannerDelegate(
-        TaskCompletionSource<VNDocumentCameraScan?> completion,
-        ScannerController controller)
-        : VNDocumentCameraViewControllerDelegate
-    {
-        public override void DidFinish(
-            VNDocumentCameraViewController controller,
-            VNDocumentCameraScan scan)
-        {
-            controller.DismissViewController(animated: true, completionHandler: null);
-            completion.TrySetResult(scan);
-            Release();
-        }
-
-        public override void DidCancel(VNDocumentCameraViewController controller)
-        {
-            controller.DismissViewController(animated: true, completionHandler: null);
-            completion.TrySetResult(null);
-            Release();
-        }
-
-        public override void DidFail(
-            VNDocumentCameraViewController controller,
-            NSError error)
-        {
-            controller.DismissViewController(animated: true, completionHandler: null);
-            completion.TrySetException(new NSErrorException(error));
-            Release();
-        }
-
-        internal void DidDisappear()
-        {
-            if (completion.TrySetResult(null))
-                Release();
-        }
-
-        private void Release()
-        {
-            controller.Delegate = null;
-            controller.Disappeared = null;
-            lock (s_activeScannerDelegates)
-                s_activeScannerDelegates.Remove(this);
         }
     }
 

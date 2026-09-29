@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DocumentExtraction;
-using ExtractedDocumentPage = Microsoft.Extensions.DocumentExtraction.DocumentPage;
 
 namespace AIExtensions.Sample.ChatPlayground;
 
@@ -11,8 +10,6 @@ public sealed record DocumentInput(
     IReadOnlyList<DocumentPreviewPage>? ProvidedPreviewPages = null)
 {
     public bool IsImage => MediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
-
-    public bool IsPdf => string.Equals(MediaType, "application/pdf", StringComparison.OrdinalIgnoreCase);
 
     public IReadOnlyList<DocumentPreviewPage> PreviewPages =>
         ProvidedPreviewPages ??
@@ -37,43 +34,36 @@ public sealed record DocumentPreviewPage(
     string Label,
     byte[] Data);
 
-/// <summary>Provider-specific settings exposed by the Documents playground.</summary>
-public sealed record DocumentExtractionSettings(
-    bool DetectBarcodes,
-    bool AutomaticallyDetectLanguage,
-    bool IncludeImages);
-
-/// <summary>Reports one completed page while a document is being extracted.</summary>
-public readonly record struct DocumentExtractionProgress(
-    int? PagesProcessed,
-    int? TotalPages,
-    ExtractedDocumentPage Page);
-
-/// <summary>Describes the document provider available to the playground.</summary>
-public sealed record DocumentProviderDescriptor(
-    string Id,
-    string DisplayName,
-    string Description,
-    bool IsAvailable,
-    bool SendsDocumentOffDevice);
-
-public sealed record DocumentProviderOption(
-    IDocumentExtractionProvider Provider,
-    DocumentProviderDescriptor Descriptor,
-    int Index)
+internal static class DocumentMediaTypes
 {
-    public string AutomationId => $"DocumentProvider{Index}Radio";
+    internal static string? FromFileName(string fileName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
 
-    public override string ToString() => Descriptor.DisplayName;
+        return Path.GetExtension(fileName).ToLowerInvariant() switch
+        {
+            ".png" => "image/png",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".heic" => "image/heic",
+            ".tif" or ".tiff" => "image/tiff",
+            ".pdf" => "application/pdf",
+            _ => null,
+        };
+    }
 }
 
-public interface IDocumentExtractionProvider
+/// <summary>Describes one registered document-extraction client.</summary>
+public sealed record DocumentExtractionClientDescriptor(
+    string Id,
+    string Name,
+    string Description);
+
+public sealed record DocumentClientOption(
+    IDocumentExtractionClient Client,
+    DocumentExtractionClientDescriptor Descriptor,
+    int Index)
 {
-    DocumentProviderDescriptor Descriptor { get; }
+    public string AutomationId => $"DocumentClient{Index}Radio";
 
-    IDocumentExtractionClient CreateClient(string mediaType);
-
-    DocumentExtractionOptions CreateOptions(DocumentExtractionSettings settings);
-
-    string GetCapabilitiesSummary();
+    public override string ToString() => Descriptor.Name;
 }

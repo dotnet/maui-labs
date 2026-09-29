@@ -44,72 +44,61 @@ public sealed class AppleVisionListStructureTests(ITestOutputHelper output)
 					.ToArray(),
 			})
 			.ToArray();
-		var normalizedListElements = AppleVisionDocumentCorpus
+		var normalizedListItems = AppleVisionDocumentCorpus
 			.EnumerateElements(page.Elements)
-			.OfType<AppleListElement>()
+			.OfType<DocumentBlock>()
+			.Where(static block => block.Kind?.Value == "listItem")
 			.ToArray();
-		Assert.All(
-			normalizedListElements.SelectMany(static list => list.Items),
-			static item => Assert.Empty(item.Elements));
 
 		switch (assetName)
 		{
 			case "flat-list.png":
-				var flatList = Assert.Single(normalizedListElements);
 				Assert.Equal(
 					["Apples", "Coffee", "Bread"],
-					flatList.Items
-						.Select(static item => item.ItemString ?? string.Empty)
+					normalizedListItems
+						.Select(static item => GetProperty(item, "apple.vision.itemString"))
 						.ToArray());
 				Assert.True(AppleVisionDocumentCorpus.GetLongProperty(
 					page,
 					"apple.vision.repeatedContainersPruned") > 0);
 				break;
 			case "nested-list.png":
-				var indentedList = Assert.Single(normalizedListElements);
 				Assert.Equal(
 					["Documents", "Passport", "Visa", "Packing", "Jacket", "Shoes", "Charger"],
-					indentedList.Items
-						.Select(static item => item.ItemString ?? string.Empty)
+					normalizedListItems
+						.Select(static item => GetProperty(item, "apple.vision.itemString"))
 						.ToArray());
 				Assert.Equal(
 					["bullet", "hyphen", "hyphen", "bullet", "hyphen", "hyphen", "hyphen"],
-					indentedList.Items
-						.Select(static item => item.MarkerType ?? string.Empty)
+					normalizedListItems
+						.Select(static item => GetProperty(item, "apple.vision.markerType"))
 						.ToArray());
 				Assert.True(AppleVisionDocumentCorpus.GetLongProperty(
 					page,
 					"apple.vision.repeatedContainersPruned") > 0);
 				break;
 			case "single-item-list.png":
-				Assert.Empty(normalizedListElements);
+				Assert.Empty(normalizedListItems);
 				Assert.Contains(page.Elements.OfType<DocumentBlock>(), static block =>
 					block.Text.Contains(
 						"Signed application form",
 						StringComparison.OrdinalIgnoreCase));
 				break;
 			case "list-in-table.png":
-				Assert.Empty(normalizedListElements);
+				Assert.Empty(normalizedListItems);
 				var table = Assert.Single(page.Elements.OfType<DocumentTable>());
 				Assert.Contains(table.Cells!, static cell =>
 					cell.Content.Contains("Passport copy", StringComparison.OrdinalIgnoreCase));
 				break;
 		}
 
-		var normalizedLists = normalizedListElements
-			.Select(static list => new
+		var normalizedLists = normalizedListItems
+			.Select(static item => new
 			{
-				Path = (list.RawRepresentation as AppleVisionDocumentNodeReference)?.Path,
-				ItemCount = list.Items.Count,
-				Items = list.Items.Select(static item => new
-				{
-					item.MarkerString,
-					item.MarkerType,
-					item.ItemString,
-					NestedListCount = AppleVisionDocumentCorpus.EnumerateElements(item.Elements)
-						.OfType<AppleListElement>()
-						.Count(),
-				}).ToArray(),
+				Path = GetProperty(item, "apple.vision.sourcePath"),
+				MarkerString = GetProperty(item, "apple.vision.markerString"),
+				MarkerType = GetProperty(item, "apple.vision.markerType"),
+				ItemString = GetProperty(item, "apple.vision.itemString"),
 			})
 			.ToArray();
 		var diagnostics = new
@@ -155,6 +144,12 @@ public sealed class AppleVisionListStructureTests(ITestOutputHelper output)
 			diagnostics,
 			new JsonSerializerOptions { WriteIndented = true }));
 	}
+
+	private static string GetProperty(DocumentElement element, string key) =>
+		element.AdditionalProperties?.TryGetValue(key, out var value) == true &&
+		value is string text
+			? text
+			: string.Empty;
 }
 
 #endif
