@@ -491,6 +491,10 @@ Create:
 - `samples/DocumentExtractionSample` for iOS and Mac Catalyst.
 - `samples/DocumentExtractionSample.MacOS` using the in-repo AppKit backend and
   linked shared UI/source.
+- a first-class `Documents` feature in
+  `samples/AIExtensions.Sample.ChatPlayground`, while keeping Android and
+  Windows visible but explicitly unavailable rather than substituting another
+  engine.
 
 The sample includes:
 
@@ -508,6 +512,15 @@ The sample includes:
 - DevFlow status, tree, screenshot, and log inspection in Debug builds;
 - run and cancel controls;
 - timing and page-progress display.
+
+The integrated AI playground additionally provides:
+
+- every selected PDF page as a scrollable image preview;
+- Images, JSON, or combined inspector modes;
+- horizontal or vertical combined layouts;
+- synchronized selection between image regions and normalized JSON paths;
+- a packaged corpus page for repeatable, credential-free DevFlow smoke tests;
+- portable orchestration tests with a fake `IDocumentExtractionClient`.
 
 The reusable device-test corpus currently includes:
 
@@ -535,6 +548,8 @@ multi-column reading order, skew, CJK/RTL, and degraded scans.
 - PDF page-number rewriting across all normalized and custom element types.
 - Unary/page-stream equivalence.
 - Caller stream ownership.
+- Playground media-type routing, streamed page aggregation, progress, disposal,
+  unavailable-provider behavior, and cancellation.
 
 ### Apple tests
 

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
+             x:Class="AIExtensions.Sample.ChatPlayground.DocumentSettingsPane"
+             x:DataType="local:DocumentPlaygroundViewModel">
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="14">
+            <VerticalStackLayout Spacing="4">
+                <Label Text="PROVIDER" Style="{StaticResource SectionHeading}" />
+                <Label Text="{Binding Settings.ProviderName}" FontAttributes="Bold" />
+                <Label Text="{Binding Settings.AvailabilityMessage}"
+                       Style="{StaticResource MutedLabel}" FontSize="12" />
+            </VerticalStackLayout>
+
+            <VerticalStackLayout Spacing="8"
+                                 IsEnabled="{Binding Settings.CanEditOptions}">
+                <Label Text="REQUEST OPTIONS" Style="{StaticResource SectionHeading}" />
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                    <CheckBox IsChecked="{Binding Settings.DetectBarcodes}"
+                              AutomationId="DocumentDetectBarcodesCheckBox" />
+                    <Label Grid.Column="1" Text="Detect barcodes"
+                           VerticalOptions="Center" />
+                </Grid>
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                    <CheckBox IsChecked="{Binding Settings.AutomaticallyDetectLanguage}"
+                              AutomationId="DocumentAutomaticLanguageCheckBox" />
+                    <Label Grid.Column="1" Text="Automatically detect language"
+                           VerticalOptions="Center" />
+                </Grid>
+            </VerticalStackLayout>
+
+            <VerticalStackLayout Spacing="8">
+                <Label Text="INSPECTOR LAYOUT" Style="{StaticResource SectionHeading}" />
+                <Label Text="Show" Style="{StaticResource MutedLabel}" FontSize="11" />
+                <Picker ItemsSource="{Binding Settings.DisplayModes}"
+                        SelectedItem="{Binding Settings.SelectedDisplayMode}"
+                        AutomationId="DocumentDisplayModePicker" />
+                <Label Text="Arrange both panes" Style="{StaticResource MutedLabel}" FontSize="11" />
+                <Picker ItemsSource="{Binding Settings.LayoutModes}"
+                        SelectedItem="{Binding Settings.SelectedLayoutMode}"
+                        AutomationId="DocumentLayoutModePicker" />
+            </VerticalStackLayout>
+
+            <VerticalStackLayout Spacing="4">
+                <Label Text="SELECTED INPUT" Style="{StaticResource SectionHeading}" />
+                <Label Text="{Binding SelectedFileName}" FontAttributes="Bold"
+                       LineBreakMode="TailTruncation" />
+                <Label Text="{Binding Settings.SelectedDocumentDetails}"
+                       Style="{StaticResource MutedLabel}" FontSize="12" />
+            </VerticalStackLayout>
+
+            <VerticalStackLayout Spacing="4">
+                <Label Text="RESULT" Style="{StaticResource SectionHeading}" />
+                <Label Text="{Binding Settings.ResultDetails}"
+                       Style="{StaticResource MutedLabel}" FontSize="12" />
+            </VerticalStackLayout>
+
+            <VerticalStackLayout Spacing="8">
+                <Label Text="INSPECT" Style="{StaticResource SectionHeading}" />
+                <Button Text="Capabilities"
+                        Command="{Binding ShowCapabilities}"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        AutomationId="DocumentCapabilitiesButton" />
+                <Button Text="Normalized JSON"
+                        Command="{Binding ShowNormalizedJson}"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        AutomationId="DocumentNormalizedJsonButton" />
+                <Button Text="Raw Apple JSON"
+                        Command="{Binding ShowRawJson}"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        AutomationId="DocumentRawJsonButton" />
+            </VerticalStackLayout>
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentView>
