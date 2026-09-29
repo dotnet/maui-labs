@@ -5,6 +5,7 @@ using System.CommandLine;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Text.Json;
 using Microsoft.Maui.Cli.Commands;
 using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
@@ -335,6 +336,124 @@ public class ProfileCommandTests
 		var noBuildOption = (Option<bool>)startup.Options.First(o => o.Name == "--no-build");
 		var parseResult = command.Parse("profile startup");
 		Assert.False(parseResult.GetValue(noBuildOption));
+	}
+
+	[Fact]
+	public void ValidateBuildIsolationOptions_NoBuild_RequiresAnIsolatedBuild()
+	{
+		var exception = Assert.Throws<MauiToolException>(() =>
+			ProfileSessionSetup.ValidateBuildIsolationOptions(noBuild: true));
+
+		Assert.Contains("--no-build cannot be used", exception.Message, StringComparison.Ordinal);
+		ProfileSessionSetup.ValidateBuildIsolationOptions(noBuild: false);
+	}
+
+	// ── Isolated build workspaces ─────────────────────────────────────────────
+
+	[Fact]
+	public void ProfileBuildWorkspace_Create_UsesUniqueSessionDirectoriesUnderProjectObj()
+	{
+		using var tempProject = TempProjectFile("<Project />");
+		var projectDirectory = Path.GetDirectoryName(tempProject.Path)!;
+		var formatter = new JsonOutputFormatter(TextWriter.Null);
+		var first = ProfileBuildWorkspace.Create(projectDirectory, formatter, useJson: true, verbose: false);
+		var second = ProfileBuildWorkspace.Create(projectDirectory, formatter, useJson: true, verbose: false);
+		first.ConfigureBuildTargets(TestPath("fake", "MauiProfilingHelperInjection.targets"));
+		second.ConfigureBuildTargets(profilingInjectionTargetsPath: null);
+
+		try
+		{
+			var expectedRoot = Path.Combine(projectDirectory, "obj", ProfileBuildWorkspace.RootDirectoryName);
+			Assert.StartsWith(expectedRoot + Path.DirectorySeparatorChar, first.Path, StringComparison.Ordinal);
+			Assert.StartsWith(expectedRoot + Path.DirectorySeparatorChar, second.Path, StringComparison.Ordinal);
+			Assert.NotEqual(first.Path, second.Path);
+			Assert.Equal(16, first.SessionId.Length);
+			Assert.Equal(16, second.SessionId.Length);
+			Assert.True(File.Exists(Path.Combine(first.Path, ProfileBuildWorkspace.OwnershipFileName)));
+			Assert.True(File.Exists(Path.Combine(second.Path, ProfileBuildWorkspace.OwnershipFileName)));
+			Assert.True(File.Exists(first.BootstrapPropsPath));
+			Assert.True(File.Exists(first.IsolationPropsPath));
+			Assert.True(File.Exists(first.IsolationTargetsPath));
+			Assert.True(File.Exists(first.AfterCommonTargetsPath));
+			_ = System.Xml.Linq.XDocument.Load(first.BootstrapPropsPath);
+			_ = System.Xml.Linq.XDocument.Load(first.IsolationPropsPath);
+			_ = System.Xml.Linq.XDocument.Load(first.IsolationTargetsPath);
+			_ = System.Xml.Linq.XDocument.Load(first.AfterCommonTargetsPath);
+			Assert.Contains(
+				"MauiProfilingHelperInjection.targets",
+				File.ReadAllText(first.AfterCommonTargetsPath),
+				StringComparison.Ordinal);
+
+			var recovered = ProfileBuildWorkspace.RecoverStaleWorkspaces(
+				projectDirectory,
+				formatter,
+				useJson: true,
+				verbose: false,
+				now: DateTimeOffset.UtcNow + ProfileBuildWorkspace.StaleWorkspaceMinimumAge + TimeSpan.FromHours(1));
+
+			Assert.Equal(0, recovered);
+			Assert.True(Directory.Exists(first.Path));
+			Assert.True(Directory.Exists(second.Path));
+		}
+		finally
+		{
+			first.Cleanup(formatter, useJson: true, verbose: false);
+			second.Cleanup(formatter, useJson: true, verbose: false);
+		}
+
+		Assert.False(Directory.Exists(Path.Combine(projectDirectory, "obj", ProfileBuildWorkspace.RootDirectoryName)));
+	}
+
+	[Fact]
+	public void RecoverStaleWorkspaces_OldOwnedWorkspaceWithExitedOwner_IsDeleted()
+	{
+		using var tempProject = TempProjectFile("<Project />");
+		var projectDirectory = Path.GetDirectoryName(tempProject.Path)!;
+		var createdAt = DateTimeOffset.UtcNow - ProfileBuildWorkspace.StaleWorkspaceMinimumAge - TimeSpan.FromHours(1);
+		var workspacePath = CreateWorkspaceOwnershipFile(
+			projectDirectory,
+			Guid.NewGuid().ToString("N"),
+			createdAt,
+			processId: int.MaxValue);
+
+		var recovered = ProfileBuildWorkspace.RecoverStaleWorkspaces(
+			projectDirectory,
+			new JsonOutputFormatter(TextWriter.Null),
+			useJson: true,
+			verbose: false,
+			now: DateTimeOffset.UtcNow);
+
+		Assert.Equal(1, recovered);
+		Assert.False(Directory.Exists(workspacePath));
+	}
+
+	[Fact]
+	public void RecoverStaleWorkspaces_RecentOrUnownedWorkspace_IsPreserved()
+	{
+		using var tempProject = TempProjectFile("<Project />");
+		var projectDirectory = Path.GetDirectoryName(tempProject.Path)!;
+		var recentWorkspace = CreateWorkspaceOwnershipFile(
+			projectDirectory,
+			Guid.NewGuid().ToString("N"),
+			DateTimeOffset.UtcNow,
+			processId: int.MaxValue);
+		var unownedWorkspace = CreateWorkspaceOwnershipFile(
+			projectDirectory,
+			Guid.NewGuid().ToString("N"),
+			DateTimeOffset.UtcNow - ProfileBuildWorkspace.StaleWorkspaceMinimumAge - TimeSpan.FromHours(1),
+			processId: int.MaxValue,
+			kind: "not-owned-by-maui-cli");
+
+		var recovered = ProfileBuildWorkspace.RecoverStaleWorkspaces(
+			projectDirectory,
+			new JsonOutputFormatter(TextWriter.Null),
+			useJson: true,
+			verbose: false,
+			now: DateTimeOffset.UtcNow);
+
+		Assert.Equal(0, recovered);
+		Assert.True(Directory.Exists(recentWorkspace));
+		Assert.True(Directory.Exists(unownedWorkspace));
 	}
 
 	// ── Target framework resolution ──────────────────────────────────────────
@@ -723,6 +842,32 @@ public class ProfileCommandTests
 		var path = Path.Combine(directory, "TestProject.csproj");
 		File.WriteAllText(path, content);
 		return new TempFile(path);
+	}
+
+	static string CreateWorkspaceOwnershipFile(
+		string projectDirectory,
+		string sessionId,
+		DateTimeOffset createdAt,
+		int processId,
+		string kind = ProfileBuildWorkspace.OwnershipKind)
+	{
+		var workspacePath = Path.Combine(projectDirectory, "obj", ProfileBuildWorkspace.RootDirectoryName, sessionId);
+		Directory.CreateDirectory(workspacePath);
+		var ownership = new ProfileBuildWorkspaceOwnership
+		{
+			Kind = kind,
+			Version = ProfileBuildWorkspace.OwnershipVersion,
+			SessionId = sessionId,
+			WorkspacePath = Path.GetFullPath(workspacePath),
+			ProjectDirectory = Path.GetFullPath(projectDirectory),
+			ProcessId = processId,
+			ProcessStartTimeUtcTicks = 1,
+			CreatedAtUtc = createdAt
+		};
+		File.WriteAllText(
+			Path.Combine(workspacePath, ProfileBuildWorkspace.OwnershipFileName),
+			JsonSerializer.Serialize(ownership));
+		return workspacePath;
 	}
 
 	// ── BuildTraceArguments ───────────────────────────────────────────────────
@@ -1131,9 +1276,13 @@ public class ProfileCommandTests
 	{
 		var device = CreateDevice(Platforms.iOS, isEmulator: true) with { Id = "ios-sim-udid" };
 		var transport = ProfileCommand.ResolveProfileTransport(Platforms.iOS, device);
+		var artifactsPath = TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session");
+		var bootstrapPropsPath = TestPath("fake", ProfileBuildWorkspace.BootstrapPropsFileName);
 
 		var args = ProfileCommand.BuildLaunchArguments(
 			TestPath("fake", "MyApp.csproj"),
+			artifactsPath,
+			bootstrapPropsPath,
 			"net10.0-ios",
 			"Release",
 			device,
@@ -1143,6 +1292,8 @@ public class ProfileCommandTests
 
 		Assert.Contains("-p:Device=ios-sim-udid", args);
 		Assert.Contains("-p:_MlaunchWaitForExit=false", args);
+		Assert.Contains($"-p:ArtifactsPath={artifactsPath}", args);
+		Assert.Contains($"-p:CustomBeforeDirectoryBuildProps={bootstrapPropsPath}", args);
 	}
 
 	[Fact]
@@ -1150,9 +1301,13 @@ public class ProfileCommandTests
 	{
 		var device = CreateDevice(Platforms.iOS, isEmulator: true) with { Id = "ios-sim-udid" };
 		var transport = ProfileCommand.ResolveProfileTransport(Platforms.iOS, device);
+		var artifactsPath = TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session");
+		var bootstrapPropsPath = TestPath("fake", ProfileBuildWorkspace.BootstrapPropsFileName);
 
 		var args = ProfileCommand.BuildCompileArguments(
 			TestPath("fake", "MyApp.csproj"),
+			artifactsPath,
+			bootstrapPropsPath,
 			"net10.0-ios",
 			"Release",
 			transport,
@@ -1164,6 +1319,8 @@ public class ProfileCommandTests
 		Assert.Contains("-p:DiagnosticSuspend=true", args);
 		Assert.Contains("-p:DiagnosticListenMode=listen", args);
 		Assert.Contains("-p:EnableDiagnostics=true", args);
+		Assert.Contains($"-p:ArtifactsPath={artifactsPath}", args);
+		Assert.Contains($"-p:CustomBeforeDirectoryBuildProps={bootstrapPropsPath}", args);
 	}
 
 	[Fact]
@@ -1182,6 +1339,8 @@ public class ProfileCommandTests
 
 		var args = ProfileCommand.BuildCompileArguments(
 			TestPath("fake", "MyApp.csproj"),
+			TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session"),
+			TestPath("fake", ProfileBuildWorkspace.BootstrapPropsFileName),
 			"net10.0-android",
 			"Release",
 			transport,
@@ -1212,6 +1371,8 @@ public class ProfileCommandTests
 
 		var args = ProfileCommand.BuildLaunchArguments(
 			TestPath("fake", "MyApp.csproj"),
+			TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session"),
+			TestPath("fake", ProfileBuildWorkspace.BootstrapPropsFileName),
 			"net10.0-android",
 			"Release",
 			device,
@@ -1234,6 +1395,8 @@ public class ProfileCommandTests
 
 		var args = ProfileCommand.BuildCompileArguments(
 			TestPath("fake", "MyApp.csproj"),
+			TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session"),
+			TestPath("fake", ProfileBuildWorkspace.BootstrapPropsFileName),
 			"net10.0-android",
 			"Release",
 			transport,
@@ -1255,6 +1418,8 @@ public class ProfileCommandTests
 
 		var args = ProfileCommand.BuildLaunchArguments(
 			TestPath("fake", "MyApp.csproj"),
+			TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session"),
+			TestPath("fake", ProfileBuildWorkspace.BootstrapPropsFileName),
 			"net10.0-ios",
 			"Release",
 			device,
@@ -1277,6 +1442,8 @@ public class ProfileCommandTests
 
 		var args = ProfileCommand.BuildCompileArguments(
 			TestPath("fake", "MyApp.csproj"),
+			TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session"),
+			TestPath("fake", ProfileBuildWorkspace.BootstrapPropsFileName),
 			"net10.0-android",
 			"Release",
 			transport,

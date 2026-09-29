@@ -102,7 +102,7 @@ public static class ProfileCommand
 		};
 		var noBuildOption = new Option<bool>("--no-build")
 		{
-			Description = "Skip the build step and just deploy/run with the existing outputs"
+			Description = "Skip the build step (not supported because profiling sessions require isolated outputs)"
 		};
 		var diagnosticPortOption = new Option<int>("--diagnostic-port")
 		{
@@ -213,7 +213,7 @@ public static class ProfileCommand
 		};
 		var noBuildOption = new Option<bool>("--no-build")
 		{
-			Description = "Skip the build step and just deploy/run with the existing outputs"
+			Description = "Skip the build step (not supported because profiling sessions require isolated outputs)"
 		};
 		var diagnosticPortOption = new Option<int>("--diagnostic-port")
 		{
@@ -289,6 +289,8 @@ public static class ProfileCommand
 
 		try
 		{
+			ProfileSessionSetup.ValidateBuildIsolationOptions(parseResult.GetValue(noBuildOption));
+
 			var requestedPlatform = Platforms.Normalize(parseResult.GetValue(platformOption));
 			var project = MauiProjectResolver.Resolve(parseResult.GetValue(projectOption));
 			var framework = ResolveTargetFramework(
@@ -409,6 +411,8 @@ public static class ProfileCommand
 
 		try
 		{
+			ProfileSessionSetup.ValidateBuildIsolationOptions(parseResult.GetValue(noBuildOption));
+
 			var requestedPlatform = Platforms.Normalize(parseResult.GetValue(platformOption));
 			var project = MauiProjectResolver.Resolve(parseResult.GetValue(projectOption));
 			var framework = ResolveTargetFramework(
@@ -637,16 +641,20 @@ public static class ProfileCommand
 
 	internal static string[] BuildCompileArguments(
 		string projectPath,
+		string artifactsPath,
+		string bootstrapPropsPath,
 		string framework,
 		string configuration,
 		ProfileTransportConfiguration transport,
 		int diagnosticPort,
 		ProfilingBuildInjection? buildInjection,
 		bool diagnosticSuspend = true)
-		=> ProfileCommandArguments.BuildCompileArguments(projectPath, framework, configuration, transport, diagnosticPort, buildInjection, diagnosticSuspend);
+		=> ProfileCommandArguments.BuildCompileArguments(projectPath, artifactsPath, bootstrapPropsPath, framework, configuration, transport, diagnosticPort, buildInjection, diagnosticSuspend);
 
 	internal static string[] BuildLaunchArguments(
 		string projectPath,
+		string artifactsPath,
+		string bootstrapPropsPath,
 		string framework,
 		string configuration,
 		Device device,
@@ -654,7 +662,7 @@ public static class ProfileCommand
 		int diagnosticPort,
 		ProfilingBuildInjection? buildInjection,
 		bool diagnosticSuspend = true)
-		=> ProfileCommandArguments.BuildLaunchArguments(projectPath, framework, configuration, device, transport, diagnosticPort, buildInjection, diagnosticSuspend);
+		=> ProfileCommandArguments.BuildLaunchArguments(projectPath, artifactsPath, bootstrapPropsPath, framework, configuration, device, transport, diagnosticPort, buildInjection, diagnosticSuspend);
 
 	internal static IEnumerable<string> BuildTraceArguments(
 		string outputPath,
@@ -694,9 +702,9 @@ public static class ProfileCommand
 	internal static async Task ConvertNetTraceToMibcAsync(
 		ResolvedMauiProject project,
 		string framework,
-		string configuration,
 		string netTracePath,
 		string mibcPath,
+		string buildArtifactsPath,
 		IOutputFormatter formatter,
 		bool useJson,
 		bool verbose,
@@ -710,7 +718,7 @@ public static class ProfileCommand
 		}
 
 		var dotnetPgoPath = DotnetPgoInstaller.ResolvePathOrThrow();
-		var referenceAssemblies = ResolveMibcReferenceAssemblies(project, framework, configuration);
+		var referenceAssemblies = ResolveMibcReferenceAssemblies(project, buildArtifactsPath);
 		if (referenceAssemblies.Count == 0)
 		{
 			throw MauiToolException.UserActionRequired(
@@ -768,10 +776,11 @@ public static class ProfileCommand
 
 	static IReadOnlyList<string> ResolveMibcReferenceAssemblies(
 		ResolvedMauiProject project,
-		string framework,
-		string configuration)
+		string buildArtifactsPath)
 	{
-		var candidateRoots = GetMibcReferenceSearchRoots(project, framework, configuration).ToArray();
+		var candidateRoots = GetIsolatedMibcReferenceSearchRoots(project, buildArtifactsPath)
+			.Where(Directory.Exists)
+			.ToArray();
 		if (candidateRoots.Length == 0)
 			return [];
 
@@ -795,24 +804,12 @@ public static class ProfileCommand
 			.ToArray();
 	}
 
-	static IEnumerable<string> GetMibcReferenceSearchRoots(
+	static IEnumerable<string> GetIsolatedMibcReferenceSearchRoots(
 		ResolvedMauiProject project,
-		string framework,
-		string configuration)
+		string buildArtifactsPath)
 	{
-		var searchRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-		{
-			Path.Combine(project.ProjectDirectory, "obj", configuration, framework),
-			Path.Combine(project.ProjectDirectory, "bin", configuration, framework)
-		};
-
-		for (var current = new DirectoryInfo(project.ProjectDirectory); current is not null; current = current.Parent)
-		{
-			searchRoots.Add(Path.Combine(current.FullName, "artifacts", "obj", project.ProjectName, configuration, framework));
-			searchRoots.Add(Path.Combine(current.FullName, "artifacts", "bin", project.ProjectName, configuration, framework));
-		}
-
-		return searchRoots.Where(Directory.Exists);
+		yield return Path.Combine(buildArtifactsPath, "obj", project.ProjectName);
+		yield return Path.Combine(buildArtifactsPath, "bin", project.ProjectName);
 	}
 
 	internal static int FindAvailableTcpPort(int startingPort, int maxPort = IPEndPoint.MaxPort)

@@ -9,6 +9,8 @@ internal static class ProfileCommandArguments
 {
 	internal static string[] BuildCompileArguments(
 		string projectPath,
+		string artifactsPath,
+		string bootstrapPropsPath,
 		string framework,
 		string configuration,
 		ProfileTransportConfiguration transport,
@@ -20,6 +22,8 @@ internal static class ProfileCommandArguments
 		{
 			"build",
 			projectPath,
+			$"-p:ArtifactsPath={artifactsPath}",
+			$"-p:CustomBeforeDirectoryBuildProps={bootstrapPropsPath}",
 			"-c", configuration,
 			"-f", framework,
 			"--nologo"
@@ -36,6 +40,8 @@ internal static class ProfileCommandArguments
 
 	internal static string[] BuildLaunchArguments(
 		string projectPath,
+		string artifactsPath,
+		string bootstrapPropsPath,
 		string framework,
 		string configuration,
 		Device device,
@@ -48,6 +54,8 @@ internal static class ProfileCommandArguments
 		{
 			"build",
 			projectPath,
+			$"-p:ArtifactsPath={artifactsPath}",
+			$"-p:CustomBeforeDirectoryBuildProps={bootstrapPropsPath}",
 			"-t:Run",
 			"-c", configuration,
 			"-f", framework,
@@ -85,7 +93,6 @@ internal static class ProfileCommandArguments
 		if (buildInjection is null)
 			return;
 
-		args.Add($"-p:CustomAfterMicrosoftCommonTargets={buildInjection.TargetsPath}");
 		args.Add("-p:MauiProfilingHelperInject=true");
 		if (!string.IsNullOrWhiteSpace(buildInjection.ExitControlHost))
 			args.Add($"-p:MauiProfilingHelperExitHost={buildInjection.ExitControlHost}");

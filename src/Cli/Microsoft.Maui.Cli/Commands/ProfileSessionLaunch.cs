@@ -174,7 +174,11 @@ internal static class ProfileSessionLaunch
 	{
 		if (context.NoBuild)
 		{
-			ProfileCommandProcessHelpers.WriteVerbose(context.Formatter, context.UseJson, context.Verbose, "Skipping build because --no-build was specified.");
+			ProfileCommandProcessHelpers.WriteVerbose(
+				context.Formatter,
+				context.UseJson,
+				context.Verbose,
+				$"Skipping the initial build because --no-build was specified. The Run target will use the isolated workspace '{context.BuildWorkspace.Path}' and may build missing outputs there.");
 			return;
 		}
 
@@ -183,6 +187,8 @@ internal static class ProfileSessionLaunch
 
 		var buildArgs = ProfileCommandArguments.BuildCompileArguments(
 			context.Project.ProjectPath,
+			context.BuildWorkspace.Path,
+			context.BuildWorkspace.BootstrapPropsPath,
 			context.Framework,
 			context.Configuration,
 			context.Transport,
@@ -200,6 +206,8 @@ internal static class ProfileSessionLaunch
 	{
 		var launchArgs = ProfileCommandArguments.BuildLaunchArguments(
 			context.Project.ProjectPath,
+			context.BuildWorkspace.Path,
+			context.BuildWorkspace.BootstrapPropsPath,
 			context.Framework,
 			context.Configuration,
 			context.Device,
