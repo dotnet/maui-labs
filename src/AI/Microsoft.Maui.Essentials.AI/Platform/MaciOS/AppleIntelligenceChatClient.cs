@@ -87,6 +87,7 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 	{
 		var nativeMessages = ToNative(messages, options);
 		var nativeOptions = ToNative(options, cancellationToken);
+		cancellationToken.ThrowIfCancellationRequested();
 		var native = new ChatClientNative();
 		var handler = new NonStreamingResponseHandler();
 
@@ -138,6 +139,7 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 	{
 		var nativeMessages = ToNative(messages, options);
 		var nativeOptions = ToNative(options, cancellationToken);
+		cancellationToken.ThrowIfCancellationRequested();
 		var native = new ChatClientNative();
 		StreamChunkerBase chunker = nativeOptions?.ResponseJsonSchema is not null
 			? new JsonStreamChunker()
