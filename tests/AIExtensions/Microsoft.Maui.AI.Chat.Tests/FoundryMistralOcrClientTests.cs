@@ -50,8 +50,8 @@ public sealed class FoundryMistralOcrClientTests
             block.Kind?.Value == "signature");
         Assert.Equal(1, result.Usage?.PagesProcessed);
         Assert.Equal(3d, result.Usage?.AdditionalProperties!["doc_size_bytes"]);
-        var raw = Assert.IsType<FoundryMistralOcrRawReference>(page.RawRepresentation);
-        Assert.Contains("\"blocks\"", raw.Json);
+        var raw = Assert.IsType<JsonElement>(page.RawRepresentation);
+        Assert.Equal(JsonValueKind.Array, raw.GetProperty("pages")[0].GetProperty("blocks").ValueKind);
 
         var request = Assert.Single(handler.Requests);
         Assert.Equal(

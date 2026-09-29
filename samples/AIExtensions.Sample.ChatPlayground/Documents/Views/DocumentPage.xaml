@@ -16,7 +16,7 @@
                 <VerticalStackLayout Spacing="2">
                     <ImageButton Source="more.png"
                                  Style="{StaticResource ChatActionButton}"
-                                 SemanticProperties.Description="Inspect document capabilities and JSON"
+                    SemanticProperties.Description="Inspect document client details and JSON"
                                  AutomationId="DocumentInspectButton">
                         <local:PopupMenu.Content>
                             <VerticalStackLayout WidthRequest="560"
@@ -27,9 +27,9 @@
                                 <HorizontalStackLayout Spacing="8"
                                                        RadioButtonGroup.GroupName="DocumentInspectionMode"
                                                        RadioButtonGroup.SelectedValue="{Binding SelectedInspectionMode, Mode=TwoWay}">
-                                    <RadioButton Content="Capabilities"
-                                                 Value="{x:Static local:DocumentInspectionMode.Capabilities}"
-                                                 AutomationId="DocumentInspectCapabilitiesRadio" />
+                                    <RadioButton Content="Client"
+                                                 Value="{x:Static local:DocumentInspectionMode.Client}"
+                                                 AutomationId="DocumentInspectClientRadio" />
                                     <RadioButton Content="Normalized"
                                                  Value="{x:Static local:DocumentInspectionMode.NormalizedJson}"
                                                  IsEnabled="{Binding HasResult}"

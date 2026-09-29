@@ -87,8 +87,10 @@ public sealed class DocumentOverlayView : GraphicsView
     {
         private IReadOnlyList<DocumentResultNode> _nodes = [];
         private DocumentResultNode? _selectedNode;
-        private float _sourceWidth = 1;
-        private float _sourceHeight = 1;
+        private float _coordinateWidth = 1;
+        private float _coordinateHeight = 1;
+        private float _imageWidth = 1;
+        private float _imageHeight = 1;
         private DocumentCoordinateOrigin _coordinateOrigin = DocumentCoordinateOrigin.TopLeft;
 
         internal void SetState(
@@ -98,12 +100,15 @@ public sealed class DocumentOverlayView : GraphicsView
         {
             _nodes = nodes ?? [];
             _selectedNode = selectedNode;
-            _sourceWidth = GetDimension(page, "apple.sourcePixelWidth") ??
+            var normalized = page?.CoordinateUnit == DocumentCoordinateUnit.Normalized;
+            _imageWidth = GetDimension(page, "apple.sourcePixelWidth") ??
                 page?.Dimensions?.Width ??
                 1;
-            _sourceHeight = GetDimension(page, "apple.sourcePixelHeight") ??
+            _imageHeight = GetDimension(page, "apple.sourcePixelHeight") ??
                 page?.Dimensions?.Height ??
                 1;
+            _coordinateWidth = normalized ? 1 : _imageWidth;
+            _coordinateHeight = normalized ? 1 : _imageHeight;
             _coordinateOrigin = page?.CoordinateOrigin ?? DocumentCoordinateOrigin.TopLeft;
         }
 
@@ -129,10 +134,10 @@ public sealed class DocumentOverlayView : GraphicsView
             var normalizedX = (point.X - imageRect.X) / imageRect.Width;
             var normalizedY = (point.Y - imageRect.Y) / imageRect.Height;
             var sourcePoint = new PointF(
-                normalizedX * _sourceWidth,
+                normalizedX * _coordinateWidth,
                 (_coordinateOrigin == DocumentCoordinateOrigin.BottomLeft
                     ? 1 - normalizedY
-                    : normalizedY) * _sourceHeight);
+                    : normalizedY) * _coordinateHeight);
             return _nodes
                 .Select(static node => (Node: node, Bounds: node.BoundingRegion?.GetBounds()))
                 .Where(item =>
@@ -170,7 +175,7 @@ public sealed class DocumentOverlayView : GraphicsView
 
         private RectF GetImageRect(RectF dirtyRect)
         {
-            var sourceAspect = _sourceWidth / _sourceHeight;
+            var sourceAspect = _imageWidth / _imageHeight;
             var targetAspect = dirtyRect.Width / dirtyRect.Height;
             if (targetAspect > sourceAspect)
             {
@@ -192,11 +197,11 @@ public sealed class DocumentOverlayView : GraphicsView
 
         private PointF ToViewPoint(DocumentPoint point, RectF imageRect) =>
             new(
-                imageRect.X + ((point.X / _sourceWidth) * imageRect.Width),
+                imageRect.X + ((point.X / _coordinateWidth) * imageRect.Width),
                 imageRect.Y +
                     ((_coordinateOrigin == DocumentCoordinateOrigin.BottomLeft
-                        ? 1 - (point.Y / _sourceHeight)
-                        : point.Y / _sourceHeight) * imageRect.Height));
+                        ? 1 - (point.Y / _coordinateHeight)
+                        : point.Y / _coordinateHeight) * imageRect.Height));
 
         private static float? GetDimension(ExtractedDocumentPage? page, string key)
         {

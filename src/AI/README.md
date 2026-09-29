@@ -41,7 +41,7 @@ var response = await client.GetResponseAsync("Plan a weekend trip to Portland");
 using Microsoft.Extensions.DocumentExtraction;
 using Microsoft.Maui.Essentials.AI;
 
-using IDocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
+using IDocumentExtractionClient client = new AppleVisionDocumentExtractionClient();
 await using var image = File.OpenRead("receipt.png");
 var document = await client.ExtractAsync(image, "image/png");
 

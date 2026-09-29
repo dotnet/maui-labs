@@ -119,17 +119,22 @@ public sealed class AppleVisionDocumentCorpusTests(ITestOutputHelper output)
 #endif
 
 		var options = new DocumentExtractionOptions()
-			.WithAppleBarcodeDetection(true, symbologies: ["qr", "code128"]);
+			.WithBarcodeDetection(true, symbologies: ["qr", "code128"]);
 		var page = await AppleVisionDocumentCorpus.ExtractAsync("barcodes.png", options);
 
-		var barcodes = page.Elements.OfType<AppleBarcodeElement>().ToArray();
+		var barcodes = page.Elements
+			.OfType<DocumentBlock>()
+			.Where(static block => block.Kind?.Value == "barcode")
+			.ToArray();
 		Assert.Equal(2, barcodes.Length);
 		Assert.Contains(barcodes, static barcode =>
-			barcode.Symbology == "qr" &&
-			barcode.PayloadString == "https://example.com/meai/vision-corpus");
+			GetStringProperty(barcode, "apple.vision.barcodeSymbology") == "qr" &&
+			GetStringProperty(barcode, "apple.vision.barcodePayload") ==
+				"https://example.com/meai/vision-corpus");
 		Assert.Contains(barcodes, static barcode =>
-			barcode.Symbology == "code128" &&
-			barcode.PayloadString == "MEAI-VISION-2026");
+			GetStringProperty(barcode, "apple.vision.barcodeSymbology") == "code128" &&
+			GetStringProperty(barcode, "apple.vision.barcodePayload") ==
+				"MEAI-VISION-2026");
 		WriteDiagnostics("barcodes.png", page);
 	}
 
@@ -149,11 +154,14 @@ public sealed class AppleVisionDocumentCorpusTests(ITestOutputHelper output)
 		var table = Assert.Single(page.Elements.OfType<DocumentTable>());
 		Assert.Equal(3, table.RowCount);
 		Assert.Equal(2, table.ColumnCount);
-		var list = Assert.Single(page.Elements.OfType<AppleListElement>());
+		var listItems = page.Elements
+			.OfType<DocumentBlock>()
+			.Where(static block => block.Kind?.Value == "listItem")
+			.ToArray();
 		Assert.Equal(
 			["Bring identification", "Arrive early", "Keep the receipt"],
-			list.Items.Select(static item => item.ItemString ?? string.Empty).ToArray());
-		Assert.All(list.Items, static item => Assert.Empty(item.Elements));
+			listItems.Select(static item =>
+				GetStringProperty(item, "apple.vision.itemString") ?? string.Empty).ToArray());
 		var detectedTypes = AppleVisionDocumentCorpus.GetDetectedData(page)
 			.Select(static match => match.GetProperty("type").GetString())
 			.ToHashSet(StringComparer.Ordinal);
@@ -161,6 +169,11 @@ public sealed class AppleVisionDocumentCorpusTests(ITestOutputHelper output)
 		Assert.Contains("emailAddress", detectedTypes);
 		WriteDiagnostics("mixed-document.png", page);
 	}
+
+	private static string? GetStringProperty(DocumentElement element, string key) =>
+		element.AdditionalProperties?.TryGetValue(key, out var value) == true
+			? value as string
+			: null;
 
 	private void WriteDiagnostics(string assetName, DocumentPage page)
 	{

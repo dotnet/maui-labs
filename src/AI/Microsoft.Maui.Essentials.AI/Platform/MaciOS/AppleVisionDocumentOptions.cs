@@ -1,14 +1,9 @@
-using System.Runtime.Versioning;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DocumentExtraction;
 
 namespace Microsoft.Maui.Essentials.AI;
 
-/// <summary>Configures Apple Vision-specific document recognition options.</summary>
-[SupportedOSPlatform("ios26.0")]
-[SupportedOSPlatform("maccatalyst26.0")]
-[SupportedOSPlatform("macos26.0")]
-public static class AppleVisionDocumentOptionsExtensions
+internal static class AppleVisionDocumentOptions
 {
 	internal const string RecognitionLanguagesKey = "apple.vision.recognitionLanguages";
 	internal const string CustomWordsKey = "apple.vision.customWords";
@@ -22,32 +17,27 @@ public static class AppleVisionDocumentOptionsExtensions
 	internal const string RegionOfInterestKey = "apple.vision.regionOfInterest";
 	internal const string RevisionKey = "apple.vision.revision";
 
-	/// <summary>Sets preferred recognition languages.</summary>
-	public static DocumentExtractionOptions WithAppleRecognitionLanguages(
+	internal static DocumentExtractionOptions WithRecognitionLanguages(
 		this DocumentExtractionOptions options,
 		params string[] recognitionLanguages) =>
 		Set(options, RecognitionLanguagesKey, recognitionLanguages);
 
-	/// <summary>Sets custom words that improve recognition.</summary>
-	public static DocumentExtractionOptions WithAppleCustomWords(
+	internal static DocumentExtractionOptions WithCustomWords(
 		this DocumentExtractionOptions options,
 		params string[] customWords) =>
 		Set(options, CustomWordsKey, customWords);
 
-	/// <summary>Enables or disables language correction.</summary>
-	public static DocumentExtractionOptions WithAppleLanguageCorrection(
+	internal static DocumentExtractionOptions WithLanguageCorrection(
 		this DocumentExtractionOptions options,
 		bool enabled) =>
 		Set(options, UseLanguageCorrectionKey, enabled);
 
-	/// <summary>Enables or disables automatic language detection.</summary>
-	public static DocumentExtractionOptions WithAppleAutomaticLanguageDetection(
+	internal static DocumentExtractionOptions WithAutomaticLanguageDetection(
 		this DocumentExtractionOptions options,
 		bool enabled) =>
 		Set(options, AutomaticallyDetectLanguageKey, enabled);
 
-	/// <summary>Sets the maximum number of recognition candidates.</summary>
-	public static DocumentExtractionOptions WithAppleMaximumCandidateCount(
+	internal static DocumentExtractionOptions WithMaximumCandidateCount(
 		this DocumentExtractionOptions options,
 		int count)
 	{
@@ -56,8 +46,7 @@ public static class AppleVisionDocumentOptionsExtensions
 		return Set(options, MaximumCandidateCountKey, count);
 	}
 
-	/// <summary>Sets the minimum recognized-text height as a normalized fraction.</summary>
-	public static DocumentExtractionOptions WithAppleMinimumTextHeightFraction(
+	internal static DocumentExtractionOptions WithMinimumTextHeightFraction(
 		this DocumentExtractionOptions options,
 		float fraction)
 	{
@@ -66,8 +55,7 @@ public static class AppleVisionDocumentOptionsExtensions
 		return Set(options, MinimumTextHeightFractionKey, fraction);
 	}
 
-	/// <summary>Configures barcode detection.</summary>
-	public static DocumentExtractionOptions WithAppleBarcodeDetection(
+	internal static DocumentExtractionOptions WithBarcodeDetection(
 		this DocumentExtractionOptions options,
 		bool enabled,
 		bool? coalesceCompositeSymbologies = null,
@@ -85,8 +73,7 @@ public static class AppleVisionDocumentOptionsExtensions
 		return options;
 	}
 
-	/// <summary>Sets the normalized region of interest.</summary>
-	public static DocumentExtractionOptions WithAppleRegionOfInterest(
+	internal static DocumentExtractionOptions WithRegionOfInterest(
 		this DocumentExtractionOptions options,
 		float x,
 		float y,
@@ -105,8 +92,7 @@ public static class AppleVisionDocumentOptionsExtensions
 		return Set(options, RegionOfInterestKey, new[] { x, y, width, height });
 	}
 
-	/// <summary>Sets the Apple Vision request revision.</summary>
-	public static DocumentExtractionOptions WithAppleRevision(
+	internal static DocumentExtractionOptions WithRevision(
 		this DocumentExtractionOptions options,
 		int revision)
 	{

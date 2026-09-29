@@ -16,7 +16,7 @@ elements where the behavior is stable.
 | Headings and paragraphs | One title and seven paragraphs | Title and body blocks retain expected text |
 | Table | One 4 x 3 table with 12 cells | Row, column, cell text, and geometry map to `DocumentTable` |
 | Detected data | Link, email, phone, postal address, calendar event, and money amount | All six semantic types remain in Apple metadata |
-| Barcodes | QR and Code 128 with expected payloads | Two `AppleBarcodeElement` values retain symbology, payload, confidence, and geometry |
+| Barcodes | QR and Code 128 with expected payloads | Two `DocumentBlock` values with kind `barcode` retain symbology, payload, confidence, and geometry |
 | Mixed document | Title, paragraphs, 3 x 2 table, list, link, email, and calendar events | Heterogeneous top-level elements remain available together |
 
 ## List behavior
@@ -32,7 +32,8 @@ item, however, `item.content` reports:
 - descendant content that re-enters the same semantic container.
 
 The three-item fixture projects 26 raw nodes and prunes six ancestor re-entries.
-The normalized result contains one three-item list and no nested lists.
+The normalized result contains three `listItem` blocks and no nested
+self-projections.
 
 ### Visually nested list
 
@@ -60,7 +61,7 @@ Consumers must not assume every visible bullet becomes
 
 ## Mapper decision
 
-`AppleListItemElement` is treated as the normalized semantic leaf for its own
+The `listItem` `DocumentBlock` is treated as the normalized semantic leaf for its own
 line. The native snapshot remains available for inspection, but the mapper
 filters a child paragraph or list only when all of the following identify an
 exact self-projection:

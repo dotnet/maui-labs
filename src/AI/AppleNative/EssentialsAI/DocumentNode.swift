@@ -3,8 +3,7 @@ import DataDetection
 import Vision
 
 @available(iOS 26.0, macCatalyst 26.0, macOS 26.0, tvOS 26.0, visionOS 26.0, *)
-@objc(VisionDocumentNodeKindNative)
-public enum VisionDocumentNodeKindNative: Int {
+enum VisionDocumentNodeKindNative: Int {
     case title = 0
     case paragraph = 1
     case table = 2
@@ -33,37 +32,33 @@ public class VisionDocumentCapabilitiesNative: NSObject {
 }
 
 @available(iOS 26.0, macCatalyst 26.0, macOS 26.0, tvOS 26.0, visionOS 26.0, *)
-@objc(VisionDocumentNodeNative)
-public class VisionDocumentNodeNative: NSObject {
-    @objc public let kind: VisionDocumentNodeKindNative
-    @objc public let path: String
-    @objc public let parentPath: String?
-    @objc public let text: String?
-    @objc public let polygon: [NSNumber]
-    @objc public let confidence: NSNumber?
-    @objc public let rowIndex: NSNumber?
-    @objc public let columnIndex: NSNumber?
-    @objc public let rowSpan: NSNumber?
-    @objc public let columnSpan: NSNumber?
-    @objc public let itemString: String?
-    @objc public let markerString: String?
-    @objc public let markerType: String?
-    @objc public let symbology: String?
-    @objc public let payloadString: String?
-    @objc public let payloadData: Data?
-    @objc public let isGS1DataCarrier: NSNumber?
-    @objc public let isColorInverted: NSNumber?
-    @objc public let supplementalPayloadString: String?
-    @objc public let supplementalPayloadData: Data?
-    @objc public let supplementalCompositeType: String?
-    @objc public let textAlignment: String?
-    @objc public let recognitionLanguages: [String]?
-    @objc public let detectedDataJson: Data?
-    @objc public let candidatesJson: Data?
-
-    private let rangeProvider: ((Int, Int) -> [NSNumber]?)?
-    private let jsonLock = NSLock()
-    private var cachedJson: Data?
+final class VisionDocumentNodeNative {
+    let kind: VisionDocumentNodeKindNative
+    let path: String
+    let parentPath: String?
+    let text: String?
+    let polygon: [NSNumber]
+    let confidence: NSNumber?
+    let rowIndex: NSNumber?
+    let columnIndex: NSNumber?
+    let rowSpan: NSNumber?
+    let columnSpan: NSNumber?
+    let itemString: String?
+    let markerString: String?
+    let markerType: String?
+    let symbology: String?
+    let payloadString: String?
+    let payloadData: Data?
+    let isGS1DataCarrier: NSNumber?
+    let isColorInverted: NSNumber?
+    let supplementalPayloadString: String?
+    let supplementalPayloadData: Data?
+    let supplementalCompositeType: String?
+    let textAlignment: String?
+    let recognitionLanguages: [String]?
+    let detectedData: [[String: Any]]
+    let candidates: [[String: Any]]
+    let words: [[String: Any]]?
 
     init(
         kind: VisionDocumentNodeKindNative,
@@ -89,9 +84,9 @@ public class VisionDocumentNodeNative: NSObject {
         supplementalCompositeType: String? = nil,
         textAlignment: String? = nil,
         recognitionLanguages: [String]? = nil,
-        detectedDataJson: Data? = nil,
-        candidatesJson: Data? = nil,
-        rangeProvider: ((Int, Int) -> [NSNumber]?)? = nil
+        detectedData: [[String: Any]] = [],
+        candidates: [[String: Any]] = [],
+        words: [[String: Any]]? = nil
     ) {
         self.kind = kind
         self.path = path
@@ -116,43 +111,9 @@ public class VisionDocumentNodeNative: NSObject {
         self.supplementalCompositeType = supplementalCompositeType
         self.textAlignment = textAlignment
         self.recognitionLanguages = recognitionLanguages
-        self.detectedDataJson = detectedDataJson
-        self.candidatesJson = candidatesJson
-        self.rangeProvider = rangeProvider
-    }
-
-    @objc public func encodeJson(
-        _ errorPointer: AutoreleasingUnsafeMutablePointer<NSError?>?
-    ) -> Data? {
-        jsonLock.lock()
-        defer { jsonLock.unlock() }
-
-        if let cachedJson {
-            return cachedJson
-        }
-
-        do {
-            let json = try JSONSerialization.data(
-                withJSONObject: snapshotObject(),
-                options: [.sortedKeys]
-            )
-            cachedJson = json
-            return json
-        } catch {
-            errorPointer?.pointee = error as NSError
-            return nil
-        }
-    }
-
-    @objc public var jsonData: Data? {
-        encodeJson(nil)
-    }
-
-    @objc public func boundingRegion(
-        forUtf16Location location: Int,
-        length: Int
-    ) -> [NSNumber]? {
-        rangeProvider?(location, length)
+        self.detectedData = detectedData
+        self.candidates = candidates
+        self.words = words
     }
 
     func snapshotObject() -> [String: Any] {
@@ -182,8 +143,9 @@ public class VisionDocumentNodeNative: NSObject {
         snapshot["supplementalCompositeType"] = supplementalCompositeType
         snapshot["textAlignment"] = textAlignment
         snapshot["recognitionLanguages"] = recognitionLanguages
-        snapshot["detectedData"] = jsonObject(detectedDataJson)
-        snapshot["candidates"] = jsonObject(candidatesJson)
+        snapshot["detectedData"] = detectedData
+        snapshot["candidates"] = candidates
+        snapshot["words"] = words
         return snapshot
     }
 
@@ -200,35 +162,22 @@ public class VisionDocumentNodeNative: NSObject {
         }
     }
 
-    private func jsonObject(_ data: Data?) -> Any? {
-        guard let data else {
-            return nil
-        }
-        return try? JSONSerialization.jsonObject(with: data)
-    }
 }
 
 @available(iOS 26.0, macCatalyst 26.0, macOS 26.0, tvOS 26.0, visionOS 26.0, *)
-@objc(VisionDocumentObservationNative)
-public class VisionDocumentObservationNative: NSObject {
-    let observation: DocumentObservation
-
-    @objc public let uuidString: String
-    @objc public let confidence: Float
-    @objc public let transcript: String
-    @objc public let nodes: [VisionDocumentNodeNative]
-    @objc public let structureTruncated: Bool
-    @objc public let projectedNodeCount: Int
-    @objc public let maximumTraversalDepth: Int
-    @objc public let repeatedContainerCount: Int
-    @objc public let firstRepeatedContainerPath: String?
-    @objc public let firstRepeatedAncestorPath: String?
-
-    private let jsonLock = NSLock()
-    private var cachedJson: Data?
+final class VisionDocumentObservationNative {
+    let uuidString: String
+    let confidence: Float
+    let transcript: String
+    let nodes: [VisionDocumentNodeNative]
+    let structureTruncated: Bool
+    let projectedNodeCount: Int
+    let maximumTraversalDepth: Int
+    let repeatedContainerCount: Int
+    let firstRepeatedContainerPath: String?
+    let firstRepeatedAncestorPath: String?
 
     init(_ observation: DocumentObservation) {
-        self.observation = observation
         self.uuidString = observation.uuid.uuidString
         self.confidence = observation.confidence
         self.transcript = observation.document.text.transcript
@@ -245,53 +194,38 @@ public class VisionDocumentObservationNative: NSObject {
         self.firstRepeatedAncestorPath = buildResult.firstRepeatedAncestorPath
     }
 
-    @objc public func encodeJson(
-        _ errorPointer: AutoreleasingUnsafeMutablePointer<NSError?>?
-    ) -> Data? {
-        jsonLock.lock()
-        defer { jsonLock.unlock() }
-
-        if let cachedJson {
-            return cachedJson
-        }
-
-        do {
-            var snapshot: [String: Any] = [
-                "uuid": uuidString,
-                "confidence": Double(confidence),
-                "transcript": transcript,
-                "structureTruncated": structureTruncated,
-                "projectedNodeCount": projectedNodeCount,
-                "maximumTraversalDepth": maximumTraversalDepth,
-                "repeatedContainerCount": repeatedContainerCount,
-                "nodes": nodes.map { $0.snapshotObject() },
-            ]
-            snapshot["firstRepeatedContainerPath"] = firstRepeatedContainerPath
-            snapshot["firstRepeatedAncestorPath"] = firstRepeatedAncestorPath
-            let json = try JSONSerialization.data(
-                withJSONObject: snapshot,
-                options: [.sortedKeys]
-            )
-            cachedJson = json
-            return json
-        } catch {
-            errorPointer?.pointee = error as NSError
-            return nil
-        }
-    }
-
-    @objc public var jsonData: Data? {
-        encodeJson(nil)
+    func snapshotObject() -> [String: Any] {
+        var snapshot: [String: Any] = [
+            "uuid": uuidString,
+            "confidence": Double(confidence),
+            "transcript": transcript,
+            "structureTruncated": structureTruncated,
+            "projectedNodeCount": projectedNodeCount,
+            "maximumTraversalDepth": maximumTraversalDepth,
+            "repeatedContainerCount": repeatedContainerCount,
+            "nodes": nodes.map { $0.snapshotObject() },
+        ]
+        snapshot["firstRepeatedContainerPath"] = firstRepeatedContainerPath
+        snapshot["firstRepeatedAncestorPath"] = firstRepeatedAncestorPath
+        return snapshot
     }
 }
 
 @available(iOS 26.0, macCatalyst 26.0, macOS 26.0, tvOS 26.0, visionOS 26.0, *)
 @objc(VisionDocumentResultNative)
 public class VisionDocumentResultNative: NSObject, @unchecked Sendable {
-    @objc public let observations: [VisionDocumentObservationNative]
+    @objc public let jsonData: Data
 
-    init(_ observations: [DocumentObservation]) {
-        self.observations = observations.map(VisionDocumentObservationNative.init)
+    init(_ observations: [DocumentObservation]) throws {
+        // Apple's Codable graph can re-enter Cell.content and List.Item.content
+        // for framework-produced observations, so encode only the bounded snapshot.
+        let snapshots = observations
+            .map(VisionDocumentObservationNative.init)
+            .map { $0.snapshotObject() }
+        self.jsonData = try JSONSerialization.data(
+            withJSONObject: snapshots,
+            options: [.sortedKeys]
+        )
     }
 }
 
@@ -449,8 +383,7 @@ enum VisionDocumentNodeBuilder {
                         rowIndex: NSNumber(value: cell.rowRange.lowerBound),
                         columnIndex: NSNumber(value: cell.columnRange.lowerBound),
                         rowSpan: NSNumber(value: cell.rowRange.count),
-                        columnSpan: NSNumber(value: cell.columnRange.count),
-                        rangeProvider: rangeProvider(cell.content.text)
+                        columnSpan: NSNumber(value: cell.columnRange.count)
                     ))
                     append(
                         cell.content,
@@ -500,9 +433,9 @@ enum VisionDocumentNodeBuilder {
                     markerType: markerName(item.markerType),
                     textAlignment: alignmentName(itemText.textAlignment),
                     recognitionLanguages: recognitionLanguages(itemText),
-                    detectedDataJson: detectedDataJson(itemText),
-                    candidatesJson: candidatesJson(itemText),
-                    rangeProvider: rangeProvider(itemText)
+                    detectedData: detectedDataSnapshot(itemText),
+                    candidates: candidatesSnapshot(itemText),
+                    words: wordsSnapshot(itemText)
                 ))
                 append(
                     item.content,
@@ -579,9 +512,9 @@ enum VisionDocumentNodeBuilder {
             polygon: polygon(text.boundingRegion),
             textAlignment: alignmentName(text.textAlignment),
             recognitionLanguages: recognitionLanguages(text),
-            detectedDataJson: detectedDataJson(text),
-            candidatesJson: candidatesJson(text),
-            rangeProvider: rangeProvider(text)
+            detectedData: detectedDataSnapshot(text),
+            candidates: candidatesSnapshot(text),
+            words: wordsSnapshot(text)
         )
     }
 
@@ -594,21 +527,43 @@ enum VisionDocumentNodeBuilder {
         return languages.isEmpty ? nil : languages
     }
 
-    private static func candidatesJson(
+    private static func candidatesSnapshot(
         _ text: DocumentObservation.Container.Text
-    ) -> Data? {
-        let candidates = text.lines.map { line in
-            line.topCandidates(10).map { candidate in
-                [
-                    "text": candidate.string,
-                    "confidence": Double(candidate.confidence),
-                ] as [String: Any]
-            }
+    ) -> [[String: Any]] {
+        text.lines.map { line in
+            [
+                "polygon": polygon(line.boundingRegion).map(\.doubleValue),
+                "recognitionLanguages":
+                    line.recognitionLanguages.map(\.minimalIdentifier),
+                "candidates": line.topCandidates(10).map { candidate in
+                    [
+                        "text": candidate.string,
+                        "confidence": Double(candidate.confidence),
+                    ] as [String: Any]
+                },
+            ] as [String: Any]
         }
-        return try? JSONSerialization.data(
-            withJSONObject: candidates,
-            options: [.sortedKeys]
-        )
+    }
+
+    private static func wordsSnapshot(
+        _ text: DocumentObservation.Container.Text
+    ) -> [[String: Any]]? {
+        guard let words = text.words else {
+            return nil
+        }
+        return words.map { word in
+            [
+                "polygon": polygon(word.boundingRegion).map(\.doubleValue),
+                "recognitionLanguages":
+                    word.recognitionLanguages.map(\.minimalIdentifier),
+                "candidates": word.topCandidates(10).map { candidate in
+                    [
+                        "text": candidate.string,
+                        "confidence": Double(candidate.confidence),
+                    ] as [String: Any]
+                },
+            ] as [String: Any]
+        }
     }
 
     private static func polygon(_ region: NormalizedRegion) -> [NSNumber] {
@@ -732,10 +687,10 @@ enum VisionDocumentNodeBuilder {
         }
     }
 
-    private static func detectedDataJson(
+    private static func detectedDataSnapshot(
         _ text: DocumentObservation.Container.Text
-    ) -> Data? {
-        let matches = text.detectedData.map { detected -> [String: Any] in
+    ) -> [[String: Any]] {
+        text.detectedData.map { detected -> [String: Any] in
             var snapshot: [String: Any] = [
                 "polygon": polygon(detected.boundingRegion).map(\.doubleValue),
                 "highlightStyle": highlightStyleName(
@@ -753,10 +708,6 @@ enum VisionDocumentNodeBuilder {
             addSemanticDetails(detected.match.details, to: &snapshot)
             return snapshot
         }
-        return try? JSONSerialization.data(
-            withJSONObject: matches,
-            options: [.sortedKeys]
-        )
     }
 
     private static func addSemanticDetails(
@@ -846,34 +797,4 @@ enum VisionDocumentNodeBuilder {
         ISO8601DateFormatter().string(from: date)
     }
 
-    private static func rangeProvider(
-        _ text: DocumentObservation.Container.Text
-    ) -> (Int, Int) -> [NSNumber]? {
-        { location, length in
-            guard location >= 0, length >= 0 else {
-                return nil
-            }
-
-            let utf16 = text.transcript.utf16
-            guard
-                let utf16Start = utf16.index(
-                    utf16.startIndex,
-                    offsetBy: location,
-                    limitedBy: utf16.endIndex
-                ),
-                let utf16End = utf16.index(
-                    utf16Start,
-                    offsetBy: length,
-                    limitedBy: utf16.endIndex
-                ),
-                let start = String.Index(utf16Start, within: text.transcript),
-                let end = String.Index(utf16End, within: text.transcript),
-                let region = text.boundingRegion(for: start..<end)
-            else {
-                return nil
-            }
-
-            return polygon(region)
-        }
-    }
 }

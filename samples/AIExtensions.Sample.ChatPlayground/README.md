@@ -73,6 +73,26 @@ distribute those builds or commit keys. Azure prompts, images, and indexed
 text may leave the device and incur charges. Documents leave the device when
 either Foundry provider is selected.
 
+The playground adds the standard .NET command-line configuration provider over
+`Environment.GetCommandLineArgs()`. `--page` selects the initial tab, and each
+feature consumes its own configuration keys. For example:
+
+```bash
+dotnet run --project samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
+  -f net10.0-maccatalyst -- \
+  --page Documents \
+  --document "/path/to/checklist.pdf" \
+  --document-client apple-vision \
+  --document-extract true
+```
+
+The normal `Microsoft.Extensions.Configuration.CommandLine` formats are
+supported, including `--name value` and `--name=value`. Command-line values can
+also override other configuration such as `--AI:DeploymentName value`.
+Sandboxed Apple apps still require file paths inside the app container;
+otherwise use the normal picker. Release builds ignore document automation
+values, though `--page` still selects the initial tab.
+
 ## What to try
 
 - **Chat:** Choose a provider, send text, and switch between streaming and
@@ -103,8 +123,7 @@ either Foundry provider is selected.
   Mistral returns page Markdown, classified blocks, pixel boxes, tables,
   figures, and confidence. The general vision model provides a probabilistic
   semantic extraction path with text/tables but no provider-grade geometry.
-  Choose an image or PDF, load
-  the packaged conformance sample, or scan pages with VisionKit where supported.
+  Choose an image or PDF or load the packaged conformance sample.
   Both providers return structured pages, text, tables, barcodes, metadata, and
   geometry; Apple additionally exposes its provider-specific list model. Image inputs show
   a polygon overlay, while PDF inputs show every rendered page. Switch the
@@ -112,7 +131,7 @@ either Foundry provider is selected.
   result. It stays side-by-side on wider windows and stacks automatically on
   narrow layouts. Selecting an overlay region selects and scrolls to its
   normalized JSON path; selecting a result row highlights and scrolls to its
-  page region. Use the header **Inspect** popup to switch between capabilities,
+  page region. Use the header **Inspect** popup to switch between client details,
   normalized JSON, provider raw JSON, and the selected node's raw JSON without
   leaving the page. Cancel a multi-page PDF while PDFKit renders and recognizes
   pages sequentially. The selected client description clearly states whether

@@ -1,32 +1,35 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DocumentExtraction;
 using Microsoft.Maui.ApplicationModel.DataTransfer;
 
 namespace AIExtensions.Sample.ChatPlayground;
 
-/// <summary>Coordinates file input, Apple Vision extraction, and document result inspection.</summary>
+/// <summary>Coordinates file input, selected-client extraction, and document result inspection.</summary>
 public sealed partial class DocumentPlaygroundViewModel : ObservableObject
 {
     private const int MaximumDisplayedNodes = 2000;
 
-    private readonly DocumentExtractionRunner _runner;
     private readonly DocumentInputService _inputService;
+    private readonly IConfiguration _configuration;
     private DocumentInput? _selectedInput;
     private DocumentExtractionResult? _result;
+    private bool _launchOptionsApplied;
 
     public DocumentPlaygroundViewModel(
-        DocumentExtractionRunner runner,
         DocumentInputService inputService,
-        DocumentSettingsViewModel settings)
+        DocumentSettingsViewModel settings,
+        IConfiguration configuration)
     {
-        _runner = runner;
         _inputService = inputService;
+        _configuration = configuration;
         Settings = settings;
         Settings.PropertyChanged += SettingsPropertyChanged;
-        StatusMessage = settings.IsSupported
+        StatusMessage = settings.HasClient
             ? "Choose an image or PDF, or load the sample document."
             : settings.AvailabilityMessage;
     }
@@ -47,35 +50,76 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
     [ObservableProperty] private bool isProgressVisible;
 
     public bool IsIdle => !IsBusy;
-    public bool IsSupported => Settings.IsSupported;
-    public bool CanScan => Settings.CanScan && !IsBusy;
+    public bool HasClient => Settings.HasClient;
     public bool HasSelection => _selectedInput is not null;
     public bool HasPreviewPages => PreviewPages.Count > 0;
     public bool HasResult => _result is not null;
     public bool CanInspectSelectedNode => SelectedNode?.HasRawJson == true;
     public string ComposerHint => HasSelection
-        ? $"Extract with {Settings.ProviderName}"
+        ? $"Extract with {Settings.ClientName}"
         : "Add an image or PDF to extract";
+
     public string InspectionTitle => SelectedInspectionMode switch
     {
-        DocumentInspectionMode.Capabilities => "Provider capabilities",
+        DocumentInspectionMode.Client => "Document client",
         DocumentInspectionMode.NormalizedJson => "Normalized document JSON",
-        DocumentInspectionMode.RawJson => $"Raw {Settings.ProviderName} JSON",
-        DocumentInspectionMode.SelectedNodeJson =>
-            SelectedNode is { } node ? $"Raw JSON - {node.Title}" : "Selected node JSON",
+        DocumentInspectionMode.RawJson => $"Raw {Settings.ClientName} JSON",
+        DocumentInspectionMode.SelectedNodeJson => SelectedNode is { } node ? $"Raw JSON - {node.Title}" : "Selected node JSON",
         _ => "Document inspection",
     };
+
     public string InspectionContent => GetInspectionContent();
 
     public IAsyncRelayCommand ChooseDocument => ChooseDocumentCommand;
     public IAsyncRelayCommand UseSampleDocument => UseSampleDocumentCommand;
-    public IAsyncRelayCommand ScanDocument => ScanDocumentCommand;
     public IAsyncRelayCommand ExtractDocument => ExtractDocumentCommand;
     public System.Windows.Input.ICommand CancelExtraction => ExtractDocumentCancelCommand;
     public IRelayCommand RemoveDocument => RemoveSelectedDocumentCommand;
     public IAsyncRelayCommand CopyInspectionText => CopyInspectionTextCommand;
 
-    private bool CanChooseDocument() => Settings.IsSupported && !IsBusy;
+    internal async Task ApplyLaunchOptionsAsync()
+    {
+#if DEBUG
+        if (_launchOptionsApplied)
+            return;
+
+        _launchOptionsApplied = true;
+
+        try
+        {
+            if (_configuration["document-client"] is { } clientId)
+            {
+                Settings.SelectedOption = Settings.Clients.FirstOrDefault(option =>
+                    string.Equals(option.Descriptor.Id, clientId, StringComparison.OrdinalIgnoreCase))
+                    ?? throw new InvalidOperationException($"Document client '{clientId}' is not registered.");
+            }
+
+            Settings.DetectBarcodes =
+                _configuration.GetValue<bool?>("document-detect-barcodes") ?? Settings.DetectBarcodes;
+            Settings.AutomaticallyDetectLanguage =
+                _configuration.GetValue<bool?>("document-detect-language") ?? Settings.AutomaticallyDetectLanguage;
+            Settings.IncludeImages =
+                _configuration.GetValue<bool?>("document-include-images") ?? Settings.IncludeImages;
+
+            var path = _configuration["document"];
+            if (string.IsNullOrWhiteSpace(path))
+                return;
+
+            SelectInput(await _inputService.LoadFileAsync(path));
+
+            if ((_configuration.GetValue<bool?>("document-extract") ?? true) && CanExtractDocument())
+                await ExtractDocumentAsync(CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            StatusMessage = $"Could not load configured document: {exception.Message}";
+        }
+#else
+        await Task.CompletedTask;
+#endif
+    }
+
+    private bool CanChooseDocument() => Settings.HasClient && !IsBusy;
 
     [RelayCommand(CanExecute = nameof(CanChooseDocument))]
     private async Task ChooseDocumentAsync()
@@ -104,30 +148,12 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         }
     }
 
-    private bool CanScanDocument() => Settings.CanScan && !IsBusy;
-
-    [RelayCommand(CanExecute = nameof(CanScanDocument))]
-    private async Task ScanDocumentAsync()
-    {
-        try
-        {
-            if (await _inputService.ScanAsync() is { } input)
-                SelectInput(input);
-        }
-        catch (Exception exception)
-        {
-            StatusMessage = $"Could not scan a document: {exception.Message}";
-        }
-    }
-
-    private bool CanExtractDocument() =>
-        Settings.IsSupported && _selectedInput is not null && !IsBusy;
+    private bool CanExtractDocument() => Settings.HasClient && _selectedInput is not null && !IsBusy;
 
     [RelayCommand(CanExecute = nameof(CanExtractDocument), IncludeCancelCommand = true)]
     private async Task ExtractDocumentAsync(CancellationToken cancellationToken)
     {
-        var input = _selectedInput
-            ?? throw new InvalidOperationException("Choose an image or PDF first.");
+        var input = _selectedInput ?? throw new InvalidOperationException("Choose an image or PDF first.");
 
         IsBusy = true;
         Settings.IsBusy = true;
@@ -136,30 +162,26 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         Nodes.Clear();
         _result = null;
         SelectedNode = null;
+
         foreach (var preview in PreviewPages)
             preview.SetExtraction(null, []);
+
         ResultDetails = "Extraction in progress.";
         OnPropertyChanged(nameof(HasResult));
         NotifyInspectionChanged();
         RefreshCommands();
         StatusMessage = $"Recognizing {input.FileName}...";
 
-        var pageProgress = new Progress<DocumentExtractionProgress>(OnProgress);
+        var pageProgress = new Progress<DocumentExtractionPageResult>(OnProgress);
+
         try
         {
-            var provider = Settings.SelectedProvider?.Provider
-                ?? throw new InvalidOperationException("Choose a document provider.");
-            var result = await Task.Run(
-                () => _runner.ExtractAsync(
-                    input,
-                    provider,
-                    Settings.CreateSettings(),
-                    pageProgress,
-                    cancellationToken),
-                cancellationToken);
+            var client = Settings.SelectedClient ?? throw new InvalidOperationException("Choose a document client.");
+            var result = await ExtractAsync(input, client, Settings.CreateOptions(), pageProgress, cancellationToken);
             _result = result;
 
             var projected = DocumentResultProjector.Project(result);
+
             foreach (var node in projected.Take(MaximumDisplayedNodes))
                 Nodes.Add(node);
 
@@ -169,13 +191,13 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
                     result.Pages.FirstOrDefault(page => page.PageNumber == preview.PageNumber),
                     projected.Where(node => node.PageNumber == preview.PageNumber));
             }
+
             SelectedNode = projected.FirstOrDefault(static node => node.BoundingRegion is not null);
             ResultDetails =
                 $"{result.Pages.Count} pages - {projected.Count:N0} structured nodes" +
-                (projected.Count > MaximumDisplayedNodes
-                    ? $" - showing the first {MaximumDisplayedNodes:N0}"
-                    : string.Empty);
+                (projected.Count > MaximumDisplayedNodes ? $" - showing the first {MaximumDisplayedNodes:N0}" : string.Empty);
             StatusMessage = BuildCompletionStatus(result, projected.Count);
+
             OnPropertyChanged(nameof(HasResult));
             NotifyInspectionChanged();
         }
@@ -214,7 +236,7 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         SelectedNode = null;
         PreviewPages.Clear();
         Progress = 0;
-        StatusMessage = Settings.IsSupported
+        StatusMessage = Settings.HasClient
             ? "Choose an image or PDF, or load the sample document."
             : Settings.AvailabilityMessage;
         OnPropertyChanged(nameof(HasSelection));
@@ -238,22 +260,16 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         {
             return SelectedInspectionMode switch
             {
-                DocumentInspectionMode.Capabilities =>
-                    Settings.SelectedProvider is { } option
-                        ? _runner.GetCapabilitiesSummary(option.Provider)
-                        : "No document provider is registered.",
-                DocumentInspectionMode.NormalizedJson =>
-                    _result is { } normalizedResult
-                        ? DocumentRawJson.SerializeNormalized(normalizedResult)
-                        : "Extract a document to inspect normalized JSON.",
-                DocumentInspectionMode.RawJson =>
-                    _result is { } rawResult
-                        ? DocumentRawJson.SerializePages(rawResult)
-                        : "Extract a document to inspect provider raw JSON.",
-                DocumentInspectionMode.SelectedNodeJson =>
-                    SelectedNode?.HasRawJson == true
-                        ? SelectedNode.GetRawJson()
-                        : "Select a structured result that exposes provider raw JSON.",
+                DocumentInspectionMode.Client => GetClientDetails(),
+                DocumentInspectionMode.NormalizedJson => _result is { } normalizedResult
+                    ? DocumentRawJson.SerializeNormalized(normalizedResult)
+                    : "Extract a document to inspect normalized JSON.",
+                DocumentInspectionMode.RawJson => _result is { } rawResult
+                    ? DocumentRawJson.SerializePages(rawResult)
+                    : "Extract a document to inspect provider raw JSON.",
+                DocumentInspectionMode.SelectedNodeJson => SelectedNode?.HasRawJson == true
+                    ? SelectedNode.GetRawJson()
+                    : "Select a structured result that exposes provider raw JSON.",
                 _ => string.Empty,
             };
         }
@@ -261,6 +277,50 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         {
             return $"Could not inspect the document: {exception.Message}";
         }
+    }
+
+    private string GetClientDetails()
+    {
+        if (Settings.SelectedClient is not { } client || Settings.SelectedDescriptor is not { } descriptor)
+            return "No document client is registered.";
+
+        var metadata = client.GetService<DocumentExtractionClientMetadata>();
+        var text = new StringBuilder()
+            .AppendLine(descriptor.Name)
+            .AppendLine()
+            .AppendLine(descriptor.Description);
+
+        if (metadata?.ProviderName is { Length: > 0 } providerName)
+            text.AppendLine().Append("Provider: ").AppendLine(providerName);
+        if (metadata?.DefaultModelId is { Length: > 0 } modelId)
+            text.Append("Model: ").AppendLine(modelId);
+        if (metadata?.ProviderUri is { } providerUri)
+            text.Append("Endpoint: ").AppendLine(providerUri.ToString());
+
+        return text.ToString().TrimEnd();
+    }
+
+    private static async Task<DocumentExtractionResult> ExtractAsync(
+        DocumentInput input,
+        IDocumentExtractionClient client,
+        DocumentExtractionOptions options,
+        IProgress<DocumentExtractionPageResult> progress,
+        CancellationToken cancellationToken)
+    {
+        using var stream = input.OpenRead();
+        var pages = new List<DocumentExtractionPageResult>();
+
+        // Clients are registered singletons like chat clients and embedding generators, so a request must not dispose them.
+        await foreach (var update in client
+            .ExtractPagesAsync(stream, input.MediaType, options, cancellationToken)
+            .WithCancellation(cancellationToken)
+            .ConfigureAwait(false))
+        {
+            pages.Add(update);
+            progress.Report(update);
+        }
+
+        return pages.ToDocumentExtractionResult();
     }
 
     private void SelectInput(DocumentInput input)
@@ -273,12 +333,10 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         Nodes.Clear();
         SelectedNode = null;
         PreviewPages.Clear();
+
         foreach (var preview in input.PreviewPages)
-        {
-            PreviewPages.Add(new(
-                preview,
-                node => SelectedNode = node));
-        }
+            PreviewPages.Add(new(preview, node => SelectedNode = node));
+
         Progress = 0;
         StatusMessage = $"Ready to extract {input.FileName}.";
         OnPropertyChanged(nameof(HasSelection));
@@ -289,51 +347,44 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         RefreshCommands();
     }
 
-    private void OnProgress(DocumentExtractionProgress update)
+    private void OnProgress(DocumentExtractionPageResult update)
     {
         StatusMessage = update.TotalPages is { } total
             ? $"Processed page {update.PagesProcessed}/{total}..."
             : $"Processed page {update.PagesProcessed}...";
-        if (update.PagesProcessed is { } processed &&
-            update.TotalPages is { } totalPages and > 0)
-        {
+        if (update.PagesProcessed is { } processed && update.TotalPages is { } totalPages and > 0)
             Progress = (double)processed / totalPages;
-        }
     }
 
-    private static string BuildCompletionStatus(
-        DocumentExtractionResult result,
-        int nodeCount)
+    private static string BuildCompletionStatus(DocumentExtractionResult result, int nodeCount)
     {
         var pruned = result.Pages.Sum(static page =>
-            page.AdditionalProperties?.TryGetValue(
-                "apple.vision.repeatedContainersPruned",
-                out var value) == true &&
-            value is long count
-                ? count
-                : 0);
+            page.AdditionalProperties?.TryGetValue("apple.vision.repeatedContainersPruned", out var value) == true &&
+            value is long count ? count : 0);
+
         return $"Extracted {result.Pages.Count} page(s) and {nodeCount:N0} structured nodes." +
             (pruned > 0 ? $" Pruned {pruned:N0} repeated provider traversal(s)." : string.Empty);
     }
 
     private void SettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(DocumentSettingsViewModel.SelectedProvider))
+        if (e.PropertyName != nameof(DocumentSettingsViewModel.SelectedOption))
             return;
 
         _result = null;
         Nodes.Clear();
         SelectedNode = null;
+
         foreach (var preview in PreviewPages)
             preview.SetExtraction(null, []);
+
         ResultDetails = HasSelection
             ? "Not extracted with this provider."
             : "No extraction result.";
-        StatusMessage = Settings.IsSupported
-            ? $"Selected {Settings.ProviderName}. Choose or extract a document."
+        StatusMessage = Settings.HasClient
+            ? $"Selected {Settings.ClientName}. Choose or extract a document."
             : Settings.AvailabilityMessage;
-        OnPropertyChanged(nameof(IsSupported));
-        OnPropertyChanged(nameof(CanScan));
+        OnPropertyChanged(nameof(HasClient));
         OnPropertyChanged(nameof(HasResult));
         OnPropertyChanged(nameof(ComposerHint));
         NotifyInspectionChanged();
@@ -343,7 +394,6 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
     partial void OnIsBusyChanged(bool value)
     {
         OnPropertyChanged(nameof(IsIdle));
-        OnPropertyChanged(nameof(CanScan));
         OnPropertyChanged(nameof(ComposerHint));
     }
 
@@ -362,7 +412,6 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
     {
         ChooseDocumentCommand.NotifyCanExecuteChanged();
         UseSampleDocumentCommand.NotifyCanExecuteChanged();
-        ScanDocumentCommand.NotifyCanExecuteChanged();
         ExtractDocumentCommand.NotifyCanExecuteChanged();
         RemoveSelectedDocumentCommand.NotifyCanExecuteChanged();
     }
@@ -376,7 +425,7 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
 
 public enum DocumentInspectionMode
 {
-    Capabilities,
+    Client,
     NormalizedJson,
     RawJson,
     SelectedNodeJson,
