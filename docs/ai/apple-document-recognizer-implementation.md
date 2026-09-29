@@ -570,7 +570,10 @@ multi-column reading order, skew, CJK/RTL, and degraded scans.
 ## Implemented sequence
 
 1. Vendor the two PR #7588 source projects at pinned commit
-   `a215825ae2c96723e922e068c226ff77122c7c94`.
+   `a215825ae2c96723e922e068c226ff77122c7c94`, including the package READMEs
+   and API-baseline JSONs. The two local project files remain the only deliberate
+   divergence because they replace dotnet/extensions Arcade plumbing with
+   non-shipping maui-labs project references and shared-helper shims.
 2. Add the Swift documents request, native options, capabilities, result
    wrappers, and node projection.
 3. Add Objective-C binding definitions and native enums.
@@ -640,7 +643,7 @@ recommendations are maintained separately in
 ## References
 
 - [Document extraction API proposal](https://github.com/dotnet/extensions/pull/7588)
-- [Pinned proposal interface](https://github.com/luisquintanilla/extensions/blob/a215825ae2c96723e922e068c226ff77122c7c94/src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions/IDocumentExtractionClient.cs)
+- [Pinned proposal interface](https://github.com/dotnet/extensions/blob/a215825ae2c96723e922e068c226ff77122c7c94/src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions/IDocumentExtractionClient.cs)
 - [RecognizeDocumentsRequest](https://developer.apple.com/documentation/vision/recognizedocumentsrequest)
 - [Recognizing tables within a document](https://developer.apple.com/documentation/vision/recognize-tables-within-a-document)
 - [PDFDocument](https://developer.apple.com/documentation/pdfkit/pdfdocument)
