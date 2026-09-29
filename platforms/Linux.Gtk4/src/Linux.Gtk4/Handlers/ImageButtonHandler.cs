@@ -156,7 +156,6 @@ public class ImageButtonHandler : GtkViewHandler<IImageButton, Gtk.Button>
 		else if (imageButton.StrokeThickness <= 0)
 			css += "border: none; ";
 
-		if (!string.IsNullOrWhiteSpace(css))
-			handler.ApplyCss(handler.PlatformView, css);
+		handler.UpdateCss(handler.PlatformView, css);
 	}
 }

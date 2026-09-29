@@ -85,6 +85,7 @@
   <Folder Name="/platforms/Linux.Gtk4/">
     <Project Path="platforms/Linux.Gtk4/src/Linux.Gtk4/Linux.Gtk4.csproj" />
     <Project Path="platforms/Linux.Gtk4/src/Linux.Gtk4.BlazorWebView/Linux.Gtk4.BlazorWebView.csproj" />
+    <Project Path="platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj" />
   </Folder>
   <Folder Name="/platforms/Windows.WPF/">
     <Project Path="platforms/Windows.WPF/src/Windows.WPF/Windows.WPF.csproj" />
