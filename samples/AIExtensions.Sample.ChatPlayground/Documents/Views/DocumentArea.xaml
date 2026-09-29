@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
+             x:Class="AIExtensions.Sample.ChatPlayground.DocumentArea"
+             x:Name="DocumentAreaView"
+             x:DataType="local:DocumentPlaygroundViewModel">
+    <Grid x:Name="InspectorGrid" ColumnDefinitions="*,*" ColumnSpacing="8">
+        <Border x:Name="ImagesPanel"
+                Style="{StaticResource ComposerPanel}">
+            <Grid RowDefinitions="Auto,*" RowSpacing="8">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                    <Label Text="PAGES" Style="{StaticResource SectionHeading}" />
+                    <Label Grid.Column="1"
+                           Text="{Binding SelectedDocumentDetails}"
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="11"
+                           HorizontalTextAlignment="End"
+                           LineBreakMode="TailTruncation" />
+                </Grid>
+                <CollectionView x:Name="PreviewPagesView"
+                                Grid.Row="1"
+                                ItemsSource="{Binding PreviewPages}"
+                                ItemSizingStrategy="MeasureAllItems"
+                                AutomationId="DocumentPreviewPages">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="local:DocumentPagePreviewViewModel">
+                            <VerticalStackLayout Spacing="6" Margin="0,0,0,12">
+                                <Label Text="{Binding Label}"
+                                       FontAttributes="Bold"
+                                       AutomationId="DocumentPreviewPageLabel" />
+                                <Grid HeightRequest="520"
+                                      BackgroundColor="Black">
+                                    <Image Source="{Binding Image}" Aspect="AspectFit" />
+                                    <local:DocumentOverlayView Page="{Binding ExtractedPage}"
+                                                               Nodes="{Binding Nodes}"
+                                                               SelectedNode="{Binding SelectedNode}"
+                                                               SelectionCommand="{Binding SelectNode}" />
+                                </Grid>
+                            </VerticalStackLayout>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                    <CollectionView.EmptyView>
+                        <Label Text="Add an image or PDF to show page previews."
+                               Style="{StaticResource MutedLabel}"
+                               Margin="20"
+                               HorizontalTextAlignment="Center"
+                               AutomationId="DocumentPreviewEmptyLabel" />
+                    </CollectionView.EmptyView>
+                </CollectionView>
+            </Grid>
+        </Border>
+
+        <Border x:Name="ResultsPanel"
+                Grid.Column="1"
+                Style="{StaticResource ComposerPanel}">
+            <Grid RowDefinitions="Auto,*" RowSpacing="8">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                    <Label Text="STRUCTURED RESULT"
+                           Style="{StaticResource SectionHeading}" />
+                    <Label Grid.Column="1"
+                           Text="{Binding ResultDetails}"
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="11"
+                           HorizontalTextAlignment="End"
+                           LineBreakMode="TailTruncation" />
+                </Grid>
+                <CollectionView x:Name="ResultTree"
+                                Grid.Row="1"
+                                ItemsSource="{Binding Nodes}"
+                                SelectedItem="{Binding SelectedNode, Mode=TwoWay}"
+                                SelectionMode="Single"
+                                ItemSizingStrategy="MeasureAllItems"
+                                AutomationId="DocumentResultTree">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="local:DocumentResultNode">
+                            <VerticalStackLayout Margin="{Binding Indent}"
+                                                 Padding="4"
+                                                 Spacing="2">
+                                <Label Text="{Binding JsonPath}"
+                                       FontFamily="Courier"
+                                       FontSize="10"
+                                       TextColor="{StaticResource Primary}" />
+                                <Label Text="{Binding Title}"
+                                       FontAttributes="Bold"
+                                       FontSize="13" />
+                                <Label Text="{Binding Subtitle}"
+                                       IsVisible="{Binding HasSubtitle}"
+                                       Style="{StaticResource MutedLabel}"
+                                       FontSize="12"
+                                       MaxLines="3"
+                                       LineBreakMode="TailTruncation" />
+                                <Label Text="{Binding Metadata}"
+                                       IsVisible="{Binding HasMetadata}"
+                                       Style="{StaticResource MutedLabel}"
+                                       FontSize="10"
+                                       MaxLines="2"
+                                       LineBreakMode="TailTruncation" />
+                            </VerticalStackLayout>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                    <CollectionView.EmptyView>
+                        <VerticalStackLayout Margin="20"
+                                             Spacing="6"
+                                             HorizontalOptions="Center"
+                                             VerticalOptions="Center">
+                            <Label Text="No extracted document yet."
+                                   FontAttributes="Bold"
+                                   HorizontalTextAlignment="Center" />
+                            <Label Text="Extract a document to inspect its structured result. Use Inspect for normalized and provider JSON."
+                                   Style="{StaticResource MutedLabel}"
+                                   HorizontalTextAlignment="Center"
+                                   AutomationId="DocumentEmptyLabel" />
+                        </VerticalStackLayout>
+                    </CollectionView.EmptyView>
+                </CollectionView>
+            </Grid>
+        </Border>
+
+        <ActivityIndicator x:Name="DocumentLoading"
+                           Grid.ColumnSpan="2"
+                           Grid.RowSpan="2"
+                           IsRunning="{Binding IsBusy}"
+                           IsVisible="{Binding IsBusy}"
+                           Color="{StaticResource Primary}"
+                           HorizontalOptions="Center"
+                           VerticalOptions="Center"
+                           AutomationId="DocumentLoading" />
+    </Grid>
+</ContentView>

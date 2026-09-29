@@ -2,15 +2,17 @@
 
 On-device AI for .NET MAUI apps using platform-native models — no cloud required.
 
-This package provides [`Microsoft.Extensions.AI`](https://learn.microsoft.com/dotnet/ai/ai-extensions) abstractions (`IChatClient`, `IEmbeddingGenerator`) backed by on-device AI capabilities:
+This package provides `Microsoft.Extensions.AI` and experimental
+`Microsoft.Extensions.DocumentExtraction` abstractions backed by on-device
+Apple capabilities:
 
-| Platform | Chat (IChatClient) | Embeddings (IEmbeddingGenerator) |
-|----------|-------------------|----------------------------------|
-| iOS 26+ | ✅ Apple Intelligence (Foundation Models) | ✅ NL Embeddings |
-| Mac Catalyst 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
-| macOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
-| Android | 🔜 Coming soon | 🔜 Coming soon |
-| Windows | 🔜 Coming soon | 🔜 Coming soon |
+| Platform | Chat (`IChatClient`) | Embeddings (`IEmbeddingGenerator`) | Documents (`IDocumentExtractionClient`) |
+|----------|----------------------|------------------------------------|-----------------------------------------|
+| iOS 26+ | ✅ Apple Intelligence (Foundation Models) | ✅ NL Embeddings | ✅ Apple Vision + PDFKit |
+| Mac Catalyst 26+ | ✅ Apple Intelligence | ✅ NL Embeddings | ✅ Apple Vision + PDFKit |
+| macOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings | ✅ Apple Vision + PDFKit |
+| Android | 🔜 Coming soon | 🔜 Coming soon | 🔜 Coming soon |
+| Windows | 🔜 Coming soon | 🔜 Coming soon | 🔜 Coming soon |
 
 ## Getting Started
 
@@ -66,6 +68,51 @@ var generator = new NLEmbeddingGenerator(NLEmbeddingType.Sentence);
 var embeddings = await generator.GenerateAsync(["sunset beach", "mountain hiking"]);
 ```
 
+### Structured document extraction
+
+```csharp
+using Microsoft.Extensions.DocumentExtraction;
+using Microsoft.Maui.Essentials.AI;
+
+using IDocumentExtractionClient client = new AppleVisionDocumentExtractionClient();
+await using var image = File.OpenRead("invoice.png");
+var result = await client.ExtractAsync(image, "image/png");
+
+foreach (var element in result.Pages[0].Elements)
+{
+    switch (element)
+    {
+        case DocumentTable table:
+            Console.WriteLine($"Table: {table.RowCount} x {table.ColumnCount}");
+            break;
+        case DocumentBlock item when item.Kind?.Value == "listItem":
+            Console.WriteLine($"List item: {item.Text}");
+            break;
+        case DocumentBlock barcode when barcode.Kind?.Value == "barcode":
+            Console.WriteLine(
+                barcode.AdditionalProperties?["apple.vision.barcodePayload"]);
+            break;
+    }
+}
+```
+
+The same client accepts PDFs and streams one result per internally rendered
+PDFKit page:
+
+```csharp
+using IDocumentExtractionClient client = new AppleVisionDocumentExtractionClient();
+
+await using var pdf = File.OpenRead("invoice.pdf");
+await foreach (var page in client.ExtractPagesAsync(pdf, "application/pdf"))
+{
+    Console.WriteLine($"Page {page.Page.PageNumber}: {page.Page.Text}");
+}
+```
+
+The client never falls back to another recognition engine. Apple-specific list,
+barcode, detected-data, and diagnostic fields remain available through open
+block kinds, `AdditionalProperties`, and raw `JsonElement` values.
+
 ## Requirements
 
 - .NET 10
@@ -79,5 +126,6 @@ var embeddings = await generator.GenerateAsync(["sunset beach", "mountain hiking
 ## Links
 
 - [Source code](https://github.com/dotnet/maui-labs/tree/main/src/AI)
-- [Chat Playground](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)
+- [Sample app](https://github.com/dotnet/maui-labs/tree/main/samples/EssentialsAISample)
+- [AI Playground](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)
 - [Microsoft.Extensions.AI documentation](https://learn.microsoft.com/dotnet/ai/ai-extensions)

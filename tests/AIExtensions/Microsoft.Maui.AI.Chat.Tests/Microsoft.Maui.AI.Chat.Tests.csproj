@@ -4,7 +4,7 @@
     <IsTestProject>true</IsTestProject>
     <IsPackable>false</IsPackable>
     <RootNamespace>Microsoft.Maui.AI.Chat.Tests</RootNamespace>
-    <NoWarn>$(NoWarn);MEAI001;OPENAI001</NoWarn>
+    <NoWarn>$(NoWarn);MEAI001;MEDE0001;OPENAI001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -77,12 +77,29 @@
              Link="Images\Services\ImageGeneratorDescriptor.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Images\ViewModels\ImageSettingsViewModel.cs"
              Link="Images\ViewModels\ImageSettingsViewModel.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\DocumentModels.cs"
+             Link="Documents\Services\DocumentModels.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\DescribedDocumentExtractionClient.cs"
+             Link="Documents\Services\DescribedDocumentExtractionClient.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\DocumentRawJson.cs"
+             Link="Documents\Services\DocumentRawJson.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\FoundryMistralDocumentExtractionClient.cs"
+             Link="Documents\Services\FoundryMistralDocumentExtractionClient.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\FoundryModelDocumentExtractionClient.cs"
+             Link="Documents\Services\FoundryModelDocumentExtractionClient.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\ViewModels\DocumentSettingsViewModel.cs"
+             Link="Documents\ViewModels\DocumentSettingsViewModel.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\AISettings.cs"
              Link="Services\AISettings.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\AtomicFile.cs"
              Link="Services\AtomicFile.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\ImageAttachment.cs"
              Link="Services\ImageAttachment.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Libraries\Microsoft.Extensions.DocumentExtraction.Abstractions\Microsoft.Extensions.DocumentExtraction.Abstractions.csproj" />
+    <ProjectReference Include="..\..\..\src\Libraries\Microsoft.Extensions.DocumentExtraction\Microsoft.Extensions.DocumentExtraction.csproj" />
   </ItemGroup>
 
   <ItemGroup>

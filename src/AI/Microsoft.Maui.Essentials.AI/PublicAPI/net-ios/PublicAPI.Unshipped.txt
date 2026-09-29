@@ -1,10 +1,16 @@
-﻿#nullable enable
+#nullable enable
 Microsoft.Extensions.AI.NLEmbeddingExtensions
 Microsoft.Maui.Essentials.AI.AppleIntelligenceChatClient
 Microsoft.Maui.Essentials.AI.AppleIntelligenceChatClient.AppleIntelligenceChatClient() -> void
 Microsoft.Maui.Essentials.AI.AppleIntelligenceChatClient.AppleIntelligenceChatClient(Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory = null, System.IServiceProvider? functionInvocationServices = null) -> void
 Microsoft.Maui.Essentials.AI.AppleIntelligenceChatClient.GetResponseAsync(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages, Microsoft.Extensions.AI.ChatOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.ChatResponse!>!
 Microsoft.Maui.Essentials.AI.AppleIntelligenceChatClient.GetStreamingResponseAsync(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages, Microsoft.Extensions.AI.ChatOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
+Microsoft.Maui.Essentials.AI.AppleVisionDocumentExtractionClient
+Microsoft.Maui.Essentials.AI.AppleVisionDocumentExtractionClient.AppleVisionDocumentExtractionClient() -> void
+Microsoft.Maui.Essentials.AI.AppleVisionDocumentExtractionClient.Dispose() -> void
+Microsoft.Maui.Essentials.AI.AppleVisionDocumentExtractionClient.ExtractAsync(System.IO.Stream! document, string! mediaType, Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.DocumentExtraction.DocumentExtractionResult!>!
+Microsoft.Maui.Essentials.AI.AppleVisionDocumentExtractionClient.ExtractPagesAsync(System.IO.Stream! document, string! mediaType, Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.DocumentExtraction.DocumentExtractionPageResult!>!
+Microsoft.Maui.Essentials.AI.AppleVisionDocumentExtractionClient.GetService(System.Type! serviceType, object? serviceKey = null) -> object?
 Microsoft.Maui.Essentials.AI.NLEmbeddingGenerator
 Microsoft.Maui.Essentials.AI.NLEmbeddingGenerator.Dispose() -> void
 Microsoft.Maui.Essentials.AI.NLEmbeddingGenerator.GenerateAsync(System.Collections.Generic.IEnumerable<string!>! values, Microsoft.Extensions.AI.EmbeddingGenerationOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.AI.GeneratedEmbeddings<Microsoft.Extensions.AI.Embedding<float>!>!>!
