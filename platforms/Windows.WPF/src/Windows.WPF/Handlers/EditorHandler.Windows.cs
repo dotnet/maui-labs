@@ -164,8 +164,7 @@ namespace Microsoft.Maui.Handlers.WPF
 					? System.Windows.FontStyles.Italic
 					: System.Windows.FontStyles.Normal;
 
-				if (!string.IsNullOrEmpty(font.Family))
-					handler.PlatformView.FontFamily = new FontFamily(font.Family);
+				Microsoft.Maui.Platforms.Windows.WPF.WPFFontManager.ApplyFontFamily(handler.PlatformView, font, handler.MauiContext);
 			}
 		}
 

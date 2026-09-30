@@ -76,6 +76,31 @@ For template development, run `eng\smoke-tests\wpf-template-smoke-test.ps1` on W
 It packs, generates, restores, builds, and launches the template using an isolated
 template hive. See [validation details](docs/getting-started.md#validating-template-changes).
 
+## Registered fonts
+
+Include fonts as `MauiFont` items and register them using `ConfigureFonts`:
+
+```csharp
+builder.ConfigureFonts(fonts => fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular"));
+```
+
+WPF copies `MauiFont` files into `Resources\Fonts` in both build and publish output.
+An explicitly included `MauiFont` must exist: build/publish now fails on a missing
+file instead of silently skipping it. Use a conditional item include for optional fonts.
+Aliases resolve relative to the application directory, not the process working
+directory, using the family name declared inside the font file. Embedded fonts
+registered with an assembly are extracted to a content-addressed temporary directory;
+no system font installation is required.
+
+Text controls and formatted label spans resolve aliases through the WPF font manager.
+Clearing a control's MAUI font family restores its native style or inherited default.
+`FontImageSource` uses the same resolution for Image, ImageButton, Button, Shell
+flyout icons, and NavigationPage toolbar icons. A missing or invalid font logs a warning and text uses the default UI
+font. An unresolved icon font or a character absent from that font logs a warning
+and produces no image rather than a fallback box.
+Register fonts before first use. Missing-font results are cached as failures, not as
+successful fallback fonts; transient extraction I/O failures can be retried.
+
 ## Samples
 
 See the `samples/` directory for working examples:

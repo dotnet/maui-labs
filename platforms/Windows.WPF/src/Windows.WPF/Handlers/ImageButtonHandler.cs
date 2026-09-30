@@ -52,7 +52,17 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		static void MapSource(ImageButtonHandler handler, Microsoft.Maui.Controls.ImageButton view)
 		{
-			if (view.Source is Microsoft.Maui.Controls.FileImageSource fis && !string.IsNullOrEmpty(fis.File))
+			if (view.Source == null)
+				handler.PlatformView.Content = null;
+			else if (view.Source is IFontImageSource fontSource)
+			{
+				handler.PlatformView.Content = new WImage
+				{
+					Source = Microsoft.Maui.Platforms.Windows.WPF.FontImageSourceHelper.RenderGlyph(fontSource, handler.MauiContext),
+					Stretch = GetStretch(view.Aspect),
+				};
+			}
+			else if (view.Source is Microsoft.Maui.Controls.FileImageSource fis && !string.IsNullOrEmpty(fis.File))
 			{
 				try
 				{
@@ -101,7 +111,7 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		static void MapBorderWidth(ImageButtonHandler handler, Microsoft.Maui.Controls.ImageButton view)
 		{
-			handler.PlatformView.BorderThickness = new System.Windows.Thickness(view.BorderWidth);
+			handler.PlatformView.BorderThickness = new System.Windows.Thickness(view.BorderWidth > 0 ? view.BorderWidth : 0);
 		}
 
 		static void MapBorderColor(ImageButtonHandler handler, Microsoft.Maui.Controls.ImageButton view)

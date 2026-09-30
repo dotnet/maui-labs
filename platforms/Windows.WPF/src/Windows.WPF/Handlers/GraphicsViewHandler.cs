@@ -99,7 +99,8 @@ namespace Microsoft.Maui.Handlers.WPF
 				var drawingVisual = new DrawingVisual();
 				using (var dc = drawingVisual.RenderOpen())
 				{
-					var canvas = new WpfCanvas(dc, width, height);
+					var canvas = new WpfCanvas(dc, width, height,
+						Microsoft.Maui.Platforms.Windows.WPF.WPFFontManager.FromContext(MauiContext));
 					VirtualView.Drawable.Draw(canvas, new Microsoft.Maui.Graphics.RectF(0, 0, width, height));
 				}
 
@@ -127,6 +128,7 @@ namespace Microsoft.Maui.Handlers.WPF
 	internal class WpfCanvas : Microsoft.Maui.Graphics.ICanvas
 	{
 		readonly DrawingContext _dc;
+		readonly Microsoft.Maui.Platforms.Windows.WPF.WPFFontManager _fontManager;
 		readonly int _w, _h;
 		System.Windows.Media.Color _stroke = System.Windows.Media.Colors.Black;
 		System.Windows.Media.Color _fill = System.Windows.Media.Colors.Transparent;
@@ -137,7 +139,13 @@ namespace Microsoft.Maui.Handlers.WPF
 		bool _fontBold, _fontItalic;
 		float _alpha = 1;
 
-		public WpfCanvas(DrawingContext dc, int w, int h) { _dc = dc; _w = w; _h = h; }
+		public WpfCanvas(DrawingContext dc, int w, int h, Microsoft.Maui.Platforms.Windows.WPF.WPFFontManager fontManager)
+		{
+			_dc = dc;
+			_w = w;
+			_h = h;
+			_fontManager = fontManager;
+		}
 
 		System.Windows.Media.Pen Pen() => new(new System.Windows.Media.SolidColorBrush(A(_stroke)), _strokeSize);
 		System.Windows.Media.Brush Fill() => new System.Windows.Media.SolidColorBrush(A(_fill));
@@ -210,7 +218,7 @@ namespace Microsoft.Maui.Handlers.WPF
 		// Text
 		FormattedText MakeFormattedText(string value) =>
 			new(value, System.Globalization.CultureInfo.CurrentCulture, System.Windows.FlowDirection.LeftToRight,
-				new Typeface(new System.Windows.Media.FontFamily(_fontName),
+				new Typeface(_fontManager.GetFontFamily(Microsoft.Maui.Font.OfSize(_fontName, _fontSize)),
 					_fontItalic ? FontStyles.Italic : FontStyles.Normal,
 					_fontBold ? System.Windows.FontWeights.Bold : System.Windows.FontWeights.Normal, FontStretches.Normal),
 				_fontSize, new System.Windows.Media.SolidColorBrush(A(_fontColor)), 96);
@@ -277,6 +285,5 @@ namespace Microsoft.Maui.Handlers.WPF
 			=> GetStringSize(value, font, fontSize);
 	}
 }
-
 
 

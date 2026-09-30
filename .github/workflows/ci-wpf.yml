@@ -24,6 +24,49 @@ on:
       - 'NuGet.config'
 
 jobs:
+  handler-tests:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Run WPF handler and native dialog regression tests
+        shell: pwsh
+        run: >
+          dotnet test platforms\Windows.WPF\tests\HandlerTests\HandlerTests.csproj
+          -c Release -p:UseMaui=false -m:1 -nr:false
+          --logger "trx;LogFileName=wpf-handler-tests.trx"
+          --results-directory artifacts\TestResults\WpfHandlers
+      - name: Verify native fonts from isolated working directories
+        shell: pwsh
+        run: >
+          eng\smoke-tests\wpf-font-smoke-test.ps1
+          -TestAssembly artifacts\bin\HandlerTests\Release\net10.0-windows\HandlerTests.dll
+      - name: Verify published fonts without rebuilding
+        shell: pwsh
+        run: |
+          dotnet publish platforms\Windows.WPF\tests\HandlerTests\HandlerTests.csproj `
+            -c Release --no-build --no-restore -p:UseMaui=false -m:1 -nr:false `
+            -o artifacts\publish\WpfFonts
+          if ($LASTEXITCODE -ne 0) { throw 'Publishing font tests failed.' }
+          eng\smoke-tests\wpf-font-smoke-test.ps1 `
+            -TestAssembly artifacts\publish\WpfFonts\HandlerTests.dll `
+            -ResultsDirectory artifacts\TestResults\WpfFontsPublish
+      - name: Upload handler test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: wpf-handler-tests
+          path: |
+            artifacts/TestResults/WpfHandlers/*.trx
+            artifacts/TestResults/WpfFonts/**
+            artifacts/TestResults/WpfFontsPublish/**
+          if-no-files-found: error
+
   build:
     uses: ./.github/workflows/_build.yml
     with:

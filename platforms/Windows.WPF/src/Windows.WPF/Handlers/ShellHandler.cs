@@ -551,6 +551,11 @@ namespace Microsoft.Maui.Handlers.WPF
 		static void SetIconSource(global::System.Windows.Controls.Image img, Microsoft.Maui.Controls.ImageSource? source, IMauiContext mauiContext)
 		{
 			if (source == null) return;
+			if (source is IFontImageSource fontSource)
+			{
+				img.Source = FontImageSourceHelper.RenderGlyph(fontSource, mauiContext);
+				return;
+			}
 			try
 			{
 				if (source is Microsoft.Maui.Controls.FileImageSource fileSource)
@@ -570,45 +575,6 @@ namespace Microsoft.Maui.Handlers.WPF
 					else
 					{
 						img.Source = new global::System.Windows.Media.Imaging.BitmapImage(new Uri(fileName, UriKind.RelativeOrAbsolute));
-					}
-				}
-				else if (source is Microsoft.Maui.Controls.FontImageSource fontSource)
-				{
-					// Render font glyph as text in the image's parent
-					if (img.Parent is WGrid grid)
-					{
-						var col = GetColumn(img);
-						grid.Children.Remove(img);
-						var tb = new global::System.Windows.Controls.TextBlock
-						{
-							Text = fontSource.Glyph,
-							FontSize = fontSource.Size > 0 ? fontSource.Size : 16,
-							HorizontalAlignment = WHorizontalAlignment.Center,
-							VerticalAlignment = WVerticalAlignment.Center,
-							Margin = new WThickness(5),
-						};
-						if (fontSource.Color != null)
-						{
-							var c = fontSource.Color;
-							tb.Foreground = new WSolidColorBrush(WColor.FromArgb(
-								(byte)(c.Alpha * 255), (byte)(c.Red * 255),
-								(byte)(c.Green * 255), (byte)(c.Blue * 255)));
-						}
-						if (!string.IsNullOrEmpty(fontSource.FontFamily))
-						{
-							try
-							{
-								var fontManager = mauiContext.Services.GetService<IFontManager>();
-								if (fontManager is WPFFontManager wpfFontManager)
-								{
-									var family = wpfFontManager.GetFontFamily(Microsoft.Maui.Font.OfSize(fontSource.FontFamily, fontSource.Size));
-									tb.FontFamily = family;
-								}
-							}
-							catch { }
-						}
-						SetColumn(tb, col);
-						grid.Children.Add(tb);
 					}
 				}
 			}

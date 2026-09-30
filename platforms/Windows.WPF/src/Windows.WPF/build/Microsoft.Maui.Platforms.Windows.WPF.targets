@@ -29,9 +29,14 @@
   </Target>
 
   <!-- Process MauiFont → copy fonts to output -->
-  <Target Name="_WpfProcessMauiFont" BeforeTargets="Build" Condition="@(MauiFont) != ''">
-    <Message Importance="Normal" Text="Platform.Maui.WPF: Processing MauiFont: @(MauiFont)" />
-    <Copy SourceFiles="@(MauiFont)" DestinationFolder="$(OutputPath)Resources\Fonts" SkipUnchangedFiles="true" Condition="Exists('%(MauiFont.Identity)')" />
+  <Target Name="_WpfProcessMauiFont" BeforeTargets="AssignTargetPaths" Condition="@(MauiFont) != ''">
+    <ItemGroup>
+      <ContentWithTargetPath Include="@(MauiFont)">
+        <TargetPath>Resources\Fonts\%(Filename)%(Extension)</TargetPath>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </ContentWithTargetPath>
+    </ItemGroup>
   </Target>
 
   <!-- Process MauiAsset → copy to output with LogicalName -->
