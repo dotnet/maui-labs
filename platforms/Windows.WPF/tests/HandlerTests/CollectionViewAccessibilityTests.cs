@@ -80,6 +80,83 @@ public class CollectionViewAccessibilityTests(ITestOutputHelper output)
 	}
 
 	[Fact]
+	public void ItemPeer_NotifiesAutomationClientsWhenNameChanges()
+	{
+		Label? label = null;
+		VerticalStackLayout? root = null;
+		var list = new CollectionView
+		{
+			ItemsSource = new[] { new ItemSummary("1", "First") },
+			ItemTemplate = new DataTemplate(() =>
+			{
+				label = new Label { Text = "First" };
+				root = new VerticalStackLayout { Children = { label } };
+				return root;
+			}),
+		};
+		Run(list, native =>
+		{
+			var container = (System.Windows.UIElement)native.ItemContainerGenerator.ContainerFromIndex(0);
+			System.Windows.Automation.AutomationProperties.SetAutomationId(container, "NameChangeItem");
+			var hwnd = new System.Windows.Interop.WindowInteropHelper(System.Windows.Window.GetWindow(native)).Handle;
+			var changes = new System.Collections.Concurrent.ConcurrentQueue<(string OldName, string NewName)>();
+			using var ready = new ManualResetEventSlim();
+			using var stop = new ManualResetEventSlim();
+			var client = Task.Run(() =>
+			{
+				var window = System.Windows.Automation.AutomationElement.FromHandle(hwnd);
+				var item = window.FindFirst(System.Windows.Automation.TreeScope.Descendants,
+					new System.Windows.Automation.PropertyCondition(
+						System.Windows.Automation.AutomationElement.AutomationIdProperty, "NameChangeItem"));
+				Assert.NotNull(item);
+				Assert.Equal("First", item.Current.Name);
+				System.Windows.Automation.AutomationPropertyChangedEventHandler onChanged = (_, e) =>
+					changes.Enqueue(((string)e.OldValue, (string)e.NewValue));
+				System.Windows.Automation.Automation.AddAutomationPropertyChangedEventHandler(
+					item, System.Windows.Automation.TreeScope.Element, onChanged,
+					System.Windows.Automation.AutomationElement.NameProperty);
+				try
+				{
+					ready.Set();
+					Assert.True(stop.Wait(TimeSpan.FromSeconds(30)), "UIA listener was not stopped.");
+				}
+				finally
+				{
+					System.Windows.Automation.Automation.RemoveAutomationPropertyChangedEventHandler(item, onChanged);
+				}
+			});
+			try
+			{
+				PumpUntil(() => ready.IsSet || client.IsCompleted);
+				if (client.IsCompleted)
+					client.GetAwaiter().GetResult();
+				label!.Text = "Updated";
+				PumpUntil(() => changes.Any(change => change.NewName == "Updated"));
+				SemanticProperties.SetDescription(root!, "Explicit");
+				PumpUntil(() => changes.Any(change => change.NewName == "Explicit"));
+				label.Text = "After clearing";
+				DrainDispatcher();
+				SemanticProperties.SetDescription(root!, null);
+				PumpUntil(() => changes.Any(change => change.NewName == "After clearing"));
+				var detail = new Label { Text = "Tail" };
+				root!.Children.Add(detail);
+				PumpUntil(() => changes.Any(change => change.NewName == "After clearing Tail"));
+				SemanticProperties.SetDescription(detail, "Detail");
+				PumpUntil(() => changes.Any(change => change.NewName == "After clearing Detail"));
+				root.Children.Remove(detail);
+				PumpUntil(() => changes.Any(change => change.OldName == "After clearing Detail" && change.NewName == "After clearing"));
+			}
+			finally
+			{
+				output.WriteLine($"Native UIA NameProperty events: {string.Join(", ", changes)}");
+				stop.Set();
+				PumpUntil(() => client.IsCompleted);
+				client.GetAwaiter().GetResult();
+			}
+		});
+	}
+
+	[Fact]
 	public void ItemPeer_CombinesVisibleTextAndHonorsChildSemantics()
 	{
 		var list = new CollectionView
@@ -230,6 +307,30 @@ public class CollectionViewAccessibilityTests(ITestOutputHelper output)
 	static void DrainDispatcher()
 		=> System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(
 			() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+
+	static void PumpUntil(Func<bool> condition)
+	{
+		if (condition())
+			return;
+		var frame = new System.Windows.Threading.DispatcherFrame();
+		var deadline = DateTime.UtcNow.AddSeconds(10);
+		var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(10) };
+		timer.Tick += (_, _) =>
+		{
+			if (condition() || DateTime.UtcNow >= deadline)
+				frame.Continue = false;
+		};
+		timer.Start();
+		try
+		{
+			System.Windows.Threading.Dispatcher.PushFrame(frame);
+		}
+		finally
+		{
+			timer.Stop();
+		}
+		Assert.True(condition(), "Timed out waiting for the native UIA client.");
+	}
 
 	static void Run(CollectionView list, Action<MauiCollectionListBox> assertion)
 	{

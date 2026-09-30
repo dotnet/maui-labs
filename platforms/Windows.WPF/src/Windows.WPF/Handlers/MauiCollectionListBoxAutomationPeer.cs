@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Automation.Peers;
 using System.Windows.Controls;
+using System.ComponentModel;
 using Microsoft.Maui.Controls;
 using WAutomationProperties = System.Windows.Automation.AutomationProperties;
 
@@ -29,9 +30,82 @@ internal sealed class MauiCollectionItemAutomationPeer(object item, ListBoxAutom
 
 internal sealed class MauiCollectionListBoxItem : ListBoxItem
 {
-	internal View? MauiItemView { get; set; }
+	readonly List<View> _observedViews = [];
+	View? _mauiItemView;
+
+	public MauiCollectionListBoxItem()
+	{
+		Loaded += (_, _) => ObserveView();
+		Unloaded += (_, _) => StopObservingView();
+	}
+
+	internal View? MauiItemView
+	{
+		get => _mauiItemView;
+		set
+		{
+			StopObservingView();
+			_mauiItemView = value;
+			if (IsLoaded)
+				ObserveView();
+			InvalidateName();
+		}
+	}
 
 	protected override AutomationPeer OnCreateAutomationPeer() => new MauiCollectionItemWrapperAutomationPeer(this);
+
+	void ObserveView()
+	{
+		StopObservingView();
+		if (_mauiItemView == null)
+			return;
+		_mauiItemView.DescendantAdded += OnDescendantsChanged;
+		_mauiItemView.DescendantRemoved += OnDescendantsChanged;
+		ObserveSubtree(_mauiItemView);
+		InvalidateName();
+	}
+
+	void ObserveSubtree(View view)
+	{
+		_observedViews.Add(view);
+		view.PropertyChanged += OnViewPropertyChanged;
+		foreach (var child in ((IVisualTreeElement)view).GetVisualChildren().OfType<View>())
+			ObserveSubtree(child);
+	}
+
+	void StopObservingView()
+	{
+		if (_mauiItemView != null)
+		{
+			_mauiItemView.DescendantAdded -= OnDescendantsChanged;
+			_mauiItemView.DescendantRemoved -= OnDescendantsChanged;
+		}
+		foreach (var view in _observedViews)
+			view.PropertyChanged -= OnViewPropertyChanged;
+		_observedViews.Clear();
+	}
+
+	void OnDescendantsChanged(object? sender, ElementEventArgs e) => ObserveView();
+
+	void OnViewPropertyChanged(object? sender, PropertyChangedEventArgs e)
+	{
+		if (string.IsNullOrEmpty(e.PropertyName) ||
+			e.PropertyName == SemanticProperties.DescriptionProperty.PropertyName ||
+			e.PropertyName is nameof(View.IsVisible) or nameof(Microsoft.Maui.Controls.Label.Text)
+				or nameof(Microsoft.Maui.Controls.Label.FormattedText))
+			InvalidateName();
+	}
+
+	void InvalidateName()
+	{
+		// Semantic changes need not change native layout (notably clearing a
+		// description). Ask WPF to refresh its cached name and notify UIA clients.
+		if (UIElementAutomationPeer.FromElement(this) is { } peer)
+		{
+			peer.InvalidatePeer();
+			peer.EventsSource?.InvalidatePeer();
+		}
+	}
 }
 
 internal sealed class MauiCollectionItemWrapperAutomationPeer(MauiCollectionListBoxItem owner)

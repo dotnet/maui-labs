@@ -133,7 +133,9 @@ its children's text. Native container `AutomationProperties.Name` and `LabeledBy
 remain authoritative. Names are read from the current template, including after
 binding updates and container reuse. Empty templates and unrealized items do not
 expose the data model's `ToString()`; items without a template use their displayed
-fallback text. Group headers follow the same rules as items.
+fallback text. Group headers follow the same rules as items. Changes to template
+text, semantic descriptions, visibility, or descendants invalidate the native
+automation peers so UIA clients receive name-change notifications.
 
 ### Pages & Navigation
 
