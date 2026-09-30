@@ -372,16 +372,14 @@ public class ProfileCommandTests
 			Assert.True(File.Exists(Path.Combine(first.Path, ProfileBuildWorkspace.OwnershipFileName)));
 			Assert.True(File.Exists(Path.Combine(second.Path, ProfileBuildWorkspace.OwnershipFileName)));
 			Assert.True(File.Exists(first.DirectoryBuildPropsPath));
+			Assert.True(File.Exists(first.DirectoryBuildTargetsPath));
 			Assert.True(File.Exists(first.IsolationPropsPath));
-			Assert.True(File.Exists(first.IsolationTargetsPath));
-			Assert.True(File.Exists(first.AfterCommonTargetsPath));
 			_ = System.Xml.Linq.XDocument.Load(first.DirectoryBuildPropsPath);
+			_ = System.Xml.Linq.XDocument.Load(first.DirectoryBuildTargetsPath);
 			_ = System.Xml.Linq.XDocument.Load(first.IsolationPropsPath);
-			_ = System.Xml.Linq.XDocument.Load(first.IsolationTargetsPath);
-			_ = System.Xml.Linq.XDocument.Load(first.AfterCommonTargetsPath);
 			Assert.Contains(
 				"MauiProfilingHelperInjection.targets",
-				File.ReadAllText(first.AfterCommonTargetsPath),
+				File.ReadAllText(first.DirectoryBuildTargetsPath),
 				StringComparison.Ordinal);
 
 			var recovered = ProfileBuildWorkspace.RecoverStaleWorkspaces(
@@ -552,6 +550,160 @@ public class ProfileCommandTests
 		{
 			workspace.Cleanup(formatter, useJson: true, verbose: false);
 		}
+	}
+
+	[Fact]
+	public async Task ProfileBuildWorkspace_OverridesExternalRestorePathBeforeRestoreWrites()
+	{
+		using var tempProject = TempProjectFile("""
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <TargetFramework>net10.0</TargetFramework>
+			  </PropertyGroup>
+			</Project>
+			""");
+		var projectDirectory = Path.GetDirectoryName(tempProject.Path)!;
+		var externalRestorePath = Path.Combine(projectDirectory, "external-restore");
+		File.WriteAllText(
+			Path.Combine(projectDirectory, "Directory.Build.props"),
+			$"""
+			<Project>
+			  <PropertyGroup>
+			    <MSBuildProjectExtensionsPath>{System.Security.SecurityElement.Escape(externalRestorePath + Path.DirectorySeparatorChar)}</MSBuildProjectExtensionsPath>
+			  </PropertyGroup>
+			</Project>
+			""");
+
+		var formatter = new JsonOutputFormatter(TextWriter.Null);
+		var workspace = ProfileBuildWorkspace.Create(projectDirectory, formatter, useJson: true, verbose: false);
+		workspace.ConfigureBuildTargets(profilingInjectionTargetsPath: null);
+		try
+		{
+			var result = await RunProfileBuildAsync(tempProject.Path, workspace);
+
+			Assert.True(result.ExitCode == 0, result.Output);
+			Assert.False(Directory.Exists(externalRestorePath));
+			Assert.Contains(
+				Directory.EnumerateFiles(workspace.Path, "project.assets.json", SearchOption.AllDirectories),
+				File.Exists);
+		}
+		finally
+		{
+			workspace.Cleanup(formatter, useJson: true, verbose: false);
+		}
+	}
+
+	[Fact]
+	public async Task ProfileBuildWorkspace_ProjectBodyRestoreOutputPath_FailsBeforeRestoreWrites()
+	{
+		using var tempProject = TempProjectFile("<Project Sdk=\"Microsoft.NET.Sdk\" />");
+		var projectDirectory = Path.GetDirectoryName(tempProject.Path)!;
+		var externalRestorePath = Path.Combine(projectDirectory, "external-restore");
+		File.WriteAllText(
+			tempProject.Path,
+			$"""
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <TargetFramework>net10.0</TargetFramework>
+			    <RestoreOutputPath>{System.Security.SecurityElement.Escape(externalRestorePath + Path.DirectorySeparatorChar)}</RestoreOutputPath>
+			  </PropertyGroup>
+			</Project>
+			""");
+
+		var formatter = new JsonOutputFormatter(TextWriter.Null);
+		var workspace = ProfileBuildWorkspace.Create(projectDirectory, formatter, useJson: true, verbose: false);
+		workspace.ConfigureBuildTargets(profilingInjectionTargetsPath: null);
+		try
+		{
+			var result = await RunProfileBuildAsync(tempProject.Path, workspace);
+
+			Assert.NotEqual(0, result.ExitCode);
+			Assert.Contains("could not isolate RestoreOutputPath", result.Output, StringComparison.OrdinalIgnoreCase);
+			Assert.False(Directory.Exists(externalRestorePath));
+		}
+		finally
+		{
+			workspace.Cleanup(formatter, useJson: true, verbose: false);
+		}
+	}
+
+	[Fact]
+	public async Task ProfileBuildWorkspace_ProjectBodySdkHook_CannotRemoveValidationOrInjection()
+	{
+		using var tempProject = TempProjectFile("""
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <TargetFramework>net10.0</TargetFramework>
+			    <ImportDirectoryBuildTargets>false</ImportDirectoryBuildTargets>
+			    <BeforeMicrosoftNETSdkTargets>$(BeforeMicrosoftNETSdkTargets);$(MSBuildProjectDirectory)/custom-before.targets</BeforeMicrosoftNETSdkTargets>
+			  </PropertyGroup>
+			</Project>
+			""");
+		var projectDirectory = Path.GetDirectoryName(tempProject.Path)!;
+		var customHookMarker = Path.Combine(projectDirectory, "custom-hook.marker");
+		var injectionMarker = Path.Combine(projectDirectory, "injection.marker");
+		File.WriteAllText(
+			Path.Combine(projectDirectory, "custom-before.targets"),
+			$"""
+			<Project>
+			  <Target Name="MarkCustomBeforeHook" BeforeTargets="BeforeBuild">
+			    <WriteLinesToFile File="{System.Security.SecurityElement.Escape(customHookMarker)}" Lines="custom" Overwrite="true" />
+			  </Target>
+			</Project>
+			""");
+		var injectionTargetsPath = Path.Combine(projectDirectory, "profiling-injection.targets");
+		File.WriteAllText(
+			injectionTargetsPath,
+			$"""
+			<Project>
+			  <Target Name="MarkProfilingInjection" BeforeTargets="BeforeBuild">
+			    <WriteLinesToFile File="{System.Security.SecurityElement.Escape(injectionMarker)}" Lines="injected" Overwrite="true" />
+			  </Target>
+			</Project>
+			""");
+
+		var formatter = new JsonOutputFormatter(TextWriter.Null);
+		var workspace = ProfileBuildWorkspace.Create(projectDirectory, formatter, useJson: true, verbose: false);
+		workspace.ConfigureBuildTargets(injectionTargetsPath);
+		try
+		{
+			var result = await RunProfileBuildAsync(tempProject.Path, workspace);
+
+			Assert.True(result.ExitCode == 0, result.Output);
+			Assert.True(File.Exists(customHookMarker));
+			Assert.True(File.Exists(injectionMarker));
+		}
+		finally
+		{
+			workspace.Cleanup(formatter, useJson: true, verbose: false);
+		}
+	}
+
+	[Fact]
+	public async Task ProcessRunner_CallerCancellation_StopsWorkspaceWriterBeforeReturning()
+	{
+		using var tempProject = TempProjectFile("<Project />");
+		var projectDirectory = Path.GetDirectoryName(tempProject.Path)!;
+		var formatter = new JsonOutputFormatter(TextWriter.Null);
+		var workspace = ProfileBuildWorkspace.Create(projectDirectory, formatter, useJson: true, verbose: false);
+		var childOutputPath = Path.Combine(workspace.Path, "child-output");
+		var childReadyPath = Path.Combine(projectDirectory, "child-ready.marker");
+		var helperSource = Path.Combine(AppContext.BaseDirectory, "ProfileTestProcess.cs");
+		using var cts = new CancellationTokenSource();
+
+		var runTask = ProcessRunner.RunAsync(
+			GetDotnetHostPath(),
+			["run", "--file", helperSource, "--no-launch-profile", "--", "wrap-write-until-killed", helperSource, childOutputPath, childReadyPath],
+			projectDirectory,
+			timeout: TimeSpan.FromMinutes(1),
+			cancellationToken: cts.Token);
+		await WaitForFileAsync(childReadyPath, TimeSpan.FromSeconds(30));
+		cts.Cancel();
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => runTask);
+
+		workspace.Cleanup(formatter, useJson: true, verbose: false);
+		await Task.Delay(250);
+		Assert.False(Directory.Exists(workspace.Path));
 	}
 
 	[Theory]
@@ -1442,11 +1594,13 @@ public class ProfileCommandTests
 		var transport = ProfileCommand.ResolveProfileTransport(Platforms.iOS, device);
 		var artifactsPath = TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session");
 		var directoryBuildPropsPath = TestPath("fake", ProfileBuildWorkspace.DirectoryBuildPropsFileName);
+		var directoryBuildTargetsPath = TestPath("fake", ProfileBuildWorkspace.DirectoryBuildTargetsFileName);
 
 		var args = ProfileCommand.BuildLaunchArguments(
 			TestPath("fake", "MyApp.csproj"),
 			artifactsPath,
 			directoryBuildPropsPath,
+			directoryBuildTargetsPath,
 			"net10.0-ios",
 			"Release",
 			device,
@@ -1458,6 +1612,8 @@ public class ProfileCommandTests
 		Assert.Contains("-p:_MlaunchWaitForExit=false", args);
 		Assert.Contains($"-p:ArtifactsPath={artifactsPath}", args);
 		Assert.Contains($"-p:DirectoryBuildPropsPath={directoryBuildPropsPath}", args);
+		Assert.Contains($"-p:DirectoryBuildTargetsPath={directoryBuildTargetsPath}", args);
+		Assert.Contains("-p:ImportDirectoryBuildTargets=true", args);
 	}
 
 	[Fact]
@@ -1467,11 +1623,13 @@ public class ProfileCommandTests
 		var transport = ProfileCommand.ResolveProfileTransport(Platforms.iOS, device);
 		var artifactsPath = TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session");
 		var directoryBuildPropsPath = TestPath("fake", ProfileBuildWorkspace.DirectoryBuildPropsFileName);
+		var directoryBuildTargetsPath = TestPath("fake", ProfileBuildWorkspace.DirectoryBuildTargetsFileName);
 
 		var args = ProfileCommand.BuildCompileArguments(
 			TestPath("fake", "MyApp.csproj"),
 			artifactsPath,
 			directoryBuildPropsPath,
+			directoryBuildTargetsPath,
 			"net10.0-ios",
 			"Release",
 			transport,
@@ -1485,6 +1643,8 @@ public class ProfileCommandTests
 		Assert.Contains("-p:EnableDiagnostics=true", args);
 		Assert.Contains($"-p:ArtifactsPath={artifactsPath}", args);
 		Assert.Contains($"-p:DirectoryBuildPropsPath={directoryBuildPropsPath}", args);
+		Assert.Contains($"-p:DirectoryBuildTargetsPath={directoryBuildTargetsPath}", args);
+		Assert.Contains("-p:ImportDirectoryBuildTargets=true", args);
 	}
 
 	[Fact]
@@ -1506,6 +1666,7 @@ public class ProfileCommandTests
 			projectPath,
 			TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session"),
 			TestPath("fake", ProfileBuildWorkspace.DirectoryBuildPropsFileName),
+			TestPath("fake", ProfileBuildWorkspace.DirectoryBuildTargetsFileName),
 			"net10.0-android",
 			"Release",
 			transport,
@@ -1539,6 +1700,7 @@ public class ProfileCommandTests
 			TestPath("fake", "MyApp.csproj"),
 			TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session"),
 			TestPath("fake", ProfileBuildWorkspace.DirectoryBuildPropsFileName),
+			TestPath("fake", ProfileBuildWorkspace.DirectoryBuildTargetsFileName),
 			"net10.0-android",
 			"Release",
 			device,
@@ -1563,6 +1725,7 @@ public class ProfileCommandTests
 			TestPath("fake", "MyApp.csproj"),
 			TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session"),
 			TestPath("fake", ProfileBuildWorkspace.DirectoryBuildPropsFileName),
+			TestPath("fake", ProfileBuildWorkspace.DirectoryBuildTargetsFileName),
 			"net10.0-android",
 			"Release",
 			transport,
@@ -1586,6 +1749,7 @@ public class ProfileCommandTests
 			TestPath("fake", "MyApp.csproj"),
 			TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session"),
 			TestPath("fake", ProfileBuildWorkspace.DirectoryBuildPropsFileName),
+			TestPath("fake", ProfileBuildWorkspace.DirectoryBuildTargetsFileName),
 			"net10.0-ios",
 			"Release",
 			device,
@@ -1610,6 +1774,7 @@ public class ProfileCommandTests
 			TestPath("fake", "MyApp.csproj"),
 			TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session"),
 			TestPath("fake", ProfileBuildWorkspace.DirectoryBuildPropsFileName),
+			TestPath("fake", ProfileBuildWorkspace.DirectoryBuildTargetsFileName),
 			"net10.0-android",
 			"Release",
 			transport,
@@ -2077,7 +2242,9 @@ public class ProfileCommandTests
 			projectPath,
 			"--nologo",
 			$"-p:ArtifactsPath={workspace.Path}",
-			$"-p:DirectoryBuildPropsPath={workspace.DirectoryBuildPropsPath}"
+			$"-p:DirectoryBuildPropsPath={workspace.DirectoryBuildPropsPath}",
+			$"-p:DirectoryBuildTargetsPath={workspace.DirectoryBuildTargetsPath}",
+			"-p:ImportDirectoryBuildTargets=true"
 		};
 		arguments.AddRange(additionalArguments);
 
@@ -2129,6 +2296,13 @@ public class ProfileCommandTests
 			"..",
 			"..",
 			OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet"));
+
+	static async Task WaitForFileAsync(string path, TimeSpan timeout)
+	{
+		using var cts = new CancellationTokenSource(timeout);
+		while (!File.Exists(path))
+			await Task.Delay(20, cts.Token);
+	}
 
 	static TempFile CreateTempFile(string fileName)
 	{

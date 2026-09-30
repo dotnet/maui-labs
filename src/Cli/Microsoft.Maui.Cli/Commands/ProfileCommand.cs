@@ -643,18 +643,20 @@ public static class ProfileCommand
 		string projectPath,
 		string artifactsPath,
 		string directoryBuildPropsPath,
+		string directoryBuildTargetsPath,
 		string framework,
 		string configuration,
 		ProfileTransportConfiguration transport,
 		int diagnosticPort,
 		ProfilingBuildInjection? buildInjection,
 		bool diagnosticSuspend = true)
-		=> ProfileCommandArguments.BuildCompileArguments(projectPath, artifactsPath, directoryBuildPropsPath, framework, configuration, transport, diagnosticPort, buildInjection, diagnosticSuspend);
+		=> ProfileCommandArguments.BuildCompileArguments(projectPath, artifactsPath, directoryBuildPropsPath, directoryBuildTargetsPath, framework, configuration, transport, diagnosticPort, buildInjection, diagnosticSuspend);
 
 	internal static string[] BuildLaunchArguments(
 		string projectPath,
 		string artifactsPath,
 		string directoryBuildPropsPath,
+		string directoryBuildTargetsPath,
 		string framework,
 		string configuration,
 		Device device,
@@ -662,7 +664,7 @@ public static class ProfileCommand
 		int diagnosticPort,
 		ProfilingBuildInjection? buildInjection,
 		bool diagnosticSuspend = true)
-		=> ProfileCommandArguments.BuildLaunchArguments(projectPath, artifactsPath, directoryBuildPropsPath, framework, configuration, device, transport, diagnosticPort, buildInjection, diagnosticSuspend);
+		=> ProfileCommandArguments.BuildLaunchArguments(projectPath, artifactsPath, directoryBuildPropsPath, directoryBuildTargetsPath, framework, configuration, device, transport, diagnosticPort, buildInjection, diagnosticSuspend);
 
 	internal static IEnumerable<string> BuildTraceArguments(
 		string outputPath,
