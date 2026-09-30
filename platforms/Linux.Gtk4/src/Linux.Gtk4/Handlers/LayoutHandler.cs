@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Maui;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Handlers;
@@ -57,7 +58,6 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 		{
 			Add(layout[i]);
 		}
-
 	}
 
 	protected override void ConnectHandler(GtkLayoutPanel platformView)
@@ -67,6 +67,25 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 		if (VirtualView is ICrossPlatformLayout layout)
 			platformView.CrossPlatformLayout = layout;
 
+		platformView.OnNotify += OnPlatformNotify;
+		platformView.OnMap += OnPlatformMap;
+		StartRootLayoutTick(platformView);
+	}
+
+	void OnPlatformNotify(GObject.Object sender, GObject.Object.NotifySignalArgs args)
+	{
+		if (args.Pspec.GetName() == "parent")
+			StartRootLayoutTick(PlatformView);
+	}
+
+	void OnPlatformMap(Gtk.Widget sender, EventArgs args) => StartRootLayoutTick(PlatformView);
+
+	void StartRootLayoutTick(GtkLayoutPanel platformView)
+	{
+		if (_rootLayoutTickId != 0)
+			return;
+
+		_rootWidth = _rootHeight = -1;
 		_rootLayoutTickId = platformView.AddTickCallback((widget, clock) =>
 		{
 			if (VirtualView == null)
@@ -76,8 +95,8 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 			}
 			if (platformView.IsExternallyManaged || HasAncestorLayoutPanel(platformView))
 			{
-				_rootWidth = _rootHeight = -1;
-				return true;
+				_rootLayoutTickId = 0;
+				return false;
 			}
 
 			// A default-size notification precedes allocation and misses compositor
@@ -99,9 +118,11 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 			}
 			catch (Exception ex)
 			{
-				Console.Error.WriteLine($"[Microsoft.Maui.Platforms.Linux.Gtk4] Root layout failed: {ex}");
-				_rootLayoutTickId = 0;
-				return false;
+				var logger = MauiContext?.Services.GetService(typeof(ILogger<LayoutHandler>)) as ILogger<LayoutHandler>;
+				if (logger != null)
+					logger.LogError(ex, "GTK root layout failed at {Width}x{Height}", width, height);
+				else
+					Console.Error.WriteLine($"[Microsoft.Maui.Platforms.Linux.Gtk4] Root layout failed: {ex}");
 			}
 			return true;
 		});
@@ -109,6 +130,8 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 
 	protected override void DisconnectHandler(GtkLayoutPanel platformView)
 	{
+		platformView.OnNotify -= OnPlatformNotify;
+		platformView.OnMap -= OnPlatformMap;
 		if (_rootLayoutTickId != 0)
 			platformView.RemoveTickCallback(_rootLayoutTickId);
 		_rootLayoutTickId = 0;
