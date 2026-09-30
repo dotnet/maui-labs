@@ -363,22 +363,23 @@ public sealed class RegressionApp : Application
             });
         }
 
-        sealed class CountingPageHandler : Handlers.ContentPageHandler
-        {
-            protected override MacOSContainerView CreatePlatformView() => new CountingPageView();
-        }
-
-        sealed class CountingPageView : MacOSContainerView
-        {
-            public int Attachments { get; private set; }
-
-            public override void ViewDidMoveToSuperview()
-            {
-                base.ViewDidMoveToSuperview();
-                if (Superview != null)
-                    Attachments++;
-            }
-        }
         return item;
+    }
+}
+
+sealed class CountingPageHandler : Handlers.ContentPageHandler
+{
+    protected override MacOSContainerView CreatePlatformView() => new CountingPageView();
+}
+
+sealed class CountingPageView : MacOSContainerView
+{
+    public int Attachments { get; private set; }
+
+    public override void ViewDidMoveToSuperview()
+    {
+        base.ViewDidMoveToSuperview();
+        if (Superview != null)
+            Attachments++;
     }
 }
