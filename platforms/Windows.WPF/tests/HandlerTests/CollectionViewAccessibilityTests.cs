@@ -145,6 +145,12 @@ public class CollectionViewAccessibilityTests(ITestOutputHelper output)
 				PumpUntil(() => changes.Any(change => change.NewName == "After clearing Detail"));
 				root.Children.Remove(detail);
 				PumpUntil(() => changes.Any(change => change.OldName == "After clearing Detail" && change.NewName == "After clearing"));
+				System.Windows.Automation.AutomationProperties.SetName(container, "Native override");
+				PumpUntil(() => changes.Any(change => change.NewName == "Native override"));
+				System.Windows.Automation.AutomationProperties.SetName(container, "");
+				System.Windows.Automation.AutomationProperties.SetLabeledBy(container,
+					new System.Windows.Controls.TextBlock { Text = "Native label override" });
+				PumpUntil(() => changes.Any(change => change.NewName == "Native label override"));
 			}
 			finally
 			{
@@ -206,6 +212,29 @@ public class CollectionViewAccessibilityTests(ITestOutputHelper output)
 			GroupHeaderTemplate = new DataTemplate(() => new Label { Text = "Heading" }),
 		};
 		Run(list, native => AssertName(GetItemPeers(native)[grouped ? 1 : 0], "First"));
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void ItemPeer_WhenTemplateThrowsMatchesDisplayedFallback(bool grouped)
+	{
+		var item = new ItemSummary("1", "First");
+		var list = new CollectionView
+		{
+			IsGrouped = grouped,
+			ItemsSource = grouped ? new[] { new[] { item } } : new[] { item },
+			GroupHeaderTemplate = new DataTemplate(() => new Label { Text = "Heading" }),
+			ItemTemplate = new DataTemplate(() => throw new InvalidOperationException("Template failed")),
+		};
+		Run(list, native =>
+		{
+			var index = grouped ? 1 : 0;
+			var container = (System.Windows.Controls.ListBoxItem)native.ItemContainerGenerator.ContainerFromIndex(index);
+			var fallback = Assert.IsType<System.Windows.Controls.TextBlock>(container.Content);
+			Assert.Equal(item.ToString(), fallback.Text);
+			AssertName(GetItemPeers(native)[index], fallback.Text);
+		});
 	}
 
 	[Fact]
@@ -287,6 +316,22 @@ public class CollectionViewAccessibilityTests(ITestOutputHelper output)
 			Assert.Null(native.ItemContainerGenerator.ContainerFromIndex(100));
 			var container = (System.Windows.UIElement)native.ItemContainerGenerator.ContainerFromIndex(199);
 			AssertName(UIElementAutomationPeer.CreatePeerForElement(container)!, "Item 199");
+
+			var listPeer = UIElementAutomationPeer.CreatePeerForElement(native)!;
+			// GetChildren only returns realized items. Exercise the actual protected
+			// factory for an unrealized item without relying on a UIA client proxy.
+			var factory = listPeer.GetType().GetMethod("CreateItemAutomationPeer",
+				System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+			var virtualizedPeer = Assert.IsAssignableFrom<ItemAutomationPeer>(
+				factory.Invoke(listPeer, [native.Items[100]]));
+			AssertName(virtualizedPeer, "");
+			var virtualizedItem = Assert.IsAssignableFrom<System.Windows.Automation.Provider.IVirtualizedItemProvider>(
+				virtualizedPeer.GetPattern(PatternInterface.VirtualizedItem));
+			virtualizedItem.Realize();
+			DrainDispatcher();
+			native.UpdateLayout();
+			Assert.NotNull(native.ItemContainerGenerator.ContainerFromIndex(100));
+			AssertName(virtualizedPeer, "Item 100");
 		});
 	}
 

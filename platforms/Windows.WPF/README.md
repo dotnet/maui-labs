@@ -136,6 +136,8 @@ expose the data model's `ToString()`; items without a template use their display
 fallback text. Group headers follow the same rules as items. Changes to template
 text, semantic descriptions, visibility, or descendants invalidate the native
 automation peers so UIA clients receive name-change notifications.
+If template creation fails, the existing displayed fallback text remains the
+accessible name; this does not suppress information that is already visible.
 
 ### Pages & Navigation
 

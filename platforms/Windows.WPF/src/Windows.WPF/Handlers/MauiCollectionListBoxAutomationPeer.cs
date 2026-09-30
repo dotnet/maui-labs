@@ -54,6 +54,13 @@ internal sealed class MauiCollectionListBoxItem : ListBoxItem
 
 	protected override AutomationPeer OnCreateAutomationPeer() => new MauiCollectionItemWrapperAutomationPeer(this);
 
+	protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
+	{
+		base.OnPropertyChanged(e);
+		if (e.Property == WAutomationProperties.NameProperty || e.Property == WAutomationProperties.LabeledByProperty)
+			InvalidateName();
+	}
+
 	void ObserveView()
 	{
 		StopObservingView();
