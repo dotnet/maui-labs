@@ -62,6 +62,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p baseline/platforms/MacOS/tests
           cp -R fixed/platforms/MacOS/tests/PickerRegressionTests baseline/platforms/MacOS/tests/
           for variant in baseline fixed; do
             evidence="$GITHUB_WORKSPACE/evidence/$variant"
@@ -71,8 +72,8 @@ jobs:
               dotnet build platforms/MacOS/tests/PickerRegressionTests/PickerRegressionTests.csproj \
                 -p:UseMaui=false -p:ContinuousIntegrationBuild=true \
                 2>&1 | tee "$evidence/build.log"
-              app="$(find artifacts/bin/PickerRegressionTests -type d -name PickerRegressionTests.app -print -quit)"
-              test -n "$app"
+              app="$(find artifacts/bin/PickerRegressionTests -type d -name PickerRegressionTests.app -print)"
+              test -d "$app"
               set +e
               PICKER_EVIDENCE="$evidence" "$app/Contents/MacOS/PickerRegressionTests" \
                 > "$evidence/runtime.log" 2>&1

@@ -117,7 +117,9 @@ sealed class RegressionApplication : MacOSMauiApplication
     static void Activate(NSPopUpButton native, int index)
     {
         native.SelectItem(index);
-        if (!NSApplication.SharedApplication.SendAction(native.Action!, native.Target, native))
+        var action = native.Action
+            ?? throw new InvalidOperationException("The Picker has no native activation action.");
+        if (!NSApplication.SharedApplication.SendAction(action, native.Target, native))
             throw new InvalidOperationException("AppKit did not dispatch the Picker activation action.");
     }
 
