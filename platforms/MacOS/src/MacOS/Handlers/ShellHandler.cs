@@ -14,8 +14,7 @@ namespace Microsoft.Maui.Platforms.MacOS.Handlers;
 /// <summary>
 /// Shell handler for macOS. Renders Shell as a split view with:
 /// - Left sidebar (flyout) showing Shell items
-/// - Right content area showing the current page
-/// On macOS, the flyout is always visible (like a source list sidebar).
+/// - Right content area showing section tabs and the current page
 /// </summary>
 public partial class ShellHandler : ViewHandler<Shell, NSView>
 {
@@ -145,7 +144,8 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 		sidebarVC.View = _sidebarView;
 
 		var contentVC = new NSViewController();
-		contentVC.View = _contentView;
+		_contentContainer = new ShellContentContainer(_contentView);
+		contentVC.View = _contentContainer;
 
 		_sidebarSplitItem = NSSplitViewItem.CreateSidebar(sidebarVC);
 		_sidebarSplitItem.MinimumThickness = 150;
@@ -182,6 +182,7 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 	{
 		base.ConnectHandler(platformView);
 		_shell = VirtualView;
+		ConnectTabs();
 
 		if (_shell != null)
 		{
@@ -203,6 +204,7 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 
 	protected override void DisconnectHandler(NSView platformView)
 	{
+		DisconnectTabs();
 		UnregisterNativeElements();
 		if (_shell != null)
 		{
@@ -677,6 +679,8 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 			BuildCustomSidebar();
 
 		// Notify WindowHandler to refresh toolbar (back button, title, toolbar items)
+		_tabCoordinator?.SetPage(_currentPage);
+		UpdateTabs();
 		NotifyToolbarRefresh();
 	}
 

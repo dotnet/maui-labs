@@ -20,6 +20,22 @@ This backend lets MAUI applications run as true native macOS apps that use AppKi
 | `Microsoft.Maui.Platforms.MacOS.Essentials` | MAUI Essentials implementations (clipboard, preferences, sensors, …) |
 | `Microsoft.Maui.Platforms.MacOS.BlazorWebView` | Blazor Hybrid (`BlazorWebView`) support |
 
+## Shell navigation
+
+Shell displays native segmented tabs for a `TabBar` (including a single tab) and for
+`FlyoutItem`s with multiple visible sections. The strip scrolls horizontally when
+the tabs do not fit a narrow window. Section titles, enabled/visible state, collection
+changes and selection update the strip without creating inactive pages.
+`Shell.TabBarIsVisible` on the displayed page hides the strip.
+
+Portable presentation tests run with
+`dotnet test platforms/MacOS/tests/UnitTests/UnitTests.csproj`.
+The `shell-tabs-regression` CI job runs a real AppKit application against the original
+issue revision and the current source, and uploads native screenshots and assertions
+as `shell-tabs-runtime-evidence`. Its source is in `tests/ShellTabsRegressionTests`;
+run the built app executable on macOS with `SHELL_TABS_RESULTS` set to an output
+directory. Compilation and portable tests alone do not establish native rendering.
+
 ## Prerequisites
 
 - .NET 10 SDK

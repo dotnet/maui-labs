@@ -31,6 +31,64 @@ jobs:
       project-name: macos-appkit
       os: '["macos-latest"]'
       install-workloads: true
-      run-tests: false
+      run-tests: true
       pack: true
       xcode-version: '26.3'
+
+  shell-tabs-regression:
+    runs-on: macos-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: fixed
+      - uses: actions/checkout@v6
+        with:
+          # Original issue revision: the same native harness must fail here.
+          ref: 9206e7c5c6486a7f422efd36a7635c6fe9609000
+          path: baseline
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: fixed/global.json
+      - name: Select Xcode and install macOS workload
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+          dotnet workload install macos --version 10.0.203
+      - name: Run identical AppKit harness against baseline and fix
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $relative = 'platforms/MacOS/tests/ShellTabsRegressionTests'
+          New-Item -ItemType Directory -Force 'baseline/platforms/MacOS/tests' | Out-Null
+          Copy-Item "fixed/$relative" "baseline/$relative" -Recurse
+          foreach ($variant in @('baseline', 'fixed')) {
+            Push-Location $variant
+            try {
+              $env:SHELL_TABS_RESULTS = Join-Path $env:GITHUB_WORKSPACE "runtime-evidence/$variant"
+              New-Item -ItemType Directory -Force $env:SHELL_TABS_RESULTS | Out-Null
+              dotnet build "$relative/ShellTabsRegressionTests.csproj" -m:1 -nr:false -v:q
+              if ($LASTEXITCODE -ne 0) { throw "$variant build failed" }
+              $bundle = Get-ChildItem artifacts/bin/ShellTabsRegressionTests -Filter '*.app' -Recurse -Directory | Select-Object -First 1
+              if (!$bundle) { throw 'Missing regression app bundle' }
+              & "$($bundle.FullName)/Contents/MacOS/ShellTabsRegressionTests" *> "$env:SHELL_TABS_RESULTS/process.log"
+              $exitCode = $LASTEXITCODE
+              if ($variant -eq 'baseline') {
+                if ($exitCode -ne 42 -or !(Select-String -Path "$env:SHELL_TABS_RESULTS/failure.txt" -Pattern 'REGRESSION: missing native tabs' -Quiet)) {
+                  Get-Content "$env:SHELL_TABS_RESULTS/process.log"
+                  Get-Content "$env:SHELL_TABS_RESULTS/failure.txt" -ErrorAction SilentlyContinue
+                  throw "Baseline harness failed before confirming the missing-tabs regression (exit $exitCode)"
+                }
+              } elseif ($exitCode -ne 0 -or !(Test-Path "$env:SHELL_TABS_RESULTS/passed.txt")) {
+                Get-Content "$env:SHELL_TABS_RESULTS/process.log"
+                Get-Content "$env:SHELL_TABS_RESULTS/failure.txt" -ErrorAction SilentlyContinue
+                throw "Fixed native regression failed: $exitCode"
+              }
+            } finally { Pop-Location }
+          }
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: shell-tabs-runtime-evidence
+          path: runtime-evidence
+          if-no-files-found: error

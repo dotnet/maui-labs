@@ -78,6 +78,7 @@
   </Folder>
   <Folder Name="/tests/DevFlow/" />
   <Folder Name="/platforms/MacOS/">
+    <Project Path="platforms/MacOS/tests/UnitTests/UnitTests.csproj" />
     <Project Path="platforms/MacOS/src/MacOS/MacOS.csproj" />
     <Project Path="platforms/MacOS/src/MacOS.Essentials/MacOS.Essentials.csproj" />
     <Project Path="platforms/MacOS/src/MacOS.BlazorWebView/MacOS.BlazorWebView.csproj" />
