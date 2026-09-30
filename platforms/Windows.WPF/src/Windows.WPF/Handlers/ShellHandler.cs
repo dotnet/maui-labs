@@ -395,7 +395,7 @@ namespace Microsoft.Maui.Handlers.WPF
 
 			foreach (var item in shell.Items)
 			{
-				if (item.FlyoutItemIsVisible)
+				if (item is not TabBar && item.FlyoutItemIsVisible)
 				{
 					hasFlyoutItems = true;
 					var capturedItem = item;
@@ -838,6 +838,15 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		public ShellHandler() : base(Mapper, CommandMapper) { }
 
+		public override void SetVirtualView(IView view)
+		{
+			if (!ReferenceEquals(_observedShell, view))
+				DisconnectShellItems();
+
+			base.SetVirtualView(view);
+			ConnectShellItems();
+		}
+
 		protected override ShellContainerView CreatePlatformView()
 		{
 			var container = new ShellContainerView();
@@ -857,9 +866,7 @@ namespace Microsoft.Maui.Handlers.WPF
 			base.ConnectHandler(platformView);
 			if (VirtualView != null)
 			{
-				VirtualView.Navigated += OnShellNavigated;
-				VirtualView.Navigating += OnShellNavigating;
-				VirtualView.PropertyChanged += OnShellPropertyChanged;
+				ConnectShellItems();
 				if (MauiContext != null)
 				{
 					platformView.MauiContext = MauiContext;
@@ -888,12 +895,7 @@ namespace Microsoft.Maui.Handlers.WPF
 		protected override void DisconnectHandler(ShellContainerView platformView)
 		{
 			platformView.UnregisterNativeElements();
-			if (VirtualView != null)
-			{
-				VirtualView.Navigated -= OnShellNavigated;
-				VirtualView.Navigating -= OnShellNavigating;
-				VirtualView.PropertyChanged -= OnShellPropertyChanged;
-			}
+			DisconnectShellItems();
 			ThemeManager.ThemeChanged -= OnThemeChanged;
 			base.DisconnectHandler(platformView);
 		}
@@ -950,12 +952,21 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		void ShowCurrentPage()
 		{
-			if (VirtualView == null || MauiContext == null) return;
+			if (((IElementHandler)this).VirtualView == null || ((IElementHandler)this).PlatformView == null || MauiContext == null) return;
 
 			try
 			{
+				var item = VirtualView.CurrentItem;
+				var section = item?.CurrentItem;
+				if (item == null || !VirtualView.Items.Contains(item) ||
+					section == null || !item.Items.Contains(section))
+				{
+					PlatformView.UpdateBackButtonRegistration(null);
+					PlatformView.ShowPage(null, null, false);
+					return;
+				}
+
 				Microsoft.Maui.Controls.Page? currentPage = VirtualView.CurrentPage;
-				var section = VirtualView.CurrentItem?.CurrentItem;
 
 				if (currentPage == null)
 				{
@@ -976,6 +987,7 @@ namespace Microsoft.Maui.Handlers.WPF
 				if (currentPage == null)
 				{
 					PlatformView.UpdateBackButtonRegistration(null);
+					PlatformView.ShowPage(null, null, false);
 					return;
 				}
 
@@ -1099,6 +1111,9 @@ namespace Microsoft.Maui.Handlers.WPF
 		static void MapItems(ShellHandler handler, Shell shell)
 		{
 			handler.PlatformView.BuildFlyoutItems(shell);
+			MapShellBackground(handler, shell);
+			MapFlyoutBackground(handler, shell);
+			MapFlyoutBackgroundBrush(handler, shell);
 			handler.ShowCurrentPage();
 		}
 
