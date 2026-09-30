@@ -154,7 +154,8 @@ Evaluations use **pairwise comparison**: an LLM generates a response _with_ the 
 
 ### Local Testing
 
-Download the skill-validator from [dotnet/skills releases](https://github.com/dotnet/skills/releases/tag/skill-validator-nightly):
+Download a versioned skill-validator from [dotnet/skills releases](https://github.com/dotnet/skills/releases)
+and verify its published SHA-256 digest before running it:
 
 ```bash
 # Static validation (no LLM)
@@ -170,7 +171,8 @@ skill-validator evaluate \
 ### CI
 
 - **skill-check** — Runs automatically on every PR that modifies `plugins/` or `tests/`
-- **skill-evaluation** — Triggered by posting `/evaluate` on a PR (write access required)
+- **skill-evaluation** — Posts the evaluation status; automated LLM evaluation of PR-authored
+  files is disabled until it can run in a dedicated credential-isolated sandbox
 
 ## PR Checklist
 

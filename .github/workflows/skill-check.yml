@@ -33,19 +33,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download skill-validator-nightly \
-            --repo dotnet/skills \
-            --pattern "skill-validator-linux-x64.tar.gz" \
-            --pattern "checksums.sha256" \
-            --dir /tmp/skill-validator
+          mkdir -p /tmp/skill-validator
+          gh api repos/dotnet/skills/releases/assets/597658130 \
+            -H "Accept: application/octet-stream" \
+            > /tmp/skill-validator/skill-validator-linux-x64.tar.gz
 
-          # Verify checksum before extracting
           cd /tmp/skill-validator
-          if [ -f checksums.sha256 ]; then
-            grep "skill-validator-linux-x64.tar.gz" checksums.sha256 | sha256sum --check --strict
-          else
-            echo "::warning::No checksums.sha256 in release — verify dotnet/skills publishes checksums"
-          fi
+          echo "7f137e8de2d51a52a453f6cf621df7b49043ac1a03a8fa5924a020612205b301  skill-validator-linux-x64.tar.gz" \
+            | sha256sum --check --strict
 
           mkdir -p bin
           tar -xzf skill-validator-linux-x64.tar.gz -C bin
