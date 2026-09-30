@@ -46,14 +46,16 @@ jobs:
           $PSNativeCommandUseErrorActionPreference = $false
           $relative = 'platforms\Windows.WPF\tests\HandlerTests'
           Copy-Item "fixed\$relative\ShellSectionSwitchingTests.cs" "baseline\$relative"
+          Copy-Item "fixed\$relative\ShellTabNavigationTests.cs" "baseline\$relative"
           foreach ($variant in @('baseline', 'fixed')) {
             Push-Location $variant
             try {
               $env:SHELL_SECTION_RESULTS = Join-Path $env:GITHUB_WORKSPACE "section-runtime-evidence\$variant"
+              $env:SHELL_TAB_RESULTS = Join-Path $env:SHELL_SECTION_RESULTS 'tabs'
               New-Item -ItemType Directory -Force $env:SHELL_SECTION_RESULTS | Out-Null
-              $filter = 'FullyQualifiedName~ShellSectionSwitchingTests'
+              $filter = 'FullyQualifiedName~ShellSectionSwitchingTests|FullyQualifiedName~ShellTabNavigationTests'
               if ($variant -eq 'baseline') {
-                $filter = 'FullyQualifiedName~SwitchSection_ShowsLazyPageAndCompletesNavigation|FullyQualifiedName~SwitchContentWithinSection_ShowsLazyPage'
+                $filter = 'FullyQualifiedName~SwitchSection_ShowsLazyPageAndCompletesNavigation|FullyQualifiedName~SwitchContentWithinSection_ShowsLazyPage|FullyQualifiedName~NativeTabSelection_WithOrWithoutItemTemplate'
               }
               dotnet test "$relative\HandlerTests.csproj" -c Release -p:UseMaui=false -m:1 -nr:false --filter $filter --logger 'trx;LogFileName=sections.trx' --results-directory $env:SHELL_SECTION_RESULTS *> "$env:SHELL_SECTION_RESULTS\process.log"
               $exitCode = $LASTEXITCODE
@@ -62,12 +64,12 @@ jobs:
               $counters = $results.TestRun.ResultSummary.Counters
               if ($variant -eq 'baseline') {
                 $failures = @($results.TestRun.Results.UnitTestResult | Where-Object outcome -eq 'Failed')
-                if ($exitCode -ne 1 -or $counters.failed -ne 3 -or $counters.total -ne 3 -or
+                if ($exitCode -ne 1 -or $counters.failed -ne 5 -or $counters.total -ne 5 -or
                     @($failures | Where-Object { $_.Output.ErrorInfo.Message -notmatch 'Assert\.(Equal|Same)\(\) Failure' }).Count -ne 0) {
                   Get-Content "$env:SHELL_SECTION_RESULTS\process.log"
-                  throw 'Baseline did not reproduce all three lazy section/content selection failures'
+                  throw 'Baseline did not reproduce the three section/content and two native tab failures'
                 }
-              } elseif ($exitCode -ne 0 -or $counters.failed -ne 0 -or $counters.executed -lt 7) {
+              } elseif ($exitCode -ne 0 -or $counters.failed -ne 0 -or $counters.executed -lt 16) {
                 Get-Content "$env:SHELL_SECTION_RESULTS\process.log"
                 throw 'Fixed WPF section regression failed'
               }

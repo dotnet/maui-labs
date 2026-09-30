@@ -49,9 +49,11 @@ namespace Microsoft.Maui.Handlers.WPF
 		readonly HashSet<DependencyObject> _registeredNativeElements = new();
 		Microsoft.Maui.Controls.Page? _backButtonOwner;
 		bool _flyoutOpen;
+		bool _updatingTabs;
 		FlyoutBehavior _currentBehavior = FlyoutBehavior.Flyout;
 
 		public Action<ShellItem>? OnShellItemSelected { get; set; }
+		internal Action<ShellSection>? OnShellSectionSelected { get; set; }
 		public Action? OnBackButtonClicked { get; set; }
 		public Action<bool>? OnFlyoutOpenChanged { get; set; }
 		public IMauiContext? MauiContext { get; set; }
@@ -177,7 +179,13 @@ namespace Microsoft.Maui.Handlers.WPF
 			Children.Add(mainGrid);
 		}
 
-		void TabControl_SelectionChanged(object sender, global::System.Windows.Controls.SelectionChangedEventArgs e) { }
+		void TabControl_SelectionChanged(object sender, global::System.Windows.Controls.SelectionChangedEventArgs e)
+		{
+			if (!_updatingTabs && ReferenceEquals(e.OriginalSource, _tabControl) &&
+				e.AddedItems.Count > 0 &&
+				_tabControl.SelectedItem is global::System.Windows.Controls.TabItem { Tag: ShellSection section })
+				OnShellSectionSelected?.Invoke(section);
+		}
 
 		static bool IsDarkTheme()
 		{
@@ -512,6 +520,19 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		public void UpdateTabs(Shell shell)
 		{
+			_updatingTabs = true;
+			try
+			{
+				RebuildTabs(shell);
+			}
+			finally
+			{
+				_updatingTabs = false;
+			}
+		}
+
+		void RebuildTabs(Shell shell)
+		{
 			foreach (global::System.Windows.Controls.TabItem tab in _tabControl.Items)
 			{
 				if (_registeredNativeElements.Remove(tab))
@@ -537,6 +558,21 @@ namespace Microsoft.Maui.Handlers.WPF
 				}
 			}
 			_tabControl.Visibility = hasTabs ? WVisibility.Visible : WVisibility.Collapsed;
+		}
+
+		internal void UpdateTabSelection(Shell shell)
+		{
+			_updatingTabs = true;
+			try
+			{
+				_tabControl.SelectedItem = _tabControl.Items
+					.OfType<global::System.Windows.Controls.TabItem>()
+					.FirstOrDefault(tab => ReferenceEquals(tab.Tag, shell.CurrentItem?.CurrentItem));
+			}
+			finally
+			{
+				_updatingTabs = false;
+			}
 		}
 
 		void RegisterNativeElement(object owner, DependencyObject nativeElement, string role)
@@ -884,6 +920,7 @@ namespace Microsoft.Maui.Handlers.WPF
 		protected override void ConnectHandler(ShellContainerView platformView)
 		{
 			base.ConnectHandler(platformView);
+			platformView.OnShellSectionSelected = OnShellSectionSelected;
 			ConnectShellSelection();
 			if (VirtualView != null)
 			{
@@ -915,6 +952,7 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		protected override void DisconnectHandler(ShellContainerView platformView)
 		{
+			platformView.OnShellSectionSelected = null;
 			DisconnectShellSelection();
 			platformView.UnregisterNativeElements();
 			DisconnectShellItems();
@@ -1031,6 +1069,33 @@ namespace Microsoft.Maui.Handlers.WPF
 			{
 				MauiContext.Services.GetService<ILogger<ShellHandler>>()?
 					.LogError(ex, "Showing current Shell page failed.");
+			}
+		}
+
+		void OnShellSectionSelected(ShellSection section)
+		{
+			var shell = _selectionShell;
+			var item = shell?.CurrentItem;
+			if (shell == null || item == null)
+				return;
+
+			try
+			{
+				if (shell.Items.Contains(item) && item.Items.Contains(section) &&
+					section.IsVisible && section.IsEnabled && !ReferenceEquals(item.CurrentItem, section))
+					((IShellItemController)item).ProposeSection(section, true);
+			}
+			catch (Exception ex)
+			{
+				MauiContext?.Services.GetService<ILogger<ShellHandler>>()?
+					.LogError(ex, "Selecting Shell tab failed.");
+			}
+			finally
+			{
+				// Cancellation and deferrals leave the model on the previous tab.
+				// Accepted deferred navigation is synchronized by the selection observer.
+				if (ReferenceEquals(_selectionShell, shell))
+					PlatformView.UpdateTabSelection(shell);
 			}
 		}
 

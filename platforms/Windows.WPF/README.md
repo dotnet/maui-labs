@@ -50,6 +50,16 @@ test process environment to save PNGs of those transitions.
 
 ### Shell section selection
 
+Selecting a native tab navigates through Shell's cancellable section-selection
+pipeline, with or without `Shell.ItemTemplate`. Cancelled or deferred navigation
+keeps the native selection on the current section until Shell accepts the change.
+Rebuilding the strip does not initiate navigation or create inactive pages.
+
+The `ShellTabNavigationTests` handler regressions drive native UI Automation
+selection in an offscreen, nonactivating WPF window and assert the route,
+`Navigated` events, and rendered page. Set `SHELL_TAB_RESULTS` to a directory to
+capture the templated and non-templated repro states as PNG and JSON.
+
 For section switching within one Shell item, select **Launch Section Switching
 Repro**, or start the sample with `--shell-section-repro`. This uses two lazy
 pages in one `TabBar`, without calling a handler refresh workaround. The
