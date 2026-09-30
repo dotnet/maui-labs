@@ -29,7 +29,7 @@ changes and selection update the strip without creating inactive pages.
 `Shell.TabBarIsVisible` on the displayed page hides the strip.
 
 Portable presentation tests run with
-`dotnet test platforms/MacOS/tests/UnitTests/UnitTests.csproj`.
+`dotnet test platforms/MacOS/tests/MacOS.Tests/MacOS.Tests.csproj`.
 The `shell-tabs-regression` CI job runs a real AppKit application against the original
 issue revision and the current source, and uploads native screenshots and assertions
 as `shell-tabs-runtime-evidence`. Its source is in `tests/ShellTabsRegressionTests`;
@@ -154,6 +154,18 @@ public class App : Application
 dotnet build platforms/MacOS/MacOS.slnx
 dotnet run --project platforms/MacOS/samples/MacOS.Sample/
 ```
+
+## Unit tests
+
+The platform-neutral tests exercise the backend's managed lifecycle code using real MAUI
+windows and handlers. They target `net10.0` and do not require AppKit, Xcode, or MAUI workloads:
+
+```bash
+dotnet test platforms/MacOS/tests/MacOS.Tests/MacOS.Tests.csproj
+```
+
+The AppKit CI workflow and official macOS product build also run these tests.
+Native window notifications and rendering still require testing in a running macOS app.
 
 ## MAUI DevFlow integration
 
