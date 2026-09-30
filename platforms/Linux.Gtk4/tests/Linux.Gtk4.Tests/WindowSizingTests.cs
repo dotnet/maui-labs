@@ -58,9 +58,16 @@ public class WindowSizingTests(ITestOutputHelper output)
 							return true;
 						throw new InvalidOperationException($"Requested {width}x{height}; native allocation {window.GetAllocatedWidth()}x{window.GetAllocatedHeight()}.");
 					}
-					output.WriteLine($"Requested {width}x{height}; native {window.GetAllocatedWidth()}x{window.GetAllocatedHeight()}; child {app.Child.Width}x{app.Child.Height}");
+					var nativeChild = (Gtk.Widget)app.Child.Handler!.PlatformView!;
+					if ((app.Child.Width != width || app.Child.Height != height ||
+						nativeChild.GetAllocatedWidth() != width || nativeChild.GetAllocatedHeight() != height) &&
+						clock.Elapsed < TimeSpan.FromSeconds(3))
+						return true;
+					output.WriteLine($"Requested {width}x{height}; native {window.GetAllocatedWidth()}x{window.GetAllocatedHeight()}; child {app.Child.Width}x{app.Child.Height}; native child {nativeChild.GetAllocatedWidth()}x{nativeChild.GetAllocatedHeight()}");
 					Assert.Equal(width, app.Child.Width);
 					Assert.Equal(height, app.Child.Height);
+					Assert.Equal(width, nativeChild.GetAllocatedWidth());
+					Assert.Equal(height, nativeChild.GetAllocatedHeight());
 					index++;
 					if (index < sizes.Length)
 					{

@@ -296,14 +296,14 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 
 	public static void MapWidth(WindowHandler handler, IWindow window)
 	{
-		if (handler.PlatformView == null || window.Width < 0) return;
+		if (handler.PlatformView == null || !double.IsFinite(window.Width) || window.Width < 0) return;
 		handler.PlatformView.GetDefaultSize(out _, out var h);
 		handler.PlatformView.SetDefaultSize((int)window.Width, h > 0 ? h : 600);
 	}
 
 	public static void MapHeight(WindowHandler handler, IWindow window)
 	{
-		if (handler.PlatformView == null || window.Height < 0) return;
+		if (handler.PlatformView == null || !double.IsFinite(window.Height) || window.Height < 0) return;
 		handler.PlatformView.GetDefaultSize(out var w, out _);
 		handler.PlatformView.SetDefaultSize(w > 0 ? w : 800, (int)window.Height);
 	}
