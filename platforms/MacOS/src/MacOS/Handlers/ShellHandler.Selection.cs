@@ -50,6 +50,7 @@ public partial class ShellHandler
 			// A disconnected/rebound handler must not execute an earlier selection.
 			if (generation != _selectionGeneration || !ReferenceEquals(_shell, shell))
 				return;
+			EnsureShellItemHandlers();
 			_selectionQueued = false;
 			ShowCurrentPage();
 		});
