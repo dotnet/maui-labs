@@ -43,6 +43,7 @@ jobs:
       - name: Exercise static facades inside GTK
         env:
           ESSENTIALS_NATIVE_GTK: '1'
+          GDK_BACKEND: x11
         run: >-
           xvfb-run -a dotnet test
           platforms/Linux.Gtk4/tests/Essentials.Tests/Linux.Gtk4.Essentials.Tests.csproj
