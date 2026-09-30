@@ -859,8 +859,11 @@ namespace Microsoft.Maui.Handlers.WPF
 		{
 			if (!ReferenceEquals(_observedShell, view))
 				DisconnectShellItems();
+			if (!ReferenceEquals(_selectionShell, view))
+				DisconnectShellSelection();
 
 			base.SetVirtualView(view);
+			ConnectShellSelection();
 			ConnectShellItems();
 		}
 
@@ -881,6 +884,7 @@ namespace Microsoft.Maui.Handlers.WPF
 		protected override void ConnectHandler(ShellContainerView platformView)
 		{
 			base.ConnectHandler(platformView);
+			ConnectShellSelection();
 			if (VirtualView != null)
 			{
 				ConnectShellItems();
@@ -911,6 +915,7 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		protected override void DisconnectHandler(ShellContainerView platformView)
 		{
+			DisconnectShellSelection();
 			platformView.UnregisterNativeElements();
 			DisconnectShellItems();
 			ThemeManager.ThemeChanged -= OnThemeChanged;
@@ -933,32 +938,39 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		void OnShellNavigated(object? sender, ShellNavigatedEventArgs e)
 		{
-			PlatformView?.Dispatcher.InvokeAsync(() => ShowCurrentPage(),
-				System.Windows.Threading.DispatcherPriority.Background);
+			QueueSelectionUpdate();
 		}
 
 		void OnShellPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
 		{
 			if (e.PropertyName == "CurrentPage" || e.PropertyName == "CurrentItem")
 			{
-				PlatformView?.Dispatcher.InvokeAsync(() => ShowCurrentPage(),
-					System.Windows.Threading.DispatcherPriority.Background);
+				QueueSelectionUpdate();
 			}
 			else if (e.PropertyName == nameof(Shell.FlyoutBehavior))
 			{
 				PlatformView?.Dispatcher.InvokeAsync(() =>
-					PlatformView?.SetFlyoutBehavior(VirtualView!.FlyoutBehavior));
+				{
+					if (ReferenceEquals(sender, _selectionShell))
+						PlatformView.SetFlyoutBehavior(VirtualView.FlyoutBehavior);
+				});
 			}
 			else if (e.PropertyName == nameof(Shell.FlyoutIsPresented))
 			{
 				PlatformView?.Dispatcher.InvokeAsync(() =>
-					PlatformView?.ToggleFlyout(VirtualView!.FlyoutIsPresented));
+				{
+					if (ReferenceEquals(sender, _selectionShell))
+						PlatformView.ToggleFlyout(VirtualView.FlyoutIsPresented);
+				});
 			}
 			else if (e.PropertyName == nameof(Shell.FlyoutWidth))
 			{
 				if (VirtualView != null && VirtualView.FlyoutWidth > 0)
 					PlatformView?.Dispatcher.InvokeAsync(() =>
-						PlatformView?.SetFlyoutWidth(VirtualView.FlyoutWidth));
+					{
+						if (ReferenceEquals(sender, _selectionShell))
+							PlatformView.SetFlyoutWidth(VirtualView.FlyoutWidth);
+					});
 			}
 			else if (e.PropertyName == nameof(Shell.FlyoutBackgroundColor))
 			{

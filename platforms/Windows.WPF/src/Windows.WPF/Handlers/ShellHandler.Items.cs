@@ -20,9 +20,6 @@ public partial class ShellHandler
 		if (_observedShell == null)
 			return;
 
-		_observedShell.Navigated += OnShellNavigated;
-		_observedShell.Navigating += OnShellNavigating;
-		_observedShell.PropertyChanged += OnShellPropertyChanged;
 		UpdateItemCollectionSubscriptions();
 	}
 
@@ -33,13 +30,7 @@ public partial class ShellHandler
 		foreach (var collection in _itemCollections)
 			collection.CollectionChanged -= OnItemsCollectionChanged;
 		_itemCollections.Clear();
-		if (_observedShell != null)
-		{
-			_observedShell.Navigated -= OnShellNavigated;
-			_observedShell.Navigating -= OnShellNavigating;
-			_observedShell.PropertyChanged -= OnShellPropertyChanged;
-			_observedShell = null;
-		}
+		_observedShell = null;
 	}
 
 	void UpdateItemCollectionSubscriptions()

@@ -48,6 +48,23 @@ The runtime regression renders add, remove, replace, and reset transitions in an
 offscreen, nonactivating WPF window. Set `SHELL_ITEMS_EVIDENCE_DIRECTORY` in the
 test process environment to save PNGs of those transitions.
 
+### Shell section selection
+
+For section switching within one Shell item, select **Launch Section Switching
+Repro**, or start the sample with `--shell-section-repro`. This uses two lazy
+pages in one `TabBar`, without calling a handler refresh workaround. The
+**GoToAsync** and **Set CurrentItem** buttons must both replace Page One with
+Page Two (and back). **Refresh state** shows the route, current page, page
+creation count, and `Navigated` count. Only one page should be created initially;
+after visiting both pages, the creation count must remain two on repeat visits.
+
+The focused Windows handler regression suite exercises real MAUI selection and
+WPF content hosting, including selection cleanup:
+
+```powershell
+dotnet test platforms\Windows.WPF\tests\HandlerTests --filter FullyQualifiedName~ShellSectionSwitchingTests
+```
+
 ## Screenshots
 
 | Home | Controls | Layouts |

@@ -108,6 +108,45 @@ public class ShellItemsHandlerTests
 	}
 
 	[Fact]
+	public void DynamicSections_SelectionChanges_KeepTabsAndPageSynchronized()
+	{
+		Run((shell, handler) =>
+		{
+			var item = Item("Initial");
+			item.Items.Add(Section("Second"));
+			shell.Items.Add(item);
+			DrainDispatcher();
+
+			var inserted = Section("Inserted");
+			item.Items.Add(inserted);
+			item.CurrentItem = inserted;
+			DrainDispatcher();
+			AssertTabs(handler, item.Items.ToArray());
+			Assert.Same(inserted, Assert.IsType<TabItem>(Tabs(handler).SelectedItem).Tag);
+			AssertCurrentPage(shell, handler);
+
+			var content = Content("Inserted content");
+			inserted.Items.Add(content);
+			inserted.CurrentItem = content;
+			DrainDispatcher();
+			Assert.Same(((IShellContentController)content).Page, shell.CurrentPage);
+			AssertCurrentPage(shell, handler);
+
+			item.Items.Remove(inserted);
+			DrainDispatcher();
+			AssertTabs(handler, item.Items.ToArray());
+			Assert.Same(item.CurrentItem, Assert.IsType<TabItem>(Tabs(handler).SelectedItem).Tag);
+			AssertCurrentPage(shell, handler);
+
+			var tab = Tabs(handler).SelectedItem;
+			inserted.CurrentItem = inserted.Items[0];
+			inserted.Items.Add(Content("Detached"));
+			DrainDispatcher();
+			Assert.Same(tab, Tabs(handler).SelectedItem);
+		});
+	}
+
+	[Fact]
 	public void InactiveSections_Changed_KeepActiveTabsSelectionAndPage()
 	{
 		Run((shell, handler) =>
