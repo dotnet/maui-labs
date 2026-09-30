@@ -6,6 +6,10 @@ This backend lets MAUI applications run as true native macOS apps that use AppKi
 (`NSWindow`, `NSButton`, `NSScrollView`, etc.) and follow standard macOS UI conventions
 (menu bar, toolbar, sidebar flyout, native dialogs, etc.).
 
+Dialog registration supports both the nested MAUI 10.0.41-10.0.60 subscription
+interface and the top-level interface in 10.0.70+. An unrecognized contract fails
+during registration instead of leaving alert, prompt, or action-sheet tasks pending.
+
 > **Inspiration:** Originally based on the
 > [shinyorg/mauiplatforms](https://github.com/shinyorg/mauiplatforms) project. The Xamarin.Forms
 > [`Xamarin.Forms.Platform.MacOS`](https://github.com/xamarin/Xamarin.Forms/tree/5.0.0/Xamarin.Forms.ControlGallery.MacOS)

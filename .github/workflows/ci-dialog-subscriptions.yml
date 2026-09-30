@@ -1,0 +1,90 @@
+name: CI - Dialog subscription compatibility
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    branches: [main]
+    paths:
+      - '.github/workflows/ci-dialog-subscriptions.yml'
+      - 'platforms/Windows.WPF/**'
+      - 'platforms/Linux.Gtk4/**'
+      - 'platforms/MacOS/**'
+      - 'src/DevFlow/**'
+      - 'eng/**'
+      - 'Directory.Build.*'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ci-dialog-subscriptions.yml'
+      - 'platforms/Windows.WPF/**'
+      - 'platforms/Linux.Gtk4/**'
+      - 'platforms/MacOS/**'
+      - 'src/DevFlow/**'
+      - 'eng/**'
+      - 'Directory.Build.*'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+
+permissions:
+  contents: read
+
+jobs:
+  registration:
+    name: Managed registration - MAUI ${{ matrix.maui }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        maui: ['10.0.41', '10.0.60', '10.0.70', '10.0.110']
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      # These custom backends consume portable Controls; no MAUI workload or
+      # native GTK runtime is needed to verify the actual DI registration.
+      - name: WPF registration contract
+        shell: pwsh
+        run: >
+          dotnet test platforms/Windows.WPF/tests/HandlerTests/HandlerTests.csproj
+          -p:UseMaui=false
+          -p:MauiVersion=${{ matrix.maui }}
+          -p:MicrosoftMauiControlsVersion=${{ matrix.maui }}
+          --filter FullyQualifiedName~AlertManagerSubscriptionTests
+      - name: GTK registration contract
+        shell: pwsh
+        run: >
+          dotnet test platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
+          -p:MauiVersion=${{ matrix.maui }}
+          --filter FullyQualifiedName~AlertManagerSubscriptionTests
+
+  appkit-registration:
+    name: AppKit registration - MAUI ${{ matrix.maui }}
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        maui: ['10.0.41', '10.0.60', '10.0.70', '10.0.110']
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Install macOS workload
+        run: dotnet workload install macos --version 10.0.203
+      - name: Build actual AppKit registration probe
+        run: >
+          dotnet build platforms/MacOS/tests/AlertRegistrationProbe/AlertRegistrationProbe.csproj
+          -p:MicrosoftMauiControlsVersion=${{ matrix.maui }}
+          -p:EnableCodeSigning=false
+      - name: Execute registration contract on macOS
+        shell: bash
+        run: |
+          set -euo pipefail
+          probe=$(find artifacts/bin/AlertRegistrationProbe/Debug -type f -path '*/Contents/MacOS/AlertRegistrationProbe' -print -quit)
+          test -n "$probe"
+          "$probe"
