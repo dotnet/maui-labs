@@ -46,6 +46,7 @@ public sealed class RegressionDelegate : NSApplicationDelegate
             _stack = new VerticalStackLayout();
             _stack.Children.Add(new Label { Text = "Existing child" });
             _nativeStack = _stack.ToMacOSPlatform(context);
+            _nativeStack.Appearance = NSAppearance.GetAppearance(NSAppearance.NameAqua);
             _window = new NSWindow(new CGRect(0, 0, 640, 480),
                 NSWindowStyle.Titled | NSWindowStyle.Closable,
                 NSBackingStore.Buffered, false);
@@ -164,6 +165,10 @@ public sealed class RegressionDelegate : NSApplicationDelegate
                 ?? throw new InvalidOperationException("Could not create screenshot context");
             NSGraphicsContext.CurrentContext = context;
             _nativeStack.CacheDisplay(bounds, bitmap);
+            // CacheDisplay leaves the window backdrop transparent; fill behind the captured pixels.
+            context.CGContext.SetBlendMode(CGBlendMode.DestinationOver);
+            context.CGContext.SetFillColor(1, 1, 1, 1);
+            context.CGContext.FillRect(new CGRect(0, 0, bitmap.PixelsWide, bitmap.PixelsHigh));
         }
         finally
         {

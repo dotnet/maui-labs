@@ -161,6 +161,8 @@ The original behavior must fail the first dynamic addition check.
 The `Native dynamic layout regression` CI job performs that comparison on a
 GitHub-hosted macOS runner. Its `appkit-layout-runtime` artifact contains both
 process logs, native view screenshots and managed/native bounds after addition.
+Screenshots use Aqua appearance and composite transparent view backgrounds over
+white so native text remains readable in dark artifact viewers.
 Set `APPKIT_LAYOUT_ARTIFACTS` to an output directory to capture the same evidence
 when running locally. Hosted execution is distinct from a local desktop run.
 
