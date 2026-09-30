@@ -34,7 +34,10 @@ The `shell-tabs-regression` CI job runs a real AppKit application against the or
 issue revision and the current source, and uploads native screenshots and assertions
 as `shell-tabs-runtime-evidence`. Its source is in `tests/ShellTabsRegressionTests`;
 run the built app executable on macOS with `SHELL_TABS_RESULTS` set to an output
-directory. Compilation and portable tests alone do not establish native rendering.
+directory. It also checks that the selected tab and displayed native page agree
+after programmatic selection, hiding/removing the active section, and handler
+rebinding, and that queued work is ignored after disconnect.
+Compilation and portable tests alone do not establish native rendering.
 
 ## Prerequisites
 
