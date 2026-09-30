@@ -11,6 +11,9 @@ namespace Microsoft.Maui.Platforms.Windows.WPF;
 /// <summary>Renders font glyphs for WPF image surfaces using the app's font registrations.</summary>
 public static class FontImageSourceHelper
 {
+	const int MaximumDimension = 4096;
+	const int MaximumPixels = 4 * 1024 * 1024;
+
 	/// <summary>Renders a system font family. For registered MAUI aliases, use the overload accepting the app's font manager.</summary>
 	public static BitmapSource? RenderGlyph(string glyph, string? fontFamily, float size, Graphics.Color? color)
 		=> RenderGlyph(glyph, fontFamily, size, color, new WPFFontManager(new WPFFontRegistrar()));
@@ -26,6 +29,12 @@ public static class FontImageSourceHelper
 		if (string.IsNullOrEmpty(glyph))
 			return null;
 
+		if (!float.IsFinite(size) || size <= 0 || size > MaximumDimension)
+		{
+			Warn($"Cannot render glyph: size {size} must be finite, positive, and at most {MaximumDimension}.", logger);
+			return null;
+		}
+
 		if (!fontManager.TryGetFontFamily(Font.OfSize(fontFamily, size), out var family))
 			return null;
 		var typeface = new Typeface(family, FontStyles.Normal, System.Windows.FontWeights.Normal, FontStretches.Normal);
@@ -36,30 +45,61 @@ public static class FontImageSourceHelper
 			return null;
 		}
 
-		var wpfColor = color != null
-			? System.Windows.Media.Color.FromArgb(
-				(byte)(color.Alpha * 255), (byte)(color.Red * 255),
-				(byte)(color.Green * 255), (byte)(color.Blue * 255))
-			: System.Windows.Media.Colors.Black;
-		var text = new FormattedText(glyph, CultureInfo.InvariantCulture,
-			System.Windows.FlowDirection.LeftToRight, typeface,
-			float.IsFinite(size) && size > 0 ? size : 24, new SolidColorBrush(wpfColor), 1);
-		var geometry = text.BuildGeometry(new System.Windows.Point());
-		var bounds = geometry.Bounds;
-		if (bounds.IsEmpty)
-			return null;
-
-		var visual = new DrawingVisual();
-		using (var drawing = visual.RenderOpen())
+		try
 		{
-			drawing.PushTransform(new TranslateTransform(1 - bounds.X, 1 - bounds.Y));
-			drawing.DrawGeometry(new SolidColorBrush(wpfColor), null, geometry);
+			var wpfColor = color != null
+				? System.Windows.Media.Color.FromArgb(
+					(byte)(color.Alpha * 255), (byte)(color.Red * 255),
+					(byte)(color.Green * 255), (byte)(color.Blue * 255))
+				: System.Windows.Media.Colors.Black;
+			var text = new FormattedText(glyph, CultureInfo.InvariantCulture,
+				System.Windows.FlowDirection.LeftToRight, typeface,
+				size, new SolidColorBrush(wpfColor), 1);
+			var geometry = text.BuildGeometry(new System.Windows.Point());
+			var bounds = geometry.Bounds;
+			if (bounds.IsEmpty)
+				return null;
+			if (!TryGetBitmapDimensions(bounds, out var width, out var height))
+			{
+				Warn($"Cannot render glyph: bounds exceed {MaximumDimension} pixels per side or {MaximumPixels} total pixels.", logger);
+				return null;
+			}
+
+			var visual = new DrawingVisual();
+			using (var drawing = visual.RenderOpen())
+			{
+				drawing.PushTransform(new TranslateTransform(1 - bounds.X, 1 - bounds.Y));
+				drawing.DrawGeometry(new SolidColorBrush(wpfColor), null, geometry);
+			}
+			var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+			bitmap.Render(visual);
+			bitmap.Freeze();
+			return bitmap;
 		}
-		var bitmap = new RenderTargetBitmap((int)Math.Ceiling(bounds.Width) + 2,
-			(int)Math.Ceiling(bounds.Height) + 2, 96, 96, PixelFormats.Pbgra32);
-		bitmap.Render(visual);
-		bitmap.Freeze();
-		return bitmap;
+		catch (Exception ex) when (ex is ArgumentException or OverflowException or InvalidOperationException or System.Runtime.InteropServices.COMException)
+		{
+			Warn($"Cannot render glyph: {ex.Message}", logger);
+			return null;
+		}
+	}
+
+	static bool TryGetBitmapDimensions(System.Windows.Rect bounds, out int width, out int height)
+	{
+		width = height = 0;
+		if (bounds.IsEmpty || !double.IsFinite(bounds.X) || !double.IsFinite(bounds.Y) ||
+			!double.IsFinite(bounds.Width) || !double.IsFinite(bounds.Height) ||
+			bounds.Width <= 0 || bounds.Height <= 0)
+			return false;
+
+		var paddedWidth = Math.Ceiling(bounds.Width) + 2;
+		var paddedHeight = Math.Ceiling(bounds.Height) + 2;
+		if (paddedWidth > MaximumDimension || paddedHeight > MaximumDimension ||
+			paddedWidth * paddedHeight > MaximumPixels)
+			return false;
+
+		width = (int)paddedWidth;
+		height = (int)paddedHeight;
+		return true;
 	}
 
 	static void Warn(string message, ILogger? logger)

@@ -98,6 +98,11 @@ Clearing a control's MAUI font family restores its native style or inherited def
 flyout icons, and NavigationPage toolbar icons. A missing or invalid font logs a warning and text uses the default UI
 font. An unresolved icon font or a character absent from that font logs a warning
 and produces no image rather than a fallback box.
+Glyph sizes must be finite, positive, and no greater than 4096 device-independent
+units. At 96 DPI, the rendered bitmap, including its one-pixel padding on each side,
+is limited to 4096 pixels per side and 4,194,304 pixels total (16 MiB of pixel data).
+Out-of-range sizes, unsupported bounds, and expected native rendering failures log
+a warning and produce no image; invalid sizes are not replaced with a default size.
 Register fonts before first use. Missing-font results are cached as failures, not as
 successful fallback fonts; transient extraction I/O failures can be retried.
 

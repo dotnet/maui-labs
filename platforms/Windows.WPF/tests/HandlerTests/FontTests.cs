@@ -23,6 +23,51 @@ public class FontApplicationCollection;
 public class FontTests(Xunit.Abstractions.ITestOutputHelper output)
 {
 	[Fact]
+	public void GlyphSize_ExceedsLimit_ReturnsNoImageAndLogs()
+	{
+		StaHelper.RunOnSta(() =>
+		{
+			foreach (var size in new[] { float.MaxValue, 100000f, 4097f, float.PositiveInfinity, float.NaN, 0, -1 })
+			{
+				var registrar = new RejectingRegistrar();
+				var logger = new RecordingLogger();
+				var manager = new WPFFontManager(registrar, logger);
+				Assert.Null(FontImageSourceHelper.RenderGlyph("W", "Guarded", size, null, manager, logger));
+				Assert.Equal(0, registrar.Lookups);
+				Assert.Contains("size", Assert.Single(logger.Messages));
+			}
+		});
+	}
+
+	[Fact]
+	public void GlyphBitmapBounds_AreLimitedBeforeAllocation()
+	{
+		var method = typeof(FontImageSourceHelper).GetMethod("TryGetBitmapDimensions", BindingFlags.Static | BindingFlags.NonPublic)!;
+		(System.Windows.Rect Bounds, int Width, int Height)[] cases =
+		[
+			(new(0, 0, 30.25, 19.25), 33, 22),
+			(new(-10, -10, 4094, 1022), 4096, 1024),
+			(new(0, 0, 1022, 4094), 1024, 4096),
+			(new(0, 0, 4094.01, 10), 0, 0),
+			(new(0, 0, 10, 4094.01), 0, 0),
+			(new(0, 0, 4094, 1022.01), 0, 0),
+			(new(0, 0, double.MaxValue, 10), 0, 0),
+			(new(0, 0, double.PositiveInfinity, 10), 0, 0),
+			(new(0, 0, double.NaN, 10), 0, 0),
+			(new(double.NaN, 0, 10, 10), 0, 0),
+			(new(0, 0, 0, 10), 0, 0),
+			(System.Windows.Rect.Empty, 0, 0),
+		];
+		foreach (var (bounds, width, height) in cases)
+		{
+			object[] arguments = [bounds, 0, 0];
+			Assert.Equal(width != 0, Assert.IsType<bool>(method.Invoke(null, arguments)));
+			Assert.Equal(width, arguments[1]);
+			Assert.Equal(height, arguments[2]);
+		}
+	}
+
+	[Fact]
 	public void MissingFontCache_RemainsFailureForGlyphsAndLogsOnce()
 	{
 		StaHelper.RunOnSta(() =>
@@ -417,6 +462,18 @@ public class FontTests(Xunit.Abstractions.ITestOutputHelper output)
 	sealed class FixedRegistrar(string path) : IFontRegistrar
 	{
 		public string GetFont(string font) => path;
+		public void Register(string filename, string? alias) => throw new NotSupportedException();
+		public void Register(string filename, string? alias, Assembly assembly) => throw new NotSupportedException();
+	}
+
+	sealed class RejectingRegistrar : IFontRegistrar
+	{
+		public int Lookups { get; private set; }
+		public string GetFont(string font)
+		{
+			Lookups++;
+			throw new InvalidOperationException("Invalid sizes must be rejected before font lookup or rendering.");
+		}
 		public void Register(string filename, string? alias) => throw new NotSupportedException();
 		public void Register(string filename, string? alias, Assembly assembly) => throw new NotSupportedException();
 	}

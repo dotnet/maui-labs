@@ -22,6 +22,8 @@ $directories = [ordered]@{
     Fonts = Join-Path $output "Resources\Fonts"
 }
 $expectedTests = @{
+    GlyphSize_ExceedsLimit_ReturnsNoImageAndLogs = 1
+    GlyphBitmapBounds_AreLimitedBeforeAllocation = 1
     MissingFontCache_RemainsFailureForGlyphsAndLogsOnce = 1
     EmbeddedFont_TransientExtractionFailure_CanRetry = 1
     EmbeddedFont_AmbiguousShortName_RequiresFullResourceName = 1
