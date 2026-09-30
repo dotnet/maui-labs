@@ -550,6 +550,14 @@ namespace Microsoft.Maui.Handlers.WPF
 			base.ClearContainerForItemOverride(element, item);
 		}
 
+		internal void ClearItemViews()
+		{
+			var views = ItemMauiViews.Values.ToArray();
+			ItemMauiViews.Clear();
+			foreach (var view in views)
+				view.DisconnectHandlers();
+		}
+
 		protected override void PrepareContainerForItemOverride(DependencyObject element, object item)
 		{
 			if (element is ListBoxItem previousContainer)
