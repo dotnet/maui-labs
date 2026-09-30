@@ -207,7 +207,7 @@ public class PickerSelectionTests(ITestOutputHelper output)
 		var handler = (PickerHandler)picker.Handler!;
 		var seen = new List<int>();
 		picker.SelectedIndexChanged += (_, _) => seen.Add(picker.SelectedIndex);
-		handler.DisconnectHandler();
+		((IElementHandler)handler).DisconnectHandler();
 		original.SetSelected(0);
 		Assert.Equal(8, picker.SelectedIndex);
 		Assert.Empty(seen);
@@ -224,7 +224,7 @@ public class PickerSelectionTests(ITestOutputHelper output)
 		}
 		finally
 		{
-			handler.DisconnectHandler();
+			((IElementHandler)handler).DisconnectHandler();
 		}
 		output.WriteLine("Disconnect ignores native changes; reconnect restores selection and one subscription.");
 	}
