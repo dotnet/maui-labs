@@ -10,7 +10,7 @@ internal static class ProfileCommandArguments
 	internal static string[] BuildCompileArguments(
 		string projectPath,
 		string artifactsPath,
-		string bootstrapPropsPath,
+		string directoryBuildPropsPath,
 		string framework,
 		string configuration,
 		ProfileTransportConfiguration transport,
@@ -23,7 +23,7 @@ internal static class ProfileCommandArguments
 			"build",
 			projectPath,
 			$"-p:ArtifactsPath={artifactsPath}",
-			$"-p:CustomBeforeDirectoryBuildProps={bootstrapPropsPath}",
+			$"-p:DirectoryBuildPropsPath={directoryBuildPropsPath}",
 			"-c", configuration,
 			"-f", framework,
 			"--nologo"
@@ -34,14 +34,14 @@ internal static class ProfileCommandArguments
 		if (!UsesRuntimeOwnedEventPipe(buildInjection))
 			AppendDiagnosticArguments(args, transport, diagnosticPort, diagnosticSuspend);
 
-		AppendBuildInjectionArguments(args, buildInjection);
+		AppendBuildInjectionArguments(args, projectPath, buildInjection);
 		return [.. args];
 	}
 
 	internal static string[] BuildLaunchArguments(
 		string projectPath,
 		string artifactsPath,
-		string bootstrapPropsPath,
+		string directoryBuildPropsPath,
 		string framework,
 		string configuration,
 		Device device,
@@ -55,7 +55,7 @@ internal static class ProfileCommandArguments
 			"build",
 			projectPath,
 			$"-p:ArtifactsPath={artifactsPath}",
-			$"-p:CustomBeforeDirectoryBuildProps={bootstrapPropsPath}",
+			$"-p:DirectoryBuildPropsPath={directoryBuildPropsPath}",
 			"-t:Run",
 			"-c", configuration,
 			"-f", framework,
@@ -73,7 +73,7 @@ internal static class ProfileCommandArguments
 			args.Add("-p:_MlaunchWaitForExit=false");
 		}
 
-		AppendBuildInjectionArguments(args, buildInjection);
+		AppendBuildInjectionArguments(args, projectPath, buildInjection);
 		return [.. args];
 	}
 
@@ -88,12 +88,13 @@ internal static class ProfileCommandArguments
 	static void AppendEnableDiagnosticsArgument(List<string> args)
 		=> args.Add("-p:EnableDiagnostics=true");
 
-	static void AppendBuildInjectionArguments(List<string> args, ProfilingBuildInjection? buildInjection)
+	static void AppendBuildInjectionArguments(List<string> args, string projectPath, ProfilingBuildInjection? buildInjection)
 	{
 		if (buildInjection is null)
 			return;
 
 		args.Add("-p:MauiProfilingHelperInject=true");
+		args.Add($"-p:MauiProfilingHelperProjectFullPath={Path.GetFullPath(projectPath)}");
 		if (!string.IsNullOrWhiteSpace(buildInjection.ExitControlHost))
 			args.Add($"-p:MauiProfilingHelperExitHost={buildInjection.ExitControlHost}");
 		if (buildInjection.ExitControlPort > 0)

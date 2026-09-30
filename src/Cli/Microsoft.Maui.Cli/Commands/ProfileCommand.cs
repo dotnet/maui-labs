@@ -642,19 +642,19 @@ public static class ProfileCommand
 	internal static string[] BuildCompileArguments(
 		string projectPath,
 		string artifactsPath,
-		string bootstrapPropsPath,
+		string directoryBuildPropsPath,
 		string framework,
 		string configuration,
 		ProfileTransportConfiguration transport,
 		int diagnosticPort,
 		ProfilingBuildInjection? buildInjection,
 		bool diagnosticSuspend = true)
-		=> ProfileCommandArguments.BuildCompileArguments(projectPath, artifactsPath, bootstrapPropsPath, framework, configuration, transport, diagnosticPort, buildInjection, diagnosticSuspend);
+		=> ProfileCommandArguments.BuildCompileArguments(projectPath, artifactsPath, directoryBuildPropsPath, framework, configuration, transport, diagnosticPort, buildInjection, diagnosticSuspend);
 
 	internal static string[] BuildLaunchArguments(
 		string projectPath,
 		string artifactsPath,
-		string bootstrapPropsPath,
+		string directoryBuildPropsPath,
 		string framework,
 		string configuration,
 		Device device,
@@ -662,7 +662,7 @@ public static class ProfileCommand
 		int diagnosticPort,
 		ProfilingBuildInjection? buildInjection,
 		bool diagnosticSuspend = true)
-		=> ProfileCommandArguments.BuildLaunchArguments(projectPath, artifactsPath, bootstrapPropsPath, framework, configuration, device, transport, diagnosticPort, buildInjection, diagnosticSuspend);
+		=> ProfileCommandArguments.BuildLaunchArguments(projectPath, artifactsPath, directoryBuildPropsPath, framework, configuration, device, transport, diagnosticPort, buildInjection, diagnosticSuspend);
 
 	internal static IEnumerable<string> BuildTraceArguments(
 		string outputPath,
@@ -808,8 +808,15 @@ public static class ProfileCommand
 		ResolvedMauiProject project,
 		string buildArtifactsPath)
 	{
-		yield return Path.Combine(buildArtifactsPath, "obj", project.ProjectName);
-		yield return Path.Combine(buildArtifactsPath, "bin", project.ProjectName);
+		foreach (var rootName in new[] { "obj", "bin" })
+		{
+			var rootPath = Path.Combine(buildArtifactsPath, rootName);
+			if (!Directory.Exists(rootPath))
+				continue;
+
+			foreach (var projectPath in Directory.EnumerateDirectories(rootPath, $"{project.ProjectName}-*", SearchOption.TopDirectoryOnly))
+				yield return projectPath;
+		}
 	}
 
 	internal static int FindAvailableTcpPort(int startingPort, int maxPort = IPEndPoint.MaxPort)

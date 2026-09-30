@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'platforms/MacOS/**'
+      - '.github/workflows/ci-macos-appkit.yml'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -16,6 +17,7 @@ on:
     branches: [main]
     paths:
       - 'platforms/MacOS/**'
+      - '.github/workflows/ci-macos-appkit.yml'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -31,6 +33,6 @@ jobs:
       project-name: macos-appkit
       os: '["macos-latest"]'
       install-workloads: true
-      run-tests: false
+      run-tests: true
       pack: true
       xcode-version: '26.3'

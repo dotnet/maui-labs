@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'src/DevFlow/**'
+      - 'platforms/Linux.Gtk4/**'
       - 'src/Cli/Microsoft.Maui.Cli/DevFlow/**'
       - '.github/extensions/maui-devflow-canvas/**'
       - '.github/workflows/ci-devflow.yml'
@@ -21,6 +22,7 @@ on:
     branches: [main]
     paths:
       - 'src/DevFlow/**'
+      - 'platforms/Linux.Gtk4/**'
       - 'src/Cli/Microsoft.Maui.Cli/DevFlow/**'
       - '.github/extensions/maui-devflow-canvas/**'
       - '.github/workflows/ci-devflow.yml'
@@ -33,6 +35,15 @@ on:
       - 'NuGet.config'
 
 jobs:
+  gtk-publication-guard:
+    name: GTK publication closure guard
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Reject incomplete GTK publication sets
+        shell: pwsh
+        run: ./eng/scripts/Test-GtkPackageClosure.Tests.ps1
+
   build:
     uses: ./.github/workflows/_build.yml
     with:

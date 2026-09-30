@@ -12,7 +12,7 @@ internal sealed class ProfileBuildWorkspace
 {
 	internal const string RootDirectoryName = "maui-startup-profiling";
 	internal const string OwnershipFileName = ".maui-profile-owner.json";
-	internal const string BootstrapPropsFileName = "MauiProfileBuildIsolation.before.props";
+	internal const string DirectoryBuildPropsFileName = "MauiProfileBuildIsolation.Directory.Build.props";
 	internal const string IsolationPropsFileName = "MauiProfileBuildIsolation.props";
 	internal const string IsolationTargetsFileName = "MauiProfileBuildIsolation.before.targets";
 	internal const string AfterCommonTargetsFileName = "MauiProfileBuildIsolation.targets";
@@ -32,7 +32,7 @@ internal sealed class ProfileBuildWorkspace
 
 	internal string Path { get; }
 	internal string SessionId { get; }
-	internal string BootstrapPropsPath => System.IO.Path.Combine(Path, BootstrapPropsFileName);
+	internal string DirectoryBuildPropsPath => System.IO.Path.Combine(Path, DirectoryBuildPropsFileName);
 	internal string IsolationPropsPath => System.IO.Path.Combine(Path, IsolationPropsFileName);
 	internal string IsolationTargetsPath => System.IO.Path.Combine(Path, IsolationTargetsFileName);
 	internal string AfterCommonTargetsPath => System.IO.Path.Combine(Path, AfterCommonTargetsFileName);
@@ -105,11 +105,13 @@ internal sealed class ProfileBuildWorkspace
 			  <PropertyGroup>
 			    <InitialTargets>ValidateMauiProfileBuildIsolation;$(InitialTargets)</InitialTargets>
 			  </PropertyGroup>
-			  <Target Name="ValidateMauiProfileBuildIsolation">
+			  <Target Name="ValidateMauiProfileBuildIsolation" BeforeTargets="PrepareForBuild">
 			    <PropertyGroup>
 			      <_MauiProfileArtifactsRoot>$([MSBuild]::NormalizeDirectory('$(ArtifactsPath)'))</_MauiProfileArtifactsRoot>
 			      <_MauiProfileBaseOutputPath>$([MSBuild]::NormalizeDirectory('$(BaseOutputPath)'))</_MauiProfileBaseOutputPath>
 			      <_MauiProfileOutputPath>$([MSBuild]::NormalizeDirectory('$(OutputPath)'))</_MauiProfileOutputPath>
+			      <_MauiProfileOutDir>$([MSBuild]::NormalizeDirectory('$(OutDir)'))</_MauiProfileOutDir>
+			      <_MauiProfileTargetDir>$([MSBuild]::NormalizeDirectory('$(TargetDir)'))</_MauiProfileTargetDir>
 			      <_MauiProfileBaseIntermediateOutputPath>$([MSBuild]::NormalizeDirectory('$(BaseIntermediateOutputPath)'))</_MauiProfileBaseIntermediateOutputPath>
 			      <_MauiProfileIntermediateOutputPath>$([MSBuild]::NormalizeDirectory('$(IntermediateOutputPath)'))</_MauiProfileIntermediateOutputPath>
 			      <_MauiProfileProjectExtensionsPath>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectExtensionsPath)'))</_MauiProfileProjectExtensionsPath>
@@ -118,6 +120,10 @@ internal sealed class ProfileBuildWorkspace
 			           Text="The profiling build could not isolate BaseOutputPath for '$(MSBuildProjectFullPath)'." />
 			    <Error Condition="$([System.String]::Copy('$(_MauiProfileOutputPath)').StartsWith('$(_MauiProfileArtifactsRoot)')) != 'True'"
 			           Text="The profiling build could not isolate OutputPath for '$(MSBuildProjectFullPath)'." />
+			    <Error Condition="$([System.String]::Copy('$(_MauiProfileOutDir)').StartsWith('$(_MauiProfileArtifactsRoot)')) != 'True'"
+			           Text="The profiling build could not isolate OutDir for '$(MSBuildProjectFullPath)'." />
+			    <Error Condition="$([System.String]::Copy('$(_MauiProfileTargetDir)').StartsWith('$(_MauiProfileArtifactsRoot)')) != 'True'"
+			           Text="The profiling build could not isolate TargetDir for '$(MSBuildProjectFullPath)'." />
 			    <Error Condition="$([System.String]::Copy('$(_MauiProfileBaseIntermediateOutputPath)').StartsWith('$(_MauiProfileArtifactsRoot)')) != 'True'"
 			           Text="The profiling build could not isolate BaseIntermediateOutputPath for '$(MSBuildProjectFullPath)'." />
 			    <Error Condition="$([System.String]::Copy('$(_MauiProfileIntermediateOutputPath)').StartsWith('$(_MauiProfileArtifactsRoot)')) != 'True'"
@@ -344,9 +350,12 @@ internal sealed class ProfileBuildWorkspace
 			    <UseArtifactsOutput>true</UseArtifactsOutput>
 			    <UseArtifactsIntermediateOutput>true</UseArtifactsIntermediateOutput>
 			    <IncludeProjectNameInArtifactsPaths>true</IncludeProjectNameInArtifactsPaths>
-			    <ArtifactsProjectName>$(MSBuildProjectName)</ArtifactsProjectName>
-			    <BaseOutputPath>$([MSBuild]::NormalizeDirectory('$(ArtifactsPath)', 'bin', '$(MSBuildProjectName)'))</BaseOutputPath>
-			    <BaseIntermediateOutputPath>$([MSBuild]::NormalizeDirectory('$(ArtifactsPath)', 'obj', '$(MSBuildProjectName)'))</BaseIntermediateOutputPath>
+			    <_MauiProfileProjectIdentityPath>$(MSBuildProjectFullPath)</_MauiProfileProjectIdentityPath>
+			    <_MauiProfileProjectIdentityPath Condition="$([MSBuild]::IsOSPlatform('osx')) and $([System.String]::Copy('$(_MauiProfileProjectIdentityPath)').StartsWith('/private/'))">$(_MauiProfileProjectIdentityPath.Substring(8))</_MauiProfileProjectIdentityPath>
+			    <_MauiProfileProjectIdentityPath Condition="$([MSBuild]::IsOSPlatform('windows'))">$(_MauiProfileProjectIdentityPath.ToUpperInvariant())</_MauiProfileProjectIdentityPath>
+			    <ArtifactsProjectName>$(MSBuildProjectName)-$([MSBuild]::StableStringHash($(_MauiProfileProjectIdentityPath)).ToString("X8"))</ArtifactsProjectName>
+			    <BaseOutputPath>$([MSBuild]::NormalizeDirectory('$(ArtifactsPath)', 'bin', '$(ArtifactsProjectName)'))</BaseOutputPath>
+			    <BaseIntermediateOutputPath>$([MSBuild]::NormalizeDirectory('$(ArtifactsPath)', 'obj', '$(ArtifactsProjectName)'))</BaseIntermediateOutputPath>
 			    <OutputPath />
 			    <IntermediateOutputPath />
 			    <BeforeMicrosoftNETSdkTargets>$(BeforeMicrosoftNETSdkTargets);{SecurityElement.Escape(IsolationTargetsPath)}</BeforeMicrosoftNETSdkTargets>
@@ -362,9 +371,12 @@ internal sealed class ProfileBuildWorkspace
 			    <UseArtifactsOutput>true</UseArtifactsOutput>
 			    <UseArtifactsIntermediateOutput>true</UseArtifactsIntermediateOutput>
 			    <IncludeProjectNameInArtifactsPaths>true</IncludeProjectNameInArtifactsPaths>
-			    <ArtifactsProjectName>$(MSBuildProjectName)</ArtifactsProjectName>
-			    <BaseOutputPath>$([MSBuild]::NormalizeDirectory('$(ArtifactsPath)', 'bin', '$(MSBuildProjectName)'))</BaseOutputPath>
-			    <BaseIntermediateOutputPath>$([MSBuild]::NormalizeDirectory('$(ArtifactsPath)', 'obj', '$(MSBuildProjectName)'))</BaseIntermediateOutputPath>
+			    <_MauiProfileProjectIdentityPath>$(MSBuildProjectFullPath)</_MauiProfileProjectIdentityPath>
+			    <_MauiProfileProjectIdentityPath Condition="$([MSBuild]::IsOSPlatform('osx')) and $([System.String]::Copy('$(_MauiProfileProjectIdentityPath)').StartsWith('/private/'))">$(_MauiProfileProjectIdentityPath.Substring(8))</_MauiProfileProjectIdentityPath>
+			    <_MauiProfileProjectIdentityPath Condition="$([MSBuild]::IsOSPlatform('windows'))">$(_MauiProfileProjectIdentityPath.ToUpperInvariant())</_MauiProfileProjectIdentityPath>
+			    <ArtifactsProjectName>$(MSBuildProjectName)-$([MSBuild]::StableStringHash($(_MauiProfileProjectIdentityPath)).ToString("X8"))</ArtifactsProjectName>
+			    <BaseOutputPath>$([MSBuild]::NormalizeDirectory('$(ArtifactsPath)', 'bin', '$(ArtifactsProjectName)'))</BaseOutputPath>
+			    <BaseIntermediateOutputPath>$([MSBuild]::NormalizeDirectory('$(ArtifactsPath)', 'obj', '$(ArtifactsProjectName)'))</BaseIntermediateOutputPath>
 			    <OutputPath />
 			    <IntermediateOutputPath />
 			    <MauiProfileOriginalCustomAfterMicrosoftCommonTargets>$(CustomAfterMicrosoftCommonTargets)</MauiProfileOriginalCustomAfterMicrosoftCommonTargets>
@@ -374,12 +386,16 @@ internal sealed class ProfileBuildWorkspace
 			""");
 
 		File.WriteAllText(
-			BootstrapPropsPath,
+			DirectoryBuildPropsPath,
 			$"""
 			<Project>
 			  <PropertyGroup>
-			    <CustomAfterDirectoryBuildProps>$(CustomAfterDirectoryBuildProps);{SecurityElement.Escape(IsolationPropsPath)}</CustomAfterDirectoryBuildProps>
+			    <_MauiProfileOriginalDirectoryBuildPropsBasePath>$([MSBuild]::GetDirectoryNameOfFileAbove('$(MSBuildProjectDirectory)', 'Directory.Build.props'))</_MauiProfileOriginalDirectoryBuildPropsBasePath>
+			    <_MauiProfileOriginalDirectoryBuildPropsPath Condition="'$(_MauiProfileOriginalDirectoryBuildPropsBasePath)' != ''">$([System.IO.Path]::Combine('$(_MauiProfileOriginalDirectoryBuildPropsBasePath)', 'Directory.Build.props'))</_MauiProfileOriginalDirectoryBuildPropsPath>
 			  </PropertyGroup>
+			  <Import Project="$(_MauiProfileOriginalDirectoryBuildPropsPath)"
+			          Condition="'$(_MauiProfileOriginalDirectoryBuildPropsPath)' != '' and Exists('$(_MauiProfileOriginalDirectoryBuildPropsPath)')" />
+			  <Import Project="{SecurityElement.Escape(IsolationPropsPath)}" />
 			</Project>
 			""");
 	}

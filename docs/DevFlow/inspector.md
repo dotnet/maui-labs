@@ -119,7 +119,7 @@ Platform notes:
   it.
 - **Mac Catalyst**: A sandboxed Debug build needs the
   `com.apple.security.network.server` entitlement.
-- **GTK**: Start the agent after app activation with `app.StartDevFlowAgent()`.
+- **GTK**: With `Microsoft.Maui.Platforms.Linux.Gtk4`, builder registration starts the agent on the first window-created event. For explicit startup, call `this.StartDevFlowAgent()` from `GtkMauiApplication.OnStarted()`.
 
 ## Open in a browser
 

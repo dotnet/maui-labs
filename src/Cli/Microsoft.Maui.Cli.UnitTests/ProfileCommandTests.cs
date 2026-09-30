@@ -371,11 +371,11 @@ public class ProfileCommandTests
 			Assert.Equal(16, second.SessionId.Length);
 			Assert.True(File.Exists(Path.Combine(first.Path, ProfileBuildWorkspace.OwnershipFileName)));
 			Assert.True(File.Exists(Path.Combine(second.Path, ProfileBuildWorkspace.OwnershipFileName)));
-			Assert.True(File.Exists(first.BootstrapPropsPath));
+			Assert.True(File.Exists(first.DirectoryBuildPropsPath));
 			Assert.True(File.Exists(first.IsolationPropsPath));
 			Assert.True(File.Exists(first.IsolationTargetsPath));
 			Assert.True(File.Exists(first.AfterCommonTargetsPath));
-			_ = System.Xml.Linq.XDocument.Load(first.BootstrapPropsPath);
+			_ = System.Xml.Linq.XDocument.Load(first.DirectoryBuildPropsPath);
 			_ = System.Xml.Linq.XDocument.Load(first.IsolationPropsPath);
 			_ = System.Xml.Linq.XDocument.Load(first.IsolationTargetsPath);
 			_ = System.Xml.Linq.XDocument.Load(first.AfterCommonTargetsPath);
@@ -454,6 +454,139 @@ public class ProfileCommandTests
 		Assert.Equal(0, recovered);
 		Assert.True(Directory.Exists(recentWorkspace));
 		Assert.True(Directory.Exists(unownedWorkspace));
+	}
+
+	[Fact]
+	public async Task ProfileBuildWorkspace_SameNamedReferencedProjects_UseUniqueArtifactDirectories()
+	{
+		using var tempRoot = TempProjectFile("<Project />");
+		var rootDirectory = Path.GetDirectoryName(tempRoot.Path)!;
+		var appDirectory = Path.Combine(rootDirectory, "App");
+		var leftDirectory = Path.Combine(rootDirectory, "Left");
+		var rightDirectory = Path.Combine(rootDirectory, "Right");
+		Directory.CreateDirectory(appDirectory);
+		Directory.CreateDirectory(leftDirectory);
+		Directory.CreateDirectory(rightDirectory);
+
+		var appProjectPath = Path.Combine(appDirectory, "App.csproj");
+		File.WriteAllText(appProjectPath, """
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <TargetFramework>net10.0</TargetFramework>
+			  </PropertyGroup>
+			  <ItemGroup>
+			    <ProjectReference Include="../Left/Shared.csproj" />
+			    <ProjectReference Include="../Right/Shared.csproj" />
+			  </ItemGroup>
+			</Project>
+			""");
+		File.WriteAllText(Path.Combine(leftDirectory, "Shared.csproj"), CreateClassLibraryProject("LeftLibrary"));
+		File.WriteAllText(Path.Combine(rightDirectory, "Shared.csproj"), CreateClassLibraryProject("RightLibrary"));
+		File.WriteAllText(Path.Combine(leftDirectory, "Left.cs"), "public sealed class LeftType { }");
+		File.WriteAllText(Path.Combine(rightDirectory, "Right.cs"), "public sealed class RightType { }");
+
+		var formatter = new JsonOutputFormatter(TextWriter.Null);
+		var workspace = ProfileBuildWorkspace.Create(appDirectory, formatter, useJson: true, verbose: false);
+		workspace.ConfigureBuildTargets(profilingInjectionTargetsPath: null);
+		try
+		{
+			var result = await RunProfileBuildAsync(appProjectPath, workspace);
+
+			Assert.True(result.ExitCode == 0, result.Output);
+			var sharedIntermediateDirectories = Directory.GetDirectories(
+				Path.Combine(workspace.Path, "obj"),
+				"Shared-*",
+				SearchOption.TopDirectoryOnly);
+			var sharedOutputDirectories = Directory.GetDirectories(
+				Path.Combine(workspace.Path, "bin"),
+				"Shared-*",
+				SearchOption.TopDirectoryOnly);
+			Assert.Equal(2, sharedIntermediateDirectories.Length);
+			Assert.Equal(2, sharedOutputDirectories.Length);
+			Assert.Equal(2, sharedIntermediateDirectories.Select(Path.GetFileName).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+			Assert.Contains(Directory.EnumerateFiles(workspace.Path, "LeftLibrary.dll", SearchOption.AllDirectories), File.Exists);
+			Assert.Contains(Directory.EnumerateFiles(workspace.Path, "RightLibrary.dll", SearchOption.AllDirectories), File.Exists);
+		}
+		finally
+		{
+			workspace.Cleanup(formatter, useJson: true, verbose: false);
+		}
+	}
+
+	[Fact]
+	public async Task ProfileBuildWorkspace_PreservesCustomBeforeDirectoryBuildProps()
+	{
+		using var tempProject = TempProjectFile("""
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <TargetFramework>net10.0</TargetFramework>
+			  </PropertyGroup>
+			  <Target Name="ValidateBuildPropsImports" BeforeTargets="BeforeBuild">
+			    <Error Condition="'$(EarlyBuildPropsImported)' != 'true'" Text="CustomBeforeDirectoryBuildProps was not imported." />
+			    <Error Condition="'$(NormalDirectoryBuildPropsImported)' != 'true'" Text="Directory.Build.props was not imported." />
+			  </Target>
+			</Project>
+			""");
+		var projectDirectory = Path.GetDirectoryName(tempProject.Path)!;
+		var earlyPropsPath = Path.Combine(projectDirectory, "early.props");
+		File.WriteAllText(
+			earlyPropsPath,
+			"<Project><PropertyGroup><EarlyBuildPropsImported>true</EarlyBuildPropsImported></PropertyGroup></Project>");
+		File.WriteAllText(
+			Path.Combine(projectDirectory, "Directory.Build.props"),
+			"<Project><PropertyGroup><NormalDirectoryBuildPropsImported>true</NormalDirectoryBuildPropsImported></PropertyGroup></Project>");
+
+		var formatter = new JsonOutputFormatter(TextWriter.Null);
+		var workspace = ProfileBuildWorkspace.Create(projectDirectory, formatter, useJson: true, verbose: false);
+		workspace.ConfigureBuildTargets(profilingInjectionTargetsPath: null);
+		try
+		{
+			var result = await RunProfileBuildAsync(
+				tempProject.Path,
+				workspace,
+				$"-p:CustomBeforeDirectoryBuildProps={earlyPropsPath}");
+
+			Assert.True(result.ExitCode == 0, result.Output);
+		}
+		finally
+		{
+			workspace.Cleanup(formatter, useJson: true, verbose: false);
+		}
+	}
+
+	[Theory]
+	[InlineData("OutDir")]
+	[InlineData("TargetDir")]
+	public async Task ProfileBuildWorkspace_ExternalFinalOutputPath_FailsBeforeProducingOutputs(string propertyName)
+	{
+		using var tempProject = TempProjectFile("""
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <TargetFramework>net10.0</TargetFramework>
+			  </PropertyGroup>
+			</Project>
+			""");
+		var projectDirectory = Path.GetDirectoryName(tempProject.Path)!;
+		var externalOutputPath = Path.Combine(projectDirectory, "external-output");
+		var formatter = new JsonOutputFormatter(TextWriter.Null);
+		var workspace = ProfileBuildWorkspace.Create(projectDirectory, formatter, useJson: true, verbose: false);
+		workspace.ConfigureBuildTargets(profilingInjectionTargetsPath: null);
+		try
+		{
+			var result = await RunProfileBuildAsync(
+				tempProject.Path,
+				workspace,
+				$"-p:{propertyName}={externalOutputPath}{Path.DirectorySeparatorChar}");
+
+			Assert.NotEqual(0, result.ExitCode);
+			Assert.Contains($"could not isolate {propertyName}", result.Output, StringComparison.OrdinalIgnoreCase);
+			Assert.False(Directory.Exists(externalOutputPath)
+				&& Directory.EnumerateFiles(externalOutputPath, "*.dll", SearchOption.AllDirectories).Any());
+		}
+		finally
+		{
+			workspace.Cleanup(formatter, useJson: true, verbose: false);
+		}
 	}
 
 	// ── Target framework resolution ──────────────────────────────────────────
@@ -1077,6 +1210,37 @@ public class ProfileCommandTests
 		Assert.Contains("DOTNET_JitMinimalJitProfiling=1", contents);
 	}
 
+	[Fact]
+	public async Task MauiProfilingHelperInjectionTargets_GeneratesEnvironmentOnlyForSelectedProject()
+	{
+		var targetsPath = Path.GetFullPath(Path.Combine(
+			AppContext.BaseDirectory,
+			"../../../../../src/Cli/Microsoft.Maui.Cli/Build/MauiProfilingHelperInjection.targets"));
+		var tempDirectory = Path.Combine(Path.GetTempPath(), "maui-profile-injection-tests", Guid.NewGuid().ToString("N"));
+		var appProjectPath = Path.Combine(tempDirectory, "App.proj");
+		var libraryProjectPath = Path.Combine(tempDirectory, "Library.proj");
+		var appIntermediatePath = Path.Combine(tempDirectory, "app-obj");
+		var libraryIntermediatePath = Path.Combine(tempDirectory, "library-obj");
+
+		Directory.CreateDirectory(tempDirectory);
+		try
+		{
+			File.WriteAllText(appProjectPath, CreateProfilingInjectionTestProject(targetsPath, appIntermediatePath));
+			File.WriteAllText(libraryProjectPath, CreateProfilingInjectionTestProject(targetsPath, libraryIntermediatePath));
+
+			var appResult = await RunProfilingInjectionTargetAsync(appProjectPath, appProjectPath);
+			var libraryResult = await RunProfilingInjectionTargetAsync(libraryProjectPath, appProjectPath);
+
+			Assert.True(appResult.ExitCode == 0, appResult.Output);
+			Assert.True(libraryResult.ExitCode == 0, libraryResult.Output);
+			Assert.True(File.Exists(Path.Combine(appIntermediatePath, "MauiProfilingHelper.env")));
+			Assert.False(File.Exists(Path.Combine(libraryIntermediatePath, "MauiProfilingHelper.env")));
+		}
+		finally
+		{
+			Directory.Delete(tempDirectory, recursive: true);
+		}
+	}
 
 	[Fact]
 	public void ResolveProfileTransport_AndroidEmulator_UsesEmulatorLoopbackAlias()
@@ -1277,12 +1441,12 @@ public class ProfileCommandTests
 		var device = CreateDevice(Platforms.iOS, isEmulator: true) with { Id = "ios-sim-udid" };
 		var transport = ProfileCommand.ResolveProfileTransport(Platforms.iOS, device);
 		var artifactsPath = TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session");
-		var bootstrapPropsPath = TestPath("fake", ProfileBuildWorkspace.BootstrapPropsFileName);
+		var directoryBuildPropsPath = TestPath("fake", ProfileBuildWorkspace.DirectoryBuildPropsFileName);
 
 		var args = ProfileCommand.BuildLaunchArguments(
 			TestPath("fake", "MyApp.csproj"),
 			artifactsPath,
-			bootstrapPropsPath,
+			directoryBuildPropsPath,
 			"net10.0-ios",
 			"Release",
 			device,
@@ -1293,7 +1457,7 @@ public class ProfileCommandTests
 		Assert.Contains("-p:Device=ios-sim-udid", args);
 		Assert.Contains("-p:_MlaunchWaitForExit=false", args);
 		Assert.Contains($"-p:ArtifactsPath={artifactsPath}", args);
-		Assert.Contains($"-p:CustomBeforeDirectoryBuildProps={bootstrapPropsPath}", args);
+		Assert.Contains($"-p:DirectoryBuildPropsPath={directoryBuildPropsPath}", args);
 	}
 
 	[Fact]
@@ -1302,12 +1466,12 @@ public class ProfileCommandTests
 		var device = CreateDevice(Platforms.iOS, isEmulator: true) with { Id = "ios-sim-udid" };
 		var transport = ProfileCommand.ResolveProfileTransport(Platforms.iOS, device);
 		var artifactsPath = TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session");
-		var bootstrapPropsPath = TestPath("fake", ProfileBuildWorkspace.BootstrapPropsFileName);
+		var directoryBuildPropsPath = TestPath("fake", ProfileBuildWorkspace.DirectoryBuildPropsFileName);
 
 		var args = ProfileCommand.BuildCompileArguments(
 			TestPath("fake", "MyApp.csproj"),
 			artifactsPath,
-			bootstrapPropsPath,
+			directoryBuildPropsPath,
 			"net10.0-ios",
 			"Release",
 			transport,
@@ -1320,7 +1484,7 @@ public class ProfileCommandTests
 		Assert.Contains("-p:DiagnosticListenMode=listen", args);
 		Assert.Contains("-p:EnableDiagnostics=true", args);
 		Assert.Contains($"-p:ArtifactsPath={artifactsPath}", args);
-		Assert.Contains($"-p:CustomBeforeDirectoryBuildProps={bootstrapPropsPath}", args);
+		Assert.Contains($"-p:DirectoryBuildPropsPath={directoryBuildPropsPath}", args);
 	}
 
 	[Fact]
@@ -1328,6 +1492,7 @@ public class ProfileCommandTests
 	{
 		var device = CreateDevice(Platforms.Android, isEmulator: true);
 		var transport = ProfileCommand.ResolveProfileTransport(Platforms.Android, device);
+		var projectPath = TestPath("fake", "MyApp.csproj");
 		var buildInjection = new ProfilingBuildInjection(
 			TargetsPath: TestPath("fake", "MauiProfilingHelperInjection.targets"),
 			AssemblyPath: TestPath("fake", "Microsoft.Maui.ProfilingHelper.dll"),
@@ -1338,9 +1503,9 @@ public class ProfileCommandTests
 			EventPipeOutputPath: "/storage/emulated/0/Android/data/com.example/files/startup.nettrace");
 
 		var args = ProfileCommand.BuildCompileArguments(
-			TestPath("fake", "MyApp.csproj"),
+			projectPath,
 			TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session"),
-			TestPath("fake", ProfileBuildWorkspace.BootstrapPropsFileName),
+			TestPath("fake", ProfileBuildWorkspace.DirectoryBuildPropsFileName),
 			"net10.0-android",
 			"Release",
 			transport,
@@ -1351,6 +1516,7 @@ public class ProfileCommandTests
 		Assert.Contains("-p:EnableDiagnostics=true", args);
 		Assert.Contains("-p:MauiProfilingHelperExitHost=10.0.2.2", args);
 		Assert.Contains("-p:MauiProfilingHelperExitPort=9001", args);
+		Assert.Contains($"-p:MauiProfilingHelperProjectFullPath={Path.GetFullPath(projectPath)}", args);
 		Assert.Contains("-p:MauiProfilingHelperEnableRuntimePgo=true", args);
 		Assert.Contains("-p:MauiProfilingHelperEventPipeOutputPath=/storage/emulated/0/Android/data/com.example/files/startup.nettrace", args);
 	}
@@ -1372,7 +1538,7 @@ public class ProfileCommandTests
 		var args = ProfileCommand.BuildLaunchArguments(
 			TestPath("fake", "MyApp.csproj"),
 			TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session"),
-			TestPath("fake", ProfileBuildWorkspace.BootstrapPropsFileName),
+			TestPath("fake", ProfileBuildWorkspace.DirectoryBuildPropsFileName),
 			"net10.0-android",
 			"Release",
 			device,
@@ -1396,7 +1562,7 @@ public class ProfileCommandTests
 		var args = ProfileCommand.BuildCompileArguments(
 			TestPath("fake", "MyApp.csproj"),
 			TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session"),
-			TestPath("fake", ProfileBuildWorkspace.BootstrapPropsFileName),
+			TestPath("fake", ProfileBuildWorkspace.DirectoryBuildPropsFileName),
 			"net10.0-android",
 			"Release",
 			transport,
@@ -1419,7 +1585,7 @@ public class ProfileCommandTests
 		var args = ProfileCommand.BuildLaunchArguments(
 			TestPath("fake", "MyApp.csproj"),
 			TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session"),
-			TestPath("fake", ProfileBuildWorkspace.BootstrapPropsFileName),
+			TestPath("fake", ProfileBuildWorkspace.DirectoryBuildPropsFileName),
 			"net10.0-ios",
 			"Release",
 			device,
@@ -1443,7 +1609,7 @@ public class ProfileCommandTests
 		var args = ProfileCommand.BuildCompileArguments(
 			TestPath("fake", "MyApp.csproj"),
 			TestPath("fake", "obj", ProfileBuildWorkspace.RootDirectoryName, "session"),
-			TestPath("fake", ProfileBuildWorkspace.BootstrapPropsFileName),
+			TestPath("fake", ProfileBuildWorkspace.DirectoryBuildPropsFileName),
 			"net10.0-android",
 			"Release",
 			transport,
@@ -1877,6 +2043,92 @@ public class ProfileCommandTests
 
 		return new ProfileTestProcess(monitoredProcess, ready.Task, finalizationStarted.Task);
 	}
+
+	static string CreateProfilingInjectionTestProject(string targetsPath, string intermediateOutputPath)
+		=> $"""
+			<Project>
+			  <PropertyGroup>
+			    <UseMaui>true</UseMaui>
+			    <TargetFramework>net10.0-android</TargetFramework>
+			    <IntermediateOutputPath>{System.Security.SecurityElement.Escape(intermediateOutputPath + Path.DirectorySeparatorChar)}</IntermediateOutputPath>
+			  </PropertyGroup>
+			  <Import Project="{System.Security.SecurityElement.Escape(targetsPath)}" />
+			</Project>
+			""";
+
+	static string CreateClassLibraryProject(string assemblyName)
+		=> $"""
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <TargetFramework>net10.0</TargetFramework>
+			    <AssemblyName>{assemblyName}</AssemblyName>
+			  </PropertyGroup>
+			</Project>
+			""";
+
+	static async Task<(int ExitCode, string Output)> RunProfileBuildAsync(
+		string projectPath,
+		ProfileBuildWorkspace workspace,
+		params string[] additionalArguments)
+	{
+		var arguments = new List<string>
+		{
+			"build",
+			projectPath,
+			"--nologo",
+			$"-p:ArtifactsPath={workspace.Path}",
+			$"-p:DirectoryBuildPropsPath={workspace.DirectoryBuildPropsPath}"
+		};
+		arguments.AddRange(additionalArguments);
+
+		var result = await ProcessRunner.RunAsync(
+			GetDotnetHostPath(),
+			[.. arguments],
+			Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../..")),
+			timeout: TimeSpan.FromMinutes(2),
+			environmentVariablesToRemove: ProfileCommand.s_msbuildSdkEnvVars);
+		return (result.ExitCode, result.StandardOutput + result.StandardError);
+	}
+
+	static async Task<(int ExitCode, string Output)> RunProfilingInjectionTargetAsync(string projectPath, string selectedProjectPath)
+	{
+		var startInfo = new ProcessStartInfo(GetDotnetHostPath())
+		{
+			UseShellExecute = false,
+			RedirectStandardOutput = true,
+			RedirectStandardError = true,
+			CreateNoWindow = true
+		};
+		foreach (var argument in new[]
+		{
+			"msbuild",
+			projectPath,
+			"-t:GenerateMauiProfilingHelperEnvironment",
+			"--nologo",
+			"-p:MauiProfilingHelperInject=true",
+			$"-p:MauiProfilingHelperProjectFullPath={selectedProjectPath}"
+		})
+		{
+			startInfo.ArgumentList.Add(argument);
+		}
+
+		using var process = Process.Start(startInfo)
+			?? throw new InvalidOperationException("Failed to start the profiling injection MSBuild test.");
+		var standardOutput = process.StandardOutput.ReadToEndAsync();
+		var standardError = process.StandardError.ReadToEndAsync();
+		await process.WaitForExitAsync();
+		var output = await standardOutput + await standardError;
+
+		return (process.ExitCode, output);
+	}
+
+	static string GetDotnetHostPath()
+		=> Path.GetFullPath(Path.Combine(
+			System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(),
+			"..",
+			"..",
+			"..",
+			OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet"));
 
 	static TempFile CreateTempFile(string fileName)
 	{

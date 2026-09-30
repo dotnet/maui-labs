@@ -383,8 +383,8 @@ public partial class ShellHandler : GtkViewHandler<Shell, Gtk.Box>
 		{
 			handler._flyoutHeaderLabel.SetText(text);
 			handler._flyoutHeaderLabel.SetVisible(true);
-			var css = "label { font-weight: bold; font-size: 16px; }";
-			handler.ApplyCss(handler._flyoutHeaderLabel, css);
+			var css = "font-weight: bold; font-size: 16px;";
+			handler.UpdateCss(handler._flyoutHeaderLabel, css);
 		}
 		else
 		{
@@ -416,8 +416,7 @@ public partial class ShellHandler : GtkViewHandler<Shell, Gtk.Box>
 		if (handler._flyoutBox == null) return;
 
 		var color = shell.FlyoutBackgroundColor;
-		if (color != null)
-			handler.ApplyCss(handler._flyoutBox, $"background-color: {ToGtkColor(color)};");
+		handler.UpdateCss(handler._flyoutBox, color != null ? $"background-color: {ToGtkColor(color)};" : null);
 	}
 
 	public static void MapFlyoutBehavior(ShellHandler handler, Shell shell)

@@ -188,7 +188,7 @@ internal static class ProfileSessionLaunch
 		var buildArgs = ProfileCommandArguments.BuildCompileArguments(
 			context.Project.ProjectPath,
 			context.BuildWorkspace.Path,
-			context.BuildWorkspace.BootstrapPropsPath,
+			context.BuildWorkspace.DirectoryBuildPropsPath,
 			context.Framework,
 			context.Configuration,
 			context.Transport,
@@ -207,7 +207,7 @@ internal static class ProfileSessionLaunch
 		var launchArgs = ProfileCommandArguments.BuildLaunchArguments(
 			context.Project.ProjectPath,
 			context.BuildWorkspace.Path,
-			context.BuildWorkspace.BootstrapPropsPath,
+			context.BuildWorkspace.DirectoryBuildPropsPath,
 			context.Framework,
 			context.Configuration,
 			context.Device,

@@ -72,13 +72,12 @@ public class PickerHandler : GtkViewHandler<IPicker, Gtk.DropDown>
 			return;
 
 		var css = handler.BuildFontCss(textStyle.Font);
-		if (!string.IsNullOrEmpty(css))
-			handler.ApplyCss(handler.PlatformView, css);
+		handler.UpdateCss(handler.PlatformView, css);
 	}
 
 	public static void MapCharacterSpacing(PickerHandler handler, IPicker picker)
 	{
-		handler.ApplyCss(handler.PlatformView, $"letter-spacing: {picker.CharacterSpacing}px;");
+		handler.UpdateCss(handler.PlatformView, $"letter-spacing: {picker.CharacterSpacing}px;");
 	}
 
 	public static void MapHorizontalTextAlignment(PickerHandler handler, IPicker picker)
@@ -90,13 +89,13 @@ public class PickerHandler : GtkViewHandler<IPicker, Gtk.DropDown>
 			TextAlignment.End => "right",
 			_ => "left"
 		};
-		handler.ApplyCss(handler.PlatformView, $"text-align: {align};");
+		handler.UpdateCss(handler.PlatformView, $"text-align: {align};");
 	}
 
 	public static void MapTextColor(PickerHandler handler, IPicker picker)
 	{
-		if (picker.TextColor != null)
-			handler.ApplyCss(handler.PlatformView, $"color: {ToGtkColor(picker.TextColor)};");
+		handler.UpdateCss(handler.PlatformView,
+			picker.TextColor != null ? $"color: {ToGtkColor(picker.TextColor)};" : null);
 	}
 
 	public static void MapTitleColor(PickerHandler handler, IPicker picker)

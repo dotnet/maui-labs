@@ -6,6 +6,7 @@ on:
     paths:
       - 'src/AIExtensions/**'
       - 'tests/AIExtensions/**'
+      - 'src/AI/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -14,10 +15,10 @@ on:
       - 'NuGet.config'
   pull_request:
     types: [opened, synchronize, reopened, edited]
-    branches: [main]
     paths:
       - 'src/AIExtensions/**'
       - 'tests/AIExtensions/**'
+      - 'src/AI/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -29,7 +30,7 @@ jobs:
   build:
     uses: ./.github/workflows/_build.yml
     with:
-      project-path: src/AIExtensions/AIExtensions.slnf
+      project-path: src/AIExtensions/AIExtensions.Packages.slnf
       project-name: ai-extensions
       run-tests: true
       pack: true
