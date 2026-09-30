@@ -257,9 +257,12 @@ dotnet test tests\UITests\UITests.csproj --no-build
 The handler regression suite exercises real native container callbacks and
 selection, including CollectionView parenting, recycling, equal-valued items,
 runtime item/group template and grouping changes, group headers and footers,
-conversion failures, disconnection, and DevFlow tree discovery. Template changes
+conversion failures, recursive handler disconnection, and DevFlow tree discovery. Template changes
 rebuild realized roots without requiring an ItemsSource change and preserve
-single/multiple selection of equal-valued grouped item occurrences:
+single/multiple selection of equal-valued grouped item occurrences. Single selection
+is restored from the saved native occurrence, independently of the virtual
+SelectedItem representation. Retired template roots and their descendants disconnect
+on clear, reuse, template replacement, conversion failure, and handler teardown:
 
 ```powershell
 dotnet test tests\HandlerTests\HandlerTests.csproj -p:UseMaui=false

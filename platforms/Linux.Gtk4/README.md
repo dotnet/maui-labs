@@ -340,7 +340,10 @@ dotnet test tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
 These tests require Linux, GTK 4.12 or newer, and a display. They exercise the real
 GTK list-item factory, including logical parenting, DevFlow tree discovery,
 source replacement, runtime item/group-header template replacement, group headers,
-and disconnection. Template changes do not require an ItemsSource change.
+and recursive handler disconnection of retired roots and nested template children.
+Cleanup is checked after source replacement, template rebuild, and handler teardown,
+including repeated cleanup without duplicate disconnection. Template changes do not
+require an ItemsSource change.
 From `platforms/Linux.Gtk4`, use an isolated display:
 
 ```bash

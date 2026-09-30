@@ -224,7 +224,12 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 	void RemoveRealizedView(Gtk.ListItem listItem)
 	{
 		if (_realizedViews.Remove(listItem.Handle.DangerousGetHandle(), out var entry))
+		{
 			entry.Owner.RemoveLogicalChild(entry.View);
+			listItem.SetChild(null);
+			entry.View.DisconnectHandlers();
+			return;
+		}
 		listItem.SetChild(null);
 	}
 
@@ -236,6 +241,7 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 		{
 			entry.Owner.RemoveLogicalChild(entry.View);
 			entry.Item.SetChild(null);
+			entry.View.DisconnectHandlers();
 		}
 	}
 

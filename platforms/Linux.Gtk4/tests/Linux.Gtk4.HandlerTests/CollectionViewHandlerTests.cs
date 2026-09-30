@@ -15,8 +15,21 @@ public class CollectionViewHandlerTests
 	{
 		Gtk.Module.Initialize();
 		Gtk.Functions.Init();
-		using var app = MauiApp.CreateBuilder().UseMauiAppLinuxGtk4<Application>().Build();
+		using var app = MauiApp.CreateBuilder().UseMauiAppLinuxGtk4<Application>()
+			.ConfigureMauiHandlers(handlers => handlers.AddHandler<Label, DisconnectTrackingLabelHandler>())
+			.Build();
 		var created = new List<Label>();
+		var connected = new List<DisconnectTrackingLabelHandler>();
+		void Track(Label label, bool isRoot = true)
+		{
+			if (isRoot)
+				created.Add(label);
+			label.HandlerChanged += (_, _) =>
+			{
+				if (label.Handler is DisconnectTrackingLabelHandler tracking && !connected.Contains(tracking))
+					connected.Add(tracking);
+			};
+		}
 		var collection = new CollectionView
 		{
 			ItemsSource = new[] { "Card title", "Card title" },
@@ -24,7 +37,7 @@ public class CollectionViewHandlerTests
 			{
 				var label = new Label { AutomationId = "Card" };
 				label.SetBinding(Label.TextProperty, ".");
-				created.Add(label);
+				Track(label);
 				return label;
 			}),
 		};
@@ -40,7 +53,10 @@ public class CollectionViewHandlerTests
 			WaitUntil(() => created.Count >= 2);
 
 			var realized = created.Where(view => view.Handler != null).ToArray();
+			var originalHandlers = connected.ToArray();
 			Assert.Equal(2, realized.Length);
+			Assert.Equal(2, originalHandlers.Length);
+			Assert.All(originalHandlers, item => Assert.Equal(0, item.DisconnectCount));
 			Assert.All(realized, view => Assert.Same(collection, view.Parent));
 			Assert.Equal(2, ((IVisualTreeElement)collection).GetVisualChildren().Count);
 			var tree = new VisualTreeWalker().WalkElement(collection, null, 0, 20);
@@ -49,23 +65,26 @@ public class CollectionViewHandlerTests
 			collection.ItemsSource = new[] { "Replacement" };
 			WaitUntil(() => created.Any(view => view.Text == "Replacement") && realized.All(view => view.Parent == null));
 			Assert.All(realized, view => Assert.Null(view.Parent));
+			Assert.All(originalHandlers, item => Assert.Equal(1, item.DisconnectCount));
 			Assert.Single(((IVisualTreeElement)collection).GetVisualChildren());
 
 			var beforeRebuild = created.ToArray();
+			var beforeRebuildHandlers = connected.ToArray();
 			collection.ItemTemplate = new DataTemplate(() =>
 			{
 				var label = new Label { Text = "New template" };
-				created.Add(label);
+				Track(label);
 				return label;
 			});
 			WaitUntil(() => created.Any(view => view.Text == "New template" && view.Handler != null));
 			Assert.All(beforeRebuild, view => Assert.Null(view.Parent));
+			Assert.All(beforeRebuildHandlers, item => Assert.Equal(1, item.DisconnectCount));
 			Assert.Single(((IVisualTreeElement)collection).GetVisualChildren());
 
 			collection.GroupHeaderTemplate = new DataTemplate(() =>
 			{
 				var label = new Label { Text = "Group header" };
-				created.Add(label);
+				Track(label);
 				return label;
 			});
 			collection.IsGrouped = true;
@@ -79,7 +98,7 @@ public class CollectionViewHandlerTests
 			collection.GroupHeaderTemplate = new DataTemplate(() =>
 			{
 				var label = new Label { Text = "Replacement group header" };
-				created.Add(label);
+				Track(label);
 				return label;
 			});
 			WaitUntil(() => previousHeader.Parent == null &&
@@ -98,7 +117,7 @@ public class CollectionViewHandlerTests
 			collection.GroupHeaderTemplate = new DataTemplate(() =>
 			{
 				var label = new Label { Text = "Header with default rows" };
-				created.Add(label);
+				Track(label);
 				return label;
 			});
 			WaitUntil(() => headerWithoutItemTemplate.Parent == null &&
@@ -111,29 +130,68 @@ public class CollectionViewHandlerTests
 			WaitUntil(() => created.All(view => view.Parent == null) &&
 				NativeLabelTexts(handler.PlatformView).Contains("Grouped card"));
 			Assert.Empty(((IVisualTreeElement)collection).GetVisualChildren());
+			Assert.All(connected, item => Assert.Equal(1, item.DisconnectCount));
 
 			collection.GroupHeaderTemplate = new DataTemplate(() =>
 			{
 				var label = new Label { Text = "Disconnect header" };
-				created.Add(label);
+				Track(label);
 				return label;
 			});
-			collection.ItemTemplate = new DataTemplate(() =>
+			var nestedRoots = new List<VerticalStackLayout>();
+			var nestedLeaves = new List<Label>();
+			View CreateNestedItem()
 			{
 				var label = new Label { Text = "Disconnect item" };
-				created.Add(label);
-				return label;
-			});
-			WaitUntil(() => created.Count(view => view.Parent == collection) == 2);
+				Track(label, isRoot: false);
+				nestedLeaves.Add(label);
+				var root = new VerticalStackLayout { new ContentView { Content = label } };
+				nestedRoots.Add(root);
+				return root;
+			}
+			collection.ItemTemplate = new DataTemplate(CreateNestedItem);
+			WaitUntil(() => nestedRoots.Any(view => view.Parent == collection) &&
+				nestedLeaves.Any(view => view.Handler != null));
+			var firstNestedRoot = Assert.Single(nestedRoots);
+			var firstNestedHandler = Assert.IsType<DisconnectTrackingLabelHandler>(Assert.Single(nestedLeaves).Handler);
+			Assert.Equal(0, firstNestedHandler.DisconnectCount);
+			collection.ItemsSource = new[] { new[] { "Replacement nested card" } };
+			WaitUntil(() => firstNestedRoot.Parent == null &&
+				nestedRoots.Any(view => view.Parent == collection));
+			Assert.Equal(1, firstNestedHandler.DisconnectCount);
+
+			var beforeNestedRebuild = connected.ToArray();
+			var oldNestedRoots = nestedRoots.ToArray();
+			collection.ItemTemplate = new DataTemplate(CreateNestedItem);
+			WaitUntil(() => oldNestedRoots.All(view => view.Parent == null) &&
+				nestedRoots.Any(view => view.Parent == collection));
+			Assert.All(beforeNestedRebuild, item => Assert.Equal(1, item.DisconnectCount));
+			Assert.Equal(2, ((IVisualTreeElement)collection).GetVisualChildren().Count);
+			Assert.Contains(connected, item => item.DisconnectCount == 0);
 			((IElementHandler)handler).DisconnectHandler();
 			Assert.All(created, view => Assert.Null(view.Parent));
+			Assert.All(nestedRoots, view => Assert.Null(view.Parent));
+			Assert.All(connected, item => Assert.Equal(1, item.DisconnectCount));
 			Assert.Empty(((IVisualTreeElement)collection).GetVisualChildren());
+			((IElementHandler)handler).DisconnectHandler();
+			Assert.All(connected, item => Assert.Equal(1, item.DisconnectCount));
 		}
 		finally
 		{
 			if (collection.Handler != null)
 				((IElementHandler)handler).DisconnectHandler();
 			window.Destroy();
+		}
+	}
+
+	public sealed class DisconnectTrackingLabelHandler : LabelHandler
+	{
+		public int DisconnectCount { get; private set; }
+
+		protected override void DisconnectHandler(Gtk.Label platformView)
+		{
+			DisconnectCount++;
+			base.DisconnectHandler(platformView);
 		}
 	}
 

@@ -14,6 +14,10 @@ using WListBoxItem = System.Windows.Controls.ListBoxItem;
 
 namespace HandlerTests;
 
+[CollectionDefinition("CollectionView native lifecycle", DisableParallelization = true)]
+public sealed class CollectionViewNativeLifecycleCollection;
+
+[Collection("CollectionView native lifecycle")]
 public class CollectionViewHandlerTests
 {
 	[Fact]
@@ -309,6 +313,135 @@ public class CollectionViewHandlerTests
 
 	sealed class UnsupportedView : View;
 
+	[Theory]
+	[InlineData(false, "clear")]
+	[InlineData(false, "reuse")]
+	[InlineData(false, "template")]
+	[InlineData(false, "disconnect")]
+	[InlineData(true, "clear")]
+	[InlineData(true, "reuse")]
+	[InlineData(true, "template")]
+	[InlineData(true, "disconnect")]
+	public void RetiredTemplates_DisconnectRootAndNestedHandlers(bool nested, string retirement)
+	{
+		Run((collection, handler, list, created) =>
+		{
+			var leaves = new List<Label>();
+			View? root = null;
+			collection.ItemTemplate = new DataTemplate(() =>
+			{
+				var first = new Label { Text = "First" };
+				leaves.Add(first);
+				if (!nested)
+					return root = first;
+				var second = new Label { Text = "Nested" };
+				leaves.Add(second);
+				return root = new VerticalStackLayout { first, new ContentView { Content = second } };
+			});
+			Realize(list);
+			var retiredRoot = root!;
+			var retired = leaves.Select(view => Assert.IsType<DisconnectTrackingLabelHandler>(view.Handler)).ToArray();
+			Assert.All(retired, item => Assert.Equal(0, item.DisconnectCount));
+			var container = Assert.IsType<WListBoxItem>(list.ItemContainerGenerator.ContainerFromIndex(0));
+			switch (retirement)
+			{
+				case "clear": Clear(list, container, list.Items[0]); break;
+				case "reuse": Prepare(list, container, "Reused"); break;
+				case "template":
+					collection.ItemTemplate = new DataTemplate(() => new Label { Text = "Replacement" });
+					Realize(list);
+					break;
+				case "disconnect": ((IElementHandler)handler).DisconnectHandler(); break;
+				default: throw new ArgumentOutOfRangeException(nameof(retirement));
+			}
+			Assert.Null(retiredRoot.Parent);
+			Assert.All(retired, item => Assert.Equal(1, item.DisconnectCount));
+			((IElementHandler)handler).DisconnectHandler();
+			Assert.All(retired, item => Assert.Equal(1, item.DisconnectCount));
+		});
+	}
+
+	[Fact]
+	public void FailedNestedTemplate_DisconnectsAlreadyCreatedChildHandler()
+	{
+		Run((collection, handler, list, created) =>
+		{
+			DisconnectTrackingLabelHandler? childHandler = null;
+			var child = new Label { Text = "Created before failure" };
+			child.HandlerChanged += (_, _) =>
+			{
+				if (child.Handler is DisconnectTrackingLabelHandler tracking)
+					childHandler = tracking;
+			};
+			var root = new FailingLayout { child };
+			collection.ItemTemplate = new DataTemplate(() => root);
+			Realize(list);
+			Assert.NotNull(childHandler);
+			Assert.Null(root.Parent);
+			Assert.Equal(1, childHandler.DisconnectCount);
+			((IElementHandler)handler).DisconnectHandler();
+			Assert.Equal(1, childHandler.DisconnectCount);
+		});
+	}
+
+	[Fact]
+	public void GroupedSingleTemplateChange_RestoresNativeSelectionWhenVirtualSelectionIsData()
+	{
+		Run((collection, handler, list, created) =>
+		{
+			collection.SelectionMode = SelectionMode.Single;
+			collection.IsGrouped = true;
+			collection.GroupHeaderTemplate = new DataTemplate(() => new Label { Text = "Header" });
+			collection.ItemsSource = new[] { new[] { "Same item", "Same item" } };
+			Realize(list);
+			list.SelectedIndex = 2;
+			var selectedWrapper = list.SelectedItem;
+			collection.SelectedItem = "Same item";
+			Assert.Same(selectedWrapper, list.SelectedItem);
+			var selectionChanges = 0;
+			collection.SelectionChanged += (_, _) => selectionChanges++;
+
+			collection.ItemTemplate = new DataTemplate(() => new Label { Text = "Replacement" });
+			Realize(list);
+			Assert.Same(selectedWrapper, list.SelectedItem);
+			Assert.Equal("Same item", collection.SelectedItem);
+			Assert.True(Assert.IsType<WListBoxItem>(list.ItemContainerGenerator.ContainerFromIndex(2)).IsSelected);
+			Assert.Equal(0, selectionChanges);
+		}, () => new DataSelectionHandler());
+	}
+
+	// Simulate data-normalized selection without changing this PR's public selection mapper.
+	sealed class DataSelectionHandler : CollectionViewHandler
+	{
+		public override void UpdateValue(string property)
+		{
+			if (property != nameof(CollectionView.SelectedItem))
+				base.UpdateValue(property);
+		}
+	}
+
+	public sealed class DisconnectTrackingLabelHandler : LabelHandler
+	{
+		public int DisconnectCount { get; private set; }
+
+		protected override void DisconnectHandler(System.Windows.Controls.TextBlock platformView)
+		{
+			DisconnectCount++;
+			base.DisconnectHandler(platformView);
+		}
+	}
+
+	public sealed class FailingLayout : VerticalStackLayout;
+
+	public sealed class FailingLayoutHandler : LayoutHandler
+	{
+		public override void SetVirtualView(IView view)
+		{
+			base.SetVirtualView(view);
+			throw new InvalidOperationException("Test failure after creating native child handlers.");
+		}
+	}
+
 	static void Realize(MauiCollectionListBox list)
 	{
 		list.ApplyTemplate();
@@ -317,13 +450,18 @@ public class CollectionViewHandlerTests
 		list.UpdateLayout();
 	}
 
-	static void Run(Action<CollectionView, CollectionViewHandler, MauiCollectionListBox, List<Label>> action)
+	static void Run(Action<CollectionView, CollectionViewHandler, MauiCollectionListBox, List<Label>> action,
+		Func<CollectionViewHandler>? createHandler = null)
 	{
 		RunOnSta(() =>
 		{
 			_ = System.Windows.Threading.Dispatcher.CurrentDispatcher;
 			DispatcherProvider.SetCurrent(new WPFDispatcherProvider());
-			using var app = MauiApp.CreateBuilder().UseMauiAppWPF<Application>().Build();
+			using var app = MauiApp.CreateBuilder().UseMauiAppWPF<Application>()
+				.ConfigureMauiHandlers(handlers => handlers
+					.AddHandler<Label, DisconnectTrackingLabelHandler>()
+					.AddHandler<FailingLayout, FailingLayoutHandler>())
+				.Build();
 			var created = new List<Label>();
 			var collection = new CollectionView
 			{
@@ -341,7 +479,7 @@ public class CollectionViewHandlerTests
 					return label;
 				}),
 			};
-			var handler = new CollectionViewHandler();
+			var handler = createHandler?.Invoke() ?? new CollectionViewHandler();
 			handler.SetMauiContext(new WPFMauiContext(app.Services));
 			try
 			{

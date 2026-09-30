@@ -206,7 +206,10 @@ namespace Microsoft.Maui.Handlers.WPF
 				handler._listBox.ClearMauiViews();
 				MapItemsSource(handler, view, reusableItems);
 				if (view.SelectionMode == Microsoft.Maui.Controls.SelectionMode.Single)
-					MapSelectedItem(handler, view);
+				{
+					if (selectedItems.Length > 0 && handler._listBox.Items.Contains(selectedItems[0]))
+						handler._listBox.SelectedItem = selectedItems[0];
+				}
 				else if (view.SelectionMode == Microsoft.Maui.Controls.SelectionMode.Multiple)
 					foreach (var item in selectedItems)
 						if (handler._listBox.Items.Contains(item))
@@ -394,6 +397,7 @@ namespace Microsoft.Maui.Handlers.WPF
 			_selectedContainers.Remove(container);
 			entry.Owner.RemoveLogicalChild(entry.View);
 			container.Content = null;
+			entry.View.DisconnectHandlers();
 		}
 
 		internal void ClearMauiViews()
