@@ -53,10 +53,20 @@ public class WindowSizingTests(ITestOutputHelper output)
 					Page.Content = new VerticalStackLayout { Children = { Child } };
 					break;
 				case 3:
-					Child.HeightRequest = 40;
+				case 5:
+					Child.HeightRequest = kind == 5 ? 1200 : 40;
 					Page.Content = new ScrollView
 					{
 						Content = new VerticalStackLayout { Children = { Child } }
+					};
+					break;
+				case 4:
+					Child.WidthRequest = 1200;
+					Child.HeightRequest = 40;
+					Page.Content = new ScrollView
+					{
+						Orientation = ScrollOrientation.Horizontal,
+						Content = new HorizontalStackLayout { Children = { Child } }
 					};
 					break;
 				default:
@@ -110,8 +120,8 @@ public class WindowSizingTests(ITestOutputHelper output)
 			var container = (WindowRootViewContainer)window.GetChild()!;
 			var steps = new Queue<Step>();
 
-			void Add(string name, Action apply, int width, int height, int? childHeight = null) =>
-				steps.Enqueue(new(name, apply, width, height, () => (width, childHeight ?? height)));
+			void Add(string name, Action apply, int width, int height, int? childHeight = null, int? childWidth = null) =>
+				steps.Enqueue(new(name, apply, width, height, () => (childWidth ?? width, childHeight ?? height)));
 
 			Add("explicit startup dimensions and minima", () => { }, 500, 700);
 			Add("startup minima clamp native shrink", () => window.SetDefaultSize(100, 100), 300, 200);
@@ -121,17 +131,19 @@ public class WindowSizingTests(ITestOutputHelper output)
 				mauiWindow.Height = 720;
 			}, 550, 720);
 
-			foreach (var kind in new[] { 0, 1, 2, 3 })
+			foreach (var kind in new[] { 0, 1, 2, 3, 4, 5 })
 			{
 				var contentKind = kind;
+				int? childHeight = kind == 5 ? 1200 : kind >= 2 ? 40 : null;
+				int? childWidth = kind == 4 ? 1200 : null;
 				Add($"content {kind} initial allocation", () =>
 				{
 					app.SetContent(contentKind);
 					window.SetDefaultSize(1024, 768);
-				}, 1024, 768, kind >= 2 ? 40 : null);
+				}, 1024, 768, childHeight, childWidth);
 				foreach (var (width, height) in new[] { (500, 700), (300, 400), (1100, 700), (300, 400) })
 					Add($"content {kind} resize {width}x{height}", () => window.SetDefaultSize(width, height),
-						width, height, kind >= 2 ? 40 : null);
+						width, height, childHeight, childWidth);
 			}
 
 			Add("nested mutation setup", () =>
@@ -167,6 +179,16 @@ public class WindowSizingTests(ITestOutputHelper output)
 			{
 				mauiWindow.MinimumWidth = 0;
 				mauiWindow.MinimumHeight = 0;
+				window.SetDefaultSize(300, 200);
+			}, 300, 200);
+			Add("native content minimum is preserved", () =>
+			{
+				((Gtk.Widget)app.Page.Handler!.PlatformView!).SetSizeRequest(360, 260);
+				window.SetDefaultSize(100, 100);
+			}, 360, 260);
+			Add("native content minimum removal", () =>
+			{
+				((Gtk.Widget)app.Page.Handler!.PlatformView!).SetSizeRequest(-1, -1);
 				window.SetDefaultSize(300, 200);
 			}, 300, 200);
 
