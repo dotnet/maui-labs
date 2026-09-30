@@ -139,6 +139,58 @@ public class CollectionViewObservableSourceTests
 	static object? GroupData(object item) => item.GetType().GetProperty("Data")!.GetValue(item);
 
 	[Fact]
+	public void GroupedRebuilds_ReleaseDiscardedMaterializedViews()
+	{
+		Run(view =>
+		{
+			var group = new ObservableCollection<string> { "First" };
+			view.IsGrouped = true;
+			view.ItemsSource = new[] { group };
+			view.ItemTemplate = new DataTemplate(() => new VerticalStackLayout
+			{
+				Children = { new Label { Text = "Materialized item" } },
+			});
+			return (handler, list, empty) =>
+			{
+				var cache = (IDictionary<object, View>)typeof(MauiCollectionListBox)
+					.GetProperty("ItemMauiViews", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+					.GetValue(list)!;
+				void Layout()
+				{
+					list.Measure(new System.Windows.Size(400, 400));
+					list.Arrange(new System.Windows.Rect(0, 0, 400, 400));
+					list.UpdateLayout();
+				}
+				Layout();
+				Assert.Single(cache);
+				for (var i = 0; i < 5; i++)
+				{
+					var oldHandlers = cache.Values
+						.SelectMany(item => ((IVisualTreeElement)item).GetVisualChildren().OfType<View>().Prepend(item))
+						.Select(item => item.Handler!).ToArray();
+					Assert.All(oldHandlers, Assert.NotNull);
+					group.Add($"Item {i}");
+					Layout();
+					Assert.Equal(group.Count, cache.Count);
+					Assert.All(oldHandlers, oldHandler => Assert.Null(oldHandler.VirtualView));
+				}
+				view.IsGrouped = false;
+				Layout();
+				var flatView = Assert.Single(cache).Value;
+				var flatHandler = flatView.Handler;
+				handler.UpdateValue(nameof(ItemsView.ItemsSource));
+				Layout();
+				Assert.Same(flatView, Assert.Single(cache).Value);
+				Assert.Same(flatHandler, flatView.Handler);
+				Assert.NotNull(flatHandler!.VirtualView);
+				((IElementHandler)handler).DisconnectHandler();
+				Assert.Empty(cache);
+				Assert.Null(flatHandler.VirtualView);
+			};
+		});
+	}
+
+	[Fact]
 	public void QueuedGroupChange_AfterSourceReplacement_DoesNotRebuildNewSource()
 	{
 		Run(view =>

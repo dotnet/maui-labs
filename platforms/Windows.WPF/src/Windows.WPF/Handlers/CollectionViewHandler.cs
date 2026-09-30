@@ -250,10 +250,13 @@ namespace Microsoft.Maui.Handlers.WPF
 							flat.Add(new GroupedItem(child, GroupedItemKind.Item));
 					}
 				}
+				_listBox.ClearItemViews();
 				_listBox.ItemsSource = flat;
 			}
 			else
 			{
+				if (!ReferenceEquals(_listBox.ItemsSource, view.ItemsSource))
+					_listBox.ClearItemViews();
 				_listBox.ItemsSource = view.ItemsSource as IEnumerable;
 			}
 
@@ -375,6 +378,7 @@ namespace Microsoft.Maui.Handlers.WPF
 			{
 				_listBox.SelectionChanged -= OnSelectionChanged;
 				_listBox.SizeChanged -= OnListBoxSizeChanged;
+				_listBox.ClearItemViews();
 			}
 			base.DisconnectHandler(platformView);
 		}
@@ -414,6 +418,14 @@ namespace Microsoft.Maui.Handlers.WPF
 		internal bool IsGrouped { get; set; }
 		internal Microsoft.Maui.Controls.CollectionView? MauiCollectionView { get; set; }
 		internal Dictionary<object, View> ItemMauiViews { get; } = new();
+
+		internal void ClearItemViews()
+		{
+			var views = ItemMauiViews.Values.ToArray();
+			ItemMauiViews.Clear();
+			foreach (var view in views)
+				view.DisconnectHandlers();
+		}
 
 		protected override void PrepareContainerForItemOverride(DependencyObject element, object item)
 		{
