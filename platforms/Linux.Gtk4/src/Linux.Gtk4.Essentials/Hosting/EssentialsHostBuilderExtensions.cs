@@ -78,6 +78,7 @@ public static class EssentialsHostBuilderExtensions
 		SetDefault(typeof(Microsoft.Maui.Storage.SecureStorage), new LinuxSecureStorage());
 		SetDefault(typeof(Microsoft.Maui.ApplicationModel.DataTransfer.Clipboard), new LinuxClipboard());
 		SetDefault(typeof(Microsoft.Maui.Media.MediaPicker), new LinuxMediaPicker());
+		SetDefault(typeof(Microsoft.Maui.Accessibility.SemanticScreenReader), new LinuxSemanticScreenReader());
 	}
 
 	private static void SetDefault(Type essentialsType, object implementation)

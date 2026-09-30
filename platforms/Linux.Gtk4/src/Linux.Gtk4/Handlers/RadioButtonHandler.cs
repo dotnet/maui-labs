@@ -86,38 +86,37 @@ public class RadioButtonHandler : GtkViewHandler<IRadioButton, Gtk.CheckButton>
 			return;
 
 		var css = handler.BuildFontCss(textStyle.Font);
-		if (!string.IsNullOrEmpty(css))
-			handler.ApplyCss(handler.PlatformView, css);
+		handler.UpdateCss(handler.PlatformView, css);
 	}
 
 	public static void MapCharacterSpacing(RadioButtonHandler handler, IRadioButton radioButton)
 	{
 		if (radioButton is ITextStyle textStyle)
-			handler.ApplyCss(handler.PlatformView, $"letter-spacing: {textStyle.CharacterSpacing}px;");
+			handler.UpdateCss(handler.PlatformView, $"letter-spacing: {textStyle.CharacterSpacing}px;");
 	}
 
 	public static void MapTextColor(RadioButtonHandler handler, IRadioButton radioButton)
 	{
-		if (radioButton is ITextStyle textStyle && textStyle.TextColor != null)
-			handler.ApplyCss(handler.PlatformView, $"color: {ToGtkColor(textStyle.TextColor)};");
+		handler.UpdateCss(handler.PlatformView,
+			radioButton is ITextStyle { TextColor: not null } textStyle ? $"color: {ToGtkColor(textStyle.TextColor)};" : null);
 	}
 
 	public static void MapCornerRadius(RadioButtonHandler handler, IRadioButton radioButton)
 	{
-		if (radioButton is IButtonStroke stroke && stroke.CornerRadius >= 0)
-			handler.ApplyCss(handler.PlatformView, $"border-radius: {stroke.CornerRadius}px;");
+		handler.UpdateCss(handler.PlatformView,
+			radioButton is IButtonStroke stroke && stroke.CornerRadius >= 0 ? $"border-radius: {stroke.CornerRadius}px;" : null);
 	}
 
 	public static void MapStrokeColor(RadioButtonHandler handler, IRadioButton radioButton)
 	{
-		if (radioButton is IButtonStroke stroke && stroke.StrokeColor != null)
-			handler.ApplyCss(handler.PlatformView, $"border-color: {ToGtkColor(stroke.StrokeColor)};");
+		handler.UpdateCss(handler.PlatformView,
+			radioButton is IButtonStroke { StrokeColor: not null } stroke ? $"border-color: {ToGtkColor(stroke.StrokeColor)};" : null);
 	}
 
 	public static void MapStrokeThickness(RadioButtonHandler handler, IRadioButton radioButton)
 	{
-		if (radioButton is IButtonStroke stroke && stroke.StrokeThickness >= 0)
-			handler.ApplyCss(handler.PlatformView,
-				$"border-width: {stroke.StrokeThickness}px; border-style: solid;");
+		handler.UpdateCss(handler.PlatformView,
+			radioButton is IButtonStroke stroke && stroke.StrokeThickness >= 0
+				? $"border-width: {stroke.StrokeThickness}px; border-style: solid;" : null);
 	}
 }

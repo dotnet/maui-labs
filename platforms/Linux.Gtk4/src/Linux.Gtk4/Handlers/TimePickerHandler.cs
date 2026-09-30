@@ -152,22 +152,18 @@ public class TimePickerHandler : GtkViewHandler<ITimePicker, Gtk.Box>
 
 		var button = handler.PlatformView?.GetFirstChild() as Gtk.Button;
 		var css = handler.BuildFontCss(textStyle.Font);
-		if (!string.IsNullOrEmpty(css))
-			handler.ApplyCss(button, css);
+		handler.UpdateCss(button, css);
 	}
 
 	public static void MapCharacterSpacing(TimePickerHandler handler, ITimePicker timePicker)
 	{
 		var button = handler.PlatformView?.GetFirstChild() as Gtk.Button;
-		handler.ApplyCss(button, $"letter-spacing: {timePicker.CharacterSpacing}px;");
+		handler.UpdateCss(button, $"letter-spacing: {timePicker.CharacterSpacing}px;");
 	}
 
 	public static void MapTextColor(TimePickerHandler handler, ITimePicker timePicker)
 	{
-		if (timePicker.TextColor != null)
-		{
-			var button = handler.PlatformView?.GetFirstChild() as Gtk.Button;
-			handler.ApplyCss(button, $"color: {ToGtkColor(timePicker.TextColor)};");
-		}
+		var button = handler.PlatformView?.GetFirstChild() as Gtk.Button;
+		handler.UpdateCss(button, timePicker.TextColor != null ? $"color: {ToGtkColor(timePicker.TextColor)};" : null);
 	}
 }

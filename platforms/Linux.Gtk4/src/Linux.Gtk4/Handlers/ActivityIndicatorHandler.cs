@@ -27,7 +27,7 @@ public class ActivityIndicatorHandler : GtkViewHandler<IActivityIndicator, Gtk.S
 
 	public static void MapColor(ActivityIndicatorHandler handler, IActivityIndicator indicator)
 	{
-		if (indicator.Color != null)
-			handler.ApplyCss(handler.PlatformView, $"color: {ToGtkColor(indicator.Color)};");
+		handler.UpdateCss(handler.PlatformView,
+			indicator.Color != null ? $"color: {ToGtkColor(indicator.Color)};" : null);
 	}
 }

@@ -139,6 +139,7 @@ class ShellHomePage : ContentPage
 				new Label
 				{
 					Text = "🏠 Welcome Home",
+					AutomationId = "ShellHomeTitle",
 					FontSize = 28,
 					FontAttributes = FontAttributes.Bold,
 					HorizontalTextAlignment = TextAlignment.Center,
@@ -164,12 +165,14 @@ class ShellHomePage : ContentPage
 				new Button
 				{
 					Text = "GoToAsync → Settings",
+					AutomationId = "ShellSettingsButton",
 					BackgroundColor = Colors.Teal, TextColor = Colors.White,
 					Command = new Command(async () => await Shell.Current.GoToAsync("//settings")),
 				},
 				new Button
 				{
 					Text = "GoToAsync → About",
+					AutomationId = "ShellAboutButton",
 					BackgroundColor = Colors.SlateBlue, TextColor = Colors.White,
 					Command = new Command(async () => await Shell.Current.GoToAsync("//about")),
 				},

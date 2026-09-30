@@ -10,4 +10,7 @@
   <Folder Name="/templates/">
     <Project Path="templates/Linux.Gtk4.Templates.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj" />
+  </Folder>
 </Solution>

@@ -39,6 +39,12 @@ or:
 maui profile startup --duration 00:00:15
 ```
 
+Trace duration and trace finalization are separate limits. By default, the CLI waits up to two minutes for `dotnet-trace` to finish rundown and flush the output after a manual, timed, or event-driven stop. Use `--trace-stop-timeout` when a large trace or a slower device needs a different finalization window:
+
+```sh
+maui profile startup --duration 00:00:20 --trace-stop-timeout 00:05:00
+```
+
 ## Optional custom/manual integration
 
 If you want to use this helper outside the zero-touch CLI flow, you can reference it directly and call `MauiProfilingMarker.Complete()` yourself when startup is logically finished.

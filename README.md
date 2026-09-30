@@ -30,6 +30,7 @@ A command-line tool for .NET MAUI development environment setup, device manageme
 - **Apple platform management** (`maui apple`) — Xcode, simulator, and runtime management (macOS)
 - **Device listing** (`maui device list`) across all connected platforms
 - **DevFlow app automation** (`maui devflow`) — visual tree inspection, element interaction, screenshots, WebView/CDP automation, network monitoring, profiling, storage access, real-time log/sensor streaming, and MCP server for AI agents
+- **AI-powered development bootstrap** (`maui ai init`) — install MAUI Copilot skills, DevFlow skills, Copilot agents, and MCP configuration for the current project
 - **MAUI Go** (`maui go`) — create, serve, and upgrade single-file Comet Go projects for rapid prototyping
 - **Version info** (`maui version`)
 - **Global options** — `--json` for CI pipelines, `--verbose`, `--dry-run`, `--ci`
@@ -67,6 +68,8 @@ Single-file Comet apps server + companion app for rapid prototyping (alpha; sist
 A comprehensive testing, automation, and debugging toolkit for .NET MAUI apps — and for plain .NET Android, iOS, Mac Catalyst and macOS apps with no MAUI reference at all. The DevFlow CLI is integrated into the `maui` CLI as `maui devflow` — see [Cli](#cli) above.
 
 - **In-app HTTP agent** for visual tree inspection, element interaction, and screenshots
+- **[MAUI DevFlow Inspector](docs/DevFlow/inspector.md)** in a browser, VS Code, the GitHub Copilot
+  desktop app, or Copilot CLI
 - **Works without MAUI** — the same agent, CLI, and MCP tools drive plain .NET apps via Android views, UIKit, and AppKit backends
 - **Blazor CDP bridge** for Chrome DevTools Protocol on Blazor WebViews
 - **MCP server** for AI agent integration (via `maui devflow mcp`)
@@ -161,14 +164,36 @@ Built artifacts are exposed as `@(MauiAppArtifact)` items with `ArtifactType`, `
 
 ## Agent Skills
 
-This repository is also a marketplace for distributable agent skills for .NET MAUI development. Skills are organized as plugins compatible with Copilot CLI, Claude Code, and VS Code.
+This repository is also a marketplace for distributable agent skills for .NET MAUI development. The recommended one-stop setup is `maui ai init`, which installs the relevant MAUI skills, bundled DevFlow skills, Copilot agent definitions, and MCP configuration for detected agent environments.
 
 | Plugin | Description |
 |--------|-------------|
 | [`dotnet-maui`](plugins/dotnet-maui/) | MAUI development: DevFlow automation, profiling, accessibility, platform bindings, diagnostics, session review |
 
 ```bash
-# Install via Copilot CLI
+# Preview recommended setup and exact scopes for VS Code
+maui ai init --env VsCode --dry-run
+
+# Bootstrap this project for AI-powered MAUI development
+maui ai init --env VsCode --yes
+
+# Discover skills, agents, and MCP registrations, then inspect local inventory
+maui ai list
+maui ai status
+
+# Refresh existing managed assets only; never add missing recommendations
+maui ai update
+
+# Or add exactly one typed asset, without implicit companion installations
+maui ai add skill maui-devflow-debug --env Claude --yes
+maui ai add mcp maui-devflow --env Claude --yes
+```
+
+`--yes`/`-y` accepts prompts; `--force` separately authorizes replacement. Copilot CLI MCP registration is user-wide; other supported MCP destinations are project-scoped. See the [CLI guide](src/Cli/README.md#ai-command-scope-and-options) for targeting, provenance, and safety semantics.
+
+Direct plugin installation remains available for agent runtimes that support plugin marketplaces:
+
+```bash
 /plugin marketplace add dotnet/maui-labs
 /plugin install dotnet-maui@dotnet-maui-labs
 ```
@@ -198,6 +223,9 @@ These are CI builds from `main` only — PR builds are not published. Use wildca
 See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions and development setup.
 
 For the formal DevFlow HTTP and WebSocket contract, see [`docs/DevFlow/spec`](docs/DevFlow/spec/README.md).
+
+For live app inspection and host setup, see the
+[MAUI DevFlow Inspector guide](docs/DevFlow/inspector.md).
 
 For AI Extensions usage and samples, see [`src/AIExtensions/README.md`](src/AIExtensions/README.md) and [`samples/AIExtensions.Sample.Garden`](samples/AIExtensions.Sample.Garden/README.md).
 
