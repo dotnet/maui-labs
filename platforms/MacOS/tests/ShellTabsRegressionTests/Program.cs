@@ -111,15 +111,92 @@ sealed class RegressionDelegate : MacOSMauiApplication
             tabs.ScrollRectToVisible(tabs.Bounds);
             Capture(root, "narrow-replacement");
 
-            File.WriteAllText(Path.Combine(Program.Output, "passed.txt"),
-                $"PASS: native AppKit tabs, selection, lazy pages, metadata, visibility, replacement and resize. OS={Environment.OSVersion}");
-            Environment.Exit(0);
+            flyout.CurrentItem = flyout.Items[^1];
+            RunSelectionSteps(root, shell, tabs, replacement);
         }
         catch (Exception ex)
         {
             File.WriteAllText(Path.Combine(Program.Output, "failure.txt"), ex.ToString());
             Console.Error.WriteLine(ex);
             Environment.Exit(1);
+        }
+    }
+
+    static void RunSelectionSteps(NSView root, Shell shell, NSSegmentedControl tabs, ShellItem item)
+    {
+        NSView? pageBeforeDisconnect = null;
+        string? firstLabel = null;
+        var steps = new Queue<Action>(new Action[]
+        {
+            () =>
+            {
+                AssertSelectedPage("detached-item-selection");
+                item.CurrentItem = item.Items[4];
+            },
+            () =>
+            {
+                AssertSelectedPage("programmatic-selection");
+                item.CurrentItem.IsVisible = false;
+            },
+            () =>
+            {
+                AssertSelectedPage("hide-active-section");
+                item.Items.Remove(item.CurrentItem);
+            },
+            () =>
+            {
+                AssertSelectedPage("remove-active-section");
+                pageBeforeDisconnect = shell.CurrentPage.Handler!.PlatformView as NSView;
+                item.CurrentItem = item.Items[^1];
+                shell.Handler!.DisconnectHandler();
+                firstLabel = tabs.GetLabel(0);
+                item.Items[0].Title = "Changed after disconnect";
+            },
+            () =>
+            {
+                Require(pageBeforeDisconnect != null && Descendants(root).Contains(pageBeforeDisconnect),
+                    "disconnect: queued selection did not replace native page");
+                Require(tabs.GetLabel(0) == firstLabel, "disconnect: tab metadata observer detached");
+                File.WriteAllText(Path.Combine(Program.Output, "passed.txt"),
+                    $"PASS: native tabs and page coherence for click, programmatic, hidden and removed selections. OS={Environment.OSVersion}");
+                Environment.Exit(0);
+            },
+        });
+        NSApplication.SharedApplication.BeginInvokeOnMainThread(RunNext);
+
+        void RunNext()
+        {
+            try
+            {
+                steps.Dequeue()();
+                // Child-handler selection refresh is deferred until MAUI finishes updating its model.
+                if (steps.Count > 0)
+                    NSApplication.SharedApplication.BeginInvokeOnMainThread(RunNext);
+            }
+            catch (Exception ex)
+            {
+                File.WriteAllText(Path.Combine(Program.Output, "failure.txt"), ex.ToString());
+                Console.Error.WriteLine(ex);
+                Environment.Exit(1);
+            }
+        }
+
+        void AssertSelectedPage(string scenario)
+        {
+            root.LayoutSubtreeIfNeeded();
+            Capture(root, scenario);
+            var selected = item.CurrentItem;
+            var visibleSections = item.Items.Where(section => section.IsVisible).ToList();
+            Require(tabs.SelectedSegment == visibleSections.IndexOf(selected), $"{scenario}: native selected identity");
+            var expectedPage = selected.CurrentItem.Content as Page;
+            Require(expectedPage != null && ReferenceEquals(shell.CurrentPage, expectedPage),
+                $"{scenario}: selected page materialized");
+            Require(expectedPage?.Handler?.PlatformView is NSView nativePage &&
+                Descendants(root).Contains(nativePage), $"{scenario}: selected page in native tree");
+            Require(Descendants(root).OfType<NSTextField>().Any(label =>
+                label.StringValue == expectedPage?.Title?.Replace("Page ", "Selected page ") &&
+                IsVisible(label) && label.Bounds.Width > 0 && label.Bounds.Height > 0),
+                $"{scenario}: selected page label rendered");
         }
     }
 
