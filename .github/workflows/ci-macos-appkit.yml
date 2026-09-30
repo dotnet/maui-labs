@@ -74,8 +74,11 @@ jobs:
               dotnet build platforms/MacOS/tests/PickerRegressionTests/PickerRegressionTests.csproj \
                 -p:UseMaui=false -p:ValidateXcodeVersion=true \
                 2>&1 | tee "$evidence/build.log"
-              app="$(find artifacts/bin/PickerRegressionTests -type d -name PickerRegressionTests.app -print)"
-              test -d "$app"
+              app="$(find artifacts/bin/PickerRegressionTests -type d -name '*.app' -print)"
+              if [ ! -d "$app" ]; then
+                echo "Expected exactly one Picker app bundle; found: $app" >&2
+                exit 1
+              fi
               set +e
               PICKER_EVIDENCE="$evidence" "$app/Contents/MacOS/PickerRegressionTests" \
                 > "$evidence/runtime.log" 2>&1

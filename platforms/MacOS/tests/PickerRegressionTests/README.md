@@ -5,7 +5,7 @@ window, on the AppKit main thread. It requires macOS and the MAUI/macOS workload
 is not a portable unit test or a replacement for interactive testing.
 
 Build with `dotnet build platforms/MacOS/tests/PickerRegressionTests -p:UseMaui=false`,
-then run the built `PickerRegressionTests.app/Contents/MacOS/PickerRegressionTests`.
+then run the built `"AppKit Picker regression.app/Contents/MacOS/PickerRegressionTests"`.
 Set `PICKER_EVIDENCE` to a writable output directory for native screenshots and
 JSONL state observations.
 
