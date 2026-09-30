@@ -18,6 +18,123 @@ namespace HandlerTests;
 public class ShellItemsHandlerTests
 {
 	[Fact]
+	public void RuntimeWindow_ItemsAppendToMapping_CustomizesDeferredCollectionRefresh()
+	{
+		var originalMapper = ShellHandler.Mapper;
+		var mapper = new PropertyMapper<Shell, ShellHandler>(originalMapper);
+		var calls = 0;
+		mapper.AppendToMapping(nameof(Shell.Items), (handler, _) =>
+		{
+			calls++;
+			foreach (var tab in Tabs(handler).Items.Cast<TabItem>())
+				tab.Header = $"Custom {Assert.IsAssignableFrom<ShellSection>(tab.Tag).Title}";
+		});
+		try
+		{
+			ShellHandler.Mapper = mapper;
+			Run((shell, handler) =>
+			{
+				var window = new System.Windows.Window
+				{
+					Content = handler.PlatformView,
+					Width = 800,
+					Height = 600,
+					Left = -20000,
+					Top = -20000,
+					ShowActivated = false,
+					ShowInTaskbar = false,
+				};
+				try
+				{
+					window.Show();
+					var first = Section("First");
+					var second = Section("Second");
+					var item = new TabBar { Items = { first, second } };
+					shell.Items.Add(item);
+					DrainDispatcher();
+					var previousCalls = calls;
+
+					var added = Section("Added");
+					item.Items.Add(added);
+					AssertCustomized("09-mapper-add", first, second, added);
+
+					var replacement = Section("Replacement");
+					item.Items[2] = replacement;
+					AssertCustomized("10-mapper-replace", first, second, replacement);
+
+					item.Items.Remove(replacement);
+					AssertCustomized("11-mapper-remove", first, second);
+
+					item.Items.Clear();
+					item.Items.Add(first);
+					item.Items.Add(second);
+					AssertCustomized("12-mapper-reset-add", first, second);
+
+					void AssertCustomized(string name, params ShellSection[] sections)
+					{
+						DrainDispatcher();
+						Assert.True(calls > previousCalls, "Deferred collection refresh bypassed the Items mapper customization.");
+						previousCalls = calls;
+						AssertTabs(handler, sections);
+						Assert.Equal(sections.Select(section => $"Custom {section.Title}"),
+							Tabs(handler).Items.Cast<TabItem>().Select(tab => Assert.IsType<string>(tab.Header)));
+						AssertCurrentPage(shell, handler);
+						window.UpdateLayout();
+						Assert.True(handler.PlatformView.ActualWidth > 0);
+						Assert.True(handler.PlatformView.ActualHeight > 0);
+						SaveRuntimeEvidence(handler, name);
+					}
+				}
+				finally
+				{
+					window.Close();
+				}
+			});
+		}
+		finally
+		{
+			ShellHandler.Mapper = originalMapper;
+		}
+	}
+
+	[Fact]
+	public void RootSubscriptions_AttachRebindAndReconnect_RegisterEachCallbackOnce()
+	{
+		Run((original, handler) =>
+		{
+			original.Items.Add(Item("Original"));
+			DrainDispatcher();
+			AssertRootSubscriptions(original, handler, connected: true);
+			handler.SetVirtualView(original);
+			handler.SetVirtualView(original);
+			AssertRootSubscriptions(original, handler, connected: true);
+
+			var replacement = new Shell { Items = { Item("Replacement") } };
+			handler.SetVirtualView(replacement);
+			DrainDispatcher();
+			AssertRootSubscriptions(original, handler, connected: false);
+			AssertRootSubscriptions(replacement, handler, connected: true);
+			AssertCurrentPage(replacement, handler);
+
+			((IElementHandler)handler).DisconnectHandler();
+			AssertRootSubscriptions(original, handler, connected: false);
+			AssertRootSubscriptions(replacement, handler, connected: false);
+
+			handler.SetVirtualView(replacement);
+			handler.SetVirtualView(replacement);
+			DrainDispatcher();
+			AssertRootSubscriptions(replacement, handler, connected: true);
+			replacement.Items.Add(Item("After reconnect"));
+			DrainDispatcher();
+			AssertFlyout(handler, replacement.Items.ToArray());
+			AssertCurrentPage(replacement, handler);
+
+			((IElementHandler)handler).DisconnectHandler();
+			AssertRootSubscriptions(replacement, handler, connected: false);
+		});
+	}
+
+	[Fact]
 	public void RuntimeWindow_DynamicHierarchy_RendersAddRemoveReplaceAndReset()
 	{
 		Run((shell, handler) =>
@@ -91,18 +208,7 @@ public class ShellItemsHandlerTests
 				AssertFlyout(handler, items);
 				Assert.True(handler.PlatformView.ActualWidth > 0);
 				Assert.True(handler.PlatformView.ActualHeight > 0);
-				var directory = Environment.GetEnvironmentVariable("SHELL_ITEMS_EVIDENCE_DIRECTORY");
-				if (string.IsNullOrEmpty(directory))
-					return;
-				System.IO.Directory.CreateDirectory(directory);
-				var image = new System.Windows.Media.Imaging.RenderTargetBitmap(
-					(int)handler.PlatformView.ActualWidth, (int)handler.PlatformView.ActualHeight,
-					96, 96, System.Windows.Media.PixelFormats.Pbgra32);
-				image.Render(handler.PlatformView);
-				var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
-				encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(image));
-				using var file = System.IO.File.Create(System.IO.Path.Combine(directory, name + ".png"));
-				encoder.Save(file);
+				SaveRuntimeEvidence(handler, name);
 			}
 		});
 	}
@@ -403,6 +509,43 @@ public class ShellItemsHandlerTests
 		Assert.NotNull(shell.CurrentPage);
 		Assert.NotNull(shell.CurrentPage.Handler?.PlatformView);
 		Assert.Same(shell.CurrentPage.Handler.PlatformView, ContentHost(handler).Content);
+	}
+
+	static void AssertRootSubscriptions(Shell shell, ShellHandler handler, bool connected)
+	{
+		AssertCallbacks(typeof(Shell), nameof(Shell.Navigated), "OnShellNavigated");
+		AssertCallbacks(typeof(Shell), nameof(Shell.Navigating), "OnShellNavigating");
+		AssertCallbacks(typeof(BindableObject), nameof(Shell.PropertyChanged),
+			"OnSelectionShellPropertyChanged", "OnShellPropertyChanged");
+
+		void AssertCallbacks(Type declaringType, string eventName, params string[] expected)
+		{
+			// Count registrations, not coalesced renders, so duplicate subscriptions cannot hide.
+			var field = declaringType.GetField(eventName,
+				System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+			Assert.NotNull(field);
+			var callbacks = (field.GetValue(shell) as Delegate)?.GetInvocationList() ?? Array.Empty<Delegate>();
+			var owned = callbacks.Where(callback => ReferenceEquals(callback.Target, handler) &&
+				callback.Method.DeclaringType == typeof(ShellHandler))
+				.Select(callback => callback.Method.Name).OrderBy(name => name).ToArray();
+			Assert.Equal(connected ? expected.OrderBy(name => name).ToArray() : Array.Empty<string>(), owned);
+		}
+	}
+
+	static void SaveRuntimeEvidence(ShellHandler handler, string name)
+	{
+		var directory = Environment.GetEnvironmentVariable("SHELL_ITEMS_EVIDENCE_DIRECTORY");
+		if (string.IsNullOrEmpty(directory))
+			return;
+		System.IO.Directory.CreateDirectory(directory);
+		var image = new System.Windows.Media.Imaging.RenderTargetBitmap(
+			(int)handler.PlatformView.ActualWidth, (int)handler.PlatformView.ActualHeight,
+			96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+		image.Render(handler.PlatformView);
+		var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+		encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(image));
+		using var file = System.IO.File.Create(System.IO.Path.Combine(directory, name + ".png"));
+		encoder.Save(file);
 	}
 
 	static void DrainDispatcher()
