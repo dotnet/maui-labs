@@ -24,6 +24,7 @@ static class Program
             Environment.Exit(1);
         }, null, TimeSpan.FromSeconds(90), Timeout.InfiniteTimeSpan);
         NSApplication.Init();
+        NSApplication.SharedApplication.Appearance = NSAppearance.GetAppearance(NSAppearance.NameAqua);
         NSApplication.SharedApplication.Delegate = new RegressionDelegate();
         NSApplication.Main(args);
     }
@@ -73,6 +74,9 @@ sealed class RegressionDelegate : MacOSMauiApplication
             Require(shell.CurrentPage?.Title == "Page 5", "native click displays selected page");
             Require(shell.CurrentPage?.Handler?.PlatformView is NSView pageView && pageView.Superview != null,
                 "selected page attached to native tree");
+            Require(Descendants(root).OfType<NSTextField>().Any(label =>
+                label.StringValue == "Selected page 5" && IsVisible(label) &&
+                label.Bounds.Width > 0 && label.Bounds.Height > 0), "selected page label rendered");
             Require(app.CreatedPages == 2, "inactive page templates remain lazy");
             Capture(root, "selected-sixth");
 
@@ -147,7 +151,21 @@ sealed class RegressionDelegate : MacOSMauiApplication
         using var bitmap = new NSBitmapImageRep(IntPtr.Zero, (nint)view.Bounds.Width,
             (nint)view.Bounds.Height, 8, 4, true, false, NSColorSpace.DeviceRGB, 0, 0);
         bitmap.Size = view.Bounds.Size;
-        view.CacheDisplay(view.Bounds, bitmap);
+        NSGraphicsContext.GlobalSaveGraphicsState();
+        try
+        {
+            using var context = NSGraphicsContext.FromBitmap(bitmap)
+                ?? throw new InvalidOperationException("Bitmap graphics context unavailable.");
+            NSGraphicsContext.CurrentContext = context;
+            // View caching does not include the NSWindow's opaque background.
+            context.CGContext.SetFillColor(NSColor.White.CGColor);
+            context.CGContext.FillRect(view.Bounds);
+            view.CacheDisplay(view.Bounds, bitmap);
+        }
+        finally
+        {
+            NSGraphicsContext.GlobalRestoreGraphicsState();
+        }
         using var png = bitmap.RepresentationUsingTypeProperties(NSBitmapImageFileType.Png)
             ?? throw new InvalidOperationException("PNG encoding failed.");
         File.WriteAllBytes(Path.Combine(Program.Output, $"{name}.png"), png.ToArray());
