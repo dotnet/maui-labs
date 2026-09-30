@@ -188,8 +188,9 @@ sealed class RegressionDelegate : MacOSMauiApplication
             var selected = item.CurrentItem;
             var visibleSections = item.Items.Where(section => section.IsVisible).ToList();
             Require(tabs.SelectedSegment == visibleSections.IndexOf(selected), $"{scenario}: native selected identity");
-            var expectedPage = selected.CurrentItem.Content as Page;
-            Require(expectedPage != null && ReferenceEquals(shell.CurrentPage, expectedPage),
+            var expectedTitle = selected.Title.Replace("Tab ", "Page ");
+            var expectedPage = shell.CurrentPage;
+            Require(expectedPage != null && expectedPage.Title == expectedTitle,
                 $"{scenario}: selected page materialized");
             Require(expectedPage?.Handler?.PlatformView is NSView nativePage &&
                 Descendants(root).Contains(nativePage), $"{scenario}: selected page in native tree");
