@@ -56,3 +56,28 @@ jobs:
       - name: Pack, generate, and build template variants
         shell: pwsh
         run: ./eng/smoke-tests/gtk-template-smoke-test.ps1 -BuildApps
+
+  native-handlers:
+    name: Native CollectionView lifecycle
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Install GTK and isolated display
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-1 xvfb dbus-x11
+      - name: Test native handlers
+        run: >-
+          dbus-run-session -- xvfb-run -a dotnet test
+          platforms/Linux.Gtk4/tests/Linux.Gtk4.HandlerTests/Linux.Gtk4.HandlerTests.csproj
+          --configuration Release --logger trx
+          --results-directory artifacts/TestResults/gtk-native
+      - name: Upload native handler test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gtk-native-handler-test-results
+          path: artifacts/TestResults/gtk-native/*.trx
+          if-no-files-found: error

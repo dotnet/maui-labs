@@ -100,7 +100,7 @@ compiled custom handlers and share a legacy fragment per widget and selector.
 | Layouts | 100% | All layout types including FlexLayout and AbsoluteLayout |
 | Basic Controls | 100% | All 14 standard controls |
 | Input Controls | 100% | Picker, DatePicker, TimePicker, SearchBar |
-| Collection Controls | 100% | Virtualized CollectionView, ListView, TableView, CarouselView, SwipeView |
+| Collection Controls | 100% | Virtualized CollectionView with logical parenting of realized template views, ListView, TableView, CarouselView, SwipeView |
 | Navigation & Routing | 100% | Push/pop, Shell routes, query parameters |
 | Alerts & Dialogs | 100% | All three dialog types + native modal dialog windows |
 | Gesture Recognizers | 100% | All 5 gesture types |
@@ -335,12 +335,30 @@ From `platforms/Linux.Gtk4`, run:
 dotnet test tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
 ```
 
+### Native CollectionView regression tests
+
+These tests require Linux, GTK 4.12 or newer, and a display. They exercise the real
+GTK list-item factory, including logical parenting, DevFlow tree discovery,
+source replacement, template replacement, group headers, and disconnection.
+From `platforms/Linux.Gtk4`, use an isolated display:
+
+```bash
+dbus-run-session -- xvfb-run -a dotnet test tests/Linux.Gtk4.HandlerTests/Linux.Gtk4.HandlerTests.csproj
+```
+
 ### Run the sample app
 
 ```bash
 # Sample app (includes native controls, Blazor Hybrid, essentials, and more)
 dotnet run --project samples/Linux.Gtk4.Sample
 ```
+
+For a focused DevFlow check, set `MAUI_SAMPLE_COLLECTIONVIEW=1` when launching
+the sample with `-p:EnableMauiDevFlow=true`. Choose **CollectionView** in its
+example picker. Realized contact labels are discoverable by text and by their
+name as an automation id. Tapping **Alice Johnson** or **Bob Smith** updates the
+status to `Tapped: <name>`. Unrealized rows are not logical children until GTK
+realizes them.
 
 ## Project Structure
 

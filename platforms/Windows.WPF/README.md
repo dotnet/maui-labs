@@ -118,7 +118,7 @@ See the `samples/` directory for working examples:
 
 | Control | Status | Notes |
 |---|---|---|
-| CollectionView | ✅ | WPF ListBox with DataTemplateSelector, SelectedItem, SelectionMode, EmptyView |
+| CollectionView | ✅ | WPF ListBox with DataTemplateSelector, SelectedItem, SelectionMode, EmptyView, and logical parenting of realized template views |
 | ListView | ✅ | WPF ListBox with MAUI template bridge |
 | CarouselView | ✅ | Horizontal ListBox with arrow navigation buttons |
 | IndicatorView | ✅ | Dot indicators as Ellipses |
@@ -253,6 +253,19 @@ dotnet test tests\UITests\UITests.csproj --no-build
 > **Note:** Build projects individually or use `build.slnf`. The full solution includes samples that may have additional dependencies.
 
 ## Testing
+
+The handler regression suite exercises real native container callbacks and
+selection, including CollectionView parenting, recycling, equal-valued items,
+group headers, conversion failures, disconnection, and DevFlow tree discovery:
+
+```powershell
+dotnet test tests\HandlerTests\HandlerTests.csproj -p:UseMaui=false
+```
+
+In the gallery, open **Collection View** and choose **CollectionView** in the
+example picker. DevFlow can find realized contact labels by text or their name
+as an automation id. Tapping **Alice Johnson** or **Bob Smith** updates the status
+to `Tapped: <name>`, providing an observable check beyond a successful tap response.
 
 The project includes **213 UI tests** covering all implemented controls, plus a **WinUI comparison framework** that captures side-by-side screenshots of the WPF and WinUI ControlGallery apps for visual parity validation.
 
