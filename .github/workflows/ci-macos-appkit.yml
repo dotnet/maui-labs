@@ -72,7 +72,7 @@ jobs:
             (
               cd "$variant"
               dotnet build platforms/MacOS/tests/PickerRegressionTests/PickerRegressionTests.csproj \
-                -p:UseMaui=false -p:ContinuousIntegrationBuild=true \
+                -p:UseMaui=false -p:ValidateXcodeVersion=true \
                 2>&1 | tee "$evidence/build.log"
               app="$(find artifacts/bin/PickerRegressionTests -type d -name PickerRegressionTests.app -print)"
               test -d "$app"
