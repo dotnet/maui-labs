@@ -25,6 +25,7 @@ public class WindowSizingTests(ITestOutputHelper output)
 		public ContentPage Page { get; } = new();
 		public Grid Inner { get; private set; } = null!;
 		public ContentView? Wrapper { get; private set; }
+		public ScrollView TemplateScroll { get; private set; } = null!;
 
 		protected override Window CreateWindow(IActivationState? activationState)
 		{
@@ -85,13 +86,14 @@ public class WindowSizingTests(ITestOutputHelper output)
 		public Shell CreateTemplateShell()
 		{
 			Child = new Label { Text = "Hello, World!", HeightRequest = 40 };
+			TemplateScroll = new ScrollView
+			{
+				Content = new VerticalStackLayout { Children = { Child } }
+			};
 			var page = new ContentPage
 			{
 				Title = "Home",
-				Content = new ScrollView
-				{
-					Content = new VerticalStackLayout { Children = { Child } }
-				}
+				Content = TemplateScroll
 			};
 			return new Shell
 			{
@@ -192,14 +194,21 @@ public class WindowSizingTests(ITestOutputHelper output)
 				window.SetDefaultSize(300, 200);
 			}, 300, 200);
 
-			Add("template Shell/ScrollView startup", () =>
+			int TemplateViewportWidth() =>
+				((Gtk.ScrolledWindow)app.TemplateScroll.Handler!.PlatformView!).GetFirstChild()!.GetAllocatedWidth();
+			int? shellChromeWidth = null;
+			steps.Enqueue(new("template Shell/ScrollView startup", () =>
 			{
 				mauiWindow.Page = app.CreateTemplateShell();
 				window.SetDefaultSize(1024, 768);
-			}, 1024, 768, 40);
+			}, 1024, 768, () => (TemplateViewportWidth(), 40)));
 			foreach (var (width, height) in new[] { (500, 700), (300, 400), (1100, 700), (300, 400) })
-				Add($"template Shell resize {width}x{height}", () => window.SetDefaultSize(width, height),
-					width, height, 40);
+				steps.Enqueue(new($"template Shell resize {width}x{height}", () =>
+				{
+					// Account for the native notebook border without fixing a GTK theme's thickness.
+					shellChromeWidth ??= 1024 - TemplateViewportWidth();
+					window.SetDefaultSize(width, height);
+				}, width, height, () => (width - shellChromeWidth!.Value, 40)));
 
 			var step = steps.Dequeue();
 			step.Apply();
