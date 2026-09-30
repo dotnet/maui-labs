@@ -98,11 +98,13 @@ public class ShellTabNavigationTests
 	}
 
 	[Theory]
-	[InlineData(false)]
-	[InlineData(true)]
-	public void NativeTabSelection_WhenDeferred_WaitsForShellDecision(bool cancel)
+	[InlineData(false, false)]
+	[InlineData(false, true)]
+	[InlineData(true, false)]
+	[InlineData(true, true)]
+	public void NativeTabSelection_WhenDeferred_WaitsForShellDecision(bool useTemplate, bool cancel)
 	{
-		RunTest(true, (shell, handler, tabs, first, second, created) =>
+		RunTest(useTemplate, (shell, handler, tabs, first, second, created) =>
 		{
 			ShellNavigatingEventArgs? proposal = null;
 			ShellNavigatingDeferral? deferral = null;
@@ -132,6 +134,27 @@ public class ShellTabNavigationTests
 			Assert.Same(shell.CurrentItem.CurrentItem, ((WTabItem)tabs.SelectedItem).Tag);
 			Assert.EndsWith(cancel ? "/one" : "/two", shell.CurrentState.Location.OriginalString);
 		});
+	}
+
+	[Fact]
+	public void NativeTabSelection_WithRenderedFlyoutItemTemplate_NavigatesAndDisplaysPage()
+	{
+		RunTest(true, (shell, handler, tabs, first, second, created) =>
+		{
+			Assert.Contains(VisualDescendants(handler.PlatformView).OfType<System.Windows.Controls.TextBlock>(),
+				label => label.Text == "templated item" && label.IsVisible && label.ActualWidth > 0);
+			var navigated = 0;
+			shell.Navigated += (_, _) => navigated++;
+			Select((WTabItem)tabs.Items[1]);
+			DrainDispatcher();
+			Assert.Equal(2, tabs.Items.Count);
+			Assert.True(tabs.IsVisible);
+			Assert.Same(shell.CurrentItem.Items[1], ((WTabItem)tabs.SelectedItem).Tag);
+			Assert.EndsWith("/two", shell.CurrentState.Location.OriginalString);
+			Assert.Equal(1, navigated);
+			Assert.Equal(1, created());
+			AssertDisplayed(handler, second, "PAGE TWO");
+		}, useFlyoutItem: true);
 	}
 
 	[Fact]
@@ -223,7 +246,8 @@ public class ShellTabNavigationTests
 	}
 
 	static void RunTest(bool useTemplate,
-		Action<Shell, ShellHandler, WTabControl, ContentPage, ContentPage, Func<int>> test)
+		Action<Shell, ShellHandler, WTabControl, ContentPage, ContentPage, Func<int>> test,
+		bool useFlyoutItem = false)
 	{
 		Exception? failure = null;
 		var thread = new Thread(() =>
@@ -238,19 +262,13 @@ public class ShellTabNavigationTests
 				var first = CreatePage("PAGE ONE");
 				var second = CreatePage("PAGE TWO");
 				var count = 0;
+				ShellItem item = useFlyoutItem ? new FlyoutItem() : new TabBar();
+				item.Items.Add(new ShellContent { Title = "One", Route = "one", ContentTemplate = new DataTemplate(() => first) });
+				item.Items.Add(new ShellContent { Title = "Two", Route = "two", ContentTemplate = new DataTemplate(() => { count++; return second; }) });
 				var shell = new Shell
 				{
-					Items =
-					{
-						new TabBar
-						{
-							Items =
-							{
-								new ShellContent { Title = "One", Route = "one", ContentTemplate = new DataTemplate(() => first) },
-								new ShellContent { Title = "Two", Route = "two", ContentTemplate = new DataTemplate(() => { count++; return second; }) },
-							},
-						},
-					},
+					Items = { item },
+					FlyoutBehavior = useFlyoutItem ? FlyoutBehavior.Locked : FlyoutBehavior.Flyout,
 				};
 				if (useTemplate)
 					shell.ItemTemplate = new DataTemplate(() => new Label { Text = "templated item", Padding = 8 });

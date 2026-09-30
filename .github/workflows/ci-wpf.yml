@@ -64,12 +64,13 @@ jobs:
               $counters = $results.TestRun.ResultSummary.Counters
               if ($variant -eq 'baseline') {
                 $failures = @($results.TestRun.Results.UnitTestResult | Where-Object outcome -eq 'Failed')
-                if ($exitCode -ne 1 -or $counters.failed -ne 5 -or $counters.total -ne 5 -or
+                if ($exitCode -ne 1 -or $counters.failed -ne 5 -or $counters.total -ne 5 -or $counters.executed -ne 5 -or
                     @($failures | Where-Object { $_.Output.ErrorInfo.Message -notmatch 'Assert\.(Equal|Same)\(\) Failure' }).Count -ne 0) {
                   Get-Content "$env:SHELL_SECTION_RESULTS\process.log"
                   throw 'Baseline did not reproduce the three section/content and two native tab failures'
                 }
-              } elseif ($exitCode -ne 0 -or $counters.failed -ne 0 -or $counters.executed -lt 16) {
+              } elseif ($exitCode -ne 0 -or $counters.total -ne 20 -or $counters.executed -ne 20 -or
+                        $counters.passed -ne 20 -or $counters.failed -ne 0 -or $counters.notExecuted -ne 0) {
                 Get-Content "$env:SHELL_SECTION_RESULTS\process.log"
                 throw 'Fixed WPF section regression failed'
               }
