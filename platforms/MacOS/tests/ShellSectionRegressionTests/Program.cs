@@ -109,6 +109,36 @@ sealed class RegressionDelegate : MacOSMauiApplication
 			item.Items.Add(secondSection);
 			Require(app.CreatedPages == 3, "hide/remove active section reuses remaining page");
 
+			var dynamicCreated = 0;
+			var dynamicSection = new Tab
+			{
+				Items =
+				{
+					new ShellContent { ContentTemplate = new DataTemplate(() =>
+					{
+						dynamicCreated++;
+						return RegressionApp.CreateVisiblePage("Dynamic one");
+					}) },
+					new ShellContent { ContentTemplate = new DataTemplate(() =>
+					{
+						dynamicCreated++;
+						return RegressionApp.CreateVisiblePage("Dynamic two");
+					}) },
+				},
+			};
+			item.Items.Add(dynamicSection);
+			Require(dynamicCreated == 0, "inserting an inactive section keeps its templates lazy");
+			item.CurrentItem = dynamicSection;
+			await FlushMainQueue();
+			AssertDisplayed(shell, root, "Dynamic one");
+			dynamicSection.CurrentItem = dynamicSection.Items[1];
+			await FlushMainQueue();
+			Capture(root, "dynamic-content-two");
+			AssertDisplayed(shell, root, "Dynamic two");
+			Require(dynamicCreated == 2, "new section content selection creates the second page");
+			item.Items.Remove(dynamicSection);
+			await FlushMainQueue();
+
 			var other = new FlyoutItem
 			{
 				Items = { new ShellContent { Content = RegressionApp.CreateVisiblePage("Other") } },
