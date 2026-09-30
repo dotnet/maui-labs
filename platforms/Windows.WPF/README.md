@@ -192,6 +192,9 @@ before or after `UseWPFEssentials()`. Static calls are supported after `Build()`
 not while configuring the builder. Unsupported desktop capabilities keep their
 existing stub behavior.
 
+Version tracking records a launch only when `VersionTracking.Track()` or a
+tracking property is used, not merely when building the app.
+
 The facades are process-wide: the most recently built app sets their instances.
 Do not use them after disposing that app.
 
