@@ -72,6 +72,25 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 
 ### Handler styling
 
+`ContentViewHandler` now hosts its content in `GtkLayoutPanel`, so child translation,
+scale, rotation, anchors, and MAUI-arranged offsets use the same native allocation
+path as layout children. `LayoutHandler` also preserves transforms across arrange
+passes. **Breaking change:** custom handlers compiled against the previous
+`Gtk.Box` platform-view type must be rebuilt and use `GtkLayoutPanel` child APIs
+(`AddChild` / `RemoveChild`, not `Append` / `Remove`).
+
+The native regression runs on Linux with GTK 4.12+ and an isolated display:
+
+```bash
+RUN_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo \
+  dbus-run-session -- xvfb-run -a dotnet test \
+  platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj \
+  --filter FullyQualifiedName~ContentViewTransformTests
+```
+
+The ordinary managed test run skips native tests unless explicitly enabled.
+Run each native test class in a separate process to keep GTK thread ownership isolated.
+
 GTK CSS font sizes use logical pixels (`px`), matching MAUI's device-independent
 font sizes. Handler CSS is composed per widget, selector, and mapper, so font,
 color, spacing, background, and border updates preserve one another. Custom

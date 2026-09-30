@@ -250,10 +250,8 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 
 	public override void PlatformArrange(Rect rect)
 	{
-		if (PlatformView.GetParent() is Platform.GtkLayoutPanel lp)
-		{
-			lp.SetChildBounds(PlatformView, rect.X, rect.Y, (int)rect.Width, (int)rect.Height);
-		}
+		if (PlatformView.GetParent() is Platform.GtkLayoutPanel)
+			base.PlatformArrange(rect);
 
 		// Arrange children relative to the panel (origin at 0,0)
 		PlatformView.CrossPlatformArrange(new Rect(0, 0, rect.Width, rect.Height));
