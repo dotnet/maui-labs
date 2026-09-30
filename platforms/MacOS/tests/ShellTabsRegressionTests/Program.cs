@@ -36,7 +36,7 @@ sealed class RegressionDelegate : MacOSMauiApplication
     protected override MauiApp CreateMauiApp() => MauiApp.CreateBuilder()
         .UseMauiAppMacOS<RegressionApp>()
         .AddMacOSEssentials()
-        .ConfigureMauiHandlers(handlers => handlers.AddHandler<ContentPage, CountingPageHandler>())
+        .ConfigureMauiHandlers(handlers => handlers.AddHandler<CountingPage, CountingPageHandler>())
         .Build();
 
     protected override void OnStarted() =>
@@ -82,11 +82,11 @@ sealed class RegressionDelegate : MacOSMauiApplication
                 label.Bounds.Width > 0 && label.Bounds.Height > 0), "selected page label rendered");
             Require(app.CreatedPages == 2, "inactive page templates remain lazy");
             Capture(root, "selected-sixth");
-            var selectedView = (CountingPageView)shell.CurrentPage!.Handler!.PlatformView!;
+            var selectedPage = (CountingPage)shell.CurrentPage!;
             File.WriteAllText(Path.Combine(Program.Output, "click-refresh-count.txt"),
-                $"Selected page 5 native attachments: {selectedView.Attachments}");
-            Require(selectedView.Attachments == 1,
-                $"native click attaches the selected page once (actual {selectedView.Attachments})");
+                $"Selected page 5 native attachments: {selectedPage.NativeAttachments}");
+            Require(selectedPage.NativeAttachments == 1,
+                $"native click attaches the selected page once (actual {selectedPage.NativeAttachments})");
 
             shell.FlyoutBehavior = FlyoutBehavior.Locked;
             window.SetContentSize(new CGSize(1000, 640));
@@ -116,13 +116,14 @@ sealed class RegressionDelegate : MacOSMauiApplication
             tabs.PerformClick(tabs);
             await FlushMainQueue();
             Require(shell.CurrentPage?.Title == "Page 0", "native click returns to cached first page");
-            var previousAttachments = selectedView.Attachments;
+            var previousAttachments = selectedPage.NativeAttachments;
             tabs.SelectedSegment = 5;
             tabs.PerformClick(tabs);
             await FlushMainQueue();
-            Require(shell.CurrentPage?.Title == "Page 5" && selectedView.Superview != null,
+            Require(ReferenceEquals(shell.CurrentPage, selectedPage) &&
+                selectedPage.Handler?.PlatformView is NSView { Superview: not null },
                 "native click restores cached selected page");
-            Require(selectedView.Attachments == previousAttachments + 1,
+            Require(selectedPage.NativeAttachments == previousAttachments + 1,
                 "native click attaches cached page once");
             Require(app.CreatedPages == 2, "native return visits reuse cached pages");
 
@@ -352,7 +353,7 @@ public sealed class RegressionApp : Application
                         ContentTemplate = new DataTemplate(() =>
                         {
                             CreatedPages++;
-                            return new ContentPage
+                            return new CountingPage
                             {
                                 Title = $"Page {index}",
                                 Content = new Label { Text = $"Selected page {index}", FontSize = 32 },
@@ -369,17 +370,26 @@ public sealed class RegressionApp : Application
 
 sealed class CountingPageHandler : Handlers.ContentPageHandler
 {
-    protected override MacOSContainerView CreatePlatformView() => new CountingPageView();
+    protected override MacOSContainerView CreatePlatformView() => new CountingPageView
+    {
+        Attached = () => ((CountingPage)VirtualView).NativeAttachments++,
+    };
+}
+
+sealed class CountingPage : ContentPage
+{
+    // ToMacOSPlatform can recreate the native view, so count across handlers for the same page.
+    public int NativeAttachments { get; set; }
 }
 
 sealed class CountingPageView : MacOSContainerView
 {
-    public int Attachments { get; private set; }
+    public Action? Attached { get; init; }
 
     public override void ViewDidMoveToSuperview()
     {
         base.ViewDidMoveToSuperview();
         if (Superview != null)
-            Attachments++;
+            Attached?.Invoke();
     }
 }
