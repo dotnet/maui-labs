@@ -130,7 +130,8 @@ public class AlertManagerTests
 					parent != null && !parent.Equals(dialog);
 					parent = TreeWalker.ControlViewWalker.GetParent(parent))
 				{
-					if (parent.Current.ControlType == ControlType.TitleBar)
+					if (parent.Current.ControlType == ControlType.TitleBar
+						|| parent.Current.ControlType == ControlType.ScrollBar)
 						return false;
 				}
 				return true;
