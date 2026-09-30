@@ -127,7 +127,9 @@ sealed class RegressionDelegate : MacOSMauiApplication
                 "native click restores cached selected page");
             Require(selectedPage.NativeAttachments == previousAttachments + 1,
                 "native click attaches cached page once");
+            Require(selectedPage.NativeViewCreations == 1, "cached page reuses its native handler and view");
             Require(app.CreatedPages == 2, "native return visits reuse cached pages");
+            await VerifyMountRefresh(window, root, shell, selectedPage);
 
             shell.CurrentItem.Items[1].IsVisible = false;
             shell.CurrentItem.Items[2].Title = "Renamed";
@@ -179,6 +181,116 @@ sealed class RegressionDelegate : MacOSMauiApplication
             NSApplication.SharedApplication.BeginInvokeOnMainThread(() => completion.SetResult());
             await completion.Task;
         }
+    }
+
+    static async Task VerifyMountRefresh(NSWindow window, NSView root, Shell shell, CountingPage page)
+    {
+        var shellHandler = shell.Handler!;
+        var context = shellHandler.MauiContext!;
+        var handler = page.Handler!;
+        var view = (NSView)handler.PlatformView!;
+        var host = view.Superview!;
+        var attachments = page.NativeAttachments;
+        var creations = page.NativeViewCreations;
+        var title = page.Title;
+        var action = new ToolbarItem { Text = "Refresh action" };
+        page.ToolbarItems.Add(action);
+        page.Title = "Refreshed page";
+        window.Title = "Stale chrome";
+        view.Frame = new CGRect(0, 0, 1, 1);
+        shellHandler.UpdateValue(nameof(Shell.CurrentItem));
+        await FlushMainQueue();
+        Require(ReferenceEquals(page.Handler, handler) && page.NativeViewCreations == creations &&
+            page.NativeAttachments == attachments, "same-page refresh reuses handler without remounting");
+        Require(view.Frame.Width == host.Bounds.Width && view.Frame.Height == host.Bounds.Height,
+            "same-page refresh restores native layout");
+        Require(window.Title == "Refreshed page" &&
+            window.Toolbar?.Items.Any(item => item.Label == "Refresh action") == true,
+            "same-page refresh updates native title and toolbar");
+        page.ToolbarItems.Remove(action);
+        page.Title = title;
+        shellHandler.UpdateValue(nameof(Shell.CurrentItem));
+        await FlushMainQueue();
+
+        view.RemoveFromSuperview();
+        shellHandler.UpdateValue(nameof(Shell.CurrentItem));
+        await FlushMainQueue();
+        Require(ReferenceEquals(page.Handler, handler) && ReferenceEquals(view.Superview, host) &&
+            page.NativeAttachments == attachments + 1, "detached current page remounts using its existing handler");
+
+        var replacement = new CountingPageHandler();
+        replacement.SetMauiContext(context);
+        replacement.SetVirtualView(page);
+        shellHandler.UpdateValue(nameof(Shell.CurrentItem));
+        await FlushMainQueue();
+        Require(ReferenceEquals(page.Handler, replacement) &&
+            replacement.PlatformView.Superview == host && view.Superview == null,
+            "same-context replacement handler supplies the mounted view");
+
+        var foreign = new CountingPageHandler();
+        foreign.SetMauiContext(new MauiContext(context.Services));
+        foreign.SetVirtualView(page);
+        shellHandler.UpdateValue(nameof(Shell.CurrentItem));
+        await FlushMainQueue();
+        Require(!ReferenceEquals(page.Handler, foreign) && ReferenceEquals(page.Handler?.MauiContext, context) &&
+            page.Handler?.PlatformView is NSView { Superview: not null },
+            "changed-context handler is converted for the current context");
+
+        var disposedView = (NSView)page.Handler!.PlatformView!;
+        disposedView.RemoveFromSuperview();
+        disposedView.Dispose();
+        shellHandler.UpdateValue(nameof(Shell.CurrentItem));
+        await FlushMainQueue();
+        Require(page.Handler?.PlatformView is NSView restoredView && restoredView.Handle != IntPtr.Zero &&
+            !ReferenceEquals(restoredView, disposedView) && ReferenceEquals(restoredView.Superview, host),
+            "disposed native view is replaced and mounted");
+
+        var empty = new Shell { FlyoutBehavior = FlyoutBehavior.Disabled };
+        shellHandler.SetVirtualView(empty);
+        await FlushMainQueue();
+        Require(host.Subviews.Length == 0, "empty shell clears the previous native page");
+        shellHandler.SetVirtualView(shell);
+        await FlushMainQueue();
+        Require(ReferenceEquals(shell.CurrentPage, page) &&
+            page.Handler?.PlatformView is NSView { Superview: not null }, "restored shell remounts its page");
+
+        var retainedItem = shell.CurrentItem;
+        CountingPage? abandonedPage = null;
+        var redirect = new TabBar
+        {
+            Items =
+            {
+                new Tab
+                {
+                    Title = "Redirect",
+                    Items =
+                    {
+                        new ShellContent
+                        {
+                            ContentTemplate = new DataTemplate(() =>
+                            {
+                                shell.CurrentItem = retainedItem;
+                                return abandonedPage = new CountingPage
+                                {
+                                    Title = "Stale destination",
+                                    Content = new Label { Text = "Stale destination" },
+                                };
+                            }),
+                        },
+                    },
+                },
+            },
+        };
+        shell.Items.Add(redirect);
+        shell.CurrentItem = redirect;
+        await FlushMainQueue();
+        Require(ReferenceEquals(shell.CurrentItem, retainedItem) && ReferenceEquals(shell.CurrentPage, page),
+            "navigation during lazy creation retains the newer destination");
+        Require(abandonedPage is { NativeAttachments: 0 } && page.Handler?.PlatformView is NSView mounted &&
+            Descendants(root).Contains(mounted), "older outer render never mounts the abandoned destination");
+        Capture(root, "reentrant-different-destination");
+        shell.Items.Remove(redirect);
+        await FlushMainQueue();
     }
 
     static void RunSelectionSteps(RegressionApp app, NSView root, Shell shell, NSSegmentedControl tabs, ShellItem item)
@@ -372,21 +484,26 @@ public sealed class RegressionApp : Application
 
 sealed class CountingPageHandler : Handlers.ContentPageHandler
 {
-    protected override MacOSContainerView CreatePlatformView() => new CountingPageView
+    protected override MacOSContainerView CreatePlatformView()
     {
-        Attached = () =>
+        var page = (CountingPage)VirtualView;
+        page.NativeViewCreations++;
+        return new CountingPageView
         {
-            var page = (CountingPage)VirtualView;
-            page.NativeAttachments++;
-            page.NativeAttachmentTraces.Add(Environment.StackTrace);
-        },
-    };
+            Attached = () =>
+            {
+                page.NativeAttachments++;
+                page.NativeAttachmentTraces.Add(Environment.StackTrace);
+            },
+        };
+    }
 }
 
 sealed class CountingPage : ContentPage
 {
     // ToMacOSPlatform can recreate the native view, so count across handlers for the same page.
     public int NativeAttachments { get; set; }
+    public int NativeViewCreations { get; set; }
     public List<string> NativeAttachmentTraces { get; } = new();
 }
 

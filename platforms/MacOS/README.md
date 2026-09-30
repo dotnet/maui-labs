@@ -41,6 +41,9 @@ Native tab clicks use the same queued section refresh as programmatic selection.
 The harness counts native attachments across recreated handlers to verify that
 new and cached pages are displayed once per click, and checks narrow tabs and
 explicit wide-sidebar presentation with titles and system icons.
+Same-page refreshes retain valid native views while updating layout and chrome;
+the native tests also cover remounts, handler/context replacement, and navigation
+to a different destination during lazy page creation.
 Compilation and portable tests alone do not establish native rendering.
 
 ## Shell section navigation
