@@ -26,6 +26,10 @@ namespace Microsoft.Maui.Handlers.WPF
 			new(ViewMapper)
 			{
 				[nameof(Microsoft.Maui.Controls.ItemsView.ItemsSource)] = MapItemsSource,
+				[nameof(Microsoft.Maui.Controls.ItemsView.ItemTemplate)] = MapTemplates,
+				[nameof(Microsoft.Maui.Controls.GroupableItemsView.IsGrouped)] = MapTemplates,
+				[nameof(Microsoft.Maui.Controls.GroupableItemsView.GroupHeaderTemplate)] = MapTemplates,
+				[nameof(Microsoft.Maui.Controls.GroupableItemsView.GroupFooterTemplate)] = MapTemplates,
 				[nameof(Microsoft.Maui.Controls.SelectableItemsView.SelectedItem)] = MapSelectedItem,
 				[nameof(Microsoft.Maui.Controls.SelectableItemsView.SelectionMode)] = MapSelectionMode,
 				[nameof(Microsoft.Maui.Controls.ItemsView.EmptyView)] = MapEmptyView,
@@ -158,6 +162,8 @@ namespace Microsoft.Maui.Handlers.WPF
 						foreach (var child in children)
 							flat.Add(new GroupedItem(child, GroupedItemKind.Item));
 					}
+					if (view.GroupFooterTemplate != null)
+						flat.Add(new GroupedItem(group, GroupedItemKind.Footer));
 				}
 				handler._listBox.ItemsSource = flat;
 			}
@@ -167,6 +173,30 @@ namespace Microsoft.Maui.Handlers.WPF
 			}
 
 			handler.UpdateEmptyView();
+		}
+
+		static void MapTemplates(CollectionViewHandler handler, Microsoft.Maui.Controls.CollectionView view)
+		{
+			if (handler._listBox == null) return;
+			var selectedItems = handler._listBox.SelectedItems.Cast<object>().ToArray();
+			var wasProcessingSelection = handler._processingSelection;
+			handler._processingSelection = true;
+			try
+			{
+				handler._listBox.ItemsSource = null;
+				handler._listBox.ClearMauiViews();
+				MapItemsSource(handler, view);
+				if (view.SelectionMode == Microsoft.Maui.Controls.SelectionMode.Single)
+					MapSelectedItem(handler, view);
+				else if (view.SelectionMode == Microsoft.Maui.Controls.SelectionMode.Multiple)
+					foreach (var item in selectedItems)
+						if (handler._listBox.Items.Contains(item))
+							handler._listBox.SelectedItems.Add(item);
+			}
+			finally
+			{
+				handler._processingSelection = wasProcessingSelection;
+			}
 		}
 
 		void UpdateEmptyView()

@@ -75,6 +75,56 @@ public class CollectionViewHandlerTests
 				view => view is Label { Text: "Group header", Parent: not null });
 			Assert.Equal(2, ((IVisualTreeElement)collection).GetVisualChildren().Count);
 
+			var previousHeader = Assert.Single(created.Where(view => view.Text == "Group header" && view.Parent != null));
+			collection.GroupHeaderTemplate = new DataTemplate(() =>
+			{
+				var label = new Label { Text = "Replacement group header" };
+				created.Add(label);
+				return label;
+			});
+			WaitUntil(() => previousHeader.Parent == null &&
+				created.Any(view => view.Text == "Replacement group header" && view.Parent == collection));
+			var updatedTree = new VisualTreeWalker().WalkElement(collection, null, 0, 20);
+			Assert.Contains(updatedTree!.Children!, child => child.Text == "Replacement group header");
+			Assert.DoesNotContain(updatedTree.Children!, child => child.Text == "Group header");
+			Assert.Equal(2, ((IVisualTreeElement)collection).GetVisualChildren().Count);
+
+			collection.ItemTemplate = null;
+			WaitUntil(() => ((IVisualTreeElement)collection).GetVisualChildren().Count == 1 &&
+				NativeLabelTexts(handler.PlatformView).Contains("Grouped card"));
+			var headerWithoutItemTemplate = Assert.IsType<Label>(
+				Assert.Single(((IVisualTreeElement)collection).GetVisualChildren()));
+			Assert.Equal("Replacement group header", headerWithoutItemTemplate.Text);
+			collection.GroupHeaderTemplate = new DataTemplate(() =>
+			{
+				var label = new Label { Text = "Header with default rows" };
+				created.Add(label);
+				return label;
+			});
+			WaitUntil(() => headerWithoutItemTemplate.Parent == null &&
+				created.Any(view => view.Text == "Header with default rows" && view.Parent == collection));
+			var defaultRowsTree = new VisualTreeWalker().WalkElement(collection, null, 0, 20);
+			Assert.Contains(defaultRowsTree!.Children!, child => child.Text == "Header with default rows");
+			Assert.Contains("Grouped card", NativeLabelTexts(handler.PlatformView));
+
+			collection.GroupHeaderTemplate = null;
+			WaitUntil(() => created.All(view => view.Parent == null) &&
+				NativeLabelTexts(handler.PlatformView).Contains("Grouped card"));
+			Assert.Empty(((IVisualTreeElement)collection).GetVisualChildren());
+
+			collection.GroupHeaderTemplate = new DataTemplate(() =>
+			{
+				var label = new Label { Text = "Disconnect header" };
+				created.Add(label);
+				return label;
+			});
+			collection.ItemTemplate = new DataTemplate(() =>
+			{
+				var label = new Label { Text = "Disconnect item" };
+				created.Add(label);
+				return label;
+			});
+			WaitUntil(() => created.Count(view => view.Parent == collection) == 2);
 			((IElementHandler)handler).DisconnectHandler();
 			Assert.All(created, view => Assert.Null(view.Parent));
 			Assert.Empty(((IVisualTreeElement)collection).GetVisualChildren());
@@ -85,6 +135,15 @@ public class CollectionViewHandlerTests
 				((IElementHandler)handler).DisconnectHandler();
 			window.Destroy();
 		}
+	}
+
+	static IEnumerable<string> NativeLabelTexts(Gtk.Widget widget)
+	{
+		if (widget is Gtk.Label label)
+			yield return label.GetText();
+		for (var child = widget.GetFirstChild(); child != null; child = child.GetNextSibling())
+			foreach (var text in NativeLabelTexts(child))
+				yield return text;
 	}
 
 	static void WaitUntil(Func<bool> condition)

@@ -84,7 +84,6 @@ public class CollectionViewHandlerTests
 		{
 			var unsupported = new UnsupportedView();
 			collection.ItemTemplate = new DataTemplate(() => unsupported);
-			handler.UpdateValue(nameof(CollectionView.ItemsSource));
 			Prepare(list, new WListBoxItem(), "Unsupported");
 			Assert.Null(unsupported.Parent);
 			Assert.Empty(((IVisualTreeElement)collection).GetVisualChildren());
@@ -100,7 +99,6 @@ public class CollectionViewHandlerTests
 			collection.GroupHeaderTemplate = new DataTemplate(() => new Label { Text = "Group" });
 			collection.ItemTemplate = new CardTemplateSelector(collection.ItemTemplate);
 			collection.ItemsSource = new[] { new[] { "Grouped card" } };
-			handler.UpdateValue(nameof(CollectionView.ItemsSource));
 			var headerContainer = new WListBoxItem();
 			var itemContainer = new WListBoxItem();
 			Prepare(list, headerContainer, list.Items[0]);
@@ -117,6 +115,112 @@ public class CollectionViewHandlerTests
 	sealed class CardTemplateSelector(DataTemplate template) : DataTemplateSelector
 	{
 		protected override DataTemplate OnSelectTemplate(object item, BindableObject container) => template;
+	}
+
+	[Fact]
+	public void ItemTemplateChange_ReplacesLogicalChildren_WithoutChangingItemsSource()
+	{
+		Run((collection, handler, list, created) =>
+		{
+			Realize(list);
+			var original = Assert.Single(created);
+			var source = collection.ItemsSource;
+			collection.SelectionMode = SelectionMode.Single;
+			list.SelectedIndex = 0;
+			var selected = collection.SelectedItem;
+			var taps = 0;
+			collection.ItemTemplate = new DataTemplate(() =>
+			{
+				var label = new Label { Text = "New template" };
+				label.GestureRecognizers.Add(new TapGestureRecognizer { Command = new Command(() => taps++) });
+				return label;
+			});
+			Realize(list);
+
+			Assert.Same(source, collection.ItemsSource);
+			Assert.Same(selected, collection.SelectedItem);
+			Assert.Same(selected, list.SelectedItem);
+			Assert.Equal(0, taps);
+			Assert.Null(original.Parent);
+			var replacement = Assert.IsType<Label>(Assert.Single(((IVisualTreeElement)collection).GetVisualChildren()));
+			Assert.Equal("New template", replacement.Text);
+			Assert.Same(collection, replacement.Parent);
+			var tree = new VisualTreeWalker().WalkElement(collection, null, 0, 20);
+			Assert.Contains(tree!.Children!, child => child.Text == "New template");
+			Assert.DoesNotContain(tree.Children!, child => child.AutomationId == "Card");
+
+			collection.ItemTemplate = null;
+			Realize(list);
+			Assert.Null(replacement.Parent);
+			Assert.Empty(((IVisualTreeElement)collection).GetVisualChildren());
+		});
+	}
+
+	[Fact]
+	public void GroupingChange_ReplacesLogicalChildren_WithoutChangingItemsSource()
+	{
+		Run((collection, handler, list, created) =>
+		{
+			collection.GroupHeaderTemplate = new DataTemplate(() => new Label { Text = "Group header" });
+			collection.ItemsSource = new[] { new[] { "Grouped card" } };
+			Realize(list);
+			var original = Assert.Single(created);
+			var source = collection.ItemsSource;
+
+			collection.IsGrouped = true;
+			Realize(list);
+			Assert.Same(source, collection.ItemsSource);
+			Assert.Null(original.Parent);
+			var grouped = ((IVisualTreeElement)collection).GetVisualChildren().Cast<Label>().ToArray();
+			Assert.Equal(2, grouped.Length);
+			Assert.All(grouped, view => Assert.Same(collection, view.Parent));
+			Assert.Contains(grouped, view => view.Text == "Group header");
+			Assert.Contains(grouped, view => view.Text == "Grouped card");
+
+			collection.IsGrouped = false;
+			Realize(list);
+			Assert.All(grouped, view => Assert.Null(view.Parent));
+			Assert.Single(((IVisualTreeElement)collection).GetVisualChildren());
+		});
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void GroupTemplateChange_RebuildsRealizedRoots(bool footer)
+	{
+		Run((collection, handler, list, created) =>
+		{
+			collection.IsGrouped = true;
+			collection.GroupHeaderTemplate = new DataTemplate(() => new Label { Text = "Original header" });
+			if (footer)
+				collection.GroupFooterTemplate = new DataTemplate(() => new Label { Text = "Original footer" });
+			collection.ItemsSource = new[] { new[] { "Grouped card" } };
+			Realize(list);
+			var original = ((IVisualTreeElement)collection).GetVisualChildren().Cast<Label>().ToArray();
+			Assert.Equal(footer ? 3 : 2, original.Length);
+			var template = new DataTemplate(() => new Label { Text = "Replacement group template" });
+
+			if (footer)
+				collection.GroupFooterTemplate = template;
+			else
+				collection.GroupHeaderTemplate = template;
+			Realize(list);
+
+			Assert.All(original, view => Assert.Null(view.Parent));
+			var children = ((IVisualTreeElement)collection).GetVisualChildren().Cast<Label>().ToArray();
+			Assert.Equal(footer ? 3 : 2, children.Length);
+			Assert.All(children, view => Assert.Same(collection, view.Parent));
+			Assert.Contains(children, view => view.Text == "Replacement group template");
+			Assert.DoesNotContain(children, view => view.Text == (footer ? "Original footer" : "Original header"));
+			if (footer)
+			{
+				collection.GroupFooterTemplate = null;
+				Realize(list);
+				Assert.All(children, view => Assert.Null(view.Parent));
+				Assert.Equal(2, ((IVisualTreeElement)collection).GetVisualChildren().Count);
+			}
+		});
 	}
 
 	[Theory]
@@ -139,10 +243,7 @@ public class CollectionViewHandlerTests
 				return label;
 			});
 			collection.ItemsSource = new[] { "Same item", "Same item" };
-			list.ApplyTemplate();
-			list.Measure(new System.Windows.Size(400, 300));
-			list.Arrange(new System.Windows.Rect(0, 0, 400, 300));
-			list.UpdateLayout();
+			Realize(list);
 			Assert.Equal(2, created.Count);
 			Assert.NotNull(list.ItemContainerGenerator.ContainerFromIndex(1));
 
@@ -156,6 +257,14 @@ public class CollectionViewHandlerTests
 	}
 
 	sealed class UnsupportedView : View;
+
+	static void Realize(MauiCollectionListBox list)
+	{
+		list.ApplyTemplate();
+		list.Measure(new System.Windows.Size(400, 300));
+		list.Arrange(new System.Windows.Rect(0, 0, 400, 300));
+		list.UpdateLayout();
+	}
 
 	static void Run(Action<CollectionView, CollectionViewHandler, MauiCollectionListBox, List<Label>> action)
 	{

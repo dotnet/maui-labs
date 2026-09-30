@@ -67,17 +67,34 @@ jobs:
         with:
           global-json-file: global.json
       - name: Install GTK and isolated display
-        run: sudo apt-get update && sudo apt-get install -y libgtk-4-1 xvfb dbus-x11
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-1 libwebkitgtk-6.0-4 xvfb dbus-x11
       - name: Test native handlers
         run: >-
           dbus-run-session -- xvfb-run -a dotnet test
           platforms/Linux.Gtk4/tests/Linux.Gtk4.HandlerTests/Linux.Gtk4.HandlerTests.csproj
           --configuration Release --logger trx
           --results-directory artifacts/TestResults/gtk-native
+      - name: Build DevFlow sample
+        run: >-
+          dotnet build platforms/Linux.Gtk4/samples/Linux.Gtk4.Sample/Linux.Gtk4.Sample.csproj
+          --configuration Debug -p:EnableMauiDevFlow=true -m:1 -nr:false
+      - name: Verify running sample through DevFlow
+        run: >-
+          dbus-run-session -- xvfb-run -a python3
+          platforms/Linux.Gtk4/tests/devflow_collectionview_smoke.py
+          --sample artifacts/bin/Linux.Gtk4.Sample/Debug/net10.0/Linux.Gtk4.Sample.dll
+          --output artifacts/TestResults/gtk-devflow
       - name: Upload native handler test results
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: gtk-native-handler-test-results
           path: artifacts/TestResults/gtk-native/*.trx
+          if-no-files-found: error
+      - name: Upload DevFlow runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gtk-collectionview-devflow-evidence
+          path: artifacts/TestResults/gtk-devflow/
           if-no-files-found: error

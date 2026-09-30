@@ -41,6 +41,7 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 			["FooterTemplate"] = MapFooter,
 			["ItemsLayout"] = MapItemsLayout,
 			["ItemTemplate"] = MapItemTemplate,
+			["GroupHeaderTemplate"] = MapItemTemplate,
 			["ItemSizingStrategy"] = MapItemSizingStrategy,
 			["ItemsUpdatingScrollMode"] = MapItemsUpdatingScrollMode,
 			["IsGrouped"] = MapIsGrouped,
@@ -88,7 +89,8 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 			ClearRealizedViews();
 		}
 
-		var hasTemplate = VirtualView is CollectionView cv && cv.ItemTemplate != null;
+		var hasTemplate = VirtualView is CollectionView cv &&
+			(cv.ItemTemplate != null || cv.GroupHeaderTemplate != null);
 		Gtk.ListItemFactory factory;
 
 		if (hasTemplate)
@@ -117,13 +119,7 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 		factory.OnSetup += (_, args) =>
 		{
 			var listItem = (Gtk.ListItem)args.Object;
-			var label = Gtk.Label.New(string.Empty);
-			label.SetHalign(Gtk.Align.Start);
-			label.SetXalign(0f);
-			label.SetMarginStart(12);
-			label.SetMarginEnd(12);
-			label.SetMarginTop(8);
-			label.SetMarginBottom(8);
+			var label = CreateItemLabel(string.Empty);
 
 			// Add a one-time CSS provider for group header styling via CSS class
 			var cssProvider = Gtk.CssProvider.New();
@@ -148,6 +144,18 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 				label.RemoveCssClass("group-header");
 		};
 		return factory;
+	}
+
+	static Gtk.Label CreateItemLabel(string text)
+	{
+		var label = Gtk.Label.New(text);
+		label.SetHalign(Gtk.Align.Start);
+		label.SetXalign(0f);
+		label.SetMarginStart(12);
+		label.SetMarginEnd(12);
+		label.SetMarginTop(8);
+		label.SetMarginBottom(8);
+		return label;
 	}
 
 	Gtk.SignalListItemFactory BuildTemplateFactory()
@@ -180,7 +188,10 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 			}
 
 			if (collectionView.ItemTemplate == null)
+			{
+				listItem.SetChild(CreateItemLabel(dataItem?.ToString() ?? string.Empty));
 				return;
+			}
 
 			try
 			{

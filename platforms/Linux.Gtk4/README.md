@@ -339,7 +339,8 @@ dotnet test tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
 
 These tests require Linux, GTK 4.12 or newer, and a display. They exercise the real
 GTK list-item factory, including logical parenting, DevFlow tree discovery,
-source replacement, template replacement, group headers, and disconnection.
+source replacement, runtime item/group-header template replacement, group headers,
+and disconnection. Template changes do not require an ItemsSource change.
 From `platforms/Linux.Gtk4`, use an isolated display:
 
 ```bash
@@ -359,6 +360,12 @@ example picker. Realized contact labels are discoverable by text and by their
 name as an automation id. Tapping **Alice Johnson** or **Bob Smith** updates the
 status to `Tapped: <name>`. Unrealized rows are not logical children until GTK
 realizes them.
+
+The native CI job also builds the DevFlow-enabled sample and runs
+`tests/devflow_collectionview_smoke.py` under dbus/Xvfb. It verifies the owned
+process identity before mutation and asserts both command outcomes, then uploads
+the application log, query/tap JSON, tree and screenshot as
+`gtk-collectionview-devflow-evidence`.
 
 ## Project Structure
 
