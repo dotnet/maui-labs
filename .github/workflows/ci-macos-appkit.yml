@@ -41,6 +41,8 @@ jobs:
     name: Native dynamic layout regression
     runs-on: macos-latest
     timeout-minutes: 25
+    env:
+      NUGET_PACKAGES: ${{ github.workspace }}/.packages
     steps:
       - uses: actions/checkout@v6
       - name: Select Xcode
@@ -48,8 +50,8 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
-      - name: Install pinned MAUI and macOS workloads
-        run: ./eng/common/dotnet.sh workload install maui macos --version 10.0.203
+      - name: Install pinned macOS workload
+        run: ./eng/common/dotnet.sh workload install macos --version 10.0.203
       - name: Run native baseline and fixed regression
         shell: bash
         run: |
