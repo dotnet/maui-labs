@@ -312,7 +312,6 @@ namespace Microsoft.Maui.Handlers.WPF
 		{
 			UnregisterNativeElements();
 			_flyoutItems.Children.Clear();
-			_tabControl.Items.Clear();
 			RegisterNativeElement(shell, _hamburgerButton, "ShellFlyoutToggle");
 			UpdateBackButtonRegistration(shell.CurrentPage);
 
@@ -390,7 +389,6 @@ namespace Microsoft.Maui.Handlers.WPF
 			}
 
 			bool hasFlyoutItems = false;
-			bool hasTabs = false;
 			var itemTemplate = shell.ItemTemplate;
 
 			foreach (var item in shell.Items)
@@ -498,16 +496,6 @@ namespace Microsoft.Maui.Handlers.WPF
 					RegisterNativeElement(capturedItem, btn, "ShellFlyout");
 				}
 
-				if (item.Items.Count > 1)
-				{
-					hasTabs = true;
-					foreach (var section in item.Items)
-					{
-						var tabItem = new global::System.Windows.Controls.TabItem { Header = section.Title ?? section.Route ?? "Tab", Tag = section };
-						_tabControl.Items.Add(tabItem);
-						RegisterNativeElement(section, tabItem, "ShellTab");
-					}
-				}
 			}
 
 			if (hasFlyoutItems)
@@ -515,11 +503,40 @@ namespace Microsoft.Maui.Handlers.WPF
 			else
 				SetFlyoutBehavior(FlyoutBehavior.Disabled);
 
-			_tabControl.Visibility = hasTabs ? WVisibility.Visible : WVisibility.Collapsed;
+			UpdateTabs(shell);
 
 			// Apply theme after building items
 			UpdateFlyoutTheme();
 			UpdateToolbarTheme();
+		}
+
+		public void UpdateTabs(Shell shell)
+		{
+			foreach (global::System.Windows.Controls.TabItem tab in _tabControl.Items)
+			{
+				if (_registeredNativeElements.Remove(tab))
+					NativeElementDiagnosticsBridge.Unregister(tab);
+			}
+			_tabControl.Items.Clear();
+
+			var item = shell.CurrentItem;
+			bool hasTabs = item != null && shell.Items.Contains(item) && item.Items.Count > 1;
+			if (hasTabs && item != null)
+			{
+				foreach (var section in item.Items)
+				{
+					var tab = new global::System.Windows.Controls.TabItem
+					{
+						Header = section.Title ?? section.Route ?? "Tab",
+						Tag = section,
+					};
+					_tabControl.Items.Add(tab);
+					RegisterNativeElement(section, tab, "ShellTab");
+					if (ReferenceEquals(section, item.CurrentItem))
+						_tabControl.SelectedItem = tab;
+				}
+			}
+			_tabControl.Visibility = hasTabs ? WVisibility.Visible : WVisibility.Collapsed;
 		}
 
 		void RegisterNativeElement(object owner, DependencyObject nativeElement, string role)
@@ -1118,6 +1135,9 @@ namespace Microsoft.Maui.Handlers.WPF
 		}
 
 		static void MapCurrentItem(ShellHandler handler, Shell shell)
-			=> handler.ShowCurrentPage();
+		{
+			handler.PlatformView.UpdateTabs(shell);
+			handler.ShowCurrentPage();
+		}
 	}
 }

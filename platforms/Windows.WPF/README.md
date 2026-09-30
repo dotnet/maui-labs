@@ -35,6 +35,8 @@ thread refresh the native flyout, tabs, and selected page. Collection notificati
 are coalesced on the dispatcher after Shell settles its current selection. Clearing
 the hierarchy clears the displayed page; replacing flyout items with a `TabBar`
 does not leave flyout entries behind. Inactive page templates remain lazy.
+The tab strip contains only the current item's sections and preserves its selected
+section when inactive items change.
 
 Run the collection and lifecycle regressions on Windows:
 

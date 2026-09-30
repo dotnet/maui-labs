@@ -108,6 +108,41 @@ public class ShellItemsHandlerTests
 	}
 
 	[Fact]
+	public void InactiveSections_Changed_KeepActiveTabsSelectionAndPage()
+	{
+		Run((shell, handler) =>
+		{
+			var active = Item("Active");
+			var selected = Section("Selected");
+			active.Items.Add(selected);
+			active.CurrentItem = selected;
+			var inactive = Item("Inactive");
+			inactive.Items.Add(Section("Other"));
+			shell.Items.Add(active);
+			shell.Items.Add(inactive);
+			DrainDispatcher();
+			var page = shell.CurrentPage;
+
+			inactive.Items.Add(Section("Added while inactive"));
+			DrainDispatcher();
+
+			AssertFlyout(handler, active, inactive);
+			AssertTabs(handler, active.Items.ToArray());
+			Assert.Same(selected, Assert.IsType<TabItem>(Tabs(handler).SelectedItem).Tag);
+			Assert.Same(page, shell.CurrentPage);
+			AssertCurrentPage(shell, handler);
+			Assert.All(inactive.Items, section =>
+				Assert.Null(((IShellContentController)section.Items[0]).Page));
+
+			shell.CurrentItem = inactive;
+			DrainDispatcher();
+			AssertTabs(handler, inactive.Items.ToArray());
+			Assert.Same(inactive.CurrentItem, Assert.IsType<TabItem>(Tabs(handler).SelectedItem).Tag);
+			AssertCurrentPage(shell, handler);
+		});
+	}
+
+	[Fact]
 	public void Items_AddRemoveReplaceReorderReset_UpdatesNativeFlyoutAndPage()
 	{
 		Run((shell, handler) =>
