@@ -20,6 +20,15 @@ This backend lets MAUI applications run as true native macOS apps that use AppKi
 | `Microsoft.Maui.Platforms.MacOS.Essentials` | MAUI Essentials implementations (clipboard, preferences, sensors, …) |
 | `Microsoft.Maui.Platforms.MacOS.BlazorWebView` | Blazor Hybrid (`BlazorWebView`) support |
 
+## Shell section navigation
+
+Shell observes section and content selection changes, including `GoToAsync` and
+programmatic `CurrentItem` updates. The selected lazy page is created and hosted
+without requiring a manual handler refresh; unselected templates remain lazy.
+The `shell-section-regression` CI job runs a native AppKit harness against both
+the pre-fix revision and the current code and uploads screenshots and navigation
+assertions as `shell-section-appkit-runtime`.
+
 ## Prerequisites
 
 - .NET 10 SDK

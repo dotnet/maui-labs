@@ -28,6 +28,21 @@ maui devflow --agent-port <port> ui tap --automationId ShellSettingsButton
 The tree should include `ShellHomePage` beneath `ShellContent`, the title query
 should find a MAUI `Label`, and tapping the button should navigate to Settings.
 
+For section switching within one Shell item, select **Launch Section Switching
+Repro**, or start the sample with `--shell-section-repro`. This uses two lazy
+pages in one `TabBar`, without calling a handler refresh workaround. The
+**GoToAsync** and **Set CurrentItem** buttons must both replace Page One with
+Page Two (and back). **Refresh state** shows the route, current page, page
+creation count, and `Navigated` count. Only one page should be created initially;
+after visiting both pages, the creation count must remain two on repeat visits.
+
+The focused Windows handler regression suite exercises real MAUI selection and
+WPF content hosting, including selection cleanup:
+
+```powershell
+dotnet test platforms\Windows.WPF\tests\HandlerTests --filter FullyQualifiedName~ShellSectionSwitchingTests
+```
+
 ## Screenshots
 
 | Home | Controls | Layouts |

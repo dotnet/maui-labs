@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-macos</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <ApplicationId>com.microsoft.maui.tests.shellsections</ApplicationId>
+    <ApplicationTitle>Shell section regression</ApplicationTitle>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\MacOS\MacOS.csproj" />
+    <ProjectReference Include="..\..\src\MacOS.Essentials\MacOS.Essentials.csproj" />
+  </ItemGroup>
+</Project>
