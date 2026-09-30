@@ -258,7 +258,8 @@ The handler regression suite exercises real native container callbacks and
 selection, including CollectionView parenting, recycling, equal-valued items,
 runtime item/group template and grouping changes, group headers and footers,
 conversion failures, disconnection, and DevFlow tree discovery. Template changes
-rebuild realized roots without requiring an ItemsSource change:
+rebuild realized roots without requiring an ItemsSource change and preserve
+single/multiple selection of equal-valued grouped item occurrences:
 
 ```powershell
 dotnet test tests\HandlerTests\HandlerTests.csproj -p:UseMaui=false

@@ -141,6 +141,10 @@ namespace Microsoft.Maui.Handlers.WPF
 		}
 
 		static void MapItemsSource(CollectionViewHandler handler, Microsoft.Maui.Controls.CollectionView view)
+			=> MapItemsSource(handler, view, null);
+
+		static void MapItemsSource(CollectionViewHandler handler, Microsoft.Maui.Controls.CollectionView view,
+			GroupedItem[]? reusableItems)
 		{
 			if (handler._listBox == null) return;
 
@@ -152,18 +156,32 @@ namespace Microsoft.Maui.Handlers.WPF
 
 			if (view.IsGrouped && view.ItemsSource is IEnumerable source)
 			{
+				// Keep each equal-valued occurrence distinct while preserving selection across template rebuilds.
+				var reusable = reusableItems?.GroupBy(item => (item.Data, item.Kind))
+					.ToDictionary(group => group.Key, group => new Queue<GroupedItem>(group));
+				GroupedItem Wrap(object data, GroupedItemKind kind)
+				{
+					if (reusable != null && reusable.TryGetValue((data, kind), out var items) && items.Count > 0)
+					{
+						var item = items.Dequeue();
+						item.Data = data;
+						return item;
+					}
+					return new GroupedItem(data, kind);
+				}
+
 				// Flatten groups into a single list with header/footer markers
 				var flat = new List<GroupedItem>();
 				foreach (var group in source)
 				{
-					flat.Add(new GroupedItem(group, GroupedItemKind.Header));
+					flat.Add(Wrap(group, GroupedItemKind.Header));
 					if (group is IEnumerable children)
 					{
 						foreach (var child in children)
-							flat.Add(new GroupedItem(child, GroupedItemKind.Item));
+							flat.Add(Wrap(child, GroupedItemKind.Item));
 					}
 					if (view.GroupFooterTemplate != null)
-						flat.Add(new GroupedItem(group, GroupedItemKind.Footer));
+						flat.Add(Wrap(group, GroupedItemKind.Footer));
 				}
 				handler._listBox.ItemsSource = flat;
 			}
@@ -179,13 +197,14 @@ namespace Microsoft.Maui.Handlers.WPF
 		{
 			if (handler._listBox == null) return;
 			var selectedItems = handler._listBox.SelectedItems.Cast<object>().ToArray();
+			var reusableItems = handler._listBox.Items.OfType<GroupedItem>().ToArray();
 			var wasProcessingSelection = handler._processingSelection;
 			handler._processingSelection = true;
 			try
 			{
 				handler._listBox.ItemsSource = null;
 				handler._listBox.ClearMauiViews();
-				MapItemsSource(handler, view);
+				MapItemsSource(handler, view, reusableItems);
 				if (view.SelectionMode == Microsoft.Maui.Controls.SelectionMode.Single)
 					MapSelectedItem(handler, view);
 				else if (view.SelectionMode == Microsoft.Maui.Controls.SelectionMode.Multiple)
@@ -339,7 +358,7 @@ namespace Microsoft.Maui.Handlers.WPF
 
 	class GroupedItem
 	{
-		public object Data { get; }
+		public object Data { get; set; }
 		public GroupedItemKind Kind { get; }
 		public GroupedItem(object data, GroupedItemKind kind) { Data = data; Kind = kind; }
 	}

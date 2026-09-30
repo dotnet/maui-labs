@@ -225,6 +225,57 @@ public class CollectionViewHandlerTests
 
 	[Theory]
 	[InlineData(SelectionMode.Single)]
+	[InlineData(SelectionMode.Multiple)]
+	public void GroupedTemplateChanges_PreserveSelectedOccurrences(SelectionMode mode)
+	{
+		Run((collection, handler, list, created) =>
+		{
+			collection.SelectionMode = mode;
+			collection.IsGrouped = true;
+			collection.GroupHeaderTemplate = new DataTemplate(() => new Label { Text = "Header" });
+			collection.ItemsSource = new[] { new[] { "Same item", "Same item" } };
+			Realize(list);
+			list.SelectedIndex = 2;
+			if (mode == SelectionMode.Multiple)
+				Assert.IsType<WListBoxItem>(list.ItemContainerGenerator.ContainerFromIndex(1)).IsSelected = true;
+			var selected = list.SelectedItems.Cast<object>().ToArray();
+			var selectedItem = collection.SelectedItem;
+			var selectedItems = collection.SelectedItems;
+			var taps = 0;
+
+			collection.ItemTemplate = new DataTemplate(() =>
+			{
+				var label = new Label { Text = "Replacement" };
+				label.GestureRecognizers.Add(new TapGestureRecognizer { Command = new Command(() => taps++) });
+				return label;
+			});
+			Realize(list);
+			AssertSelection();
+
+			collection.GroupFooterTemplate = new DataTemplate(() => new Label { Text = "Footer" });
+			Realize(list);
+			AssertSelection();
+			Assert.Equal(4, list.Items.Count);
+
+			collection.GroupFooterTemplate = null;
+			Realize(list);
+			AssertSelection();
+			Assert.Equal(3, list.Items.Count);
+
+			void AssertSelection()
+			{
+				Assert.Equal(selected, list.SelectedItems.Cast<object>().ToArray());
+				Assert.Same(selectedItem, collection.SelectedItem);
+				Assert.Same(selectedItems, collection.SelectedItems);
+				Assert.Equal(0, taps);
+				Assert.True(Assert.IsType<WListBoxItem>(
+					list.ItemContainerGenerator.ContainerFromIndex(2)).IsSelected);
+			}
+		});
+	}
+
+	[Theory]
+	[InlineData(SelectionMode.Single)]
 	[InlineData(SelectionMode.None)]
 	public void SelectingEqualItems_FiresGestureOnTheSelectedContainer(SelectionMode mode)
 	{
