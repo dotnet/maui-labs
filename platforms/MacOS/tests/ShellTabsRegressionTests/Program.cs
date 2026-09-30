@@ -239,8 +239,19 @@ sealed class RegressionDelegate : MacOSMauiApplication
         var disposedView = (NSView)page.Handler!.PlatformView!;
         disposedView.RemoveFromSuperview();
         disposedView.Dispose();
+        var handleAfterDispose = disposedView.Handle;
+        await FlushMainQueue();
+        File.WriteAllText(Path.Combine(Program.Output, "disposed-view-state.txt"),
+            $"immediate={handleAfterDispose}; after UI queue={disposedView.Handle}");
+        Require(disposedView.Handle == IntPtr.Zero, "disposed native handle has been released");
         shellHandler.UpdateValue(nameof(Shell.CurrentItem));
         await FlushMainQueue();
+        var resolvedView = page.Handler?.PlatformView as NSView;
+        File.AppendAllText(Path.Combine(Program.Output, "disposed-view-state.txt"),
+            $"; resolved={resolvedView?.Handle}; same view={ReferenceEquals(resolvedView, disposedView)}" +
+            $"; context matches={ReferenceEquals(page.Handler?.MauiContext, context)}" +
+            $"; parent={(resolvedView != null && resolvedView.Handle != IntPtr.Zero ? resolvedView.Superview?.Handle.ToString() : "none")}" +
+            $"; expected parent={host.Handle}");
         Require(page.Handler?.PlatformView is NSView restoredView && restoredView.Handle != IntPtr.Zero &&
             !ReferenceEquals(restoredView, disposedView) && ReferenceEquals(restoredView.Superview, host),
             "disposed native view is replaced and mounted");
