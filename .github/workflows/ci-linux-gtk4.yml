@@ -45,6 +45,42 @@ jobs:
       run-tests: true
       pack: true
 
+  runtime:
+    name: Native GTK runtime (${{ matrix.test-class }})
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        # Each class gets its own process: GTK initialization is thread-affine.
+        test-class: [PickerSelectionTests]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Install GTK and virtual display
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-1 xvfb
+      - name: Run native regression tests
+        env:
+          RUN_GTK_RUNTIME_TESTS: '1'
+          GDK_BACKEND: x11
+          GSK_RENDERER: cairo
+          GTK_A11Y: none
+        run: >-
+          dbus-run-session -- xvfb-run --auto-servernum
+          dotnet test platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
+          --configuration Release
+          --filter FullyQualifiedName~${{ matrix.test-class }}
+          --logger "console;verbosity=detailed"
+          --logger "trx;LogFileName=${{ matrix.test-class }}.trx"
+          --results-directory artifacts/TestResults/gtk-runtime
+          --blame-hang-timeout 3m
+          -m:1 -nr:false
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: gtk-runtime-${{ matrix.test-class }}
+          path: artifacts/TestResults/gtk-runtime
+
   templates:
     name: Packed template regression checks
     runs-on: windows-latest

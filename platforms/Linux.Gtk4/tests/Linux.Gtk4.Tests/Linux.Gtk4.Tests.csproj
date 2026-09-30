@@ -4,7 +4,7 @@
     <AssemblyName>Microsoft.Maui.Platforms.Linux.Gtk4.Tests</AssemblyName>
     <IsTestProject>true</IsTestProject>
     <IsPackable>false</IsPackable>
-    <!-- Only managed CSS paths are tested; the backend assembly is marked Linux-only. -->
+    <!-- Native GTK tests are opt-in on Linux; managed tests also run on other hosts. -->
     <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
   <ItemGroup>
