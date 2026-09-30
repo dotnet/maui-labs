@@ -6,9 +6,6 @@ using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Tests;
 
-[CollectionDefinition("GTK runtime", DisableParallelization = true)]
-public sealed class GtkRuntimeCollection;
-
 [Collection("GTK runtime")]
 public class GtkTransformTests
 {
@@ -25,6 +22,10 @@ public class GtkTransformTests
 		handler.SetMauiContext(new GtkMauiContext(services));
 		handler.SetVirtualView(view);
 		var widget = handler.PlatformView;
+		using var css = Gtk.CssProvider.New();
+		// ComputePoint uses the content origin, so remove theme-dependent insets.
+		css.LoadFromString("button { padding: 0; margin: 0; border-width: 0; min-width: 0; min-height: 0; }");
+		widget.GetStyleContext().AddProvider(css, Gtk.Constants.STYLE_PROVIDER_PRIORITY_APPLICATION);
 		panel.AddChild(widget);
 		window.SetDefaultSize(640, 480);
 		window.SetChild(panel);
@@ -96,14 +97,5 @@ public class GtkTransformTests
 	sealed class TransformHandler() : GtkViewHandler<IView, Gtk.Button>(ViewMapper)
 	{
 		protected override Gtk.Button CreatePlatformView() => Gtk.Button.New();
-	}
-}
-
-internal sealed class GtkRuntimeFactAttribute : FactAttribute
-{
-	public GtkRuntimeFactAttribute()
-	{
-		if (!OperatingSystem.IsLinux() || Environment.GetEnvironmentVariable("RUN_GTK_RUNTIME_TESTS") != "1")
-			Skip = "Set RUN_GTK_RUNTIME_TESTS=1 and run under a Linux GTK4 display (for example xvfb-run).";
 	}
 }

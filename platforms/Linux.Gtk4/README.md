@@ -342,6 +342,26 @@ From `platforms/Linux.Gtk4`, run:
 dotnet test tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
 ```
 
+### Native transform regression
+
+The transform regression requires Linux, GTK 4.12+, and a display. It creates a
+real GTK window and repeatedly scales and rotates a button at origin, off-origin,
+translated, and translation-cancelled positions. Forced finalization detects
+native point double frees; coordinate assertions check that transforms still work.
+Native tests are explicitly skipped unless `RUN_GTK_RUNTIME_TESTS=1`.
+
+From `platforms/Linux.Gtk4`, run with an isolated display:
+
+```bash
+RUN_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo GTK_A11Y=none \
+  dbus-run-session -- xvfb-run --auto-servernum \
+  dotnet test tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj \
+  --filter FullyQualifiedName~GtkTransformTests
+```
+
+The native CI job runs each test class in a separate process to keep GTK
+initialization on one thread and uploads its TRX results.
+
 ### Run the sample app
 
 ```bash
