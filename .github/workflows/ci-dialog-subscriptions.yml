@@ -90,3 +90,15 @@ jobs:
           probe=$(find artifacts/bin/AlertRegistrationProbe/Debug -type f -path '*/Contents/MacOS/AlertRegistrationProbe' -print -quit)
           test -n "$probe"
           "$probe"
+      - name: Verify native AppKit Page dialogs
+        if: matrix.maui == '10.0.70'
+        shell: bash
+        run: |
+          set -euo pipefail
+          probe=$(find artifacts/bin/AlertRegistrationProbe/Debug -type f -path '*/Contents/MacOS/AlertRegistrationProbe' -print -quit)
+          test -n "$probe"
+          python3 - "$probe" <<'PY'
+          import subprocess
+          import sys
+          subprocess.run([sys.argv[1], "--native"], check=True, timeout=60)
+          PY

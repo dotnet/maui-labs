@@ -21,3 +21,10 @@ if (subscription is not DispatchProxy
 }
 
 Console.WriteLine($"PASS: {typeof(Window).Assembly.FullName}: {subscriptionType.FullName} -> {subscription.GetType()}");
+
+if (args.Contains("--native"))
+{
+    AppKit.NSApplication.Init();
+    AppKit.NSApplication.SharedApplication.Delegate = new NativeDialogProbe();
+    AppKit.NSApplication.Main([]);
+}
