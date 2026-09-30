@@ -19,5 +19,8 @@ original mismatch (`SelectedIndex == -1`, no title, native index 0 displaying
 January). Other failures, including the 60-second watchdog, exit 1.
 
 The `picker-regression` CI job runs the identical harness against the issue's
-pinned baseline and the PR code. It requires the baseline's exact failure and
-the fixed version's complete pass, and uploads logs, states, and screenshots.
+pinned original `PickerHandler.cs` and the PR handler. Both builds use the current
+surrounding source and build infrastructure: the historical repository has
+unrelated compilation failures with `UseMaui=false`. The job requires the original
+handler's exact failure and the fixed version's complete pass, and uploads logs,
+states, and screenshots.

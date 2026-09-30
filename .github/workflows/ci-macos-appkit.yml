@@ -48,7 +48,6 @@ jobs:
           path: fixed
       - uses: actions/checkout@v4
         with:
-          ref: 9206e7c5c6486a7f422efd36a7635c6fe9609000
           path: baseline
       - uses: actions/setup-dotnet@v5
         with:
@@ -62,8 +61,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p baseline/platforms/MacOS/tests
-          cp -R fixed/platforms/MacOS/tests/PickerRegressionTests baseline/platforms/MacOS/tests/
+          # Keep current build infrastructure; only restore the original Picker handler.
+          # The full historical tree fails to compile with UseMaui=false.
+          baseline_sha=9206e7c5c6486a7f422efd36a7635c6fe9609000
+          handler=platforms/MacOS/src/MacOS/Handlers/PickerHandler.cs
+          git -C baseline fetch --depth=1 origin "$baseline_sha"
+          git -C baseline show "$baseline_sha:$handler" > "baseline/$handler"
           for variant in baseline fixed; do
             evidence="$GITHUB_WORKSPACE/evidence/$variant"
             mkdir -p "$evidence"
