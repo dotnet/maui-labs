@@ -41,11 +41,8 @@ public partial class ShellHandler
 
     void OnTabActivated(object? sender, EventArgs e)
     {
-        if (_contentContainer != null &&
-            _tabCoordinator?.Select((int)_contentContainer.Tabs.SelectedSegment) == true)
-        {
-            // Like the sidebar, materialize only the chosen section's page.
-            ShowCurrentPage();
-        }
+        // The CurrentItem mapper schedules the page refresh after the model updates.
+        if (_contentContainer != null)
+            _tabCoordinator?.Select((int)_contentContainer.Tabs.SelectedSegment);
     }
 }

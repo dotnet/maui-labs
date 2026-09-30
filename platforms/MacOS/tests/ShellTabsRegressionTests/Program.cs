@@ -85,6 +85,8 @@ sealed class RegressionDelegate : MacOSMauiApplication
             var selectedPage = (CountingPage)shell.CurrentPage!;
             File.WriteAllText(Path.Combine(Program.Output, "click-refresh-count.txt"),
                 $"Selected page 5 native attachments: {selectedPage.NativeAttachments}");
+            File.WriteAllText(Path.Combine(Program.Output, "click-refresh-traces.txt"),
+                string.Join("\n\n", selectedPage.NativeAttachmentTraces));
             Require(selectedPage.NativeAttachments == 1,
                 $"native click attaches the selected page once (actual {selectedPage.NativeAttachments})");
 
@@ -372,7 +374,12 @@ sealed class CountingPageHandler : Handlers.ContentPageHandler
 {
     protected override MacOSContainerView CreatePlatformView() => new CountingPageView
     {
-        Attached = () => ((CountingPage)VirtualView).NativeAttachments++,
+        Attached = () =>
+        {
+            var page = (CountingPage)VirtualView;
+            page.NativeAttachments++;
+            page.NativeAttachmentTraces.Add(Environment.StackTrace);
+        },
     };
 }
 
@@ -380,6 +387,7 @@ sealed class CountingPage : ContentPage
 {
     // ToMacOSPlatform can recreate the native view, so count across handlers for the same page.
     public int NativeAttachments { get; set; }
+    public List<string> NativeAttachmentTraces { get; } = new();
 }
 
 sealed class CountingPageView : MacOSContainerView

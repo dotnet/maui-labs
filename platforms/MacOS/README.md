@@ -37,6 +37,10 @@ run the built app executable on macOS with `SHELL_TABS_RESULTS` set to an output
 directory. It also checks that the selected tab and displayed native page agree
 after programmatic selection, hiding/removing the active section, and handler
 rebinding, and that queued work is ignored after disconnect.
+Native tab clicks use the same queued section refresh as programmatic selection.
+The harness counts native attachments across recreated handlers to verify that
+new and cached pages are displayed once per click, and checks narrow tabs and
+explicit wide-sidebar presentation with titles and system icons.
 Compilation and portable tests alone do not establish native rendering.
 
 ## Shell section navigation
