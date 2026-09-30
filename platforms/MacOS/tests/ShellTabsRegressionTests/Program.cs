@@ -112,7 +112,7 @@ sealed class RegressionDelegate : MacOSMauiApplication
             Capture(root, "narrow-replacement");
 
             flyout.CurrentItem = flyout.Items[^1];
-            RunSelectionSteps(root, shell, tabs, replacement);
+            RunSelectionSteps(app, root, shell, tabs, replacement);
         }
         catch (Exception ex)
         {
@@ -122,7 +122,7 @@ sealed class RegressionDelegate : MacOSMauiApplication
         }
     }
 
-    static void RunSelectionSteps(NSView root, Shell shell, NSSegmentedControl tabs, ShellItem item)
+    static void RunSelectionSteps(RegressionApp app, NSView root, Shell shell, NSSegmentedControl tabs, ShellItem item)
     {
         NSView? pageBeforeDisconnect = null;
         string? firstLabel = null;
@@ -146,6 +146,21 @@ sealed class RegressionDelegate : MacOSMauiApplication
             () =>
             {
                 AssertSelectedPage("remove-active-section");
+                var handler = shell.Handler!;
+                var previousItem = item;
+                item.CurrentItem = item.Items[^1];
+                shell = new Shell { FlyoutBehavior = FlyoutBehavior.Disabled };
+                item = app.CreateItem(true, 2);
+                shell.Items.Add(item);
+                handler.SetVirtualView(shell);
+                previousItem.Items[0].Title = "Changed after rebind";
+                previousItem.CurrentItem = previousItem.Items[0];
+            },
+            () =>
+            {
+                AssertSelectedPage("handler-rebind");
+                Require(tabs.SegmentCount == 2 && tabs.GetLabel(0) == "Tab 0",
+                    "rebind: new shell tabs replace old subscriptions");
                 pageBeforeDisconnect = shell.CurrentPage.Handler!.PlatformView as NSView;
                 item.CurrentItem = item.Items[^1];
                 shell.Handler!.DisconnectHandler();
