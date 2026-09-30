@@ -21,13 +21,37 @@ public class WindowSizingTests(ITestOutputHelper output)
 
 	public sealed class SizingApp : Application
 	{
-		public Grid Layout { get; } = new();
-		public Label Child { get; } = new() { Text = "Window sizing regression" };
+		public Label Child { get; private set; } = null!;
+		public ContentPage Page { get; } = new();
+		public bool IsStack { get; private set; }
 
 		protected override Window CreateWindow(IActivationState? activationState)
 		{
-			Layout.Add(Child);
-			return new Window(new ContentPage { Content = Layout });
+			SetContent(0);
+			return new Window(Page);
+		}
+
+		public void SetContent(int kind)
+		{
+			IsStack = kind == 2;
+			Child = new Label { Text = "Window sizing regression" };
+			var grid = new Grid();
+			grid.Add(Child);
+			if (kind == 1)
+			{
+				var outer = new Grid();
+				outer.Add(new ContentView { Content = grid });
+				Page.Content = outer;
+			}
+			else if (IsStack)
+			{
+				Child.HeightRequest = 40;
+				Page.Content = new VerticalStackLayout { Children = { Child } };
+			}
+			else
+			{
+				Page.Content = grid;
+			}
 		}
 	}
 
@@ -46,12 +70,19 @@ public class WindowSizingTests(ITestOutputHelper output)
 			var window = (Gtk.Window)app.Windows[0].Handler!.PlatformView!;
 			var sizes = new[] { (1024, 768), (500, 700), (300, 400), (1100, 700), (300, 400) };
 			var index = 0;
+			var contentKind = 0;
+			var minimumPhase = 0;
 			var clock = Stopwatch.StartNew();
 			GLib.Functions.TimeoutAdd(0, 50, () =>
 			{
 				try
 				{
-					var (width, height) = sizes[index];
+					var (width, height) = minimumPhase switch
+					{
+						1 => (430, 350),
+						2 => (300, 200),
+						_ => sizes[index]
+					};
 					if (window.GetAllocatedWidth() != width || window.GetAllocatedHeight() != height)
 					{
 						if (clock.Elapsed < TimeSpan.FromSeconds(3))
@@ -59,23 +90,49 @@ public class WindowSizingTests(ITestOutputHelper output)
 						throw new InvalidOperationException($"Requested {width}x{height}; native allocation {window.GetAllocatedWidth()}x{window.GetAllocatedHeight()}.");
 					}
 					var nativeChild = (Gtk.Widget)app.Child.Handler!.PlatformView!;
-					if ((app.Child.Width != width || app.Child.Height != height ||
-						nativeChild.GetAllocatedWidth() != width || nativeChild.GetAllocatedHeight() != height) &&
+					var childHeight = app.IsStack ? 40 : height;
+					if ((app.Child.Width != width || app.Child.Height != childHeight ||
+						nativeChild.GetAllocatedWidth() != width || nativeChild.GetAllocatedHeight() != childHeight) &&
 						clock.Elapsed < TimeSpan.FromSeconds(3))
 						return true;
-					output.WriteLine($"Requested {width}x{height}; native {window.GetAllocatedWidth()}x{window.GetAllocatedHeight()}; child {app.Child.Width}x{app.Child.Height}; native child {nativeChild.GetAllocatedWidth()}x{nativeChild.GetAllocatedHeight()}");
+					output.WriteLine($"Content {contentKind}, minimum phase {minimumPhase}: expected {width}x{height}; native {window.GetAllocatedWidth()}x{window.GetAllocatedHeight()}; child {app.Child.Width}x{app.Child.Height}; native child {nativeChild.GetAllocatedWidth()}x{nativeChild.GetAllocatedHeight()}");
 					Assert.Equal(width, app.Child.Width);
-					Assert.Equal(height, app.Child.Height);
+					Assert.Equal(childHeight, app.Child.Height);
 					Assert.Equal(width, nativeChild.GetAllocatedWidth());
-					Assert.Equal(height, nativeChild.GetAllocatedHeight());
+					Assert.Equal(childHeight, nativeChild.GetAllocatedHeight());
+					if (minimumPhase == 1)
+					{
+						minimumPhase = 2;
+						app.Windows[0].MinimumWidth = 0;
+						app.Windows[0].MinimumHeight = 0;
+						window.SetDefaultSize(300, 200);
+						clock.Restart();
+						return true;
+					}
+					if (minimumPhase == 2)
+					{
+						Completed = true;
+						window.Close();
+						return false;
+					}
 					index++;
+					if (index == sizes.Length && contentKind < 2)
+					{
+						app.SetContent(++contentKind);
+						index = 0;
+					}
 					if (index < sizes.Length)
 					{
 						window.SetDefaultSize(sizes[index].Item1, sizes[index].Item2);
 						clock.Restart();
 						return true;
 					}
-					Completed = true;
+					minimumPhase = 1;
+					app.Windows[0].MinimumWidth = 430;
+					app.Windows[0].MinimumHeight = 350;
+					window.SetDefaultSize(300, 200);
+					clock.Restart();
+					return true;
 				}
 				catch (Exception ex)
 				{
