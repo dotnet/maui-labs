@@ -216,6 +216,7 @@ namespace Microsoft.Maui.Handlers.WPF
 					handler._passwordBox = new WPasswordBox();
 					handler._passwordBox.PasswordChanged += handler.OnPasswordChanged;
 					handler._passwordBox.KeyUp += handler.OnKeyUp;
+					MapFont(handler, entry);
 				}
 
 				handler._passwordBox.Password = entry.Text ?? string.Empty;

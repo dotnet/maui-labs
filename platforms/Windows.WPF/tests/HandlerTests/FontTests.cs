@@ -23,6 +23,88 @@ public class FontApplicationCollection;
 public class FontTests(Xunit.Abstractions.ITestOutputHelper output)
 {
 	[Fact]
+	public void PasswordEntry_CreatingNativeControl_AppliesRegisteredFont()
+	{
+		StaHelper.RunOnSta(() =>
+		{
+			using var app = CreateApp();
+			foreach (var initiallyPassword in new[] { false, true })
+			{
+				var entry = new Entry
+				{
+					FontFamily = "OpenSansRegular",
+					FontSize = 32,
+					FontAttributes = FontAttributes.Bold | FontAttributes.Italic,
+					IsPassword = initiallyPassword,
+				};
+				var handler = new EntryHandler();
+				handler.SetMauiContext(new WPFMauiContext(app.Services));
+				try
+				{
+					handler.SetVirtualView(entry);
+					entry.IsPassword = true;
+					handler.UpdateValue(nameof(IEntry.IsPassword));
+					var native = Assert.IsType<System.Windows.Controls.PasswordBox>(
+						typeof(EntryHandler).GetField("_passwordBox", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(handler));
+					AssertFont(native.FontFamily, "Open Sans", "OpenSans-Regular.ttf");
+					Assert.Equal(32, native.FontSize);
+					Assert.Equal(System.Windows.FontWeights.Bold, native.FontWeight);
+					Assert.Equal(System.Windows.FontStyles.Italic, native.FontStyle);
+				}
+				finally
+				{
+					((IElementHandler)handler).DisconnectHandler();
+				}
+			}
+		});
+	}
+
+	[Fact]
+	public void GraphicsCanvas_RegisteredFont_MeasurementMatchesNativeDrawing()
+	{
+		StaHelper.RunOnSta(() =>
+		{
+			using var app = CreateApp();
+			var manager = (WPFFontManager)app.Services.GetRequiredService<IFontManager>();
+			var canvasType = typeof(GraphicsViewHandler).Assembly.GetType("Microsoft.Maui.Handlers.WPF.WpfCanvas")!;
+			foreach (var boldItalic in new[] { false, true })
+			{
+				var font = new Microsoft.Maui.Graphics.Font("OpenSansRegular", boldItalic ? 800 : 400,
+					boldItalic ? Microsoft.Maui.Graphics.FontStyleType.Italic : Microsoft.Maui.Graphics.FontStyleType.Normal);
+				var visual = new DrawingVisual();
+				Microsoft.Maui.Graphics.SizeF measured;
+				const string text = "WWW iii mmm";
+				using (var drawing = visual.RenderOpen())
+				{
+					var canvas = Assert.IsAssignableFrom<Microsoft.Maui.Graphics.ICanvas>(
+						Activator.CreateInstance(canvasType, drawing, 500, 100, manager));
+					canvas.Font = font;
+					canvas.FontSize = 32;
+					measured = canvas.GetStringSize(text, font, 32);
+					Assert.Equal(measured, canvas.GetStringSize(text, font, 32,
+						Microsoft.Maui.Graphics.HorizontalAlignment.Center, Microsoft.Maui.Graphics.VerticalAlignment.Center));
+					canvas.DrawString(text, 0, 0, Microsoft.Maui.Graphics.HorizontalAlignment.Left);
+				}
+				var glyph = Assert.Single(GlyphRuns(visual.Drawing));
+				Assert.Equal("OpenSans-Regular.ttf", Path.GetFileName(glyph.GlyphTypeface.FontUri.LocalPath), ignoreCase: true);
+				output.WriteLine("Canvas native font URI: " + glyph.GlyphTypeface.FontUri);
+				var expected = new System.Windows.Media.FormattedText(text, System.Globalization.CultureInfo.CurrentCulture,
+					System.Windows.FlowDirection.LeftToRight,
+					new Typeface(manager.GetFontFamily(Font.OfSize("OpenSansRegular", 32)),
+						boldItalic ? System.Windows.FontStyles.Italic : System.Windows.FontStyles.Normal,
+						boldItalic ? System.Windows.FontWeights.Bold : System.Windows.FontWeights.Normal, System.Windows.FontStretches.Normal),
+					32, Brushes.Black, 96);
+				Assert.Equal((float)expected.Width, measured.Width, 3);
+				Assert.Equal((float)expected.Height, measured.Height, 3);
+				var bitmap = new RenderTargetBitmap(500, 100, 96, 96, PixelFormats.Pbgra32);
+				bitmap.Render(visual);
+				bitmap.Freeze();
+				AssertRendered(bitmap);
+			}
+		});
+	}
+
+	[Fact]
 	public void GlyphSize_ExceedsLimit_ReturnsNoImageAndLogs()
 	{
 		StaHelper.RunOnSta(() =>
@@ -418,6 +500,16 @@ public class FontTests(Xunit.Abstractions.ITestOutputHelper output)
 			foreach (var descendant in Descendants(child))
 				yield return descendant;
 		}
+	}
+
+	static IEnumerable<GlyphRun> GlyphRuns(System.Windows.Media.Drawing drawing)
+	{
+		if (drawing is GlyphRunDrawing glyph)
+			yield return glyph.GlyphRun;
+		else if (drawing is DrawingGroup group)
+			foreach (var child in group.Children)
+				foreach (var run in GlyphRuns(child))
+					yield return run;
 	}
 
 	static void AssertRendered(BitmapSource? bitmap)

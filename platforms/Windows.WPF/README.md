@@ -94,6 +94,8 @@ no system font installation is required.
 
 Text controls and formatted label spans resolve aliases through the WPF font manager.
 Clearing a control's MAUI font family restores its native style or inherited default.
+Entry also applies its font when creating a native password control. GraphicsView
+text drawing and measurement share the same registered-family and style resolution.
 `FontImageSource` uses the same resolution for Image, ImageButton, Button, Shell
 flyout icons, and NavigationPage toolbar icons. A missing or invalid font logs a warning and text uses the default UI
 font. An unresolved icon font or a character absent from that font logs a warning

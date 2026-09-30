@@ -217,11 +217,16 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		// Text
 		FormattedText MakeFormattedText(string value) =>
+			MakeFormattedText(value, _fontName, _fontSize, _fontBold, _fontItalic,
+				new System.Windows.Media.SolidColorBrush(A(_fontColor)));
+
+		FormattedText MakeFormattedText(string value, string fontName, float fontSize,
+			bool bold, bool italic, System.Windows.Media.Brush foreground) =>
 			new(value, System.Globalization.CultureInfo.CurrentCulture, System.Windows.FlowDirection.LeftToRight,
-				new Typeface(_fontManager.GetFontFamily(Microsoft.Maui.Font.OfSize(_fontName, _fontSize)),
-					_fontItalic ? FontStyles.Italic : FontStyles.Normal,
-					_fontBold ? System.Windows.FontWeights.Bold : System.Windows.FontWeights.Normal, FontStretches.Normal),
-				_fontSize, new System.Windows.Media.SolidColorBrush(A(_fontColor)), 96);
+				new Typeface(_fontManager.GetFontFamily(Microsoft.Maui.Font.OfSize(fontName, fontSize)),
+					italic ? FontStyles.Italic : FontStyles.Normal,
+					bold ? System.Windows.FontWeights.Bold : System.Windows.FontWeights.Normal, FontStretches.Normal),
+				fontSize, foreground, 96);
 
 		public void DrawString(string value, float x, float y, GHorizontalAlignment ha) =>
 			_dc.DrawText(MakeFormattedText(value), new System.Windows.Point(x, y));
@@ -276,14 +281,13 @@ namespace Microsoft.Maui.Handlers.WPF
 		// Measure
 		public Microsoft.Maui.Graphics.SizeF GetStringSize(string value, Microsoft.Maui.Graphics.IFont font, float fontSize)
 		{
-			var ft = new FormattedText(value, System.Globalization.CultureInfo.CurrentCulture,
-				System.Windows.FlowDirection.LeftToRight, new Typeface(font?.Name ?? "Segoe UI"),
-				fontSize, Brushes.Black, 96);
+			var ft = MakeFormattedText(value, font?.Name ?? "Segoe UI", fontSize,
+				(font?.Weight ?? 400) >= 600,
+				font?.StyleType == Microsoft.Maui.Graphics.FontStyleType.Italic, Brushes.Black);
 			return new Microsoft.Maui.Graphics.SizeF((float)ft.Width, (float)ft.Height);
 		}
 		public Microsoft.Maui.Graphics.SizeF GetStringSize(string value, Microsoft.Maui.Graphics.IFont font, float fontSize, GHorizontalAlignment ha, GVerticalAlignment va)
 			=> GetStringSize(value, font, fontSize);
 	}
 }
-
 
