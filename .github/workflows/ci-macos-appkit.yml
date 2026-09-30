@@ -71,8 +71,11 @@ jobs:
           path.write_text(source.replace(fixed, "public LayoutHandler() : base(Mapper)"))
           PY
           ./eng/common/dotnet.sh build "$project" -c Debug -p:ContinuousIntegrationBuild=true | tee "$evidence/baseline-build.log"
-          executable="$(find artifacts/bin/LayoutRegressionTests/Debug -path '*/LayoutRegressionTests.app/Contents/MacOS/LayoutRegressionTests' -type f)"
-          test -f "$executable"
+          executable="$(find artifacts/bin/LayoutRegressionTests/Debug -path '*.app/Contents/MacOS/LayoutRegressionTests' -type f)"
+          if [[ ! -f "$executable" ]]; then
+            echo "::error::Expected exactly one LayoutRegressionTests native app executable; found: $executable"
+            exit 1
+          fi
           set +e
           APPKIT_LAYOUT_ARTIFACTS="$evidence/baseline" "$executable" > "$evidence/baseline.log" 2>&1
           baseline_exit=$?
