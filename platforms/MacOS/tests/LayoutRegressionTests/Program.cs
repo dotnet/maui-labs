@@ -78,8 +78,9 @@ public sealed class RegressionDelegate : NSApplicationDelegate
                 },
             };
             _stack.Children.Add(row);
-            AssertChildren(existing, row);
             _nativeStack.LayoutSubtreeIfNeeded();
+            CaptureEvidence();
+            AssertChildren(existing, row);
             AssertMeasured(row);
             foreach (var child in row.Children)
                 AssertMeasured(child);
@@ -138,6 +139,49 @@ public sealed class RegressionDelegate : NSApplicationDelegate
             Assert(actual[i].Handle == Native(expected[i]).Handle,
                 $"Wrong native child at index {i}");
     }
+
+    void CaptureEvidence()
+    {
+        var directory = Environment.GetEnvironmentVariable("APPKIT_LAYOUT_ARTIFACTS");
+        if (string.IsNullOrEmpty(directory))
+            return;
+
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, "after-add.json"),
+            System.Text.Json.JsonSerializer.Serialize(Inspect(_stack),
+                new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+
+        var bounds = _nativeStack.Bounds;
+        var scale = _window!.BackingScaleFactor;
+        using var bitmap = new NSBitmapImageRep(IntPtr.Zero,
+            (nint)(bounds.Width * scale), (nint)(bounds.Height * scale),
+            8, 4, true, false, NSColorSpace.DeviceRGB, 0, 0);
+        bitmap.Size = bounds.Size;
+        NSGraphicsContext.GlobalSaveGraphicsState();
+        try
+        {
+            using var context = NSGraphicsContext.FromBitmap(bitmap)
+                ?? throw new InvalidOperationException("Could not create screenshot context");
+            NSGraphicsContext.CurrentContext = context;
+            _nativeStack.CacheDisplay(bounds, bitmap);
+        }
+        finally
+        {
+            NSGraphicsContext.GlobalRestoreGraphicsState();
+        }
+
+        using var png = bitmap.RepresentationUsingTypeProperties(NSBitmapImageFileType.Png)
+            ?? throw new InvalidOperationException("Could not encode screenshot");
+        File.WriteAllBytes(Path.Combine(directory, "after-add.png"), png.ToArray());
+    }
+
+    static object Inspect(IView view) => new
+    {
+        Type = view.GetType().Name,
+        Frame = view.Frame.ToString(),
+        NativeFrame = (view.Handler?.PlatformView as NSView)?.Frame.ToString(),
+        Children = (view as Microsoft.Maui.ILayout)?.Select(Inspect).ToArray(),
+    };
 
     static void AssertMeasured(IView view)
     {

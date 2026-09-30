@@ -158,6 +158,12 @@ comparison, run the same executable with `LayoutHandler`'s constructor passing
 only `Mapper` (the original behavior), then with `Mapper, CommandMapper`.
 The original behavior must fail the first dynamic addition check.
 
+The `Native dynamic layout regression` CI job performs that comparison on a
+GitHub-hosted macOS runner. Its `appkit-layout-runtime` artifact contains both
+process logs, native view screenshots and managed/native bounds after addition.
+Set `APPKIT_LAYOUT_ARTIFACTS` to an output directory to capture the same evidence
+when running locally. Hosted execution is distinct from a local desktop run.
+
 ## MAUI DevFlow integration
 
 The sample app supports the optional in-process MAUI DevFlow agent:
