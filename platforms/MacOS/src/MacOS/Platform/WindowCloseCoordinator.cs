@@ -5,6 +5,9 @@ internal sealed class WindowCloseCoordinator
 {
     bool _closing;
 
+    public bool ShouldHandleClose(IElementHandler handler, object? closedPlatformView)
+        => closedPlatformView is null || ReferenceEquals(closedPlatformView, handler.PlatformView);
+
     public bool Close(IElementHandler handler, Action<IWindow> removeWindow)
     {
         // The generic ElementHandler.VirtualView getter throws after disconnection;

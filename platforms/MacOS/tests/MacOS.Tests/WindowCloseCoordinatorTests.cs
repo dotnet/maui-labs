@@ -102,6 +102,32 @@ public class WindowCloseCoordinatorTests
         Assert.Null(nextWindow.Handler);
     }
 
+    [Fact]
+    public void Close_StaleCallbackAfterHandlerReconnect_DoesNotDestroyCurrentWindow()
+    {
+        var handler = new TestWindowHandler();
+        handler.SetVirtualView(new Window(new ContentPage()));
+        var closedPlatformView = ((IElementHandler)handler).PlatformView;
+        var coordinator = new WindowCloseCoordinator();
+        Assert.True(coordinator.Close(handler, _ => { }));
+
+        var currentWindow = new Window(new ContentPage());
+        var destroyingCount = 0;
+        currentWindow.Destroying += (_, _) => destroyingCount++;
+        handler.SetVirtualView(currentWindow);
+        Assert.NotSame(closedPlatformView, ((IElementHandler)handler).PlatformView);
+        Assert.True(coordinator.ShouldHandleClose(handler, null));
+        var removalCount = 0;
+
+        var closed = coordinator.ShouldHandleClose(handler, closedPlatformView)
+            && coordinator.Close(handler, _ => removalCount++);
+
+        Assert.False(closed);
+        Assert.Equal(0, destroyingCount);
+        Assert.Equal(0, removalCount);
+        Assert.Same(handler, currentWindow.Handler);
+    }
+
     // Only the native window is substituted; connection/disconnection and Destroying
     // execute the real MAUI implementation, including the throwing VirtualView getter.
     sealed class TestWindowHandler : ElementHandler<IWindow, object>

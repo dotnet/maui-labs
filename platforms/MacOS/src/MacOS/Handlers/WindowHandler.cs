@@ -144,6 +144,9 @@ public partial class WindowHandler : ElementHandler<IWindow, NSWindow>
     /// </summary>
     internal void OnWindowClosed(NSWindow? closedNsWindow)
     {
+        if (!_closeCoordinator.ShouldHandleClose(this, closedNsWindow))
+            return;
+
         var macApp = IPlatformApplication.Current as MacOSMauiApplication;
         if (_closeCoordinator.Close(this, window => macApp?.RemoveWindow(window)))
         {
