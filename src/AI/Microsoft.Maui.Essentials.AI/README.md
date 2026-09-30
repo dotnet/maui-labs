@@ -146,11 +146,22 @@ trace/span and async tool code. No correlation is invented when no span exists.
 ## Embeddings
 
 ```csharp
-var generator = new NLEmbeddingGenerator(NLEmbeddingType.Sentence);
+using var generator = new NLEmbeddingGenerator(); // English sentence embeddings
 var embeddings = await generator.GenerateAsync(["sunset beach", "mountain hiking"]);
 ```
 
 The corresponding NaturalLanguage model asset must be installed on the device.
+
+Use sentence embeddings for short descriptions, FAQ matching, and paraphrase
+retrieval. They measure relatedness, not factual equivalence: validate exact
+identifiers, numbers, and exclusions separately. Keep query and document vectors
+in the same model, language, and revision, and evaluate chunking on labeled queries
+from your app. A cosine score is not a confidence percentage.
+
+NaturalLanguage embeddings are separate from Apple Intelligence. Native API
+availability does not by itself establish the minimum runtime of a packaged app
+and its native dependencies. See the [Apple embedding guide](https://github.com/dotnet/docs-maui/blob/main/docs/ai/embeddings/apple.md)
+for model selection, availability, and measured limitations.
 
 ## Examples and source
 
@@ -158,3 +169,7 @@ The corresponding NaturalLanguage model asset must be installed on the device.
 - [Essentials AI sample](https://github.com/dotnet/maui-labs/tree/main/samples/EssentialsAISample)
 - [Apple image input](https://github.com/dotnet/maui-labs/blob/main/docs/ai/apple-foundation-models-image-input.md)
 - [Source and contributor build instructions](https://github.com/dotnet/maui-labs/tree/main/src/AI)
+- [Chat guide and provider comparison](https://github.com/dotnet/docs-maui/blob/main/docs/ai/chat.md)
+- [Embedding guide and provider comparison](https://github.com/dotnet/docs-maui/blob/main/docs/ai/embeddings.md)
+- [Apple chat best practices and image input](https://github.com/dotnet/docs-maui/blob/main/docs/ai/chat/apple.md)
+- [Microsoft.Extensions.AI documentation](https://learn.microsoft.com/dotnet/ai/ai-extensions)
