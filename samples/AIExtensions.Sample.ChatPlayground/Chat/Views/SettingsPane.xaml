@@ -78,7 +78,7 @@
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
                         <Label Text="Tools" FontSize="12" FontAttributes="Bold" VerticalOptions="Center" />
                         <local:InfoTip Grid.Column="1"
-                                       Text="Call enabled functions; Azure images use the configured deployment." />
+                                       Text="Call enabled functions; Azure images use the configured deployment. Windows AI selection is experimental and may choose the wrong tool or arguments." />
                     </Grid>
                     <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto"
                           ColumnSpacing="4" RowSpacing="8">
@@ -116,7 +116,7 @@
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
                         <Label Text="Tool mode" VerticalOptions="Center" />
                         <local:InfoTip Grid.Column="1"
-                                       Text="Controls whether the provider may or must call an enabled tool." />
+                                       Text="Controls whether the provider may or must call an enabled tool. Windows AI Auto uses experimental model-selected tool calling." />
                     </Grid>
                     <HorizontalStackLayout Spacing="6"
                                            RadioButtonGroup.GroupName="ToolMode"

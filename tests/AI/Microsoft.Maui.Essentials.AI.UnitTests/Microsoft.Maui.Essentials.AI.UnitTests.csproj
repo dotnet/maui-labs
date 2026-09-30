@@ -19,6 +19,12 @@
     <ProjectReference Include="..\..\..\src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj" />
   </ItemGroup>
 
+  <!-- The adapter has no WinRT dependencies; run its scripted tests on the host as well as on Windows devices. -->
+  <ItemGroup>
+    <Compile Include="..\..\..\src\AI\Microsoft.Maui.Essentials.AI\Platform\Windows\WindowsAIToolCallingClient.cs" Link="WindowsAIToolCallingClient.cs" />
+    <Compile Include="..\Microsoft.Maui.Essentials.AI.DeviceTests\Tests\Windows\WindowsAIToolCallingClientTests.cs" Link="WindowsAIToolCallingClientTests.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <Compile Include="..\..\..\samples\EssentialsAISample\Models\**" Link="Models\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\..\..\samples\EssentialsAISample\Services\StreamingJsonDeserializer.cs" Link="Services\StreamingJsonDeserializer.cs" />
