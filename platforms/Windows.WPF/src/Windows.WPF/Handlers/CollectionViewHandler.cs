@@ -203,7 +203,7 @@ namespace Microsoft.Maui.Handlers.WPF
 			void Update()
 			{
 				// A queued notification must not revive an old source after replacement or disconnect.
-				if (version != _sourceVersion || VirtualView == null ||
+				if (version != _sourceVersion || ((IElementHandler)this).VirtualView == null ||
 					(isGroup ? sender is not INotifyCollectionChanged group || !_observedGroups.Contains(group)
 						: !ReferenceEquals(sender, _observedSource)))
 					return;

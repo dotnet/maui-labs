@@ -105,8 +105,10 @@ public class CollectionViewObservableSourceTests
 				Assert.Empty(list.Items);
 				Assert.Equal(Visibility.Visible, empty.Visibility);
 				view.ItemsSource = replacement;
+				var inFlightNotification = replacement.CaptureNotification();
 				Task.Run(() => group.Add("Queued before disconnect")).GetAwaiter().GetResult();
 				((IElementHandler)handler).DisconnectHandler();
+				inFlightNotification();
 				list.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
 				Assert.Equal(0, replacement.Subscribers);
 				Assert.Equal(0, group.Subscribers);
@@ -203,12 +205,19 @@ public class CollectionViewObservableSourceTests
 
 	sealed class TrackedCollection<T> : ObservableCollection<T>
 	{
+		NotifyCollectionChangedEventHandler? _handlers;
 		public int Subscribers { get; private set; }
+
+		public Action CaptureNotification()
+		{
+			var handlers = _handlers;
+			return () => handlers?.Invoke(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+		}
 
 		public override event NotifyCollectionChangedEventHandler? CollectionChanged
 		{
-			add { base.CollectionChanged += value; Subscribers++; }
-			remove { base.CollectionChanged -= value; Subscribers--; }
+			add { base.CollectionChanged += value; _handlers += value; Subscribers++; }
+			remove { base.CollectionChanged -= value; _handlers -= value; Subscribers--; }
 		}
 	}
 }
