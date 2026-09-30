@@ -164,6 +164,8 @@ Images are bundled as `Contents/Resources/Images/<filename>` and fonts as
 `IFileSystem.OpenAppPackageFileAsync`. Backslashes in logical names are normalized.
 The MAUI mapping replaces the SDK's default resource entry for the same source file;
 unrelated `BundleResource` items are unchanged.
+For apps that intentionally manage all these paths using custom `BundleResource` items,
+set `EnableMacOSMauiResourceMapping` to `false` to retain that mapping instead.
 
 This bundles image sources as-is; it does not add Resizetizer resizing or SVG conversion.
 Image names and font names must be unique within their respective bundle directories.

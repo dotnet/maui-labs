@@ -4,7 +4,7 @@
        incremental builds, publishing and signing, using the backend's lookup paths. -->
   <Target Name="_MacOSCollectMauiResources"
           BeforeTargets="_CollectBundleResources"
-          Condition="'$(TargetPlatformIdentifier)' == 'macos'">
+          Condition="'$(TargetPlatformIdentifier)' == 'macos' and '$(EnableMacOSMauiResourceMapping)' != 'false'">
     <ItemGroup>
       <_MacOSMauiBundleResource Include="@(MauiImage)">
         <LogicalName>Images/%(Filename)%(Extension)</LogicalName>

@@ -59,6 +59,7 @@ jobs:
         run: |
           ./eng/common/dotnet.sh msbuild platforms/MacOS/tests/BundleResources/ResourceItems.proj
           ./eng/common/dotnet.sh msbuild platforms/MacOS/tests/BundleResources/ResourceItems.proj -p:TargetPlatformIdentifier=windows
+          ./eng/common/dotnet.sh msbuild platforms/MacOS/tests/BundleResources/ResourceItems.proj -p:EnableMacOSMauiResourceMapping=false
       - name: Reproduce original omission and verify packaged fix in AppKit
         shell: pwsh
         run: |

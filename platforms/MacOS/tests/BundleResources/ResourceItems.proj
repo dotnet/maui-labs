@@ -2,6 +2,7 @@
   <PropertyGroup>
     <TargetPlatformIdentifier Condition="'$(TargetPlatformIdentifier)' == ''">macos</TargetPlatformIdentifier>
     <MacOSResourceTargets Condition="'$(MacOSResourceTargets)' == ''">$(MSBuildThisFileDirectory)..\..\src\MacOS\buildTransitive\Microsoft.Maui.Platforms.MacOS.targets</MacOSResourceTargets>
+    <_ExpectMapping Condition="'$(TargetPlatformIdentifier)' == 'macos' and '$(EnableMacOSMauiResourceMapping)' != 'false'">true</_ExpectMapping>
   </PropertyGroup>
   <Import Project="$(MacOSResourceTargets)" />
 
@@ -11,7 +12,7 @@
     <MauiAsset Include="..\Shared\Raw\data.txt" LogicalName="Data\nested\renamed.txt" Link="Resources\Raw\data.txt" />
     <MauiAsset Include="..\Shared\Raw\default.txt" />
     <!-- Simulate the Apple SDK's default resource glob, including a differently spelled source path. -->
-    <BundleResource Include="$(MSBuildProjectDirectory)\..\Shared\Raw\data.txt" LogicalName="Raw\data.txt" />
+    <BundleResource Include="$(MSBuildProjectDirectory)\..\Shared\Raw\data.txt" LogicalName="Raw/data.txt" />
     <BundleResource Include="unrelated.txt" LogicalName="unrelated.txt" />
   </ItemGroup>
 
@@ -19,10 +20,10 @@
     <ItemGroup>
       <_Actual Include="@(BundleResource->'%(LogicalName)')" />
     </ItemGroup>
-    <Error Condition="'$(TargetPlatformIdentifier)' == 'macos' and '@(_Actual)' != 'unrelated.txt;Images/picture.svg;Fonts/font.ttf;Data/nested/renamed.txt;default.txt'"
+    <Error Condition="'$(_ExpectMapping)' == 'true' and '@(_Actual)' != 'unrelated.txt;Images/picture.svg;Fonts/font.ttf;Data/nested/renamed.txt;default.txt'"
            Text="Unexpected macOS bundle resources: @(_Actual)" />
-    <Error Condition="'$(TargetPlatformIdentifier)' != 'macos' and '@(_Actual)' != 'Raw\data.txt;unrelated.txt'"
-           Text="Non-macOS resources were changed: @(_Actual)" />
+    <Error Condition="'$(_ExpectMapping)' != 'true' and '@(_Actual)' != 'Raw/data.txt;unrelated.txt'"
+           Text="Resources were changed despite the platform guard or opt-out: @(_Actual)" />
     <Message Importance="high" Text="Bundle resource item assertions passed (@(_Actual->Count()) items)." />
   </Target>
 </Project>
