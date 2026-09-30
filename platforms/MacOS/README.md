@@ -39,6 +39,15 @@ after programmatic selection, hiding/removing the active section, and handler
 rebinding, and that queued work is ignored after disconnect.
 Compilation and portable tests alone do not establish native rendering.
 
+## Shell section navigation
+
+Shell observes section and content selection changes, including `GoToAsync` and
+programmatic `CurrentItem` updates. The selected lazy page is created and hosted
+without requiring a manual handler refresh; unselected templates remain lazy.
+The `shell-section-regression` CI job runs a native AppKit harness against both
+the pre-fix revision and the current code and uploads screenshots and navigation
+assertions as `shell-section-appkit-runtime`.
+
 ## Prerequisites
 
 - .NET 10 SDK

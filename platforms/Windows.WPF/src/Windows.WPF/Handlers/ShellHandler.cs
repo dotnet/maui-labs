@@ -838,6 +838,14 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		public ShellHandler() : base(Mapper, CommandMapper) { }
 
+		public override void SetVirtualView(IView view)
+		{
+			if (!ReferenceEquals(_selectionShell, view))
+				DisconnectShellSelection();
+			base.SetVirtualView(view);
+			ConnectShellSelection();
+		}
+
 		protected override ShellContainerView CreatePlatformView()
 		{
 			var container = new ShellContainerView();
@@ -855,11 +863,9 @@ namespace Microsoft.Maui.Handlers.WPF
 		protected override void ConnectHandler(ShellContainerView platformView)
 		{
 			base.ConnectHandler(platformView);
+			ConnectShellSelection();
 			if (VirtualView != null)
 			{
-				VirtualView.Navigated += OnShellNavigated;
-				VirtualView.Navigating += OnShellNavigating;
-				VirtualView.PropertyChanged += OnShellPropertyChanged;
 				if (MauiContext != null)
 				{
 					platformView.MauiContext = MauiContext;
@@ -887,13 +893,8 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		protected override void DisconnectHandler(ShellContainerView platformView)
 		{
+			DisconnectShellSelection();
 			platformView.UnregisterNativeElements();
-			if (VirtualView != null)
-			{
-				VirtualView.Navigated -= OnShellNavigated;
-				VirtualView.Navigating -= OnShellNavigating;
-				VirtualView.PropertyChanged -= OnShellPropertyChanged;
-			}
 			ThemeManager.ThemeChanged -= OnThemeChanged;
 			base.DisconnectHandler(platformView);
 		}
@@ -914,32 +915,39 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		void OnShellNavigated(object? sender, ShellNavigatedEventArgs e)
 		{
-			PlatformView?.Dispatcher.InvokeAsync(() => ShowCurrentPage(),
-				System.Windows.Threading.DispatcherPriority.Background);
+			QueueSelectionUpdate();
 		}
 
 		void OnShellPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
 		{
 			if (e.PropertyName == "CurrentPage" || e.PropertyName == "CurrentItem")
 			{
-				PlatformView?.Dispatcher.InvokeAsync(() => ShowCurrentPage(),
-					System.Windows.Threading.DispatcherPriority.Background);
+				QueueSelectionUpdate();
 			}
 			else if (e.PropertyName == nameof(Shell.FlyoutBehavior))
 			{
 				PlatformView?.Dispatcher.InvokeAsync(() =>
-					PlatformView?.SetFlyoutBehavior(VirtualView!.FlyoutBehavior));
+				{
+					if (ReferenceEquals(sender, _selectionShell))
+						PlatformView.SetFlyoutBehavior(VirtualView.FlyoutBehavior);
+				});
 			}
 			else if (e.PropertyName == nameof(Shell.FlyoutIsPresented))
 			{
 				PlatformView?.Dispatcher.InvokeAsync(() =>
-					PlatformView?.ToggleFlyout(VirtualView!.FlyoutIsPresented));
+				{
+					if (ReferenceEquals(sender, _selectionShell))
+						PlatformView.ToggleFlyout(VirtualView.FlyoutIsPresented);
+				});
 			}
 			else if (e.PropertyName == nameof(Shell.FlyoutWidth))
 			{
 				if (VirtualView != null && VirtualView.FlyoutWidth > 0)
 					PlatformView?.Dispatcher.InvokeAsync(() =>
-						PlatformView?.SetFlyoutWidth(VirtualView.FlyoutWidth));
+					{
+						if (ReferenceEquals(sender, _selectionShell))
+							PlatformView.SetFlyoutWidth(VirtualView.FlyoutWidth);
+					});
 			}
 			else if (e.PropertyName == nameof(Shell.FlyoutBackgroundColor))
 			{
