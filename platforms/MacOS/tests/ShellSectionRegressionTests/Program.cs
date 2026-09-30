@@ -2,6 +2,7 @@ using AppKit;
 using Foundation;
 using Microsoft.Maui;
 using Microsoft.Maui.Controls;
+using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Hosting;
 using Microsoft.Maui.Platforms.MacOS.Essentials;
 using Microsoft.Maui.Platforms.MacOS.Hosting;
@@ -110,7 +111,7 @@ sealed class RegressionDelegate : MacOSMauiApplication
 
 			var other = new FlyoutItem
 			{
-				Items = { new ShellContent { Content = new ContentPage { Title = "Other", Content = new Label { Text = "Other" } } } },
+				Items = { new ShellContent { Content = RegressionApp.CreateVisiblePage("Other") } },
 			};
 			shell.Items.Add(other);
 			shell.CurrentItem = other;
@@ -136,13 +137,13 @@ sealed class RegressionDelegate : MacOSMauiApplication
 					{
 						Items =
 						{
-							new ShellContent { Content = new ContentPage { Title = "Replacement", Content = new Label { Text = "Replacement" } } },
+							new ShellContent { Content = RegressionApp.CreateVisiblePage("Replacement") },
 							new ShellContent
 							{
 								ContentTemplate = new DataTemplate(() =>
 								{
 									replacementCreated++;
-									return new ContentPage { Title = "Replacement target", Content = new Label { Text = "Replacement target" } };
+									return RegressionApp.CreateVisiblePage("Replacement target");
 								}),
 							},
 						},
@@ -204,6 +205,11 @@ sealed class RegressionDelegate : MacOSMauiApplication
 		Require(shell.CurrentPage?.Handler?.PlatformView is NSView page &&
 			Descendants(root).Contains(page) && page.Bounds.Width > 0 && page.Bounds.Height > 0,
 			$"{title} attached to rendered native tree");
+		Require(shell.CurrentPage is ContentPage { Content: Label label } &&
+			label.Handler?.PlatformView is NSTextField text && text.StringValue == $"Page {title}" &&
+			text.Bounds.Width > 0 && text.Bounds.Height > 0 && !text.Hidden &&
+			Descendants(root).Contains(text),
+			$"{title} label rendered with expected native text");
 	}
 
 	static IEnumerable<NSView> Descendants(NSView view)
@@ -262,8 +268,15 @@ public sealed class RegressionApp : Application
 	Page CreatePage(string title)
 	{
 		CreatedPages++;
-		return new ContentPage { Title = title, Content = new Label { Text = $"Page {title}", FontSize = 32 } };
+		return CreateVisiblePage(title);
 	}
+
+	internal static ContentPage CreateVisiblePage(string title) => new()
+	{
+		Title = title,
+		BackgroundColor = Colors.White,
+		Content = new Label { Text = $"Page {title}", FontSize = 32, TextColor = Colors.Black },
+	};
 
 	protected override Window CreateWindow(IActivationState? activationState) =>
 		new(TestShell) { Width = 800, Height = 600 };
