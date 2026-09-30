@@ -171,6 +171,12 @@ If 2+ new **growable** items appear at the same parent level in the same chunk, 
 
 Numbers, bools, and null are NOT growable - they are always complete.
 
+For the first snapshot of an object, emit these complete properties **before**
+opening its single growable value. For example, `{"answer":"","found":false}`
+must start with `{"found":false,"answer":"`, not insert `"found":false` inside
+the still-open answer string. Apply the same ordering when the growable value
+is a nested object or array. Property order is not part of the output contract.
+
 **Example 1 - Multiple strings:**
 ```
 Previous: {"count": 5}

@@ -82,7 +82,16 @@
       }
     },
     {
-      "language" : "zh",
+      "language" : "zh-Hans",
+      "sentence" : {
+        "available" : false
+      },
+      "word" : {
+        "available" : false
+      }
+    },
+    {
+      "language" : "zh-Hant",
       "sentence" : {
         "available" : false
       },

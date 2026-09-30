@@ -308,7 +308,9 @@ func run() throws {
     let corpus = try JSONDecoder().decode(Corpus.self, from: bytes)
     try validate(corpus)
     let sha = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
-    let languages = ["en", "fr", "de", "es", "it", "pt", "ja", "zh", "ko", "ar", "ru", "hi"]
+    let languages = ["en", "fr", "de", "es", "it", "pt", "ja",
+                     NLLanguage.simplifiedChinese.rawValue, NLLanguage.traditionalChinese.rawValue,
+                     "ko", "ar", "ru", "hi"]
     let availability = languages.map { code -> [String: Any] in
         let language = NLLanguage(rawValue: code)
         return ["language": code, "sentence": modelInfo(NLEmbedding.sentenceEmbedding(for: language)),
