@@ -138,6 +138,7 @@ sealed class RegressionDelegate : MacOSMauiApplication
 			Require(dynamicCreated == 2, "new section content selection creates the second page");
 			item.Items.Remove(dynamicSection);
 			await FlushMainQueue();
+			AssertDisplayed(shell, root, "One");
 
 			var other = new FlyoutItem
 			{
