@@ -69,8 +69,8 @@ jobs:
                   Get-Content "$env:SHELL_SECTION_RESULTS\process.log"
                   throw 'Baseline did not reproduce the three section/content and two native tab failures'
                 }
-              } elseif ($exitCode -ne 0 -or $counters.total -ne 20 -or $counters.executed -ne 20 -or
-                        $counters.passed -ne 20 -or $counters.failed -ne 0 -or $counters.notExecuted -ne 0) {
+              } elseif ($exitCode -ne 0 -or $counters.total -ne 22 -or $counters.executed -ne 22 -or
+                        $counters.passed -ne 22 -or $counters.failed -ne 0 -or $counters.notExecuted -ne 0) {
                 Get-Content "$env:SHELL_SECTION_RESULTS\process.log"
                 throw 'Fixed WPF section regression failed'
               }

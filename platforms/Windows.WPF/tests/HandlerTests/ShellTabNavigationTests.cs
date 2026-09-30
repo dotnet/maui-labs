@@ -182,6 +182,48 @@ public class ShellTabNavigationTests
 		});
 	}
 
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void NativeTabSelection_WithNoVisibleContent_KeepsCurrentPage(bool emptySection)
+	{
+		RunTest(true, (shell, handler, tabs, first, second, created) =>
+		{
+			var item = shell.CurrentItem;
+			var original = item.CurrentItem;
+			var target = item.Items[1];
+			if (emptySection)
+			{
+				target = new ShellSection { Title = "Empty", Route = "empty" };
+				item.Items.Add(target);
+			}
+			else
+			{
+				target.CurrentItem.IsVisible = false;
+			}
+			DrainDispatcher();
+			Assert.True(target.IsVisible);
+			Assert.Contains(target, item.Items);
+			Assert.DoesNotContain(target, ((IShellItemController)item).GetItems());
+			var navigating = 0;
+			var navigated = 0;
+			shell.Navigating += (_, _) => navigating++;
+			shell.Navigated += (_, _) => navigated++;
+			var tab = Assert.Single(tabs.Items.OfType<WTabItem>(), tab => ReferenceEquals(tab.Tag, target));
+
+			Select(tab);
+			DrainDispatcher();
+
+			Assert.Same(original, item.CurrentItem);
+			Assert.Same(original, ((WTabItem)tabs.SelectedItem).Tag);
+			Assert.Equal(0, navigating);
+			Assert.Equal(0, navigated);
+			Assert.EndsWith("/one", shell.CurrentState.Location.OriginalString);
+			AssertDisplayed(handler, first, "PAGE ONE");
+			Assert.Equal(0, created());
+		});
+	}
+
 	[Fact]
 	public void NativeTabSelection_AfterDisconnect_DoesNotNavigate()
 	{

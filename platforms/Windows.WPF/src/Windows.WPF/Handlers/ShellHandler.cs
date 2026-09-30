@@ -1081,9 +1081,10 @@ namespace Microsoft.Maui.Handlers.WPF
 
 			try
 			{
-				if (shell.Items.Contains(item) && item.Items.Contains(section) &&
+				var controller = (IShellItemController)item;
+				if (shell.Items.Contains(item) && controller.GetItems().Contains(section) &&
 					section.IsVisible && section.IsEnabled && !ReferenceEquals(item.CurrentItem, section))
-					((IShellItemController)item).ProposeSection(section, true);
+					controller.ProposeSection(section, true);
 			}
 			catch (Exception ex)
 			{
