@@ -79,6 +79,7 @@ public class WPFFontManager : IFontManager
 
 	internal static WPFFontManager FromContext(IMauiContext? context)
 		=> context?.Services.GetRequiredService<IFontManager>() as WPFFontManager
+			?? context?.Services.GetRequiredService<WPFFontManager>()
 			?? throw new InvalidOperationException("A WPF font manager is required to resolve fonts.");
 
 	internal static void ApplyFontFamily(DependencyObject target, Font font, IMauiContext? context)

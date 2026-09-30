@@ -55,10 +55,7 @@ public static class FontImageSourceHelper
 			var text = new FormattedText(glyph, CultureInfo.InvariantCulture,
 				System.Windows.FlowDirection.LeftToRight, typeface,
 				size, new SolidColorBrush(wpfColor), 1);
-			var geometry = text.BuildGeometry(new System.Windows.Point());
-			var bounds = geometry.Bounds;
-			if (bounds.IsEmpty)
-				return null;
+			var bounds = new System.Windows.Rect(0, 0, text.WidthIncludingTrailingWhitespace, text.Height);
 			if (!TryGetBitmapDimensions(bounds, out var width, out var height))
 			{
 				Warn($"Cannot render glyph: bounds exceed {MaximumDimension} pixels per side or {MaximumPixels} total pixels.", logger);
@@ -68,8 +65,7 @@ public static class FontImageSourceHelper
 			var visual = new DrawingVisual();
 			using (var drawing = visual.RenderOpen())
 			{
-				drawing.PushTransform(new TranslateTransform(1 - bounds.X, 1 - bounds.Y));
-				drawing.DrawGeometry(new SolidColorBrush(wpfColor), null, geometry);
+				drawing.DrawText(text, new System.Windows.Point(1, 1));
 			}
 			var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
 			bitmap.Render(visual);

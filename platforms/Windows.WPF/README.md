@@ -98,10 +98,17 @@ Text controls and formatted label spans resolve aliases through the WPF font man
 Clearing a control's MAUI font family restores its native style or inherited default.
 Entry also applies its font when creating a native password control. GraphicsView
 text drawing and measurement share the same registered-family and style resolution.
+The default public `IFontManager` and native `WPFFontManager` share one singleton.
+Replacing the portable `IFontManager` preserves its `DefaultFontSize` contract;
+native family resolution still uses the app's registered fonts. A supplied
+`WPFFontManager` override takes precedence for native resolution as well.
 `FontImageSource` uses the same resolution for Image, ImageButton, Button, Shell
 flyout icons, and NavigationPage toolbar icons. A missing or invalid font logs a warning and text uses the default UI
 font. An unresolved icon font or a character absent from that font logs a warning
 and produces no image rather than a fallback box.
+Glyph bitmaps retain the font's advance width and line box, including its internal
+padding, rather than cropping to the visible ink. This keeps icon scaling and
+alignment consistent with the font's metrics.
 Glyph sizes must be finite, positive, and no greater than 4096 device-independent
 units. At 96 DPI, the rendered bitmap, including its one-pixel padding on each side,
 is limited to 4096 pixels per side and 4,194,304 pixels total (16 MiB of pixel data).

@@ -23,6 +23,98 @@ public class FontApplicationCollection;
 public class FontTests(Xunit.Abstractions.ITestOutputHelper output)
 {
 	[Fact]
+	public void GlyphBitmap_PreservesNativeAdvanceAndLineBox()
+	{
+		StaHelper.RunOnSta(() =>
+		{
+			using var app = CreateApp();
+			var manager = (WPFFontManager)app.Services.GetRequiredService<IFontManager>();
+			var family = manager.GetFontFamily(Font.OfSize("Icons", 32));
+			AssertFont(family, "Font Awesome 5 Free", "fa_solid.ttf");
+			foreach (var glyph in new[] { "\uf015", "\uf005" })
+			{
+				var text = new System.Windows.Media.FormattedText(glyph, System.Globalization.CultureInfo.InvariantCulture,
+					System.Windows.FlowDirection.LeftToRight,
+					new Typeface(family, System.Windows.FontStyles.Normal, System.Windows.FontWeights.Normal,
+						System.Windows.FontStretches.Normal), 32, Brushes.Red, 1);
+				var expected = new RenderTargetBitmap((int)Math.Ceiling(text.WidthIncludingTrailingWhitespace) + 2,
+					(int)Math.Ceiling(text.Height) + 2, 96, 96, PixelFormats.Pbgra32);
+				var visual = new DrawingVisual();
+				using (var drawing = visual.RenderOpen())
+					drawing.DrawText(text, new System.Windows.Point(1, 1));
+				expected.Render(visual);
+				expected.Freeze();
+				var actual = FontImageSourceHelper.RenderGlyph(glyph, "Icons", 32,
+					Microsoft.Maui.Graphics.Colors.Red, manager);
+				AssertRendered(actual);
+				output.WriteLine($"Glyph U+{(int)glyph[0]:X4}: native advance={text.WidthIncludingTrailingWhitespace}, line height={text.Height}; expected bitmap={expected.PixelWidth}x{expected.PixelHeight}, actual={actual!.PixelWidth}x{actual.PixelHeight}");
+				Assert.Equal(expected.PixelWidth, actual.PixelWidth);
+				Assert.Equal(expected.PixelHeight, actual.PixelHeight);
+				Assert.Equal(Pixels(expected), Pixels(actual));
+			}
+		});
+	}
+
+	[Fact]
+	public void FontManagerOverride_PreservesPublicServiceAndNativeResolution()
+	{
+		StaHelper.RunOnSta(() =>
+		{
+			output.WriteLine("Portable IFontManager members: " + string.Join(", ",
+				typeof(IFontManager).GetMembers().Select(member => member.Name)));
+			var registrar = new WPFFontRegistrar();
+			registrar.Register("OpenSans-Regular.ttf", "OverrideText");
+			registrar.Register("fa_solid.ttf", "OverrideIcons");
+			foreach (IFontManager replacement in new IFontManager[] { new CustomFontManager(), new WPFFontManager(registrar) })
+			{
+				using var app = CreateApp(services => services.AddSingleton(replacement));
+				Assert.Same(replacement, app.Services.GetRequiredService<IFontManager>());
+				var size = replacement.DefaultFontSize;
+				Assert.Equal(replacement is CustomFontManager ? 47 : 14, size);
+				var context = new WPFMauiContext(app.Services);
+				var labelHandler = new LabelHandler();
+				var imageHandler = new ImageHandler();
+				try
+				{
+					labelHandler.SetMauiContext(context);
+					imageHandler.SetMauiContext(context);
+					labelHandler.SetVirtualView(new Label
+					{
+						Text = "Registered override",
+						FontFamily = replacement is WPFFontManager ? "OverrideText" : "OpenSansRegular",
+						FontSize = size,
+					});
+					AssertFont(labelHandler.PlatformView.FontFamily, "Open Sans", "OpenSans-Regular.ttf");
+					Assert.Equal(size, labelHandler.PlatformView.FontSize);
+					var source = new FontImageSource
+					{
+						Glyph = "\uf015",
+						FontFamily = replacement is WPFFontManager ? "OverrideIcons" : "Icons",
+						Size = size,
+					};
+					imageHandler.SetVirtualView(new Image { Source = source });
+					var actual = Assert.IsAssignableFrom<BitmapSource>(imageHandler.PlatformView.Source);
+					AssertRendered(actual);
+					var nativeManager = replacement as WPFFontManager ?? app.Services.GetRequiredService<WPFFontManager>();
+					var expected = FontImageSourceHelper.RenderGlyph(source.Glyph, source.FontFamily, (float)size, null, nativeManager);
+					AssertRendered(expected);
+					Assert.Equal(expected!.PixelWidth, actual.PixelWidth);
+					Assert.Equal(expected.PixelHeight, actual.PixelHeight);
+					Assert.Equal(Pixels(expected), Pixels(actual));
+				}
+				finally
+				{
+					((IElementHandler)labelHandler).DisconnectHandler();
+					((IElementHandler)imageHandler).DisconnectHandler();
+				}
+			}
+			using var defaultApp = CreateApp();
+			Assert.Same(defaultApp.Services.GetRequiredService<WPFFontManager>(),
+				defaultApp.Services.GetRequiredService<IFontManager>());
+		});
+	}
+
+	[Fact]
 	public void FontFormatFailure_LogsAndDoesNotRenderFallbackGlyph()
 	{
 		StaHelper.RunOnSta(() =>
@@ -573,6 +665,11 @@ public class FontTests(Xunit.Abstractions.ITestOutputHelper output)
 		public string? LoadFont(EmbeddedFont font) => throw new FileFormatException("Invalid font data.");
 	}
 
+	sealed class CustomFontManager : IFontManager
+	{
+		public double DefaultFontSize => 47;
+	}
+
 	sealed class FixedRegistrar(string path) : IFontRegistrar
 	{
 		public string GetFont(string font) => path;
@@ -601,16 +698,18 @@ public class FontTests(Xunit.Abstractions.ITestOutputHelper output)
 			=> Messages.Add(formatter(state, exception) + (exception == null ? "" : " " + exception.Message));
 	}
 
-	internal static MauiApp CreateApp()
+	internal static MauiApp CreateApp(Action<IServiceCollection>? configureServices = null)
 	{
 		_ = System.Windows.Threading.Dispatcher.CurrentDispatcher;
 		DispatcherProvider.SetCurrent(new WPFDispatcherProvider());
-		return MauiApp.CreateBuilder().UseMauiAppWPF<Application>()
+		var builder = MauiApp.CreateBuilder().UseMauiAppWPF<Application>()
 			.ConfigureFonts(fonts =>
 			{
 				fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
 				fonts.AddFont("fa_solid.ttf", "Icons");
-			}).Build();
+			});
+		configureServices?.Invoke(builder.Services);
+		return builder.Build();
 	}
 
 	internal static GlyphTypeface AssertFont(FontFamily family, string expectedFamily, string? filename)
