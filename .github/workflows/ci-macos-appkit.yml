@@ -36,3 +36,61 @@ jobs:
       run-tests: true
       pack: true
       xcode-version: '26.3'
+
+  picker-regression:
+    runs-on: macos-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: fixed
+      - uses: actions/checkout@v4
+        with:
+          ref: 9206e7c5c6486a7f422efd36a7635c6fe9609000
+          path: baseline
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: fixed/global.json
+      - name: Select Xcode and install macOS workload
+        working-directory: fixed
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+          dotnet workload install macos --version 10.0.203
+      - name: Run identical native regression before and after
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp -R fixed/platforms/MacOS/tests/PickerRegressionTests baseline/platforms/MacOS/tests/
+          for variant in baseline fixed; do
+            evidence="$GITHUB_WORKSPACE/evidence/$variant"
+            mkdir -p "$evidence"
+            (
+              cd "$variant"
+              dotnet build platforms/MacOS/tests/PickerRegressionTests/PickerRegressionTests.csproj \
+                -p:UseMaui=false -p:ContinuousIntegrationBuild=true \
+                2>&1 | tee "$evidence/build.log"
+              app="$(find artifacts/bin/PickerRegressionTests -type d -name PickerRegressionTests.app -print -quit)"
+              test -n "$app"
+              set +e
+              PICKER_EVIDENCE="$evidence" "$app/Contents/MacOS/PickerRegressionTests" \
+                > "$evidence/runtime.log" 2>&1
+              result=$?
+              set -e
+              cat "$evidence/runtime.log"
+              if [ "$variant" = baseline ]; then
+                test "$result" -eq 42
+                grep -F "BASELINE_563:" "$evidence/runtime.log"
+              else
+                test "$result" -eq 0
+                grep -F "PASS: all native AppKit Picker regression scenarios." "$evidence/runtime.log"
+              fi
+            )
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: appkit-picker-runtime
+          path: evidence/
+          if-no-files-found: error
