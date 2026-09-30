@@ -13,6 +13,7 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 	uint _rootLayoutTickId;
 	int _rootWidth = -1;
 	int _rootHeight = -1;
+	ScrollOrientation? _rootScrollOrientation;
 
 	object ILayoutHandler.PlatformView => base.PlatformView!;
 
@@ -103,18 +104,35 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 			// and container resizes. Use this panel's actual space, excluding native chrome.
 			var width = platformView.GetAllocatedWidth();
 			var height = platformView.GetAllocatedHeight();
+			ScrollOrientation? scrollOrientation = null;
+			if (VirtualView.Parent is IScrollView scrollView && platformView.GetParent() is Gtk.Viewport viewport)
+			{
+				// The viewport can keep its child at the previous natural extent.
+				// Reflow the non-scrolling axis against the viewport, not that stale extent.
+				width = viewport.GetAllocatedWidth();
+				height = viewport.GetAllocatedHeight();
+				scrollOrientation = scrollView.Orientation;
+			}
 			if (width <= 0 || height <= 0 ||
-				(width == _rootWidth && height == _rootHeight && !platformView.LayoutDirty))
+				(width == _rootWidth && height == _rootHeight &&
+					scrollOrientation == _rootScrollOrientation && !platformView.LayoutDirty))
 				return true;
 
 			try
 			{
 				_rootWidth = width;
 				_rootHeight = height;
+				_rootScrollOrientation = scrollOrientation;
 				platformView.LayoutDirty = false;
 				(VirtualView as Microsoft.Maui.Controls.VisualElement)?.InvalidateMeasure();
-				platformView.CrossPlatformMeasure(width, height);
-				platformView.CrossPlatformArrange(new Rect(0, 0, width, height));
+				var scrollsHorizontally = scrollOrientation is ScrollOrientation.Horizontal or ScrollOrientation.Both;
+				var scrollsVertically = scrollOrientation is ScrollOrientation.Vertical or ScrollOrientation.Both;
+				var measured = platformView.CrossPlatformMeasure(
+					scrollsHorizontally ? double.PositiveInfinity : width,
+					scrollsVertically ? double.PositiveInfinity : height);
+				platformView.CrossPlatformArrange(new Rect(0, 0,
+					scrollsHorizontally ? Math.Max(width, measured.Width) : width,
+					scrollsVertically ? Math.Max(height, measured.Height) : height));
 			}
 			catch (Exception ex)
 			{
@@ -136,6 +154,7 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 			platformView.RemoveTickCallback(_rootLayoutTickId);
 		_rootLayoutTickId = 0;
 		_rootWidth = _rootHeight = -1;
+		_rootScrollOrientation = null;
 		platformView.CrossPlatformLayout = null;
 		base.DisconnectHandler(platformView);
 	}
