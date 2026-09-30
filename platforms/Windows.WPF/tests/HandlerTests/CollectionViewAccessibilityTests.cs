@@ -148,9 +148,21 @@ public class CollectionViewAccessibilityTests(ITestOutputHelper output)
 				System.Windows.Automation.AutomationProperties.SetName(container, "Native override");
 				PumpUntil(() => changes.Any(change => change.NewName == "Native override"));
 				System.Windows.Automation.AutomationProperties.SetName(container, "");
-				System.Windows.Automation.AutomationProperties.SetLabeledBy(container,
-					new System.Windows.Controls.TextBlock { Text = "Native label override" });
+				var nativeLabel = new System.Windows.Controls.TextBlock { Text = "Native label override" };
+				System.Windows.Automation.AutomationProperties.SetLabeledBy(container, nativeLabel);
 				PumpUntil(() => changes.Any(change => change.NewName == "Native label override"));
+				nativeLabel.Text = "Native label updated";
+				PumpUntil(() => changes.Any(change => change.NewName == "Native label updated"));
+				System.Windows.Automation.AutomationProperties.SetName(nativeLabel, "Native label semantic");
+				PumpUntil(() => changes.Any(change => change.NewName == "Native label semantic"));
+				var nestedLabel = new System.Windows.Controls.TextBlock { Text = "Nested native label" };
+				var contentLabel = new System.Windows.Controls.Label { Content = nestedLabel };
+				System.Windows.Automation.AutomationProperties.SetLabeledBy(container, contentLabel);
+				PumpUntil(() => changes.Any(change => change.NewName == "Nested native label"));
+				nestedLabel.Text = "Nested native label updated";
+				PumpUntil(() => changes.Any(change => change.NewName == "Nested native label updated"));
+				contentLabel.Content = "Replacement label content";
+				PumpUntil(() => changes.Any(change => change.NewName == "Replacement label content"));
 			}
 			finally
 			{

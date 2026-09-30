@@ -332,14 +332,14 @@ namespace Microsoft.Maui.Handlers.WPF
 		protected override void ClearContainerForItemOverride(DependencyObject element, object item)
 		{
 			if (element is MauiCollectionListBoxItem container)
-				container.MauiItemView = null;
+				container.ClearAccessibility();
 			base.ClearContainerForItemOverride(element, item);
 		}
 
 		protected override void PrepareContainerForItemOverride(DependencyObject element, object item)
 		{
 			if (element is MauiCollectionListBoxItem container)
-				container.MauiItemView = null;
+				container.PrepareAccessibility();
 			base.PrepareContainerForItemOverride(element, item);
 
 			if (element is not ListBoxItem lbi || MauiCollectionView == null) return;

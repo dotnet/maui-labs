@@ -31,12 +31,36 @@ internal sealed class MauiCollectionItemAutomationPeer(object item, ListBoxAutom
 internal sealed class MauiCollectionListBoxItem : ListBoxItem
 {
 	readonly List<View> _observedViews = [];
+	readonly List<(UIElement Element, DependencyPropertyDescriptor Property)> _observedLabels = [];
 	View? _mauiItemView;
+	bool _isPrepared;
 
 	public MauiCollectionListBoxItem()
 	{
-		Loaded += (_, _) => ObserveView();
-		Unloaded += (_, _) => StopObservingView();
+		Loaded += (_, _) =>
+		{
+			ObserveView();
+			ObserveLabeledBy();
+		};
+		Unloaded += (_, _) =>
+		{
+			StopObservingView();
+			StopObservingLabeledBy();
+		};
+	}
+
+	internal void PrepareAccessibility()
+	{
+		ClearAccessibility();
+		_isPrepared = true;
+		ObserveLabeledBy();
+	}
+
+	internal void ClearAccessibility()
+	{
+		_isPrepared = false;
+		MauiItemView = null;
+		StopObservingLabeledBy();
 	}
 
 	internal View? MauiItemView
@@ -57,9 +81,57 @@ internal sealed class MauiCollectionListBoxItem : ListBoxItem
 	protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
 	{
 		base.OnPropertyChanged(e);
+		if (e.Property == WAutomationProperties.LabeledByProperty)
+			ObserveLabeledBy();
 		if (e.Property == WAutomationProperties.NameProperty || e.Property == WAutomationProperties.LabeledByProperty)
 			InvalidateName();
 	}
+
+	void ObserveLabeledBy()
+	{
+		StopObservingLabeledBy();
+		if (_isPrepared && IsLoaded && WAutomationProperties.GetLabeledBy(this) is { } label)
+			ObserveNativeLabel(label, []);
+		InvalidateName();
+	}
+
+	void ObserveNativeLabel(UIElement label, HashSet<UIElement> visited)
+	{
+		if (!visited.Add(label))
+			return;
+
+		ObserveLabelProperty(label, DependencyPropertyDescriptor.FromProperty(WAutomationProperties.NameProperty, label.GetType()));
+		ObserveLabelProperty(label, DependencyPropertyDescriptor.FromProperty(WAutomationProperties.LabeledByProperty, label.GetType()));
+		if (WAutomationProperties.GetLabeledBy(label) is { } referencedLabel)
+			ObserveNativeLabel(referencedLabel, visited);
+
+		// WPF text and content controls derive their default peer names from
+		// these properties; content may itself be another native label.
+		foreach (var propertyName in new[] { "Text", "Content", "Header" })
+		{
+			var property = DependencyPropertyDescriptor.FromName(propertyName, label.GetType(), label.GetType());
+			if (property == null)
+				continue;
+			ObserveLabelProperty(label, property);
+			if (property.GetValue(label) is UIElement content)
+				ObserveNativeLabel(content, visited);
+		}
+	}
+
+	void ObserveLabelProperty(UIElement label, DependencyPropertyDescriptor property)
+	{
+		property.AddValueChanged(label, OnNativeLabelChanged);
+		_observedLabels.Add((label, property));
+	}
+
+	void StopObservingLabeledBy()
+	{
+		foreach (var (label, property) in _observedLabels)
+			property.RemoveValueChanged(label, OnNativeLabelChanged);
+		_observedLabels.Clear();
+	}
+
+	void OnNativeLabelChanged(object? sender, EventArgs e) => ObserveLabeledBy();
 
 	void ObserveView()
 	{
