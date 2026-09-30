@@ -118,7 +118,7 @@ See the `samples/` directory for working examples:
 
 | Control | Status | Notes |
 |---|---|---|
-| CollectionView | ✅ | WPF ListBox with DataTemplateSelector, SelectedItem, SelectionMode, EmptyView |
+| CollectionView | ✅ | WPF ListBox with DataTemplateSelector, SelectedItem, SelectionMode, EmptyView; observable flat and grouped sources update live |
 | ListView | ✅ | WPF ListBox with MAUI template bridge |
 | CarouselView | ✅ | Horizontal ListBox with arrow navigation buttons |
 | IndicatorView | ✅ | Dot indicators as Ellipses |
