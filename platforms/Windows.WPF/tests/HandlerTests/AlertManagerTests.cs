@@ -16,11 +16,15 @@ public class AlertManagerTests
 	[InlineData("Remove_item", "Keep_item", "Remove_item", true)]
 	[InlineData("Remove_item", "Keep_item", "Keep_item", false)]
 	[InlineData("Remove_item", "Keep_item", null, false)]
+	[InlineData(null, "OK", "OK", false, true)]
 	public async Task OnAlertRequested_PreservesButtonsAndCompletesResult(
-		string? accept, string cancel, string? clickedButton, bool expectedResult)
+		string? accept, string cancel, string? clickedButton, bool expectedResult, bool longMessage = false)
 	{
 		var title = $"Alert regression {Guid.NewGuid():N}";
-		var arguments = new AlertArguments(title, "Exported 1 of 1 item(s).", accept, cancel);
+		var message = longMessage
+			? string.Join("\n", Enumerable.Repeat("Exported 1 of 1 item(s).", 200))
+			: "Exported 1 of 1 item(s).";
+		var arguments = new AlertArguments(title, message, accept, cancel);
 		var expectedButtons = accept == null ? new[] { cancel } : new[] { accept, cancel };
 
 		// Exercise the production request handler, independently of MAUI's internal
@@ -62,6 +66,16 @@ public class AlertManagerTests
 			Assert.Equal(expectedButtons, buttons.Select(b => b.Current.Name).ToArray());
 			Assert.NotNull(dialog.FindFirst(TreeScope.Descendants,
 				new PropertyCondition(AutomationElement.NameProperty, arguments.Message)));
+			if (longMessage)
+			{
+				var scrollable = dialog.FindAll(TreeScope.Descendants,
+						new PropertyCondition(AutomationElement.IsScrollPatternAvailableProperty, true))
+					.Cast<AutomationElement>().Select(element =>
+						(ScrollPattern)element.GetCurrentPattern(ScrollPattern.Pattern));
+				Assert.Contains(scrollable, pattern => pattern.Current.VerticallyScrollable);
+				Assert.All(buttons, button => Assert.False(button.Current.IsOffscreen));
+				Assert.True(dialog.Current.BoundingRectangle.Height <= System.Windows.SystemParameters.WorkArea.Height);
+			}
 
 			if (clickedButton == null)
 				((WindowPattern)dialog.GetCurrentPattern(WindowPattern.Pattern)).Close();

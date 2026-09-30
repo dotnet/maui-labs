@@ -94,16 +94,30 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 					: System.Windows.FlowDirection.LeftToRight,
 			};
 
-			var panel = new System.Windows.Controls.StackPanel
+			var panel = new System.Windows.Controls.Grid
 			{
 				Margin = new System.Windows.Thickness(16),
 			};
-			panel.Children.Add(new System.Windows.Controls.TextBlock
+			panel.RowDefinitions.Add(new System.Windows.Controls.RowDefinition
 			{
-				Text = arguments.Message ?? string.Empty,
-				TextWrapping = System.Windows.TextWrapping.Wrap,
-				FontSize = 14,
+				Height = System.Windows.GridLength.Auto,
+			});
+			panel.RowDefinitions.Add(new System.Windows.Controls.RowDefinition
+			{
+				Height = System.Windows.GridLength.Auto,
+			});
+			panel.Children.Add(new System.Windows.Controls.ScrollViewer
+			{
+				MaxHeight = System.Windows.SystemParameters.WorkArea.Height / 2,
+				VerticalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto,
+				HorizontalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Disabled,
 				Margin = new System.Windows.Thickness(0, 0, 0, 12),
+				Content = new System.Windows.Controls.TextBlock
+				{
+					Text = arguments.Message ?? string.Empty,
+					TextWrapping = System.Windows.TextWrapping.Wrap,
+					FontSize = 14,
+				},
 			});
 
 			var buttons = new System.Windows.Controls.WrapPanel
@@ -130,6 +144,7 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 				buttons.Children.Add(cancel);
 			}
 
+			System.Windows.Controls.Grid.SetRow(buttons, 1);
 			panel.Children.Add(buttons);
 			dialog.Content = panel;
 			return dialog.ShowDialog() == true;
