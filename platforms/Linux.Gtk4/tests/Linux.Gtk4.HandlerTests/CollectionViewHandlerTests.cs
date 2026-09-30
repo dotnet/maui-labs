@@ -152,8 +152,10 @@ public class CollectionViewHandlerTests
 			collection.ItemTemplate = new DataTemplate(CreateNestedItem);
 			WaitUntil(() => nestedRoots.Any(view => view.Parent == collection) &&
 				nestedLeaves.Any(view => view.Handler != null));
-			var firstNestedRoot = Assert.Single(nestedRoots);
-			var firstNestedHandler = Assert.IsType<DisconnectTrackingLabelHandler>(Assert.Single(nestedLeaves).Handler);
+			var firstNestedRoot = Assert.Single(nestedRoots, view => view.Parent == collection);
+			var firstNestedLeaf = Assert.IsType<Label>(
+				Assert.IsType<ContentView>(Assert.Single(firstNestedRoot.Children)).Content);
+			var firstNestedHandler = Assert.IsType<DisconnectTrackingLabelHandler>(firstNestedLeaf.Handler);
 			Assert.Equal(0, firstNestedHandler.DisconnectCount);
 			collection.ItemsSource = new[] { new[] { "Replacement nested card" } };
 			WaitUntil(() => firstNestedRoot.Parent == null &&
