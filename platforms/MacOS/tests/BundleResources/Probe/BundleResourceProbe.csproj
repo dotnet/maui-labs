@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-macos</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <UseMaui>true</UseMaui>
+    <SingleProject>true</SingleProject>
+    <SupportedOSPlatformVersion>14.0</SupportedOSPlatformVersion>
+    <ApplicationId>com.microsoft.maui.tests.bundleresources</ApplicationId>
+    <ApplicationTitle>AppKit resource regression</ApplicationTitle>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <IsPackable>false</IsPackable>
+    <MacOSResourceTargets Condition="'$(MacOSResourceTargets)' == ''">$(MSBuildThisFileDirectory)..\..\..\src\MacOS\buildTransitive\Microsoft.Maui.Platforms.MacOS.targets</MacOSResourceTargets>
+  </PropertyGroup>
+
+  <Import Project="$(MacOSResourceTargets)" Condition="'$(ResourceTestPackageVersion)' == ''" />
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(ResourceTestPackageVersion)' == ''">
+    <ProjectReference Include="..\..\..\src\MacOS\MacOS.csproj" />
+    <ProjectReference Include="..\..\..\src\MacOS.Essentials\MacOS.Essentials.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(ResourceTestPackageVersion)' != ''">
+    <PackageReference Include="Microsoft.Maui.Platforms.MacOS" VersionOverride="$(ResourceTestPackageVersion)" />
+    <PackageReference Include="Microsoft.Maui.Platforms.MacOS.Essentials" VersionOverride="$(ResourceTestPackageVersion)" />
+  </ItemGroup>
+
+  <!-- Outside the head's Resources directory: the SDK's default glob cannot rescue these. -->
+  <ItemGroup>
+    <MauiImage Include="..\..\..\samples\MacOS.Sample\Resources\AppIcon\appicon.png" Link="Resources\Images\appicon.png" />
+    <MauiFont Include="..\..\..\samples\MacOS.Sample\Resources\Fonts\OpenSans-Regular.ttf" Link="Resources\Fonts\OpenSans-Regular.ttf" />
+    <MauiAsset Include="..\Shared\Raw\**\*" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" Link="Resources\Raw\%(RecursiveDir)%(Filename)%(Extension)" />
+    <MauiAsset Include="..\Shared\renamed.txt" LogicalName="Custom\renamed.txt" />
+    <MauiAsset Include="..\Shared\default.txt" />
+    <MauiAsset Include="Resources\Raw\local.txt" LogicalName="Local\local.txt" />
+  </ItemGroup>
+
+  <Target Name="_RecordResourceProbeBundle" AfterTargets="Build;Publish"
+          Condition="'$(ResourceTestBundlePathFile)' != ''">
+    <WriteLinesToFile File="$(ResourceTestBundlePathFile)"
+                      Lines="$([System.IO.Path]::GetFullPath('$(AppBundleDir)'))"
+                      Overwrite="true" />
+  </Target>
+</Project>

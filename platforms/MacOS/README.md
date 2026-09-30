@@ -65,6 +65,9 @@ dotnet run
 
   <ItemGroup>
     <MauiIcon Include="Resources\AppIcon\appicon.png" />
+    <MauiImage Include="Resources\Images\*" />
+    <MauiFont Include="Resources\Fonts\*" />
+    <MauiAsset Include="Resources\Raw\**\*" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>
 ```
@@ -150,6 +153,36 @@ dotnet test platforms/MacOS/tests/MacOS.Tests/MacOS.Tests.csproj
 
 The AppKit CI workflow and official macOS product build also run these tests.
 Native window notifications and rendering still require testing in a running macOS app.
+
+### Bundled resources
+
+The package's build targets translate `MauiImage`, `MauiFont`, and `MauiAsset` into
+Apple SDK `BundleResource` items, including files linked from outside the head project.
+Images are bundled as `Contents/Resources/Images/<filename>` and fonts as
+`Contents/Resources/Fonts/<filename>`. Raw assets use `LogicalName` relative to
+`Contents/Resources` (or the filename when no logical name is supplied), matching
+`IFileSystem.OpenAppPackageFileAsync`. Backslashes in logical names are normalized.
+The MAUI mapping replaces the SDK's default resource entry for the same source file;
+unrelated `BundleResource` items are unchanged.
+
+This bundles image sources as-is; it does not add Resizetizer resizing or SVG conversion.
+Image names and font names must be unique within their respective bundle directories.
+Use `LogicalName` to preserve nested raw-asset paths.
+
+The resource regression fixture uses an actual AppKit app with external image/font/raw
+items and a local raw item also matched by the SDK glob. On macOS with Xcode and the
+MAUI/macOS workloads, run:
+
+```powershell
+./platforms/MacOS/tests/BundleResources/Test-BundleResources.ps1
+```
+
+It checks the produced `.app`, incremental builds and `dotnet publish` (without an
+installer package), then runs native MAUI image/label handlers and reads assets through
+the registered `IFileSystem`. CI also builds the historical failing targets and tests
+the newly packed NuGet packages. Logs, bundle listings and binlogs are uploaded as
+`appkit-bundle-resource-evidence`. These checks require macOS; item-mapping checks alone
+on Windows are not proof of rendering.
 
 ## MAUI DevFlow integration
 

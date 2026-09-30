@@ -36,3 +36,42 @@ jobs:
       run-tests: true
       pack: true
       xcode-version: '26.3'
+
+  bundle-resources:
+    needs: build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+      - name: Install workloads
+        run: ./eng/common/dotnet.sh workload install macos maui maui-tizen --version 10.0.203
+      - uses: actions/download-artifact@v8
+        with:
+          name: packages-macos-appkit-macos-latest
+          path: artifacts/resource-test-packages
+      - name: Assert resource item mapping
+        run: |
+          ./eng/common/dotnet.sh msbuild platforms/MacOS/tests/BundleResources/ResourceItems.proj
+          ./eng/common/dotnet.sh msbuild platforms/MacOS/tests/BundleResources/ResourceItems.proj -p:TargetPlatformIdentifier=windows
+      - name: Reproduce original omission and verify packaged fix in AppKit
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts/BundleResourceEvidence | Out-Null
+          git show 9206e7c5c6486a7f422efd36a7635c6fe9609000:platforms/MacOS/src/MacOS/buildTransitive/Microsoft.Maui.Platforms.MacOS.targets |
+            Set-Content artifacts/BundleResourceEvidence/before.targets
+          if ($LASTEXITCODE -ne 0) { throw 'Could not read the issue reproduction baseline.' }
+          ./platforms/MacOS/tests/BundleResources/Test-BundleResources.ps1 `
+            -BaselineTargets artifacts/BundleResourceEvidence/before.targets `
+            -PackageDirectory artifacts/resource-test-packages
+      - name: Upload bundle and native runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: appkit-bundle-resource-evidence
+          path: artifacts/BundleResourceEvidence
