@@ -293,10 +293,13 @@ public partial class ShellHandler : GtkViewHandler<Shell, Gtk.Box>
 				var tabLabel = Gtk.Label.New(section.Title ?? "Tab");
 				_notebook.AppendPage(container, tabLabel);
 				RegisterNativeElement(section, tabLabel, "ShellTab", _registeredTabElements);
+				var displayVersion = 0;
 				var observer = new ShellSectionNavigationObserver(section, page =>
 				{
-					DisplaySectionPage(container, page, generation);
-					if (generation == _sectionGeneration)
+					var version = ++displayVersion;
+					bool IsCurrent() => generation == _sectionGeneration && version == displayVersion;
+					DisplaySectionPage(container, page, IsCurrent);
+					if (IsCurrent())
 						tabLabel.SetText(section.Title ?? page?.Title ?? "Tab");
 				});
 				_sectionObservers.Add(observer);
@@ -320,13 +323,13 @@ public partial class ShellHandler : GtkViewHandler<Shell, Gtk.Box>
 		}
 	}
 
-	void DisplaySectionPage(Gtk.Box container, Page? page, int generation)
+	void DisplaySectionPage(Gtk.Box container, Page? page, Func<bool> isCurrent)
 	{
-		if (generation != _sectionGeneration)
+		if (!isCurrent())
 			return;
 		var platformPage = page == null ? null : (Gtk.Widget)page.ToPlatform(MauiContext!);
 		// Handler creation can run application code which navigates or disconnects Shell.
-		if (generation != _sectionGeneration)
+		if (!isCurrent())
 			return;
 		if (container.GetFirstChild() == platformPage)
 			return;

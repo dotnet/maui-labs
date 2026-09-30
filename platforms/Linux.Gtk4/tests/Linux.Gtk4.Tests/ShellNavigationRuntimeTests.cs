@@ -75,6 +75,21 @@ public class ShellNavigationRuntimeTests
 				await shell.GoToAsync("..", false);
 				await AssertDisplayed(shell, root, "relative-back");
 
+				var first = new ContentPage { Content = new Label { Text = "First detail" } };
+				var second = new ContentPage { Content = new Label { Text = "Reentrant detail" } };
+				Task? nestedPush = null;
+				first.HandlerChanged += (_, _) =>
+				{
+					if (first.Handler != null)
+						nestedPush = ((NavigationTestSection)section).PushDirect(second);
+				};
+				await ((NavigationTestSection)section).PushDirect(first);
+				Assert.NotNull(nestedPush);
+				await nestedPush;
+				await AssertDisplayed(shell, second, "same-section-reentrant-push");
+				await section.Navigation.PopToRootAsync(false);
+				await AssertDisplayed(shell, root, "reentrant-pop-to-root");
+
 				var originalItem = shell.CurrentItem;
 				var otherRoot = new ContentPage { Content = new Label { Text = "Other item" } };
 				var otherItem = new ShellItem { Route = "other" };
@@ -152,7 +167,7 @@ public class ShellNavigationRuntimeTests
 		{
 			Routing.RegisterRoute("detail", typeof(DetailPage));
 			var root = new ContentPage { Content = new Label { Text = "Shell navigation root" } };
-			var section = new ShellSection { Route = "home", Title = "Home" };
+			var section = new NavigationTestSection { Route = "home", Title = "Home" };
 			section.Items.Add(new ShellContent { Route = "main", Content = root });
 			var item = new ShellItem { Route = "workspace" };
 			item.Items.Add(section);
@@ -165,5 +180,10 @@ public class ShellNavigationRuntimeTests
 	public sealed class DetailPage : ContentPage
 	{
 		public DetailPage() => Content = new Label { Text = "Routed detail page" };
+	}
+
+	sealed class NavigationTestSection : ShellSection
+	{
+		public Task PushDirect(Page page) => OnPushAsync(page, false);
 	}
 }
