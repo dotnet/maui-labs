@@ -266,41 +266,56 @@ sealed class RegressionDelegate : MacOSMauiApplication
             page.Handler?.PlatformView is NSView { Superview: not null }, "restored shell remounts its page");
 
         var retainedItem = shell.CurrentItem;
-        CountingPage? abandonedPage = null;
-        var redirect = new TabBar
+        var retainedSection = retainedItem.CurrentItem;
+        var destinationPage = new CountingPage
         {
+            Title = "New destination",
+            Content = new Label { Text = "New destination" },
+        };
+        var destination = new TabBar
+        {
+            Items = { new Tab { Items = { new ShellContent { Content = destinationPage } } } },
+        };
+        CountingPage? abandonedPage = null;
+        var redirect = new Tab
+        {
+            Title = "Redirect",
             Items =
             {
-                new Tab
+                new ShellContent
                 {
-                    Title = "Redirect",
-                    Items =
+                    ContentTemplate = new DataTemplate(() =>
                     {
-                        new ShellContent
+                        // Switch a different BindableObject: a reentrant write to the same
+                        // CurrentItem setter can be deferred until its outer setter completes.
+                        shell.CurrentItem = destination;
+                        Require(ReferenceEquals(shell.CurrentItem, destination) &&
+                            destinationPage.Handler?.PlatformView is NSView { Superview: not null },
+                            "newer destination is rendered during lazy creation");
+                        return abandonedPage = new CountingPage
                         {
-                            ContentTemplate = new DataTemplate(() =>
-                            {
-                                shell.CurrentItem = retainedItem;
-                                return abandonedPage = new CountingPage
-                                {
-                                    Title = "Stale destination",
-                                    Content = new Label { Text = "Stale destination" },
-                                };
-                            }),
-                        },
-                    },
+                            Title = "Stale destination",
+                            Content = new Label { Text = "Stale destination" },
+                        };
+                    }),
                 },
             },
         };
-        shell.Items.Add(redirect);
-        shell.CurrentItem = redirect;
+        shell.Items.Add(destination);
+        retainedItem.Items.Add(redirect);
+        retainedItem.CurrentItem = redirect;
         await FlushMainQueue();
-        Require(ReferenceEquals(shell.CurrentItem, retainedItem) && ReferenceEquals(shell.CurrentPage, page),
+        File.WriteAllText(Path.Combine(Program.Output, "reentrant-destination-state.txt"),
+            $"page={shell.CurrentPage?.Title}; abandoned attachments={abandonedPage?.NativeAttachments}");
+        Require(ReferenceEquals(shell.CurrentItem, destination) && ReferenceEquals(shell.CurrentPage, destinationPage),
             "navigation during lazy creation retains the newer destination");
-        Require(abandonedPage is { NativeAttachments: 0 } && page.Handler?.PlatformView is NSView mounted &&
+        Require(abandonedPage is { NativeAttachments: 0 } && destinationPage.Handler?.PlatformView is NSView mounted &&
             Descendants(root).Contains(mounted), "older outer render never mounts the abandoned destination");
         Capture(root, "reentrant-different-destination");
-        shell.Items.Remove(redirect);
+        retainedItem.CurrentItem = retainedSection;
+        retainedItem.Items.Remove(redirect);
+        shell.CurrentItem = retainedItem;
+        shell.Items.Remove(destination);
         await FlushMainQueue();
     }
 
