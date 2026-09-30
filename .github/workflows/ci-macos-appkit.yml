@@ -5,25 +5,25 @@ on:
     branches: [main]
     paths:
       - 'platforms/MacOS/**'
+      - '.github/workflows/ci-macos-appkit.yml'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
       - 'Directory.Packages.props'
       - 'global.json'
       - 'NuGet.config'
-      - '.github/workflows/ci-macos-appkit.yml'
   pull_request:
     types: [opened, synchronize, reopened, edited]
     branches: [main]
     paths:
       - 'platforms/MacOS/**'
+      - '.github/workflows/ci-macos-appkit.yml'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
       - 'Directory.Packages.props'
       - 'global.json'
       - 'NuGet.config'
-      - '.github/workflows/ci-macos-appkit.yml'
 
 jobs:
   build:
@@ -33,7 +33,7 @@ jobs:
       project-name: macos-appkit
       os: '["macos-latest"]'
       install-workloads: true
-      run-tests: false
+      run-tests: true
       pack: true
       xcode-version: '26.3'
 

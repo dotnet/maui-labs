@@ -164,6 +164,18 @@ process logs, native view screenshots and managed/native bounds after addition.
 Set `APPKIT_LAYOUT_ARTIFACTS` to an output directory to capture the same evidence
 when running locally. Hosted execution is distinct from a local desktop run.
 
+## Unit tests
+
+The platform-neutral tests exercise the backend's managed lifecycle code using real MAUI
+windows and handlers. They target `net10.0` and do not require AppKit, Xcode, or MAUI workloads:
+
+```bash
+dotnet test platforms/MacOS/tests/MacOS.Tests/MacOS.Tests.csproj
+```
+
+The AppKit CI workflow and official macOS product build also run these tests.
+Native window notifications and rendering still require testing in a running macOS app.
+
 ## MAUI DevFlow integration
 
 The sample app supports the optional in-process MAUI DevFlow agent:
