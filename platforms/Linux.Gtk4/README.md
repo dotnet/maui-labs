@@ -70,6 +70,23 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 - **Lifecycle Events** — `ConfigureLifecycleEvents().AddGtk()` hooks for `OnWindowCreated` and `OnMauiApplicationCreated`.
 - **Desktop integration** — App icons via hicolor icon theme, `.desktop` file generation, `MauiImage`/`MauiFont`/`MauiAsset` resource processing.
 
+### Shell navigation regression checks
+
+Shell section navigation displays the top pushed page and restores the previous
+page when popped, including route navigation, `PushAsync`, and `PopToRootAsync`.
+Managed observer tests run with the normal GTK test project. The native regression
+test additionally checks the selected notebook child, its mapped state, and a
+positive GTK allocation in a real window. Run it on Linux with GTK and Xvfb:
+
+```bash
+MAUI_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo xvfb-run -a \
+  dotnet test platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj \
+  --filter FullyQualifiedName~ShellNavigationRuntimeTests \
+  --logger "console;verbosity=detailed"
+```
+
+The test uses its own GTK application and does not require a DevFlow broker.
+
 ### Handler styling
 
 GTK CSS font sizes use logical pixels (`px`), matching MAUI's device-independent
