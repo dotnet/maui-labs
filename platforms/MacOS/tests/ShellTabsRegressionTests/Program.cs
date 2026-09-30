@@ -36,12 +36,13 @@ sealed class RegressionDelegate : MacOSMauiApplication
     protected override MauiApp CreateMauiApp() => MauiApp.CreateBuilder()
         .UseMauiAppMacOS<RegressionApp>()
         .AddMacOSEssentials()
+        .ConfigureMauiHandlers(handlers => handlers.AddHandler<ContentPage, CountingPageHandler>())
         .Build();
 
     protected override void OnStarted() =>
         NSApplication.SharedApplication.BeginInvokeOnMainThread(Run);
 
-    void Run()
+    async void Run()
     {
         try
         {
@@ -50,6 +51,7 @@ sealed class RegressionDelegate : MacOSMauiApplication
             var shell = app.TestShell;
             var root = window.ContentView!;
             window.SetContentSize(new CGSize(480, 640));
+            await FlushMainQueue();
             root.LayoutSubtreeIfNeeded();
             window.Display();
             Capture(root, "initial");
@@ -69,6 +71,7 @@ sealed class RegressionDelegate : MacOSMauiApplication
 
             tabs.SelectedSegment = 5;
             tabs.PerformClick(tabs);
+            await FlushMainQueue();
             root.LayoutSubtreeIfNeeded();
             Require(shell.CurrentItem.CurrentItem == shell.CurrentItem.Items[5], "native click selects sixth section");
             Require(shell.CurrentPage?.Title == "Page 5", "native click displays selected page");
@@ -79,6 +82,49 @@ sealed class RegressionDelegate : MacOSMauiApplication
                 label.Bounds.Width > 0 && label.Bounds.Height > 0), "selected page label rendered");
             Require(app.CreatedPages == 2, "inactive page templates remain lazy");
             Capture(root, "selected-sixth");
+            var selectedView = (CountingPageView)shell.CurrentPage!.Handler!.PlatformView!;
+            File.WriteAllText(Path.Combine(Program.Output, "click-refresh-count.txt"),
+                $"Selected page 5 native attachments: {selectedView.Attachments}");
+            Require(selectedView.Attachments == 1,
+                $"native click attaches the selected page once (actual {selectedView.Attachments})");
+
+            shell.FlyoutBehavior = FlyoutBehavior.Locked;
+            window.SetContentSize(new CGSize(1000, 640));
+            await FlushMainQueue();
+            root.LayoutSubtreeIfNeeded();
+            window.Display();
+            var sidebar = Descendants(root).OfType<NSOutlineView>().Single();
+            Require(IsVisible(sidebar) && sidebar.VisibleRect().Width > 0,
+                "wide window displays native sidebar");
+            var sidebarCell = Descendants(sidebar).OfType<NSTableCellView>()
+                .Single(cell => cell.TextField?.StringValue == "Tab 5");
+            Require(sidebarCell.TextField is { } title && IsVisible(title) && title.Bounds.Width > 0,
+                "wide sidebar retains selected tab title");
+            Require(sidebarCell.ImageView is { Image: not null } icon && IsVisible(icon) &&
+                icon.Bounds.Width > 0 && icon.Bounds.Height > 0, "wide sidebar retains system icon");
+            Require(tabs.GetLabel(5) == "Tab 5" && shell.CurrentPage.Title == "Page 5",
+                "wide resize preserves tab title and page");
+            Capture(root, "wide-sidebar");
+
+            shell.FlyoutBehavior = FlyoutBehavior.Disabled;
+            window.SetContentSize(new CGSize(480, 640));
+            await FlushMainQueue();
+            root.LayoutSubtreeIfNeeded();
+            Require((!IsVisible(sidebar) || sidebar.VisibleRect().Width <= 0) && IsVisible(tabs),
+                "narrow presentation restores tabs without sidebar");
+            tabs.SelectedSegment = 0;
+            tabs.PerformClick(tabs);
+            await FlushMainQueue();
+            Require(shell.CurrentPage?.Title == "Page 0", "native click returns to cached first page");
+            var previousAttachments = selectedView.Attachments;
+            tabs.SelectedSegment = 5;
+            tabs.PerformClick(tabs);
+            await FlushMainQueue();
+            Require(shell.CurrentPage?.Title == "Page 5" && selectedView.Superview != null,
+                "native click restores cached selected page");
+            Require(selectedView.Attachments == previousAttachments + 1,
+                "native click attaches cached page once");
+            Require(app.CreatedPages == 2, "native return visits reuse cached pages");
 
             shell.CurrentItem.Items[1].IsVisible = false;
             shell.CurrentItem.Items[2].Title = "Renamed";
@@ -119,6 +165,16 @@ sealed class RegressionDelegate : MacOSMauiApplication
             File.WriteAllText(Path.Combine(Program.Output, "failure.txt"), ex.ToString());
             Console.Error.WriteLine(ex);
             Environment.Exit(1);
+        }
+    }
+
+    static async Task FlushMainQueue()
+    {
+        for (var i = 0; i < 2; i++)
+        {
+            var completion = new TaskCompletionSource();
+            NSApplication.SharedApplication.BeginInvokeOnMainThread(() => completion.SetResult());
+            await completion.Task;
         }
     }
 
@@ -270,7 +326,11 @@ public sealed class RegressionApp : Application
     public Shell TestShell { get; } = new() { FlyoutBehavior = FlyoutBehavior.Disabled };
     public int CreatedPages { get; private set; }
 
-    public RegressionApp() => TestShell.Items.Add(CreateItem(true, 6));
+    public RegressionApp()
+    {
+        MacOSShell.SetUseNativeSidebar(TestShell, true);
+        TestShell.Items.Add(CreateItem(true, 6));
+    }
 
     protected override Window CreateWindow(IActivationState? activationState) =>
         new(TestShell) { Width = 480, Height = 640 };
@@ -278,6 +338,7 @@ public sealed class RegressionApp : Application
     internal ShellItem CreateItem(bool tabBar, int count)
     {
         ShellItem item = tabBar ? new TabBar() : new FlyoutItem();
+        MacOSShell.SetSystemImage(item, "star");
         for (var i = 0; i < count; i++)
         {
             var index = i;
@@ -300,6 +361,23 @@ public sealed class RegressionApp : Application
                     },
                 },
             });
+        }
+
+        sealed class CountingPageHandler : Handlers.ContentPageHandler
+        {
+            protected override MacOSContainerView CreatePlatformView() => new CountingPageView();
+        }
+
+        sealed class CountingPageView : MacOSContainerView
+        {
+            public int Attachments { get; private set; }
+
+            public override void ViewDidMoveToSuperview()
+            {
+                base.ViewDidMoveToSuperview();
+                if (Superview != null)
+                    Attachments++;
+            }
         }
         return item;
     }
