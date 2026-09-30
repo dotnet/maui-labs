@@ -520,18 +520,43 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		public void UpdateTabs(Shell shell)
 		{
+			var item = shell.CurrentItem;
+			var sections = item != null && shell.Items.Contains(item)
+				? ((IShellItemController)item).GetItems().ToArray()
+				: Array.Empty<ShellSection>();
+			bool hasTabs = sections.Length > 1;
+			if (!hasTabs)
+				sections = Array.Empty<ShellSection>();
+
 			_updatingTabs = true;
 			try
 			{
-				RebuildTabs(shell);
+				var tabs = _tabControl.Items.OfType<global::System.Windows.Controls.TabItem>().ToArray();
+				if (tabs.Length != sections.Length ||
+					tabs.Where((tab, index) => !ReferenceEquals(tab.Tag, sections[index])).Any())
+				{
+					RebuildTabs(sections);
+				}
+				else
+				{
+					foreach (var tab in tabs)
+					{
+						var section = (ShellSection)tab.Tag;
+						tab.Header = section.Title ?? section.Route ?? "Tab";
+						if (!_registeredNativeElements.Contains(tab))
+							RegisterNativeElement(section, tab, "ShellTab");
+					}
+				}
+				_tabControl.Visibility = hasTabs ? WVisibility.Visible : WVisibility.Collapsed;
 			}
 			finally
 			{
 				_updatingTabs = false;
 			}
+			UpdateTabSelection(shell);
 		}
 
-		void RebuildTabs(Shell shell)
+		void RebuildTabs(IEnumerable<ShellSection> sections)
 		{
 			foreach (global::System.Windows.Controls.TabItem tab in _tabControl.Items)
 			{
@@ -540,24 +565,16 @@ namespace Microsoft.Maui.Handlers.WPF
 			}
 			_tabControl.Items.Clear();
 
-			var item = shell.CurrentItem;
-			bool hasTabs = item != null && shell.Items.Contains(item) && item.Items.Count > 1;
-			if (hasTabs && item != null)
+			foreach (var section in sections)
 			{
-				foreach (var section in item.Items)
+				var tab = new global::System.Windows.Controls.TabItem
 				{
-					var tab = new global::System.Windows.Controls.TabItem
-					{
-						Header = section.Title ?? section.Route ?? "Tab",
-						Tag = section,
-					};
-					_tabControl.Items.Add(tab);
-					RegisterNativeElement(section, tab, "ShellTab");
-					if (ReferenceEquals(section, item.CurrentItem))
-						_tabControl.SelectedItem = tab;
-				}
+					Header = section.Title ?? section.Route ?? "Tab",
+					Tag = section,
+				};
+				_tabControl.Items.Add(tab);
+				RegisterNativeElement(section, tab, "ShellTab");
 			}
-			_tabControl.Visibility = hasTabs ? WVisibility.Visible : WVisibility.Collapsed;
 		}
 
 		internal void UpdateTabSelection(Shell shell)

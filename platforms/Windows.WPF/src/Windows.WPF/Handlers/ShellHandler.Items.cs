@@ -7,6 +7,7 @@ namespace Microsoft.Maui.Handlers.WPF;
 public partial class ShellHandler
 {
 	readonly HashSet<INotifyCollectionChanged> _itemCollections = new();
+	readonly HashSet<IShellItemController> _itemControllers = new();
 	Shell? _observedShell;
 	DispatcherOperation? _itemsRefresh;
 
@@ -30,17 +31,22 @@ public partial class ShellHandler
 		foreach (var collection in _itemCollections)
 			collection.CollectionChanged -= OnItemsCollectionChanged;
 		_itemCollections.Clear();
+		foreach (var controller in _itemControllers)
+			controller.ItemsCollectionChanged -= OnItemsCollectionChanged;
+		_itemControllers.Clear();
 		_observedShell = null;
 	}
 
 	void UpdateItemCollectionSubscriptions()
 	{
 		var collections = new HashSet<INotifyCollectionChanged>();
+		var controllers = new HashSet<IShellItemController>();
 		if (_observedShell != null)
 		{
 			collections.Add((INotifyCollectionChanged)_observedShell.Items);
 			foreach (var item in _observedShell.Items)
 			{
+				controllers.Add(item);
 				collections.Add((INotifyCollectionChanged)item.Items);
 				foreach (var section in item.Items)
 					collections.Add((INotifyCollectionChanged)section.Items);
@@ -53,6 +59,13 @@ public partial class ShellHandler
 			added.CollectionChanged += OnItemsCollectionChanged;
 		_itemCollections.Clear();
 		_itemCollections.UnionWith(collections);
+
+		foreach (var removed in _itemControllers.Except(controllers))
+			removed.ItemsCollectionChanged -= OnItemsCollectionChanged;
+		foreach (var added in controllers.Except(_itemControllers))
+			added.ItemsCollectionChanged += OnItemsCollectionChanged;
+		_itemControllers.Clear();
+		_itemControllers.UnionWith(controllers);
 	}
 
 	void OnItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)

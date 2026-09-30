@@ -209,13 +209,21 @@ public class ShellTabNavigationTests
 			var navigated = 0;
 			shell.Navigating += (_, _) => navigating++;
 			shell.Navigated += (_, _) => navigated++;
-			var tab = Assert.Single(tabs.Items.OfType<WTabItem>(), tab => ReferenceEquals(tab.Tag, target));
+			var tab = tabs.Items.OfType<WTabItem>().FirstOrDefault(tab => ReferenceEquals(tab.Tag, target));
+			if (tab is null)
+			{
+				// Exercise the acceptance guard even if stale/customized native UI proposes a hidden section.
+				tab = new WTabItem { Header = target.Title, Tag = target };
+				tabs.Items.Add(tab);
+			}
 
 			Select(tab);
 			DrainDispatcher();
 
 			Assert.Same(original, item.CurrentItem);
-			Assert.Same(original, ((WTabItem)tabs.SelectedItem).Tag);
+			Assert.NotSame(tab, tabs.SelectedItem);
+			if (tabs.SelectedItem is WTabItem selected)
+				Assert.Same(original, selected.Tag);
 			Assert.Equal(0, navigating);
 			Assert.Equal(0, navigated);
 			Assert.EndsWith("/one", shell.CurrentState.Location.OriginalString);
@@ -238,6 +246,100 @@ public class ShellTabNavigationTests
 			Assert.EndsWith("/one", shell.CurrentState.Location.OriginalString);
 			Assert.Equal(0, created());
 		});
+	}
+
+	[Theory]
+	[InlineData(false, "section")]
+	[InlineData(true, "section")]
+	[InlineData(false, "content")]
+	[InlineData(true, "content")]
+	[InlineData(false, "empty")]
+	[InlineData(true, "empty")]
+	public void TabPopulation_WhenVisibleSectionsChange_MatchesControllerWithoutRefresh(bool useTemplate, string change)
+	{
+		RunTest(useTemplate, (shell, handler, tabs, first, second, created) =>
+		{
+			var item = shell.CurrentItem;
+			var target = item.Items[1];
+			var content = target.Items[0];
+			item.Items.Add(new ShellContent
+			{
+				Title = "Three",
+				Route = "three",
+				ContentTemplate = new DataTemplate(() => CreatePage("PAGE THREE")),
+			});
+			DrainDispatcher();
+			Assert.Equal(3, tabs.Items.Count);
+			var navigated = 0;
+			shell.Navigated += (_, _) => navigated++;
+
+			switch (change)
+			{
+				case "section": target.IsVisible = false; break;
+				case "content": content.IsVisible = false; break;
+				case "empty": target.Items.Clear(); break;
+			}
+			DrainDispatcher();
+			Record(useTemplate, $"filtered-{change}", shell, handler, tabs, navigated);
+
+			var visible = ((IShellItemController)item).GetItems();
+			Assert.DoesNotContain(target, visible);
+			Assert.Equal(2, visible.Count);
+			Assert.Equal(visible.ToArray(), tabs.Items.OfType<WTabItem>().Select(tab => tab.Tag).Cast<ShellSection>().ToArray());
+			Assert.True(tabs.IsVisible);
+			AssertDisplayed(handler, first, "PAGE ONE");
+			Assert.Equal(0, navigated);
+			Assert.Equal(0, created());
+
+			switch (change)
+			{
+				case "section": target.IsVisible = true; break;
+				case "content": content.IsVisible = true; break;
+				case "empty": target.Items.Add(content); break;
+			}
+			DrainDispatcher();
+			Assert.Equal(3, tabs.Items.Count);
+			Assert.Same(target, ((WTabItem)tabs.Items[1]).Tag);
+			Select((WTabItem)tabs.Items[1]);
+			DrainDispatcher();
+			Assert.Equal(1, navigated);
+			Assert.EndsWith("/two", shell.CurrentState.Location.OriginalString);
+			AssertDisplayed(handler, second, "PAGE TWO");
+			Assert.Equal(1, created());
+			Record(useTemplate, $"restored-{change}", shell, handler, tabs, navigated);
+		});
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void NativeTabSelection_WhenKeyboardFocused_PreservesNativeFocus(bool useTemplate)
+	{
+		RunTest(useTemplate, (shell, handler, tabs, first, second, created) =>
+		{
+			var originalTabs = tabs.Items.OfType<WTabItem>().ToArray();
+			var window = System.Windows.Window.GetWindow(tabs);
+			Assert.True(window.IsActive);
+			Assert.Same(originalTabs[0], System.Windows.Input.Keyboard.Focus(originalTabs[0]));
+			DrainDispatcher();
+			Assert.True(originalTabs[0].IsKeyboardFocused);
+			Record(useTemplate, "keyboard-before", shell, handler, tabs, 0, originalTabs[0]);
+			var navigated = 0;
+			shell.Navigated += (_, _) => navigated++;
+
+			Assert.Same(originalTabs[1], System.Windows.Input.Keyboard.Focus(originalTabs[1]));
+			DrainDispatcher();
+			Record(useTemplate, "keyboard-selected-two", shell, handler, tabs, navigated, originalTabs[1]);
+
+			Assert.Same(originalTabs[1], System.Windows.Input.Keyboard.FocusedElement);
+			Assert.True(originalTabs[1].IsKeyboardFocused);
+			Assert.Equal(originalTabs, tabs.Items.OfType<WTabItem>().ToArray());
+			Assert.Same(originalTabs[1], tabs.SelectedItem);
+			Assert.EndsWith("/two", shell.CurrentState.Location.OriginalString);
+			Assert.Equal(1, navigated);
+			AssertDisplayed(handler, second, "PAGE TWO");
+			Assert.Equal(1, created());
+		}, activateWindow: true);
 	}
 
 	[Fact]
@@ -289,7 +391,7 @@ public class ShellTabNavigationTests
 
 	static void RunTest(bool useTemplate,
 		Action<Shell, ShellHandler, WTabControl, ContentPage, ContentPage, Func<int>> test,
-		bool useFlyoutItem = false)
+		bool useFlyoutItem = false, bool activateWindow = false)
 	{
 		Exception? failure = null;
 		var thread = new Thread(() =>
@@ -328,7 +430,7 @@ public class ShellTabNavigationTests
 						Height = 600,
 						Left = -10000,
 						Top = -10000,
-						ShowActivated = false,
+						ShowActivated = activateWindow,
 						ShowInTaskbar = false,
 					};
 					nativeWindow.Show();
@@ -380,7 +482,8 @@ public class ShellTabNavigationTests
 		Assert.True(label.ActualWidth > 0 && label.ActualHeight > 0);
 	}
 
-	static void Record(bool useTemplate, string state, Shell shell, ShellHandler handler, WTabControl tabs, int navigated)
+	static void Record(bool useTemplate, string state, Shell shell, ShellHandler handler, WTabControl tabs, int navigated,
+		WTabItem? expectedFocusedTab = null)
 	{
 		if (Environment.GetEnvironmentVariable("SHELL_TAB_RESULTS") is not { Length: > 0 } output)
 			return;
@@ -393,6 +496,11 @@ public class ShellTabNavigationTests
 			selectedTab = (tabs.SelectedItem as WTabItem)?.Header,
 			route = shell.CurrentState.Location.OriginalString,
 			navigated,
+			keyboardFocusedTab = (System.Windows.Input.Keyboard.FocusedElement as WTabItem)?.Header,
+			selectedTabHasKeyboardFocus = (tabs.SelectedItem as WTabItem)?.IsKeyboardFocused,
+			originalTabHasKeyboardFocus = expectedFocusedTab?.IsKeyboardFocused,
+			originalTabRetainsKeyboardFocus = expectedFocusedTab is null ? (bool?)null
+				: ReferenceEquals(expectedFocusedTab, System.Windows.Input.Keyboard.FocusedElement),
 			visibleLabels = VisualDescendants(handler.PlatformView).OfType<System.Windows.Controls.TextBlock>()
 				.Where(label => label.IsVisible).Select(label => label.Text).ToArray(),
 		}, new JsonSerializerOptions { WriteIndented = true }));

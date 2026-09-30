@@ -56,11 +56,18 @@ Selecting a native tab navigates through Shell's cancellable section-selection
 pipeline, with or without `Shell.ItemTemplate`. Cancelled or deferred navigation
 keeps the native selection on the current section until Shell accepts the change.
 Rebuilding the strip does not initiate navigation or create inactive pages.
+The strip uses controller-visible sections, excluding hidden sections and sections
+without visible content. Visibility changes refresh it automatically. Plain section
+changes retain the native tab elements and synchronize selection without rebuilding,
+preserving keyboard focus.
 
 The `ShellTabNavigationTests` handler regressions drive native UI Automation
-selection in an offscreen, nonactivating WPF window and assert the route,
+selection in an offscreen WPF window and assert the route,
 `Navigated` events, and rendered page. Set `SHELL_TAB_RESULTS` to a directory to
 capture the templated and non-templated repro states as PNG and JSON.
+Only the keyboard-focus cases activate their window; all other cases are
+nonactivating. On a shared desktop, run the focus cases only with exclusive
+foreground access. They assert actual keyboard focus, not just logical focus.
 
 For section switching within one Shell item, select **Launch Section Switching
 Repro**, or start the sample with `--shell-section-repro`. This uses two lazy
