@@ -38,7 +38,7 @@ jobs:
         with:
           global-json-file: global.json
       - name: Install native test dependencies
-        run: sudo apt-get update && sudo apt-get install -y libgtk-4-1 xvfb
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-1 xvfb dbus
       - name: Run native GTK regression
         env:
           RUN_GTK_RUNTIME_TESTS: '1'

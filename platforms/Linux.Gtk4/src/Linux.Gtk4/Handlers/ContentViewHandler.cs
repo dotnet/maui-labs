@@ -39,10 +39,13 @@ public class ContentViewHandler : GtkViewHandler<IContentView, Platform.GtkLayou
 
 	void StartLayoutTick(Platform.GtkLayoutPanel platformView)
 	{
+		if (_layoutTick != 0)
+			return;
+
 		int lastWidth = -1, lastHeight = -1;
 		_layoutTick = platformView.AddTickCallback((widget, clock) =>
 		{
-			if (VirtualView is not ICrossPlatformLayout layout || platformView.IsExternallyManaged)
+			if (((IElementHandler)this).VirtualView is not ICrossPlatformLayout layout || platformView.IsExternallyManaged)
 			{
 				_layoutTick = 0;
 				return false;
@@ -50,7 +53,7 @@ public class ContentViewHandler : GtkViewHandler<IContentView, Platform.GtkLayou
 
 			// A root ContentView must drive layout; its panel prevents nested
 			// LayoutHandlers from installing their own root layout callbacks.
-			for (var parent = platformView.GetParent(); parent != null; parent = parent.GetParent())
+			for (var parent = platformView.GetParent(); parent != null && parent is not Gtk.Window; parent = parent.GetParent())
 				if (parent is Platform.GtkLayoutPanel)
 				{
 					_layoutTick = 0;
@@ -87,7 +90,12 @@ public class ContentViewHandler : GtkViewHandler<IContentView, Platform.GtkLayou
 	public override Size GetDesiredSize(double widthConstraint, double heightConstraint)
 	{
 		if (VirtualView is ICrossPlatformLayout crossPlatform)
-			return crossPlatform.CrossPlatformMeasure(widthConstraint, heightConstraint);
+		{
+			var size = crossPlatform.CrossPlatformMeasure(widthConstraint, heightConstraint);
+			return new Size(
+				Microsoft.Maui.Layouts.LayoutManager.ResolveConstraints(widthConstraint, VirtualView.Width, size.Width, VirtualView.MinimumWidth, VirtualView.MaximumWidth),
+				Microsoft.Maui.Layouts.LayoutManager.ResolveConstraints(heightConstraint, VirtualView.Height, size.Height, VirtualView.MinimumHeight, VirtualView.MaximumHeight));
+		}
 
 		return base.GetDesiredSize(widthConstraint, heightConstraint);
 	}

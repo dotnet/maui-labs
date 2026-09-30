@@ -92,6 +92,7 @@ public class ContentViewTransformTests(ITestOutputHelper output)
 		}
 		finally
 		{
+			DrainPending();
 			window.SetChild(null);
 			window.Destroy();
 			child.Handler?.DisconnectHandler();
@@ -145,6 +146,7 @@ public class ContentViewTransformTests(ITestOutputHelper output)
 		}
 		finally
 		{
+			DrainPending();
 			window.SetChild(null);
 			window.Destroy();
 			child.Handler?.DisconnectHandler();
@@ -180,6 +182,7 @@ public class ContentViewTransformTests(ITestOutputHelper output)
 		}
 		finally
 		{
+			DrainPending();
 			replacement.Content.Handler?.DisconnectHandler();
 			replacement.Handler?.DisconnectHandler();
 			originalView.Handler?.DisconnectHandler();
@@ -187,6 +190,13 @@ public class ContentViewTransformTests(ITestOutputHelper output)
 			host.Dispose();
 			original.Dispose();
 		}
+	}
+
+	static void DrainPending()
+	{
+		var timeout = Stopwatch.StartNew();
+		while (g_main_context_pending(IntPtr.Zero) && timeout.Elapsed < TimeSpan.FromSeconds(5))
+			g_main_context_iteration(IntPtr.Zero, false);
 	}
 
 	static void WaitUntil(Func<bool> condition)
@@ -214,4 +224,8 @@ public class ContentViewTransformTests(ITestOutputHelper output)
 	[DllImport("libglib-2.0.so.0")]
 	[return: MarshalAs(UnmanagedType.Bool)]
 	static extern bool g_main_context_iteration(IntPtr context, [MarshalAs(UnmanagedType.Bool)] bool mayBlock);
+
+	[DllImport("libglib-2.0.so.0")]
+	[return: MarshalAs(UnmanagedType.Bool)]
+	static extern bool g_main_context_pending(IntPtr context);
 }
