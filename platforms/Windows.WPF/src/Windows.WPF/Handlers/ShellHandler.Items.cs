@@ -67,7 +67,7 @@ public partial class ShellHandler
 		{
 			_itemsRefresh = null;
 			if (_observedShell != null)
-				MapItems(this, _observedShell);
+				UpdateValue(nameof(Shell.Items));
 		}, DispatcherPriority.Background);
 	}
 }
