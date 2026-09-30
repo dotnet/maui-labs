@@ -61,7 +61,7 @@ public class WPFFontManager : IFontManager
 			_fontCache.TryAdd(font.Family, (family, true));
 			return true;
 		}
-		catch (Exception ex) when (ex is IOException or ArgumentException or InvalidOperationException or NotSupportedException or UnauthorizedAccessException)
+		catch (Exception ex) when (ex is IOException or FileFormatException or ArgumentException or InvalidOperationException or NotSupportedException or UnauthorizedAccessException)
 		{
 			family = DefaultFontFamily;
 			if (ex is FileNotFoundException)

@@ -85,6 +85,8 @@ builder.ConfigureFonts(fonts => fonts.AddFont("OpenSans-Regular.ttf", "OpenSansR
 ```
 
 WPF copies `MauiFont` files into `Resources\Fonts` in both build and publish output.
+This output layout uses leaf filenames, so font filenames must be unique even
+when their source directories differ.
 An explicitly included `MauiFont` must exist: build/publish now fails on a missing
 file instead of silently skipping it. Use a conditional item include for optional fonts.
 Aliases resolve relative to the application directory, not the process working

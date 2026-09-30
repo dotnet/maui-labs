@@ -22,6 +22,7 @@ $directories = [ordered]@{
     Fonts = Join-Path $output "Resources\Fonts"
 }
 $expectedTests = @{
+    FontFormatFailure_LogsAndDoesNotRenderFallbackGlyph = 1
     PasswordEntry_CreatingNativeControl_AppliesRegisteredFont = 1
     GraphicsCanvas_RegisteredFont_MeasurementMatchesNativeDrawing = 1
     GlyphSize_ExceedsLimit_ReturnsNoImageAndLogs = 1

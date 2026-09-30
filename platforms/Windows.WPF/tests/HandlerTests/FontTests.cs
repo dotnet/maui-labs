@@ -23,6 +23,23 @@ public class FontApplicationCollection;
 public class FontTests(Xunit.Abstractions.ITestOutputHelper output)
 {
 	[Fact]
+	public void FontFormatFailure_LogsAndDoesNotRenderFallbackGlyph()
+	{
+		StaHelper.RunOnSta(() =>
+		{
+			var registrar = new WPFFontRegistrar(new InvalidFontLoader());
+			registrar.Register("Embedded.ttf", "Broken", typeof(FontTests).Assembly);
+			var logger = new RecordingLogger();
+			var manager = new WPFFontManager(registrar, logger);
+			Assert.Same(manager.DefaultFontFamily, manager.GetFontFamily(Font.OfSize("Broken", 24)));
+			Assert.Null(FontImageSourceHelper.RenderGlyph("A", "Broken", 24, null, manager, logger));
+			var warning = Assert.Single(logger.Messages);
+			Assert.Contains("Unable to resolve font Broken", warning);
+			Assert.Contains("Invalid font data", warning);
+		});
+	}
+
+	[Fact]
 	public void PasswordEntry_CreatingNativeControl_AppliesRegisteredFont()
 	{
 		StaHelper.RunOnSta(() =>
@@ -549,6 +566,11 @@ public class FontTests(Xunit.Abstractions.ITestOutputHelper output)
 				throw new IOException("Transient extraction failure");
 			return new WPFEmbeddedFontLoader().LoadFont(font);
 		}
+	}
+
+	sealed class InvalidFontLoader : IEmbeddedFontLoader
+	{
+		public string? LoadFont(EmbeddedFont font) => throw new FileFormatException("Invalid font data.");
 	}
 
 	sealed class FixedRegistrar(string path) : IFontRegistrar
