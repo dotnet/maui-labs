@@ -71,6 +71,24 @@ public class WindowSizingTests(ITestOutputHelper output)
 			Child = new Label { Text = "Changed without resizing" };
 			Inner.Add(Child);
 		}
+
+		public Shell CreateTemplateShell()
+		{
+			Child = new Label { Text = "Hello, World!", HeightRequest = 40 };
+			var page = new ContentPage
+			{
+				Title = "Home",
+				Content = new ScrollView
+				{
+					Content = new VerticalStackLayout { Children = { Child } }
+				}
+			};
+			return new Shell
+			{
+				FlyoutBehavior = FlyoutBehavior.Disabled,
+				Items = { new ShellContent { Title = "Home", ContentTemplate = new DataTemplate(() => page) } }
+			};
+		}
 	}
 
 	record Step(string Name, Action Apply, int Width, int Height, Func<(int Width, int Height)> ChildSize);
@@ -151,6 +169,15 @@ public class WindowSizingTests(ITestOutputHelper output)
 				mauiWindow.MinimumHeight = 0;
 				window.SetDefaultSize(300, 200);
 			}, 300, 200);
+
+			Add("template Shell/ScrollView startup", () =>
+			{
+				mauiWindow.Page = app.CreateTemplateShell();
+				window.SetDefaultSize(1024, 768);
+			}, 1024, 768, 40);
+			foreach (var (width, height) in new[] { (500, 700), (300, 400), (1100, 700), (300, 400) })
+				Add($"template Shell resize {width}x{height}", () => window.SetDefaultSize(width, height),
+					width, height, 40);
 
 			var step = steps.Dequeue();
 			step.Apply();
