@@ -58,7 +58,7 @@ sealed class NativeDialogProbe : MacOSMauiApplication
                 var button = buttons.Single(b => b.Title == expectedTitle);
                 Console.WriteLine($"VISIBLE stage {_stage}: {string.Join(", ", buttons.Select(b => b.Title))}");
                 _observedDialog = true;
-                button.PerformClick(null);
+                button.PerformClick(button);
             }
 
             if (_pending!.IsCompleted)
