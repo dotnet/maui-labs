@@ -335,6 +335,25 @@ From `platforms/Linux.Gtk4`, run:
 dotnet test tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
 ```
 
+### Native regression tests
+
+Picker selection tests use real MAUI controls and GTK widgets. They require Linux,
+GTK 4.12+, and a display, and are skipped unless `RUN_GTK_RUNTIME_TESTS=1`.
+From `platforms/Linux.Gtk4`, run them under an isolated virtual display:
+
+```bash
+RUN_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo GTK_A11Y=none \
+  dbus-run-session -- xvfb-run --auto-servernum \
+  dotnet test tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj \
+  --filter FullyQualifiedName~PickerSelectionTests \
+  --logger "console;verbosity=detailed" -m:1 -nr:false
+```
+
+The native CI job runs each GTK test class in its own process to keep GTK
+initialization thread-affine and uploads its TRX results. The Picker regression
+checks item replacement, no selection, collection mutations, managed selection
+mapping, native selection notifications, and disconnect/reconnect behavior.
+
 ### Run the sample app
 
 ```bash
