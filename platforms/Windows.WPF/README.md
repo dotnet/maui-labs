@@ -76,6 +76,30 @@ For template development, run `eng\smoke-tests\wpf-template-smoke-test.ps1` on W
 It packs, generates, restores, builds, and launches the template using an isolated
 template hive. See [validation details](docs/getting-started.md#validating-template-changes).
 
+## Packaged raw assets
+
+Declare raw files as `MauiAsset` items with their package-relative names:
+
+```xml
+<MauiAsset Include="Resources\Raw\**\*" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+```
+
+For example, `Resources\Raw\Data\sample.txt` is copied to `Data\sample.txt`
+under the app directory in both build and publish output. Open it with
+`IFileSystem.OpenAppPackageFileAsync("Data/sample.txt")`; use
+`AppPackageFileExistsAsync` with the same name. Resolve `IFileSystem` from the
+services registered by `UseWPFEssentials()`.
+
+An explicit `LogicalName` takes precedence over `Link`. Without either metadata,
+the path defaults to `%(RecursiveDir)%(Filename)%(Extension)` (a single explicitly
+included file uses its filename). Nested folders are preserved, so files with
+the same basename in different logical folders remain distinct. Do not prefix
+the runtime name with `Resources\Raw`.
+
+Run `eng\smoke-tests\wpf-assets-smoke-test.ps1` on Windows to build and run the
+asset probe, then publish it without rebuilding and run it again. The probe uses
+the actual DI-registered WPF file system, without opening a window.
+
 ## Samples
 
 See the `samples/` directory for working examples:

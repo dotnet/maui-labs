@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Windows.WPF.Essentials\Windows.WPF.Essentials.csproj" />
+    <MauiAsset Include="Resources\Raw\**\*" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+    <MauiAsset Include="Resources\Renamed.txt" LogicalName="Config/settings.txt" Link="Ignored\name.txt" />
+    <MauiAsset Include="Resources\Fallback\**\*" />
+    <MauiAsset Include="Resources\Linked.txt" Link="Linked\asset.txt" />
+  </ItemGroup>
+
+  <!-- Project references do not import NuGet build assets. Exercise the shipping target explicitly. -->
+  <Import Project="..\..\src\Windows.WPF\build\Microsoft.Maui.Platforms.Windows.WPF.targets" />
+</Project>
