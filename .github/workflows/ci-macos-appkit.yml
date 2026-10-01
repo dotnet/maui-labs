@@ -37,71 +37,6 @@ jobs:
       pack: true
       xcode-version: '26.3'
 
-  shell-section-regression:
-    runs-on: macos-latest
-    timeout-minutes: 25
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          path: fixed
-      - uses: actions/checkout@v6
-        with:
-          # Pre-#556 fix, including the unrelated AppKit quit-crash fix.
-          ref: 23ea45e98b84bfbf9dd00f4859fd4cf30d44120d
-          path: baseline
-      - uses: actions/setup-dotnet@v5
-        with:
-          global-json-file: fixed/global.json
-      - name: Select Xcode and install macOS workload
-        run: |
-          sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
-          dotnet workload install macos --version 10.0.203
-      - name: Verify section navigation fails before and passes after
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $PSNativeCommandUseErrorActionPreference = $false
-          $relative = 'platforms/MacOS/tests/ShellSectionRegressionTests'
-          Copy-Item "fixed/$relative" "baseline/$relative" -Recurse
-          foreach ($variant in @('baseline', 'fixed')) {
-            Push-Location $variant
-            try {
-              $env:SHELL_SECTION_RESULTS = Join-Path $env:GITHUB_WORKSPACE "section-runtime-evidence/$variant"
-              New-Item -ItemType Directory -Force $env:SHELL_SECTION_RESULTS | Out-Null
-              dotnet build "$relative/ShellSectionRegressionTests.csproj" -m:1 -nr:false -v:q *> "$env:SHELL_SECTION_RESULTS/build.log"
-              if ($LASTEXITCODE -ne 0) {
-                Get-Content "$env:SHELL_SECTION_RESULTS/build.log"
-                throw "$variant build failed before runtime validation"
-              }
-              $bundle = Get-ChildItem artifacts/bin/ShellSectionRegressionTests -Filter '*.app' -Recurse -Directory | Select-Object -First 1
-              if (!$bundle) { throw 'Missing regression app bundle' }
-              & "$($bundle.FullName)/Contents/MacOS/ShellSectionRegressionTests" *> "$env:SHELL_SECTION_RESULTS/process.log"
-              $exitCode = $LASTEXITCODE
-              if ($variant -eq 'baseline') {
-                if ($exitCode -ne 42 -or !(Select-String -Path "$env:SHELL_SECTION_RESULTS/failure.txt" -Pattern 'REGRESSION: route changed to two' -Quiet)) {
-                  Get-Content "$env:SHELL_SECTION_RESULTS/process.log"
-                  Get-Content "$env:SHELL_SECTION_RESULTS/failure.txt" -ErrorAction SilentlyContinue
-                  throw "Baseline did not reproduce section navigation failure (exit $exitCode)"
-                }
-                Set-Content "$env:SHELL_SECTION_RESULTS/summary.txt" 'Baseline built and reproduced the expected lazy section-navigation failure.'
-              } elseif ($exitCode -ne 0 -or !(Test-Path "$env:SHELL_SECTION_RESULTS/passed.txt")) {
-                Get-Content "$env:SHELL_SECTION_RESULTS/process.log"
-                Get-Content "$env:SHELL_SECTION_RESULTS/failure.txt" -ErrorAction SilentlyContinue
-                throw "Fixed AppKit regression failed (exit $exitCode)"
-              } else {
-                Set-Content "$env:SHELL_SECTION_RESULTS/summary.txt" 'Fixed harness built and passed all native runtime assertions.'
-              }
-            } finally { Pop-Location }
-          }
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: shell-section-appkit-runtime
-          path: section-runtime-evidence
-          if-no-files-found: error
-
   native-runtime:
     name: AppKit runtime (${{ matrix.scenario }}, ${{ matrix.maui-version || 'default' }})
     runs-on: macos-latest
@@ -111,6 +46,8 @@ jobs:
       matrix:
         include:
           - scenario: layout
+            maui-version: ''
+          - scenario: shell-sections
             maui-version: ''
     env:
       NUGET_PACKAGES: ${{ github.workspace }}/.packages

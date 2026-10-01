@@ -25,9 +25,11 @@ This backend lets MAUI applications run as true native macOS apps that use AppKi
 Shell observes section and content selection changes, including `GoToAsync` and
 programmatic `CurrentItem` updates. The selected lazy page is created and hosted
 without requiring a manual handler refresh; unselected templates remain lazy.
-The `shell-section-regression` CI job runs a native AppKit harness against both
-the pre-fix revision and the current code and uploads screenshots and navigation
-assertions as `shell-section-appkit-runtime`.
+The shared `MacOS.RuntimeTests` host's `shell-sections` scenario exercises the
+pre-fix Shell handlers and the current code through full MAUI/AppKit startup.
+The `native-runtime` CI matrix uploads screenshots, navigation state and all 59
+assertions as `appkit-runtime-shell-sections-default`. See the
+[shared runner](tests/MacOS.RuntimeTests/README.md) for local macOS usage.
 
 ## Prerequisites
 
