@@ -18,6 +18,493 @@ namespace HandlerTests;
 public class ShellItemsHandlerTests
 {
 	[Theory]
+	[InlineData("Header", false)]
+	[InlineData("Footer", false)]
+	[InlineData("Item", false)]
+	[InlineData("Header", true)]
+	[InlineData("Footer", true)]
+	[InlineData("Item", true)]
+	public void FlyoutTemplates_ContentOnlyMutation_PreservesNativeState(string surface, bool active)
+	{
+		RunWithFlyoutTemplates((shell, handler, calls, created) =>
+		{
+			var section = shell.Items[active ? 0 : 1].Items[0];
+			var selectedPage = shell.CurrentPage;
+			var tabs = shell.CurrentItem.Items.ToArray();
+			var before = FlyoutTemplateNative(handler, surface);
+			Assert.Contains(created[surface], entry => ReferenceEquals(entry.Handler?.PlatformView, before));
+			before.Text = "Locally edited flyout text";
+			before.Select(3, 7);
+			DrainDispatcher();
+			Assert.Equal("Locally edited flyout text", before.Text);
+			Assert.Equal(3, before.SelectionStart);
+			Assert.Equal(7, before.SelectionLength);
+			var factoryCounts = created.ToDictionary(pair => pair.Key, pair => pair.Value.Count);
+			var headerTemplate = shell.FlyoutHeaderTemplate;
+			var footerTemplate = shell.FlyoutFooterTemplate;
+			var itemTemplate = shell.ItemTemplate;
+			calls.Clear();
+
+			var replacement = Content("Replacement content");
+			section.Items[0] = replacement;
+			DrainDispatcher();
+
+			Assert.Same(headerTemplate, shell.FlyoutHeaderTemplate);
+			Assert.Same(footerTemplate, shell.FlyoutFooterTemplate);
+			Assert.Same(itemTemplate, shell.ItemTemplate);
+			Assert.Equal(new[] { nameof(Shell.BackgroundColor), nameof(Shell.FlyoutBackgroundColor),
+				nameof(Shell.FlyoutBackground), nameof(Shell.Items) }, calls);
+			AssertTabs(handler, tabs);
+			AssertCurrentPage(shell, handler);
+			if (active)
+			{
+				Assert.Same(replacement, section.CurrentItem);
+				Assert.NotSame(selectedPage, shell.CurrentPage);
+				Assert.Equal("Replacement content", shell.CurrentPage.Title);
+			}
+			else
+				Assert.Same(selectedPage, shell.CurrentPage);
+
+			var after = FlyoutTemplateNative(handler, surface);
+			Assert.Same(before, after);
+			Assert.Equal("Locally edited flyout text", after.Text);
+			Assert.Equal(3, after.SelectionStart);
+			Assert.Equal(7, after.SelectionLength);
+			foreach (var pair in factoryCounts)
+				Assert.Equal(pair.Value, created[pair.Key].Count);
+		});
+	}
+
+	[Theory]
+	[InlineData("Header", false)]
+	[InlineData("Footer", false)]
+	[InlineData("Item", false)]
+	[InlineData("Header", true)]
+	[InlineData("Footer", true)]
+	public void FlyoutTemplates_ChangedTemplateOrData_UpdatesNativeContent(string surface, bool changeData)
+	{
+		RunWithFlyoutTemplates((shell, handler, calls, created) =>
+		{
+			var before = FlyoutTemplateNative(handler, surface);
+			Assert.Contains(created[surface], entry => ReferenceEquals(entry.Handler?.PlatformView, before));
+			Assert.Equal(surface == "Item" ? "Initial item" : $"Initial {surface}", before.Text);
+			var originalTemplate = surface == "Header" ? shell.FlyoutHeaderTemplate
+				: surface == "Footer" ? shell.FlyoutFooterTemplate : shell.ItemTemplate;
+			var replacementEntries = new List<Microsoft.Maui.Controls.Entry>();
+			if (changeData)
+			{
+				if (surface == "Header")
+					shell.FlyoutHeader = "Updated data";
+				else
+					shell.FlyoutFooter = "Updated data";
+			}
+			else
+			{
+				var template = new Microsoft.Maui.Controls.DataTemplate(() =>
+				{
+					var entry = new Microsoft.Maui.Controls.Entry { Text = "Updated template" };
+					replacementEntries.Add(entry);
+					return entry;
+				});
+				if (surface == "Header")
+					shell.FlyoutHeaderTemplate = template;
+				else if (surface == "Footer")
+					shell.FlyoutFooterTemplate = template;
+				else
+					shell.ItemTemplate = template;
+			}
+			DrainDispatcher();
+			calls.Clear();
+
+			// Exercise invalidation through the same deferred Items replay as the preservation cases.
+			shell.Items[1].Items[0].Items.Add(Content("Inactive content"));
+			DrainDispatcher();
+
+			var after = FlyoutTemplateNative(handler, surface);
+			Assert.Equal(changeData ? "Updated data" : "Updated template", after.Text);
+			if (changeData)
+			{
+				Assert.Same(originalTemplate, surface == "Header" ? shell.FlyoutHeaderTemplate : shell.FlyoutFooterTemplate);
+				var entry = Assert.Single(created[surface].Where(entry => ReferenceEquals(entry.Handler?.PlatformView, after)));
+				Assert.Equal("Updated data", entry.BindingContext);
+			}
+			else
+			{
+				Assert.NotSame(before, after);
+				Assert.Contains(replacementEntries, entry => ReferenceEquals(entry.Handler?.PlatformView, after));
+				if (surface == "Item")
+				{
+					var buttons = Flyout(handler).Children.Cast<System.Windows.Controls.Button>().ToArray();
+					Assert.Equal(shell.Items.Count, buttons.Length);
+					foreach (var button in buttons)
+					{
+						var textBox = Assert.IsType<TextBox>(button.Content);
+						Assert.Equal("Updated template", textBox.Text);
+						Assert.Contains(replacementEntries, entry => ReferenceEquals(entry.Handler?.PlatformView, textBox));
+					}
+				}
+			}
+			Assert.Equal(new[] { nameof(Shell.BackgroundColor), nameof(Shell.FlyoutBackgroundColor),
+				nameof(Shell.FlyoutBackground), nameof(Shell.Items) }, calls);
+			AssertTabs(handler, shell.CurrentItem.Items.ToArray());
+			AssertCurrentPage(shell, handler);
+		});
+	}
+
+	[Fact]
+	public void FlyoutTemplates_SelectorResultChanges_ReplacesOnlyAffectedItem()
+	{
+		RunWithFlyoutTemplates((shell, handler, _, _) =>
+		{
+			var entries = new List<Microsoft.Maui.Controls.Entry>();
+			var first = Template("First selection");
+			var second = Template("Second selection");
+			var changed = false;
+			shell.ItemTemplate = new FlyoutTestSelector(item =>
+				changed && ReferenceEquals(item, shell.Items[0]) ? second : first);
+			shell.Items[1].Items[0].Items.Add(Content("Initial refresh"));
+			DrainDispatcher();
+			var original = FlyoutTemplateNative(handler, "Item");
+			var originalEntry = Assert.Single(entries, entry => ReferenceEquals(entry.Handler?.PlatformView, original));
+			var other = ((System.Windows.Controls.Button)Flyout(handler).Children[1]).Content;
+			Assert.Equal("First selection", original.Text);
+			Assert.Equal(2, entries.Count);
+
+			changed = true;
+			shell.Items[1].Items[0].Items.Add(Content("Resolve changed selector"));
+			DrainDispatcher();
+
+			Assert.NotSame(original, FlyoutTemplateNative(handler, "Item"));
+			Assert.Equal("Second selection", FlyoutTemplateNative(handler, "Item").Text);
+			Assert.Null(originalEntry.Handler);
+			Assert.Same(other, ((System.Windows.Controls.Button)Flyout(handler).Children[1]).Content);
+			Assert.Equal(3, entries.Count);
+			AssertCurrentPage(shell, handler);
+
+			Microsoft.Maui.Controls.DataTemplate Template(string text) => new(() =>
+			{
+				var entry = new Microsoft.Maui.Controls.Entry { Text = text };
+				entries.Add(entry);
+				return entry;
+			});
+		});
+	}
+
+	[Fact]
+	public void FlyoutTemplates_RemovedItem_DisconnectsAndDoesNotReuseDetachedNativeView()
+	{
+		RunWithFlyoutTemplates((shell, handler, _, created) =>
+		{
+			var removed = shell.Items[1];
+			var button = (System.Windows.Controls.Button)Flyout(handler).Children[1];
+			var native = Assert.IsType<TextBox>(button.Content);
+			var entry = Assert.Single(created["Item"], candidate => ReferenceEquals(candidate.Handler?.PlatformView, native));
+			shell.Items.Remove(removed);
+			DrainDispatcher();
+
+			Assert.Null(entry.Handler);
+			Assert.Null(entry.BindingContext);
+			Assert.Single(Flyout(handler).Children.Cast<System.Windows.Controls.Button>());
+			var selected = shell.CurrentItem;
+			button.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+			Assert.Same(selected, shell.CurrentItem);
+
+			shell.Items.Add(removed);
+			DrainDispatcher();
+			var replacement = Assert.IsType<TextBox>(((System.Windows.Controls.Button)Flyout(handler).Children[1]).Content);
+			Assert.NotSame(native, replacement);
+			Assert.Contains(created["Item"], candidate => ReferenceEquals(candidate.Handler?.PlatformView, replacement));
+			AssertCurrentPage(shell, handler);
+		});
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void FlyoutTemplates_RebindOrReconnect_ReleasesPreviousTemplateViews(bool reconnect)
+	{
+		RunWithFlyoutTemplates((shell, handler, _, created) =>
+		{
+			var nativeViews = new[] { "Header", "Footer", "Item" }
+				.Select(surface => FlyoutTemplateNative(handler, surface)).ToArray();
+			var entries = created.Values.SelectMany(value => value).Where(entry => entry.Handler != null).ToArray();
+			Assert.Equal(4, entries.Length);
+			if (reconnect)
+				((IElementHandler)handler).DisconnectHandler();
+			var replacement = reconnect ? shell : new Shell
+			{
+				FlyoutHeader = shell.FlyoutHeader,
+				FlyoutFooter = shell.FlyoutFooter,
+				FlyoutHeaderTemplate = shell.FlyoutHeaderTemplate,
+				FlyoutFooterTemplate = shell.FlyoutFooterTemplate,
+				ItemTemplate = shell.ItemTemplate,
+				Items = { Item("Replacement shell") },
+			};
+			handler.SetVirtualView(replacement);
+			DrainDispatcher();
+
+			Assert.All(entries, entry =>
+			{
+				Assert.Null(entry.Handler);
+				Assert.Null(entry.BindingContext);
+			});
+			foreach (var surface in new[] { "Header", "Footer", "Item" })
+				Assert.DoesNotContain(FlyoutTemplateNative(handler, surface), nativeViews);
+			AssertCurrentPage(replacement, handler);
+			if (!reconnect)
+			{
+				var newHeader = FlyoutTemplateNative(handler, "Header");
+				shell.Items.Clear();
+				DrainDispatcher();
+				Assert.Same(newHeader, FlyoutTemplateNative(handler, "Header"));
+				AssertCurrentPage(replacement, handler);
+			}
+		});
+	}
+
+	[Theory]
+	[InlineData("Header")]
+	[InlineData("Footer")]
+	public void FlyoutTemplates_EffectiveBindingContextChanges_UpdatesNativeContent(string surface)
+	{
+		RunWithFlyoutTemplates((shell, handler, _, created) =>
+		{
+			if (surface == "Header")
+				shell.FlyoutHeader = null;
+			else
+				shell.FlyoutFooter = null;
+			shell.BindingContext = "First context";
+			shell.Items[1].Items[0].Items.Add(Content("Initial context"));
+			DrainDispatcher();
+			Assert.Equal("First context", FlyoutTemplateNative(handler, surface).Text);
+
+			shell.BindingContext = "Second context";
+			shell.Items[1].Items[0].Items.Add(Content("New context"));
+			DrainDispatcher();
+			var native = FlyoutTemplateNative(handler, surface);
+			Assert.Equal("Second context", native.Text);
+			var entry = Assert.Single(created[surface], candidate => ReferenceEquals(candidate.Handler?.PlatformView, native));
+			Assert.Equal("Second context", entry.BindingContext);
+			AssertCurrentPage(shell, handler);
+		});
+	}
+
+	[Fact]
+	public void FlyoutTemplates_UnchangedDirectHeader_DoesNotDetachNativeContent()
+	{
+		RunWithFlyoutTemplates((shell, handler, _, _) =>
+		{
+			var header = new Microsoft.Maui.Controls.Entry { Text = "Direct header" };
+			shell.FlyoutHeaderTemplate = null;
+			shell.FlyoutHeader = header;
+			shell.Items[1].Items[0].Items.Add(Content("Render direct header"));
+			DrainDispatcher();
+			var native = FlyoutTemplateNative(handler, "Header");
+			Assert.Same(header.Handler?.PlatformView, native);
+			native.Text = "Edited direct header";
+			native.Select(2, 5);
+			var host = (ContentControl)((WGrid)handler.PlatformView.Children[0]).Children[0];
+			var descriptor = System.ComponentModel.DependencyPropertyDescriptor.FromProperty(ContentControl.ContentProperty, typeof(ContentControl));
+			var changes = 0;
+			EventHandler onChanged = (_, _) => changes++;
+			descriptor.AddValueChanged(host, onChanged);
+			try
+			{
+				shell.Items[1].Items[0].Items.Add(Content("Preserve direct header"));
+				DrainDispatcher();
+				Assert.Same(native, host.Content);
+				Assert.Equal("Edited direct header", native.Text);
+				Assert.Equal(2, native.SelectionStart);
+				Assert.Equal(5, native.SelectionLength);
+				Assert.Equal(0, changes);
+				AssertCurrentPage(shell, handler);
+			}
+			finally
+			{
+				descriptor.RemoveValueChanged(host, onChanged);
+				header.Handler?.DisconnectHandler();
+				header.Handler = null;
+			}
+		});
+	}
+
+	[Fact]
+	public void FlyoutTemplates_SameFooterContext_RefreshesProjectionWithoutReplacingState()
+	{
+		RunWithFlyoutTemplates((shell, handler, _, _) =>
+		{
+			var model = new Label { Text = "Original label", FontSize = 16 };
+			var labels = new List<Label>();
+			var pickers = new List<Microsoft.Maui.Controls.Picker>();
+			shell.FlyoutFooter = model;
+			shell.FlyoutFooterTemplate = new Microsoft.Maui.Controls.DataTemplate(() =>
+			{
+				var label = new Label();
+				label.SetBinding(Label.TextProperty, nameof(Label.Text));
+				label.SetBinding(Label.FontSizeProperty, nameof(Label.FontSize));
+				var picker = new Microsoft.Maui.Controls.Picker { Items = { "First", "Second" }, SelectedIndex = 0 };
+				labels.Add(label);
+				pickers.Add(picker);
+				return new VerticalStackLayout { Children = { label, picker } };
+			});
+			shell.Items[1].Items[0].Items.Add(Content("Render footer projection"));
+			DrainDispatcher();
+			var host = (ContentControl)((WGrid)handler.PlatformView.Children[0]).Children[2];
+			var native = Assert.IsType<System.Windows.Controls.StackPanel>(host.Content);
+			var text = Assert.IsType<TextBlock>(native.Children[0]);
+			var combo = Assert.IsType<ComboBox>(native.Children[1]);
+			Assert.Equal("Original label", text.Text);
+			Assert.Equal(16, text.FontSize);
+			var shellOwnedRoot = Assert.IsType<VerticalStackLayout>(((IShellController)shell).FlyoutFooter);
+			var shellOwnedLabel = Assert.Single(shellOwnedRoot.Children.OfType<Label>());
+			var shellOwnedPicker = Assert.Single(shellOwnedRoot.Children.OfType<Microsoft.Maui.Controls.Picker>());
+			Assert.Equal(2, labels.Count);
+			Assert.Equal(2, pickers.Count);
+			Assert.Contains(shellOwnedLabel, labels);
+			Assert.Contains(shellOwnedPicker, pickers);
+			combo.SelectedIndex = 1;
+			DrainDispatcher();
+			var projectedPicker = Assert.Single(pickers, picker => picker.SelectedIndex == 1);
+			Assert.NotSame(shellOwnedPicker, projectedPicker);
+			Assert.Equal(0, shellOwnedPicker.SelectedIndex);
+			var projectedRoot = Assert.IsType<VerticalStackLayout>(projectedPicker.Parent);
+			Assert.NotSame(shellOwnedRoot, projectedRoot);
+			var projectedLabel = Assert.Single(labels, label => ReferenceEquals(label.Parent, projectedRoot));
+			Assert.NotSame(shellOwnedLabel, projectedLabel);
+			Assert.Same(model, projectedLabel.BindingContext);
+			var labelsAfterInitial = labels.ToArray();
+			var pickersAfterInitial = pickers.ToArray();
+
+			model.Text = "Changed bound label";
+			model.FontSize = 24;
+			DrainDispatcher();
+			Assert.Equal("Changed bound label", projectedLabel.Text);
+			shell.Items[1].Items[0].Items.Add(Content("Refresh same footer context"));
+			DrainDispatcher();
+
+			Assert.Same(model, shell.FlyoutFooter);
+			Assert.Same(native, host.Content);
+			Assert.Same(text, native.Children[0]);
+			Assert.Same(combo, native.Children[1]);
+			Assert.Equal("Changed bound label", text.Text);
+			Assert.Equal(24, text.FontSize);
+			Assert.Equal(1, combo.SelectedIndex);
+			Assert.Equal(labelsAfterInitial, labels);
+			Assert.Equal(pickersAfterInitial, pickers);
+			AssertCurrentPage(shell, handler);
+
+			shell.FlyoutFooterTemplate = null;
+			shell.FlyoutFooter = null;
+			shell.Items[1].Items[0].Items.Add(Content("Release projected footer"));
+			DrainDispatcher();
+			Assert.Null(host.Content);
+			Assert.Null(((IShellController)shell).FlyoutFooter);
+			projectedPicker.SelectedIndex = 0;
+			DrainDispatcher();
+			Assert.Equal(1, combo.SelectedIndex);
+			combo.SelectedIndex = -1;
+			combo.SelectedIndex = 1;
+			Assert.Equal(0, projectedPicker.SelectedIndex);
+		});
+	}
+
+	[Fact]
+	public void FlyoutTemplates_SameHeaderContext_RefreshesImageProjectionInPlace()
+	{
+		var firstPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"wpf-shell-{Guid.NewGuid():N}.png");
+		var secondPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"wpf-shell-{Guid.NewGuid():N}.png");
+		try
+		{
+			RunWithFlyoutTemplates((shell, handler, _, _) =>
+			{
+				WriteImage(firstPath, 1);
+				WriteImage(secondPath, 2);
+				var model = new Microsoft.Maui.Controls.Image
+				{
+					Source = Microsoft.Maui.Controls.ImageSource.FromFile(firstPath),
+					WidthRequest = 32,
+					HeightRequest = 24,
+				};
+				var images = new List<Microsoft.Maui.Controls.Image>();
+				shell.FlyoutHeader = model;
+				shell.FlyoutHeaderTemplate = new Microsoft.Maui.Controls.DataTemplate(() =>
+				{
+					var image = new Microsoft.Maui.Controls.Image();
+					image.SetBinding(Microsoft.Maui.Controls.Image.SourceProperty, nameof(Microsoft.Maui.Controls.Image.Source));
+					image.SetBinding(VisualElement.WidthRequestProperty, nameof(VisualElement.WidthRequest));
+					image.SetBinding(VisualElement.HeightRequestProperty, nameof(VisualElement.HeightRequest));
+					images.Add(image);
+					return image;
+				});
+				shell.Items[1].Items[0].Items.Add(Content("Render header projection"));
+				DrainDispatcher();
+				var host = (ContentControl)((WGrid)handler.PlatformView.Children[0]).Children[0];
+				var native = Assert.IsType<WGrid>(host.Content);
+				var image = Assert.IsType<System.Windows.Controls.Image>(Assert.Single(native.Children.Cast<System.Windows.UIElement>()));
+				Assert.Equal(1, Assert.IsAssignableFrom<System.Windows.Media.Imaging.BitmapSource>(image.Source).PixelWidth);
+				Assert.Equal(32, image.Width);
+				Assert.Equal(24, image.Height);
+				var shellOwnedImage = Assert.IsType<Microsoft.Maui.Controls.Image>(((IShellController)shell).FlyoutHeader);
+				Assert.Equal(2, images.Count);
+				Assert.Contains(shellOwnedImage, images);
+				var projectedImage = Assert.Single(images, candidate => !ReferenceEquals(candidate, shellOwnedImage));
+				Assert.Same(model, projectedImage.BindingContext);
+				Assert.Same(model.Source, projectedImage.Source);
+				Assert.Equal(32, projectedImage.WidthRequest);
+				Assert.Equal(24, projectedImage.HeightRequest);
+				var imagesAfterInitial = images.ToArray();
+
+				model.Source = Microsoft.Maui.Controls.ImageSource.FromFile(secondPath);
+				model.WidthRequest = 48;
+				model.HeightRequest = 36;
+				DrainDispatcher();
+				Assert.Same(model.Source, projectedImage.Source);
+				shell.Items[1].Items[0].Items.Add(Content("Refresh same header context"));
+				DrainDispatcher();
+
+				Assert.Same(model, shell.FlyoutHeader);
+				Assert.Same(native, host.Content);
+				Assert.Same(image, native.Children[0]);
+				Assert.Equal(2, Assert.IsAssignableFrom<System.Windows.Media.Imaging.BitmapSource>(image.Source).PixelWidth);
+				Assert.Equal(48, image.Width);
+				Assert.Equal(36, image.Height);
+				Assert.Equal(36, native.Height);
+				Assert.Equal(imagesAfterInitial, images);
+				AssertCurrentPage(shell, handler);
+
+				shell.FlyoutHeaderTemplate = null;
+				shell.FlyoutHeader = null;
+				shell.Items[1].Items[0].Items.Add(Content("Release projected header"));
+				DrainDispatcher();
+				Assert.Null(host.Content);
+				Assert.Null(((IShellController)shell).FlyoutHeader);
+			});
+		}
+		finally
+		{
+			System.IO.File.Delete(firstPath);
+			System.IO.File.Delete(secondPath);
+		}
+
+		static void WriteImage(string path, int width)
+		{
+			var bitmap = System.Windows.Media.Imaging.BitmapSource.Create(width, 1, 96, 96,
+				System.Windows.Media.PixelFormats.Bgra32, null, new byte[width * 4], width * 4);
+			var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+			encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
+			using var stream = System.IO.File.Open(path, System.IO.FileMode.CreateNew);
+			encoder.Save(stream);
+		}
+	}
+
+	sealed class FlyoutTestSelector(Func<object, Microsoft.Maui.Controls.DataTemplate> select)
+		: Microsoft.Maui.Controls.DataTemplateSelector
+	{
+		protected override Microsoft.Maui.Controls.DataTemplate OnSelectTemplate(object item, BindableObject container)
+			=> select(item);
+	}
+
+	[Theory]
 	[InlineData(nameof(Shell.BackgroundColor), false)]
 	[InlineData(nameof(Shell.FlyoutBackgroundColor), false)]
 	[InlineData(nameof(Shell.FlyoutBackground), false)]
@@ -616,6 +1103,96 @@ public class ShellItemsHandlerTests
 	}
 
 	static ShellItem Item(string title) => new FlyoutItem { Title = title, Items = { Section(title) } };
+	static void RunWithFlyoutTemplates(Action<Shell, ShellHandler, List<string>,
+		Dictionary<string, List<Microsoft.Maui.Controls.Entry>>> test)
+	{
+		var originalMapper = ShellHandler.Mapper;
+		var mapper = new PropertyMapper<Shell, ShellHandler>(originalMapper);
+		var calls = new List<string>();
+		foreach (var key in new[] { nameof(Shell.Items), nameof(Shell.BackgroundColor),
+			nameof(Shell.FlyoutBackgroundColor), nameof(Shell.FlyoutBackground), nameof(Shell.FlyoutWidth) })
+			mapper.AppendToMapping(key, (_, _) => calls.Add(key));
+		try
+		{
+			ShellHandler.Mapper = mapper;
+			Run((shell, handler) =>
+			{
+				var created = new Dictionary<string, List<Microsoft.Maui.Controls.Entry>>();
+				shell.FlyoutBehavior = FlyoutBehavior.Locked;
+				shell.FlyoutHeader = "Initial Header";
+				shell.FlyoutFooter = "Initial Footer";
+				shell.FlyoutHeaderTemplate = Template("Header");
+				shell.FlyoutFooterTemplate = Template("Footer");
+				shell.ItemTemplate = Template("Item");
+				var active = Item("Active");
+				active.Items.Add(Section("Other tab"));
+				shell.Items.Add(active);
+				shell.Items.Add(Item("Inactive"));
+				shell.CurrentItem = active;
+				DrainDispatcher();
+				var window = new System.Windows.Window
+				{
+					Content = handler.PlatformView,
+					Width = 800,
+					Height = 600,
+					Left = -20000,
+					Top = -20000,
+					ShowActivated = false,
+					ShowInTaskbar = false,
+				};
+				try
+				{
+					window.Show();
+					DrainDispatcher();
+					window.UpdateLayout();
+					Assert.True(handler.PlatformView.ActualWidth > 0);
+					Assert.True(handler.PlatformView.ActualHeight > 0);
+					AssertCurrentPage(shell, handler);
+					foreach (var surface in created.Keys)
+					{
+						var native = FlyoutTemplateNative(handler, surface);
+						Assert.True(native.ActualWidth > 0);
+						Assert.True(native.ActualHeight > 0);
+						Assert.Equal(surface == "Item" ? "Initial item" : $"Initial {surface}", native.Text);
+						Assert.Contains(created[surface], entry => ReferenceEquals(entry.Handler?.PlatformView, native));
+					}
+					test(shell, handler, calls, created);
+				}
+				finally
+				{
+					window.Close();
+				}
+
+				Microsoft.Maui.Controls.DataTemplate Template(string surface)
+				{
+					var entries = new List<Microsoft.Maui.Controls.Entry>();
+					created.Add(surface, entries);
+					return new Microsoft.Maui.Controls.DataTemplate(() =>
+					{
+						var entry = new Microsoft.Maui.Controls.Entry { Text = "Initial item" };
+						if (surface != "Item")
+							entry.SetBinding(Microsoft.Maui.Controls.Entry.TextProperty,
+								new Binding(".", mode: BindingMode.OneWay));
+						entries.Add(entry);
+						return entry;
+					});
+				}
+			});
+		}
+		finally
+		{
+			ShellHandler.Mapper = originalMapper;
+		}
+	}
+
+	static TextBox FlyoutTemplateNative(ShellHandler handler, string surface)
+	{
+		if (surface == "Item")
+			return Assert.IsType<TextBox>(((System.Windows.Controls.Button)Flyout(handler).Children[0]).Content);
+		var panel = (WGrid)handler.PlatformView.Children[0];
+		return Assert.IsType<TextBox>(Assert.IsType<ContentControl>(panel.Children[surface == "Header" ? 0 : 2]).Content);
+	}
+
 	static ShellSection Section(string title) => new Tab { Title = title, Items = { Content(title) } };
 	static ShellContent Content(string title) => new()
 	{
