@@ -78,21 +78,25 @@ public class ContentViewClippingTests(ITestOutputHelper output)
 		void AssertPaint(string phase, bool clipped)
 		{
 			var timer = Stopwatch.StartNew();
+			using var paintable = Gtk.WidgetPaintable.New(root);
+			var bounds = Graphene.Rect.Alloc();
+			bounds.Init(0, 0, 300, 200);
 			byte[]? lastPixels = null;
 			int width = 0;
 			bool matches = false;
+			string state = "waiting for GTK snapshot";
 			while (timer.Elapsed < TimeSpan.FromSeconds(5))
 			{
 				g_main_context_iteration(IntPtr.Zero, false);
-				using var paintable = Gtk.WidgetPaintable.New(root);
 				using var snapshot = Gtk.Snapshot.New();
 				paintable.Snapshot(snapshot, 300, 200);
 				var node = snapshot.ToNode();
 				var renderer = root.GetNative()?.GetRenderer();
+				state = $"root={root.GetAllocatedWidth()}x{root.GetAllocatedHeight()}, mapped={root.GetMapped()}, node={node != null}, renderer={renderer != null}";
 				if (node == null || renderer == null)
 					continue;
 
-				using var texture = renderer.RenderTexture(node, null);
+				using var texture = renderer.RenderTexture(node, bounds);
 				width = texture.GetWidth();
 				var height = texture.GetHeight();
 				if (width != 300 || height != 200)
@@ -116,7 +120,7 @@ public class ContentViewClippingTests(ITestOutputHelper output)
 				Thread.Sleep(1);
 			}
 
-			output.WriteLine($"{phase}: inside={Pixel(lastPixels, width, 100, 90)}, header={Pixel(lastPixels, width, 60, 45)}, clipped={clipped}");
+			output.WriteLine($"{phase}: inside={Pixel(lastPixels, width, 100, 90)}, header={Pixel(lastPixels, width, 60, 45)}, clipped={clipped}; {state}");
 			Assert.True(matches, $"Native paint did not respect clipping during {phase}; header={Pixel(lastPixels, width, 60, 45)}.");
 		}
 	}
