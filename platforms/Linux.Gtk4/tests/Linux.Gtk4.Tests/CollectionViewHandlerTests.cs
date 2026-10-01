@@ -464,7 +464,7 @@ public class CollectionViewHandlerTests(ITestOutputHelper output)
 			source.Clear();
 			WaitUntil(() => NativeLabelTexts(handler.PlatformView).Contains("No cards"));
 			collection.ItemTemplate = BoundTemplate();
-			Assert.Equal("No cards", Assert.IsType<Gtk.Label>(handler.PlatformView.GetChild()).GetText());
+			Assert.Equal("No cards", Assert.Single(NativeLabelTexts(handler.PlatformView)));
 			source.Add("Third");
 			WaitUntil(() => created.Any(view => view.Parent == collection && view.Text == "Third" && IsAllocated(view)));
 			Assert.Same(source, collection.ItemsSource);
