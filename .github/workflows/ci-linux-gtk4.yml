@@ -32,9 +32,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        test-class: [ContentViewTransformTests, ContentViewClippingTests, ContentViewRootLayoutTests]
+        test-class: [ContentViewTransformTests, ContentViewClippingTests, ContentViewRootLayoutTests, GtkRootLayoutDriverTests]
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json

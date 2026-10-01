@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Maui;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Platform;
@@ -6,13 +7,15 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Handlers;
 
 public class ContentViewHandler : GtkViewHandler<IContentView, Platform.GtkLayoutPanel>
 {
-	uint _layoutTick;
+	Platform.GtkRootLayoutDriver? _rootLayout;
 	Size _arrangedSize;
 
 	public static IPropertyMapper<IContentView, ContentViewHandler> Mapper =
 		new PropertyMapper<IContentView, ContentViewHandler>(ViewMapper)
 		{
 			[nameof(IContentView.Content)] = MapContent,
+			[nameof(ILayout.ClipsToBounds)] = MapClipsToBounds,
+			[nameof(IView.Clip)] = MapContentClip,
 		};
 
 	public ContentViewHandler() : base(Mapper)
@@ -27,62 +30,16 @@ public class ContentViewHandler : GtkViewHandler<IContentView, Platform.GtkLayou
 	protected override void ConnectHandler(Platform.GtkLayoutPanel platformView)
 	{
 		base.ConnectHandler(platformView);
-		platformView.OnNotify += OnPlatformNotify;
-		StartLayoutTick(platformView);
-	}
-
-	void OnPlatformNotify(GObject.Object sender, GObject.Object.NotifySignalArgs args)
-	{
-		if (args.Pspec.GetName() == "parent" && _layoutTick == 0)
-			StartLayoutTick(PlatformView);
-	}
-
-	void StartLayoutTick(Platform.GtkLayoutPanel platformView)
-	{
-		if (_layoutTick != 0)
-			return;
-
-		int lastWidth = -1, lastHeight = -1;
-		_layoutTick = platformView.AddTickCallback((widget, clock) =>
-		{
-			if (((IElementHandler)this).VirtualView is not ICrossPlatformLayout layout || platformView.IsExternallyManaged)
-			{
-				_layoutTick = 0;
-				return false;
-			}
-
-			// A root ContentView must drive layout; its panel prevents nested
-			// LayoutHandlers from installing their own root layout callbacks.
-			for (var parent = platformView.GetParent(); parent != null && parent is not Gtk.Window; parent = parent.GetParent())
-				if (parent is Platform.GtkLayoutPanel)
-				{
-					_layoutTick = 0;
-					return false;
-				}
-
-			int width = platformView.GetAllocatedWidth();
-			int height = platformView.GetAllocatedHeight();
-			if (width <= 0 || height <= 0)
-				return true;
-			if (width == lastWidth && height == lastHeight && !platformView.LayoutDirty)
-				return true;
-
-			lastWidth = width;
-			lastHeight = height;
-			platformView.LayoutDirty = false;
-			(VirtualView as Microsoft.Maui.Controls.VisualElement)?.InvalidateMeasure();
-			layout.CrossPlatformMeasure(width, height);
-			layout.CrossPlatformArrange(new Rect(0, 0, width, height));
-			return true;
-		});
+		_rootLayout?.Dispose();
+		_rootLayout = new Platform.GtkRootLayoutDriver(platformView,
+			() => ((IElementHandler)this).VirtualView as IView,
+			() => MauiContext?.Services.GetService(typeof(ILogger<ContentViewHandler>)) as ILogger);
 	}
 
 	protected override void DisconnectHandler(Platform.GtkLayoutPanel platformView)
 	{
-		platformView.OnNotify -= OnPlatformNotify;
-		if (_layoutTick != 0)
-			platformView.RemoveTickCallback(_layoutTick);
-		_layoutTick = 0;
+		_rootLayout?.Dispose();
+		_rootLayout = null;
 		_arrangedSize = Size.Zero;
 		base.DisconnectHandler(platformView);
 	}
@@ -106,6 +63,18 @@ public class ContentViewHandler : GtkViewHandler<IContentView, Platform.GtkLayou
 		base.PlatformArrange(rect);
 		if (VirtualView is ICrossPlatformLayout crossPlatform)
 			crossPlatform.CrossPlatformArrange(new Rect(0, 0, rect.Width, rect.Height));
+	}
+
+	public static void MapClipsToBounds(ContentViewHandler handler, IContentView contentView)
+	{
+		handler.PlatformView.SetOverflow(contentView is ILayout { ClipsToBounds: true } || contentView.Clip != null
+			? Gtk.Overflow.Hidden : Gtk.Overflow.Visible);
+	}
+
+	static void MapContentClip(ContentViewHandler handler, IContentView contentView)
+	{
+		ViewMapper.UpdateProperty(handler, contentView, nameof(IView.Clip));
+		MapClipsToBounds(handler, contentView);
 	}
 
 	public static void MapContent(ContentViewHandler handler, IContentView contentView)

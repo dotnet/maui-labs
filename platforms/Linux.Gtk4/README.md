@@ -75,7 +75,13 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 `ContentViewHandler` now hosts its content in `GtkLayoutPanel`, so child translation,
 scale, rotation, anchors, and MAUI-arranged offsets use the same native allocation
 path as layout children. `LayoutHandler` also preserves transforms across arrange
-passes. **Breaking change:** custom handlers compiled against the previous
+passes. `ContentView.IsClippedToBounds` clips translated content to its viewport;
+clearing a separate `Clip` does not disable bounds clipping. ContentView and layout
+roots share an allocation-driven layout helper. For direct ScrollView content it
+uses the native viewport on non-scrolling axes and measures scrolling axes without
+a bound, preserving scroll extent while allowing the viewport to shrink.
+
+**Breaking change:** custom handlers compiled against the previous
 `Gtk.Box` platform-view type must be rebuilt and use `GtkLayoutPanel` child APIs
 (`AddChild` / `RemoveChild`, not `Append` / `Remove`).
 
@@ -90,6 +96,10 @@ RUN_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo \
 
 The ordinary managed test run skips native tests unless explicitly enabled.
 Run each native test class in a separate process to keep GTK thread ownership isolated.
+`ContentViewClippingTests` checks rendered header and content pixels and writes PNG
+evidence when `GTK_TEST_ARTIFACTS` is set. `ContentViewRootLayoutTests` covers
+ContentView/Border nesting and all ScrollView orientations; `GtkRootLayoutDriverTests`
+checks root ownership, reparenting, callback disposal, and logged layout failures.
 
 GTK CSS font sizes use logical pixels (`px`), matching MAUI's device-independent
 font sizes. Handler CSS is composed per widget, selector, and mapper, so font,
