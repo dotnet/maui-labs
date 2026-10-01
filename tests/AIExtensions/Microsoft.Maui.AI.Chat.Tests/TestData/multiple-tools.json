@@ -1,0 +1,466 @@
+{
+  "format": "chat-client-playground-recording",
+  "schemaVersion": 2,
+  "interactions": [
+    {
+      "sequence": 0,
+      "isStreaming": true,
+      "request": {
+        "messages": [
+          {
+            "role": "user",
+            "contents": [
+              {
+                "$type": "text",
+                "text": "Call calculate twice: once to add 19 and 23, once to multiply 6 and 7. Report both results."
+              }
+            ]
+          }
+        ],
+        "options": {
+          "reasoning": {
+            "effort": "Low",
+            "output": "Summary"
+          },
+          "allowMultipleToolCalls": true,
+          "toolMode": {
+            "$type": "required"
+          }
+        }
+      },
+      "updates": [
+        {
+          "contents": [],
+          "responseId": "resp_039172b23f443932006ab3f6bd3a5481938ed43e9c6ebcb5b2",
+          "conversationId": "resp_039172b23f443932006ab3f6bd3a5481938ed43e9c6ebcb5b2",
+          "createdAt": "2026-09-23T15:56:45+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "contents": [],
+          "responseId": "resp_039172b23f443932006ab3f6bd3a5481938ed43e9c6ebcb5b2",
+          "conversationId": "resp_039172b23f443932006ab3f6bd3a5481938ed43e9c6ebcb5b2",
+          "createdAt": "2026-09-23T15:56:45+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [],
+          "responseId": "resp_039172b23f443932006ab3f6bd3a5481938ed43e9c6ebcb5b2",
+          "conversationId": "resp_039172b23f443932006ab3f6bd3a5481938ed43e9c6ebcb5b2",
+          "createdAt": "2026-09-23T15:56:45+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [],
+          "responseId": "resp_039172b23f443932006ab3f6bd3a5481938ed43e9c6ebcb5b2",
+          "conversationId": "resp_039172b23f443932006ab3f6bd3a5481938ed43e9c6ebcb5b2",
+          "createdAt": "2026-09-23T15:56:45+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [],
+          "responseId": "resp_039172b23f443932006ab3f6bd3a5481938ed43e9c6ebcb5b2",
+          "conversationId": "resp_039172b23f443932006ab3f6bd3a5481938ed43e9c6ebcb5b2",
+          "createdAt": "2026-09-23T15:56:45+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [
+            {
+              "$type": "functionCall",
+              "name": "calculate",
+              "arguments": {
+                "left": 19,
+                "operation": "add",
+                "right": 23
+              },
+              "informationalOnly": false,
+              "callId": "call_5sUeaWfTEE9fqzJIF8rjJRtC"
+            }
+          ],
+          "responseId": "resp_039172b23f443932006ab3f6bd3a5481938ed43e9c6ebcb5b2",
+          "conversationId": "resp_039172b23f443932006ab3f6bd3a5481938ed43e9c6ebcb5b2",
+          "createdAt": "2026-09-23T15:56:45+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [],
+          "responseId": "resp_039172b23f443932006ab3f6bd3a5481938ed43e9c6ebcb5b2",
+          "conversationId": "resp_039172b23f443932006ab3f6bd3a5481938ed43e9c6ebcb5b2",
+          "createdAt": "2026-09-23T15:56:45+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [],
+          "responseId": "resp_039172b23f443932006ab3f6bd3a5481938ed43e9c6ebcb5b2",
+          "conversationId": "resp_039172b23f443932006ab3f6bd3a5481938ed43e9c6ebcb5b2",
+          "createdAt": "2026-09-23T15:56:45+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [],
+          "responseId": "resp_039172b23f443932006ab3f6bd3a5481938ed43e9c6ebcb5b2",
+          "conversationId": "resp_039172b23f443932006ab3f6bd3a5481938ed43e9c6ebcb5b2",
+          "createdAt": "2026-09-23T15:56:45+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [
+            {
+              "$type": "functionCall",
+              "name": "calculate",
+              "arguments": {
+                "left": 6,
+                "operation": "multiply",
+                "right": 7
+              },
+              "informationalOnly": false,
+              "callId": "call_Yd6DkCXNBk99EieVeObJdS5k"
+            }
+          ],
+          "responseId": "resp_039172b23f443932006ab3f6bd3a5481938ed43e9c6ebcb5b2",
+          "conversationId": "resp_039172b23f443932006ab3f6bd3a5481938ed43e9c6ebcb5b2",
+          "createdAt": "2026-09-23T15:56:45+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [
+            {
+              "$type": "usage",
+              "details": {
+                "inputTokenCount": 78,
+                "outputTokenCount": 62,
+                "totalTokenCount": 140,
+                "cachedInputTokenCount": 0,
+                "reasoningTokenCount": 0
+              }
+            }
+          ],
+          "responseId": "resp_039172b23f443932006ab3f6bd3a5481938ed43e9c6ebcb5b2",
+          "conversationId": "resp_039172b23f443932006ab3f6bd3a5481938ed43e9c6ebcb5b2",
+          "createdAt": "2026-09-23T15:56:45+00:00",
+          "finishReason": "tool_calls",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "tool",
+          "contents": [
+            {
+              "$type": "functionResult",
+              "result": 42,
+              "callId": "call_5sUeaWfTEE9fqzJIF8rjJRtC"
+            },
+            {
+              "$type": "functionResult",
+              "result": 42,
+              "callId": "call_Yd6DkCXNBk99EieVeObJdS5k"
+            }
+          ],
+          "responseId": "fadbe54c4df945319148e90c6650245d",
+          "messageId": "fadbe54c4df945319148e90c6650245d",
+          "conversationId": "resp_039172b23f443932006ab3f6bd3a5481938ed43e9c6ebcb5b2",
+          "createdAt": "2026-09-23T15:56:46.697589+00:00"
+        },
+        {
+          "contents": [],
+          "responseId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "conversationId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "createdAt": "2026-09-23T15:56:47+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "contents": [],
+          "responseId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "conversationId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "createdAt": "2026-09-23T15:56:47+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [],
+          "responseId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "messageId": "msg_039172b23f443932006ab3f6c01c54819391ee1e3e308ae39d",
+          "conversationId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "createdAt": "2026-09-23T15:56:47+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [],
+          "responseId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "messageId": "msg_039172b23f443932006ab3f6c01c54819391ee1e3e308ae39d",
+          "conversationId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "createdAt": "2026-09-23T15:56:47+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [
+            {
+              "$type": "text",
+              "text": "19"
+            }
+          ],
+          "responseId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "messageId": "msg_039172b23f443932006ab3f6c01c54819391ee1e3e308ae39d",
+          "conversationId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "createdAt": "2026-09-23T15:56:47+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [
+            {
+              "$type": "text",
+              "text": " +"
+            }
+          ],
+          "responseId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "messageId": "msg_039172b23f443932006ab3f6c01c54819391ee1e3e308ae39d",
+          "conversationId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "createdAt": "2026-09-23T15:56:47+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [
+            {
+              "$type": "text",
+              "text": " "
+            }
+          ],
+          "responseId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "messageId": "msg_039172b23f443932006ab3f6c01c54819391ee1e3e308ae39d",
+          "conversationId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "createdAt": "2026-09-23T15:56:47+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [
+            {
+              "$type": "text",
+              "text": "23"
+            }
+          ],
+          "responseId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "messageId": "msg_039172b23f443932006ab3f6c01c54819391ee1e3e308ae39d",
+          "conversationId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "createdAt": "2026-09-23T15:56:47+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [
+            {
+              "$type": "text",
+              "text": " ="
+            }
+          ],
+          "responseId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "messageId": "msg_039172b23f443932006ab3f6c01c54819391ee1e3e308ae39d",
+          "conversationId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "createdAt": "2026-09-23T15:56:47+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [
+            {
+              "$type": "text",
+              "text": " "
+            }
+          ],
+          "responseId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "messageId": "msg_039172b23f443932006ab3f6c01c54819391ee1e3e308ae39d",
+          "conversationId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "createdAt": "2026-09-23T15:56:47+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [
+            {
+              "$type": "text",
+              "text": "42"
+            }
+          ],
+          "responseId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "messageId": "msg_039172b23f443932006ab3f6c01c54819391ee1e3e308ae39d",
+          "conversationId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "createdAt": "2026-09-23T15:56:47+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [
+            {
+              "$type": "text",
+              "text": "  \n"
+            }
+          ],
+          "responseId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "messageId": "msg_039172b23f443932006ab3f6c01c54819391ee1e3e308ae39d",
+          "conversationId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "createdAt": "2026-09-23T15:56:47+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [
+            {
+              "$type": "text",
+              "text": "6"
+            }
+          ],
+          "responseId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "messageId": "msg_039172b23f443932006ab3f6c01c54819391ee1e3e308ae39d",
+          "conversationId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "createdAt": "2026-09-23T15:56:47+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [
+            {
+              "$type": "text",
+              "text": " ×"
+            }
+          ],
+          "responseId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "messageId": "msg_039172b23f443932006ab3f6c01c54819391ee1e3e308ae39d",
+          "conversationId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "createdAt": "2026-09-23T15:56:47+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [
+            {
+              "$type": "text",
+              "text": " "
+            }
+          ],
+          "responseId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "messageId": "msg_039172b23f443932006ab3f6c01c54819391ee1e3e308ae39d",
+          "conversationId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "createdAt": "2026-09-23T15:56:47+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [
+            {
+              "$type": "text",
+              "text": "7"
+            }
+          ],
+          "responseId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "messageId": "msg_039172b23f443932006ab3f6c01c54819391ee1e3e308ae39d",
+          "conversationId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "createdAt": "2026-09-23T15:56:47+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [
+            {
+              "$type": "text",
+              "text": " ="
+            }
+          ],
+          "responseId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "messageId": "msg_039172b23f443932006ab3f6c01c54819391ee1e3e308ae39d",
+          "conversationId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "createdAt": "2026-09-23T15:56:47+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [
+            {
+              "$type": "text",
+              "text": " "
+            }
+          ],
+          "responseId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "messageId": "msg_039172b23f443932006ab3f6c01c54819391ee1e3e308ae39d",
+          "conversationId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "createdAt": "2026-09-23T15:56:47+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [
+            {
+              "$type": "text",
+              "text": "42"
+            }
+          ],
+          "responseId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "messageId": "msg_039172b23f443932006ab3f6c01c54819391ee1e3e308ae39d",
+          "conversationId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "createdAt": "2026-09-23T15:56:47+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [],
+          "responseId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "messageId": "msg_039172b23f443932006ab3f6c01c54819391ee1e3e308ae39d",
+          "conversationId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "createdAt": "2026-09-23T15:56:47+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [],
+          "responseId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "messageId": "msg_039172b23f443932006ab3f6c01c54819391ee1e3e308ae39d",
+          "conversationId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "createdAt": "2026-09-23T15:56:47+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [],
+          "responseId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "messageId": "msg_039172b23f443932006ab3f6c01c54819391ee1e3e308ae39d",
+          "conversationId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "createdAt": "2026-09-23T15:56:47+00:00",
+          "modelId": "gpt-6-luna"
+        },
+        {
+          "role": "assistant",
+          "contents": [
+            {
+              "$type": "usage",
+              "details": {
+                "inputTokenCount": 160,
+                "outputTokenCount": 19,
+                "totalTokenCount": 179,
+                "cachedInputTokenCount": 0,
+                "reasoningTokenCount": 0
+              }
+            }
+          ],
+          "responseId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "messageId": "msg_039172b23f443932006ab3f6c01c54819391ee1e3e308ae39d",
+          "conversationId": "resp_039172b23f443932006ab3f6bf07e481938e6c4f5ec2009b78",
+          "createdAt": "2026-09-23T15:56:47+00:00",
+          "finishReason": "stop",
+          "modelId": "gpt-6-luna"
+        }
+      ]
+    }
+  ]
+}
