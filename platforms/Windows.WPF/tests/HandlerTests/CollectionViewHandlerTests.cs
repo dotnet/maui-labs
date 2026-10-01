@@ -432,6 +432,207 @@ public class CollectionViewHandlerTests
 		});
 	}
 
+	[Theory]
+	[InlineData(SelectionMode.Single)]
+	[InlineData(SelectionMode.Multiple)]
+	public void DefaultRows_BecomeTemplated_WithoutReplacingSelectedContainers(SelectionMode mode)
+	{
+		Run((collection, handler, list, created) =>
+		{
+			collection.ItemTemplate = null;
+			collection.SelectionMode = mode;
+			collection.ItemsSource = new[] { "Same", "Same" };
+			Realize(list);
+			var first = Assert.IsType<WListBoxItem>(list.ItemContainerGenerator.ContainerFromIndex(0));
+			var second = Assert.IsType<WListBoxItem>(list.ItemContainerGenerator.ContainerFromIndex(1));
+			list.SelectedIndex = 1;
+			if (mode == SelectionMode.Multiple)
+				first.IsSelected = true;
+			var selectedItem = collection.SelectedItem;
+			var selectedItems = collection.SelectedItems;
+			var changes = 0;
+			var taps = 0;
+			collection.SelectionChanged += (_, _) => changes++;
+			Assert.Empty(((IVisualTreeElement)collection).GetVisualChildren());
+
+			collection.ItemTemplate = new DataTemplate(() =>
+			{
+				var label = new Label { Text = "Templated" };
+				label.GestureRecognizers.Add(new TapGestureRecognizer { Command = new Command(() => taps++) });
+				return label;
+			});
+			Realize(list);
+
+			Assert.Same(first, list.ItemContainerGenerator.ContainerFromIndex(0));
+			Assert.Same(second, list.ItemContainerGenerator.ContainerFromIndex(1));
+			Assert.True(second.IsSelected);
+			Assert.Equal(mode == SelectionMode.Multiple, first.IsSelected);
+			Assert.Equal(mode == SelectionMode.Multiple ? 2 : 1, list.SelectedItems.Count);
+			Assert.Same(selectedItem, collection.SelectedItem);
+			Assert.Same(selectedItems, collection.SelectedItems);
+			Assert.Equal(0, changes);
+			Assert.Equal(0, taps);
+			var children = ((IVisualTreeElement)collection).GetVisualChildren();
+			Assert.Equal(2, children.Count);
+			Assert.All(children, child =>
+			{
+				var label = Assert.IsType<Label>(child);
+				Assert.Equal("Templated", label.Text);
+				Assert.Same(collection, label.Parent);
+			});
+		});
+	}
+
+	[Fact]
+	public void GroupFooters_IncludeEmptyGroups_WithoutReenumeratingOrLosingSelection()
+	{
+		Run((collection, handler, list, created) =>
+		{
+			collection.ItemsSource = null;
+			collection.IsGrouped = true;
+			collection.SelectionMode = SelectionMode.Single;
+			collection.GroupHeaderTemplate = new DataTemplate(() => new Label { Text = "Header" });
+			var groups = new[] { Array.Empty<string>(), new[] { "Card" }, Array.Empty<string>() };
+			var enumerations = 0;
+			System.Collections.IEnumerable Groups()
+			{
+				Assert.Equal(1, ++enumerations);
+				foreach (var group in groups)
+					yield return group;
+			}
+			collection.ItemsSource = Groups();
+			Realize(list);
+			Assert.Equal(4, list.Items.Count);
+			list.SelectedIndex = 2;
+			var selected = list.SelectedItem;
+			var changes = 0;
+			collection.SelectionChanged += (_, _) => changes++;
+
+			foreach (var includeFooters in new[] { true, false })
+			{
+				var previous = ((IVisualTreeElement)collection).GetVisualChildren().Cast<View>().ToArray();
+				collection.GroupFooterTemplate = includeFooters
+					? new DataTemplate(() => new Label { Text = "Footer" })
+					: null;
+				Realize(list);
+				Assert.Equal(1, enumerations);
+				Assert.Equal(includeFooters ? 7 : 4, list.Items.Count);
+				Assert.Equal(includeFooters ? 3 : 2, list.SelectedIndex);
+				Assert.Same(selected, list.SelectedItem);
+				Assert.Same(selected, collection.SelectedItem);
+				Assert.Equal(0, changes);
+				Assert.All(previous, view => Assert.Null(view.Parent));
+				var current = ((IVisualTreeElement)collection).GetVisualChildren().Cast<Label>().ToArray();
+				Assert.Equal(includeFooters ? 7 : 4, current.Length);
+				Assert.Equal(3, current.Count(view => view.Text == "Header"));
+				Assert.Equal(includeFooters ? 3 : 0, current.Count(view => view.Text == "Footer"));
+			}
+		});
+	}
+
+	[Fact]
+	public void TemplateRefresh_KeepsObservableSourceUpdatesLive()
+	{
+		Run((collection, handler, list, created) =>
+		{
+			var source = new System.Collections.ObjectModel.ObservableCollection<string> { "First", "Second" };
+			collection.ItemsSource = source;
+			Realize(list);
+			collection.ItemTemplate = new DataTemplate(() =>
+			{
+				var label = new Label { AutomationId = "Replacement" };
+				label.SetBinding(Label.TextProperty, ".");
+				return label;
+			});
+			Realize(list);
+			Assert.Same(source, list.ItemsSource);
+			var old = ((IVisualTreeElement)collection).GetVisualChildren().Cast<View>().ToArray();
+			source.Add("Third");
+			source.RemoveAt(0);
+			source[0] = "Changed";
+			source.Move(1, 0);
+			Realize(list);
+
+			Assert.Equal(new[] { "Third", "Changed" }, list.Items.Cast<string>().ToArray());
+			Assert.All(old, view => Assert.Null(view.Parent));
+			var current = ((IVisualTreeElement)collection).GetVisualChildren().Cast<Label>().ToArray();
+			Assert.Equal(2, current.Length);
+			Assert.All(current, view => Assert.Equal("Replacement", view.AutomationId));
+			Assert.Contains(current, view => view.Text == "Third");
+			Assert.Contains(current, view => view.Text == "Changed");
+		});
+	}
+
+	[Fact]
+	public void TemplateRefresh_PreservesUnrealizedSelection_AndRecycledContainerLifecycle()
+	{
+		Run((collection, handler, list, created) =>
+		{
+			var window = new System.Windows.Window
+			{
+				Content = handler.PlatformView,
+				Width = 400,
+				Height = 300,
+				ShowActivated = false,
+				ShowInTaskbar = false,
+			};
+			void Layout()
+			{
+				window.UpdateLayout();
+				window.Dispatcher.Invoke(static () => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+				window.UpdateLayout();
+			}
+			try
+			{
+				System.Windows.Controls.VirtualizingPanel.SetIsVirtualizing(list, true);
+				System.Windows.Controls.VirtualizingPanel.SetVirtualizationMode(list, System.Windows.Controls.VirtualizationMode.Recycling);
+				System.Windows.Controls.ScrollViewer.SetCanContentScroll(list, true);
+				var source = Enumerable.Range(0, 200).Select(index => $"Item {index}").ToArray();
+				collection.SelectionMode = SelectionMode.Single;
+				collection.ItemsSource = source;
+				window.Show();
+				Layout();
+				var old = ((IVisualTreeElement)collection).GetVisualChildren().Cast<View>().ToArray();
+				Assert.InRange(old.Length, 1, source.Length - 1);
+				Assert.Null(list.ItemContainerGenerator.ContainerFromIndex(199));
+				list.SelectedIndex = 199;
+				Assert.Null(list.ItemContainerGenerator.ContainerFromIndex(199));
+				var selected = collection.SelectedItem;
+				var changes = 0;
+				collection.SelectionChanged += (_, _) => changes++;
+				collection.ItemTemplate = new DataTemplate(() =>
+				{
+					var label = new Label { AutomationId = "Replacement" };
+					label.SetBinding(Label.TextProperty, ".");
+					return label;
+				});
+				Layout();
+				Assert.Same(source, list.ItemsSource);
+				Assert.Equal(199, list.SelectedIndex);
+				Assert.Same(selected, collection.SelectedItem);
+				Assert.Equal(0, changes);
+				Assert.Null(list.ItemContainerGenerator.ContainerFromIndex(199));
+				Assert.All(old, view => Assert.Null(view.Parent));
+				var beforeScroll = ((IVisualTreeElement)collection).GetVisualChildren().Cast<Label>().ToArray();
+				var retiredHandlers = beforeScroll.Select(view => Assert.IsType<DisconnectTrackingLabelHandler>(view.Handler)).ToArray();
+
+				list.ScrollIntoView(source[199]);
+				Layout();
+				Assert.True(Assert.IsType<WListBoxItem>(list.ItemContainerGenerator.ContainerFromIndex(199)).IsSelected);
+				Assert.All(beforeScroll, view => Assert.Null(view.Parent));
+				Assert.All(retiredHandlers, item => Assert.Equal(1, item.DisconnectCount));
+				var current = ((IVisualTreeElement)collection).GetVisualChildren().Cast<Label>().ToArray();
+				Assert.InRange(current.Length, 1, source.Length - 1);
+				Assert.Contains(current, view => view.Text == "Item 199" && view.AutomationId == "Replacement");
+			}
+			finally
+			{
+				window.Content = null;
+				window.Close();
+			}
+		});
+	}
+
 	sealed class UnsupportedView : View;
 
 	[Theory]

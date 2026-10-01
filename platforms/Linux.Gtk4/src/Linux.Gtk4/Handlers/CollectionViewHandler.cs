@@ -732,8 +732,9 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 	{
 		// Rebuild the ListView with the appropriate factory (string vs template)
 		handler.RebuildListView();
-		handler.HookSelectionChanged();
-		MapItemsSource(handler, view);
+		MapItemsLayout(handler, view);
+		if (view is CollectionView collectionView)
+			handler.UpdateDisplayedChild(collectionView);
 	}
 
 	public static void MapItemSizingStrategy(CollectionViewHandler handler, IView view) { }
