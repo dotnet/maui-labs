@@ -55,7 +55,8 @@ public class WPFFontManager : IFontManager
 			else
 				family = new FontFamily(font.Family);
 
-			if (!family.GetTypefaces().Any(face => face.TryGetGlyphTypeface(out _)))
+			// Composite families map text to other fonts rather than a single physical typeface.
+			if (family.FamilyMaps.Count == 0 && !family.GetTypefaces().Any(face => face.TryGetGlyphTypeface(out _)))
 				throw new FileNotFoundException($"No native typeface found for '{font.Family}'.", path);
 
 			_fontCache.TryAdd(font.Family, (family, true));

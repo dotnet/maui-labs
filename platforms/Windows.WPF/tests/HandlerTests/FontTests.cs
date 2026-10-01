@@ -22,6 +22,65 @@ public class FontApplicationCollection;
 [Collection("Font application")]
 public class FontTests(Xunit.Abstractions.ITestOutputHelper output)
 {
+	[Theory]
+	[InlineData("Global User Interface")]
+	[InlineData("MauiMissingFamily590, Global User Interface")]
+	public void CompositeFont_TextMatchesNativeAndGlyphImagesRejectIt(string familyName)
+	{
+		StaHelper.RunOnSta(() =>
+		{
+			using var app = CreateApp();
+			const string text = "Hello, World! \u03a9";
+			var family = new FontFamily(familyName);
+			Assert.NotEmpty(family.FamilyMaps);
+			Assert.NotEmpty(family.GetTypefaces());
+			Assert.False(new Typeface(family, System.Windows.FontStyles.Normal,
+				System.Windows.FontWeights.Normal, System.Windows.FontStretches.Normal).TryGetGlyphTypeface(out _));
+			var reference = new System.Windows.Controls.TextBlock
+			{
+				Text = text,
+				FontFamily = family,
+				FontSize = 32,
+				TextWrapping = System.Windows.TextWrapping.Wrap,
+				VerticalAlignment = System.Windows.VerticalAlignment.Top,
+			};
+			var expected = RenderTextBlock(reference);
+			var referenceRuns = GlyphRuns(VisualTreeHelper.GetDrawing(reference)).ToArray();
+			Assert.NotEmpty(referenceRuns);
+			Assert.All(referenceRuns, run => Assert.Contains(run.GlyphIndices, index => index != 0));
+			output.WriteLine("Native composite glyph fonts: " +
+				string.Join(", ", referenceRuns.Select(run => run.GlyphTypeface.FontUri)));
+			var handler = new LabelHandler();
+			handler.SetMauiContext(new WPFMauiContext(app.Services));
+			try
+			{
+				handler.SetVirtualView(new Label { Text = text, FontFamily = familyName, FontSize = 32 });
+				var actual = RenderTextBlock(handler.PlatformView);
+				var actualRuns = GlyphRuns(VisualTreeHelper.GetDrawing(handler.PlatformView)).ToArray();
+				output.WriteLine($"Requested composite={familyName}; native label family={handler.PlatformView.FontFamily.Source}");
+				Assert.Equal(familyName, handler.PlatformView.FontFamily.Source);
+				Assert.Equal(referenceRuns.Select(run => run.GlyphTypeface.FontUri),
+					actualRuns.Select(run => run.GlyphTypeface.FontUri));
+				Assert.Equal(referenceRuns.SelectMany(run => run.GlyphIndices), actualRuns.SelectMany(run => run.GlyphIndices));
+				Assert.Equal(Pixels(expected), Pixels(actual));
+
+				var manager = (WPFFontManager)app.Services.GetRequiredService<IFontManager>();
+				var logger = new RecordingLogger();
+				Assert.Null(FontImageSourceHelper.RenderGlyph("A", familyName, 32, null, manager, logger));
+				Assert.Contains("Cannot render glyph", Assert.Single(logger.Messages));
+				var missingLogger = new RecordingLogger();
+				var missingManager = new WPFFontManager(new WPFFontRegistrar(), missingLogger);
+				Assert.Same(missingManager.DefaultFontFamily,
+					missingManager.GetFontFamily(Font.OfSize("MauiMissingFamily590", 32)));
+				Assert.Contains("Unable to resolve font", Assert.Single(missingLogger.Messages));
+			}
+			finally
+			{
+				((IElementHandler)handler).DisconnectHandler();
+			}
+		});
+	}
+
 	[Fact]
 	public void GlyphBitmap_PreservesNativeAdvanceAndLineBox()
 	{
@@ -647,6 +706,18 @@ public class FontTests(Xunit.Abstractions.ITestOutputHelper output)
 		var pixels = new byte[bitmap.PixelWidth * bitmap.PixelHeight * 4];
 		bitmap.CopyPixels(pixels, bitmap.PixelWidth * 4, 0);
 		return pixels;
+	}
+
+	static BitmapSource RenderTextBlock(System.Windows.Controls.TextBlock textBlock)
+	{
+		textBlock.Foreground = Brushes.Black;
+		textBlock.Background = Brushes.White;
+		textBlock.Measure(new System.Windows.Size(500, 100));
+		textBlock.Arrange(new System.Windows.Rect(0, 0, 500, 100));
+		var bitmap = new RenderTargetBitmap(500, 100, 96, 96, PixelFormats.Pbgra32);
+		bitmap.Render(textBlock);
+		bitmap.Freeze();
+		return bitmap;
 	}
 
 	sealed class RetryLoader : IEmbeddedFontLoader

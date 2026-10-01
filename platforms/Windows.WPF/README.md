@@ -95,6 +95,9 @@ registered with an assembly are extracted to a content-addressed temporary direc
 no system font installation is required.
 
 Text controls and formatted label spans resolve aliases through the WPF font manager.
+Native WPF composite families, such as `Global User Interface`, remain supported
+for text. Font images require a physical typeface containing the requested glyphs;
+composite families produce a warning and no image rather than an unverified fallback.
 Clearing a control's MAUI font family restores its native style or inherited default.
 Entry also applies its font when creating a native password control. GraphicsView
 text drawing and measurement share the same registered-family and style resolution.
