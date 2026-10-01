@@ -22,6 +22,344 @@ public class ShellItemsHandlerTests
 	public ShellItemsHandlerTests(Xunit.Abstractions.ITestOutputHelper output) => _output = output;
 
 	[Theory]
+	[InlineData("Reuse")]
+	[InlineData("Replace")]
+	[InlineData("Clear")]
+	[InlineData("RebindHeader")]
+	[InlineData("RebindEmpty")]
+	[InlineData("HandlerOnlyDisconnect")]
+	[InlineData("TreeAutomaticDisconnect")]
+	[InlineData("TreeManualDisconnect")]
+	public void DirectFlyoutHeaderLifecycle_Paired(string transition)
+	{
+		Run((_, handler) =>
+		{
+			var shellContext = new object();
+			var explicitContext = new object();
+			var replacementContext = new object();
+			var header = new Microsoft.Maui.Controls.Entry { Text = "Original header" };
+			if (transition != "Clear")
+				header.BindingContext = explicitContext;
+			if (transition == "TreeManualDisconnect")
+				HandlerProperties.SetDisconnectPolicy(header, HandlerDisconnectPolicy.Manual);
+			var replacement = new Microsoft.Maui.Controls.Entry
+			{
+				Text = "Replacement header",
+				BindingContext = replacementContext,
+			};
+			var shell = NewShell("Original page", header, shellContext);
+			Shell? rebound = null;
+			handler.SetVirtualView(shell);
+			DrainDispatcher();
+			var container = handler.PlatformView;
+			var host = Assert.Single(((WGrid)container.Children[0]).Children.OfType<ContentControl>(),
+				child => WGrid.GetRow(child) == 0);
+			var pageHost = ContentHost(handler);
+			var tabs = Tabs(handler);
+			var window = new System.Windows.Window
+			{
+				Content = container,
+				Width = 800,
+				Height = 600,
+				Left = -20000,
+				Top = -20000,
+				ShowActivated = false,
+				ShowInTaskbar = false,
+			};
+			TextBox? native = null;
+			IElementHandler? originalHeaderHandler = null;
+			var journal = new List<string>();
+			System.ComponentModel.PropertyChangedEventHandler onPropertyChanged = (_, e) =>
+				journal.Add($"Header.{e.PropertyName}");
+			EventHandler onHandlerChanged = (_, _) => journal.Add("Header.HandlerChanged");
+			EventHandler onHostChanged = (_, _) => journal.Add("Host.ContentChanged");
+			var descriptor = System.ComponentModel.DependencyPropertyDescriptor.FromProperty(
+				ContentControl.ContentProperty, typeof(ContentControl));
+			header.PropertyChanged += onPropertyChanged;
+			header.HandlerChanged += onHandlerChanged;
+			descriptor.AddValueChanged(host, onHostChanged);
+			try
+			{
+				window.Show();
+				DrainDispatcher();
+				window.UpdateLayout();
+				native = Assert.IsType<TextBox>(host.Content);
+				originalHeaderHandler = Assert.IsAssignableFrom<IElementHandler>(header.Handler);
+				Assert.Same(native, originalHeaderHandler.PlatformView);
+				Assert.Same(header, ((IShellController)shell).FlyoutHeader);
+				Assert.Same(shell, header.Parent);
+				Assert.Contains(header, ((IVisualTreeElement)shell).GetVisualChildren());
+				Assert.Same(transition == "Clear" ? shellContext : explicitContext, header.BindingContext);
+				Assert.Null(shell.ItemTemplate);
+				Assert.Empty(tabs.Items);
+				Assert.Equal(System.Windows.Visibility.Collapsed, tabs.Visibility);
+				Assert.True(container.ActualWidth > 0 && container.ActualHeight > 0);
+				Assert.True(native.ActualWidth > 0 && native.ActualHeight > 0);
+				Assert.False(window.IsActive);
+				AssertCurrentPage(shell, handler);
+				header.Text = "Initial managed ownership";
+				Assert.Equal(header.Text, native.Text);
+				native.Text = "Initial native ownership";
+				Assert.Equal(native.Text, header.Text);
+				native.Select(2, 5);
+				Assert.Equal(2, native.SelectionStart);
+				Assert.Equal(5, native.SelectionLength);
+				var assertOriginalHierarchy = CaptureHierarchy(shell);
+				Action? assertReboundHierarchy = null;
+				journal.Clear();
+				Snapshot("Initial valid native ownership, context, hierarchy and nonactivation");
+
+				switch (transition)
+				{
+					case "Reuse":
+						handler.SetVirtualView(shell);
+						handler.UpdateValue(nameof(Shell.Items));
+						break;
+					case "Replace":
+					case "Clear":
+						shell.FlyoutHeader = transition == "Replace" ? replacement : null;
+						DrainDispatcher();
+						Snapshot("Property-only mutation; no Items dispatch yet");
+						// Both versions receive the same explicit render request, separate from notification coverage.
+						handler.UpdateValue(nameof(Shell.Items));
+						break;
+					case "RebindHeader":
+					case "RebindEmpty":
+						rebound = NewShell("Rebound page", transition == "RebindHeader" ? replacement : null, new object());
+						assertReboundHierarchy = CaptureHierarchy(rebound);
+						handler.SetVirtualView(rebound);
+						break;
+					case "HandlerOnlyDisconnect":
+						((IElementHandler)handler).DisconnectHandler();
+						break;
+					case "TreeAutomaticDisconnect":
+					case "TreeManualDisconnect":
+						shell.DisconnectHandlers();
+						break;
+					default:
+						throw new ArgumentOutOfRangeException(nameof(transition), transition, null);
+				}
+				DrainDispatcher();
+				Snapshot("Transition drained; before callback probes");
+				var textAfterTransition = native.Text;
+				var selectionStartAfterTransition = native.SelectionStart;
+				var selectionLengthAfterTransition = native.SelectionLength;
+				var hostChangesAfterTransition = journal.Count(entry => entry == "Host.ContentChanged");
+
+				native.Text = "Post-transition native probe";
+				var nativeToManaged = header.Text == native.Text;
+				Snapshot("Native-to-managed callback probe");
+				header.Text = "Post-transition managed probe";
+				var managedToNative = native.Text == header.Text;
+				Snapshot("Managed-to-native callback probe");
+				_output.WriteLine($"Callback results: nativeToManaged={nativeToManaged}; managedToNative={managedToNative}.");
+
+				assertOriginalHierarchy();
+				assertReboundHierarchy?.Invoke();
+				Assert.False(window.IsActive);
+				if (transition == "Clear")
+				{
+					Assert.Null(header.Parent);
+					Assert.Null(header.BindingContext);
+				}
+				else
+					Assert.Same(explicitContext, header.BindingContext);
+
+				switch (transition)
+				{
+					case "Reuse":
+						Assert.Same(header, ((IShellController)shell).FlyoutHeader);
+						Assert.Same(shell, header.Parent);
+						Assert.Same(originalHeaderHandler, header.Handler);
+						Assert.Same(native, host.Content);
+						Assert.Equal("Initial native ownership", textAfterTransition);
+						Assert.Equal(2, selectionStartAfterTransition);
+						Assert.Equal(5, selectionLengthAfterTransition);
+						Assert.Equal(0, hostChangesAfterTransition);
+						Assert.True(nativeToManaged);
+						Assert.True(managedToNative);
+						AssertCurrentPage(shell, handler);
+						break;
+					case "Replace":
+						Assert.Null(header.Parent);
+						Assert.DoesNotContain(header, ((IVisualTreeElement)shell).GetVisualChildren());
+						AssertReplacement(shell);
+						AssertCurrentPage(shell, handler);
+						break;
+					case "Clear":
+						Assert.Null(((IShellController)shell).FlyoutHeader);
+						Assert.DoesNotContain(header, ((IVisualTreeElement)shell).GetVisualChildren());
+						AssertCurrentPage(shell, handler);
+						Assert.Null(host.Content);
+						break;
+					case "RebindHeader":
+					case "RebindEmpty":
+						Assert.NotNull(rebound);
+						Assert.Null(shell.Handler);
+						Assert.Same(shell, header.Parent);
+						Assert.Same(header, ((IShellController)shell).FlyoutHeader);
+						Assert.Same(handler, rebound.Handler);
+						Assert.Same(rebound, ((IElementHandler)handler).VirtualView);
+						Assert.Equal("Rebound page", rebound.CurrentPage.Title);
+						AssertCurrentPage(rebound, handler);
+						if (transition == "RebindHeader")
+							AssertReplacement(rebound);
+						else
+						{
+							Assert.Null(((IShellController)rebound).FlyoutHeader);
+							Assert.Null(host.Content);
+						}
+						break;
+					case "HandlerOnlyDisconnect":
+					case "TreeAutomaticDisconnect":
+					case "TreeManualDisconnect":
+						Assert.Null(shell.Handler);
+						Assert.Null(((IElementHandler)handler).PlatformView);
+						Assert.Null(((IElementHandler)handler).VirtualView);
+						Assert.Same(shell, header.Parent);
+						Assert.Same(header, ((IShellController)shell).FlyoutHeader);
+						if (transition == "TreeAutomaticDisconnect")
+						{
+							Assert.Null(header.Handler);
+							Assert.Null(originalHeaderHandler.PlatformView);
+							Assert.Null(originalHeaderHandler.VirtualView);
+							Assert.False(nativeToManaged);
+							Assert.False(managedToNative);
+						}
+						else if (transition == "TreeManualDisconnect")
+						{
+							Assert.Same(originalHeaderHandler, header.Handler);
+							Assert.Same(header, originalHeaderHandler.VirtualView);
+							Assert.Same(native, originalHeaderHandler.PlatformView);
+							Assert.True(nativeToManaged);
+							Assert.True(managedToNative);
+						}
+						break;
+				}
+				_output.WriteLine("Post-transition contract assertions passed.");
+			}
+			finally
+			{
+				Snapshot("Before finally cleanup; no fixture disconnection performed yet");
+				descriptor.RemoveValueChanged(host, onHostChanged);
+				header.PropertyChanged -= onPropertyChanged;
+				header.HandlerChanged -= onHandlerChanged;
+				try
+				{
+					header.Handler?.DisconnectHandler();
+					replacement.Handler?.DisconnectHandler();
+					shell.DisconnectHandlers();
+					rebound?.DisconnectHandlers();
+					shell.CurrentPage?.DisconnectHandlers();
+					rebound?.CurrentPage?.DisconnectHandlers();
+				}
+				finally
+				{
+					window.Close();
+				}
+			}
+
+			void AssertReplacement(Shell owner)
+			{
+				Assert.Same(replacement, ((IShellController)owner).FlyoutHeader);
+				Assert.Same(owner, replacement.Parent);
+				Assert.Same(replacementContext, replacement.BindingContext);
+				var replacementNative = Assert.IsType<TextBox>(host.Content);
+				Assert.Same(replacementNative, replacement.Handler?.PlatformView);
+				Assert.Equal("Replacement header", replacement.Text);
+				Assert.Equal(replacement.Text, replacementNative.Text);
+				Assert.NotSame(native, host.Content);
+				Assert.NotNull(native);
+				Assert.Null(native.Parent);
+			}
+
+			void Snapshot(string stage)
+			{
+				_output.WriteLine(System.Text.Json.JsonSerializer.Serialize(new
+				{
+					stage,
+					transition,
+					hostContent = Identity(host.Content),
+					originalNative = Identity(native),
+					nativeParent = Identity(native?.Parent),
+					hostRetainsOriginal = native != null && ReferenceEquals(host.Content, native),
+					headerHandler = Identity(header.Handler),
+					originalHandler = Identity(originalHeaderHandler),
+					originalHandlerPlatform = Identity(originalHeaderHandler?.PlatformView),
+					originalHandlerVirtual = Identity(originalHeaderHandler?.VirtualView),
+					headerParent = Identity(header.Parent),
+					headerContext = Identity(header.BindingContext),
+					explicitContext = Identity(explicitContext),
+					shellContext = Identity(shellContext),
+					controllerHeader = Identity(((IShellController)shell).FlyoutHeader),
+					logicalHeader = ((IVisualTreeElement)shell).GetVisualChildren().Contains(header),
+					header.Text,
+					nativeText = native?.Text,
+					selectionStart = native?.SelectionStart,
+					selectionLength = native?.SelectionLength,
+					disconnectPolicy = HandlerProperties.GetDisconnectPolicy(header).ToString(),
+					shellHandler = Identity(shell.Handler),
+					handlerVirtual = Identity(((IElementHandler)handler).VirtualView),
+					handlerPlatform = Identity(((IElementHandler)handler).PlatformView),
+					page = Identity(shell.CurrentPage),
+					item = Identity(shell.CurrentItem),
+					section = Identity(shell.CurrentItem?.CurrentItem),
+					content = Identity(shell.CurrentItem?.CurrentItem?.CurrentItem),
+					navigation = shell.CurrentItem?.CurrentItem?.Navigation.NavigationStack.Select(Identity).ToArray(),
+					nativePage = Identity(pageHost.Content),
+					reboundPage = Identity(rebound?.CurrentPage),
+					reboundHeader = Identity(rebound == null ? null : ((IShellController)rebound).FlyoutHeader),
+					replacementHandler = Identity(replacement.Handler),
+					replacementParent = Identity(replacement.Parent),
+					replacementContext = Identity(replacement.BindingContext),
+					replacementText = replacement.Text,
+					window.IsActive,
+					journal = journal.ToArray(),
+				}));
+			}
+		});
+
+		static string Identity(object? value) => value == null ? "null"
+			: $"{value.GetType().Name}:{System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(value):X}";
+
+		static Shell NewShell(string title, Microsoft.Maui.Controls.Entry? header, object context)
+		{
+			var page = new ContentPage { Title = title, Content = new Label { Text = title } };
+			return new Shell
+			{
+				BindingContext = context,
+				FlyoutBehavior = FlyoutBehavior.Locked,
+				FlyoutHeader = header,
+				Items = { new FlyoutItem { Items = { new Tab { Items = { new ShellContent { Content = page } } } } } },
+			};
+		}
+
+		static Action CaptureHierarchy(Shell shell)
+		{
+			var item = Assert.Single(shell.Items);
+			var section = Assert.Single(item.Items);
+			var content = Assert.Single(section.Items);
+			var page = Assert.IsType<ContentPage>(content.Content);
+			var navigation = section.Navigation.NavigationStack.ToArray();
+			return () =>
+			{
+				Assert.Same(item, Assert.Single(shell.Items));
+				Assert.Same(item, shell.CurrentItem);
+				Assert.Same(section, Assert.Single(item.Items));
+				Assert.Same(section, item.CurrentItem);
+				Assert.Same(content, Assert.Single(section.Items));
+				Assert.Same(content, section.CurrentItem);
+				Assert.Same(page, shell.CurrentPage);
+				Assert.Same(page, content.Content);
+				Assert.Same(shell, item.Parent);
+				Assert.Same(item, section.Parent);
+				Assert.Same(section, content.Parent);
+				Assert.Equal(navigation, section.Navigation.NavigationStack);
+			};
+		}
+	}
+
+	[Theory]
 	[InlineData(false)]
 	[InlineData(true)]
 	public void CloudReview_CurrentItemMapper_DeferredSelectionPreservesNativeCustomization(bool customize)
