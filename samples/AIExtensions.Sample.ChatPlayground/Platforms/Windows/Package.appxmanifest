@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" IgnorableNamespaces="uap">
+  <Identity Name="com.microsoft.maui.chatclientplayground" Publisher="CN=Microsoft Corporation" Version="1.0.0.0" />
+  <Properties><DisplayName>Chat Client Playground</DisplayName><PublisherDisplayName>Microsoft</PublisherDisplayName><Logo>Images\StoreLogo.png</Logo></Properties>
+  <Resources><Resource Language="x-generate" /></Resources>
+  <Applications><Application Id="App" Executable="$targetnametoken$.exe" EntryPoint="$targetentrypoint$"><uap:VisualElements DisplayName="Chat Client Playground" Description="IChatClient playground" BackgroundColor="transparent" Square150x150Logo="Images\Square150x150Logo.png" Square44x44Logo="Images\Square44x44Logo.png" /></Application></Applications>
+  <Capabilities><Capability Name="internetClient" /></Capabilities>
+</Package>

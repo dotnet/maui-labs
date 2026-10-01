@@ -30,11 +30,14 @@ changes and selection update the strip without creating inactive pages.
 
 Portable presentation tests run with
 `dotnet test platforms/MacOS/tests/MacOS.Tests/MacOS.Tests.csproj`.
-The `shell-tabs-regression` CI job runs a real AppKit application against the original
-issue revision and the current source, and uploads native screenshots and assertions
-as `shell-tabs-runtime-evidence`. Its source is in `tests/ShellTabsRegressionTests`;
-run the built app executable on macOS with `SHELL_TABS_RESULTS` set to an output
-directory. It also checks that the selected tab and displayed native page agree
+The shared `MacOS.RuntimeTests` host runs the `shell-tabs` scenario in an isolated
+real AppKit process. Its `native-runtime` CI matrix row uploads screenshots, native
+attachment traces and exact results as `appkit-runtime-shell-tabs-default`.
+Run it through `tests/MacOS.RuntimeTests/run.py --scenario shell-tabs --evidence <new-directory>`
+on macOS. The identical fixture checks a pinned two-file production overlay from
+`b0767ac6` for exactly three mounts per native click, then the current source for one.
+The original `9206e7c` missing-tabs proof remains historical, not this overlay's baseline.
+The scenario also checks that the selected tab and displayed native page agree
 after programmatic selection, hiding/removing the active section, and handler
 rebinding, and that queued work is ignored after disconnect.
 Native tab clicks use the same queued section refresh as programmatic selection.
@@ -44,6 +47,10 @@ explicit wide-sidebar presentation with titles and system icons.
 Same-page refreshes retain valid native views while updating layout and chrome;
 the native tests also cover remounts, handler/context replacement, and navigation
 to a different destination during lazy page creation.
+The scenario requires exactly 63 assertions; lower section navigation requires 59.
+Wide/narrow checks explicitly select Locked at 1000 DIP and Disabled at 480 DIP,
+not an automatic resize policy. Native sidebar title/icon/bounds checks are not
+pixel proof: `CacheDisplay` omits the vibrancy/sidebar region.
 Compilation and portable tests alone do not establish native rendering.
 
 ## Shell section navigation
@@ -51,9 +58,11 @@ Compilation and portable tests alone do not establish native rendering.
 Shell observes section and content selection changes, including `GoToAsync` and
 programmatic `CurrentItem` updates. The selected lazy page is created and hosted
 without requiring a manual handler refresh; unselected templates remain lazy.
-The `shell-section-regression` CI job runs a native AppKit harness against both
-the pre-fix revision and the current code and uploads screenshots and navigation
-assertions as `shell-section-appkit-runtime`.
+The shared `MacOS.RuntimeTests` host's `shell-sections` scenario exercises the
+pre-fix Shell handlers and the current code through full MAUI/AppKit startup.
+The `native-runtime` CI matrix uploads screenshots, navigation state and all 59
+assertions as `appkit-runtime-shell-sections-default`. See the
+[shared runner](tests/MacOS.RuntimeTests/README.md) for local macOS usage.
 
 ## Prerequisites
 
@@ -173,6 +182,38 @@ public class App : Application
 dotnet build platforms/MacOS/MacOS.slnx
 dotnet run --project platforms/MacOS/samples/MacOS.Sample/
 ```
+
+## Native runtime scenarios
+
+On macOS, run a registered scenario through the shared native host:
+
+```bash
+export NUGET_PACKAGES="$PWD/.packages"
+python3 -B platforms/MacOS/tests/MacOS.RuntimeTests/run.py \
+  --scenario layout --evidence "$PWD/artifacts/layout-run"
+```
+
+It opens an AppKit window and mutates a MAUI layout after its handler connects.
+It checks nested child bounds, native insertion order, replacement, removal,
+clear, and re-addition without resizing the window. Failures exit with code 1;
+success prints a `PASS` line for each of the six cases and exits with code 0. A 90-second
+watchdog fails a hung run.
+This executable uses the AppKit main thread and is not a `dotnet test` project.
+Building it on Windows does not validate AppKit behavior. For a before/after
+comparison, run the same executable with `LayoutHandler`'s constructor passing
+only `Mapper` (the original behavior), then with `Mapper, CommandMapper`.
+The original behavior must fail the first dynamic addition check.
+
+The shared `AppKit runtime` CI matrix performs that comparison on a
+GitHub-hosted macOS runner. Its `appkit-runtime-layout-default` artifact contains both
+process logs, native view screenshots and managed/native bounds after addition.
+Screenshots use Aqua appearance and composite transparent view backgrounds over
+white so native text remains readable in dark artifact viewers.
+The required evidence directory also receives strict machine-readable terminal
+results and assertion counts. Hosted execution is distinct from a local desktop run.
+See [the shared host contract](tests/MacOS.RuntimeTests/README.md) to add a scenario,
+version matrix entry or scoped fixture assets without another application/project.
+Portable `MacOS.Tests` remains independent of native AppKit execution.
 
 ## Unit tests
 
