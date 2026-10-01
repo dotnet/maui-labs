@@ -95,7 +95,7 @@ public class CollectionViewHandlerTests
 				view => view is Label { Text: "Group header", Parent: not null });
 			Assert.Equal(2, ((IVisualTreeElement)collection).GetVisualChildren().Count);
 
-			var previousHeader = Assert.Single(created.Where(view => view.Text == "Group header" && view.Parent != null));
+			var previousHeader = Assert.Single(created, view => view.Text == "Group header" && view.Parent != null);
 			collection.GroupHeaderTemplate = new DataTemplate(() =>
 			{
 				var label = new Label { Text = "Replacement group header" };

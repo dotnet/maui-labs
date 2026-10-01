@@ -27,7 +27,7 @@ $filter = "FullyQualifiedName~Microsoft.Maui.Platforms.Linux.Gtk4.Tests.$TestCla
     --configuration Release --filter $filter `
     --logger 'console;verbosity=detailed' `
     --logger "trx;LogFileName=$TestClass.trx" `
-    --results-directory $results --blame-hang-timeout 3m -m:1 -nr:false
+    --results-directory $results --blame-hang-timeout 3m '-m:1' '-nr:false'
 if ($LASTEXITCODE -ne 0) {
     throw "Native GTK class $TestClass failed (exit code $LASTEXITCODE)."
 }
