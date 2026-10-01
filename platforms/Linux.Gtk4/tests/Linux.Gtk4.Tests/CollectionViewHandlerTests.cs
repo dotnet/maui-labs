@@ -6,11 +6,12 @@ using Microsoft.Maui.Platforms.Linux.Gtk4.Handlers;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Hosting;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 
-namespace Microsoft.Maui.Platforms.Linux.Gtk4.HandlerTests;
+namespace Microsoft.Maui.Platforms.Linux.Gtk4.Tests;
 
+[Collection("GTK runtime")]
 public class CollectionViewHandlerTests
 {
-	[Fact]
+	[GtkRuntimeFact]
 	public void NativeFactory_ParentsRealizedItems_AndCleansUpOnReloadRebuildAndDisconnect()
 	{
 		Gtk.Module.Initialize();

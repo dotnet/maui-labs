@@ -347,20 +347,33 @@ From `platforms/Linux.Gtk4`, run:
 dotnet test tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
 ```
 
-### Native CollectionView regression tests
+### Native regression tests in the shared test host
 
-These tests require Linux, GTK 4.12 or newer, and a display. They exercise the real
+Native tests live alongside managed tests in `Linux.Gtk4.Tests`, use
+`[GtkRuntimeFact]` and the `GTK runtime` collection, and opt in with
+`RUN_GTK_RUNTIME_TESTS=1` on Linux. Normal portable test runs skip these cases;
+those skips are not native validation. Run each native class in a separate
+process because GTK initialization is thread-affine.
+
+The CollectionView tests require Linux, GTK 4.12 or newer, and a display. They exercise the real
 GTK list-item factory, including logical parenting, DevFlow tree discovery,
 source replacement, runtime item/group-header template replacement, group headers,
 and recursive handler disconnection of retired roots and nested template children.
 Cleanup is checked after source replacement, template rebuild, and handler teardown,
 including repeated cleanup without duplicate disconnection. Template changes do not
 require an ItemsSource change.
-From `platforms/Linux.Gtk4`, use an isolated display:
+From the repository root on Linux, use the shared class runner (PowerShell 7,
+`dbus-run-session`, and `xvfb-run` are required):
 
 ```bash
-dbus-run-session -- xvfb-run -a dotnet test tests/Linux.Gtk4.HandlerTests/Linux.Gtk4.HandlerTests.csproj
+pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass CollectionViewHandlerTests
 ```
+
+The runner creates a private DBus session and display, requires nonzero executed
+tests with no failures or skips in the TRX, and rejects missing/empty filtered
+classes. Use a fresh `-ResultsDirectory` when repeating a run to preserve prior
+evidence. CI's `runtime` matrix runs one existing native class per process; retain
+the union of native class entries when integrating other platform changes.
 
 ### Run the sample app
 
