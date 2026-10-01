@@ -954,7 +954,9 @@ internal sealed class JsonStreamChunker : StreamChunkerBase
 		int growablesAtLevel = CountGrowablesAtLevel(elem, path);
 		bool isFirst = true;
 
-		foreach (var prop in elem.EnumerateObject())
+		// Emit complete siblings before opening a partial string or container.
+		// Otherwise their JSON syntax would be appended inside that open value.
+		foreach (var prop in elem.EnumerateObject().OrderBy(prop => IsGrowable(prop.Value.ValueKind)))
 		{
 			var propPath = CombinePath(path, prop.Name);
 
