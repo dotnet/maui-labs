@@ -6,6 +6,7 @@ on:
     paths:
       - 'platforms/MacOS/**'
       - '.github/workflows/ci-macos-appkit.yml'
+      - '.github/workflows/_build.yml'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -18,6 +19,7 @@ on:
     paths:
       - 'platforms/MacOS/**'
       - '.github/workflows/ci-macos-appkit.yml'
+      - '.github/workflows/_build.yml'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
