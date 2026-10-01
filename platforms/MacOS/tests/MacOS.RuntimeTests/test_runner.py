@@ -98,10 +98,35 @@ class BuildOutputTests(unittest.TestCase):
 
     def test_callers_cannot_override_the_recording_target_or_destination(self):
         runner = RuntimeRunner("layout", self.root / "evidence")
-        for key in ("RuntimeTestBuildTarget", "RuntimeTestBuildMetadata"):
+        for key in ("RuntimeTestBuildTarget", "RuntimeTestBuildMetadata",
+                    "runtimetestbuildtarget", "RUNTIMETESTBUILDMETADATA"):
             with self.subTest(key=key), patch.object(runner, "command") as command:
                 with self.assertRaisesRegex(ValueError, "runner owns"):
                     runner.build("fixed", properties={key: "ignored"})
+                command.assert_not_called()
+
+    def test_extra_arguments_cannot_override_owned_properties(self):
+        runner = RuntimeRunner("layout", self.root / "evidence")
+        arguments = (
+            "-p:RuntimeTestBuildTarget=Build",
+            "/p:runtimetestbuildmetadata=old.txt",
+            "--property:RuntimeTestBuildTarget=Build",
+            "-property:Other=true;RUNTIMETESTBUILDMETADATA=old.txt",
+            "/property:Other=true,RuntimeTestBuildTarget=Build",
+            "--property=RuntimeTestBuildTarget=Build",
+        )
+        for argument in arguments:
+            with self.subTest(argument=argument), patch.object(runner, "command") as command:
+                with self.assertRaisesRegex(ValueError, "Extra arguments"):
+                    runner.build("publish", publish=True, extra_args=(argument,))
+                command.assert_not_called()
+
+    def test_response_files_cannot_bypass_property_ownership(self):
+        runner = RuntimeRunner("layout", self.root / "evidence")
+        for argument in ("@build.rsp", ' "@build.rsp"'):
+            with self.subTest(argument=argument), patch.object(runner, "command") as command:
+                with self.assertRaisesRegex(ValueError, "response files"):
+                    runner.build("publish", publish=True, extra_args=(argument,))
                 command.assert_not_called()
 
     def test_publish_uses_sdk_output_without_publish_directory(self):
@@ -111,6 +136,7 @@ class BuildOutputTests(unittest.TestCase):
             if log.name == "build.log":
                 self.assertEqual(str(args[1]), "publish")
                 self.assertIn("-p:RuntimeTestBuildTarget=Publish", args)
+                self.assertIn("-p:CreatePackage=false", args)
                 metadata_arg = next(str(arg) for arg in args if str(arg).startswith("-p:RuntimeTestBuildMetadata="))
                 Path(metadata_arg.split("=", 1)[1]).write_text(f"{self.bundle}\n{self.executable}\n")
             elif log.name == "registry.json":
@@ -121,7 +147,7 @@ class BuildOutputTests(unittest.TestCase):
             return 0
 
         with patch.object(runner, "command", side_effect=command):
-            output = runner.build("publish", publish=True)
+            output = runner.build("publish", publish=True, extra_args=("-p:CreatePackage=false",))
         self.assertEqual(output.bundle, self.bundle)
         self.assertNotIn("publish", output.bundle.parts)
 
