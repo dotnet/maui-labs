@@ -10,6 +10,7 @@
     <IsPackable>false</IsPackable>
     <IsShipping>false</IsShipping>
     <RuntimeTestsUseProjectReferences Condition="'$(RuntimeTestsUseProjectReferences)' == ''">true</RuntimeTestsUseProjectReferences>
+    <RuntimeTestBuildTarget Condition="'$(RuntimeTestBuildTarget)' == ''">Build</RuntimeTestBuildTarget>
   </PropertyGroup>
   <Import Project="Scenarios\*\*.props" Condition="'$(RuntimeTestScenario)' == ''" />
   <Import Project="Scenarios\$(RuntimeTestScenario)\*.props" Condition="'$(RuntimeTestScenario)' != ''" />
@@ -23,13 +24,13 @@
   </ItemGroup>
   <Import Project="Scenarios\*\*.targets" Condition="'$(RuntimeTestScenario)' == ''" />
   <Import Project="Scenarios\$(RuntimeTestScenario)\*.targets" Condition="'$(RuntimeTestScenario)' != ''" />
-  <Target Name="_RecordRuntimeTestBuildOutput" AfterTargets="Build;Publish"
+  <Target Name="_RecordRuntimeTestBuildOutput" AfterTargets="$(RuntimeTestBuildTarget)"
           DependsOnTargets="_GetNativeExecutableName"
           Condition="'$(RuntimeTestBuildMetadata)' != ''">
     <Error Condition="'$(AppBundleDir)' == '' or '$(_NativeExecutable)' == ''"
            Text="The Apple SDK did not resolve the runtime test bundle and native executable." />
     <WriteLinesToFile File="$(RuntimeTestBuildMetadata)"
-                      Lines="$([System.IO.Path]::GetFullPath('$(AppBundleDir)'));$([System.IO.Path]::GetFullPath('$(_NativeExecutable)'))"
+                      Lines="$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(AppBundleDir)'));$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(_NativeExecutable)'))"
                       Overwrite="true" />
   </Target>
 </Project>
