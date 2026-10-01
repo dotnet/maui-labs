@@ -5,6 +5,11 @@ test app. Portable `MacOS.Tests` remains a separate `net10.0` xUnit project.
 Native scenarios share one executable, project, process bootstrap and CI runner.
 Every launch selects exactly one registered scenario in a fresh process.
 
+| Scenario | Cases | Before/fixed behavior |
+|---|---|---|
+| `layout` | 6 | Exact missing native child failure / add, insert, replace, remove, clear, re-add |
+| `picker` | 19 | Unselected null-title Picker displays January / selection, title, items and native activation transitions |
+
 ## Run on macOS
 
 Use the repository SDK, macOS workload 10.0.203 and Xcode 26.3:
@@ -65,6 +70,9 @@ since the preceding case. `Complete` requires positive assertions and exactly th
 declared case count, plus the exact assertion count when specified. Thus a
 59-assertion fixture can declare one case, call `Assert` 59 times, then `Pass` once.
 Layout retains six cases; case counts are not assertion counts.
+Picker retains its 19 state-transition cases, `states.jsonl`, initial/final
+native captures and the exact `BASELINE_563` sentinel. Its shared MAUI adapter
+creates the same real window, rather than simulating a handler in isolation.
 
 Exceptions go to `context.Fail` (exit 1). A deliberately observed regression can
 call `BaselineFailure(id, message)` (exit 42), after recording its concrete

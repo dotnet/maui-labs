@@ -1,0 +1,14 @@
+{
+  "name": "picker",
+  "expectedCases": 19,
+  "evidence": ["initial.png", "states.jsonl", "assertions.txt"],
+  "fixedEvidence": ["final.png"],
+  "baseline": {
+    "source": "platforms/MacOS/src/MacOS/Handlers/PickerHandler.cs",
+    "commit": "9206e7c5c6486a7f422efd36a7635c6fe9609000",
+    "exitCode": 42,
+    "outcome": "regression",
+    "failureId": "picker.unselected-first-item",
+    "message": "BASELINE_563: unselected untitled Picker displays January."
+  }
+}

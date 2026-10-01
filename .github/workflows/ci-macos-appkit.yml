@@ -37,70 +37,6 @@ jobs:
       pack: true
       xcode-version: '26.3'
 
-  picker-regression:
-    runs-on: macos-latest
-    timeout-minutes: 25
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          path: fixed
-      - uses: actions/checkout@v4
-        with:
-          path: baseline
-      - uses: actions/setup-dotnet@v5
-        with:
-          global-json-file: fixed/global.json
-      - name: Select Xcode and install workloads
-        working-directory: fixed
-        run: |
-          sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
-          dotnet workload install maui macos --version 10.0.203
-      - name: Run identical native regression before and after
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Keep everything except the handler identical for a controlled comparison.
-          baseline_sha=9206e7c5c6486a7f422efd36a7635c6fe9609000
-          handler=platforms/MacOS/src/MacOS/Handlers/PickerHandler.cs
-          git -C baseline fetch --depth=1 origin "$baseline_sha"
-          git -C baseline show "$baseline_sha:$handler" > "baseline/$handler"
-          for variant in baseline fixed; do
-            evidence="$GITHUB_WORKSPACE/evidence/$variant"
-            mkdir -p "$evidence"
-            (
-              cd "$variant"
-              dotnet build platforms/MacOS/tests/PickerRegressionTests/PickerRegressionTests.csproj \
-                -p:UseMaui=false -p:ValidateXcodeVersion=true \
-                2>&1 | tee "$evidence/build.log"
-              app="$(find artifacts/bin/PickerRegressionTests -type d -name '*.app' -print)"
-              if [ ! -d "$app" ]; then
-                echo "Expected exactly one Picker app bundle; found: $app" >&2
-                exit 1
-              fi
-              set +e
-              PICKER_EVIDENCE="$evidence" "$app/Contents/MacOS/PickerRegressionTests" \
-                > "$evidence/runtime.log" 2>&1
-              result=$?
-              set -e
-              cat "$evidence/runtime.log"
-              if [ "$variant" = baseline ]; then
-                test "$result" -eq 42
-                grep -F "BASELINE_563:" "$evidence/runtime.log"
-              else
-                test "$result" -eq 0
-                grep -F "PASS: all native AppKit Picker regression scenarios." "$evidence/runtime.log"
-              fi
-            )
-          done
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: appkit-picker-runtime
-          path: evidence/
-          if-no-files-found: error
-
   native-runtime:
     name: AppKit runtime (${{ matrix.scenario }}, ${{ matrix.maui-version || 'default' }})
     runs-on: macos-latest
@@ -110,6 +46,8 @@ jobs:
       matrix:
         include:
           - scenario: layout
+            maui-version: ''
+          - scenario: picker
             maui-version: ''
     env:
       NUGET_PACKAGES: ${{ github.workspace }}/.packages
