@@ -1140,9 +1140,9 @@ namespace Microsoft.Maui.Handlers.WPF
 		static void MapItems(ShellHandler handler, Shell shell)
 		{
 			handler.PlatformView.BuildFlyoutItems(shell);
-			MapShellBackground(handler, shell);
-			MapFlyoutBackground(handler, shell);
-			MapFlyoutBackgroundBrush(handler, shell);
+			handler.UpdateValue(nameof(Shell.BackgroundColor));
+			handler.UpdateValue(nameof(Shell.FlyoutBackgroundColor));
+			handler.UpdateValue(nameof(Shell.FlyoutBackground));
 			handler.ShowCurrentPage();
 		}
 

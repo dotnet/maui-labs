@@ -17,6 +17,146 @@ namespace HandlerTests;
 [Collection("Shell handlers")]
 public class ShellItemsHandlerTests
 {
+	[Theory]
+	[InlineData(nameof(Shell.BackgroundColor), false)]
+	[InlineData(nameof(Shell.FlyoutBackgroundColor), false)]
+	[InlineData(nameof(Shell.FlyoutBackground), false)]
+	[InlineData(nameof(Shell.BackgroundColor), true)]
+	public void BackgroundAppendToMapping_ItemsOnlyRefresh_PreservesNativeCustomization(string key, bool mutateOnceInCallback)
+	{
+		var originalMapper = ShellHandler.Mapper;
+		var mapper = new PropertyMapper<Shell, ShellHandler>(originalMapper);
+		string[] backgroundKeys = [nameof(Shell.BackgroundColor), nameof(Shell.FlyoutBackgroundColor), nameof(Shell.FlyoutBackground)];
+		var replayedKeys = new List<string>();
+		var unrelatedCalls = 0;
+		System.Windows.Media.Brush? customBrush = null;
+		Action? mutateItems = null;
+		foreach (var backgroundKey in backgroundKeys)
+		{
+			mapper.AppendToMapping(backgroundKey, (handler, _) =>
+			{
+				replayedKeys.Add(backgroundKey);
+				if (backgroundKey != key)
+					return;
+				customBrush ??= new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Magenta);
+				if (key == nameof(Shell.BackgroundColor))
+					handler.PlatformView.SetBarBackground(customBrush);
+				else
+					handler.PlatformView.SetFlyoutBackground(customBrush);
+				var mutation = mutateItems;
+				mutateItems = null;
+				mutation?.Invoke();
+			});
+		}
+		mapper.AppendToMapping(nameof(Shell.FlyoutWidth), (_, _) => unrelatedCalls++);
+		try
+		{
+			ShellHandler.Mapper = mapper;
+			Run((shell, handler) =>
+			{
+				var item = Item("Initial");
+				shell.Items.Add(item);
+				shell.BackgroundColor = Microsoft.Maui.Graphics.Colors.Red;
+				shell.FlyoutBackgroundColor = Microsoft.Maui.Graphics.Colors.Blue;
+				if (key == nameof(Shell.FlyoutBackground))
+					shell.FlyoutBackground = new Microsoft.Maui.Controls.SolidColorBrush(Microsoft.Maui.Graphics.Colors.Green);
+				DrainDispatcher();
+
+				// Establish a valid customization without relying on initial mapper enumeration order.
+				handler.UpdateValue(key);
+				DrainDispatcher();
+				Assert.NotNull(customBrush);
+				Assert.Same(customBrush, NativeBackground(handler, key));
+				Assert.Contains(key, replayedKeys);
+				var background = shell.BackgroundColor;
+				var flyoutColor = shell.FlyoutBackgroundColor;
+				var flyoutBrush = shell.FlyoutBackground;
+				var changedBackgrounds = new List<string>();
+				System.ComponentModel.PropertyChangedEventHandler onChanged = (_, args) =>
+				{
+					if (args.PropertyName is string name && backgroundKeys.Contains(name))
+						changedBackgrounds.Add(name);
+				};
+				shell.PropertyChanged += onChanged;
+				try
+				{
+					replayedKeys.Clear();
+					var previousUnrelatedCalls = unrelatedCalls;
+					if (mutateOnceInCallback)
+						mutateItems = () => item.Items.Add(Section("Added by callback"));
+					item.Items.Add(Section("Added by test"));
+					DrainDispatcher();
+
+					Assert.Same(background, shell.BackgroundColor);
+					Assert.Same(flyoutColor, shell.FlyoutBackgroundColor);
+					Assert.Same(flyoutBrush, shell.FlyoutBackground);
+					Assert.Empty(changedBackgrounds);
+					Assert.Equal(previousUnrelatedCalls, unrelatedCalls);
+					Assert.Same(customBrush, NativeBackground(handler, key));
+					Assert.Equal(mutateOnceInCallback ? backgroundKeys.Concat(backgroundKeys) : backgroundKeys, replayedKeys);
+					Assert.Null(mutateItems);
+					Assert.Equal(mutateOnceInCallback ? 3 : 2, item.Items.Count);
+					AssertTabs(handler, item.Items.ToArray());
+					AssertCurrentPage(shell, handler);
+				}
+				finally
+				{
+					shell.PropertyChanged -= onChanged;
+				}
+			});
+		}
+		finally
+		{
+			ShellHandler.Mapper = originalMapper;
+		}
+	}
+
+	[Theory]
+	[InlineData(false, false)]
+	[InlineData(false, true)]
+	[InlineData(true, false)]
+	public void BackgroundMappings_ItemsOnlyRefresh_PreservesUncustomizedColorsAndPrecedence(bool themeDefaults, bool useFlyoutBrush)
+	{
+		Run((shell, handler) =>
+		{
+			var item = Item("Initial");
+			shell.Items.Add(item);
+			if (!themeDefaults)
+			{
+				shell.BackgroundColor = Microsoft.Maui.Graphics.Colors.Red;
+				shell.FlyoutBackgroundColor = Microsoft.Maui.Graphics.Colors.Blue;
+			}
+			if (useFlyoutBrush)
+				shell.FlyoutBackground = new Microsoft.Maui.Controls.SolidColorBrush(Microsoft.Maui.Graphics.Colors.Green);
+			if (themeDefaults)
+				shell.FlyoutBackground = null;
+			DrainDispatcher();
+			handler.UpdateValue(nameof(Shell.BackgroundColor));
+			handler.UpdateValue(nameof(Shell.FlyoutBackgroundColor));
+			handler.UpdateValue(nameof(Shell.FlyoutBackground));
+			var toolbarColor = Assert.IsType<System.Windows.Media.SolidColorBrush>(NativeBackground(handler, nameof(Shell.BackgroundColor))).Color;
+			var flyoutColor = Assert.IsType<System.Windows.Media.SolidColorBrush>(NativeBackground(handler, nameof(Shell.FlyoutBackground))).Color;
+			if (themeDefaults)
+			{
+				Assert.Null(shell.BackgroundColor);
+				Assert.Null(shell.FlyoutBackgroundColor);
+				Assert.Null(shell.FlyoutBackground);
+			}
+			else
+			{
+				Assert.Equal(System.Windows.Media.Colors.Red, toolbarColor);
+				Assert.Equal(useFlyoutBrush ? System.Windows.Media.Colors.Green : System.Windows.Media.Colors.Blue, flyoutColor);
+			}
+
+			item.Items.Add(Section("Added"));
+			DrainDispatcher();
+			Assert.Equal(toolbarColor, Assert.IsType<System.Windows.Media.SolidColorBrush>(NativeBackground(handler, nameof(Shell.BackgroundColor))).Color);
+			Assert.Equal(flyoutColor, Assert.IsType<System.Windows.Media.SolidColorBrush>(NativeBackground(handler, nameof(Shell.FlyoutBackground))).Color);
+			AssertTabs(handler, item.Items.ToArray());
+			AssertCurrentPage(shell, handler);
+		});
+	}
+
 	[Fact]
 	public void RuntimeWindow_ItemsAppendToMapping_CustomizesDeferredCollectionRefresh()
 	{
@@ -489,6 +629,10 @@ public class ShellItemsHandlerTests
 	};
 
 	static WGrid MainGrid(ShellHandler handler) => (WGrid)handler.PlatformView.Children[1];
+	static System.Windows.Media.Brush NativeBackground(ShellHandler handler, string key)
+		=> key == nameof(Shell.BackgroundColor)
+			? MainGrid(handler).Children.OfType<DockPanel>().Single().Background
+			: ((WGrid)handler.PlatformView.Children[0]).Background;
 	static TabControl Tabs(ShellHandler handler) => MainGrid(handler).Children.OfType<TabControl>().Single();
 	static ContentControl ContentHost(ShellHandler handler) => MainGrid(handler).Children.OfType<ContentControl>().Single();
 	static System.Windows.Controls.StackPanel Flyout(ShellHandler handler)
