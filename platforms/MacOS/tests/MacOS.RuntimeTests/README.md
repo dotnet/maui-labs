@@ -31,6 +31,8 @@ python3 -B -m unittest discover -s platforms/MacOS/tests/MacOS.RuntimeTests -p '
 The executable accepts `--list` (JSON metadata), or exactly
 `--scenario <id> --evidence <directory>`. Unknown/empty selectors fail before
 native startup. Duplicate registrations and non-positive expected counts fail.
+Scenario ids start with a lowercase ASCII letter and contain only lowercase
+ASCII letters, digits and hyphens.
 
 ## Add a scenario, not a project or job
 
@@ -80,6 +82,8 @@ predicate through `Assert`. A timeout is never a baseline success. The first
 terminal result wins atomically; `result.json` and process exit must agree.
 `WriteJson`, `AppendJson`, `EvidencePath` and `Capture` provide isolated evidence.
 Native captures are composited onto white, not claimed as full-screen screenshots.
+Call `Capture` and access native UI state only on AppKit's main thread, including
+after asynchronous work. JSON file writers have no additional AppKit affinity.
 `FlushMainQueueAsync()` drains two native dispatch turns, not a timed sleep.
 
 ## Runner manifest and baseline
@@ -105,8 +109,10 @@ does not change central package versions or feeds.
 
 `RuntimeTestScenario=<id>` compiles only that module. Building without it registers
 all modules. Optional `Scenarios/<id>/*.props` and `*.targets` imports scope fixture
-assets/build behavior; do not change other modules or copy shipping resources by
-hand. Set `RuntimeTestsUseProjectReferences=false` for a package-consumer scenario
+assets/build behavior. Imports are limited to the module's root directory;
+root-level imports may explicitly import nested fixture files. Do not change other
+modules or copy shipping resources by hand.
+Set `RuntimeTestsUseProjectReferences=false` for a package-consumer scenario
 and supply its package references through the selected module's props, including
 both backend and Essentials used by the shared bootstrap. Keep shipping NuGet
 buildTransitive targets authoritative.
