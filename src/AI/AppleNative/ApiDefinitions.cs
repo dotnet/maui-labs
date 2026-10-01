@@ -2,6 +2,7 @@
 
 using System;
 using System.Threading.Tasks;
+using CoreGraphics;
 using Foundation;
 using ObjCRuntime;
 
@@ -253,6 +254,50 @@ interface TextContentNative
 	// @property (nonatomic, copy) NSString * _Nonnull text;
 	[Export("text")]
 	string Text { get; set; }
+}
+
+// @interface ImageContentNative : AIContentNative
+[BaseType(typeof(AIContentNative))]
+[DisableDefaultCtor]
+[Internal]
+interface ImageContentNative
+{
+	// @property (nonatomic, strong) CGImageRef _Nullable cgImage;
+	[NullAllowed, Export("cgImage")]
+	CGImage CgImage { get; set; }
+
+	// @property (nonatomic, copy) NSData * _Nullable data;
+	[NullAllowed, Export("data", ArgumentSemantic.Copy)]
+	NSData Data { get; set; }
+
+	// @property (nonatomic, copy) NSURL * _Nullable imageURL;
+	[NullAllowed, Export("imageURL", ArgumentSemantic.Copy)]
+	NSUrl ImageUrl { get; set; }
+
+	// @property (nonatomic, copy) NSString * _Nullable mimeType;
+	[NullAllowed, Export("mimeType")]
+	string MimeType { get; set; }
+
+	// @property (nonatomic) int orientationRaw;
+	[Export("orientationRaw")]
+	int OrientationRaw { get; set; }
+
+	// @property (nonatomic, copy) NSString * _Nullable label;
+	[NullAllowed, Export("label")]
+	string Label { get; set; }
+
+	// - (nonnull instancetype)initWithCgImage:(CGImageRef _Nonnull)cgImage orientationRaw:(int)orientationRaw label:(NSString * _Nullable)label OBJC_DESIGNATED_INITIALIZER;
+	[Export("initWithCgImage:orientationRaw:label:")]
+	[DesignatedInitializer]
+	NativeHandle Constructor(CGImage cgImage, int orientationRaw, [NullAllowed] string label);
+
+	// - (nonnull instancetype)initWithData:(NSData * _Nonnull)data mimeType:(NSString * _Nonnull)mimeType orientationRaw:(int)orientationRaw label:(NSString * _Nullable)label;
+	[Export("initWithData:mimeType:orientationRaw:label:")]
+	NativeHandle Constructor(NSData data, string mimeType, int orientationRaw, [NullAllowed] string label);
+
+	// - (nonnull instancetype)initWithImageURL:(NSURL * _Nonnull)imageURL orientationRaw:(int)orientationRaw label:(NSString * _Nullable)label;
+	[Export("initWithImageURL:orientationRaw:label:")]
+	NativeHandle Constructor(NSUrl imageURL, int orientationRaw, [NullAllowed] string label);
 }
 
 // @interface ResponseUpdateNative : NSObject

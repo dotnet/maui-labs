@@ -70,7 +70,10 @@ text may leave the device and incur charges.
   **Auto** makes checked tools available, and a model may call them for
   unrelated prompts. Uncheck unneeded tools to prevent those calls. Azure
   can accept images and create them through a separately configured
-  image-generation tool.
+  image-generation tool. Apple's image attachment button is enabled on
+  iOS/Mac Catalyst 27+; sending requires a ready vision-capable model. On 26,
+  Apple text chat remains available but image input is disabled. Apple does
+  not generate images or silently fall back to Azure.
 - **Embeddings:** Import documents, create an index, and search it. Apple
   on-device and configured Azure providers are available. Imported content
   and indexes are separate from chats.
@@ -93,3 +96,45 @@ with dependency injection. `MainWindow` composes the three registered pages
 as tabs. Reusable controls are in `Views/`, and shared configuration, image
 input, and atomic storage are in `Services/`. Chat recording and document
 indexing remain separate.
+
+### Manual Apple image-input validation (macOS 27)
+
+This is a **human test on macOS 27**, not a verified vision-inference result.
+Use a Mac with Apple Intelligence enabled and a downloaded, vision-capable
+Foundation Models model. Install .NET SDK 10.0.401, its matching MAUI/Apple
+workload, and Xcode 27. Build with Xcode 27 without changing the system-wide
+Xcode selection:
+
+```bash
+DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer \
+  dotnet build samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
+  -f net10.0-maccatalyst27.0 -c Debug -t:Run \
+  -p:UseXcode27Preview=true -p:ValidateXcodeVersion=false
+```
+
+If the app fails to launch, collect the crash report and distinguish that
+from an image-inference failure. Debug may embed local secrets; do not
+distribute Debug builds, exported chats, or unredacted logs.
+
+1. In **Chat** settings select **Apple Intelligence** and confirm the
+   add-image button is enabled. Choose **Use sample image**, verify its
+   thumbnail, and ask "What is in this picture?" The answer must describe
+   visible pixels, not just the words of the prompt. Compare with a text-only
+   request. After comparing, use **New** to test an image-only turn.
+2. Ask a follow-up without reattaching the image; verify the answer uses
+   image-bearing history. Repeat with streaming on and off.
+3. After a completed turn auto-saves, select **Replay** in Chat settings.
+   Confirm the image and follow-up render offline using **Restart** and
+   **Next turn**. Export the recording to a file, import it into a new chat,
+   and verify the image persists there too.
+4. On macOS/Mac Catalyst 26, Apple text remains selectable while image
+   input is disabled; a direct image request must fail with a 27.0
+   requirement. On 27 without a ready vision-capable model, record the
+   explicit error instead of reporting successful inference. Remote
+   `https://` image `UriContent` must throw `NotSupportedException`.
+
+Record the OS build, Xcode version, SDK/workload, model readiness, prompt,
+input type, answer or exception, and whether follow-up and replay preserved
+the image. Capture only redacted UI/status and logs. Neither an Xcode 27
+build nor a simulator's advertised capability demonstrates live macOS 27
+vision inference.
