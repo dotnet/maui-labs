@@ -23,4 +23,13 @@
   </ItemGroup>
   <Import Project="Scenarios\*\*.targets" Condition="'$(RuntimeTestScenario)' == ''" />
   <Import Project="Scenarios\$(RuntimeTestScenario)\*.targets" Condition="'$(RuntimeTestScenario)' != ''" />
+  <Target Name="_RecordRuntimeTestBuildOutput" AfterTargets="Build;Publish"
+          DependsOnTargets="_GetNativeExecutableName"
+          Condition="'$(RuntimeTestBuildMetadata)' != ''">
+    <Error Condition="'$(AppBundleDir)' == '' or '$(_NativeExecutable)' == ''"
+           Text="The Apple SDK did not resolve the runtime test bundle and native executable." />
+    <WriteLinesToFile File="$(RuntimeTestBuildMetadata)"
+                      Lines="$([System.IO.Path]::GetFullPath('$(AppBundleDir)'));$([System.IO.Path]::GetFullPath('$(_NativeExecutable)'))"
+                      Overwrite="true" />
+  </Target>
 </Project>
