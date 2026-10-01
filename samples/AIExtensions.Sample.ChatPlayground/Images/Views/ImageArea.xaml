@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
+             x:Class="AIExtensions.Sample.ChatPlayground.ImageArea"
+             x:DataType="local:ImagePlaygroundViewModel">
+    <Border Style="{StaticResource ComposerPanel}">
+        <Grid RowDefinitions="Auto,*" RowSpacing="8">
+            <Label Text="GENERATED IMAGE" Style="{StaticResource SectionHeading}" />
+            <Grid Grid.Row="1">
+                <Image Source="{Binding GeneratedImage}" IsVisible="{Binding HasResult}"
+                       Aspect="AspectFit" HorizontalOptions="Fill" VerticalOptions="Fill"
+                       AutomationId="GeneratedImagePreview" />
+                <Label Text="Your generated image appears here."
+                       Style="{StaticResource MutedLabel}"
+                       HorizontalOptions="Center" VerticalOptions="Center">
+                    <Label.Triggers>
+                        <DataTrigger TargetType="Label" Binding="{Binding HasResult}" Value="True">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </Label.Triggers>
+                </Label>
+                <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}"
+                                   Color="{StaticResource Primary}"
+                                   HorizontalOptions="Center" VerticalOptions="Center"
+                                   AutomationId="ImageGenerationLoading" />
+            </Grid>
+        </Grid>
+    </Border>
+</ContentView>

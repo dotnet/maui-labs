@@ -11,6 +11,7 @@
     <Project Path="templates/MacOS.Templates.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/LayoutRegressionTests/LayoutRegressionTests.csproj" />
     <Project Path="tests/MacOS.Tests/MacOS.Tests.csproj" />
   </Folder>
 </Solution>

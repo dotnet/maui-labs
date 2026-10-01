@@ -139,6 +139,33 @@ dotnet build platforms/MacOS/MacOS.slnx
 dotnet run --project platforms/MacOS/samples/MacOS.Sample/
 ```
 
+## Dynamic layout regression
+
+On a macOS desktop session, run the native regression executable:
+
+```bash
+dotnet run --project platforms/MacOS/tests/LayoutRegressionTests/LayoutRegressionTests.csproj
+```
+
+It opens an AppKit window and mutates a MAUI layout after its handler connects.
+It checks nested child bounds, native insertion order, replacement, removal,
+clear, and re-addition without resizing the window. Failures exit with code 1;
+success prints a `PASS` line for each scenario and exits with code 0. A 30-second
+watchdog fails a hung run.
+This executable uses the AppKit main thread and is not a `dotnet test` project.
+Building it on Windows does not validate AppKit behavior. For a before/after
+comparison, run the same executable with `LayoutHandler`'s constructor passing
+only `Mapper` (the original behavior), then with `Mapper, CommandMapper`.
+The original behavior must fail the first dynamic addition check.
+
+The `Native dynamic layout regression` CI job performs that comparison on a
+GitHub-hosted macOS runner. Its `appkit-layout-runtime` artifact contains both
+process logs, native view screenshots and managed/native bounds after addition.
+Screenshots use Aqua appearance and composite transparent view backgrounds over
+white so native text remains readable in dark artifact viewers.
+Set `APPKIT_LAYOUT_ARTIFACTS` to an output directory to capture the same evidence
+when running locally. Hosted execution is distinct from a local desktop run.
+
 ## Unit tests
 
 The platform-neutral tests exercise the backend's managed lifecycle code using real MAUI
