@@ -17,6 +17,101 @@ namespace HandlerTests;
 [Collection("Shell handlers")]
 public class ShellItemsHandlerTests
 {
+	readonly Xunit.Abstractions.ITestOutputHelper _output;
+
+	public ShellItemsHandlerTests(Xunit.Abstractions.ITestOutputHelper output) => _output = output;
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void CloudReview_CurrentItemMapper_DeferredSelectionPreservesNativeCustomization(bool customize)
+	{
+		var originalMapper = ShellHandler.Mapper;
+		var mapper = new PropertyMapper<Shell, ShellHandler>(originalMapper);
+		var mapped = new List<TabItem[]>();
+		mapper.AppendToMapping(nameof(Shell.CurrentItem), (handler, _) =>
+		{
+			var tabs = Tabs(handler).Items.Cast<TabItem>().ToArray();
+			if (customize)
+				foreach (var tab in tabs)
+				{
+					var section = Assert.IsAssignableFrom<ShellSection>(tab.Tag);
+					tab.Header = new TextBox { Text = $"Custom {section.Title}" };
+					System.Windows.Automation.AutomationProperties.SetHelpText(tab, "CurrentItem customization");
+				}
+			mapped.Add(tabs);
+		});
+		try
+		{
+			ShellHandler.Mapper = mapper;
+			RunWithCloudReviewWindow(shell =>
+			{
+				shell.Items.Add(new FlyoutItem { Title = "First root", Items = { Section("First A"), Section("First B") } });
+				var second = new FlyoutItem { Title = "Second root", Items = { Section("Second A"), Section("Second B") } };
+				second.CurrentItem = second.Items[1];
+				shell.Items.Add(second);
+				shell.CurrentItem = shell.Items[0];
+			}, (shell, handler) =>
+			{
+				// Establish customization on settled initial tabs before exercising a real property change.
+				handler.UpdateValue(nameof(Shell.CurrentItem));
+				DrainDispatcher();
+				AssertTabs(handler, shell.CurrentItem.Items.ToArray());
+				AssertHeaders();
+				AssertCurrentPage(shell, handler);
+				var previousPage = shell.CurrentPage;
+				var previousCalls = mapped.Count;
+				var target = shell.Items[1];
+				var targetSection = target.CurrentItem;
+				var targetContent = targetSection.CurrentItem;
+				var navigation = targetSection.Navigation.NavigationStack.ToArray();
+				_output.WriteLine($"Initial native render and mapper customization valid; customize={customize}.");
+
+				shell.CurrentItem = target;
+
+				Assert.True(mapped.Count > previousCalls, "The real CurrentItem change must invoke its mapper before deferred work.");
+				var immediatelyMappedTabs = Tabs(handler).Items.Cast<TabItem>().ToArray();
+				Assert.Contains(mapped.Skip(previousCalls), tabs => tabs.SequenceEqual(immediatelyMappedTabs));
+				AssertTabs(handler, target.Items.ToArray());
+				AssertHeaders();
+				_output.WriteLine("Real CurrentItem mutation mapped valid native headers before dispatcher drain.");
+				DrainDispatcher();
+
+				Assert.Same(target, shell.CurrentItem);
+				Assert.Same(targetSection, target.CurrentItem);
+				Assert.Same(targetContent, targetSection.CurrentItem);
+				Assert.Equal(navigation, targetSection.Navigation.NavigationStack);
+				Assert.Same(targetSection, Assert.IsType<TabItem>(Tabs(handler).SelectedItem).Tag);
+				Assert.NotSame(previousPage, shell.CurrentPage);
+				Assert.Equal("Second B", shell.CurrentPage.Title);
+				AssertCurrentPage(shell, handler);
+				AssertTabs(handler, target.Items.ToArray());
+				_output.WriteLine("Deferred work drained; selected page, section, content and navigation remain correct.");
+				AssertHeaders();
+
+				void AssertHeaders()
+				{
+					foreach (var tab in Tabs(handler).Items.Cast<TabItem>())
+					{
+						var section = Assert.IsAssignableFrom<ShellSection>(tab.Tag);
+						if (customize)
+						{
+							Assert.Equal($"Custom {section.Title}", Assert.IsType<TextBox>(tab.Header).Text);
+							Assert.Equal("CurrentItem customization",
+								System.Windows.Automation.AutomationProperties.GetHelpText(tab));
+						}
+						else
+							Assert.Equal(section.Title, Assert.IsType<string>(tab.Header));
+					}
+				}
+			});
+		}
+		finally
+		{
+			ShellHandler.Mapper = originalMapper;
+		}
+	}
+
 	[Theory]
 	[InlineData("Header", false)]
 	[InlineData("Footer", false)]
@@ -1103,6 +1198,42 @@ public class ShellItemsHandlerTests
 	}
 
 	static ShellItem Item(string title) => new FlyoutItem { Title = title, Items = { Section(title) } };
+	static void RunWithCloudReviewWindow(Action<Shell> arrange, Action<Shell, ShellHandler> test)
+	{
+		Run((_, handler) =>
+		{
+			var shell = new Shell { FlyoutBehavior = FlyoutBehavior.Locked };
+			arrange(shell);
+			handler.SetVirtualView(shell);
+			DrainDispatcher();
+			var window = new System.Windows.Window
+			{
+				Content = handler.PlatformView,
+				Width = 800,
+				Height = 600,
+				Left = -20000,
+				Top = -20000,
+				ShowActivated = false,
+				ShowInTaskbar = false,
+			};
+			try
+			{
+				window.Show();
+				DrainDispatcher();
+				window.UpdateLayout();
+				Assert.False(window.IsActive);
+				Assert.True(handler.PlatformView.ActualWidth > 0 && handler.PlatformView.ActualHeight > 0);
+				AssertCurrentPage(shell, handler);
+				test(shell, handler);
+				Assert.False(window.IsActive);
+			}
+			finally
+			{
+				window.Close();
+			}
+		});
+	}
+
 	static void RunWithFlyoutTemplates(Action<Shell, ShellHandler, List<string>,
 		Dictionary<string, List<Microsoft.Maui.Controls.Entry>>> test)
 	{

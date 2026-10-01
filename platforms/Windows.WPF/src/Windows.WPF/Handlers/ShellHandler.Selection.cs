@@ -101,10 +101,7 @@ public partial class ShellHandler
 		{
 			_selectionUpdate = null;
 			if (_selectionShell != null)
-			{
-				PlatformView.UpdateTabs(_selectionShell);
-				ShowCurrentPage();
-			}
+				UpdateValue(nameof(Shell.CurrentItem));
 		}));
 	}
 }
