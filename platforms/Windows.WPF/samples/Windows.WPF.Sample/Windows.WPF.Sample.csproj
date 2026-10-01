@@ -76,4 +76,7 @@
     <Compile Remove="TestScenarios\**\*.cs" />
   </ItemGroup>
 
+  <Import Project="..\..\src\Windows.WPF\build\Fonts\Microsoft.Maui.Platforms.Windows.WPF.Fonts.targets"
+          Condition="'$(_MicrosoftMauiPlatformsWindowsWPFFontsTargetsImported)' != 'true'" />
+
 </Project>

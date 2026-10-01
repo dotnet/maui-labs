@@ -185,12 +185,25 @@ jobs:
           name: wpf-normal-source-font-baseline
           path: artifacts/TestResults/WpfSourceFontsBaseline/**
           if-no-files-found: error
-      - name: Verify the existing packed WPF template
+      - name: Verify the packed WPF template and native fonts
         shell: pwsh
         run: |
           $sdkVersion = (Get-Content global.json -Raw | ConvertFrom-Json).sdk.version
           $sdkDirectory = Join-Path $env:DOTNET_ROOT "sdk\$sdkVersion"
-          eng\smoke-tests\wpf-template-smoke-test.ps1 -SdkDirectory $sdkDirectory
+          eng\smoke-tests\wpf-template-smoke-test.ps1 -SdkDirectory $sdkDirectory -FontScenarios `
+            -ArtifactsDirectory (Join-Path $env:RUNNER_TEMP 'wpf-font-package')
+      - name: Upload packed consumer font evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: wpf-package-font-proof
+          path: |
+            ${{ runner.temp }}/wpf-font-package/FontBuild/**
+            ${{ runner.temp }}/wpf-font-package/FontPublish/**
+            ${{ runner.temp }}/wpf-font-package/font-*.json
+            ${{ runner.temp }}/wpf-font-package/font-consumer.xml
+            ${{ runner.temp }}/wpf-font-package/packages/*.nupkg
+          if-no-files-found: error
       - name: Require successful native consumer evidence
         if: always()
         shell: pwsh

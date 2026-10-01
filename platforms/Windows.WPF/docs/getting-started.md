@@ -123,6 +123,16 @@ diagnostics when the repository-pinned SDK is unavailable. This also selects the
 `maui` and `maui-tizen` at the pinned workload version into the setup-dotnet SDK
 and explicitly uses that same SDK for packing, generation, and the consumer build.
 
+Add `-FontScenarios` to exercise registered fonts in that same generated
+PackageReference consumer (enabled in WPF CI). The harness adds the sample's shared
+font registration and native scenario, without adding any ProjectReference or
+repository target import. It checks the actual packed font target and its consumer
+integration, then compares native font identity, glyphs, and pixels against an
+independent trusted Open Sans control in three working directories for both build
+and no-build/no-restore publish output. The normal template window check still runs.
+The package contract, evaluated imports, native results, and tested packages are
+retained in the smoke-test artifacts.
+
 Install the packed `.nupkg`, not the template source directory: dependency version
 tokens in the source project are replaced during packing.
 

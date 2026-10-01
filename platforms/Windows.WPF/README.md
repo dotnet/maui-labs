@@ -84,6 +84,23 @@ Include fonts as `MauiFont` items and register them using `ConfigureFonts`:
 builder.ConfigureFonts(fonts => fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular"));
 ```
 
+The NuGet package imports font processing through its existing
+`Microsoft.Maui.Platforms.Windows.WPF.targets` entry point; package consumers do
+not need an additional import. A `ProjectReference` to the backend does not import
+its packaged build targets into the consuming app. Source consumers must explicitly
+import the font-only target, as the repository sample does:
+
+```xml
+<Import Project="..\..\src\Windows.WPF\build\Fonts\Microsoft.Maui.Platforms.Windows.WPF.Fonts.targets"
+        Condition="'$(_MicrosoftMauiPlatformsWindowsWPFFontsTargetsImported)' != 'true'" />
+```
+
+Adjust this path relative to your app project. Keep `UseMaui` enabled. This import
+handles only `MauiFont`; it does not enable or fix source-consumer processing of
+images, icons, splash screens, or raw assets.
+The import guard prevents loading the font target twice when another import
+already included the umbrella; it does not depend on test-scenario opt-in.
+
 WPF copies `MauiFont` files into `Resources\Fonts` in both build and publish output.
 This output layout uses leaf filenames, so font filenames must be unique even
 when their source directories differ.
