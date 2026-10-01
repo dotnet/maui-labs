@@ -87,7 +87,7 @@ public class ContentViewClippingTests(ITestOutputHelper output)
 				using var paintable = Gtk.WidgetPaintable.New(root);
 				using var snapshot = Gtk.Snapshot.New();
 				paintable.Snapshot(snapshot, 300, 200);
-				using var node = snapshot.ToNode();
+				var node = snapshot.ToNode();
 				var renderer = root.GetNative()?.GetRenderer();
 				if (node == null || renderer == null)
 					continue;

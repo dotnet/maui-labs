@@ -30,6 +30,7 @@ jobs:
     name: Native GTK runtime (${{ matrix.test-class }})
     runs-on: ubuntu-24.04
     strategy:
+      fail-fast: false
       matrix:
         test-class: [ContentViewTransformTests, ContentViewClippingTests, ContentViewRootLayoutTests]
     steps:
