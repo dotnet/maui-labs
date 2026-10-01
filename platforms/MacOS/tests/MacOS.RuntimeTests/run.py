@@ -77,7 +77,7 @@ class BuildOutput:
 
 
 def read_build_output(metadata, log, binlog, app_root=None):
-    paths = metadata.read_text().splitlines()
+    paths = metadata.read_text(encoding="utf-8-sig").splitlines()
     if len(paths) != 2 or any(not path or not Path(path).is_absolute() for path in paths):
         raise ValueError("Build metadata must contain exactly one absolute bundle and executable path.")
     bundle, executable = (Path(path).resolve(strict=True) for path in paths)
@@ -140,9 +140,10 @@ class RuntimeRunner:
         if metadata.exists():
             raise RuntimeError(f"Refusing stale build metadata: {metadata}")
         properties = dict(properties or {})
-        if "RuntimeTestBuildMetadata" in properties:
-            raise ValueError("The runner owns RuntimeTestBuildMetadata.")
+        if "RuntimeTestBuildMetadata" in properties or "RuntimeTestBuildTarget" in properties:
+            raise ValueError("The runner owns RuntimeTestBuildMetadata and RuntimeTestBuildTarget.")
         properties["RuntimeTestBuildMetadata"] = str(metadata)
+        properties["RuntimeTestBuildTarget"] = "Publish" if publish else "Build"
         properties.setdefault("RuntimeTestScenario", self.name)
         properties.setdefault("ContinuousIntegrationBuild", "true")
         properties.setdefault("ValidateXcodeVersion", "true")
