@@ -199,6 +199,23 @@ All MAUI shapes render via WPF `System.Windows.Shapes`:
 
 ### Essentials
 
+Call `builder.UseWPFEssentials()` before `builder.Build()` on the WPF UI thread.
+When `Build()` returns, every registered Essentials facade (`FileSystem.Current`,
+`Preferences.Default`, `DeviceInfo.Current`, and the other supported APIs) uses the
+same instance as dependency injection, including application overrides registered
+before or after `UseWPFEssentials()`. Static calls are supported after `Build()`,
+not while configuring the builder. Unsupported desktop capabilities keep their
+existing stub behavior.
+
+Version tracking records a launch only when `VersionTracking.Track()` or a
+tracking property is used, not merely when building the app.
+
+The facades are process-wide: the most recently built app sets their instances.
+Do not use them after disposing that app.
+
+Run the behavioral registration regressions on Windows:
+`dotnet test platforms\Windows.WPF\tests\Essentials.Tests\Windows.WPF.Essentials.Tests.csproj`.
+
 | API | Status | Notes |
 |---|---|---|
 | AppInfo | ✅ | Assembly-based name, version, package; RequestedTheme |
