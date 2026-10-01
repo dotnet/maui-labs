@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from run import RuntimeRunner, contained, load_manifest, validate_result
+from run import RuntimeRunner, contained, load_manifest, read_build_output, validate_result
 
 
 class ResultContractTests(unittest.TestCase):
@@ -67,6 +67,88 @@ class ResultContractTests(unittest.TestCase):
         for name in ("1layout", "-layout", "Layout"):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 load_manifest(name)
+
+
+class BuildOutputTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.bundle = self.root / "Debug" / "App with spaces.app"
+        self.executable = self.bundle / "Contents" / "MacOS" / "NativeApp"
+        self.executable.parent.mkdir(parents=True)
+        self.executable.touch()
+        self.metadata = self.root / "sdk-build-output.txt"
+
+    def write_metadata(self, *paths):
+        self.metadata.write_text("\n".join(map(str, paths)) + "\n")
+
+    def read_output(self):
+        return read_build_output(self.metadata, self.root / "build.log", self.root / "build.binlog")
+
+    def test_sdk_build_output_with_spaces(self):
+        self.write_metadata(self.bundle, self.executable)
+        output = self.read_output()
+        self.assertEqual(output.bundle, self.bundle)
+        self.assertEqual(output.executable, self.executable)
+
+    def test_publish_uses_sdk_output_without_publish_directory(self):
+        runner = RuntimeRunner("layout", self.root / "evidence")
+
+        def command(args, log, **kwargs):
+            if log.name == "build.log":
+                self.assertEqual(str(args[1]), "publish")
+                metadata_arg = next(str(arg) for arg in args if str(arg).startswith("-p:RuntimeTestBuildMetadata="))
+                Path(metadata_arg.split("=", 1)[1]).write_text(f"{self.bundle}\n{self.executable}\n")
+            elif log.name == "registry.json":
+                log.write_text('[{"Name":"layout","ExpectedCases":6,"ExpectedAssertions":28}]')
+            elif log.name == "unknown-selector.log":
+                log.write_text("Unknown scenario: __unregistered_scenario__")
+                return 1
+            return 0
+
+        with patch.object(runner, "command", side_effect=command):
+            output = runner.build("publish", publish=True)
+        self.assertEqual(output.bundle, self.bundle)
+        self.assertNotIn("publish", output.bundle.parts)
+
+    def test_missing_metadata_rejected_even_with_existing_bundle(self):
+        with self.assertRaises(FileNotFoundError):
+            self.read_output()
+
+    def test_stale_metadata_rejected_before_build(self):
+        runner = RuntimeRunner("layout", self.root / "evidence")
+        directory = runner.stage_directory("fixed")
+        (directory / "sdk-build-output.txt").write_text(f"{self.bundle}\n{self.executable}\n")
+        with patch.object(runner, "command") as command:
+            with self.assertRaisesRegex(RuntimeError, "stale build metadata"):
+                runner.build("fixed")
+            command.assert_not_called()
+
+    def test_missing_executable_rejected(self):
+        self.write_metadata(self.bundle, self.executable.parent / "missing")
+        with self.assertRaises(FileNotFoundError):
+            self.read_output()
+
+    def test_ambiguous_or_relative_metadata_rejected(self):
+        for paths in ((self.bundle,), (self.bundle, self.executable, self.executable),
+                      ("relative.app", self.executable), (self.bundle, "")):
+            with self.subTest(paths=paths):
+                self.write_metadata(*paths)
+                with self.assertRaises(ValueError):
+                    self.read_output()
+
+    def test_executable_outside_bundle_rejected(self):
+        other = self.root / "other"
+        other.touch()
+        self.write_metadata(self.bundle, other)
+        with self.assertRaisesRegex(ValueError, "inside the reported app"):
+            self.read_output()
+
+    def test_app_root_is_enforced_when_supplied(self):
+        self.write_metadata(self.bundle, self.executable)
+        with self.assertRaisesRegex(ValueError, "outside the requested"):
+            read_build_output(self.metadata, None, None, self.root / "other")
 
 
 class SourceOverlayTests(unittest.TestCase):

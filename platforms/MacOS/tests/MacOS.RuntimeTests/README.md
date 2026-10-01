@@ -124,6 +124,11 @@ shared primitives instead of cloning bootstrap/build/CI code:
   extra_args=(), app_root=None)` captures logs/binlog and returns `BuildOutput`
   (`executable`, actual `bundle`, `log`, `binlog`). Per-stage MSBuild overrides
   support package versions/sources and historical targets.
+  The host records the Apple SDK's resolved `AppBundleDir` and `_NativeExecutable`
+  after Build/Publish; the runner requires fresh metadata and existing outputs.
+  Publishing without an installer may retain the normal `.app` output location:
+  the runner does not assume a `publish` directory or copy the bundle.
+  Optional `app_root` constrains the reported bundle, rather than overriding discovery.
 - `runner.launch(output, stage, expectation=None, required_evidence=())` starts
   a fresh owned process, enforces deadlines, exit/result/counts and required files.
 - `with runner.baseline_sources(): ...` applies/restores declared source overlays.
