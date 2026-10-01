@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.DevFlow.Agent.Core;
+using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Hosting;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Handlers;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Hosting;
@@ -180,14 +181,163 @@ public class CollectionViewHandlerTests(ITestOutputHelper output)
 			((IElementHandler)handler).DisconnectHandler();
 			Assert.All(connected, item => Assert.Equal(1, item.DisconnectCount));
 
+			VerifyLayoutCallbackLifetime(app.Services, window);
 			VerifyGroupedHeaderRefresh(app.Services, window, singlePass: false);
 			VerifyGroupedHeaderRefresh(app.Services, window, singlePass: true);
+			VerifyTemplateRefreshState(app.Services, window);
 		}
 		finally
 		{
 			if (collection.Handler != null)
 				((IElementHandler)handler).DisconnectHandler();
 			window.Destroy();
+		}
+	}
+
+	void VerifyLayoutCallbackLifetime(IServiceProvider services, Gtk.Window window)
+	{
+		var handler = new LayoutHandler();
+		handler.SetMauiContext(new GtkMauiContext(services));
+		using var paned = Gtk.Paned.New(Gtk.Orientation.Horizontal);
+		using var sibling = Gtk.Label.New("Sibling pane");
+		paned.SetEndChild(sibling);
+		try
+		{
+			var disconnected = new CountingLayout();
+			handler.SetVirtualView(disconnected);
+			var disconnectedPanel = handler.PlatformView;
+			window.SetChild(disconnectedPanel);
+			Assert.Equal((0, 0), disconnected.Counts);
+			((IElementHandler)handler).DisconnectHandler();
+			window.SetChild(null);
+			PumpThroughSentinel();
+			Assert.Equal((0, 0), disconnected.Counts);
+			Assert.Null(disconnectedPanel.CrossPlatformLayout);
+			Assert.Null(((IElementHandler)handler).VirtualView);
+
+			var superseded = new CountingLayout();
+			handler.SetVirtualView(superseded);
+			var panel = handler.PlatformView;
+			var current = new CountingLayout();
+			handler.SetVirtualView(current);
+			Assert.Same(panel, handler.PlatformView);
+			Assert.Same(current, panel.CrossPlatformLayout);
+			paned.SetStartChild(panel);
+			window.SetChild(paned);
+			paned.SetPosition(160);
+			PumpThroughSentinel();
+			Assert.Equal((0, 0), superseded.Counts);
+			Assert.True(current.MeasureCount > 0 && current.ArrangeCount > 0);
+
+			var sameBindingCounts = current.Counts;
+			handler.SetVirtualView(current);
+			Assert.Same(panel, handler.PlatformView);
+			Assert.Equal(sameBindingCounts, current.Counts);
+			window.SetDefaultSize(440, 320);
+			Assert.True(current.MeasureCount > sameBindingCounts.Measure && current.ArrangeCount > sameBindingCounts.Arrange);
+			var beforePaned = current.Counts;
+			paned.SetPosition(180);
+			Assert.True(current.MeasureCount > beforePaned.Measure && current.ArrangeCount > beforePaned.Arrange);
+			var beforeTick = current.Counts;
+			panel.LayoutDirty = true;
+			PumpUntil(() => current.MeasureCount > beforeTick.Measure && current.ArrangeCount > beforeTick.Arrange);
+
+			var retiredCounts = current.Counts;
+			var replacement = new CountingLayout();
+			handler.SetVirtualView(replacement);
+			Assert.Same(panel, handler.PlatformView);
+			Assert.Same(replacement, panel.CrossPlatformLayout);
+			PumpThroughSentinel();
+			Assert.Equal(retiredCounts, current.Counts);
+			Assert.True(replacement.MeasureCount > 0 && replacement.ArrangeCount > 0);
+			var beforeResize = replacement.Counts;
+			window.SetDefaultSize(460, 340);
+			paned.SetPosition(200);
+			Assert.True(replacement.MeasureCount > beforeResize.Measure && replacement.ArrangeCount > beforeResize.Arrange);
+			Assert.Equal(retiredCounts, current.Counts);
+
+			var disconnectedCounts = replacement.Counts;
+			((IElementHandler)handler).DisconnectHandler();
+			Assert.Null(panel.CrossPlatformLayout);
+			window.SetDefaultSize(480, 360);
+			paned.SetPosition(220);
+			panel.LayoutDirty = true;
+			PumpThroughSentinel();
+			Assert.Equal(disconnectedCounts, replacement.Counts);
+			Assert.Equal(retiredCounts, current.Counts);
+			Assert.Equal((0, 0), disconnected.Counts);
+			Assert.Equal((0, 0), superseded.Counts);
+			output.WriteLine("Layout callback lifetime passed: disconnect-before-pump and superseded bindings measured/arranged zero times; same/current bindings responded to resize, paned and dirty tick; retired counter deltas stayed zero.");
+		}
+		finally
+		{
+			if (((IElementHandler)handler).VirtualView != null)
+				((IElementHandler)handler).DisconnectHandler();
+			window.SetChild(null);
+			paned.SetStartChild(null);
+			paned.SetEndChild(null);
+			window.SetDefaultSize(400, 300);
+		}
+	}
+
+	sealed class CountingLayout : VerticalStackLayout, ICrossPlatformLayout
+	{
+		public int MeasureCount { get; private set; }
+		public int ArrangeCount { get; private set; }
+		public (int Measure, int Arrange) Counts => (MeasureCount, ArrangeCount);
+
+		Size ICrossPlatformLayout.CrossPlatformMeasure(double widthConstraint, double heightConstraint)
+		{
+			MeasureCount++;
+			return new Size(Math.Min(80, widthConstraint), Math.Min(40, heightConstraint));
+		}
+
+		Size ICrossPlatformLayout.CrossPlatformArrange(Rect bounds)
+		{
+			ArrangeCount++;
+			return bounds.Size;
+		}
+	}
+
+	static void PumpThroughSentinel()
+	{
+		var reached = false;
+		var source = GLib.Functions.IdleAdd(200, () =>
+		{
+			reached = true;
+			return false;
+		});
+		try
+		{
+			PumpUntil(() => reached);
+		}
+		finally
+		{
+			if (!reached)
+				GLib.Functions.SourceRemove(source);
+		}
+	}
+
+	static void PumpUntil(Func<bool> condition)
+	{
+		var timedOut = false;
+		uint timeoutSource = 0;
+		timeoutSource = GLib.Functions.TimeoutAdd(0, 10_000, () =>
+		{
+			timeoutSource = 0;
+			timedOut = true;
+			return false;
+		});
+		try
+		{
+			while (!condition() && !timedOut)
+				GLib.MainContext.Default().Iteration(true);
+			Assert.True(condition(), "GTK did not complete the queued lifecycle work before the deadline.");
+		}
+		finally
+		{
+			if (timeoutSource != 0)
+				GLib.Functions.SourceRemove(timeoutSource);
 		}
 	}
 
@@ -249,6 +399,77 @@ public class CollectionViewHandlerTests(ITestOutputHelper output)
 			if (singlePass)
 				Assert.Equal(1, source.EnumerationCount);
 			output.WriteLine($"Grouped header refresh passed: singlePass={singlePass}, allocated rows=2, enumerations={source.EnumerationCount}.");
+		}
+		finally
+		{
+			window.SetChild(null);
+			if (collection.Handler != null)
+				((IElementHandler)handler).DisconnectHandler();
+			Assert.All(created, view => Assert.Null(view.Parent));
+			Assert.All(connected, item => Assert.Equal(1, item.DisconnectCount));
+		}
+	}
+
+	void VerifyTemplateRefreshState(IServiceProvider services, Gtk.Window window)
+	{
+		var created = new List<Label>();
+		var connected = new List<DisconnectTrackingLabelHandler>();
+		DataTemplate BoundTemplate() => new(() =>
+		{
+			var label = new Label();
+			label.SetBinding(Label.TextProperty, ".");
+			created.Add(label);
+			label.HandlerChanged += (_, _) =>
+			{
+				if (label.Handler is DisconnectTrackingLabelHandler tracking && !connected.Contains(tracking))
+					connected.Add(tracking);
+			};
+			return label;
+		});
+		var source = new System.Collections.ObjectModel.ObservableCollection<string> { "First", "Second" };
+		var collection = new CollectionView
+		{
+			ItemsSource = source,
+			ItemTemplate = BoundTemplate(),
+			SelectionMode = SelectionMode.Single,
+			EmptyView = "No cards",
+		};
+		var handler = new CollectionViewHandler();
+		handler.SetMauiContext(new GtkMauiContext(services));
+		try
+		{
+			handler.SetVirtualView(collection);
+			window.SetChild(handler.PlatformView);
+			WaitUntil(() => created.Count(view => view.Parent == collection && IsAllocated(view)) == 2);
+			collection.SelectedItem = source[1];
+			var selected = collection.SelectedItem;
+			var selectedItems = collection.SelectedItems;
+			var changes = 0;
+			collection.SelectionChanged += (_, _) => changes++;
+			foreach (var templated in new[] { false, true })
+			{
+				collection.ItemTemplate = templated ? BoundTemplate() : null;
+				WaitUntil(() => ((IVisualTreeElement)collection).GetVisualChildren().Count == (templated ? 2 : 0) &&
+					NativeLabelTexts(handler.PlatformView).Contains("Second"));
+				var list = Assert.IsType<Gtk.ListView>(handler.PlatformView.GetChild());
+				Assert.Equal(1u, Assert.IsType<Gtk.SingleSelection>(list.GetModel()).GetSelected());
+				Assert.Same(selected, collection.SelectedItem);
+				Assert.Same(selectedItems, collection.SelectedItems);
+				Assert.Equal(0, changes);
+			}
+			var currentList = Assert.IsType<Gtk.ListView>(handler.PlatformView.GetChild());
+			Assert.IsType<Gtk.SingleSelection>(currentList.GetModel()).SetSelected(0);
+			Assert.Equal("First", collection.SelectedItem);
+
+			source.Clear();
+			WaitUntil(() => NativeLabelTexts(handler.PlatformView).Contains("No cards"));
+			collection.ItemTemplate = BoundTemplate();
+			Assert.Equal("No cards", Assert.IsType<Gtk.Label>(handler.PlatformView.GetChild()).GetText());
+			source.Add("Third");
+			WaitUntil(() => created.Any(view => view.Parent == collection && view.Text == "Third" && IsAllocated(view)));
+			Assert.Same(source, collection.ItemsSource);
+			Assert.Single(((IVisualTreeElement)collection).GetVisualChildren());
+			output.WriteLine("Template refresh retained selection, empty view and observable updates.");
 		}
 		finally
 		{
