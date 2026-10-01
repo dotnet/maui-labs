@@ -36,9 +36,16 @@ public class ContentViewClippingTests(ITestOutputHelper output)
 		var host = (Gtk.Widget)content.ToPlatform(context);
 		var childWidget = (Gtk.Widget)child.Handler!.PlatformView!;
 		using var root = Gtk.Fixed.New();
-		using var css = Gtk.CssProvider.New();
-		css.LoadFromString("fixed { background-color: white; }");
-		root.GetStyleContext().AddProvider(css, Gtk.Constants.STYLE_PROVIDER_PRIORITY_APPLICATION);
+		using var background = Gtk.DrawingArea.New();
+		background.SetContentWidth(300);
+		background.SetContentHeight(200);
+		background.SetDrawFunc((area, cr, width, height) =>
+		{
+			cr.SetSourceRgba(1, 1, 1, 1);
+			cr.Rectangle(0, 0, width, height);
+			cr.Fill();
+		});
+		root.Put(background, 0, 0);
 		root.Put(host, 80, 60);
 		using var window = Gtk.Window.New();
 		window.SetChild(root);
@@ -104,7 +111,7 @@ public class ContentViewClippingTests(ITestOutputHelper output)
 
 				lastPixels = new byte[width * height * 4];
 				gdk_texture_download(texture.Handle.DangerousGetHandle(), lastPixels, (nuint)(width * 4));
-				matches = IsRed(lastPixels, width, 100, 90) &&
+				matches = IsWhite(lastPixels, width, 20, 20) && IsRed(lastPixels, width, 100, 90) &&
 					(clipped ? IsWhite(lastPixels, width, 60, 45) : IsRed(lastPixels, width, 60, 45));
 				if (matches || timer.Elapsed > TimeSpan.FromSeconds(4.5))
 				{
@@ -120,7 +127,8 @@ public class ContentViewClippingTests(ITestOutputHelper output)
 				Thread.Sleep(1);
 			}
 
-			output.WriteLine($"{phase}: inside={Pixel(lastPixels, width, 100, 90)}, header={Pixel(lastPixels, width, 60, 45)}, clipped={clipped}; {state}");
+			output.WriteLine($"{phase}: background={Pixel(lastPixels, width, 20, 20)}, inside={Pixel(lastPixels, width, 100, 90)}, header={Pixel(lastPixels, width, 60, 45)}, clipped={clipped}; {state}");
+			Assert.True(lastPixels != null && IsWhite(lastPixels, width, 20, 20), "Native test background did not paint white.");
 			Assert.True(matches, $"Native paint did not respect clipping during {phase}; header={Pixel(lastPixels, width, 60, 45)}.");
 		}
 	}
