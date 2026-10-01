@@ -17,6 +17,7 @@ public static class ScenarioRegistry
     public static void Register(RuntimeScenario scenario)
     {
         if (string.IsNullOrWhiteSpace(scenario.Name) ||
+            !char.IsAsciiLetterLower(scenario.Name[0]) ||
             scenario.Name.Any(c => !(char.IsAsciiLetterLower(c) || char.IsAsciiDigit(c) || c == '-')) ||
             scenario.ExpectedCases <= 0 || scenario.ExpectedAssertions is <= 0 ||
             scenario.TimeoutSeconds <= 0 ||
