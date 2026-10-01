@@ -11,7 +11,8 @@ static class Registration
 {
     [ModuleInitializer]
     public static void Register() =>
-        ScenarioRegistry.Register(new("picker", 19, context => new PickerScenario().CreateDelegate(context)));
+        ScenarioRegistry.Register(new("picker", 19, context => new PickerScenario().CreateDelegate(context),
+            ExpectedAssertions: 31));
 }
 
 sealed class PickerScenario : MauiRuntimeScenario
@@ -37,6 +38,7 @@ sealed class PickerScenario : MauiRuntimeScenario
                 "Original unselected Picker displays the first native item.");
             evidence.BaselineFailure("picker.unselected-first-item",
                 "BASELINE_563: unselected untitled Picker displays January.");
+            return Task.CompletedTask;
         }
 
         Check("initial", -1, -1, "", picker, native, evidence);
@@ -107,9 +109,12 @@ sealed class PickerScenario : MauiRuntimeScenario
         evidence.Assert(picker.SelectedIndex == selected && native.IndexOfSelectedItem == nativeSelected &&
             native.Title == title && (nativeSelected != -1 || native.SelectedItem == null),
                 $"{scenario}: expected managed={selected}, native={nativeSelected}, title='{title}'; " +
-                $"actual managed={picker.SelectedIndex}, native={native.IndexOfSelectedItem}, title='{native.Title}'.");
+                $"actual managed={picker.SelectedIndex}, native={native.IndexOfSelectedItem}, " +
+                $"title='{native.Title}', native item='{native.SelectedItem?.Title ?? "<null>"}'.",
+                $"picker.{scenario}");
         if (selected == -1)
-            evidence.Assert(picker.SelectedItem == null, $"{scenario}: unselected Picker has no managed SelectedItem.");
+            evidence.Assert(picker.SelectedItem == null, $"{scenario}: unselected Picker has no managed SelectedItem.",
+                $"picker.{scenario}.managed-item");
         evidence.Pass(scenario);
     }
 

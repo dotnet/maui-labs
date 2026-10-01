@@ -75,6 +75,9 @@ Layout retains six cases; case counts are not assertion counts.
 Picker retains its 19 state-transition cases, `states.jsonl`, initial/final
 native captures and the exact `BASELINE_563` sentinel. Its shared MAUI adapter
 creates the same real window, rather than simulating a handler in isolation.
+The Picker contract requires all 31 assertions. Its exit-42 baseline is deliberately
+exact: the pinned handler displays January while the managed picker is unselected.
+A different mismatch fails normally, not as a successful reproduction of #563.
 
 Exceptions go to `context.Fail` (exit 1). A deliberately observed regression can
 call `BaselineFailure(id, message)` (exit 42), after recording its concrete

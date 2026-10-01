@@ -1,6 +1,7 @@
 {
   "name": "picker",
   "expectedCases": 19,
+  "expectedAssertions": 31,
   "evidence": ["initial.png", "states.jsonl", "assertions.txt"],
   "fixedEvidence": ["final.png"],
   "baseline": {
