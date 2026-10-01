@@ -143,18 +143,20 @@ dotnet build platforms/MacOS/MacOS.slnx
 dotnet run --project platforms/MacOS/samples/MacOS.Sample/
 ```
 
-## Dynamic layout regression
+## Native runtime scenarios
 
-On a macOS desktop session, run the native regression executable:
+On macOS, run a registered scenario through the shared native host:
 
 ```bash
-dotnet run --project platforms/MacOS/tests/LayoutRegressionTests/LayoutRegressionTests.csproj
+export NUGET_PACKAGES="$PWD/.packages"
+python3 -B platforms/MacOS/tests/MacOS.RuntimeTests/run.py \
+  --scenario layout --evidence "$PWD/artifacts/layout-run"
 ```
 
 It opens an AppKit window and mutates a MAUI layout after its handler connects.
 It checks nested child bounds, native insertion order, replacement, removal,
 clear, and re-addition without resizing the window. Failures exit with code 1;
-success prints a `PASS` line for each scenario and exits with code 0. A 30-second
+success prints a `PASS` line for each of the six cases and exits with code 0. A 90-second
 watchdog fails a hung run.
 This executable uses the AppKit main thread and is not a `dotnet test` project.
 Building it on Windows does not validate AppKit behavior. For a before/after
@@ -162,13 +164,16 @@ comparison, run the same executable with `LayoutHandler`'s constructor passing
 only `Mapper` (the original behavior), then with `Mapper, CommandMapper`.
 The original behavior must fail the first dynamic addition check.
 
-The `Native dynamic layout regression` CI job performs that comparison on a
-GitHub-hosted macOS runner. Its `appkit-layout-runtime` artifact contains both
+The shared `AppKit runtime` CI matrix performs that comparison on a
+GitHub-hosted macOS runner. Its `appkit-runtime-layout-default` artifact contains both
 process logs, native view screenshots and managed/native bounds after addition.
 Screenshots use Aqua appearance and composite transparent view backgrounds over
 white so native text remains readable in dark artifact viewers.
-Set `APPKIT_LAYOUT_ARTIFACTS` to an output directory to capture the same evidence
-when running locally. Hosted execution is distinct from a local desktop run.
+The required evidence directory also receives strict machine-readable terminal
+results and assertion counts. Hosted execution is distinct from a local desktop run.
+See [the shared host contract](tests/MacOS.RuntimeTests/README.md) to add a scenario,
+version matrix entry or scoped fixture assets without another application/project.
+Portable `MacOS.Tests` remains independent of native AppKit execution.
 
 ## Unit tests
 
