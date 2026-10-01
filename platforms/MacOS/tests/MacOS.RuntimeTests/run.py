@@ -76,6 +76,20 @@ class BuildOutput:
     binlog: Path
 
 
+def read_build_output(metadata, log, binlog, app_root=None):
+    paths = metadata.read_text().splitlines()
+    if len(paths) != 2 or any(not path or not Path(path).is_absolute() for path in paths):
+        raise ValueError("Build metadata must contain exactly one absolute bundle and executable path.")
+    bundle, executable = (Path(path).resolve(strict=True) for path in paths)
+    if not bundle.is_dir() or bundle.suffix != ".app" or not executable.is_file():
+        raise ValueError("Build metadata must identify an existing .app and native executable.")
+    if executable.parent != bundle / "Contents" / "MacOS":
+        raise ValueError("Native executable must be inside the reported app bundle.")
+    if app_root is not None and not bundle.is_relative_to(Path(app_root).resolve()):
+        raise ValueError("Reported bundle is outside the requested app_root.")
+    return BuildOutput(executable, bundle, log, binlog)
+
+
 class RuntimeRunner:
     """Shared stage primitives for scenario drivers (build, publish, launch, source overlays)."""
 
@@ -122,7 +136,13 @@ class RuntimeRunner:
 
     def build(self, stage, properties=None, publish=False, configuration="Debug", extra_args=(), app_root=None):
         directory = self.stage_directory(stage)
+        metadata = directory / "sdk-build-output.txt"
+        if metadata.exists():
+            raise RuntimeError(f"Refusing stale build metadata: {metadata}")
         properties = dict(properties or {})
+        if "RuntimeTestBuildMetadata" in properties:
+            raise ValueError("The runner owns RuntimeTestBuildMetadata.")
+        properties["RuntimeTestBuildMetadata"] = str(metadata)
         properties.setdefault("RuntimeTestScenario", self.name)
         properties.setdefault("ContinuousIntegrationBuild", "true")
         properties.setdefault("ValidateXcodeVersion", "true")
@@ -140,16 +160,8 @@ class RuntimeRunner:
         self.command([REPO / "eng/common/dotnet.sh", "publish" if publish else "build",
                       self.project, "-c", configuration, "-m:1", "-nr:false", f"-bl:{binlog}",
                       *arguments, *extra_args], log)
-        search_root = Path(app_root) if app_root else REPO / "artifacts/bin/MacOS.RuntimeTests" / configuration
-        candidates = list(search_root.glob("**/*.app/Contents/MacOS/MacOS.RuntimeTests"))
-        if publish:
-            candidates = [path for path in candidates if "publish" in path.relative_to(search_root).parts]
-        else:
-            candidates = [path for path in candidates if "publish" not in path.relative_to(search_root).parts]
-        if len(candidates) != 1:
-            raise RuntimeError(f"Expected one native executable under {search_root}, found {candidates}")
-        executable = candidates[0].resolve()
-        output = BuildOutput(executable, executable.parents[2], log, binlog)
+        output = read_build_output(metadata, log, binlog, app_root)
+        executable = output.executable
         (directory / "build-output.json").write_text(json.dumps({
             "executable": str(output.executable), "bundle": str(output.bundle),
             "properties": properties, "configuration": configuration, "publish": publish
