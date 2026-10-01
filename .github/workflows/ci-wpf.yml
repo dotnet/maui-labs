@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'platforms/Windows.WPF/**'
+      - 'platforms/Shared/Essentials*/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -15,6 +16,7 @@ on:
     types: [opened, synchronize, reopened, edited]
     paths:
       - 'platforms/Windows.WPF/**'
+      - 'platforms/Shared/Essentials*/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
