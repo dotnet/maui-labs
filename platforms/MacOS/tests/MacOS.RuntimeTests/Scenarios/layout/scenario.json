@@ -1,6 +1,7 @@
 {
   "name": "layout",
   "expectedCases": 6,
+  "expectedAssertions": 28,
   "evidence": ["after-add.json", "after-add.png", "assertions.txt"],
   "baseline": {
     "source": "platforms/MacOS/src/MacOS/Handlers/LayoutHandler.cs",

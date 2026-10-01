@@ -14,7 +14,8 @@ static class Registration
 {
     [ModuleInitializer]
     public static void Register() =>
-        ScenarioRegistry.Register(new("layout", 6, context => new RegressionDelegate(context)));
+        ScenarioRegistry.Register(new("layout", 6, context => new RegressionDelegate(context),
+            ExpectedAssertions: 28));
 }
 
 public sealed class TestApplication : Application
