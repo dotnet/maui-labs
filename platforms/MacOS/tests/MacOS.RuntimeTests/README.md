@@ -5,6 +5,14 @@ test app. Portable `MacOS.Tests` remains a separate `net10.0` xUnit project.
 Native scenarios share one executable, project, process bootstrap and CI runner.
 Every launch selects exactly one registered scenario in a fresh process.
 
+The dialog scenarios replace the standalone `AlertRegistrationProbe` app:
+`dialog-registration` checks the actual MAUI-consumed subscription, AppKit proxy
+and singleton registration across MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110.
+`dialogs` runs at 10.0.70, first restoring only the legacy registration logic to
+prove the missing service in a real window, then verifying fixed native action
+sheets, prompts and alerts with visible-sheet captures and typed task results.
+A timeout is a failure, not accepted baseline evidence.
+
 ## Run on macOS
 
 Use the repository SDK, macOS workload 10.0.203 and Xcode 26.3:

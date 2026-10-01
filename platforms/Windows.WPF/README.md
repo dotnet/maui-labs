@@ -271,6 +271,11 @@ dotnet test tests\UITests\UITests.csproj --no-build
 
 ## Testing
 
+The `ci-wpf.yml` compatibility matrix runs `AlertManagerSubscriptionTests` in the
+existing `HandlerTests` project against MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110
+through the shared build workflow's targeted test mode. These are registration
+contract tests, not native dialog interaction tests.
+
 The project includes **213 UI tests** covering all implemented controls, plus a **WinUI comparison framework** that captures side-by-side screenshots of the WPF and WinUI ControlGallery apps for visual parity validation.
 
 ```bash

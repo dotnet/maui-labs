@@ -347,6 +347,11 @@ From `platforms/Linux.Gtk4`, run:
 dotnet test tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
 ```
 
+The `ci-linux-gtk4.yml` compatibility matrix runs `AlertManagerSubscriptionTests`
+in this existing project against MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110
+through the shared build workflow's targeted test mode. These managed registration
+checks do not require GTK initialization and do not claim native UI coverage.
+
 ### Run the sample app
 
 ```bash

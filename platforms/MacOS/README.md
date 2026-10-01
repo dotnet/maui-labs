@@ -175,6 +175,12 @@ See [the shared host contract](tests/MacOS.RuntimeTests/README.md) to add a scen
 version matrix entry or scoped fixture assets without another application/project.
 Portable `MacOS.Tests` remains independent of native AppKit execution.
 
+The same host also registers `dialog-registration` (consumed MAUI interface,
+AppKit proxy and singleton contract) and `dialogs` (real Page action sheet, prompt
+and alert completion with native-sheet screenshots). The existing AppKit workflow
+tests registration on MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110; native dialogs
+run at 10.0.70 with an exact missing-subscription baseline and bounded fixed run.
+
 ## Unit tests
 
 The platform-neutral tests exercise the backend's managed lifecycle code using real MAUI
