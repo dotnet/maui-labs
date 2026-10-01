@@ -5,6 +5,14 @@ Use Microsoft Learn for platform/lifecycle guidance, GitHub release notes and
 tagged source for exact versions and APIs. Do not turn this snapshot into a
 future promise of Xcode 27.1 support.
 
+Authenticated GitHub release queries can include unpublished drafts. Require
+`draft: false`, a non-null `published_at`, and an actual publicly available
+version/workload set before recommending installation. Reject `TBD` placeholders
+and verify the corresponding packages through the permitted feeds. A published
+prerelease is not the same as a draft: the `prerelease` flag alone does not
+establish or rule out support. Report unavailable publication evidence as a
+blocker, not as permission to use draft instructions.
+
 ## Version decisions
 
 | App | Decision |

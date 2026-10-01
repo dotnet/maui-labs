@@ -67,10 +67,10 @@ public abstract class LinkAwareSceneDelegate : MauiUISceneDelegate
         foreach (var context in connectionOptions.UrlContexts.ToArray<UIOpenUrlContext>())
         {
             var url = context.Url;
-            pending.Enqueue(window => HandleColdUrl(window, url));
+            pending.Enqueue(window => HandleColdLaunchUrl(window, url));
         }
         foreach (var activity in connectionOptions.UserActivities.ToArray<NSUserActivity>())
-            pending.Enqueue(window => HandleColdActivity(window, activity));
+            pending.Enqueue(_ => HandleOriginalActivity(scene, activity));
 
         base.WillConnect(scene, session, connectionOptions);
     }
@@ -78,7 +78,8 @@ public abstract class LinkAwareSceneDelegate : MauiUISceneDelegate
     public override void OnActivated(UIScene scene)
     {
         base.OnActivated(scene);
-        HandleActivation(scene);
+        HandleExistingSceneActivation(scene);
+        HandleApplicationActivation(scene);
         if (Window is not UIWindow window)
             return; // Work remains queued until this scene has a window.
         while (pending.Count > 0)
@@ -89,29 +90,64 @@ public abstract class LinkAwareSceneDelegate : MauiUISceneDelegate
     {
         bool handled = base.OpenUrl(scene, contexts);
         foreach (var context in contexts.ToArray<UIOpenUrlContext>())
-            handled = HandleWarmUrl(scene, context.Url) | handled;
+            handled = HandleOriginalWarmUrl(scene, context.Url) | handled;
         return handled;
     }
 
     public override bool ContinueUserActivity(UIScene scene, NSUserActivity activity)
     {
         bool forwarded = base.ContinueUserActivity(scene, activity);
-        return HandleWarmActivity(scene, activity) | forwarded;
+        return HandleOriginalActivity(scene, activity) | forwarded;
     }
 
-    protected abstract void HandleActivation(UIScene scene);
-    protected abstract void HandleColdUrl(UIWindow window, NSUrl url);
-    protected abstract void HandleColdActivity(UIWindow window, NSUserActivity activity);
-    protected abstract bool HandleWarmUrl(UIScene scene, NSUrl url);
-    protected abstract bool HandleWarmActivity(UIScene scene, NSUserActivity activity);
+    protected abstract void HandleExistingSceneActivation(UIScene scene);
+    protected abstract void HandleApplicationActivation(UIScene scene);
+    protected abstract void HandleColdLaunchUrl(UIWindow window, NSUrl url);
+    protected abstract bool HandleOriginalWarmUrl(UIScene scene, NSUrl url);
+    protected abstract bool HandleOriginalActivity(UIScene scene, NSUserActivity activity);
 }
 ```
 
-`HandleActivation` must preserve **both** the former AppDelegate activation
-side effects and the custom scene delegate's existing activation side effects.
-Likewise, map the original warm URL/activity handlers and cold-launch work to
-the corresponding methods. Do not leave the AppDelegate activation override
-as the only delivery path because it predates this task.
+The two activation calls deliberately remain separate: one contains the custom
+scene delegate's existing implementation, the other the former AppDelegate
+implementation. Preserve both bodies, including their original logging;
+replacing two observers with one combined log loses a side effect.
+`base.OnActivated` supplies MAUI behavior, not the custom code being moved or
+replaced. Likewise, map the original warm URL/activity handlers and cold-launch
+work to the corresponding methods. Do not leave the AppDelegate activation
+override as the only delivery path because it predates this task.
+
+The URL helpers also have distinct owners. Move the original AppDelegate
+`OpenUrl` app-specific body into `HandleOriginalWarmUrl`; move the old
+FinishedLaunching URL/window initialization into `HandleColdLaunchUrl`.
+For a warm URL observer, retain its original logging even when no window is
+available. If the old override only logged and returned the base result,
+`HandleOriginalWarmUrl` must return **false** so the outer override keeps that
+base result. Returning true after logging changes an unhandled URL into a
+handled one. Setting a cold-launch window title is not a replacement for that
+observer, and cold-only initialization must not be added to warm delivery.
+Copy the original app behavior into these slots rather than inventing a new
+router from their names.
+
+To apply the abstract example, copy the existing statements into the matching
+helpers first, then connect the callbacks shown above. Remove slots that have
+no original behavior rather than inventing a route from a helper's name.
+Finally trace each connection-option loop through the queue drain to its
+implemented body. A comment-only title block or an undefined navigation helper
+is not a completed transformation, even if the accompanying mapping says it is.
+
+For activity overrides, the app helper still returns its original handled
+result (false for an observer). The override combines that result with the
+unconditional base result; a true Essentials/base result must not be discarded
+merely to force the entire override to return false. A Scene* registration
+returns only its own handled result instead.
+
+Warm and cold activities deliberately call the **same** original activity
+handler in the pattern. Under the application lifecycle, ContinueUserActivity can deliver
+an activity during a cold launch; under scenes, initial activities arrive in
+connection options. The absence of a UserActivities loop in the old
+FinishedLaunching does not mean there was no cold activity behavior to retain.
+An empty enumeration or a separate unimplemented cold hook loses that delivery.
 
 Window existence is enough for native title work, but not necessarily for
 Shell navigation. If navigation initializes asynchronously, drain at the

@@ -24,6 +24,12 @@ Run these from the app project. Use `--env Claude` or `--env VsCode` for those
 clients. Restart/reload the agent session if needed, then ask it to
 "Prepare this MAUI app for Xcode 27" (or explicitly use `maui-xcode27-migration`).
 The CLI installs instructions; the agent performs the migration.
+**Validation status:** this is a candidate for expert-reviewed testing, not a
+validated complex-migration workflow. Evaluated agents still left cold window
+work in AppDelegate or dropped additional cold URLs despite loading the skill
+and producing compilable code. Automatic selection is also not guaranteed;
+explicitly requesting the skill controls intent, not migration correctness.
+Inspect every callback mapping and validate with a matching released toolchain.
 
 **Availability:** the skill must exist in the public marketplace's selected
 revision before the commands can discover it. The `maui ai` command is present

@@ -120,6 +120,11 @@ maui ai add skill maui-xcode27-migration --env CopilotCli --yes
 Then ask the coding agent to prepare the app for Xcode 27. The CLI installs
 instructions, not an automatic project rewrite. This requires both a CLI build
 that exposes `ai add skill` and a catalog revision containing the skill.
+The skill is a **candidate for expert-reviewed testing**, not a validated
+complex-migration workflow: evaluated agents still lost cold-path behavior
+despite loading it and producing compilable code. Automatic selection is not
+guaranteed, and explicit invocation is not a correctness guarantee. Inspect all
+callback mappings and validate with a matching released toolchain.
 **A minimum published CLI version has not been established**; an older tool may
 print root help for `maui ai --help`, so check that actual `ai` commands appear.
 See the [skill catalog](../../plugins/README.md) for availability, client choices,

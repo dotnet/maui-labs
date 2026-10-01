@@ -1,18 +1,18 @@
 ---
 name: maui-xcode27-migration
 description: >-
-  Only for existing .NET MAUI iOS/Mac Catalyst apps needing Xcode 27.0
-  compatibility or SDK 27 scene-lifecycle repair. USE FOR: preparing a MAUI app for Xcode 27,
-  SDK 27 upgrades, or an app that builds but exits after its splash screen with
-  "UIScene lifecycle is required"; audit scene manifests, deployment targets,
-  AppDelegate callbacks, deep links, authentication, and quick actions even
-  when the request does not mention migration. Also use for an Xcode 27.0
-  workload mismatch audit (including when Xcode 27.1 is selected).
-  DO NOT USE FOR: iPhone Duo
-  hinge/layout work, Xcode 27.1 beta enablement, ordinary UI changes, non-MAUI
-  apps, listing installed Xcodes, new auth features unrelated to an SDK upgrade,
-  or projects without iOS/Mac Catalyst targets. Xcode being mentioned in an
-  otherwise unrelated request is not a reason to activate this skill.
+  USE FOR Xcode 27 compatibility decisions and migration of existing .NET MAUI
+  iOS/Mac Catalyst apps, INCLUDING partially migrated apps that already have
+  scene manifests/delegates but still use AppDelegate or application-level
+  callbacks. Load BEFORE file discovery; file access is not a prerequisite.
+  Existing scene files do not mean migration is finished. Also use for SDK 27
+  "UIScene lifecycle is required" startup failures, preserving warm/cold links
+  and quick actions during this upgrade, readiness/no-op audits, read-only
+  .NET 9/.NET 11 compatibility or pinning questions, and Apple 27.0 packs with
+  Xcode 27.1 mismatches. Compatibility audits do not authorize toolchain
+  installation or major upgrades. DO NOT USE FOR Android-only, Windows-only,
+  or no-Apple-head apps; ordinary UI or hinge/layout requests; listing Xcodes;
+  non-MAUI apps; or unrelated auth work, even if Xcode 27 is mentioned.
 ---
 
 # Xcode 27 compatibility for existing MAUI apps
@@ -25,25 +25,51 @@ apps built against SDK 27 and running on iOS 27 need the scene lifecycle.
 An existing binary built with an older SDK does not suddenly require a rebuild.
 This is not a foldable-layout migration or permission to use Xcode 27.1.
 
+**Preserve side effects, not obsolete delivery locations.** In a scene-enabled
+app, `AppDelegate.Window` is null **even in FinishedLaunching**; there is no
+"pre-scene window" exception. Keeping cold-only window initialization there
+does not preserve it. Move its original body to cold connection-option work
+that runs once the owning scene's window exists. Likewise, application-level
+`ContinueUserActivity` registration is not reached by scene forwarding: use
+`SceneContinueUserActivity` (or the verified scene override) for warm delivery
+and process cold `UserActivities` separately. Each custom shortcut registration,
+including a logging-only observer, must complete its own acknowledgement.
+These are migration requirements, not optional cleanup of old code.
+
 Obtain the project/solution, supported OS policy, current SDK/workload/package
-versions, selected Xcode, and any known startup error. For an audit-only or plan
-request, return findings in the response and stop before any edits, including
+versions, selected Xcode, and any known startup error. Match the requested mode:
+**implement/migrate** means edit the applicable files; **show/propose/explain**
+means provide concrete changes without editing; **audit-only** means findings
+without edits. When code changes are requested as a proposal, include the
+requested snippets and edit locations, not just filenames or a reference to
+this skill. Do not claim a proposal was applied. For an audit-only or plan
+request, stop before any edits, including
 "safe" partial scene migrations or version bumps. Do not restore or build during
 an audit-only request: those create `obj`/`bin` files even without source edits.
-Use file inspection and read-only version/property queries; if they cannot
-resolve without restore, report the missing evidence. Otherwise perform the read-only inventory first, resolve
-support decisions, then make the smallest safe changes.
+Use file inspection and read-only version/property queries when needed; if they
+cannot resolve without restore, report the missing evidence. Otherwise perform
+the read-only inventory first, resolve support decisions, then make the
+smallest safe changes.
 
-Read [compatibility.md](references/compatibility.md) for release evidence and
-[lifecycle.md](references/lifecycle.md) before changing callbacks. Recheck dated
-release facts against Microsoft Learn and the linked official release/source;
-do not treat a merged PR as an available workload.
+Read [compatibility.md](references/compatibility.md) for covered version
+decisions. Use its tagged evidence for those exact releases; check Microsoft
+Learn and the official release/source when the task depends on newer releases,
+uncovered versions, or current publication status. If that check is unavailable,
+date the known evidence and report what remains unverified. Do not infer
+publication from a merged PR. Read lifecycle references only when reconciling
+custom callbacks or scene behavior, not for every basic version audit.
 
 ## Workflow
 
 ### 1. Inventory before modifying the project or toolchain
 
-Read the applicable repository instructions and current diff. Locate all MAUI
+Read the applicable repository instructions and current diff. Inspect a supplied
+project path relative to the current workspace unless it is explicitly absolute.
+Prefer direct file reads and workspace-scoped glob/grep tools for discovery,
+not shell `find` pipelines: shell execution may be unavailable even when
+project file tools are available. Keep discovery under that workspace; never
+search the filesystem root for an app. If the supplied path is missing or
+inaccessible, report that blocker rather than broadening access. Locate all MAUI
 Apple heads (including conditional TargetFrameworks), imported
 Directory.Build.props/targets, Directory.Packages.props, global.json, NuGet.config,
 package references/lockfiles, platform source inclusions, Info.plist files,
@@ -52,6 +78,12 @@ Include CI SDK/workload/Xcode pins: changing a project SDK pin while leaving
 CI installing only the old SDK makes the migration fail on the build server.
 Do not assume an empty project-level MauiVersion means there is no version pin:
 the workload supplies defaults through BundledVersions.targets.
+
+For a conceptual audit or proposal with supplied configuration, distinguish
+those stated facts from locally verified facts. Do not probe an unrelated host
+toolchain or missing project tree to answer a configuration question. If the
+provided app is already correctly migrated, report no changes rather than
+rebuilding or repeating the migration.
 
 Use the project's own SDK selection and, where available:
 
@@ -86,6 +118,9 @@ version owner instead when centrally managed; preserve a newer compatible pin.
 Check explicit package versions and all MAUI packages for coherence. Do not
 insert a competing project pin that a later import overrides, and do not
 silently move between .NET major versions.
+For a conditional pin, verify when the condition is evaluated: an empty-only
+fallback does not replace an older value supplied by an earlier import. Inspect
+the effective result when possible; XML presence alone is not proof of resolution.
 Reconcile any approved project `global.json` update with its CI setup steps;
 this is distinct from changing the developer machine's global tool selection.
 If toolchain provisioning is outside the request, explicitly report the
@@ -110,11 +145,23 @@ keys and other platform-version declarations for conflicting values.
 
 For .NET 9, present an intentional .NET 10 upgrade plan: there are no .NET 9
 Apple 27 packs. For .NET 11 previews/RCs, check that exact release's support and
-forwarding APIs; do not pin .NET 10 packages into .NET 11. RC1 is not the .NET 10
-recipe. If Xcode does not match the installed Apple workload, stop before a
+forwarding APIs; do not pin .NET 10 packages into .NET 11. The documented
+**.NET 11 RC1 pairing requires Xcode 26.6**, not an arbitrary 26.x installation.
+RC1 has scene infrastructure but lacks the scene App Actions selector and
+Essentials URL/user-activity forwarding fixes. It is not the .NET 10 recipe.
+Keep that known RC1 pairing distinct from a fresh check for published RC2
+support; an unavailable publication lookup does not erase the tagged RC1 facts.
+If Xcode does not match the installed Apple workload, stop before a
 build and propose a supported pairing; do not infer 27.1 support from 27.0.
 
 ### 3. Reconcile scenes on each Apple head
+
+For an already configured head, read and preserve the existing Objective-C
+`[Register]` name and its `UISceneDelegateClassName` binding before changing
+callbacks. The CLR class name does not determine that registration string.
+Merge into the existing delegate instead of copying the new-head template
+below. If the actual binding is unavailable, report it as unresolved rather
+than guessing a default and claiming it was preserved.
 
 For a head without scene configuration, add `Platforms/iOS/SceneDelegate.cs`
 (and the equivalent file under `Platforms/MacCatalyst` for that head):
@@ -178,10 +225,61 @@ before editing. Leftover AppDelegate callbacks are unfinished migration work,
 even if a scene manifest already exists; reconcile their intended behavior
 rather than treating the presence of the manifest as a completed migration.
 
+For **MAUI 10.0.110**, use these verified subclass signatures at the edit point:
+
+| Callback | `MauiUISceneDelegate` override signature | Bodies to retain |
+|---|---|---|
+| Activation | `public override void OnActivated(UIScene scene)` | Existing scene activation **and** former application activation, separately. |
+| Warm URLs | `public override bool OpenUrl(UIScene scene, NSSet<UIOpenUrlContext> contexts)` | Original warm URL handler for every context, plus unconditional base forwarding. |
+| Warm activity | `public override bool ContinueUserActivity(UIScene scene, NSUserActivity activity)` | Original activity handler and its handled result, plus unconditional base forwarding. |
+
+These are MAUI APIs, not the similarly named native UIKit APIs. Keep the
+unconditional base call and combine its handled result with the app's result.
+The linked example supplies the complete implementation pattern; a signature
+alone is not an implementation of the app's original behavior.
+
+An existing `OnActivated(UIScene)` method is **not** evidence that a separate
+`AppDelegate.OnActivated(UIApplication)` body was moved. The additive shape is:
+
+```csharp
+public override void OnActivated(UIScene scene)
+{
+    base.OnActivated(scene);
+    HandleExistingSceneActivation(scene);
+    HandleApplicationActivation(scene);
+}
+```
+
+Extract the two original custom bodies into those helpers before wiring the
+calls; they are not framework APIs or empty placeholders. Keep the existing
+scene method's work and add the former application method's work. The reference
+example includes the required helper declarations and deferred queue drain.
+A mapping such as "AppDelegate.OnActivated -> existing scene OnActivated,
+unchanged" fails this audit unless the original application body is actually
+called there.
+
+Preserve **handled results** as well as side effects. If the original warm URL
+override only logged and returned its base result, its scene equivalent keeps
+that result:
+
+```csharp
+bool forwarded = base.OpenUrl(scene, contexts);
+foreach (var context in contexts.ToArray<UIOpenUrlContext>())
+    ObserveOriginalWarmUrl(context.Url);
+return forwarded;
+```
+
+`ObserveOriginalWarmUrl` contains the original logging body. If extracted as
+a bool-returning helper instead, it returns **false**, not true: observing a
+URL does not handle it. Only real app handling may add a true result.
+
 - Before editing, make a before/after mapping of every custom callback's side
   effects, including logging-only observers and multiple registrations of the
   same event. After editing, verify each side effect still has a delivery path.
-  A compiling manifest does not prove behavior was preserved.
+  Follow each path from its scene callback or registration through any helpers
+  to the moved body. Include those bodies in concrete proposals too: an
+  undefined helper, empty block, or comment describing the old work does not
+  implement it. A compiling manifest does not prove behavior was preserved.
 - Explicitly wire `OnActivated`, `OnResignActivation`, `DidEnterBackground`,
   and `WillEnterForeground` behavior to `SceneOnActivated`,
   `SceneOnResignActivation`, `SceneDidEnterBackground`, and
@@ -196,6 +294,8 @@ rather than treating the presence of the manifest as a completed migration.
   mode. Defer window-dependent initialization until the scene's window exists.
 - Handle warm and cold links separately. SceneWillConnect receives connection
   options before the MAUI window is created; queue cold navigation until ready.
+  Retain every cold URL context in per-scene pending work; a single pending-URL
+  field can overwrite earlier inputs before the window is ready.
   If the app has a ContinueUserActivity handler, moving it to
   SceneContinueUserActivity only repairs **warm** delivery. Also enumerate
   `connectionOptions.UserActivities` and queue that app-specific activity
@@ -230,7 +330,28 @@ or explicitly return an unresolved-behavior report without calling the partial
 patch complete. Preserving a pre-existing missing shortcut acknowledgement
 "unchanged" is not safe: the scene dispatch now depends on that acknowledgement.
 
-### 5. Validate and report honestly
+### 5. Run a read-only completion audit
+
+Use the workspace's file-search tool on the edited source, even when shell or
+build commands are unavailable. These searches are conservative warning
+signals, not semantic proof:
+
+| Scope | Search expression | Investigate each match |
+|---|---|---|
+| Apple AppDelegate files | `\b(Window|LaunchOptionsUrlKey)\b` | Window-dependent work still in FinishedLaunching is not repaired by calling it cold-only. Its replacement must consume the owning scene's `connectionOptions.UrlContexts`, not a launch URL cached on AppDelegate and reused across scenes. |
+| Apple C# source using MAUI 10.0.110 | `override\s+void\s+(OpenUrlContexts|ContinueUserActivity)\b` | These are not the MAUI bool override signatures; read the tagged API reference before replacing them. |
+| Lifecycle-registration source | `\.ContinueUserActivity\s*\(\s*\(` | An application-level registration does not receive scene delivery. Verify its original body has a reachable scene counterpart. |
+| Scene connection code | `UserActivities` | If an app activity handler exists, verify cold elements reach its actual body, not just an empty loop or a comment. |
+
+Also search for each original callback's business calls and logging messages
+from the inventory. Read the containing methods and helper implementations:
+the existing scene activation observation does not substitute for a different
+application activation observation. Follow both cold collections through any
+queue to their real side effects. Record file/method evidence for every mapped
+body. Resolve warnings or report the exact blocker; a summary table asserting
+preservation cannot override a missing implementation in the files.
+
+### 6. Validate and report honestly
 
 Check XML/plist structure (on macOS `plutil -lint -- <path>`), inspect the
 evaluated package/minimum versions, and review the diff for preserved settings.
