@@ -125,7 +125,7 @@ public class ShellItemsHandlerTests
 			if (changeData)
 			{
 				Assert.Same(originalTemplate, surface == "Header" ? shell.FlyoutHeaderTemplate : shell.FlyoutFooterTemplate);
-				var entry = Assert.Single(created[surface].Where(entry => ReferenceEquals(entry.Handler?.PlatformView, after)));
+				var entry = Assert.Single(created[surface], entry => ReferenceEquals(entry.Handler?.PlatformView, after));
 				Assert.Equal("Updated data", entry.BindingContext);
 			}
 			else
