@@ -6,6 +6,7 @@ on:
     paths:
       - 'src/AIExtensions/**'
       - 'tests/AIExtensions/**'
+      - 'samples/AIExtensions.Sample.ChatPlayground/**'
       - 'src/AI/**'
       - 'eng/**'
       - 'Directory.Build.props'
@@ -18,6 +19,7 @@ on:
     paths:
       - 'src/AIExtensions/**'
       - 'tests/AIExtensions/**'
+      - 'samples/AIExtensions.Sample.ChatPlayground/**'
       - 'src/AI/**'
       - 'eng/**'
       - 'Directory.Build.props'
@@ -35,3 +37,16 @@ jobs:
       run-tests: true
       pack: true
       install-workloads: false
+
+  sample:
+    uses: ./.github/workflows/_build.yml
+    with:
+      project-path: samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj
+      project-name: ai-chat-playground
+      os: '["macos-26"]'
+      run-tests: false
+      pack: false
+      install-workloads: true
+      workload-version: '10.0.401'
+      xcode-version: '26.6'
+      android-project: src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj
