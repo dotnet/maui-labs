@@ -96,7 +96,8 @@ included file uses its filename). Nested folders are preserved, so files with
 the same basename in different logical folders remain distinct. Do not prefix
 the runtime name with `Resources\Raw`.
 
-Run `eng\smoke-tests\wpf-assets-smoke-test.ps1` on Windows to build and run the
+Run `eng\smoke-tests\wpf-assets-smoke-test.ps1 -RuntimeIdentifier win-x64` on
+Windows (choose the RID matching your selected `dotnet` host) to build and run the
 existing `Windows.WPF.Sample` with `-p:WpfTestScenarios=true`, then publish it
 without rebuilding and run it again. The opt-in `--test-scenario packaged-assets`
 entrypoint uses the actual DI-registered WPF file system without opening a window
@@ -109,6 +110,8 @@ The same asset definitions and expected contents are reused by `HandlerTests`,
 while the smoke verifies the real sample build/publish output through the shipping
 backend MSBuild target. `-TargetsFile` can select a historical target file for
 regression reproduction; it never changes the shipped target.
+The same explicit RID is used for build and no-build publish so Razor's generated
+manifests are read from the directory where the build wrote them.
 
 ## Samples
 

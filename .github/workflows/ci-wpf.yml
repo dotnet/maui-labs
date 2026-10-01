@@ -54,4 +54,4 @@ jobs:
           eng\smoke-tests\wpf-template-smoke-test.ps1 -SdkDirectory $sdkDirectory
       - name: Verify sample packaged asset build and publish runtime paths
         shell: pwsh
-        run: eng\smoke-tests\wpf-assets-smoke-test.ps1
+        run: eng\smoke-tests\wpf-assets-smoke-test.ps1 -RuntimeIdentifier win-x64

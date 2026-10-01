@@ -3,6 +3,9 @@ param(
     [string] $DotNet = 'dotnet',
     [string] $ArtifactsDirectory,
     [string] $TargetsFile,
+    [Parameter(Mandatory)]
+    [ValidateSet('win-x64', 'win-arm64', 'win-x86')]
+    [string] $RuntimeIdentifier,
     [switch] $SkipMauiWorkload
 )
 
@@ -28,7 +31,9 @@ function Invoke-DotNet {
     }
 }
 
-$properties = @('-m:1', '-nr:false', '-p:Configuration=Release', '-p:WpfTestScenarios=true', "-p:OutputPath=$build\")
+# MAUI publish infers a Windows RID; use the same RID for build so Razor's manifests exist for no-build publish.
+$properties = @('-m:1', '-nr:false', '-p:Configuration=Release', '-p:WpfTestScenarios=true',
+    "-p:RuntimeIdentifier=$RuntimeIdentifier", '-p:SelfContained=false', "-p:OutputPath=$build\")
 if ($TargetsFile) {
     $properties += "-p:WpfTestTargetsPath=$((Resolve-Path -LiteralPath $TargetsFile).Path)"
 }
