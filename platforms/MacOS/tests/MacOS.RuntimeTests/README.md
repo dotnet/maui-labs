@@ -128,7 +128,8 @@ shared primitives instead of cloning bootstrap/build/CI code:
   (`executable`, actual `bundle`, `log`, `binlog`). Per-stage MSBuild overrides
   support package versions/sources and historical targets.
   The host records the Apple SDK's resolved `AppBundleDir` and `_NativeExecutable`
-  after Build/Publish; the runner requires fresh metadata and existing outputs.
+  after the requested Build or Publish target (not the intermediate Build within
+  Publish); the runner owns that selector and requires fresh metadata and existing outputs.
   Publishing without an installer may retain the normal `.app` output location:
   the runner does not assume a `publish` directory or copy the bundle.
   Optional `app_root` constrains the reported bundle, rather than overriding discovery.

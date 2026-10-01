@@ -92,12 +92,25 @@ class BuildOutputTests(unittest.TestCase):
         self.assertEqual(output.bundle, self.bundle)
         self.assertEqual(output.executable, self.executable)
 
+    def test_msbuild_utf8_bom_metadata_is_accepted(self):
+        self.metadata.write_text(f"{self.bundle}\n{self.executable}\n", encoding="utf-8-sig")
+        self.assertEqual(self.read_output().bundle, self.bundle)
+
+    def test_callers_cannot_override_the_recording_target_or_destination(self):
+        runner = RuntimeRunner("layout", self.root / "evidence")
+        for key in ("RuntimeTestBuildTarget", "RuntimeTestBuildMetadata"):
+            with self.subTest(key=key), patch.object(runner, "command") as command:
+                with self.assertRaisesRegex(ValueError, "runner owns"):
+                    runner.build("fixed", properties={key: "ignored"})
+                command.assert_not_called()
+
     def test_publish_uses_sdk_output_without_publish_directory(self):
         runner = RuntimeRunner("layout", self.root / "evidence")
 
         def command(args, log, **kwargs):
             if log.name == "build.log":
                 self.assertEqual(str(args[1]), "publish")
+                self.assertIn("-p:RuntimeTestBuildTarget=Publish", args)
                 metadata_arg = next(str(arg) for arg in args if str(arg).startswith("-p:RuntimeTestBuildMetadata="))
                 Path(metadata_arg.split("=", 1)[1]).write_text(f"{self.bundle}\n{self.executable}\n")
             elif log.name == "registry.json":
