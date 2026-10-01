@@ -67,7 +67,9 @@ public class ContentViewHandler : GtkViewHandler<IContentView, Platform.GtkLayou
 
 	public static void MapClipsToBounds(ContentViewHandler handler, IContentView contentView)
 	{
-		handler.PlatformView.SetOverflow(contentView is ILayout { ClipsToBounds: true } || contentView.Clip != null
+		// TemplatedView implements Controls.ILayout, not the core ILayout contract.
+		handler.PlatformView.SetOverflow(contentView is Microsoft.Maui.Controls.TemplatedView { IsClippedToBounds: true }
+			|| contentView is ILayout { ClipsToBounds: true } || contentView.Clip != null
 			? Gtk.Overflow.Hidden : Gtk.Overflow.Visible);
 	}
 
