@@ -1,6 +1,5 @@
 <Project>
   <Import Project="$(MacOSResourceTargets)" Condition="'$(RuntimeTestScenario)' == 'bundle-resources' and '$(RuntimeTestsUseProjectReferences)' == 'true'" />
-  <Import Project="$(MSBuildThisFileDirectory)ResourceItems.targets" Condition="'$(RuntimeTestScenario)' == 'bundle-resources'" />
 
   <Target Name="_RecordResourcePackageMode" BeforeTargets="Build;Publish"
           Condition="'$(RuntimeTestScenario)' == 'bundle-resources' and '$(RuntimeTestsUseProjectReferences)' == 'false'">
