@@ -118,4 +118,16 @@ public class AgentMetadataTests : IntegrationTestBase
             status.Capabilities!.Jobs,
             capabilities.GetProperty("capabilities").GetProperty("device.jobs").GetProperty("supported").GetBoolean());
     }
+
+    [Fact]
+    public async Task SyntheticTouchCapability_IsReportedOnlyWhereTheTierExists()
+    {
+        var status = await Client.GetStatusAsync();
+
+        Assert.NotNull(status?.Capabilities);
+        // The sample opts in everywhere, but the tier is UIKit-only: other platforms must
+        // report false rather than echo the option.
+        var expected = Platform is "ios" or "maccatalyst";
+        Assert.Equal(expected, status!.Capabilities!.SyntheticTouch);
+    }
 }

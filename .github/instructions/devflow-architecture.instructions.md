@@ -181,11 +181,17 @@ Override virtual methods from `Agent.Abstractions/DevFlowAgentService.cs`:
    recognizer exists, which is the case for Map, WebView and other controls that handle
    gestures internally. Override the `TryNative{Pinch,Rotate,Pan,Swipe,LongPress,DoubleTap}`
    virtuals; return a description string when handled, `null` when not.
-   - **Android** — real multi-pointer `MotionEvent`s dispatched via `Activity.DispatchTouchEvent`,
-     so the full hit-test and `GestureDetector` pipeline runs. Fully faithful.
-   - **iOS / Mac Catalyst** — MKMapView camera distance → UIScrollView zoom/offset → driving
-     the attached `UIGestureRecognizer` via `setState:`. In-process synthetic `UITouch` needs
-     private API and is not attempted, so the recognizer path is best-effort.
+   - **Android** — real multi-pointer `MotionEvent`s dispatched to the named element's native
+     view (or its MAUI container), with start points constrained to its visible bounds. The
+     activity's window hit-test and ancestor interception are intentionally bypassed so another
+     view cannot receive a gesture reported against the target.
+   - **iOS / Mac Catalyst** — MKMapView camera distance/centre → UIScrollView zoom/offset →
+     driving an attached `UIGestureRecognizer` via `setState:`. When `AgentOptions.EnableSyntheticTouch`
+     is enabled, MAUI's `GraphicsView` and explicitly registered raw-touch view types can also
+     receive synthesised `UITouch` sequences. This opt-in uses private UIKit ivars; ordinary
+     controls, scroll views, and recognizer-backed views are excluded. The status capability
+     `syntheticTouch` reports whether the tier is enabled on that backend. `SKCanvasView` is not
+     eligible because its touch handling is recognizer-backed.
    - **Windows** — `ScrollViewer.ChangeView`. Input injection needs the restricted
      `inputInjectionBrokered` capability and is unusable from a normal app package.
    - **macOS AppKit** — `NSScrollView` magnification and content offset.

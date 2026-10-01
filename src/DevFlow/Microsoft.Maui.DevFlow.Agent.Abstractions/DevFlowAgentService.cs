@@ -247,6 +247,10 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                     jobs = IsJobsSupported,
                     theme = IsThemeSupported,
                     mutationLease = _options.RequireMutationLease,
+                    // Whether gestures can reach views that take touches directly (GraphicsView)
+                    // rather than through a recognizer, so callers can tell a "no handler" apart
+                    // from a disabled tier.
+                    syntheticTouch = IsSyntheticTouchSupported,
                 },
                 running = IsAppBound,
                 // Current navigation route (null for backends without a router). Powers the
@@ -282,6 +286,12 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     /// <summary>Whether app theme endpoints are backed by an implementation.</summary>
     protected virtual bool IsThemeSupported => false;
+
+    /// <summary>
+    /// Whether gestures can be delivered as synthesised touches to raw-touch views. Only a
+    /// backend that implements the tier (iOS and Mac Catalyst) reports the opt-in option.
+    /// </summary>
+    protected virtual bool IsSyntheticTouchSupported => false;
 
     /// <summary>
     /// Reason surfaced to clients when a capability group is unavailable.

@@ -2970,6 +2970,12 @@ public class AgentCapabilities
     public bool Jobs { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("theme")]
     public bool Theme { get; set; }
+    /// <summary>
+    /// Whether gestures can be delivered as synthesised touches to raw-touch views such as
+    /// GraphicsView. True only on iOS and Mac Catalyst when the app enables the tier.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonPropertyName("syntheticTouch")]
+    public bool SyntheticTouch { get; set; }
 }
 
 public class NetworkRequest
