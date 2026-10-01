@@ -1,4 +1,4 @@
-namespace PackagedAssetsApp;
+namespace Microsoft.Maui.Platforms.Windows.WPF.Sample.TestScenarios;
 
 public static class AssetCases
 {

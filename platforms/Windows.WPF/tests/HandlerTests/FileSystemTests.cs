@@ -1,6 +1,6 @@
 using System.IO;
 using Microsoft.Maui.Platforms.Windows.WPF.Essentials;
-using PackagedAssetsApp;
+using Microsoft.Maui.Platforms.Windows.WPF.Sample.TestScenarios;
 
 namespace Microsoft.Maui.Platforms.Windows.WPF.Tests;
 

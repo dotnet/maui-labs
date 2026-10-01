@@ -52,6 +52,6 @@ jobs:
           & $dotnet (Join-Path $sdkDirectory 'dotnet.dll') workload install maui maui-tizen --version 10.0.203
           if ($LASTEXITCODE -ne 0) { throw 'Workload installation failed.' }
           eng\smoke-tests\wpf-template-smoke-test.ps1 -SdkDirectory $sdkDirectory
-      - name: Verify packaged asset build and publish runtime paths
+      - name: Verify sample packaged asset build and publish runtime paths
         shell: pwsh
         run: eng\smoke-tests\wpf-assets-smoke-test.ps1

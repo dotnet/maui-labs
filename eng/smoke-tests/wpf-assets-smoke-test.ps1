@@ -2,13 +2,14 @@
 param(
     [string] $DotNet = 'dotnet',
     [string] $ArtifactsDirectory,
+    [string] $TargetsFile,
     [switch] $SkipMauiWorkload
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$project = Join-Path $repo 'platforms\Windows.WPF\tests\PackagedAssetsApp\PackagedAssetsApp.csproj'
+$project = Join-Path $repo 'platforms\Windows.WPF\samples\Windows.WPF.Sample\Windows.WPF.Sample.csproj'
 if (-not $ArtifactsDirectory) {
     $ArtifactsDirectory = Join-Path $repo "artifacts\wpf-assets-$([Guid]::NewGuid().ToString('N'))"
 }
@@ -27,16 +28,19 @@ function Invoke-DotNet {
     }
 }
 
-$properties = @('-m:1', '-nr:false', '-p:Configuration=Release', "-p:OutputPath=$build\")
+$properties = @('-m:1', '-nr:false', '-p:Configuration=Release', '-p:WpfTestScenarios=true', "-p:OutputPath=$build\")
+if ($TargetsFile) {
+    $properties += "-p:WpfTestTargetsPath=$((Resolve-Path -LiteralPath $TargetsFile).Path)"
+}
 if ($SkipMauiWorkload) {
     $properties += '-p:UseMaui=false'
 }
 
 Invoke-DotNet (@('build', $project, '--nologo', '-v:minimal') + $properties)
-Invoke-DotNet @((Join-Path $build 'PackagedAssetsApp.dll'))
+Invoke-DotNet @((Join-Path $build 'Windows.WPF.Sample.dll'), '--test-scenario', 'packaged-assets')
 
 # A no-build publish must reconstruct the content items without relying on the Build target.
 Invoke-DotNet (@('publish', $project, '--no-build', '--no-restore', '--nologo', '-v:minimal',
     "-p:PublishDir=$publish\") + $properties)
-Invoke-DotNet @((Join-Path $publish 'PackagedAssetsApp.dll'))
+Invoke-DotNet @((Join-Path $publish 'Windows.WPF.Sample.dll'), '--test-scenario', 'packaged-assets')
 Write-Host "PASS: built and published assets opened through IFileSystem. Artifacts: $work"

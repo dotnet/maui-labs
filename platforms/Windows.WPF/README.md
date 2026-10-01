@@ -97,8 +97,18 @@ the same basename in different logical folders remain distinct. Do not prefix
 the runtime name with `Resources\Raw`.
 
 Run `eng\smoke-tests\wpf-assets-smoke-test.ps1` on Windows to build and run the
-asset probe, then publish it without rebuilding and run it again. The probe uses
-the actual DI-registered WPF file system, without opening a window.
+existing `Windows.WPF.Sample` with `-p:WpfTestScenarios=true`, then publish it
+without rebuilding and run it again. The opt-in `--test-scenario packaged-assets`
+entrypoint uses the actual DI-registered WPF file system without opening a window
+or starting DevFlow. Normal startup (no scenario argument) still opens the gallery.
+Scenario code and fixtures live under the sample's `TestScenarios` directory;
+additional runtime checks should use this shared host rather than new test apps.
+Launch scenarios with `dotnet Windows.WPF.Sample.dll --test-scenario <name>` to
+see console diagnostics; the normal Windows executable is a GUI application.
+The same asset definitions and expected contents are reused by `HandlerTests`,
+while the smoke verifies the real sample build/publish output through the shipping
+backend MSBuild target. `-TargetsFile` can select a historical target file for
+regression reproduction; it never changes the shipped target.
 
 ## Samples
 

@@ -4,18 +4,20 @@ using Microsoft.Maui.Hosting;
 using Microsoft.Maui.Platforms.Windows.WPF.Essentials;
 using Microsoft.Maui.Storage;
 
-namespace PackagedAssetsApp;
+namespace Microsoft.Maui.Platforms.Windows.WPF.Sample.TestScenarios;
 
-public static class Program
+public static class PackagedAssetsScenario
 {
-    [STAThread]
-    public static int Main()
+    public static int Run()
     {
         using var app = MauiApp.CreateBuilder().UseWPFEssentials().Build();
         var fileSystem = app.Services.GetRequiredService<IFileSystem>();
         var failures = 0;
+        var cases = AssetCases.All.ToArray();
+        if (cases.Length == 0)
+            throw new InvalidOperationException("No packaged asset cases were registered.");
 
-        foreach (var testCase in AssetCases.All)
+        foreach (var testCase in cases)
         {
             var name = (string)testCase[0];
             var expected = (string)testCase[1];
@@ -55,7 +57,7 @@ public static class Program
             Console.WriteLine("PASS missing asset: exists=false, open throws FileNotFoundException");
         }
 
-        Console.WriteLine($"Asset root: {AppContext.BaseDirectory}; failures: {failures}");
+        Console.WriteLine($"Asset root: {AppContext.BaseDirectory}; cases: {cases.Length}; failures: {failures}");
         return failures == 0 ? 0 : 1;
     }
 }
