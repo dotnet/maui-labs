@@ -251,6 +251,18 @@ If you added the optional Essentials package, also import
 `builder.AddLinuxGtk4Essentials()` before `builder.Build()`. Adding the package
 alone does not replace MAUI's portable Essentials implementations.
 
+When `Build()` returns, all registered static Essentials facades use the same
+instances as dependency injection, including application overrides registered
+before or after `AddLinuxGtk4Essentials()`. Call statics after `Build()`, not while
+configuring the builder. Unsupported desktop capabilities retain their existing
+stub behavior. Facades are process-wide: the most recently built app sets their
+instances, and callers must not use them after disposing that app.
+
+Run the behavioral registration regressions on Linux:
+`dotnet test platforms/Linux.Gtk4/tests/Essentials.Tests/Linux.Gtk4.Essentials.Tests.csproj`.
+Set `ESSENTIALS_NATIVE_GTK=1` under a real display (or `xvfb-run`) to also run the
+GTK application activation/display regression; otherwise that test is explicitly skipped.
+
 ## XAML Support
 
 `Microsoft.Maui.Platforms.Linux.Gtk4` relies on MAUI's normal transitive build assets for XAML.
