@@ -203,20 +203,32 @@ This bundles image sources as-is; it does not add Resizetizer resizing or SVG co
 Image names and font names must be unique within their respective bundle directories.
 Use `LogicalName` to preserve nested raw-asset paths.
 
-The resource regression fixture uses an actual AppKit app with external image/font/raw
-items and a local raw item also matched by the SDK glob. On macOS with Xcode and the
-MAUI/macOS workloads, run:
+The `bundle-resources` scenario runs inside the shared `MacOS.RuntimeTests` host,
+using external image/font/raw fixtures and a local raw item also matched by the
+SDK glob. On macOS with Xcode and the MAUI/macOS workloads, point the runner at
+freshly built core and Essentials packages and a new evidence directory:
 
-```powershell
-./platforms/MacOS/tests/BundleResources/Test-BundleResources.ps1
+```bash
+export RUNTIME_TEST_PACKAGES="$PWD/artifacts/packages"
+python3 -B platforms/MacOS/tests/MacOS.RuntimeTests/run.py \
+  --scenario bundle-resources --evidence "$PWD/artifacts/resources-run"
 ```
 
-It checks the produced `.app`, incremental builds and `dotnet publish` (without an
-installer package), then runs native MAUI image/label handlers and reads assets through
-the registered `IFileSystem`. CI also builds the historical failing targets and tests
-the newly packed NuGet packages. Logs, bundle listings and binlogs are uploaded as
-`appkit-bundle-resource-evidence`. These checks require macOS; item-mapping checks alone
-on Windows are not proof of rendering.
+The scenario's stage driver composes the common build/launch runner: historical
+target reproduction, clean package-consumer rebuild, incremental build and
+`dotnet publish` without an installer. Each native run verifies the produced `.app`,
+MAUI image/label handlers and raw content through registered `IFileSystem`.
+Logical paths include spaces, renamed assets and equal filenames in different
+folders. Shipping targets perform the bundling; the harness never copies resources.
+The same host also runs item-metadata assertions for normal mapping, platform guards
+and opt-out. Its package mode rejects ProjectReferences.
+
+The existing `native-runtime` CI matrix supplies the newly packed packages and uploads
+`appkit-runtime-bundle-resources-default` with strict terminal results, native captures,
+bundle inventory, package references and stage binlogs. All native rows wait for the
+product build; optional matrix `packages` and `workloads` inputs reuse common setup.
+These checks require macOS; item-mapping checks alone on Windows are not proof of
+rendering.
 
 ## MAUI DevFlow integration
 

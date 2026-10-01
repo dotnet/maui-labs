@@ -1,0 +1,13 @@
+<Project>
+  <Import Project="$(MacOSResourceTargets)" Condition="'$(RuntimeTestScenario)' == 'bundle-resources' and '$(RuntimeTestsUseProjectReferences)' == 'true'" />
+  <Import Project="$(MSBuildThisFileDirectory)ResourceItems.targets" Condition="'$(RuntimeTestScenario)' == 'bundle-resources'" />
+
+  <Target Name="_RecordResourcePackageMode" BeforeTargets="Build;Publish"
+          Condition="'$(RuntimeTestScenario)' == 'bundle-resources' and '$(RuntimeTestsUseProjectReferences)' == 'false'">
+    <Error Condition="'@(ProjectReference)' != ''" Text="Resource package-consumer verification must not use ProjectReferences." />
+    <Error Condition="'$(ResourceTestPackageVersion)' == ''" Text="Resource package-consumer verification requires an explicit package version." />
+    <WriteLinesToFile File="$(ResourcePackageEvidence)"
+                      Lines="@(PackageReference->'%(Identity)|%(VersionOverride)')"
+                      Overwrite="true" Condition="'$(ResourcePackageEvidence)' != ''" />
+  </Target>
+</Project>
