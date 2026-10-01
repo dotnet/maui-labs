@@ -25,9 +25,11 @@ This backend lets MAUI applications run as true native macOS apps that use AppKi
 Shell observes section and content selection changes, including `GoToAsync` and
 programmatic `CurrentItem` updates. The selected lazy page is created and hosted
 without requiring a manual handler refresh; unselected templates remain lazy.
-The `shell-section-regression` CI job runs a native AppKit harness against both
-the pre-fix revision and the current code and uploads screenshots and navigation
-assertions as `shell-section-appkit-runtime`.
+The shared `MacOS.RuntimeTests` host's `shell-sections` scenario exercises the
+pre-fix Shell handlers and the current code through full MAUI/AppKit startup.
+The `native-runtime` CI matrix uploads screenshots, navigation state and all 59
+assertions as `appkit-runtime-shell-sections-default`. See the
+[shared runner](tests/MacOS.RuntimeTests/README.md) for local macOS usage.
 
 ## Prerequisites
 
@@ -147,6 +149,38 @@ public class App : Application
 dotnet build platforms/MacOS/MacOS.slnx
 dotnet run --project platforms/MacOS/samples/MacOS.Sample/
 ```
+
+## Native runtime scenarios
+
+On macOS, run a registered scenario through the shared native host:
+
+```bash
+export NUGET_PACKAGES="$PWD/.packages"
+python3 -B platforms/MacOS/tests/MacOS.RuntimeTests/run.py \
+  --scenario layout --evidence "$PWD/artifacts/layout-run"
+```
+
+It opens an AppKit window and mutates a MAUI layout after its handler connects.
+It checks nested child bounds, native insertion order, replacement, removal,
+clear, and re-addition without resizing the window. Failures exit with code 1;
+success prints a `PASS` line for each of the six cases and exits with code 0. A 90-second
+watchdog fails a hung run.
+This executable uses the AppKit main thread and is not a `dotnet test` project.
+Building it on Windows does not validate AppKit behavior. For a before/after
+comparison, run the same executable with `LayoutHandler`'s constructor passing
+only `Mapper` (the original behavior), then with `Mapper, CommandMapper`.
+The original behavior must fail the first dynamic addition check.
+
+The shared `AppKit runtime` CI matrix performs that comparison on a
+GitHub-hosted macOS runner. Its `appkit-runtime-layout-default` artifact contains both
+process logs, native view screenshots and managed/native bounds after addition.
+Screenshots use Aqua appearance and composite transparent view backgrounds over
+white so native text remains readable in dark artifact viewers.
+The required evidence directory also receives strict machine-readable terminal
+results and assertion counts. Hosted execution is distinct from a local desktop run.
+See [the shared host contract](tests/MacOS.RuntimeTests/README.md) to add a scenario,
+version matrix entry or scoped fixture assets without another application/project.
+Portable `MacOS.Tests` remains independent of native AppKit execution.
 
 ## Unit tests
 
