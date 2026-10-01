@@ -279,6 +279,127 @@ public class CollectionViewHandlerTests
 	}
 
 	[Theory]
+	[InlineData(SelectionMode.Single, true)]
+	[InlineData(SelectionMode.Multiple, true)]
+	[InlineData(SelectionMode.Single, false)]
+	[InlineData(SelectionMode.Multiple, false)]
+	public void UngroupedItemTemplateChange_PreservesSelectedOccurrence(SelectionMode mode, bool equalItems)
+	{
+		Run((collection, handler, list, created) =>
+		{
+			collection.SelectionMode = mode;
+			collection.ItemsSource = equalItems ? new[] { "Same", "Same" } : new[] { "First", "Second" };
+			Realize(list);
+			list.SelectedIndex = 1;
+			Assert.Equal(1, list.SelectedIndex);
+			Assert.Single(list.SelectedItems);
+			Assert.True(Assert.IsType<WListBoxItem>(list.ItemContainerGenerator.ContainerFromIndex(1)).IsSelected);
+			Assert.False(Assert.IsType<WListBoxItem>(list.ItemContainerGenerator.ContainerFromIndex(0)).IsSelected);
+			var selectedItem = collection.SelectedItem;
+			var selectedItems = collection.SelectedItems;
+			var original = ((IVisualTreeElement)collection).GetVisualChildren().Cast<View>().ToArray();
+			var taps = 0;
+			var selectionChanges = 0;
+			collection.SelectionChanged += (_, _) => selectionChanges++;
+
+			collection.ItemTemplate = new DataTemplate(() =>
+			{
+				var label = new Label { Text = "Replacement" };
+				label.GestureRecognizers.Add(new TapGestureRecognizer { Command = new Command(() => taps++) });
+				return label;
+			});
+			Realize(list);
+
+			Assert.True(list.SelectedIndex == 1,
+				$"After template change, selected index was {list.SelectedIndex}; expected the original index 1.");
+			Assert.Single(list.SelectedItems);
+			Assert.True(Assert.IsType<WListBoxItem>(list.ItemContainerGenerator.ContainerFromIndex(1)).IsSelected);
+			Assert.False(Assert.IsType<WListBoxItem>(list.ItemContainerGenerator.ContainerFromIndex(0)).IsSelected);
+			Assert.Same(selectedItem, collection.SelectedItem);
+			Assert.Same(selectedItems, collection.SelectedItems);
+			Assert.Equal(0, selectionChanges);
+			Assert.Equal(0, taps);
+			Assert.All(original, view => Assert.Null(view.Parent));
+			Assert.All(((IVisualTreeElement)collection).GetVisualChildren(),
+				view => Assert.Equal("Replacement", Assert.IsType<Label>(view).Text));
+		});
+	}
+
+	[Theory]
+	[InlineData(true, "item")]
+	[InlineData(true, "header")]
+	[InlineData(true, "footer")]
+	[InlineData(false, "item")]
+	[InlineData(false, "header")]
+	[InlineData(false, "footer")]
+	public void GroupedTemplateChange_PreservesAssignedSourceRows(bool singlePass, string templateKind)
+	{
+		Run((collection, handler, list, created) =>
+		{
+			collection.ItemsSource = null;
+			collection.IsGrouped = true;
+			collection.GroupHeaderTemplate = new DataTemplate(() => new Label { Text = "Initial header" });
+			collection.ItemTemplate = new DataTemplate(() =>
+			{
+				var label = new Label();
+				label.SetBinding(Label.TextProperty, ".");
+				return label;
+			});
+			var source = new TrackingGroupedSource(singlePass);
+			collection.ItemsSource = source;
+			Realize(list);
+
+			Assert.Equal(1, source.EnumerationCount);
+			Assert.Equal(2, list.Items.Count);
+			var original = ((IVisualTreeElement)collection).GetVisualChildren().Cast<Label>().ToArray();
+			Assert.Equal(2, original.Length);
+			Assert.Contains(original, view => view.Text == "Initial header");
+			Assert.Contains(original, view => view.Text == "Grouped card");
+			Assert.All(original, view => Assert.Same(collection, view.Parent));
+			Assert.NotNull(list.ItemContainerGenerator.ContainerFromIndex(0));
+			Assert.NotNull(list.ItemContainerGenerator.ContainerFromIndex(1));
+
+			switch (templateKind)
+			{
+				case "item": collection.ItemTemplate = new DataTemplate(() => new Label { Text = "Replacement item" }); break;
+				case "header": collection.GroupHeaderTemplate = new DataTemplate(() => new Label { Text = "Replacement header" }); break;
+				case "footer": collection.GroupFooterTemplate = new DataTemplate(() => new Label { Text = "Replacement footer" }); break;
+				default: throw new ArgumentOutOfRangeException(nameof(templateKind));
+			}
+			Realize(list);
+
+			var expectedCount = templateKind == "footer" ? 3 : 2;
+			Assert.True(list.Items.Count == expectedCount,
+				$"After {templateKind} template change, rows were {list.Items.Count}; expected {expectedCount}. Source enumerations: {source.EnumerationCount}.");
+			Assert.Same(source, collection.ItemsSource);
+			Assert.All(original, view => Assert.Null(view.Parent));
+			var current = ((IVisualTreeElement)collection).GetVisualChildren().Cast<Label>().ToArray();
+			Assert.Equal(expectedCount, current.Length);
+			Assert.All(current, view => Assert.Same(collection, view.Parent));
+			Assert.Contains(current, view => view.Text == $"Replacement {templateKind}");
+			Assert.Contains(current, view => view.Text == (templateKind == "item" ? "Initial header" : "Grouped card"));
+		});
+	}
+
+	sealed class TrackingGroupedSource(bool singlePass) : System.Collections.IEnumerable
+	{
+		public int EnumerationCount { get; private set; }
+
+		public System.Collections.IEnumerator GetEnumerator()
+		{
+			EnumerationCount++;
+			return singlePass && EnumerationCount > 1
+				? Array.Empty<object>().GetEnumerator()
+				: Groups().GetEnumerator();
+		}
+
+		static System.Collections.IEnumerable Groups()
+		{
+			yield return new[] { "Grouped card" };
+		}
+	}
+
+	[Theory]
 	[InlineData(SelectionMode.Single)]
 	[InlineData(SelectionMode.None)]
 	public void SelectingEqualItems_FiresGestureOnTheSelectedContainer(SelectionMode mode)

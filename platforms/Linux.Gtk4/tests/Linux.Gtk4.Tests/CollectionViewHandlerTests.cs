@@ -5,11 +5,12 @@ using Microsoft.Maui.Hosting;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Handlers;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Hosting;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
+using Xunit.Abstractions;
 
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Tests;
 
 [Collection("GTK runtime")]
-public class CollectionViewHandlerTests
+public class CollectionViewHandlerTests(ITestOutputHelper output)
 {
 	[GtkRuntimeFact]
 	public void NativeFactory_ParentsRealizedItems_AndCleansUpOnReloadRebuildAndDisconnect()
@@ -178,12 +179,106 @@ public class CollectionViewHandlerTests
 			Assert.Empty(((IVisualTreeElement)collection).GetVisualChildren());
 			((IElementHandler)handler).DisconnectHandler();
 			Assert.All(connected, item => Assert.Equal(1, item.DisconnectCount));
+
+			VerifyGroupedHeaderRefresh(app.Services, window, singlePass: false);
+			VerifyGroupedHeaderRefresh(app.Services, window, singlePass: true);
 		}
 		finally
 		{
 			if (collection.Handler != null)
 				((IElementHandler)handler).DisconnectHandler();
 			window.Destroy();
+		}
+	}
+
+	void VerifyGroupedHeaderRefresh(IServiceProvider services, Gtk.Window window, bool singlePass)
+	{
+		var created = new List<Label>();
+		var connected = new List<DisconnectTrackingLabelHandler>();
+		Label Track(Label label)
+		{
+			created.Add(label);
+			label.HandlerChanged += (_, _) =>
+			{
+				if (label.Handler is DisconnectTrackingLabelHandler tracking && !connected.Contains(tracking))
+					connected.Add(tracking);
+			};
+			return label;
+		}
+		var collection = new CollectionView();
+		var handler = new CollectionViewHandler();
+		handler.SetMauiContext(new GtkMauiContext(services));
+		try
+		{
+			handler.SetVirtualView(collection);
+			window.SetChild(handler.PlatformView);
+			collection.IsGrouped = true;
+			collection.ItemTemplate = new DataTemplate(() =>
+			{
+				var label = Track(new Label());
+				label.SetBinding(Label.TextProperty, ".");
+				return label;
+			});
+			collection.GroupHeaderTemplate = new DataTemplate(() => Track(new Label { Text = "Initial one-pass header" }));
+			var source = new TrackingGroupedSource(singlePass);
+			collection.ItemsSource = source;
+
+			bool HasAllocatedRows(string header) =>
+				created.Count(view => view.Parent == collection && IsAllocated(view)) == 2 &&
+				NativeLabelTexts(handler.PlatformView).Contains(header) &&
+				NativeLabelTexts(handler.PlatformView).Contains("One-pass card");
+			WaitUntil(() => HasAllocatedRows("Initial one-pass header"));
+			Assert.Equal(1, source.EnumerationCount);
+			var original = ((IVisualTreeElement)collection).GetVisualChildren().Cast<Label>().ToArray();
+			Assert.Equal(2, original.Length);
+			Assert.All(original, view => Assert.Same(collection, view.Parent));
+			Assert.Contains(original, view => view.Text == "Initial one-pass header");
+			Assert.Contains(original, view => view.Text == "One-pass card");
+			var originalHandlers = connected.ToArray();
+			Assert.Equal(2, originalHandlers.Length);
+			Assert.All(originalHandlers, item => Assert.Equal(0, item.DisconnectCount));
+			output.WriteLine($"Grouped header initial state: singlePass={singlePass}, allocated rows=2, enumerations={source.EnumerationCount}.");
+
+			collection.GroupHeaderTemplate = new DataTemplate(() => Track(new Label { Text = "Replacement one-pass header" }));
+			WaitUntil(() => HasAllocatedRows("Replacement one-pass header"),
+				() => $"After GroupHeaderTemplate-only change (singlePass={singlePass}), expected allocated header and card; logical rows={((IVisualTreeElement)collection).GetVisualChildren().Count}, source enumerations={source.EnumerationCount}.");
+			Assert.Same(source, collection.ItemsSource);
+			Assert.All(original, view => Assert.Null(view.Parent));
+			Assert.All(originalHandlers, item => Assert.Equal(1, item.DisconnectCount));
+			Assert.Equal(2, ((IVisualTreeElement)collection).GetVisualChildren().Count);
+			if (singlePass)
+				Assert.Equal(1, source.EnumerationCount);
+			output.WriteLine($"Grouped header refresh passed: singlePass={singlePass}, allocated rows=2, enumerations={source.EnumerationCount}.");
+		}
+		finally
+		{
+			window.SetChild(null);
+			if (collection.Handler != null)
+				((IElementHandler)handler).DisconnectHandler();
+			Assert.All(created, view => Assert.Null(view.Parent));
+			Assert.All(connected, item => Assert.Equal(1, item.DisconnectCount));
+		}
+	}
+
+	static bool IsAllocated(Label view) =>
+		view.Handler is DisconnectTrackingLabelHandler handler &&
+		handler.PlatformView.GetWidth() > 0 && handler.PlatformView.GetHeight() > 0;
+
+	sealed class TrackingGroupedSource(bool singlePass) : System.Collections.IEnumerable
+	{
+		public int EnumerationCount { get; private set; }
+
+		public System.Collections.IEnumerator GetEnumerator()
+		{
+			EnumerationCount++;
+			return singlePass && EnumerationCount > 1
+				? Array.Empty<object>().GetEnumerator()
+				: Groups().GetEnumerator();
+		}
+
+		static System.Collections.IEnumerable Groups()
+		{
+			yield return new[] { "One-pass card" };
 		}
 	}
 
@@ -207,7 +302,7 @@ public class CollectionViewHandlerTests
 				yield return text;
 	}
 
-	static void WaitUntil(Func<bool> condition)
+	static void WaitUntil(Func<bool> condition, Func<string>? failureMessage = null)
 	{
 		var timeout = Stopwatch.StartNew();
 		while (!condition() && timeout.Elapsed < TimeSpan.FromSeconds(10))
@@ -216,6 +311,6 @@ public class CollectionViewHandlerTests
 				GLib.MainContext.Default().Iteration(false);
 			Thread.Sleep(10);
 		}
-		Assert.True(condition(), "GTK did not realize the expected item before the timeout.");
+		Assert.True(condition(), failureMessage?.Invoke() ?? "GTK did not realize the expected item before the timeout.");
 	}
 }
