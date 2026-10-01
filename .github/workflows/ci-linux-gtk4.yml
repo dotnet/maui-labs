@@ -1,15 +1,6 @@
 name: CI - Linux GTK4
 
 on:
-  workflow_dispatch:
-    inputs:
-      evidence-probe:
-        description: 'One-shot pinned evidence; requires coordinator authorization'
-        required: true
-        type: choice
-        options:
-          - clipping-baseline
-          - window-compatibility
   push:
     branches: [main]
     paths:
@@ -36,7 +27,6 @@ on:
 
 jobs:
   runtime:
-    if: github.event_name != 'workflow_dispatch'
     name: Native GTK runtime (${{ matrix.test-class }})
     runs-on: ubuntu-24.04
     strategy:
@@ -74,7 +64,6 @@ jobs:
           path: artifacts/TestResults/gtk-runtime
 
   build:
-    if: github.event_name != 'workflow_dispatch'
     uses: ./.github/workflows/_build.yml
     with:
       project-path: platforms/Linux.Gtk4/Linux.Gtk4.slnx
@@ -94,7 +83,6 @@ jobs:
       pack: true
 
   templates:
-    if: github.event_name != 'workflow_dispatch'
     name: Packed template regression checks
     runs-on: windows-latest
     steps:
@@ -105,34 +93,3 @@ jobs:
       - name: Pack, generate, and build template variants
         shell: pwsh
         run: ./eng/smoke-tests/gtk-template-smoke-test.ps1 -BuildApps
-
-  evidence:
-    name: Pinned hosted evidence (${{ inputs.evidence-probe }})
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          path: harness
-          sparse-checkout: .github/scripts
-      - uses: actions/checkout@v6
-        with:
-          path: source
-          ref: ${{ inputs.evidence-probe == 'clipping-baseline' && '4e9a5e7cecd3ad976b757551d4d323b4917dd08b' || 'ba043896fd4d2ae123020dc43f241031b9a47699' }}
-      - uses: actions/setup-dotnet@v5
-        with:
-          global-json-file: source/global.json
-      - name: Install native evidence dependencies
-        run: sudo apt-get update && sudo apt-get install -y libgtk-4-1 xvfb dbus
-      - name: Run the authorized pinned probe
-        working-directory: source
-        env:
-          PROBE: ${{ inputs.evidence-probe }}
-        run: python3 ../harness/.github/scripts/gtk-layout-evidence.py "$PROBE"
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: pinned-${{ inputs.evidence-probe }}-evidence
-          path: source/artifacts/TestResults/${{ inputs.evidence-probe }}
-          if-no-files-found: error
