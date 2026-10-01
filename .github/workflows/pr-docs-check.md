@@ -65,6 +65,7 @@ safe-outputs:
         script: |
           const fs = require("node:fs");
           const disclosure = "AI disclosure: A generative AI model, accessed through GitHub Copilot, determined that documentation changes may be needed and drafted this issue. Please verify the recommendation and content before acting.";
+          const notice = `made with AI\n\n${disclosure}`;
           const outputPath = process.env.GH_AW_AGENT_OUTPUT;
           const output = JSON.parse(fs.readFileSync(outputPath, "utf8"));
           if (!Array.isArray(output.items)) {
@@ -79,8 +80,9 @@ safe-outputs:
               throw new Error("Expected a documentation issue body before enforcing AI disclosure.");
             }
             // Put the notice outside model-authored Markdown, even if it was quoted or hidden.
-            const body = item.body.replaceAll(disclosure, "").trim();
-            item.body = `${disclosure}\n\n${body}`;
+            const body = item.body.replaceAll(notice, "").replaceAll(disclosure, "")
+              .replace(/^made with AI[ \t]*\r?$/gm, "").trim();
+            item.body = `${notice}\n\n${body}`;
           }
           fs.writeFileSync(outputPath, JSON.stringify(output), "utf8");
   create-issue:
@@ -202,8 +204,9 @@ documentation update should be in the issue itself.
 
 ## Output disclosure
 
-The trusted `safe-outputs` step prepends an explicit AI decision-and-drafting
-disclosure to every documentation issue before the GitHub issue handler runs.
+The trusted `safe-outputs` step prepends a visible `made with AI` line and an
+explicit AI decision-and-drafting disclosure to every documentation issue before
+the GitHub issue handler runs.
 Do not add a second copy yourself. The existing workflow/run provenance footer
 is retained. This workflow only creates issues; updating existing issues is not
 enabled. Any future update path must enforce the same disclosure.

@@ -26,7 +26,7 @@
 # needed on dotnet/docs-maui. If updates are needed, it opens an issue on
 # docs-maui with a detailed description of the changes needed.
 #
-# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"28d5885a67519481667116034ece351694eb13d6a4dc657dcbcf241bdfb559ca","compiler_version":"v0.53.5"}
+# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"bad30d50f61c8c960f08858ad134c4329a13560130c86585409de548a725bbef","compiler_version":"v0.53.5"}
 
 name: "PR Documentation Check"
 "on":
@@ -1114,6 +1114,7 @@ jobs:
           script: |
             const fs = require("node:fs");
             const disclosure = "AI disclosure: A generative AI model, accessed through GitHub Copilot, determined that documentation changes may be needed and drafted this issue. Please verify the recommendation and content before acting.";
+            const notice = `made with AI\n\n${disclosure}`;
             const outputPath = process.env.GH_AW_AGENT_OUTPUT;
             const output = JSON.parse(fs.readFileSync(outputPath, "utf8"));
             if (!Array.isArray(output.items)) {
@@ -1128,8 +1129,9 @@ jobs:
                 throw new Error("Expected a documentation issue body before enforcing AI disclosure.");
               }
               // Put the notice outside model-authored Markdown, even if it was quoted or hidden.
-              const body = item.body.replaceAll(disclosure, "").trim();
-              item.body = `${disclosure}\n\n${body}`;
+              const body = item.body.replaceAll(notice, "").replaceAll(disclosure, "")
+                .replace(/^made with AI[ \t]*\r?$/gm, "").trim();
+              item.body = `${notice}\n\n${body}`;
             }
             fs.writeFileSync(outputPath, JSON.stringify(output), "utf8");
       - name: Process Safe Outputs
