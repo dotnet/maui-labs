@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        test-class: [ContentViewTransformTests, ContentViewClippingTests]
+        test-class: [ContentViewTransformTests, ContentViewClippingTests, ContentViewRootLayoutTests]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v5
