@@ -20,6 +20,7 @@
     <Project Path="samples/DevFlow.Sample.WPF/DevFlow.Sample.WPF.csproj" />
     <Project Path="samples/DevFlow.Sample/DevFlow.Sample.csproj" />
     <Project Path="samples/EssentialsAISample/EssentialsAISample.csproj" />
+    <Project Path="samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj" />
   </Folder>
   <Folder Name="/src/" />
   <Folder Name="/src/AI/">
@@ -30,6 +31,7 @@
     <Project Path="src/AIExtensions/Microsoft.Maui.AI.Attributes.Generators/Microsoft.Maui.AI.Attributes.Generators.csproj" />
     <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Attributes.Tests/Microsoft.Maui.AI.Attributes.Tests.csproj" />
     <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Attributes.Generators.Tests/Microsoft.Maui.AI.Attributes.Generators.Tests.csproj" />
+    <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Chat.Tests/Microsoft.Maui.AI.Chat.Tests.csproj" />
   </Folder>
   <Folder Name="/src/Comet/">
     <Project Path="src/Comet/src/Comet.SourceGenerator/Comet.SourceGenerator.csproj" />
@@ -87,11 +89,13 @@
     <Project Path="platforms/MacOS/tests/MacOS.Tests/MacOS.Tests.csproj" />
   </Folder>
   <Folder Name="/platforms/Linux.Gtk4/">
+    <Project Path="platforms/Linux.Gtk4/tests/Essentials.Tests/Linux.Gtk4.Essentials.Tests.csproj" />
     <Project Path="platforms/Linux.Gtk4/src/Linux.Gtk4/Linux.Gtk4.csproj" />
     <Project Path="platforms/Linux.Gtk4/src/Linux.Gtk4.BlazorWebView/Linux.Gtk4.BlazorWebView.csproj" />
     <Project Path="platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj" />
   </Folder>
   <Folder Name="/platforms/Windows.WPF/">
+    <Project Path="platforms/Windows.WPF/tests/Essentials.Tests/Windows.WPF.Essentials.Tests.csproj" />
     <Project Path="platforms/Windows.WPF/src/Windows.WPF/Windows.WPF.csproj" />
     <Project Path="platforms/Windows.WPF/src/Windows.WPF.Essentials/Windows.WPF.Essentials.csproj" />
   </Folder>

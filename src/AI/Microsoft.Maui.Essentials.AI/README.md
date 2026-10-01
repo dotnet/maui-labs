@@ -79,5 +79,5 @@ var embeddings = await generator.GenerateAsync(["sunset beach", "mountain hiking
 ## Links
 
 - [Source code](https://github.com/dotnet/maui-labs/tree/main/src/AI)
-- [Sample app](https://github.com/dotnet/maui-labs/tree/main/samples/EssentialsAISample)
+- [Chat Playground](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)
 - [Microsoft.Extensions.AI documentation](https://learn.microsoft.com/dotnet/ai/ai-extensions)
