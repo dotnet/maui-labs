@@ -163,16 +163,17 @@ skill-validator check --plugin plugins/<plugin-name>
 
 # LLM evaluation (requires GitHub auth)
 skill-validator evaluate \
-  --model gpt-5.6-terra \
-  --judge-model gpt-5.6-sol \
+  --model gpt-6.1-sol \
+  --judge-model claude-haiku-4.5 \
   --runs 3 \
   --tests-dir tests/<plugin-name> \
   plugins/<plugin-name>/skills
 ```
 
-Set both model options explicitly rather than relying on validator defaults. To evaluate one skill,
-pass its directory instead of the parent `skills` directory. Reports are written as `results.json`
-and `summary.md` under a timestamped directory inside `--results-dir`; older validator versions may
+Set both model options explicitly rather than relying on validator defaults. The executor and judge
+use different model families to reduce correlated evaluation bias. To evaluate one skill, pass its
+directory instead of the parent `skills` directory. Reports are written as `results.json` and
+`summary.md` under a timestamped directory inside `--results-dir`; older validator versions may
 write `results.md` instead of `summary.md`.
 
 Only run LLM evaluation against trusted content in an isolated environment. Do not expose a
