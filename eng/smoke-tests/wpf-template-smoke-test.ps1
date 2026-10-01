@@ -2,7 +2,9 @@
 param(
     [string] $ArtifactsDirectory,
     [string] $PackageVersion = '0.1.0-preview.518.1',
-    [string] $SdkDirectory
+    [string] $SdkDirectory,
+    [switch] $FontScenarios,
+    [ValidateSet('win-x64', 'win-arm64')][string] $RuntimeIdentifier = 'win-x64'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -68,7 +70,7 @@ $config.Save($configPath)
 
 $platform = Join-Path $repo 'platforms\Windows.WPF'
 $templateProject = Join-Path $platform 'templates\Windows.WPF.Templates.csproj'
-$packArguments = @('-restore', '-t:Pack', '-p:Configuration=Release',
+$packArguments = @('-restore', '-t:Pack', '-p:Configuration=Release', '-m:1', '-nr:false',
     "-p:PackageOutputPath=$packages", '-verbosity:minimal', '-nologo')
 
 # Pack twice without cleaning to catch stale version substitution in incremental builds.
@@ -104,9 +106,54 @@ if ((Get-Content $appProject -Raw) -match '__\w+_VERSION__') {
     throw 'The packed template contains unresolved version tokens.'
 }
 
-Invoke-MSBuild -Arguments @($appProject, '-restore', '-t:Build', '-p:Configuration=Release',
+if ($FontScenarios) {
+    # Reuse the sample's router, real font-registration callback, and native assertions.
+    # Only fixture SOURCE files are copied: deployment must come from the installed NuGet target.
+    $sample = Join-Path $platform 'samples\Windows.WPF.Sample'
+    $fixture = New-Item -ItemType Directory -Path (Join-Path $appDirectory 'Resources\Fonts') -Force
+    Copy-Item (Join-Path $sample 'Resources\Fonts\OpenSans-Regular.ttf') $fixture.FullName
+    $items = $projectXml.CreateElement('ItemGroup')
+    foreach ($relative in @('SampleFontRegistration.cs', 'TestScenarios\TestScenarioRunner.cs', 'TestScenarios\RegisteredFontsScenario.cs')) {
+        $compile = $projectXml.CreateElement('Compile')
+        $compile.SetAttribute('Include', (Join-Path $sample $relative))
+        [void] $items.AppendChild($compile)
+    }
+    $font = $projectXml.CreateElement('MauiFont')
+    $font.SetAttribute('Include', 'Resources\Fonts\OpenSans-Regular.ttf')
+    [void] $items.AppendChild($font)
+    [void] $projectXml.Project.AppendChild($items)
+    $properties = $projectXml.CreateElement('PropertyGroup')
+    $constants = $projectXml.CreateElement('DefineConstants')
+    $constants.InnerText = '$(DefineConstants);WPF_TEST_SCENARIOS;WPF_FONT_TEST_SCENARIO'
+    [void] $properties.AppendChild($constants)
+    [void] $projectXml.Project.AppendChild($properties)
+    $projectXml.Save($appProject)
+    if ($projectXml.SelectNodes('//ProjectReference|//Import').Count -ne 0) {
+        throw 'The packed font consumer must not import repository targets or use project references.'
+    }
+
+    $programPath = Join-Path $appDirectory 'Program.cs'
+    $program = Get-Content $programPath -Raw
+    $signature = 'public static void Main\(\)\s*\{'
+    if ([regex]::Matches($program, $signature).Count -ne 1) {
+        throw 'The generated template startup changed; update the shared scenario integration explicitly.'
+    }
+    $route = @'
+public static void Main(string[] args)
+    {
+        if (Array.IndexOf(args, "--test-scenario") >= 0)
+        {
+            Environment.Exit(Microsoft.Maui.Platforms.Windows.WPF.Sample.TestScenarios.TestScenarioRunner.Run(args));
+            return;
+        }
+'@
+    [regex]::Replace($program, $signature, $route) | Set-Content $programPath
+}
+
+$consumerArguments = @("-p:RuntimeIdentifier=$RuntimeIdentifier", '-p:SelfContained=false', '-m:1', '-nr:false')
+Invoke-MSBuild -Arguments (@($appProject, '-restore', '-t:Build', '-p:Configuration=Release',
     "-p:RestoreConfigFile=$configPath", "-p:RestorePackagesPath=$(Join-Path $work 'cache')",
-    '-warnaserror:NU1605', '-verbosity:minimal', '-nologo')
+    '-warnaserror:NU1605', '-verbosity:minimal', '-nologo') + $consumerArguments)
 
 $assets = Get-Content (Join-Path $appDirectory 'obj\project.assets.json') -Raw | ConvertFrom-Json
 foreach ($id in $references.Keys) {
@@ -116,7 +163,21 @@ foreach ($id in $references.Keys) {
     }
 }
 
-$executable = Join-Path $appDirectory 'bin\Release\net10.0-windows\TemplateSmoke.WPF.exe'
+$output = Join-Path $appDirectory "bin\Release\net10.0-windows\$RuntimeIdentifier"
+if ($FontScenarios) {
+    $fontSmoke = Join-Path $PSScriptRoot 'wpf-font-smoke-test.ps1'
+    & $fontSmoke -SampleAssembly (Join-Path $output 'TemplateSmoke.WPF.dll') -DotNet $dotnet `
+        -ControlFont (Join-Path $sample 'Resources\Fonts\OpenSans-Regular.ttf') `
+        -ResultsDirectory (Join-Path $work 'FontBuild')
+    $publish = Join-Path $work 'publish'
+    Invoke-DotNet -Arguments (@('publish', $appProject, '-c', 'Release', '--no-build', '--no-restore',
+        '-o', $publish) + $consumerArguments)
+    & $fontSmoke -SampleAssembly (Join-Path $publish 'TemplateSmoke.WPF.dll') -DotNet $dotnet `
+        -ControlFont (Join-Path $sample 'Resources\Fonts\OpenSans-Regular.ttf') `
+        -ResultsDirectory (Join-Path $work 'FontPublish')
+}
+
+$executable = Join-Path $output 'TemplateSmoke.WPF.exe'
 $process = Start-Process -FilePath $executable -WorkingDirectory $appDirectory -PassThru
 try {
     $deadline = [DateTime]::UtcNow.AddSeconds(30)

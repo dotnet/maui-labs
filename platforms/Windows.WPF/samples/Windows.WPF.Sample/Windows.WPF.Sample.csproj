@@ -64,4 +64,16 @@
     <AssemblyMetadata Include="Microsoft.Maui.DevFlowTfm" Value="$(TargetFramework)" />
   </ItemGroup>
 
+  <PropertyGroup Condition="'$(WpfTestScenarios)' == 'true'">
+    <DefineConstants>$(DefineConstants);WPF_TEST_SCENARIOS;WPF_FONT_TEST_SCENARIO</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(WpfTestScenarios)' == 'true' and Exists('$(MSBuildThisFileDirectory)TestScenarios\PackagedAssetsScenario.cs')">
+    <DefineConstants>$(DefineConstants);WPF_ASSET_TEST_SCENARIO</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(WpfTestScenarios)' != 'true'">
+    <Compile Remove="TestScenarios\**\*.cs" />
+  </ItemGroup>
+
 </Project>
