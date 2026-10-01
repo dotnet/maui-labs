@@ -44,11 +44,12 @@ jobs:
       project-name: wpf-registration-${{ matrix.maui }}
       os: '["windows-latest"]'
       install-workloads: false
-      test-arguments: >-
-        -p:UseMaui=false
-        -p:MauiVersion=${{ matrix.maui }}
-        -p:MicrosoftMauiControlsVersion=${{ matrix.maui }}
-        --filter FullyQualifiedName~AlertManagerSubscriptionTests
+      test-only: true
+      test-arguments-json: >-
+        ["-p:UseMaui=false",
+         "-p:MauiVersion=${{ matrix.maui }}",
+         "-p:MicrosoftMauiControlsVersion=${{ matrix.maui }}",
+         "--filter", "FullyQualifiedName~AlertManagerSubscriptionTests"]
 
   build:
     uses: ./.github/workflows/_build.yml
