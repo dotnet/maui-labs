@@ -140,8 +140,14 @@ class RuntimeRunner:
         if metadata.exists():
             raise RuntimeError(f"Refusing stale build metadata: {metadata}")
         properties = dict(properties or {})
-        if "RuntimeTestBuildMetadata" in properties or "RuntimeTestBuildTarget" in properties:
+        owned_properties = ("runtimetestbuildmetadata", "runtimetestbuildtarget")
+        if any(str(key).casefold() in owned_properties for key in properties):
             raise ValueError("The runner owns RuntimeTestBuildMetadata and RuntimeTestBuildTarget.")
+        extra_args = tuple(map(str, extra_args))
+        if any(argument.lstrip(" '\"").startswith("@") or
+               any(name in argument.casefold() for name in owned_properties)
+               for argument in extra_args):
+            raise ValueError("Extra arguments cannot override runner-owned properties or use response files.")
         properties["RuntimeTestBuildMetadata"] = str(metadata)
         properties["RuntimeTestBuildTarget"] = "Publish" if publish else "Build"
         properties.setdefault("RuntimeTestScenario", self.name)
