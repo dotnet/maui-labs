@@ -1,6 +1,6 @@
 {
   "name": "dotnet-maui",
-  "version": "0.6.0",
-  "description": "Skills for building production .NET MAUI apps: architecture, project structure, UI, accessibility, testing, performance, platform integration, auth, networking, assets, lifecycle, Blazor Hybrid, AI, localization, theming, release notes, and migration.",
+  "version": "0.7.0",
+  "description": "Skills for building production .NET MAUI apps: architecture, project structure, UI, accessibility, testing, performance, platform integration, auth, networking, assets, lifecycle, Blazor Hybrid, AI, localization, theming, release notes, Xamarin.Forms migration, and Xcode 27 compatibility.",
   "skills": ["./skills/"]
 }

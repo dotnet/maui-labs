@@ -1,0 +1,10 @@
+[
+  {"query":"The shipping Orchard MAUI app worked with our previous Apple toolchain. After rebuilding against SDK 27.0 it immediately terminates on iPad with UIScene lifecycle is required. Please repair the compatibility issue without redesigning the UI.","should_trigger":true},
+  {"query":"Our invoice app is .NET MAUI 10 with Catalyst and iOS heads. I need a read-only checklist of source changes before adopting Xcode 27.0, especially authentication and home-screen shortcuts.","should_trigger":true},
+  {"query":"We already added a scene manifest to a MAUI app for iOS 27. Now login returns never arrive and cold universal links disappear. Audit the runtime version and old application callbacks.","should_trigger":true},
+  {"query":"Review the upcoming SDK 27 migration for our .NET MAUI project. All MAUI versions come from Directory.Packages.props, and we must keep our custom two-window scene setup.","should_trigger":true},
+  {"query":"Build an adaptive MAUI dashboard for the Duo hinge. Our platform startup is already correct; this ticket is only about responsive layout.","should_trigger":false},
+  {"query":"In a .NET MAUI Windows test app, fix the mock authentication redirect handler. It has no iOS or Catalyst targets.","should_trigger":false},
+  {"query":"Please list available iPhone simulators from our installed Xcode 27.0. This is environment inventory only, no application migration.","should_trigger":false},
+  {"query":"The native Objective-C application delegates must be updated for UIKit scenes in iOS 27. There is no C# or MAUI project in this repository.","should_trigger":false}
+]

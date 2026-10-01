@@ -2,16 +2,19 @@ name: skill-check
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
     paths:
       - 'plugins/**'
       - 'tests/**'
       - 'eng/allowed-external-deps.txt'
+      - '.github/workflows/skill-check.yml'
   push:
     branches: [main]
     paths:
       - 'plugins/**'
       - 'tests/**'
       - 'eng/allowed-external-deps.txt'
+      - '.github/workflows/skill-check.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

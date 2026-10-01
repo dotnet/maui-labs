@@ -1,0 +1,63 @@
+scenarios:
+  - name: "Existing .NET 10 app exits after splash"
+    prompt: |
+      Our existing .NET 10 MAUI app builds with Xcode 27.0 but exits after
+      splash with "UIScene lifecycle is required" on an ordinary iPhone.
+      MAUI resolves to 10.0.100 through the workload default. We ship iOS and
+      Mac Catalyst, currently iOS 14 and Catalyst 15. What must we migrate?
+    assertions:
+      - type: output_contains
+        value: "MauiUISceneDelegate"
+      - type: output_contains
+        value: "__MAUI_DEFAULT_SCENE_CONFIGURATION__"
+      - type: output_matches
+        pattern: "10\\.0\\.110|later.*servicing"
+      - type: output_matches
+        pattern: "15\\.0|iOS 15"
+      - type: output_matches
+        pattern: "17\\.0|Catalyst 17"
+    rubric:
+      - "Explains SDK 27 scene requirement applies to ordinary iPhones, not just Duo"
+      - "Asks before dropping existing older OS support"
+      - "Updates the effective MAUI version before scene migration and includes Catalyst"
+      - "Keeps version XML text inline and does not disable Xcode version checks"
+    timeout: 180
+  - name: "Custom scene behavior and quick actions"
+    prompt: |
+      Migrate a MAUI app to Xcode 27. It already has a custom scene delegate
+      and a true multiwindow manifest. AppDelegate overrides OnActivated,
+      OpenUrl and PerformActionForShortcutItem; ConfigureLifecycleEvents has
+      another logging-only shortcut observer. Cold universal links navigate
+      from FinishedLaunching using AppDelegate.Window. What changes are needed?
+    assertions:
+      - type: output_contains
+        value: "SceneWillConnect"
+      - type: output_contains
+        value: "PerformActionForShortcutItem"
+      - type: output_matches
+        pattern: "completion|acknowledg"
+    rubric:
+      - "Preserves custom registered names and multiwindow intent"
+      - "Audits both overrides and lifecycle registrations with changed argument shapes"
+      - "Every custom shortcut registration completes exactly once, including false for a logging-only observer"
+      - "Does not duplicate default Essentials quick action forwarding"
+      - "Defers cold navigation until window creation and retains scene base calls"
+    timeout: 180
+  - name: "Unsupported version shortcuts"
+    prompt: |
+      We have one .NET 9 MAUI app and one .NET 11 RC1 MAUI app. Can both use
+      MauiVersion 10.0.110 with Xcode 27.1 because a PR merged into xcode27.1?
+      Audit only, no framework upgrades approved.
+    assertions:
+      - type: output_matches
+        pattern: "26\\.6"
+      - type: output_matches
+        pattern: "27\\.0"
+      - type: output_matches
+        pattern: "RC1|RC 1"
+    rubric:
+      - "Does not prescribe .NET 10 packages for .NET 11 RC1"
+      - "Explains RC1 scene App Actions and Essentials forwarding gaps"
+      - "Requires intentional .NET 9 to .NET 10 upgrade"
+      - "Distinguishes RC2 source from published support and rejects inferred Xcode 27.1 support"
+    timeout: 180
