@@ -4,7 +4,10 @@ on:
   push:
     branches: [main]
     paths:
+      - '.github/workflows/ci-wpf.yml'
+      - '.github/workflows/_build.yml'
       - 'platforms/Windows.WPF/**'
+      - 'src/DevFlow/**'
       - 'platforms/Shared/Essentials*/**'
       - 'eng/**'
       - 'Directory.Build.props'
@@ -16,7 +19,10 @@ on:
     types: [opened, synchronize, reopened, edited]
     branches: [main]
     paths:
+      - '.github/workflows/ci-wpf.yml'
+      - '.github/workflows/_build.yml'
       - 'platforms/Windows.WPF/**'
+      - 'src/DevFlow/**'
       - 'platforms/Shared/Essentials*/**'
       - 'eng/**'
       - 'Directory.Build.props'
@@ -26,6 +32,50 @@ on:
       - 'NuGet.config'
 
 jobs:
+  compatibility:
+    name: WPF registration - MAUI ${{ matrix.maui }}
+    strategy:
+      fail-fast: false
+      matrix:
+        maui: ['10.0.41', '10.0.60', '10.0.70', '10.0.110']
+    uses: ./.github/workflows/_build.yml
+    with:
+      project-path: platforms/Windows.WPF/tests/HandlerTests/HandlerTests.csproj
+      project-name: wpf-registration-${{ matrix.maui }}
+      os: '["windows-latest"]'
+      install-workloads: false
+      test-only: true
+      test-arguments-json: >-
+        ["-p:UseMaui=false",
+         "-p:MauiVersion=${{ matrix.maui }}",
+         "-p:MicrosoftMauiControlsVersion=${{ matrix.maui }}",
+         "--filter", "FullyQualifiedName~AlertManagerSubscriptionTests"]
+
+  handler-tests:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Run WPF handler and native dialog regression tests
+        shell: pwsh
+        run: >
+          dotnet test platforms\Windows.WPF\tests\HandlerTests\HandlerTests.csproj
+          -c Release -p:UseMaui=false -m:1 -nr:false
+          --logger "trx;LogFileName=wpf-handler-tests.trx"
+          --results-directory artifacts\TestResults\WpfHandlers
+      - name: Upload handler test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: wpf-handler-tests
+          path: artifacts/TestResults/WpfHandlers/*.trx
+          if-no-files-found: error
+
   build:
     uses: ./.github/workflows/_build.yml
     with:
@@ -54,3 +104,6 @@ jobs:
           & $dotnet (Join-Path $sdkDirectory 'dotnet.dll') workload install maui maui-tizen --version 10.0.203
           if ($LASTEXITCODE -ne 0) { throw 'Workload installation failed.' }
           eng\smoke-tests\wpf-template-smoke-test.ps1 -SdkDirectory $sdkDirectory
+      - name: Verify sample packaged asset build and publish runtime paths
+        shell: pwsh
+        run: eng\smoke-tests\wpf-assets-smoke-test.ps1 -RuntimeIdentifier win-x64

@@ -466,21 +466,21 @@ public partial class DevFlowAgentService
 	private Task<HttpResponse> HandleListActions(HttpRequest request)
 	{
 		var actions = DiscoverActions();
-		var result = actions.Select(a => new
+		var result = actions.Select(a => new Dictionary<string, object?>
 		{
-			name = a.Name,
-			description = a.Description,
-			declaringType = a.DeclaringType,
-			parameters = a.Parameters.Select(p => new
+			["name"] = a.Name,
+			["description"] = a.Description,
+			["declaringType"] = a.DeclaringType,
+			["parameters"] = a.Parameters.Select(p => new Dictionary<string, object?>
 			{
-				name = p.Name,
-				type = p.Type,
-				description = p.Description,
-				defaultValue = p.DefaultValue,
-				isRequired = p.IsRequired
+				["name"] = p.Name,
+				["type"] = p.Type,
+				["description"] = p.Description,
+				["defaultValue"] = p.DefaultValue,
+				["isRequired"] = p.IsRequired
 			})
 		});
-		return Task.FromResult(HttpResponse.Json(new { actions = result }));
+		return Task.FromResult(HttpResponse.Json(new Dictionary<string, object?> { ["actions"] = result }));
 	}
 
 	protected async Task<HttpResponse> HandleInvokeAction(HttpRequest request)
@@ -506,7 +506,7 @@ public partial class DevFlowAgentService
 			var (success, returnValue, returnType, error) = await DispatchInvokeMethodAsync(action.Method, null, convertedArgs);
 
 			return success
-				? HttpResponse.Json(new { success = true, action = action.Name, returnValue, returnType })
+				? HttpResponse.Json(new Dictionary<string, object?> { ["success"] = true, ["action"] = action.Name, ["returnValue"] = returnValue, ["returnType"] = returnType })
 				: InvokeError($"Action '{actionName}' failed: {error}");
 		}
 		catch (Exception ex)

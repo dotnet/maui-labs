@@ -6,6 +6,7 @@ on:
     paths:
       - 'platforms/MacOS/**'
       - '.github/workflows/ci-macos-appkit.yml'
+      - '.github/workflows/_build.yml'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -18,6 +19,7 @@ on:
     paths:
       - 'platforms/MacOS/**'
       - '.github/workflows/ci-macos-appkit.yml'
+      - '.github/workflows/_build.yml'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -37,10 +39,33 @@ jobs:
       pack: true
       xcode-version: '26.3'
 
-  layout-regression:
-    name: Native dynamic layout regression
+  native-runtime:
+    name: AppKit runtime (${{ matrix.scenario }}, ${{ matrix.maui-version || 'default' }})
+    needs: build
     runs-on: macos-latest
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - scenario: layout
+            maui-version: ''
+          - scenario: dialog-registration
+            maui-version: '10.0.41'
+          - scenario: dialog-registration
+            maui-version: '10.0.60'
+          - scenario: dialog-registration
+            maui-version: '10.0.70'
+          - scenario: dialog-registration
+            maui-version: '10.0.110'
+          - scenario: dialogs
+            maui-version: '10.0.70'
+          - scenario: picker
+            maui-version: ''
+          - scenario: bundle-resources
+            maui-version: ''
+            workloads: 'macos maui maui-tizen'
+            packages: true
     env:
       NUGET_PACKAGES: ${{ github.workspace }}/.packages
     steps:
@@ -50,47 +75,30 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
-      - name: Install pinned macOS workload
-        run: ./eng/common/dotnet.sh workload install macos --version 10.0.203
-      - name: Run native baseline and fixed regression
+      - name: Install pinned scenario workloads
+        run: ./eng/common/dotnet.sh workload install ${{ matrix.workloads || 'macos' }} --version 10.0.203
+      - name: Download requested product packages
+        if: matrix.packages == true
+        uses: actions/download-artifact@v8
+        with:
+          name: packages-macos-appkit-macos-latest
+          path: artifacts/runtime-packages
+      - name: Verify shared runner contracts
+        run: python3 -B -m unittest discover -s platforms/MacOS/tests/MacOS.RuntimeTests -p 'test_*.py'
+      - name: Run registered baseline and fixed scenario
         shell: bash
+        env:
+          RUNTIME_SCENARIO: ${{ matrix.scenario }}
+          RUNTIME_MAUI_VERSION: ${{ matrix.maui-version }}
         run: |
           set -euo pipefail
-          project=platforms/MacOS/tests/LayoutRegressionTests/LayoutRegressionTests.csproj
-          source=platforms/MacOS/src/MacOS/Handlers/LayoutHandler.cs
-          evidence="$PWD/artifacts/appkit-layout"
-          mkdir -p "$evidence"
-          cp "$source" "$evidence/LayoutHandler.fixed.cs"
-          trap 'cp "$evidence/LayoutHandler.fixed.cs" "$source"' EXIT
-          python3 - "$source" <<'PY'
-          import pathlib, sys
-          path = pathlib.Path(sys.argv[1])
-          source = path.read_text()
-          fixed = "public LayoutHandler() : base(Mapper, CommandMapper)"
-          assert source.count(fixed) == 1, "Expected exactly one fixed constructor"
-          path.write_text(source.replace(fixed, "public LayoutHandler() : base(Mapper)"))
-          PY
-          ./eng/common/dotnet.sh build "$project" -c Debug -p:ContinuousIntegrationBuild=true | tee "$evidence/baseline-build.log"
-          executable="$(find artifacts/bin/LayoutRegressionTests/Debug -path '*.app/Contents/MacOS/LayoutRegressionTests' -type f)"
-          if [[ ! -f "$executable" ]]; then
-            echo "::error::Expected exactly one LayoutRegressionTests native app executable; found: $executable"
-            exit 1
-          fi
-          set +e
-          APPKIT_LAYOUT_ARTIFACTS="$evidence/baseline" "$executable" > "$evidence/baseline.log" 2>&1
-          baseline_exit=$?
-          set -e
-          cat "$evidence/baseline.log"
-          test "$baseline_exit" -eq 1
-          grep -F 'Expected 2 native children, got 1' "$evidence/baseline.log"
-          cp "$evidence/LayoutHandler.fixed.cs" "$source"
-          ./eng/common/dotnet.sh build "$project" -c Debug -p:ContinuousIntegrationBuild=true | tee "$evidence/fixed-build.log"
-          APPKIT_LAYOUT_ARTIFACTS="$evidence/fixed" "$executable" 2>&1 | tee "$evidence/fixed.log"
-          test "$(grep -c '^PASS ' "$evidence/fixed.log")" -eq 6
+          python3 -B platforms/MacOS/tests/MacOS.RuntimeTests/run.py \
+            --scenario "$RUNTIME_SCENARIO" --maui-version "$RUNTIME_MAUI_VERSION" \
+            --evidence "$PWD/artifacts/appkit-runtime"
       - name: Upload hosted AppKit evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: appkit-layout-runtime
-          path: artifacts/appkit-layout/
+          name: appkit-runtime-${{ matrix.scenario }}-${{ matrix.maui-version || 'default' }}
+          path: artifacts/appkit-runtime/
           if-no-files-found: error
