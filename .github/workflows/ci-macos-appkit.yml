@@ -50,6 +50,8 @@ jobs:
         include:
           - scenario: layout
             maui-version: ''
+          - scenario: shell-sections
+            maui-version: ''
           - scenario: dialog-registration
             maui-version: '10.0.41'
           - scenario: dialog-registration
