@@ -59,6 +59,40 @@ await foreach (var update in _chat.GetStreamingResponseAsync("Plan a day trip to
 }
 ```
 
+### Token usage
+
+On Apple OS 27 and later, token usage is returned through the standard
+`Microsoft.Extensions.AI` response APIs:
+
+```csharp
+var response = await _chat.GetResponseAsync("Summarize this text.");
+
+if (response.Usage is { } usage)
+{
+    Console.WriteLine($"Input: {usage.InputTokenCount}");
+    Console.WriteLine($"Output: {usage.OutputTokenCount}");
+    Console.WriteLine($"Cached input: {usage.CachedInputTokenCount}");
+    Console.WriteLine($"Reasoning: {usage.ReasoningTokenCount}");
+    Console.WriteLine($"Total: {usage.TotalTokenCount}");
+}
+```
+
+Streaming responses emit a final `UsageContent` update. Aggregate the stream
+into a `ChatResponse` to read it from `ChatResponse.Usage`:
+
+```csharp
+var response = await _chat
+    .GetStreamingResponseAsync("Plan a day trip to Tokyo")
+    .ToChatResponseAsync();
+
+Console.WriteLine($"Total tokens: {response.Usage?.TotalTokenCount}");
+```
+
+Each response reports usage for that request. To track a conversation or
+application total, accumulate responses with `UsageDetails.Add`. Usage is
+`null` on Apple OS 26 because the native Foundation Models usage API was
+introduced in OS 27.
+
 ### Embeddings for semantic search
 
 ```csharp
