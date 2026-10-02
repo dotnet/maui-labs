@@ -49,17 +49,12 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 			for (var index = 0; index < InternalChildren.Count; index++)
 			{
 				var child = InternalChildren[index];
-				// MAUI lays out nested flex items in the parent's flex tree, without
-				// calling their native Measure. Refresh them using that computed frame.
-				if (VirtualView is IFlexLayout flex && index < flex.Count &&
-					flex[index] is IFlexLayout { Visibility: not Microsoft.Maui.Visibility.Collapsed })
-				{
-					var frame = flex.GetFlexFrame(flex[index]);
-					child.Measure(new WSize(frame.Width, frame.Height));
-				}
 				// Keep the constraints chosen by MAUI for children it already measured.
 				// Remeasuring a FlexLayout with the whole parent's height inflates its lines.
-				else if (!child.IsMeasureValid)
+				// Nested flex items are an exception: the shared flex engine bypasses
+				// their native Measure, so they still need the fallback on constraint changes.
+				var nestedFlex = VirtualView is IFlexLayout flex && index < flex.Count && flex[index] is IFlexLayout;
+				if (!child.IsMeasureValid || nestedFlex)
 					child.Measure(constrainedSize);
 				if (child.DesiredSize.Height > maxChildHeight)
 					maxChildHeight = child.DesiredSize.Height;

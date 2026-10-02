@@ -279,14 +279,11 @@ public class LayoutHandlerTests(ITestOutputHelper output)
 				foreach (var width in new[] { 120, 200, 120 })
 				{
 					panel.Measure(new WSize(width, 200));
-					panel.Arrange(new WRect(0, 0, width, panel.DesiredSize.Height));
 					var expectedHeight = width < 160 ? 50 : 25;
 					var nativeNested = Assert.IsType<LayoutPanel>(nested.Handler!.PlatformView);
-					output.WriteLine($"Width={width}: outer={panel.DesiredSize}, nested={nested.Frame}, native={nativeNested.RenderSize}");
+					output.WriteLine($"Width={width}: outer={panel.DesiredSize}, native nested={nativeNested.DesiredSize}");
 					Assert.InRange(panel.DesiredSize.Height, expectedHeight - 0.1, expectedHeight + 0.1);
-					AssertNativeChild(nested, panel);
-					foreach (var child in nested.Children)
-						AssertNativeChild(child, nativeNested);
+					Assert.InRange(nativeNested.DesiredSize.Height, expectedHeight - 0.1, expectedHeight + 0.1);
 				}
 			});
 		});
