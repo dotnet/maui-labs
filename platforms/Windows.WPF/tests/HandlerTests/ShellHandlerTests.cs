@@ -12,6 +12,7 @@ using Microsoft.Maui.WPF;
 
 namespace HandlerTests;
 
+[Collection("CollectionView native lifecycle")]
 public class ShellHandlerTests
 {
 	[Fact]

@@ -12,6 +12,7 @@ using Visibility = System.Windows.Visibility;
 
 namespace HandlerTests;
 
+[Collection("CollectionView native lifecycle")]
 public class CollectionViewObservableSourceTests
 {
 	[Fact]
