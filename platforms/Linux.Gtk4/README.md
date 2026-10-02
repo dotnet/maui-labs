@@ -110,6 +110,13 @@ declarations of equal specificity, the most recently updated fragment wins.
 The original `ApplyCss` / `ApplyCssWithSelector` signatures remain available for
 compiled custom handlers and share a legacy fragment per widget and selector.
 
+### Transform point ownership
+
+`Graphene.Point.Alloc()` returns a point owned by a GirCore `SafeHandle`.
+Do not call its native `Free()` method after passing it to `Gsk.Transform.Translate`:
+the handle still owns the allocation and will free it again during finalization.
+This applies to layout-position points as well as anchor points.
+
 ### Essentials (21 of 36 services)
 
 | Status | Services |
@@ -395,7 +402,8 @@ RUN_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo GTK_A11Y=none \
 ```
 
 ```bash
-RUN_GTK_RUNTIME_TESTS=1 GSK_RENDERER=cairo dbus-run-session -- xvfb-run --auto-servernum \
+RUN_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo GTK_A11Y=none \
+  dbus-run-session -- xvfb-run --auto-servernum \
   dotnet test tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj \
   --filter FullyQualifiedName~GtkSynchronizationContextTests \
   --logger "console;verbosity=detailed" --blame-hang-timeout 3m
@@ -410,8 +418,14 @@ invokes an async MAUI button handler from the GTK main loop, and checks thread
 identity, context preservation across repeated awaits, native label updates,
 and restoration of the original context after shutdown.
 
-The native CI job runs each GTK test class in its own process and uploads its
-TRX results.
+The transform regression creates a real GTK window and repeatedly scales and
+rotates a button at origin, off-origin, translated, and translation-cancelled
+positions. Forced finalization detects native point double frees; coordinate
+assertions check that transforms still work. Run it with the same command,
+replacing the filter with `FullyQualifiedName~GtkTransformTests`.
+
+The native CI job runs each test class in a separate process to keep GTK
+initialization on one thread and uploads its TRX results.
 
 ### Run the sample app
 
