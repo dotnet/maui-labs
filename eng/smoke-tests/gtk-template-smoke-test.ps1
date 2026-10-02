@@ -150,10 +150,11 @@ using Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Accessibility;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Hosting;
 
 var builder = MauiApp.CreateBuilder().AddLinuxGtk4Essentials();
-using var services = builder.Services.BuildServiceProvider();
-if (services.GetRequiredService<ISemanticScreenReader>() is not LinuxSemanticScreenReader ||
-    SemanticScreenReader.Default is not LinuxSemanticScreenReader)
-    throw new System.Exception("SemanticScreenReader must use the Linux implementation in DI and static APIs.");
+using var app = builder.Build();
+var reader = app.Services.GetRequiredService<ISemanticScreenReader>();
+if (reader is not LinuxSemanticScreenReader ||
+    !object.ReferenceEquals(reader, SemanticScreenReader.Default))
+    throw new System.Exception("SemanticScreenReader must share the Linux implementation between DI and static APIs after Build.");
 System.Console.WriteLine("PASS SemanticScreenReader DI and static default (no native GTK calls)");
 '@ | Set-Content (Join-Path $probe 'Program.cs')
             Invoke-DotNet @('restore', $probe, '--configfile', (Join-Path $modeRoot 'NuGet.config'),
