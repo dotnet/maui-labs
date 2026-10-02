@@ -278,7 +278,8 @@ public class LayoutHandlerTests(ITestOutputHelper output)
 			{
 				foreach (var width in new[] { 120, 200, 120 })
 				{
-					MeasureAndArrange(panel, width);
+					panel.Measure(new WSize(width, 200));
+					panel.Arrange(new WRect(0, 0, width, panel.DesiredSize.Height));
 					var expectedHeight = width < 160 ? 50 : 25;
 					var nativeNested = Assert.IsType<LayoutPanel>(nested.Handler!.PlatformView);
 					output.WriteLine($"Width={width}: outer={panel.DesiredSize}, nested={nested.Frame}, native={nativeNested.RenderSize}");

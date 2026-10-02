@@ -51,7 +51,8 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 				var child = InternalChildren[index];
 				// MAUI lays out nested flex items in the parent's flex tree, without
 				// calling their native Measure. Refresh them using that computed frame.
-				if (VirtualView is IFlexLayout flex && index < flex.Count && flex[index] is IFlexLayout)
+				if (VirtualView is IFlexLayout flex && index < flex.Count &&
+					flex[index] is IFlexLayout { Visibility: not Microsoft.Maui.Visibility.Collapsed })
 				{
 					var frame = flex.GetFlexFrame(flex[index]);
 					child.Measure(new WSize(frame.Width, frame.Height));
