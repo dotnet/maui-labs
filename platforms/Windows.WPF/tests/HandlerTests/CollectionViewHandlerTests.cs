@@ -241,7 +241,7 @@ public class CollectionViewHandlerTests
 			Realize(list);
 			list.SelectedIndex = 2;
 			if (mode == SelectionMode.Multiple)
-				Assert.IsType<WListBoxItem>(list.ItemContainerGenerator.ContainerFromIndex(1)).IsSelected = true;
+				GetContainer(list, 1).IsSelected = true;
 			var selected = list.SelectedItems.Cast<object>().ToArray();
 			var selectedItem = collection.SelectedItem;
 			var selectedItems = collection.SelectedItems;
@@ -272,8 +272,7 @@ public class CollectionViewHandlerTests
 				Assert.Same(selectedItem, collection.SelectedItem);
 				Assert.Same(selectedItems, collection.SelectedItems);
 				Assert.Equal(0, taps);
-				Assert.True(Assert.IsType<WListBoxItem>(
-					list.ItemContainerGenerator.ContainerFromIndex(2)).IsSelected);
+				Assert.True(GetContainer(list, 2).IsSelected);
 			}
 		});
 	}
@@ -293,8 +292,8 @@ public class CollectionViewHandlerTests
 			list.SelectedIndex = 1;
 			Assert.Equal(1, list.SelectedIndex);
 			Assert.Single(list.SelectedItems);
-			Assert.True(Assert.IsType<WListBoxItem>(list.ItemContainerGenerator.ContainerFromIndex(1)).IsSelected);
-			Assert.False(Assert.IsType<WListBoxItem>(list.ItemContainerGenerator.ContainerFromIndex(0)).IsSelected);
+			Assert.True(GetContainer(list, 1).IsSelected);
+			Assert.False(GetContainer(list, 0).IsSelected);
 			var selectedItem = collection.SelectedItem;
 			var selectedItems = collection.SelectedItems;
 			var original = ((IVisualTreeElement)collection).GetVisualChildren().Cast<View>().ToArray();
@@ -313,8 +312,8 @@ public class CollectionViewHandlerTests
 			Assert.True(list.SelectedIndex == 1,
 				$"After template change, selected index was {list.SelectedIndex}; expected the original index 1.");
 			Assert.Single(list.SelectedItems);
-			Assert.True(Assert.IsType<WListBoxItem>(list.ItemContainerGenerator.ContainerFromIndex(1)).IsSelected);
-			Assert.False(Assert.IsType<WListBoxItem>(list.ItemContainerGenerator.ContainerFromIndex(0)).IsSelected);
+			Assert.True(GetContainer(list, 1).IsSelected);
+			Assert.False(GetContainer(list, 0).IsSelected);
 			Assert.Same(selectedItem, collection.SelectedItem);
 			Assert.Same(selectedItems, collection.SelectedItems);
 			Assert.Equal(0, selectionChanges);
@@ -443,8 +442,8 @@ public class CollectionViewHandlerTests
 			collection.SelectionMode = mode;
 			collection.ItemsSource = new[] { "Same", "Same" };
 			Realize(list);
-			var first = Assert.IsType<WListBoxItem>(list.ItemContainerGenerator.ContainerFromIndex(0));
-			var second = Assert.IsType<WListBoxItem>(list.ItemContainerGenerator.ContainerFromIndex(1));
+			var first = GetContainer(list, 0);
+			var second = GetContainer(list, 1);
 			list.SelectedIndex = 1;
 			if (mode == SelectionMode.Multiple)
 				first.IsSelected = true;
@@ -618,7 +617,7 @@ public class CollectionViewHandlerTests
 
 				list.ScrollIntoView(source[199]);
 				Layout();
-				Assert.True(Assert.IsType<WListBoxItem>(list.ItemContainerGenerator.ContainerFromIndex(199)).IsSelected);
+				Assert.True(GetContainer(list, 199).IsSelected);
 				Assert.All(beforeScroll, view => Assert.Null(view.Parent));
 				Assert.All(retiredHandlers, item => Assert.Equal(1, item.DisconnectCount));
 				var current = ((IVisualTreeElement)collection).GetVisualChildren().Cast<Label>().ToArray();
@@ -664,7 +663,7 @@ public class CollectionViewHandlerTests
 			var retiredRoot = root!;
 			var retired = leaves.Select(view => Assert.IsType<DisconnectTrackingLabelHandler>(view.Handler)).ToArray();
 			Assert.All(retired, item => Assert.Equal(0, item.DisconnectCount));
-			var container = Assert.IsType<WListBoxItem>(list.ItemContainerGenerator.ContainerFromIndex(0));
+			var container = GetContainer(list, 0);
 			switch (retirement)
 			{
 				case "clear": Clear(list, container, list.Items[0]); break;
@@ -727,7 +726,7 @@ public class CollectionViewHandlerTests
 			Realize(list);
 			Assert.Same(selectedWrapper, list.SelectedItem);
 			Assert.Equal("Same item", collection.SelectedItem);
-			Assert.True(Assert.IsType<WListBoxItem>(list.ItemContainerGenerator.ContainerFromIndex(2)).IsSelected);
+			Assert.True(GetContainer(list, 2).IsSelected);
 			Assert.Equal(0, selectionChanges);
 		}, () => new DataSelectionHandler());
 	}
@@ -770,6 +769,15 @@ public class CollectionViewHandlerTests
 		list.Measure(new System.Windows.Size(400, 300));
 		list.Arrange(new System.Windows.Rect(0, 0, 400, 300));
 		list.UpdateLayout();
+	}
+
+	static WListBoxItem GetContainer(MauiCollectionListBox list, int index)
+	{
+		var container = list.ItemContainerGenerator.ContainerFromIndex(index);
+		Assert.NotNull(container);
+		Assert.Equal(typeof(MauiCollectionListBox).Assembly.GetType(
+			"Microsoft.Maui.Handlers.WPF.MauiCollectionListBoxItem", throwOnError: true), container.GetType());
+		return (WListBoxItem)container;
 	}
 
 	static void Run(Action<CollectionView, CollectionViewHandler, MauiCollectionListBox, List<Label>> action,

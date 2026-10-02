@@ -502,6 +502,11 @@ namespace Microsoft.Maui.Handlers.WPF
 		readonly Dictionary<ListBoxItem, (Microsoft.Maui.Controls.CollectionView Owner, View View)> _itemMauiViews = new();
 		readonly HashSet<ListBoxItem> _selectedContainers = new();
 
+		protected override DependencyObject GetContainerForItemOverride() => new MauiCollectionListBoxItem();
+
+		protected override System.Windows.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+			=> new MauiCollectionListBoxAutomationPeer(this);
+
 		internal View[] GetNewlySelectedMauiViews()
 		{
 			var selected = _itemMauiViews.Keys.Where(container => container.IsSelected).ToArray();
@@ -514,6 +519,8 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		void RemoveMauiView(ListBoxItem container)
 		{
+			if (container is MauiCollectionListBoxItem mauiContainer)
+				mauiContainer.ClearAccessibility();
 			if (!_itemMauiViews.Remove(container, out var entry))
 				return;
 
@@ -547,6 +554,8 @@ namespace Microsoft.Maui.Handlers.WPF
 		{
 			if (element is ListBoxItem previousContainer)
 				RemoveMauiView(previousContainer);
+			if (element is MauiCollectionListBoxItem container)
+				container.PrepareAccessibility();
 			base.PrepareContainerForItemOverride(element, item);
 
 			if (element is not ListBoxItem lbi || MauiCollectionView == null) return;
@@ -616,6 +625,8 @@ namespace Microsoft.Maui.Handlers.WPF
 				MauiCollectionView.AddLogicalChild(content);
 				var platformView = Microsoft.Maui.Platform.ElementExtensions.ToPlatform((IElement)content, mauiContext);
 				lbi.Content = platformView;
+				if (lbi is MauiCollectionListBoxItem mauiContainer)
+					mauiContainer.MauiItemView = content;
 			}
 			catch (Exception ex)
 			{
