@@ -14,7 +14,6 @@ on:
       - 'NuGet.config'
   pull_request:
     types: [opened, synchronize, reopened, edited]
-    branches: [main]
     paths:
       - 'platforms/Windows.WPF/**'
       - 'platforms/Shared/Essentials*/**'
