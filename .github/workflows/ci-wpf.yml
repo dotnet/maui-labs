@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'platforms/Windows.WPF/**'
+      - 'platforms/Shared/Essentials*/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -16,6 +17,7 @@ on:
     branches: [main]
     paths:
       - 'platforms/Windows.WPF/**'
+      - 'platforms/Shared/Essentials*/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -216,3 +218,6 @@ jobs:
               '${{ steps.source-font-native-publish.outcome }}' -ne 'success') {
             throw 'Inspect classified native results: fixture, rendering and unproven portability are distinct outcomes.'
           }
+      - name: Verify sample packaged asset build and publish runtime paths
+        shell: pwsh
+        run: eng\smoke-tests\wpf-assets-smoke-test.ps1 -RuntimeIdentifier win-x64

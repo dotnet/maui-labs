@@ -2690,6 +2690,43 @@ components:
         minimum: 0
 
   schemas:
+    MissingJsonMetadata:
+      type: object
+      description: >
+        An extension request or response uses a CLR type without registered
+        source-generated metadata while System.Text.Json reflection is disabled.
+        Register the extension's JsonSerializerContext with AgentJson.RegisterContext.
+      required: [success, error, reason]
+      properties:
+        success:
+          type: boolean
+          const: false
+        error:
+          type: string
+        reason:
+          type: string
+          const: json-metadata-missing
+      additionalProperties: false
+
+    UnsupportedJsonContract:
+      type: object
+      description: >
+        JSON serialization or deserialization rejected a contract, for example
+        ambiguous collection ancestor metadata or an unsupported custom converter.
+        The error contains the original serializer diagnostic. Register concrete
+        collection metadata when multiple interface contracts are ambiguous.
+      required: [success, error, reason]
+      properties:
+        success:
+          type: boolean
+          const: false
+        error:
+          type: string
+        reason:
+          type: string
+          const: json-serialization-unsupported
+      additionalProperties: false
+
     BackendNotSupported:
       type: object
       description: >
@@ -2834,11 +2871,18 @@ components:
             status: 404
 
     InternalError:
-      description: Internal server error.
+      description: >
+        Internal server error. Missing extension JSON metadata in reflection-disabled
+        hosts is reported as a json-metadata-missing envelope rather than closing
+        the connection without a response. Other unsupported JSON contracts use
+        json-serialization-unsupported and preserve the serializer diagnostic.
       content:
         application/json:
           schema:
-            $ref: "./schemas/common.json#/$defs/ProblemDetails"
+            oneOf:
+              - $ref: "./schemas/common.json#/$defs/ProblemDetails"
+              - $ref: "#/components/schemas/MissingJsonMetadata"
+              - $ref: "#/components/schemas/UnsupportedJsonContract"
           example:
             type: "urn:devflow:error:internal-error"
             title: Internal error

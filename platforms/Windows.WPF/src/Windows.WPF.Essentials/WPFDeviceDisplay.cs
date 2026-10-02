@@ -5,7 +5,7 @@ using Microsoft.Win32;
 
 namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
 {
-	public class WPFDeviceDisplay : IDeviceDisplay
+	public class WPFDeviceDisplay : IDeviceDisplay, IDisposable
 	{
 		double _cachedDpi;
 
@@ -41,6 +41,8 @@ namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
 		}
 
 		public event EventHandler<DisplayInfoChangedEventArgs>? MainDisplayInfoChanged;
+
+		public void Dispose() => SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
 
 		static double GetDpi()
 		{
