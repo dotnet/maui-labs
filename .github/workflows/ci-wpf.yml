@@ -44,6 +44,10 @@ jobs:
         with:
           ref: 23ea45e98b84bfbf9dd00f4859fd4cf30d44120d
           path: baseline
+      - uses: actions/checkout@v6
+        with:
+          ref: 2fd4e24a553bcfb6e3ab39dc7ee3eb3500b0438d
+          path: followup-baseline
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: fixed/global.json
@@ -54,14 +58,19 @@ jobs:
           $PSNativeCommandUseErrorActionPreference = $false
           $relative = 'platforms\Windows.WPF\tests\HandlerTests'
           Copy-Item "fixed\$relative\ShellSectionSwitchingTests.cs" "baseline\$relative"
-          foreach ($variant in @('baseline', 'fixed')) {
+          Copy-Item "fixed\$relative\ShellTabNavigationTests.cs" "baseline\$relative"
+          Copy-Item "fixed\$relative\ShellTabNavigationTests.cs" "followup-baseline\$relative"
+          foreach ($variant in @('baseline', 'followup-baseline', 'fixed')) {
             Push-Location $variant
             try {
               $env:SHELL_SECTION_RESULTS = Join-Path $env:GITHUB_WORKSPACE "section-runtime-evidence\$variant"
+              $env:SHELL_TAB_RESULTS = Join-Path $env:SHELL_SECTION_RESULTS 'tabs'
               New-Item -ItemType Directory -Force $env:SHELL_SECTION_RESULTS | Out-Null
-              $filter = 'FullyQualifiedName~ShellSectionSwitchingTests'
+              $filter = '(FullyQualifiedName~ShellSectionSwitchingTests|FullyQualifiedName~ShellTabNavigationTests)&FullyQualifiedName!~NativeTabEnabled_'
               if ($variant -eq 'baseline') {
-                $filter = 'FullyQualifiedName~SwitchSection_ShowsLazyPageAndCompletesNavigation|FullyQualifiedName~SwitchContentWithinSection_ShowsLazyPage'
+                $filter = 'FullyQualifiedName~SwitchSection_ShowsLazyPageAndCompletesNavigation|FullyQualifiedName~SwitchContentWithinSection_ShowsLazyPage|FullyQualifiedName~NativeTabSelection_WithOrWithoutItemTemplate'
+              } elseif ($variant -eq 'followup-baseline') {
+                $filter = 'FullyQualifiedName~TabPopulation_WhenVisibleSectionsChange|FullyQualifiedName~NativeTabSelection_WhenKeyboardFocused'
               }
               dotnet test "$relative\HandlerTests.csproj" -c Release -p:UseMaui=false -m:1 -nr:false --filter $filter --logger 'trx;LogFileName=sections.trx' --results-directory $env:SHELL_SECTION_RESULTS *> "$env:SHELL_SECTION_RESULTS\process.log"
               $exitCode = $LASTEXITCODE
@@ -70,12 +79,21 @@ jobs:
               $counters = $results.TestRun.ResultSummary.Counters
               if ($variant -eq 'baseline') {
                 $failures = @($results.TestRun.Results.UnitTestResult | Where-Object outcome -eq 'Failed')
-                if ($exitCode -ne 1 -or $counters.failed -ne 3 -or $counters.total -ne 3 -or
+                if ($exitCode -ne 1 -or $counters.failed -ne 5 -or $counters.total -ne 5 -or $counters.executed -ne 5 -or
                     @($failures | Where-Object { $_.Output.ErrorInfo.Message -notmatch 'Assert\.(Equal|Same)\(\) Failure' }).Count -ne 0) {
                   Get-Content "$env:SHELL_SECTION_RESULTS\process.log"
-                  throw 'Baseline did not reproduce all three lazy section/content selection failures'
+                  throw 'Baseline did not reproduce the three section/content and two native tab failures'
                 }
-              } elseif ($exitCode -ne 0 -or $counters.failed -ne 0 -or $counters.executed -lt 7) {
+              } elseif ($variant -eq 'followup-baseline') {
+                $failures = @($results.TestRun.Results.UnitTestResult | Where-Object outcome -eq 'Failed')
+                if ($exitCode -ne 1 -or $counters.failed -ne 8 -or $counters.total -ne 8 -or
+                    $counters.executed -ne 8 -or $counters.notExecuted -ne 0 -or
+                    @($failures | Where-Object { $_.Output.ErrorInfo.Message -notmatch 'Assert\.(Equal|Same)\(\) Failure' }).Count -ne 0) {
+                  Get-Content "$env:SHELL_SECTION_RESULTS\process.log"
+                  throw 'Follow-up baseline did not reproduce six population and two native keyboard-focus failures'
+                }
+              } elseif ($exitCode -ne 0 -or $counters.total -ne 30 -or $counters.executed -ne 30 -or
+                        $counters.passed -ne 30 -or $counters.failed -ne 0 -or $counters.notExecuted -ne 0) {
                 Get-Content "$env:SHELL_SECTION_RESULTS\process.log"
                 throw 'Fixed WPF section regression failed'
               }
@@ -86,6 +104,35 @@ jobs:
         with:
           name: shell-section-wpf-runtime
           path: section-runtime-evidence
+          if-no-files-found: error
+
+  shell-enabled-regression:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: fixed
+      - uses: actions/checkout@v6
+        with:
+          path: baseline
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: fixed/global.json
+      - name: Verify native enabled-state baseline and fix with identical tests
+        shell: pwsh
+        run: >
+          fixed\platforms\Windows.WPF\tests\Scripts\Verify-ShellEnabledRegression.ps1
+          -BaselineRef 76ba9861590190dcea8dc076df719c151e44ac9d
+          -FixedDirectory fixed -BaselineDirectory baseline
+          -ResultsDirectory shell-enabled-evidence
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: shell-enabled-wpf-runtime
+          path: shell-enabled-evidence
           if-no-files-found: error
 
   compatibility:

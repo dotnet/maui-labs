@@ -59,6 +59,29 @@ test process environment to save PNGs of those transitions.
 
 ### Shell section selection
 
+Selecting a native tab navigates through Shell's cancellable section-selection
+pipeline, with or without `Shell.ItemTemplate`. Cancelled or deferred navigation
+keeps the native selection on the current section until Shell accepts the change.
+Rebuilding the strip does not initiate navigation or create inactive pages.
+The strip uses controller-visible sections, excluding hidden sections and sections
+without visible content. Visibility changes refresh it automatically. Plain section
+changes retain the native tab elements and synchronize selection without rebuilding,
+preserving keyboard focus.
+
+`ShellSection.IsEnabled` is projected onto native tabs and their UI Automation
+enabled state, both initially and when it changes. Enabled-state changes update
+only the matching current tab in place: they do not rebuild the strip, replay
+property mappers, replace custom headers, or navigate away from a selected section.
+Disabled sections remain visible; native UI Automation selection rejects them.
+Section observers follow collection changes and handler rebind/disconnect.
+
+The `ShellTabNavigationTests` handler regressions drive native UI Automation
+selection in an offscreen WPF window and assert the route,
+`Navigated` events, and rendered page. Set `SHELL_TAB_RESULTS` to a directory to
+capture the templated and non-templated repro states as PNG and JSON.
+Only the keyboard-focus cases activate their window; all other cases are
+nonactivating. On a shared desktop, run the focus cases only with exclusive
+foreground access. They assert actual keyboard focus, not just logical focus.
 For section switching within one Shell item, select **Launch Section Switching
 Repro**, or start the sample with `--shell-section-repro`. This uses two lazy
 pages in one `TabBar`, without calling a handler refresh workaround. The
