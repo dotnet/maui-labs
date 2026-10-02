@@ -11,6 +11,11 @@
     <PackageReference Include="xunit" />
     <PackageReference Include="YamlDotNet" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing" />
+
+    <!-- The agent uses whatever SQLite provider its host registered, so the tests are the host here:
+         a bundle to provide one, and Microsoft.Data.Sqlite to seed the files. -->
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
   </ItemGroup>
 
   <ItemGroup>

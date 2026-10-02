@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Maui.DevFlow.Agent.Core;
 using Microsoft.Maui.DevFlow.Driver;
 using Microsoft.Maui.Dispatching;
@@ -28,6 +29,52 @@ public class FileStorageRootTests
         Assert.DoesNotContain("basePath", result.ToString(), StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(appDataPath, result.ToString(), StringComparison.Ordinal);
         Assert.DoesNotContain(customPath, result.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StorageRoots_ResponseMatchesTheProtocolSchema()
+    {
+        using var service = new PlainAgentService(GetFreePort(), CreateTempDirectory(), CreateTempDirectory());
+        using var client = new AgentClient("localhost", service.ServicePort);
+
+        service.StartServerOnly(new DelegateAgentDispatcher(() => false, action => action()));
+
+        var result = await WaitForJsonAsync(client.ListStorageRootsAsync);
+        var roots = result.GetProperty("roots").EnumerateArray().ToArray();
+        Assert.Equal(["appData", "cache"], roots.Select(x => x.GetProperty("id").GetString()));
+
+        var schema = LoadSpecSchema("storage.json")["$defs"]!["StorageRoot"]!;
+        var required = schema["required"]!.AsArray().Select(x => x!.GetValue<string>()).ToArray();
+        var declared = schema["properties"]!.AsObject().Select(x => x.Key).ToHashSet();
+        var operations = schema["properties"]!["supportedOperations"]!["items"]!["enum"]!
+            .AsArray().Select(x => x!.GetValue<string>()).ToHashSet();
+
+        foreach (var root in roots)
+        {
+            foreach (var name in required)
+                Assert.True(root.TryGetProperty(name, out _), $"Root '{root.GetProperty("id")}' is missing required '{name}'.");
+
+            foreach (var property in root.EnumerateObject())
+                Assert.True(declared.Contains(property.Name), $"Root '{root.GetProperty("id")}' sends '{property.Name}', which the schema does not declare.");
+
+            foreach (var operation in root.GetProperty("supportedOperations").EnumerateArray())
+                Assert.True(operations.Contains(operation.GetString()!), $"'{operation}' is not an operation the schema allows.");
+        }
+    }
+
+    [Fact]
+    public async Task StorageRoots_WithoutAKnownCacheDirectory_AdvertiseNoCacheRoot()
+    {
+        // The base service has no idea where this app's cache is, and the shared temp directory is
+        // not it - so there is no cache root rather than a writable view of everyone's temp files.
+        using var service = new PlainAgentService(GetFreePort(), CreateTempDirectory(), cachePath: null);
+        using var client = new AgentClient("localhost", service.ServicePort);
+
+        service.StartServerOnly(new DelegateAgentDispatcher(() => false, action => action()));
+
+        var result = await WaitForJsonAsync(client.ListStorageRootsAsync);
+
+        Assert.Equal(["appData"], result.GetProperty("roots").EnumerateArray().Select(x => x.GetProperty("id").GetString()));
     }
 
     [Fact]
@@ -142,6 +189,119 @@ public class FileStorageRootTests
         Assert.Equal("outside", await File.ReadAllTextAsync(outsideFile));
     }
 
+    [Fact]
+    public async Task Directories_CreateListAndDelete()
+    {
+        var appDataPath = CreateTempDirectory();
+        using var service = CreateService(("appData", appDataPath));
+        using var client = new AgentClient("localhost", service.ServicePort);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+
+        var created = await WaitForJsonAsync(() => client.CreateDirectoryAsync("reports/2026"));
+        Assert.True(created.GetProperty("success").GetBoolean());
+        Assert.Equal("reports/2026", created.GetProperty("path").GetString());
+        Assert.True(Directory.Exists(Path.Combine(appDataPath, "reports", "2026")));
+
+        var list = await client.ListFilesAsync("reports");
+        var entry = list.GetProperty("entries")[0];
+        Assert.Equal("2026", entry.GetProperty("name").GetString());
+        Assert.Equal("directory", entry.GetProperty("type").GetString());
+        Assert.Equal("reports/2026", entry.GetProperty("path").GetString());
+
+        Assert.True(await client.DeleteDirectoryAsync("reports/2026"));
+        Assert.False(Directory.Exists(Path.Combine(appDataPath, "reports", "2026")));
+    }
+
+    [Fact]
+    public async Task DirectoryDelete_RefusesNonEmptyDirectoryWithoutRecursive()
+    {
+        var appDataPath = CreateTempDirectory();
+        Directory.CreateDirectory(Path.Combine(appDataPath, "logs"));
+        await File.WriteAllTextAsync(Path.Combine(appDataPath, "logs", "today.txt"), "noisy");
+
+        using var service = CreateService(("appData", appDataPath));
+        using var client = new AgentClient("localhost", service.ServicePort);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+
+        // Wait for the server rather than asserting on the first call - the port may not be up yet.
+        await WaitForJsonAsync(client.ListStorageRootsAsync);
+
+        Assert.False(await client.DeleteDirectoryAsync("logs"));
+        Assert.True(Directory.Exists(Path.Combine(appDataPath, "logs")));
+
+        Assert.True(await client.DeleteDirectoryAsync("logs", recursive: true));
+        Assert.False(Directory.Exists(Path.Combine(appDataPath, "logs")));
+    }
+
+    [Fact]
+    public async Task Move_RenamesFileAndRefusesToClobberWithoutOverwrite()
+    {
+        var appDataPath = CreateTempDirectory();
+        using var service = CreateService(("appData", appDataPath));
+        using var client = new AgentClient("localhost", service.ServicePort);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+
+        await WaitForJsonAsync(() => client.UploadFileAsync("notes.txt", Convert.ToBase64String(Encoding.UTF8.GetBytes("first"))));
+        await client.UploadFileAsync("keep.txt", Convert.ToBase64String(Encoding.UTF8.GetBytes("second")));
+
+        var moved = await client.MoveAsync("notes.txt", "archive/notes.txt");
+        Assert.True(moved.GetProperty("success").GetBoolean());
+        Assert.Equal("archive/notes.txt", moved.GetProperty("path").GetString());
+        Assert.Equal("file", moved.GetProperty("type").GetString());
+        Assert.Equal("first", await File.ReadAllTextAsync(Path.Combine(appDataPath, "archive", "notes.txt")));
+
+        var refused = await client.MoveAsync("keep.txt", "archive/notes.txt");
+        Assert.False(refused.GetProperty("success").GetBoolean());
+        Assert.Contains("already exists", refused.GetProperty("error").GetString(), StringComparison.Ordinal);
+
+        var overwritten = await client.MoveAsync("keep.txt", "archive/notes.txt", overwrite: true);
+        Assert.True(overwritten.GetProperty("success").GetBoolean());
+        Assert.Equal("second", await File.ReadAllTextAsync(Path.Combine(appDataPath, "archive", "notes.txt")));
+    }
+
+    [Fact]
+    public async Task Move_RefusesToMoveDirectoryInsideItself()
+    {
+        var appDataPath = CreateTempDirectory();
+        Directory.CreateDirectory(Path.Combine(appDataPath, "tree"));
+
+        using var service = CreateService(("appData", appDataPath));
+        using var client = new AgentClient("localhost", service.ServicePort);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+
+        var result = await WaitForJsonAsync(() => client.MoveAsync("tree", "tree/inner"));
+
+        Assert.False(result.GetProperty("success").GetBoolean());
+        Assert.Contains("inside itself", result.GetProperty("error").GetString(), StringComparison.Ordinal);
+        Assert.True(Directory.Exists(Path.Combine(appDataPath, "tree")));
+    }
+
+    [Fact]
+    public async Task RawTransfer_RoundTripsBinaryContentUntouched()
+    {
+        var appDataPath = CreateTempDirectory();
+        using var service = CreateService(("appData", appDataPath));
+        using var client = new AgentClient("localhost", service.ServicePort);
+
+        service.StartServerOnly(new ImmediateDispatcher());
+
+        // Every byte value, including the ones a UTF-8 round trip would replace with U+FFFD.
+        var payload = new byte[256];
+        for (var i = 0; i < payload.Length; i++)
+            payload[i] = (byte)i;
+
+        var upload = await WaitForJsonAsync(() => client.UploadFileBytesAsync("binary/all-bytes.bin", payload));
+        Assert.True(upload.GetProperty("success").GetBoolean());
+        Assert.Equal(payload.Length, upload.GetProperty("size").GetInt32());
+
+        Assert.Equal(payload, await File.ReadAllBytesAsync(Path.Combine(appDataPath, "binary", "all-bytes.bin")));
+        Assert.Equal(payload, await client.DownloadFileBytesAsync("binary/all-bytes.bin"));
+    }
+
     private static RootedDevFlowAgentService CreateService(params (string Id, string BasePath)[] roots)
         => CreateService(roots.Select(root => new TestStorageRoot(root.Id, root.BasePath)).ToArray());
 
@@ -184,6 +344,7 @@ public class FileStorageRootTests
         private readonly IReadOnlyList<FileStorageRoot> _roots;
 
         public RootedDevFlowAgentService(int port, IReadOnlyList<TestStorageRoot> roots)
+            // Leases on, as they are by default, so a client route that skips the lease fails here.
             : base(new AgentOptions { Port = port })
         {
             ServicePort = port;
@@ -205,9 +366,33 @@ public class FileStorageRootTests
         protected override IReadOnlyList<FileStorageRoot> GetFileStorageRoots() => _roots;
     }
 
+    /// <summary>The framework-neutral service, with nothing overridden but where app data lives.</summary>
+    private sealed class PlainAgentService(int port, string appDataPath, string? cachePath)
+        : DevFlowAgentService(new AgentOptions { Port = port })
+    {
+        public int ServicePort => port;
+
+        protected override string GetAppDataBasePath() => appDataPath;
+
+        protected override string? GetCacheBasePath() => cachePath ?? base.GetCacheBasePath();
+    }
+
+    private static JsonNode LoadSpecSchema(string name)
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        {
+            var candidate = Path.Combine(directory.FullName, "docs", "DevFlow", "spec", "schemas", name);
+            if (File.Exists(candidate))
+                return JsonNode.Parse(File.ReadAllText(candidate))!;
+        }
+
+        throw new InvalidOperationException($"Could not find docs/DevFlow/spec/schemas/{name} from the test output directory.");
+    }
+
     private sealed class TestStorageRoot
     {
-        private static readonly string[] s_defaultOperations = ["list", "download", "upload", "delete"];
+        private static readonly string[] s_defaultOperations =
+            ["list", "download", "upload", "delete", "create-directory", "delete-directory", "move"];
 
         public TestStorageRoot(string id, string basePath, bool isWritable = true, params string[] supportedOperations)
         {

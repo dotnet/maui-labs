@@ -5178,6 +5178,9 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     protected override string GetAppDataBasePath()
         => _essentials.GetAppDataBasePath();
 
+    protected override string GetCacheBasePath()
+        => _essentials.GetCacheBasePath();
+
     protected override Task<HttpResponse> HandlePlatformDeviceInfo(HttpRequest request)
         => _essentials.HandlePlatformDeviceInfo(request);
 
