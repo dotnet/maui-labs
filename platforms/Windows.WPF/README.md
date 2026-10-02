@@ -75,7 +75,6 @@ capture the templated and non-templated repro states as PNG and JSON.
 Only the keyboard-focus cases activate their window; all other cases are
 nonactivating. On a shared desktop, run the focus cases only with exclusive
 foreground access. They assert actual keyboard focus, not just logical focus.
-
 For section switching within one Shell item, select **Launch Section Switching
 Repro**, or start the sample with `--shell-section-repro`. This uses two lazy
 pages in one `TabBar`, without calling a handler refresh workaround. The
@@ -225,6 +224,21 @@ See the `samples/` directory for working examples:
 | TableView | ✅ | Grouped sections with TextCell, SwitchCell, EntryCell |
 | SwipeView | ✅ | Context menu approximation |
 | RefreshView | ✅ | Progress bar indicator |
+
+CollectionView's native list-item accessible names prefer the template root's
+`SemanticProperties.Description`. Without a description, visible template labels
+and buttons supply the name in visual-tree order; a described subtree replaces
+its children's text. Native container `AutomationProperties.Name` and `LabeledBy`
+remain authoritative. Names are read from the current template, including after
+binding updates and container reuse. Empty templates and unrealized items do not
+expose the data model's `ToString()`; items without a template use their displayed
+fallback text. Group headers follow the same rules as items. Changes to template
+text, semantic descriptions, visibility, or descendants invalidate the native
+automation peers so UIA clients receive name-change notifications.
+Referenced native `LabeledBy` text/content labels are observed as well, including
+changes to their own accessible names and replacement of their content.
+If template creation fails, the existing displayed fallback text remains the
+accessible name; this does not suppress information that is already visible.
 
 ### Pages & Navigation
 

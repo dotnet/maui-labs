@@ -419,6 +419,18 @@ namespace Microsoft.Maui.Handlers.WPF
 		internal Microsoft.Maui.Controls.CollectionView? MauiCollectionView { get; set; }
 		internal Dictionary<object, View> ItemMauiViews { get; } = new();
 
+		protected override DependencyObject GetContainerForItemOverride() => new MauiCollectionListBoxItem();
+
+		protected override System.Windows.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+			=> new MauiCollectionListBoxAutomationPeer(this);
+
+		protected override void ClearContainerForItemOverride(DependencyObject element, object item)
+		{
+			if (element is MauiCollectionListBoxItem container)
+				container.ClearAccessibility();
+			base.ClearContainerForItemOverride(element, item);
+		}
+
 		internal void ClearItemViews()
 		{
 			var views = ItemMauiViews.Values.ToArray();
@@ -429,6 +441,8 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		protected override void PrepareContainerForItemOverride(DependencyObject element, object item)
 		{
+			if (element is MauiCollectionListBoxItem container)
+				container.PrepareAccessibility();
 			base.PrepareContainerForItemOverride(element, item);
 
 			if (element is not ListBoxItem lbi || MauiCollectionView == null) return;
@@ -494,6 +508,8 @@ namespace Microsoft.Maui.Handlers.WPF
 
 				var platformView = Microsoft.Maui.Platform.ElementExtensions.ToPlatform((IElement)content, mauiContext);
 				lbi.Content = platformView;
+				if (lbi is MauiCollectionListBoxItem mauiContainer)
+					mauiContainer.MauiItemView = content;
 
 				// Store MAUI view reference so OnSelectionChanged can fire TapGesture
 				ItemMauiViews[item] = content;
