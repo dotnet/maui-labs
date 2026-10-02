@@ -53,6 +53,7 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 ### Platform Features
 
 - **Native GTK4 rendering** — Every control maps to a real GTK4 widget, styled via GTK CSS.
+- **UI synchronization context** — Async UI event handlers resume on the GTK main thread after `await` (unless they explicitly opt out with `ConfigureAwait(false)`).
 - **Blazor Hybrid** — Host Blazor components inside a native GTK window via WebKitGTK.
 - **Gestures** — Tap, Pan, Swipe, Pinch, and Pointer gesture recognizers via GTK4 event controllers.
 - **Animations** — `TranslateTo`, `FadeTo`, `ScaleTo`, `RotateTo` via `GtkPlatformTicker` + `Gsk.Transform` at ~60fps.
@@ -61,7 +62,7 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 - **ControlTemplate** — Full ContentPresenter and TemplatedView support via `IContentView` handler mapping.
 - **Font icons** — Embedded font registration with fontconfig/Pango, FontImageSource rendering via Cairo. FontAwesome and custom icon fonts work out of the box.
 - **FormattedText** — Rich text via Pango markup: Span colors, fonts, sizes, bold/italic, underline/strikethrough, character spacing.
-- **Alerts & Dialogs** — `DisplayAlert`, `DisplayActionSheet`, `DisplayPromptAsync` via native GTK4 modal windows.
+- **Alerts & Dialogs** — `DisplayAlert`, `DisplayActionSheet`, `DisplayPromptAsync` via native GTK4 modal windows. Registration supports both the nested MAUI 10.0.41–10.0.60 subscription interface and the top-level 10.0.70+ interface; an unrecognized contract fails during registration instead of leaving dialog tasks pending.
 - **Modal Pages** — `PushModalAsync` presents pages as native GTK4 dialog windows by default, with attached properties for custom sizing, content-fit sizing, and inline (legacy) presentation via `GtkPage`.
 - **Brushes & Gradients** — SolidColorBrush, LinearGradientBrush, RadialGradientBrush via CSS gradients.
 - **MenuBar** — `MenuBarItem` / `MenuFlyoutItem` via `Gtk.PopoverMenuBar`, integrated into Window and NavigationPage handlers via `GtkMenuBarManager` (not a standalone handler).
@@ -69,6 +70,36 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 - **Theming** — Automatic light/dark theme detection via `GtkThemeManager`.
 - **Lifecycle Events** — `ConfigureLifecycleEvents().AddGtk()` hooks for `OnWindowCreated` and `OnMauiApplicationCreated`.
 - **Desktop integration** — App icons via hicolor icon theme, `.desktop` file generation, `MauiImage`/`MauiFont`/`MauiAsset` resource processing.
+
+### Shell navigation regression checks
+
+Shell section navigation displays the top pushed page and restores the previous
+page when popped, including route navigation, `PushAsync`, and `PopToRootAsync`.
+Managed observer tests run with the normal GTK test project. The native regression
+test additionally checks the selected notebook child, its mapped state, and a
+positive GTK allocation in a real window. Run it on Linux with GTK and Xvfb:
+
+```bash
+MAUI_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo xvfb-run -a \
+  dotnet test platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj \
+  --filter FullyQualifiedName~ShellNavigationRuntimeTests \
+  --logger "console;verbosity=detailed"
+```
+
+The test uses its own GTK application and does not require a DevFlow broker.
+
+### Handler styling
+
+GTK CSS font sizes use logical pixels (`px`), matching MAUI's device-independent
+font sizes. Handler CSS is composed per widget, selector, and mapper, so font,
+color, spacing, background, and border updates preserve one another. Custom
+handlers should pass a complete fragment to `UpdateCss` / `UpdateCssWithSelector`
+on every update, including null or empty CSS to remove that fragment's overrides.
+The optional `property` key defaults to the calling method's name; shared helpers
+must supply distinct keys for independently updated properties. For overlapping
+declarations of equal specificity, the most recently updated fragment wins.
+The original `ApplyCss` / `ApplyCssWithSelector` signatures remain available for
+compiled custom handlers and share a legacy fragment per widget and selector.
 
 ### Essentials (21 of 36 services)
 
@@ -143,6 +174,12 @@ cd MyApp.Linux
 dotnet run
 ```
 
+The packaged template pins its GTK4 package references to the package version produced
+by the same build. Essentials is enabled by default: the generated `MauiProgram.cs`
+calls `AddLinuxGtk4Essentials()` to register Linux services and static API defaults,
+including `SemanticScreenReader`. Use `--essentials false` to omit both the package
+and registration, or `--blazor true` to include the BlazorWebView package.
+
 ### Option 2: Add to an existing project manually
 
 Add the NuGet package:
@@ -190,6 +227,23 @@ public static class MauiProgram
     }
 }
 ```
+
+If you added the optional Essentials package, also import
+`Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Hosting` and call
+`builder.AddLinuxGtk4Essentials()` before `builder.Build()`. Adding the package
+alone does not replace MAUI's portable Essentials implementations.
+
+When `Build()` returns, all registered static Essentials facades use the same
+instances as dependency injection, including application overrides registered
+before or after `AddLinuxGtk4Essentials()`. Call statics after `Build()`, not while
+configuring the builder. Unsupported desktop capabilities retain their existing
+stub behavior. Facades are process-wide: the most recently built app sets their
+instances, and callers must not use them after disposing that app.
+
+Run the behavioral registration regressions on Linux:
+`dotnet test platforms/Linux.Gtk4/tests/Essentials.Tests/Linux.Gtk4.Essentials.Tests.csproj`.
+Set `ESSENTIALS_NATIVE_GTK=1` under a real display (or `xvfb-run`) to also run the
+GTK application activation/display regression; otherwise that test is explicitly skipped.
 
 ## XAML Support
 
@@ -281,12 +335,59 @@ When enabled, the sample project (`samples/Linux.Gtk4.Sample`) conditionally ref
 
 ## Building from Source
 
+From the repository root, run the template regression checks with PowerShell 7:
+
+```powershell
+pwsh -File eng/smoke-tests/gtk-template-smoke-test.ps1 -BuildApps
+```
+
+This packs the templates with default and overridden package versions, generates
+the default app and all Essentials/Blazor option combinations in isolated template
+hives, and checks their references and registration. `-BuildApps` also packs the
+backend packages, restores/builds the default-version apps, and checks the
+`SemanticScreenReader` DI and static defaults without loading native GTK.
+Omit `-BuildApps` for template-only checks. GTK window rendering and speech output
+still require Linux runtime validation.
+
 ```bash
 git clone https://github.com/dotnet/maui-labs.git
 cd maui-labs/platforms/Linux.Gtk4
 dotnet restore
 dotnet build
 ```
+
+### Managed regression tests
+
+The CSS composition and font CSS tests do not require GTK native libraries or a display.
+From `platforms/Linux.Gtk4`, run:
+
+```bash
+dotnet test tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
+```
+
+The `ci-linux-gtk4.yml` compatibility matrix runs `AlertManagerSubscriptionTests`
+in this existing project against MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110
+through the shared build workflow's targeted test mode. These managed registration
+checks do not require GTK initialization and do not claim native UI coverage.
+
+### Native runtime regression tests
+
+Native tests require Linux with GTK 4.12+ and a display. They are explicitly
+skipped unless `RUN_GTK_RUNTIME_TESTS=1`. Run each native test class in its own
+process to keep GTK initialization on one thread. For example, from
+`platforms/Linux.Gtk4`, with `xvfb` installed:
+
+```bash
+RUN_GTK_RUNTIME_TESTS=1 GSK_RENDERER=cairo dbus-run-session -- xvfb-run --auto-servernum \
+  dotnet test tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj \
+  --filter FullyQualifiedName~GtkSynchronizationContextTests \
+  --logger "console;verbosity=detailed" --blame-hang-timeout 3m
+```
+
+The synchronization-context regression starts a real `GtkMauiApplication`,
+invokes an async MAUI button handler from the GTK main loop, and checks thread
+identity, context preservation across repeated awaits, native label updates,
+and restoration of the original context after shutdown.
 
 ### Run the sample app
 

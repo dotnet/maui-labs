@@ -14,9 +14,19 @@ public class App : MauiWPFApplication
 public static class Program
 {
     [STAThread]
-    public static void Main(string[] args)
+    public static int Main(string[] args)
     {
+        if (Array.IndexOf(args, "--test-scenario") >= 0)
+        {
+#if WPF_TEST_SCENARIOS
+            return TestScenarios.TestScenarioRunner.Run(args);
+#else
+            Console.Error.WriteLine("Test scenarios require building with -p:WpfTestScenarios=true.");
+            return 2;
+#endif
+        }
+
         var app = new App();
-        app.Run();
+        return app.Run();
     }
 }

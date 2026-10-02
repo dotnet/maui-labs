@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
+             x:Class="AIExtensions.Sample.ChatPlayground.ChatPage"
+             x:DataType="local:ChatViewModel"
+             Title="Chat"
+             BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}">
+    <Grid>
+        <local:PlaygroundPageLayout HeaderTitle="Chat"
+                                       HeaderInfo="Send messages with the selected real client. Replay plays only the current chat offline; More imports or exports that recording."
+                                       HeaderStatus="{Binding Chat.StatusMessage}"
+                                       StatusAutomationId="RequestStatusLabel"
+                                       SidebarTitle="Chat settings">
+            <local:PlaygroundPageLayout.HeaderActions>
+                <HorizontalStackLayout Spacing="4">
+                    <VerticalStackLayout Spacing="2">
+                        <ImageButton Source="add.png" Style="{StaticResource ChatActionButton}"
+                                     Command="{Binding NewChatAction}"
+                                     SemanticProperties.Description="Start a new chat, replacing the current autosave"
+                                     ToolTipProperties.Text="Export this chat before starting a new one"
+                                     AutomationId="NewChatButton" />
+                        <Label Text="New" Style="{StaticResource ChatActionLabel}" />
+                    </VerticalStackLayout>
+                    <VerticalStackLayout Spacing="2">
+                        <ImageButton x:Name="MoreButton" Source="more.png"
+                                     Style="{StaticResource ChatActionButton}"
+                                     SemanticProperties.Description="Import or export the current chat"
+                                     AutomationId="ChatMoreButton">
+                            <local:PopupMenu.Content>
+                                <VerticalStackLayout Spacing="8" x:DataType="local:ChatViewModel">
+                                    <Label Text="CURRENT CHAT" Style="{StaticResource SectionHeading}" />
+                                    <Button Text="Import from file" ImageSource="folder.png"
+                                            Command="{Binding ImportFileAction}"
+                                            SemanticProperties.Description="Replace the current chat with a recording from a file"
+                                            AutomationId="ImportChatFileButton" />
+                                    <Button Text="Load example" ImageSource="play.png"
+                                            Command="{Binding LoadSampleAction}"
+                                            SemanticProperties.Description="Replace the current chat with a bundled image and tool-call recording"
+                                            AutomationId="LoadSampleChatButton" />
+                                    <Button Text="Export to file" ImageSource="export.png"
+                                            Command="{Binding ExportChatAction}"
+                                            CommandParameter="{x:Reference MoreButton}"
+                                            AutomationId="ExportChatButton" />
+                                </VerticalStackLayout>
+                            </local:PopupMenu.Content>
+                        </ImageButton>
+                        <Label Text="More" Style="{StaticResource ChatActionLabel}" />
+                    </VerticalStackLayout>
+                </HorizontalStackLayout>
+            </local:PlaygroundPageLayout.HeaderActions>
+            <local:PlaygroundPageLayout.SettingsContent>
+                <local:SettingsPane BindingContext="{Binding Settings}" />
+            </local:PlaygroundPageLayout.SettingsContent>
+            <local:PlaygroundPageLayout.MainContent>
+                <local:ChatArea BindingContext="{Binding Chat}" />
+            </local:PlaygroundPageLayout.MainContent>
+            <local:PlaygroundPageLayout.InputContent>
+                <Grid>
+                    <local:ChatComposer BindingContext="{Binding Chat}" />
+                    <local:ReplayControls IsVisible="{Binding Chat.IsReplayClient}" />
+                </Grid>
+            </local:PlaygroundPageLayout.InputContent>
+        </local:PlaygroundPageLayout>
+    </Grid>
+</ContentPage>

@@ -1,10 +1,10 @@
 # Linux / GTK Platform Guide
 
-Platform-specific setup and usage for .NET MAUI apps running on Linux via Maui.Gtk (GTK4).
+Platform-specific setup and usage for .NET MAUI apps running on Linux via Microsoft.Maui.Platforms.Linux.Gtk4.
 
 ## Overview
 
-Maui.Gtk apps target `net10.0` (not a platform-specific TFM like `net10.0-ios`) and use
+Microsoft.Maui.Platforms.Linux.Gtk4 apps target `net10.0` (not a platform-specific TFM like `net10.0-ios`) and use
 GTK4 via GirCore bindings. MAUI DevFlow provides dedicated Linux packages that work with
 this architecture.
 
@@ -45,18 +45,20 @@ builder.AddMauiBlazorDevFlowTools(); // Blazor Hybrid only
 
 ### Application Startup
 
-The agent must be started after the MAUI Application is available. In your GTK app
-startup (e.g., `GtkMauiApplication.OnActivate` or equivalent):
+`AddMauiDevFlowAgent()` starts automatically on the GTK thread after the first window is
+created. Use the current `Microsoft.Maui.Platforms.Linux.Gtk4` backend, not the superseded
+`Platform.Maui.Linux.Gtk4` packages. No manual call is required.
+
+An explicit hook is available in a `GtkMauiApplication.OnStarted()` override:
 
 ```csharp
+protected override void OnStarted()
+{
+    base.OnStarted();
 #if DEBUG
-app.StartDevFlowAgent();
-
-// For Blazor Hybrid, wire CDP to the agent:
-var blazorService = app.Handler?.MauiContext?.Services
-    .GetService<GtkBlazorWebViewDebugService>();
-blazorService?.WireBlazorCdpToAgent();
+    this.StartDevFlowAgent();
 #endif
+}
 ```
 
 ## Building and Running
@@ -131,7 +133,7 @@ Only the driver backend should reach for `xdotool` or `ydotool`.
 | NuGet packages | `Agent`, `Blazor` | `Agent.Gtk`, `Blazor.Gtk` |
 | TFM | `net10.0-<platform>` | `net10.0` |
 | Build command | `dotnet build -f $TFM -t:Run` | `dotnet run --project <path>` |
-| Agent startup | Automatic (lifecycle hook) | Manual (`app.StartDevFlowAgent()`) |
+| Agent startup | Automatic (lifecycle hook) | Automatic (first GTK window created) |
 | Network | Varies by platform | Direct localhost |
 | Screenshots | `VisualDiagnostics` | GTK `WidgetPaintable` → `Texture.SaveToPng()` |
 | Native tap | Platform gesture system | `Gtk.Widget.Activate()` |
@@ -143,8 +145,8 @@ Only the driver backend should reach for `xdotool` or `ydotool`.
 
 ### Agent Not Starting
 
-1. Ensure `app.StartDevFlowAgent()` is called after the app is activated
-2. Check that `Application.Current` is available when `StartDevFlowAgent()` runs
+1. Ensure `builder.AddMauiDevFlowAgent()` is called and the host uses `Microsoft.Maui.Platforms.Linux.Gtk4`
+2. For explicit startup, call `this.StartDevFlowAgent()` from `GtkMauiApplication.OnStarted()`, not `CreateMauiApp()`
 3. Verify the port isn't in use: `lsof -i :<port>` or `ss -tlnp | grep <port>`
 
 ### xdotool / ydotool Not Working

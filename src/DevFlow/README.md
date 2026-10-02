@@ -12,7 +12,7 @@ the agent was split away from MAUI, for plain .NET Android, iOS, Mac Catalyst an
 | **Microsoft.Maui.DevFlow.Agent** | In-app agent for .NET MAUI apps. Exposes visual tree, element interactions, screenshots, and profiling via HTTP/JSON API. |
 | **Microsoft.Maui.DevFlow.Agent.Abstractions** | The protocol itself: HTTP server, routing, element DTOs, CSS selector engine, network capture, profiling, extensions. No MAUI dependency. |
 | **Microsoft.Maui.DevFlow.Agent.Core** | The MAUI UI backend: visual tree walker, `VisualElement` interactions, `BindableProperty` access, Essentials endpoints. |
-| **Microsoft.Maui.DevFlow.Agent.Gtk** | GTK/Linux agent for Maui.Gtk apps. |
+| **Microsoft.Maui.DevFlow.Agent.Gtk** | GTK/Linux agent for Microsoft.Maui.Platforms.Linux.Gtk4 apps. |
 | **Microsoft.Maui.DevFlow.Agent.Native** | In-app agent for plain .NET apps with no MAUI reference — Android views, UIKit, and AppKit backends. |
 | **Microsoft.Maui.DevFlow.Agent.Native.Essentials** | Optional add-on that lights up the device, storage and sensor endpoints for native apps using MAUI Essentials. |
 | **Microsoft.Maui.DevFlow.Blazor** | Blazor WebView CDP bridge. Enables Chrome DevTools Protocol access for Blazor Hybrid content via Chobitsu. |
@@ -23,6 +23,93 @@ the agent was split away from MAUI, for plain .NET Android, iOS, Mac Catalyst an
 | **Microsoft.Maui.DevFlow.Logging** | Buffered rotating JSONL file logger. No MAUI dependency. |
 
 ## Quick Start
+
+### NativeAOT and trimming
+
+The agent's built-in HTTP requests/responses, broker registration and lease/recording
+messages, and WebSocket envelopes use source-generated JSON metadata. They do not
+require `JsonSerializerIsReflectionEnabledByDefault=true`. The same contracts run
+in reflection-disabled trimmed JIT applications. MAUI-specific JSON metadata is
+registered by `Agent.Core`; `Agent.Abstractions` remains MAUI-free.
+
+Custom extension payloads can use string-keyed dictionaries, sequences, primitive
+values, `JsonElement`, `JsonNode`, or `JsonDocument` without additional registration. For custom CLR
+request/response types, register a source-generated context before serving requests:
+
+```csharp
+using System.Text.Json.Serialization;
+using Microsoft.Maui.DevFlow.Agent.Core;
+
+AgentJson.RegisterContext(MyExtensionJsonContext.Default);
+
+// Existing extension handlers can still use request.BodyAs<MyRequest>() and
+// HttpResponse.Json(new MyResponse(...)).
+[JsonSerializable(typeof(MyRequest))]
+[JsonSerializable(typeof(MyResponse))]
+internal partial class MyExtensionJsonContext : JsonSerializerContext;
+```
+
+Include concrete types used inside `object`-typed members in that context too.
+Unregistered types fail with an explicit metadata error when JSON reflection is
+disabled; HTTP handlers report `500` with reason `json-metadata-missing` rather
+than dropping the connection or silently serializing an empty object. Reflection-enabled
+hosts retain the existing arbitrary-object serialization behavior. No existing
+public method signatures or wire field names changed.
+
+The default System.Text.Json object converter remains in use. Registered polymorphic
+base/derived contracts retain their discriminators, and member-level
+`JsonNumberHandling` applies to boxed numbers and values inside dynamic collections.
+Generated STJ sequence and dictionary ancestor contracts use native element
+traversal, including the containing member's settings. Registered converters take
+precedence.
+
+Custom collection types with multiple unrelated dictionary interfaces can have
+ambiguous STJ ancestor metadata. Register the concrete collection type in a
+source-generated context in that case. Unsupported JSON contracts return `500`
+with reason `json-serialization-unsupported` and the original diagnostic; missing
+metadata continues to use `json-metadata-missing`. These errors do not silently
+change a dictionary into an array or close the connection without a response.
+
+Common MAUI controls retain the public property accessors and bindable-property
+fields needed by the inspector. For custom controls or custom objects reached
+through a property path, opt in to preserving just that type's inspection contract:
+
+```csharp
+MauiAgentInspection.RegisterType<MyCustomControl>();
+MauiAgentInspection.RegisterType<MyCustomPropertyObject>();
+```
+
+This is not a guarantee that every reflection-based feature is trim-safe.
+Automatic `[DevFlowAction]` assembly scanning, arbitrary generic/async method
+invocation, custom `TypeConverter` discovery, the legacy reflection-only Comet
+adapter, and native-handler reflection fallbacks still need application-specific
+metadata/code preservation. Their linker warnings are not suppressed. Prefer
+explicit extension routes with generated JSON contracts for AOT applications.
+Platform screenshots, native injection, and device/Essentials APIs additionally
+require verification on the target platform; the host smoke below does not render
+a native UI.
+
+The DevFlow PR workflow publishes and runs both the agent smoke (including the
+headless MAUI backend) and the standalone logging smoke as Native AOT executables
+on Linux.
+
+The standalone smoke starts only its own loopback agent and broker fixtures. It
+checks reflection-disabled HTTP/broker/WebSocket serialization and the core UI
+transport contracts. Optional MAUI checks exercise real headless MAUI tree walking,
+tap, property read/write, descriptors, and custom-type registration:
+
+```bash
+dotnet run --project src/DevFlow/Microsoft.Maui.DevFlow.Agent.AotSmoke \
+  -p:IncludeMauiBackend=true -- .artifacts/devflow-aot/jit
+
+# Use the host RID (osx-arm64 shown). AotSmoke sets PublishAot only on the
+# executable, not on its netstandard analyzer dependency.
+dotnet publish src/DevFlow/Microsoft.Maui.DevFlow.Agent.AotSmoke \
+  -c Release -r osx-arm64 -p:AotSmoke=true -p:IncludeMauiBackend=true \
+  -p:TrimmerSingleWarn=false -o .artifacts/devflow-aot/native
+.artifacts/devflow-aot/native/Microsoft.Maui.DevFlow.Agent.AotSmoke \
+  .artifacts/devflow-aot/native-evidence
+```
 
 ### 1. Install the NuGet packages
 
@@ -58,6 +145,58 @@ builder.AddMauiDevFlowAgent(options =>
     options.EnableLayoutDiagnostics = true;
 });
 ```
+
+### GTK/Linux apps
+
+Use `Microsoft.Maui.DevFlow.Agent.Gtk` instead of the standard agent package with
+`Microsoft.Maui.Platforms.Linux.Gtk4`. For Blazor Hybrid, use
+`Microsoft.Maui.DevFlow.Blazor.Gtk` alongside `Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView`.
+These packages use the in-repo GTK backend; remove superseded `Platform.Maui.Linux.Gtk4*`
+package references when migrating. Mixing the two backends is not supported.
+
+```csharp
+using Microsoft.Maui.DevFlow.Agent.Gtk;
+using Microsoft.Maui.Platforms.Linux.Gtk4.Hosting;
+
+// In CreateMauiApp:
+builder.UseMauiAppLinuxGtk4<App>();
+#if DEBUG
+builder.AddMauiDevFlowAgent();
+#endif
+```
+
+`AddMauiDevFlowAgent` starts the agent automatically on the GTK thread when the first
+window is created, after `GtkMauiApplication` has initialized the MAUI application and its
+handler. No manual startup call is required. Hosts needing an explicit startup hook can call
+the extension from `OnStarted` (not `CreateMauiApp`, which is too early):
+
+```csharp
+using Microsoft.Maui.DevFlow.Agent.Gtk;
+using Microsoft.Maui.Hosting;
+using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
+
+public class Program : GtkMauiApplication
+{
+    protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
+
+    protected override void OnStarted()
+    {
+        base.OnStarted();
+#if DEBUG
+        this.StartDevFlowAgent();
+#endif
+    }
+}
+```
+
+The explicit hook still requires builder registration. Calling it before initialization or
+without registering the agent reports an error instead of silently doing nothing.
+Use `maui devflow list` to discover the assigned port rather than assuming port 9223.
+
+For Blazor Hybrid, register `builder.AddMauiBlazorDevFlowTools()` from
+`Microsoft.Maui.DevFlow.Blazor.Gtk` as well. CDP wiring and WebView discovery start on the
+same initialized window lifecycle, even if application startup takes more than two seconds.
+Later windows and explicit `WireBlazorCdpToAgent()` calls do not duplicate registrations.
 
 ### 2b. Or, in a plain .NET app (no MAUI)
 
@@ -290,6 +429,9 @@ emitted by the diagnostics contract.
 Set `DevFlowXamlSourceMapsEnabled=false` to disable source embedding, or enable
 it explicitly for another configuration. Source maps embed developer file paths
 and XAML text and should normally remain disabled for Release/store builds.
+Source maps reuse MAUI's prepared XAML items regardless of target framework,
+including plain .NET GTK heads and macOS AppKit heads. Projects without the MAUI
+Controls build targets can still supply `MauiXaml` items for source mapping.
 
 The request privacy modes are:
 
@@ -368,7 +510,18 @@ dotnet build src/DevFlow/DevFlow.slnf
 
 # Run tests
 dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Tests/
+
+# GTK managed startup and dependency tests (no native GTK runtime required)
+dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.Gtk.Tests/
 ```
+
+The GTK agent and Blazor bridge reference the in-repo Linux GTK4 projects. `DevFlow.slnf`
+includes those shipping dependencies and is used by both PR validation and the official
+DevFlow build. `publishDevFlowNuget` automatically enables the Linux GTK4 publication stage
+and waits for it to succeed before publishing DevFlow. The DevFlow preparation step also
+validates the GTK agents' in-repo dependency closure against the actual shipping nuspecs
+and rejects missing or mismatched package versions. `publishLinuxGtk4Nuget` remains available
+for Linux-only releases.
 
 ### Real app integration tests
 

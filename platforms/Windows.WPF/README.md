@@ -9,6 +9,32 @@ This backend uses the platform-agnostic MAUI NuGet packages (`net10.0` fallback 
 
 > **Inspiration:** This project follows the patterns established by [mauiplatforms](https://github.com/Redth/mauiplatforms) (macOS/tvOS backends) and [Maui.Gtk](https://github.com/AathifMahir/Maui.Gtk).
 
+## Window and page titles
+
+The native title bar belongs to `Window.Title`. Page titles are used by navigation
+and Shell headers; creating, renaming, or returning to a page does not change any
+window's title bar. Set or bind `Window.Title` explicitly to change it. An empty
+window title stays empty rather than falling back to a page title.
+
+## Shell inspection with DevFlow
+
+Shell creates only the selected page through its content controller. Template pages
+remain cached and attached to the MAUI tree, so DevFlow can inspect their labels and
+buttons without creating inactive pages.
+
+To check this in the sample, open **Shell Navigation**, select **Launch Shell App**,
+then use the sample agent's port:
+
+```powershell
+maui devflow --agent-port <port> ui tree --depth 20
+maui devflow --agent-port <port> ui query --automationId ShellHomeTitle
+maui devflow --agent-port <port> ui query --type Button
+maui devflow --agent-port <port> ui tap --automationId ShellSettingsButton
+```
+
+The tree should include `ShellHomePage` beneath `ShellContent`, the title query
+should find a MAUI `Label`, and tapping the button should navigate to Settings.
+
 ## Screenshots
 
 | Home | Controls | Layouts |
@@ -43,83 +69,56 @@ dotnet run
 
 ### Option 2: Add to an existing project manually
 
-#### 1. Create the project
+Follow the [getting-started guide](docs/getting-started.md#using-the-nuget-package-directly)
+for package references and the code-only entry point. Use a `MauiWPFApplication`
+host separate from your MAUI `Application`, with `UseMauiAppWPF<App>()` and
+`UseWPFEssentials()`.
+
+The packed template selects backend and Essentials packages from its own release
+and explicitly references the backend's MAUI Controls version. Use full release
+versions when configuring references manually: `0.1.0-preview` selects the oldest
+matching preview, not the latest.
+
+For template development, run `eng\smoke-tests\wpf-template-smoke-test.ps1` on Windows.
+It packs, generates, restores, builds, and launches the template using an isolated
+template hive. See [validation details](docs/getting-started.md#validating-template-changes).
+
+## Packaged raw assets
+
+Declare raw files as `MauiAsset` items with their package-relative names:
 
 ```xml
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
-    <OutputType>WinExe</OutputType>
-    <UseMaui>true</UseMaui>
-    <UseWPF>true</UseWPF>
-    <EnableDefaultXamlItems>false</EnableDefaultXamlItems>
-  </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.31" />
-    <PackageReference Include="Microsoft.Maui.Platforms.Windows.WPF" Version="*" />
-    <PackageReference Include="Microsoft.Maui.Platforms.Windows.WPF.Essentials" Version="*" />
-  </ItemGroup>
-</Project>
+<MauiAsset Include="Resources\Raw\**\*" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
 ```
 
-#### 2. App.xaml
+For example, `Resources\Raw\Data\sample.txt` is copied to `Data\sample.txt`
+under the app directory in both build and publish output. Open it with
+`IFileSystem.OpenAppPackageFileAsync("Data/sample.txt")`; use
+`AppPackageFileExistsAsync` with the same name. Resolve `IFileSystem` from the
+services registered by `UseWPFEssentials()`.
 
-```xml
-<Microsoft.Maui.Platforms.Windows.WPF:MauiWPFApplication
-    x:Class="MyApp.App"
-    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:Microsoft.Maui.Platforms.Windows.WPF="clr-namespace:Microsoft.Maui.Platform.WPF;assembly=Microsoft.Maui.Platforms.Windows.WPF">
-</Microsoft.Maui.Platforms.Windows.WPF:MauiWPFApplication>
-```
+An explicit `LogicalName` takes precedence over `Link`. Without either metadata,
+the path defaults to `%(RecursiveDir)%(Filename)%(Extension)` (a single explicitly
+included file uses its filename). Nested folders are preserved, so files with
+the same basename in different logical folders remain distinct. Do not prefix
+the runtime name with `Resources\Raw`.
 
-#### 3. App.xaml.cs
-
-```csharp
-using Microsoft.Maui.Platform.WPF;
-
-namespace MyApp;
-
-public partial class App : MauiWPFApplication
-{
-    protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
-}
-```
-
-#### 4. MauiProgram.cs
-
-```csharp
-using Microsoft.Maui.Platform.WPF.Hosting;
-using Microsoft.Maui.Essentials.WPF;
-
-public static class MauiProgram
-{
-    public static MauiApp CreateMauiApp()
-    {
-        var builder = MauiApp.CreateBuilder();
-        builder
-            .UseMauiAppWPF<App>()
-            .UseWPFEssentials()
-            .ConfigureFonts(fonts =>
-            {
-                fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
-            });
-
-        return builder.Build();
-    }
-}
-```
-
-#### 5. App class
-
-```csharp
-public class App : Application
-{
-    protected override Window CreateWindow(IActivationState? activationState)
-        => new Window(new MainPage());
-}
-```
+Run `eng\smoke-tests\wpf-assets-smoke-test.ps1 -RuntimeIdentifier win-x64` on
+Windows (choose the RID matching your selected `dotnet` host) to build and run the
+existing `Windows.WPF.Sample` with `-p:WpfTestScenarios=true`, then publish it
+without rebuilding and run it again. The opt-in `--test-scenario packaged-assets`
+entrypoint uses the actual DI-registered WPF file system without opening a window
+or starting DevFlow. Normal startup (no scenario argument) still opens the gallery.
+Scenario code and fixtures live under the sample's `TestScenarios` directory;
+additional runtime checks should use this shared host rather than new test apps.
+Launch scenarios with `dotnet Windows.WPF.Sample.dll --test-scenario <name>` to
+see console diagnostics; the normal Windows executable is a GUI application.
+The same asset definitions and expected contents are reused by `HandlerTests`,
+while the smoke verifies the real sample build/publish output through the shipping
+backend MSBuild target. `-TargetsFile` can select a historical target file for
+regression reproduction; it never changes the shipped target.
+The same explicit RID is used for build and no-build publish so Razor's generated
+manifests are read from the directory where the build wrote them.
 
 ## Samples
 
@@ -163,7 +162,7 @@ See the `samples/` directory for working examples:
 
 | Control | Status | Notes |
 |---|---|---|
-| CollectionView | ✅ | WPF ListBox with DataTemplateSelector, SelectedItem, SelectionMode, EmptyView |
+| CollectionView | ✅ | WPF ListBox with DataTemplateSelector, SelectedItem, SelectionMode, EmptyView; observable flat and grouped sources update live |
 | ListView | ✅ | WPF ListBox with MAUI template bridge |
 | CarouselView | ✅ | Horizontal ListBox with arrow navigation buttons |
 | IndicatorView | ✅ | Dot indicators as Ellipses |
@@ -214,7 +213,7 @@ All MAUI shapes render via WPF `System.Windows.Shapes`:
 | Application | ✅ | MauiWPFApplication base class |
 | Window | ✅ | Title, Size, Position, Min/Max, MenuBar, Multi-window |
 | Dispatcher | ✅ | WPF Dispatcher + DispatcherProvider |
-| Dialogs | ✅ | DisplayAlert (MessageBox), DisplayActionSheet, DisplayPromptAsync (custom windows) |
+| Dialogs | ✅ | DisplayAlert, DisplayActionSheet, DisplayPromptAsync (native WPF windows with app-provided button labels) |
 | Font Management | ✅ | IFontManager, IFontRegistrar, embedded font loading, FontImageSource glyph rendering |
 | Dark/Light Mode | ✅ | ThemeManager detects via registry + SystemEvents, fires ThemeChanged |
 | Animations | ✅ | WPFTicker at ~60fps, TranslateTo/FadeTo/ScaleTo/RotateTo all work |
@@ -228,6 +227,23 @@ All MAUI shapes render via WPF `System.Windows.Shapes`:
 | VisualStateManager | ✅ | PointerOver, Pressed, Focused, Disabled state hooks |
 
 ### Essentials
+
+Call `builder.UseWPFEssentials()` before `builder.Build()` on the WPF UI thread.
+When `Build()` returns, every registered Essentials facade (`FileSystem.Current`,
+`Preferences.Default`, `DeviceInfo.Current`, and the other supported APIs) uses the
+same instance as dependency injection, including application overrides registered
+before or after `UseWPFEssentials()`. Static calls are supported after `Build()`,
+not while configuring the builder. Unsupported desktop capabilities keep their
+existing stub behavior.
+
+Version tracking records a launch only when `VersionTracking.Track()` or a
+tracking property is used, not merely when building the app.
+
+The facades are process-wide: the most recently built app sets their instances.
+Do not use them after disposing that app.
+
+Run the behavioral registration regressions on Windows:
+`dotnet test platforms\Windows.WPF\tests\Essentials.Tests\Windows.WPF.Essentials.Tests.csproj`.
 
 | API | Status | Notes |
 |---|---|---|
@@ -299,6 +315,11 @@ dotnet test tests\UITests\UITests.csproj --no-build
 
 ## Testing
 
+The `ci-wpf.yml` compatibility matrix runs `AlertManagerSubscriptionTests` in the
+existing `HandlerTests` project against MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110
+through the shared build workflow's targeted test mode. These are registration
+contract tests, not native dialog interaction tests.
+
 The project includes **213 UI tests** covering all implemented controls, plus a **WinUI comparison framework** that captures side-by-side screenshots of the WPF and WinUI ControlGallery apps for visual parity validation.
 
 ```bash
@@ -317,7 +338,7 @@ Comparison screenshots are saved to `tests/UITests/Comparisons/`.
 - The platform-agnostic `ViewHandler` has no-op `PlatformArrange` and returns `Size.Zero`. `WPFViewHandler` overrides these to bridge MAUI layout to WPF `Measure`/`Arrange`.
 - WPF `System.Windows.Controls` and MAUI `Microsoft.Maui.Controls` share many type names — every handler file uses `using` aliases to disambiguate (e.g., `WButton = System.Windows.Controls.Button`).
 - The `MauiWPFApplication` base class in `App.xaml` bootstraps the MAUI runtime within a WPF `Application`.
-- Dialogs use `DispatchProxy` + reflection to intercept `AlertManager` requests (the API is internal in MAUI). See [dotnet/maui#34104](https://github.com/dotnet/maui/issues/34104).
+- Dialogs use `DispatchProxy` + reflection to intercept `AlertManager` requests (the API is internal in MAUI). Both the nested subscription interface in MAUI 10.0.41–10.0.60 and the top-level interface in 10.0.70+ are supported. An unrecognized contract fails during registration rather than leaving dialog tasks pending. See [dotnet/maui#34104](https://github.com/dotnet/maui/issues/34104).
 
 ## Known Limitations
 

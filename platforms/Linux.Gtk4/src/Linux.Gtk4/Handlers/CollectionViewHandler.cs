@@ -668,8 +668,8 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 
 	public static void MapBackgroundColor(CollectionViewHandler handler, IView view)
 	{
-		if (view is CollectionView cv && cv.BackgroundColor != null)
-			handler.ApplyCss(handler.PlatformView, $"background-color: {ToGtkColor(cv.BackgroundColor)};");
+		handler.UpdateCss(handler.PlatformView,
+			view is CollectionView { BackgroundColor: not null } cv ? $"background-color: {ToGtkColor(cv.BackgroundColor)};" : null);
 	}
 
 	public static void MapItemTemplate(CollectionViewHandler handler, IView view)

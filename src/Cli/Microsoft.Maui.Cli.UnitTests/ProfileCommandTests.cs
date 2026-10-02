@@ -2,11 +2,13 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.CommandLine;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using Microsoft.Maui.Cli.Commands;
 using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
+using Microsoft.Maui.Cli.Output;
 using Microsoft.Maui.Cli.Utils;
 using Xunit;
 
@@ -50,9 +52,181 @@ public class ProfileCommandTests
 		Assert.Contains(startup.Options, o => o.Name == "--trace-profile");
 		Assert.Contains(startup.Options, o => o.Name == "--no-build");
 		Assert.Contains(startup.Options, o => o.Name == "--diagnostic-port");
+		Assert.Contains(startup.Options, o => o.Name == "--trace-stop-timeout");
 		Assert.Contains(startup.Options, o => o.Name == "--stopping-event-provider-name");
 		Assert.Contains(startup.Options, o => o.Name == "--stopping-event-event-name");
 		Assert.Contains(startup.Options, o => o.Name == "--stopping-event-payload-filter");
+	}
+
+	[Fact]
+	public void ProfileCommand_DefaultTraceStopTimeoutIsTwoMinutes()
+	{
+		var command = ProfileCommand.Create();
+		var startup = command.Subcommands.Single(c => c.Name == "startup");
+		var timeoutOption = (Option<TimeSpan>)startup.Options.First(o => o.Name == "--trace-stop-timeout");
+		var parseResult = command.Parse("profile startup");
+
+		Assert.Equal(TimeSpan.FromMinutes(2), parseResult.GetValue(timeoutOption));
+	}
+
+	[Fact]
+	public void ProfileCommand_ParsesExplicitTraceStopTimeout()
+	{
+		var command = ProfileCommand.Create();
+		var startup = command.Subcommands.Single(c => c.Name == "startup");
+		var timeoutOption = (Option<TimeSpan>)startup.Options.First(o => o.Name == "--trace-stop-timeout");
+		var parseResult = command.Parse("profile startup --trace-stop-timeout 00:05:00");
+
+		Assert.Equal(TimeSpan.FromMinutes(5), parseResult.GetValue(timeoutOption));
+	}
+
+	[Fact]
+	public void ProfileCommand_ManualSubcommandHasTraceStopTimeout()
+	{
+		var manual = ProfileCommand.Create().Subcommands.Single(c => c.Name == "manual");
+
+		Assert.Contains(manual.Options, o => o.Name == "--trace-stop-timeout");
+	}
+
+	[Fact]
+	public void ValidateTraceStopTimeout_RejectsNonPositiveValues()
+	{
+		Assert.Throws<MauiToolException>(() => ProfileCommand.ValidateTraceStopTimeout(TimeSpan.Zero));
+		Assert.Throws<MauiToolException>(() => ProfileCommand.ValidateTraceStopTimeout(TimeSpan.FromSeconds(-1)));
+		ProfileCommand.ValidateTraceStopTimeout(TimeSpan.FromSeconds(1));
+	}
+
+	[Fact]
+	public async Task StopAndWaitForFinalizationAsync_TimesOutWithCollectorOutput()
+	{
+		await using var testProcess = StartProfileTestProcess("ignore-stdin");
+		await testProcess.Ready.WaitAsync(TimeSpan.FromMinutes(1));
+
+		var exception = await Assert.ThrowsAsync<MauiToolException>(() =>
+			ProfileTraceLifecycle.StopAndWaitForFinalizationAsync(
+				testProcess.MonitoredProcess,
+				testProcess.MonitoredProcess.WaitForExitAsync(),
+				Task.CompletedTask,
+				TimeSpan.FromMilliseconds(50),
+				new JsonOutputFormatter(TextWriter.Null),
+				useJson: true,
+				verbose: false,
+				traceStopInterruptDelay: TimeSpan.FromMilliseconds(10)));
+
+		Assert.Contains("did not exit within", exception.Message, StringComparison.Ordinal);
+		Assert.Contains("collector-output", exception.NativeError, StringComparison.Ordinal);
+	}
+
+	[Fact]
+	public async Task StopAndWaitForFinalizationAsync_ReturnsWhenCollectorExitsBeforeInterruptDelay()
+	{
+		await using var testProcess = StartProfileTestProcess("exit-on-stdin");
+		await testProcess.Ready.WaitAsync(TimeSpan.FromMinutes(1));
+
+		await ProfileTraceLifecycle.StopAndWaitForFinalizationAsync(
+			testProcess.MonitoredProcess,
+			testProcess.MonitoredProcess.WaitForExitAsync(),
+			Task.Delay(Timeout.InfiniteTimeSpan),
+			TimeSpan.FromSeconds(2),
+			new JsonOutputFormatter(TextWriter.Null),
+			useJson: true,
+			verbose: false,
+			traceStopInterruptDelay: TimeSpan.FromSeconds(1));
+
+		Assert.True(testProcess.Process.HasExited);
+	}
+
+	[Fact]
+	public async Task StopAndWaitForFinalizationAsync_AcknowledgedRundownGetsFullTimeoutWithoutInterrupt()
+	{
+		var releasePath = Path.Combine(Path.GetTempPath(), $"maui-profile-test-release-{Guid.NewGuid():N}");
+		try
+		{
+			await using var testProcess = StartProfileTestProcess("finalize-on-stdin", releasePath);
+			await testProcess.Ready.WaitAsync(TimeSpan.FromMinutes(1));
+			var interruptDelay = TimeSpan.FromMilliseconds(100);
+			var stopTask = ProfileTraceLifecycle.StopAndWaitForFinalizationAsync(
+				testProcess.MonitoredProcess,
+				testProcess.MonitoredProcess.WaitForExitAsync(),
+				testProcess.FinalizationStarted,
+				TimeSpan.FromSeconds(5),
+				new JsonOutputFormatter(TextWriter.Null),
+				useJson: true,
+				verbose: false,
+				traceStopInterruptDelay: interruptDelay);
+
+			await testProcess.FinalizationStarted.WaitAsync(TimeSpan.FromSeconds(10));
+			await Task.Delay(interruptDelay + interruptDelay);
+			await File.WriteAllTextAsync(releasePath, string.Empty);
+
+			Assert.False(await stopTask);
+			Assert.True(testProcess.Process.HasExited);
+		}
+		finally
+		{
+			File.Delete(releasePath);
+		}
+	}
+
+	[Fact]
+	public async Task StopAndWaitForFinalizationAsync_DescendantInterruptCountsWhenWrapperExitsFirst()
+	{
+		if (OperatingSystem.IsWindows())
+			return;
+
+		await using var testProcess = StartProfileTestProcess("wrap-ignore-stdin");
+		await testProcess.Ready.WaitAsync(TimeSpan.FromMinutes(1));
+
+		var interrupted = await ProfileTraceLifecycle.StopAndWaitForFinalizationAsync(
+			testProcess.MonitoredProcess,
+			testProcess.MonitoredProcess.WaitForExitAsync(),
+			Task.Delay(Timeout.InfiniteTimeSpan),
+			TimeSpan.FromSeconds(5),
+			new JsonOutputFormatter(TextWriter.Null),
+			useJson: true,
+			verbose: false,
+			traceStopInterruptDelay: TimeSpan.FromMilliseconds(10));
+
+		Assert.True(interrupted);
+		Assert.Equal(130, testProcess.Process.ExitCode);
+	}
+
+	[Theory]
+	[InlineData("Stopping the trace. This may take several minutes depending on the application being traced.", true)]
+	[InlineData("Trace completed.", false)]
+	public void IsFinalizationStartedMessage_RecognizesDotnetTraceRundownOutput(string line, bool expected)
+	{
+		Assert.Equal(expected, DotnetTraceRunner.IsFinalizationStartedMessage(line));
+	}
+
+	[Fact]
+	public async Task WaitForCompletionAsync_TimedStopUsesTraceStopTimeout()
+	{
+		var releasePath = Path.Combine(Path.GetTempPath(), $"maui-profile-test-release-{Guid.NewGuid():N}");
+		try
+		{
+			await using var testProcess = StartProfileTestProcess("finalize-on-stdin", releasePath);
+			await testProcess.Ready.WaitAsync(TimeSpan.FromMinutes(1));
+			var exception = await Assert.ThrowsAsync<MauiToolException>(() =>
+				ProfileTraceLifecycle.WaitForCompletionAsync(
+					testProcess.MonitoredProcess,
+					allowManualStop: false,
+					duration: TimeSpan.FromMilliseconds(10),
+					finalizationStartedTask: testProcess.FinalizationStarted,
+					traceStopTimeout: TimeSpan.FromMilliseconds(50),
+					new JsonOutputFormatter(TextWriter.Null),
+					useJson: true,
+					verbose: false,
+					CancellationToken.None,
+					traceStopInterruptDelay: TimeSpan.FromMilliseconds(100)));
+
+			Assert.Contains("after finalization started", exception.Message, StringComparison.Ordinal);
+			Assert.Contains("collector-output", exception.NativeError, StringComparison.Ordinal);
+		}
+		finally
+		{
+			File.Delete(releasePath);
+		}
 	}
 
 	[Fact]
@@ -758,6 +932,37 @@ public class ProfileCommandTests
 		Assert.Contains("DOTNET_JitMinimalJitProfiling=1", contents);
 	}
 
+	[Fact]
+	public async Task MauiProfilingHelperInjectionTargets_GeneratesEnvironmentOnlyForSelectedProject()
+	{
+		var targetsPath = Path.GetFullPath(Path.Combine(
+			AppContext.BaseDirectory,
+			"../../../../../src/Cli/Microsoft.Maui.Cli/Build/MauiProfilingHelperInjection.targets"));
+		var tempDirectory = Path.Combine(Path.GetTempPath(), "maui-profile-injection-tests", Guid.NewGuid().ToString("N"));
+		var appProjectPath = Path.Combine(tempDirectory, "App.proj");
+		var libraryProjectPath = Path.Combine(tempDirectory, "Library.proj");
+		var appIntermediatePath = Path.Combine(tempDirectory, "app-obj");
+		var libraryIntermediatePath = Path.Combine(tempDirectory, "library-obj");
+
+		Directory.CreateDirectory(tempDirectory);
+		try
+		{
+			File.WriteAllText(appProjectPath, CreateProfilingInjectionTestProject(targetsPath, appIntermediatePath));
+			File.WriteAllText(libraryProjectPath, CreateProfilingInjectionTestProject(targetsPath, libraryIntermediatePath));
+
+			var appResult = await RunProfilingInjectionTargetAsync(appProjectPath, appProjectPath);
+			var libraryResult = await RunProfilingInjectionTargetAsync(libraryProjectPath, appProjectPath);
+
+			Assert.True(appResult.ExitCode == 0, appResult.Output);
+			Assert.True(libraryResult.ExitCode == 0, libraryResult.Output);
+			Assert.True(File.Exists(Path.Combine(appIntermediatePath, "MauiProfilingHelper.env")));
+			Assert.False(File.Exists(Path.Combine(libraryIntermediatePath, "MauiProfilingHelper.env")));
+		}
+		finally
+		{
+			Directory.Delete(tempDirectory, recursive: true);
+		}
+	}
 
 	[Fact]
 	public void ResolveProfileTransport_AndroidEmulator_UsesEmulatorLoopbackAlias()
@@ -783,6 +988,150 @@ public class ProfileCommandTests
 		Assert.Equal("connect", transport.DiagnosticListenMode);
 		Assert.Equal("android", transport.DsrouterKind);
 		Assert.True(transport.RequiresManualExitControlPortRouting);
+		Assert.True(transport.RequiresExplicitDsrouter);
+	}
+
+	[Fact]
+	public void PhysicalAndroidPorts_ReserveSeparateRouterAndExitControlPorts()
+	{
+		var transport = ProfileCommand.ResolveProfileTransport(
+			Platforms.Android,
+			CreateDevice(Platforms.Android, isEmulator: false));
+
+		Assert.Equal(9001, ProfileCommandPortRouter.GetDsrouterTcpPort(9000));
+		Assert.Equal(9002, ProfileCommandPortRouter.GetExitControlPort(9000, transport));
+	}
+
+	[Fact]
+	public void ParseAdbReverseMappings_ParsesTcpMappingsAndIgnoresMalformedLines()
+	{
+		var mappings = ProfileCommandPortRouter.ParseAdbReverseMappings(
+			"""
+			device-123 tcp:9000 tcp:9001
+			UsbFfs tcp:9002 tcp:9002
+			device-123 localabstract:not-tcp tcp:9003
+			malformed
+			""");
+
+		Assert.Equal(
+			[
+				new ProfileCommandPortRouter.AdbReverseMapping(9000, 9001),
+				new ProfileCommandPortRouter.AdbReverseMapping(9002, 9002)
+			],
+			mappings);
+	}
+
+	[Fact]
+	public void AdbReverseMappingOwnership_RequiresOneExactMapping()
+	{
+		ProfileCommandPortRouter.AdbReverseMapping[] ownedMapping = [new(9000, 9001)];
+		ProfileCommandPortRouter.AdbReverseMapping[] replacedMapping = [new(9000, 9101)];
+		ProfileCommandPortRouter.AdbReverseMapping[] duplicateMappings = [new(9000, 9001), new(9000, 9101)];
+
+		Assert.True(ProfileCommandPortRouter.HasAdbReverseMapping(ownedMapping, 9000));
+		Assert.True(ProfileCommandPortRouter.IsOwnedAdbReverseMapping(ownedMapping, 9000, 9001));
+		Assert.False(ProfileCommandPortRouter.IsOwnedAdbReverseMapping(replacedMapping, 9000, 9001));
+		Assert.False(ProfileCommandPortRouter.IsOwnedAdbReverseMapping(duplicateMappings, 9000, 9001));
+		Assert.False(ProfileCommandPortRouter.HasAdbReverseMapping(ownedMapping, 9002));
+	}
+
+	[Fact]
+	public void BuildAdbReverseArguments_RefusesToReplaceAnExistingMapping()
+	{
+		Assert.Equal(
+			["-s", "device-123", "reverse", "--no-rebind", "tcp:9000", "tcp:9001"],
+			ProfileCommandPortRouter.BuildAdbReverseArguments("device-123", 9000, 9001));
+	}
+
+	[Fact]
+	public async Task ReserveProfilePorts_ExplicitDsrouterSkipsCollidingPortSet()
+	{
+		using var listener = new TcpListener(IPAddress.Loopback, 0);
+		listener.Start();
+		var busyPort = ((IPEndPoint)listener.LocalEndpoint).Port;
+		var startingPort = busyPort - 1;
+		var transport = new ProfileTransportConfiguration(
+			Platforms.Android,
+			"127.0.0.1",
+			"connect",
+			"android",
+			RequiresManualExitControlPortRouting: false,
+			RequiresExplicitDsrouter: true);
+
+		using var ports = await ProfileCommandPortRouter.ReserveProfilePortsAndConfigureRoutingAsync(
+			CreateDevice(Platforms.Android, isEmulator: false),
+			transport,
+			startingPort,
+			new JsonOutputFormatter(TextWriter.Null),
+			useJson: false,
+			verbose: false,
+			CancellationToken.None);
+
+		Assert.True(ports.DiagnosticPort > busyPort);
+		Assert.Equal(ports.DiagnosticPort + 1, ports.DsrouterTcpPort);
+		Assert.Equal(ports.DiagnosticPort + 2, ports.ExitControlPort);
+		Assert.NotNull(ports.DsrouterTcpReservation);
+	}
+
+	[Fact]
+	public void EmulatorExitControlPort_RemainsAdjacentToDiagnosticPort()
+	{
+		var transport = ProfileCommand.ResolveProfileTransport(
+			Platforms.Android,
+			CreateDevice(Platforms.Android, isEmulator: true));
+
+		Assert.Equal(9001, ProfileCommandPortRouter.GetExitControlPort(9000, transport));
+	}
+
+	[Fact]
+	public void BuildDsrouterArguments_UsesSelectedRouterPortAndUniqueIpcEndpoint()
+	{
+		var args = ProfileDsrouterRunner.BuildArguments("maui-profile-test", 9101);
+
+		Assert.Equal(
+			[
+				"server-server",
+				"--ipc-server", "maui-profile-test",
+				"--tcp-server", "127.0.0.1:9101",
+				"--forward-port", "Android"
+			],
+			args);
+	}
+
+	[Fact]
+	public void CreateDsrouterIpcEndpoint_UnixPathFitsSocketLimit()
+	{
+		if (OperatingSystem.IsWindows())
+			return;
+
+		var endpoint = ProfileDsrouterRunner.CreateIpcEndpoint();
+
+		Assert.StartsWith("/tmp/", endpoint, StringComparison.Ordinal);
+		Assert.True(endpoint.Length < 100);
+	}
+
+	[Fact]
+	public void BuildTraceArguments_WithExplicitDsrouterIpc_DoesNotLaunchImplicitRouter()
+	{
+		var transport = ProfileCommand.ResolveProfileTransport(
+			Platforms.Android,
+			CreateDevice(Platforms.Android, isEmulator: false));
+
+		var args = ProfileCommand.BuildTraceArguments(
+			"trace.nettrace",
+			TraceOutputFormat.NetTrace,
+			transport,
+			traceProfile: null,
+			duration: null,
+			stoppingEventProvider: null,
+			stoppingEventName: null,
+			stoppingEventPayloadFilter: null,
+			diagnosticPortEndpoint: "maui-profile-test").ToArray();
+
+		Assert.DoesNotContain("--dsrouter", args);
+		var diagnosticPortIndex = Array.IndexOf(args, "--diagnostic-port");
+		Assert.True(diagnosticPortIndex >= 0);
+		Assert.Equal("maui-profile-test,connect", args[diagnosticPortIndex + 1]);
 	}
 
 	[Fact]
@@ -853,6 +1202,7 @@ public class ProfileCommandTests
 	{
 		var device = CreateDevice(Platforms.Android, isEmulator: true);
 		var transport = ProfileCommand.ResolveProfileTransport(Platforms.Android, device);
+		var projectPath = TestPath("fake", "MyApp.csproj");
 		var buildInjection = new ProfilingBuildInjection(
 			TargetsPath: TestPath("fake", "MauiProfilingHelperInjection.targets"),
 			AssemblyPath: TestPath("fake", "Microsoft.Maui.ProfilingHelper.dll"),
@@ -863,7 +1213,7 @@ public class ProfileCommandTests
 			EventPipeOutputPath: "/storage/emulated/0/Android/data/com.example/files/startup.nettrace");
 
 		var args = ProfileCommand.BuildCompileArguments(
-			TestPath("fake", "MyApp.csproj"),
+			projectPath,
 			"net10.0-android",
 			"Release",
 			transport,
@@ -874,6 +1224,7 @@ public class ProfileCommandTests
 		Assert.Contains("-p:EnableDiagnostics=true", args);
 		Assert.Contains("-p:MauiProfilingHelperExitHost=10.0.2.2", args);
 		Assert.Contains("-p:MauiProfilingHelperExitPort=9001", args);
+		Assert.Contains($"-p:MauiProfilingHelperProjectFullPath={Path.GetFullPath(projectPath)}", args);
 		Assert.Contains("-p:MauiProfilingHelperEnableRuntimePgo=true", args);
 		Assert.Contains("-p:MauiProfilingHelperEventPipeOutputPath=/storage/emulated/0/Android/data/com.example/files/startup.nettrace", args);
 	}
@@ -1027,6 +1378,152 @@ public class ProfileCommandTests
 	public void CanUseDiagnosticsTooling_MissingRequiredToolWithoutDnx_ReturnsFalse()
 	{
 		Assert.False(ProfileCommand.CanUseDiagnosticsTooling(hasDnx: false, hasDotnetTrace: true, hasDotnetDsrouter: false));
+	}
+
+	[Fact]
+	public void ConfigureDnxStartInfo_UsesResolvedCommandPath()
+	{
+		var startInfo = new ProcessStartInfo();
+		var dnxPath = TestPath("dotnet", "dnx");
+
+		ProfileCommandDiagnostics.ConfigureDnxStartInfo(
+			startInfo,
+			dnxPath,
+			"dotnet-trace",
+			["collect", "--output", "trace.nettrace"],
+			out var commandLine);
+
+		Assert.Equal(dnxPath, startInfo.FileName);
+		Assert.Equal(
+			["-y", "dotnet-trace", "--", "collect", "--output", "trace.nettrace"],
+			startInfo.ArgumentList);
+		Assert.Contains(dnxPath, commandLine);
+	}
+
+	[Theory]
+	[InlineData(".cmd")]
+	[InlineData(".bat")]
+	public void ConfigureDnxStartInfo_WindowsCommandWrapperUsesDotnetExecutable(string extension)
+	{
+		var startInfo = new ProcessStartInfo
+		{
+			RedirectStandardInput = true,
+			RedirectStandardOutput = true,
+			RedirectStandardError = true
+		};
+		var dnxPath = TestPath("Program Files", "dotnet", "dnx" + extension);
+		var outputPath = TestPath("trace output", "%TEMP% ^ & | < > ( ) \"quoted\".nettrace");
+
+		ProfileCommandDiagnostics.ConfigureDnxStartInfo(
+			startInfo,
+			dnxPath,
+			"dotnet-trace",
+			["collect", "--output", outputPath],
+			out var commandLine,
+			isWindows: true);
+
+		Assert.Equal(Path.Combine(Path.GetDirectoryName(dnxPath)!, "dotnet.exe"), startInfo.FileName);
+		Assert.Equal(
+			["dnx", "-y", "dotnet-trace", "--", "collect", "--output", outputPath],
+			startInfo.ArgumentList);
+		Assert.True(startInfo.RedirectStandardInput);
+		Assert.True(startInfo.RedirectStandardOutput);
+		Assert.True(startInfo.RedirectStandardError);
+		Assert.Contains(startInfo.FileName, commandLine);
+	}
+
+	[Fact]
+	public async Task ConfigureDnxStartInfo_WindowsCommandWrapperPreservesExclamationMarksWhenExecuted()
+	{
+		if (!OperatingSystem.IsWindows())
+			return;
+
+		var tempDirectory = Path.Combine(Path.GetTempPath(), $"maui-dnx!test-{Guid.NewGuid():N}");
+		var helperProject = Path.Combine(tempDirectory, "DnxEcho.csproj");
+		var outputDirectory = Path.Combine(tempDirectory, "sdk!path");
+		Directory.CreateDirectory(tempDirectory);
+		try
+		{
+			File.WriteAllText(helperProject, """
+				<Project Sdk="Microsoft.NET.Sdk">
+				  <PropertyGroup>
+				    <OutputType>Exe</OutputType>
+				    <TargetFramework>net10.0</TargetFramework>
+				    <AssemblyName>dotnet</AssemblyName>
+				    <UseAppHost>true</UseAppHost>
+				  </PropertyGroup>
+				</Project>
+				""");
+			File.WriteAllText(
+				Path.Combine(tempDirectory, "Program.cs"),
+				"""
+				using System;
+
+				Console.Write(System.Text.Json.JsonSerializer.Serialize(args));
+				""");
+
+			var dotnetPath = Path.GetFullPath(Path.Combine(
+				System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(),
+				"..",
+				"..",
+				"..",
+				"dotnet.exe"));
+			Assert.True(File.Exists(dotnetPath), $"Could not find the active .NET host at '{dotnetPath}'.");
+			var buildStartInfo = new ProcessStartInfo(dotnetPath)
+			{
+				UseShellExecute = false,
+				RedirectStandardOutput = true,
+				RedirectStandardError = true
+			};
+			foreach (var arg in new[] { "build", helperProject, "--nologo", "--configuration", "Release", "--output", outputDirectory })
+				buildStartInfo.ArgumentList.Add(arg);
+
+			using (var buildProcess = Process.Start(buildStartInfo)!)
+			{
+				var buildOutputTask = buildProcess.StandardOutput.ReadToEndAsync();
+				var buildErrorTask = buildProcess.StandardError.ReadToEndAsync();
+				await buildProcess.WaitForExitAsync();
+				var buildOutput = await buildOutputTask;
+				var buildError = await buildErrorTask;
+				Assert.True(buildProcess.ExitCode == 0, buildOutput + buildError);
+			}
+
+			var dnxPath = Path.Combine(outputDirectory, "dnx.cmd");
+			var outputPath = Path.Combine(tempDirectory, "trace!output.nettrace");
+			File.WriteAllText(dnxPath, "@exit /b 99");
+			var startInfo = new ProcessStartInfo
+			{
+				UseShellExecute = false,
+				RedirectStandardOutput = true,
+				RedirectStandardError = true,
+				RedirectStandardInput = true
+			};
+			ProfileCommandDiagnostics.ConfigureDnxStartInfo(
+				startInfo,
+				dnxPath,
+				"dotnet-trace",
+				["collect", "--output", outputPath],
+				out _,
+				isWindows: true);
+
+			using (var process = Process.Start(startInfo)!)
+			{
+				var standardOutput = await process.StandardOutput.ReadToEndAsync();
+				var standardError = await process.StandardError.ReadToEndAsync();
+				await process.WaitForExitAsync();
+
+				Assert.True(process.ExitCode == 0, standardError);
+				var actualArgs = System.Text.Json.JsonSerializer.Deserialize<string[]>(standardOutput);
+				Assert.NotNull(actualArgs);
+				Assert.Equal(
+					["dnx", "-y", "dotnet-trace", "--", "collect", "--output", outputPath],
+					actualArgs);
+			}
+		}
+		finally
+		{
+			Directory.Delete(tempDirectory, recursive: true);
+		}
 	}
 
 	[Fact]
@@ -1192,6 +1689,111 @@ public class ProfileCommandTests
 		Assert.Equal("kind:start", customResult.PayloadFilter);
 	}
 
+	static ProfileTestProcess StartProfileTestProcess(string mode, string? releasePath = null)
+	{
+		var helperSource = Path.Combine(
+			AppContext.BaseDirectory,
+			"ProfileTestProcess.cs");
+		if (!File.Exists(helperSource))
+			throw new FileNotFoundException("The profile test process helper was not copied.", helperSource);
+
+		var dotnetHost = Path.GetFullPath(Path.Combine(
+			System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(),
+			"..",
+			"..",
+			"..",
+			OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet"));
+		var startInfo = new ProcessStartInfo(dotnetHost)
+		{
+			UseShellExecute = false,
+			RedirectStandardInput = true,
+			RedirectStandardOutput = true,
+			RedirectStandardError = true,
+			CreateNoWindow = true
+		};
+		startInfo.ArgumentList.Add("run");
+		startInfo.ArgumentList.Add("--file");
+		startInfo.ArgumentList.Add(helperSource);
+		startInfo.ArgumentList.Add("--no-launch-profile");
+		startInfo.ArgumentList.Add("--");
+		startInfo.ArgumentList.Add(mode);
+		if (mode == "wrap-ignore-stdin")
+			startInfo.ArgumentList.Add(helperSource);
+		if (releasePath is not null)
+			startInfo.ArgumentList.Add(releasePath);
+
+		var process = Process.Start(startInfo)
+			?? throw new InvalidOperationException("Failed to start the profile test process helper.");
+		var ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+		var finalizationStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+		var monitoredProcess = MonitoredProcess.Attach(
+			process,
+			new JsonOutputFormatter(TextWriter.Null),
+			useJson: true,
+			verbose: false,
+			"trace",
+			CancellationToken.None,
+			onStdoutLine: line =>
+			{
+				if (line == "ready")
+					ready.TrySetResult(true);
+				else if (line == "finalizing")
+					finalizationStarted.TrySetResult(true);
+			});
+
+		return new ProfileTestProcess(monitoredProcess, ready.Task, finalizationStarted.Task);
+	}
+
+	static string CreateProfilingInjectionTestProject(string targetsPath, string intermediateOutputPath)
+		=> $"""
+			<Project>
+			  <PropertyGroup>
+			    <UseMaui>true</UseMaui>
+			    <TargetFramework>net10.0-android</TargetFramework>
+			    <IntermediateOutputPath>{System.Security.SecurityElement.Escape(intermediateOutputPath + Path.DirectorySeparatorChar)}</IntermediateOutputPath>
+			  </PropertyGroup>
+			  <Import Project="{System.Security.SecurityElement.Escape(targetsPath)}" />
+			</Project>
+			""";
+
+	static async Task<(int ExitCode, string Output)> RunProfilingInjectionTargetAsync(string projectPath, string selectedProjectPath)
+	{
+		var dotnetHost = Path.GetFullPath(Path.Combine(
+			System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(),
+			"..",
+			"..",
+			"..",
+			OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet"));
+		var startInfo = new ProcessStartInfo(dotnetHost)
+		{
+			UseShellExecute = false,
+			RedirectStandardOutput = true,
+			RedirectStandardError = true,
+			CreateNoWindow = true
+		};
+		foreach (var argument in new[]
+		{
+			"msbuild",
+			projectPath,
+			"-t:GenerateMauiProfilingHelperEnvironment",
+			"--nologo",
+			"-p:MauiProfilingHelperInject=true",
+			$"-p:MauiProfilingHelperProjectFullPath={selectedProjectPath}"
+		})
+		{
+			startInfo.ArgumentList.Add(argument);
+		}
+
+		using var process = Process.Start(startInfo)
+			?? throw new InvalidOperationException("Failed to start the profiling injection MSBuild test.");
+		var standardOutput = process.StandardOutput.ReadToEndAsync();
+		var standardError = process.StandardError.ReadToEndAsync();
+		await process.WaitForExitAsync();
+		var output = await standardOutput + await standardError;
+
+		return (process.ExitCode, output);
+	}
+
 	static TempFile CreateTempFile(string fileName)
 	{
 		var directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "maui-cli-profile-tests", Guid.NewGuid().ToString("N"));
@@ -1223,6 +1825,25 @@ public class ProfileCommandTests
 					File.Delete(Path);
 			}
 			catch { /* best-effort cleanup */ }
+		}
+	}
+
+	sealed class ProfileTestProcess(
+		MonitoredProcess monitoredProcess,
+		Task ready,
+		Task finalizationStarted) : IAsyncDisposable
+	{
+		public MonitoredProcess MonitoredProcess { get; } = monitoredProcess;
+		public Process Process => MonitoredProcess.Process;
+		public Task Ready { get; } = ready;
+		public Task FinalizationStarted { get; } = finalizationStarted;
+
+		public async ValueTask DisposeAsync()
+		{
+			if (!Process.HasExited)
+				Process.Kill(entireProcessTree: true);
+			await Process.WaitForExitAsync();
+			MonitoredProcess.Dispose();
 		}
 	}
 }

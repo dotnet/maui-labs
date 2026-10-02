@@ -17,10 +17,16 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Windows.WPF\Windows.WPF.csproj" />
+    <ProjectReference Include="..\..\src\Windows.WPF.Essentials\Windows.WPF.Essentials.csproj" />
+    <ProjectReference Include="..\..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Core\Microsoft.Maui.DevFlow.Agent.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Compile Include="..\..\samples\Windows.WPF.Sample\TestScenarios\AssetCases.cs" Link="AssetCases.cs" />
   </ItemGroup>
+
+  <Import Project="..\..\samples\Windows.WPF.Sample\TestScenarios\PackagedAssets.props" />
+  <Import Project="..\..\src\Windows.WPF\build\Microsoft.Maui.Platforms.Windows.WPF.targets" />
 
 </Project>

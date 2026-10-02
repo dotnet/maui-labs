@@ -30,7 +30,7 @@ internal static class ProfileCommandArguments
 		if (!UsesRuntimeOwnedEventPipe(buildInjection))
 			AppendDiagnosticArguments(args, transport, diagnosticPort, diagnosticSuspend);
 
-		AppendBuildInjectionArguments(args, buildInjection);
+		AppendBuildInjectionArguments(args, projectPath, buildInjection);
 		return [.. args];
 	}
 
@@ -65,7 +65,7 @@ internal static class ProfileCommandArguments
 			args.Add("-p:_MlaunchWaitForExit=false");
 		}
 
-		AppendBuildInjectionArguments(args, buildInjection);
+		AppendBuildInjectionArguments(args, projectPath, buildInjection);
 		return [.. args];
 	}
 
@@ -80,13 +80,14 @@ internal static class ProfileCommandArguments
 	static void AppendEnableDiagnosticsArgument(List<string> args)
 		=> args.Add("-p:EnableDiagnostics=true");
 
-	static void AppendBuildInjectionArguments(List<string> args, ProfilingBuildInjection? buildInjection)
+	static void AppendBuildInjectionArguments(List<string> args, string projectPath, ProfilingBuildInjection? buildInjection)
 	{
 		if (buildInjection is null)
 			return;
 
 		args.Add($"-p:CustomAfterMicrosoftCommonTargets={buildInjection.TargetsPath}");
 		args.Add("-p:MauiProfilingHelperInject=true");
+		args.Add($"-p:MauiProfilingHelperProjectFullPath={Path.GetFullPath(projectPath)}");
 		if (!string.IsNullOrWhiteSpace(buildInjection.ExitControlHost))
 			args.Add($"-p:MauiProfilingHelperExitHost={buildInjection.ExitControlHost}");
 		if (buildInjection.ExitControlPort > 0)
