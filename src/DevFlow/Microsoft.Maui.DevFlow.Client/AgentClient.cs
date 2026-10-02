@@ -2684,6 +2684,26 @@ public class AgentClient : IDisposable
 
     // ── Network monitoring ──
 
+    /// <summary>
+    /// Retrieves network summaries with cancellation and explicit HTTP/JSON failures.
+    /// Unlike the legacy overload, an unavailable capture is not reported as an empty result.
+    /// </summary>
+    public async Task<List<NetworkRequest>> GetNetworkRequestsAsync(
+        int limit, CancellationToken cancellationToken)
+    {
+        if (limit < 1)
+            throw new ArgumentOutOfRangeException(nameof(limit));
+        cancellationToken.ThrowIfCancellationRequested();
+        using var response = await SendWithTransientRetriesAsync(
+            HttpMethod.Get,
+            () => _http.GetAsync($"{_baseUrl}{NetworkApi}/requests?limit={limit}", cancellationToken));
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadAsStringAsync();
+        cancellationToken.ThrowIfCancellationRequested();
+        return ProtocolJson.Deserialize<List<NetworkRequest>>(body)
+            ?? throw new InvalidDataException("The agent did not return a network request array.");
+    }
+
     public async Task<List<NetworkRequest>> GetNetworkRequestsAsync(
         int limit = 100, string? host = null, string? method = null)
     {
