@@ -110,6 +110,11 @@ public partial class WindowSizingTests
 		{
 			var content = Native.GetChild()!;
 			output.WriteLine($"{Name} {step}: native outer {Native.GetAllocatedWidth()}x{Native.GetAllocatedHeight()}, content {content.GetAllocatedWidth()}x{content.GetAllocatedHeight()}, window {Window.Width}x{Window.Height}, events {WindowEvents}");
+			foreach (var (view, events) in SizeEvents)
+			{
+				var native = (Gtk.Widget)view.Handler!.PlatformView!;
+				output.WriteLine($"{Name} {step}: {view.GetType().Name} frame {view.Frame}; native {native.GetAllocatedWidth()}x{native.GetAllocatedHeight()}; events {events}; allocations {((IAllocationProbe)view).Allocations.Count}");
+			}
 			Assert.True(content.GetAllocatedWidth() > 0 && content.GetAllocatedHeight() > 0);
 			Assert.Equal(content.GetAllocatedWidth(), Window.Width);
 			Assert.Equal(content.GetAllocatedHeight(), Window.Height);
@@ -118,7 +123,6 @@ public partial class WindowSizingTests
 			foreach (var (view, events) in SizeEvents)
 			{
 				var native = (Gtk.Widget)view.Handler!.PlatformView!;
-				output.WriteLine($"{Name} {step}: {view.GetType().Name} frame {view.Frame}; native {native.GetAllocatedWidth()}x{native.GetAllocatedHeight()}; events {events}; allocations {((IAllocationProbe)view).Allocations.Count}");
 				Assert.True(view.Width > 0 && view.Height > 0);
 				Assert.Equal(native.GetAllocatedWidth(), view.Width);
 				Assert.Equal(native.GetAllocatedHeight(), view.Height);
