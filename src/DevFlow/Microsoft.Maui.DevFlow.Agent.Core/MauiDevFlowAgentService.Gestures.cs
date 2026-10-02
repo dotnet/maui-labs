@@ -42,7 +42,7 @@ public partial class MauiDevFlowAgentService
             {
                 Method = "POST",
                 MutationState = request.MutationState,
-                Body = JsonSerializer.Serialize(new ActionRequest { ElementId = body.ElementId })
+                Body = AgentJson.Serialize(new ActionRequest { ElementId = body.ElementId })
             });
             failureStatusCode = tapResponse.StatusCode;
             outcome = tapResponse.StatusCode < 400
@@ -72,7 +72,7 @@ public partial class MauiDevFlowAgentService
             {
                 Method = "POST",
                 MutationState = request.MutationState,
-                Body = JsonSerializer.Serialize(new ScrollRequest
+                Body = AgentJson.Serialize(new ScrollRequest
                 {
                     ElementId = body.ElementId,
                     DeltaX = -SwipeDeltaX(body.Direction, body.Distance),
@@ -91,17 +91,17 @@ public partial class MauiDevFlowAgentService
             outcome.Success,
             outcome.Success ? null : outcome.Error,
             body.ElementId,
-            new { gesture = gestureType, handledBy = outcome.HandledBy, detail = outcome.Detail });
+            new Dictionary<string, object?> { ["gesture"] = gestureType, ["handledBy"] = outcome.HandledBy, ["detail"] = outcome.Detail });
 
-        var response = HttpResponse.Json(new
+        var response = HttpResponse.Json(new Dictionary<string, object?>
         {
-            success = outcome.Success,
-            type = gestureType,
-            elementId = body.ElementId,
-            handledBy = outcome.HandledBy,
-            platform = DeviceInfo.Platform.ToString(),
-            detail = outcome.Detail,
-            error = outcome.Error
+            ["success"] = outcome.Success,
+            ["type"] = gestureType,
+            ["elementId"] = body.ElementId,
+            ["handledBy"] = outcome.HandledBy,
+            ["platform"] = DeviceInfo.Platform.ToString(),
+            ["detail"] = outcome.Detail,
+            ["error"] = outcome.Error
         });
 
         if (!outcome.Success)

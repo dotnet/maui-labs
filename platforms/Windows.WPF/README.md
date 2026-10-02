@@ -9,6 +9,13 @@ This backend uses the platform-agnostic MAUI NuGet packages (`net10.0` fallback 
 
 > **Inspiration:** This project follows the patterns established by [mauiplatforms](https://github.com/Redth/mauiplatforms) (macOS/tvOS backends) and [Maui.Gtk](https://github.com/AathifMahir/Maui.Gtk).
 
+## Window and page titles
+
+The native title bar belongs to `Window.Title`. Page titles are used by navigation
+and Shell headers; creating, renaming, or returning to a page does not change any
+window's title bar. Set or bind `Window.Title` explicitly to change it. An empty
+window title stays empty rather than falling back to a page title.
+
 ## Shell inspection with DevFlow
 
 Shell creates only the selected page through its content controller. Template pages
@@ -91,6 +98,43 @@ For template development, run `eng\smoke-tests\wpf-template-smoke-test.ps1` on W
 It packs, generates, restores, builds, and launches the template using an isolated
 template hive. See [validation details](docs/getting-started.md#validating-template-changes).
 
+## Packaged raw assets
+
+Declare raw files as `MauiAsset` items with their package-relative names:
+
+```xml
+<MauiAsset Include="Resources\Raw\**\*" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+```
+
+For example, `Resources\Raw\Data\sample.txt` is copied to `Data\sample.txt`
+under the app directory in both build and publish output. Open it with
+`IFileSystem.OpenAppPackageFileAsync("Data/sample.txt")`; use
+`AppPackageFileExistsAsync` with the same name. Resolve `IFileSystem` from the
+services registered by `UseWPFEssentials()`.
+
+An explicit `LogicalName` takes precedence over `Link`. Without either metadata,
+the path defaults to `%(RecursiveDir)%(Filename)%(Extension)` (a single explicitly
+included file uses its filename). Nested folders are preserved, so files with
+the same basename in different logical folders remain distinct. Do not prefix
+the runtime name with `Resources\Raw`.
+
+Run `eng\smoke-tests\wpf-assets-smoke-test.ps1 -RuntimeIdentifier win-x64` on
+Windows (choose the RID matching your selected `dotnet` host) to build and run the
+existing `Windows.WPF.Sample` with `-p:WpfTestScenarios=true`, then publish it
+without rebuilding and run it again. The opt-in `--test-scenario packaged-assets`
+entrypoint uses the actual DI-registered WPF file system without opening a window
+or starting DevFlow. Normal startup (no scenario argument) still opens the gallery.
+Scenario code and fixtures live under the sample's `TestScenarios` directory;
+additional runtime checks should use this shared host rather than new test apps.
+Launch scenarios with `dotnet Windows.WPF.Sample.dll --test-scenario <name>` to
+see console diagnostics; the normal Windows executable is a GUI application.
+The same asset definitions and expected contents are reused by `HandlerTests`,
+while the smoke verifies the real sample build/publish output through the shipping
+backend MSBuild target. `-TargetsFile` can select a historical target file for
+regression reproduction; it never changes the shipped target.
+The same explicit RID is used for build and no-build publish so Razor's generated
+manifests are read from the directory where the build wrote them.
+
 ## Samples
 
 See the `samples/` directory for working examples:
@@ -133,7 +177,7 @@ See the `samples/` directory for working examples:
 
 | Control | Status | Notes |
 |---|---|---|
-| CollectionView | ✅ | WPF ListBox with DataTemplateSelector, SelectedItem, SelectionMode, EmptyView |
+| CollectionView | ✅ | WPF ListBox with DataTemplateSelector, SelectedItem, SelectionMode, EmptyView; observable flat and grouped sources update live |
 | ListView | ✅ | WPF ListBox with MAUI template bridge |
 | CarouselView | ✅ | Horizontal ListBox with arrow navigation buttons |
 | IndicatorView | ✅ | Dot indicators as Ellipses |
@@ -184,7 +228,7 @@ All MAUI shapes render via WPF `System.Windows.Shapes`:
 | Application | ✅ | MauiWPFApplication base class |
 | Window | ✅ | Title, Size, Position, Min/Max, MenuBar, Multi-window |
 | Dispatcher | ✅ | WPF Dispatcher + DispatcherProvider |
-| Dialogs | ✅ | DisplayAlert (MessageBox), DisplayActionSheet, DisplayPromptAsync (custom windows) |
+| Dialogs | ✅ | DisplayAlert, DisplayActionSheet, DisplayPromptAsync (native WPF windows with app-provided button labels) |
 | Font Management | ✅ | IFontManager, IFontRegistrar, embedded font loading, FontImageSource glyph rendering |
 | Dark/Light Mode | ✅ | ThemeManager detects via registry + SystemEvents, fires ThemeChanged |
 | Animations | ✅ | WPFTicker at ~60fps, TranslateTo/FadeTo/ScaleTo/RotateTo all work |

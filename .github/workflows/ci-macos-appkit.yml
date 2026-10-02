@@ -39,6 +39,7 @@ jobs:
 
   native-runtime:
     name: AppKit runtime (${{ matrix.scenario }}, ${{ matrix.maui-version || 'default' }})
+    needs: build
     runs-on: macos-latest
     timeout-minutes: 25
     strategy:
@@ -49,6 +50,12 @@ jobs:
             maui-version: ''
           - scenario: shell-sections
             maui-version: ''
+          - scenario: picker
+            maui-version: ''
+          - scenario: bundle-resources
+            maui-version: ''
+            workloads: 'macos maui maui-tizen'
+            packages: true
     env:
       NUGET_PACKAGES: ${{ github.workspace }}/.packages
     steps:
@@ -58,8 +65,14 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
-      - name: Install pinned macOS workload
-        run: ./eng/common/dotnet.sh workload install macos --version 10.0.203
+      - name: Install pinned scenario workloads
+        run: ./eng/common/dotnet.sh workload install ${{ matrix.workloads || 'macos' }} --version 10.0.203
+      - name: Download requested product packages
+        if: matrix.packages == true
+        uses: actions/download-artifact@v8
+        with:
+          name: packages-macos-appkit-macos-latest
+          path: artifacts/runtime-packages
       - name: Verify shared runner contracts
         run: python3 -B -m unittest discover -s platforms/MacOS/tests/MacOS.RuntimeTests -p 'test_*.py'
       - name: Run registered baseline and fixed scenario
