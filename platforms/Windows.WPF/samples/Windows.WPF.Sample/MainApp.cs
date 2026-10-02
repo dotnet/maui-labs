@@ -10,6 +10,8 @@ class MainApp : Application
 {
 	protected override Window CreateWindow(IActivationState? activationState)
 	{
+		if (Environment.GetCommandLineArgs().Contains("--shell-section-repro"))
+			return new Window(new SectionSwitchingShell()) { Title = "Shell section switching (#556)" };
 		return new Window(new MainShell()) { Title = "WPF Control Gallery" };
 	}
 }

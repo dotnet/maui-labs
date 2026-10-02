@@ -12,6 +12,7 @@ using Microsoft.Maui.WPF;
 
 namespace HandlerTests;
 
+[Collection("Shell handlers")]
 public class ShellHandlerTests
 {
 	[Fact]

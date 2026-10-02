@@ -93,5 +93,5 @@ for model selection, availability, and measured limitations.
 - [Embedding guide and provider comparison](https://github.com/dotnet/docs-maui/blob/main/docs/ai/embeddings.md)
 - [Apple chat best practices and image-input preview](https://github.com/dotnet/docs-maui/blob/main/docs/ai/chat/apple.md)
 - [Source code](https://github.com/dotnet/maui-labs/tree/main/src/AI)
-- [Sample app](https://github.com/dotnet/maui-labs/tree/main/samples/EssentialsAISample)
+- [Chat Playground](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)
 - [Microsoft.Extensions.AI documentation](https://learn.microsoft.com/dotnet/ai/ai-extensions)

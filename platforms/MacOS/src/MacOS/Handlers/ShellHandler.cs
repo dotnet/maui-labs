@@ -65,6 +65,17 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 	{
 	}
 
+	public override void SetVirtualView(IView view)
+	{
+		if (!ReferenceEquals(_shell, view))
+			DisconnectShellEvents();
+		base.SetVirtualView(view);
+		ConnectShellEvents();
+		EnsureShellItemHandlers();
+		BuildSidebar();
+		ShowCurrentPage();
+	}
+
 	/// <summary>
 	/// Exposes the NSSplitViewController so WindowHandler can set it as the
 	/// window's contentViewController for proper sidebar titlebar integration.
@@ -181,19 +192,8 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 	protected override void ConnectHandler(NSView platformView)
 	{
 		base.ConnectHandler(platformView);
-		_shell = VirtualView;
-
-		if (_shell != null)
-		{
-			((INotifyCollectionChanged)_shell.Items).CollectionChanged += OnShellItemsChanged;
-			_shell.Navigating += OnShellNavigating;
-			_shell.Navigated += OnShellNavigated;
-			_shell.PropertyChanged += OnShellPropertyChanged;
-
-			// Ensure handlers are created for all Shell sub-elements so
-			// Shell's internal navigation system (GoToAsync) can resolve them
-			EnsureShellItemHandlers();
-		}
+		ConnectShellEvents();
+		EnsureShellItemHandlers();
 
 		// Set initial sidebar width
 		_splitViewController?.SplitView?.SetPositionOfDivider(_flyoutWidth, 0);
@@ -204,19 +204,12 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 	protected override void DisconnectHandler(NSView platformView)
 	{
 		UnregisterNativeElements();
-		if (_shell != null)
-		{
-			((INotifyCollectionChanged)_shell.Items).CollectionChanged -= OnShellItemsChanged;
-			_shell.Navigating -= OnShellNavigating;
-			_shell.Navigated -= OnShellNavigated;
-			_shell.PropertyChanged -= OnShellPropertyChanged;
-		}
+		DisconnectShellEvents();
 		if (_contentFrameChangedObserver != null)
 		{
 			NSNotificationCenter.DefaultCenter.RemoveObserver(_contentFrameChangedObserver);
 			_contentFrameChangedObserver = null;
 		}
-		_shell = null;
 		base.DisconnectHandler(platformView);
 	}
 

@@ -14,7 +14,7 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Handlers;
 /// - Gtk.Paned for flyout sidebar | content split
 /// - Gtk.ListBox for flyout menu items
 /// - Gtk.Notebook for section tabs
-/// - Gtk.Stack for page navigation within sections
+/// - A stable Gtk.Box per section for its current navigation page
 /// </summary>
 public partial class ShellHandler : GtkViewHandler<Shell, Gtk.Box>
 {
@@ -29,6 +29,10 @@ public partial class ShellHandler : GtkViewHandler<Shell, Gtk.Box>
 	bool _updatingSelection;
 	readonly List<Gtk.Widget> _registeredFlyoutElements = new();
 	readonly List<Gtk.Widget> _registeredTabElements = new();
+	readonly List<ShellSectionNavigationObserver> _sectionObservers = new();
+	readonly List<Gtk.Box> _sectionContainers = new();
+	Shell? _observedShell;
+	int _sectionGeneration;
 
 	public static IPropertyMapper<Shell, ShellHandler> Mapper =
 		new PropertyMapper<Shell, ShellHandler>(ViewMapper)
@@ -52,6 +56,23 @@ public partial class ShellHandler : GtkViewHandler<Shell, Gtk.Box>
 		new(ViewCommandMapper);
 
 	public ShellHandler() : base(Mapper, CommandMapper) { }
+
+	public override void SetVirtualView(IView view)
+	{
+		base.SetVirtualView(view);
+		ObserveShell(VirtualView);
+	}
+
+	void ObserveShell(Shell? shell)
+	{
+		if (_observedShell == shell)
+			return;
+		if (_observedShell != null)
+			_observedShell.Navigated -= OnShellNavigated;
+		_observedShell = shell;
+		if (_observedShell != null)
+			_observedShell.Navigated += OnShellNavigated;
+	}
 
 	protected override Gtk.Box CreatePlatformView()
 	{
@@ -131,6 +152,7 @@ public partial class ShellHandler : GtkViewHandler<Shell, Gtk.Box>
 
 		if (VirtualView != null)
 		{
+			ObserveShell(VirtualView);
 			RebuildFlyoutItems();
 			RebuildTabs();
 		}
@@ -138,6 +160,8 @@ public partial class ShellHandler : GtkViewHandler<Shell, Gtk.Box>
 
 	protected override void DisconnectHandler(Gtk.Box platformView)
 	{
+		ObserveShell(null);
+		ClearSectionObservers();
 		UnregisterNativeElements(_registeredFlyoutElements);
 		UnregisterNativeElements(_registeredTabElements);
 		if (_flyoutListBox != null)
@@ -246,46 +270,99 @@ public partial class ShellHandler : GtkViewHandler<Shell, Gtk.Box>
 		if (_notebook == null || MauiContext == null)
 			return;
 
-		UnregisterNativeElements(_registeredTabElements);
-		// Clear existing tabs
-		while (_notebook.GetNPages() > 0)
-			_notebook.RemovePage(0);
-
-		var shellItem = VirtualView?.CurrentItem;
-		if (shellItem == null)
-			return;
-
-		bool singleSection = shellItem.Items.Count <= 1;
-
-		foreach (var section in shellItem.Items)
+		var wasUpdatingSelection = _updatingSelection;
+		_updatingSelection = true;
+		try
 		{
-			var page = GetCurrentPage(section);
-			if (page == null) continue;
+			ClearSectionObservers();
+			var generation = _sectionGeneration;
+			UnregisterNativeElements(_registeredTabElements);
+			while (_notebook.GetNPages() > 0)
+				_notebook.RemovePage(0);
 
-			var platformPage = (Gtk.Widget)page.ToPlatform(MauiContext);
-			platformPage.SetVexpand(true);
-			platformPage.SetHexpand(true);
+			var shellItem = VirtualView?.CurrentItem;
+			if (shellItem == null)
+				return;
 
-			var tabLabel = Gtk.Label.New(section.Title ?? page.Title ?? "Tab");
-			_notebook.AppendPage(platformPage, tabLabel);
-			RegisterNativeElement(section, tabLabel, "ShellTab", _registeredTabElements);
-		}
-
-		// Hide tab strip if only one section
-		_notebook.SetShowTabs(!singleSection);
-
-		// Select the current section
-		if (shellItem.CurrentItem != null)
-		{
-			int sectionIdx = shellItem.Items.IndexOf(shellItem.CurrentItem);
-			if (sectionIdx >= 0 && sectionIdx < _notebook.GetNPages())
+			foreach (var section in shellItem.Items)
 			{
-				_updatingSelection = true;
-				_notebook.SetCurrentPage(sectionIdx);
-				_updatingSelection = false;
+				var container = Gtk.Box.New(Gtk.Orientation.Vertical, 0);
+				container.SetVexpand(true);
+				container.SetHexpand(true);
+				_sectionContainers.Add(container);
+				var tabLabel = Gtk.Label.New(section.Title ?? "Tab");
+				_notebook.AppendPage(container, tabLabel);
+				RegisterNativeElement(section, tabLabel, "ShellTab", _registeredTabElements);
+				var displayVersion = 0;
+				var observer = new ShellSectionNavigationObserver(section, page =>
+				{
+					var version = ++displayVersion;
+					bool IsCurrent() => generation == _sectionGeneration && version == displayVersion;
+					DisplaySectionPage(container, page, IsCurrent);
+					if (IsCurrent())
+						tabLabel.SetText(section.Title ?? page?.Title ?? "Tab");
+				});
+				_sectionObservers.Add(observer);
+				observer.Refresh();
+				if (generation != _sectionGeneration)
+					return;
+			}
+
+			_notebook.SetShowTabs(shellItem.Items.Count > 1);
+
+			if (shellItem.CurrentItem != null)
+			{
+				int sectionIdx = shellItem.Items.IndexOf(shellItem.CurrentItem);
+				if (sectionIdx >= 0 && sectionIdx < _notebook.GetNPages())
+					_notebook.SetCurrentPage(sectionIdx);
 			}
 		}
+		finally
+		{
+			_updatingSelection = wasUpdatingSelection;
+		}
+	}
 
+	void DisplaySectionPage(Gtk.Box container, Page? page, Func<bool> isCurrent)
+	{
+		if (!isCurrent())
+			return;
+		var platformPage = page == null ? null : (Gtk.Widget)page.ToPlatform(MauiContext!);
+		// Handler creation can run application code which navigates or disconnects Shell.
+		if (!isCurrent())
+			return;
+		if (container.GetFirstChild() == platformPage)
+			return;
+
+		while (container.GetFirstChild() is Gtk.Widget child)
+			container.Remove(child);
+
+		if (platformPage != null)
+		{
+			platformPage.SetVexpand(true);
+			platformPage.SetHexpand(true);
+			container.Append(platformPage);
+		}
+	}
+
+	void OnShellNavigated(object? sender, ShellNavigatedEventArgs args)
+	{
+		foreach (var observer in _sectionObservers.ToArray())
+			observer.Refresh();
+	}
+
+	void ClearSectionObservers()
+	{
+		_sectionGeneration++;
+		foreach (var observer in _sectionObservers)
+			observer.Dispose();
+		_sectionObservers.Clear();
+		foreach (var container in _sectionContainers)
+		{
+			while (container.GetFirstChild() is Gtk.Widget child)
+				container.Remove(child);
+		}
+		_sectionContainers.Clear();
 	}
 
 	void RegisterNativeElement(
@@ -303,15 +380,6 @@ public partial class ShellHandler : GtkViewHandler<Shell, Gtk.Box>
 		foreach (var nativeElement in registrations)
 			NativeElementDiagnosticsBridge.Unregister(nativeElement);
 		registrations.Clear();
-	}
-
-	static Page? GetCurrentPage(ShellSection section)
-	{
-		if (section.CurrentItem is ShellContent content)
-		{
-			return (content as IShellContentController)?.GetOrCreateContent();
-		}
-		return null;
 	}
 
 	void UpdateFlyoutVisibility()
