@@ -75,7 +75,6 @@ capture the templated and non-templated repro states as PNG and JSON.
 Only the keyboard-focus cases activate their window; all other cases are
 nonactivating. On a shared desktop, run the focus cases only with exclusive
 foreground access. They assert actual keyboard focus, not just logical focus.
-
 For section switching within one Shell item, select **Launch Section Switching
 Repro**, or start the sample with `--shell-section-repro`. This uses two lazy
 pages in one `TabBar`, without calling a handler refresh workaround. The
