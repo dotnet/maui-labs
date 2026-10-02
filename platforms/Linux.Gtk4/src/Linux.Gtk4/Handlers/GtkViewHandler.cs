@@ -68,10 +68,22 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 
 	Gtk.CssProvider? _transitionCssProvider;
 	Platform.GtkAllocationObserver? _pageAllocationObserver;
+	protected int LayoutGeneration { get; private set; }
+
+	public override void SetVirtualView(IView view)
+	{
+		var changed = VirtualView != view;
+		if (changed)
+			LayoutGeneration++;
+		base.SetVirtualView(view);
+		if (changed)
+			_pageAllocationObserver?.Invalidate();
+	}
 
 	protected override void ConnectHandler(TPlatformView platformView)
 	{
 		base.ConnectHandler(platformView);
+		LayoutGeneration++;
 		SetupVisualStateTracking(platformView);
 		ApplyTransitionCss(platformView);
 		if (VirtualView is Microsoft.Maui.Controls.Page)
@@ -79,10 +91,11 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 			_pageAllocationObserver = new Platform.GtkAllocationObserver(platformView, (width, height) =>
 			{
 				var view = VirtualView;
+				var generation = LayoutGeneration;
 				if (view == null || platformView.GetParent() is Platform.GtkLayoutPanel)
 					return;
 				view.Measure(width, height);
-				if (VirtualView == view)
+				if (VirtualView == view && PlatformView == platformView && LayoutGeneration == generation)
 					view.Arrange(new Rect(0, 0, width, height));
 			}, MauiContext?.Services.GetService(typeof(Microsoft.Extensions.Logging.ILoggerFactory)) is
 				Microsoft.Extensions.Logging.ILoggerFactory factory ? factory.CreateLogger(GetType().FullName!) : null);
@@ -91,6 +104,7 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 
 	protected override void DisconnectHandler(TPlatformView platformView)
 	{
+		LayoutGeneration++;
 		_pageAllocationObserver?.Dispose();
 		_pageAllocationObserver = null;
 		_zIndexMap.TryRemove(platformView.Handle.DangerousGetHandle(), out _);

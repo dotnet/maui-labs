@@ -61,6 +61,7 @@ public partial class WindowSizingTests
 		public SizedPage Page { get; } = new();
 		public SizedGrid Grid { get; } = new();
 		public Label Label { get; } = new() { Text = "Native allocated frames" };
+		public CollectionView Collection { get; }
 		public List<SizedGrid> Cards { get; } = [];
 		public Dictionary<VisualElement, int> SizeEvents { get; } = [];
 		public int WindowEvents { get; private set; }
@@ -72,18 +73,22 @@ public partial class WindowSizingTests
 			Grid.RowDefinitions.Add(new RowDefinition { Height = 40 });
 			Grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Star });
 			Grid.Add(Label);
-			var collection = new CollectionView
+			Collection = new CollectionView
 			{
 				ItemsSource = new[] { "First", "Second", "Third" },
 				ItemTemplate = new DataTemplate(() =>
 				{
-					var card = new SizedGrid { HeightRequest = 50 };
-					card.Add(new Label { Text = "Card content" });
+					var card = new SizedGrid();
+					card.Add(new Label
+					{
+						Text = string.Join(" ", Enumerable.Repeat("Card content wraps across the available width.", 12)),
+						LineBreakMode = LineBreakMode.WordWrap
+					});
 					Cards.Add(card);
 					return card;
 				})
 			};
-			Grid.Add(collection, 0, 1);
+			Grid.Add(Collection, 0, 1);
 			Page.Content = Grid;
 			Page root = shell
 				? new SizedShell
@@ -140,6 +145,7 @@ public partial class WindowSizingTests
 				var native = (Gtk.Widget)card.Handler!.PlatformView!;
 				Assert.True(card.Width > 0);
 				Assert.Equal(native.GetAllocatedWidth(), card.Width);
+				Assert.Equal(native.GetAllocatedHeight(), card.Height);
 				Assert.Equal(card.Width, card.Children[0].Frame.Width);
 				Assert.InRange(card.Width, Grid.Width - 40, Grid.Width);
 			}
@@ -157,6 +163,7 @@ public partial class WindowSizingTests
 		int[][] _viewEvents = [];
 		int[][] _allocations = [];
 		Size[] _windowSizes = [];
+		double[] _cardHeights = [];
 		readonly Stopwatch _clock = new();
 
 		public void Start()
@@ -177,6 +184,8 @@ public partial class WindowSizingTests
 			_viewEvents = _scenarios.Select(s => s.SizeEvents.Values.ToArray()).ToArray();
 			_allocations = _scenarios.Select(s => s.SizeEvents.Keys.Select(v => ((IAllocationProbe)v).Allocations.Count).ToArray()).ToArray();
 			_windowSizes = _scenarios.Select(s => new Size(s.Window.Width, s.Window.Height)).ToArray();
+			_cardHeights = _scenarios.Select(s => s.Cards.FirstOrDefault(c =>
+				c.Handler?.PlatformView is Gtk.Widget widget && widget.GetMapped())?.Height ?? -1).ToArray();
 			if (_step < _sizes.Length)
 				for (var i = 0; i < _scenarios.Length; i++)
 				{
@@ -208,6 +217,9 @@ public partial class WindowSizingTests
 					scenario.WindowHandler.SetVirtualView(scenario.Window);
 					scenario.Native.SetDefaultSize(680, 600);
 				}
+			if (_step == 8)
+				foreach (var scenario in _scenarios)
+					scenario.Collection.ItemsSource = new[] { "Replacement first", "Replacement second" };
 			_clock.Restart();
 		}
 
@@ -233,10 +245,15 @@ public partial class WindowSizingTests
 							continue;
 						}
 						scenario.AssertFrames(output, $"step {_step}");
+						var cardHeight = scenario.Cards.First(c => c.Handler?.PlatformView is Gtk.Widget widget && widget.GetMapped()).Height;
+						if (_step is 1 or 3)
+							Assert.True(cardHeight > _cardHeights[i], "Wrapping rows must grow when narrowed.");
+						if (_step == 2)
+							Assert.True(cardHeight < _cardHeights[i], "Wrapping rows must shrink when widened.");
 						if (_step >= 5)
 							Assert.True(scenario.Window.Height < scenario.Native.GetAllocatedHeight(),
 								"Client-side titlebar must not be counted in Window.Height.");
-						if (_step == _sizes.Length)
+						if (_step == _sizes.Length || _step == 8)
 						{
 							Assert.Equal(_windowEvents[i], scenario.WindowEvents);
 							Assert.Equal(_viewEvents[i], scenario.SizeEvents.Values.ToArray());
@@ -259,7 +276,7 @@ public partial class WindowSizingTests
 						_failures.Add(ex);
 					}
 				}
-				if (++_step <= 7)
+				if (++_step <= 8)
 				{
 					Apply();
 					return true;
@@ -271,7 +288,10 @@ public partial class WindowSizingTests
 			}
 			foreach (var scenario in _scenarios)
 				scenario.Native.Close();
-			finish(_failures.Count == 0 ? null : new AggregateException(_failures));
+			if (_failures.Count == 0)
+				new AllocationLifecycleChecks(app, output, finish).Start();
+			else
+				finish(new AggregateException(_failures));
 			return false;
 		}
 	}

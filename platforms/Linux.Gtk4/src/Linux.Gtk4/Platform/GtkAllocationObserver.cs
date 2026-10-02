@@ -48,7 +48,9 @@ internal sealed class GtkAllocationObserver : IDisposable
 		});
 	}
 
-	void OnMap(Gtk.Widget sender, EventArgs args) => _width = _height = -1;
+	public void Invalidate() => _width = _height = -1;
+
+	void OnMap(Gtk.Widget sender, EventArgs args) => Invalidate();
 
 	public void Dispose()
 	{

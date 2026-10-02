@@ -290,12 +290,18 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 		// and keep cards clipped after narrowing the viewport.
 		_templateAllocations[nativeWidget] = new GtkAllocationObserver(nativeWidget, (width, _) =>
 		{
+			var generation = LayoutGeneration;
 			mauiView.InvalidateMeasure();
+			if (generation != LayoutGeneration || !_templateAllocations.ContainsKey(nativeWidget))
+				return;
 			var view = (IView)mauiView;
 			var measured = view.Measure(width, double.PositiveInfinity);
+			if (generation != LayoutGeneration || !_templateAllocations.ContainsKey(nativeWidget))
+				return;
 			var rowHeight = Math.Max((int)Math.Ceiling(measured.Height), 20);
 			view.Arrange(new Rect(0, 0, width, rowHeight));
-			nativeWidget.SetSizeRequest(-1, rowHeight);
+			if (generation == LayoutGeneration && _templateAllocations.ContainsKey(nativeWidget))
+				nativeWidget.SetSizeRequest(-1, rowHeight);
 		}, MauiContext.Services.GetService(typeof(Microsoft.Extensions.Logging.ILoggerFactory)) is
 			Microsoft.Extensions.Logging.ILoggerFactory factory ? factory.CreateLogger(GetType().FullName!) : null);
 

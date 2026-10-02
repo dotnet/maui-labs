@@ -45,6 +45,14 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 			?? new Gtk.Window();
 	}
 
+	public override void SetVirtualView(IElement view)
+	{
+		var changed = VirtualView != view;
+		base.SetVirtualView(view);
+		if (changed)
+			_allocationObserver?.Invalidate();
+	}
+
 	protected override void ConnectHandler(Gtk.Window platformView)
 	{
 		base.ConnectHandler(platformView);
