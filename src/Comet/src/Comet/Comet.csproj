@@ -61,6 +61,10 @@
 	      Pack="true" PackagePath="build\CometSwiftUIShim.xcframework" />
 	<None Include="PackAssets\Comet.targets"
 	      Pack="true" PackagePath="build\Comet.targets" />
+	<None Include="PackAssets\Comet.Android.targets"
+	      Pack="true" PackagePath="buildTransitive\Comet.targets" />
+	<None Include="..\vendor\Microsoft.AndroidX.Compose\buildTransitive\*"
+	      Pack="true" PackagePath="buildTransitive\compose" />
   </ItemGroup>
 
 </Project>

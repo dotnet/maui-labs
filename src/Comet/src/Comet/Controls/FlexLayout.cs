@@ -12,7 +12,7 @@ using YogaFlexAlign = Comet.Layout.Yoga.FlexAlign;
 
 namespace Comet
 {
-	public class FlexLayout : AbstractLayout
+	public partial class FlexLayout : AbstractLayout
 	{
 		public FlexLayout(
 			YogaFlexDirection direction = YogaFlexDirection.Row,

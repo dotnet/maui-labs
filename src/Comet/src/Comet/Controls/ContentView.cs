@@ -5,10 +5,34 @@ using Microsoft.Maui.Graphics;
 
 namespace Comet
 {
-	public class ContentView : View, IEnumerable, IContainerView, IContentView
+	public partial class ContentView : View, IEnumerable, IContainerView, IContentView
 	{
 		IEnumerator IEnumerable.GetEnumerator() => new[] { Content }.GetEnumerator();
-		public View Content { get; set; }
+		View content;
+		public View Content
+		{
+			get => content;
+			set
+			{
+				if (ReferenceEquals(content, value))
+					return;
+				if (content is not null && ReferenceEquals(content.Parent, this))
+					content.Parent = null;
+				content = value;
+				if (content is not null)
+				{
+					content.Parent = this;
+					NavigationView.RebindNavigationOwner(
+						content,
+						this is NavigationView navigation ? navigation : Navigation);
+					TypeHashCode = content.GetContentTypeHashCode();
+				}
+				else
+				{
+					TypeHashCode = null;
+				}
+			}
+		}
 
 		object IContentView.Content => Content;
 
@@ -20,10 +44,7 @@ namespace Comet
 		{
 			if (view is null)
 				return;
-			view.Parent = this;
-			view.Navigation = Parent?.Navigation;
 			Content = view;
-			TypeHashCode = view.GetContentTypeHashCode();
 		}
 		protected override void OnParentChange(View parent)
 		{
@@ -31,6 +52,9 @@ namespace Comet
 			if (Content is not null)
 			{
 				Content.Parent = this;
+				NavigationView.RebindNavigationOwner(
+					Content,
+					this is NavigationView navigation ? navigation : Navigation);
 			}
 		}
 
@@ -42,7 +66,8 @@ namespace Comet
 
 		protected override void Dispose(bool disposing)
 		{
-			Content?.Dispose();
+			if (Content is { } content && ReferenceEquals(content.Parent, this))
+				content.Dispose();
 			Content = null;
 			base.Dispose(disposing);
 		}

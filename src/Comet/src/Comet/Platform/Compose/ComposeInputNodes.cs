@@ -19,6 +19,13 @@ namespace Comet.Platform.Compose
 		readonly MutableState<bool> _borderless = new(false);
 		Microsoft.Maui.Graphics.Color? _textColor;
 		Comet.ReturnType _returnType = Comet.ReturnType.Default;
+		int _keyboardTypeCode; // 0=Default 1=Numeric 2=Email 3=Url 4=Telephone 5=Chat 6=Plain
+		int _fontSize;
+		int _fontWeight;
+		string? _fontFamily;
+		bool _fontItalic;
+		AndroidX.Compose.FocusRequester? _focusRequester;
+		readonly MutableState<int> _styleVersion = new(0);
 
 		// TextFieldValue state (text + caret) for the borderless path: user edits hand back the
 		// full value, and programmatic edits (insert-at-cursor) can place the caret.
@@ -86,8 +93,32 @@ namespace Comet.Platform.Compose
 				_borderless.Value = value.AsBool;
 			else if (id == PropertyIds.TextField_TextColor)
 				_textColor = value.AsColor;
+			else if (id == PropertyIds.Text_FontSize)
+			{
+				_fontSize = (int)System.Math.Round(value.AsDouble);
+				_styleVersion.Value++;
+			}
+			else if (id == PropertyIds.Text_FontFamily)
+			{
+				_fontFamily = value.AsString;
+				_styleVersion.Value++;
+			}
+			else if (id == PropertyIds.Text_FontWeight)
+			{
+				_fontWeight = value.AsInt;
+				_styleVersion.Value++;
+			}
+			else if (id == PropertyIds.Text_Italic)
+			{
+				_fontItalic = value.AsBool;
+				_styleVersion.Value++;
+			}
 			else if (id == PropertyIds.TextField_ReturnType)
 				_returnType = (Comet.ReturnType)value.AsInt;
+			else if (id == PropertyIds.TextField_FocusRequested && value.AsBool)
+				_focusRequester?.RequestFocus();
+			else if (id == PropertyIds.TextField_Keyboard)
+				_keyboardTypeCode = value.AsInt;
 		}
 
 		// Map Comet's ReturnType (the soft-keyboard action key) to a Compose ImeAction int.
@@ -101,24 +132,43 @@ namespace Comet.Platform.Compose
 			_ => AndroidX.Compose.ImeAction.Default,
 		};
 
+		/// <summary>Maps the protocol keyboard code to a Compose KeyboardType constant.
+		/// Numeric maps to Decimal (allows decimal separator for values like 6.5).</summary>
+		int MapKeyboardType() => _keyboardTypeCode switch
+		{
+			1 => AndroidX.Compose.KeyboardType.Decimal,  // Numeric — allows decimal
+			2 => AndroidX.Compose.KeyboardType.Email,
+			3 => AndroidX.Compose.KeyboardType.Uri,
+			4 => AndroidX.Compose.KeyboardType.Phone,
+			6 => AndroidX.Compose.KeyboardType.Ascii,    // Plain
+			_ => AndroidX.Compose.KeyboardType.Text,     // Default, Text, Chat
+		};
+
 		// A Material TextField fills the available width and is ~56dp tall; give Yoga that intrinsic
 		// size so it doesn't collapse to zero height. A borderless field is sized to its text plus
 		// the requested vertical padding (no Material container chrome).
 		public override Size Measure(double widthConstraint, double heightConstraint)
 		{
 			double width = double.IsInfinity(widthConstraint) ? 0 : widthConstraint;
+			var text = TextMeasure.SingleLine(
+				string.IsNullOrEmpty(_text.Value) ? _placeholder.Value : _text.Value,
+				EffectiveFontSize(),
+				MeasureTypeface());
 			if (_borderless.Value)
-				return new Size(width, 22);   // content only — Yoga adds the leaf's padding
-			return new Size(width, 56);
+				return new Size(width, System.Math.Max(22, text.Height));
+			return new Size(width, System.Math.Max(56, text.Height + 32));
 		}
-
-		const int BorderlessFontSp = 16;
 
 		readonly MutableState<bool> _outlined = new(false);
 		readonly MutableState<string> _leadingIcon = new(string.Empty);
 
 		public override void Render(IComposer composer)
 		{
+			_ = _styleVersion.Value;
+			// Lazily create the FocusRequester — it's attached to the Modifier chain so
+			// RequestFocus() programmatically opens the keyboard on this exact field.
+			_focusRequester ??= new AndroidX.Compose.FocusRequester();
+
 			if (_borderless.Value)
 			{
 				RenderBorderless(composer);
@@ -135,10 +185,16 @@ namespace Comet.Platform.Compose
 					value: _text.Value,
 					onValueChange: s => Sink?.OnEvent(EventIds.TextChanged, s));
 				if (!string.IsNullOrEmpty(placeholder))
-					outlined.Placeholder = new AndroidX.Compose.Text(placeholder);
+					outlined.Placeholder = StyledPlaceholder(placeholder);
 				if (_leadingIcon.Value is { Length: > 0 } leading)
 					outlined.LeadingIcon = new AndroidX.Compose.Icon(ComposeIconNode.ResolveSymbol(leading), leading);
-				((ComposableNode)outlined).Modifier = BuildNodeModifier();
+				if (_keyboardTypeCode != 0)
+					outlined.KeyboardOptions = AndroidX.Compose.KeyboardOptionsCompanion.Default.Copy(
+						0, null, MapKeyboardType(), AndroidX.Compose.ImeAction.Default, null, null, null);
+				outlined.TextStyle = InputTextStyle(
+					_textColor is { } outlinedColor ? ToComposeColor(outlinedColor) : AndroidX.Compose.Color.Black);
+				((ComposableNode)outlined).Modifier = (BuildNodeModifier() ?? Modifier.Companion)
+					.FocusRequester(_focusRequester!);
 				outlined.Render(composer);
 				return;
 			}
@@ -148,10 +204,16 @@ namespace Comet.Platform.Compose
 				onValueChange: s => Sink?.OnEvent(EventIds.TextChanged, s));
 
 			if (!string.IsNullOrEmpty(placeholder))
-				field.Placeholder = new AndroidX.Compose.Text(placeholder);
+				field.Placeholder = StyledPlaceholder(placeholder);
+			if (_keyboardTypeCode != 0)
+				field.KeyboardOptions = AndroidX.Compose.KeyboardOptionsCompanion.Default.Copy(
+					0, null, MapKeyboardType(), AndroidX.Compose.ImeAction.Default, null, null, null);
+			field.TextStyle = InputTextStyle(
+				_textColor is { } fieldColor ? ToComposeColor(fieldColor) : AndroidX.Compose.Color.Black);
 
 			// Position + size the field from its Yoga frame so it doesn't render at the origin.
-			((ComposableNode)field).Modifier = BuildNodeModifier();
+			((ComposableNode)field).Modifier = (BuildNodeModifier() ?? Modifier.Companion)
+				.FocusRequester(_focusRequester!);
 			field.Render(composer);
 		}
 
@@ -184,24 +246,28 @@ namespace Comet.Platform.Compose
 			{
 				// Report focus GAINED so the host can react (gold onTextFieldFocused — e.g. close an open
 				// input-selector panel so the keyboard doesn't overlay it).
-				Modifier = contentMod.OnFocusChanged(fs => { if (fs.IsFocused) Sink?.OnEvent(EventIds.Focused); }),
+				Modifier = contentMod
+					.FocusRequester(_focusRequester!)
+					.OnFocusChanged(fs => { if (fs.IsFocused) Sink?.OnEvent(EventIds.Focused); }),
 				SingleLine = true,
-				TextStyle = new AndroidX.Compose.TextStyle { Color = textColor, FontSize = new AndroidX.Compose.Sp(BorderlessFontSp) },
+				TextStyle = InputTextStyle(textColor),
 			};
 
 			// Soft-keyboard action key (e.g. Send): set the ImeAction and fire Completed when it's pressed
 			// (the gold's KeyboardActions { onMessageSent }). All action callbacks route to Completed —
 			// only the configured action's key is shown by the IME, so just one can fire.
-			if (_returnType != Comet.ReturnType.Default)
+			if (_returnType != Comet.ReturnType.Default || _keyboardTypeCode != 0)
 			{
-				// Copy the default options overriding only imeAction. The binding strips Kotlin defaults,
-				// so pass all slots: capitalization None(0), autoCorrect default, keyboardType Text, the
-				// mapped action; the trailing platformImeOptions / showKeyboardOnFocus / hintLocales = null.
+				var kbType = _keyboardTypeCode != 0 ? MapKeyboardType() : AndroidX.Compose.KeyboardType.Text;
+				var imeAction = _returnType != Comet.ReturnType.Default ? MapImeAction(_returnType) : AndroidX.Compose.ImeAction.Default;
 				field.KeyboardOptions = AndroidX.Compose.KeyboardOptionsCompanion.Default.Copy(
-					0, null, AndroidX.Compose.KeyboardType.Text, MapImeAction(_returnType), null, null, null);
-				void Fire() => Sink?.OnEvent(EventIds.Completed);
-				field.KeyboardActions = AndroidX.Compose.KeyboardActionsHelper.Create(
-					onDone: Fire, onGo: Fire, onNext: Fire, onSearch: Fire, onSend: Fire);
+					0, null, kbType, imeAction, null, null, null);
+				if (_returnType != Comet.ReturnType.Default)
+				{
+					void Fire() => Sink?.OnEvent(EventIds.Completed);
+					field.KeyboardActions = AndroidX.Compose.KeyboardActionsHelper.Create(
+						onDone: Fire, onGo: Fire, onNext: Fire, onSearch: Fire, onSend: Fire);
+				}
 			}
 
 			// Field FIRST so it keeps a stable position (index 0) across text changes. The placeholder is
@@ -209,18 +275,83 @@ namespace Comet.Platform.Compose
 			// would shift the field's index and make Compose drop focus + dismiss the keyboard mid-typing.
 			box.Add(field);
 			var hint = string.IsNullOrEmpty(_text.Value) ? (_placeholder.Value ?? string.Empty) : string.Empty;
-			box.Add(new AndroidX.Compose.Text(hint)
+			var placeholder = new AndroidX.Compose.Text(hint)
 			{
 				Modifier = contentMod,
-				FontSize = new AndroidX.Compose.Sp(BorderlessFontSp),
+				FontSize = new AndroidX.Compose.Sp(EffectiveFontSize()),
 				// Dim the hint (≈60% alpha) — reads like onSurfaceVariant.
 				Color = _textColor is { } c
 					? ToComposeColor(new Microsoft.Maui.Graphics.Color(c.Red, c.Green, c.Blue, 0.6f))
 					: AndroidX.Compose.Color.Gray,
-			});
+			};
+			ApplyFont(placeholder);
+			box.Add(placeholder);
 
 			((ComposableNode)box).Render(composer);
 		}
+
+		int EffectiveFontSize() => _fontSize > 0 ? _fontSize : 16;
+
+		AndroidX.Compose.TextStyle InputTextStyle(AndroidX.Compose.Color color)
+		{
+			var style = new AndroidX.Compose.TextStyle
+			{
+				Color = color,
+				FontSize = new AndroidX.Compose.Sp(EffectiveFontSize()),
+			};
+			if (ComposeFontRegistry.Resolve(_fontFamily, _fontWeight, _fontItalic) is { } resolved)
+				style.FontFamily = resolved.Family;
+			else if (_fontWeight > 0)
+				style.FontWeight = MapWeight(_fontWeight);
+			if (_fontItalic)
+				style.FontStyle = AndroidX.Compose.FontStyle.Italic;
+			return style;
+		}
+
+		void ApplyFont(AndroidX.Compose.Text text)
+		{
+			if (ComposeFontRegistry.Resolve(_fontFamily, _fontWeight, _fontItalic) is { } resolved)
+				text.FontFamily = resolved.Family;
+			else if (_fontWeight > 0)
+				text.FontWeight = MapWeight(_fontWeight);
+			if (_fontItalic)
+				text.FontStyle = AndroidX.Compose.FontStyle.Italic;
+		}
+
+		AndroidX.Compose.Text StyledPlaceholder(string text)
+		{
+			var placeholder = new AndroidX.Compose.Text(text)
+			{
+				FontSize = new AndroidX.Compose.Sp(EffectiveFontSize()),
+			};
+			ApplyFont(placeholder);
+			return placeholder;
+		}
+
+		global::Android.Graphics.Typeface? MeasureTypeface()
+		{
+			if (ComposeFontRegistry.Resolve(_fontFamily, _fontWeight, _fontItalic)?.Typeface is { } custom)
+				return custom;
+			if ((_fontWeight != 0 || _fontItalic) && System.OperatingSystem.IsAndroidVersionAtLeast(28))
+			{
+				return global::Android.Graphics.Typeface.Create(
+					global::Android.Graphics.Typeface.Default,
+					_fontWeight > 0 ? _fontWeight : 400,
+					_fontItalic);
+			}
+			return null;
+		}
+
+		static AndroidX.Compose.FontWeight MapWeight(int weight) =>
+			weight >= 900 ? AndroidX.Compose.FontWeight.Black
+			: weight >= 800 ? AndroidX.Compose.FontWeight.ExtraBold
+			: weight >= 700 ? AndroidX.Compose.FontWeight.Bold
+			: weight >= 600 ? AndroidX.Compose.FontWeight.SemiBold
+			: weight >= 500 ? AndroidX.Compose.FontWeight.Medium
+			: weight >= 400 ? AndroidX.Compose.FontWeight.Normal
+			: weight >= 300 ? AndroidX.Compose.FontWeight.Light
+			: weight >= 200 ? AndroidX.Compose.FontWeight.ExtraLight
+			: AndroidX.Compose.FontWeight.Thin;
 	}
 
 	/// <summary>Renders Comet <c>Slider</c> as a Material 3 <c>Slider</c> (default 0..1
@@ -228,19 +359,29 @@ namespace Comet.Platform.Compose
 	sealed class ComposeSliderNode : ComposeNode
 	{
 		readonly MutableState<float> _value = new(0f);
+		readonly MutableState<float> _min = new(0f);
+		readonly MutableState<float> _max = new(1f);
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
 		{
 			if (id == PropertyIds.Slider_Value)
 				_value.Value = (float)value.AsDouble;
+			else if (id == PropertyIds.Slider_Minimum)
+				_min.Value = (float)value.AsDouble;
+			else if (id == PropertyIds.Slider_Maximum)
+				_max.Value = (float)value.AsDouble;
 		}
 
 		public override void Render(IComposer composer)
 		{
-			new ComposeSlider(
+			var slider = new ComposeSlider(
 				value: _value.Value,
-				onValueChange: v => Sink?.OnEvent(EventIds.ValueChanged, (double)v))
-				.Render(composer);
+				onValueChange: v => Sink?.OnEvent(EventIds.ValueChanged, (double)v));
+			var minimum = _min.Value;
+			var maximum = _max.Value;
+			if (minimum != 0f || maximum != 1f)
+				slider.ValueRange = Kotlin.Ranges.RangesKt.RangeTo(minimum, maximum);
+			slider.Render(composer);
 		}
 	}
 

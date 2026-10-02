@@ -19,7 +19,9 @@ namespace Comet
 				if (IconFont.TryGlyph(Symbol, out var glyph))
 				{
 					node.ApplyProperty(PropertyIds.Icon_Glyph, PropertyValue.From(glyph));
-					node.ApplyProperty(PropertyIds.Icon_FontFamily, PropertyValue.From(IconFont.Family!));
+					node.ApplyProperty(
+						PropertyIds.Icon_FontFamily,
+						PropertyValue.From(FontFamilyRegistry.Resolve(IconFont.Family!).FaceName));
 				}
 				else
 					node.ApplyProperty(PropertyIds.Icon_Symbol, PropertyValue.From(Symbol));

@@ -141,10 +141,40 @@ namespace Comet
 			=> new ComposeStackNode(StackAxis.Depth);
 	}
 
+	public partial class ContentView
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeStackNode(StackAxis.Depth);
+	}
+
+	public partial class FlexLayout
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeStackNode(StackAxis.Depth);
+	}
+
+	public partial class Grid
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeGridNode();
+	}
+
 	public partial class TextField
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
 			=> new ComposeTextFieldNode(this);
+	}
+
+	public partial class TextEditor
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeTextEditorNode();
+	}
+
+	public partial class RefreshView
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeRefreshNode();
 	}
 
 	public partial class Toggle
@@ -169,6 +199,24 @@ namespace Comet
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
 			=> new ComposeScrollNode(this, context);
+	}
+
+	public partial class Spacer
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeSpacerNode();
+	}
+
+	public partial class DatePicker
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeDatePickerNode(this);
+	}
+
+	public partial class TabView
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new ComposeTabViewNode(this, context);
 	}
 
 	public partial class NavigationView

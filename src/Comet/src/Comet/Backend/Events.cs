@@ -42,6 +42,9 @@ namespace Comet.Backend
 		public static readonly EventId DialogDismissed = new(12);// user dismissed an AlertDialog
 		public static readonly EventId SelectorPanelDismissed = new(13); // user back-dismissed an input-selector panel
 		public static readonly EventId DetailClosed = new(14);   // user back-closed a compact ListDetail detail pane
+		public static readonly EventId DateConfirmed = new(16);  // user confirmed a DatePicker selection (payload: long ticks)
+		public static readonly EventId RefreshRequested = new(17);
+		public static readonly EventId RefreshEnded = new(18);
 	}
 
 	/// <summary>The category of a recognized gesture flowing back from a backend node.</summary>

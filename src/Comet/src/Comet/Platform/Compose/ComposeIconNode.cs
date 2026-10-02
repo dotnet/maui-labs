@@ -127,7 +127,29 @@ namespace Comet.Platform.Compose
 				return;
 			}
 
-			var icon = new ComposeIcon(Resolve(_symbol.Value), _symbol.Value);
+			var vector = Resolve(_symbol.Value);
+			if (vector is null)
+			{
+				// No core ImageVector — render the Material Symbols glyph through the
+				// AnnotatedText path (same as an explicit Icon_Glyph, sized + tinted).
+				var glyphCode = ResolveGlyph(_symbol.Value) ?? "\u2b50"; // fallback: star emoji
+				var glyphText = new AndroidX.Compose.AnnotatedText(new AndroidX.Compose.AnnotatedString(glyphCode))
+				{
+					FontSize = new AndroidX.Compose.Sp((int)_size),
+					LineHeight = new AndroidX.Compose.Sp((int)_size),
+					Align = AndroidX.Compose.TextAlign.Center,
+					SoftWrap = false,
+				};
+				if (_tint is { } gt)
+					glyphText.Color = ToComposeColor(gt);
+				if (ComposeFontRegistry.Resolve("MaterialSymbolsOutlined", 400) is { } rf)
+					glyphText.FontFamily = rf.Family;
+				((ComposableNode)glyphText).Modifier = IconModifier();
+				glyphText.Render(composer);
+				return;
+			}
+
+			var icon = new ComposeIcon(vector, _symbol.Value);
 			if (_tint is { } t)
 				icon.Tint = ToComposeColor(t);
 			((ComposableNode)icon).Modifier = IconModifier();
@@ -137,9 +159,9 @@ namespace Comet.Platform.Compose
 		// Cross-platform symbol name → Material ImageVector. Core set (material-icons-core);
 		// a few footer icons fall back to the nearest available until the facade exposes the
 		// extended set (mood/alternate_email/photo/duo).
-	internal static ImageVector ResolveSymbol(string s) => Resolve(s);
+	internal static ImageVector ResolveSymbol(string s) => Resolve(s) ?? Icons.Filled.Star;
 
-		static ImageVector Resolve(string s) => s switch
+		static ImageVector? Resolve(string s) => s switch
 		{
 			"search" => Icons.Filled.Search,
 			"info" => Icons.Outlined.Info,
@@ -147,24 +169,45 @@ namespace Comet.Platform.Compose
 			"send" => Icons.AutoMirrored.Default.Send,
 			"place" or "location" => Icons.Filled.Place,
 			"person" => Icons.Filled.Person,
-			"people" => Icons.Filled.AccountCircle,   // jetchat logo stand-in (core set has no "groups")
+			"people" => Icons.Filled.AccountCircle,
 			"account" => Icons.Filled.AccountCircle,
 			"call" or "phone" => Icons.Filled.Call,
 			"email" or "mail" => Icons.Filled.Email,
 			"close" => Icons.Filled.Close,
-			"settings" => Icons.Filled.Settings,
+			"settings" or "gearshape" => Icons.Filled.Settings,
 			"share" => Icons.Filled.Share,
 			"back" => Icons.AutoMirrored.Default.ArrowBack,
-			"arrow_down" or "arrow_downward" or "expand_more" => Icons.Filled.KeyboardArrowDown,
-			"add" => Icons.Filled.Add,
-			"edit" => Icons.Filled.Edit,
-			// Nearest-available stand-ins for Jetchat's extended footer icons:
-			"mood" or "emoji" => Icons.Filled.Face,
+			"arrow_down" or "arrow_downward" or "expand_more" or "chevron.down" => Icons.Filled.KeyboardArrowDown,
+			"add" or "plus" => Icons.Filled.Add,
+			"edit" or "pencil" => Icons.Filled.Edit,
+			"mood" or "emoji" or "face.smiling" => Icons.Filled.Face,
 			"at" => Icons.Filled.Email,
 			"photo" or "image" => Icons.Filled.AccountBox,
 			"video" or "duo" => Icons.Filled.Call,
-			"mic" or "microphone" => Icons.Filled.Phone,   // core set has no Mic glyph (stand-in)
+			"mic" or "microphone" => Icons.Filled.Phone,
+			"home" or "house" or "house.fill" => Icons.Filled.Home,
+			"feed" or "list.bullet" or "view_list" or "history" or "clock.arrow.circlepath" => Icons.AutoMirrored.Default.List,
+			"star" or "star.fill" => Icons.Filled.Star,
+			"favorite" or "heart" or "heart.fill" => Icons.Filled.Favorite,
+			"delete" or "trash" or "trash.fill" => Icons.Filled.Delete,
+			"check" or "checkmark" or "checkmark.circle.fill" => Icons.Filled.Check,
+			"refresh" or "arrow.clockwise" => Icons.Filled.Refresh,
+			"calendar" or "calendar.circle" => Icons.Filled.DateRange,
+			"notification" or "bell" or "bell.fill" or "notifications" => Icons.Filled.Notifications,
+			"warning" or "exclamationmark.triangle" => Icons.Filled.Warning,
+			// Icons not in core ImageVector set → null signals the glyph fallback path.
+			"coffee" or "coffee_maker" or "cup.and.saucer.fill" or "local_cafe"
+				=> MaterialIconVectors.LocalCafe,
 			_ => Icons.Filled.Star,
+		};
+
+		/// <summary>Material Symbols font glyph codepoints for icons that lack a core
+		/// <c>ImageVector</c> binding. The glyph renders as a real sized/tinted icon through
+		/// <c>AnnotatedText</c> in the registered Material Symbols font — NOT text or emoji.</summary>
+		static string? ResolveGlyph(string s) => s switch
+		{
+			"coffee" or "coffee_maker" or "cup.and.saucer.fill" or "local_cafe" => "\ue541",  // local_cafe
+			_ => null,
 		};
 	}
 }
