@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/ci-linux-gtk4.yml'
       - 'platforms/Linux.Gtk4/**'
+      - 'platforms/Shared/Essentials*/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -18,6 +19,7 @@ on:
     paths:
       - '.github/workflows/ci-linux-gtk4.yml'
       - 'platforms/Linux.Gtk4/**'
+      - 'platforms/Shared/Essentials*/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -26,6 +28,34 @@ on:
       - 'NuGet.config'
 
 jobs:
+  essentials-runtime:
+    name: Essentials native GTK regression
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Install GTK runtime and virtual display
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-1 xvfb
+      - name: Exercise static facades inside GTK
+        env:
+          ESSENTIALS_NATIVE_GTK: '1'
+          GDK_BACKEND: x11
+        run: >-
+          xvfb-run -a dotnet test
+          platforms/Linux.Gtk4/tests/Essentials.Tests/Linux.Gtk4.Essentials.Tests.csproj
+          --configuration Release --logger "trx;LogFileName=essentials-native.trx"
+          --results-directory artifacts/TestResults/essentials
+      - name: Upload runtime results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: essentials-native-gtk-results
+          path: artifacts/TestResults/essentials/*.trx
+
   build:
     uses: ./.github/workflows/_build.yml
     with:
@@ -51,14 +81,14 @@ jobs:
     strategy:
       matrix:
         # Each class gets its own process: GTK initialization is thread-affine.
-        test-class: [PickerSelectionTests]
+        test-class: [PickerSelectionTests, GtkSynchronizationContextTests]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
       - name: Install GTK and virtual display
-        run: sudo apt-get update && sudo apt-get install -y libgtk-4-1 xvfb
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-1 xvfb dbus-daemon
       - name: Run native regression tests
         env:
           RUN_GTK_RUNTIME_TESTS: '1'

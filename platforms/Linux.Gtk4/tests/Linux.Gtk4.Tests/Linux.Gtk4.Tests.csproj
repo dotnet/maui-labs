@@ -4,7 +4,7 @@
     <AssemblyName>Microsoft.Maui.Platforms.Linux.Gtk4.Tests</AssemblyName>
     <IsTestProject>true</IsTestProject>
     <IsPackable>false</IsPackable>
-    <!-- Native GTK tests are opt-in on Linux; managed tests also run on other hosts. -->
+    <!-- Managed tests are portable; native GTK tests explicitly opt in on Linux. -->
     <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
   <ItemGroup>
