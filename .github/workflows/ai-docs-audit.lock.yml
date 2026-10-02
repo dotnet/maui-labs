@@ -23,7 +23,7 @@
 #
 # Weekly audit of AI configuration files (AGENTS.md, copilot-instructions.md, instruction files) to keep them in sync with the actual codebase. Also audits itself for drift against the repo structure.
 #
-# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"20e5614fc94ca4e928d9f1c4e70714f6c477f5effa008526eb4aa85ccb31a6be","compiler_version":"v0.53.5"}
+# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"7847bbf37e9a002f34128d090860edf5bf4c2f3781c4abed8d386266c5dd4e74","compiler_version":"v0.53.5"}
 
 name: "Weekly AI Docs Audit"
 "on":
@@ -1244,6 +1244,36 @@ jobs:
           SERVER_URL_STRIPPED="${SERVER_URL#https://}"
           git remote set-url origin "https://x-access-token:${GIT_TOKEN}@${SERVER_URL_STRIPPED}/${REPO_NAME}.git"
           echo "Git configured with standard GitHub Actions identity"
+      - name: Enforce audit output AI disclosure
+        id: enforce_ai_disclosure
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
+        with:
+          script: |
+            const fs = require("node:fs");
+            const disclosures = {
+              create_issue: "AI disclosure: A generative AI model, accessed through GitHub Copilot, determined that the audited documentation may need updating and drafted this issue text. Please verify the recommendation and content before acting.",
+              create_pull_request: "AI disclosure: A generative AI model, accessed through GitHub Copilot, determined that the audited documentation may need updating, proposed the documentation changes, and drafted this pull request text. Please verify the recommendation, changes, and content before acting."
+            };
+            const outputPath = process.env.GH_AW_AGENT_OUTPUT;
+            const output = JSON.parse(fs.readFileSync(outputPath, "utf8"));
+            if (!Array.isArray(output.items)) {
+              throw new Error("Expected safe-output items before enforcing AI disclosure.");
+            }
+            for (const item of output.items) {
+              if (item.type !== "create_issue" && item.type !== "create_pull_request") continue;
+              if (typeof item.body !== "string") {
+                throw new Error("Expected an audit output body before enforcing AI disclosure.");
+              }
+              const disclosure = disclosures[item.type];
+              const notice = `made with AI\n\n${disclosure}`;
+              // Put the notice outside model-authored Markdown, even if it was quoted or hidden.
+              const body = item.body.replaceAll(notice, "").replaceAll(disclosure, "")
+                .replace(/^made with AI[ \t]*\r?$/gm, "").trim();
+              item.body = `${notice}\n\n${body}`;
+            }
+            fs.writeFileSync(outputPath, JSON.stringify(output), "utf8");
       - name: Process Safe Outputs
         id: process_safe_outputs
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
