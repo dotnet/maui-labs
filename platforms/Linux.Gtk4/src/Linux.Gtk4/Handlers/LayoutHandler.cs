@@ -127,10 +127,10 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 				(VirtualView as Microsoft.Maui.Controls.VisualElement)?.InvalidateMeasure();
 				var scrollsHorizontally = scrollOrientation is ScrollOrientation.Horizontal or ScrollOrientation.Both;
 				var scrollsVertically = scrollOrientation is ScrollOrientation.Vertical or ScrollOrientation.Both;
-				var measured = platformView.CrossPlatformMeasure(
+				var measured = VirtualView.Measure(
 					scrollsHorizontally ? double.PositiveInfinity : width,
 					scrollsVertically ? double.PositiveInfinity : height);
-				platformView.CrossPlatformArrange(new Rect(0, 0,
+				VirtualView.Arrange(new Rect(0, 0,
 					scrollsHorizontally ? Math.Max(width, measured.Width) : width,
 					scrollsVertically ? Math.Max(height, measured.Height) : height));
 			}
