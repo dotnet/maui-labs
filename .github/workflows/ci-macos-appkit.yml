@@ -48,6 +48,8 @@ jobs:
         include:
           - scenario: layout
             maui-version: ''
+          - scenario: picker
+            maui-version: ''
           - scenario: bundle-resources
             maui-version: ''
             workloads: 'macos maui maui-tizen'
