@@ -62,7 +62,7 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 - **ControlTemplate** — Full ContentPresenter and TemplatedView support via `IContentView` handler mapping.
 - **Font icons** — Embedded font registration with fontconfig/Pango, FontImageSource rendering via Cairo. FontAwesome and custom icon fonts work out of the box.
 - **FormattedText** — Rich text via Pango markup: Span colors, fonts, sizes, bold/italic, underline/strikethrough, character spacing.
-- **Alerts & Dialogs** — `DisplayAlert`, `DisplayActionSheet`, `DisplayPromptAsync` via native GTK4 modal windows.
+- **Alerts & Dialogs** — `DisplayAlert`, `DisplayActionSheet`, `DisplayPromptAsync` via native GTK4 modal windows. Registration supports both the nested MAUI 10.0.41–10.0.60 subscription interface and the top-level 10.0.70+ interface; an unrecognized contract fails during registration instead of leaving dialog tasks pending.
 - **Modal Pages** — `PushModalAsync` presents pages as native GTK4 dialog windows by default, with attached properties for custom sizing, content-fit sizing, and inline (legacy) presentation via `GtkPage`.
 - **Brushes & Gradients** — SolidColorBrush, LinearGradientBrush, RadialGradientBrush via CSS gradients.
 - **MenuBar** — `MenuBarItem` / `MenuFlyoutItem` via `Gtk.PopoverMenuBar`, integrated into Window and NavigationPage handlers via `GtkMenuBarManager` (not a standalone handler).
@@ -347,6 +347,11 @@ From `platforms/Linux.Gtk4`, run:
 ```bash
 dotnet test tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
 ```
+
+The `ci-linux-gtk4.yml` compatibility matrix runs `AlertManagerSubscriptionTests`
+in this existing project against MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110
+through the shared build workflow's targeted test mode. These managed registration
+checks do not require GTK initialization and do not claim native UI coverage.
 
 ### Native regression tests in the shared test host
 
