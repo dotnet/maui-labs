@@ -30,6 +30,28 @@ on:
       - 'NuGet.config'
 
 jobs:
+  shell-navigation:
+    name: Shell navigation runtime regression
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Install GTK and isolated display
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-1 xvfb
+      - name: Exercise Shell push and pop in GTK
+        env:
+          MAUI_GTK_RUNTIME_TESTS: '1'
+          GDK_BACKEND: x11
+          GSK_RENDERER: cairo
+        run: >-
+          xvfb-run -a dotnet test
+          platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
+          --filter FullyQualifiedName~ShellNavigationRuntimeTests
+          --logger "console;verbosity=detailed"
+
   compatibility:
     name: GTK registration - MAUI ${{ matrix.maui }}
     strategy:
