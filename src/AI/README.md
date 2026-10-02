@@ -1,25 +1,27 @@
 # Microsoft.Maui.Essentials.AI
 
-On-device AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://www.nuget.org/packages/Microsoft.Extensions.AI.Abstractions) abstractions.
+AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://www.nuget.org/packages/Microsoft.Extensions.AI.Abstractions) abstractions, with on-device implementations and an optional Azure image-classification provider.
 
 > **Note:** This is the contributor/repo-browsing README. The NuGet consumer README with install instructions and full usage examples is at [`Microsoft.Maui.Essentials.AI/README.md`](Microsoft.Maui.Essentials.AI/README.md).
 
 ## Features
 
 - **`IChatClient`** — backed by Apple Intelligence (Foundation Models) on iOS, macOS, and Mac Catalyst
+- **`IImageClassificationClient`** — provider-neutral contracts for classifying encoded images
+- **Azure Content Understanding classifier** — optional cloud provider for custom whole-image classifier analyzers
 - **Streaming** — progressive JSON deserialization of LLM responses via `JsonStreamChunker` and `PlainTextStreamChunker`
 - **Tool calling** — function-calling support for on-device models
 - **NL embeddings** — on-device semantic search via Apple's NaturalLanguage framework (`NLEmbeddingGenerator`)
 
 ### Platform Support
 
-| Platform | Chat (IChatClient) | Embeddings (IEmbeddingGenerator) |
-|----------|-------------------|----------------------------------|
-| iOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
-| Mac Catalyst 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
-| macOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
-| Android | 🔜 Coming soon | 🔜 Coming soon |
-| Windows | 🔜 Coming soon | 🔜 Coming soon |
+| Platform | Chat (IChatClient) | Embeddings (IEmbeddingGenerator) | Image classification contract |
+|----------|-------------------|----------------------------------|-------------------------------|
+| iOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings | ✅ Provider-neutral contract |
+| Mac Catalyst 26+ | ✅ Apple Intelligence | ✅ NL Embeddings | ✅ Provider-neutral contract |
+| macOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings | ✅ Provider-neutral contract |
+| Android | 🔜 Coming soon | 🔜 Coming soon | ✅ Provider-neutral contract |
+| Windows | 🔜 Coming soon | 🔜 Coming soon | ✅ Provider-neutral contract |
 
 ## Quick Start
 
@@ -35,11 +37,26 @@ var client = serviceProvider.GetRequiredService<IChatClient>();
 var response = await client.GetResponseAsync("Plan a weekend trip to Portland");
 ```
 
+Image classification providers implement `IImageClassificationClient`; consumer code remains provider-neutral:
+
+```csharp
+await using Stream image = File.OpenRead("photo.jpg");
+ImageClassificationResult result =
+    await classifier.ClassifyImageAsync(image, "image/jpeg");
+
+ImageClassificationPrediction? best = result.Predictions.FirstOrDefault();
+```
+
+`MaximumPredictions` is an at-most constraint. `MaximumInputBytes` defaults to exactly 20 MiB (`20 * 1024 * 1024` bytes) and bounds how much image data a provider may read. Confidence is optional, and providers without confidence support reject a non-null `MinimumConfidence`. `ChatClientImageClassificationClient` adapts a dedicated vision-capable `IChatClient` to a snapshotted label allowlist while preserving response ranking and the original `ChatResponse`. It prefers structured output and narrowly falls back to a top-level JSON string array when a client ignores the requested format.
+
+Provider identity is exposed through `ImageClassificationClientMetadata`; individual results retain model provenance and optional raw or additional response metadata. Callers retain ownership of input streams and of any chat client passed to the adapter.
+
 ## Packages
 
 | Package | Description |
 |---------|-------------|
 | `Microsoft.Maui.Essentials.AI` | On-device AI APIs for MAUI |
+| `Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding` | Azure Content Understanding image-classification provider |
 
 ## Building
 
@@ -59,6 +76,7 @@ The CI pipeline handles the macOS → Windows artifact flow automatically. See `
 - **Native Swift bindings** (`AppleNative/EssentialsAI/`) compiled via Xcode, producing `.xcframework` bundles
 - **`AppleBindings.targets`** — MSBuild targets for cross-platform native artifact flow
 - **Streaming infrastructure** — `JsonStreamChunker`, `PlainTextStreamChunker`, `StreamingResponseHandler` for progressive deserialization
+- **Azure provider** — independently installable managed adapter over `Azure.AI.ContentUnderstanding`
 
 ## Documentation
 
