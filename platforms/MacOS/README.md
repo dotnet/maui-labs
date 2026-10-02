@@ -6,6 +6,10 @@ This backend lets MAUI applications run as true native macOS apps that use AppKi
 (`NSWindow`, `NSButton`, `NSScrollView`, etc.) and follow standard macOS UI conventions
 (menu bar, toolbar, sidebar flyout, native dialogs, etc.).
 
+Dialog registration supports both the nested MAUI 10.0.41-10.0.60 subscription
+interface and the top-level interface in 10.0.70+. An unrecognized contract fails
+during registration instead of leaving alert, prompt, or action-sheet tasks pending.
+
 > **Inspiration:** Originally based on the
 > [shinyorg/mauiplatforms](https://github.com/shinyorg/mauiplatforms) project. The Xamarin.Forms
 > [`Xamarin.Forms.Platform.MacOS`](https://github.com/xamarin/Xamarin.Forms/tree/5.0.0/Xamarin.Forms.ControlGallery.MacOS)
@@ -76,6 +80,9 @@ dotnet run
 
   <ItemGroup>
     <MauiIcon Include="Resources\AppIcon\appicon.png" />
+    <MauiImage Include="Resources\Images\*" />
+    <MauiFont Include="Resources\Fonts\*" />
+    <MauiAsset Include="Resources\Raw\**\*" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>
 ```
@@ -182,6 +189,12 @@ See [the shared host contract](tests/MacOS.RuntimeTests/README.md) to add a scen
 version matrix entry or scoped fixture assets without another application/project.
 Portable `MacOS.Tests` remains independent of native AppKit execution.
 
+The same host also registers `dialog-registration` (consumed MAUI interface,
+AppKit proxy and singleton contract) and `dialogs` (real Page action sheet, prompt
+and alert completion with native-sheet screenshots). The existing AppKit workflow
+tests registration on MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110; native dialogs
+run at 10.0.70 with an exact missing-subscription baseline and bounded fixed run.
+
 ## Unit tests
 
 The platform-neutral tests exercise the backend's managed lifecycle code using real MAUI
@@ -193,6 +206,50 @@ dotnet test platforms/MacOS/tests/MacOS.Tests/MacOS.Tests.csproj
 
 The AppKit CI workflow and official macOS product build also run these tests.
 Native window notifications and rendering still require testing in a running macOS app.
+
+### Bundled resources
+
+The package's build targets translate `MauiImage`, `MauiFont`, and `MauiAsset` into
+Apple SDK `BundleResource` items, including files linked from outside the head project.
+Images are bundled as `Contents/Resources/Images/<filename>` and fonts as
+`Contents/Resources/Fonts/<filename>`. Raw assets use `LogicalName` relative to
+`Contents/Resources` (or the filename when no logical name is supplied), matching
+`IFileSystem.OpenAppPackageFileAsync`. Backslashes in logical names are normalized.
+The MAUI mapping replaces the SDK's default resource entry for the same source file;
+unrelated `BundleResource` items are unchanged.
+For apps that intentionally manage all these paths using custom `BundleResource` items,
+set `EnableMacOSMauiResourceMapping` to `false` to retain that mapping instead.
+
+This bundles image sources as-is; it does not add Resizetizer resizing or SVG conversion.
+Image names and font names must be unique within their respective bundle directories.
+Use `LogicalName` to preserve nested raw-asset paths.
+
+The `bundle-resources` scenario runs inside the shared `MacOS.RuntimeTests` host,
+using external image/font/raw fixtures and a local raw item also matched by the
+SDK glob. On macOS with Xcode and the MAUI/macOS workloads, point the runner at
+freshly built core and Essentials packages and a new evidence directory:
+
+```bash
+export RUNTIME_TEST_PACKAGES="$PWD/artifacts/packages"
+python3 -B platforms/MacOS/tests/MacOS.RuntimeTests/run.py \
+  --scenario bundle-resources --evidence "$PWD/artifacts/resources-run"
+```
+
+The scenario's stage driver composes the common build/launch runner: historical
+target reproduction, clean package-consumer rebuild, incremental build and
+`dotnet publish` without an installer. Each native run verifies the produced `.app`,
+MAUI image/label handlers and raw content through registered `IFileSystem`.
+Logical paths include spaces, renamed assets and equal filenames in different
+folders. Shipping targets perform the bundling; the harness never copies resources.
+The same host also runs item-metadata assertions for normal mapping, platform guards
+and opt-out. Its package mode rejects ProjectReferences.
+
+The existing `native-runtime` CI matrix supplies the newly packed packages and uploads
+`appkit-runtime-bundle-resources-default` with strict terminal results, native captures,
+bundle inventory, package references and stage binlogs. All native rows wait for the
+product build; optional matrix `packages` and `workloads` inputs reuse common setup.
+These checks require macOS; item-mapping checks alone on Windows are not proof of
+rendering.
 
 ## MAUI DevFlow integration
 

@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/ci-linux-gtk4.yml'
+      - '.github/workflows/_build.yml'
       - 'platforms/Linux.Gtk4/**'
       - 'platforms/Shared/Essentials*/**'
       - 'eng/**'
@@ -18,6 +19,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/ci-linux-gtk4.yml'
+      - '.github/workflows/_build.yml'
       - 'platforms/Linux.Gtk4/**'
       - 'platforms/Shared/Essentials*/**'
       - 'eng/**'
@@ -28,6 +30,23 @@ on:
       - 'NuGet.config'
 
 jobs:
+  compatibility:
+    name: GTK registration - MAUI ${{ matrix.maui }}
+    strategy:
+      fail-fast: false
+      matrix:
+        maui: ['10.0.41', '10.0.60', '10.0.70', '10.0.110']
+    uses: ./.github/workflows/_build.yml
+    with:
+      project-path: platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
+      project-name: gtk-registration-${{ matrix.maui }}
+      os: '["windows-latest"]'
+      install-workloads: false
+      test-only: true
+      test-arguments-json: >-
+        ["-p:MauiVersion=${{ matrix.maui }}",
+         "--filter", "FullyQualifiedName~AlertManagerSubscriptionTests"]
+
   essentials-runtime:
     name: Essentials native GTK regression
     runs-on: ubuntu-24.04
@@ -74,6 +93,41 @@ jobs:
         pkg-config
       run-tests: true
       pack: true
+
+  runtime:
+    name: Native GTK runtime (${{ matrix.test-class }})
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        # Each class gets its own process: GTK initialization is thread-affine.
+        test-class: [GtkSynchronizationContextTests]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Install GTK and virtual display
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-1 xvfb dbus-daemon
+      - name: Run native regression tests
+        env:
+          RUN_GTK_RUNTIME_TESTS: '1'
+          GSK_RENDERER: cairo
+        run: >-
+          dbus-run-session -- xvfb-run --auto-servernum
+          dotnet test platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
+          --configuration Release
+          --filter FullyQualifiedName~${{ matrix.test-class }}
+          --logger "console;verbosity=detailed"
+          --logger "trx;LogFileName=${{ matrix.test-class }}.trx"
+          --results-directory artifacts/TestResults/gtk-runtime
+          --blame-hang-timeout 3m
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: gtk-runtime-${{ matrix.test-class }}
+          path: artifacts/TestResults/gtk-runtime
 
   templates:
     name: Packed template regression checks
