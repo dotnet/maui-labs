@@ -9,6 +9,8 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Handlers;
 
 public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHandler
 {
+	LayoutBinding? _layoutBinding;
+
 	object ILayoutHandler.PlatformView => base.PlatformView!;
 
 	public static IPropertyMapper<ILayout, LayoutHandler> Mapper =
@@ -44,131 +46,203 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 
 	public override void SetVirtualView(IView view)
 	{
+		ArgumentNullException.ThrowIfNull(view);
+		var layout = (ILayout)view;
+		var previousPanel = ((IElementHandler)this).PlatformView as GtkLayoutPanel;
+		if (_layoutBinding is { } current && current.Matches(view, previousPanel))
+			return;
+
+		RetireLayoutBinding();
+		if (previousPanel != null)
+			previousPanel.CrossPlatformLayout = null;
 		base.SetVirtualView(view);
 
-		// MAUI doesn't automatically call Add for pre-existing children.
-		// We must add them manually when the handler is first connected.
-		var layout = (ILayout)view;
+		var panel = PlatformView;
+		if (ReferenceEquals(previousPanel, panel))
+			while (panel.GetFirstChild() is { } child)
+				panel.RemoveChild(child);
+		panel.CrossPlatformLayout = layout as ICrossPlatformLayout;
+
 		for (int i = 0; i < layout.Count; i++)
-		{
 			Add(layout[i]);
-		}
 
-		// Trigger initial layout after GTK has allocated sizes
-		GLib.Functions.IdleAdd(0, () =>
-		{
-			if (VirtualView == null || PlatformView == null) return false;
-			if (PlatformView.IsExternallyManaged) return false;
-
-			var (w, h) = GetConstrainedSize(PlatformView);
-			if (w > 1 && h > 1)
-			{
-				PlatformView.CrossPlatformMeasure(w, h);
-				PlatformView.CrossPlatformArrange(new Rect(0, 0, w, h));
-			}
-			return false;
-		});
+		var binding = new LayoutBinding(this, layout, panel);
+		_layoutBinding = binding;
+		binding.Start();
 	}
 
-	protected override void ConnectHandler(GtkLayoutPanel platformView)
+	protected override void DisconnectHandler(GtkLayoutPanel platformView)
 	{
-		base.ConnectHandler(platformView);
+		RetireLayoutBinding();
+		platformView.CrossPlatformLayout = null;
+		base.DisconnectHandler(platformView);
+	}
 
-		if (VirtualView is ICrossPlatformLayout layout)
-			platformView.CrossPlatformLayout = layout;
+	void RetireLayoutBinding()
+	{
+		var binding = _layoutBinding;
+		_layoutBinding = null;
+		binding?.Dispose();
+	}
 
-		// Only the outermost layout installs a resize handler.
-		// Nested layouts are driven by their parent's arrange pass.
-		GLib.Functions.IdleAdd(0, () =>
+	// The binding object is the generation token; retired callbacks cannot alter a newer binding's IDs.
+	sealed class LayoutBinding(LayoutHandler handler, ILayout view, GtkLayoutPanel panel) : IDisposable
+	{
+		uint _initialLayoutSource;
+		uint _resizeSetupSource;
+		uint _tickCallback;
+		Gtk.Window? _window;
+		Gtk.Paned? _paned;
+		int _constraintWidth;
+		int _constraintHeight;
+
+		public bool Matches(IView candidate, GtkLayoutPanel? candidatePanel) =>
+			ReferenceEquals(view, candidate) && ReferenceEquals(panel, candidatePanel);
+
+		bool IsCurrent =>
+			ReferenceEquals(handler._layoutBinding, this) &&
+			ReferenceEquals(((IElementHandler)handler).VirtualView, view) &&
+			ReferenceEquals(((IElementHandler)handler).PlatformView, panel);
+
+		public void Start()
 		{
-			if (HasAncestorLayoutPanel(platformView))
-				return false; // nested — parent drives layout
+			_resizeSetupSource = GLib.Functions.IdleAdd(0, InstallResizeCallbacks);
+			_initialLayoutSource = GLib.Functions.IdleAdd(0, InitialLayout);
+		}
 
-			if (platformView.IsExternallyManaged)
-				return false; // template-driven — CollectionView manages layout
+		bool InitialLayout()
+		{
+			_initialLayoutSource = 0;
+			if (!IsCurrent || panel.IsExternallyManaged)
+				return false;
 
-			// Find the window and listen for size changes
-			Gtk.Widget? cur = platformView;
-			while (cur != null && cur is not Gtk.Window) cur = cur.GetParent();
-			if (cur is not Gtk.Window window) return false;
-
-			// Capture the initial window size from allocation (actual rendered
-			// size), not default size. On Wayland, the compositor may constrain
-			// the window smaller than the default. Content-driven size changes
-			// (from SetSizeRequest) can push the window to grow, so only
-			// user-initiated resizes should update the constraint.
-			int constraintW = window.GetAllocatedWidth();
-			int constraintH = window.GetAllocatedHeight();
-			if (constraintW < 1 || constraintH < 1)
+			var (width, height) = GetConstrainedSize(panel);
+			if (width > 1 && height > 1)
 			{
-				window.GetDefaultSize(out constraintW, out constraintH);
+				panel.CrossPlatformMeasure(width, height);
+				if (IsCurrent)
+					panel.CrossPlatformArrange(new Rect(0, 0, width, height));
 			}
-			if (constraintW < 1) constraintW = 800;
-			if (constraintH < 1) constraintH = 600;
+			return false;
+		}
 
-			void DoLayout()
-			{
-				if (VirtualView == null) return;
-				var (dw, dh) = GetConstrainedSize(platformView, constraintW, constraintH);
-				if (dw < 1 || dh < 1) return;
+		bool InstallResizeCallbacks()
+		{
+			_resizeSetupSource = 0;
+			if (!IsCurrent || HasAncestorLayoutPanel(panel) || panel.IsExternallyManaged)
+				return false;
 
-				// Invalidate cached measurements so MAUI re-measures the
-				// entire tree with the new constraints, not just the root.
-				(VirtualView as Microsoft.Maui.Controls.VisualElement)?.InvalidateMeasure();
+			Gtk.Widget? ancestor = panel;
+			while (ancestor != null && ancestor is not Gtk.Window)
+				ancestor = ancestor.GetParent();
+			if (ancestor is not Gtk.Window window)
+				return false;
 
-				platformView.CrossPlatformMeasure(dw, dh);
-				platformView.CrossPlatformArrange(new Rect(0, 0, dw, dh));
-			}
+			_constraintWidth = window.GetAllocatedWidth();
+			_constraintHeight = window.GetAllocatedHeight();
+			if (_constraintWidth < 1 || _constraintHeight < 1)
+				window.GetDefaultSize(out _constraintWidth, out _constraintHeight);
+			if (_constraintWidth < 1) _constraintWidth = 800;
+			if (_constraintHeight < 1) _constraintHeight = 600;
 
-			// Initial layout
 			DoLayout();
+			if (!IsCurrent)
+				return false;
+			_window = window;
+			window.OnNotify += OnWindowNotify;
 
-			// Re-layout on window resize via property notification
-			window.OnNotify += (sender, args) =>
-			{
-				if (args.Pspec.GetName() is "default-width" or "default-height")
-				{
-					// Update constraint from actual allocated size
-					var aw = window.GetAllocatedWidth();
-					var ah = window.GetAllocatedHeight();
-					if (aw > 0) constraintW = aw;
-					if (ah > 0) constraintH = ah;
-					DoLayout();
-				}
-			};
-
-			// Re-layout when ancestor Paned divider is moved
-			Gtk.Widget? ancestor = platformView.GetParent();
+			ancestor = panel.GetParent();
 			while (ancestor != null && ancestor is not Gtk.Window)
 			{
 				if (ancestor is Gtk.Paned paned)
 				{
-					paned.OnNotify += (sender, args) =>
-					{
-						if (args.Pspec.GetName() == "position")
-						{
-							DoLayout();
-						}
-					};
+					_paned = paned;
+					paned.OnNotify += OnPanedNotify;
 					break;
 				}
 				ancestor = ancestor.GetParent();
 			}
 
-			// Also re-layout when content changes
-			platformView.AddTickCallback((widget, clock) =>
+			_tickCallback = panel.AddTickCallback((widget, clock) =>
 			{
-				if (VirtualView == null) return false;
-				if (platformView.LayoutDirty)
+				if (!IsCurrent || panel.IsExternallyManaged)
 				{
-					platformView.LayoutDirty = false;
+					_tickCallback = 0;
+					return false;
+				}
+				if (panel.LayoutDirty)
+				{
+					panel.LayoutDirty = false;
 					DoLayout();
 				}
-				return true;
+				return IsCurrent;
 			});
-
 			return false;
-		});
+		}
+
+		void DoLayout()
+		{
+			if (!IsCurrent || panel.IsExternallyManaged)
+				return;
+			var (width, height) = GetConstrainedSize(panel, _constraintWidth, _constraintHeight);
+			if (width < 1 || height < 1)
+				return;
+
+			(view as Microsoft.Maui.Controls.VisualElement)?.InvalidateMeasure();
+			if (!IsCurrent)
+				return;
+			panel.CrossPlatformMeasure(width, height);
+			if (IsCurrent)
+				panel.CrossPlatformArrange(new Rect(0, 0, width, height));
+		}
+
+		void OnWindowNotify(GObject.Object sender, GObject.Object.NotifySignalArgs args)
+		{
+			if (!IsCurrent || _window is not { } window)
+				return;
+			if (args.Pspec.GetName() is "default-width" or "default-height")
+			{
+				var width = window.GetAllocatedWidth();
+				var height = window.GetAllocatedHeight();
+				if (width > 0) _constraintWidth = width;
+				if (height > 0) _constraintHeight = height;
+				DoLayout();
+			}
+		}
+
+		void OnPanedNotify(GObject.Object sender, GObject.Object.NotifySignalArgs args)
+		{
+			if (IsCurrent && args.Pspec.GetName() == "position")
+				DoLayout();
+		}
+
+		public void Dispose()
+		{
+			RemoveSource(ref _initialLayoutSource);
+			RemoveSource(ref _resizeSetupSource);
+			var tick = _tickCallback;
+			_tickCallback = 0;
+			if (tick != 0)
+				panel.RemoveTickCallback(tick);
+			if (_window != null)
+			{
+				_window.OnNotify -= OnWindowNotify;
+				_window = null;
+			}
+			if (_paned != null)
+			{
+				_paned.OnNotify -= OnPanedNotify;
+				_paned = null;
+			}
+		}
+
+		static void RemoveSource(ref uint source)
+		{
+			var id = source;
+			source = 0;
+			if (id != 0)
+				GLib.Functions.SourceRemove(id);
+		}
 	}
 
 	/// <summary>

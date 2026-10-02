@@ -118,7 +118,7 @@ compiled custom handlers and share a legacy fragment per widget and selector.
 | Layouts | 100% | All layout types including FlexLayout and AbsoluteLayout |
 | Basic Controls | 100% | All 14 standard controls |
 | Input Controls | 100% | Picker, DatePicker, TimePicker, SearchBar |
-| Collection Controls | 100% | Virtualized CollectionView, ListView, TableView, CarouselView, SwipeView |
+| Collection Controls | 100% | Virtualized CollectionView with logical parenting of realized template views, ListView, TableView, CarouselView, SwipeView |
 | Navigation & Routing | 100% | Push/pop, Shell routes, query parameters |
 | Alerts & Dialogs | 100% | All three dialog types + native modal dialog windows |
 | Gesture Recognizers | 100% | All 5 gesture types |
@@ -370,27 +370,21 @@ in this existing project against MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110
 through the shared build workflow's targeted test mode. These managed registration
 checks do not require GTK initialization and do not claim native UI coverage.
 
-### Native runtime regression tests
+### Native regression tests in the shared test host
 
-Native tests require Linux with GTK 4.12+ and a display. They are skipped unless
-`RUN_GTK_RUNTIME_TESTS=1`. Run each native test class in its own process to keep
-GTK initialization on one thread. From `platforms/Linux.Gtk4`, with `xvfb`
-installed:
+Native tests live alongside managed tests in `Linux.Gtk4.Tests`, use
+`[GtkRuntimeFact]` and the `GTK runtime` collection, and opt in with
+`RUN_GTK_RUNTIME_TESTS=1` on Linux. Normal portable test runs skip these cases;
+those skips are not native validation. Run each native class in a separate
+process because GTK initialization is thread-affine.
 
-```bash
-RUN_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo GTK_A11Y=none \
-  dbus-run-session -- xvfb-run --auto-servernum \
-  dotnet test tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj \
-  --filter FullyQualifiedName~PickerSelectionTests \
-  --logger "console;verbosity=detailed" -m:1 -nr:false
-```
-
-```bash
-RUN_GTK_RUNTIME_TESTS=1 GSK_RENDERER=cairo dbus-run-session -- xvfb-run --auto-servernum \
-  dotnet test tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj \
-  --filter FullyQualifiedName~GtkSynchronizationContextTests \
-  --logger "console;verbosity=detailed" --blame-hang-timeout 3m
-```
+The CollectionView tests require Linux, GTK 4.12 or newer, and a display. They exercise the real
+GTK list-item factory, including logical parenting, DevFlow tree discovery,
+source replacement, runtime item/group-header template replacement, group headers,
+and recursive handler disconnection of retired roots and nested template children.
+Cleanup is checked after source replacement, template rebuild, and handler teardown,
+including repeated cleanup without duplicate disconnection. Template changes do not
+require an ItemsSource change.
 
 The Picker regression checks item replacement, no selection, collection
 mutations, managed selection mapping, native selection notifications, and
@@ -401,8 +395,20 @@ invokes an async MAUI button handler from the GTK main loop, and checks thread
 identity, context preservation across repeated awaits, native label updates,
 and restoration of the original context after shutdown.
 
-The native CI job runs each GTK test class in its own process and uploads its
-TRX results.
+From the repository root on Linux, use the shared class runner (PowerShell 7,
+`dbus-run-session`, and `xvfb-run` are required):
+
+```bash
+pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass CollectionViewHandlerTests
+pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass PickerSelectionTests
+pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkSynchronizationContextTests
+```
+
+The runner creates a private DBus session and display, requires nonzero executed
+tests with no failures or skips in the TRX, and rejects missing/empty filtered
+classes. Use a fresh `-ResultsDirectory` when repeating a run to preserve prior
+evidence. CI's `runtime` matrix runs one existing native class per process; retain
+the union of native class entries when integrating other platform changes.
 
 ### Run the sample app
 
@@ -410,6 +416,19 @@ TRX results.
 # Sample app (includes native controls, Blazor Hybrid, essentials, and more)
 dotnet run --project samples/Linux.Gtk4.Sample
 ```
+
+For a focused DevFlow check, set `MAUI_SAMPLE_COLLECTIONVIEW=1` when launching
+the sample with `-p:EnableMauiDevFlow=true`. Choose **CollectionView** in its
+example picker. Realized contact labels are discoverable by text and by their
+name as an automation id. Tapping **Alice Johnson** or **Bob Smith** updates the
+status to `Tapped: <name>`. Unrealized rows are not logical children until GTK
+realizes them.
+
+The native CI job also builds the DevFlow-enabled sample and runs
+`tests/devflow_collectionview_smoke.py` under dbus/Xvfb. It verifies the owned
+process identity before mutation and asserts both command outcomes, then uploads
+the application log, query/tap JSON, tree and screenshot as
+`gtk-collectionview-devflow-evidence`.
 
 ## Project Structure
 

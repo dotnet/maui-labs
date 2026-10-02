@@ -201,7 +201,7 @@ See the `samples/` directory for working examples:
 
 | Control | Status | Notes |
 |---|---|---|
-| CollectionView | ✅ | WPF ListBox with DataTemplateSelector, SelectedItem, SelectionMode, EmptyView; observable flat and grouped sources update live |
+| CollectionView | ✅ | WPF ListBox with DataTemplateSelector, SelectedItem, SelectionMode, EmptyView, and logical parenting of realized template views; observable flat and grouped sources update live |
 | ListView | ✅ | WPF ListBox with MAUI template bridge |
 | CarouselView | ✅ | Horizontal ListBox with arrow navigation buttons |
 | IndicatorView | ✅ | Dot indicators as Ellipses |
@@ -368,6 +368,25 @@ dotnet test tests\UITests\UITests.csproj --no-build
 > **Note:** Build projects individually or use `build.slnf`. The full solution includes samples that may have additional dependencies.
 
 ## Testing
+
+The handler regression suite exercises real native container callbacks and
+selection, including CollectionView parenting, recycling, equal-valued items,
+runtime item/group template and grouping changes, group headers and footers,
+conversion failures, recursive handler disconnection, and DevFlow tree discovery. Template changes
+rebuild realized roots without requiring an ItemsSource change and preserve
+single/multiple selection of equal-valued grouped item occurrences. Single selection
+is restored from the saved native occurrence, independently of the virtual
+SelectedItem representation. Retired template roots and their descendants disconnect
+on clear, reuse, template replacement, conversion failure, and handler teardown:
+
+```powershell
+dotnet test tests\HandlerTests\HandlerTests.csproj -p:UseMaui=false
+```
+
+In the gallery, open **Collection View** and choose **CollectionView** in the
+example picker. DevFlow can find realized contact labels by text or their name
+as an automation id. Tapping **Alice Johnson** or **Bob Smith** updates the status
+to `Tapped: <name>`, providing an observable check beyond a successful tap response.
 
 The `ci-wpf.yml` compatibility matrix runs `AlertManagerSubscriptionTests` in the
 existing `HandlerTests` project against MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110

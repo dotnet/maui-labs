@@ -29,7 +29,10 @@ namespace Microsoft.Maui.Handlers.WPF
 			new(ViewMapper)
 			{
 				[nameof(Microsoft.Maui.Controls.ItemsView.ItemsSource)] = MapItemsSource,
-				[nameof(Microsoft.Maui.Controls.CollectionView.IsGrouped)] = MapItemsSource,
+				[nameof(Microsoft.Maui.Controls.ItemsView.ItemTemplate)] = MapTemplates,
+				[nameof(Microsoft.Maui.Controls.GroupableItemsView.IsGrouped)] = MapTemplates,
+				[nameof(Microsoft.Maui.Controls.GroupableItemsView.GroupHeaderTemplate)] = MapTemplates,
+				[nameof(Microsoft.Maui.Controls.GroupableItemsView.GroupFooterTemplate)] = MapTemplates,
 				[nameof(Microsoft.Maui.Controls.SelectableItemsView.SelectedItem)] = MapSelectedItem,
 				[nameof(Microsoft.Maui.Controls.SelectableItemsView.SelectionMode)] = MapSelectionMode,
 				[nameof(Microsoft.Maui.Controls.ItemsView.EmptyView)] = MapEmptyView,
@@ -74,14 +77,13 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		void OnSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
 		{
-			if (VirtualView == null || _listBox == null || _processingSelection) return;
+			if (VirtualView == null || _listBox == null) return;
+			var newlySelectedViews = _listBox.GetNewlySelectedMauiViews();
+			if (_processingSelection) return;
 
 			// Fire TapGesture for newly selected items (enables UIAutomation navigation)
-			foreach (var added in e.AddedItems)
-			{
-				if (_listBox.ItemMauiViews.TryGetValue(added, out var mauiView))
-					FireTapGestures(mauiView);
-			}
+			foreach (var mauiView in newlySelectedViews)
+				FireTapGestures(mauiView);
 
 			if (VirtualView.SelectionMode == Microsoft.Maui.Controls.SelectionMode.None)
 			{
@@ -149,8 +151,7 @@ namespace Microsoft.Maui.Handlers.WPF
 			handler._observedSource = view.ItemsSource as INotifyCollectionChanged;
 			if (handler._observedSource != null)
 				handler._observedSource.CollectionChanged += handler.OnSourceCollectionChanged;
-			handler.UpdateGroupSubscriptions();
-			handler.PopulateItems(view);
+			handler.PopulateItems(view, updateGroupSubscriptions: true);
 		}
 
 		void UnsubscribeCollections()
@@ -164,10 +165,10 @@ namespace Microsoft.Maui.Handlers.WPF
 			_observedGroups.Clear();
 		}
 
-		void UpdateGroupSubscriptions()
+		void UpdateGroupSubscriptions(IEnumerable? source)
 		{
 			var groups = new HashSet<INotifyCollectionChanged>(ReferenceEqualityComparer.Instance);
-			if (VirtualView.IsGrouped && VirtualView.ItemsSource is IEnumerable source)
+			if (source != null)
 			{
 				foreach (var group in source)
 				{
@@ -210,9 +211,7 @@ namespace Microsoft.Maui.Handlers.WPF
 
 				if (VirtualView.IsGrouped)
 				{
-					if (!isGroup)
-						UpdateGroupSubscriptions();
-					PopulateItems(VirtualView);
+					PopulateItems(VirtualView, updateGroupSubscriptions: !isGroup);
 				}
 				else
 				{
@@ -227,21 +226,23 @@ namespace Microsoft.Maui.Handlers.WPF
 				_listBox.Dispatcher.InvokeAsync(Update);
 		}
 
-		void PopulateItems(Microsoft.Maui.Controls.CollectionView view)
+		void PopulateItems(Microsoft.Maui.Controls.CollectionView view, bool updateGroupSubscriptions)
 		{
 			if (_listBox == null) return;
 
-			_listBox.MauiTemplate = view.ItemTemplate;
-			_listBox.MauiGroupHeaderTemplate = view.GroupHeaderTemplate;
-			_listBox.MauiGroupFooterTemplate = view.GroupFooterTemplate;
-			_listBox.IsGrouped = view.IsGrouped;
-			_listBox.MauiCollectionView = view;
+			UpdateTemplates(_listBox, view);
 
-			if (view.IsGrouped && view.ItemsSource is IEnumerable source)
+			var groups = view.IsGrouped && view.ItemsSource is IEnumerable source
+				? source.Cast<object>().ToArray()
+				: null;
+			if (updateGroupSubscriptions)
+				UpdateGroupSubscriptions(groups);
+
+			if (groups != null)
 			{
 				// Flatten groups into a single list with header/footer markers
 				var flat = new List<GroupedItem>();
-				foreach (var group in source)
+				foreach (var group in groups)
 				{
 					flat.Add(new GroupedItem(group, GroupedItemKind.Header));
 					if (group is IEnumerable children)
@@ -249,18 +250,97 @@ namespace Microsoft.Maui.Handlers.WPF
 						foreach (var child in children)
 							flat.Add(new GroupedItem(child, GroupedItemKind.Item));
 					}
+					if (view.GroupFooterTemplate != null)
+						flat.Add(new GroupedItem(group, GroupedItemKind.Footer));
 				}
-				_listBox.ClearItemViews();
+				_listBox.ClearMauiViews();
 				_listBox.ItemsSource = flat;
 			}
 			else
 			{
 				if (!ReferenceEquals(_listBox.ItemsSource, view.ItemsSource))
-					_listBox.ClearItemViews();
+					_listBox.ClearMauiViews();
 				_listBox.ItemsSource = view.ItemsSource as IEnumerable;
 			}
 
 			UpdateEmptyView();
+		}
+
+		static void MapTemplates(CollectionViewHandler handler, Microsoft.Maui.Controls.CollectionView view)
+		{
+			if (handler._listBox is not { } list) return;
+			var groupingChanged = list.IsGrouped != view.IsGrouped;
+			var footerShapeChanged = view.IsGrouped &&
+				(list.MauiGroupFooterTemplate == null) != (view.GroupFooterTemplate == null);
+			var wasProcessingSelection = handler._processingSelection;
+			handler._processingSelection = true;
+			try
+			{
+				if (!groupingChanged && !footerShapeChanged)
+				{
+					UpdateTemplates(list, view);
+					list.RefreshMauiViews();
+					return;
+				}
+
+				var selectedItems = list.SelectedItems.Cast<object>().ToArray();
+				var groupedItems = !groupingChanged
+					? UpdateGroupFooters(list.Items.Cast<GroupedItem>(), view.GroupFooterTemplate != null)
+					: null;
+				list.ItemsSource = null;
+				list.ClearMauiViews();
+				if (groupingChanged)
+					MapItemsSource(handler, view);
+				else
+				{
+					UpdateTemplates(list, view);
+					list.ItemsSource = groupedItems;
+					handler.UpdateEmptyView();
+				}
+				if (view.SelectionMode == Microsoft.Maui.Controls.SelectionMode.Single)
+				{
+					if (selectedItems.Length > 0 && list.Items.Contains(selectedItems[0]))
+						list.SelectedItem = selectedItems[0];
+				}
+				else if (view.SelectionMode == Microsoft.Maui.Controls.SelectionMode.Multiple)
+					foreach (var item in selectedItems)
+						if (list.Items.Contains(item))
+							list.SelectedItems.Add(item);
+			}
+			finally
+			{
+				handler._processingSelection = wasProcessingSelection;
+			}
+		}
+
+		static void UpdateTemplates(MauiCollectionListBox list, Microsoft.Maui.Controls.CollectionView view)
+		{
+			list.MauiTemplate = view.ItemTemplate;
+			list.MauiGroupHeaderTemplate = view.GroupHeaderTemplate;
+			list.MauiGroupFooterTemplate = view.GroupFooterTemplate;
+			list.IsGrouped = view.IsGrouped;
+			list.MauiCollectionView = view;
+		}
+
+		static List<GroupedItem> UpdateGroupFooters(IEnumerable<GroupedItem> items, bool includeFooters)
+		{
+			var result = new List<GroupedItem>();
+			GroupedItem? header = null;
+			foreach (var item in items)
+			{
+				if (item.Kind == GroupedItemKind.Footer)
+					continue;
+				if (item.Kind == GroupedItemKind.Header)
+				{
+					if (includeFooters && header != null)
+						result.Add(new GroupedItem(header.Data, GroupedItemKind.Footer));
+					header = item;
+				}
+				result.Add(item);
+			}
+			if (includeFooters && header != null)
+				result.Add(new GroupedItem(header.Data, GroupedItemKind.Footer));
+			return result;
 		}
 
 		void UpdateEmptyView()
@@ -378,7 +458,9 @@ namespace Microsoft.Maui.Handlers.WPF
 			{
 				_listBox.SelectionChanged -= OnSelectionChanged;
 				_listBox.SizeChanged -= OnListBoxSizeChanged;
-				_listBox.ClearItemViews();
+				_listBox.ItemsSource = null;
+				_listBox.ClearMauiViews();
+				_listBox.MauiCollectionView = null;
 			}
 			base.DisconnectHandler(platformView);
 		}
@@ -402,7 +484,7 @@ namespace Microsoft.Maui.Handlers.WPF
 
 	class GroupedItem
 	{
-		public object Data { get; }
+		public object Data { get; set; }
 		public GroupedItemKind Kind { get; }
 		public GroupedItem(object data, GroupedItemKind kind) { Data = data; Kind = kind; }
 	}
@@ -417,30 +499,61 @@ namespace Microsoft.Maui.Handlers.WPF
 		internal Microsoft.Maui.Controls.DataTemplate? MauiGroupFooterTemplate { get; set; }
 		internal bool IsGrouped { get; set; }
 		internal Microsoft.Maui.Controls.CollectionView? MauiCollectionView { get; set; }
-		internal Dictionary<object, View> ItemMauiViews { get; } = new();
+		readonly Dictionary<ListBoxItem, (Microsoft.Maui.Controls.CollectionView Owner, View View)> _itemMauiViews = new();
+		readonly HashSet<ListBoxItem> _selectedContainers = new();
 
 		protected override DependencyObject GetContainerForItemOverride() => new MauiCollectionListBoxItem();
 
 		protected override System.Windows.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
 			=> new MauiCollectionListBoxAutomationPeer(this);
 
-		protected override void ClearContainerForItemOverride(DependencyObject element, object item)
+		internal View[] GetNewlySelectedMauiViews()
 		{
-			if (element is MauiCollectionListBoxItem container)
-				container.ClearAccessibility();
-			base.ClearContainerForItemOverride(element, item);
+			var selected = _itemMauiViews.Keys.Where(container => container.IsSelected).ToArray();
+			var views = selected.Where(container => !_selectedContainers.Contains(container))
+				.Select(container => _itemMauiViews[container].View).ToArray();
+			_selectedContainers.Clear();
+			_selectedContainers.UnionWith(selected);
+			return views;
 		}
 
-		internal void ClearItemViews()
+		void RemoveMauiView(ListBoxItem container)
 		{
-			var views = ItemMauiViews.Values.ToArray();
-			ItemMauiViews.Clear();
-			foreach (var view in views)
-				view.DisconnectHandlers();
+			if (container is MauiCollectionListBoxItem mauiContainer)
+				mauiContainer.ClearAccessibility();
+			if (!_itemMauiViews.Remove(container, out var entry))
+				return;
+
+			_selectedContainers.Remove(container);
+			entry.Owner.RemoveLogicalChild(entry.View);
+			container.Content = null;
+			entry.View.DisconnectHandlers();
+		}
+
+		internal void ClearMauiViews()
+		{
+			foreach (var container in _itemMauiViews.Keys.ToArray())
+				RemoveMauiView(container);
+		}
+
+		internal void RefreshMauiViews()
+		{
+			for (var index = 0; index < Items.Count; index++)
+				if (ItemContainerGenerator.ContainerFromIndex(index) is ListBoxItem container)
+					PrepareContainerForItemOverride(container, Items[index]);
+		}
+
+		protected override void ClearContainerForItemOverride(DependencyObject element, object item)
+		{
+			if (element is ListBoxItem container)
+				RemoveMauiView(container);
+			base.ClearContainerForItemOverride(element, item);
 		}
 
 		protected override void PrepareContainerForItemOverride(DependencyObject element, object item)
 		{
+			if (element is ListBoxItem previousContainer)
+				RemoveMauiView(previousContainer);
 			if (element is MauiCollectionListBoxItem container)
 				container.PrepareAccessibility();
 			base.PrepareContainerForItemOverride(element, item);
@@ -506,16 +619,18 @@ namespace Microsoft.Maui.Handlers.WPF
 
 				if (mauiContext == null) return;
 
+				_itemMauiViews[lbi] = (MauiCollectionView, content);
+				if (lbi.IsSelected)
+					_selectedContainers.Add(lbi);
+				MauiCollectionView.AddLogicalChild(content);
 				var platformView = Microsoft.Maui.Platform.ElementExtensions.ToPlatform((IElement)content, mauiContext);
 				lbi.Content = platformView;
 				if (lbi is MauiCollectionListBoxItem mauiContainer)
 					mauiContainer.MauiItemView = content;
-
-				// Store MAUI view reference so OnSelectionChanged can fire TapGesture
-				ItemMauiViews[item] = content;
 			}
 			catch (Exception ex)
 			{
+				RemoveMauiView(lbi);
 				var dataText = (item is GroupedItem g ? g.Data : item)?.ToString() ?? "";
 				lbi.Content = new TextBlock
 				{
