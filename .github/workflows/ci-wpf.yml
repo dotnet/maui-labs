@@ -4,7 +4,10 @@ on:
   push:
     branches: [main]
     paths:
+      - '.github/workflows/ci-wpf.yml'
+      - '.github/workflows/_build.yml'
       - 'platforms/Windows.WPF/**'
+      - 'src/DevFlow/**'
       - 'platforms/Shared/Essentials*/**'
       - 'eng/**'
       - 'Directory.Build.props'
@@ -14,9 +17,11 @@ on:
       - 'NuGet.config'
   pull_request:
     types: [opened, synchronize, reopened, edited]
-    branches: [main]
     paths:
+      - '.github/workflows/ci-wpf.yml'
+      - '.github/workflows/_build.yml'
       - 'platforms/Windows.WPF/**'
+      - 'src/DevFlow/**'
       - 'platforms/Shared/Essentials*/**'
       - 'eng/**'
       - 'Directory.Build.props'
@@ -82,6 +87,25 @@ jobs:
           name: shell-section-wpf-runtime
           path: section-runtime-evidence
           if-no-files-found: error
+
+  compatibility:
+    name: WPF registration - MAUI ${{ matrix.maui }}
+    strategy:
+      fail-fast: false
+      matrix:
+        maui: ['10.0.41', '10.0.60', '10.0.70', '10.0.110']
+    uses: ./.github/workflows/_build.yml
+    with:
+      project-path: platforms/Windows.WPF/tests/HandlerTests/HandlerTests.csproj
+      project-name: wpf-registration-${{ matrix.maui }}
+      os: '["windows-latest"]'
+      install-workloads: false
+      test-only: true
+      test-arguments-json: >-
+        ["-p:UseMaui=false",
+         "-p:MauiVersion=${{ matrix.maui }}",
+         "-p:MicrosoftMauiControlsVersion=${{ matrix.maui }}",
+         "--filter", "FullyQualifiedName~AlertManagerSubscriptionTests"]
 
   handler-tests:
     runs-on: windows-latest

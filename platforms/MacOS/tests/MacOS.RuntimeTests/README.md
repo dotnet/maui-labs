@@ -5,12 +5,25 @@ test app. Portable `MacOS.Tests` remains a separate `net10.0` xUnit project.
 Native scenarios share one executable, project, process bootstrap and CI runner.
 Every launch selects exactly one registered scenario in a fresh process.
 
+The dialog scenarios replace the standalone `AlertRegistrationProbe` app:
+`dialog-registration` checks the actual MAUI-consumed subscription, AppKit proxy
+and singleton registration across MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110.
+`dialogs` runs at 10.0.70, first restoring only the legacy registration logic to
+prove the missing service in a real window, then verifying fixed native action
+sheets, prompts and alerts with visible-sheet captures and typed task results.
+A timeout is a failure, not accepted baseline evidence.
+
 | Scenario | Cases | Before/fixed behavior |
 |---|---|---|
 | `layout` | 6 | Exact missing native child failure / add, insert, replace, remove, clear, re-add |
 | `shell-sections` | 1 | Lazy route target missing / section and content switching, dynamic insertion and handler lifecycle (59 assertions) |
+| `dialog-registration` | 1 | Fixed subscription, proxy and singleton registration across four MAUI versions |
+| `dialogs` | 3 | Missing consumed subscription / native action sheets, prompts and alerts |
 | `picker` | 19 | Unselected null-title Picker displays January / selection, title, items and native activation transitions |
 | `bundle-resources` | 4 | Linked image missing / assets included and loaded from the built app bundle |
+
+The `picker` scenario covers the native state transitions of the AppKit Picker
+handler; `bundle-resources` verifies MAUI resources in the packaged application.
 
 ## Run on macOS
 

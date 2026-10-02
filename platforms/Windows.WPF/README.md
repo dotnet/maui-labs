@@ -35,6 +35,30 @@ maui devflow --agent-port <port> ui tap --automationId ShellSettingsButton
 The tree should include `ShellHomePage` beneath `ShellContent`, the title query
 should find a MAUI `Label`, and tapping the button should navigate to Settings.
 
+### Dynamic Shell items
+
+Changes to `Shell.Items`, `ShellItem.Items`, and `ShellSection.Items` on the UI
+thread refresh the native flyout, tabs, and selected page. Collection notifications
+are coalesced on the dispatcher after Shell settles its current selection. Clearing
+the hierarchy clears the displayed page; replacing flyout items with a `TabBar`
+does not leave flyout entries behind. Inactive page templates remain lazy.
+The tab strip contains only the current item's sections and preserves its selected
+section when inactive items change.
+Deferred collection refreshes use the `Items` property mapper, including
+customizations registered with `AppendToMapping(nameof(Shell.Items), ...)`.
+
+Run the collection and lifecycle regressions on Windows:
+
+```powershell
+dotnet test platforms\Windows.WPF\tests\HandlerTests\HandlerTests.csproj -p:UseMaui=false --filter FullyQualifiedName~ShellItemsHandlerTests
+```
+
+The runtime regression renders add, remove, replace, and reset transitions in an
+offscreen, nonactivating WPF window. Set `SHELL_ITEMS_EVIDENCE_DIRECTORY` in the
+test process environment to save PNGs of those transitions.
+
+### Shell section selection
+
 For section switching within one Shell item, select **Launch Section Switching
 Repro**, or start the sample with `--shell-section-repro`. This uses two lazy
 pages in one `TabBar`, without calling a handler refresh workaround. The
@@ -330,6 +354,11 @@ dotnet test tests\UITests\UITests.csproj --no-build
 
 ## Testing
 
+The `ci-wpf.yml` compatibility matrix runs `AlertManagerSubscriptionTests` in the
+existing `HandlerTests` project against MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110
+through the shared build workflow's targeted test mode. These are registration
+contract tests, not native dialog interaction tests.
+
 The project includes **213 UI tests** covering all implemented controls, plus a **WinUI comparison framework** that captures side-by-side screenshots of the WPF and WinUI ControlGallery apps for visual parity validation.
 
 ```bash
@@ -348,7 +377,7 @@ Comparison screenshots are saved to `tests/UITests/Comparisons/`.
 - The platform-agnostic `ViewHandler` has no-op `PlatformArrange` and returns `Size.Zero`. `WPFViewHandler` overrides these to bridge MAUI layout to WPF `Measure`/`Arrange`.
 - WPF `System.Windows.Controls` and MAUI `Microsoft.Maui.Controls` share many type names — every handler file uses `using` aliases to disambiguate (e.g., `WButton = System.Windows.Controls.Button`).
 - The `MauiWPFApplication` base class in `App.xaml` bootstraps the MAUI runtime within a WPF `Application`.
-- Dialogs use `DispatchProxy` + reflection to intercept `AlertManager` requests (the API is internal in MAUI). See [dotnet/maui#34104](https://github.com/dotnet/maui/issues/34104).
+- Dialogs use `DispatchProxy` + reflection to intercept `AlertManager` requests (the API is internal in MAUI). Both the nested subscription interface in MAUI 10.0.41–10.0.60 and the top-level interface in 10.0.70+ are supported. An unrecognized contract fails during registration rather than leaving dialog tasks pending. See [dotnet/maui#34104](https://github.com/dotnet/maui/issues/34104).
 
 ## Known Limitations
 

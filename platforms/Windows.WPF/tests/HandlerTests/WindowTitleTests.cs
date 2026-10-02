@@ -8,7 +8,6 @@ using Microsoft.Maui.Hosting;
 using Microsoft.Maui.Platform;
 using Microsoft.Maui.Platforms.Windows.WPF;
 using Microsoft.Maui.WPF;
-using WApplication = System.Windows.Application;
 using WWindow = System.Windows.Window;
 
 namespace HandlerTests;
@@ -22,20 +21,12 @@ public class WindowTitleTests
 	[Fact]
 	public void WindowTitle_IsOwnedByEachWindow_NotPagesOrNavigation()
 	{
-		// WPF permits only one Application per process, so keep all title scenarios together.
-		Exception? failure = null;
-		var thread = new Thread(() =>
+		WpfApplicationHost.Run(nativeApp =>
 		{
-			var nativeApp = new WApplication { ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown };
-			nativeApp.DispatcherUnhandledException += (_, args) =>
-			{
-				failure ??= args.Exception;
-				args.Handled = true;
-			};
+			DispatcherProvider.SetCurrent(new WPFDispatcherProvider());
+			var nativeMain = new WWindow();
 			try
 			{
-				DispatcherProvider.SetCurrent(new WPFDispatcherProvider());
-				var nativeMain = new WWindow();
 				nativeApp.MainWindow = nativeMain;
 				using var mainApp = CreateApp(nativeMain);
 				var mainContext = new WPFMauiContext(mainApp.Services);
@@ -70,32 +61,38 @@ public class WindowTitleTests
 					Assert.Equal(main.Title, nativeMain.Title);
 
 					var nativeSecond = new WWindow();
-					using var secondApp = CreateApp(nativeSecond);
-					var secondPage = new ContentPage { Title = "Second page" };
-					var second = new Window(secondPage) { Title = "Second window" };
-					second.ToHandler(new WPFMauiContext(secondApp.Services));
 					try
 					{
-						secondPage.Title = "Updated second page";
-						Assert.Equal(main.Title, nativeMain.Title);
-						Assert.Equal(second.Title, nativeSecond.Title);
-						second.Title = "Updated second window";
-						Assert.Equal(second.Title, nativeSecond.Title);
-						Assert.Equal(main.Title, nativeMain.Title);
-
-						foreach (var emptyTitle in new string?[] { "", null })
+						using var secondApp = CreateApp(nativeSecond);
+						var secondPage = new ContentPage { Title = "Second page" };
+						var second = new Window(secondPage) { Title = "Second window" };
+						second.ToHandler(new WPFMauiContext(secondApp.Services));
+						try
 						{
-							second.Title = emptyTitle;
-							secondPage.Title = $"Page with {emptyTitle ?? "null"} window title";
-							Assert.Equal(string.Empty, nativeSecond.Title);
+							secondPage.Title = "Updated second page";
 							Assert.Equal(main.Title, nativeMain.Title);
+							Assert.Equal(second.Title, nativeSecond.Title);
+							second.Title = "Updated second window";
+							Assert.Equal(second.Title, nativeSecond.Title);
+							Assert.Equal(main.Title, nativeMain.Title);
+
+							foreach (var emptyTitle in new string?[] { "", null })
+							{
+								second.Title = emptyTitle;
+								secondPage.Title = $"Page with {emptyTitle ?? "null"} window title";
+								Assert.Equal(string.Empty, nativeSecond.Title);
+								Assert.Equal(main.Title, nativeMain.Title);
+							}
+						}
+						finally
+						{
+							DrainDispatcher();
+							secondPage.Handler?.DisconnectHandler();
+							second.Handler?.DisconnectHandler();
 						}
 					}
 					finally
 					{
-						DrainDispatcher();
-						secondPage.Handler?.DisconnectHandler();
-						second.Handler?.DisconnectHandler();
 						nativeSecond.Close();
 					}
 				}
@@ -106,27 +103,37 @@ public class WindowTitleTests
 						page.Handler?.DisconnectHandler();
 					navigation.Handler?.DisconnectHandler();
 					main.Handler?.DisconnectHandler();
-					nativeMain.Close();
 				}
-			}
-			catch (Exception ex)
-			{
-				failure = ex;
 			}
 			finally
 			{
-				nativeApp.Shutdown();
-				// Shutdown queues its cleanup; drain it before this STA thread exits.
-				DrainDispatcher();
-				nativeApp.Dispatcher.InvokeShutdown();
+				nativeMain.Close();
 			}
-		}) { IsBackground = true };
-		thread.SetApartmentState(ApartmentState.STA);
-		thread.Start();
-		Assert.True(thread.Join(TimeSpan.FromSeconds(30)), "Window title scenario timed out.");
-		if (failure is not null)
-			System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
-		Assert.Null(WApplication.Current);
+		});
+
+		WpfApplicationHost.Run(_ =>
+		{
+			var window = new WWindow
+			{
+				Width = 100,
+				Height = 100,
+				Left = -10000,
+				Top = -10000,
+				ShowActivated = false,
+				ShowInTaskbar = false,
+			};
+			try
+			{
+				window.Show();
+				DrainDispatcher();
+				Assert.True(window.IsVisible, "Title test teardown must not disable later native windows.");
+				Assert.True(window.ActualWidth > 0);
+			}
+			finally
+			{
+				window.Close();
+			}
+		});
 	}
 
 	static void DrainDispatcher()

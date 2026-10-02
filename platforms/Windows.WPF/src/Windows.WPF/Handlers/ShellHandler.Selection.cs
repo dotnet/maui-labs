@@ -101,7 +101,7 @@ public partial class ShellHandler
 		{
 			_selectionUpdate = null;
 			if (_selectionShell != null)
-				ShowCurrentPage();
+				UpdateValue(nameof(Shell.CurrentItem));
 		}));
 	}
 }
