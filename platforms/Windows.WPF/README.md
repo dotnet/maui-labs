@@ -95,7 +95,9 @@ layout. The native panel preserves measurements already performed by MAUI, inste
 of remeasuring each child against the whole parent's size (which can inflate flex
 lines beyond their allocated frames). Children whose native measurement is still
 invalid, including explicitly sized views MAUI did not measure, are measured by
-the panel. The existing minimum-height floor is retained.
+the panel. Nested flex panels are refreshed against their MAUI-computed flex
+frames on each pass, because the shared flex engine bypasses their native measure.
+The existing minimum-height floor is retained.
 
 ## Screenshots
 

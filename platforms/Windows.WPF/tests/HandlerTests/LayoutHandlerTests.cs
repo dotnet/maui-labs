@@ -259,6 +259,38 @@ public class LayoutHandlerTests(ITestOutputHelper output)
 		});
 	}
 
+	[Fact]
+	public void NestedFlexLayout_WidthChanges_RefreshesNativeMeasurements()
+	{
+		Run(context =>
+		{
+			var nested = new FlexLayout
+			{
+				Wrap = FlexWrap.Wrap,
+				Children =
+				{
+					new Entry { Text = "First", WidthRequest = 80, HeightRequest = 25 },
+					new Entry { Text = "Second", WidthRequest = 80, HeightRequest = 25 },
+				},
+			};
+			var outer = new FlexLayout { Direction = FlexDirection.Column, Children = { nested } };
+			WithNativeLayout(outer, context, panel =>
+			{
+				foreach (var width in new[] { 120, 200, 120 })
+				{
+					MeasureAndArrange(panel, width);
+					var expectedHeight = width < 160 ? 50 : 25;
+					var nativeNested = Assert.IsType<LayoutPanel>(nested.Handler!.PlatformView);
+					output.WriteLine($"Width={width}: outer={panel.DesiredSize}, nested={nested.Frame}, native={nativeNested.RenderSize}");
+					Assert.InRange(panel.DesiredSize.Height, expectedHeight - 0.1, expectedHeight + 0.1);
+					AssertNativeChild(nested, panel);
+					foreach (var child in nested.Children)
+						AssertNativeChild(child, nativeNested);
+				}
+			});
+		});
+	}
+
 	static FlexLayout CreateFlex(FlexWrap wrap) => new()
 	{
 		Wrap = wrap,

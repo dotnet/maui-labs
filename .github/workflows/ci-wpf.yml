@@ -53,6 +53,10 @@ jobs:
         with:
           ref: 63f8baa65f74ee6c605c9ebb5969949f990ccdf8
           path: dispatch-only
+      - uses: actions/checkout@v6
+        with:
+          ref: 6fbd7df10b08c9d01c61ec6bcea23d5449f8763b
+          path: cached-measure
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: fixed/global.json
@@ -64,7 +68,8 @@ jobs:
           $relative = 'platforms\Windows.WPF\tests\HandlerTests'
           Copy-Item "fixed\$relative\LayoutHandlerTests.cs" "baseline\$relative"
           Copy-Item "fixed\$relative\LayoutHandlerTests.cs" "dispatch-only\$relative"
-          foreach ($variant in @('baseline', 'dispatch-only', 'fixed')) {
+          Copy-Item "fixed\$relative\LayoutHandlerTests.cs" "cached-measure\$relative"
+          foreach ($variant in @('baseline', 'dispatch-only', 'cached-measure', 'fixed')) {
             Push-Location $variant
             try {
               $output = Join-Path $env:GITHUB_WORKSPACE "layout-runtime-evidence\$variant"
@@ -74,6 +79,8 @@ jobs:
                 $filter = 'FullyQualifiedName~FlexLayout_FirstNativeMeasure|FullyQualifiedName~CreatePlatformView_UsesInterface|FullyQualifiedName~SetVirtualView_Replacement_UsesNewInterface'
               } elseif ($variant -eq 'dispatch-only') {
                 $filter = 'FullyQualifiedName~FlexLayout_FirstNativeMeasure'
+              } elseif ($variant -eq 'cached-measure') {
+                $filter = 'FullyQualifiedName~NestedFlexLayout_WidthChanges'
               }
               dotnet test "$relative\HandlerTests.csproj" -c Release -p:UseMaui=false -p:MauiVersion=${{ matrix.maui }} -p:MicrosoftMauiControlsVersion=${{ matrix.maui }} -m:1 -nr:false --filter $filter --logger 'trx;LogFileName=layouts.trx' --results-directory $output *> "$output\process.log"
               $exitCode = $LASTEXITCODE
@@ -97,7 +104,14 @@ jobs:
                   Get-Content "$output\process.log"
                   throw 'Dispatch-only fix did not reproduce the two native frame inflation failures'
                 }
-              } elseif ($exitCode -ne 0 -or $counters.failed -ne 0 -or $counters.executed -ne 15) {
+              } elseif ($variant -eq 'cached-measure') {
+                $failures = @($results.TestRun.Results.UnitTestResult | Where-Object outcome -eq 'Failed')
+                if ($exitCode -ne 1 -or $counters.failed -ne 1 -or $counters.total -ne 1 -or
+                    @($failures | Where-Object { $_.Output.ErrorInfo.Message -notmatch 'Assert.InRange\(\) Failure' }).Count -ne 0) {
+                  Get-Content "$output\process.log"
+                  throw 'Cached-measure revision did not reproduce the nested flex stale-height failure'
+                }
+              } elseif ($exitCode -ne 0 -or $counters.failed -ne 0 -or $counters.executed -ne 16) {
                 Get-Content "$output\process.log"
                 throw 'Fixed native WPF layout regression failed'
               }

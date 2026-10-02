@@ -29,6 +29,7 @@ namespace Microsoft.Maui.Handlers.WPF
 
 			// Layout subclasses can reimplement these methods (FlexLayout hides Measure).
 			var layout = (ICrossPlatformLayout)VirtualView;
+			PlatformView.VirtualView = VirtualView;
 			PlatformView.CrossPlatformMeasure = layout.CrossPlatformMeasure;
 			PlatformView.CrossPlatformArrange = layout.CrossPlatformArrange;
 
@@ -125,6 +126,7 @@ namespace Microsoft.Maui.Handlers.WPF
 			var layout = (ICrossPlatformLayout)VirtualView;
 			var view = new LayoutPanel
 			{
+				VirtualView = VirtualView,
 				CrossPlatformMeasure = layout.CrossPlatformMeasure,
 				CrossPlatformArrange = layout.CrossPlatformArrange,
 			};
