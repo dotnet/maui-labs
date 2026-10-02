@@ -65,6 +65,9 @@ dotnet run
 
   <ItemGroup>
     <MauiIcon Include="Resources\AppIcon\appicon.png" />
+    <MauiImage Include="Resources\Images\*" />
+    <MauiFont Include="Resources\Fonts\*" />
+    <MauiAsset Include="Resources\Raw\**\*" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>
 ```
@@ -139,18 +142,20 @@ dotnet build platforms/MacOS/MacOS.slnx
 dotnet run --project platforms/MacOS/samples/MacOS.Sample/
 ```
 
-## Dynamic layout regression
+## Native runtime scenarios
 
-On a macOS desktop session, run the native regression executable:
+On macOS, run a registered scenario through the shared native host:
 
 ```bash
-dotnet run --project platforms/MacOS/tests/LayoutRegressionTests/LayoutRegressionTests.csproj
+export NUGET_PACKAGES="$PWD/.packages"
+python3 -B platforms/MacOS/tests/MacOS.RuntimeTests/run.py \
+  --scenario layout --evidence "$PWD/artifacts/layout-run"
 ```
 
 It opens an AppKit window and mutates a MAUI layout after its handler connects.
 It checks nested child bounds, native insertion order, replacement, removal,
 clear, and re-addition without resizing the window. Failures exit with code 1;
-success prints a `PASS` line for each scenario and exits with code 0. A 30-second
+success prints a `PASS` line for each of the six cases and exits with code 0. A 90-second
 watchdog fails a hung run.
 This executable uses the AppKit main thread and is not a `dotnet test` project.
 Building it on Windows does not validate AppKit behavior. For a before/after
@@ -158,13 +163,16 @@ comparison, run the same executable with `LayoutHandler`'s constructor passing
 only `Mapper` (the original behavior), then with `Mapper, CommandMapper`.
 The original behavior must fail the first dynamic addition check.
 
-The `Native dynamic layout regression` CI job performs that comparison on a
-GitHub-hosted macOS runner. Its `appkit-layout-runtime` artifact contains both
+The shared `AppKit runtime` CI matrix performs that comparison on a
+GitHub-hosted macOS runner. Its `appkit-runtime-layout-default` artifact contains both
 process logs, native view screenshots and managed/native bounds after addition.
 Screenshots use Aqua appearance and composite transparent view backgrounds over
 white so native text remains readable in dark artifact viewers.
-Set `APPKIT_LAYOUT_ARTIFACTS` to an output directory to capture the same evidence
-when running locally. Hosted execution is distinct from a local desktop run.
+The required evidence directory also receives strict machine-readable terminal
+results and assertion counts. Hosted execution is distinct from a local desktop run.
+See [the shared host contract](tests/MacOS.RuntimeTests/README.md) to add a scenario,
+version matrix entry or scoped fixture assets without another application/project.
+Portable `MacOS.Tests` remains independent of native AppKit execution.
 
 ## Unit tests
 
@@ -177,6 +185,50 @@ dotnet test platforms/MacOS/tests/MacOS.Tests/MacOS.Tests.csproj
 
 The AppKit CI workflow and official macOS product build also run these tests.
 Native window notifications and rendering still require testing in a running macOS app.
+
+### Bundled resources
+
+The package's build targets translate `MauiImage`, `MauiFont`, and `MauiAsset` into
+Apple SDK `BundleResource` items, including files linked from outside the head project.
+Images are bundled as `Contents/Resources/Images/<filename>` and fonts as
+`Contents/Resources/Fonts/<filename>`. Raw assets use `LogicalName` relative to
+`Contents/Resources` (or the filename when no logical name is supplied), matching
+`IFileSystem.OpenAppPackageFileAsync`. Backslashes in logical names are normalized.
+The MAUI mapping replaces the SDK's default resource entry for the same source file;
+unrelated `BundleResource` items are unchanged.
+For apps that intentionally manage all these paths using custom `BundleResource` items,
+set `EnableMacOSMauiResourceMapping` to `false` to retain that mapping instead.
+
+This bundles image sources as-is; it does not add Resizetizer resizing or SVG conversion.
+Image names and font names must be unique within their respective bundle directories.
+Use `LogicalName` to preserve nested raw-asset paths.
+
+The `bundle-resources` scenario runs inside the shared `MacOS.RuntimeTests` host,
+using external image/font/raw fixtures and a local raw item also matched by the
+SDK glob. On macOS with Xcode and the MAUI/macOS workloads, point the runner at
+freshly built core and Essentials packages and a new evidence directory:
+
+```bash
+export RUNTIME_TEST_PACKAGES="$PWD/artifacts/packages"
+python3 -B platforms/MacOS/tests/MacOS.RuntimeTests/run.py \
+  --scenario bundle-resources --evidence "$PWD/artifacts/resources-run"
+```
+
+The scenario's stage driver composes the common build/launch runner: historical
+target reproduction, clean package-consumer rebuild, incremental build and
+`dotnet publish` without an installer. Each native run verifies the produced `.app`,
+MAUI image/label handlers and raw content through registered `IFileSystem`.
+Logical paths include spaces, renamed assets and equal filenames in different
+folders. Shipping targets perform the bundling; the harness never copies resources.
+The same host also runs item-metadata assertions for normal mapping, platform guards
+and opt-out. Its package mode rejects ProjectReferences.
+
+The existing `native-runtime` CI matrix supplies the newly packed packages and uploads
+`appkit-runtime-bundle-resources-default` with strict terminal results, native captures,
+bundle inventory, package references and stage binlogs. All native rows wait for the
+product build; optional matrix `packages` and `workloads` inputs reuse common setup.
+These checks require macOS; item-mapping checks alone on Windows are not proof of
+rendering.
 
 ## MAUI DevFlow integration
 
