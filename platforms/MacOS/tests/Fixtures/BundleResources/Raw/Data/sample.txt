@@ -1,0 +1,1 @@
+AppKit nested MAUI asset

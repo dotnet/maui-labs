@@ -53,6 +53,34 @@ jobs:
       pack: true
       os: '["windows-latest"]'
 
+  native-aot-smoke:
+    name: Reflection-disabled Native AOT smoke
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Install Native AOT prerequisites
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+
+      - name: Publish and run agent smoke with headless MAUI backend
+        run: |
+          dotnet publish src/DevFlow/Microsoft.Maui.DevFlow.Agent.AotSmoke \
+            -c Release -r linux-x64 -p:AotSmoke=true -p:IncludeMauiBackend=true \
+            -p:TrimmerSingleWarn=false -o artifacts/devflow-aot/agent
+          artifacts/devflow-aot/agent/Microsoft.Maui.DevFlow.Agent.AotSmoke \
+            artifacts/devflow-aot/evidence
+
+      - name: Publish and run logging smoke
+        run: |
+          dotnet publish src/DevFlow/tools/LoggingAotSmoke/LoggingAotSmoke.csproj \
+            -c Release -r linux-x64 -o artifacts/devflow-aot/logging
+          artifacts/devflow-aot/logging/LoggingAotSmoke
+
   hosts:
     name: JavaScript hosts and VSIX
     runs-on: ubuntu-latest

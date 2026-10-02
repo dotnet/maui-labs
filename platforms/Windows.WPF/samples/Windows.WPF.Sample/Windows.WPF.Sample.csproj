@@ -64,4 +64,17 @@
     <AssemblyMetadata Include="Microsoft.Maui.DevFlowTfm" Value="$(TargetFramework)" />
   </ItemGroup>
 
+  <PropertyGroup Condition="'$(WpfTestScenarios)' == 'true'">
+    <DefineConstants>$(DefineConstants);WPF_TEST_SCENARIOS</DefineConstants>
+    <WpfTestTargetsPath Condition="'$(WpfTestTargetsPath)' == ''">$(MSBuildThisFileDirectory)..\..\src\Windows.WPF\build\Microsoft.Maui.Platforms.Windows.WPF.targets</WpfTestTargetsPath>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(WpfTestScenarios)' != 'true'">
+    <Compile Remove="TestScenarios\**\*.cs" />
+  </ItemGroup>
+
+  <!-- Project references do not import the backend's shipping NuGet build targets. -->
+  <Import Project="TestScenarios\PackagedAssets.props" Condition="'$(WpfTestScenarios)' == 'true'" />
+  <Import Project="$(WpfTestTargetsPath)" Condition="'$(WpfTestScenarios)' == 'true'" />
+
 </Project>

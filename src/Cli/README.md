@@ -261,6 +261,20 @@ VS Code, GitHub Copilot desktop, and Copilot CLI setup.
 
 Run `maui <command> --help` for detailed options on any command.
 
+For screen recording, select the platform and target when starting:
+
+```bash
+maui devflow recording start --platform android --device <serial> --output capture.mp4
+# Or: --platform ios --device <simulator-UDID>
+maui devflow recording stop
+```
+
+An iOS simulator recording requires an explicit `--device`. Stopping uses the
+saved recording platform and Android serial; it does not require repeating
+`--platform` or `--device`, and those options do not override the saved target.
+The iOS driver stops its saved recording process. Without a saved recording,
+`stop` reports an error without creating a platform driver.
+
 Profiling commands wait up to two minutes for `dotnet-trace` to finish rundown and flush after a manual, timed, or event-driven stop. Use `--trace-stop-timeout` to adjust that finalization window independently of `--duration`.
 
 For the shared Inspector UI and its host integrations, see the
