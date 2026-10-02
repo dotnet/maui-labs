@@ -65,7 +65,7 @@ jobs:
             --allowed-external-deps ../eng/allowed-external-deps.txt
 
   migration-audit-tests:
-    name: Migration audit helper (${{ matrix.os }})
+    name: Migration acceptance tests (${{ matrix.os }})
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
@@ -81,5 +81,11 @@ jobs:
         with:
           node-version: 22
 
-      - name: Test read-only migration audit
-        run: node --test tests/dotnet-maui/maui-xcode27-migration/audit-lifecycle.test.mjs
+      - name: Test migration audit and qualification acceptance
+        run: >-
+          node --test
+          tests/dotnet-maui/maui-xcode27-migration/audit-lifecycle.test.mjs
+          tests/dotnet-maui/maui-xcode27-migration/fixture-manifest.test.mjs
+          tests/dotnet-maui/maui-xcode27-migration/acceptance-audit.test.mjs
+          tests/dotnet-maui/maui-xcode27-migration/runtime/assertions.test.mjs
+          tests/dotnet-maui/maui-xcode27-migration/runtime/runner.test.mjs

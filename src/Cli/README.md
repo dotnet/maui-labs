@@ -121,12 +121,18 @@ Then ask the coding agent to prepare the app for Xcode 27. The CLI installs
 instructions, not an automatic project rewrite. This requires both a CLI build
 that exposes `ai add skill` and a catalog revision containing the skill.
 The skill is a **candidate for expert-reviewed testing**, not a validated
-complex-migration workflow: evaluated agents still lost cold-path behavior
-despite loading it and producing compilable code. Automatic selection is not
+complex-migration workflow: evaluations have still lost cold-path behavior
+despite producing compilable code. Native host audits reject covered failure
+patterns, but other behavior still needs source review. Aggregate judge scores
+are not acceptance, and supported released-toolchain build and runtime
+qualification remain incomplete. Automatic selection is not
 guaranteed, and explicit invocation is not a correctness guarantee. Inspect all
 callback mappings and validate with a matching released toolchain.
 **A minimum published CLI version has not been established**; an older tool may
 print root help for `maui ai --help`, so check that actual `ai` commands appear.
+Real GitHub installation and no-op updates have passed with an isolated
+CI-built CLI and a full-SHA catalog pin for CopilotCli, Claude and VsCode.
+That candidate-package evidence does not certify a published CLI release.
 See the [skill catalog](../../plugins/README.md) for availability, client choices,
 and the marketplace alternative.
 

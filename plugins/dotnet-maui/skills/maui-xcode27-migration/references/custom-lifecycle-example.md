@@ -64,12 +64,12 @@ public abstract class LinkAwareSceneDelegate : MauiUISceneDelegate
     public override void WillConnect(UIScene scene, UISceneSession session,
         UISceneConnectionOptions connectionOptions)
     {
-        foreach (var context in connectionOptions.UrlContexts.ToArray<UIOpenUrlContext>())
+        foreach (var context in connectionOptions.UrlContexts?.ToArray<UIOpenUrlContext>() ?? [])
         {
             var url = context.Url;
             pending.Enqueue(window => HandleColdLaunchUrl(window, url));
         }
-        foreach (var activity in connectionOptions.UserActivities.ToArray<NSUserActivity>())
+        foreach (var activity in connectionOptions.UserActivities?.ToArray<NSUserActivity>() ?? [])
             pending.Enqueue(_ => HandleOriginalActivity(scene, activity));
 
         base.WillConnect(scene, session, connectionOptions);

@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <UseMaui>true</UseMaui>
+    <SingleProject>true</SingleProject>
+    <ApplicationId>com.example.xcode27qualification</ApplicationId>
+    <ApplicationTitle>Lifecycle qualification</ApplicationTitle>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+    <MauiVersion>10.0.110</MauiVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">17.0</SupportedOSPlatformVersion>
+    <ValidateXcodeVersion>true</ValidateXcodeVersion>
+    <IsPackable>false</IsPackable>
+    <IsShipping>false</IsShipping>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <CandidateDirectory Condition="'$(CandidateDirectory)' == ''">$(MSBuildProjectDirectory)/Candidate</CandidateDirectory>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" />
+    <Compile Include="Harness/**/*.cs" />
+    <Compile Include="$(CandidateDirectory)/*.cs" />
+    <BundleResource Include="$(CandidateManifest)" LogicalName="candidate-manifest.json" Condition="'$(CandidateManifest)' != ''" />
+  </ItemGroup>
+  <Target Name="RequireCandidateManifest" BeforeTargets="CoreCompile">
+    <Error Condition="'$(CandidateManifest)' == '' Or !Exists('$(CandidateManifest)')"
+           Text="Run node runner.mjs prepare --candidate PATH --output results/NAME first, then pass its candidate directory and CandidateManifest path. This binds evidence to the compiled source." />
+    <Exec Command="node &quot;$(MSBuildProjectDirectory)/runner.mjs&quot; verify-build --candidate &quot;$(CandidateDirectory)&quot; --manifest &quot;$(CandidateManifest)&quot;" />
+  </Target>
+</Project>

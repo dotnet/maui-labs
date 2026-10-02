@@ -25,9 +25,12 @@ clients. Restart/reload the agent session if needed, then ask it to
 "Prepare this MAUI app for Xcode 27" (or explicitly use `maui-xcode27-migration`).
 The CLI installs instructions; the agent performs the migration.
 **Validation status:** this is a candidate for expert-reviewed testing, not a
-validated complex-migration workflow. Evaluated agents still left cold window
-work in AppDelegate or dropped additional cold URLs despite loading the skill
-and producing compilable code. Automatic selection is also not guaranteed;
+validated complex-migration workflow. Evaluations have still produced
+compilable code that loses cold window work or additional URLs. Native host
+audits now reject those covered failure patterns; source review remains
+necessary for other behavior. Aggregate judge scores are not acceptance.
+Supported released-toolchain build and runtime qualification remain incomplete.
+Automatic selection is not guaranteed;
 explicitly requesting the skill controls intent, not migration correctness.
 Inspect every callback mapping and validate with a matching released toolchain.
 
@@ -38,6 +41,14 @@ in repository source; older published tools may not expose it. Check
 No minimum published CLI version is asserted here. The tool package ID is
 `Microsoft.Maui.Cli`; follow [CLI installation](../src/Cli/README.md) and verify
 the chosen package contains `ai` before relying on this route.
+
+Contributor testing can select a reviewed catalog revision with
+`--repo dotnet/maui-labs --branch <full-40-character-commit-sha>` on the list
+and add commands. A full SHA stays pinned on later updates. Real GitHub
+discovery, installation, status and no-op updates have been exercised with an
+isolated CI-built CLI for all three clients, including delivery of the audit
+script. This does not establish a minimum released CLI version or qualify a
+future signed release; repeat the consumer checks against the published package.
 
 Alternatively, install the complete plugin in an agent that supports marketplaces:
 

@@ -2,11 +2,11 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { auditDirectory, auditSource } from '../../../plugins/dotnet-maui/skills/maui-xcode27-migration/scripts/audit-lifecycle.mjs';
 
@@ -187,4 +187,28 @@ test('CLI usage errors and empty source directories are not successful audits', 
     assert.equal(result.status, 2);
     assert.ok(result.stderr || JSON.parse(result.stdout).errors.length);
   }
+});
+
+for (const nodeOptions of [[], ['--preserve-symlinks-main']]) {
+  test(`CLI executes through linked installation ancestors (${nodeOptions.join(' ') || 'default'})`, t => {
+    const app = fixture(t);
+    const source = join(app.root, 'source');
+    app.write('source/AppDelegate.cs', 'class AppDelegate { void Run() { Window.Root.Title = url; } }');
+    mkdirSync(join(app.root, 'installed'));
+    copyFileSync(script, join(app.root, 'installed', 'audit.mjs'));
+    symlinkSync(join(app.root, 'installed'), join(app.root, 'linked'), 'junction');
+    const result = spawnSync(process.execPath, [...nodeOptions, join(app.root, 'linked', 'audit.mjs'), source, '--json'], { encoding: 'utf8' });
+    assert.equal(result.status, 1, result.stderr);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.filesScanned, 1);
+    assert.equal(report.findings[0].rule, 'X27_APP_WINDOW');
+  });
+}
+
+test('importing the library with an absent entry path does not execute its CLI', t => {
+  const app = fixture(t);
+  const code = `process.argv[1]=${JSON.stringify(join(app.root, 'missing.mjs'))}; await import(${JSON.stringify(pathToFileURL(script).href)});`;
+  const result = spawnSync(process.execPath, ['--input-type=module', '--eval', code], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, '');
 });

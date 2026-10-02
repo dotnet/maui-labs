@@ -304,6 +304,9 @@ URL does not handle it. Only real app handling may add a true result.
   behavior for **cold** delivery. Do not assume base.WillConnect replays those
   activities through SceneContinueUserActivity. Check both collections even
   when the former FinishedLaunching code inspected only LaunchOptionsUrlKey.
+  Treat absent connection-option collections as empty payloads, using
+  `?.ToArray<T>() ?? []` or equivalent guards for both collections.
+  An ordinary no-link launch must not throw before `base.WillConnect`.
   WebAuthenticator forwarding is not a general deep-link router.
 - AppDelegate.PerformActionForShortcutItem is no longer the callback path.
   Move custom handling to the iOSLifecycle.PerformActionForShortcutItem
@@ -374,6 +377,7 @@ signals, not semantic proof:
 | Apple C# source using MAUI 10.0.110 | `override\s+void\s+(OpenUrlContexts|ContinueUserActivity)\b` | These are not the MAUI bool override signatures; read the tagged API reference before replacing them. |
 | Lifecycle-registration source | `\.ContinueUserActivity\s*\(\s*\(` | An application-level registration does not receive scene delivery. Verify its original body has a reachable scene counterpart. |
 | Scene connection code | `UserActivities` | If an app activity handler exists, verify cold elements reach its actual body, not just an empty loop or a comment. |
+| Cold collection extraction | `First`, `Single`, `ElementAt`, `Take`, indexing | Trace each selection back to its source. Do not reduce the URL/activity collection to one item before processing or queuing every input. |
 
 Also search for each original callback's business calls and logging messages
 from the inventory. Read the containing methods and helper implementations:

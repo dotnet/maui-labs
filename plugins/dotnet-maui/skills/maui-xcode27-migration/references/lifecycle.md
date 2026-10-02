@@ -74,9 +74,12 @@ Do not assume a later SceneOpenUrl event repeats a cold link.
 Check native collection types before applying LINQ. The cold connection-option
 properties can be non-generic Foundation `NSSet`, unlike the typed
 `NSSet<UIOpenUrlContext>` passed to `SceneOpenUrl`. With those bindings, use
-`connectionOptions.UrlContexts.ToArray<UIOpenUrlContext>()` and
-`connectionOptions.UserActivities.ToArray<NSUserActivity>()` to obtain typed
-elements before enumeration/LINQ. A direct `UrlContexts.FirstOrDefault()` can
+`connectionOptions.UrlContexts?.ToArray<UIOpenUrlContext>() ?? []` and
+`connectionOptions.UserActivities?.ToArray<NSUserActivity>() ?? []` to obtain typed
+elements before enumeration/LINQ. Treat an absent collection as no cold payload:
+an ordinary launch without a URL must still reach `base.WillConnect`, even if
+the native getter returns null despite its binding annotation.
+A direct `UrlContexts.FirstOrDefault()` can
 fail to compile; a non-generic enumeration can lose the element's `Url` API.
 Use `Foundation` and `UIKit` and verify against the actual Apple reference pack.
 

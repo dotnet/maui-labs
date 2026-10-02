@@ -2,9 +2,9 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-import { lstatSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { extname, join, relative, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 const excluded = new Set(['.git', '.vs', '.idea', 'bin', 'obj', 'artifacts', 'node_modules', '.packages']);
 const limitations = 'Textual warning scan, not C# semantic analysis or migration certification. '
@@ -150,5 +150,6 @@ function main(argumentsList) {
   return report.errors.length ? 2 : report.findings.length ? 1 : 0;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href)
+if (process.argv[1] && existsSync(process.argv[1])
+    && realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]))
   process.exitCode = main(process.argv.slice(2));
