@@ -90,6 +90,35 @@ The test uses its own GTK application and does not require a DevFlow broker.
 
 ### Handler styling
 
+`ContentViewHandler` now hosts its content in `GtkLayoutPanel`, so child translation,
+scale, rotation, anchors, and MAUI-arranged offsets use the same native allocation
+path as layout children. `LayoutHandler` also preserves transforms across arrange
+passes. `ContentView.IsClippedToBounds` clips translated content to its viewport;
+clearing a separate `Clip` does not disable bounds clipping. ContentView and layout
+roots share an allocation-driven layout helper. For direct ScrollView content it
+uses the native viewport on non-scrolling axes and measures scrolling axes without
+a bound, preserving scroll extent while allowing the viewport to shrink.
+
+**Breaking change:** custom handlers compiled against the previous
+`Gtk.Box` platform-view type must be rebuilt and use `GtkLayoutPanel` child APIs
+(`AddChild` / `RemoveChild`, not `Append` / `Remove`).
+
+The native regression runs on Linux with GTK 4.12+ and an isolated display:
+
+```bash
+RUN_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo \
+  dbus-run-session -- xvfb-run -a dotnet test \
+  platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj \
+  --filter FullyQualifiedName~ContentViewTransformTests
+```
+
+The ordinary managed test run skips native tests unless explicitly enabled.
+Run each native test class in a separate process to keep GTK thread ownership isolated.
+`ContentViewClippingTests` checks rendered header and content pixels and writes PNG
+evidence when `GTK_TEST_ARTIFACTS` is set. `ContentViewRootLayoutTests` covers
+ContentView/Border nesting and all ScrollView orientations; `GtkRootLayoutDriverTests`
+checks root ownership, reparenting, callback disposal, and logged layout failures.
+
 GTK CSS font sizes use logical pixels (`px`), matching MAUI's device-independent
 font sizes. Handler CSS is composed per widget, selector, and mapper, so font,
 color, spacing, background, and border updates preserve one another. Custom
@@ -100,6 +129,13 @@ must supply distinct keys for independently updated properties. For overlapping
 declarations of equal specificity, the most recently updated fragment wins.
 The original `ApplyCss` / `ApplyCssWithSelector` signatures remain available for
 compiled custom handlers and share a legacy fragment per widget and selector.
+
+### Transform point ownership
+
+`Graphene.Point.Alloc()` returns a point owned by a GirCore `SafeHandle`.
+Do not call its native `Free()` method after passing it to `Gsk.Transform.Translate`:
+the handle still owns the allocation and will free it again during finalization.
+This applies to layout-position points as well as anchor points.
 
 ### Essentials (21 of 36 services)
 

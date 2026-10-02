@@ -124,11 +124,14 @@ jobs:
     permissions:
       contents: read
     strategy:
+      fail-fast: false
       matrix:
         # Each class gets its own process: GTK initialization is thread-affine.
-        test-class: [PickerSelectionTests, GtkSynchronizationContextTests]
+        test-class: [PickerSelectionTests, GtkSynchronizationContextTests, ContentViewTransformTests, ContentViewClippingTests, ContentViewRootLayoutTests, GtkRootLayoutDriverTests]
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
@@ -140,6 +143,7 @@ jobs:
           GDK_BACKEND: x11
           GSK_RENDERER: cairo
           GTK_A11Y: none
+          GTK_TEST_ARTIFACTS: ${{ github.workspace }}/artifacts/TestResults/gtk-runtime/paint
         run: >-
           dbus-run-session -- xvfb-run --auto-servernum
           dotnet test platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
