@@ -91,8 +91,11 @@ dotnet test platforms\Windows.WPF\tests\HandlerTests\HandlerTests.csproj -p:UseM
 
 These tests cover first measurement, wrapping as constraints change, native child
 frames, delegate dispatch during creation and replacement, and ordinary Grid/Stack
-layout. The native panel's existing child-measurement and minimum-height behavior
-is unchanged.
+layout. The native panel preserves measurements already performed by MAUI, instead
+of remeasuring each child against the whole parent's size (which can inflate flex
+lines beyond their allocated frames). Children whose native measurement is still
+invalid, including explicitly sized views MAUI did not measure, are measured by
+the panel. The existing minimum-height floor is retained.
 
 ## Screenshots
 

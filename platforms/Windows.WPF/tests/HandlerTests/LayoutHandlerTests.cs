@@ -47,6 +47,8 @@ public class LayoutHandlerTests(ITestOutputHelper output)
 				panel.Arrange(new WRect(0, 0, 800, panel.DesiredSize.Height));
 				Assert.True(flex.Frame.Height > 0);
 				AssertFlex(flex, 1);
+				AssertNativeChild(flex, panel);
+				AssertNativeChild(sibling, panel);
 				Assert.True(flex.Frame.Y >= above.Frame.Bottom - 0.1);
 				Assert.True(sibling.Frame.Y >= flex.Frame.Bottom - 0.1);
 				Assert.True(below.Frame.Y >= sibling.Frame.Bottom - 0.1);
@@ -172,10 +174,13 @@ public class LayoutHandlerTests(ITestOutputHelper output)
 	}
 
 	[Theory]
-	[InlineData("Grid")]
-	[InlineData("VerticalStackLayout")]
-	[InlineData("HorizontalStackLayout")]
-	public void OrdinaryLayouts_FirstNativeMeasure_PreservesChildSizesAndPlacement(string kind)
+	[InlineData("Grid", false)]
+	[InlineData("Grid", true)]
+	[InlineData("VerticalStackLayout", false)]
+	[InlineData("VerticalStackLayout", true)]
+	[InlineData("HorizontalStackLayout", false)]
+	[InlineData("HorizontalStackLayout", true)]
+	public void OrdinaryLayouts_FirstNativeMeasure_PreservesChildSizesAndPlacement(string kind, bool explicitHeight)
 	{
 		Run(context =>
 		{
@@ -187,6 +192,11 @@ public class LayoutHandlerTests(ITestOutputHelper output)
 			};
 			var first = new Entry { Text = "First", WidthRequest = 60 };
 			var second = new Entry { Text = "Second", WidthRequest = 140 };
+			if (explicitHeight)
+			{
+				first.HeightRequest = 25;
+				second.HeightRequest = 35;
+			}
 			layout.Add(first);
 			layout.Add(second);
 			if (layout is Grid)
@@ -197,6 +207,11 @@ public class LayoutHandlerTests(ITestOutputHelper output)
 				Assert.True(panel.DesiredSize.Height > 0);
 				AssertNativeChild(first, panel);
 				AssertNativeChild(second, panel);
+				if (explicitHeight)
+				{
+					Assert.Equal(25, first.Frame.Height);
+					Assert.Equal(35, second.Frame.Height);
+				}
 				if (layout is HorizontalStackLayout)
 				{
 					Assert.True(second.Frame.X >= first.Frame.Right - 0.1);
@@ -204,6 +219,40 @@ public class LayoutHandlerTests(ITestOutputHelper output)
 				}
 				else
 					Assert.True(second.Frame.Y >= first.Frame.Bottom - 0.1);
+			});
+		});
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void NestedLayout_WidthChanges_RemeasuresWrappingLabel(bool useGrid)
+	{
+		Run(context =>
+		{
+			var label = new Label
+			{
+				Text = "A wrapping label must be measured again when the available width changes, without taking the height of its siblings.",
+				LineBreakMode = LineBreakMode.WordWrap,
+			};
+			Layout nested = useGrid ? new Grid() : new VerticalStackLayout();
+			nested.Add(label);
+			var root = new VerticalStackLayout
+			{
+				Children = { new Label { Text = "Above" }, nested, new Label { Text = "Below" } },
+			};
+			WithNativeLayout(root, context, panel =>
+			{
+				MeasureAndArrange(panel, 400);
+				AssertNativeChild(nested, panel);
+				var wideHeight = label.Frame.Height;
+				MeasureAndArrange(panel, 120);
+				AssertNativeChild(nested, panel);
+				AssertNativeChild(label, Assert.IsType<LayoutPanel>(nested.Handler!.PlatformView));
+				Assert.True(label.Frame.Height > wideHeight);
+				MeasureAndArrange(panel, 400);
+				AssertNativeChild(nested, panel);
+				Assert.InRange(label.Frame.Height, wideHeight - 0.1, wideHeight + 0.1);
 			});
 		});
 	}

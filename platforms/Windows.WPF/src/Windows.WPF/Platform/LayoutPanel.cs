@@ -47,7 +47,10 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 			double maxChildHeight = 0;
 			foreach (System.Windows.UIElement child in InternalChildren)
 			{
-				child.Measure(constrainedSize);
+				// Keep the constraints chosen by MAUI for children it already measured.
+				// Remeasuring a FlexLayout with the whole parent's height inflates its lines.
+				if (!child.IsMeasureValid)
+					child.Measure(constrainedSize);
 				if (child.DesiredSize.Height > maxChildHeight)
 					maxChildHeight = child.DesiredSize.Height;
 			}
