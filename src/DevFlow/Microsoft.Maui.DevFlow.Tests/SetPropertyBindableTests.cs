@@ -14,6 +14,26 @@ namespace Microsoft.Maui.DevFlow.Tests;
 public class SetPropertyBindableTests
 {
     [Fact]
+    public async Task GetPropertyAsync_AutomationIdWithSpace_ResolvesBindingContext()
+    {
+        var label = new Label
+        {
+            AutomationId = "Alice Johnson",
+            BindingContext = new Person { Name = "Alice Johnson" }
+        };
+        using var harness = await SetPropertyTestHarness.CreateAsync(label);
+        var id = await harness.GetElementIdAsync(label.AutomationId);
+
+        Assert.Equal("Alice Johnson", id);
+        Assert.Equal("Alice Johnson", await harness.Client.GetPropertyAsync(id, "BindingContext.Name"));
+    }
+
+    private sealed class Person
+    {
+        public string Name { get; init; } = "";
+    }
+
+    [Fact]
     public async Task SetPropertyAsync_UpdatesButtonText_ThroughAgentEndpoint()
     {
         var button = new Button
