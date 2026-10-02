@@ -296,8 +296,15 @@ tracking property is used, not merely when building the app.
 The facades are process-wide: the most recently built app sets their instances.
 Do not use them after disposing that app.
 
-Run the behavioral registration regressions on Windows:
-`dotnet test platforms\Windows.WPF\tests\Essentials.Tests\Windows.WPF.Essentials.Tests.csproj`.
+`FileSystem.AppDataDirectory` uses local application data and `CacheDirectory`
+uses the temporary directory, each with the application name appended. Both
+getters create the directory before returning it, without changing existing
+contents; filesystem errors propagate to the caller.
+
+Run the registration and filesystem regressions on Windows:
+`dotnet test platforms\Windows.WPF\tests\Essentials.Tests\Windows.WPF.Essentials.Tests.csproj -p:UseMaui=false`.
+The filesystem tests use unique application identities and real file writes;
+they remove only their own directories, never the user storage roots.
 
 | API | Status | Notes |
 |---|---|---|
