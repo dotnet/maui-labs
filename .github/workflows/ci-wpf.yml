@@ -34,6 +34,8 @@ on:
 jobs:
   compatibility:
     name: WPF registration - MAUI ${{ matrix.maui }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
