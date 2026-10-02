@@ -8,7 +8,7 @@ using Xunit.Abstractions;
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Tests;
 
 [Collection("GTK runtime")]
-public class WindowSizingTests(ITestOutputHelper output)
+public partial class WindowSizingTests(ITestOutputHelper output)
 {
 	[GtkRuntimeFact]
 	public void StartupWindow_ResizesBelowOldFloor_AndReflowsContent()
@@ -236,7 +236,13 @@ public class WindowSizingTests(ITestOutputHelper output)
 						clock.Restart();
 						return true;
 					}
-					Completed = true;
+					new FrameChecks(app, output, error =>
+					{
+						Failure = error;
+						Completed = error == null;
+						window.Close();
+					}).Start();
+					return false;
 				}
 				catch (Exception ex)
 				{
