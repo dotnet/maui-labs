@@ -819,6 +819,16 @@ paths:
       summary: Get element property value
       description: >
         Returns the current value of a named property on an element.
+        The MAUI backend accepts case-insensitive public-property dot paths and
+        formats the resulting value as a string. A null value or missing path returns 404.
+        Handler and handler PlatformView segments use public MAUI interfaces to
+        avoid ambiguity from hidden properties.
+        Reading a password Entry's direct Text property returns [REDACTED].
+        When traversing IElementHandler.PlatformView belonging to a password Entry,
+        a non-null native view and its entire requested subtree return [REDACTED]
+        before native getters or formatting run, including nonsensitive properties.
+        A null native view still returns 404. Nonpassword handler paths are unaffected.
+        This boundary is not a general redaction policy for other reflective paths.
       parameters:
         - $ref: "#/components/parameters/ElementIdPath"
         - name: name
