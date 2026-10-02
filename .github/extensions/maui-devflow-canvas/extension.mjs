@@ -227,7 +227,7 @@ async function pushInspectorContext(instanceId, store, context, input) {
   });
 }
 
-const DATA_CONTEXT_SCOPES = new Set(["logs", "network", "preferences", "device", "sensors", "files", "alerts"]);
+const DATA_CONTEXT_SCOPES = new Set(["logs", "network", "preferences", "device", "sensors", "files", "alerts", "layout"]);
 
 async function pushDataContext(instanceId, snapshot) {
   if (!snapshot || snapshot.kind !== "dataSnapshot" || snapshot.redacted !== true

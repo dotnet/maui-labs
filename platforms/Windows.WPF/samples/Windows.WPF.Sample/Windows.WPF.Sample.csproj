@@ -4,7 +4,7 @@
     <!-- Use Windows SDK-versioned TFM so the WinRT projections (Microsoft.Windows.SDK.NET) are
          available. WebView2CompositionControl (used internally by Wpf.BlazorWebView) loads them
          from its ControlTemplate during the WPF measure pass. -->
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>
     <OutputType>WinExe</OutputType>
     <UseWPF>true</UseWPF>
     <UseMaui>true</UseMaui>
@@ -27,7 +27,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Razor SDK auto-includes wwwroot/** as Content; no explicit include needed. -->
+    <Content Update="wwwroot\**">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
@@ -63,5 +66,18 @@
     <AssemblyMetadata Include="Microsoft.Maui.DevFlowProject" Value="Windows.WPF.Sample" />
     <AssemblyMetadata Include="Microsoft.Maui.DevFlowTfm" Value="$(TargetFramework)" />
   </ItemGroup>
+
+  <Target Name="IncludeWpfBlazorStaticWebAssets"
+          BeforeTargets="GetCopyToOutputDirectoryItems;GetCopyToPublishDirectoryItems"
+          DependsOnTargets="StaticWebAssetsPrepareForRun">
+    <ComputeStaticWebAssetsTargetPaths Assets="@(StaticWebAsset)" PathPrefix="wwwroot">
+      <Output TaskParameter="AssetsWithTargetPath" ItemName="_WpfBlazorStaticWebAsset" />
+    </ComputeStaticWebAssetsTargetPaths>
+    <ItemGroup>
+      <ContentWithTargetPath Include="@(_WpfBlazorStaticWebAsset)"
+                             CopyToOutputDirectory="PreserveNewest"
+                             CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
 
 </Project>

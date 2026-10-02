@@ -15,6 +15,49 @@ namespace Microsoft.Maui.DevFlow.Tests;
 /// </summary>
 public class InspectorPropertyEndpointTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Source_RootedProject_ResolvesRelativeMapWithoutRequiringWritableSource(bool readOnly)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"devflow-layout-source-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var project = Path.Combine(root, "App.csproj");
+        var source = Path.Combine(root, "Page.xaml");
+        await File.WriteAllTextAsync(project, "<Project />");
+        await File.WriteAllTextAsync(source, "<ContentPage />");
+        if (readOnly)
+            File.SetAttributes(source, FileAttributes.ReadOnly);
+        await using var agent = new FakeAgent(new ElementInfo
+        {
+            Id = "e1", SourceFile = "Page.xaml", SourceLine = 21, SourceColumn = 4
+        });
+        using var inspector = new InspectorServer(FreePort(), "127.0.0.1", agent.Port, embedToken: null,
+            agentId: null, appName: null, platform: null, project, sessionId: null);
+        inspector.Start();
+        try
+        {
+            using var http = new HttpClient();
+            var html = await http.GetStringAsync($"http://127.0.0.1:{inspector.Port}/");
+            var token = Regex.Match(html, "<meta\\s+name=\"devflow-inspector-token\"\\s+content=\"([^\"]+)\"").Groups[1].Value;
+            Assert.NotEmpty(token);
+            http.DefaultRequestHeaders.Add("X-DevFlow-Inspector-Token", token);
+            using var response = await http.PostAsync($"http://127.0.0.1:{inspector.Port}/api/source", Json("""{"elementId":"e1"}"""));
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Assert.True(body.RootElement.GetProperty("ok").GetBoolean());
+            Assert.Equal(source, body.RootElement.GetProperty("file").GetString());
+            Assert.Equal(21, body.RootElement.GetProperty("line").GetInt32());
+            Assert.Equal("<ContentPage />", await File.ReadAllTextAsync(source));
+        }
+        finally
+        {
+            await inspector.StopAsync();
+            File.SetAttributes(source, FileAttributes.Normal);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public void EventSupport_DistinguishesSupportedUnsupportedAndTransientDiscovery()
     {

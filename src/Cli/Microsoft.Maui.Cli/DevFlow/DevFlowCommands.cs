@@ -382,14 +382,14 @@ public class DevFlowCommands
         var diagnosticsProfileOption = new Option<string>("--profile") { Description = "Inspection profile: agent, strict, exhaustive, or ci", DefaultValueFactory = _ => "agent" };
         var diagnosticsRootOption = new Option<string?>("--root") { Description = "Root element ID to inspect" };
         var diagnosticsChecksOption = new Option<string?>("--checks") { Description = "Comma-separated layout diagnostic rule IDs" };
-        var diagnosticsSeverityOption = new Option<string>("--minimum-severity") { Description = "Minimum severity: info, minor, moderate, serious, or critical", DefaultValueFactory = _ => "minor" };
+        var diagnosticsSeverityOption = new Option<string>("--minimum-severity") { Description = "Minimum severity: info, minor, moderate, serious, or critical; use info for desired-size and child-frame observations (omitted detections are counted as filtered)", DefaultValueFactory = _ => "minor" };
         var diagnosticsEvidenceOption = new Option<bool>("--include-evidence") { Description = "Include geometry, clip-chain, text, and overlap evidence", DefaultValueFactory = _ => true };
         var diagnosticsPassesOption = new Option<bool>("--include-passes") { Description = "Include pass accounting" };
         var diagnosticsWatchOption = new Option<bool>("--watch") { Description = "Continuously inspect and emit updated results" };
         var diagnosticsFailOnOption = new Option<string?>("--fail-on") { Description = "Set a failing exit code for violations at or above this severity, or for 'incomplete'" };
         var diagnosticsTimeoutOption = new Option<int>("--stability-timeout") { Description = "Geometry stability timeout in milliseconds", DefaultValueFactory = _ => 2500 };
         var diagnosticsImmediateOption = new Option<bool>("--immediate") { Description = "Inspect immediately without waiting for stable geometry" };
-        var mauiDiagnosticsCmd = new Command("diagnostics", "Detect clipping, overflow, text truncation, overlap, and occlusion")
+        var mauiDiagnosticsCmd = new Command("diagnostics", "Detect layout constraint violations, desired-size or child-frame discrepancies, clipping, text truncation, overlap, and occlusion")
         {
             diagnosticsProfileOption,
             diagnosticsRootOption,
@@ -3214,7 +3214,8 @@ public class DevFlowCommands
                             $"Layout diagnostics: {data.Summary.Violations} violation(s), "
                             + $"{data.Summary.Observations} observation(s), "
                             + $"{data.Summary.Incomplete} incomplete, "
-                            + $"{data.Summary.Suppressed} suppressed.");
+                            + $"{data.Summary.Suppressed} suppressed, "
+                            + $"{data.Summary.Filtered} filtered by severity.");
                         Console.WriteLine(
                             $"Snapshot {data.Snapshot.Id} ({data.Snapshot.Platform}, "
                             + $"{data.Snapshot.NodeCount} nodes, stable={data.Snapshot.Stable.ToString().ToLowerInvariant()})");

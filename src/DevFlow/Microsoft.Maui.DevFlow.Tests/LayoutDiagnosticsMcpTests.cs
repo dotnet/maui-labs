@@ -25,6 +25,21 @@ public class LayoutDiagnosticsMcpTests
     }
 
     [Fact]
+    public void SerializeResult_FilteredObservations_RemainVisibleInCompactSummary()
+    {
+        var result = new LayoutInspectionResult
+        {
+            Summary = new LayoutInspectionSummary { Filtered = 2 },
+            Findings = []
+        };
+
+        var json = LayoutDiagnosticsTool.SerializeResult(result, false, "agent", 100);
+
+        Assert.Contains("\"filtered\":2", json);
+        Assert.Contains("\"returnedFindings\":0", json);
+    }
+
+    [Fact]
     public void SerializeResult_ExplicitEvidence_PreservesGeometry()
     {
         var json = LayoutDiagnosticsTool.SerializeResult(

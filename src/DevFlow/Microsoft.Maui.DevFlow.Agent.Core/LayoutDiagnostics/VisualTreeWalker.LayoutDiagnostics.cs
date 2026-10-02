@@ -10,6 +10,22 @@ public partial class VisualTreeWalker
         Application app,
         LayoutInspectionRequest request)
     {
+        _layoutPlatformElementIds = null;
+        try
+        {
+            return CaptureLayoutSnapshotCore(app, request);
+        }
+        finally
+        {
+            _layoutPlatformElementIds = null;
+            _layoutTreeOrder = 0;
+        }
+    }
+
+    private LayoutCaptureSnapshot CaptureLayoutSnapshotCore(
+        Application app,
+        LayoutInspectionRequest request)
+    {
         var tree = WalkTree(app, request.Scope.MaxDepth, request.Scope.Window);
         var capture = new LayoutCaptureSnapshot();
         if (tree.Count == 0)
@@ -17,6 +33,17 @@ public partial class VisualTreeWalker
             capture.MarkIncomplete(
                 "The MAUI visual tree is empty or the requested window is not available.");
             return capture;
+        }
+
+        HashSet<ElementInfo>? captureNodes = null;
+        if (!string.IsNullOrWhiteSpace(request.Scope.RootElementId))
+        {
+            var scopedNodes = new HashSet<ElementInfo>();
+            foreach (var root in tree)
+                CollectLayoutCapturePath(root, request.Scope, scopedNodes, insideScope: false);
+            // A native or Blazor root can be added later during enrichment.
+            if (scopedNodes.Count > 0)
+                captureNodes = scopedNodes;
         }
 
         var requestedWindow = request.Scope.Window;
@@ -53,12 +80,32 @@ public partial class VisualTreeWalker
                 insideScrollableViewport: false,
                 ancestorVisible: true,
                 request,
-                ref _layoutTreeOrder);
+                ref _layoutTreeOrder,
+                captureNodes);
         }
 
         _layoutTreeOrder = 0;
         capture.HasActiveAnimations = capture.Nodes.Any(node => node.HasActiveAnimation);
         return capture;
+    }
+
+    private static bool CollectLayoutCapturePath(
+        ElementInfo info,
+        LayoutInspectionScope scope,
+        HashSet<ElementInfo> nodes,
+        bool insideScope)
+    {
+        var inScope = insideScope
+            || info.Id.Equals(scope.RootElementId, StringComparison.OrdinalIgnoreCase);
+        var keep = inScope;
+        if (info.Children is not null)
+        {
+            foreach (var child in info.Children)
+                keep |= CollectLayoutCapturePath(child, scope, nodes, inScope && scope.IncludeDescendants);
+        }
+        if (keep)
+            nodes.Add(info);
+        return keep;
     }
 
     internal void ApplyLayoutScope(
@@ -106,12 +153,21 @@ public partial class VisualTreeWalker
             },
             Confidence = rule switch
             {
+                LayoutDiagnosticRules.ConstraintViolation => "high",
+                LayoutDiagnosticRules.DesiredSizeConstrained => "medium",
+                LayoutDiagnosticRules.ChildOutsideParent => "high",
                 LayoutDiagnosticRules.GeometricOverlap => "medium",
                 LayoutDiagnosticRules.AccessibilityVisibilityMismatch => "low",
                 _ => "medium"
             },
             Limitations = rule switch
             {
+                LayoutDiagnosticRules.ConstraintViolation =>
+                    ["Uses realized MAUI minimum/maximum requests and untransformed arranged sizes; native-only and Blazor elements are not evaluated."],
+                LayoutDiagnosticRules.DesiredSizeConstrained =>
+                    ["Uses the existing MAUI DesiredSize without remeasuring; a smaller allocation is an observation, not proof of lost content."],
+                LayoutDiagnosticRules.ChildOutsideParent =>
+                    ["Compares direct managed layout frames only; scroll content, transforms, negative margins and unknown parents are excluded. Overflow alone is not a violation."],
                 LayoutDiagnosticRules.TextNotFullyRendered =>
                     ["Exact text truncation requires a platform text-layout collector."],
                 LayoutDiagnosticRules.InteractionOccluded =>
@@ -134,17 +190,23 @@ public partial class VisualTreeWalker
     {
     }
 
+    private Dictionary<object, string>? _layoutPlatformElementIds;
+
     protected string? FindElementIdForPlatformView(object platformView)
     {
-        foreach (var pair in _externalIdToElement)
+        if (_layoutPlatformElementIds is null)
         {
-            if (pair.Value is IView view
-                && ReferenceEquals(view.Handler?.PlatformView, platformView))
+            // Hit-test samples repeatedly resolve the same native ancestors within one capture.
+            var ids = new Dictionary<object, string>(ReferenceEqualityComparer.Instance);
+            foreach (var pair in _externalIdToElement)
             {
-                return pair.Key;
+                if (pair.Value is IView view && view.Handler?.PlatformView is { } nativeView)
+                    ids.TryAdd(nativeView, pair.Key);
             }
+            _layoutPlatformElementIds = ids;
         }
-        return null;
+
+        return _layoutPlatformElementIds.GetValueOrDefault(platformView);
     }
 
     protected static bool ShouldCollectInteractionOcclusion(
@@ -208,8 +270,14 @@ public partial class VisualTreeWalker
         bool insideScrollableViewport,
         bool ancestorVisible,
         LayoutInspectionRequest request,
-        ref int treeOrder)
+        ref int treeOrder,
+        IReadOnlySet<ElementInfo>? captureNodes = null,
+        VisualElement? managedParent = null,
+        bool hasTransformedAncestor = false)
     {
+        if (captureNodes is not null && !captureNodes.Contains(info))
+            return;
+
         _externalIdToElement.TryGetValue(info.Id, out var visualTreeElement);
         var metrics = BuildBaseLayoutMetrics(info, visualTreeElement);
         if (visualTreeElement is VisualElement visualElement)
@@ -292,11 +360,34 @@ public partial class VisualTreeWalker
             IsInsideScrollableViewport = insideScrollableViewport,
             AccessibilityVisible = metrics.AccessibilityVisible,
             HasActiveAnimation = metrics.HasActiveAnimation,
+            HasTransformedAncestor = hasTransformedAncestor,
             InteractionOccluderId = metrics.InteractionOccluderId,
             InteractionBlockedLowerBound = metrics.InteractionBlockedLowerBound,
             InteractionBlockedUpperBound = metrics.InteractionBlockedUpperBound,
             InteractionSampleCount = metrics.InteractionSampleCount
         };
+        if (visualTreeElement is VisualElement arrangedElement)
+        {
+            node.Sizing = CaptureSizing(arrangedElement);
+            node.IsLayoutContainer = arrangedElement is Microsoft.Maui.Controls.Layout or IContentView;
+            node.HasVisualTransform = arrangedElement.TranslationX != 0 || arrangedElement.TranslationY != 0
+                || arrangedElement.Scale != 1 || arrangedElement.ScaleX != 1 || arrangedElement.ScaleY != 1
+                || arrangedElement.Rotation != 0 || arrangedElement.RotationX != 0 || arrangedElement.RotationY != 0;
+            var margin = ((IView)arrangedElement).Margin;
+            node.HasNegativeMargin = margin.Left < 0 || margin.Top < 0 || margin.Right < 0 || margin.Bottom < 0;
+            if (node.Sizing is not null && managedParent is not null
+                && ReferenceEquals(arrangedElement.Parent, managedParent)
+                && double.IsFinite(arrangedElement.X) && double.IsFinite(arrangedElement.Y))
+            {
+                node.ParentRelativeBounds = new LayoutRectInfo
+                {
+                    X = arrangedElement.X,
+                    Y = arrangedElement.Y,
+                    Width = node.Sizing.ArrangedWidth,
+                    Height = node.Sizing.ArrangedHeight
+                };
+            }
+        }
         if (info.NativeProperties?.TryGetValue("itemCount", out var itemCountValue) == true
             && int.TryParse(itemCountValue, out var itemCount))
         {
@@ -337,7 +428,10 @@ public partial class VisualTreeWalker
                 childInsideScroll,
                 isRendered,
                 request,
-                ref treeOrder);
+                ref treeOrder,
+                captureNodes,
+                visualTreeElement as VisualElement,
+                hasTransformedAncestor || node.HasVisualTransform);
         }
     }
 
@@ -364,6 +458,31 @@ public partial class VisualTreeWalker
             evidence.Text = text;
     }
 
+    internal static LayoutSizingEvidence? CaptureSizing(VisualElement element)
+    {
+        if (!double.IsFinite(element.Width) || !double.IsFinite(element.Height)
+            || element.Width < 0 || element.Height < 0)
+            return null;
+
+        var desired = element.DesiredSize;
+        var margin = ((IView)element).Margin;
+        return new LayoutSizingEvidence
+        {
+            ArrangedWidth = element.Width,
+            ArrangedHeight = element.Height,
+            // MAUI DesiredSize includes margins, whereas the arranged frame does not.
+            DesiredWidth = desired.Width > 0 ? KnownDimension(desired.Width - margin.HorizontalThickness) : null,
+            DesiredHeight = desired.Height > 0 ? KnownDimension(desired.Height - margin.VerticalThickness) : null,
+            MinimumWidth = KnownDimension(element.MinimumWidthRequest),
+            MinimumHeight = KnownDimension(element.MinimumHeightRequest),
+            MaximumWidth = KnownDimension(element.MaximumWidthRequest),
+            MaximumHeight = KnownDimension(element.MaximumHeightRequest)
+        };
+    }
+
+    private static double? KnownDimension(double value)
+        => double.IsFinite(value) && value >= 0 && value < double.MaxValue ? value : null;
+
     private LayoutPlatformMetrics BuildBaseLayoutMetrics(
         ElementInfo info,
         IVisualTreeElement? visualTreeElement)
@@ -389,16 +508,15 @@ public partial class VisualTreeWalker
         if (element.Background is SolidColorBrush { Color: { } backgroundColor })
             metrics.IsOpaque = backgroundColor.Alpha >= 0.99f && element.Opacity >= 0.99;
 
-        var desired = element.DesiredSize;
+        var sizing = CaptureSizing(element);
         if (layoutRegion.Area > 0
-            && double.IsFinite(desired.Width) && double.IsFinite(desired.Height)
-            && (desired.Width > 0 || desired.Height > 0))
+            && sizing is { DesiredWidth: { } desiredWidth, DesiredHeight: { } desiredHeight })
         {
             metrics.ContentRegion = LayoutRegionMath.FromRect(
                 layoutRegion.Bounds.X,
                 layoutRegion.Bounds.Y,
-                Math.Max(layoutRegion.Bounds.Width, desired.Width),
-                Math.Max(layoutRegion.Bounds.Height, desired.Height),
+                Math.Max(layoutRegion.Bounds.Width, desiredWidth),
+                Math.Max(layoutRegion.Bounds.Height, desiredHeight),
                 "conservativeBounds");
         }
 

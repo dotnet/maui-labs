@@ -21,7 +21,7 @@ export function confirmModal(message, confirmLabel) {
     text.id = 'df-confirm-message';
     text.textContent = message;
     box.setAttribute('aria-labelledby', text.id);
-    Object.assign(text.style, { marginBottom: '14px', lineHeight: '1.4' });
+    Object.assign(text.style, { marginBottom: '14px', lineHeight: '1.4', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' });
     const actions = document.createElement('div');
     Object.assign(actions.style, { display: 'flex', gap: '8px', justifyContent: 'flex-end' });
     const createButton = (label, primary) => {

@@ -40,4 +40,6 @@ namespace Microsoft.Maui.Cli.DevFlow;
 [JsonSerializable(typeof(LayoutDiagnosticsPolicy))]
 [JsonSerializable(typeof(LayoutDiagnosticsDelta))]
 [JsonSerializable(typeof(InspectorServer.InspectorDiagnosticRequest))]
+[JsonSerializable(typeof(InspectorServer.InspectorLayoutScanRequest))]
+[JsonSerializable(typeof(InspectorServer.InspectorLayoutScanResponse))]
 internal sealed partial class DevFlowCliJsonContext : JsonSerializerContext;
