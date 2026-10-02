@@ -1,27 +1,22 @@
 ---
 name: android-slim-bindings
 description: >-
-  Create Android slim bindings for MAUI/.NET Android. USE FOR: slim Android binding, Kotlin/Java wrappers, build.gradle.kts, Maven, AAR/JAR, AndroidMavenLibrary, AndroidLibrary, @JvmStatic, XA4241/XA4242, Xamarin.AndroidX/Kotlin NuGets. DO NOT USE FOR: iOS/macOS bindings, general MAUI apps, or NuGet packaging.
+  Create Android slim bindings for MAUI/.NET Android. USE FOR: Native Library Interop, thin Kotlin/Java wrapper design, building wrapper AARs with Gradle, Java-friendly callbacks, @JvmStatic, and dependencies of slim wrappers. DO NOT USE FOR: direct/full Java/Kotlin bindings or generated-code/Metadata.xml repairs (use android-java-bindings), iOS/macOS bindings, general MAUI apps, or NuGet packaging.
 ---
 
 # When to use this skill
 
+For direct/full bindings and generated-code or `Metadata.xml` troubleshooting,
+use `android-java-bindings`. Use this skill when designing or maintaining a thin
+native wrapper; it does not require replacing an existing direct binding.
+
 Activate this skill when the user asks:
-- How do I create Android bindings for a native library?
-- How do I wrap an Android SDK for use in .NET MAUI?
+- How do I create a thin wrapper around an Android SDK for use in .NET MAUI?
 - How do I create slim bindings for Android?
 - How do I use Native Library Interop for Android?
-- How do I bind a Kotlin library to .NET?
-- How do I bind a Java library to .NET?
-- How do I integrate an AAR or JAR into .NET MAUI?
 - How do I create a Java/Kotlin wrapper for a native Android library?
-- How do I update Android bindings when the native SDK changes?
-- How do I fix Android binding build errors?
-- How do I expose native Android APIs to C#?
-- How do I resolve Maven dependencies for Android bindings?
-- How do I handle AndroidX dependencies in bindings?
-- How do I fix "Java dependency is not satisfied" errors?
-- How do I use AndroidMavenLibrary in my binding project?
+- How do I update a slim wrapper when the native SDK changes?
+- How do I resolve Maven dependencies for my slim wrapper?
 
 # Overview
 
@@ -149,8 +144,10 @@ For each unsatisfied dependency:
  Is there a XA4242 suggestion?
  Install the suggested NuGet package
 
- Is the dependency needed from C#?
+ Is the dependency needed from C# or exposed in public signatures?
  Find/create a binding NuGet or create your own binding
+
+ Is the dependency only needed by Java at runtime?
  Use AndroidMavenLibrary with Bind="false"
 
  Is it a compile-time only dependency (annotations, processors)?
@@ -215,7 +212,7 @@ Add a conditional `<ProjectReference>`, initialize in `MauiProgram.cs` using `Co
 | Error | Cause | Solution |
 |-------|-------|----------|
 | XA4241 / XA4242 | Missing transitive dependency | Use NuGet, `AndroidMavenLibrary Bind="false"`, or `AndroidIgnoredJavaDependency` |
-| "Type is defined multiple times" | Duplicate dependency | Check NuGet/AAR overlap, use `Bind="false"` |
+| "Type is defined multiple times" | Duplicate dependency | Remove redundant NuGet/AAR/JAR inclusion; `Bind="false"` still packages Java classes |
 | "Class does not implement interface member" | Covariant return types | Add custom implementation in `Additions/` folder |
 | "Cannot find symbol" | Missing Gradle dependency | Verify `build.gradle.kts` dependencies, rebuild AAR |
 | `NoClassDefFoundError` (runtime) | Dependency ignored incorrectly | Remove from `AndroidIgnoredJavaDependency`, satisfy properly |
