@@ -151,6 +151,7 @@ public partial class WindowSizingTests(ITestOutputHelper output)
 						width, height, childHeight, childWidth);
 			}
 
+			Add("direct child replacement without resize", () => app.SetContent(6), 300, 400);
 			Add("nested mutation setup", () =>
 			{
 				app.SetContent(1);

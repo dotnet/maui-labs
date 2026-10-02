@@ -70,6 +70,8 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 	Platform.GtkAllocationObserver? _pageAllocationObserver;
 	protected int LayoutGeneration { get; private set; }
 
+	protected void InvalidateNativeAllocation() => _pageAllocationObserver?.Invalidate();
+
 	public override void SetVirtualView(IView view)
 	{
 		var changed = ((IElementHandler)this).VirtualView != view;

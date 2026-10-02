@@ -143,6 +143,7 @@ public partial class WindowSizingTests
 			foreach (var card in mappedCards)
 			{
 				var native = (Gtk.Widget)card.Handler!.PlatformView!;
+				output.WriteLine($"{Name} {step}: card {card.Frame}; native {native.GetAllocatedWidth()}x{native.GetAllocatedHeight()}; child {card.Children[0].Frame}");
 				Assert.True(card.Width > 0);
 				Assert.Equal(native.GetAllocatedWidth(), card.Width);
 				Assert.Equal(native.GetAllocatedHeight(), card.Height);

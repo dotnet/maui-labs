@@ -131,6 +131,13 @@ public partial class WindowSizingTests
 					return true;
 
 				var nativePage = _native.GetChild()!.GetFirstChild()!;
+				var ready = _window.Width == _native.GetChild()!.GetAllocatedWidth() &&
+					_window.Height == _native.GetChild()!.GetAllocatedHeight() &&
+					_page.Width == nativePage.GetAllocatedWidth() &&
+					_page.Height == nativePage.GetAllocatedHeight() &&
+					(_step < 6 ? _grid.Width == _page.Width && _grid.Height == _page.Height : _grid.Handler == null);
+				if (!ready && _clock.Elapsed < TimeSpan.FromSeconds(5))
+					return true;
 				output.WriteLine($"allocation lifecycle {_step}: window {_window.Width}x{_window.Height}, page {_page.Frame}, grid {_grid.Frame}, measure {_grid.Measurements}, arrange {_grid.Arrangements}");
 				Assert.Equal(_native.GetChild()!.GetAllocatedWidth(), _window.Width);
 				Assert.Equal(_native.GetChild()!.GetAllocatedHeight(), _window.Height);
