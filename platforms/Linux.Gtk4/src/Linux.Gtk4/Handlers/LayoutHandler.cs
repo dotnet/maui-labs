@@ -50,12 +50,13 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 
 	public override void SetVirtualView(IView view)
 	{
-		if (VirtualView == view)
+		if (((IElementHandler)this).VirtualView == view)
 			return;
-		if (PlatformView != null)
+		if (((IElementHandler)this).PlatformView != null)
 			Clear();
 		base.SetVirtualView(view);
-		PlatformView.CrossPlatformLayout = view as ICrossPlatformLayout;
+		var platformView = PlatformView ?? throw new InvalidOperationException("PlatformView not set.");
+		platformView.CrossPlatformLayout = view as ICrossPlatformLayout;
 		_rootWidth = _rootHeight = -1;
 
 		// MAUI doesn't automatically call Add for pre-existing children.
@@ -133,14 +134,14 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 				_rootScrollOrientation = scrollOrientation;
 				platformView.LayoutDirty = false;
 				(view as Microsoft.Maui.Controls.VisualElement)?.InvalidateMeasure();
-				if (VirtualView != view || PlatformView != platformView || LayoutGeneration != generation)
+				if (LayoutGeneration != generation || VirtualView != view || PlatformView != platformView)
 					return true;
 				var scrollsHorizontally = scrollOrientation is ScrollOrientation.Horizontal or ScrollOrientation.Both;
 				var scrollsVertically = scrollOrientation is ScrollOrientation.Vertical or ScrollOrientation.Both;
 				var measured = view.Measure(
 					scrollsHorizontally ? double.PositiveInfinity : width,
 					scrollsVertically ? double.PositiveInfinity : height);
-				if (VirtualView != view || PlatformView != platformView || LayoutGeneration != generation)
+				if (LayoutGeneration != generation || VirtualView != view || PlatformView != platformView)
 					return true;
 				view.Arrange(new Rect(0, 0,
 					scrollsHorizontally ? Math.Max(width, measured.Width) : width,

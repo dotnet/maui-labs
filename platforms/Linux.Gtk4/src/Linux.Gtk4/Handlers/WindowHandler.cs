@@ -47,7 +47,7 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 
 	public override void SetVirtualView(IElement view)
 	{
-		var changed = VirtualView != view;
+		var changed = ((IElementHandler)this).VirtualView != view;
 		base.SetVirtualView(view);
 		if (changed)
 			_allocationObserver?.Invalidate();

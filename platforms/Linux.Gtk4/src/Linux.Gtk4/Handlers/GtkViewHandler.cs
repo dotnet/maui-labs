@@ -72,7 +72,7 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 
 	public override void SetVirtualView(IView view)
 	{
-		var changed = VirtualView != view;
+		var changed = ((IElementHandler)this).VirtualView != view;
 		if (changed)
 			LayoutGeneration++;
 		base.SetVirtualView(view);
@@ -95,7 +95,7 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 				if (view == null || platformView.GetParent() is Platform.GtkLayoutPanel)
 					return;
 				view.Measure(width, height);
-				if (VirtualView == view && PlatformView == platformView && LayoutGeneration == generation)
+				if (LayoutGeneration == generation && VirtualView == view && PlatformView == platformView)
 					view.Arrange(new Rect(0, 0, width, height));
 			}, MauiContext?.Services.GetService(typeof(Microsoft.Extensions.Logging.ILoggerFactory)) is
 				Microsoft.Extensions.Logging.ILoggerFactory factory ? factory.CreateLogger(GetType().FullName!) : null);
@@ -271,7 +271,8 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 				layoutPanel.SetChildBounds(platformView, rect.X, rect.Y, (int)rect.Width, (int)rect.Height);
 			}
 		}
-		else if (VirtualView is not Microsoft.Maui.Controls.Page)
+		else if (VirtualView is not Microsoft.Maui.Controls.Page &&
+			VirtualView?.Parent is not Microsoft.Maui.Controls.ContentPage)
 		{
 			platformView.SetSizeRequest((int)rect.Width, (int)rect.Height);
 		}
