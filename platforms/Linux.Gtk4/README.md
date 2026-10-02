@@ -385,6 +385,11 @@ and recursive handler disconnection of retired roots and nested template childre
 Cleanup is checked after source replacement, template rebuild, and handler teardown,
 including repeated cleanup without duplicate disconnection. Template changes do not
 require an ItemsSource change.
+
+The Picker regression checks item replacement, no selection, collection
+mutations, managed selection mapping, native selection notifications, and
+disconnect/reconnect behavior.
+
 The synchronization-context regression starts a real `GtkMauiApplication`,
 invokes an async MAUI button handler from the GTK main loop, and checks thread
 identity, context preservation across repeated awaits, native label updates,
@@ -395,6 +400,7 @@ From the repository root on Linux, use the shared class runner (PowerShell 7,
 
 ```bash
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass CollectionViewHandlerTests
+pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass PickerSelectionTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkSynchronizationContextTests
 ```
 

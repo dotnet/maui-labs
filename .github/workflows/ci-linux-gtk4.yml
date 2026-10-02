@@ -61,6 +61,8 @@ jobs:
       matrix:
         maui: ['10.0.41', '10.0.60', '10.0.70', '10.0.110']
     uses: ./.github/workflows/_build.yml
+    permissions:
+      contents: read
     with:
       project-path: platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
       project-name: gtk-registration-${{ matrix.maui }}
@@ -140,7 +142,7 @@ jobs:
       fail-fast: false
       matrix:
         # Each class gets its own process: GTK initialization is thread-affine.
-        test-class: [CollectionViewHandlerTests, GtkSynchronizationContextTests]
+        test-class: [CollectionViewHandlerTests, PickerSelectionTests, GtkSynchronizationContextTests]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v5
@@ -152,7 +154,9 @@ jobs:
         shell: pwsh
         env:
           RUN_GTK_RUNTIME_TESTS: '1'
+          GDK_BACKEND: x11
           GSK_RENDERER: cairo
+          GTK_A11Y: none
         run: ./platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass '${{ matrix.test-class }}'
       - name: Build DevFlow sample
         if: matrix.test-class == 'CollectionViewHandlerTests'
