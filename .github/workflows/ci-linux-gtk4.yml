@@ -36,6 +36,8 @@ jobs:
     permissions:
       contents: read
     timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v5
@@ -123,12 +125,13 @@ jobs:
   runtime:
     name: Native GTK runtime (${{ matrix.test-class }})
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       contents: read
     strategy:
       matrix:
         # Each class gets its own process: GTK initialization is thread-affine.
-        test-class: [PickerSelectionTests, GtkSynchronizationContextTests]
+        test-class: [PickerSelectionTests, GtkSynchronizationContextTests, WindowSizingTests]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v5

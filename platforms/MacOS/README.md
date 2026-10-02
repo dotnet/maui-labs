@@ -24,6 +24,39 @@ during registration instead of leaving alert, prompt, or action-sheet tasks pend
 | `Microsoft.Maui.Platforms.MacOS.Essentials` | MAUI Essentials implementations (clipboard, preferences, sensors, …) |
 | `Microsoft.Maui.Platforms.MacOS.BlazorWebView` | Blazor Hybrid (`BlazorWebView`) support |
 
+## Shell navigation
+
+Shell displays native segmented tabs for a `TabBar` (including a single tab) and for
+`FlyoutItem`s with multiple visible sections. The strip scrolls horizontally when
+the tabs do not fit a narrow window. Section titles, enabled/visible state, collection
+changes and selection update the strip without creating inactive pages.
+`Shell.TabBarIsVisible` on the displayed page hides the strip.
+
+Portable presentation tests run with
+`dotnet test platforms/MacOS/tests/MacOS.Tests/MacOS.Tests.csproj`.
+The shared `MacOS.RuntimeTests` host runs the `shell-tabs` scenario in an isolated
+real AppKit process. Its `native-runtime` CI matrix row uploads screenshots, native
+attachment traces and exact results as `appkit-runtime-shell-tabs-default`.
+Run it through `tests/MacOS.RuntimeTests/run.py --scenario shell-tabs --evidence <new-directory>`
+on macOS. The identical fixture checks a pinned two-file production overlay from
+`b0767ac6` for exactly three mounts per native click, then the current source for one.
+The original `9206e7c` missing-tabs proof remains historical, not this overlay's baseline.
+The scenario also checks that the selected tab and displayed native page agree
+after programmatic selection, hiding/removing the active section, and handler
+rebinding, and that queued work is ignored after disconnect.
+Native tab clicks use the same queued section refresh as programmatic selection.
+The harness counts native attachments across recreated handlers to verify that
+new and cached pages are displayed once per click, and checks narrow tabs and
+explicit wide-sidebar presentation with titles and system icons.
+Same-page refreshes retain valid native views while updating layout and chrome;
+the native tests also cover remounts, handler/context replacement, and navigation
+to a different destination during lazy page creation.
+The scenario requires exactly 63 assertions; lower section navigation requires 59.
+Wide/narrow checks explicitly select Locked at 1000 DIP and Disabled at 480 DIP,
+not an automatic resize policy. Native sidebar title/icon/bounds checks are not
+pixel proof: `CacheDisplay` omits the vibrancy/sidebar region.
+Compilation and portable tests alone do not establish native rendering.
+
 ## Shell section navigation
 
 Shell observes section and content selection changes, including `GoToAsync` and

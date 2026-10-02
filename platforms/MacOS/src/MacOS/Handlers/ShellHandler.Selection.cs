@@ -19,10 +19,12 @@ public partial class ShellHandler
 		_shell.Navigating += OnShellNavigating;
 		_shell.Navigated += OnShellNavigated;
 		_shell.PropertyChanged += OnShellPropertyChanged;
+		ConnectTabs();
 	}
 
 	void DisconnectShellEvents()
 	{
+		DisconnectTabs();
 		_selectionGeneration++;
 		_selectionQueued = false;
 		if (_shell != null)
