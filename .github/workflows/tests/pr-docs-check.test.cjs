@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { test } = require("node:test");
 const vm = require("node:vm");
+const { withBodyLimit } = require("./body-limit-helpers.cjs");
 
 const workflowDir = path.resolve(__dirname, "..");
 const source = fs.readFileSync(path.join(workflowDir, "pr-docs-check.md"), "utf8");
@@ -91,10 +92,14 @@ for (const [name, workflow] of [["source", source], ["compiled", compiled]]) {
     }
   });
 
-  test(`${name}: long body keeps disclosure first and does not silently truncate content`, () => {
-    const body = "x".repeat(65000);
+  test(`${name}: disclosed body budget reserves footer space without silent truncation`, () => {
+    const body = "x".repeat(60000 - notice.length - 2);
     const actual = enforce(script, { items: [{ type: "create_issue", body }] }).items[0].body;
     assert.equal(actual, `${notice}\n\n${body}`);
+    assert.equal(actual.length, 60000);
+    for (const oversized of [body + "x", "x".repeat(65000)]) {
+      assert.throws(() => enforce(script, { items: [{ type: "create_issue", body: oversized }] }), /60,000/);
+    }
   });
 
   test(`${name}: empty output and non-issue messages are unchanged`, () => {
@@ -143,6 +148,8 @@ test("pinned gh-aw handler sends disclosure and provenance in the actual create 
     GH_AW_CALLER_WORKFLOW_ID: "dotnet/maui-labs/pr-docs-check",
     GH_AW_ENGINE_ID: "copilot",
     GH_AW_SAFE_OUTPUTS_STAGED: "false",
+    GH_AW_WORKFLOW_SOURCE: "",
+    GH_AW_WORKFLOW_SOURCE_URL: "",
   };
   const savedEnv = Object.fromEntries(Object.keys(metadata).map(key => [key, process.env[key]]));
   t.after(() => {
@@ -153,7 +160,8 @@ test("pinned gh-aw handler sends disclosure and provenance in the actual create 
     }
   });
   Object.assign(process.env, metadata);
-  global.core = { info() {}, debug() {}, warning() {}, setOutput() {}, error(message) { throw new Error(message); } };
+  const failures = [];
+  global.core = { info() {}, debug() {}, warning() {}, setOutput() {}, setFailed(message) { failures.push(message); }, error() {} };
   global.context = {
     repo: { owner: "dotnet", repo: "maui-labs" },
     payload: { pull_request: { number: 123 } },
@@ -163,8 +171,10 @@ test("pinned gh-aw handler sends disclosure and provenance in the actual create 
   const calls = [];
   global.github = {
     rest: {
+      pulls: {},
       issues: {
         async create(payload) {
+          assert.ok(payload.body.length <= 65536);
           calls.push(payload);
           return { data: { number: 789, html_url: "https://github.com/dotnet/docs-maui/issues/789" } };
         },
@@ -172,7 +182,7 @@ test("pinned gh-aw handler sends disclosure and provenance in the actual create 
     },
   };
 
-  for (const body of ["Changes", `${disclosure}\n\nChanges`, `${notice}\n\nChanges\n\n${notice}`, "x".repeat(65000)]) {
+  for (const body of ["Changes", `${disclosure}\n\nChanges`, `${notice}\n\nChanges\n\n${notice}`, "x".repeat(60000 - notice.length - 2)]) {
     const handler = await main({
       "target-repo": "dotnet/docs-maui",
       title_prefix: "[maui-labs docs] ",
@@ -182,7 +192,7 @@ test("pinned gh-aw handler sends disclosure and provenance in the actual create 
     const output = enforce(disclosureScript(compiled), {
       items: [{ type: "create_issue", title: "New command", body }],
     });
-    const result = await handler(output.items[0]);
+    const result = await withBodyLimit(compiled, () => handler(output.items[0]), global.github, global.core);
     assert.equal(result.success, true);
     const actual = calls.at(-1);
     assert.equal(actual.owner, "dotnet");
@@ -195,4 +205,28 @@ test("pinned gh-aw handler sends disclosure and provenance in the actual create 
     assert.match(actual.body, /engine: copilot/);
   }
   assert.equal(calls.length, 4);
+  assert.deepEqual(failures, []);
+  // Measure the real handler's complete payload, including provenance, at the API boundary.
+  const payload = { type: "create_issue", title: "New command", body: `${notice}\n\nChanges` };
+  async function send() {
+    const handler = await main({ "target-repo": "dotnet/docs-maui", max: 1 });
+    return withBodyLimit(compiled, () => handler(payload), global.github, global.core);
+  }
+  await send();
+  const length = calls.at(-1).body.length;
+  payload.body += "x".repeat(65536 - length);
+  assert.equal((await send()).success, true);
+  assert.equal(calls.at(-1).body.length, 65536);
+  const count = calls.length;
+  payload.body += "x";
+  const rejected = await send();
+  assert.equal(rejected.success, false);
+  assert.match(rejected.error, /65,536/);
+  assert.equal(calls.length, count);
+  assert.equal(failures.length, 1);
+  payload.body = `${notice}\n\nChanges`;
+  process.env.GH_AW_WORKFLOW_SOURCE = "x".repeat(65536);
+  process.env.GH_AW_WORKFLOW_SOURCE_URL = "https://github.com/dotnet/maui-labs";
+  assert.equal((await send()).success, false, "Unexpected footer growth must be guarded even with a short model body");
+  assert.equal(calls.length, count);
 });

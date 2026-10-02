@@ -27,6 +27,9 @@ tools:
 network:
   allowed:
     - defaults
+imports:
+  - shared/docs-output-body-limit.md
+
 safe-outputs:
   steps:
     - name: Enforce audit output AI disclosure
@@ -57,6 +60,9 @@ safe-outputs:
             const body = item.body.replaceAll(notice, "").replaceAll(disclosure, "")
               .replace(/^made with AI[ \t]*\r?$/gm, "").trim();
             item.body = `${notice}\n\n${body}`;
+            if (item.body.length > 60000) {
+              throw new Error("Audit output body exceeds the 60,000 UTF-16 code unit budget including AI disclosure. Shorten the body and retry.");
+            }
           }
           fs.writeFileSync(outputPath, JSON.stringify(output), "utf8");
   create-pull-request:
@@ -272,9 +278,13 @@ The trusted `safe-outputs` step prepends a visible `made with AI` line and an
 explicit AI decision-and-drafting disclosure to generated issue and pull request
 bodies before the existing handlers run. The pull request notice also identifies
 the proposed documentation changes as model-generated. Do not add another copy
-or label the edited documentation files. Existing provenance, output limits,
+or label the edited documentation files. Existing provenance,
 draft configuration, and older-issue handling are unchanged. Framework fallback
 issues retain the notice identifying their originally intended pull request.
+The disclosed body is limited to 60,000 UTF-16 code units, reserving 5,536 for
+generated content. A shared final-payload guard rejects bodies over 65,536 before
+the GitHub request, including unexpectedly large provenance or fallback text.
+Nothing is silently truncated. Existing patch and output-count caps are unchanged.
 
 Local regression check: `node --test .github/workflows/tests/*.test.cjs`.
 Set `GH_AW_ACTIONS_DIR` to gh-aw v0.53.5's `actions/setup/js` directory to also

@@ -53,6 +53,9 @@ tools:
     toolsets: [repos, issues, pull_requests]
     github-token: ${{ secrets.MAUI_BOT_TOKEN }}
 
+imports:
+  - shared/docs-output-body-limit.md
+
 safe-outputs:
   github-token: ${{ secrets.MAUI_BOT_TOKEN }}
   steps:
@@ -83,6 +86,9 @@ safe-outputs:
             const body = item.body.replaceAll(notice, "").replaceAll(disclosure, "")
               .replace(/^made with AI[ \t]*\r?$/gm, "").trim();
             item.body = `${notice}\n\n${body}`;
+            if (item.body.length > 60000) {
+              throw new Error("Documentation issue body exceeds the 60,000 UTF-16 code unit budget including AI disclosure. Shorten the body and retry.");
+            }
           }
           fs.writeFileSync(outputPath, JSON.stringify(output), "utf8");
   create-issue:
@@ -210,6 +216,10 @@ the GitHub issue handler runs.
 Do not add a second copy yourself. The existing workflow/run provenance footer
 is retained. This workflow only creates issues; updating existing issues is not
 enabled. Any future update path must enforce the same disclosure.
+The disclosed body is limited to 60,000 UTF-16 code units, reserving 5,536 for
+generated content. A shared final-payload guard rejects bodies over 65,536 before
+the GitHub request, including unexpected footer growth; it never truncates
+disclosure or provenance.
 
 Local regression check: `node --test .github/workflows/tests/pr-docs-check.test.cjs`.
 Set `GH_AW_ACTIONS_DIR` to gh-aw v0.53.5's `actions/setup/js` directory to also

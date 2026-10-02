@@ -4,6 +4,7 @@ const path = require("node:path");
 const { createRequire } = require("node:module");
 const { test } = require("node:test");
 const vm = require("node:vm");
+const { withBodyLimit } = require("./body-limit-helpers.cjs");
 
 const workflowDir = path.resolve(__dirname, "..");
 const source = fs.readFileSync(path.join(workflowDir, "ai-docs-audit.md"), "utf8");
@@ -78,10 +79,13 @@ for (const [name, workflow] of [["source", source], ["compiled", compiled]]) {
       }
     });
 
-    test(`${name}: ${type} long and empty bodies retain prefix without silent truncation`, () => {
-      for (const body of ["", "x".repeat(65000)]) {
+    test(`${name}: ${type} disclosed-body budget reserves footer space without silent truncation`, () => {
+      for (const body of ["", "x".repeat(60000 - notice.length - 2)]) {
         const result = enforce(script, { items: [{ type, body }] });
         assert.equal(result.items[0].body, `${notice}\n\n${body}`);
+      }
+      for (const body of ["x".repeat(60001 - notice.length - 2), "x".repeat(65000)]) {
+        assert.throws(() => enforce(script, { items: [{ type, body }] }), /60,000/);
       }
     });
   }
@@ -139,6 +143,8 @@ test("pinned Audit handlers preserve notices, provenance, fallbacks, and caps in
     GH_AW_CALLER_WORKFLOW_ID: "dotnet/maui-labs/ai-docs-audit",
     GH_AW_ENGINE_ID: "copilot",
     GH_AW_SAFE_OUTPUTS_STAGED: "false",
+    GH_AW_WORKFLOW_SOURCE: "",
+    GH_AW_WORKFLOW_SOURCE_URL: "",
     GITHUB_TOKEN: undefined,
     GH_AW_CI_TRIGGER_TOKEN: undefined,
   };
@@ -152,7 +158,8 @@ test("pinned Audit handlers preserve notices, provenance, fallbacks, and caps in
   t.after(() => { Object.assign(global, savedGlobals); setEnv(savedEnv); });
   setEnv(metadata);
   const summary = { addRaw() { return this; }, async write() {} };
-  global.core = { info() {}, debug() {}, warning() {}, error() {}, setOutput() {}, summary };
+  const failures = [];
+  global.core = { info() {}, debug() {}, warning() {}, error() {}, setOutput() {}, setFailed(message) { failures.push(message); }, summary };
   global.context = {
     repo: { owner: "dotnet", repo: "maui-labs" }, payload: {},
     serverUrl: "https://github.com", runId: 456,
@@ -163,6 +170,7 @@ test("pinned Audit handlers preserve notices, provenance, fallbacks, and caps in
   global.github = { rest: {
     issues: {
       async create(payload) {
+        assert.ok(payload.body.length <= 65536);
         calls.push({ type: "issue", ...payload });
         return { data: { number: 789, html_url: "https://github.com/dotnet/maui-labs/issues/789" } };
       },
@@ -170,6 +178,7 @@ test("pinned Audit handlers preserve notices, provenance, fallbacks, and caps in
     },
     pulls: {
       async create(payload) {
+        assert.ok(payload.body.length <= 65536);
         if (failure === "permission") throw new Error("GitHub Actions is not permitted to create or approve pull requests");
         if (failure === "pr") throw new Error("Mock PR creation failure");
         calls.push({ type: "pull_request", ...payload });
@@ -191,7 +200,9 @@ test("pinned Audit handlers preserve notices, provenance, fallbacks, and caps in
     assert.equal(actual.repo, "maui-labs");
   }
   const issueFactory = require(path.join(actionsDir, "create_issue.cjs")).main;
-  const issueHandler = await issueFactory(config.create_issue);
+  const guarded = handler => (...args) =>
+    withBodyLimit(compiled, () => handler(...args), global.github, global.core);
+  const issueHandler = guarded(await issueFactory(config.create_issue));
   assert.equal((await issueHandler(message("create_issue"))).success, true);
   assertPayload("create_issue", calls.at(-1));
   assert.match(calls.at(-1).body, /<!-- gh-aw-workflow-call-id: dotnet\/maui-labs\/ai-docs-audit -->/);
@@ -223,7 +234,7 @@ test("pinned Audit handlers preserve notices, provenance, fallbacks, and caps in
   }, { filename: handlerFile });
   const prFactory = module.exports.main;
   for (failure of [undefined, "push", "permission", "pr"]) {
-    const handler = await prFactory({ ...config.create_pull_request, base_branch: "main" });
+    const handler = guarded(await prFactory({ ...config.create_pull_request, base_branch: "main" }));
     const notice = `made with AI\n\n${disclosures.create_pull_request}`;
     const result = await handler(message("create_pull_request", `${notice}\n\nChanges\n\n${notice}`));
     assert.equal(result.success, true, JSON.stringify(result));
@@ -240,7 +251,7 @@ test("pinned Audit handlers preserve notices, provenance, fallbacks, and caps in
   ]) {
     patch = oversizedPatch;
     const count = calls.length;
-    const handler = await prFactory({ ...config.create_pull_request, base_branch: "main" });
+    const handler = guarded(await prFactory({ ...config.create_pull_request, base_branch: "main" }));
     const result = await handler(message("create_pull_request"));
     assert.equal(result.success, false);
     assert.match(result.error, error);
@@ -251,10 +262,47 @@ test("pinned Audit handlers preserve notices, provenance, fallbacks, and caps in
     "diff --git a/doc b/doc\n".repeat(100),
   ]) {
     patch = boundaryPatch;
-    const handler = await prFactory({ ...config.create_pull_request, base_branch: "main" });
-    const result = await handler(message("create_pull_request", "x".repeat(65000)));
+    const handler = guarded(await prFactory({ ...config.create_pull_request, base_branch: "main" }));
+    const body = "x".repeat(60000 - `made with AI\n\n${disclosures.create_pull_request}\n\n`.length);
+    const result = await handler(message("create_pull_request", body));
     assert.equal(result.success, true, JSON.stringify(result));
     assertPayload("create_pull_request", calls.at(-1));
-    assert.ok(calls.at(-1).body.includes("x".repeat(65000)));
+    assert.ok(calls.at(-1).body.includes(body));
+  }
+  assert.deepEqual(failures, []);
+  patch = "diff --git a/AGENTS.md b/AGENTS.md\n-old\n+new\n";
+  // Exercise the real renderers, not guessed footer lengths, for every final output path.
+  for (const scenario of ["issue", "pull_request", "push", "permission", "pr"]) {
+    failure = ["push", "permission", "pr"].includes(scenario) ? scenario : undefined;
+    const type = scenario === "issue" ? "create_issue" : "create_pull_request";
+    const payload = message(type);
+    async function send() {
+      const factory = type === "create_issue" ? issueFactory : prFactory;
+      const handler = guarded(await factory({ ...config[type], base_branch: "main" }));
+      return handler(payload);
+    }
+    assert.equal((await send()).success, true);
+    const length = calls.at(-1).body.length;
+    payload.body += "x".repeat(65536 - length);
+    assert.equal((await send()).success, true, scenario);
+    assert.equal(calls.at(-1).body.length, 65536, scenario);
+    assertPayload(type, calls.at(-1));
+    payload.body += "x";
+    const count = calls.length;
+    const rejected = await send();
+    assert.equal(rejected.success, false, scenario);
+    assert.match(rejected.error, /65,536/);
+    assert.equal(calls.length, count, `${scenario}: no oversized API request`);
+  }
+  assert.ok(failures.length >= 5);
+  process.env.GH_AW_WORKFLOW_SOURCE = "x".repeat(65536);
+  process.env.GH_AW_WORKFLOW_SOURCE_URL = "https://github.com/dotnet/maui-labs";
+  failure = undefined;
+  for (const type of Object.keys(disclosures)) {
+    const factory = type === "create_issue" ? issueFactory : prFactory;
+    const handler = guarded(await factory({ ...config[type], base_branch: "main" }));
+    const count = calls.length;
+    assert.equal((await handler(message(type))).success, false, "Reject unexpected footer growth on a short model body");
+    assert.equal(calls.length, count);
   }
 });
