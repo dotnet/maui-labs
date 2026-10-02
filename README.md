@@ -144,6 +144,11 @@ On-device AI capabilities for .NET MAUI via `Microsoft.Extensions.AI` abstractio
 - **NL embeddings** — on-device semantic search via Apple's NaturalLanguage framework (`NLEmbeddingGenerator`)
 - **Tool calling** — function-calling support for on-device models
 
+See the [chat guides](https://github.com/dotnet/docs-maui/blob/main/docs/ai/chat.md)
+and [embedding guides](https://github.com/dotnet/docs-maui/blob/main/docs/ai/embeddings.md)
+for provider comparisons and Apple-specific best practices, and the
+[retained Apple evaluation](docs/ai/apple-ai-evaluation.md) for reproducible findings.
+
 | Package | Description |
 |---------|-------------|
 | [![NuGet: Microsoft.Maui.Essentials.AI](https://img.shields.io/nuget/v/Microsoft.Maui.Essentials.AI.svg?label=Microsoft.Maui.Essentials.AI)](https://www.nuget.org/packages/Microsoft.Maui.Essentials.AI/) | On-device AI APIs for MAUI |
