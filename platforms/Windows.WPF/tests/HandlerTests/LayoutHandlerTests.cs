@@ -215,7 +215,9 @@ public class LayoutHandlerTests(ITestOutputHelper output)
 				if (layout is HorizontalStackLayout)
 				{
 					Assert.True(second.Frame.X >= first.Frame.Right - 0.1);
-					Assert.InRange(second.Frame.Y, first.Frame.Y - 0.1, first.Frame.Y + 0.1);
+					var firstCenter = first.Frame.Y + first.Frame.Height / 2;
+					var secondCenter = second.Frame.Y + second.Frame.Height / 2;
+					Assert.InRange(secondCenter, firstCenter - 0.1, firstCenter + 0.1);
 				}
 				else
 					Assert.True(second.Frame.Y >= first.Frame.Bottom - 0.1);
@@ -306,9 +308,9 @@ public class LayoutHandlerTests(ITestOutputHelper output)
 		var origin = native.TranslatePoint(new System.Windows.Point(), parent);
 		Assert.InRange(origin.X, child.Frame.X - 0.1, child.Frame.X + 0.1);
 		Assert.InRange(origin.Y, child.Frame.Y - 0.1, child.Frame.Y + 0.1);
-		Assert.True(origin.Y + native.ActualHeight <= parent.ActualHeight + 0.1);
 		Assert.InRange(native.ActualWidth, child.Frame.Width - 0.1, child.Frame.Width + 0.1);
 		Assert.InRange(native.ActualHeight, child.Frame.Height - 0.1, child.Frame.Height + 0.1);
+		Assert.True(origin.Y + native.ActualHeight <= parent.ActualHeight + 0.1);
 	}
 
 	static void MeasureAndArrange(LayoutPanel panel, double width)
