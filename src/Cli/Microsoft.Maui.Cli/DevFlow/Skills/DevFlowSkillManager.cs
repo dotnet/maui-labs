@@ -23,7 +23,8 @@ internal static class DevFlowSkillManager
     [
         new("maui-devflow-onboard", "MAUI DevFlow Onboard", "Guides first-time MAUI DevFlow project integration.", Recommended: true),
         new("maui-devflow-debug", "MAUI DevFlow Debug", "Guides build, deploy, connection recovery, inspect, and debug loops with MAUI DevFlow.", Recommended: true),
-        new("maui-devflow-session-review", "MAUI DevFlow Session Review", "Guides opt-in review of MAUI DevFlow-assisted AI sessions for friction, workarounds, and product feedback.", Recommended: true)
+        new("maui-devflow-session-review", "MAUI DevFlow Session Review", "Guides opt-in review of MAUI DevFlow-assisted AI sessions for friction, workarounds, and product feedback.", Recommended: true),
+        new("maui-devflow-ci-triage", "MAUI DevFlow CI Evidence", "Diagnostic-only CI evidence and local reproduction handoff; no run or repair authority.", Recommended: false)
     ];
 
     static readonly string[] s_legacySkillIds =
