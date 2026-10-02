@@ -71,6 +71,15 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 - **Lifecycle Events** — `ConfigureLifecycleEvents().AddGtk()` hooks for `OnWindowCreated` and `OnMauiApplicationCreated`.
 - **Desktop integration** — App icons via hicolor icon theme, `.desktop` file generation, `MauiImage`/`MauiFont`/`MauiAsset` resource processing.
 
+### Window sizing
+
+Windows default to 1024 x 768 when the app does not specify a size. Set `Window.Width`
+and `Window.Height` to request another initial or runtime size, and `Window.MinimumWidth`
+and `Window.MinimumHeight` to impose application-specific lower bounds. GTK's native
+content minimums still apply; there is no backend-imposed 800 x 600 minimum.
+Root MAUI layouts reflow using their actual GTK allocation, including space reserved
+by native containers and window chrome.
+
 ### Shell navigation regression checks
 
 Shell section navigation displays the top pushed page and restores the previous
