@@ -43,7 +43,7 @@ public abstract class GtkMauiApplication : IPlatformApplication
 		_gtkApp.OnActivate += OnActivate;
 		_gtkApp.OnShutdown += OnShutdown;
 
-		var exitCode = _gtkApp.Run(args);
+		var exitCode = _gtkApp.RunWithSynchronizationContext(args);
 		Environment.ExitCode = exitCode;
 	}
 
