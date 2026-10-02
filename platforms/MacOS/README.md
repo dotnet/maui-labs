@@ -24,6 +24,17 @@ during registration instead of leaving alert, prompt, or action-sheet tasks pend
 | `Microsoft.Maui.Platforms.MacOS.Essentials` | MAUI Essentials implementations (clipboard, preferences, sensors, …) |
 | `Microsoft.Maui.Platforms.MacOS.BlazorWebView` | Blazor Hybrid (`BlazorWebView`) support |
 
+## Shell section navigation
+
+Shell observes section and content selection changes, including `GoToAsync` and
+programmatic `CurrentItem` updates. The selected lazy page is created and hosted
+without requiring a manual handler refresh; unselected templates remain lazy.
+The shared `MacOS.RuntimeTests` host's `shell-sections` scenario exercises the
+pre-fix Shell handlers and the current code through full MAUI/AppKit startup.
+The `native-runtime` CI matrix uploads screenshots, navigation state and all 59
+assertions as `appkit-runtime-shell-sections-default`. See the
+[shared runner](tests/MacOS.RuntimeTests/README.md) for local macOS usage.
+
 ## Prerequisites
 
 - .NET 10 SDK

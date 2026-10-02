@@ -59,6 +59,8 @@ jobs:
       matrix:
         maui: ['10.0.41', '10.0.60', '10.0.70', '10.0.110']
     uses: ./.github/workflows/_build.yml
+    permissions:
+      contents: read
     with:
       project-path: platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
       project-name: gtk-registration-${{ matrix.maui }}
@@ -125,7 +127,7 @@ jobs:
       fail-fast: false
       matrix:
         # Each class gets its own process: GTK initialization is thread-affine.
-        test-class: [GtkSynchronizationContextTests, GtkTransformTests]
+        test-class: [PickerSelectionTests, GtkSynchronizationContextTests, GtkTransformTests]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v5
@@ -148,6 +150,7 @@ jobs:
           --logger "trx;LogFileName=${{ matrix.test-class }}.trx"
           --results-directory artifacts/TestResults/gtk-runtime
           --blame-hang-timeout 3m
+          -m:1 -nr:false
       - uses: actions/upload-artifact@v7
         if: always()
         with:

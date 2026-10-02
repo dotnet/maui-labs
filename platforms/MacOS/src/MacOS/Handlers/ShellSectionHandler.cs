@@ -35,7 +35,10 @@ public partial class ShellSectionHandler : ElementHandler<ShellSection, NSView>
 
 	static void MapCurrentItem(ShellSectionHandler handler, ShellSection section)
 	{
-		// ShellHandler listens for Shell.CurrentItem changes and handles page switching
+		if (section.Parent is ShellItem item && item.CurrentItem == section &&
+			item.Parent is Shell shell && shell.CurrentItem == item &&
+			shell.Handler is ShellHandler shellHandler)
+			shellHandler.QueueSelectionUpdate(section);
 	}
 
 	static void RequestNavigation(ShellSectionHandler handler, IStackNavigation view, object? arg)

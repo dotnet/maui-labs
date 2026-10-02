@@ -379,10 +379,18 @@ checks do not require GTK initialization and do not claim native UI coverage.
 
 ### Native runtime regression tests
 
-Native tests require Linux with GTK 4.12+ and a display. They are explicitly
-skipped unless `RUN_GTK_RUNTIME_TESTS=1`. Run each native test class in its own
-process to keep GTK initialization on one thread. For example, from
-`platforms/Linux.Gtk4`, with `xvfb` installed:
+Native tests require Linux with GTK 4.12+ and a display. They are skipped unless
+`RUN_GTK_RUNTIME_TESTS=1`. Run each native test class in its own process to keep
+GTK initialization on one thread. From `platforms/Linux.Gtk4`, with `xvfb`
+installed:
+
+```bash
+RUN_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo GTK_A11Y=none \
+  dbus-run-session -- xvfb-run --auto-servernum \
+  dotnet test tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj \
+  --filter FullyQualifiedName~PickerSelectionTests \
+  --logger "console;verbosity=detailed" -m:1 -nr:false
+```
 
 ```bash
 RUN_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo GTK_A11Y=none \
@@ -391,6 +399,10 @@ RUN_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo GTK_A11Y=none \
   --filter FullyQualifiedName~GtkSynchronizationContextTests \
   --logger "console;verbosity=detailed" --blame-hang-timeout 3m
 ```
+
+The Picker regression checks item replacement, no selection, collection
+mutations, managed selection mapping, native selection notifications, and
+disconnect/reconnect behavior.
 
 The synchronization-context regression starts a real `GtkMauiApplication`,
 invokes an async MAUI button handler from the GTK main loop, and checks thread

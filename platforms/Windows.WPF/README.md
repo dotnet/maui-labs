@@ -35,6 +35,45 @@ maui devflow --agent-port <port> ui tap --automationId ShellSettingsButton
 The tree should include `ShellHomePage` beneath `ShellContent`, the title query
 should find a MAUI `Label`, and tapping the button should navigate to Settings.
 
+### Dynamic Shell items
+
+Changes to `Shell.Items`, `ShellItem.Items`, and `ShellSection.Items` on the UI
+thread refresh the native flyout, tabs, and selected page. Collection notifications
+are coalesced on the dispatcher after Shell settles its current selection. Clearing
+the hierarchy clears the displayed page; replacing flyout items with a `TabBar`
+does not leave flyout entries behind. Inactive page templates remain lazy.
+The tab strip contains only the current item's sections and preserves its selected
+section when inactive items change.
+Deferred collection refreshes use the `Items` property mapper, including
+customizations registered with `AppendToMapping(nameof(Shell.Items), ...)`.
+
+Run the collection and lifecycle regressions on Windows:
+
+```powershell
+dotnet test platforms\Windows.WPF\tests\HandlerTests\HandlerTests.csproj -p:UseMaui=false --filter FullyQualifiedName~ShellItemsHandlerTests
+```
+
+The runtime regression renders add, remove, replace, and reset transitions in an
+offscreen, nonactivating WPF window. Set `SHELL_ITEMS_EVIDENCE_DIRECTORY` in the
+test process environment to save PNGs of those transitions.
+
+### Shell section selection
+
+For section switching within one Shell item, select **Launch Section Switching
+Repro**, or start the sample with `--shell-section-repro`. This uses two lazy
+pages in one `TabBar`, without calling a handler refresh workaround. The
+**GoToAsync** and **Set CurrentItem** buttons must both replace Page One with
+Page Two (and back). **Refresh state** shows the route, current page, page
+creation count, and `Navigated` count. Only one page should be created initially;
+after visiting both pages, the creation count must remain two on repeat visits.
+
+The focused Windows handler regression suite exercises real MAUI selection and
+WPF content hosting, including selection cleanup:
+
+```powershell
+dotnet test platforms\Windows.WPF\tests\HandlerTests --filter FullyQualifiedName~ShellSectionSwitchingTests
+```
+
 ## Screenshots
 
 | Home | Controls | Layouts |
@@ -169,6 +208,21 @@ See the `samples/` directory for working examples:
 | TableView | ✅ | Grouped sections with TextCell, SwitchCell, EntryCell |
 | SwipeView | ✅ | Context menu approximation |
 | RefreshView | ✅ | Progress bar indicator |
+
+CollectionView's native list-item accessible names prefer the template root's
+`SemanticProperties.Description`. Without a description, visible template labels
+and buttons supply the name in visual-tree order; a described subtree replaces
+its children's text. Native container `AutomationProperties.Name` and `LabeledBy`
+remain authoritative. Names are read from the current template, including after
+binding updates and container reuse. Empty templates and unrealized items do not
+expose the data model's `ToString()`; items without a template use their displayed
+fallback text. Group headers follow the same rules as items. Changes to template
+text, semantic descriptions, visibility, or descendants invalidate the native
+automation peers so UIA clients receive name-change notifications.
+Referenced native `LabeledBy` text/content labels are observed as well, including
+changes to their own accessible names and replacement of their content.
+If template creation fails, the existing displayed fallback text remains the
+accessible name; this does not suppress information that is already visible.
 
 ### Pages & Navigation
 
