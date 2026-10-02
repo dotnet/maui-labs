@@ -147,6 +147,48 @@
                 </VerticalStackLayout>
             </Border>
 
+            <!-- Raw touch: no recognizer anywhere, the view takes touches itself by overriding
+                 the platform touch methods. Only real/synthetic touches reach this. -->
+            <Border StrokeShape="RoundRectangle 8" Padding="16">
+                <Border.BackgroundColor>
+                    <AppThemeBinding Light="#DCE7C8" Dark="#3B4A2E" />
+                </Border.BackgroundColor>
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Raw-touch target (GraphicsView)" FontAttributes="Bold" FontSize="16" />
+                    <Label Text="Takes touches directly — no gesture recognizer to drive."
+                           FontSize="12" />
+                    <GraphicsView x:Name="RawTouchCanvas"
+                                  AutomationId="RawTouchTarget"
+                                  HeightRequest="140"
+                                  StartInteraction="OnRawTouchStarted"
+                                  DragInteraction="OnRawTouchDragged"
+                                  EndInteraction="OnRawTouchEnded" />
+                    <Label x:Name="RawTouchStatusLabel"
+                           Text="rawtouch: none"
+                           FontSize="14"
+                           AutomationId="RawTouchStatusLabel" />
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- An ordinary control. Synthesised touches must never reach it: a drag delivered
+                 to a button presses it, and one that ends inside also clicks it. -->
+            <Border StrokeShape="RoundRectangle 8" Padding="16">
+                <Border.BackgroundColor>
+                    <AppThemeBinding Light="#E6E0E9" Dark="#49454F" />
+                </Border.BackgroundColor>
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Synthetic-touch guard (Button)" FontAttributes="Bold" FontSize="16" />
+                    <Button AutomationId="SyntheticTouchGuardButton"
+                            Text="Gestures must not press this"
+                            Pressed="OnGuardButtonPressed"
+                            Clicked="OnGuardButtonClicked" />
+                    <Label x:Name="GuardStatusLabel"
+                           Text="guard: pressed=0 clicked=0"
+                           FontSize="14"
+                           AutomationId="GuardStatusLabel" />
+                </VerticalStackLayout>
+            </Border>
+
         </VerticalStackLayout>
     </ScrollView>
 </ContentPage>

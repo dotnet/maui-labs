@@ -7,15 +7,33 @@ namespace Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
 [McpServerToolType]
 public sealed class InteractionTools
 {
-	[McpServerTool(Name = "maui_tap"), Description("Tap a UI element by its visual tree ID. Use maui_tree to discover element IDs.")]
+	[McpServerTool(Name = "maui_tap"), Description("Tap a UI element by its visual tree ID. Use maui_tree to discover element IDs. " +
+		"Pass x and y to tap a point inside the element instead: this is how to tap content drawn on a canvas — " +
+		"SkiaSharp's SKCanvasView, GraphicsView, Syncfusion charts and other drawn controls — which has no element ID of its own. " +
+		"Use the element's bounds from maui_tree (and a screenshot) to pick the point. " +
+		"On iOS and Mac Catalyst a point tap needs the app to enable synthetic touch; check agent status capabilities.syntheticTouch.")]
 	public static async Task<string> Tap(
 		McpAgentSession session,
 		[Description("Element ID from the visual tree")] string elementId,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null,
 		[Description("Capture epoch from maui_tree or maui_hittest; stale epochs are rejected")] long? captureEpoch = null,
-		[Description("Native registry generation from maui_tree or maui_hittest")] long? registryGeneration = null)
+		[Description("Native registry generation from maui_tree or maui_hittest")] long? registryGeneration = null,
+		[Description("Tap at this X inside the element, in device-independent units from its left edge. Requires y.")] double? x = null,
+		[Description("Tap at this Y inside the element, in device-independent units from its top edge. Requires x.")] double? y = null)
 	{
+		if (x.HasValue != y.HasValue)
+			return "Tap at a point needs both 'x' and 'y'.";
+
 		using var agent = await session.GetAgentClientAsync(agentPort);
+		if (x is { } px && y is { } py)
+		{
+			var pointResult = await agent.TapResultAsync(elementId, px, py, captureEpoch, registryGeneration);
+			return McpActionResult.RequireSuccess(
+				pointResult,
+				$"Tapped element '{elementId}' at ({px:0.#}, {py:0.#}).",
+				$"Failed to tap element '{elementId}' at ({px:0.#}, {py:0.#}). {pointResult.Error}".TrimEnd());
+		}
+
 		var result = await agent.TapResultAsync(elementId, captureEpoch, registryGeneration);
 		return McpActionResult.RequireSuccess(
 			result,
@@ -96,7 +114,9 @@ public sealed class InteractionTools
 		"Use maui_tap for simple taps and maui_scroll for scrolling a list; this tool is for real gestures. " +
 		"Each gesture is first sent to a matching MAUI gesture recognizer on the element or its ancestors, and if there is " +
 		"none it is injected natively at the platform view — which is how pinch-to-zoom works on Maps, WebViews and other " +
-		"controls that handle gestures internally. Use maui_tree first to find the element ID; the 'gestures' field on each " +
+		"controls that handle gestures internally, including canvases such as GraphicsView that take touches directly " +
+		"(on iOS and Mac Catalyst only when the app enables synthetic touch; check agent status capabilities.syntheticTouch first). " +
+		"Use maui_tree first to find the element ID; the 'gestures' field on each " +
 		"element lists the recognizers it has. Omitting elementId aims non-tap gestures at the current page; tap requires an element ID.")]
 	public static async Task<string> Gesture(
 		McpAgentSession session,

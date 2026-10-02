@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:skia="clr-namespace:SkiaSharp.Views.Maui.Controls;assembly=SkiaSharp.Views.Maui.Controls"
+             xmlns:chart="clr-namespace:Syncfusion.Maui.Toolkit.Charts;assembly=Syncfusion.Maui.Toolkit"
+             x:Class="DevFlow.Sample.CanvasTapTestPage"
+             Title="Canvas Taps">
+    <ContentPage.BackgroundColor>
+        <AppThemeBinding Light="#F5F5F5" Dark="#1C1B1F" />
+    </ContentPage.BackgroundColor>
+
+    <ScrollView Padding="16">
+        <VerticalStackLayout Spacing="16">
+
+            <Label Text="Everything tappable here is drawn, not a view, so it has no element id of its own. Tap the canvas at a point (maui_tap with x/y) and read the status label back."
+                   FontSize="13"
+                   AutomationId="CanvasTapIntroLabel">
+                <Label.TextColor>
+                    <AppThemeBinding Light="#49454F" Dark="#CAC4D0" />
+                </Label.TextColor>
+            </Label>
+
+            <!-- SkiaSharp: touch arrives through SKCanvasView's own recognizer (iOS) or
+                 touch listener (Android); the handler hit-tests the drawn halves itself. -->
+            <Border StrokeShape="RoundRectangle 8" Padding="16">
+                <Border.BackgroundColor>
+                    <AppThemeBinding Light="#E8DEF8" Dark="#4A4458" />
+                </Border.BackgroundColor>
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="SkiaSharp canvas (SKCanvasView)" FontAttributes="Bold" FontSize="16" />
+                    <Label Text="Left half is red, right half is blue." FontSize="12" />
+                    <skia:SKCanvasView x:Name="SkiaCanvas"
+                                       AutomationId="SkiaCanvas"
+                                       HeightRequest="120"
+                                       EnableTouchEvents="True"
+                                       PaintSurface="OnSkiaPaintSurface"
+                                       Touch="OnSkiaTouch" />
+                    <Label x:Name="SkiaStatusLabel"
+                           Text="skia: none"
+                           FontSize="14"
+                           AutomationId="SkiaStatusLabel" />
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Syncfusion: the chart draws its columns with Microsoft.Maui.Graphics and selects
+                 the one under a tap from the tap location its gesture recognizers report. -->
+            <Border StrokeShape="RoundRectangle 8" Padding="16">
+                <Border.BackgroundColor>
+                    <AppThemeBinding Light="#DCE7C8" Dark="#3B4A2E" />
+                </Border.BackgroundColor>
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Syncfusion chart (SfCartesianChart)" FontAttributes="Bold" FontSize="16" />
+                    <Label Text="Tap a column to select it." FontSize="12" />
+                    <chart:SfCartesianChart x:Name="SalesChart"
+                                            AutomationId="SalesChart"
+                                            HeightRequest="220">
+                        <chart:SfCartesianChart.XAxes>
+                            <chart:CategoryAxis />
+                        </chart:SfCartesianChart.XAxes>
+                        <chart:SfCartesianChart.YAxes>
+                            <chart:NumericalAxis Minimum="0" Maximum="10" />
+                        </chart:SfCartesianChart.YAxes>
+                        <chart:ColumnSeries x:Name="SalesSeries"
+                                            XBindingPath="Name"
+                                            YBindingPath="Value">
+                            <chart:ColumnSeries.SelectionBehavior>
+                                <chart:DataPointSelectionBehavior SelectionBrush="#FF6750A4"
+                                                                  SelectionChanged="OnChartSelectionChanged" />
+                            </chart:ColumnSeries.SelectionBehavior>
+                        </chart:ColumnSeries>
+                    </chart:SfCartesianChart>
+                    <Label x:Name="ChartStatusLabel"
+                           Text="chart: none"
+                           FontSize="14"
+                           AutomationId="ChartStatusLabel" />
+                </VerticalStackLayout>
+            </Border>
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

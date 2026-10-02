@@ -27,14 +27,14 @@
     },
     "TapRequest": {
       "type": "object",
-      "description": "Request to perform a tap/click action on an element or at coordinates.",
+      "description": "Request to tap an element, or a point inside it when x and y are given.",
       "properties": {
         "elementId": {
           "type": [
             "string",
             "null"
           ],
-          "description": "Target element identifier. Either elementId or coordinates must be provided."
+          "description": "Target element identifier. Required; x and y, when given, are relative to this element."
         },
         "captureEpoch": {
           "$ref": "#/$defs/CaptureEpoch"
@@ -47,14 +47,14 @@
             "number",
             "null"
           ],
-          "description": "X coordinate for the tap. Used when tapping by position rather than element."
+          "description": "Tap at this X inside the element, in device-independent units from its left edge. Given together with y; the tap is then delivered as a real touch at that point, which is how content drawn on a canvas (SkiaSharp, GraphicsView, Syncfusion charts) is reached. On iOS and Mac Catalyst this needs AgentOptions.EnableSyntheticTouch (capabilities.syntheticTouch)."
         },
         "y": {
           "type": [
             "number",
             "null"
           ],
-          "description": "Y coordinate for the tap. Used when tapping by position rather than element."
+          "description": "Tap at this Y inside the element, in device-independent units from its top edge. Given together with x."
         },
         "include": {
           "$ref": "#/$defs/IncludeOption",
@@ -394,6 +394,20 @@
           "minimum": 0,
           "maximum": 1
         },
+        "x": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "For 'tap': X inside the element, in device-independent units from its left edge. Given together with y."
+        },
+        "y": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "For 'tap': Y inside the element, in device-independent units from its top edge. Given together with x."
+        },
         "steps": {
           "type": [
             "integer",
@@ -561,14 +575,14 @@
             "number",
             "null"
           ],
-          "description": "X coordinate (for tap and gesture actions)."
+          "description": "For tap: X inside the element, in device-independent units from its left edge. Given together with y."
         },
         "y": {
           "type": [
             "number",
             "null"
           ],
-          "description": "Y coordinate (for tap and gesture actions)."
+          "description": "For tap: Y inside the element, in device-independent units from its top edge. Given together with x."
         },
         "text": {
           "type": [

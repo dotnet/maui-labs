@@ -877,6 +877,30 @@ public class AgentClient : IDisposable
     }
 
     /// <summary>
+    /// Tap at a point inside an element, delivered as a real touch there. <paramref name="x"/> and
+    /// <paramref name="y"/> are device-independent units from the element's top-left corner. This
+    /// is how content drawn on a canvas — SkiaSharp, Microsoft.Maui.Graphics, Syncfusion charts —
+    /// is tapped, since what is drawn has no element id of its own. On iOS and Mac Catalyst the app
+    /// must enable synthetic touch (<c>capabilities.syntheticTouch</c> in the agent status).
+    /// </summary>
+    public Task<ActionResult> TapResultAsync(
+        string elementId,
+        double x,
+        double y,
+        long? captureEpoch,
+        long? registryGeneration)
+    {
+        var payload = new JsonObject
+        {
+            ["elementId"] = elementId,
+            ["x"] = x,
+            ["y"] = y
+        };
+        AddCaptureMetadata(payload, captureEpoch, registryGeneration);
+        return PostActionResultAsync($"{UiApi}/actions/tap", payload);
+    }
+
+    /// <summary>
     /// Fill text into an element.
     /// </summary>
     public Task<bool> FillAsync(string elementId, string text)
@@ -2970,6 +2994,12 @@ public class AgentCapabilities
     public bool Jobs { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("theme")]
     public bool Theme { get; set; }
+    /// <summary>
+    /// Whether gestures can be delivered as synthesised touches to raw-touch views such as
+    /// GraphicsView. True only on iOS and Mac Catalyst when the app enables the tier.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonPropertyName("syntheticTouch")]
+    public bool SyntheticTouch { get; set; }
 }
 
 public class NetworkRequest

@@ -410,6 +410,198 @@ public class UiActionTests : IntegrationTestBase
         Assert.Equal($"swipe: {direction}", status.Text);
     }
 
+    // ========== raw-touch tier: views that take their touches directly ==========
+    // A GraphicsView overrides the platform touch methods and installs no gesture recognizer,
+    // so nothing above can service it. Android delivers real MotionEvents; iOS and Mac Catalyst
+    // synthesise UITouches, which the sample opts into with AgentOptions.EnableSyntheticTouch,
+    // and only to an allow-list of views. The status label reports the whole sequence, so these
+    // assert what the app actually received rather than an HTTP 200.
+
+    private bool SupportsRawTouchInjection =>
+        Platform.Equals("android", StringComparison.OrdinalIgnoreCase)
+        || Platform.Equals("ios", StringComparison.OrdinalIgnoreCase)
+        || Platform.Equals("maccatalyst", StringComparison.OrdinalIgnoreCase);
+
+    private async Task<ElementInfo> FindRawTouchTargetAsync()
+    {
+        await NavigateToGesturePageAsync();
+        await Client.ScrollAsync("RawTouchTarget");
+        await SettleAsync();
+        return await FindElementAsync("RawTouchTarget");
+    }
+
+    [Fact]
+    public async Task Pinch_OnRawTouchView_ArrivesAsTwoTouches()
+    {
+        if (!SupportsRawTouchInjection)
+        {
+            Output.WriteLine($"Raw-touch injection is not available on {Platform}.");
+            return;
+        }
+
+        var target = await FindRawTouchTargetAsync();
+
+        var result = await Client.PinchAsync(target.Id, scale: 0.5);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("native", result.HandledBy);
+
+        await SettleAsync();
+        var status = await FindElementAsync("RawTouchStatusLabel");
+        // Two simultaneous pointers is the whole point: a single-pointer approximation
+        // cannot produce a scale at all.
+        Assert.Contains("maxtouches=2", status.Text);
+        Assert.Contains("scale=0.50", status.Text);
+    }
+
+    [Fact]
+    public async Task Pan_OnRawTouchView_DeliversTheWholeDrag()
+    {
+        if (!SupportsRawTouchInjection)
+        {
+            Output.WriteLine($"Raw-touch injection is not available on {Platform}.");
+            return;
+        }
+
+        var target = await FindRawTouchTargetAsync();
+
+        var result = await Client.PanAsync(target.Id, deltaX: 80, deltaY: 0);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("native", result.HandledBy);
+
+        await SettleAsync();
+        var status = await FindElementAsync("RawTouchStatusLabel");
+        Assert.Contains("dx=80", status.Text);
+    }
+
+    [Fact]
+    public async Task Pan_OnRawTouchViewInsideAScrollView_IsNotStolenByTheScrollView()
+    {
+        if (!SupportsRawTouchInjection)
+        {
+            Output.WriteLine($"Raw-touch injection is not available on {Platform}.");
+            return;
+        }
+
+        var target = await FindRawTouchTargetAsync();
+
+        // Vertical, inside a vertical ScrollView: the case where the enclosing scroller
+        // takes the gesture away from the element the caller actually named.
+        var result = await Client.PanAsync(target.Id, deltaX: 0, deltaY: 60);
+
+        Assert.True(result.Success, result.Error);
+
+        await SettleAsync();
+        var status = await FindElementAsync("RawTouchStatusLabel");
+        Assert.Contains("dy=60", status.Text);
+    }
+
+    private static int ReadRawTouchDx(string? statusText)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(statusText ?? "", @"dx=(-?\d+)");
+        Assert.True(match.Success, $"No dx in '{statusText}'");
+        return int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    [Fact]
+    public async Task Swipe_OnRawTouchView_ArrivesAsADrag()
+    {
+        if (!SupportsRawTouchInjection)
+        {
+            Output.WriteLine($"Raw-touch injection is not available on {Platform}.");
+            return;
+        }
+
+        var target = await FindRawTouchTargetAsync();
+
+        var result = await Client.GestureDetailedAsync("swipe", target.Id, "right");
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("native", result.HandledBy);
+
+        await SettleAsync();
+        var status = await FindElementAsync("RawTouchStatusLabel");
+        Assert.True(ReadRawTouchDx(status.Text) > 0, status.Text);
+    }
+
+    [Fact]
+    public async Task Pan_OnRawTouchView_LongerThanTheView_IsShortenedToStayOnIt()
+    {
+        if (!SupportsRawTouchInjection)
+        {
+            Output.WriteLine($"Raw-touch injection is not available on {Platform}.");
+            return;
+        }
+
+        var target = await FindRawTouchTargetAsync();
+
+        // Started centred and offset by half the delta, a drag this long would begin far off
+        // the canvas and land on whatever sits beside it.
+        var result = await Client.PanAsync(target.Id, deltaX: 5000, deltaY: 0);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("native", result.HandledBy);
+
+        await SettleAsync();
+        var status = await FindElementAsync("RawTouchStatusLabel");
+        Assert.InRange(ReadRawTouchDx(status.Text), 1, 4999);
+    }
+
+    [Theory]
+    [InlineData(0.0, 0.0)]
+    [InlineData(1.0, 1.0)]
+    public async Task Pinch_OnRawTouchView_FromAnEdgeOrigin_KeepsBothFingersOnTheView(double originX, double originY)
+    {
+        if (!SupportsRawTouchInjection)
+        {
+            Output.WriteLine($"Raw-touch injection is not available on {Platform}.");
+            return;
+        }
+
+        var target = await FindRawTouchTargetAsync();
+
+        var result = await Client.PinchAsync(target.Id, scale: 0.5, originX: originX, originY: originY);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("native", result.HandledBy);
+
+        await SettleAsync();
+        var status = await FindElementAsync("RawTouchStatusLabel");
+        Assert.Contains("maxtouches=2", status.Text);
+        Assert.Contains("scale=0.50", status.Text);
+    }
+
+    // UIKit-only: Android delivers real touches to the named view, which behave exactly as a
+    // finger would — including pressing a button that is dragged across.
+    private bool SupportsSyntheticTouch =>
+        Platform.Equals("ios", StringComparison.OrdinalIgnoreCase)
+        || Platform.Equals("maccatalyst", StringComparison.OrdinalIgnoreCase);
+
+    [Fact]
+    public async Task Pan_OnAnOrdinaryButton_NeverDeliversSyntheticTouches()
+    {
+        if (!SupportsSyntheticTouch)
+        {
+            Output.WriteLine($"Synthetic touch is UIKit-only; skipping on {Platform}.");
+            return;
+        }
+
+        await NavigateToGesturePageAsync();
+        await Client.ScrollAsync("SyntheticTouchGuardButton");
+        await SettleAsync();
+        var button = await FindElementAsync("SyntheticTouchGuardButton");
+
+        // UIButton overrides touchesBegan:, which is exactly what used to qualify a view for
+        // synthesised touches. Vertical, so no enclosing horizontal pan (Shell's flyout) is involved.
+        await Client.PanAsync(button.Id, deltaX: 0, deltaY: 10);
+
+        // Whether another tier claims the pan is beside the point: the button must not be pressed.
+        await SettleAsync();
+        var status = await FindElementAsync("GuardStatusLabel");
+        Assert.Equal("guard: pressed=0 clicked=0", status.Text);
+    }
+
     [Fact]
     public async Task DoubleTap_FiresTwoTapRecognizerNotTheSingleTapOne()
     {
@@ -455,6 +647,111 @@ public class UiActionTests : IntegrationTestBase
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
         Assert.Contains("tap requires elementId", body);
+    }
+
+    // ========== tap at a point: content drawn on a canvas ==========
+    // SkiaSharp and Syncfusion hit-test what they drew from the touch location, so the drawn
+    // items have no element id and only a tap at a point reaches them. Android delivers real
+    // MotionEvents; iOS and Mac Catalyst feed a synthesised UITouch to the canvas's recognizers.
+    // Each status label names the drawn item the app resolved, so these assert the tap landed
+    // where it was aimed — not only that it was accepted.
+
+    private async Task<ElementInfo> FindCanvasTargetAsync(string automationId)
+    {
+        await NavigateToPageAsync("//canvastaps", "SkiaCanvas");
+        await Client.ScrollAsync(automationId);
+        await SettleAsync();
+        return await FindElementAsync(automationId);
+    }
+
+    private async Task<ActionResult> TapAtFractionAsync(ElementInfo target, double fx, double fy)
+    {
+        var bounds = target.Bounds ?? throw new InvalidOperationException($"{target.Id} has no bounds");
+        return await Client.TapResultAsync(
+            target.Id,
+            bounds.Width * fx,
+            bounds.Height * fy,
+            target.CaptureEpoch,
+            target.RegistryGeneration);
+    }
+
+    [Theory]
+    [InlineData(0.8, "right")]
+    [InlineData(0.2, "left")]
+    public async Task TapAtPoint_OnSkiaCanvas_ReachesTheDrawnHalfAtThatPoint(double fx, string expected)
+    {
+        if (!SupportsRawTouchInjection)
+        {
+            Output.WriteLine($"Touch injection is not available on {Platform}.");
+            return;
+        }
+
+        var canvas = await FindCanvasTargetAsync("SkiaCanvas");
+
+        var result = await TapAtFractionAsync(canvas, fx, 0.5);
+
+        Assert.True(result.Success, result.Error);
+        await SettleAsync();
+        var status = await FindElementAsync("SkiaStatusLabel");
+        // The canvas reports the location it was handed; it must be the one asked for.
+        var expectedX = canvas.Bounds!.Width * fx;
+        var match = System.Text.RegularExpressions.Regex.Match(status.Text ?? "", @"^skia: (\w+) at \((\d+), (\d+)\)");
+        Assert.True(match.Success, status.Text);
+        Assert.Equal(expected, match.Groups[1].Value);
+        Assert.InRange(double.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture), expectedX - 1, expectedX + 1);
+        Assert.InRange(double.Parse(match.Groups[3].Value, CultureInfo.InvariantCulture), canvas.Bounds.Height / 2 - 1, canvas.Bounds.Height / 2 + 1);
+    }
+
+    [Fact]
+    public async Task TapAtPoint_OnSyncfusionChart_SelectsEachColumnItIsAimedAt()
+    {
+        if (!SupportsRawTouchInjection)
+        {
+            Output.WriteLine($"Touch injection is not available on {Platform}.");
+            return;
+        }
+
+        // Alternating columns is the point: a double-tap recognizer left holding the previous
+        // tap would complete on the next one and select the previous column instead.
+        (double X, double Y, string Column)[] columns = [(0.54, 0.6, "B"), (0.85, 0.65, "C"), (0.24, 0.78, "A"), (0.85, 0.65, "C")];
+        foreach (var (fx, fy, column) in columns)
+        {
+            var chart = await FindCanvasTargetAsync("SalesChart");
+
+            var result = await TapAtFractionAsync(chart, fx, fy);
+
+            Assert.True(result.Success, result.Error);
+            await SettleAsync();
+            var status = await FindElementAsync("ChartStatusLabel");
+            Assert.StartsWith($"chart: selected {column} ", status.Text);
+        }
+    }
+
+    [Fact]
+    public async Task TapAtPoint_OutsideTheElement_IsRejectedWithoutTapping()
+    {
+        var canvas = await FindCanvasTargetAsync("SkiaCanvas");
+        var before = (await FindElementAsync("SkiaStatusLabel")).Text;
+
+        var result = await Client.TapResultAsync(
+            canvas.Id, canvas.Bounds!.Width + 10, 5, canvas.CaptureEpoch, canvas.RegistryGeneration);
+
+        Assert.False(result.Success);
+        Assert.Contains("outside the element", result.Error);
+        await SettleAsync();
+        var status = await FindElementAsync("SkiaStatusLabel");
+        Assert.Equal(before, status.Text);
+    }
+
+    [Fact]
+    public async Task TapAtPoint_WithOnlyOneCoordinate_IsRejected()
+    {
+        var canvas = await FindCanvasTargetAsync("SkiaCanvas");
+
+        using var response = await PostRawAsync("/api/v1/ui/actions/tap", new { elementId = canvas.Id, x = 10 });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("x and y must be given together", await response.Content.ReadAsStringAsync());
     }
 
     [Trait(TestFramework.Trait, TestFramework.Maui)]

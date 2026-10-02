@@ -42,7 +42,7 @@ public partial class MauiDevFlowAgentService
             {
                 Method = "POST",
                 MutationState = request.MutationState,
-                Body = JsonSerializer.Serialize(new ActionRequest { ElementId = body.ElementId })
+                Body = JsonSerializer.Serialize(new TapRequest { ElementId = body.ElementId, X = body.X, Y = body.Y })
             });
             failureStatusCode = tapResponse.StatusCode;
             outcome = tapResponse.StatusCode < 400
@@ -506,4 +506,61 @@ public partial class MauiDevFlowAgentService
 
     protected virtual Task<string?> TryNativeDoubleTap(VisualElement element)
         => Task.FromResult<string?>(null);
+
+    /// <summary>
+    /// A tap at <paramref name="point"/> inside the element, delivered as a real touch. Canvases —
+    /// SkiaSharp, Microsoft.Maui.Graphics, and the controls drawn on them such as Syncfusion's —
+    /// hit-test their own content from the touch location, so there is no element to invoke and
+    /// the element-level tap cannot reach what is drawn. Never falls back to that tap: a tap asked
+    /// for at a point and delivered anywhere else would report success for the wrong target.
+    /// </summary>
+    private async Task<HttpResponse> HandlePointTapAsync(
+        HttpRequest request, string elementId, Point point, UiCaptureContext capture, DateTime startedAtUtc)
+    {
+        string? detail = null;
+        var error = await DispatchAsync<string>(async () =>
+        {
+            if (IsNativeElementId(elementId))
+                return "Tap at a point needs a MAUI element; native element ids are not supported";
+
+            var resolved = ResolveCapturedElement(capture, elementId, id => _treeWalker.GetElementById(id, _app));
+            if (resolved == null)
+                return "Element not found";
+            if (resolved is not VisualElement element)
+                return $"Element '{elementId}' is a {resolved.GetType().Name}, which cannot receive touches";
+
+            CaptureMutationTarget(request, element);
+            if (SyntheticTouchGeometry.ForTap(element.Width, element.Height, point.X, point.Y) is not { } inside)
+                return $"Point ({point.X:0.#}, {point.Y:0.#}) is outside the element's {element.Width:0.#}x{element.Height:0.#} bounds";
+
+            var outcome = await TryNativePointTapAsync(element, new Point(inside.X, inside.Y));
+            detail = outcome.Handled ? outcome.Message : null;
+            return outcome.Handled ? null : outcome.Message;
+        }) ?? (detail == null ? "Point tap failed" : null);
+
+        PublishUiOperationSpan(
+            "action.tap",
+            startedAtUtc,
+            error == null,
+            error,
+            elementId,
+            new { x = point.X, y = point.Y, detail });
+
+        return error == null ? HttpResponse.Ok($"Tapped at ({point.X:0.#}, {point.Y:0.#}): {detail}") : HttpResponse.Error(error);
+    }
+
+    /// <summary>
+    /// Delivers a touch down and up at <paramref name="point"/> — device-independent units from
+    /// the element's top-left, already checked to lie inside it.
+    /// </summary>
+    protected virtual Task<PointTapResult> TryNativePointTapAsync(VisualElement element, Point point)
+        => Task.FromResult(PointTapResult.Failed(
+            $"Tap at a point is not supported on {DeviceInfo.Platform}"));
+
+    /// <summary>What serviced a tap at a point, or why none could be delivered.</summary>
+    protected readonly record struct PointTapResult(bool Handled, string Message)
+    {
+        public static PointTapResult Delivered(string detail) => new(true, detail);
+        public static PointTapResult Failed(string reason) => new(false, reason);
+    }
 }

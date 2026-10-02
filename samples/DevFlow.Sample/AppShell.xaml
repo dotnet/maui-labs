@@ -17,6 +17,8 @@
                   ContentTemplate="{DataTemplate local:LayoutDiagnosticsTestPage}" />
     <ShellContent Title="Gestures" Route="gestures"
                   ContentTemplate="{DataTemplate local:GestureTestPage}" />
+    <ShellContent Title="Canvas Taps" Route="canvastaps"
+                  ContentTemplate="{DataTemplate local:CanvasTapTestPage}" />
     <ShellContent Title="Dialogs" Route="dialogs"
                   ContentTemplate="{DataTemplate local:DialogTestPage}" />
     <ShellContent Title="Network" Route="network"

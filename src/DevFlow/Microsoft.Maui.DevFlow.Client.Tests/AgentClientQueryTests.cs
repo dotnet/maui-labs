@@ -135,6 +135,35 @@ public class AgentClientQueryTests
     }
 
     [Fact]
+    public async Task GetStatusAsync_ReadsTheSyntheticTouchCapability()
+    {
+        using var agent = FakeAgent.StartJson("""
+            { "running": true, "capabilities": { "ui": true, "jobs": true, "syntheticTouch": true } }
+            """);
+        using var client = new AgentClient("localhost", agent.Port);
+
+        var status = await client.GetStatusAsync();
+
+        Assert.NotNull(status?.Capabilities);
+        Assert.True(status!.Capabilities!.SyntheticTouch);
+    }
+
+    [Fact]
+    public async Task GetStatusAsync_TreatsAnAbsentSyntheticTouchCapabilityAsUnavailable()
+    {
+        // An agent that predates the tier omits the field entirely.
+        using var agent = FakeAgent.StartJson("""
+            { "running": true, "capabilities": { "ui": true } }
+            """);
+        using var client = new AgentClient("localhost", agent.Port);
+
+        var status = await client.GetStatusAsync();
+
+        Assert.NotNull(status?.Capabilities);
+        Assert.False(status!.Capabilities!.SyntheticTouch);
+    }
+
+    [Fact]
     public async Task GetCapabilitiesAsync_ReturnsRawJsonDocument()
     {
         using var agent = FakeAgent.StartJson("""{ "capabilities": { "ui.tree": true } }""");

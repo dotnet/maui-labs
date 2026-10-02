@@ -482,9 +482,18 @@ paths:
     post:
       operationId: tapElement
       tags: [ui-actions]
-      summary: Tap element or coordinates
+      summary: Tap element, or a point inside it
       description: >
-        Taps on an element (by ID) or at absolute coordinates.
+        Taps an element by ID. With x and y — device-independent units from the element's
+        top-left, given together — the tap is instead delivered as a real touch at that point
+        inside the element. That is how content drawn on a canvas is tapped: SkiaSharp's
+        SKCanvasView, GraphicsView, and controls drawn with Microsoft.Maui.Graphics such as
+        Syncfusion's charts hit-test the touch location themselves, and what they draw has no
+        element ID of its own. On Android the touch is a real MotionEvent sent to the element's
+        view; on iOS and Mac Catalyst it is a synthesised UITouch given to the gesture recognizers
+        of the view under the point (or, for a recognizer-less raw-touch view, to the view), which
+        needs AgentOptions.EnableSyntheticTouch (capabilities.syntheticTouch). A point outside the
+        element, or covered by another view, is rejected rather than tapped elsewhere.
       requestBody:
         required: true
         content:
@@ -729,7 +738,13 @@ paths:
         The gesture is first offered to a matching MAUI gesture recognizer on the target
         element or its ancestors. If there is none, it is injected natively at the platform
         view, which is how pinch-to-zoom reaches controls that handle gestures internally
-        such as Map, WebView and native scroll views. The response reports which tier
+        such as Map, WebView and native scroll views. Views that take touches directly and
+        expose no recognizer at all — MAUI's GraphicsView, or a type listed in
+        AgentOptions.SyntheticTouchViewTypes — are reached on iOS and Mac Catalyst by
+        synthesised touches, which the agent only does when AgentOptions.EnableSyntheticTouch
+        is set; /api/v1/agent/status reports whether that tier is available as
+        capabilities.syntheticTouch. Controls, scroll views and views with gesture recognizers
+        never receive synthesised touches. The response reports which tier
         serviced the gesture so callers can tell a real recognizer hit from a native fallback.
         Tap requires elementId; other gesture types target the current page when it is omitted.
       requestBody:

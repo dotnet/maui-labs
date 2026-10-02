@@ -2696,14 +2696,19 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
-        var body = request.BodyAs<ActionRequest>();
+        var body = request.BodyAs<TapRequest>();
         if (body?.ElementId == null)
             return HttpResponse.Error("elementId is required");
+        if (body.X.HasValue != body.Y.HasValue)
+            return HttpResponse.Error("x and y must be given together");
         if (await PrepareUiMutationAsync(request, body, body.ElementId) is { } staleCapture)
             return staleCapture;
 
         var startedAtUtc = DateTime.UtcNow;
         var reservedCapture = GetReservedCapture(request);
+        if (body.X is { } x && body.Y is { } y)
+            return await HandlePointTapAsync(request, body.ElementId, new Point(x, y), reservedCapture, startedAtUtc);
+
         if (IsNativeElementId(body.ElementId))
         {
             string nativeResult;
@@ -3625,9 +3630,11 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                             {
                                 Method = "POST",
                                 MutationState = reservation.Capture,
-                                Body = JsonSerializer.Serialize(new ActionRequest
+                                Body = JsonSerializer.Serialize(new TapRequest
                                 {
-                                    ElementId = action.ElementId
+                                    ElementId = action.ElementId,
+                                    X = action.X,
+                                    Y = action.Y
                                 })
                             });
                             break;

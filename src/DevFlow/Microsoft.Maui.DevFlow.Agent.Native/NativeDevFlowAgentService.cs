@@ -277,7 +277,14 @@ public class NativeDevFlowAgentService : DevFlowAgentService
 
     /// <inheritdoc />
     protected override Task<HttpResponse> HandleTap(HttpRequest request)
-        => ActOnElement(request, "action.tap", (view, _) => NativeUi.TryTap(view, null, null) ? "ok" : "Tap not handled", "Tapped");
+    {
+        // A tap at a point needs touch injection this agent does not have; tapping the element
+        // instead would report success for something other than what was asked.
+        if (request.BodyAs<TapRequest>() is { } body && (body.X.HasValue || body.Y.HasValue))
+            return Task.FromResult(HttpResponse.Error("Tap at a point is not supported by this agent"));
+
+        return ActOnElement(request, "action.tap", (view, _) => NativeUi.TryTap(view, null, null) ? "ok" : "Tap not handled", "Tapped");
+    }
 
     /// <inheritdoc />
     protected override Task<HttpResponse> HandleFill(HttpRequest request)

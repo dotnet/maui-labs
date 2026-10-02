@@ -60,6 +60,12 @@
     <PackageVersion Include="AathifMahir.Maui.MauiIcons.Cupertino" Version="$(AathifMahirMauiIconsCupertinoVersion)" />
   </ItemGroup>
 
+  <!-- Samples only (not shipped): canvas controls the DevFlow sample drives with taps at a point -->
+  <ItemGroup Label="Samples">
+    <PackageVersion Include="SkiaSharp.Views.Maui.Controls" Version="$(SkiaSharpVersion)" />
+    <PackageVersion Include="Syncfusion.Maui.Toolkit" Version="$(SyncfusionMauiToolkitVersion)" />
+  </ItemGroup>
+
   <!-- MAUI Cli Tool dependencies -->
   <ItemGroup Label="Cli">
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="$(MicrosoftExtensionsDependencyInjectionVersion)" />

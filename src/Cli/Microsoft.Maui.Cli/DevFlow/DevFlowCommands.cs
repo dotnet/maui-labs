@@ -488,7 +488,9 @@ public class DevFlowCommands
 
         // MAUI tap
         var tapIdArg = new Argument<string?>("elementId") { Description = "Element ID to tap (optional if --automationId, --type, or --text is used)", DefaultValueFactory = _ => null };
-        var mauiTapCmd = new Command("tap", "Tap element") { tapIdArg, resolveAutoIdOption, resolveTypeOption, resolveTextOption, resolveIndexOption, andScreenshotOption, andTreeOption, andTreeDepthOption };
+        var tapXOption = new Option<double?>("--x") { Description = "Tap at this X inside the element (device-independent units from its left edge); use with --y to tap content drawn on a canvas" };
+        var tapYOption = new Option<double?>("--y") { Description = "Tap at this Y inside the element (device-independent units from its top edge); use with --x" };
+        var mauiTapCmd = new Command("tap", "Tap element, or a point inside it with --x/--y") { tapIdArg, resolveAutoIdOption, resolveTypeOption, resolveTextOption, resolveIndexOption, tapXOption, tapYOption, andScreenshotOption, andTreeOption, andTreeDepthOption };
         mauiTapCmd.SetAction(async (ctx, ct) =>
         {
             var host = ctx.GetValue(agentHostOption)!;
@@ -503,6 +505,14 @@ public class DevFlowCommands
             var hasAndScreenshot = ctx.GetResult(andScreenshotOption) != null;
             var andTree = ctx.GetValue(andTreeOption);
             var andTreeDepth = ctx.GetValue(andTreeDepthOption);
+            var tapX = ctx.GetValue(tapXOption);
+            var tapY = ctx.GetValue(tapYOption);
+            if (tapX.HasValue != tapY.HasValue)
+            {
+                Output.WriteError("--x and --y must be given together", isJson, "InvocationError");
+                _errorOccurred = true;
+                return;
+            }
             var target = await ResolveElementTargetAsync(
                 host,
                 port,
@@ -515,7 +525,10 @@ public class DevFlowCommands
                 ElementActionKind.Tap,
                 preferActionable: ctx.GetResult(resolveIndexOption)?.Tokens.Count == 0);
             if (target == null) return;
-            await MauiTapAsync(host, port, isJson, target);
+            if (tapX is { } x && tapY is { } y)
+                await MauiTapAtAsync(host, port, isJson, target, x, y);
+            else
+                await MauiTapAsync(host, port, isJson, target);
             await HandlePostActionFlags(host, port, isJson, hasAndScreenshot, andScreenshot, andTree, andTreeDepth);
         });
         mauiCommand.Add(mauiTapCmd);
@@ -3447,6 +3460,30 @@ public class DevFlowCommands
             Output.WriteActionResult(success, "Tapped", element.Id, json,
                 success ? $"Tapped: {element.Id}" : $"Failed to tap: {element.Id}");
             if (!success) _errorOccurred = true;
+        }
+        catch (Exception ex) { Output.WriteError(ex.Message, json, suggestions: new[] { "Run 'ui tree' to refresh element IDs" }); _errorOccurred = true; }
+    }
+
+    private static async Task MauiTapAtAsync(string host, int port, bool json, ElementInfo element, double x, double y)
+    {
+        try
+        {
+            using var client = await CreateAgentClientAsync(host, port);
+            var (captureEpoch, registryGeneration) = GetCaptureMetadata(element);
+            var result = await client.TapResultAsync(element.Id, x, y, captureEpoch, registryGeneration);
+            if (result.Success)
+            {
+                Output.WriteActionResult(true, "Tapped", element.Id, json, $"Tapped: {element.Id} at ({x:0.#}, {y:0.#})");
+                return;
+            }
+
+            // The agent's reason is the useful part — outside the bounds, covered, synthetic
+            // touch not enabled — so it goes out as a structured error rather than a bare false.
+            Output.WriteError(
+                $"Failed to tap {element.Id} at ({x:0.#}, {y:0.#}): {result.Error ?? result.Reason ?? "unknown error"}",
+                json,
+                retryable: result.Retryable);
+            _errorOccurred = true;
         }
         catch (Exception ex) { Output.WriteError(ex.Message, json, suggestions: new[] { "Run 'ui tree' to refresh element IDs" }); _errorOccurred = true; }
     }
