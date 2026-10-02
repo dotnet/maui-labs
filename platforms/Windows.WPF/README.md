@@ -170,6 +170,21 @@ See the `samples/` directory for working examples:
 | SwipeView | ✅ | Context menu approximation |
 | RefreshView | ✅ | Progress bar indicator |
 
+CollectionView's native list-item accessible names prefer the template root's
+`SemanticProperties.Description`. Without a description, visible template labels
+and buttons supply the name in visual-tree order; a described subtree replaces
+its children's text. Native container `AutomationProperties.Name` and `LabeledBy`
+remain authoritative. Names are read from the current template, including after
+binding updates and container reuse. Empty templates and unrealized items do not
+expose the data model's `ToString()`; items without a template use their displayed
+fallback text. Group headers follow the same rules as items. Changes to template
+text, semantic descriptions, visibility, or descendants invalidate the native
+automation peers so UIA clients receive name-change notifications.
+Referenced native `LabeledBy` text/content labels are observed as well, including
+changes to their own accessible names and replacement of their content.
+If template creation fails, the existing displayed fallback text remains the
+accessible name; this does not suppress information that is already visible.
+
 ### Pages & Navigation
 
 | Page | Status | Notes |
@@ -315,6 +330,11 @@ dotnet test tests\UITests\UITests.csproj --no-build
 
 ## Testing
 
+The `ci-wpf.yml` compatibility matrix runs `AlertManagerSubscriptionTests` in the
+existing `HandlerTests` project against MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110
+through the shared build workflow's targeted test mode. These are registration
+contract tests, not native dialog interaction tests.
+
 The project includes **213 UI tests** covering all implemented controls, plus a **WinUI comparison framework** that captures side-by-side screenshots of the WPF and WinUI ControlGallery apps for visual parity validation.
 
 ```bash
@@ -333,7 +353,7 @@ Comparison screenshots are saved to `tests/UITests/Comparisons/`.
 - The platform-agnostic `ViewHandler` has no-op `PlatformArrange` and returns `Size.Zero`. `WPFViewHandler` overrides these to bridge MAUI layout to WPF `Measure`/`Arrange`.
 - WPF `System.Windows.Controls` and MAUI `Microsoft.Maui.Controls` share many type names — every handler file uses `using` aliases to disambiguate (e.g., `WButton = System.Windows.Controls.Button`).
 - The `MauiWPFApplication` base class in `App.xaml` bootstraps the MAUI runtime within a WPF `Application`.
-- Dialogs use `DispatchProxy` + reflection to intercept `AlertManager` requests (the API is internal in MAUI). See [dotnet/maui#34104](https://github.com/dotnet/maui/issues/34104).
+- Dialogs use `DispatchProxy` + reflection to intercept `AlertManager` requests (the API is internal in MAUI). Both the nested subscription interface in MAUI 10.0.41–10.0.60 and the top-level interface in 10.0.70+ are supported. An unrecognized contract fails during registration rather than leaving dialog tasks pending. See [dotnet/maui#34104](https://github.com/dotnet/maui/issues/34104).
 
 ## Known Limitations
 
