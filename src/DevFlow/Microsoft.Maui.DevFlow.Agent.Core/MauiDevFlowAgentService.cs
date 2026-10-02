@@ -2438,6 +2438,21 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         foreach (var part in propertyName.Split('.'))
         {
             if (current is null) return null;
+            if (current is IElement mauiElement
+                && part.Equals(nameof(IElement.Handler), StringComparison.OrdinalIgnoreCase))
+            {
+                current = mauiElement.Handler;
+                continue;
+            }
+            if (current is IElementHandler handler
+                && part.Equals(nameof(IElementHandler.PlatformView), StringComparison.OrdinalIgnoreCase))
+            {
+                current = handler.PlatformView;
+                // Native password controls expose sensitive values through getters and formatting.
+                if (current is not null && handler.VirtualView is Entry { IsPassword: true })
+                    return SensitiveValueRedactor.RedactedValue;
+                continue;
+            }
             var property = current.GetType().GetProperty(
                 part,
                 BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
