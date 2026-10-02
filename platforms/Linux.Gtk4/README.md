@@ -80,6 +80,26 @@ content minimums still apply; there is no backend-imposed 800 x 600 minimum.
 Root MAUI layouts reflow using their actual GTK allocation, including space reserved
 by native containers and window chrome.
 
+`Window.Width`/`Height` report the allocated client area (excluding a native titlebar),
+and `Window.SizeChanged` follows actual allocation changes, not just size requests.
+Pages, including `NavigationPage` and `Shell`, report their own native allocation;
+the current content page excludes navigation chrome. Their `SizeChanged` and
+`OnSizeAllocated` callbacks and top-level layout frames can be used for responsive UI.
+Vertical `CollectionView` templates reflow at their allocated row width.
+
+The existing native sizing host covers initial sizing, minimum sizes, nested
+layouts, scrolling, NavigationPage/Shell frames and events, independent windows,
+unchanged allocations, decorated client areas, handler reconnect, and collection
+cards. It runs in the normal GTK CI runtime matrix. To run the same checks on Linux:
+
+```bash
+RUN_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo GTK_A11Y=none \
+  dbus-run-session -- xvfb-run --auto-servernum \
+  dotnet test platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj \
+  --configuration Release --filter FullyQualifiedName~WindowSizingTests \
+  --logger "console;verbosity=detailed"
+```
+
 ### Shell navigation regression checks
 
 Shell section navigation displays the top pushed page and restores the previous

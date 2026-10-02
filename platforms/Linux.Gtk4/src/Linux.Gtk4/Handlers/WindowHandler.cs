@@ -1,4 +1,5 @@
 using System.Reflection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Maui;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Handlers;
@@ -28,6 +29,7 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 
 	private readonly Dictionary<Page, Gtk.Window> _modalDialogs = new();
 	private bool _destroying;
+	private GtkAllocationObserver? _allocationObserver;
 
 	public WindowHandler() : base(Mapper, CommandMapper)
 	{
@@ -43,9 +45,18 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 			?? new Gtk.Window();
 	}
 
+	public override void SetVirtualView(IElement view)
+	{
+		var changed = ((IElementHandler)this).VirtualView != view;
+		base.SetVirtualView(view);
+		if (changed)
+			_allocationObserver?.Invalidate();
+	}
+
 	protected override void ConnectHandler(Gtk.Window platformView)
 	{
 		base.ConnectHandler(platformView);
+		_destroying = false;
 
 		if (platformView.GetChild() == null)
 		{
@@ -54,6 +65,11 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 
 		platformView.OnCloseRequest += OnCloseRequest;
 		platformView.OnNotify += OnWindowNotify;
+		_allocationObserver = new GtkAllocationObserver(platformView.GetChild()!, (width, height) =>
+		{
+			if (!_destroying)
+				VirtualView?.FrameChanged(new Rect(0, 0, width, height));
+		}, MauiContext?.Services.GetService(typeof(ILogger<WindowHandler>)) as ILogger);
 
 		if (VirtualView is Microsoft.Maui.Controls.Window mauiWindow)
 		{
@@ -64,6 +80,8 @@ public class WindowHandler : ElementHandler<IWindow, Gtk.Window>
 
 	protected override void DisconnectHandler(Gtk.Window platformView)
 	{
+		_allocationObserver?.Dispose();
+		_allocationObserver = null;
 		if (VirtualView is Microsoft.Maui.Controls.Window mauiWindow)
 		{
 			mauiWindow.ModalPushed -= OnModalPushed;
