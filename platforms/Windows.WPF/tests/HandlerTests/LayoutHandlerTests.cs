@@ -4,6 +4,7 @@ using Microsoft.Maui.Controls.Hosting.WPF;
 using Microsoft.Maui.Dispatching;
 using Microsoft.Maui.Handlers.WPF;
 using Microsoft.Maui.Hosting;
+using Microsoft.Maui.Layouts;
 using Microsoft.Maui.Platform;
 using Microsoft.Maui.Platforms.Windows.WPF;
 using Microsoft.Maui.WPF;
@@ -40,8 +41,10 @@ public class LayoutHandlerTests(ITestOutputHelper output)
 			WithNativeLayout(root, context, panel =>
 			{
 				Assert.All(flex.Children, child => Assert.Equal(MSize.Zero, child.DesiredSize));
-				MeasureAndArrange(panel, 800);
+				panel.Measure(new WSize(800, double.PositiveInfinity));
+				output.WriteLine($"First measure: flex={((IView)flex).DesiredSize}, stack={panel.DesiredSize}");
 				Assert.True(((IView)flex).DesiredSize.Height > 0, "Flex height must be positive on the first native measure.");
+				panel.Arrange(new WRect(0, 0, 800, panel.DesiredSize.Height));
 				Assert.True(flex.Frame.Height > 0);
 				AssertFlex(flex, 1);
 				Assert.True(flex.Frame.Y >= above.Frame.Bottom - 0.1);
