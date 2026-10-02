@@ -60,26 +60,106 @@ namespace Microsoft.Maui.Platforms.Windows.WPF
 		{
 			if (arguments == null) return;
 
-			if (arguments.Cancel == null)
+			try
 			{
-				System.Windows.MessageBox.Show(
-					arguments.Message ?? string.Empty,
-					arguments.Title ?? string.Empty,
-					System.Windows.MessageBoxButton.OK,
-					System.Windows.MessageBoxImage.Information);
-				arguments.SetResult(true);
+				arguments.SetResult(ShowAlert(sender, arguments));
 			}
-			else
+			catch (Exception exception)
 			{
-				var result = System.Windows.MessageBox.Show(
-					arguments.Message ?? string.Empty,
-					arguments.Title ?? string.Empty,
-					System.Windows.MessageBoxButton.YesNo,
-					System.Windows.MessageBoxImage.Question,
-					System.Windows.MessageBoxResult.No);
+				arguments.Result.TrySetException(exception);
+			}
+		}
 
-				arguments.SetResult(result == System.Windows.MessageBoxResult.Yes);
+		static bool ShowAlert(Page? sender, AlertArguments arguments)
+		{
+			var owner = sender?.Window?.Handler?.PlatformView as System.Windows.Window
+				?? System.Windows.Application.Current?.MainWindow;
+			// A startup alert can precede the owner's native window creation.
+			if (owner != null && (!owner.CheckAccess()
+				|| new System.Windows.Interop.WindowInteropHelper(owner).Handle == IntPtr.Zero))
+				owner = null;
+
+			var dialog = new System.Windows.Window
+			{
+				Title = arguments.Title ?? string.Empty,
+				SizeToContent = System.Windows.SizeToContent.WidthAndHeight,
+				WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner,
+				Owner = owner,
+				ResizeMode = System.Windows.ResizeMode.NoResize,
+				ShowInTaskbar = false,
+				MinWidth = 300,
+				MaxWidth = 500,
+				FlowDirection = arguments.FlowDirection == FlowDirection.RightToLeft
+					? System.Windows.FlowDirection.RightToLeft
+					: System.Windows.FlowDirection.LeftToRight,
+			};
+
+			var panel = new System.Windows.Controls.Grid
+			{
+				Margin = new System.Windows.Thickness(16),
+			};
+			panel.RowDefinitions.Add(new System.Windows.Controls.RowDefinition
+			{
+				Height = System.Windows.GridLength.Auto,
+			});
+			panel.RowDefinitions.Add(new System.Windows.Controls.RowDefinition
+			{
+				Height = System.Windows.GridLength.Auto,
+			});
+			panel.Children.Add(new System.Windows.Controls.ScrollViewer
+			{
+				MaxHeight = System.Windows.SystemParameters.WorkArea.Height / 2,
+				VerticalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto,
+				HorizontalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Disabled,
+				Margin = new System.Windows.Thickness(0, 0, 0, 12),
+				Content = new System.Windows.Controls.TextBlock
+				{
+					Text = arguments.Message ?? string.Empty,
+					TextWrapping = System.Windows.TextWrapping.Wrap,
+					FontSize = 14,
+				},
+			});
+
+			var buttons = new System.Windows.Controls.WrapPanel
+			{
+				HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
+			};
+
+			if (arguments.Accept != null)
+			{
+				var accept = CreateAlertButton(arguments.Accept);
+				accept.IsDefault = arguments.Cancel == null;
+				accept.Click += (_, _) => dialog.DialogResult = true;
+				buttons.Children.Add(accept);
 			}
+
+			// The one-button overload supplies Cancel, not Accept. Keep cancellation
+			// as the default action, including for two-button destructive alerts.
+			if (arguments.Cancel != null)
+			{
+				var cancel = CreateAlertButton(arguments.Cancel);
+				cancel.IsCancel = true;
+				cancel.IsDefault = true;
+				cancel.Click += (_, _) => dialog.DialogResult = false;
+				buttons.Children.Add(cancel);
+			}
+
+			System.Windows.Controls.Grid.SetRow(buttons, 1);
+			panel.Children.Add(buttons);
+			dialog.Content = panel;
+			return dialog.ShowDialog() == true;
+		}
+
+		static System.Windows.Controls.Button CreateAlertButton(string text)
+		{
+			return new System.Windows.Controls.Button
+			{
+				// A TextBlock preserves literal underscores instead of access keys.
+				Content = new System.Windows.Controls.TextBlock { Text = text },
+				Padding = new System.Windows.Thickness(16, 6, 16, 6),
+				Margin = new System.Windows.Thickness(4, 0, 0, 0),
+				MinWidth = 80,
+			};
 		}
 
 		static void OnPromptRequested(Page? sender, PromptArguments? arguments)

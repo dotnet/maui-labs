@@ -53,6 +53,7 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 ### Platform Features
 
 - **Native GTK4 rendering** — Every control maps to a real GTK4 widget, styled via GTK CSS.
+- **UI synchronization context** — Async UI event handlers resume on the GTK main thread after `await` (unless they explicitly opt out with `ConfigureAwait(false)`).
 - **Blazor Hybrid** — Host Blazor components inside a native GTK window via WebKitGTK.
 - **Gestures** — Tap, Pan, Swipe, Pinch, and Pointer gesture recognizers via GTK4 event controllers.
 - **Animations** — `TranslateTo`, `FadeTo`, `ScaleTo`, `RotateTo` via `GtkPlatformTicker` + `Gsk.Transform` at ~60fps.
@@ -362,11 +363,17 @@ and recursive handler disconnection of retired roots and nested template childre
 Cleanup is checked after source replacement, template rebuild, and handler teardown,
 including repeated cleanup without duplicate disconnection. Template changes do not
 require an ItemsSource change.
+The synchronization-context regression starts a real `GtkMauiApplication`,
+invokes an async MAUI button handler from the GTK main loop, and checks thread
+identity, context preservation across repeated awaits, native label updates,
+and restoration of the original context after shutdown.
+
 From the repository root on Linux, use the shared class runner (PowerShell 7,
 `dbus-run-session`, and `xvfb-run` are required):
 
 ```bash
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass CollectionViewHandlerTests
+pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkSynchronizationContextTests
 ```
 
 The runner creates a private DBus session and display, requires nonzero executed

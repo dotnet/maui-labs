@@ -95,11 +95,13 @@ jobs:
     name: Native GTK runtime (${{ matrix.test-class }})
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
         # Each class gets its own process: GTK initialization is thread-affine.
-        test-class: [CollectionViewHandlerTests]
+        test-class: [CollectionViewHandlerTests, GtkSynchronizationContextTests]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v5

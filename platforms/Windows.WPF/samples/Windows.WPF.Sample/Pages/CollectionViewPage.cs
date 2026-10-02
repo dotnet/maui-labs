@@ -32,6 +32,7 @@ public class CollectionViewPage : ContentPage
 			("Multi-Select", BuildMultiSelectList),
 			("CollectionView", BuildCollectionViewDemo),
 			("Grouped", BuildGroupedDemo),
+			("Observable updates", BuildObservableDemo),
 			("10K Virtual", BuildVirtualizedDemo),
 		};
 
@@ -72,6 +73,57 @@ public class CollectionViewPage : ContentPage
 				picker.Row(2),
 				contentArea.Row(3),
 			}
+		};
+	}
+
+	View BuildObservableDemo()
+	{
+		var items = new System.Collections.ObjectModel.ObservableCollection<string>();
+		var group = new System.Collections.ObjectModel.ObservableCollection<string>();
+		var groups = new System.Collections.ObjectModel.ObservableCollection<System.Collections.ObjectModel.ObservableCollection<string>>();
+		var flatList = new CollectionView
+		{
+			AutomationId = "ObservableFlatList",
+			BackgroundColor = Colors.White,
+			ItemsSource = items,
+			EmptyView = "Flat source is empty",
+		};
+		var groupedList = new CollectionView
+		{
+			AutomationId = "ObservableGroupedList",
+			BackgroundColor = Colors.White,
+			IsGrouped = true,
+			ItemsSource = groups,
+			EmptyView = "Grouped source is empty",
+		};
+		var add = new Button { Text = "Add after binding", AutomationId = "ObservableAdd" };
+		add.Clicked += (_, _) =>
+		{
+			items.Add($"Hello {items.Count + 1}");
+			if (groups.Count == 0)
+				groups.Add(group);
+			group.Add($"Grouped hello {group.Count + 1}");
+		};
+		var clear = new Button { Text = "Clear sources", AutomationId = "ObservableClear" };
+		clear.Clicked += (_, _) =>
+		{
+			items.Clear();
+			group.Clear();
+			groups.Clear();
+		};
+		return new Grid
+		{
+			RowDefinitions = new RowDefinitionCollection(
+				new RowDefinition(GridLength.Auto),
+				new RowDefinition(GridLength.Star),
+				new RowDefinition(GridLength.Star)),
+			RowSpacing = 8,
+			Children =
+			{
+				new HorizontalStackLayout { Spacing = 8, Children = { add, clear } },
+				flatList.Row(1),
+				groupedList.Row(2),
+			},
 		};
 	}
 

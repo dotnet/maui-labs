@@ -6,23 +6,16 @@ using Microsoft.Maui.Controls;
 using Microsoft.Maui.Hosting;
 using Microsoft.Maui.Platforms.MacOS.Hosting;
 using Microsoft.Maui.Platforms.MacOS.Platform;
+using System.Runtime.CompilerServices;
 
-namespace MacOS.LayoutRegressionTests;
+namespace MacOS.RuntimeTests.Scenarios.Layout;
 
-static class Program
+static class Registration
 {
-    static void Main(string[] args)
-    {
-        using var timeout = new System.Threading.Timer(_ =>
-        {
-            Console.Error.WriteLine("FAIL AppKit dynamic layout regression timed out after 30 seconds");
-            Environment.Exit(1);
-        }, null, TimeSpan.FromSeconds(30), Timeout.InfiniteTimeSpan);
-        NSApplication.Init();
-        using var appDelegate = new RegressionDelegate();
-        NSApplication.SharedApplication.Delegate = appDelegate;
-        NSApplication.Main(args);
-    }
+    [ModuleInitializer]
+    public static void Register() =>
+        ScenarioRegistry.Register(new("layout", 6, context => new RegressionDelegate(context),
+            ExpectedAssertions: 28));
 }
 
 public sealed class TestApplication : Application
@@ -30,7 +23,7 @@ public sealed class TestApplication : Application
 }
 
 [Register("LayoutRegressionDelegate")]
-public sealed class RegressionDelegate : NSApplicationDelegate
+public sealed class RegressionDelegate(RuntimeTestContext context) : NSApplicationDelegate
 {
     MauiApp? _app;
     NSWindow? _window;
@@ -59,7 +52,7 @@ public sealed class RegressionDelegate : NSApplicationDelegate
         }
         catch (Exception ex)
         {
-            Fail(ex);
+            context.Fail(ex);
         }
     }
 
@@ -85,25 +78,25 @@ public sealed class RegressionDelegate : NSApplicationDelegate
             AssertMeasured(row);
             foreach (var child in row.Children)
                 AssertMeasured(child);
-            Console.WriteLine("PASS Add after connection creates and lays out nested children");
+            context.Pass("Add after connection creates and lays out nested children");
 
             var inserted = new Label { Text = "Inserted first" };
             _stack.Children.Insert(0, inserted);
             AssertChildren(inserted, existing, row);
-            Console.WriteLine("PASS Insert preserves native child order");
+            context.Pass("Insert preserves native child order");
 
             var oldNative = Native(existing);
             var replacement = new Label { Text = "Replacement" };
             _stack.Children[1] = replacement;
             AssertChildren(inserted, replacement, row);
             Assert(oldNative.Superview == null, "Update left the replaced child attached");
-            Console.WriteLine("PASS Update replaces and detaches the old child");
+            context.Pass("Update replaces and detaches the old child");
 
             var insertedNative = Native(inserted);
             _stack.Children.Remove(inserted);
             AssertChildren(replacement, row);
             Assert(insertedNative.Superview == null, "Remove left the child attached");
-            Console.WriteLine("PASS Remove detaches the requested child");
+            context.Pass("Remove detaches the requested child");
 
             var replacementNative = Native(replacement);
             var rowNative = Native(row);
@@ -111,7 +104,7 @@ public sealed class RegressionDelegate : NSApplicationDelegate
             AssertChildren();
             Assert(replacementNative.Superview == null && rowNative.Superview == null,
                 "Clear left children attached");
-            Console.WriteLine("PASS Clear detaches all children");
+            context.Pass("Clear detaches all children");
 
             _stack.Children.Add(row);
             AssertChildren(row);
@@ -119,23 +112,23 @@ public sealed class RegressionDelegate : NSApplicationDelegate
             AssertMeasured(row);
             foreach (var child in row.Children)
                 AssertMeasured(child);
-            Console.WriteLine("PASS Re-add after Clear attaches once and lays out");
+            context.Pass("Re-add after Clear attaches once and lays out");
 
             _window!.Close();
             _app!.Dispose();
-            Environment.Exit(0);
+            context.Complete();
         }
         catch (Exception ex)
         {
-            Fail(ex);
+            context.Fail(ex);
         }
     }
 
     void AssertChildren(params IView[] expected)
     {
         var actual = _nativeStack.Subviews;
-        Assert(actual.Length == expected.Length,
-            $"Expected {expected.Length} native children, got {actual.Length}");
+        context.Assert(actual.Length == expected.Length,
+            $"Expected {expected.Length} native children, got {actual.Length}", "layout.native-child-count");
         for (var i = 0; i < expected.Length; i++)
             Assert(actual[i].Handle == Native(expected[i]).Handle,
                 $"Wrong native child at index {i}");
@@ -143,41 +136,8 @@ public sealed class RegressionDelegate : NSApplicationDelegate
 
     void CaptureEvidence()
     {
-        var directory = Environment.GetEnvironmentVariable("APPKIT_LAYOUT_ARTIFACTS");
-        if (string.IsNullOrEmpty(directory))
-            return;
-
-        Directory.CreateDirectory(directory);
-        File.WriteAllText(Path.Combine(directory, "after-add.json"),
-            System.Text.Json.JsonSerializer.Serialize(Inspect(_stack),
-                new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
-
-        var bounds = _nativeStack.Bounds;
-        var scale = _window!.BackingScaleFactor;
-        using var bitmap = new NSBitmapImageRep(IntPtr.Zero,
-            (nint)(bounds.Width * scale), (nint)(bounds.Height * scale),
-            8, 4, true, false, NSColorSpace.DeviceRGB, 0, 0);
-        bitmap.Size = bounds.Size;
-        NSGraphicsContext.GlobalSaveGraphicsState();
-        try
-        {
-            using var context = NSGraphicsContext.FromBitmap(bitmap)
-                ?? throw new InvalidOperationException("Could not create screenshot context");
-            NSGraphicsContext.CurrentContext = context;
-            _nativeStack.CacheDisplay(bounds, bitmap);
-            // CacheDisplay leaves the window backdrop transparent; fill behind the captured pixels.
-            context.CGContext.SetBlendMode(CGBlendMode.DestinationOver);
-            context.CGContext.SetFillColor(1, 1, 1, 1);
-            context.CGContext.FillRect(new CGRect(0, 0, bitmap.PixelsWide, bitmap.PixelsHigh));
-        }
-        finally
-        {
-            NSGraphicsContext.GlobalRestoreGraphicsState();
-        }
-
-        using var png = bitmap.RepresentationUsingTypeProperties(NSBitmapImageFileType.Png)
-            ?? throw new InvalidOperationException("Could not encode screenshot");
-        File.WriteAllBytes(Path.Combine(directory, "after-add.png"), png.ToArray());
+        context.WriteJson("after-add.json", Inspect(_stack));
+        context.Capture(_nativeStack, "after-add.png");
     }
 
     static object Inspect(IView view) => new
@@ -188,7 +148,7 @@ public sealed class RegressionDelegate : NSApplicationDelegate
         Children = (view as Microsoft.Maui.ILayout)?.Select(Inspect).ToArray(),
     };
 
-    static void AssertMeasured(IView view)
+    void AssertMeasured(IView view)
     {
         var frame = Native(view).Frame;
         Assert(double.IsFinite(view.Frame.Width) && view.Frame.Width > 0 &&
@@ -201,15 +161,5 @@ public sealed class RegressionDelegate : NSApplicationDelegate
         => view.Handler?.PlatformView as NSView
             ?? throw new InvalidOperationException($"{view.GetType().Name} has no AppKit view");
 
-    static void Assert(bool condition, string message)
-    {
-        if (!condition)
-            throw new InvalidOperationException(message);
-    }
-
-    static void Fail(Exception ex)
-    {
-        Console.Error.WriteLine($"FAIL AppKit dynamic layout regression: {ex}");
-        Environment.Exit(1);
-    }
+    void Assert(bool condition, string message) => context.Assert(condition, message);
 }
