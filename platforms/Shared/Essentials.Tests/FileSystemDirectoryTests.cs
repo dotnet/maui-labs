@@ -74,6 +74,43 @@ public class FileSystemDirectoryTests(Xunit.Abstractions.ITestOutputHelper outpu
         });
     }
 
+#if !WPF
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Directory_XdgChanges_ResolvesCurrentPathOnSameInstance(bool cache)
+    {
+        WithIsolatedApplication(cache, useXdg: true, (fileSystem, expected) =>
+        {
+            Assert.Equal(expected, GetDirectory(fileSystem, cache));
+            var originalFile = Path.Combine(expected, "original.txt");
+            File.WriteAllText(originalFile, "keep this content");
+
+            var variable = cache ? "XDG_CACHE_HOME" : "XDG_DATA_HOME";
+            var changedRoot = Path.Combine(Path.GetDirectoryName(expected)!, "changed");
+            Environment.SetEnvironmentVariable(variable, changedRoot);
+            var changedPath = Path.Combine(changedRoot, AppDomain.CurrentDomain.FriendlyName);
+            Assert.Equal(changedPath, GetDirectory(fileSystem, cache));
+            var changedFile = Path.Combine(changedPath, "changed.txt");
+            File.WriteAllText(changedFile, "new location");
+            Assert.Equal("new location", File.ReadAllText(changedFile));
+
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var fallbackRoot = cache ? Path.Combine(home, ".cache") : Path.Combine(home, ".local", "share");
+            var fallbackPath = Path.Combine(fallbackRoot, AppDomain.CurrentDomain.FriendlyName);
+            foreach (var emptyValue in new string?[] { null, "" })
+            {
+                Environment.SetEnvironmentVariable(variable, emptyValue);
+                Assert.Equal(fallbackPath, GetDirectory(fileSystem, cache));
+                var fallbackFile = Path.Combine(fallbackPath, "fallback.txt");
+                File.WriteAllText(fallbackFile, "fallback location");
+                Assert.Equal("fallback location", File.ReadAllText(fallbackFile));
+            }
+            Assert.Equal("keep this content", File.ReadAllText(originalFile));
+        });
+    }
+#endif
+
     static string GetDirectory(IFileSystem fileSystem, bool cache)
         => cache ? fileSystem.CacheDirectory : fileSystem.AppDataDirectory;
 
@@ -109,6 +146,12 @@ public class FileSystemDirectoryTests(Xunit.Abstractions.ITestOutputHelper outpu
             {
                 Assert.False(Path.Exists(xdgRoot));
                 ownedPaths.Add(xdgRoot);
+                foreach (var root in new[] { Path.Combine(home, ".local", "share"), Path.Combine(home, ".cache") })
+                {
+                    var fallbackPath = Path.Combine(root, name);
+                    Assert.False(Path.Exists(fallbackPath));
+                    ownedPaths.Add(fallbackPath);
+                }
             }
 #endif
             var dataPath = Path.Combine(dataRoot, name);
