@@ -138,8 +138,7 @@ namespace Microsoft.Maui.Handlers.WPF
 					? System.Windows.FontStyles.Italic
 					: System.Windows.FontStyles.Normal;
 
-			if (!string.IsNullOrEmpty(font.Family))
-				handler._textBox.FontFamily = new System.Windows.Media.FontFamily(font.Family);
+			Microsoft.Maui.Platforms.Windows.WPF.WPFFontManager.ApplyFontFamily(handler._textBox, font, handler.MauiContext);
 		}
 
 		public static void MapCancelButtonColor(SearchBarHandler handler, ISearchBar searchBar)
