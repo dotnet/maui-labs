@@ -60,6 +60,8 @@ jobs:
             maui-version: '10.0.110'
           - scenario: dialogs
             maui-version: '10.0.70'
+          - scenario: picker
+            maui-version: ''
           - scenario: bundle-resources
             maui-version: ''
             workloads: 'macos maui maui-tizen'

@@ -9,6 +9,13 @@ This backend uses the platform-agnostic MAUI NuGet packages (`net10.0` fallback 
 
 > **Inspiration:** This project follows the patterns established by [mauiplatforms](https://github.com/Redth/mauiplatforms) (macOS/tvOS backends) and [Maui.Gtk](https://github.com/AathifMahir/Maui.Gtk).
 
+## Window and page titles
+
+The native title bar belongs to `Window.Title`. Page titles are used by navigation
+and Shell headers; creating, renaming, or returning to a page does not change any
+window's title bar. Set or bind `Window.Title` explicitly to change it. An empty
+window title stays empty rather than falling back to a page title.
+
 ## Shell inspection with DevFlow
 
 Shell creates only the selected page through its content controller. Template pages
@@ -206,7 +213,7 @@ All MAUI shapes render via WPF `System.Windows.Shapes`:
 | Application | ✅ | MauiWPFApplication base class |
 | Window | ✅ | Title, Size, Position, Min/Max, MenuBar, Multi-window |
 | Dispatcher | ✅ | WPF Dispatcher + DispatcherProvider |
-| Dialogs | ✅ | DisplayAlert (MessageBox), DisplayActionSheet, DisplayPromptAsync (custom windows) |
+| Dialogs | ✅ | DisplayAlert, DisplayActionSheet, DisplayPromptAsync (native WPF windows with app-provided button labels) |
 | Font Management | ✅ | IFontManager, IFontRegistrar, embedded font loading, FontImageSource glyph rendering |
 | Dark/Light Mode | ✅ | ThemeManager detects via registry + SystemEvents, fires ThemeChanged |
 | Animations | ✅ | WPFTicker at ~60fps, TranslateTo/FadeTo/ScaleTo/RotateTo all work |
