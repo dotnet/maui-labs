@@ -55,7 +55,8 @@ test('native grading cannot pass when its copied instrument is changed to return
   writeFileSync(join(root, '_acceptance', 'audit-lifecycle.mjs'), 'process.exit(0);');
   const result = run(root);
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /Acceptance instrument changed/);
+  assert.match(result.stderr, /(?:^|\r?\n)Error: Acceptance instrument changed/);
+  assert.doesNotMatch(result.stderr, /(?:^|\r?\n)Error: Acceptance instrument did not produce/);
 });
 
 test('native grading fails when the instrument is missing', t => {
@@ -97,6 +98,6 @@ for (const [name, stdout] of [
     const prelude = `require('node:child_process').spawnSync=()=>(${JSON.stringify({ status: 0, stdout, stderr: '' })});`;
     const result = run(root, prelude);
     assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /Acceptance instrument did not produce/);
+    assert.match(result.stderr, /(?:^|\r?\n)Error: Acceptance instrument did not produce/);
   });
 }
