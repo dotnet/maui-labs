@@ -32,12 +32,12 @@ public class SensorManager : IDisposable
     {
         lock (_gate)
         {
-            return AllSensorNames.Select(name => new
+            return AllSensorNames.Select(name => new Dictionary<string, object?>
             {
-                sensor = name,
-                active = _activeSensors.Contains(name),
-                supported = IsSensorSupported(name),
-                subscribers = _subscribers.TryGetValue(name, out var subs) ? subs.Count : 0
+                ["sensor"] = name,
+                ["active"] = _activeSensors.Contains(name),
+                ["supported"] = IsSensorSupported(name),
+                ["subscribers"] = _subscribers.TryGetValue(name, out var subs) ? subs.Count : 0
             }).ToList();
         }
     }

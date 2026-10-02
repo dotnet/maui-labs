@@ -6,6 +6,7 @@ on:
     paths:
       - 'platforms/MacOS/**'
       - '.github/workflows/ci-macos-appkit.yml'
+      - '.github/workflows/_build.yml'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -18,6 +19,7 @@ on:
     paths:
       - 'platforms/MacOS/**'
       - '.github/workflows/ci-macos-appkit.yml'
+      - '.github/workflows/_build.yml'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -47,6 +49,18 @@ jobs:
       matrix:
         include:
           - scenario: layout
+            maui-version: ''
+          - scenario: dialog-registration
+            maui-version: '10.0.41'
+          - scenario: dialog-registration
+            maui-version: '10.0.60'
+          - scenario: dialog-registration
+            maui-version: '10.0.70'
+          - scenario: dialog-registration
+            maui-version: '10.0.110'
+          - scenario: dialogs
+            maui-version: '10.0.70'
+          - scenario: picker
             maui-version: ''
           - scenario: bundle-resources
             maui-version: ''

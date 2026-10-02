@@ -6,6 +6,10 @@ This backend lets MAUI applications run as true native macOS apps that use AppKi
 (`NSWindow`, `NSButton`, `NSScrollView`, etc.) and follow standard macOS UI conventions
 (menu bar, toolbar, sidebar flyout, native dialogs, etc.).
 
+Dialog registration supports both the nested MAUI 10.0.41-10.0.60 subscription
+interface and the top-level interface in 10.0.70+. An unrecognized contract fails
+during registration instead of leaving alert, prompt, or action-sheet tasks pending.
+
 > **Inspiration:** Originally based on the
 > [shinyorg/mauiplatforms](https://github.com/shinyorg/mauiplatforms) project. The Xamarin.Forms
 > [`Xamarin.Forms.Platform.MacOS`](https://github.com/xamarin/Xamarin.Forms/tree/5.0.0/Xamarin.Forms.ControlGallery.MacOS)
@@ -173,6 +177,12 @@ results and assertion counts. Hosted execution is distinct from a local desktop 
 See [the shared host contract](tests/MacOS.RuntimeTests/README.md) to add a scenario,
 version matrix entry or scoped fixture assets without another application/project.
 Portable `MacOS.Tests` remains independent of native AppKit execution.
+
+The same host also registers `dialog-registration` (consumed MAUI interface,
+AppKit proxy and singleton contract) and `dialogs` (real Page action sheet, prompt
+and alert completion with native-sheet screenshots). The existing AppKit workflow
+tests registration on MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110; native dialogs
+run at 10.0.70 with an exact missing-subscription baseline and bounded fixed run.
 
 ## Unit tests
 
