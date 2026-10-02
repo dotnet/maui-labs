@@ -392,6 +392,7 @@ scenarios:
       - "Processes both cold connection-option collections with typed elements and defers window work per scene instead of using AppDelegate.Window; every cold user activity reaches the original ActivityType observer and every cold URL reaches the original title assignment, not an empty loop, TODO, undefined helper, or mapping-table-only claim"
       - "Retains base scene forwarding and does not assume SceneContinueUserActivity automatically receives cold activities"
       - "Produces compilable MAUI 10.0.110 C#: uses the actual bool OpenUrl/ContinueUserActivity overrides or valid Scene* registrations, not native UIKit-style void overrides; obtains typed cold collection elements and does not discard all but one cold URL before deferred execution"
+      - "Distinguishes checks actually executed from unavailable validation; does not claim a clean automated audit when execution was denied, or treat a textual scan or successful compile as proof of callback behavior"
     timeout: 300
 
   - name: "Preserve central package ownership and higher deployment targets"

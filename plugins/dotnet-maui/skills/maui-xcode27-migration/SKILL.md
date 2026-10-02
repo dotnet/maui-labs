@@ -104,6 +104,8 @@ disable Apple SDK/Xcode version checks as part of this inventory.
 If there are no MAUI iOS/Catalyst targets, stop with "not applicable"; add no
 Apple files. For custom scenes, multiwindow support, or lifecycle overrides,
 record existing behavior and the required reconciliation before editing.
+Use the read-only helper in step 5 to record existing warning patterns before
+editing, then repeat it on the proposed result.
 
 ### 2. Establish a supported version and OS policy
 
@@ -331,6 +333,36 @@ patch complete. Preserving a pre-existing missing shortcut acknowledgement
 "unchanged" is not safe: the scene dispatch now depends on that acknowledgement.
 
 ### 5. Run a read-only completion audit
+
+For custom lifecycle changes, run the bundled
+[audit helper](scripts/audit-lifecycle.mjs) using an already available Node.js
+22+ runtime. Resolve the script from this installed skill, not from an assumed
+file in the app repository:
+
+```sh
+node "<installed-skill-directory>/scripts/audit-lifecycle.mjs" "<app-source-directory>" --json
+```
+
+It only reads source and prints findings with file/line locations. It does not
+build, install dependencies, evaluate MSBuild, follow discovered symbolic links,
+or modify the app. Exit **1** means warnings requiring review, not a failed
+execution; **2** means the scan was incomplete or its input was invalid.
+Exit **0** means only that these patterns were not found, **not** that the
+migration is correct. Generated/cache directories are excluded and reported.
+
+`X27_APP_WINDOW` flags possible app-delegate window access;
+`X27_SINGLE_URL` flags direct single-item selection from `UrlContexts`.
+For each warning, either repair the lost behavior or document a code-backed
+justification, such as selecting a preview while a separate loop processes
+every URL. Do not rewrite legitimate code merely to silence a warning.
+This is a textual check: aliases, helper indirection, inheritance through custom
+base types, preprocessor configuration and linked/generated sources still need
+manual inspection. Audit linked source directories separately.
+
+If Node or shell access is unavailable, do not install tools or bypass a
+permission denial. Perform the searches below and explicitly report that the
+helper was **not run** and custom-migration verification remains blocked.
+Never invent a clean helper result or report the custom migration fully verified.
 
 Use the workspace's file-search tool on the edited source, even when shell or
 build commands are unavailable. These searches are conservative warning

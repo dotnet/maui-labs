@@ -30,6 +30,7 @@ public sealed class XcodeMigrationDistributionTests
 			.Where(file => file.Key.StartsWith(SkillSource + "/", StringComparison.Ordinal))
 			.ToDictionary(file => file.Key[(SkillSource.Length + 1)..], file => file.Value, StringComparer.Ordinal);
 		Assert.Contains("SKILL.md", expected.Keys);
+		Assert.Contains("scripts/audit-lifecycle.mjs", expected.Keys);
 		Assert.Contains(expected.Keys, path => path.StartsWith("references/", StringComparison.Ordinal));
 
 		var before = test.Snapshot();

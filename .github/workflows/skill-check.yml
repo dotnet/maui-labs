@@ -63,3 +63,23 @@ jobs:
             -- check \
             "${plugin_args[@]}" \
             --allowed-external-deps ../eng/allowed-external-deps.txt
+
+  migration-audit-tests:
+    name: Migration audit helper (${{ matrix.os }})
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Test read-only migration audit
+        run: node --test tests/dotnet-maui/maui-xcode27-migration/audit-lifecycle.test.mjs
