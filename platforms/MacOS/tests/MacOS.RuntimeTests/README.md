@@ -9,7 +9,7 @@ Every launch selects exactly one registered scenario in a fresh process.
 |---|---|---|
 | `layout` | 6 | Exact missing native child failure / add, insert, replace, remove, clear, re-add |
 | `picker` | 19 | Unselected null-title Picker displays January / selection, title, items and native activation transitions |
-
+| `bundle-resources` | 4 | Linked image missing / assets included and loaded from the built app bundle |
 ## Run on macOS
 
 Use the repository SDK, macOS workload 10.0.203 and Xcode 26.3:
@@ -78,6 +78,8 @@ creates the same real window, rather than simulating a handler in isolation.
 The Picker contract requires all 31 assertions. Its exit-42 baseline is deliberately
 exact: the pinned handler displays January while the managed picker is unselected.
 A different mismatch fails normally, not as a successful reproduction of #563.
+The bundle-resources scenario verifies package-provided assets in the published
+application bundle and requires all 26 assertions.
 
 Exceptions go to `context.Fail` (exit 1). A deliberately observed regression can
 call `BaselineFailure(id, message)` (exit 42), after recording its concrete
