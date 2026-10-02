@@ -14,6 +14,16 @@ on:
         required: false
         type: boolean
         default: true
+      test-only:
+        required: false
+        type: boolean
+        default: false
+        description: 'Explicitly replace the Arcade build with targeted dotnet test. Requires run-tests: true and pack: false (pack enables signing/publishing).'
+      test-arguments-json:
+        required: false
+        type: string
+        default: '[]'
+        description: 'JSON string array of dotnet test arguments (version properties/filter), only valid with test-only: true. Arguments are not evaluated by a shell.'
       pack:
         required: false
         type: boolean
@@ -71,6 +81,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Validate explicit test-only mode
+        if: (inputs.test-only && (!inputs.run-tests || inputs.pack)) || (!inputs.test-only && inputs.test-arguments-json != '[]')
+        shell: pwsh
+        run: throw 'Test arguments require test-only=true; test-only requires run-tests=true and pack=false (no signing or publishing).'
+
       - name: Download pre-build artifact
         if: inputs.pre-build-artifact != ''
         uses: actions/download-artifact@v8
@@ -116,7 +131,7 @@ jobs:
       # app heads). Expanded here so those flags can follow the `pack` input. For pack: true
       # callers this is the exact command cibuild runs.
       - name: Build, Test and Pack (Windows)
-        if: matrix.os == 'windows-latest'
+        if: matrix.os == 'windows-latest' && !inputs.test-only
         run: >
           eng\common\build.cmd
           -restore -build -test -ci
@@ -128,7 +143,7 @@ jobs:
         shell: cmd
 
       - name: Build and Test (macOS)
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && !inputs.test-only
         run: >
           ./eng/common/build.sh
           --restore --build --test --ci
@@ -139,7 +154,7 @@ jobs:
           /p:VersionSuffix=$CI_PACKAGE_VERSION_SUFFIX
 
       - name: Build and Test (Linux)
-        if: startsWith(matrix.os, 'ubuntu')
+        if: startsWith(matrix.os, 'ubuntu') && !inputs.test-only
         run: >
           ./eng/common/build.sh
           --restore --build --test --ci
@@ -149,8 +164,48 @@ jobs:
           --projects $(pwd)/${{ inputs.project-path }}
           /p:VersionSuffix=$CI_PACKAGE_VERSION_SUFFIX
 
+      - name: Run targeted platform tests
+        if: inputs.test-only
+        shell: pwsh
+        env:
+          TEST_PROJECT: ${{ inputs.project-path }}
+          TEST_ARGUMENTS_JSON: ${{ inputs.test-arguments-json }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $additional = ConvertFrom-Json -InputObject $env:TEST_ARGUMENTS_JSON -NoEnumerate
+          if ($additional -isnot [array] -or @($additional | Where-Object { $_ -isnot [string] }).Count -ne 0) {
+            throw 'test-arguments-json must be an array of strings.'
+          }
+          $resultsDirectory = Join-Path 'artifacts/TestResults' "targeted-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          if (Test-Path -LiteralPath $resultsDirectory) { throw 'Refusing stale targeted test results.' }
+          $testArguments = @(
+            'test', $env:TEST_PROJECT, '--configuration', 'Release', '-m:1', '-nr:false',
+            "-p:VersionSuffix=$env:CI_PACKAGE_VERSION_SUFFIX",
+            '--logger', 'trx;LogFilePrefix=results',
+            '--results-directory', $resultsDirectory
+          ) + $additional
+          & dotnet @testArguments
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify targeted tests executed
+        if: inputs.test-only
+        shell: pwsh
+        run: |
+          $resultsDirectory = Join-Path 'artifacts/TestResults' "targeted-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          $results = @(Get-ChildItem -LiteralPath $resultsDirectory -Filter *.trx)
+          if ($results.Count -eq 0) { throw 'Targeted test mode produced no TRX results.' }
+          foreach ($result in $results) {
+            [xml]$document = Get-Content -LiteralPath $result.FullName -Raw
+            $counts = $document.TestRun.ResultSummary.Counters
+            if ([int]$counts.total -le 0 -or [int]$counts.executed -ne [int]$counts.total -or
+                [int]$counts.passed -ne [int]$counts.total -or [int]$counts.failed -ne 0 -or
+                [int]$counts.notExecuted -ne 0) {
+              throw "Targeted tests must all execute and pass without skips: $($result.Name)"
+            }
+          }
+
       - name: NativeAOT publish smoke test (macOS)
-        if: matrix.os == 'macos-latest' && inputs.project-name == 'cli'
+        if: matrix.os == 'macos-latest' && inputs.project-name == 'cli' && !inputs.test-only
         shell: bash
         run: |
           set -euo pipefail
@@ -204,11 +259,19 @@ jobs:
           rm -f "$commands_json" "$agents_json"
 
       - name: Upload test results
-        if: inputs.run-tests && always()
+        if: inputs.run-tests && !inputs.test-only && always()
         uses: actions/upload-artifact@v7
         with:
           name: test-results-${{ inputs.project-name }}-${{ matrix.os }}
           path: artifacts/TestResults/**/*.xml
+
+      - name: Upload targeted test results
+        if: inputs.test-only && always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-${{ inputs.project-name }}-${{ matrix.os }}
+          path: artifacts/TestResults/targeted-${{ github.run_id }}-${{ github.run_attempt }}/**/*.trx
+          if-no-files-found: error
 
       - name: Validate packages
         if: inputs.pack
