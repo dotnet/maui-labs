@@ -17,7 +17,6 @@ on:
       - 'NuGet.config'
   pull_request:
     types: [opened, synchronize, reopened, edited]
-    branches: [main]
     paths:
       - '.github/workflows/ci-wpf.yml'
       - '.github/workflows/_build.yml'
@@ -32,15 +31,72 @@ on:
       - 'NuGet.config'
 
 jobs:
-  compatibility:
-    name: WPF registration - MAUI ${{ matrix.maui }}
+  shell-section-regression:
+    runs-on: windows-latest
+    timeout-minutes: 20
     permissions:
       contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: fixed
+      - uses: actions/checkout@v6
+        with:
+          ref: 23ea45e98b84bfbf9dd00f4859fd4cf30d44120d
+          path: baseline
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: fixed/global.json
+      - name: Verify native WPF section navigation before and after
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $relative = 'platforms\Windows.WPF\tests\HandlerTests'
+          Copy-Item "fixed\$relative\ShellSectionSwitchingTests.cs" "baseline\$relative"
+          foreach ($variant in @('baseline', 'fixed')) {
+            Push-Location $variant
+            try {
+              $env:SHELL_SECTION_RESULTS = Join-Path $env:GITHUB_WORKSPACE "section-runtime-evidence\$variant"
+              New-Item -ItemType Directory -Force $env:SHELL_SECTION_RESULTS | Out-Null
+              $filter = 'FullyQualifiedName~ShellSectionSwitchingTests'
+              if ($variant -eq 'baseline') {
+                $filter = 'FullyQualifiedName~SwitchSection_ShowsLazyPageAndCompletesNavigation|FullyQualifiedName~SwitchContentWithinSection_ShowsLazyPage'
+              }
+              dotnet test "$relative\HandlerTests.csproj" -c Release -p:UseMaui=false -m:1 -nr:false --filter $filter --logger 'trx;LogFileName=sections.trx' --results-directory $env:SHELL_SECTION_RESULTS *> "$env:SHELL_SECTION_RESULTS\process.log"
+              $exitCode = $LASTEXITCODE
+              if (!(Test-Path "$env:SHELL_SECTION_RESULTS\sections.trx")) { throw "$variant produced no test results" }
+              [xml]$results = Get-Content "$env:SHELL_SECTION_RESULTS\sections.trx"
+              $counters = $results.TestRun.ResultSummary.Counters
+              if ($variant -eq 'baseline') {
+                $failures = @($results.TestRun.Results.UnitTestResult | Where-Object outcome -eq 'Failed')
+                if ($exitCode -ne 1 -or $counters.failed -ne 3 -or $counters.total -ne 3 -or
+                    @($failures | Where-Object { $_.Output.ErrorInfo.Message -notmatch 'Assert\.(Equal|Same)\(\) Failure' }).Count -ne 0) {
+                  Get-Content "$env:SHELL_SECTION_RESULTS\process.log"
+                  throw 'Baseline did not reproduce all three lazy section/content selection failures'
+                }
+              } elseif ($exitCode -ne 0 -or $counters.failed -ne 0 -or $counters.executed -lt 7) {
+                Get-Content "$env:SHELL_SECTION_RESULTS\process.log"
+                throw 'Fixed WPF section regression failed'
+              }
+            } finally { Pop-Location }
+          }
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: shell-section-wpf-runtime
+          path: section-runtime-evidence
+          if-no-files-found: error
+
+  compatibility:
+    name: WPF registration - MAUI ${{ matrix.maui }}
     strategy:
       fail-fast: false
       matrix:
         maui: ['10.0.41', '10.0.60', '10.0.70', '10.0.110']
     uses: ./.github/workflows/_build.yml
+    permissions:
+      contents: read
     with:
       project-path: platforms/Windows.WPF/tests/HandlerTests/HandlerTests.csproj
       project-name: wpf-registration-${{ matrix.maui }}

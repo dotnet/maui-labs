@@ -32,19 +32,17 @@ public class AlertManagerTests
 		var handler = typeof(WPFAlertManagerSubscription).GetMethod(
 			"OnAlertRequested", BindingFlags.Static | BindingFlags.NonPublic)!;
 		Exception? requestFailure = null;
-		var thread = new Thread(() =>
+		var request = Task.Run(() =>
 		{
 			try
 			{
-				handler.Invoke(null, new object?[] { null, arguments });
+				WpfApplicationHost.Run(_ => handler.Invoke(null, new object?[] { null, arguments }));
 			}
 			catch (Exception ex)
 			{
 				requestFailure = ex;
 			}
-		}) { IsBackground = true };
-		thread.SetApartmentState(ApartmentState.STA);
-		thread.Start();
+		});
 
 		var condition = new AndCondition(
 			new PropertyCondition(AutomationElement.ProcessIdProperty, Environment.ProcessId),
@@ -53,7 +51,7 @@ public class AlertManagerTests
 		try
 		{
 			var timeout = Stopwatch.StartNew();
-			while (dialog == null && thread.IsAlive && timeout.Elapsed < TimeSpan.FromSeconds(30))
+			while (dialog == null && !request.IsCompleted && timeout.Elapsed < TimeSpan.FromSeconds(30))
 			{
 				dialog = AutomationElement.RootElement.FindFirst(TreeScope.Children, condition);
 				if (dialog == null)
@@ -83,26 +81,26 @@ public class AlertManagerTests
 				((InvokePattern)buttons.Single(b => b.Current.Name == clickedButton)
 					.GetCurrentPattern(InvokePattern.Pattern)).Invoke();
 
-			Assert.True(thread.Join(TimeSpan.FromSeconds(10)), "Alert handler did not return.");
+			await request.WaitAsync(TimeSpan.FromSeconds(10));
 			Assert.Null(requestFailure);
 			Assert.True(arguments.Result.Task.IsCompletedSuccessfully);
 			Assert.Equal(expectedResult, await arguments.Result.Task);
 		}
 		finally
 		{
-			if (thread.IsAlive)
+			dialog = AutomationElement.RootElement.FindFirst(TreeScope.Children, condition);
+			if (dialog != null)
 			{
-				dialog ??= AutomationElement.RootElement.FindFirst(TreeScope.Children, condition);
 				// Also dismiss the old Yes/No MessageBox when a regression assertion
 				// fails; it disables the title-bar close button.
-				var buttons = dialog == null ? [] : GetDialogButtons(dialog);
+				var buttons = GetDialogButtons(dialog);
 				var button = buttons.FirstOrDefault(b => b.Current.Name == cancel)
 					?? buttons.FirstOrDefault(b => b.Current.AutomationId == "7")
 					?? buttons.FirstOrDefault();
 				if (button != null)
 					((InvokePattern)button.GetCurrentPattern(InvokePattern.Pattern)).Invoke();
 			}
-			Assert.True(thread.Join(TimeSpan.FromSeconds(10)), "Alert test left a dialog open.");
+			await request.WaitAsync(TimeSpan.FromSeconds(10));
 		}
 	}
 
