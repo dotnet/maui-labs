@@ -14,6 +14,58 @@ namespace Microsoft.Maui.DevFlow.Tests;
 public class SetPropertyBindableTests
 {
     [Fact]
+    public async Task GetPropertyAsync_AutomationIdWithSpace_ResolvesBindingContext()
+    {
+        var label = new Label
+        {
+            AutomationId = "Alice Johnson",
+            BindingContext = new Person { Name = "Alice Johnson" }
+        };
+        using var harness = await SetPropertyTestHarness.CreateAsync(label);
+        var id = await harness.GetElementIdAsync(label.AutomationId);
+
+        Assert.Equal("Alice Johnson", id);
+        Assert.Equal("Alice Johnson", await harness.Client.GetPropertyAsync(id, "BindingContext.Name"));
+    }
+
+    private sealed class Person
+    {
+        public string Name { get; init; } = "";
+    }
+
+    [Theory]
+    [InlineData("Alice%20Johnson")]
+    [InlineData("Alice+Johnson")]
+    [InlineData("Alice/Johnson")]
+    [InlineData("Alice?Johnson#name")]
+    [InlineData("100%")]
+    [InlineData("Jos\u00e9 \u674e")]
+    public async Task ElementEndpoints_ReservedCharactersInId_RoundTripThroughClient(string id)
+    {
+        var label = new Label { AutomationId = id, Text = "Original" };
+        using var harness = await SetPropertyTestHarness.CreateAsync(label);
+        Assert.Equal(id, await harness.GetElementIdAsync(id));
+
+        var element = await harness.Client.GetElementAsync(id);
+        Assert.NotNull(element);
+        Assert.Equal(id, element.Id);
+
+        var descriptors = await harness.Client.GetPropertyDescriptorsAsync(id);
+        Assert.Contains(descriptors.GetProperty("properties").EnumerateArray(),
+            property => property.GetProperty("name").GetString() == nameof(Label.Text));
+
+        Assert.True(await harness.Client.SetPropertyAsync(id, nameof(Label.Text), "Updated"));
+        Assert.Equal("Updated", label.Text);
+        Assert.Equal("Updated", await harness.Client.GetPropertyAsync(id, nameof(Label.Text)));
+
+        var result = await harness.Client.SetPropertyResultAsync(
+            id, nameof(Label.Text), "Result updated", captureEpoch: null, registryGeneration: null);
+        Assert.True(result.Success);
+        Assert.Equal("Result updated", label.Text);
+        Assert.Equal("Result updated", await harness.Client.GetPropertyAsync(id, nameof(Label.Text)));
+    }
+
+    [Fact]
     public async Task SetPropertyAsync_UpdatesButtonText_ThroughAgentEndpoint()
     {
         var button = new Button

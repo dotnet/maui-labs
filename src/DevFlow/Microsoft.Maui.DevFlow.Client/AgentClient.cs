@@ -811,7 +811,7 @@ public class AgentClient : IDisposable
     /// </summary>
     public async Task<ElementInfo?> GetElementAsync(string id)
     {
-        return await GetAsync<ElementInfo>($"{UiApi}/elements/{id}");
+        return await GetAsync<ElementInfo>($"{UiApi}/elements/{Uri.EscapeDataString(id)}");
     }
 
     /// <summary>
@@ -1543,7 +1543,7 @@ public class AgentClient : IDisposable
     /// </remarks>
     public async Task<string?> GetPropertyAsync(string elementId, string propertyName)
     {
-        var (result, statusCode) = await GetJsonWithStatusAsync($"{UiApi}/elements/{elementId}/properties/{propertyName}");
+        var (result, statusCode) = await GetJsonWithStatusAsync($"{UiApi}/elements/{Uri.EscapeDataString(elementId)}/properties/{Uri.EscapeDataString(propertyName)}");
 
         if (result.ValueKind == JsonValueKind.Undefined)
         {
@@ -1584,7 +1584,7 @@ public class AgentClient : IDisposable
 
     /// <summary>Get curated editable property descriptors and current values for an element.</summary>
     public Task<JsonElement> GetPropertyDescriptorsAsync(string elementId)
-        => GetJsonAsync($"{UiApi}/elements/{elementId}/properties");
+        => GetJsonAsync($"{UiApi}/elements/{Uri.EscapeDataString(elementId)}/properties");
 
     /// <summary>
     /// Set a property value on an element.
@@ -1614,7 +1614,7 @@ public class AgentClient : IDisposable
                 };
                 AddCaptureMetadata(payload, captureEpoch, registryGeneration);
                 using var content = ProtocolJson.CreateJsonContent(payload);
-                return await _http.PutAsync($"{_baseUrl}{UiApi}/elements/{elementId}/properties/{propertyName}", content);
+                return await _http.PutAsync($"{_baseUrl}{UiApi}/elements/{Uri.EscapeDataString(elementId)}/properties/{Uri.EscapeDataString(propertyName)}", content);
             });
             return response.IsSuccessStatusCode;
         }
@@ -1634,7 +1634,7 @@ public class AgentClient : IDisposable
         };
         AddCaptureMetadata(payload, captureEpoch, registryGeneration);
         return PutActionResultAsync(
-            $"{UiApi}/elements/{elementId}/properties/{propertyName}",
+            $"{UiApi}/elements/{Uri.EscapeDataString(elementId)}/properties/{Uri.EscapeDataString(propertyName)}",
             payload);
     }
 

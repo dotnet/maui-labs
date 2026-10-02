@@ -5,6 +5,13 @@ info:
   description: >
     Protocol for runtime app inspection, interaction, and debugging in
     DevFlow-enabled applications.
+    Percent-encode path parameter values as individual URI segments. The server
+    splits the route before decoding each captured parameter exactly once:
+    %20 is a space, %2B is a literal plus, %2F is a slash within the parameter,
+    and %2520 is the literal text %20. A raw plus remains a plus. Static route
+    segments are not decoded. Malformed percent escapes are preserved by
+    System.Uri.UnescapeDataString, consistent with query parameter decoding;
+    endpoint-specific validation still applies to decoded values.
   license:
     name: MIT
     identifier: MIT
