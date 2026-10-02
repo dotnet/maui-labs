@@ -478,7 +478,7 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
             var getInstanceMethod = wmClass.GetMethod("getInstance", Java.Lang.Class.FromType(typeof(global::Android.Content.Context)));
             var wm = getInstanceMethod?.Invoke(null, context);
             if (wm == null)
-                return new { platform = "Android", type = "WorkManager", supported = true, runSupported = false, error = "WorkManager not initialized", jobs = Array.Empty<object>() };
+                return new Dictionary<string, object?> { ["platform"] = "Android", ["type"] = "WorkManager", ["supported"] = true, ["runSupported"] = false, ["error"] = "WorkManager not initialized", ["jobs"] = Array.Empty<object>() };
 
             // Build WorkQuery for all states
             var queryBuilderClass = Java.Lang.Class.ForName("androidx.work.WorkQuery$Builder");
@@ -497,7 +497,7 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
             var fromStatesMethod = queryBuilderClass.GetMethod("fromStates", Java.Lang.Class.FromType(typeof(Java.Util.IList)));
             var builder = fromStatesMethod?.Invoke(null, stateList);
             if (builder == null)
-                return new { platform = "Android", type = "WorkManager", supported = true, runSupported = false, error = "Failed to create WorkQuery", jobs = Array.Empty<object>() };
+                return new Dictionary<string, object?> { ["platform"] = "Android", ["type"] = "WorkManager", ["supported"] = true, ["runSupported"] = false, ["error"] = "Failed to create WorkQuery", ["jobs"] = Array.Empty<object>() };
 
             var buildMethod = builder.Class.GetMethod("build");
             var query = buildMethod?.Invoke(builder);
@@ -536,21 +536,21 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
                     if (getRunAttemptCount?.Invoke(info) is Java.Lang.Integer countObj)
                         runAttemptCount = countObj.IntValue();
 
-                    jobs.Add(new
+                    jobs.Add(new Dictionary<string, object?>
                     {
-                        identifier,
-                        tags = tags.ToArray(),
-                        state,
-                        runAttemptCount
+                        ["identifier"] = identifier,
+                        ["tags"] = tags.ToArray(),
+                        ["state"] = state,
+                        ["runAttemptCount"] = runAttemptCount
                     });
                 }
             }
 
-            return new { platform = "Android", type = "WorkManager", supported = true, runSupported = false, jobs };
+            return new Dictionary<string, object?> { ["platform"] = "Android", ["type"] = "WorkManager", ["supported"] = true, ["runSupported"] = false, ["jobs"] = jobs };
         }
         catch (Exception ex)
         {
-            return new { platform = "Android", type = "WorkManager", supported = true, runSupported = false, error = ex.Message, jobs = Array.Empty<object>() };
+            return new Dictionary<string, object?> { ["platform"] = "Android", ["type"] = "WorkManager", ["supported"] = true, ["runSupported"] = false, ["error"] = ex.Message, ["jobs"] = Array.Empty<object>() };
         }
 #elif IOS || MACCATALYST
         try
@@ -562,20 +562,20 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
                 foreach (var req in requests)
                 {
                     var type = req is BGProcessingTaskRequest ? "processing" : "refresh";
-                    jobs.Add(new
+                    jobs.Add(new Dictionary<string, object?>
                     {
-                        identifier = req.Identifier,
-                        type,
-                        earliestBeginDate = req.EarliestBeginDate?.ToString() ?? ""
+                        ["identifier"] = req.Identifier,
+                        ["type"] = type,
+                        ["earliestBeginDate"] = req.EarliestBeginDate?.ToString() ?? ""
                     });
                 }
-                tcs.TrySetResult(new { platform = "iOS", type = "BGTaskScheduler", supported = true, runSupported = true, jobs });
+                tcs.TrySetResult(new Dictionary<string, object?> { ["platform"] = "iOS", ["type"] = "BGTaskScheduler", ["supported"] = true, ["runSupported"] = true, ["jobs"] = jobs });
             });
             return await tcs.Task;
         }
         catch (Exception ex)
         {
-            return new { platform = "iOS", type = "BGTaskScheduler", supported = true, runSupported = true, error = ex.Message, jobs = Array.Empty<object>() };
+            return new Dictionary<string, object?> { ["platform"] = "iOS", ["type"] = "BGTaskScheduler", ["supported"] = true, ["runSupported"] = true, ["error"] = ex.Message, ["jobs"] = Array.Empty<object>() };
         }
 #else
         return await base.GetPlatformJobsAsync();
@@ -585,12 +585,12 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
     protected override async Task<object?> RunPlatformJobAsync(string identifier, string? type = null)
     {
 #if ANDROID
-        return await Task.FromResult<object?>(new
+        return await Task.FromResult<object?>(new Dictionary<string, object?>
         {
-            success = false,
-            supported = false,
-            identifier,
-            error = $"Running job '{identifier}' is not supported on Android because the original WorkManager worker type and request parameters cannot be reconstructed safely from the listed identifier or tags."
+            ["success"] = false,
+            ["supported"] = false,
+            ["identifier"] = identifier,
+            ["error"] = $"Running job '{identifier}' is not supported on Android because the original WorkManager worker type and request parameters cannot be reconstructed safely from the listed identifier or tags."
         });
 #elif IOS || MACCATALYST
         try
@@ -604,19 +604,19 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
 
             BGTaskScheduler.Shared.Submit(taskRequest, out var error);
             if (error != null)
-                return new { success = false, error = error.LocalizedDescription, identifier };
+                return new Dictionary<string, object?> { ["success"] = false, ["error"] = error.LocalizedDescription, ["identifier"] = identifier };
 
-            return await Task.FromResult<object?>(new
+            return await Task.FromResult<object?>(new Dictionary<string, object?>
             {
-                success = true,
-                message = $"BGTask '{identifier}' submitted",
-                identifier,
-                type = taskType
+                ["success"] = true,
+                ["message"] = $"BGTask '{identifier}' submitted",
+                ["identifier"] = identifier,
+                ["type"] = taskType
             });
         }
         catch (Exception ex)
         {
-            return new { success = false, error = ex.Message, identifier };
+            return new Dictionary<string, object?> { ["success"] = false, ["error"] = ex.Message, ["identifier"] = identifier };
         }
 #else
         return await base.RunPlatformJobAsync(identifier, type);

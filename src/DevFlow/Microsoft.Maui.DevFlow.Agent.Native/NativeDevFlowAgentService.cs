@@ -215,14 +215,14 @@ public class NativeDevFlowAgentService : DevFlowAgentService
             // snapshot", without pretending the native agent has MAUI's stale-capture-rejection
             // machinery (it does not advertise that ui.actions feature). registryGeneration has no
             // independent native concept to report, so it stays at its schema-minimum default of 0.
-            return new
+            return new Dictionary<string, object?>
             {
-                x,
-                y,
-                window = windowIndex,
-                captureEpoch = _registry.CurrentWalk,
-                registryGeneration = 0,
-                elements
+                ["x"] = x,
+                ["y"] = y,
+                ["window"] = windowIndex,
+                ["captureEpoch"] = _registry.CurrentWalk,
+                ["registryGeneration"] = 0,
+                ["elements"] = elements
             };
         });
 
@@ -245,7 +245,7 @@ public class NativeDevFlowAgentService : DevFlowAgentService
 
             var properties = NativeUi.GetProperties(view);
             return properties.TryGetValue(name, out var value)
-                ? new { elementId = id, name, value }
+                ? new Dictionary<string, object?> { ["elementId"] = id, ["name"] = name, ["value"] = value }
                 : null;
         });
 
@@ -329,10 +329,10 @@ public class NativeDevFlowAgentService : DevFlowAgentService
             result == "ok",
             result == "ok" ? null : result,
             body.ElementId,
-            new { key = keyValue, text = body.Text });
+            new Dictionary<string, object?> { ["key"] = keyValue, ["text"] = body.Text });
 
         return result == "ok"
-            ? HttpResponse.Json(new { success = true, key = keyValue, text = body.Text, elementId = body.ElementId })
+            ? HttpResponse.Json(new Dictionary<string, object?> { ["success"] = true, ["key"] = keyValue, ["text"] = body.Text, ["elementId"] = body.ElementId })
             : HttpResponse.Error(result!);
     }
 
@@ -369,7 +369,7 @@ public class NativeDevFlowAgentService : DevFlowAgentService
             result == "ok",
             result == "ok" ? null : result,
             body.ElementId,
-            new { type = body.Type, direction = body.Direction });
+            new Dictionary<string, object?> { ["type"] = body.Type, ["direction"] = body.Direction });
 
         return result == "ok" ? HttpResponse.Ok("Gesture performed") : HttpResponse.Error(result!);
     }

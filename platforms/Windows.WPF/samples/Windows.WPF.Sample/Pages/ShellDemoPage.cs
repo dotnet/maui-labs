@@ -32,6 +32,16 @@ public class ShellDemoPage : ContentPage
 				},
 				new Button
 				{
+					Text = "Launch Section Switching Repro",
+					AutomationId = "LaunchSectionSwitching",
+					Command = new Command(() =>
+					{
+						if (Window != null)
+							Window.Page = new SectionSwitchingShell();
+					}),
+				},
+				new Button
+				{
 					Text = "Launch Shell App",
 					BackgroundColor = Colors.DodgerBlue,
 					TextColor = Colors.White,
@@ -44,6 +54,61 @@ public class ShellDemoPage : ContentPage
 					}),
 				},
 			}
+		};
+	}
+}
+
+public class SectionSwitchingShell : Shell
+{
+	int _created;
+	int _navigated;
+
+	public SectionSwitchingShell()
+	{
+		Items.Add(new TabBar
+		{
+			Items =
+			{
+				new ShellContent { Title = "One", Route = "one", ContentTemplate = new DataTemplate(() => CreatePage("One", "two", 1)) },
+				new ShellContent { Title = "Two", Route = "two", ContentTemplate = new DataTemplate(() => CreatePage("Two", "one", 0)) },
+			},
+		});
+		Navigated += (_, _) => _navigated++;
+	}
+
+	Page CreatePage(string title, string route, int section)
+	{
+		_created++;
+		var status = new Label { AutomationId = "SectionSwitchingStatus" };
+		void UpdateStatus() => status.Text =
+			$"Location: {CurrentState.Location}; page: {CurrentPage?.Title ?? "null"}; created: {_created}; navigated: {_navigated}";
+		var navigate = new Button { Text = $"GoToAsync //{route}", AutomationId = "SwitchSectionRoute" };
+		navigate.Clicked += async (_, _) =>
+		{
+			await GoToAsync("//" + route);
+			UpdateStatus();
+		};
+		var select = new Button { Text = $"Set CurrentItem to {route}", AutomationId = "SwitchSectionProperty" };
+		select.Clicked += (_, _) =>
+		{
+			CurrentItem.CurrentItem = CurrentItem.Items[section];
+			UpdateStatus();
+		};
+		var inspect = new Button { Text = "Refresh state", AutomationId = "InspectSectionState" };
+		inspect.Clicked += (_, _) => UpdateStatus();
+		return new ContentPage
+		{
+			Title = title,
+			Content = new VerticalStackLayout
+			{
+				Padding = 24,
+				Spacing = 12,
+				Children =
+				{
+					new Label { Text = $"Page {title}", AutomationId = $"SectionPage{title}", FontSize = 28 },
+					navigate, select, inspect, status,
+				},
+			},
 		};
 	}
 }
