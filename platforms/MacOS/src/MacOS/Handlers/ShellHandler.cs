@@ -14,8 +14,7 @@ namespace Microsoft.Maui.Platforms.MacOS.Handlers;
 /// <summary>
 /// Shell handler for macOS. Renders Shell as a split view with:
 /// - Left sidebar (flyout) showing Shell items
-/// - Right content area showing the current page
-/// On macOS, the flyout is always visible (like a source list sidebar).
+/// - Right content area showing section tabs and the current page
 /// </summary>
 public partial class ShellHandler : ViewHandler<Shell, NSView>
 {
@@ -43,6 +42,7 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 	NSObject? _contentFrameChangedObserver;
 	NSView? _currentPageView;
 	Page? _currentPage;
+	int _pageRenderGeneration;
 	Shell? _shell;
 	nfloat _flyoutWidth = 300;
 
@@ -156,7 +156,8 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 		sidebarVC.View = _sidebarView;
 
 		var contentVC = new NSViewController();
-		contentVC.View = _contentView;
+		_contentContainer = new ShellContentContainer(_contentView);
+		contentVC.View = _contentContainer;
 
 		_sidebarSplitItem = NSSplitViewItem.CreateSidebar(sidebarVC);
 		_sidebarSplitItem.MinimumThickness = 150;
@@ -605,21 +606,17 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 			return;
 		}
 
-		if (_contentView == null || _shell == null || MauiContext == null)
+		var contentView = _contentView;
+		var shell = _shell;
+		var context = MauiContext;
+		if (contentView == null || shell == null || context == null)
 			return;
 
-		// Remove old page
-		if (_currentPageView != null)
-		{
-			_currentPageView.RemoveFromSuperview();
-			_currentPageView = null;
-			_currentPage = null;
-		}
-
+		var renderGeneration = ++_pageRenderGeneration;
 		Page? page = null;
 
 		// Check if there are pushed pages on the ShellSection navigation stack
-		var currentItem = _shell.CurrentItem;
+		var currentItem = shell.CurrentItem;
 		if (currentItem?.CurrentItem is ShellSection section)
 		{
 			var navStack = section.Navigation?.NavigationStack;
@@ -638,19 +635,42 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 			page = controller.GetOrCreateContent();
 		}
 
+		// Lazy content and native lifecycle callbacks can render a newer destination.
+		if (!IsCurrentRender())
+			return;
+
 		if (page != null)
 		{
-			_currentPage = page;
 			try
 			{
-				var platformView = ((IView)page).ToMacOSPlatform(MauiContext);
-				platformView.Frame = _contentView.Bounds;
+				var platformView = ReferenceEquals(page.Handler?.MauiContext, context) &&
+					page.Handler?.PlatformView is NSView existingView && existingView.Handle != IntPtr.Zero
+					? existingView
+					: ((IView)page).ToMacOSPlatform(context);
+				if (!IsCurrentRender())
+					return;
+
+				platformView.Frame = contentView.Bounds;
 				platformView.AutoresizingMask = NSViewResizingMask.WidthSizable | NSViewResizingMask.HeightSizable;
-				_contentView.AddSubview(platformView);
-				_currentPageView = platformView;
+				if (!IsCurrentRender())
+					return;
+
+				if (!ReferenceEquals(page, _currentPage) || !ReferenceEquals(platformView, _currentPageView) ||
+					!ReferenceEquals(platformView.Superview, contentView))
+				{
+					ClearCurrentPageView();
+					if (!IsCurrentRender())
+						return;
+
+					_currentPage = page;
+					_currentPageView = platformView;
+					contentView.AddSubview(platformView);
+					if (!IsCurrentRender())
+						return;
+				}
 
 				// Measure and arrange
-				var bounds = _contentView.Bounds;
+				var bounds = contentView.Bounds;
 				if (bounds.Width > 0 && bounds.Height > 0)
 				{
 					page.Measure((double)bounds.Width, (double)bounds.Height);
@@ -662,6 +682,13 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 				Console.Error.WriteLine($"[ShellHandler.ShowCurrentPage] Failed to create page view: {ex.Message}");
 			}
 		}
+		else
+		{
+			ClearCurrentPageView();
+		}
+
+		if (!IsCurrentRender())
+			return;
 
 		// Update sidebar selection
 		if (_useNativeSidebar)
@@ -670,7 +697,23 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 			BuildCustomSidebar();
 
 		// Notify WindowHandler to refresh toolbar (back button, title, toolbar items)
+		_tabCoordinator?.SetPage(_currentPage);
+		UpdateTabs();
 		NotifyToolbarRefresh();
+
+		bool IsCurrentRender() =>
+			renderGeneration == _pageRenderGeneration &&
+			ReferenceEquals(shell, _shell) && ReferenceEquals(contentView, _contentView) &&
+			ReferenceEquals(context, MauiContext);
+	}
+
+	void ClearCurrentPageView()
+	{
+		var previousView = _currentPageView;
+		_currentPageView = null;
+		_currentPage = null;
+		if (previousView != null && previousView.Handle != IntPtr.Zero)
+			previousView.RemoveFromSuperview();
 	}
 
 	void NotifyToolbarRefresh()
