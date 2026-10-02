@@ -78,6 +78,8 @@ jobs:
   runtime:
     name: Native GTK runtime (${{ matrix.test-class }})
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     strategy:
       matrix:
         # Each class gets its own process: GTK initialization is thread-affine.
