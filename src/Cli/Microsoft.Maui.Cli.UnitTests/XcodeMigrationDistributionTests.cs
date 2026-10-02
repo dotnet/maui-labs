@@ -46,7 +46,7 @@ public sealed class XcodeMigrationDistributionTests
 		Assert.Contains("plugins/dotnet-maui/plugin.json", catalog.RequestedFiles);
 		Assert.Equal(before, test.Snapshot());
 
-		var directory = Path.Combine(test.Root, skillsPath, SkillName);
+		var directory = Path.GetFullPath(Path.Combine(test.Root, skillsPath, SkillName));
 		var added = await test.Invoke("add", "skill", SkillName, "--env", environment);
 		AssertSuccess(added);
 		var installed = Assert.Single(Rows(added.Result));
@@ -110,7 +110,7 @@ public sealed class XcodeMigrationDistributionTests
 			Assert.Equal(bytes, File.ReadAllBytes(Path.Combine(directory, path)));
 
 		// No sibling skills, agents, MCP configuration, or user-home files may be installed.
-		var allowed = expected.Keys.Append(".skill-version").Select(path => Path.Combine(directory, path))
+		var allowed = expected.Keys.Append(".skill-version").Select(path => Path.GetFullPath(Path.Combine(directory, path)))
 			.Append(Path.Combine(root, ".git")).Order(StringComparer.Ordinal);
 		Assert.Equal(allowed, Directory.GetFiles(root, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal));
 		Assert.Single(Directory.GetDirectories(Path.GetDirectoryName(directory)!));
