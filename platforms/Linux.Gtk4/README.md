@@ -71,6 +71,23 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 - **Lifecycle Events** — `ConfigureLifecycleEvents().AddGtk()` hooks for `OnWindowCreated` and `OnMauiApplicationCreated`.
 - **Desktop integration** — App icons via hicolor icon theme, `.desktop` file generation, `MauiImage`/`MauiFont`/`MauiAsset` resource processing.
 
+### Shell navigation regression checks
+
+Shell section navigation displays the top pushed page and restores the previous
+page when popped, including route navigation, `PushAsync`, and `PopToRootAsync`.
+Managed observer tests run with the normal GTK test project. The native regression
+test additionally checks the selected notebook child, its mapped state, and a
+positive GTK allocation in a real window. Run it on Linux with GTK and Xvfb:
+
+```bash
+MAUI_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo xvfb-run -a \
+  dotnet test platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj \
+  --filter FullyQualifiedName~ShellNavigationRuntimeTests \
+  --logger "console;verbosity=detailed"
+```
+
+The test uses its own GTK application and does not require a DevFlow broker.
+
 ### Handler styling
 
 GTK CSS font sizes use logical pixels (`px`), matching MAUI's device-independent
@@ -355,10 +372,18 @@ checks do not require GTK initialization and do not claim native UI coverage.
 
 ### Native runtime regression tests
 
-Native tests require Linux with GTK 4.12+ and a display. They are explicitly
-skipped unless `RUN_GTK_RUNTIME_TESTS=1`. Run each native test class in its own
-process to keep GTK initialization on one thread. For example, from
-`platforms/Linux.Gtk4`, with `xvfb` installed:
+Native tests require Linux with GTK 4.12+ and a display. They are skipped unless
+`RUN_GTK_RUNTIME_TESTS=1`. Run each native test class in its own process to keep
+GTK initialization on one thread. From `platforms/Linux.Gtk4`, with `xvfb`
+installed:
+
+```bash
+RUN_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo GTK_A11Y=none \
+  dbus-run-session -- xvfb-run --auto-servernum \
+  dotnet test tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj \
+  --filter FullyQualifiedName~PickerSelectionTests \
+  --logger "console;verbosity=detailed" -m:1 -nr:false
+```
 
 ```bash
 RUN_GTK_RUNTIME_TESTS=1 GSK_RENDERER=cairo dbus-run-session -- xvfb-run --auto-servernum \
@@ -367,10 +392,17 @@ RUN_GTK_RUNTIME_TESTS=1 GSK_RENDERER=cairo dbus-run-session -- xvfb-run --auto-s
   --logger "console;verbosity=detailed" --blame-hang-timeout 3m
 ```
 
+The Picker regression checks item replacement, no selection, collection
+mutations, managed selection mapping, native selection notifications, and
+disconnect/reconnect behavior.
+
 The synchronization-context regression starts a real `GtkMauiApplication`,
 invokes an async MAUI button handler from the GTK main loop, and checks thread
 identity, context preservation across repeated awaits, native label updates,
 and restoration of the original context after shutdown.
+
+The native CI job runs each GTK test class in its own process and uploads its
+TRX results.
 
 ### Run the sample app
 

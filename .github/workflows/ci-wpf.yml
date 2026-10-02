@@ -95,6 +95,8 @@ jobs:
       matrix:
         maui: ['10.0.41', '10.0.60', '10.0.70', '10.0.110']
     uses: ./.github/workflows/_build.yml
+    permissions:
+      contents: read
     with:
       project-path: platforms/Windows.WPF/tests/HandlerTests/HandlerTests.csproj
       project-name: wpf-registration-${{ matrix.maui }}

@@ -4,6 +4,8 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Handlers;
 
 public class PickerHandler : GtkViewHandler<IPicker, Gtk.DropDown>
 {
+	bool _updatingSelection;
+
 	public static IPropertyMapper<IPicker, PickerHandler> Mapper =
 		new PropertyMapper<IPicker, PickerHandler>(ViewMapper)
 		{
@@ -42,8 +44,11 @@ public class PickerHandler : GtkViewHandler<IPicker, Gtk.DropDown>
 
 	void OnSelectedChanged(GObject.Object sender, GObject.Object.NotifySignalArgs args)
 	{
-		if (args.Pspec.GetName() == "selected" && VirtualView != null)
-			VirtualView.SelectedIndex = (int)PlatformView.GetSelected();
+		if (_updatingSelection || args.Pspec.GetName() != "selected" || VirtualView == null)
+			return;
+
+		var selected = PlatformView.GetSelected();
+		VirtualView.SelectedIndex = selected == uint.MaxValue ? -1 : (int)selected;
 	}
 
 	public static void MapTitle(PickerHandler handler, IPicker picker)
@@ -53,17 +58,37 @@ public class PickerHandler : GtkViewHandler<IPicker, Gtk.DropDown>
 
 	public static void MapSelectedIndex(PickerHandler handler, IPicker picker)
 	{
-		handler.PlatformView?.SetSelected(
-			picker.SelectedIndex >= 0
-				? (uint)picker.SelectedIndex
-				: uint.MaxValue);
+		var wasUpdatingSelection = handler._updatingSelection;
+		handler._updatingSelection = true;
+		try
+		{
+			handler.PlatformView?.SetSelected(
+				picker.SelectedIndex >= 0
+					? (uint)picker.SelectedIndex
+					: uint.MaxValue);
+		}
+		finally
+		{
+			handler._updatingSelection = wasUpdatingSelection;
+		}
 	}
 
 	public static void MapItems(PickerHandler handler, IPicker picker)
 	{
 		var items = picker.Items?.ToArray() ?? Array.Empty<string>();
 		var stringList = Gtk.StringList.New(items);
-		handler.PlatformView?.SetModel(stringList);
+		var wasUpdatingSelection = handler._updatingSelection;
+		handler._updatingSelection = true;
+		try
+		{
+			// GTK selects the first item of a new model; MAUI remains the selection authority.
+			handler.PlatformView?.SetModel(stringList);
+			MapSelectedIndex(handler, picker);
+		}
+		finally
+		{
+			handler._updatingSelection = wasUpdatingSelection;
+		}
 	}
 
 	public static void MapFont(PickerHandler handler, IPicker picker)
