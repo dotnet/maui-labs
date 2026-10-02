@@ -661,6 +661,7 @@ namespace Microsoft.Maui.Handlers.WPF
 					{
 						var section = (ShellSection)tab.Tag;
 						tab.Header = section.Title ?? section.Route ?? "Tab";
+						tab.IsEnabled = section.IsEnabled;
 						if (!_registeredNativeElements.Contains(tab))
 							RegisterNativeElement(section, tab, "ShellTab");
 					}
@@ -689,9 +690,34 @@ namespace Microsoft.Maui.Handlers.WPF
 				{
 					Header = section.Title ?? section.Route ?? "Tab",
 					Tag = section,
+					IsEnabled = section.IsEnabled,
 				};
 				_tabControl.Items.Add(tab);
 				RegisterNativeElement(section, tab, "ShellTab");
+			}
+		}
+
+		internal void UpdateTabIsEnabled(Shell shell, ShellSection section)
+		{
+			var item = shell.CurrentItem;
+			if (item == null || !shell.Items.Contains(item) ||
+				!((IShellItemController)item).GetItems().Contains(section))
+				return;
+
+			var tab = _tabControl.Items.OfType<global::System.Windows.Controls.TabItem>()
+				.FirstOrDefault(tab => ReferenceEquals(tab.Tag, section));
+			if (tab == null)
+				return;
+
+			var updatingTabs = _updatingTabs;
+			_updatingTabs = true;
+			try
+			{
+				tab.IsEnabled = section.IsEnabled;
+			}
+			finally
+			{
+				_updatingTabs = updatingTabs;
 			}
 		}
 

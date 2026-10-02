@@ -68,6 +68,13 @@ without visible content. Visibility changes refresh it automatically. Plain sect
 changes retain the native tab elements and synchronize selection without rebuilding,
 preserving keyboard focus.
 
+`ShellSection.IsEnabled` is projected onto native tabs and their UI Automation
+enabled state, both initially and when it changes. Enabled-state changes update
+only the matching current tab in place: they do not rebuild the strip, replay
+property mappers, replace custom headers, or navigate away from a selected section.
+Disabled sections remain visible; native UI Automation selection rejects them.
+Section observers follow collection changes and handler rebind/disconnect.
+
 The `ShellTabNavigationTests` handler regressions drive native UI Automation
 selection in an offscreen WPF window and assert the route,
 `Navigated` events, and rendered page. Set `SHELL_TAB_RESULTS` to a directory to

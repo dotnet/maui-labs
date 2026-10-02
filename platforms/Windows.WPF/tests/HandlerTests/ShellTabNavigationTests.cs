@@ -24,7 +24,7 @@ namespace HandlerTests;
 public sealed class ShellTabRuntimeCollection;
 
 [Collection("Shell tab runtime")]
-public class ShellTabNavigationTests
+public partial class ShellTabNavigationTests
 {
 	[Theory]
 	[InlineData(false)]
@@ -391,7 +391,7 @@ public class ShellTabNavigationTests
 
 	static void RunTest(bool useTemplate,
 		Action<Shell, ShellHandler, WTabControl, ContentPage, ContentPage, Func<int>> test,
-		bool useFlyoutItem = false, bool activateWindow = false)
+		bool useFlyoutItem = false, bool activateWindow = false, Action<Shell>? beforeAttach = null)
 	{
 		Exception? failure = null;
 		var thread = new Thread(() =>
@@ -416,6 +416,7 @@ public class ShellTabNavigationTests
 				};
 				if (useTemplate)
 					shell.ItemTemplate = new DataTemplate(() => new Label { Text = "templated item", Padding = 8 });
+				beforeAttach?.Invoke(shell);
 				_ = new Window(shell);
 				var handler = new ShellHandler();
 				handler.SetMauiContext(new WPFMauiContext(app.Services));

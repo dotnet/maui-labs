@@ -66,7 +66,7 @@ jobs:
               $env:SHELL_SECTION_RESULTS = Join-Path $env:GITHUB_WORKSPACE "section-runtime-evidence\$variant"
               $env:SHELL_TAB_RESULTS = Join-Path $env:SHELL_SECTION_RESULTS 'tabs'
               New-Item -ItemType Directory -Force $env:SHELL_SECTION_RESULTS | Out-Null
-              $filter = 'FullyQualifiedName~ShellSectionSwitchingTests|FullyQualifiedName~ShellTabNavigationTests'
+              $filter = '(FullyQualifiedName~ShellSectionSwitchingTests|FullyQualifiedName~ShellTabNavigationTests)&FullyQualifiedName!~NativeTabEnabled_'
               if ($variant -eq 'baseline') {
                 $filter = 'FullyQualifiedName~SwitchSection_ShowsLazyPageAndCompletesNavigation|FullyQualifiedName~SwitchContentWithinSection_ShowsLazyPage|FullyQualifiedName~NativeTabSelection_WithOrWithoutItemTemplate'
               } elseif ($variant -eq 'followup-baseline') {
@@ -104,6 +104,35 @@ jobs:
         with:
           name: shell-section-wpf-runtime
           path: section-runtime-evidence
+          if-no-files-found: error
+
+  shell-enabled-regression:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: fixed
+      - uses: actions/checkout@v6
+        with:
+          path: baseline
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: fixed/global.json
+      - name: Verify native enabled-state baseline and fix with identical tests
+        shell: pwsh
+        run: >
+          fixed\platforms\Windows.WPF\tests\Scripts\Verify-ShellEnabledRegression.ps1
+          -BaselineRef 76ba9861590190dcea8dc076df719c151e44ac9d
+          -FixedDirectory fixed -BaselineDirectory baseline
+          -ResultsDirectory shell-enabled-evidence
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: shell-enabled-wpf-runtime
+          path: shell-enabled-evidence
           if-no-files-found: error
 
   compatibility:
