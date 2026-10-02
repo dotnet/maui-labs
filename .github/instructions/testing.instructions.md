@@ -54,12 +54,26 @@ dotnet test --logger "console;verbosity=detailed"
 
 ## CI Matrix
 
-Tests run on **macOS and Windows** in CI (`.github/workflows/_build.yml`):
+The matrix is selected by each product workflow that calls
+`.github/workflows/_build.yml`; it is not one repository-wide macOS + Windows
+matrix.
 
-- **macOS**: `./eng/common/cibuild.sh --configuration Release --prepareMachine --projects src/DevFlow/DevFlow.slnf`
-- **Windows**: `eng\common\cibuild.cmd -configuration Release -prepareMachine -projects src/DevFlow/DevFlow.slnf`
+DevFlow currently uses three separate jobs:
 
-Test results are uploaded as artifacts: `artifacts/TestResults/**/*.xml`
+- **Library and test projects:** Windows, with tests enabled, using
+  `src/DevFlow/DevFlow.slnf`.
+- **JavaScript hosts and VSIX:** Ubuntu, using the npm workspace and Canvas
+  tests.
+- **Native sample apps:** macOS, with tests disabled, using
+  `src/DevFlow/DevFlow.Samples.Native.slnf`. This job proves the app heads
+  bundle; it is not a second DevFlow test leg.
+
+The equivalent library/test commands are:
+
+- **Windows:** `eng\common\build.cmd -restore -build -test -ci -configuration Release -prepareMachine -projects <repo>\src\DevFlow\DevFlow.slnf`
+- **macOS/Unix syntax:** `./eng/common/build.sh --restore --build --test --ci --configuration Release --prepareMachine --projects <repo>/src/DevFlow/DevFlow.slnf`
+
+Test results are uploaded from `artifacts/TestResults/**/*.xml`.
 
 ## Test Patterns
 

@@ -2798,6 +2798,8 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 case MenuItem mi:
                     ((IMenuItemController)mi).Activate();
                     return "ok";
+                case InputView input when !input.GestureRecognizers.OfType<TapGestureRecognizer>().Any():
+                    return input.Focus() ? "ok" : $"Unable to focus {el.GetType().FullName}";
                 case Picker picker:
                     picker.Focus();
                     return "ok";
@@ -3033,8 +3035,8 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 null, Type.EmptyTypes, null);
             if (performClickMethod != null)
             {
-                performClickMethod.Invoke(platformView, null);
-                return true;
+                var result = performClickMethod.Invoke(platformView, null);
+                return result is not bool accepted || accepted;
             }
         }
         catch (Exception ex)

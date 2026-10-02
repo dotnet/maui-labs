@@ -256,6 +256,13 @@ public static class ProcessRunner
 				catch (Exception ex) { System.Diagnostics.Trace.WriteLine($"Kill after async timeout failed: {ex.Message}"); }
 				throw new TimeoutException($"Process '{fileName}' timed out after {effectiveTimeout.TotalSeconds}s");
 			}
+			catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+			{
+				try
+				{ process.Kill(entireProcessTree: true); }
+				catch (Exception ex) { System.Diagnostics.Trace.WriteLine($"Kill after cancellation failed: {ex.Message}"); }
+				throw;
+			}
 
 			// Wait for input task to complete if present
 			if (inputTask != null)

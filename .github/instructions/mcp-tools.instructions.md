@@ -86,6 +86,7 @@ If the tool calls a new agent endpoint, add the client method in `Microsoft.Maui
 | `JobTools.cs` | `maui_jobs_list`, `maui_jobs_run` | Background jobs |
 | `LayoutDiagnosticsTool.cs` | `maui_layout_diagnostics` | Layout diagnostics |
 | `LogsTool.cs` | `maui_logs` | Log retrieval |
+| `MutationLeaseTools.cs` | `maui_control_status`, `maui_take_control`, `maui_release_control` | App-wide mutation lease control |
 | `NavigationTools.cs` | `maui_navigate`, `maui_back`, `maui_focus`, `maui_resize` | Navigation & window |
 | `NetworkTool.cs` | `maui_network`, `maui_network_detail`, `maui_network_clear` | Network inspection |
 | `PlatformTools.cs` | `maui_app_info`, `maui_device_info`, `maui_display_info`, `maui_battery_info`, `maui_connectivity`, `maui_geolocation` | Device/app info |

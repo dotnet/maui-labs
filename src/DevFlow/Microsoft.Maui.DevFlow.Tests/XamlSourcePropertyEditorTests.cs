@@ -289,6 +289,181 @@ public sealed class XamlSourcePropertyEditorTests : IDisposable
         Assert.Contains("Text=\"Updated\"", await File.ReadAllTextAsync(sourcePath));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task PersistAsync_RelativeSourceAndProject_ResolvesFromWorkspace(bool hostLocalProcess)
+    {
+        var workspaceRoot = Path.Combine(_tempRoot, "workspace");
+        Directory.CreateDirectory(workspaceRoot);
+        await File.WriteAllTextAsync(Path.Combine(workspaceRoot, ".git"), "gitdir: test");
+
+        var projectRoot = Path.Combine(workspaceRoot, "samples", "TestApp");
+        Directory.CreateDirectory(projectRoot);
+        var projectPath = Path.Combine(projectRoot, "TestApp.csproj");
+        await File.WriteAllTextAsync(projectPath, "<Project />");
+
+        var sourceDirectory = Path.Combine(projectRoot, "Views");
+        Directory.CreateDirectory(sourceDirectory);
+        var sourcePath = Path.Combine(sourceDirectory, "MainPage.xaml");
+        const string xaml = """
+            <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui">
+                <Label Text="Original" />
+            </ContentPage>
+            """;
+        await File.WriteAllTextAsync(sourcePath, xaml);
+
+        var appDirectory = Path.Combine(workspaceRoot, "artifacts", "bin", "TestApp", "Debug");
+        Directory.CreateDirectory(appDirectory);
+        var appPath = Path.Combine(appDirectory, "TestApp.exe");
+        await File.WriteAllBytesAsync(appPath, []);
+
+        var editor = new XamlSourcePropertyEditor(
+            "TestApp.csproj",
+            XamlSourcePropertyEditor.ComputeDefaultSessionId(projectPath),
+            appExecutablePath: hostLocalProcess ? appPath : null,
+            workspace: XamlSourceWorkspace.Capture(workspaceRoot));
+        var element = CreateElement(Path.Combine("Views", "MainPage.xaml"), xaml, "<Label");
+
+        Assert.Equal(sourcePath, editor.ResolveSourcePath(element.SourceFile!, out var error));
+        Assert.Null(error);
+        var result = await editor.PersistAsync(element, "Text", "Updated");
+
+        Assert.Equal(XamlSourceEditStatus.Success, result.Status);
+        Assert.Contains("Text=\"Updated\"", await File.ReadAllTextAsync(sourcePath));
+    }
+
+    [Fact]
+    public async Task ResolveSourcePath_WorkspaceRemovedAfterCapture_DoesNotSearchParent()
+    {
+        var (sourcePath, _) = await CreateProjectAsync("<ContentPage />");
+        var projectRoot = Path.GetDirectoryName(sourcePath)!;
+        var projectPath = Path.Combine(projectRoot, "TestApp.csproj");
+        var workspacePath = Path.Combine(projectRoot, "workspace");
+        Directory.CreateDirectory(workspacePath);
+        var workspace = XamlSourceWorkspace.Capture(workspacePath);
+        Directory.Delete(workspacePath);
+
+        var editor = new XamlSourcePropertyEditor(
+            "TestApp.csproj",
+            XamlSourcePropertyEditor.ComputeDefaultSessionId(projectPath),
+            workspace: workspace);
+
+        Assert.Null(editor.ResolveSourcePath("MainPage.xaml", out var error));
+        Assert.Contains("MAUI_DEVFLOW_PROJECT_ROOT", error);
+    }
+
+    [Fact]
+    public async Task ResolveSourcePath_RelativeSource_ReturnsFullLocalPath()
+    {
+        var (sourcePath, _) = await CreateProjectAsync("""
+            <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui">
+                <Label Text="Original" />
+            </ContentPage>
+            """);
+        var projectPath = Path.Combine(Path.GetDirectoryName(sourcePath)!, "TestApp.csproj");
+        var editor = new XamlSourcePropertyEditor(projectPath);
+
+        var resolved = editor.ResolveSourcePath("MainPage.xaml", out var error);
+
+        Assert.Null(error);
+        Assert.Equal(sourcePath, resolved);
+        Assert.True(Path.IsPathFullyQualified(resolved!));
+    }
+
+    [Fact]
+    public async Task ResolveSourcePath_AbsoluteLinkedSource_ReturnsExistingPath()
+    {
+        var projectRoot = Path.Combine(_tempRoot, "project-with-link");
+        Directory.CreateDirectory(projectRoot);
+        var projectPath = Path.Combine(projectRoot, "TestApp.csproj");
+        await File.WriteAllTextAsync(projectPath, "<Project />");
+
+        var sharedRoot = Path.Combine(_tempRoot, "shared");
+        Directory.CreateDirectory(sharedRoot);
+        var sourcePath = Path.Combine(sharedRoot, "SharedPage.xaml");
+        await File.WriteAllTextAsync(sourcePath, "<ContentPage />");
+        var editor = new XamlSourcePropertyEditor(projectPath);
+
+        var resolved = editor.ResolveSourcePath(sourcePath, out var error);
+
+        Assert.Null(error);
+        Assert.Equal(sourcePath, resolved);
+    }
+
+    [Theory]
+    [InlineData(@"\\server\share\Page.xaml")]
+    [InlineData(@"\\?\C:\source\Page.xaml")]
+    [InlineData(@"\\.\C:\source\Page.xaml")]
+    [InlineData(@"\??\C:\source\Page.xaml")]
+    [InlineData(@"\??\UNC\server\share\Page.xaml")]
+    [InlineData(@"\??\GLOBALROOT\Device\HarddiskVolumeShadowCopy1\Page.xaml")]
+    public void UnsafeAbsoluteSourcePath_RejectsNetworkAndDeviceNamespaces(string path)
+    {
+        if (OperatingSystem.IsWindows())
+            Assert.True(XamlSourcePropertyEditor.IsUnsafeAbsoluteSourcePath(path));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task FindRelativeProjectRoot_AmbiguousWorkspaceReturnsNull(bool hostLocalProcess)
+    {
+        var workspaceRoot = Path.Combine(_tempRoot, "ambiguous-workspace");
+        Directory.CreateDirectory(workspaceRoot);
+        await File.WriteAllTextAsync(Path.Combine(workspaceRoot, ".git"), "gitdir: test");
+
+        string? sessionId = null;
+        string? firstProjectRoot = null;
+        foreach (var name in new[] { "one", "two" })
+        {
+            var projectRoot = Path.Combine(workspaceRoot, name, "shared-application-folder");
+            firstProjectRoot ??= projectRoot;
+            Directory.CreateDirectory(projectRoot);
+            var projectPath = Path.Combine(projectRoot, "TestApp.csproj");
+            await File.WriteAllTextAsync(projectPath, "<Project />");
+            await File.WriteAllTextAsync(Path.Combine(projectRoot, "MainPage.xaml"), "<ContentPage />");
+            sessionId ??= XamlSourcePropertyEditor.ComputeDefaultSessionId(projectPath);
+            Assert.Equal(sessionId, XamlSourcePropertyEditor.ComputeDefaultSessionId(projectPath));
+        }
+
+        var appDirectory = Path.Combine(workspaceRoot, "artifacts", "bin", "TestApp", "Debug");
+        Directory.CreateDirectory(appDirectory);
+
+        var result = XamlSourcePropertyEditor.FindRelativeProjectRoot(
+            "TestApp.csproj",
+            sessionId,
+            "MainPage.xaml",
+            appExecutablePath: hostLocalProcess ? Path.Combine(appDirectory, "TestApp.exe") : null,
+            currentDirectory: hostLocalProcess ? firstProjectRoot : workspaceRoot);
+
+        Assert.Null(result);
+    }
+
+    [Theory]
+    [InlineData("WinUI", true)]
+    [InlineData("windows", true)]
+    [InlineData("macOS", true)]
+    [InlineData("MacCatalyst", true)]
+    [InlineData("GTK", true)]
+    [InlineData("Android", false)]
+    [InlineData("iOS", false)]
+    [InlineData(null, false)]
+    public void HostProcessLookup_OnlyUsesLocalPlatforms(string? platform, bool expected)
+        => Assert.Equal(expected, InspectorServer.IsHostLocalPlatform(platform));
+
+    [Theory]
+    [InlineData(@"C:\apps\DevFlow.Sample.exe", "DevFlow.Sample.csproj", "MauiTodo", true)]
+    [InlineData(@"C:\apps\MauiTodo.exe", "DevFlow.Sample.csproj", "MauiTodo", true)]
+    [InlineData(@"C:\apps\Other.exe", "DevFlow.Sample.csproj", "MauiTodo", false)]
+    [InlineData(null, "DevFlow.Sample.csproj", "MauiTodo", false)]
+    public void HostProcessLookup_RequiresMatchingProjectOrAppExecutable(
+        string? executablePath,
+        string? project,
+        string? appName,
+        bool expected)
+        => Assert.Equal(expected, InspectorServer.ExecutableMatchesAgent(executablePath, project, appName));
+
     [Fact]
     public async Task PersistAsync_RelativeProjectIdentity_MismatchedSessionIsForbidden()
     {
