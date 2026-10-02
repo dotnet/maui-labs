@@ -53,6 +53,7 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 ### Platform Features
 
 - **Native GTK4 rendering** — Every control maps to a real GTK4 widget, styled via GTK CSS.
+- **UI synchronization context** — Async UI event handlers resume on the GTK main thread after `await` (unless they explicitly opt out with `ConfigureAwait(false)`).
 - **Blazor Hybrid** — Host Blazor components inside a native GTK window via WebKitGTK.
 - **Gestures** — Tap, Pan, Swipe, Pinch, and Pointer gesture recognizers via GTK4 event controllers.
 - **Animations** — `TranslateTo`, `FadeTo`, `ScaleTo`, `RotateTo` via `GtkPlatformTicker` + `Gsk.Transform` at ~60fps.
@@ -232,6 +233,18 @@ If you added the optional Essentials package, also import
 `builder.AddLinuxGtk4Essentials()` before `builder.Build()`. Adding the package
 alone does not replace MAUI's portable Essentials implementations.
 
+When `Build()` returns, all registered static Essentials facades use the same
+instances as dependency injection, including application overrides registered
+before or after `AddLinuxGtk4Essentials()`. Call statics after `Build()`, not while
+configuring the builder. Unsupported desktop capabilities retain their existing
+stub behavior. Facades are process-wide: the most recently built app sets their
+instances, and callers must not use them after disposing that app.
+
+Run the behavioral registration regressions on Linux:
+`dotnet test platforms/Linux.Gtk4/tests/Essentials.Tests/Linux.Gtk4.Essentials.Tests.csproj`.
+Set `ESSENTIALS_NATIVE_GTK=1` under a real display (or `xvfb-run`) to also run the
+GTK application activation/display regression; otherwise that test is explicitly skipped.
+
 ## XAML Support
 
 `Microsoft.Maui.Platforms.Linux.Gtk4` relies on MAUI's normal transitive build assets for XAML.
@@ -351,6 +364,25 @@ From `platforms/Linux.Gtk4`, run:
 ```bash
 dotnet test tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
 ```
+
+### Native runtime regression tests
+
+Native tests require Linux with GTK 4.12+ and a display. They are explicitly
+skipped unless `RUN_GTK_RUNTIME_TESTS=1`. Run each native test class in its own
+process to keep GTK initialization on one thread. For example, from
+`platforms/Linux.Gtk4`, with `xvfb` installed:
+
+```bash
+RUN_GTK_RUNTIME_TESTS=1 GSK_RENDERER=cairo dbus-run-session -- xvfb-run --auto-servernum \
+  dotnet test tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj \
+  --filter FullyQualifiedName~GtkSynchronizationContextTests \
+  --logger "console;verbosity=detailed" --blame-hang-timeout 3m
+```
+
+The synchronization-context regression starts a real `GtkMauiApplication`,
+invokes an async MAUI button handler from the GTK main loop, and checks thread
+identity, context preservation across repeated awaits, native label updates,
+and restoration of the original context after shutdown.
 
 ### Run the sample app
 

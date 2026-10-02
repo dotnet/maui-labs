@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'platforms/MacOS/**'
+      - '.github/workflows/ci-macos-appkit.yml'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -16,6 +17,7 @@ on:
     branches: [main]
     paths:
       - 'platforms/MacOS/**'
+      - '.github/workflows/ci-macos-appkit.yml'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -31,6 +33,58 @@ jobs:
       project-name: macos-appkit
       os: '["macos-latest"]'
       install-workloads: true
-      run-tests: false
+      run-tests: true
       pack: true
       xcode-version: '26.3'
+
+  native-runtime:
+    name: AppKit runtime (${{ matrix.scenario }}, ${{ matrix.maui-version || 'default' }})
+    needs: build
+    runs-on: macos-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - scenario: layout
+            maui-version: ''
+          - scenario: bundle-resources
+            maui-version: ''
+            workloads: 'macos maui maui-tizen'
+            packages: true
+    env:
+      NUGET_PACKAGES: ${{ github.workspace }}/.packages
+    steps:
+      - uses: actions/checkout@v6
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Install pinned scenario workloads
+        run: ./eng/common/dotnet.sh workload install ${{ matrix.workloads || 'macos' }} --version 10.0.203
+      - name: Download requested product packages
+        if: matrix.packages == true
+        uses: actions/download-artifact@v8
+        with:
+          name: packages-macos-appkit-macos-latest
+          path: artifacts/runtime-packages
+      - name: Verify shared runner contracts
+        run: python3 -B -m unittest discover -s platforms/MacOS/tests/MacOS.RuntimeTests -p 'test_*.py'
+      - name: Run registered baseline and fixed scenario
+        shell: bash
+        env:
+          RUNTIME_SCENARIO: ${{ matrix.scenario }}
+          RUNTIME_MAUI_VERSION: ${{ matrix.maui-version }}
+        run: |
+          set -euo pipefail
+          python3 -B platforms/MacOS/tests/MacOS.RuntimeTests/run.py \
+            --scenario "$RUNTIME_SCENARIO" --maui-version "$RUNTIME_MAUI_VERSION" \
+            --evidence "$PWD/artifacts/appkit-runtime"
+      - name: Upload hosted AppKit evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: appkit-runtime-${{ matrix.scenario }}-${{ matrix.maui-version || 'default' }}
+          path: artifacts/appkit-runtime/
+          if-no-files-found: error
