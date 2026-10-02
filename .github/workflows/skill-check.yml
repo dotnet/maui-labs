@@ -2,13 +2,18 @@ name: skill-check
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
     paths:
+      - '.gitattributes'
+      - '.github/workflows/skill-check.yml'
       - 'plugins/**'
       - 'tests/**'
       - 'eng/allowed-external-deps.txt'
   push:
     branches: [main]
     paths:
+      - '.gitattributes'
+      - '.github/workflows/skill-check.yml'
       - 'plugins/**'
       - 'tests/**'
       - 'eng/allowed-external-deps.txt'
