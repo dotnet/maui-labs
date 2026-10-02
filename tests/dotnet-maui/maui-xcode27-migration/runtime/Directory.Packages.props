@@ -1,0 +1,7 @@
+<Project>
+  <Import Project="../../../../Directory.Packages.props" />
+  <ItemGroup>
+    <!-- The repository transitively pins Core/Essentials to an older MAUI release. -->
+    <PackageVersion Update="Microsoft.Maui.Controls;Microsoft.Maui.Core;Microsoft.Maui.Essentials" Version="10.0.110" />
+  </ItemGroup>
+</Project>

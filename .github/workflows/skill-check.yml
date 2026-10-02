@@ -2,13 +2,18 @@ name: skill-check
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
     paths:
+      - '.gitattributes'
+      - '.github/workflows/skill-check.yml'
       - 'plugins/**'
       - 'tests/**'
       - 'eng/allowed-external-deps.txt'
   push:
     branches: [main]
     paths:
+      - '.gitattributes'
+      - '.github/workflows/skill-check.yml'
       - 'plugins/**'
       - 'tests/**'
       - 'eng/allowed-external-deps.txt'
@@ -63,3 +68,29 @@ jobs:
             -- check \
             "${plugin_args[@]}" \
             --allowed-external-deps ../eng/allowed-external-deps.txt
+
+  migration-audit-tests:
+    name: Migration acceptance tests (${{ matrix.os }})
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Test migration audit and qualification acceptance
+        run: >-
+          node --test
+          tests/dotnet-maui/maui-xcode27-migration/audit-lifecycle.test.mjs
+          tests/dotnet-maui/maui-xcode27-migration/fixture-manifest.test.mjs
+          tests/dotnet-maui/maui-xcode27-migration/acceptance-audit.test.mjs
+          tests/dotnet-maui/maui-xcode27-migration/runtime/assertions.test.mjs
+          tests/dotnet-maui/maui-xcode27-migration/runtime/runner.test.mjs

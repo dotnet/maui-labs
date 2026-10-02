@@ -1,0 +1,729 @@
+scenarios:
+  - name: "Existing .NET 10 app exits after splash"
+    setup: &legacy-app-setup
+      files:
+        - path: "MyApp/MyApp.csproj"
+          content: |
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFrameworks>net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
+                <OutputType>Exe</OutputType>
+                <UseMaui>true</UseMaui>
+                <SingleProject>true</SingleProject>
+                <ImplicitUsings>enable</ImplicitUsings>
+                <Nullable>enable</Nullable>
+                <ApplicationId>com.example.xcode27evaluation</ApplicationId>
+                <ApplicationTitle>Migration evaluation</ApplicationTitle>
+                <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+                <ApplicationVersion>1</ApplicationVersion>
+                <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">14.0</SupportedOSPlatformVersion>
+                <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
+              </PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+              </ItemGroup>
+            </Project>
+        - &app-source
+          path: "MyApp/App.cs"
+          content: |
+            using Microsoft.Maui;
+            using Microsoft.Maui.Controls;
+            namespace MyApp;
+            public class App : Application
+            {
+                protected override Window CreateWindow(IActivationState? state) =>
+                    new(new ContentPage { Content = new Label { Text = "Existing app" } });
+            }
+        - &maui-startup
+          path: "MyApp/MauiProgram.cs"
+          content: |
+            using Microsoft.Maui.Hosting;
+            namespace MyApp;
+            public static class MauiProgram
+            {
+                public static MauiApp CreateMauiApp() =>
+                    MauiApp.CreateBuilder().UseMauiApp<App>().Build();
+            }
+        - &ios-app-delegate
+          path: "MyApp/Platforms/iOS/AppDelegate.cs"
+          content: |
+            using Foundation;
+            using Microsoft.Maui;
+            using Microsoft.Maui.Hosting;
+            namespace MyApp;
+            [Register("AppDelegate")]
+            public class AppDelegate : MauiUIApplicationDelegate
+            {
+                protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
+            }
+        - &catalyst-app-delegate
+          path: "MyApp/Platforms/MacCatalyst/AppDelegate.cs"
+          content: |
+            using Foundation;
+            using Microsoft.Maui;
+            using Microsoft.Maui.Hosting;
+            namespace MyApp;
+            [Register("AppDelegate")]
+            public class AppDelegate : MauiUIApplicationDelegate
+            {
+                protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
+            }
+        - &ios-entry-point
+          path: "MyApp/Platforms/iOS/Program.cs"
+          content: |
+            using UIKit;
+            namespace MyApp;
+            public static class Program
+            {
+                public static void Main(string[] args) => UIApplication.Main(args, null, typeof(AppDelegate));
+            }
+        - &catalyst-entry-point
+          path: "MyApp/Platforms/MacCatalyst/Program.cs"
+          content: |
+            using UIKit;
+            namespace MyApp;
+            public static class Program
+            {
+                public static void Main(string[] args) => UIApplication.Main(args, null, typeof(AppDelegate));
+            }
+        - path: "MyApp/Platforms/iOS/Info.plist"
+          content: |
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0"><dict>
+              <key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>
+              <key>NSCameraUsageDescription</key><string>Scan existing tickets.</string>
+              <key>CFBundleURLTypes</key><array><dict><key>CFBundleURLSchemes</key><array><string>existingapp</string></array></dict></array>
+            </dict></plist>
+        - path: "MyApp/Platforms/MacCatalyst/Info.plist"
+          content: |
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0"><dict>
+              <key>UIDeviceFamily</key><array><integer>2</integer></array>
+              <key>NSCameraUsageDescription</key><string>Scan existing tickets.</string>
+              <key>CFBundleURLTypes</key><array><dict><key>CFBundleURLSchemes</key><array><string>existingapp</string></array></dict></array>
+            </dict></plist>
+    prompt: |
+      Our existing .NET 10 MAUI project MyApp/MyApp.csproj builds with Xcode 27.0 but exits after
+      splash with "UIScene lifecycle is required" on an ordinary iPhone.
+      MAUI resolves to 10.0.100 through the workload default. Neither Apple head
+      has a scene manifest or custom callbacks. I approve dropping iOS 14 and
+      Catalyst 15 support. Implement the project, delegate and plist changes
+      on both heads, preserving existing metadata and startup code, and
+      explain what still needs build/runtime validation.
+      Do not install tools or change the machine's Xcode selection.
+    assertions:
+      - type: file_contains
+        path: "MyApp/Platforms/iOS/SceneDelegate.cs"
+        value: "MauiUISceneDelegate"
+      - type: file_contains
+        path: "MyApp/Platforms/MacCatalyst/SceneDelegate.cs"
+        value: "MauiUISceneDelegate"
+      - type: file_contains
+        path: "MyApp/Platforms/iOS/SceneDelegate.cs"
+        value: '[Register("SceneDelegate")]'
+      - type: file_contains
+        path: "MyApp/Platforms/MacCatalyst/SceneDelegate.cs"
+        value: '[Register("SceneDelegate")]'
+      - type: file_contains
+        path: "MyApp/Platforms/iOS/Info.plist"
+        value: "__MAUI_DEFAULT_SCENE_CONFIGURATION__"
+      - type: file_contains
+        path: "MyApp/Platforms/MacCatalyst/Info.plist"
+        value: "__MAUI_DEFAULT_SCENE_CONFIGURATION__"
+      - type: file_contains
+        path: "MyApp/Platforms/iOS/Info.plist"
+        value: "UIApplicationSceneManifest"
+      - type: file_contains
+        path: "MyApp/Platforms/MacCatalyst/Info.plist"
+        value: "UIApplicationSceneManifest"
+      - type: file_contains
+        path: "MyApp/Platforms/iOS/Info.plist"
+        value: "Scan existing tickets."
+      - type: file_contains
+        path: "MyApp/Platforms/MacCatalyst/Info.plist"
+        value: "Scan existing tickets."
+      - type: file_contains
+        path: "MyApp/Platforms/iOS/Info.plist"
+        value: "existingapp"
+      - type: file_contains
+        path: "MyApp/Platforms/MacCatalyst/Info.plist"
+        value: "existingapp"
+      - type: file_contains
+        path: "MyApp/Platforms/iOS/AppDelegate.cs"
+        value: "MauiUIApplicationDelegate"
+      - type: file_contains
+        path: "MyApp/Platforms/MacCatalyst/AppDelegate.cs"
+        value: "MauiUIApplicationDelegate"
+      - type: file_contains
+        path: "MyApp/MyApp.csproj"
+        value: "</MauiVersion>"
+      - type: file_contains
+        path: "MyApp/MyApp.csproj"
+        value: "net10.0-ios"
+      - type: file_contains
+        path: "MyApp/MyApp.csproj"
+        value: "net10.0-maccatalyst"
+      - type: file_contains
+        path: "MyApp/MyApp.csproj"
+        value: ">15.0</SupportedOSPlatformVersion>"
+      - type: file_contains
+        path: "MyApp/MyApp.csproj"
+        value: ">17.0</SupportedOSPlatformVersion>"
+    rubric:
+      - "Explains SDK 27 scene requirement applies to ordinary iPhones, not just Duo"
+      - "Updates the effective MAUI version to 10.0.110 or a later compatible .NET 10 servicing release before migration, accounting for import order and any conditional pin"
+      - "Adds public registered MAUI scene delegates and one root manifest to both Apple heads while preserving AppDelegate inheritance and unrelated metadata"
+      - "Uses the approved iOS 15.0 and Catalyst 17.0 minima with inline XML version text and defaults multiple scenes to false"
+      - "Distinguishes proposed changes from actual build/runtime evidence and does not disable Xcode version checks"
+    timeout: 240
+
+  - name: "Requested skill-assisted repair of a partially migrated custom scene app"
+    setup:
+      files:
+        # Shared acceptance instrument in every arm, including the baseline.
+        - path: "_acceptance/audit-lifecycle.mjs"
+          source: "../../../plugins/dotnet-maui/skills/maui-xcode27-migration/scripts/audit-lifecycle.mjs"
+        - path: "MyApp/MyApp.csproj"
+          content: |
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFrameworks>net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
+                <OutputType>Exe</OutputType>
+                <UseMaui>true</UseMaui>
+                <SingleProject>true</SingleProject>
+                <ImplicitUsings>enable</ImplicitUsings>
+                <Nullable>enable</Nullable>
+                <ApplicationId>com.example.xcode27custom</ApplicationId>
+                <ApplicationTitle>Custom migration evaluation</ApplicationTitle>
+                <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+                <ApplicationVersion>1</ApplicationVersion>
+                <MauiVersion>10.0.110</MauiVersion>
+                <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
+                <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">17.0</SupportedOSPlatformVersion>
+              </PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+              </ItemGroup>
+            </Project>
+        - *app-source
+        - *ios-entry-point
+        - *catalyst-entry-point
+        - path: "MyApp/MauiProgram.cs"
+          content: |
+            using Microsoft.Maui.Hosting;
+            using Microsoft.Maui.LifecycleEvents;
+            namespace MyApp;
+            public static class MauiProgram
+            {
+                public static MauiApp CreateMauiApp()
+                {
+                    var builder = MauiApp.CreateBuilder().UseMauiApp<App>();
+            #if IOS || MACCATALYST
+                    builder.ConfigureLifecycleEvents(events => events.AddiOS(ios => ios
+                        .PerformActionForShortcutItem((application, shortcut, completion) =>
+                        {
+                            System.Diagnostics.Debug.WriteLine(shortcut.Type);
+                        })
+                        .ContinueUserActivity((application, activity, restorationHandler) =>
+                        {
+                            System.Diagnostics.Debug.WriteLine(activity.ActivityType);
+                            return false;
+                        })));
+            #endif
+                    return builder.Build();
+                }
+            }
+        - path: "MyApp/Platforms/iOS/AppDelegate.cs"
+          content: &custom-app-delegate |
+            using Foundation;
+            using Microsoft.Maui;
+            using Microsoft.Maui.Hosting;
+            using UIKit;
+            namespace MyApp;
+            [Register("AppDelegate")]
+            public class AppDelegate : MauiUIApplicationDelegate
+            {
+                protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
+
+                public override void OnActivated(UIApplication application)
+                {
+                    base.OnActivated(application);
+                    System.Diagnostics.Debug.WriteLine("Application activation");
+                }
+
+                public override bool OpenUrl(UIApplication application, NSUrl url, NSDictionary options)
+                {
+                    bool forwarded = base.OpenUrl(application, url, options);
+                    System.Diagnostics.Debug.WriteLine($"Received URL: {url}");
+                    return forwarded;
+                }
+
+                public override bool FinishedLaunching(UIApplication application, NSDictionary launchOptions)
+                {
+                    bool launched = base.FinishedLaunching(application, launchOptions);
+                    if (launchOptions?[UIApplication.LaunchOptionsUrlKey] is NSUrl url)
+                        Window.RootViewController.Title = url.AbsoluteString;
+                    return launched;
+                }
+
+                public override void PerformActionForShortcutItem(UIApplication application,
+                    UIApplicationShortcutItem shortcutItem, UIOperationHandler completionHandler)
+                {
+                    completionHandler(shortcutItem.Type == "orders.open");
+                }
+            }
+        - path: "MyApp/Platforms/MacCatalyst/AppDelegate.cs"
+          content: *custom-app-delegate
+        - path: "MyApp/Platforms/iOS/ExistingSceneDelegate.cs"
+          content: &custom-scene-delegate |
+            using Foundation;
+            using Microsoft.Maui;
+            using UIKit;
+            namespace MyApp;
+            [Register("ExistingSceneDelegate")]
+            public class ExistingSceneDelegate : MauiUISceneDelegate
+            {
+                public override void OnActivated(UIScene scene)
+                {
+                    base.OnActivated(scene);
+                    System.Diagnostics.Debug.WriteLine("Scene activation");
+                }
+            }
+        - path: "MyApp/Platforms/MacCatalyst/ExistingSceneDelegate.cs"
+          content: *custom-scene-delegate
+        - path: "MyApp/Platforms/iOS/Info.plist"
+          content: &custom-scene-plist |
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0"><dict>
+              <key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>
+              <key>UIApplicationSceneManifest</key><dict>
+                <key>UIApplicationSupportsMultipleScenes</key><true/>
+                <key>UISceneConfigurations</key><dict>
+                  <key>UIWindowSceneSessionRoleApplication</key><array><dict>
+                    <key>UISceneConfigurationName</key><string>__MAUI_DEFAULT_SCENE_CONFIGURATION__</string>
+                    <key>UISceneDelegateClassName</key><string>ExistingSceneDelegate</string>
+                  </dict></array>
+                </dict>
+              </dict>
+            </dict></plist>
+        - path: "MyApp/Platforms/MacCatalyst/Info.plist"
+          content: *custom-scene-plist
+    prompt: |
+      Use a relevant installed migration skill if one is available for this task.
+      Otherwise perform the migration directly using your available knowledge.
+      Do not install or fetch skills. This instruction applies equally
+      whether or not the skill is available.
+      Finish migrating MyApp/MyApp.csproj, a .NET 10 MAUI iOS/Catalyst app,
+      to Xcode 27.0. Edit the supplied files on both heads.
+      We approve iOS 15/Catalyst 17 and MAUI 10.0.110. Both heads already use
+      [Register("ExistingSceneDelegate")] on ExistingSceneDelegate : MauiUISceneDelegate,
+      UISceneDelegateClassName=ExistingSceneDelegate, configuration
+      __MAUI_DEFAULT_SCENE_CONFIGURATION__, and true multiwindow support.
+      Its OnActivated(UIScene) override calls base and logs scene activation.
+      Leftover AppDelegate overrides log app activation and warm URLs, and its
+      PerformActionForShortcutItem handles "orders.open" and completes with
+      true only for that type. FinishedLaunching sets Window.RootViewController.Title
+      from LaunchOptionsUrlKey. ConfigureLifecycleEvents separately logs shortcut
+      types without completing, and ContinueUserActivity logs ActivityType and
+      returns false. Preserve those actual callback bodies and side effects,
+      including warm/cold links and activities. Do not install tools or claim
+      the resulting callbacks have been exercised on a device. Summarize the
+      implemented mapping and remaining validation. The launch-title
+      initialization remains cold-only. The activity observer must
+      log ActivityType for both warm activity callbacks and cold connection-option
+      activities, even though FinishedLaunching only inspected LaunchOptionsUrlKey.
+    assertions:
+      - type: file_contains
+        path: "MyApp/Platforms/iOS/ExistingSceneDelegate.cs"
+        value: '[Register("ExistingSceneDelegate")]'
+      - type: file_contains
+        path: "MyApp/Platforms/MacCatalyst/ExistingSceneDelegate.cs"
+        value: '[Register("ExistingSceneDelegate")]'
+      - type: file_contains
+        path: "MyApp/Platforms/iOS/Info.plist"
+        value: "<string>ExistingSceneDelegate</string>"
+      - type: file_contains
+        path: "MyApp/Platforms/MacCatalyst/Info.plist"
+        value: "<string>ExistingSceneDelegate</string>"
+      - type: file_contains
+        path: "MyApp/Platforms/iOS/Info.plist"
+        value: "<true/>"
+      - type: file_contains
+        path: "MyApp/Platforms/MacCatalyst/Info.plist"
+        value: "<true/>"
+      - type: file_contains
+        path: "MyApp/**/*.cs"
+        value: "PerformActionForShortcutItem"
+      - type: file_contains
+        path: "MyApp/Platforms/iOS/ExistingSceneDelegate.cs"
+        value: "UserActivities"
+      - type: file_contains
+        path: "MyApp/Platforms/MacCatalyst/ExistingSceneDelegate.cs"
+        value: "UserActivities"
+      - type: file_contains
+        path: "MyApp/Platforms/iOS/ExistingSceneDelegate.cs"
+        value: "UrlContexts"
+      - type: file_contains
+        path: "MyApp/Platforms/MacCatalyst/ExistingSceneDelegate.cs"
+        value: "UrlContexts"
+      - type: file_contains
+        path: "MyApp/**/*.cs"
+        value: 'Debug.WriteLine("Scene activation")'
+      - type: file_contains
+        path: "MyApp/**/*.cs"
+        value: 'Debug.WriteLine("Application activation")'
+      - type: file_contains
+        path: "MyApp/**/*.cs"
+        value: "Received URL:"
+      - type: file_contains
+        path: "MyApp/**/*.cs"
+        value: ".ActivityType"
+      - type: file_contains
+        path: "MyApp/**/*.cs"
+        value: ".Title"
+      # Host-owned native grading is not an in-agent permission workaround.
+      # Authenticate the copied instrument before executing it.
+      - type: run_command_and_assert
+        command_to_run: node
+        command_arguments: &migration-audit-command >-
+          --eval "const fs=require('node:fs'),crypto=require('node:crypto'),cp=require('node:child_process'),p='_acceptance/audit-lifecycle.mjs'; if(!fs.lstatSync(p).isFile()||crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex')!=='06e53354257dccf307cb12f14cf16dab4f9980f88d6448a5f481a05c56955223')throw Error('Acceptance instrument changed'); const r=cp.spawnSync(process.execPath,[p,'MyApp','--json'],{encoding:'utf8',timeout:10000}); if(r.error)throw r.error; process.stdout.write(r.stdout??''); process.stderr.write(r.stderr??''); if(r.status===0){let report;try{report=JSON.parse(r.stdout);}catch{throw Error('Acceptance instrument did not produce a valid audit report');}if(!report||report.status!=='no-patterns-found'||!Number.isSafeInteger(report.filesScanned)||report.filesScanned<=0||!Array.isArray(report.errors)||report.errors.length!==0||!Array.isArray(report.findings)||report.findings.length!==0)throw Error('Acceptance instrument did not produce a complete no-patterns report');}process.exit(r.status??2);"
+        command_timeout: 20
+        expected_exit_code: 0
+    rubric:
+      - "Edits both supplied Apple heads, preserving custom registered names and multiwindow intent; a proposal without file edits does not complete the request"
+      - "Maps both distinct original activation statements to reachable scene code, not just a mapping table or one merged log; recognizes leftover inactive app callbacks as unfinished migration rather than a newly introduced regression"
+      - "Keeps the shortcut observer separate from the custom handler, completes each exactly once, and reports false for the observer"
+      - "Does not duplicate default Essentials quick-action forwarding"
+      - "Retains the original warm URL logging in reachable scene code, even without a window; does not replace it with cold-launch title work or add cold-only initialization to warm delivery"
+      - "Preserves the warm URL observer's original handled result: the old override returned only its base result, so logging alone must not introduce return true or handled=true; an extracted log-only helper returns false and the override retains the unconditional base result"
+      - "Preserves warm URL handling and the app activity observer's false result. MAUI 10.0.110 MauiUISceneDelegate bool OpenUrl/ContinueUserActivity overrides are valid (unlike assumptions based on native UIKit); aggregating the app's false result with the unconditional base result must retain a true base/Essentials result"
+      - "Processes both cold connection-option collections with typed elements and defers window work per scene instead of using AppDelegate.Window; every cold user activity reaches the original ActivityType observer and every cold URL reaches the original title assignment, not an empty loop, TODO, undefined helper, or mapping-table-only claim"
+      - "Retains base scene forwarding and does not assume SceneContinueUserActivity automatically receives cold activities"
+      - "Handles absent or empty UrlContexts and UserActivities without throwing before base scene connection; a no-link launch must still create its window"
+      - "Produces compilable MAUI 10.0.110 C#: uses the actual bool OpenUrl/ContinueUserActivity overrides or valid Scene* registrations, not native UIKit-style void overrides; obtains typed cold collection elements and does not discard all but one cold URL before deferred execution"
+      - "Distinguishes checks actually executed from unavailable validation; does not claim a clean automated audit when execution was denied, or treat a textual scan or successful compile as proof of callback behavior"
+    timeout: 300
+
+  - name: "Preserve central package ownership and higher deployment targets"
+    setup:
+      files:
+        - path: "MyApp/Directory.Packages.props"
+          content: |
+            <Project>
+              <PropertyGroup>
+                <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+              </PropertyGroup>
+              <ItemGroup>
+                <PackageVersion Include="Microsoft.Maui.Controls" Version="10.0.100" />
+              </ItemGroup>
+            </Project>
+        - path: "MyApp/MyApp.csproj"
+          content: |
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFrameworks>net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
+                <UseMaui>true</UseMaui>
+                <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">16.0</SupportedOSPlatformVersion>
+                <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">18.0</SupportedOSPlatformVersion>
+              </PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="Microsoft.Maui.Controls" />
+              </ItemGroup>
+            </Project>
+    prompt: |
+      Review only: the supplied MyApp versioning files are for an Xcode 27.0
+      migration. The app has no scene manifests yet; its platform source is
+      not included here. Show the exact central-package edit and proposed
+      scene delegate and root manifest snippets for both Apple heads.
+      Keep the current deployment targets and .NET major version. Leave
+      files unchanged and don't install tools; identify any further callback
+      audit needed before implementation.
+    assertions:
+      - type: output_matches
+        pattern: 'Directory\.Packages\.props|<PackageVersion\b'
+      - type: output_contains
+        value: "MauiUISceneDelegate"
+      - type: file_contains
+        path: "MyApp/Directory.Packages.props"
+        value: 'Version="10.0.100"'
+      - type: file_contains
+        path: "MyApp/MyApp.csproj"
+        value: ">16.0</SupportedOSPlatformVersion>"
+      - type: file_contains
+        path: "MyApp/MyApp.csproj"
+        value: ">18.0</SupportedOSPlatformVersion>"
+      - type: file_not_exists
+        path: "MyApp/Platforms/**/SceneDelegate.cs"
+    rubric:
+      - "Proposes updating the central Microsoft.Maui.Controls package version to compatible .NET 10 servicing with scene fixes, without applying this read-only proposal"
+      - "Does not insert an ineffective project MauiVersion pin or a package-reference Version that conflicts with central management"
+      - "Preserves iOS 16.0 and Catalyst 18.0 rather than lowering them to the SDK minimums"
+      - "Includes both Apple scene manifests/delegates without changing framework major"
+    timeout: 240
+
+  - name: "Already migrated app needs no rewrite or version downgrade"
+    setup:
+      files:
+        - path: "MyApp/Directory.Packages.props"
+          content: |
+            <Project>
+              <PropertyGroup>
+                <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+              </PropertyGroup>
+              <ItemGroup>
+                <PackageVersion Include="Microsoft.Maui.Controls" Version="10.0.120" />
+              </ItemGroup>
+            </Project>
+        - path: "MyApp/MyApp.csproj"
+          content: |
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFrameworks>net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
+                <OutputType>Exe</OutputType>
+                <UseMaui>true</UseMaui>
+                <SingleProject>true</SingleProject>
+                <ImplicitUsings>enable</ImplicitUsings>
+                <Nullable>enable</Nullable>
+                <ApplicationId>com.example.xcode27evaluation</ApplicationId>
+                <ApplicationTitle>Migration evaluation</ApplicationTitle>
+                <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+                <ApplicationVersion>1</ApplicationVersion>
+                <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">16.0</SupportedOSPlatformVersion>
+                <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">18.0</SupportedOSPlatformVersion>
+              </PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="Microsoft.Maui.Controls" />
+              </ItemGroup>
+            </Project>
+        - *app-source
+        - *maui-startup
+        - *ios-app-delegate
+        - *catalyst-app-delegate
+        - *ios-entry-point
+        - *catalyst-entry-point
+        - path: "MyApp/Platforms/iOS/SceneDelegate.cs"
+          content: |
+            using Foundation;
+            using Microsoft.Maui;
+            namespace MyApp;
+            [Register("SceneDelegate")]
+            public class SceneDelegate : MauiUISceneDelegate
+            {
+            }
+        - path: "MyApp/Platforms/MacCatalyst/SceneDelegate.cs"
+          content: |
+            using Foundation;
+            using Microsoft.Maui;
+            namespace MyApp;
+            [Register("SceneDelegate")]
+            public class SceneDelegate : MauiUISceneDelegate
+            {
+            }
+        - path: "MyApp/Platforms/iOS/Info.plist"
+          content: |
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0"><dict>
+              <key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>
+              <key>UIApplicationSceneManifest</key><dict>
+                <key>UIApplicationSupportsMultipleScenes</key><false/>
+                <key>UISceneConfigurations</key><dict>
+                  <key>UIWindowSceneSessionRoleApplication</key><array><dict>
+                    <key>UISceneConfigurationName</key><string>__MAUI_DEFAULT_SCENE_CONFIGURATION__</string>
+                    <key>UISceneDelegateClassName</key><string>SceneDelegate</string>
+                  </dict></array>
+                </dict>
+              </dict>
+            </dict></plist>
+        - path: "MyApp/Platforms/MacCatalyst/Info.plist"
+          content: |
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0"><dict>
+              <key>UIDeviceFamily</key><array><integer>2</integer></array>
+              <key>UIApplicationSceneManifest</key><dict>
+                <key>UIApplicationSupportsMultipleScenes</key><false/>
+                <key>UISceneConfigurations</key><dict>
+                  <key>UIWindowSceneSessionRoleApplication</key><array><dict>
+                    <key>UISceneConfigurationName</key><string>__MAUI_DEFAULT_SCENE_CONFIGURATION__</string>
+                    <key>UISceneDelegateClassName</key><string>SceneDelegate</string>
+                  </dict></array>
+                </dict>
+              </dict>
+            </dict></plist>
+    prompt: |
+      Audit only: MyApp has net10.0-ios and net10.0-maccatalyst heads,
+      and centrally resolves MAUI 10.0.120, a compatible servicing release
+      containing the 10.0.110 scene fixes. Both heads already have public
+      [Register("SceneDelegate")] SceneDelegate : MauiUISceneDelegate classes
+      and root UIApplicationSceneManifest entries, multiple scenes false,
+      application role, configuration __MAUI_DEFAULT_SCENE_CONFIGURATION__,
+      delegate name SceneDelegate. AppDelegate derives from MauiUIApplicationDelegate.
+      Minima are iOS 16.0 and Catalyst 18.0. There are no custom callbacks.
+      SDK 10.0.401/workload set 10.0.401.1 and Xcode 27.0 are selected.
+      Is a project rewrite needed? Leave every file unchanged, including
+      generated files, and don't install anything.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)already|no (?:further |additional |project )?(?:changes|rewrite)|unchanged'
+      - type: file_contains
+        path: "MyApp/Directory.Packages.props"
+        value: 'Version="10.0.120"'
+      - type: file_contains
+        path: "MyApp/MyApp.csproj"
+        value: ">16.0</SupportedOSPlatformVersion>"
+      - type: file_contains
+        path: "MyApp/MyApp.csproj"
+        value: ">18.0</SupportedOSPlatformVersion>"
+      - type: file_contains
+        path: "MyApp/Platforms/iOS/Info.plist"
+        value: "__MAUI_DEFAULT_SCENE_CONFIGURATION__"
+      - type: file_contains
+        path: "MyApp/Platforms/MacCatalyst/Info.plist"
+        value: "__MAUI_DEFAULT_SCENE_CONFIGURATION__"
+      - type: file_contains
+        path: "MyApp/Platforms/iOS/SceneDelegate.cs"
+        value: "public class SceneDelegate : MauiUISceneDelegate"
+      - type: file_contains
+        path: "MyApp/Platforms/MacCatalyst/SceneDelegate.cs"
+        value: "public class SceneDelegate : MauiUISceneDelegate"
+      - type: file_not_exists
+        path: "MyApp/**/obj/**"
+      - type: file_not_exists
+        path: "MyApp/**/bin/**"
+      # Native evaluator-owned grading, not an agent-run helper. Include the whole
+      # workspace, empty directories and exact bytes; never trust a mutable baseline file.
+      - type: run_command_and_assert
+        command_to_run: node
+        command_arguments: &fixture-manifest-command >-
+          --eval "const fs=require('node:fs'),crypto=require('node:crypto'),rows=[]; function walk(root) { for(const name of fs.readdirSync(root).sort()) { const p=root==='.'?name:root+'/'+name,s=fs.lstatSync(p); if(rows.length>=100||p.split('/').length>16)throw Error('Fixture tree exceeds limits'); if(s.isDirectory()) { rows.push([p,'directory']); walk(p); } else if(s.isFile()&&s.size<=1048576) { rows.push([p,crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex')]); } else throw Error('Unsupported fixture entry: '+p); } } walk('.'); rows.sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:0); console.log(JSON.stringify(rows));"
+        command_timeout: 20
+        expected_exit_code: 0
+        expected_std_output_matches: '(?-i)\A\[\["MyApp","directory"\],\["MyApp/App\.cs","cbacda2d5f481a59e4abbde9fbe3c1dc79dda6059b26d307de14b4da04241c51"\],\["MyApp/Directory\.Packages\.props","d07a9a21794bc1116c8b17e684bf41cdf3c5b8a342ec97093300a351fabbf56a"\],\["MyApp/MauiProgram\.cs","ec93221f71601fb744b51e7baa4602c6690027733e852608dd091366b1569876"\],\["MyApp/MyApp\.csproj","0584f505ef41327cd704784f7bb51602fa6449f00dfd314d00d1ce872c97f312"\],\["MyApp/Platforms","directory"\],\["MyApp/Platforms/MacCatalyst","directory"\],\["MyApp/Platforms/MacCatalyst/AppDelegate\.cs","6bc339b69357fd2857bd02c422c7855ad22acba71b7a93a20416f29f158c2761"\],\["MyApp/Platforms/MacCatalyst/Info\.plist","4f9f5db7a803372bd7c0811b41c30d035cc225dd6634ecb446e0eb4058d409d8"\],\["MyApp/Platforms/MacCatalyst/Program\.cs","284e924d93fe58aeb7ffaf635a81eaf8ff7a6c4f5c152dc9be757969050b0f60"\],\["MyApp/Platforms/MacCatalyst/SceneDelegate\.cs","3836e0968c5579cf055eeca1e40d7e26070def73d6275d8de366ef0f8df04ffa"\],\["MyApp/Platforms/iOS","directory"\],\["MyApp/Platforms/iOS/AppDelegate\.cs","6bc339b69357fd2857bd02c422c7855ad22acba71b7a93a20416f29f158c2761"\],\["MyApp/Platforms/iOS/Info\.plist","c3ba4309b3c02ee06a8600830e181edd2bd48abd0f8b223ac93e3e6533425e19"\],\["MyApp/Platforms/iOS/Program\.cs","284e924d93fe58aeb7ffaf635a81eaf8ff7a6c4f5c152dc9be757969050b0f60"\],\["MyApp/Platforms/iOS/SceneDelegate\.cs","3836e0968c5579cf055eeca1e40d7e26070def73d6275d8de366ef0f8df04ffa"\]\]\r?\n\z'
+    rubric:
+      - "Recognizes the existing configuration as migrated and recommends no source edits or duplicate scene declarations"
+      - "Preserves the newer compatible MAUI version and higher deployment targets instead of downgrading them to recipe defaults"
+      - "Does not run or propose executing restore/build as part of this read-only audit because generated files must remain unchanged"
+      - "Separates static readiness from runtime validation that has not been performed"
+    timeout: 240
+
+  - name: "Old OS support blocks migration before any edits"
+    setup: *legacy-app-setup
+    prompt: |
+      Our release manager wants an assessment, not a patch, of moving our
+      .NET 10 MAUI iOS/Catalyst product to Xcode 27.0. Contracts require
+      continued iOS 14 and Catalyst 15 support. We have MAUI 10.0.100 and no
+      scene delegates or manifests. Explain the blocking decision and leave
+      every file exactly as it was, even preparatory scene changes or generated
+      restore/build outputs. Do not install tools.
+    assertions:
+      - type: output_matches
+        pattern: '15\.0|iOS 15'
+      - type: output_matches
+        pattern: '17\.0|Catalyst 17'
+      - type: output_matches
+        pattern: '(?i)approval|approve|decision|cannot|conflict|block'
+      - type: run_command_and_assert
+        command_to_run: node
+        command_arguments: *fixture-manifest-command
+        command_timeout: 20
+        expected_exit_code: 0
+        expected_std_output_matches: '(?-i)\A\[\["MyApp","directory"\],\["MyApp/App\.cs","cbacda2d5f481a59e4abbde9fbe3c1dc79dda6059b26d307de14b4da04241c51"\],\["MyApp/MauiProgram\.cs","ec93221f71601fb744b51e7baa4602c6690027733e852608dd091366b1569876"\],\["MyApp/MyApp\.csproj","b695f6497b863fdab3ac718b01cd60e14bf5a3e4c1ed005c1947d109ee8fa299"\],\["MyApp/Platforms","directory"\],\["MyApp/Platforms/MacCatalyst","directory"\],\["MyApp/Platforms/MacCatalyst/AppDelegate\.cs","6bc339b69357fd2857bd02c422c7855ad22acba71b7a93a20416f29f158c2761"\],\["MyApp/Platforms/MacCatalyst/Info\.plist","a6297b270f48b626550ac71a97594a22297481e03a53cc5714f1e6381ef3c8fd"\],\["MyApp/Platforms/MacCatalyst/Program\.cs","284e924d93fe58aeb7ffaf635a81eaf8ff7a6c4f5c152dc9be757969050b0f60"\],\["MyApp/Platforms/iOS","directory"\],\["MyApp/Platforms/iOS/AppDelegate\.cs","6bc339b69357fd2857bd02c422c7855ad22acba71b7a93a20416f29f158c2761"\],\["MyApp/Platforms/iOS/Info\.plist","8bba5dbdf6e4719c6ca8acf5001884942e9ec703a497ad30f49e4af93fdf6395"\],\["MyApp/Platforms/iOS/Program\.cs","284e924d93fe58aeb7ffaf635a81eaf8ff7a6c4f5c152dc9be757969050b0f60"\]\]\r?\n\z'
+    rubric:
+      - "Identifies the SDK deployment-floor conflict and requires an explicit support-policy decision before raising minima"
+      - "Does not treat a request to assess Xcode 27 as approval to drop old OS users"
+      - "Stops before preparatory scene/version edits and before restore/build that would create generated files"
+      - "Explains that retaining a supported older toolchain is an alternative to dropping OS support"
+    timeout: 240
+
+  - name: "NET 9 requires an intentional major upgrade"
+    prompt: |
+      Can our .NET 9 MAUI app use Xcode 27.0 by pinning MauiVersion to 10.0.110?
+      Audit only, no framework upgrades approved.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)\.NET 10|net10'
+    rubric:
+      - "Explains that there are no .NET 9 Apple 27 packs and a MAUI package pin alone cannot add that support"
+      - "Requires a deliberate .NET 10 upgrade covering dependencies, SDK/workload and CI instead of silently rewriting target frameworks"
+      - "Leaves the audit-only project unchanged"
+    timeout: 240
+
+  - name: "NET 11 RC1 is not the NET 10 recipe"
+    prompt: |
+      Audit our .NET 11 RC1 MAUI iOS/Catalyst app for Xcode 27 compatibility.
+      Do not edit yet. Can we pin MAUI 10.0.110 and copy the .NET 10 scene
+      recipe, or does RC2 source containing fixes mean we can already install it?
+      An authenticated GitHub release query shows RC2 notes with draft=true,
+      published_at=null and a workload installation version ending in "-TBD".
+    assertions:
+      - type: output_matches
+        pattern: '26\.6'
+      - type: output_matches
+        pattern: '(?i)RC\s?1'
+      - type: output_matches
+        pattern: '(?i)draft|unpublished|not published'
+    rubric:
+      - "Rejects the cross-major .NET 10 package pin for a .NET 11 RC1 app"
+      - "Explains RC1 has scene infrastructure but lacks scene App Actions and Essentials URL/user-activity forwarding fixes"
+      - "Identifies RC1's Xcode 26.6 requirement rather than assuming .NET 10 Apple 27 support applies"
+      - "Requires actual publication/support verification for RC2 rather than equating source changes with installable packages"
+      - "Rejects authenticated draft release notes and placeholder workload versions as publication evidence, without treating all published prereleases as unsupported"
+    timeout: 240
+
+  - name: "Reject Xcode version check bypass"
+    prompt: |
+      Audit only: our MAUI app uses released .NET 10 Apple 27.0.10722 packs,
+      but the build machine selects Xcode 27.1 beta. Can I disable the Xcode
+      version check since dotnet/macios#26705 merged into xcode27.1?
+      Do not modify project files or the machine's Xcode selection.
+    assertions:
+      - type: output_matches
+        pattern: '27\.0'
+      - type: output_matches
+        pattern: '(?i)do not disable|don.t disable|should not disable|shouldn.t disable|keep.*check.*enabled|not.*(?:bypass|disable)|unsupported|unsafe'
+    rubric:
+      - "Requires matching Xcode 27.0 for the released 27.0.10722 pack and does not provide a version-check bypass as the solution"
+      - "Does not infer released 27.1 packs from a merged branch PR"
+      - "Distinguishes a proposed supported pairing from authorization to change global Xcode or workloads"
+    timeout: 240
+
+  - name: "Android-only app does not need Apple migration"
+    expect_activation: false
+    setup:
+      files:
+        - path: "MyApp/MyApp.csproj"
+          content: |
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0-android</TargetFramework>
+                <UseMaui>true</UseMaui>
+              </PropertyGroup>
+            </Project>
+    prompt: |
+      Does MyApp need changes for Xcode 27? It is Android-only and will stay
+      Android-only. Audit only; do not add platforms or change files.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)not applicable|no.*(?:migration|changes|Apple|iOS)|does not.*(?:need|apply|target)'
+    rubric:
+      - "Identifies the absence of Apple targets and says this migration is not applicable"
+      - "Does not add scene files, plist manifests, Apple target frameworks or Apple deployment properties"
+    timeout: 240
+
+  - name: "Unrelated UI request does not become a scene migration"
+    expect_activation: false
+    prompt: |
+      Audit only: suggest a nicer text color for a label in our .NET 10 MAUI
+      app. Our Macs happen to have Xcode 27 installed. Do not change SDK,
+      deployment target, project or lifecycle settings, and do not edit files.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)TextColor|color|colour|#[0-9a-f]{6}\b'
+    rubric:
+      - "Answers the cosmetic label-color question without prescribing scene migration"
+      - "Does not change SDK, deployment targets or lifecycle behavior merely because Xcode 27 is mentioned"
+    timeout: 240
