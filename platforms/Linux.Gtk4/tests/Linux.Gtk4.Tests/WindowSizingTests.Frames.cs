@@ -56,7 +56,8 @@ public partial class WindowSizingTests
 	{
 		public string Name { get; }
 		public Window Window { get; }
-		public Gtk.Window Native => (Gtk.Window)Window.Handler!.PlatformView!;
+		public Gtk.Window Native { get; set; } = null!;
+		public IElementHandler WindowHandler { get; set; } = null!;
 		public SizedPage Page { get; } = new();
 		public SizedGrid Grid { get; } = new();
 		public Label Label { get; } = new() { Text = "Native allocated frames" };
@@ -132,12 +133,14 @@ public partial class WindowSizingTests
 			Assert.True(Page.Height < Window.Page!.Height, "Native navigation chrome must not be counted as page content.");
 			Assert.Equal(Grid.Width, Label.Width);
 			Assert.NotEmpty(Cards);
-			foreach (var card in Cards.Where(c => c.Handler?.PlatformView is Gtk.Widget w && w.GetMapped()))
+			var mappedCards = Cards.Where(c => c.Handler?.PlatformView is Gtk.Widget w && w.GetMapped()).ToArray();
+			Assert.NotEmpty(mappedCards);
+			foreach (var card in mappedCards)
 			{
 				var native = (Gtk.Widget)card.Handler!.PlatformView!;
 				Assert.True(card.Width > 0);
 				Assert.Equal(native.GetAllocatedWidth(), card.Width);
-				Assert.Equal(card.Width, card.Children[0].Width);
+				Assert.Equal(card.Width, card.Children[0].Frame.Width);
 				Assert.InRange(card.Width, Grid.Width - 40, Grid.Width);
 			}
 		}
@@ -152,12 +155,18 @@ public partial class WindowSizingTests
 		int _step;
 		int[] _windowEvents = [];
 		int[][] _viewEvents = [];
+		int[][] _allocations = [];
+		Size[] _windowSizes = [];
 		readonly Stopwatch _clock = new();
 
 		public void Start()
 		{
 			foreach (var scenario in _scenarios)
+			{
 				app.OpenWindow(scenario.Window);
+				scenario.WindowHandler = scenario.Window.Handler!;
+				scenario.Native = (Gtk.Window)scenario.WindowHandler.PlatformView!;
+			}
 			Apply();
 			GLib.Functions.TimeoutAdd(0, 50, Tick);
 		}
@@ -166,12 +175,38 @@ public partial class WindowSizingTests
 		{
 			_windowEvents = _scenarios.Select(s => s.WindowEvents).ToArray();
 			_viewEvents = _scenarios.Select(s => s.SizeEvents.Values.ToArray()).ToArray();
+			_allocations = _scenarios.Select(s => s.SizeEvents.Keys.Select(v => ((IAllocationProbe)v).Allocations.Count).ToArray()).ToArray();
+			_windowSizes = _scenarios.Select(s => new Size(s.Window.Width, s.Window.Height)).ToArray();
 			if (_step < _sizes.Length)
 				for (var i = 0; i < _scenarios.Length; i++)
 				{
 					// Different widths prove callbacks don't accidentally report the active window.
 					var (width, height) = _sizes[_step];
 					_scenarios[i].Native.SetDefaultSize(width + i * 10, height);
+				}
+			if (_step == 5)
+			{
+				foreach (var scenario in _scenarios)
+				{
+					var titlebar = Gtk.Box.New(Gtk.Orientation.Horizontal, 0);
+					titlebar.SetSizeRequest(-1, 40);
+					scenario.Native.Hide();
+					scenario.Native.Unrealize();
+					scenario.Native.SetTitlebar(titlebar);
+					scenario.Native.Show();
+				}
+			}
+			if (_step == 6)
+				foreach (var scenario in _scenarios)
+				{
+					scenario.WindowHandler.DisconnectHandler();
+					scenario.Native.SetDefaultSize(680, 600);
+				}
+			if (_step == 7)
+				foreach (var scenario in _scenarios)
+				{
+					scenario.WindowHandler.SetVirtualView(scenario.Window);
+					scenario.Native.SetDefaultSize(680, 600);
 				}
 			_clock.Restart();
 		}
@@ -181,7 +216,7 @@ public partial class WindowSizingTests
 			try
 			{
 				var size = _sizes[Math.Min(_step, _sizes.Length - 1)];
-				var ready = _scenarios.Select((s, i) => s.Native.GetAllocatedWidth() == size.Width + i * 10 &&
+				var ready = _scenarios.Select((s, i) => s.Native.GetAllocatedWidth() == (_step >= 6 ? 680 : size.Width + i * 10) &&
 					s.Label.Width == ((Gtk.Widget)s.Grid.Handler!.PlatformView!).GetAllocatedWidth()).All(x => x);
 				if ((!ready || _clock.ElapsedMilliseconds < 500) && _clock.Elapsed < TimeSpan.FromSeconds(5))
 					return true;
@@ -191,16 +226,31 @@ public partial class WindowSizingTests
 					var scenario = _scenarios[i];
 					try
 					{
+						if (_step == 6)
+						{
+							Assert.Equal(_windowEvents[i], scenario.WindowEvents);
+							Assert.Equal(_windowSizes[i], new Size(scenario.Window.Width, scenario.Window.Height));
+							continue;
+						}
 						scenario.AssertFrames(output, $"step {_step}");
+						if (_step >= 5)
+							Assert.True(scenario.Window.Height < scenario.Native.GetAllocatedHeight(),
+								"Client-side titlebar must not be counted in Window.Height.");
 						if (_step == _sizes.Length)
 						{
 							Assert.Equal(_windowEvents[i], scenario.WindowEvents);
 							Assert.Equal(_viewEvents[i], scenario.SizeEvents.Values.ToArray());
+							Assert.Equal(_allocations[i], scenario.SizeEvents.Keys.Select(v => ((IAllocationProbe)v).Allocations.Count).ToArray());
 						}
-						else
+						else if (_step != 5)
 						{
 							Assert.True(scenario.WindowEvents > _windowEvents[i]);
-							Assert.All(scenario.SizeEvents.Values.Zip(_viewEvents[i]), pair => Assert.True(pair.First > pair.Second));
+							if (_step < _sizes.Length)
+							{
+								Assert.All(scenario.SizeEvents.Values.Zip(_viewEvents[i]), pair => Assert.True(pair.First > pair.Second));
+								Assert.All(scenario.SizeEvents.Keys.Select(v => ((IAllocationProbe)v).Allocations.Count).Zip(_allocations[i]),
+									pair => Assert.True(pair.First > pair.Second));
+							}
 						}
 					}
 					catch (Exception ex)
@@ -209,7 +259,7 @@ public partial class WindowSizingTests
 						_failures.Add(ex);
 					}
 				}
-				if (++_step <= _sizes.Length)
+				if (++_step <= 7)
 				{
 					Apply();
 					return true;
