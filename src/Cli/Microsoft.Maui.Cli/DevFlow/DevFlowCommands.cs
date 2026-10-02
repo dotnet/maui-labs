@@ -39,6 +39,8 @@ public class DevFlowCommands
     internal static Func<int, Task<Broker.AgentRegistration[]?>> ListBrokerAgentsAsync { get; set; } = Broker.BrokerClient.ListAgentsAsync;
     internal static Func<AndroidDevFlowPortForwarder> CreateAndroidPortForwarder { get; set; } = AndroidDevFlowPortForwarder.CreateDefault;
     internal static Func<bool> IsAndroidAdbLikelyAvailable { get; set; } = AndroidDevFlowPortForwarder.IsAdbLikelyAvailable;
+    internal static Func<string, IAppDriver> RecordingDriverFactory { get; set; } = AppDriverFactory.Create;
+    internal static Func<RecordingState?> ReadRecordingState { get; set; } = RecordingStateManager.Load;
 
     private static IDevFlowOutputWriter Output => s_output ?? throw new InvalidOperationException("DevFlowCommands not initialized. Call CreateDevFlowCommand first.");
 
@@ -72,7 +74,7 @@ public class DevFlowCommands
         // ambiguity/refusal sentinel (issue #343) must be skipped when targeting a remote host.
         var agentHostOption = new Option<string>("--agent-host", "-ah") { Description = "Agent HTTP host", DefaultValueFactory = _ => "localhost" };
         var agentPortOption = new Option<int>("--agent-port", "-ap") { Description = "Agent HTTP port (auto-discovered via broker, .mauidevflow, or default 9223)", DefaultValueFactory = ar => ResolveAgentPort(ar.GetValue(agentHostOption)) };
-        var deviceOption = new Option<string?>("--device") { Description = "Device/emulator/simulator identifier for platform-specific DevFlow setup (currently used as an Android serial for ADB forwarding)" };
+        var deviceOption = new Option<string?>("--device") { Description = "Android serial for forwarding or recording, or iOS simulator UDID for recording" };
         var platformOption = new Option<string>("--platform", "-p") { Description = "Target platform (maccatalyst, android, ios, windows)", DefaultValueFactory = _ => "maccatalyst" };
         var noJsonOption = new Option<bool>("--no-json") { Description = "Force human-readable output even when piped", DefaultValueFactory = _ => false };
 
@@ -642,18 +644,13 @@ public class DevFlowCommands
             var platform = ctx.GetValue(platformOption)!;
             var output = ctx.GetValue(recordingOutputOption);
             var timeout = ctx.GetValue(recordingTimeoutOption);
-            await RecordingStartAsync(host, port, platform, output, timeout);
+            var device = ctx.GetValue(deviceOption);
+            await RecordingStartAsync(host, port, platform, output, timeout, device);
         });
         recordingCommand.Add(recordingStartCmd);
 
-        var recordingStopCmd = new Command("stop", "Stop active recording");
-        recordingStopCmd.SetAction(async (ctx, ct) =>
-        {
-            var host = ctx.GetValue(agentHostOption)!;
-            var port = ctx.GetValue(agentPortOption);
-            var platform = ctx.GetValue(platformOption)!;
-            await RecordingStopAsync(host, port, platform);
-        });
+        var recordingStopCmd = new Command("stop", "Stop the recording using its saved platform and device");
+        recordingStopCmd.SetAction((ctx, ct) => RecordingStopAsync());
         recordingCommand.Add(recordingStopCmd);
 
         var recordingStatusCmd = new Command("status", "Check if a recording is in progress");
@@ -3657,12 +3654,31 @@ public class DevFlowCommands
         }
     }
 
-    private static async Task RecordingStartAsync(string host, int port, string platform, string? output, int timeout)
+    internal static IAppDriver CreateRecordingDriver(string platform, string? device, bool starting)
+    {
+        if (starting
+            && (platform.Equals("ios", StringComparison.OrdinalIgnoreCase)
+                || platform.Equals("iossimulator", StringComparison.OrdinalIgnoreCase))
+            && string.IsNullOrWhiteSpace(device))
+        {
+            throw new ArgumentException("Specify --device <simulator UDID> for iOS recording.", nameof(device));
+        }
+
+        var driver = RecordingDriverFactory(platform);
+        if (driver is iOSSimulatorAppDriver simulator)
+            simulator.DeviceUdid = device;
+        else if (driver is AndroidAppDriver android)
+            android.Serial = device;
+
+        return driver;
+    }
+
+    private static async Task RecordingStartAsync(string host, int port, string platform, string? output, int timeout, string? device)
     {
         try
         {
             var filename = output ?? $"recording_{DateTime.Now:yyyyMMdd_HHmmss}.mp4";
-            using var driver = Microsoft.Maui.DevFlow.Driver.AppDriverFactory.Create(platform);
+            using var driver = CreateRecordingDriver(platform, device, starting: true);
             await driver.StartRecordingAsync(filename, timeout);
             Console.WriteLine($"Recording started (timeout: {timeout}s)");
             Console.WriteLine($"Output: {Path.GetFullPath(filename)}");
@@ -3670,11 +3686,13 @@ public class DevFlowCommands
         catch (Exception ex) { WriteError(ex.Message); }
     }
 
-    private static async Task RecordingStopAsync(string host, int port, string platform)
+    private static async Task RecordingStopAsync()
     {
         try
         {
-            using var driver = Microsoft.Maui.DevFlow.Driver.AppDriverFactory.Create(platform);
+            var state = ReadRecordingState()
+                ?? throw new InvalidOperationException("No active recording found.");
+            using var driver = CreateRecordingDriver(state.Platform, state.Serial, starting: false);
             var outputFile = await driver.StopRecordingAsync();
             var size = File.Exists(outputFile) ? new FileInfo(outputFile).Length : 0;
             Console.WriteLine($"Recording saved: {outputFile} ({size} bytes)");

@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/ci-linux-gtk4.yml'
+      - '.github/workflows/_build.yml'
       - 'platforms/Linux.Gtk4/**'
       - 'platforms/Shared/Essentials*/**'
       - 'eng/**'
@@ -18,6 +19,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/ci-linux-gtk4.yml'
+      - '.github/workflows/_build.yml'
       - 'platforms/Linux.Gtk4/**'
       - 'platforms/Shared/Essentials*/**'
       - 'eng/**'
@@ -49,6 +51,23 @@ jobs:
           platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
           --filter FullyQualifiedName~ShellNavigationRuntimeTests
           --logger "console;verbosity=detailed"
+
+  compatibility:
+    name: GTK registration - MAUI ${{ matrix.maui }}
+    strategy:
+      fail-fast: false
+      matrix:
+        maui: ['10.0.41', '10.0.60', '10.0.70', '10.0.110']
+    uses: ./.github/workflows/_build.yml
+    with:
+      project-path: platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
+      project-name: gtk-registration-${{ matrix.maui }}
+      os: '["windows-latest"]'
+      install-workloads: false
+      test-only: true
+      test-arguments-json: >-
+        ["-p:MauiVersion=${{ matrix.maui }}",
+         "--filter", "FullyQualifiedName~AlertManagerSubscriptionTests"]
 
   essentials-runtime:
     name: Essentials native GTK regression
@@ -100,6 +119,8 @@ jobs:
   runtime:
     name: Native GTK runtime (${{ matrix.test-class }})
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     strategy:
       matrix:
         # Each class gets its own process: GTK initialization is thread-affine.
