@@ -11,6 +11,7 @@
     <PackageReference Include="xunit" />
     <ProjectReference Include="..\..\src\Linux.Gtk4.Essentials\Linux.Gtk4.Essentials.csproj" />
     <Compile Include="..\..\..\Shared\Essentials.Tests\StaticFacadeTests.cs" Link="StaticFacadeTests.cs" />
+    <Compile Include="..\..\..\Shared\Essentials.Tests\FileSystemDirectoryTests.cs" Link="FileSystemDirectoryTests.cs" />
     <Using Include="Xunit" />
   </ItemGroup>
 </Project>
