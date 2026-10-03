@@ -1,0 +1,9 @@
+{
+  "solution": {
+    "path": "../../MauiLabs.slnx",
+    "projects": [
+      "src\\HotReload\\Microsoft.Maui.HotReload\\Microsoft.Maui.HotReload.csproj",
+      "src\\HotReload\\Microsoft.Maui.HotReload.SourceGen\\Microsoft.Maui.HotReload.SourceGen.csproj"
+    ]
+  }
+}
