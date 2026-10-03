@@ -53,13 +53,18 @@ internal static class ProfileSessionSetup
 			context.DiagnosticPort = context.ReservedPorts.DiagnosticPort;
 
 			var hasProfilingHelper = MauiProjectResolver.HasPackageReference(context.Project.ProjectPath, ProfileCommand.ProfilingHelperPackageId);
+			var existingBuildHooks = await ProfileBuildWorkspace.ResolveExistingBuildHooksAsync(
+				context.Project.ProjectPath,
+				context.Framework,
+				context.Configuration,
+				cancellationToken);
 			context.BuildInjection = ProfileCommandBuildInjectionResolver.TryCreateBuildInjection(
 				context.DiagnosticAddress,
 				context.ReservedPorts.ExitControlPort,
 				injectBootstrap: !hasProfilingHelper,
 				enableRuntimePgo: context.UseRuntimeOwnedTraceCollection || context.OutputFormat == TraceOutputFormat.Mibc,
 				eventPipeOutputPath: context.RuntimeOwnedTraceDevicePath);
-			context.BuildWorkspace.ConfigureBuildTargets(context.BuildInjection?.TargetsPath);
+			context.BuildWorkspace.ConfigureBuildTargets(context.BuildInjection?.TargetsPath, existingBuildHooks);
 
 			WriteDiagnosticPortInfo(context);
 			return context;

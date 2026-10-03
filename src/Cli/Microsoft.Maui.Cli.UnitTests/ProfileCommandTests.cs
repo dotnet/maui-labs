@@ -512,6 +512,119 @@ public class ProfileCommandTests
 	}
 
 	[Fact]
+	public async Task ProfileBuildWorkspace_MultiTargetApp_ValidatesOuterAndInnerBuilds()
+	{
+		using var tempProject = TempProjectFile("""
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <TargetFrameworks>net10.0;netstandard2.1</TargetFrameworks>
+			  </PropertyGroup>
+			</Project>
+			""");
+		var projectDirectory = Path.GetDirectoryName(tempProject.Path)!;
+		var formatter = new JsonOutputFormatter(TextWriter.Null);
+		var workspace = ProfileBuildWorkspace.Create(projectDirectory, formatter, useJson: true, verbose: false);
+		workspace.ConfigureBuildTargets(profilingInjectionTargetsPath: null);
+		try
+		{
+			var result = await RunProfileBuildAsync(tempProject.Path, workspace, "-f", "net10.0");
+
+			Assert.True(result.ExitCode == 0, result.Output);
+			Assert.Contains(
+				Directory.EnumerateFiles(workspace.Path, "TestProject.dll", SearchOption.AllDirectories),
+				File.Exists);
+		}
+		finally
+		{
+			workspace.Cleanup(formatter, useJson: true, verbose: false);
+		}
+	}
+
+	[Fact]
+	public async Task ProfileBuildWorkspace_MultiTargetOuterBuild_RejectsExternalRestorePathBeforeWrites()
+	{
+		using var tempProject = TempProjectFile("<Project Sdk=\"Microsoft.NET.Sdk\" />");
+		var projectDirectory = Path.GetDirectoryName(tempProject.Path)!;
+		var externalRestorePath = Path.Combine(projectDirectory, "external-restore");
+		File.WriteAllText(
+			tempProject.Path,
+			$"""
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <TargetFrameworks>net10.0;netstandard2.1</TargetFrameworks>
+			    <RestoreOutputPath>{System.Security.SecurityElement.Escape(externalRestorePath + Path.DirectorySeparatorChar)}</RestoreOutputPath>
+			  </PropertyGroup>
+			</Project>
+			""");
+
+		var formatter = new JsonOutputFormatter(TextWriter.Null);
+		var workspace = ProfileBuildWorkspace.Create(projectDirectory, formatter, useJson: true, verbose: false);
+		workspace.ConfigureBuildTargets(profilingInjectionTargetsPath: null);
+		try
+		{
+			var result = await RunProfileBuildAsync(tempProject.Path, workspace, "-f", "net10.0");
+
+			Assert.NotEqual(0, result.ExitCode);
+			Assert.Contains("could not isolate RestoreOutputPath", result.Output, StringComparison.OrdinalIgnoreCase);
+			Assert.False(Directory.Exists(externalRestorePath));
+		}
+		finally
+		{
+			workspace.Cleanup(formatter, useJson: true, verbose: false);
+		}
+	}
+
+	[Fact]
+	public async Task ProfileBuildWorkspace_MultiTargetProjectReference_ValidatesOuterAndInnerBuilds()
+	{
+		using var tempRoot = TempProjectFile("<Project />");
+		var rootDirectory = Path.GetDirectoryName(tempRoot.Path)!;
+		var appDirectory = Path.Combine(rootDirectory, "App");
+		var libraryDirectory = Path.Combine(rootDirectory, "Library");
+		Directory.CreateDirectory(appDirectory);
+		Directory.CreateDirectory(libraryDirectory);
+		var appProjectPath = Path.Combine(appDirectory, "App.csproj");
+		File.WriteAllText(
+			appProjectPath,
+			"""
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <TargetFramework>net10.0</TargetFramework>
+			  </PropertyGroup>
+			  <ItemGroup>
+			    <ProjectReference Include="../Library/Library.csproj" />
+			  </ItemGroup>
+			</Project>
+			""");
+		File.WriteAllText(
+			Path.Combine(libraryDirectory, "Library.csproj"),
+			"""
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <TargetFrameworks>net10.0;netstandard2.1</TargetFrameworks>
+			  </PropertyGroup>
+			</Project>
+			""");
+
+		var formatter = new JsonOutputFormatter(TextWriter.Null);
+		var workspace = ProfileBuildWorkspace.Create(appDirectory, formatter, useJson: true, verbose: false);
+		workspace.ConfigureBuildTargets(profilingInjectionTargetsPath: null);
+		try
+		{
+			var result = await RunProfileBuildAsync(appProjectPath, workspace);
+
+			Assert.True(result.ExitCode == 0, result.Output);
+			Assert.Contains(
+				Directory.EnumerateFiles(workspace.Path, "Library.dll", SearchOption.AllDirectories),
+				File.Exists);
+		}
+		finally
+		{
+			workspace.Cleanup(formatter, useJson: true, verbose: false);
+		}
+	}
+
+	[Fact]
 	public async Task ProfileBuildWorkspace_PreservesCustomBeforeDirectoryBuildProps()
 	{
 		using var tempProject = TempProjectFile("""
@@ -545,6 +658,120 @@ public class ProfileCommandTests
 				$"-p:CustomBeforeDirectoryBuildProps={earlyPropsPath}");
 
 			Assert.True(result.ExitCode == 0, result.Output);
+		}
+		finally
+		{
+			workspace.Cleanup(formatter, useJson: true, verbose: false);
+		}
+	}
+
+	[Fact]
+	public async Task ProfileBuildWorkspace_PreservesConfiguredDirectoryBuildTargetsPath()
+	{
+		using var tempProject = TempProjectFile("""
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <TargetFramework>net10.0</TargetFramework>
+			  </PropertyGroup>
+			  <Target Name="ValidateCustomBuildTargets" BeforeTargets="BeforeBuild">
+			    <Error Condition="'$(CustomBuildTargetsImported)' != 'true'" Text="CUSTOM_BUILD_TARGETS_NOT_LOADED" />
+			  </Target>
+			</Project>
+			""");
+		var projectDirectory = Path.GetDirectoryName(tempProject.Path)!;
+		var customTargetsPath = Path.Combine(projectDirectory, "build.targets");
+		File.WriteAllText(
+			Path.Combine(projectDirectory, "Directory.Build.props"),
+			$"""
+			<Project>
+			  <PropertyGroup>
+			    <DirectoryBuildTargetsPath>{System.Security.SecurityElement.Escape(customTargetsPath)}</DirectoryBuildTargetsPath>
+			  </PropertyGroup>
+			</Project>
+			""");
+		File.WriteAllText(
+			customTargetsPath,
+			"<Project><PropertyGroup><CustomBuildTargetsImported>true</CustomBuildTargetsImported></PropertyGroup></Project>");
+
+		var formatter = new JsonOutputFormatter(TextWriter.Null);
+		var workspace = ProfileBuildWorkspace.Create(projectDirectory, formatter, useJson: true, verbose: false);
+		workspace.ConfigureBuildTargets(profilingInjectionTargetsPath: null);
+		try
+		{
+			var result = await RunProfileBuildAsync(tempProject.Path, workspace);
+
+			Assert.True(result.ExitCode == 0, result.Output);
+		}
+		finally
+		{
+			workspace.Cleanup(formatter, useJson: true, verbose: false);
+		}
+	}
+
+	[Fact]
+	public async Task ProfileBuildWorkspace_PreservesConfiguredCustomAfterHooks()
+	{
+		using var tempProject = TempProjectFile("""
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+			    <TargetFrameworks>net10.0;netstandard2.1</TargetFrameworks>
+			  </PropertyGroup>
+			</Project>
+			""");
+		var projectDirectory = Path.GetDirectoryName(tempProject.Path)!;
+		var innerTargetsPath = Path.Combine(projectDirectory, "custom-inner.targets");
+		var outerTargetsPath = Path.Combine(projectDirectory, "custom-outer.targets");
+		var innerMarkerPath = Path.Combine(projectDirectory, "custom-inner.marker");
+		var outerMarkerPath = Path.Combine(projectDirectory, "custom-outer.marker");
+		File.WriteAllText(
+			Path.Combine(projectDirectory, "Directory.Build.props"),
+			$"""
+			<Project>
+			  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+			    <CustomAfterDirectoryBuildTargets>{System.Security.SecurityElement.Escape(innerTargetsPath)}</CustomAfterDirectoryBuildTargets>
+			    <CustomAfterMicrosoftCommonCrossTargetingTargets>{System.Security.SecurityElement.Escape(outerTargetsPath)}</CustomAfterMicrosoftCommonCrossTargetingTargets>
+			  </PropertyGroup>
+			</Project>
+			""");
+		File.WriteAllText(
+			innerTargetsPath,
+			$"""
+			<Project InitialTargets="MarkCustomInnerHook">
+			  <Target Name="MarkCustomInnerHook">
+			    <Error Condition="'$(IsCrossTargetingBuild)' == 'true'" Text="INNER_HOOK_RAN_IN_OUTER_BUILD" />
+			    <WriteLinesToFile File="{System.Security.SecurityElement.Escape(innerMarkerPath)}" Lines="inner" Overwrite="true" />
+			  </Target>
+			</Project>
+			""");
+		File.WriteAllText(
+			outerTargetsPath,
+			$"""
+			<Project InitialTargets="MarkCustomOuterHook">
+			  <Target Name="MarkCustomOuterHook">
+			    <Error Condition="'$(IsCrossTargetingBuild)' != 'true'" Text="OUTER_HOOK_RAN_IN_INNER_BUILD" />
+			    <WriteLinesToFile File="{System.Security.SecurityElement.Escape(outerMarkerPath)}" Lines="outer" Overwrite="true" />
+			  </Target>
+			</Project>
+			""");
+
+		var formatter = new JsonOutputFormatter(TextWriter.Null);
+		var workspace = ProfileBuildWorkspace.Create(projectDirectory, formatter, useJson: true, verbose: false);
+		try
+		{
+			var hooks = await ProfileBuildWorkspace.ResolveExistingBuildHooksAsync(
+				tempProject.Path,
+				"net10.0",
+				"Release",
+				CancellationToken.None);
+			Assert.Contains(Path.GetFullPath(innerTargetsPath), hooks.InnerTargets);
+			Assert.Contains(Path.GetFullPath(outerTargetsPath), hooks.OuterTargets);
+			workspace.ConfigureBuildTargets(profilingInjectionTargetsPath: null, hooks);
+
+			var result = await RunProfileBuildAsync(tempProject.Path, workspace, "-f", "net10.0", "-c", "Release");
+
+			Assert.True(result.ExitCode == 0, result.Output);
+			Assert.True(File.Exists(innerMarkerPath));
+			Assert.True(File.Exists(outerMarkerPath));
 		}
 		finally
 		{
@@ -1612,8 +1839,8 @@ public class ProfileCommandTests
 		Assert.Contains("-p:_MlaunchWaitForExit=false", args);
 		Assert.Contains($"-p:ArtifactsPath={artifactsPath}", args);
 		Assert.Contains($"-p:DirectoryBuildPropsPath={directoryBuildPropsPath}", args);
-		Assert.Contains($"-p:DirectoryBuildTargetsPath={directoryBuildTargetsPath}", args);
-		Assert.Contains("-p:ImportDirectoryBuildTargets=true", args);
+		Assert.Contains($"-p:CustomAfterDirectoryBuildTargets={directoryBuildTargetsPath}", args);
+		Assert.Contains($"-p:CustomAfterMicrosoftCommonCrossTargetingTargets={directoryBuildTargetsPath}", args);
 	}
 
 	[Fact]
@@ -1643,8 +1870,8 @@ public class ProfileCommandTests
 		Assert.Contains("-p:EnableDiagnostics=true", args);
 		Assert.Contains($"-p:ArtifactsPath={artifactsPath}", args);
 		Assert.Contains($"-p:DirectoryBuildPropsPath={directoryBuildPropsPath}", args);
-		Assert.Contains($"-p:DirectoryBuildTargetsPath={directoryBuildTargetsPath}", args);
-		Assert.Contains("-p:ImportDirectoryBuildTargets=true", args);
+		Assert.Contains($"-p:CustomAfterDirectoryBuildTargets={directoryBuildTargetsPath}", args);
+		Assert.Contains($"-p:CustomAfterMicrosoftCommonCrossTargetingTargets={directoryBuildTargetsPath}", args);
 	}
 
 	[Fact]
@@ -2241,10 +2468,12 @@ public class ProfileCommandTests
 			"build",
 			projectPath,
 			"--nologo",
+			"-m:1",
+			"-nr:false",
 			$"-p:ArtifactsPath={workspace.Path}",
 			$"-p:DirectoryBuildPropsPath={workspace.DirectoryBuildPropsPath}",
-			$"-p:DirectoryBuildTargetsPath={workspace.DirectoryBuildTargetsPath}",
-			"-p:ImportDirectoryBuildTargets=true"
+			$"-p:CustomAfterDirectoryBuildTargets={workspace.DirectoryBuildTargetsPath}",
+			$"-p:CustomAfterMicrosoftCommonCrossTargetingTargets={workspace.DirectoryBuildTargetsPath}"
 		};
 		arguments.AddRange(additionalArguments);
 
