@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using ModelContextProtocol.Server;
 using Microsoft.Maui.Cli.DevFlow.Mcp;
@@ -38,7 +39,7 @@ public sealed class FlowTools
         using var agent = await session.GetAgentClientAsync(agentPort);
         var replayer = new FlowReplayer(agent);
         var report = await replayer.ReplayAsync(parsed.Flow!, read.Path);
-        return Json(report);
+        return Json(JsonSerializer.SerializeToNode(report, DevFlowCliJsonContext.Default.FlowReplayReport));
     }
 
     [McpServerTool(Name = "maui_flow_validate"),
@@ -54,13 +55,13 @@ public sealed class FlowTools
         if (!parsed.Ok) return Task.FromResult(Error(parsed.Error!));
 
         var v = FlowValidator.Validate(parsed.Flow!);
-        return Task.FromResult(Json(new
+        return Task.FromResult(Json(new JsonObject
         {
-            ok = v.Ok,
-            name = parsed.Flow!.Name,
-            steps = parsed.Flow!.Steps.Count,
-            errors = v.Errors,
-            warnings = v.Warnings,
+            ["ok"] = v.Ok,
+            ["name"] = parsed.Flow!.Name,
+            ["steps"] = parsed.Flow!.Steps.Count,
+            ["errors"] = JsonSerializer.SerializeToNode(v.Errors, DevFlowCliJsonContext.Default.ListString),
+            ["warnings"] = JsonSerializer.SerializeToNode(v.Warnings, DevFlowCliJsonContext.Default.ListString),
         }));
     }
 
@@ -83,21 +84,36 @@ public sealed class FlowTools
         }
 
         if (!Directory.Exists(dir))
-            return Task.FromResult(Json(new { ok = true, directory = dir, tests = Array.Empty<object>() }));
+            return Task.FromResult(Json(new JsonObject
+            {
+                ["ok"] = true,
+                ["directory"] = dir,
+                ["tests"] = new JsonArray()
+            }));
 
         try
         {
             var tests = Directory.EnumerateFiles(dir, "*.md", SearchOption.TopDirectoryOnly)
                 .Take(MaxListResults)
-                .Select(f => new { name = Path.GetFileNameWithoutExtension(f), file = f })
+                .Select(f => new FlowFileSummary(Path.GetFileNameWithoutExtension(f), f))
                 .ToList();
-            return Task.FromResult(Json(new { ok = true, directory = dir, tests }));
+            return Task.FromResult(Json(new JsonObject
+            {
+                ["ok"] = true,
+                ["directory"] = dir,
+                ["tests"] = JsonSerializer.SerializeToNode(tests, DevFlowCliJsonContext.Default.ListFlowFileSummary)
+            }));
         }
         catch (Exception ex)
         {
             return Task.FromResult(Error($"Could not list tests: {ex.Message}"));
         }
     }
+
+    /// <summary>A single .md flow test entry returned by <see cref="List"/>.</summary>
+    internal sealed record FlowFileSummary(
+        [property: JsonPropertyName("name")] string Name,
+        [property: JsonPropertyName("file")] string File);
 
     // ── File reading with validation (defence: .md only, existing regular file, size cap) ──
     private static (string? Path, string? Text, string? Error) ReadFlowFile(string file)
@@ -135,11 +151,9 @@ public sealed class FlowTools
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
-    private static string Json(object value) => JsonSerializer.Serialize(value, JsonOpts);
-    private static string Error(string error) => JsonSerializer.Serialize(new { ok = false, error }, JsonOpts);
+    private static string Json(JsonNode? value) => value?.ToJsonString(JsonOpts) ?? "null";
+    private static string Error(string error) => Json(new JsonObject { ["ok"] = false, ["error"] = error });
 }

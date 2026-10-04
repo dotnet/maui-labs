@@ -40,3 +40,4 @@ jobs:
       run-tests: true
       pack: true
       install-workloads: false
+      os: '["macos-latest", "windows-latest", "ubuntu-24.04"]'
