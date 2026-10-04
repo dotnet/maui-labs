@@ -12,12 +12,14 @@ internal sealed class ProfileSessionContext
 		ProfileSessionRequest request,
 		string primaryOutputPath,
 		string profilePlatform,
-		ProfileTransportConfiguration transport)
+		ProfileTransportConfiguration transport,
+		ProfileBuildWorkspace buildWorkspace)
 	{
 		Request = request;
 		PrimaryOutputPath = primaryOutputPath;
 		ProfilePlatform = profilePlatform;
 		Transport = transport;
+		BuildWorkspace = buildWorkspace;
 		RequestedDiagnosticPort = request.DiagnosticPort;
 		DiagnosticPort = request.DiagnosticPort;
 		StartedAtUtc = DateTimeOffset.UtcNow;
@@ -48,6 +50,7 @@ internal sealed class ProfileSessionContext
 	internal string PrimaryOutputPath { get; }
 	internal string ProfilePlatform { get; }
 	internal ProfileTransportConfiguration Transport { get; }
+	internal ProfileBuildWorkspace BuildWorkspace { get; }
 	internal string DsrouterKind => Transport.DsrouterKind;
 	internal string DiagnosticAddress => Transport.DiagnosticAddress;
 	internal bool RequiresExplicitDsrouter => Transport.RequiresExplicitDsrouter && !UseRuntimeOwnedTraceCollection;
