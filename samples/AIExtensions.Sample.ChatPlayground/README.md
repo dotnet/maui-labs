@@ -10,7 +10,8 @@ and Windows (not native macOS); available providers vary by platform.
 
 Switch between providers, stream responses, request structured JSON, and try
 optional tools. `Microsoft.Maui.Essentials.AI` provides on-device text chat
-through `AppleIntelligenceChatClient`. Azure uses the Responses API and also
+through `AppleIntelligenceChatClient`. On iOS and Mac Catalyst 27+, image attachments
+require a ready vision-capable model. Azure uses the Responses API and also
 supports image input, reasoning summaries, and an optional image-generation
 tool. Apple does not generate images or fall back to Azure.
 
