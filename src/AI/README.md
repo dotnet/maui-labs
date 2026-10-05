@@ -54,6 +54,19 @@ dotnet build src/AI/EssentialsAI.slnf
 
 The CI pipeline handles the macOS → Windows artifact flow automatically. See `.github/workflows/ci-essentialsai.yml` for details.
 
+### Xcode 27 builds
+
+CI builds the native Swift library on an Xcode 27 runner while keeping the
+package's normal Apple target frameworks unchanged. To opt into Apple 27
+reference packs locally, install the .NET 10.0.401 SDK and matching workloads,
+select Xcode 27 with `DEVELOPER_DIR`, and build with
+`-p:UseXcode27Preview=true -f net10.0-maccatalyst27.0` (or the corresponding
+`ios27.0` / `macos27.0` framework). `UseXcode27Preview` only changes this
+repo's target-framework list; it does not install or select Xcode. When
+building the normal Apple 26.x reference packs with Xcode 27, the native
+CI job passes `ValidateXcodeVersion=false` to bypass the older packs' Xcode
+version check.
+
 ## Architecture
 
 - **Native Swift bindings** (`AppleNative/EssentialsAI/`) compiled via Xcode, producing `.xcframework` bundles
