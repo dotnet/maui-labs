@@ -1,9 +1,7 @@
 # Microsoft.Maui.Essentials.AI
 
-On-device AI capabilities for .NET MAUI via
-[`Microsoft.Extensions.AI`](https://www.nuget.org/packages/Microsoft.Extensions.AI.Abstractions)
-and [`Microsoft.Extensions.DataIngestion`](https://www.nuget.org/packages/Microsoft.Extensions.DataIngestion.Abstractions)
-abstractions.
+On-device AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://www.nuget.org/packages/Microsoft.Extensions.AI.Abstractions)
+and [`Microsoft.Extensions.DataIngestion`](https://www.nuget.org/packages/Microsoft.Extensions.DataIngestion.Abstractions) abstractions.
 
 > **Note:** This is the contributor/repo-browsing README. The NuGet consumer README with install instructions and full usage examples is at [`Microsoft.Maui.Essentials.AI/README.md`](Microsoft.Maui.Essentials.AI/README.md).
 
@@ -13,8 +11,8 @@ abstractions.
 - **Streaming** — progressive JSON deserialization of LLM responses via `JsonStreamChunker` and `PlainTextStreamChunker`
 - **Tool calling** — function-calling support for on-device models
 - **NL embeddings** — on-device semantic search via Apple's NaturalLanguage framework (`NLEmbeddingGenerator`)
-- **Document ingestion** — `AppleVisionDocumentReader` reads images and PDFs using Apple Vision into
-  standard ingestion sections, headers, paragraphs, and tables for RAG (iOS/Mac Catalyst/macOS 26+)
+- **Document ingestion** — `AppleVisionDocumentReader` maps images and PDFs to standard ingestion sections, headers,
+  paragraphs, and tables for RAG on iOS/Mac Catalyst/macOS 26+
 
 ### Platform Support
 
@@ -57,7 +55,7 @@ var document = await reader.ReadAsync(new FileInfo("receipt.pdf"), "receipt-123"
 # macOS (builds Swift bindings + .NET library)
 dotnet build src/AI/EssentialsAI.slnf
 
-# Windows (CI only — the Azure DevOps pipeline downloads macOS-built
+# Windows (CI only — the official pipeline downloads macOS-built
 # native artifacts automatically. Local Windows builds require CI=true
 # or TF_BUILD=true for the pre-built artifact path to activate.)
 ```
@@ -66,16 +64,17 @@ The CI pipeline handles the macOS → Windows artifact flow automatically. See `
 
 ### Xcode 27 builds
 
-CI builds the native Swift library on an Xcode 27 runner while keeping the
-package's normal Apple target frameworks unchanged. To opt into Apple 27
-reference packs locally, install the .NET 10.0.401 SDK and matching workloads,
-select Xcode 27 with `DEVELOPER_DIR`, and build with
-`-p:UseXcode27Preview=true -f net10.0-maccatalyst27.0` (or the corresponding
-`ios27.0` / `macos27.0` framework). `UseXcode27Preview` only changes this
-repo's target-framework list; it does not install or select Xcode. When
-building the normal Apple 26.x reference packs with Xcode 27, the native
-CI job passes `ValidateXcodeVersion=false` to bypass the older packs' Xcode
-version check.
+CI builds the native Swift library with Xcode 27 while keeping the package's normal Apple target frameworks unchanged.
+To opt into Apple 27 reference packs locally, install .NET 10.0.401 and matching workloads, select Xcode 27 with
+`DEVELOPER_DIR`, and build with `-p:UseXcode27Preview=true -f net10.0-maccatalyst27.0` (or `ios27.0` / `macos27.0`).
+`UseXcode27Preview` only changes the target-framework list; it does not install or select Xcode. For normal Apple 26.x
+reference packs with Xcode 27, the native CI job passes `ValidateXcodeVersion=false` to bypass the older version check.
+
+### Document reader limitations
+
+The reader deliberately omits geometry, confidence, typed barcodes/entities/lists, request options, raw observations,
+and progress/streaming. List text maps to paragraphs; no provider metadata or native result types are public.
+A future official `IDocumentExtractionClient` is the likely home for these typed capabilities and provider escape hatches.
 
 ## Architecture
 

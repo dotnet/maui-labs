@@ -157,13 +157,13 @@ public sealed class AppleVisionDocumentReader : IngestionDocumentReader
 				switch (kind)
 				{
 					case "title" when !string.IsNullOrWhiteSpace(text):
-						section.Elements.Add(new IngestionDocumentHeader(text) { Level = 1 });
+						section.Elements.Add(new IngestionDocumentHeader(text) { Level = 1, Text = text, PageNumber = pageNumber });
 						break;
 					case "paragraph" when !string.IsNullOrWhiteSpace(text):
-						section.Elements.Add(new IngestionDocumentParagraph(text));
+						section.Elements.Add(new IngestionDocumentParagraph(text) { Text = text, PageNumber = pageNumber });
 						break;
 					case "table":
-						section.Elements.Add(ReadTable(element));
+						section.Elements.Add(ReadTable(element, pageNumber));
 						break;
 				}
 			}
@@ -181,7 +181,7 @@ public sealed class AppleVisionDocumentReader : IngestionDocumentReader
 		}
 	}
 
-	private static IngestionDocumentTable ReadTable(JsonElement table)
+	private static IngestionDocumentTable ReadTable(JsonElement table, int pageNumber)
 	{
 		var rowCount = table.GetProperty("rows").GetInt32();
 		var columnCount = table.GetProperty("columns").GetInt32();
@@ -199,7 +199,7 @@ public sealed class AppleVisionDocumentReader : IngestionDocumentReader
 				throw new InvalidDataException("Vision returned a table cell outside its grid.");
 			var text = cell.GetProperty("text").GetString();
 			if (!string.IsNullOrWhiteSpace(text))
-				cells[row, column] = new IngestionDocumentParagraph(text);
+				cells[row, column] = new IngestionDocumentParagraph(text) { Text = text, PageNumber = pageNumber };
 		}
 		var markdown = new StringBuilder();
 		for (var r = 0; r < rowCount; r++)
@@ -219,6 +219,6 @@ public sealed class AppleVisionDocumentReader : IngestionDocumentReader
 				markdown.AppendLine();
 			}
 		}
-		return new IngestionDocumentTable(markdown.ToString().TrimEnd(), cells);
+		return new IngestionDocumentTable(markdown.ToString().TrimEnd(), cells) { PageNumber = pageNumber };
 	}
 }

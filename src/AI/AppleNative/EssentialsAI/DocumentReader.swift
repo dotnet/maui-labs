@@ -66,8 +66,8 @@ public final class VisionDocumentReaderNative: NSObject {
                     let c = cell.columnRange.lowerBound
                     guard r >= 0, c >= 0 else { continue }
                     guard seen.insert("\(r):\(c)").inserted else { continue }
-                    rowCount = max(rowCount, cell.rowRange.upperBound + 1)
-                    columnCount = max(columnCount, cell.columnRange.upperBound + 1)
+                    rowCount = max(rowCount, r + cell.rowRange.count)
+                    columnCount = max(columnCount, c + cell.columnRange.count)
                     cells.append(["row": r, "column": c,
                                   "rowSpan": cell.rowRange.count,
                                   "columnSpan": cell.columnRange.count,

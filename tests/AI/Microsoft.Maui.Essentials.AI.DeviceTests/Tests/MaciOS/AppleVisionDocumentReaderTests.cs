@@ -28,6 +28,25 @@ public class AppleVisionDocumentReaderTests
 	private static string Content(IngestionDocumentSection section) =>
 		string.Join("\n", section.Elements.Select(element => element.GetMarkdown()));
 
+	private static void AssertPageNumbers(IngestionDocumentSection section, int expected)
+	{
+		Assert.Equal(expected, section.PageNumber);
+		Assert.All(section.Elements, element =>
+		{
+			Assert.Equal(expected, element.PageNumber);
+			Assert.False(element.HasMetadata);
+			if (element is IngestionDocumentTable table)
+			{
+				foreach (var cell in table.Cells)
+				{
+					if (cell is null) continue;
+					Assert.Equal(expected, cell.PageNumber);
+					Assert.False(cell.HasMetadata);
+				}
+			}
+		});
+	}
+
 	[Fact]
 	public async Task ReadAsync_Image_PreservesIdentifierAndText()
 	{
@@ -37,7 +56,7 @@ public class AppleVisionDocumentReaderTests
 			.ReadAsync(image, "sample-image", "image/png");
 		Assert.Equal("sample-image", document.Identifier);
 		var section = Assert.Single(document.Sections);
-		Assert.Equal(1, section.PageNumber);
+		AssertPageNumbers(section, 1);
 		Assert.Contains(section.Elements, element =>
 			element is IngestionDocumentHeader or IngestionDocumentParagraph);
 		Assert.Equal(1, CountOccurrences(Content(section), "DOCUMENT EXTRACTION EVALUATION"));
@@ -53,8 +72,9 @@ public class AppleVisionDocumentReaderTests
 			.ReadAsync(image, "table-image", "image/png");
 		var section = Assert.Single(document.Sections);
 		var table = Assert.Single(section.Elements.OfType<IngestionDocumentTable>());
-		Assert.True(table.Cells.GetLength(0) > 1);
-		Assert.True(table.Cells.GetLength(1) > 1);
+		Assert.Equal(4, table.Cells.GetLength(0));
+		Assert.Equal(3, table.Cells.GetLength(1));
+		AssertPageNumbers(section, 1);
 		Assert.Contains("|", table.GetMarkdown());
 		Assert.NotNull(table.Cells[0, 0]);
 		Assert.Equal(1, CountOccurrences(Content(section), "Notebook"));
@@ -86,10 +106,13 @@ public class AppleVisionDocumentReaderTests
 		var table = Assert.Single(section.Elements.OfType<IngestionDocumentTable>());
 		Assert.Equal(3, table.Cells.GetLength(0));
 		Assert.Equal(3, table.Cells.GetLength(1));
+		AssertPageNumbers(section, 1);
 		Assert.Equal("Merged header", table.Cells[0, 0]?.GetMarkdown());
 		Assert.Null(table.Cells[0, 1]);
 		Assert.Equal("Count", table.Cells[0, 2]?.GetMarkdown());
 		Assert.Equal("Apples", table.Cells[1, 0]?.GetMarkdown());
+		Assert.Equal("Bread", table.Cells[2, 0]?.GetMarkdown());
+		Assert.Equal("8", table.Cells[2, 2]?.GetMarkdown());
 		Assert.Equal(1, CountOccurrences(Content(section), "Merged header"));
 		Assert.Equal(1, CountOccurrences(Content(section), "Apples"));
 	}
@@ -103,8 +126,8 @@ public class AppleVisionDocumentReaderTests
 			.ReadAsync(pdf, "pdf-identifier", "application/pdf");
 		Assert.Equal("pdf-identifier", document.Identifier);
 		Assert.Equal(2, document.Sections.Count);
-		Assert.Equal(1, document.Sections[0].PageNumber);
-		Assert.Equal(2, document.Sections[1].PageNumber);
+		AssertPageNumbers(document.Sections[0], 1);
+		AssertPageNumbers(document.Sections[1], 2);
 		Assert.Equal(1, CountOccurrences(Content(document.Sections[0]), "FIRST PAGE"));
 		Assert.Equal(1, CountOccurrences(Content(document.Sections[1]), "SECOND PAGE"));
 	}

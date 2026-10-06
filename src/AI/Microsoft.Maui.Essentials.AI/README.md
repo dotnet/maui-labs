@@ -71,10 +71,9 @@ var embeddings = await generator.GenerateAsync(["sunset beach", "mountain hiking
 
 ### Read an image or PDF for ingestion
 
-On iOS 26+, Mac Catalyst 26+, or macOS 26+, use `AppleVisionDocumentReader` as
-an `IngestionDocumentReader`. Recognition runs locally through Apple's Vision
-`RecognizeDocumentsRequest`. A PDF is rendered internally with PDFKit and produces
-one numbered `IngestionDocumentSection` per page; an image produces one section.
+On iOS 26+, Mac Catalyst 26+, or macOS 26+, use `AppleVisionDocumentReader` as an `IngestionDocumentReader`.
+Recognition runs locally through Apple's Vision `RecognizeDocumentsRequest`. PDFKit renders PDFs internally,
+producing one numbered `IngestionDocumentSection` per page; an image produces one section.
 
 ```csharp
 using Microsoft.Extensions.DataIngestion;
@@ -92,32 +91,27 @@ foreach (var section in document.Sections)
 }
 ```
 
-For streams, specify the media type explicitly:
-`reader.ReadAsync(stream, "receipts/2026/october", "application/pdf", cancellationToken)`.
-Supported image types include PNG, JPEG, HEIC, and TIFF. Supply a cancellation
-token for long or multi-page documents. The reader preserves the supplied
-identifier and returns standard headers, paragraphs, and tables; list text
-becomes paragraphs because the current ingestion model has no list element.
-Unsupported platforms or document types have no cloud fallback.
+For streams, specify the media type: `reader.ReadAsync(stream, "receipts/2026/october", "application/pdf", cancellationToken)`.
+Supported image types include PNG, JPEG, HEIC, and TIFF. Supply a cancellation token for long or multi-page documents.
+The reader preserves the supplied identifier and maps standard headers, paragraphs, and tables with page numbers on
+sections, elements, and cells. List text becomes paragraphs because the current ingestion model has no list element.
 
-This focused reader does not surface geometry, confidence, barcodes, detected
-entities, provider options, raw observations, or progress. A future official
-`IDocumentExtractionClient` could provide typed versions of these, including
-streaming/progress and raw-provider escape hatches, without adding ad-hoc
-metadata to the ingestion document.
+### Deliberate limitations
+
+The reader omits geometry, confidence, typed barcodes/entities/lists, request options, raw observations, and
+progress/streaming. It does not invent provider metadata or expose native results. A future official
+`IDocumentExtractionClient` is the likely home for these typed capabilities and raw-provider escape hatches.
+Embedded images are not emitted because the recognition API does not provide usable image content.
 
 The [AI Playground](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)
-has an optional Documents tab for comparing the local reader with Azure AI
-Document Intelligence's `prebuilt-layout` model. That cloud client belongs
-only to the sample; using it requires separate configuration and an explicit
-request to upload the document.
+includes a Documents tab with selectable `IngestionDocumentReader` providers. The optional Azure AI Document
+Intelligence reader is sample-only and requires explicit upload confirmation; it is never a fallback for Apple Vision.
 
 ## Requirements
 
 - .NET 10
 - MAUI workload (`dotnet workload install maui`)
-- Apple Intelligence chat and Apple Vision document recognition require iOS 26+,
-  macOS 26+, or Mac Catalyst 26+
+- Apple Intelligence chat and Apple Vision document recognition require iOS 26+, macOS 26+, or Mac Catalyst 26+
 
 ## Status
 
@@ -126,5 +120,4 @@ request to upload the document.
 ## Links
 
 - [Source code](https://github.com/dotnet/maui-labs/tree/main/src/AI)
-- [AI Playground (including document comparison)](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)
 - [Microsoft.Extensions.AI documentation](https://learn.microsoft.com/dotnet/ai/ai-extensions)
