@@ -261,6 +261,77 @@ public sealed class HybridChatClientTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task CloudMutationBeforeFailure_PreservesLocalRecoveryAndCallerOptions(bool streaming)
+    {
+        var local = new FakeClient("apple-model") { Decision = CloudDecision };
+        var cloud = new FakeClient("azure-model") { Failure = new IOException("Cloud failed before output") };
+        cloud.OnAnswerCall = () =>
+        {
+            var received = cloud.ReceivedOptions!;
+            received.Instructions = "Cloud mutation";
+            received.Temperature = 0.9f;
+            received.MaxOutputTokens = 999;
+            received.TopP = 0.1f;
+            received.TopK = 1;
+            received.FrequencyPenalty = 0.9f;
+            received.PresencePenalty = 0.9f;
+            received.Seed = 999;
+            received.ResponseFormat = null;
+            received.StopSequences!.Clear();
+            cloud.ReceivedMessages![0].Contents.Clear();
+        };
+        using var hybrid = Create(local, cloud);
+        var schema = ChatResponseFormat.ForJsonSchema<HybridRoutingDecision>(HybridRoutingJsonContext.Default.Options);
+        var message = new ChatMessage(ChatRole.User, "Original task");
+        var options = new ChatOptions
+        {
+            Instructions = "Original instructions",
+            Temperature = 0.3f,
+            MaxOutputTokens = 123,
+            TopP = 0.8f,
+            TopK = 40,
+            FrequencyPenalty = 0.1f,
+            PresencePenalty = 0.2f,
+            Seed = 42,
+            ResponseFormat = schema,
+            StopSequences = ["done"],
+        };
+
+        Assert.Equal("apple-model", await AnswerModel(hybrid, streaming, [message], options));
+        var recovered = Assert.IsType<ChatOptions>(local.ReceivedOptions);
+        Assert.Equal("Original instructions", recovered.Instructions);
+        Assert.Equal(0.3f, recovered.Temperature);
+        Assert.Equal(123, recovered.MaxOutputTokens);
+        Assert.Equal(0.8f, recovered.TopP);
+        Assert.Equal(40, recovered.TopK);
+        Assert.Equal(0.1f, recovered.FrequencyPenalty);
+        Assert.Equal(0.2f, recovered.PresencePenalty);
+        Assert.Equal(42, recovered.Seed);
+        Assert.Same(schema, recovered.ResponseFormat);
+        Assert.Equal(["done"], recovered.StopSequences);
+        Assert.NotSame(cloud.ReceivedOptions, recovered);
+        Assert.NotSame(cloud.ReceivedOptions!.StopSequences, recovered.StopSequences);
+        Assert.NotSame(options.StopSequences, recovered.StopSequences);
+        Assert.Equal("Original task", Assert.Single(local.ReceivedMessages!).Text);
+        Assert.Equal("Original task", message.Text);
+        Assert.Equal("Original instructions", options.Instructions);
+        Assert.Equal(0.3f, options.Temperature);
+        Assert.Equal(123, options.MaxOutputTokens);
+        Assert.Equal(0.8f, options.TopP);
+        Assert.Equal(40, options.TopK);
+        Assert.Equal(0.1f, options.FrequencyPenalty);
+        Assert.Equal(0.2f, options.PresencePenalty);
+        Assert.Equal(42, options.Seed);
+        Assert.Same(schema, options.ResponseFormat);
+        Assert.Equal(["done"], options.StopSequences);
+        Assert.Equal(1, local.ClassifierCalls);
+        Assert.Equal(1, cloud.AnswerCalls + cloud.StreamCalls);
+        Assert.Equal(1, local.AnswerCalls + local.StreamCalls);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task SdkStatusZeroTransportFailure_FallsBackLocally(bool streaming)
     {
         var local = new FakeClient("apple-model") { Decision = CloudDecision };
