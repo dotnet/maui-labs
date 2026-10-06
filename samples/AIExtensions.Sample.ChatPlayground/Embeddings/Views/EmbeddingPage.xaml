@@ -13,7 +13,7 @@
                                        StatusAutomationId="EmbeddingStatusLabel"
                                        SidebarTitle="Embedding settings"
                                        DiagnosticsAutomationPrefix="Embedding"
-                                       IsDiagnosticsOpen="{Binding Diagnostics.IsOpen}">
+                                       Diagnostics="{Binding Diagnostics}">
             <local:PlaygroundPageLayout.HeaderActions>
                 <HorizontalStackLayout Spacing="4">
                     <VerticalStackLayout Spacing="2">
@@ -32,23 +32,8 @@
                         </ImageButton>
                         <Label Text="Import" Style="{StaticResource ChatActionLabel}" />
                     </VerticalStackLayout>
-                    <VerticalStackLayout Spacing="2">
-                        <ImageButton Source="more.png" Style="{StaticResource ChatActionButton}"
-                                     SemanticProperties.Description="Embedding diagnostics options"
-                                     AutomationId="EmbeddingMoreButton">
-                            <local:PopupMenu.Content>
-                                <Button Text="Show / hide logs" Command="{Binding Diagnostics.ToggleCommand}"
-                                        SemanticProperties.Description="Show or hide AI diagnostics"
-                                        AutomationId="ToggleEmbeddingLogsButton" />
-                            </local:PopupMenu.Content>
-                        </ImageButton>
-                        <Label Text="More" Style="{StaticResource ChatActionLabel}" />
-                    </VerticalStackLayout>
                 </HorizontalStackLayout>
             </local:PlaygroundPageLayout.HeaderActions>
-            <local:PlaygroundPageLayout.DiagnosticsContent>
-                <local:ChatLogsView BindingContext="{Binding Diagnostics}" AutomationPrefix="Embedding" />
-            </local:PlaygroundPageLayout.DiagnosticsContent>
             <local:PlaygroundPageLayout.SettingsContent>
                 <local:EmbeddingSettingsPane BindingContext="{Binding Settings}" />
             </local:PlaygroundPageLayout.SettingsContent>

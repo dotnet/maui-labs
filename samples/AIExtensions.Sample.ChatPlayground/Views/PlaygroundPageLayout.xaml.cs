@@ -21,9 +21,9 @@ public partial class PlaygroundPageLayout : ContentView
         nameof(InputContent), typeof(View), typeof(PlaygroundPageLayout));
     public static readonly BindableProperty HeaderActionsProperty = BindableProperty.Create(
         nameof(HeaderActions), typeof(View), typeof(PlaygroundPageLayout));
-    public static readonly BindableProperty DiagnosticsContentProperty = BindableProperty.Create(
-        nameof(DiagnosticsContent), typeof(View), typeof(PlaygroundPageLayout),
-        propertyChanged: (bindable, _, _) => ((PlaygroundPageLayout)bindable).ResizeDiagnostics());
+    public static readonly BindableProperty DiagnosticsProperty = BindableProperty.Create(
+        nameof(Diagnostics), typeof(DiagnosticsViewModel), typeof(PlaygroundPageLayout),
+        propertyChanged: (bindable, _, value) => ((PlaygroundPageLayout)bindable).BindDiagnostics(value as DiagnosticsViewModel));
     public static readonly BindableProperty IsDiagnosticsOpenProperty = BindableProperty.Create(
         nameof(IsDiagnosticsOpen), typeof(bool), typeof(PlaygroundPageLayout), false,
         defaultBindingMode: BindingMode.TwoWay,
@@ -37,6 +37,7 @@ public partial class PlaygroundPageLayout : ContentView
     {
         InitializeComponent();
         SizeChanged += (_, _) => Resize(Width);
+        HeaderPanel.SizeChanged += (_, _) => ResizeDiagnostics();
     }
 
     public string HeaderTitle
@@ -93,10 +94,10 @@ public partial class PlaygroundPageLayout : ContentView
         set => SetValue(HeaderActionsProperty, value);
     }
 
-    public View? DiagnosticsContent
+    public DiagnosticsViewModel? Diagnostics
     {
-        get => (View?)GetValue(DiagnosticsContentProperty);
-        set => SetValue(DiagnosticsContentProperty, value);
+        get => (DiagnosticsViewModel?)GetValue(DiagnosticsProperty);
+        set => SetValue(DiagnosticsProperty, value);
     }
 
     public bool IsDiagnosticsOpen
@@ -111,6 +112,20 @@ public partial class PlaygroundPageLayout : ContentView
         set => SetValue(DiagnosticsAutomationPrefixProperty, value);
     }
 
+    private void BindDiagnostics(DiagnosticsViewModel? viewModel)
+    {
+        DiagnosticsToggle.IsVisible = viewModel is not null;
+        if (viewModel is not null)
+            SetBinding(IsDiagnosticsOpenProperty, new Binding(
+                nameof(DiagnosticsViewModel.IsOpen), BindingMode.TwoWay, source: viewModel));
+        else
+        {
+            RemoveBinding(IsDiagnosticsOpenProperty);
+            IsDiagnosticsOpen = false;
+        }
+        ResizeDiagnostics();
+    }
+
     private void DiagnosticsOpenChanged()
     {
         if (IsDiagnosticsOpen)
@@ -122,8 +137,11 @@ public partial class PlaygroundPageLayout : ContentView
 
     private void ResizeDiagnostics()
     {
-        var visible = IsDiagnosticsOpen && DiagnosticsContent is not null;
+        var visible = IsDiagnosticsOpen && Diagnostics is not null;
         var overlay = Width < 1200;
+        var margin = new Thickness(0, overlay ? Math.Max(0, HeaderPanel.Height) + MainPanel.RowSpacing : 0, 0, 0);
+        DiagnosticsPanel.Margin = margin;
+        DiagnosticsBackdrop.Margin = margin;
         RootGrid.ColumnDefinitions[2].Width = visible && !overlay ? 390 : 0;
         Grid.SetColumnSpan(MainPanel, _isCompact ? 3 : visible && !overlay ? 1 : 2);
         DiagnosticsPanel.IsVisible = visible;
@@ -171,7 +189,7 @@ public partial class PlaygroundPageLayout : ContentView
             SettingsPanel.HorizontalOptions = LayoutOptions.Fill;
             Grid.SetColumnSpan(SettingsPanel, 1);
             Grid.SetColumn(MainPanel, 1);
-            Grid.SetColumnSpan(MainPanel, IsDiagnosticsOpen && DiagnosticsContent is not null && width >= 1200 ? 1 : 2);
+            Grid.SetColumnSpan(MainPanel, IsDiagnosticsOpen && Diagnostics is not null && width >= 1200 ? 1 : 2);
         }
     }
 

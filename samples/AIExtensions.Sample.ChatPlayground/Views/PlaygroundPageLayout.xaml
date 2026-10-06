@@ -34,7 +34,7 @@
             </Border>
 
             <Grid x:Name="MainPanel" Grid.Column="1" Grid.ColumnSpan="2" RowDefinitions="Auto,*,Auto" RowSpacing="12">
-                <Border Style="{StaticResource PlaygroundPanel}" Padding="16">
+                <Border x:Name="HeaderPanel" Style="{StaticResource PlaygroundPanel}" Padding="16">
                     <Grid ColumnDefinitions="Auto,*,Auto"
                           RowDefinitions="Auto,Auto" ColumnSpacing="10">
                         <ImageButton x:Name="OpenSettingsButton" Source="settings.png"
@@ -55,8 +55,18 @@
                                    LineBreakMode="TailTruncation"
                                    AutomationId="{Binding StatusAutomationId, Source={x:Reference PlaygroundLayout}}" />
                         </VerticalStackLayout>
-                        <ContentView x:Name="HeaderActionsPresenter" Grid.Column="2"
-                                     Content="{Binding HeaderActions, Source={x:Reference PlaygroundLayout}}" />
+                        <HorizontalStackLayout x:Name="HeaderActionsPresenter" Grid.Column="2" Spacing="8">
+                            <ContentView Content="{Binding HeaderActions, Source={x:Reference PlaygroundLayout}}" />
+                            <VerticalStackLayout x:Name="DiagnosticsToggle" Spacing="2" IsVisible="False">
+                                <Switch IsToggled="{Binding IsDiagnosticsOpen, Source={x:Reference PlaygroundLayout}, Mode=TwoWay}"
+                                        HeightRequest="44" MinimumWidthRequest="44"
+                                        OnColor="{StaticResource Primary}"
+                                        SemanticProperties.Description="Show or hide AI diagnostics"
+                                        ToolTipProperties.Text="Show or hide AI diagnostics"
+                                        AutomationId="{Binding DiagnosticsAutomationPrefix, Source={x:Reference PlaygroundLayout}, StringFormat='Toggle{0}LogsSwitch'}" />
+                                <Label Text="Logs" Style="{StaticResource ChatActionLabel}" />
+                            </VerticalStackLayout>
+                        </HorizontalStackLayout>
                     </Grid>
                 </Border>
                 <ContentView Grid.Row="1"
@@ -75,7 +85,8 @@
             <Border x:Name="DiagnosticsPanel" Grid.Column="1" ZIndex="20"
                     IsVisible="False" Style="{StaticResource PlaygroundPanel}"
                     AutomationId="{Binding DiagnosticsAutomationPrefix, Source={x:Reference PlaygroundLayout}, StringFormat='{0}LogsSidebar'}">
-                <ContentView Content="{Binding DiagnosticsContent, Source={x:Reference PlaygroundLayout}}" />
+                <local:ChatLogsView BindingContext="{Binding Diagnostics, Source={x:Reference PlaygroundLayout}}"
+                                    AutomationPrefix="{Binding DiagnosticsAutomationPrefix, Source={x:Reference PlaygroundLayout}}" />
             </Border>
         </Grid>
     </Grid>
