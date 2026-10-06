@@ -16,12 +16,14 @@ public sealed class DiagnosticsViewModelTests
         chat.PropertyChanged += (_, e) => notifications.Add(e.PropertyName);
         Assert.True(chat.IsOpen);
         Assert.True(embeddings.IsOpen);
+        Assert.Equal("Hide AI diagnostics", chat.ToggleDescription);
         chat.CloseCommand.Execute(null);
         Assert.False(chat.IsOpen);
+        Assert.Equal("Show AI diagnostics", chat.ToggleDescription);
         Assert.True(embeddings.IsOpen);
         chat.ToggleCommand.Execute(null);
         Assert.True(chat.IsOpen);
-        Assert.Equal(["IsOpen", "IsOpen"], notifications);
+        Assert.Equal(["IsOpen", "ToggleDescription", "IsOpen", "ToggleDescription"], notifications);
 
         receiver.CreateLogger("Microsoft.Extensions.AI.Test").LogDebug("Existing diagnostic");
         chat.Refresh();

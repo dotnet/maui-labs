@@ -58,12 +58,11 @@
                         <HorizontalStackLayout x:Name="HeaderActionsPresenter" Grid.Column="2" Spacing="8">
                             <ContentView Content="{Binding HeaderActions, Source={x:Reference PlaygroundLayout}}" />
                             <VerticalStackLayout x:Name="DiagnosticsToggle" Spacing="2" IsVisible="False">
-                                <Switch IsToggled="{Binding IsDiagnosticsOpen, Source={x:Reference PlaygroundLayout}, Mode=TwoWay}"
-                                        HeightRequest="44" MinimumWidthRequest="44"
-                                        OnColor="{StaticResource Primary}"
-                                        SemanticProperties.Description="Show or hide AI diagnostics"
-                                        ToolTipProperties.Text="Show or hide AI diagnostics"
-                                        AutomationId="{Binding DiagnosticsAutomationPrefix, Source={x:Reference PlaygroundLayout}, StringFormat='Toggle{0}LogsSwitch'}" />
+                                <ImageButton Source="logs.png" Style="{StaticResource ChatActionButton}"
+                                             Command="{Binding Diagnostics.ToggleCommand, Source={x:Reference PlaygroundLayout}}"
+                                             SemanticProperties.Description="{Binding Diagnostics.ToggleDescription, Source={x:Reference PlaygroundLayout}}"
+                                             ToolTipProperties.Text="{Binding Diagnostics.ToggleDescription, Source={x:Reference PlaygroundLayout}}"
+                                             AutomationId="{Binding DiagnosticsAutomationPrefix, Source={x:Reference PlaygroundLayout}, StringFormat='Toggle{0}LogsButton'}" />
                                 <Label Text="Logs" Style="{StaticResource ChatActionLabel}" />
                             </VerticalStackLayout>
                         </HorizontalStackLayout>

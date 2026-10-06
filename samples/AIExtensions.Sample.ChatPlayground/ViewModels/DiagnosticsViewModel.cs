@@ -11,7 +11,10 @@ public sealed partial class DiagnosticsViewModel(ChatDiagnostics diagnostics) : 
     public ChatDiagnosticGroups Groups { get; } = [];
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ToggleDescription))]
     private bool isOpen = true;
+
+    public string ToggleDescription => IsOpen ? "Hide AI diagnostics" : "Show AI diagnostics";
 
     /// <summary>Refreshes UI-bound groups on the calling UI thread.</summary>
     public void Refresh()
