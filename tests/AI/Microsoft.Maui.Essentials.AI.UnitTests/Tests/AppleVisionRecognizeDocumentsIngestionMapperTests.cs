@@ -1,13 +1,14 @@
 using System.Text.Json;
 using Microsoft.Extensions.DataIngestion;
+using Microsoft.Maui.Essentials.AI.Internal.DocumentExtraction;
 using Xunit;
 
 namespace Microsoft.Maui.Essentials.AI.UnitTests;
 
-public class AppleVisionIngestionMapperTests
+public class AppleVisionRecognizeDocumentsIngestionMapperTests
 {
 	private static IngestionDocumentSection MapPage(JsonElement snapshot, int pageNumber) =>
-		AppleVisionIngestionMapper.MapPage(AppleVisionDocumentMapper.ToPage(snapshot, pageNumber));
+		AppleVisionRecognizeDocumentsIngestionMapper.MapPage(AppleVisionRecognizeDocumentsMapper.ToPage(snapshot, pageNumber));
 
 	[Fact]
 	public void MapPage_FullSnapshot_PreservesParagraphOrderAndOmitsAdvancedFields()
@@ -137,10 +138,13 @@ public class AppleVisionIngestionMapperTests
 
 	[Theory]
 	[InlineData("title", 0.69, false)]
+	[InlineData("title", 0.699999999, false)]
 	[InlineData("title", 0.7, true)]
 	[InlineData("table", 0.69, false)]
+	[InlineData("table", 0.699999999, false)]
 	[InlineData("table", 0.7, true)]
 	[InlineData("listItem", 0.54, false)]
+	[InlineData("listItem", 0.549999999, false)]
 	[InlineData("listItem", 0.55, true)]
 	public void MapPage_OverlapThresholds_PreserveStructuredReplacement(string kind, double width, bool replaces)
 	{
@@ -201,9 +205,57 @@ public class AppleVisionIngestionMapperTests
 				{"path":"p","kind":"paragraph","text":"Paragraph first"}
 			]}]
 			""");
-		var rich = AppleVisionDocumentMapper.ToPage(json.RootElement, 1);
-		Assert.Equal(7, Assert.Single(rich.Observations).Nodes.Count);
+		var rich = AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1);
+		Assert.Equal(7, Assert.Single(Assert.IsType<AppleVisionRecognizeDocumentsObservationSnapshot[]>(
+			rich.AdditionalProperties!["apple.vision.observations"])).Nodes.Count);
 		Assert.Equal(["Paragraph first", "Same", "Same", "Same"],
-			AppleVisionIngestionMapper.MapPage(rich).Elements.Select(element => element.Text));
+			AppleVisionRecognizeDocumentsIngestionMapper.MapPage(rich).Elements.Select(element => element.Text));
+	}
+
+	[Theory]
+	[InlineData(0.849999999, 2)]
+	[InlineData(0.85, 1)]
+	[InlineData(0.850000001, 1)]
+	public void MapPage_ListDuplicateThreshold_UsesNativeDoubleBounds(double width, int expected)
+	{
+		var extent = width.ToString(System.Globalization.CultureInfo.InvariantCulture);
+		using var json = JsonDocument.Parse($$"""
+			[{"nodes":[
+				{"path":"list","kind":"list"},
+				{"path":"a","parentPath":"list","kind":"listItem","text":"Same","polygon":[0,0,1,0,1,1,0,1]},
+				{"path":"b","parentPath":"list","kind":"listItem","text":"Same",
+				 "polygon":[0,0,{{extent}},0,{{extent}},1,0,1]}
+			]}]
+			""");
+		Assert.Equal(expected, MapPage(json.RootElement, 1).Elements.Count);
+	}
+
+	[Theory]
+	[InlineData(null, "| Own \\| content |\n| --- |")]
+	[InlineData("| Provider markdown |", "| Provider markdown |")]
+	public void MapPage_TableMarkdown_UsesRepresentationOrContentFallback(string? representation, string expected)
+	{
+		var cell = new DocumentTableCell(0, 0, "Own | content")
+		{
+			Elements = [new DocumentBlock("Nested text must not replace content")],
+		};
+		var page = new DocumentPage(2, "") { Elements = [new DocumentTable(1, 1, [cell], representation)] };
+		var table = Assert.IsType<IngestionDocumentTable>(Assert.Single(AppleVisionRecognizeDocumentsIngestionMapper.MapPage(page).Elements));
+		Assert.Equal(expected.Replace("\n", Environment.NewLine), table.GetMarkdown());
+		Assert.Equal("Own | content", table.Cells[0, 0]?.Text);
+		Assert.DoesNotContain("Nested", table.GetMarkdown());
+	}
+
+	[Fact]
+	public void MapPage_TableWithoutCells_PreservesMarkdownRepresentation()
+	{
+		var page = new DocumentPage(1, "")
+		{
+			Elements = [new DocumentTable(2, 3, markdownRepresentation: "| Retained markdown |")],
+		};
+		var table = Assert.IsType<IngestionDocumentTable>(Assert.Single(AppleVisionRecognizeDocumentsIngestionMapper.MapPage(page).Elements));
+		Assert.Equal("| Retained markdown |", table.GetMarkdown());
+		Assert.Equal(2, table.Cells.GetLength(0));
+		Assert.Equal(3, table.Cells.GetLength(1));
 	}
 }

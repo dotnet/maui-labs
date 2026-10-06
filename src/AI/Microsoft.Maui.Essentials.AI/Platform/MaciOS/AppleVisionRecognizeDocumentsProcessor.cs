@@ -8,7 +8,7 @@ using PdfKit;
 
 namespace Microsoft.Maui.Essentials.AI;
 
-internal sealed class AppleVisionDocumentRecognizer
+internal sealed class AppleVisionRecognizeDocumentsProcessor
 {
 	private const double PdfRenderDpi = 200;
 	private const int PdfMaximumPixelDimension = 4096;
@@ -22,19 +22,19 @@ internal sealed class AppleVisionDocumentRecognizer
 		"image/tiff",
 	};
 
-	internal AppleVisionRecognitionCapabilities GetCapabilities()
+	internal RecognizeDocumentsRequestCapabilities GetCapabilities()
 	{
-		using var native = AppleVisionDocumentRecognizerNative.GetCapabilities();
-		return new AppleVisionRecognitionCapabilities(
-			native.RecognitionLanguages,
-			native.BarcodeSymbologies,
-			[.. native.Revisions.Select(static revision => revision.Int32Value)]);
+		using var native = RecognizeDocumentsRequestNative.GetCapabilities();
+		return new RecognizeDocumentsRequestCapabilities(
+			native.SupportedRecognitionLanguages,
+			native.SupportedBarcodeSymbologies,
+			[.. native.SupportedRevisions.Select(static revision => revision.Int32Value)]);
 	}
 
-	internal async IAsyncEnumerable<AppleVisionRecognizedPage> RecognizePagesAsync(
+	internal async IAsyncEnumerable<RecognizeDocumentsRequestPageSnapshot> RecognizePagesAsync(
 		Stream source,
 		string mediaType,
-		AppleVisionRecognitionOptions? options = null,
+		RecognizeDocumentsRequestOptions? options = null,
 		[EnumeratorCancellation] CancellationToken cancellationToken = default)
 	{
 		ArgumentNullException.ThrowIfNull(source);
@@ -85,7 +85,7 @@ internal sealed class AppleVisionDocumentRecognizer
 
 			var bounds = page.GetBoundsForBox(PdfDisplayBox.Crop);
 			var rendered = RenderPdfPage(page, bounds);
-			var pageInfo = new AppleVisionPdfPageInfo(
+			var pageInfo = new RecognizeDocumentsRequestPdfPageInfo(
 				page.Label,
 				checked((int)page.Rotation),
 				PdfDisplayBox.Crop.ToString(),
@@ -116,23 +116,23 @@ internal sealed class AppleVisionDocumentRecognizer
 		}
 	}
 
-	private static async Task<AppleVisionRecognizedPage> RecognizeImageAsync(
+	private static async Task<RecognizeDocumentsRequestPageSnapshot> RecognizeImageAsync(
 		byte[] bytes,
 		int pageNumber,
 		int totalPages,
-		AppleVisionRecognitionOptions? options,
-		AppleVisionPdfPageInfo? pdfPage,
+		RecognizeDocumentsRequestOptions? options,
+		RecognizeDocumentsRequestPdfPageInfo? pdfPage,
 		CancellationToken cancellationToken)
 	{
 		cancellationToken.ThrowIfCancellationRequested();
 		using var imageData = NSData.FromArray(bytes);
 		var imageInfo = GetImageInfo(imageData);
-		using var nativeRecognizer = new AppleVisionDocumentRecognizerNative();
+		using var nativeRecognizer = new RecognizeDocumentsRequestNative();
 		using var nativeOptions = ToNative(options);
 
 		var tokenSync = new object();
 		CancellationTokenNative? nativeToken = null;
-		var completion = new TaskCompletionSource<AppleVisionDocumentRecognitionResultNative>(
+		var completion = new TaskCompletionSource<RecognizeDocumentsRequestSnapshotNative>(
 			TaskCreationOptions.RunContinuationsAsynchronously);
 		CancellationTokenRegistration registration = default;
 
@@ -146,7 +146,7 @@ internal sealed class AppleVisionDocumentRecognizer
 				}
 			});
 
-			var createdToken = nativeRecognizer.RecognizeDocument(
+			var createdToken = nativeRecognizer.Perform(
 				imageData,
 				imageInfo.Orientation,
 				nativeOptions,
@@ -155,8 +155,8 @@ internal sealed class AppleVisionDocumentRecognizer
 					if (error is not null)
 					{
 						if (cancellationToken.IsCancellationRequested ||
-							(error.Domain == nameof(AppleVisionDocumentRecognizerNative) &&
-								error.Code == (nint)AppleVisionDocumentRecognitionErrorNative.Cancelled))
+							(error.Domain == nameof(RecognizeDocumentsRequestNative) &&
+								error.Code == (nint)RecognizeDocumentsRequestErrorNative.Cancelled))
 						{
 							completion.TrySetCanceled(cancellationToken);
 						}
@@ -192,7 +192,7 @@ internal sealed class AppleVisionDocumentRecognizer
 			}
 			cancellationToken.ThrowIfCancellationRequested();
 
-			return new AppleVisionRecognizedPage(
+			return new RecognizeDocumentsRequestPageSnapshot(
 				pageNumber,
 				totalPages,
 				json.RootElement.Clone(),
@@ -288,14 +288,14 @@ internal sealed class AppleVisionDocumentRecognizer
 		return new ImageInfo(orientation, width, height);
 	}
 
-	private static AppleVisionDocumentRecognitionOptionsNative? ToNative(AppleVisionRecognitionOptions? options)
+	private static RecognizeDocumentsRequestOptionsNative? ToNative(RecognizeDocumentsRequestOptions? options)
 	{
 		if (options is null)
 		{
 			return null;
 		}
 
-		return new AppleVisionDocumentRecognitionOptionsNative
+		return new RecognizeDocumentsRequestOptionsNative
 		{
 			RecognitionLanguages = options.RecognitionLanguages,
 			CustomWords = options.CustomWords,
@@ -325,46 +325,21 @@ internal sealed class AppleVisionDocumentRecognizer
 	private readonly record struct RenderedPdfPage(byte[] Data, double WidthPoints, double HeightPoints, double EffectiveDpi);
 }
 
-internal sealed class AppleVisionRecognitionOptions
-{
-	internal string[]? RecognitionLanguages { get; init; }
+internal sealed record RecognizeDocumentsRequestCapabilities(
+	IReadOnlyList<string> SupportedRecognitionLanguages,
+	IReadOnlyList<string> SupportedBarcodeSymbologies,
+	IReadOnlyList<int> SupportedRevisions);
 
-	internal string[]? CustomWords { get; init; }
-
-	internal bool? UseLanguageCorrection { get; init; }
-
-	internal bool? AutomaticallyDetectLanguage { get; init; }
-
-	internal int? MaximumCandidateCount { get; init; }
-
-	internal float? MinimumTextHeightFraction { get; init; }
-
-	internal bool? BarcodeDetectionEnabled { get; init; }
-
-	internal string[]? BarcodeSymbologies { get; init; }
-
-	internal bool? CoalesceCompositeSymbologies { get; init; }
-
-	internal float[]? RegionOfInterest { get; init; }
-
-	internal int? Revision { get; init; }
-}
-
-internal sealed record AppleVisionRecognitionCapabilities(
-	IReadOnlyList<string> RecognitionLanguages,
-	IReadOnlyList<string> BarcodeSymbologies,
-	IReadOnlyList<int> Revisions);
-
-internal sealed record AppleVisionRecognizedPage(
+internal sealed record RecognizeDocumentsRequestPageSnapshot(
 	int PageNumber,
 	int TotalPages,
 	JsonElement Snapshot,
 	int? SourcePixelWidth,
 	int? SourcePixelHeight,
 	int Revision,
-	AppleVisionPdfPageInfo? PdfPage);
+	RecognizeDocumentsRequestPdfPageInfo? PdfPage);
 
-internal sealed record AppleVisionPdfPageInfo(
+internal sealed record RecognizeDocumentsRequestPdfPageInfo(
 	string? Label,
 	int Rotation,
 	string DisplayBox,

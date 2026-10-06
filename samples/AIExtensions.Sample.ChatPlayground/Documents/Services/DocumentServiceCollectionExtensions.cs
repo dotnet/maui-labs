@@ -19,7 +19,7 @@ internal static class DocumentServiceCollectionExtensions
 
 #if IOS || MACCATALYST
         if (OperatingSystem.IsIOSVersionAtLeast(26) || OperatingSystem.IsMacCatalystVersionAtLeast(26))
-            services.AddSingleton<IngestionDocumentReader>(CreateAppleDocumentReader);
+            services.AddSingleton<IngestionDocumentReader>(CreateAppleRecognizeDocumentsReader);
 #endif
 
         if (settings.DocumentIntelligenceEndpoint is not null &&
@@ -48,13 +48,13 @@ internal static class DocumentServiceCollectionExtensions
 #if IOS || MACCATALYST
     [SupportedOSPlatform("ios26.0")]
     [SupportedOSPlatform("maccatalyst26.0")]
-    private static IngestionDocumentReader CreateAppleDocumentReader(IServiceProvider _) =>
+    private static IngestionDocumentReader CreateAppleRecognizeDocumentsReader(IServiceProvider _) =>
         new DescribedDocumentReader(
-            new AppleVisionDocumentReader(),
+            new AppleVisionRecognizeDocumentsReader(),
             new DocumentReaderDescriptor(
                 "apple-vision-document",
-                "Apple Vision",
-                "Reads images and PDFs on-device with Apple Vision; requires iOS or Mac Catalyst 26+."));
+                "Apple Vision RecognizeDocuments",
+                "Reads images and PDFs on-device with Vision RecognizeDocumentsRequest; requires iOS or Mac Catalyst 26+."));
 #endif
 
     private static IngestionDocumentReader CreateAzureDocumentReader(AISettings settings) =>

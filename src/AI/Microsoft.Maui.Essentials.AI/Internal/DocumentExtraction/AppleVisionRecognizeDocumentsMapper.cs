@@ -4,7 +4,7 @@ using Microsoft.Maui.Essentials.AI.Internal.DocumentExtraction;
 
 namespace Microsoft.Maui.Essentials.AI;
 
-internal static class AppleVisionDocumentMapper
+internal static class AppleVisionRecognizeDocumentsMapper
 {
 	private const int MaximumNodes = 20_000;
 	private const int MaximumDepth = 64;
@@ -16,23 +16,28 @@ internal static class AppleVisionDocumentMapper
 		{
 			if (snapshot.ValueKind != JsonValueKind.Array)
 				throw new InvalidDataException("Vision returned an invalid document snapshot.");
-			var page = new DocumentPage
+			var page = new DocumentPage(pageNumber,
+				string.Join("\n\n", snapshot.EnumerateArray().Select(value => String(value, "transcript"))
+					.Where(value => !string.IsNullOrEmpty(value))))
 			{
-				PageNumber = pageNumber,
-				Text = string.Join("\n\n", snapshot.EnumerateArray().Select(value => String(value, "transcript"))
-					.Where(value => !string.IsNullOrEmpty(value))),
+				Dimensions = new(1, 1),
+				CoordinateUnit = DocumentCoordinateUnit.Normalized,
+				CoordinateOrigin = DocumentCoordinateOrigin.BottomLeft,
 				RawRepresentation = snapshot.Clone(),
+				AdditionalProperties = new(),
 			};
-			foreach (var source in snapshot.EnumerateArray())
-				page.Observations.Add(ReadObservation(source, pageNumber));
+			var observations = snapshot.EnumerateArray().Select(source => ReadObservation(source, pageNumber)).ToArray();
+			page.Elements = observations.SelectMany(observation => observation.ReadingOrderElements)
+				.Select(node => node.Element!).ToArray();
 
 			var properties = page.AdditionalProperties;
+			properties["apple.vision.observations"] = observations;
 			properties["apple.vision.request"] = "recognize-documents";
 			properties["apple.vision.revision"] = revision;
 			properties["apple.readingOrderStrategy"] = "snapshot-paragraph-order";
-			properties["apple.vision.observationIds"] = page.Observations.Select(value => value.Id).ToArray();
-			properties["apple.vision.observationConfidences"] = page.Observations.Select(value => value.Confidence).ToArray();
-			properties["apple.vision.structureTruncated"] = page.Observations.Any(value =>
+			properties["apple.vision.observationIds"] = observations.Select(value => value.Id).ToArray();
+			properties["apple.vision.observationConfidences"] = observations.Select(value => value.Confidence).ToArray();
+			properties["apple.vision.structureTruncated"] = observations.Any(value =>
 				value.AdditionalProperties.TryGetValue("structureTruncated", out var flag) && flag is true);
 			if (sourcePixelWidth is { } width) properties["apple.sourcePixelWidth"] = width;
 			if (sourcePixelHeight is { } height) properties["apple.sourcePixelHeight"] = height;
@@ -45,12 +50,12 @@ internal static class AppleVisionDocumentMapper
 		}
 	}
 
-	private static DocumentObservation ReadObservation(JsonElement source, int pageNumber)
+	private static AppleVisionRecognizeDocumentsObservationSnapshot ReadObservation(JsonElement source, int pageNumber)
 	{
 		var values = source.GetProperty("nodes");
 		if (values.ValueKind != JsonValueKind.Array || values.GetArrayLength() > MaximumNodes)
 			throw new InvalidDataException("Vision returned invalid document nodes.");
-		var observation = new DocumentObservation
+		var observation = new AppleVisionRecognizeDocumentsObservationSnapshot
 		{
 			Id = String(source, "uuid"),
 			Text = String(source, "transcript") ?? "",
@@ -58,7 +63,7 @@ internal static class AppleVisionDocumentMapper
 			AdditionalProperties = Properties(source, "nodes"),
 			RawRepresentation = source.Clone(),
 		};
-		var byPath = new Dictionary<string, DocumentElement>(StringComparer.Ordinal);
+		var byPath = new Dictionary<string, AppleVisionRecognizeDocumentsNodeSnapshot>(StringComparer.Ordinal);
 		var parents = new Dictionary<string, string?>(StringComparer.Ordinal);
 		foreach (var value in values.EnumerateArray())
 		{
@@ -89,44 +94,43 @@ internal static class AppleVisionDocumentMapper
 		}
 		foreach (var element in observation.Nodes)
 		{
-			if (element is DocumentTableCell && element.Parent is not DocumentTable ||
-				element is DocumentBlock { Kind: DocumentBlockKind.ListItem } &&
-				element.Parent is not DocumentBlock { Kind: DocumentBlockKind.List })
+			if (element.Kind == "tableCell" && element.Parent?.Kind != "table" ||
+				element.Kind == "listItem" && element.Parent?.Kind != "list")
 				throw new InvalidDataException("Vision returned an invalid document node parent.");
-			if (element is DocumentTable table)
-				ValidateTable(table);
 		}
+		foreach (var root in observation.Elements)
+			BuildElement(root);
 		observation.ReadingOrderElements.AddRange(OrderElements(observation));
 		return observation;
 	}
 
-	private static IEnumerable<DocumentElement> OrderElements(DocumentObservation observation)
+	private static IEnumerable<AppleVisionRecognizeDocumentsNodeSnapshot> OrderElements(
+		AppleVisionRecognizeDocumentsObservationSnapshot observation)
 	{
-		var candidates = new List<DocumentElement>();
+		var candidates = new List<AppleVisionRecognizeDocumentsNodeSnapshot>();
 		foreach (var node in observation.Nodes)
 		{
-			if (node.Parent is null && node is DocumentBlock { Kind: DocumentBlockKind.Title } &&
+			if (node.Parent is null && node.Kind == "title" &&
 				!string.IsNullOrWhiteSpace(node.Text))
 				candidates.Add(node);
-			else if (node.Parent is null && node is DocumentTable)
+			else if (node.Parent is null && node.Kind == "table")
 				candidates.Add(node);
-			else if (node is DocumentBlock { Kind: DocumentBlockKind.ListItem } && IsWithinRootList(node) &&
+			else if (node.Kind == "listItem" && IsWithinRootList(node) &&
 				!string.IsNullOrWhiteSpace(node.Text) && !candidates.Any(candidate =>
-					candidate is DocumentBlock { Kind: DocumentBlockKind.ListItem } && candidate.Text == node.Text &&
+					candidate.Kind == "listItem" && candidate.Text == node.Text &&
 					Overlap(candidate, node) >= 0.85 && Overlap(node, candidate) >= 0.85))
 				candidates.Add(node);
 		}
 
 		// Vision's paragraph sequence preserves columns; replace overlapping structured regions in that order.
 		var emitted = new HashSet<string>(StringComparer.Ordinal);
-		foreach (var paragraph in observation.Elements.OfType<DocumentBlock>()
-			.Where(node => node.Kind == DocumentBlockKind.Paragraph))
+		foreach (var paragraph in observation.Elements.Where(node => node.Kind == "paragraph"))
 		{
-			var match = candidates.FindIndex(candidate => candidate switch
+			var match = candidates.FindIndex(candidate => candidate.Kind switch
 			{
-				DocumentBlock { Kind: DocumentBlockKind.Title } =>
+				"title" =>
 					paragraph.Text == candidate.Text && Overlap(paragraph, candidate) >= 0.7,
-				DocumentTable => Overlap(paragraph, candidate) >= 0.7,
+				"table" => Overlap(paragraph, candidate) >= 0.7,
 				_ => Overlap(paragraph, candidate) >= 0.55 &&
 					paragraph.Text.Contains(candidate.Text, StringComparison.OrdinalIgnoreCase),
 			});
@@ -142,86 +146,101 @@ internal static class AppleVisionDocumentMapper
 		foreach (var candidate in candidates)
 			if (emitted.Add(candidate.Path))
 				yield return candidate;
-		foreach (var block in observation.Elements.OfType<DocumentBlock>()
-			.Where(node => node.Kind is DocumentBlockKind.Barcode or DocumentBlockKind.Unknown))
+		foreach (var block in observation.Elements.Where(node =>
+			node.Kind is not ("title" or "paragraph" or "table" or "tableCell" or "list" or "listItem")))
 			yield return block;
 	}
 
-	private static bool IsWithinRootList(DocumentElement node)
+	private static bool IsWithinRootList(AppleVisionRecognizeDocumentsNodeSnapshot node)
 	{
 		while (node.Parent is { } parent)
 			node = parent;
-		return node is DocumentBlock { Kind: DocumentBlockKind.List };
+		return node.Kind == "list";
 	}
 
-	private static double Overlap(DocumentElement first, DocumentElement second) =>
-		first.BoundingRegion?.Overlap(second.BoundingRegion) ?? 0;
+	private static double Overlap(AppleVisionRecognizeDocumentsNodeSnapshot first, AppleVisionRecognizeDocumentsNodeSnapshot second) =>
+		first.Bounds?.Overlap(second.Bounds) ?? 0;
 
-	private static DocumentElement ReadElement(JsonElement source, int pageNumber)
+	private static AppleVisionRecognizeDocumentsNodeSnapshot ReadElement(JsonElement source, int pageNumber)
 	{
 		var path = String(source, "path");
 		if (string.IsNullOrEmpty(path))
 			throw new InvalidDataException("Vision returned a node without a path.");
-		var kind = String(source, "kind");
-		var text = String(source, "text") ?? "";
-		var region = ReadRegion(source, pageNumber);
+		var kind = String(source, "kind") ?? "unknown";
+		var text = (kind == "barcode" ? String(source, "payloadString") : null) ?? String(source, "text") ?? "";
+		var (region, bounds) = ReadRegion(source, pageNumber);
 		var confidence = Number(source, "confidence");
 		var raw = source.Clone();
 		var properties = Properties(source, "text", "polygon");
-		return kind switch
+		var node = new AppleVisionRecognizeDocumentsNodeSnapshot
 		{
-			"table" => new DocumentTable
+			Path = path, Kind = kind, Text = text, BoundingRegion = region, Bounds = bounds,
+			Confidence = confidence, AdditionalProperties = properties, RawRepresentation = raw,
+			Cell = kind != "tableCell" ? null : new DocumentTableCell(
+				source.GetProperty("rowIndex").GetInt32(), source.GetProperty("columnIndex").GetInt32(), text)
 			{
-				Path = path, Text = text, BoundingRegion = region, Confidence = confidence,
+				BoundingRegion = region, Confidence = confidence,
 				AdditionalProperties = properties, RawRepresentation = raw,
-			},
-			"tableCell" => new DocumentTableCell
-			{
-				Path = path, Text = text, BoundingRegion = region, Confidence = confidence,
-				AdditionalProperties = properties, RawRepresentation = raw,
-				RowIndex = source.GetProperty("rowIndex").GetInt32(),
-				ColumnIndex = source.GetProperty("columnIndex").GetInt32(),
 				RowSpan = source.GetProperty("rowSpan").GetInt32(),
 				ColumnSpan = source.GetProperty("columnSpan").GetInt32(),
 			},
-			_ => new DocumentBlock
-			{
-				Path = path, Text = kind == "barcode" ? String(source, "payloadString") ?? text : text,
-				BoundingRegion = region, Confidence = confidence, AdditionalProperties = properties, RawRepresentation = raw,
-				Kind = kind switch
-				{
-					"title" => DocumentBlockKind.Title,
-					"paragraph" => DocumentBlockKind.Paragraph,
-					"list" => DocumentBlockKind.List,
-					"listItem" => DocumentBlockKind.ListItem,
-					"barcode" => DocumentBlockKind.Barcode,
-					_ => DocumentBlockKind.Unknown,
-				},
-			},
 		};
+		properties["apple.vision.node"] = node;
+		return node;
 	}
 
-	private static DocumentBoundingRegion? ReadRegion(JsonElement source, int pageNumber)
+	private static void BuildElement(AppleVisionRecognizeDocumentsNodeSnapshot node)
+	{
+		foreach (var child in node.Elements)
+			BuildElement(child);
+		var children = node.Elements.Where(child => child.Element is not null).Select(child => child.Element!).ToArray();
+		node.AdditionalProperties["apple.vision.children"] = children;
+		if (node.Cell is { } cell)
+			cell.Elements = children;
+		else
+		{
+			node.Element = node.Kind == "table" ? BuildTable(node) : new DocumentBlock(node.Text)
+			{
+				Kind = new(node.Kind),
+			};
+			node.Element.BoundingRegion = node.BoundingRegion;
+			node.Element.Confidence = node.Confidence;
+			node.Element.AdditionalProperties = node.AdditionalProperties;
+			node.Element.RawRepresentation = node.RawRepresentation;
+		}
+	}
+
+	private static (DocumentBoundingRegion?, AppleVisionRecognizeDocumentsBounds?) ReadRegion(JsonElement source, int pageNumber)
 	{
 		if (!source.TryGetProperty("polygon", out var polygon))
-			return null;
+			return (null, null);
 		var values = polygon.EnumerateArray().Select(value => value.GetDouble()).ToArray();
 		if (values.Length % 2 != 0 || values.Any(value => !double.IsFinite(value)))
 			throw new InvalidDataException("Vision returned an invalid document polygon.");
 		if (values.Length == 0)
-			return null;
-		return new DocumentBoundingRegion
+			return (null, null);
+		var points = new DocumentPoint[values.Length / 2];
+		double left = double.MaxValue, bottom = double.MaxValue, right = double.MinValue, top = double.MinValue;
+		for (var index = 0; index < points.Length; index++)
 		{
-			PageNumber = pageNumber,
-			Polygon = Enumerable.Range(0, values.Length / 2)
-				.Select(index => new DocumentPoint(values[index * 2], values[index * 2 + 1])).ToArray(),
-		};
+			var x = values[index * 2];
+			var y = values[index * 2 + 1];
+			if (!float.IsFinite((float)x) || !float.IsFinite((float)y))
+				throw new InvalidDataException("Vision returned an invalid document polygon.");
+			points[index] = new((float)x, (float)y);
+			left = Math.Min(left, x);
+			right = Math.Max(right, x);
+			bottom = Math.Min(bottom, y);
+			top = Math.Max(top, y);
+		}
+		return (new(pageNumber, points), new(left, bottom, right, top));
 	}
 
-	private static void ValidateTable(DocumentTable table)
+	private static DocumentTable BuildTable(AppleVisionRecognizeDocumentsNodeSnapshot node)
 	{
+		var cells = node.Elements.Where(child => child.Cell is not null).Select(child => child.Cell!).ToArray();
 		long rows = 0, columns = 0;
-		foreach (var cell in table.Cells)
+		foreach (var cell in cells)
 		{
 			if (cell.RowIndex < 0 || cell.ColumnIndex < 0 || cell.RowSpan < 1 || cell.ColumnSpan < 1)
 				throw new InvalidDataException("Vision returned an invalid table cell.");
@@ -230,10 +249,8 @@ internal static class AppleVisionDocumentMapper
 		}
 		if (rows > MaximumNodes || columns > MaximumNodes || rows * columns > MaximumNodes)
 			throw new InvalidDataException("Vision returned invalid table dimensions.");
-		table.RowCount = (int)rows;
-		table.ColumnCount = (int)columns;
-		var occupied = new bool[table.RowCount, table.ColumnCount];
-		foreach (var cell in table.Cells)
+		var occupied = new bool[(int)rows, (int)columns];
+		foreach (var cell in cells)
 			for (var row = cell.RowIndex; row < cell.RowIndex + cell.RowSpan; row++)
 				for (var column = cell.ColumnIndex; column < cell.ColumnIndex + cell.ColumnSpan; column++)
 				{
@@ -241,6 +258,7 @@ internal static class AppleVisionDocumentMapper
 						throw new InvalidDataException("Vision returned overlapping table cells.");
 					occupied[row, column] = true;
 				}
+		return new((int)rows, (int)columns, cells);
 	}
 
 	private static AdditionalPropertiesDictionary Properties(JsonElement source, params string[] excluded)

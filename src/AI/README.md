@@ -11,7 +11,7 @@ and [`Microsoft.Extensions.DataIngestion`](https://www.nuget.org/packages/Micros
 - **Streaming** — progressive JSON deserialization of LLM responses via `JsonStreamChunker` and `PlainTextStreamChunker`
 - **Tool calling** — function-calling support for on-device models
 - **NL embeddings** — on-device semantic search via Apple's NaturalLanguage framework (`NLEmbeddingGenerator`)
-- **Document ingestion** — `AppleVisionDocumentReader` maps images and PDFs to standard ingestion sections, headers,
+- **Document ingestion** — `AppleVisionRecognizeDocumentsReader` maps images and PDFs to standard ingestion sections, headers,
   paragraphs, and tables for RAG on iOS/Mac Catalyst/macOS 26+
 
 ### Platform Support
@@ -39,7 +39,7 @@ var client = serviceProvider.GetRequiredService<IChatClient>();
 var response = await client.GetResponseAsync("Plan a weekend trip to Portland");
 
 // On iOS/Mac Catalyst/macOS 26+, read images or PDFs into ingestion documents.
-IngestionDocumentReader reader = new AppleVisionDocumentReader();
+IngestionDocumentReader reader = new AppleVisionRecognizeDocumentsReader();
 var document = await reader.ReadAsync(new FileInfo("receipt.pdf"), "receipt-123");
 ```
 
@@ -74,15 +74,18 @@ reference packs with Xcode 27, the native CI job passes `ValidateXcodeVersion=fa
 
 The reader deliberately omits geometry, confidence, typed barcodes/entities/lists, request options, raw observations,
 and progress/streaming. List text maps to paragraphs; no provider metadata or native result types are public.
-A future official `IDocumentExtractionClient` is the likely home for these typed capabilities and provider escape hatches.
+The internal client implements the required subset of the proposed `IDocumentExtractionClient` contract;
+neither that client nor its models are public.
 
 ## Architecture
 
 - **Native Swift bindings** (`AppleNative/EssentialsAI/`) compiled via Xcode, producing `.xcframework` bundles
-- **Shared document recognition** — internal `AppleVisionDocumentRecognizer` owns the full native snapshot, request
+- **Shared document recognition** — internal `AppleVisionRecognizeDocumentsProcessor` owns the full native snapshot, request
   controls, capabilities, image orientation, PDF page rendering, and cancellation.
-- **Transitional document extraction** — `AppleVisionDocumentReader` consumes the internal
-  `AppleVisionDocumentExtractionClient` page stream with default options and projects typed pages into ingestion.
+  `RecognizeDocumentsRequestNative` is the single native request wrapper; `RecognizeDocumentsRequestSnapshotNative`
+  carries its JSON snapshot rather than an Apple observation.
+- **Transitional document extraction** — `AppleVisionRecognizeDocumentsReader` consumes the internal
+  `AppleVisionRecognizeDocumentsClient` page stream with default options and projects typed pages into ingestion.
   The client's portable canonical mapper is the only snapshot interpreter. It validates hierarchy, geometry, table
   ranges/spans, and bounded logical grids while retaining list containers/items and nested cell content.
   Observation groups isolate local paths; the mapper creates a reading-order sequence from the original root paragraphs
@@ -91,14 +94,26 @@ A future official `IDocumentExtractionClient` is the likely home for these typed
   The internal result retains cloned page/observation/node snapshots, normalized bottom-left geometry, confidence,
   source dimensions, PDF facts, page totals/progress, and request controls/capabilities. Provider property bags retain
   native field names for list markers, barcode data/flags, detected data, languages, candidates, words, and diagnostics.
-  The minimal temporary model lives in `Internal.DocumentExtraction`; it is not an official extraction contract,
-  namespace, dependency, or public API. Future official abstraction adoption can replace this private contract without
-  changing the recognizer or adding another snapshot mapper. No image model is included because Vision emits no image content.
+  `Internal.DocumentExtraction` contains 19 internal normalized types adapted from
+  [dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588), pinned to
+  [`a215825ae2c96723e922e068c226ff77122c7c94`](https://github.com/luisquintanilla/extensions/tree/a215825ae2c96723e922e068c226ff77122c7c94/src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions).
+  This is only the required subset, not an external namespace, dependency, assembly, or public API.
+  It follows the pinned constructors, nullable property bags/usage, float geometry, open string kinds, standalone
+  table-cell `Content`/nested elements, client services/disposal, and direct page-result progress members.
+  Apple request controls live under `apple.vision.*` in options' additional properties; validation snapshots their arrays
+  before asynchronous recognition, while the normalized options' `Clone()` intentionally retains shallow values.
+  Provider-specific `AppleVisionRecognizeDocumentsObservationSnapshot`/node companions preserve the complete tree,
+  local paths, parents, nested lists, raw data, and native-double bounds used for unchanged `.7`/`.55`/`.85` ordering decisions.
+  Pages retain observations under `apple.vision.observations` and the typed `AppleVisionRecognizeDocumentsPdfPageInfo`
+  under `apple.pdf.pageInfo`, alongside existing PDF facts; none are invented normalized members.
+  Adoption of the eventual official package will require dependency/API compatibility review and migration of these
+  provider companions, not simply changing visibility. No image model or middleware/DI infrastructure is copied.
 - **`AppleBindings.targets`** — MSBuild targets for cross-platform native artifact flow
 - **Streaming infrastructure** — `JsonStreamChunker`, `PlainTextStreamChunker`, `StreamingResponseHandler` for progressive deserialization
 
 Portable document mapping, projection, and client orchestration tests access the shipped assembly through its friend
-assembly declaration, not linked copies. Apple-only wiring adapts the unchanged recognizer DTOs to the internal client seam.
+assembly declaration, not linked copies. The portable option validator creates the same request-support DTO passed
+by the Apple-only wiring to the processor.
 
 ## Documentation
 

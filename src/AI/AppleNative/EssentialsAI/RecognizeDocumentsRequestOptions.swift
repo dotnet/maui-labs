@@ -1,8 +1,8 @@
 import Foundation
 
 @available(iOS 26.0, macCatalyst 26.0, macOS 26.0, tvOS 26.0, visionOS 26.0, *)
-@objc(AppleVisionDocumentRecognitionOptionsNative)
-public class AppleVisionDocumentRecognitionOptionsNative: NSObject {
+@objc(RecognizeDocumentsRequestOptionsNative)
+public class RecognizeDocumentsRequestOptionsNative: NSObject {
     @objc public var recognitionLanguages: [String]?
     @objc public var customWords: [String]?
     @objc public var useLanguageCorrection: NSNumber?

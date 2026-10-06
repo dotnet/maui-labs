@@ -3,7 +3,7 @@ import DataDetection
 import Vision
 
 @available(iOS 26.0, macCatalyst 26.0, macOS 26.0, tvOS 26.0, visionOS 26.0, *)
-enum AppleVisionDocumentNodeKindNative: Int {
+enum RecognizeDocumentsRequestNodeKind: Int {
     case title = 0
     case paragraph = 1
     case table = 2
@@ -14,26 +14,26 @@ enum AppleVisionDocumentNodeKindNative: Int {
 }
 
 @available(iOS 26.0, macCatalyst 26.0, macOS 26.0, tvOS 26.0, visionOS 26.0, *)
-@objc(AppleVisionDocumentRecognitionCapabilitiesNative)
-public class AppleVisionDocumentRecognitionCapabilitiesNative: NSObject {
-    @objc public let recognitionLanguages: [String]
-    @objc public let barcodeSymbologies: [String]
-    @objc public let revisions: [NSNumber]
+@objc(RecognizeDocumentsRequestCapabilitiesNative)
+public class RecognizeDocumentsRequestCapabilitiesNative: NSObject {
+    @objc public let supportedRecognitionLanguages: [String]
+    @objc public let supportedBarcodeSymbologies: [String]
+    @objc public let supportedRevisions: [NSNumber]
 
     init(
-        recognitionLanguages: [String],
-        barcodeSymbologies: [String],
-        revisions: [NSNumber]
+        supportedRecognitionLanguages: [String],
+        supportedBarcodeSymbologies: [String],
+        supportedRevisions: [NSNumber]
     ) {
-        self.recognitionLanguages = recognitionLanguages
-        self.barcodeSymbologies = barcodeSymbologies
-        self.revisions = revisions
+        self.supportedRecognitionLanguages = supportedRecognitionLanguages
+        self.supportedBarcodeSymbologies = supportedBarcodeSymbologies
+        self.supportedRevisions = supportedRevisions
     }
 }
 
 @available(iOS 26.0, macCatalyst 26.0, macOS 26.0, tvOS 26.0, visionOS 26.0, *)
-final class AppleVisionDocumentNodeNative {
-    let kind: AppleVisionDocumentNodeKindNative
+final class RecognizeDocumentsRequestNodeSnapshot {
+    let kind: RecognizeDocumentsRequestNodeKind
     let path: String
     let parentPath: String?
     let text: String?
@@ -61,7 +61,7 @@ final class AppleVisionDocumentNodeNative {
     let words: [[String: Any]]?
 
     init(
-        kind: AppleVisionDocumentNodeKindNative,
+        kind: RecognizeDocumentsRequestNodeKind,
         path: String,
         parentPath: String?,
         text: String? = nil,
@@ -165,11 +165,11 @@ final class AppleVisionDocumentNodeNative {
 }
 
 @available(iOS 26.0, macCatalyst 26.0, macOS 26.0, tvOS 26.0, visionOS 26.0, *)
-final class AppleVisionDocumentObservationNative {
+final class RecognizeDocumentsRequestObservationSnapshot {
     let uuidString: String
     let confidence: Float
     let transcript: String
-    let nodes: [AppleVisionDocumentNodeNative]
+    let nodes: [RecognizeDocumentsRequestNodeSnapshot]
     let structureTruncated: Bool
     let projectedNodeCount: Int
     let maximumTraversalDepth: Int
@@ -181,7 +181,7 @@ final class AppleVisionDocumentObservationNative {
         self.uuidString = observation.uuid.uuidString
         self.confidence = observation.confidence
         self.transcript = observation.document.text.transcript
-        let buildResult = AppleVisionDocumentSnapshotBuilder.build(
+        let buildResult = RecognizeDocumentsRequestSnapshotBuilder.build(
             observation.document,
             rootPath: "observations/\(observation.uuid.uuidString)/document"
         )
@@ -212,15 +212,15 @@ final class AppleVisionDocumentObservationNative {
 }
 
 @available(iOS 26.0, macCatalyst 26.0, macOS 26.0, tvOS 26.0, visionOS 26.0, *)
-@objc(AppleVisionDocumentRecognitionResultNative)
-public class AppleVisionDocumentRecognitionResultNative: NSObject, @unchecked Sendable {
+@objc(RecognizeDocumentsRequestSnapshotNative)
+public class RecognizeDocumentsRequestSnapshotNative: NSObject, @unchecked Sendable {
     @objc public let jsonData: Data
 
     init(_ observations: [DocumentObservation]) throws {
         // Apple's Codable graph can re-enter Cell.content and List.Item.content
         // for framework-produced observations, so encode only the bounded snapshot.
         let snapshots = observations
-            .map(AppleVisionDocumentObservationNative.init)
+            .map(RecognizeDocumentsRequestObservationSnapshot.init)
             .map { $0.snapshotObject() }
         self.jsonData = try JSONSerialization.data(
             withJSONObject: snapshots,
@@ -230,7 +230,7 @@ public class AppleVisionDocumentRecognitionResultNative: NSObject, @unchecked Se
 }
 
 @available(iOS 26.0, macCatalyst 26.0, macOS 26.0, tvOS 26.0, visionOS 26.0, *)
-enum AppleVisionDocumentSnapshotBuilder {
+enum RecognizeDocumentsRequestSnapshotBuilder {
     private static let maximumDepth = 64
     private static let maximumNodeCount = 20_000
 
@@ -248,14 +248,14 @@ enum AppleVisionDocumentSnapshotBuilder {
         _ container: DocumentObservation.Container,
         rootPath: String
     ) -> (
-        nodes: [AppleVisionDocumentNodeNative],
+        nodes: [RecognizeDocumentsRequestNodeSnapshot],
         truncated: Bool,
         maximumDepth: Int,
         repeatedContainerCount: Int,
         firstRepeatedContainerPath: String?,
         firstRepeatedAncestorPath: String?
     ) {
-        var nodes: [AppleVisionDocumentNodeNative] = []
+        var nodes: [RecognizeDocumentsRequestNodeSnapshot] = []
         var truncated = false
         var maximumDepthReached = 0
         var activeContainers: [ContainerFingerprint: String] = [:]
@@ -290,7 +290,7 @@ enum AppleVisionDocumentSnapshotBuilder {
         path: String,
         parentPath: String?,
         depth: Int,
-        to nodes: inout [AppleVisionDocumentNodeNative],
+        to nodes: inout [RecognizeDocumentsRequestNodeSnapshot],
         truncated: inout Bool,
         maximumDepthReached: inout Int,
         activeContainers: inout [ContainerFingerprint: String],
@@ -354,7 +354,7 @@ enum AppleVisionDocumentSnapshotBuilder {
                 return
             }
             let tablePath = "\(path)/tables/\(index)"
-            nodes.append(AppleVisionDocumentNodeNative(
+            nodes.append(RecognizeDocumentsRequestNodeSnapshot(
                 kind: .table,
                 path: tablePath,
                 parentPath: parentPath,
@@ -374,7 +374,7 @@ enum AppleVisionDocumentSnapshotBuilder {
                     }
 
                     let cellPath = "\(tablePath)/cells/\(cellKey)"
-                    nodes.append(AppleVisionDocumentNodeNative(
+                    nodes.append(RecognizeDocumentsRequestNodeSnapshot(
                         kind: .tableCell,
                         path: cellPath,
                         parentPath: tablePath,
@@ -408,7 +408,7 @@ enum AppleVisionDocumentSnapshotBuilder {
                 return
             }
             let listPath = "\(path)/lists/\(index)"
-            nodes.append(AppleVisionDocumentNodeNative(
+            nodes.append(RecognizeDocumentsRequestNodeSnapshot(
                 kind: .list,
                 path: listPath,
                 parentPath: parentPath,
@@ -422,7 +422,7 @@ enum AppleVisionDocumentSnapshotBuilder {
                 }
                 let itemPath = "\(listPath)/items/\(itemIndex)"
                 let itemText = item.content.text
-                nodes.append(AppleVisionDocumentNodeNative(
+                nodes.append(RecognizeDocumentsRequestNodeSnapshot(
                     kind: .listItem,
                     path: itemPath,
                     parentPath: listPath,
@@ -459,7 +459,7 @@ enum AppleVisionDocumentSnapshotBuilder {
                 return
             }
             let barcodePath = "\(path)/barcodes/\(index)"
-            nodes.append(AppleVisionDocumentNodeNative(
+            nodes.append(RecognizeDocumentsRequestNodeSnapshot(
                 kind: .barcode,
                 path: barcodePath,
                 parentPath: parentPath,
@@ -500,11 +500,11 @@ enum AppleVisionDocumentSnapshotBuilder {
 
     private static func textNode(
         _ text: DocumentObservation.Container.Text,
-        kind: AppleVisionDocumentNodeKindNative,
+        kind: RecognizeDocumentsRequestNodeKind,
         path: String,
         parentPath: String?
-    ) -> AppleVisionDocumentNodeNative {
-        return AppleVisionDocumentNodeNative(
+    ) -> RecognizeDocumentsRequestNodeSnapshot {
+        return RecognizeDocumentsRequestNodeSnapshot(
             kind: kind,
             path: path,
             parentPath: parentPath,

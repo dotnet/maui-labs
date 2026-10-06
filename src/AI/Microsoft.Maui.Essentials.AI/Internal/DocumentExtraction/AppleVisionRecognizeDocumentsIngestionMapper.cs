@@ -4,7 +4,7 @@ using Microsoft.Maui.Essentials.AI.Internal.DocumentExtraction;
 
 namespace Microsoft.Maui.Essentials.AI;
 
-internal static class AppleVisionIngestionMapper
+internal static class AppleVisionRecognizeDocumentsIngestionMapper
 {
 	internal static IngestionDocumentSection MapPage(DocumentPage page)
 	{
@@ -14,15 +14,15 @@ internal static class AppleVisionIngestionMapper
 		{
 			switch (element)
 			{
-				case DocumentBlock { Kind: DocumentBlockKind.Title }:
-					section.Elements.Add(new IngestionDocumentHeader(element.Text)
-						{ Level = 1, Text = element.Text, PageNumber = pageNumber });
+				case DocumentBlock block when block.Kind == DocumentBlockKind.Title:
+					section.Elements.Add(new IngestionDocumentHeader(block.Text)
+						{ Level = 1, Text = block.Text, PageNumber = pageNumber });
 					break;
 				case DocumentTable table:
 					section.Elements.Add(ReadTable(table, pageNumber));
 					break;
-				case DocumentBlock { Kind: DocumentBlockKind.Paragraph or DocumentBlockKind.ListItem }:
-					section.Elements.Add(Paragraph(element.Text, pageNumber));
+				case DocumentBlock block when block.Kind == DocumentBlockKind.Paragraph || block.Kind == new DocumentBlockKind("listItem"):
+					section.Elements.Add(Paragraph(block.Text, pageNumber));
 					break;
 			}
 		}
@@ -37,9 +37,12 @@ internal static class AppleVisionIngestionMapper
 		var rows = table.RowCount;
 		var columns = table.ColumnCount;
 		var cells = new IngestionDocumentElement?[rows, columns];
-		foreach (var cell in table.Cells)
-			if (!string.IsNullOrWhiteSpace(cell.Text))
-				cells[cell.RowIndex, cell.ColumnIndex] = Paragraph(cell.Text, pageNumber);
+		foreach (var cell in table.Cells ?? [])
+			if (!string.IsNullOrWhiteSpace(cell.Content))
+				cells[cell.RowIndex, cell.ColumnIndex] = Paragraph(cell.Content, pageNumber);
+
+		if (table.MarkdownRepresentation is { } representation)
+			return new IngestionDocumentTable(representation, cells) { PageNumber = pageNumber };
 
 		var markdown = new StringBuilder();
 		for (var row = 0; row < rows; row++)

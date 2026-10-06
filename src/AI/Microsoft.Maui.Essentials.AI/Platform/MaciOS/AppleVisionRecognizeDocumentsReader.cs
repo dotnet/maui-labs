@@ -7,7 +7,7 @@ namespace Microsoft.Maui.Essentials.AI;
 [SupportedOSPlatform("ios26.0")]
 [SupportedOSPlatform("maccatalyst26.0")]
 [SupportedOSPlatform("macos26.0")]
-public sealed class AppleVisionDocumentReader : IngestionDocumentReader
+public sealed class AppleVisionRecognizeDocumentsReader : IngestionDocumentReader
 {
 	/// <inheritdoc />
 	public override async Task<IngestionDocument> ReadAsync(
@@ -15,12 +15,12 @@ public sealed class AppleVisionDocumentReader : IngestionDocumentReader
 	{
 		ArgumentNullException.ThrowIfNull(identifier);
 		var document = new IngestionDocument(identifier);
-		var client = new AppleVisionDocumentExtractionClient();
+		using var client = new AppleVisionRecognizeDocumentsClient();
 		await foreach (var page in client.ExtractPagesAsync(source, mediaType, options: null, cancellationToken)
 			.ConfigureAwait(false))
 		{
 			cancellationToken.ThrowIfCancellationRequested();
-			document.Sections.Add(AppleVisionIngestionMapper.MapPage(page.Page));
+			document.Sections.Add(AppleVisionRecognizeDocumentsIngestionMapper.MapPage(page.Page));
 		}
 		cancellationToken.ThrowIfCancellationRequested();
 		return document;

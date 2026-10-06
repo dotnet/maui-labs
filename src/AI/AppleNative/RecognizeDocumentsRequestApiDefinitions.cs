@@ -6,8 +6,8 @@ using ObjCRuntime;
 namespace Microsoft.Maui.Essentials.AI;
 
 [Internal]
-delegate void OnAppleVisionDocumentRecognitionComplete(
-	[NullAllowed] AppleVisionDocumentRecognitionResultNative result,
+delegate void OnRecognizeDocumentsRequestComplete(
+	[NullAllowed] RecognizeDocumentsRequestSnapshotNative result,
 	[NullAllowed] NSError error);
 
 [Introduced(PlatformName.iOS, 26, 0)]
@@ -16,16 +16,16 @@ delegate void OnAppleVisionDocumentRecognitionComplete(
 [BaseType(typeof(NSObject))]
 [DisableDefaultCtor]
 [Internal]
-interface AppleVisionDocumentRecognitionCapabilitiesNative
+interface RecognizeDocumentsRequestCapabilitiesNative
 {
-	[Export("recognitionLanguages")]
-	string[] RecognitionLanguages { get; }
+	[Export("supportedRecognitionLanguages")]
+	string[] SupportedRecognitionLanguages { get; }
 
-	[Export("barcodeSymbologies")]
-	string[] BarcodeSymbologies { get; }
+	[Export("supportedBarcodeSymbologies")]
+	string[] SupportedBarcodeSymbologies { get; }
 
-	[Export("revisions")]
-	NSNumber[] Revisions { get; }
+	[Export("supportedRevisions")]
+	NSNumber[] SupportedRevisions { get; }
 }
 
 [Introduced(PlatformName.iOS, 26, 0)]
@@ -33,7 +33,7 @@ interface AppleVisionDocumentRecognitionCapabilitiesNative
 [Introduced(PlatformName.MacOSX, 26, 0)]
 [BaseType(typeof(NSObject))]
 [Internal]
-interface AppleVisionDocumentRecognitionOptionsNative
+interface RecognizeDocumentsRequestOptionsNative
 {
 	[NullAllowed, Export("recognitionLanguages", ArgumentSemantic.Copy)]
 	string[] RecognitionLanguages { get; set; }
@@ -75,7 +75,7 @@ interface AppleVisionDocumentRecognitionOptionsNative
 [BaseType(typeof(NSObject))]
 [DisableDefaultCtor]
 [Internal]
-interface AppleVisionDocumentRecognitionResultNative
+interface RecognizeDocumentsRequestSnapshotNative
 {
 	[Export("jsonData")]
 	NSData JsonData { get; }
@@ -86,17 +86,17 @@ interface AppleVisionDocumentRecognitionResultNative
 [Introduced(PlatformName.MacOSX, 26, 0)]
 [BaseType(typeof(NSObject))]
 [Internal]
-interface AppleVisionDocumentRecognizerNative
+interface RecognizeDocumentsRequestNative
 {
 	[Static]
 	[Export("capabilities")]
-	AppleVisionDocumentRecognitionCapabilitiesNative GetCapabilities();
+	RecognizeDocumentsRequestCapabilitiesNative GetCapabilities();
 
-	[Export("recognizeDocumentWithImageData:orientation:options:onComplete:")]
+	[Export("performWithImageData:orientation:options:onComplete:")]
 	[return: NullAllowed]
-	CancellationTokenNative RecognizeDocument(
+	CancellationTokenNative Perform(
 		NSData imageData,
 		nint orientation,
-		[NullAllowed] AppleVisionDocumentRecognitionOptionsNative options,
-		OnAppleVisionDocumentRecognitionComplete onComplete);
+		[NullAllowed] RecognizeDocumentsRequestOptionsNative options,
+		OnRecognizeDocumentsRequestComplete onComplete);
 }

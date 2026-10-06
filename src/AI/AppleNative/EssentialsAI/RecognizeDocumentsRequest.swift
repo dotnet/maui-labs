@@ -3,8 +3,8 @@ import ImageIO
 import Vision
 
 @available(iOS 26.0, macCatalyst 26.0, macOS 26.0, tvOS 26.0, visionOS 26.0, *)
-@objc(AppleVisionDocumentRecognitionErrorNative)
-public enum AppleVisionDocumentRecognitionErrorNative: Int {
+@objc(RecognizeDocumentsRequestErrorNative)
+public enum RecognizeDocumentsRequestErrorNative: Int {
     case cancelled = 1
     case invalidRevision = 2
     case invalidRegionOfInterest = 3
@@ -12,30 +12,30 @@ public enum AppleVisionDocumentRecognitionErrorNative: Int {
 }
 
 @available(iOS 26.0, macCatalyst 26.0, macOS 26.0, tvOS 26.0, visionOS 26.0, *)
-@objc(AppleVisionDocumentRecognizerNative)
-public class AppleVisionDocumentRecognizerNative: NSObject {
-    private static let errorDomain = "AppleVisionDocumentRecognizerNative"
+@objc(RecognizeDocumentsRequestNative)
+public class RecognizeDocumentsRequestNative: NSObject {
+    private static let errorDomain = "RecognizeDocumentsRequestNative"
 
-    @objc public static func capabilities() -> AppleVisionDocumentRecognitionCapabilitiesNative {
+    @objc public static func capabilities() -> RecognizeDocumentsRequestCapabilitiesNative {
         let request = RecognizeDocumentsRequest()
-        return AppleVisionDocumentRecognitionCapabilitiesNative(
-            recognitionLanguages: request.supportedRecognitionLanguages
+        return RecognizeDocumentsRequestCapabilitiesNative(
+            supportedRecognitionLanguages: request.supportedRecognitionLanguages
                 .map(\.minimalIdentifier)
                 .sorted(),
-            barcodeSymbologies: request.supportedBarcodeSymbologies
-                .map { AppleVisionDocumentSnapshotBuilder.barcodeSymbologyName($0) }
+            supportedBarcodeSymbologies: request.supportedBarcodeSymbologies
+                .map { RecognizeDocumentsRequestSnapshotBuilder.barcodeSymbologyName($0) }
                 .sorted(),
-            revisions: RecognizeDocumentsRequest.supportedRevisions.map {
+            supportedRevisions: RecognizeDocumentsRequest.supportedRevisions.map {
                 NSNumber(value: revisionNumber($0))
             }
         )
     }
 
-    @objc public func recognizeDocument(
+    @objc public func perform(
         imageData: Data,
         orientation: Int,
-        options: AppleVisionDocumentRecognitionOptionsNative?,
-        onComplete: @escaping (AppleVisionDocumentRecognitionResultNative?, NSError?) -> Void
+        options: RecognizeDocumentsRequestOptionsNative?,
+        onComplete: @escaping (RecognizeDocumentsRequestSnapshotNative?, NSError?) -> Void
     ) -> CancellationTokenNative? {
         let task = Task {
             do {
@@ -50,7 +50,7 @@ public class AppleVisionDocumentRecognizerNative: NSObject {
                 )
                 try Task.checkCancellation()
 
-                let result = try AppleVisionDocumentRecognitionResultNative(observations)
+                let result = try RecognizeDocumentsRequestSnapshotNative(observations)
                 try Task.checkCancellation()
                 onComplete(result, nil)
             } catch is CancellationError {
@@ -74,7 +74,7 @@ public class AppleVisionDocumentRecognizerNative: NSObject {
     }
 
     private func makeRequest(
-        _ options: AppleVisionDocumentRecognitionOptionsNative?
+        _ options: RecognizeDocumentsRequestOptionsNative?
     ) throws -> RecognizeDocumentsRequest {
         let revision: RecognizeDocumentsRequest.Revision?
         switch options?.revision?.intValue {
@@ -125,7 +125,7 @@ public class AppleVisionDocumentRecognizerNative: NSObject {
             }
             if let barcodeSymbologies = options.barcodeSymbologies {
                 barcodeOptions.symbologies = try barcodeSymbologies.map { name in
-                    guard let symbology = AppleVisionDocumentSnapshotBuilder.barcodeSymbology(named: name) else {
+                    guard let symbology = RecognizeDocumentsRequestSnapshotBuilder.barcodeSymbology(named: name) else {
                         throw makeError(
                             .unsupportedBarcodeSymbology,
                             description: "Unsupported barcode symbology '\(name)'."
@@ -167,7 +167,7 @@ public class AppleVisionDocumentRecognizerNative: NSObject {
     }
 
     private func makeError(
-        _ code: AppleVisionDocumentRecognitionErrorNative,
+        _ code: RecognizeDocumentsRequestErrorNative,
         description: String
     ) -> NSError {
         NSError(

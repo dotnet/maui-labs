@@ -71,10 +71,12 @@ var embeddings = await generator.GenerateAsync(["sunset beach", "mountain hiking
 
 ### Read an image or PDF for ingestion
 
-On iOS 26+, Mac Catalyst 26+, or macOS 26+, use `AppleVisionDocumentReader` as an `IngestionDocumentReader`.
+On iOS 26+, Mac Catalyst 26+, or macOS 26+, use `AppleVisionRecognizeDocumentsReader` as an `IngestionDocumentReader`.
 Recognition runs locally through Apple's Vision `RecognizeDocumentsRequest`. PDFKit renders PDFs internally,
 producing one numbered `IngestionDocumentSection` per page; an image produces one section.
-The reader projects a typed page stream from an internal extraction client backed by the shared recognition pipeline.
+The reader projects a typed page stream from internal `AppleVisionRecognizeDocumentsClient`, backed by
+`AppleVisionRecognizeDocumentsProcessor`. Its single native request wrapper, `RecognizeDocumentsRequestNative`,
+returns a `RecognizeDocumentsRequestSnapshotNative` JSON snapshot, not an Apple observation.
 One canonical internal mapper retains the complete native snapshot and rich structure; the reader preserves Vision's
 paragraph/column order without interpreting raw JSON. The Swift binding, image orientation, PDF rendering, and
 cancellation machinery remain shared.
@@ -83,7 +85,7 @@ cancellation machinery remain shared.
 using Microsoft.Extensions.DataIngestion;
 using Microsoft.Maui.Essentials.AI;
 
-IngestionDocumentReader reader = new AppleVisionDocumentReader();
+IngestionDocumentReader reader = new AppleVisionRecognizeDocumentsReader();
 var document = await reader.ReadAsync(
     new FileInfo("receipt.pdf"),
     identifier: "receipts/2026/october");
@@ -103,10 +105,15 @@ sections, elements, and cells. List text becomes paragraphs because the current 
 ### Deliberate limitations
 
 The reader omits geometry, confidence, typed barcodes/entities/lists, request options, raw observations, and
-progress/streaming. It does not invent provider metadata or expose native results. A future official
-`IDocumentExtractionClient` is the likely home for these typed capabilities and raw-provider escape hatches.
-Until an official abstraction is available, a minimal private extraction model retains them internally; no temporary
-extraction API or model types are exposed to consumers. `AppleVisionDocumentReader` remains the only public document API.
+progress/streaming. It does not expose provider metadata or native results.
+Internally, a required subset of 19 normalized types follows the proposed
+[`IDocumentExtractionClient` contract in dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588),
+pinned to [`a215825ae2c96723e922e068c226ff77122c7c94`](https://github.com/luisquintanilla/extensions/tree/a215825ae2c96723e922e068c226ff77122c7c94/src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions).
+These adaptations are all internal to MAUI, with no external extraction dependency or namespace.
+Apple-specific companions and property bags retain full observations/node hierarchies, PDF facts, native-precision
+ordering bounds, and `apple.vision.*` request options separately from normalized models.
+Future official-package adoption requires compatibility review and provider-companion migration, not a visibility toggle.
+No extraction API or model types are exposed to consumers; `AppleVisionRecognizeDocumentsReader` remains the only public document API.
 Embedded images are not emitted because the recognition API does not provide usable image content.
 
 The [AI Playground](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)

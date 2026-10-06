@@ -57,7 +57,9 @@ text may leave the device and incur charges.
 ### Optional cloud document comparison
 
 The Documents tab registers selectable `IngestionDocumentReader` providers:
-Apple Vision on-device on iOS/Mac Catalyst 26+, optional Azure Document Intelligence, and optional Foundry Mistral Document AI.
+Apple Vision RecognizeDocuments on-device on iOS/Mac Catalyst 26+, optional Azure Document Intelligence,
+and optional Foundry Mistral Document AI. The Apple reader is `AppleVisionRecognizeDocumentsReader`,
+backed by Vision's `RecognizeDocumentsRequest`.
 Both cloud readers work on all platforms. On Android and Windows, only configured cloud readers are available.
 Use the input area's **+** menu to select a PDF, PNG, JPEG, HEIC, or TIFF file (20 MB maximum),
 or load the bundled two-page sample PDF or sample document image. Choose a reader in settings and select **Read**.

@@ -29,7 +29,7 @@ internal enum ResponseUpdateTypeNative : long
 }
 
 [Native]
-internal enum AppleVisionDocumentRecognitionErrorNative : long
+internal enum RecognizeDocumentsRequestErrorNative : long
 {
 	Cancelled = 1,
 	InvalidRevision = 2,

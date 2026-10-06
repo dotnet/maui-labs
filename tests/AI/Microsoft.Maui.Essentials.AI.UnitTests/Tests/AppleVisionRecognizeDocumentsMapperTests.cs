@@ -4,8 +4,14 @@ using Xunit;
 
 namespace Microsoft.Maui.Essentials.AI.UnitTests;
 
-public class AppleVisionDocumentMapperTests
+public class AppleVisionRecognizeDocumentsMapperTests
 {
+	private static AppleVisionRecognizeDocumentsObservationSnapshot[] Observations(DocumentPage page) =>
+		Assert.IsType<AppleVisionRecognizeDocumentsObservationSnapshot[]>(page.AdditionalProperties!["apple.vision.observations"]);
+
+	private static AppleVisionRecognizeDocumentsNodeSnapshot Node(DocumentElement element) =>
+		Assert.IsType<AppleVisionRecognizeDocumentsNodeSnapshot>(element.AdditionalProperties!["apple.vision.node"]);
+
 	[Fact]
 	public void ToPage_ReadingOrder_ReplacesDuplicateStructureAndRetainsFullHierarchy()
 	{
@@ -23,9 +29,9 @@ public class AppleVisionDocumentMapperTests
 				{"path":"barcode","kind":"barcode","payloadString":"Payload"}
 			]}]
 			""");
-		var page = AppleVisionDocumentMapper.ToPage(json.RootElement, 1);
-		Assert.Equal(["title", "right", "left", "item", "barcode"], page.Elements.Select(element => element.Path));
-		var observation = Assert.Single(page.Observations);
+		var page = AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1);
+		Assert.Equal(["title", "right", "left", "item", "barcode"], page.Elements.Select(element => Node(element).Path));
+		var observation = Assert.Single(Observations(page));
 		Assert.Equal(9, observation.Nodes.Count);
 		Assert.Contains(observation.Elements, element => element.Path == "titleParagraph");
 		var list = Assert.Single(observation.Elements, element => element.Path == "list");
@@ -33,7 +39,7 @@ public class AppleVisionDocumentMapperTests
 		Assert.Equal("-", item.AdditionalProperties["markerString"]);
 		Assert.Equal("self", Assert.Single(item.Elements).Path);
 		Assert.Equal(["Heading", "Right column first", "Left column second", "Apples"],
-			AppleVisionIngestionMapper.MapPage(page).Elements.Select(element => element.Text));
+			AppleVisionRecognizeDocumentsIngestionMapper.MapPage(page).Elements.Select(element => element.Text));
 	}
 
 	[Fact]
@@ -59,19 +65,19 @@ public class AppleVisionDocumentMapperTests
 				 "supplementalCompositeType":"linked","futureField":{"kept":true}}
 			]}]
 			"""))
-			page = AppleVisionDocumentMapper.ToPage(json.RootElement, 3, 1600, 1200, 2);
+			page = AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 3, 1600, 1200, 2);
 
 		Assert.Equal("Rich text", page.Text);
 		Assert.Equal(3, page.PageNumber);
-		Assert.Equal(1, page.Dimensions.Width);
-		Assert.Equal(1, page.Dimensions.Height);
+		Assert.Equal(1, page.Dimensions?.Width);
+		Assert.Equal(1, page.Dimensions?.Height);
 		Assert.Equal(DocumentCoordinateUnit.Normalized, page.CoordinateUnit);
 		Assert.Equal(DocumentCoordinateOrigin.BottomLeft, page.CoordinateOrigin);
-		Assert.Equal(1600, page.AdditionalProperties["apple.sourcePixelWidth"]);
+		Assert.Equal(1600, page.AdditionalProperties!["apple.sourcePixelWidth"]);
 		Assert.Equal(1200, page.AdditionalProperties["apple.sourcePixelHeight"]);
 		Assert.Equal(2, page.AdditionalProperties["apple.vision.revision"]);
 		Assert.Equal(true, page.AdditionalProperties["apple.vision.structureTruncated"]);
-		var observation = Assert.Single(page.Observations);
+		var observation = Assert.Single(Observations(page));
 		Assert.Equal("first", observation.Id);
 		Assert.Equal(0.9, observation.Confidence);
 		Assert.Equal(4d, observation.AdditionalProperties["maximumTraversalDepth"]);
@@ -79,12 +85,14 @@ public class AppleVisionDocumentMapperTests
 		Assert.Equal("repeat", observation.AdditionalProperties["firstRepeatedContainerPath"]);
 		Assert.Equal("ancestor", observation.AdditionalProperties["firstRepeatedAncestorPath"]);
 		Assert.Equal(17d, observation.AdditionalProperties["futureDiagnostic"]);
-		var text = Assert.IsType<DocumentBlock>(observation.Nodes[0]);
+		var text = Assert.IsType<DocumentBlock>(observation.Nodes[0].Element);
 		Assert.Equal(0.8, text.Confidence);
 		Assert.Equal(3, text.BoundingRegion?.PageNumber);
-		Assert.Equal(0.1, text.BoundingRegion?.Polygon[0].X);
-		Assert.Equal(0.2, text.BoundingRegion?.Polygon[0].Y);
-		Assert.Equal("left", text.AdditionalProperties["textAlignment"]);
+		Assert.Equal(0.1f, text.BoundingRegion?.Polygon[0].X);
+		Assert.Equal(0.2f, text.BoundingRegion?.Polygon[0].Y);
+		Assert.Equal(0.1, observation.Nodes[0].Bounds?.Left);
+		Assert.Equal(0.2, observation.Nodes[0].Bounds?.Bottom);
+		Assert.Equal("left", text.AdditionalProperties!["textAlignment"]);
 		var languages = Assert.IsType<JsonElement>(text.AdditionalProperties["recognitionLanguages"]);
 		Assert.Equal(["en", "fr"], languages.EnumerateArray().Select(value => value.GetString()));
 		var data = Assert.IsType<JsonElement>(text.AdditionalProperties["detectedData"]);
@@ -93,10 +101,10 @@ public class AppleVisionDocumentMapperTests
 		Assert.Equal("Rich text", candidates[0].GetProperty("candidates")[0].GetProperty("text").GetString());
 		var words = Assert.IsType<JsonElement>(text.AdditionalProperties["words"]);
 		Assert.Equal(0.7, words[0].GetProperty("candidates")[0].GetProperty("confidence").GetDouble());
-		var barcode = Assert.IsType<DocumentBlock>(observation.Nodes[1]);
-		Assert.Equal(DocumentBlockKind.Barcode, barcode.Kind);
+		var barcode = Assert.IsType<DocumentBlock>(observation.Nodes[1].Element);
+		Assert.Equal(new DocumentBlockKind("barcode"), barcode.Kind);
 		Assert.Equal("payload", barcode.Text);
-		Assert.Equal("AQID", barcode.AdditionalProperties["payloadDataBase64"]);
+		Assert.Equal("AQID", barcode.AdditionalProperties!["payloadDataBase64"]);
 		Assert.Equal("qr", barcode.AdditionalProperties["symbology"]);
 		Assert.Equal(true, barcode.AdditionalProperties["isGS1DataCarrier"]);
 		Assert.Equal(false, barcode.AdditionalProperties["isColorInverted"]);
@@ -107,7 +115,7 @@ public class AppleVisionDocumentMapperTests
 		Assert.Equal("first", Assert.IsType<JsonElement>(page.RawRepresentation)[0].GetProperty("uuid").GetString());
 		Assert.Equal("first", Assert.IsType<JsonElement>(observation.RawRepresentation).GetProperty("uuid").GetString());
 		Assert.Equal("text", Assert.IsType<JsonElement>(text.RawRepresentation).GetProperty("path").GetString());
-		Assert.Single(AppleVisionIngestionMapper.MapPage(page).Elements);
+		Assert.Single(AppleVisionRecognizeDocumentsIngestionMapper.MapPage(page).Elements);
 	}
 
 	[Fact]
@@ -126,26 +134,28 @@ public class AppleVisionDocumentMapperTests
 				{"path":"nestedItem","parentPath":"nested","kind":"listItem","text":"Child"}
 			]}]
 			""");
-		var page = AppleVisionDocumentMapper.ToPage(json.RootElement, 2);
+		var page = AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 2);
 		var table = Assert.IsType<DocumentTable>(Assert.Single(page.Elements));
 		Assert.Equal(3, table.RowCount);
 		Assert.Equal(4, table.ColumnCount);
-		var cell = Assert.Single(table.Cells);
+		var cell = Assert.Single(table.Cells!);
 		Assert.Equal(2, cell.RowSpan);
 		Assert.Equal(2, cell.ColumnSpan);
-		var list = Assert.IsType<DocumentBlock>(Assert.Single(cell.Elements));
-		Assert.Equal(DocumentBlockKind.List, list.Kind);
-		var item = Assert.IsType<DocumentBlock>(Assert.Single(list.Elements));
-		Assert.Equal(DocumentBlockKind.ListItem, item.Kind);
-		Assert.Equal("Item", item.AdditionalProperties["itemString"]);
+		var list = Assert.IsType<DocumentBlock>(Assert.Single(cell.Elements!));
+		Assert.Equal(new DocumentBlockKind("list"), list.Kind);
+		var item = Assert.IsType<DocumentBlock>(Assert.Single(Node(list).Elements).Element);
+		Assert.Equal(new DocumentBlockKind("listItem"), item.Kind);
+		Assert.Equal("Item", item.AdditionalProperties!["itemString"]);
 		Assert.Equal("1.", item.AdditionalProperties["markerString"]);
 		Assert.Equal("decimal", item.AdditionalProperties["markerType"]);
-		Assert.Equal(2, item.Elements.Count);
-		Assert.Equal("1. Item", item.Elements[0].Text);
-		Assert.Equal("Child", Assert.Single(item.Elements[1].Elements).Text);
-		Assert.Same(cell, list.Parent);
+		Assert.Equal(2, Node(item).Elements.Count);
+		Assert.Equal("1. Item", Node(item).Elements[0].Text);
+		Assert.Equal("Child", Assert.Single(Node(item).Elements[1].Elements).Text);
+		Assert.Same(cell, Node(list).Parent?.Cell);
+		Assert.Equal("Own cell text", cell.Content);
+		Assert.Null(cell.Kind);
 		var ingestionTable = Assert.IsType<Microsoft.Extensions.DataIngestion.IngestionDocumentTable>(
-			Assert.Single(AppleVisionIngestionMapper.MapPage(page).Elements));
+			Assert.Single(AppleVisionRecognizeDocumentsIngestionMapper.MapPage(page).Elements));
 		Assert.Equal("Own cell text", ingestionTable.Cells[1, 2]?.Text);
 		Assert.Null(ingestionTable.Cells[2, 3]);
 		Assert.DoesNotContain("Child", ingestionTable.GetMarkdown());
@@ -164,12 +174,13 @@ public class AppleVisionDocumentMapperTests
 				{"path":"item","parentPath":"list","kind":"listItem","text":"Same","polygon":[0,0,1,0,1,1,0,1]},
 				{"path":"p","kind":"paragraph","text":"Same","polygon":[0,0,1,0,1,1,0,1]}]}]
 			""");
-		var page = AppleVisionDocumentMapper.ToPage(json.RootElement, 1);
+		var page = AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1);
 		Assert.Equal("A\n\nB", page.Text);
-		Assert.Equal(2, page.Observations.Count);
-		Assert.NotSame(page.Observations[0].Nodes[0], page.Observations[1].Nodes[0]);
-		Assert.Same(page.Observations[1].Nodes[0], page.Observations[1].Nodes[1].Parent);
-		Assert.Equal(["Same", "Same"], AppleVisionIngestionMapper.MapPage(page).Elements.Select(value => value.Text));
+		var observations = Observations(page);
+		Assert.Equal(2, observations.Length);
+		Assert.NotSame(observations[0].Nodes[0], observations[1].Nodes[0]);
+		Assert.Same(observations[1].Nodes[0], observations[1].Nodes[1].Parent);
+		Assert.Equal(["Same", "Same"], AppleVisionRecognizeDocumentsIngestionMapper.MapPage(page).Elements.Select(value => value.Text));
 	}
 
 	[Theory]
@@ -193,7 +204,7 @@ public class AppleVisionDocumentMapperTests
 	public void ToPage_MalformedSnapshot_ThrowsInvalidData(string snapshot)
 	{
 		using var json = JsonDocument.Parse(snapshot);
-		Assert.Throws<InvalidDataException>(() => AppleVisionDocumentMapper.ToPage(json.RootElement, 1));
+		Assert.Throws<InvalidDataException>(() => AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1));
 	}
 
 	[Theory]
@@ -209,9 +220,9 @@ public class AppleVisionDocumentMapperTests
 		});
 		using var json = JsonDocument.Parse(JsonSerializer.Serialize(new[] { new { nodes } }));
 		if (invalid)
-			Assert.Throws<InvalidDataException>(() => AppleVisionDocumentMapper.ToPage(json.RootElement, 1));
+			Assert.Throws<InvalidDataException>(() => AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1));
 		else
-			Assert.Equal(depth + 1, Assert.Single(AppleVisionDocumentMapper.ToPage(json.RootElement, 1).Observations).Nodes.Count);
+			Assert.Equal(depth + 1, Assert.Single(Observations(AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1))).Nodes.Count);
 	}
 
 	[Fact]
@@ -219,6 +230,6 @@ public class AppleVisionDocumentMapperTests
 	{
 		var nodes = Enumerable.Range(0, 20_001).Select(index => new { path = index.ToString(), kind = "paragraph" });
 		using var json = JsonDocument.Parse(JsonSerializer.Serialize(new[] { new { nodes } }));
-		Assert.Throws<InvalidDataException>(() => AppleVisionDocumentMapper.ToPage(json.RootElement, 1));
+		Assert.Throws<InvalidDataException>(() => AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1));
 	}
 }

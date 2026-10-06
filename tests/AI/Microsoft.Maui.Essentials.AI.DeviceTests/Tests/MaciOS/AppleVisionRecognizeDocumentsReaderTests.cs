@@ -5,7 +5,7 @@ using Xunit;
 
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 
-public class AppleVisionDocumentReaderTests
+public class AppleVisionRecognizeDocumentsReaderTests
 {
 	private static bool IsSupported() =>
 		OperatingSystem.IsIOSVersionAtLeast(26) || OperatingSystem.IsMacCatalystVersionAtLeast(26);
@@ -52,7 +52,7 @@ public class AppleVisionDocumentReaderTests
 	{
 		if (!IsSupported()) return;
 		using var image = await OpenAsync("headings.png");
-		var document = await new AppleVisionDocumentReader()
+		var document = await new AppleVisionRecognizeDocumentsReader()
 			.ReadAsync(image, "sample-image", "image/png");
 		Assert.Equal("sample-image", document.Identifier);
 		var section = Assert.Single(document.Sections);
@@ -68,7 +68,7 @@ public class AppleVisionDocumentReaderTests
 	{
 		if (!IsSupported()) return;
 		using var image = await OpenAsync("table.png");
-		var document = await new AppleVisionDocumentReader()
+		var document = await new AppleVisionRecognizeDocumentsReader()
 			.ReadAsync(image, "table-image", "image/png");
 		var section = Assert.Single(document.Sections);
 		var table = Assert.Single(section.Elements.OfType<IngestionDocumentTable>());
@@ -87,7 +87,7 @@ public class AppleVisionDocumentReaderTests
 	{
 		if (!IsSupported()) return;
 		using var image = await OpenAsync("flat-list.png");
-		var document = await new AppleVisionDocumentReader()
+		var document = await new AppleVisionRecognizeDocumentsReader()
 			.ReadAsync(image, "list-image", "image/png");
 		var section = Assert.Single(document.Sections);
 		foreach (var item in new[] { "Apples", "Coffee", "Bread", "Please purchase", "Keep the receipt" })
@@ -100,7 +100,7 @@ public class AppleVisionDocumentReaderTests
 	{
 		if (!IsSupported()) return;
 		using var image = await OpenAsync("merged-table.png");
-		var document = await new AppleVisionDocumentReader()
+		var document = await new AppleVisionRecognizeDocumentsReader()
 			.ReadAsync(image, "merged-image", "image/png");
 		var section = Assert.Single(document.Sections);
 		var table = Assert.Single(section.Elements.OfType<IngestionDocumentTable>());
@@ -122,7 +122,7 @@ public class AppleVisionDocumentReaderTests
 	{
 		if (!IsSupported()) return;
 		using var pdf = await OpenAsync("two-pages.pdf");
-		var document = await new AppleVisionDocumentReader()
+		var document = await new AppleVisionRecognizeDocumentsReader()
 			.ReadAsync(pdf, "pdf-identifier", "application/pdf");
 		Assert.Equal("pdf-identifier", document.Identifier);
 		Assert.Equal(2, document.Sections.Count);
@@ -143,7 +143,7 @@ public class AppleVisionDocumentReaderTests
 			using (var output = File.Create(path))
 				await input.CopyToAsync(output);
 
-			var reader = new AppleVisionDocumentReader();
+			var reader = new AppleVisionRecognizeDocumentsReader();
 			var file = new FileInfo(path);
 			var supplied = await reader.ReadAsync(file, identifier: "supplied-pdf");
 			Assert.Equal("supplied-pdf", supplied.Identifier);
@@ -162,7 +162,7 @@ public class AppleVisionDocumentReaderTests
 	public async Task ReadAsync_UnsupportedMediaAndCorruptInput_ThrowExplicitErrors()
 	{
 		if (!IsSupported()) return;
-		var reader = new AppleVisionDocumentReader();
+		var reader = new AppleVisionRecognizeDocumentsReader();
 		using var unsupported = new MemoryStream([1, 2, 3]);
 		await Assert.ThrowsAsync<NotSupportedException>(() =>
 			reader.ReadAsync(unsupported, "bad", "text/plain"));
@@ -182,7 +182,7 @@ public class AppleVisionDocumentReaderTests
 		using var cancellation = new CancellationTokenSource();
 		cancellation.Cancel();
 		await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-			new AppleVisionDocumentReader().ReadAsync(image, "cancelled", "image/png", cancellation.Token));
+			new AppleVisionRecognizeDocumentsReader().ReadAsync(image, "cancelled", "image/png", cancellation.Token));
 	}
 }
 #endif
