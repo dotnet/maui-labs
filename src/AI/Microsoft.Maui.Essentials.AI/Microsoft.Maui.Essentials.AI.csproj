@@ -49,6 +49,7 @@
       <SchemeName>EssentialsAI</SchemeName>
     </XcodeProject>
     <ObjcBindingApiDefinition Include="..\AppleNative\ApiDefinitions.cs" />
+    <ObjcBindingApiDefinition Include="..\AppleNative\DocumentRecognitionApiDefinitions.cs" />
     <ObjcBindingCoreSource Include="..\AppleNative\StructsAndEnums.cs" />
   </ItemGroup>
   <Import Project="..\AppleBindings.targets" />
