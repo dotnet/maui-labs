@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
+             x:Class="AIExtensions.Sample.ChatPlayground.DocumentSettingsPane"
+             x:DataType="local:DocumentSettingsViewModel">
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="12">
+            <HorizontalStackLayout Spacing="4">
+                <Label Text="READER" Style="{StaticResource SectionHeading}" VerticalOptions="Center" />
+                <local:InfoTip Text="Choose a real IngestionDocumentReader. Apple reads on-device; Azure uploads the selected document only after you confirm. Switch readers and re-run the same file to compare." />
+            </HorizontalStackLayout>
+            <VerticalStackLayout Spacing="4" IsEnabled="{Binding IsIdle}"
+                                 RadioButtonGroup.GroupName="DocumentReader"
+                                 RadioButtonGroup.SelectedValue="{Binding SelectedOption, Mode=TwoWay}"
+                                 BindableLayout.ItemsSource="{Binding Readers}">
+                <BindableLayout.ItemTemplate>
+                    <DataTemplate x:DataType="local:DocumentReaderOption">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                            <RadioButton HorizontalOptions="Fill"
+                                         Value="{Binding .}"
+                                         Content="{Binding Descriptor.DisplayName}"
+                                         AutomationId="{Binding AutomationId}" />
+                            <local:InfoTip Grid.Column="1" Text="{Binding Descriptor.Description}" />
+                        </Grid>
+                    </DataTemplate>
+                </BindableLayout.ItemTemplate>
+            </VerticalStackLayout>
+            <BoxView HeightRequest="1"
+                     Color="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}" />
+            <Label Text="Azure Document Intelligence needs its own endpoint and key in Debug user secrets, separate from Azure OpenAI. If it is not configured, it is not listed above."
+                   Style="{StaticResource MutedLabel}" FontSize="12"
+                   AutomationId="DocumentReaderSettingsInfo" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentView>

@@ -1,6 +1,9 @@
 # Microsoft.Maui.Essentials.AI
 
-On-device AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://www.nuget.org/packages/Microsoft.Extensions.AI.Abstractions) abstractions.
+On-device AI capabilities for .NET MAUI via
+[`Microsoft.Extensions.AI`](https://www.nuget.org/packages/Microsoft.Extensions.AI.Abstractions)
+and [`Microsoft.Extensions.DataIngestion`](https://www.nuget.org/packages/Microsoft.Extensions.DataIngestion.Abstractions)
+abstractions.
 
 > **Note:** This is the contributor/repo-browsing README. The NuGet consumer README with install instructions and full usage examples is at [`Microsoft.Maui.Essentials.AI/README.md`](Microsoft.Maui.Essentials.AI/README.md).
 
@@ -10,21 +13,24 @@ On-device AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://
 - **Streaming** — progressive JSON deserialization of LLM responses via `JsonStreamChunker` and `PlainTextStreamChunker`
 - **Tool calling** — function-calling support for on-device models
 - **NL embeddings** — on-device semantic search via Apple's NaturalLanguage framework (`NLEmbeddingGenerator`)
+- **Document ingestion** — `AppleVisionDocumentReader` reads images and PDFs using Apple Vision into
+  standard ingestion sections, headers, paragraphs, and tables for RAG (iOS/Mac Catalyst/macOS 26+)
 
 ### Platform Support
 
-| Platform | Chat (IChatClient) | Embeddings (IEmbeddingGenerator) |
-|----------|-------------------|----------------------------------|
-| iOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
-| Mac Catalyst 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
-| macOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
-| Android | 🔜 Coming soon | 🔜 Coming soon |
-| Windows | 🔜 Coming soon | 🔜 Coming soon |
+| Platform | Chat (`IChatClient`) | Embeddings (`IEmbeddingGenerator`) | Document reading (`IngestionDocumentReader`) |
+|----------|----------------------|--------------------------------------|-----------------------------------------------|
+| iOS 26+ | Apple Intelligence | NL Embeddings | Apple Vision |
+| Mac Catalyst 26+ | Apple Intelligence | NL Embeddings | Apple Vision |
+| macOS 26+ | Apple Intelligence | NL Embeddings | Apple Vision |
+| Android | Coming soon | Coming soon | Not supported |
+| Windows | Coming soon | Coming soon | Not supported |
 
 ## Quick Start
 
 ```csharp
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DataIngestion;
 using Microsoft.Maui.Essentials.AI;
 
 // Register in MauiProgram.cs
@@ -33,6 +39,10 @@ builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
 // Use via DI
 var client = serviceProvider.GetRequiredService<IChatClient>();
 var response = await client.GetResponseAsync("Plan a weekend trip to Portland");
+
+// On iOS/Mac Catalyst/macOS 26+, read images or PDFs into ingestion documents.
+IngestionDocumentReader reader = new AppleVisionDocumentReader();
+var document = await reader.ReadAsync(new FileInfo("receipt.pdf"), "receipt-123");
 ```
 
 ## Packages

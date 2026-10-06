@@ -1,7 +1,7 @@
 # AI Chat Playground
 
 A .NET MAUI sample for comparing `Microsoft.Extensions.AI` providers. It has
-Chat, Embeddings, and Images tabs. `Microsoft.Maui.Essentials.AI` provides
+Chat, Embeddings, Images, and Documents tabs. `Microsoft.Maui.Essentials.AI` provides
 `AppleIntelligenceChatClient` for on-device chat and `NLEmbeddingGenerator`
 for on-device embeddings; Azure OpenAI is optional. The app targets Android,
 iOS, and Mac Catalyst, plus a Windows target with Azure and offline Replay
@@ -27,6 +27,8 @@ dotnet build samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.Chat
 For Xcode 27 preview builds, pass `-p:UseXcode27Preview=true` and select
 `-f net10.0-ios27.0` or `-f net10.0-maccatalyst27.0`. Normal builds retain
 the stable Apple targets. Both Apple apps register MAUI scene delegates.
+Document mapping tests live in the existing Essentials.AI unit test project:
+`dotnet test tests/AI/Microsoft.Maui.Essentials.AI.UnitTests/ --filter FullyQualifiedName~DocumentMappingTests`.
 
 ## Optional Azure configuration
 
@@ -51,6 +53,47 @@ required only when at least one Azure deployment name is configured.
 User secrets are **embedded in Debug builds** for device testing: never
 distribute those builds or commit keys. Azure prompts, images, and indexed
 text may leave the device and incur charges.
+
+### Optional Document Intelligence comparison
+
+The Documents tab registers selectable `IngestionDocumentReader` providers:
+Apple Vision on-device on iOS/Mac Catalyst 26+, and optional Azure Document
+Intelligence on all platforms. On Android and Windows, only the cloud reader
+is available. Select a PDF, PNG, JPEG, HEIC, or TIFF file once (20 MB maximum),
+choose a reader in settings, and select **Read document**. To compare, switch
+readers and re-run the same selected file. Each Azure read asks for explicit
+upload confirmation. There is **no automatic cloud fallback** if local
+recognition fails. The result displays standard `IngestionDocument` pages,
+element types/text, and Markdown. Azure paragraphs and tables follow reading
+order from the SDK spans; merged cells and actual header kinds use HTML table
+markup in the Markdown result.
+
+Azure AI Document Intelligence is a **separate resource** from Azure OpenAI:
+set its HTTPS resource root endpoint and subscription key independently. The
+sample uses the official `Azure.AI.DocumentIntelligence` 1.0.0 SDK and the
+`prebuilt-layout` model (2024-11-30 service API).
+
+**WIP dependency:** `Azure.AI.DocumentIntelligence` 1.0.0 is currently fetched
+from NuGet.org using a temporary restore source, for example:
+
+```sh
+dotnet restore samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj -p:RestoreAdditionalProjectSources=https://api.nuget.org/v3/index.json
+```
+
+The package must be mirrored to the approved dnceng proxy before CI can
+restore this sample. Do not add NuGet.org to `NuGet.config` or embed credentials
+in source files; the endpoint and key below belong in local user secrets.
+
+```powershell
+dotnet user-secrets set "AI:DocumentIntelligenceEndpoint" "https://<document-resource>.cognitiveservices.azure.com/" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
+dotnet user-secrets set "AI:DocumentIntelligenceKey" "<document-resource-key>" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
+```
+
+Cloud comparison uploads the **entire document** to Azure and may incur
+charges. The sample embeds developer secrets in Debug app binaries; never
+publish or distribute such binaries. Cancelling an in-flight operation cannot
+undo a document already submitted to Azure. Neither credentials nor document
+contents are logged.
 
 ## What to try
 
@@ -77,6 +120,8 @@ text may leave the device and incur charges.
 - **Images:** Generate from text or edit a single source image and inspect the
   result. Configured Azure providers are offered; there is no on-device image
   provider in this branch. The Images tab does not save generated results.
+- **Documents:** Pick one image/PDF, choose a reader in settings, and re-run
+  with another reader for comparison. Azure runs only after upload confirmation.
 
 The app saves one Chat recording locally for replay. Use the Chat **More**
 menu to load a bundled example without credentials, or import/export a
@@ -87,9 +132,9 @@ that chat first.
 
 ## Organization
 
-`Chat/`, `Embeddings/`, and `Images/` each contain their own services, views,
-and view models. Each feature registers its page and selected real abstractions
-with dependency injection. `MainWindow` composes the three registered pages
-as tabs. Reusable controls are in `Views/`, and shared configuration, image
-input, and atomic storage are in `Services/`. Chat recording and document
-indexing remain separate.
+`Chat/`, `Embeddings/`, `Images/`, and `Documents/` each contain their own
+services, views, and view models. Each feature registers its page and selected
+real abstractions with dependency injection. `MainWindow` composes the four
+registered pages as tabs. Reusable controls are in `Views/`, and shared
+configuration, image input, and atomic storage are in `Services/`. Chat
+recording and document indexing remain separate.

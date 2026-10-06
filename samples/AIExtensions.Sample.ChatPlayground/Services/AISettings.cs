@@ -9,6 +9,8 @@ public sealed class AISettings
     public string? DeploymentName { get; set; }
     public string? ImageDeploymentName { get; set; }
     public string? EmbeddingDeploymentName { get; set; }
+    public Uri? DocumentIntelligenceEndpoint { get; set; }
+    public string? DocumentIntelligenceKey { get; set; }
 
     public void Validate()
     {

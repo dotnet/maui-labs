@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
+             x:Class="AIExtensions.Sample.ChatPlayground.DocumentPage"
+             x:DataType="local:DocumentPlaygroundViewModel"
+             Title="Documents"
+             BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}">
+    <Grid>
+        <local:PlaygroundPageLayout HeaderTitle="Documents"
+                                    HeaderInfo="Choose an IngestionDocumentReader in settings. Select one file, then read it with Apple Vision on-device or explicitly authorize an Azure upload. Switch readers to compare."
+                                    HeaderStatus="{Binding StatusMessage}"
+                                    StatusAutomationId="DocumentStatusLabel"
+                                    SidebarTitle="Document settings">
+            <local:PlaygroundPageLayout.SettingsContent>
+                <local:DocumentSettingsPane BindingContext="{Binding Settings}" />
+            </local:PlaygroundPageLayout.SettingsContent>
+            <local:PlaygroundPageLayout.MainContent>
+                <Border Style="{StaticResource ComposerPanel}">
+                    <Grid RowDefinitions="Auto,*" RowSpacing="8">
+                        <Label Text="{Binding ResultHeading}" Style="{StaticResource SectionHeading}"
+                               AutomationId="DocumentResultHeading" />
+                        <ScrollView Grid.Row="1" AutomationId="DocumentResultsScroll">
+                            <Grid>
+                                <Label Text="Choose a PDF or image and run the selected reader to see pages, elements, and Markdown."
+                                       Style="{StaticResource MutedLabel}" AutomationId="DocumentEmptyLabel">
+                                    <Label.Triggers>
+                                        <DataTrigger TargetType="Label" Binding="{Binding HasResult}" Value="True">
+                                            <Setter Property="IsVisible" Value="False" />
+                                        </DataTrigger>
+                                    </Label.Triggers>
+                                </Label>
+                                <Label Text="{Binding ResultOutput}" IsVisible="{Binding HasResult}"
+                                       LineBreakMode="WordWrap" AutomationId="DocumentResultOutput" />
+                            </Grid>
+                        </ScrollView>
+                        <ActivityIndicator Grid.Row="1" IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}"
+                                           Color="{StaticResource Primary}"
+                                           HorizontalOptions="Center" VerticalOptions="Center"
+                                           AutomationId="DocumentLoading" />
+                    </Grid>
+                </Border>
+            </local:PlaygroundPageLayout.MainContent>
+            <local:PlaygroundPageLayout.InputContent>
+                <Border Style="{StaticResource ComposerPanel}">
+                    <VerticalStackLayout Spacing="8">
+                        <Label Text="{Binding SelectedName}" AutomationId="DocumentSelectedName" />
+                        <FlexLayout Wrap="Wrap" AlignItems="Center">
+                            <Button Text="Choose PDF or image" Command="{Binding ChooseDocument}"
+                                    Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,8"
+                                    AutomationId="DocumentChooseButton" />
+                            <Button Text="Read document" Clicked="ReadClicked"
+                                    IsEnabled="{Binding CanRead}" Margin="0,0,8,8"
+                                    AutomationId="DocumentReadButton" />
+                            <Button Text="Cancel" Command="{Binding CancelReading}"
+                                    IsVisible="{Binding IsBusy}"
+                                    Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,8"
+                                    AutomationId="DocumentCancelButton" />
+                        </FlexLayout>
+                        <Label Text="Selecting Azure uploads the entire document to Azure AI Document Intelligence only after you confirm each Read. It may incur charges. No automatic cloud fallback."
+                               Style="{StaticResource MutedLabel}" FontSize="12"
+                               AutomationId="DocumentCloudDisclosure" />
+                    </VerticalStackLayout>
+                </Border>
+            </local:PlaygroundPageLayout.InputContent>
+        </local:PlaygroundPageLayout>
+    </Grid>
+</ContentPage>

@@ -21,6 +21,7 @@ public static class MauiProgram
         aiSettings.Validate();
 
         builder.Services.AddSingleton<ImageInputService>();
+        builder.Services.AddDocumentFeature(aiSettings);
         builder.Services.AddChatFeature(aiSettings);
         builder.Services.AddEmbeddingFeature(aiSettings);
         builder.Services.AddImageFeature(aiSettings);

@@ -18,6 +18,7 @@
 		3400193C2EDF4D6800DAB0A3 /* ChatResponseUpdateNative.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3400192D2EDF4D6800DAB0A3 /* ChatResponseUpdateNative.swift */; };
 		3400193D2EDF4D6800DAB0A3 /* Cancellation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 340019272EDF4D6800DAB0A3 /* Cancellation.swift */; };
 		3400193E2EDF4D6800DAB0A3 /* ChatTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3400192E2EDF4D6800DAB0A3 /* ChatTool.swift */; };
+		AB1000012EDF4D6800DAB0A3 /* DocumentReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000022EDF4D6800DAB0A3 /* DocumentReader.swift */; };
 		34279CA12EC421CC00583050 /* FoundationModels.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 34279CA02EC421CC00583050 /* FoundationModels.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 /* End PBXBuildFile section */
 
@@ -33,6 +34,7 @@
 		340019302EDF4D6800DAB0A3 /* JsonSchemaDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JsonSchemaDecoder.swift; sourceTree = "<group>"; };
 		340019312EDF4D6800DAB0A3 /* ToolCallWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolCallWatcher.swift; sourceTree = "<group>"; };
 		340019322EDF4D6800DAB0A3 /* ToolNative.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolNative.swift; sourceTree = "<group>"; };
+		AB1000022EDF4D6800DAB0A3 /* DocumentReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentReader.swift; sourceTree = "<group>"; };
 		34279C902EC421CC00583050 /* EssentialsAI.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = EssentialsAI.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		34279CA02EC421CC00583050 /* FoundationModels.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = FoundationModels.framework; path = System/Library/Frameworks/FoundationModels.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
@@ -64,6 +66,7 @@
 				340019302EDF4D6800DAB0A3 /* JsonSchemaDecoder.swift */,
 				340019312EDF4D6800DAB0A3 /* ToolCallWatcher.swift */,
 				340019322EDF4D6800DAB0A3 /* ToolNative.swift */,
+				AB1000022EDF4D6800DAB0A3 /* DocumentReader.swift */,
 				34279C912EC421CC00583050 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -170,6 +173,7 @@
 				3400193C2EDF4D6800DAB0A3 /* ChatResponseUpdateNative.swift in Sources */,
 				3400193D2EDF4D6800DAB0A3 /* Cancellation.swift in Sources */,
 				3400193E2EDF4D6800DAB0A3 /* ChatTool.swift in Sources */,
+				AB1000012EDF4D6800DAB0A3 /* DocumentReader.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
