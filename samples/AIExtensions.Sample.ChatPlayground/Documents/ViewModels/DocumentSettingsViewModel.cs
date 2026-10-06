@@ -1,154 +1,108 @@
-using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
-using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DataIngestion;
 using Microsoft.Extensions.DocumentExtraction;
 
 namespace AIExtensions.Sample.ChatPlayground;
 
-/// <summary>Owns document-client selection and request options.</summary>
+/// <summary>Owns document reader selection, independently of Chat and Embeddings.</summary>
 public sealed partial class DocumentSettingsViewModel : ObservableObject
 {
-    private const string AppleVisionClientId = "apple-vision";
-    private const string MistralDocumentClientId = "foundry-mistral-document";
-
-    private readonly DocumentBooleanOption _detectBarcodes = new(
-        "apple.vision.barcodeDetectionEnabled",
-        "Detect barcodes",
-        "Ask Apple Vision to return barcode blocks.",
-        "DocumentDetectBarcodesCheckBox",
-        defaultValue: true);
-    private readonly DocumentBooleanOption _detectLanguage = new(
-        "apple.vision.automaticallyDetectLanguage",
-        "Detect language",
-        "Ask Apple Vision to identify recognized languages.",
-        "DocumentAutomaticLanguageCheckBox",
-        defaultValue: true);
-    private readonly DocumentBooleanOption _includeImages = new(
-        "mistral.includeImages",
-        "Include figure images",
-        "Request extracted figure bytes. This can substantially increase response size.",
-        "DocumentIncludeImagesCheckBox",
-        defaultValue: false);
-
-    public DocumentSettingsViewModel(IEnumerable<IDocumentExtractionClient> clients)
+    public DocumentSettingsViewModel(IEnumerable<IngestionDocumentReader> readers) : this(readers, [])
     {
-        Clients = clients
-            .Select(static (client, index) => new DocumentClientOption(
-                client,
-                client.GetService<DocumentExtractionClientDescriptor>()
-                    ?? throw new InvalidOperationException($"Document client {index} did not expose its descriptor."),
-                index))
-            .ToArray();
-
-        if (Clients.Select(static option => option.Descriptor.Id).Distinct(StringComparer.Ordinal).Count() != Clients.Count)
-        {
-            throw new ArgumentException("Document clients need distinct IDs.", nameof(clients));
-        }
-        SelectedOption = Clients.FirstOrDefault();
-        SelectedOption = Clients.FirstOrDefault();
     }
 
-    public IReadOnlyList<DocumentClientOption> Clients { get; }
-
-    public ObservableCollection<DocumentBooleanOption> RequestOptions { get; } = [];
-
-    public IDocumentExtractionClient? SelectedClient => SelectedOption?.Client;
-
-    public DocumentExtractionClientDescriptor? SelectedDescriptor => SelectedOption?.Descriptor;
-
-    public string ClientName => SelectedDescriptor?.Name ?? "No client";
-
-    public string AvailabilityMessage => SelectedDescriptor?.Description ?? "No document extraction client is registered.";
-
-    public bool HasClient => SelectedClient is not null;
-
-    public bool CanSelectClient => !IsBusy;
-
-    public bool CanEditOptions => HasClient && !IsBusy;
-
-    public bool HasRequestOptions => RequestOptions.Count > 0;
-
-    public bool DetectBarcodes
+    public DocumentSettingsViewModel(IEnumerable<IngestionDocumentReader> readers, IEnumerable<IDocumentExtractionClient> clients)
     {
-        get => _detectBarcodes.Value;
-        set => _detectBarcodes.Value = value;
+        ArgumentNullException.ThrowIfNull(readers);
+        ArgumentNullException.ThrowIfNull(clients);
+        Readers = readers.Select((reader, index) => new DocumentReaderOption(reader, index)).ToArray();
+        Clients = clients.Select((client, index) => new DocumentExtractionClientOption(client, index)).ToArray();
+        if (Readers.Select(option => option.Descriptor.Id).Distinct(StringComparer.Ordinal).Count() != Readers.Count)
+            throw new ArgumentException("Document readers need distinct IDs.", nameof(readers));
+        if (Clients.Select(option => option.Descriptor.Id).Distinct(StringComparer.Ordinal).Count() != Clients.Count)
+            throw new ArgumentException("Document extraction clients need distinct IDs.", nameof(clients));
+        SelectedOption = Readers.FirstOrDefault();
+        SelectedClientOption = Clients.FirstOrDefault();
+        Mode = Clients.Count > 0 ? DocumentOperationMode.Extraction : DocumentOperationMode.Reader;
     }
 
-    public bool AutomaticallyDetectLanguage
-    {
-        get => _detectLanguage.Value;
-        set => _detectLanguage.Value = value;
-    }
+    public IReadOnlyList<DocumentReaderOption> Readers { get; }
+    public IReadOnlyList<DocumentExtractionClientOption> Clients { get; }
 
-    public bool IncludeImages
-    {
-        get => _includeImages.Value;
-        set => _includeImages.Value = value;
-    }
-
-    [ObservableProperty] private DocumentClientOption? selectedOption;
+    [ObservableProperty] private DocumentReaderOption? selectedOption;
     [ObservableProperty] private bool isBusy;
+    [ObservableProperty] private DocumentExtractionClientOption? selectedClientOption;
+    [ObservableProperty] private DocumentOperationMode mode;
+    [ObservableProperty] private bool streamPages = true;
+    [ObservableProperty] private string modelId = string.Empty;
 
-    public DocumentExtractionOptions CreateOptions()
+    public IngestionDocumentReader? SelectedReader => SelectedOption?.Reader;
+    public DocumentReaderDescriptor? SelectedDescriptor => SelectedOption?.Descriptor;
+    public bool HasReader => SelectedOption is not null;
+    public bool IsIdle => !IsBusy;
+    public bool IsReaderMode => Mode == DocumentOperationMode.Reader;
+    public bool IsClientMode => !IsReaderMode;
+    public bool IsExtractionMode => Mode == DocumentOperationMode.Extraction;
+    public bool HasSelection => IsReaderMode ? HasReader : SelectedClientOption is not null;
+    public string CurrentName => IsReaderMode ? SelectedDescriptor?.DisplayName ?? "No reader" :
+        SelectedClientOption?.Descriptor.DisplayName ?? "No client";
+    public bool CurrentIsCloud => IsReaderMode ? SelectedDescriptor?.IsCloud == true : SelectedClientOption?.Descriptor.IsCloud == true;
+    public bool CanSelectModel => IsClientMode && SelectedClientOption?.Descriptor.IsCloud == true;
+    public string OperationLabel => IsExtractionMode ? "Extract" : "Read";
+
+    public DocumentExtractionOptions? CreateOptions() =>
+        !CanSelectModel || string.IsNullOrWhiteSpace(ModelId) ? null : new DocumentExtractionOptions { ModelId = ModelId.Trim() };
+
+    partial void OnSelectedOptionChanging(DocumentReaderOption? value)
     {
-        if (RequestOptions.Count == 0)
-            return new DocumentExtractionOptions();
-
-        return new DocumentExtractionOptions
-        {
-            AdditionalProperties = new AdditionalPropertiesDictionary(
-                RequestOptions.ToDictionary(static option => option.Key, static option => (object?)option.Value)),
-        };
+        if (value is not null && !Readers.Contains(value))
+            throw new ArgumentException("The selected document reader is not registered.", nameof(value));
     }
 
-    partial void OnSelectedOptionChanged(DocumentClientOption? value)
+    partial void OnSelectedOptionChanged(DocumentReaderOption? value)
     {
-        UpdateRequestOptions();
-
-        OnPropertyChanged(nameof(SelectedClient));
+        OnPropertyChanged(nameof(SelectedReader));
         OnPropertyChanged(nameof(SelectedDescriptor));
-        OnPropertyChanged(nameof(ClientName));
-        OnPropertyChanged(nameof(AvailabilityMessage));
-        OnPropertyChanged(nameof(HasClient));
-        OnPropertyChanged(nameof(CanEditOptions));
+        OnPropertyChanged(nameof(HasReader));
+        NotifySelectionChanged();
     }
 
-    partial void OnIsBusyChanged(bool value)
+    partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(IsIdle));
+
+    partial void OnSelectedClientOptionChanging(DocumentExtractionClientOption? value)
     {
-        OnPropertyChanged(nameof(CanSelectClient));
-        OnPropertyChanged(nameof(CanEditOptions));
+        if (value is not null && !Clients.Contains(value))
+            throw new ArgumentException("The selected document extraction client is not registered.", nameof(value));
     }
 
-    private void UpdateRequestOptions()
+    partial void OnSelectedClientOptionChanged(DocumentExtractionClientOption? value) => NotifySelectionChanged();
+
+    partial void OnModeChanged(DocumentOperationMode value)
     {
-        RequestOptions.Clear();
+        OnPropertyChanged(nameof(IsReaderMode));
+        OnPropertyChanged(nameof(IsClientMode));
+        OnPropertyChanged(nameof(IsExtractionMode));
+        OnPropertyChanged(nameof(OperationLabel));
+        NotifySelectionChanged();
+    }
 
-        switch (SelectedDescriptor?.Id)
-        {
-            case AppleVisionClientId:
-                RequestOptions.Add(_detectBarcodes);
-                RequestOptions.Add(_detectLanguage);
-                break;
-            case MistralDocumentClientId:
-                RequestOptions.Add(_includeImages);
-                break;
-        }
-
-        OnPropertyChanged(nameof(HasRequestOptions));
+    private void NotifySelectionChanged()
+    {
+        OnPropertyChanged(nameof(HasSelection));
+        OnPropertyChanged(nameof(CurrentName));
+        OnPropertyChanged(nameof(CurrentIsCloud));
+        OnPropertyChanged(nameof(CanSelectModel));
     }
 }
 
-public sealed partial class DocumentBooleanOption(
-    string key,
-    string name,
-    string description,
-    string automationId,
-    bool defaultValue) : ObservableObject
-{
-    public string Key { get; } = key;
-    public string Name { get; } = name;
-    public string Description { get; } = description;
-    public string AutomationId { get; } = automationId;
+public enum DocumentOperationMode { Reader, Extraction, OcrReader }
 
-    [ObservableProperty] private bool value = defaultValue;
+public sealed record DocumentReaderOption(IngestionDocumentReader Reader, int Index)
+{
+    public DocumentReaderDescriptor Descriptor { get; } =
+        Reader is DescribedDocumentReader described
+            ? described.Descriptor
+            : throw new InvalidOperationException($"Document reader {Index} did not expose its descriptor.");
+
+    public string AutomationId => $"DocumentReader{Index}Radio";
 }

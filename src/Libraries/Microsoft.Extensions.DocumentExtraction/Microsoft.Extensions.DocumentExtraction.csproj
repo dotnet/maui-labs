@@ -1,12 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!--
-    Vendored from dotnet/extensions PR #7588
-    (https://github.com/dotnet/extensions/commit/a215825ae2c96723e922e068c226ff77122c7c94).
-    The .cs implementation files, README.md, and API-baseline JSON are copied byte-for-byte
-    from upstream and must not be edited here. This project file is intentionally
-    maui-labs-specific plumbing because the upstream Arcade build infrastructure is not vendored.
-  -->
+  <!-- Local build adapter. The complete upstream project is preserved unchanged and file-linked below. -->
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -17,13 +11,10 @@
     <!-- MEDE0001: the vendored APIs are marked [Experimental] upstream.
          MEAI001: the vendored APIs consume experimental Microsoft.Extensions.AI surface area. -->
     <NoWarn>$(NoWarn);MEDE0001;MEAI001</NoWarn>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
 
   <PropertyGroup>
-    <!-- Non-shipping, non-packable: this is an internal dependency of Microsoft.Maui.Essentials.AI,
-         not an independently published package. Microsoft.Maui.Essentials.AI references this project
-         with PrivateAssets="all", so `dotnet pack` merges this project's build output directly into
-         Essentials.AI's package instead of adding a NuGet dependency on an unpublished package ID. -->
     <IsShipping>false</IsShipping>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
@@ -39,6 +30,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\DocumentExtraction\Upstream\Microsoft.Extensions.DocumentExtraction\*.cs"
+             Link="Upstream\%(Filename)%(Extension)" />
     <!-- Local shims for upstream's internal Microsoft.Shared.* helpers (see src/Libraries/Shared). -->
     <Compile Include="..\Shared\Diagnostics\Throw.cs" Link="Shared\Diagnostics\Throw.cs" />
     <Compile Include="..\Shared\DiagnosticIds\DiagnosticIds.cs" Link="Shared\DiagnosticIds\DiagnosticIds.cs" />

@@ -1,9 +1,7 @@
-using System.ClientModel;
-using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DataIngestion;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DocumentExtraction;
-using OpenAI;
-
+using Microsoft.Extensions.Logging;
 #if IOS || MACCATALYST
 using System.Runtime.Versioning;
 using Microsoft.Maui.Essentials.AI;
@@ -13,25 +11,56 @@ namespace AIExtensions.Sample.ChatPlayground;
 
 internal static class DocumentServiceCollectionExtensions
 {
-    public static IServiceCollection AddDocumentFeature(
-        this IServiceCollection services,
-        AISettings settings)
+    public static IServiceCollection AddDocumentFeature(this IServiceCollection services, AISettings settings)
     {
         services.AddSingleton<DocumentInputService>();
+        services.AddSingleton<DocumentReadingService>();
+        services.AddSingleton<DocumentExtractionService>();
         services.AddSingleton<DocumentSettingsViewModel>();
         services.AddSingleton<DocumentPlaygroundViewModel>();
         services.AddTransient<Page, DocumentPage>();
 
 #if IOS || MACCATALYST
         if (OperatingSystem.IsIOSVersionAtLeast(26) || OperatingSystem.IsMacCatalystVersionAtLeast(26))
-            services.AddSingleton<IDocumentExtractionClient>(_ => CreateAppleDocumentClient());
+        {
+            services.AddSingleton<IngestionDocumentReader>(CreateAppleRecognizeDocumentsReader);
+            services.AddSingleton<IDocumentExtractionClient>(CreateAppleRecognizeDocumentsClient);
+        }
 #endif
 
-        if (!string.IsNullOrWhiteSpace(settings.DocumentDeploymentName))
-            services.AddSingleton<IDocumentExtractionClient>(_ => CreateMistralClient(settings));
+        if (settings.DocumentIntelligenceEndpoint is not null &&
+            !string.IsNullOrWhiteSpace(settings.DocumentIntelligenceKey))
+        {
+            services.AddSingleton<IngestionDocumentReader>(_ => CreateAzureDocumentReader(settings));
+            services.AddSingleton<IDocumentExtractionClient>(provider =>
+                Describe(new AzureDocumentIntelligenceExtractionClient(
+                    settings.DocumentIntelligenceEndpoint!, settings.DocumentIntelligenceKey!),
+                    new DocumentExtractionClientDescriptor(
+                        "azure-document-intelligence", "Azure Document Intelligence",
+                        "Uploads the document for actual prebuilt-layout output; charges may apply.", IsCloud: true), provider));
+        }
 
-        if (!string.IsNullOrWhiteSpace(settings.DeploymentName))
-            services.AddSingleton<IDocumentExtractionClient>(_ => CreateVisionModelClient(settings));
+        if (!string.IsNullOrWhiteSpace(settings.DocumentDeploymentName))
+        {
+            services.AddKeyedSingleton<HttpClient>("foundry-document", (_, _) =>
+            {
+                var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
+                {
+                    BaseAddress = settings.GetFoundryDocumentEndpoint(),
+                    Timeout = Timeout.InfiniteTimeSpan,
+                };
+                client.DefaultRequestHeaders.Add("api-key", settings.ApiKey);
+                return client;
+            });
+            services.AddSingleton<IngestionDocumentReader>(provider => CreateFoundryDocumentReader(
+                provider.GetRequiredKeyedService<HttpClient>("foundry-document"), settings));
+            services.AddSingleton<IDocumentExtractionClient>(provider =>
+                Describe(new FoundryMistralDocumentExtractionClient(
+                    provider.GetRequiredKeyedService<HttpClient>("foundry-document"), settings.DocumentDeploymentName!),
+                    new DocumentExtractionClientDescriptor(
+                        "foundry-mistral-document", "Foundry Mistral Document AI",
+                        "Uploads the document to the configured Mistral OCR deployment; charges may apply.", IsCloud: true), provider));
+        }
 
         return services;
     }
@@ -39,61 +68,46 @@ internal static class DocumentServiceCollectionExtensions
 #if IOS || MACCATALYST
     [SupportedOSPlatform("ios26.0")]
     [SupportedOSPlatform("maccatalyst26.0")]
-    private static IDocumentExtractionClient CreateAppleDocumentClient() =>
-        new AppleVisionDocumentExtractionClient()
-            .AsBuilder()
-            .UseDescriptor(new DocumentExtractionClientDescriptor(
-                "apple-vision",
-                "Apple Vision",
-                "On-device RecognizeDocumentsRequest for images and PDFs. PDFKit renders PDF pages internally; no document data leaves the device."))
-            .Build();
+    private static IDocumentExtractionClient CreateAppleRecognizeDocumentsClient(IServiceProvider provider) =>
+        Describe(new AppleVisionRecognizeDocumentsClient(),
+            new DocumentExtractionClientDescriptor(
+                "apple-vision-document", "Apple Vision RecognizeDocuments",
+                "RecognizeDocumentsRequest on-device. Returns only the Apple/proposed-contract intersection; no synthesized metadata."), provider);
+
+    [SupportedOSPlatform("ios26.0")]
+    [SupportedOSPlatform("maccatalyst26.0")]
+    private static IngestionDocumentReader CreateAppleRecognizeDocumentsReader(IServiceProvider _) =>
+        new DescribedDocumentReader(
+            new AppleVisionRecognizeDocumentsReader(),
+            new DocumentReaderDescriptor(
+                "apple-vision-document",
+                "Apple Vision RecognizeDocuments",
+                "Reads images and PDFs on-device with Vision RecognizeDocumentsRequest; requires iOS or Mac Catalyst 26+."));
 #endif
 
-    private static IDocumentExtractionClient CreateMistralClient(AISettings settings) =>
-        new FoundryMistralDocumentExtractionClient(
-                CreateFoundryDocumentHttpClient(settings),
-                settings.DocumentDeploymentName!,
-                disposeHttpClient: true)
-            .AsBuilder()
-            .UseDescriptor(new DocumentExtractionClientDescriptor(
+    private static IDocumentExtractionClient Describe(
+        IDocumentExtractionClient client, DocumentExtractionClientDescriptor descriptor, IServiceProvider provider) =>
+        client.AsBuilder()
+            .Use(inner => new DescribedDocumentExtractionClient(inner, descriptor))
+            .UseLogging(provider.GetRequiredService<ILoggerFactory>())
+            .UseOpenTelemetry(sourceName: "AIExtensions.Sample.ChatPlayground.Documents")
+            .Build();
+
+    private static IngestionDocumentReader CreateAzureDocumentReader(AISettings settings) =>
+        new DescribedDocumentReader(
+            new AzureDocumentIntelligenceReader(settings.DocumentIntelligenceEndpoint!, settings.DocumentIntelligenceKey!),
+            new DocumentReaderDescriptor(
+                "azure-document-intelligence",
+                "Azure Document Intelligence",
+                "Uploads the entire document to Azure for prebuilt-layout analysis; may incur charges.",
+                IsCloud: true));
+
+    private static IngestionDocumentReader CreateFoundryDocumentReader(HttpClient client, AISettings settings) =>
+        new DescribedDocumentReader(
+            new FoundryMistralDocumentReader(client, settings.DocumentDeploymentName!),
+            new DocumentReaderDescriptor(
                 "foundry-mistral-document",
-                $"Mistral document ({settings.DocumentDeploymentName})",
-                $"Mistral image-to-text deployment '{settings.DocumentDeploymentName}'. " +
-                "Sends documents to Azure and returns Markdown, tables, figures, confidence, and pixel geometry."))
-            .Build();
-
-    private static HttpClient CreateFoundryDocumentHttpClient(AISettings settings)
-    {
-        var client = new HttpClient
-        {
-            BaseAddress = settings.GetFoundryResourceEndpoint(),
-            Timeout = TimeSpan.FromMinutes(5),
-        };
-        client.DefaultRequestHeaders.Add("api-key", settings.ApiKey!);
-        return client;
-    }
-
-    private static IDocumentExtractionClient CreateVisionModelClient(AISettings settings)
-    {
-        var openAIClient = new OpenAIClient(
-            new ApiKeyCredential(settings.ApiKey!),
-            new OpenAIClientOptions { Endpoint = settings.Endpoint! });
-
-        return new FoundryModelDocumentExtractionClient(
-                openAIClient.GetResponsesClient().AsIChatClient(settings.DeploymentName!),
-                settings.DeploymentName!,
-                disposeChatClient: true)
-            .AsBuilder()
-            .UseDescriptor(new DocumentExtractionClientDescriptor(
-                "foundry-vision-chat",
-                $"Vision chat model ({settings.DeploymentName})",
-                $"General semantic extraction with the Azure vision-capable chat deployment '{settings.DeploymentName}'. " +
-                "Sends documents to Azure; geometry and confidence are unavailable."))
-            .Build();
-    }
-
-    private static DocumentExtractionClientBuilder UseDescriptor(
-        this DocumentExtractionClientBuilder builder,
-        DocumentExtractionClientDescriptor descriptor) =>
-        builder.Use(inner => new DescribedDocumentExtractionClient(inner, descriptor));
+                "Foundry Mistral Document AI",
+                "Uploads the entire document to the configured Foundry document model; may incur charges.",
+                IsCloud: true));
 }

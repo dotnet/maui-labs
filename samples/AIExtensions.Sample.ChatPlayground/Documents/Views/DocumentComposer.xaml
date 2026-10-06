@@ -6,87 +6,41 @@
              x:DataType="local:DocumentPlaygroundViewModel">
     <Border Style="{StaticResource ComposerPanel}">
         <VerticalStackLayout Spacing="8">
-            <Grid ColumnDefinitions="Auto,*,Auto"
-                  ColumnSpacing="8"
-                  IsVisible="{Binding HasSelection}">
-                <Image Source="folder.png"
-                       WidthRequest="32"
-                       HeightRequest="32"
-                       VerticalOptions="Center" />
-                <VerticalStackLayout Grid.Column="1"
-                                     Spacing="1"
-                                     VerticalOptions="Center">
-                    <Label Text="{Binding SelectedFileName}"
-                           FontAttributes="Bold"
-                           LineBreakMode="TailTruncation"
-                           AutomationId="DocumentSelectedFileLabel" />
-                    <Label Text="{Binding SelectedDocumentDetails}"
-                           Style="{StaticResource MutedLabel}"
-                           FontSize="11" />
-                </VerticalStackLayout>
-                <ImageButton Grid.Column="2"
-                             Source="close.png"
-                             Command="{Binding RemoveDocument}"
-                             Style="{StaticResource AttachmentButton}"
-                             SemanticProperties.Description="Remove selected document"
-                             AutomationId="RemoveDocumentButton" />
-            </Grid>
-
+            <local:AttachmentPreview IsVisible="{Binding HasDocument}" PreviewSource="{Binding SelectedPreview}"
+                                     PreviewAspect="AspectFit" FileName="{Binding SelectedName}"
+                                     RemoveCommand="{Binding RemoveDocumentAction}" RemoveDescription="Remove selected document"
+                                     NameAutomationId="DocumentSelectedName" RemoveAutomationId="DocumentRemoveButton" />
             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                <ImageButton Source="add.png"
-                             Style="{StaticResource AttachmentButton}"
-                             IsEnabled="{Binding HasClient}"
+                <ImageButton Source="add.png" Style="{StaticResource AttachmentButton}" IsEnabled="{Binding IsIdle}"
                              SemanticProperties.Description="Add a document"
-                             AutomationId="AddDocumentButton">
+                             AutomationId="DocumentAddButton">
                     <local:PopupMenu.Content>
-                        <VerticalStackLayout Spacing="8"
-                                             x:DataType="local:DocumentPlaygroundViewModel">
-                            <Label Text="ADD DOCUMENT"
-                                   Style="{StaticResource SectionHeading}" />
-                            <Button Text="Choose image or PDF"
-                                    ImageSource="folder.png"
-                                    Command="{Binding ChooseDocument}"
-                                    AutomationId="ChooseDocumentButton" />
-                            <Button Text="Use sample document"
-                                    ImageSource="sampleimage.png"
-                                    Command="{Binding UseSampleDocument}"
-                                    AutomationId="UseSampleDocumentButton" />
+                        <VerticalStackLayout Spacing="8" x:DataType="local:DocumentPlaygroundViewModel">
+                            <Label Text="ADD DOCUMENT" Style="{StaticResource SectionHeading}" />
+                            <Button Text="Choose PDF or image" ImageSource="folder.png"
+                                    Command="{Binding ChooseDocument}" AutomationId="DocumentChooseButton" />
+                            <Button Text="Use sample PDF" ImageSource="folder.png"
+                                    Command="{Binding UseSamplePdf}" AutomationId="DocumentSamplePdfButton" />
+                            <Button Text="Use sample image" ImageSource="sampleimage.png"
+                                    Command="{Binding UseSampleImage}" AutomationId="DocumentSampleImageButton" />
                         </VerticalStackLayout>
                     </local:PopupMenu.Content>
                 </ImageButton>
-                <Border Grid.Column="1"
-                        Padding="12,8"
-                        StrokeThickness="0"
-                        StrokeShape="RoundRectangle 8"
-                        BackgroundColor="{AppThemeBinding Light={StaticResource InputBackground}, Dark={StaticResource InputBackgroundDark}}">
-                    <Label Text="{Binding ComposerHint}"
-                           Style="{StaticResource MutedLabel}"
-                           VerticalOptions="Center"
-                           LineBreakMode="TailTruncation"
-                           AutomationId="DocumentComposerHint" />
-                </Border>
-                <Grid Grid.Column="2"
-                      WidthRequest="44"
-                      HeightRequest="44"
-                      VerticalOptions="End">
-                    <ImageButton Source="send.png"
-                                 Command="{Binding ExtractDocument}"
-                                 IsVisible="{Binding IsIdle}"
-                                 Style="{StaticResource AttachmentButton}"
-                                 SemanticProperties.Description="Extract document"
-                                 AutomationId="ExtractDocumentButton" />
-                    <ImageButton Source="stop.png"
-                                 Command="{Binding CancelExtraction}"
-                                 IsVisible="{Binding IsBusy}"
+                <Label Grid.Column="1" Text="Add a PDF or image to process" Style="{StaticResource MutedLabel}"
+                       MinimumHeightRequest="44" VerticalTextAlignment="Center" />
+                <Grid Grid.Column="2" WidthRequest="44" HeightRequest="44" VerticalOptions="End">
+                    <ImageButton Source="send.png" Command="{Binding ReadDocument}"
+                                 IsVisible="{Binding IsIdle}" Style="{StaticResource AttachmentButton}"
+                                 SemanticProperties.Description="{Binding OperationLabel}" ToolTipProperties.Text="{Binding OperationLabel}"
+                                 AutomationId="DocumentReadButton" />
+                    <ImageButton Source="stop.png" Command="{Binding CancelReading}" IsVisible="{Binding IsBusy}"
                                  Style="{StaticResource CancelActionButton}"
-                                 SemanticProperties.Description="Cancel document extraction"
-                                 AutomationId="CancelDocumentButton" />
+                                 SemanticProperties.Description="Cancel document reading" AutomationId="DocumentCancelButton" />
                 </Grid>
             </Grid>
-
-            <ProgressBar Progress="{Binding Progress}"
-                         IsVisible="{Binding IsProgressVisible}"
-                         AutomationId="DocumentProgressBar" />
+            <Label Text="Processing uploads the entire document to the selected Azure provider. Charges may apply; no automatic cloud fallback."
+                   IsVisible="{Binding IsCloudSelected}" Style="{StaticResource MutedLabel}" FontSize="12"
+                   AutomationId="DocumentCloudDisclosure" />
         </VerticalStackLayout>
     </Border>
 </ContentView>

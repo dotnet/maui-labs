@@ -35,6 +35,16 @@ internal static class Throw
         return argument;
     }
 
+    [return: NotNull]
+    public static string IfNullOrEmpty([NotNull] string? argument, [CallerArgumentExpression(nameof(argument))] string paramName = "")
+    {
+        if (string.IsNullOrEmpty(argument))
+        {
+            ArgumentNullException(paramName);
+        }
+        return argument;
+    }
+
     /// <summary>
     /// Throws either an <see cref="ArgumentNullException"/> or an <see cref="ArgumentException"/>
     /// if the specified string is <see langword="null"/> or whitespace respectively.

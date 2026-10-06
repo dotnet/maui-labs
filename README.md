@@ -146,8 +146,9 @@ document recognition, and PDFKit for explicit per-page PDF rendering.
 - **Streaming infrastructure** — progressive JSON deserialization of LLM responses
 - **NL embeddings** — on-device semantic search via Apple's NaturalLanguage framework (`NLEmbeddingGenerator`)
 - **Tool calling** — function-calling support for on-device models
-- **Structured documents** — paragraphs, tables, nested cells, lists, list items, and barcodes through Apple Vision
-- **PDF page extraction** — PDFKit rendering composed explicitly with the Vision document client
+- **Document API prototype** — `RecognizeDocumentsRequest` mapped only to supported proposal fields: titles, paragraphs, tables,
+  nested cells/spans, geometry, and page streaming. Lists/barcodes/entities are not forced into custom normalized types or metadata.
+- **PDF page extraction** — internal PDFKit rendering shared by the native client and ingestion reader
 
 | Package | Description |
 |---------|-------------|
@@ -235,7 +236,7 @@ For live app inspection and host setup, see the
 For AI Extensions usage and samples, see [`src/AIExtensions/README.md`](src/AIExtensions/README.md),
 the [cross-platform AI playground](samples/AIExtensions.Sample.ChatPlayground/README.md) for
 chat, embeddings, images, and document comparison across local Apple Vision,
-Foundry Mistral OCR 4, and deployed Foundry multimodal models, plus
+Foundry Mistral document OCR and Azure Document Intelligence, plus
 portable recording/replay and document search,
 and the
 [`Garden` sample](samples/AIExtensions.Sample.Garden/README.md).

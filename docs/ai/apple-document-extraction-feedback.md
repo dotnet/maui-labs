@@ -1,5 +1,9 @@
 # Apple Document Extraction - Upstream Feedback
 
+> **Historical investigation.** Some sections below describe experiments with custom kinds and provider property bags that are no longer
+> part of the implementation. The revived prototype uses original proposal types and intersection-only mapping, with no such metadata.
+> See [current capability gaps](apple-document-extraction-gaps.md) for the reviewable supported/omitted feature matrix.
+
 **Proposal reviewed:** `dotnet/extensions` PR #7588
 **Pinned commit:** `a215825ae2c96723e922e068c226ff77122c7c94`
 **Upstream head reverified:** 2026-09-29 (unchanged)

@@ -10,14 +10,23 @@ public sealed class AISettings
     public string? ImageDeploymentName { get; set; }
     public string? EmbeddingDeploymentName { get; set; }
     public string? DocumentDeploymentName { get; set; }
+    public Uri? DocumentIntelligenceEndpoint { get; set; }
+    public string? DocumentIntelligenceKey { get; set; }
 
     public void Validate()
     {
-        var hasDeployment = !string.IsNullOrWhiteSpace(DeploymentName) ||
-            !string.IsNullOrWhiteSpace(ImageDeploymentName) ||
-            !string.IsNullOrWhiteSpace(EmbeddingDeploymentName) ||
-            !string.IsNullOrWhiteSpace(DocumentDeploymentName);
-        if (!hasDeployment)
+        if (DocumentIntelligenceEndpoint is not null || !string.IsNullOrWhiteSpace(DocumentIntelligenceKey))
+        {
+            if (DocumentIntelligenceEndpoint is null)
+                throw new InvalidOperationException("AI:DocumentIntelligenceEndpoint is required when Document Intelligence is configured.");
+            if (string.IsNullOrWhiteSpace(DocumentIntelligenceKey))
+                throw new InvalidOperationException("AI:DocumentIntelligenceKey is required when Document Intelligence is configured.");
+        }
+
+        if (string.IsNullOrWhiteSpace(DeploymentName) &&
+            string.IsNullOrWhiteSpace(ImageDeploymentName) &&
+            string.IsNullOrWhiteSpace(EmbeddingDeploymentName) &&
+            string.IsNullOrWhiteSpace(DocumentDeploymentName))
             return;
 
         if (Endpoint is null)
@@ -27,32 +36,20 @@ public sealed class AISettings
             throw new InvalidOperationException("AI:ApiKey is required when an Azure deployment is configured.");
 
         if (!string.IsNullOrWhiteSpace(DocumentDeploymentName))
-            _ = GetFoundryResourceEndpoint();
+            _ = GetFoundryDocumentEndpoint();
     }
 
-    internal Uri GetFoundryResourceEndpoint()
+    internal Uri GetFoundryDocumentEndpoint()
     {
-        var endpoint = Endpoint ?? throw new InvalidOperationException("AI:Endpoint is required.");
-        var builder = new UriBuilder(endpoint)
-        {
-            Path = "/",
-            Query = string.Empty,
-            Fragment = string.Empty,
-        };
+        if (Endpoint is null || !Endpoint.IsAbsoluteUri || Endpoint.Scheme != Uri.UriSchemeHttps ||
+            Endpoint.UserInfo.Length != 0 || Endpoint.Query.Length != 0 || Endpoint.Fragment.Length != 0)
+            throw new InvalidOperationException("AI:Endpoint must be an HTTPS resource URL without credentials, query, or fragment.");
 
+        var host = Endpoint.Host;
         const string openAiSuffix = ".openai.azure.com";
-        const string foundrySuffix = ".services.ai.azure.com";
+        if (host.EndsWith(openAiSuffix, StringComparison.OrdinalIgnoreCase))
+            host = host[..^openAiSuffix.Length] + ".services.ai.azure.com";
 
-        if (builder.Host.EndsWith(openAiSuffix, StringComparison.OrdinalIgnoreCase))
-        {
-            builder.Host = builder.Host[..^openAiSuffix.Length] + foundrySuffix;
-        }
-        else if (!builder.Host.EndsWith(foundrySuffix, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                "AI:Endpoint must use an Azure OpenAI or Microsoft Foundry resource host when AI:DocumentDeploymentName is configured.");
-        }
-
-        return builder.Uri;
+        return new UriBuilder(Endpoint) { Host = host, Path = "/", Query = "", Fragment = "" }.Uri;
     }
 }

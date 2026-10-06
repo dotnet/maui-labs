@@ -5,21 +5,37 @@
     <AssemblyName>Microsoft.Maui.Essentials.AI.UnitTests</AssemblyName>
     <RootNamespace>Microsoft.Maui.Essentials.AI.UnitTests</RootNamespace>
     <IsPackable>false</IsPackable>
-    <NoWarn>$(NoWarn);MAUIAI0001</NoWarn>
+    <NoWarn>$(NoWarn);MAUIAI0001;MEDE0001;CA1416</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Azure.AI.DocumentIntelligence" />
+    <PackageReference Include="AngleSharp" />
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="Microsoft.Extensions.AI" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="NSubstitute" />
     <PackageReference Include="xunit" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj" />
+    <ProjectReference Include="..\..\..\src\Libraries\Microsoft.Extensions.DocumentExtraction\Microsoft.Extensions.DocumentExtraction.csproj" />
+    <ProjectReference Include="..\..\..\src\Libraries\Microsoft.Extensions.DataIngestion.DocumentExtraction\Microsoft.Extensions.DataIngestion.DocumentExtraction.csproj" />
+    <Compile Include="..\..\..\src\AI\Microsoft.Maui.Essentials.AI\Internal\DocumentExtraction\AppleVisionRecognizeDocumentsClient.cs"
+             Link="Documents\AppleVisionRecognizeDocumentsClient.cs" />
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\AzureDocumentIntelligenceReader.cs" Link="Documents\AzureDocumentIntelligenceReader.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\AzureDocumentIntelligenceExtractionClient.cs" Link="Documents\AzureDocumentIntelligenceExtractionClient.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\FoundryMistralDocumentReader.cs" Link="Documents\FoundryMistralDocumentReader.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\FoundryMistralDocumentExtractionClient.cs" Link="Documents\FoundryMistralDocumentExtractionClient.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\AISettings.cs" Link="Documents\AISettings.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\InputStreamReader.cs" Link="Services\InputStreamReader.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\SelectedDocument.cs" Link="Documents\SelectedDocument.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\DocumentReadingService.cs" Link="Documents\DocumentReadingService.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\DocumentExtractionService.cs" Link="Documents\DocumentExtractionService.cs" />
     <Compile Include="..\..\..\samples\EssentialsAISample\Models\**" Link="Models\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\..\..\samples\EssentialsAISample\Services\StreamingJsonDeserializer.cs" Link="Services\StreamingJsonDeserializer.cs" />
     <Compile Include="..\..\..\samples\EssentialsAISample\Services\BufferedChatClient.cs" Link="Services\BufferedChatClient.cs" />
