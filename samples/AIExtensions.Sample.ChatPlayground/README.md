@@ -30,6 +30,26 @@ provides image logging only. Model and usage data appear only when emitted
 by the provider. Trace payload logging and sensitive telemetry capture are
 disabled; exceptions may still contain sensitive data. Nothing is exported.
 
+#### Hybrid chat
+
+On iOS or Mac Catalyst 26+, **Hybrid (local + cloud)** uses the enabled Apple
+Intelligence model to choose a local or Azure answer for each text-only turn.
+It is an ordinary `IChatClient` registered in `MauiProgram.cs`, using built-in
+`RoutingChatClient` and `FailoverChatClient`. Without a configured Azure chat
+deployment it answers locally without classification. Routing is model-decided,
+not deterministic; tools and images are unsupported.
+
+Cloud routes automatically send a locally prepared summary by default;
+original conversation mode is opt-in. Redaction is best-effort, not a privacy
+guarantee. Generation settings and response schemas are forwarded unchanged.
+Do not use secrets or data that must stay on-device. Only transient cloud
+failures before any streaming update allow local recovery; authentication,
+validation, local failures and caller cancellation propagate.
+
+Built-in diagnostics on the local/cloud leaves expose classification, answer
+attempts and recovery under the outer trace. Only this sample and its host tests
+use the newer AI routing packages; other products retain their pins.
+
 ### Embeddings
 
 Import documents, build an index, and search it using Apple's on-device
