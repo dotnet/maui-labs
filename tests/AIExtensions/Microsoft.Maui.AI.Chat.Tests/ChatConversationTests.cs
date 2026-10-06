@@ -518,6 +518,93 @@ public sealed class ChatConversationTests
     }
 
     [Fact]
+    public async Task ExecuteTurn_ProtectedReasoningCompletion_SeparatesItemsWithoutChangingTheirText()
+    {
+        const string first = "**First heading**\n\nFirst body";
+        const string second = "**Second heading**\n\nSecond body";
+        using var client = new ScriptedClient(new ChatResponse([]),
+        [
+            new ChatResponseUpdate(ChatRole.Assistant, [new TextReasoningContent(first)]) { ModelId = "actual-model" },
+            new ChatResponseUpdate(ChatRole.Assistant,
+                [new TextReasoningContent("") { ProtectedData = "completed-first-item" }]) { ModelId = "actual-model" },
+            new ChatResponseUpdate(ChatRole.Assistant, [new TextReasoningContent(second)]) { ModelId = "actual-model" },
+            new ChatResponseUpdate(ChatRole.Assistant,
+                [new TextReasoningContent("") { ProtectedData = "completed-second-item" }]) { ModelId = "actual-model" },
+        ]);
+        var conversation = new ChatConversation();
+
+        var changes = await CollectChangesAsync(client, streaming: true, conversation: conversation);
+
+        var entries = changes.OfType<TranscriptChange.EntryAdded>()
+            .Where(entry => entry.EntryKind == TranscriptEntryKind.Reasoning).ToArray();
+        Assert.Equal(new[] { first, second }, entries.Select(entry => entry.Text));
+        Assert.Empty(changes.OfType<TranscriptChange.EntryTextChanged>());
+
+        using var nextClient = new ScriptedClient(new ChatResponse([new ChatMessage(ChatRole.Assistant, "Next")]), []);
+        await CollectChangesAsync(nextClient, streaming: false, conversation: conversation);
+        Assert.Equal(new[] { "completed-first-item", "completed-second-item" }, nextClient.ReceivedMessages!
+            .SelectMany(message => message.Contents).OfType<TextReasoningContent>()
+            .Where(content => content.ProtectedData is not null).Select(content => content.ProtectedData));
+    }
+
+    [Fact]
+    public async Task ExecuteTurn_ReasoningWhitespaceFragments_ArePreservedExactly()
+    {
+        string[] fragments = ["**Heading**", "", "\n\n", "Text here", "  ", "\t", "\n\n", "**Heading again**", "\n\n", "More text"];
+        using var client = new ScriptedClient(new ChatResponse([]),
+            fragments.Select(fragment => new ChatResponseUpdate(ChatRole.Assistant,
+                [new TextReasoningContent(fragment)]) { ModelId = "actual-model", MessageId = "reasoning" }).ToArray());
+
+        var changes = await CollectChangesAsync(client, streaming: true);
+
+        var entry = Assert.Single(changes.OfType<TranscriptChange.EntryAdded>(),
+            entry => entry.EntryKind == TranscriptEntryKind.Reasoning);
+        Assert.Equal(string.Concat(fragments), changes.OfType<TranscriptChange.EntryTextChanged>().Last().Text);
+        Assert.Equal(entry.EntryId, changes.OfType<TranscriptChange.EntryTextChanged>().Last().EntryId);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteTurn_TextWhitespaceFragments_ArePreservedExactly(bool streaming)
+    {
+        string[] fragments = ["First", "", "  ", "second", "\n\n", "\t", "Third"];
+        using var client = new ScriptedClient(
+            new ChatResponse([new ChatMessage(ChatRole.Assistant, string.Concat(fragments))]) { ModelId = "actual-model" },
+            fragments.Select(fragment => new ChatResponseUpdate(ChatRole.Assistant,
+                [new TextContent(fragment)]) { ModelId = "actual-model", MessageId = "text" }).ToArray());
+
+        var changes = await CollectChangesAsync(client, streaming);
+
+        var entry = Assert.Single(changes.OfType<TranscriptChange.EntryAdded>(),
+            entry => entry.EntryKind == TranscriptEntryKind.Assistant);
+        Assert.Equal(string.Concat(fragments), streaming
+            ? changes.OfType<TranscriptChange.EntryTextChanged>().Last().Text
+            : entry.Text);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteTurn_WhitespaceOnlyText_IsStillContent(bool streaming)
+    {
+        const string whitespace = "  \n\t";
+        using var client = new ScriptedClient(
+            new ChatResponse([new ChatMessage(ChatRole.Assistant, whitespace)]) { ModelId = "actual-model" },
+            [new ChatResponseUpdate(ChatRole.Assistant, [new TextContent(whitespace)]) { ModelId = "actual-model" }]);
+
+        var changes = await CollectChangesAsync(client, streaming);
+
+        var entry = Assert.Single(changes.OfType<TranscriptChange.EntryAdded>(),
+            entry => entry.EntryKind == TranscriptEntryKind.Assistant);
+        Assert.Equal(whitespace, streaming
+            ? changes.OfType<TranscriptChange.EntryTextChanged>().Last().Text
+            : entry.Text);
+        if (streaming)
+            Assert.Equal(entry.EntryId, Assert.Single(changes.OfType<TranscriptChange.EntryStreamingStopped>()).EntryId);
+    }
+
+    [Fact]
     public async Task ExecuteTurn_MetadataOnlyUpdate_DoesNotCreateTranscriptEntry()
     {
         using var client = new ScriptedClient(new ChatResponse([]),

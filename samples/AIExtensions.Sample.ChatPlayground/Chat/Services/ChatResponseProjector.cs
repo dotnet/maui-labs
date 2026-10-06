@@ -27,8 +27,7 @@ internal sealed class ChatResponseProjector(TranscriptEmitter transcript, Action
         if (update.MessageId is { } messageId && _messageId != messageId)
         {
             FlushText();
-            _reasoningEntryId = null;
-            _reasoningText.Clear();
+            EndReasoning();
             _messageId = messageId;
         }
         foreach (var content in update.Contents)
@@ -79,7 +78,7 @@ internal sealed class ChatResponseProjector(TranscriptEmitter transcript, Action
                 break;
 
             case TextContent text when !string.IsNullOrEmpty(text.Text):
-                _hasText |= !string.IsNullOrWhiteSpace(text.Text);
+                _hasText = true;
                 _text.Append(text.Text);
                 if (streaming)
                 {
@@ -93,7 +92,7 @@ internal sealed class ChatResponseProjector(TranscriptEmitter transcript, Action
                 }
                 break;
 
-            case TextReasoningContent reasoning when !string.IsNullOrWhiteSpace(reasoning.Text):
+            case TextReasoningContent reasoning when !string.IsNullOrEmpty(reasoning.Text):
                 _hasReasoning = true;
                 if (!streaming)
                     FlushText();
@@ -116,7 +115,14 @@ internal sealed class ChatResponseProjector(TranscriptEmitter transcript, Action
                     emit(new TranscriptChange.EntryAdded(transcript.NextEntryId(), TranscriptEntryKind.Reasoning,
                         "Reasoning summary", reasoning.Text, modelId));
                 }
+                if (reasoning.ProtectedData is not null)
+                    EndReasoning();
                 break;
+
+            case TextReasoningContent { ProtectedData: not null }:
+                // Protected data is supplied when a reasoning item completes, even without text.
+                EndReasoning();
+                return;
 
             case DataContent image when image.MediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase):
                 if (!streaming)
@@ -158,7 +164,7 @@ internal sealed class ChatResponseProjector(TranscriptEmitter transcript, Action
             return;
         }
 
-        if (_activeTextEntryId is null || string.IsNullOrWhiteSpace(_text.ToString()))
+        if (_activeTextEntryId is null || _text.Length == 0)
         {
             if (!_hasToolActivity && !_hasImage && !_hasReasoning && !_hasText)
                 throw new InvalidOperationException("The model returned an empty response.");
@@ -208,6 +214,12 @@ internal sealed class ChatResponseProjector(TranscriptEmitter transcript, Action
                     transcript.NextEntryId(), TranscriptEntryKind.Assistant, "Text", text, _modelId));
         }
         _text.Clear();
+    }
+
+    private void EndReasoning()
+    {
+        _reasoningEntryId = null;
+        _reasoningText.Clear();
     }
 
     private void AddImage(DataContent image, string? modelId)
