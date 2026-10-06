@@ -48,9 +48,11 @@ Only transient cloud failures before any streaming update allow local recovery,
 with at most two answer attempts. Authentication, validation, local failures
 and caller cancellation propagate.
 
-Built-in local/cloud leaf diagnostics expose classification, answer attempts
-and recovery under the outer trace. Only this sample and its host tests use the
-newer AI routing packages; other products retain their pins.
+Each leaf uses built-in `ConfigureOptionsChatClient` with an independent
+stop-sequence list, so a failed cloud attempt cannot alter local recovery options.
+Built-in leaf diagnostics expose classification, answer attempts and recovery
+under the outer trace. Only this sample and its host tests use the newer AI
+routing packages; other products retain their pins.
 
 ### Embeddings
 
