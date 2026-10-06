@@ -62,7 +62,7 @@
     <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
     <PackageReference Include="OpenAI" />
   </ItemGroup>
-
+
   <Target Name="AddUserSecrets" BeforeTargets="PrepareForBuild" Condition=" '$(UserSecretsId)' != '' And '$(Configuration)' == 'Debug' ">
     <PropertyGroup>
       <UserSecretsFilePath Condition=" '$(OS)' == 'Windows_NT' ">
