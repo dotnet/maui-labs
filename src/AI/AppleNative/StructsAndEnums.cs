@@ -36,3 +36,12 @@ internal enum VisionDocumentClientErrorNative : long
 	InvalidRegionOfInterest = 3,
 	UnsupportedBarcodeSymbology = 4
 }
+
+[Native]
+internal enum AppleVisionDocumentRecognitionErrorNative : long
+{
+	Cancelled = 1,
+	InvalidRevision = 2,
+	InvalidRegionOfInterest = 3,
+	UnsupportedBarcodeSymbology = 4
+}

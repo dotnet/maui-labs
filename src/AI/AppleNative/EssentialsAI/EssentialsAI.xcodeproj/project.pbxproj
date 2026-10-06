@@ -21,6 +21,9 @@
 		A10000012F00000100000001 /* DocumentOptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000112F00000100000001 /* DocumentOptions.swift */; };
 		A10000022F00000100000001 /* DocumentNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000122F00000100000001 /* DocumentNode.swift */; };
 		A10000032F00000100000001 /* DocumentClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000132F00000100000001 /* DocumentClient.swift */; };
+		A20000012F00000100000001 /* AppleVisionDocumentRecognitionOptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000112F00000100000001 /* AppleVisionDocumentRecognitionOptions.swift */; };
+		A20000022F00000100000001 /* AppleVisionDocumentSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000122F00000100000001 /* AppleVisionDocumentSnapshot.swift */; };
+		A20000032F00000100000001 /* AppleVisionDocumentRecognizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000132F00000100000001 /* AppleVisionDocumentRecognizer.swift */; };
 		A10000042F00000100000001 /* Vision.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000142F00000100000001 /* Vision.framework */; };
 		34279CA12EC421CC00583050 /* FoundationModels.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 34279CA02EC421CC00583050 /* FoundationModels.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 /* End PBXBuildFile section */
@@ -40,6 +43,9 @@
 		A10000112F00000100000001 /* DocumentOptions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentOptions.swift; sourceTree = "<group>"; };
 		A10000122F00000100000001 /* DocumentNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentNode.swift; sourceTree = "<group>"; };
 		A10000132F00000100000001 /* DocumentClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentClient.swift; sourceTree = "<group>"; };
+		A20000112F00000100000001 /* AppleVisionDocumentRecognitionOptions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleVisionDocumentRecognitionOptions.swift; sourceTree = "<group>"; };
+		A20000122F00000100000001 /* AppleVisionDocumentSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleVisionDocumentSnapshot.swift; sourceTree = "<group>"; };
+		A20000132F00000100000001 /* AppleVisionDocumentRecognizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleVisionDocumentRecognizer.swift; sourceTree = "<group>"; };
 		A10000142F00000100000001 /* Vision.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Vision.framework; path = System/Library/Frameworks/Vision.framework; sourceTree = SDKROOT; };
 		34279C902EC421CC00583050 /* EssentialsAI.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = EssentialsAI.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		34279CA02EC421CC00583050 /* FoundationModels.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = FoundationModels.framework; path = System/Library/Frameworks/FoundationModels.framework; sourceTree = SDKROOT; };
@@ -77,6 +83,9 @@
 				A10000112F00000100000001 /* DocumentOptions.swift */,
 				A10000122F00000100000001 /* DocumentNode.swift */,
 				A10000132F00000100000001 /* DocumentClient.swift */,
+				A20000112F00000100000001 /* AppleVisionDocumentRecognitionOptions.swift */,
+				A20000122F00000100000001 /* AppleVisionDocumentSnapshot.swift */,
+				A20000132F00000100000001 /* AppleVisionDocumentRecognizer.swift */,
 				34279C912EC421CC00583050 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -186,6 +195,9 @@
 				A10000012F00000100000001 /* DocumentOptions.swift in Sources */,
 				A10000022F00000100000001 /* DocumentNode.swift in Sources */,
 				A10000032F00000100000001 /* DocumentClient.swift in Sources */,
+				A20000012F00000100000001 /* AppleVisionDocumentRecognitionOptions.swift in Sources */,
+				A20000022F00000100000001 /* AppleVisionDocumentSnapshot.swift in Sources */,
+				A20000032F00000100000001 /* AppleVisionDocumentRecognizer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
