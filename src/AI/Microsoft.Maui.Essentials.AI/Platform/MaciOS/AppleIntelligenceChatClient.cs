@@ -144,7 +144,7 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 		StreamChunkerBase chunker = nativeOptions?.ResponseJsonSchema is not null
 			? new JsonStreamChunker()
 			: new PlainTextStreamChunker();
-		var handler = new StreamingResponseHandler(chunker);
+		var handler = new StreamingResponseHandler(chunker, DefaultModelId);
 
 		// Set up cancellation registration before invoking native to avoid race
 		CancellationTokenNative? nativeToken = null;
@@ -292,7 +292,7 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 		if (response is null || response.Messages is null || response.Messages.Length == 0)
 		{
 			// Fallback: return empty response
-			return new ChatResponse([new ChatMessage(ChatRole.Assistant, "")]);
+			return new ChatResponse([new ChatMessage(ChatRole.Assistant, "")]) { ModelId = DefaultModelId };
 		}
 
 		// Convert all native messages to ChatMessage objects
@@ -301,7 +301,7 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			.ToList();
 
 		// Create ChatResponse with all messages
-		return new ChatResponse(messages);
+		return new ChatResponse(messages) { ModelId = DefaultModelId };
 	}
 
 	private static ChatMessage FromNative(ChatMessageNative nativeMessage)
