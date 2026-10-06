@@ -43,6 +43,7 @@ internal sealed class ChatTurnExecutor
         bool streaming,
         Action<ChatResponse> onResponse,
         Action<AIContent> onContent,
+        Action<ChatResponseUpdate> onUpdate,
         CancellationToken cancellationToken)
     {
         if (!streaming)
@@ -65,6 +66,7 @@ internal sealed class ChatTurnExecutor
             .WithCancellation(cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
+            onUpdate(update);
             foreach (var content in update.Contents)
             {
                 switch (content)

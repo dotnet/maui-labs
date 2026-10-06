@@ -6,9 +6,15 @@ namespace AIExtensions.Sample.ChatPlayground;
 public sealed partial class ChatMessageViewModel : ObservableObject
 {
     [ObservableProperty] private string text = string.Empty;
-    [ObservableProperty] private bool isUser;
-    [ObservableProperty] private bool isError;
-    [ObservableProperty] private bool isSystem;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasModelId))]
+    private bool isUser;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasModelId))]
+    private bool isError;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasModelId))]
+    private bool isSystem;
     [ObservableProperty] private bool isTool;
     [ObservableProperty] private bool isStreaming;
     [ObservableProperty] private string? label;
@@ -18,6 +24,12 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasImage))]
     private ImageSource? imageSource;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasModelId))]
+    private string? modelId;
+
+    /// <summary>Gets whether this provider output has a model identifier to display.</summary>
+    public bool HasModelId => !IsUser && !IsSystem && !IsError && !string.IsNullOrWhiteSpace(ModelId);
 
     /// <summary>Gets whether this bubble has supplemental details.</summary>
     public bool HasDetails => !string.IsNullOrWhiteSpace(DetailText);

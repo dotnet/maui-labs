@@ -255,6 +255,157 @@ public sealed class ChatConversationTests
         Assert.True(client.StreamCancelled.Task.IsCompletedSuccessfully);
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task ExecuteTurn_ModelId_LabelsAllProviderOutputsButNotInput(bool streaming, bool structuredJson)
+    {
+        var image = new DataContent(new byte[] { 1, 2, 3 }, "image/png");
+        var contents = new AIContent[]
+        {
+            new TextContent(structuredJson ? """{"answer":4}""" : "Answer: 4"),
+            new TextReasoningContent("Calculated"),
+            new FunctionCallContent("call", "calculate"),
+            new FunctionResultContent("call", 4),
+            new FunctionResultContent("unknown", null) { Exception = new InvalidOperationException("Tool failed") },
+            image,
+            new ImageGenerationToolResultContent("image") { Outputs = [image] },
+        };
+        using var client = new ScriptedClient(
+            new ChatResponse([new ChatMessage(ChatRole.Assistant, contents)]) { ModelId = "actual-model" },
+            [new ChatResponseUpdate(ChatRole.Assistant, contents) { ModelId = "actual-model" }]);
+        var changes = await CollectChangesAsync(client, streaming, structuredJson);
+
+        var entries = changes.OfType<TranscriptChange.EntryAdded>().ToArray();
+        Assert.All(entries.Where(entry => entry.EntryKind is TranscriptEntryKind.User or TranscriptEntryKind.System),
+            entry => Assert.Null(entry.ModelId));
+        var outputs = entries.Where(entry => entry.EntryKind is not (TranscriptEntryKind.User or TranscriptEntryKind.System)).ToArray();
+        Assert.Equal(6, outputs.Length);
+        Assert.All(outputs, entry => Assert.Equal("actual-model", entry.ModelId));
+        Assert.Contains(outputs, entry => entry.EntryKind == TranscriptEntryKind.Assistant);
+        Assert.Contains(outputs, entry => entry.EntryKind == TranscriptEntryKind.Reasoning);
+        Assert.Equal(2, outputs.Count(entry => entry.EntryKind == TranscriptEntryKind.Tool));
+        Assert.Equal(2, outputs.Count(entry => entry.EntryKind == TranscriptEntryKind.Image));
+        Assert.Single(changes.OfType<TranscriptChange.ToolCallResolved>());
+        Assert.Empty(changes.OfType<TranscriptChange.EntryModelIdChanged>());
+    }
+
+    [Fact]
+    public async Task ExecuteTurn_LateMetadataOnlyModelId_BackfillsFlushedOutputsAndPreservesKnownIds()
+    {
+        var image = new DataContent(new byte[] { 1 }, "image/png");
+        using var client = new ScriptedClient(new ChatResponse([]),
+        [
+            new ChatResponseUpdate(ChatRole.Assistant, [new TextContent("Before")]),
+            new ChatResponseUpdate(ChatRole.Assistant, [new TextReasoningContent("Reasoning")]),
+            new ChatResponseUpdate(ChatRole.Assistant, [new FunctionCallContent("call", "calculate")]),
+            new ChatResponseUpdate(ChatRole.Tool, [new FunctionResultContent("call", 4), image]),
+            new ChatResponseUpdate { ModelId = "first-model" },
+            new ChatResponseUpdate(ChatRole.Assistant, [new TextContent("After")]),
+            new ChatResponseUpdate(ChatRole.Assistant, [new TextContent(" missing")]),
+            new ChatResponseUpdate(ChatRole.Assistant, [new FunctionResultContent("unknown", 1)]) { ModelId = " " },
+            new ChatResponseUpdate { ModelId = "second-model" },
+            new ChatResponseUpdate(ChatRole.Assistant, [new TextContent("Newest")]),
+        ]);
+        var changes = await CollectChangesAsync(client, streaming: true);
+        var entries = changes.OfType<TranscriptChange.EntryAdded>()
+            .Where(entry => entry.EntryKind is not (TranscriptEntryKind.User or TranscriptEntryKind.System)).ToArray();
+        Assert.Equal(7, entries.Length);
+        Assert.All(entries.Take(4), entry => Assert.Null(entry.ModelId));
+        var backfills = changes.OfType<TranscriptChange.EntryModelIdChanged>().ToArray();
+        Assert.Equal(entries.Take(4).Select(entry => entry.EntryId), backfills.Select(change => change.EntryId));
+        Assert.All(backfills, change => Assert.Equal("first-model", change.ModelId));
+        Assert.All(entries.Skip(4).Take(2), entry => Assert.Equal("first-model", entry.ModelId));
+        Assert.Equal("second-model", entries.Last().ModelId);
+        Assert.True(changes.IndexOf(backfills[0]) >
+            changes.IndexOf(Assert.Single(changes.OfType<TranscriptChange.ToolCallResolved>())));
+        Assert.Contains(changes, change => change is TranscriptChange.EntryTextChanged { Text: "After missing" });
+    }
+
+    [Theory]
+    [InlineData(false, null)]
+    [InlineData(true, null)]
+    [InlineData(false, " ")]
+    [InlineData(true, " ")]
+    public async Task ExecuteTurn_MissingModelId_DoesNotUseOptionsOrClientMetadata(bool streaming, string? modelId)
+    {
+        using var client = new DescribedChatClient(new ScriptedClient(
+            new ChatResponse([new ChatMessage(ChatRole.Assistant, "Answer")]) { ModelId = modelId },
+            [new ChatResponseUpdate(ChatRole.Assistant, [new TextContent("Answer")]) { ModelId = modelId }]),
+            new ChatClientDescriptor("descriptor-id", "Descriptor model name", "Configured"));
+        var changes = await CollectChangesAsync(client, streaming);
+
+        Assert.All(changes.OfType<TranscriptChange.EntryAdded>(), entry => Assert.Null(entry.ModelId));
+        Assert.Empty(changes.OfType<TranscriptChange.EntryModelIdChanged>());
+    }
+
+    [Theory]
+    [InlineData(false, "user", false)]
+    [InlineData(true, "user", false)]
+    [InlineData(false, "system", false)]
+    [InlineData(true, "system", false)]
+    [InlineData(false, "user", true)]
+    [InlineData(true, "system", true)]
+    public async Task ExecuteTurn_ExplicitUserOrSystemResponse_DoesNotLabelOutput(
+        bool streaming, string roleName, bool structuredJson)
+    {
+        var role = new ChatRole(roleName);
+        var text = structuredJson ? "{}" : "Provider role";
+        using var client = new ScriptedClient(
+            new ChatResponse([new ChatMessage(role, text)]) { ModelId = "actual-model" },
+            [
+                new ChatResponseUpdate(role, [new TextContent(text)]),
+                new ChatResponseUpdate { ModelId = "actual-model" },
+            ]);
+        var changes = await CollectChangesAsync(client, streaming, structuredJson);
+        Assert.All(changes.OfType<TranscriptChange.EntryAdded>(), entry => Assert.Null(entry.ModelId));
+        Assert.Empty(changes.OfType<TranscriptChange.EntryModelIdChanged>());
+    }
+
+    [Fact]
+    public async Task ExecuteTurn_ModelId_DoesNotCarryIntoNextTurn()
+    {
+        var conversation = new ChatConversation();
+        using var first = new ScriptedClient(
+            new ChatResponse([new ChatMessage(ChatRole.Assistant, "First")]) { ModelId = "first-model" }, []);
+        await CollectChangesAsync(first, streaming: false, conversation: conversation);
+        using var second = new ScriptedClient(new ChatResponse([]),
+            [new ChatResponseUpdate(ChatRole.Assistant, [new TextContent("Second")])]);
+        var changes = await CollectChangesAsync(second, streaming: true, conversation: conversation);
+        Assert.All(changes.OfType<TranscriptChange.EntryAdded>(), entry => Assert.Null(entry.ModelId));
+        Assert.Empty(changes.OfType<TranscriptChange.EntryModelIdChanged>());
+    }
+
+    [Theory]
+    [InlineData("user")]
+    [InlineData("system")]
+    public async Task ExecuteTurn_InputRoleMetadata_DoesNotBackfillProviderOutput(string roleName)
+    {
+        using var client = new ScriptedClient(new ChatResponse([]),
+        [
+            new ChatResponseUpdate(ChatRole.Assistant, [new TextContent("Answer")]),
+            new ChatResponseUpdate { Role = new ChatRole(roleName), ModelId = "input-model" },
+        ]);
+
+        var changes = await CollectChangesAsync(client, streaming: true);
+
+        Assert.All(changes.OfType<TranscriptChange.EntryAdded>(), entry => Assert.Null(entry.ModelId));
+        Assert.Empty(changes.OfType<TranscriptChange.EntryModelIdChanged>());
+    }
+
+    private static async Task<List<TranscriptChange>> CollectChangesAsync(
+        IChatClient client, bool streaming, bool structuredJson = false, ChatConversation? conversation = null)
+    {
+        var changes = new List<TranscriptChange>();
+        await foreach (var change in (conversation ?? new ChatConversation()).SendTurnAsync(
+            client, new ChatMessage(ChatRole.User, "Question"), "Question",
+            new ChatOptions { ModelId = "requested-model", Instructions = "Answer briefly" }, streaming, structuredJson))
+            changes.Add(change);
+        return changes;
+    }
+
     private sealed class ScriptedClient(
         ChatResponse response,
         ChatResponseUpdate[] updates,

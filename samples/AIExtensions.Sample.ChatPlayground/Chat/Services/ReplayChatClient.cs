@@ -14,10 +14,32 @@ public sealed class ReplayChatClient(IChatRecordingSession recording) : IChatCli
         cancellationToken.ThrowIfCancellationRequested();
         var interaction = recording.PeekNext();
         var response = interaction.IsStreaming
-            ? await ReadUpdates(interaction, cancellationToken).ToChatResponseAsync(cancellationToken)
+            ? await ReadStreamingResponse(interaction, cancellationToken)
             : ChatRecordingSerializer.ReadResponse(interaction.Response ?? throw new InvalidDataException("The non-streaming recording has no response."));
         cancellationToken.ThrowIfCancellationRequested();
         recording.CompleteReplay(interaction);
+        return response;
+    }
+
+    private static async Task<ChatResponse> ReadStreamingResponse(
+        RecordedInteraction interaction, CancellationToken cancellationToken)
+    {
+        string? modelId = null;
+        async IAsyncEnumerable<ChatResponseUpdate> Updates(
+            [EnumeratorCancellation] CancellationToken token)
+        {
+            await foreach (var update in ReadUpdates(interaction, token))
+            {
+                if (update.Role != ChatRole.User && update.Role != ChatRole.System &&
+                    !string.IsNullOrWhiteSpace(update.ModelId))
+                    modelId = update.ModelId;
+                yield return update;
+            }
+        }
+
+        var response = await Updates(cancellationToken).ToChatResponseAsync(cancellationToken);
+        // Retain late model metadata even when the aggregate sees missing identifiers afterward.
+        response.ModelId = modelId;
         return response;
     }
 
