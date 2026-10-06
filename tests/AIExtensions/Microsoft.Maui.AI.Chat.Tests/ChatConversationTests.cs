@@ -274,8 +274,15 @@ public sealed class ChatConversationTests
             new ImageGenerationToolResultContent("image") { Outputs = [image] },
         };
         using var client = new ScriptedClient(
-            new ChatResponse([new ChatMessage(ChatRole.Assistant, contents)]) { ModelId = "actual-model" },
-            [new ChatResponseUpdate(ChatRole.Assistant, contents) { ModelId = "actual-model" }]);
+            new ChatResponse([new ChatMessage(ChatRole.Assistant, contents)])
+            {
+                ModelId = "actual-model",
+                Usage = new UsageDetails { InputTokenCount = 10, OutputTokenCount = 5 },
+            },
+            [
+                new ChatResponseUpdate(ChatRole.Assistant, contents) { ModelId = "actual-model" },
+                new ChatResponseUpdate { Contents = [new UsageContent(new UsageDetails { OutputTokenCount = 5 })] },
+            ]);
         var changes = await CollectChangesAsync(client, streaming, structuredJson);
 
         var entries = changes.OfType<TranscriptChange.EntryAdded>().ToArray();
@@ -289,6 +296,204 @@ public sealed class ChatConversationTests
         Assert.Equal(2, outputs.Count(entry => entry.EntryKind == TranscriptEntryKind.Tool));
         Assert.Equal(2, outputs.Count(entry => entry.EntryKind == TranscriptEntryKind.Image));
         Assert.Single(changes.OfType<TranscriptChange.ToolCallResolved>());
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public async Task ExecuteTurn_AdjacentAssistantMessages_KeepTranscriptAndHistorySeparate(
+        bool streaming, bool supplyMessageIds)
+    {
+        var firstId = supplyMessageIds ? "first" : null;
+        var secondId = supplyMessageIds ? "second" : null;
+        using var client = new ScriptedClient(
+            new ChatResponse([
+                new ChatMessage(ChatRole.Assistant, "First") { MessageId = firstId },
+                new ChatMessage(ChatRole.Assistant, "Second") { MessageId = secondId },
+            ]) { ModelId = "actual-model" },
+            [
+                new ChatResponseUpdate(ChatRole.Assistant, "First") { MessageId = firstId, ModelId = "actual-model" },
+                new ChatResponseUpdate(ChatRole.Assistant, "Second") { MessageId = secondId, ModelId = "actual-model" },
+            ]);
+        var conversation = new ChatConversation();
+        var changes = await CollectChangesAsync(client, streaming, conversation: conversation);
+
+        var entries = changes.OfType<TranscriptChange.EntryAdded>()
+            .Where(entry => entry.EntryKind == TranscriptEntryKind.Assistant).ToArray();
+        Assert.Equal(2, entries.Length);
+        Assert.All(entries, entry =>
+        {
+            Assert.Equal("actual-model", entry.ModelId);
+            Assert.Equal(streaming, entry.IsStreaming);
+        });
+        if (streaming)
+        {
+            Assert.Collection(changes.OfType<TranscriptChange.EntryTextChanged>(),
+                change => { Assert.Equal(entries[0].EntryId, change.EntryId); Assert.Equal("First", change.Text); },
+                change => { Assert.Equal(entries[1].EntryId, change.EntryId); Assert.Equal("Second", change.Text); });
+            Assert.Equal(entries.Select(entry => entry.EntryId),
+                changes.OfType<TranscriptChange.EntryStreamingStopped>().Select(change => change.EntryId));
+        }
+        else
+        {
+            Assert.Equal(new[] { "First", "Second" }, entries.Select(entry => entry.Text));
+        }
+
+        using var nextClient = new ScriptedClient(new ChatResponse([new ChatMessage(ChatRole.Assistant, "Next")]), []);
+        await CollectChangesAsync(nextClient, streaming: false, conversation: conversation);
+        var history = nextClient.ReceivedMessages!.Where(message => message.Role == ChatRole.Assistant).ToArray();
+        Assert.Equal(new[] { "First", "Second" }, history.Select(message => message.Text));
+        Assert.Equal(streaming ? new string?[] { null, null } : [firstId, secondId],
+            history.Select(message => message.MessageId));
+    }
+
+    [Fact]
+    public async Task ExecuteTurn_SameMessageIdFragments_CombineTranscriptAndHistory()
+    {
+        using var client = new ScriptedClient(new ChatResponse([]),
+        [
+            new ChatResponseUpdate(ChatRole.Assistant, "First ") { MessageId = "message", ModelId = "actual-model" },
+            new ChatResponseUpdate { MessageId = "message", ModelId = "actual-model" },
+            new ChatResponseUpdate(ChatRole.Assistant, "second") { MessageId = "message", ModelId = "actual-model" },
+        ]);
+        var conversation = new ChatConversation();
+        var changes = await CollectChangesAsync(client, streaming: true, conversation: conversation);
+        var entry = Assert.Single(changes.OfType<TranscriptChange.EntryAdded>(),
+            entry => entry.EntryKind == TranscriptEntryKind.Assistant);
+        Assert.Equal("actual-model", entry.ModelId);
+        Assert.Equal("First second", changes.OfType<TranscriptChange.EntryTextChanged>().Last().Text);
+        Assert.Equal(entry.EntryId, Assert.Single(changes.OfType<TranscriptChange.EntryStreamingStopped>()).EntryId);
+
+        using var nextClient = new ScriptedClient(new ChatResponse([new ChatMessage(ChatRole.Assistant, "Next")]), []);
+        await CollectChangesAsync(nextClient, streaming: false, conversation: conversation);
+        var history = Assert.Single(nextClient.ReceivedMessages!, message => message.Role == ChatRole.Assistant);
+        Assert.Equal("First second", history.Text);
+        Assert.Null(history.MessageId);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteTurn_DifferentMessageIds_KeepReasoningEntriesSeparate(bool streaming)
+    {
+        using var client = new ScriptedClient(
+            new ChatResponse([
+                new ChatMessage(ChatRole.Assistant, [new TextReasoningContent("First thought")]) { MessageId = "first" },
+                new ChatMessage(ChatRole.Assistant, [new TextReasoningContent("Second thought")]) { MessageId = "second" },
+            ]) { ModelId = "actual-model" },
+            [
+                new ChatResponseUpdate(ChatRole.Assistant, [new TextReasoningContent("First ")])
+                    { MessageId = "first", ModelId = "actual-model" },
+                new ChatResponseUpdate(ChatRole.Assistant, [new TextReasoningContent("thought")])
+                    { MessageId = "first", ModelId = "actual-model" },
+                new ChatResponseUpdate(ChatRole.Assistant, [new TextReasoningContent("Second thought")])
+                    { MessageId = "second", ModelId = "actual-model" },
+                new ChatResponseUpdate { MessageId = "third" },
+            ]);
+        var changes = await CollectChangesAsync(client, streaming);
+        var entries = changes.OfType<TranscriptChange.EntryAdded>()
+            .Where(entry => entry.EntryKind == TranscriptEntryKind.Reasoning).ToArray();
+        Assert.Equal(2, entries.Length);
+        Assert.All(entries, entry => Assert.Equal("actual-model", entry.ModelId));
+        Assert.Equal("Second thought", entries[1].Text);
+        if (streaming)
+        {
+            var combined = Assert.Single(changes.OfType<TranscriptChange.EntryTextChanged>());
+            Assert.Equal(entries[0].EntryId, combined.EntryId);
+            Assert.Equal("First thought", combined.Text);
+        }
+        else
+        {
+            Assert.Equal("First thought", entries[0].Text);
+        }
+        Assert.DoesNotContain(changes.OfType<TranscriptChange.EntryAdded>(),
+            entry => entry.EntryKind == TranscriptEntryKind.Assistant);
+    }
+
+    [Fact]
+    public async Task ExecuteTurn_TextBeforeToolWithoutFinalText_PreservesCompletionPlaceholder()
+    {
+        using var client = new ScriptedClient(new ChatResponse([]),
+        [
+            new ChatResponseUpdate(ChatRole.Assistant,
+                [new TextContent("Calculating"), new FunctionCallContent("call", "calculate")])
+                { ModelId = "actual-model" },
+            new ChatResponseUpdate(ChatRole.Tool, [new FunctionResultContent("call", 4)])
+                { ModelId = "actual-model" },
+        ]);
+        var changes = await CollectChangesAsync(client, streaming: true);
+        var entries = changes.OfType<TranscriptChange.EntryAdded>()
+            .Where(entry => entry.EntryKind == TranscriptEntryKind.Assistant).ToArray();
+        Assert.Equal(2, entries.Length);
+        Assert.True(entries[0].IsStreaming);
+        Assert.False(entries[1].IsStreaming);
+        Assert.Equal("(The provider completed tool activity without a final text response.)", entries[1].Text);
+        Assert.Equal("actual-model", entries[1].ModelId);
+        Assert.Equal(entries[0].EntryId, Assert.Single(changes.OfType<TranscriptChange.EntryStreamingStopped>()).EntryId);
+    }
+
+    [Fact]
+    public async Task ExecuteTurn_TrailingWhitespaceMessage_StopsEveryStreamingBubble()
+    {
+        using var client = new ScriptedClient(new ChatResponse([]),
+        [
+            new ChatResponseUpdate(ChatRole.Assistant, "Answer") { MessageId = "first", ModelId = "actual-model" },
+            new ChatResponseUpdate(ChatRole.Assistant, " ") { MessageId = "second", ModelId = "actual-model" },
+        ]);
+        var changes = await CollectChangesAsync(client, streaming: true);
+        var entries = changes.OfType<TranscriptChange.EntryAdded>()
+            .Where(entry => entry.EntryKind == TranscriptEntryKind.Assistant).ToArray();
+
+        Assert.Equal(2, entries.Length);
+        Assert.Equal(entries.Select(entry => entry.EntryId),
+            changes.OfType<TranscriptChange.EntryStreamingStopped>().Select(change => change.EntryId));
+    }
+
+    [Fact]
+    public async Task ExecuteTurn_FilteredUpdates_PreserveMetadataAndOriginalContents()
+    {
+        var call = new FunctionCallContent("call", "calculate");
+        var result = new FunctionResultContent("call", 4);
+        var usage = new UsageContent(new UsageDetails { OutputTokenCount = 5 });
+        var source = new ChatResponseUpdate(ChatRole.Assistant, [call, new TextContent("First"), result])
+        {
+            MessageId = "message",
+            ModelId = "actual-model",
+            ResponseId = "response",
+            ConversationId = "conversation",
+            AuthorName = "author",
+            CreatedAt = DateTimeOffset.UtcNow,
+            FinishReason = ChatFinishReason.Stop,
+            RawRepresentation = new object(),
+            AdditionalProperties = new() { ["provider"] = "value" },
+        };
+        var duplicates = new ChatResponseUpdate(ChatRole.Assistant, [call, usage, new TextContent("Second"), result])
+            { MessageId = "message", ModelId = "actual-model" };
+        using var client = new ScriptedClient(new ChatResponse([]), [source, duplicates]);
+        var updates = new List<ChatResponseUpdate>();
+        await new ChatTurnExecutor().ExecuteTurnAsync(client, null, true, updates.Add, CancellationToken.None);
+
+        Assert.Equal(2, updates.Count);
+        Assert.NotSame(source, updates[0]);
+        Assert.NotSame(source.Contents, updates[0].Contents);
+        Assert.Equal(source.Contents, updates[0].Contents);
+        Assert.Equal(source.MessageId, updates[0].MessageId);
+        Assert.Equal(source.Role, updates[0].Role);
+        Assert.Equal(source.ModelId, updates[0].ModelId);
+        Assert.Equal(source.ResponseId, updates[0].ResponseId);
+        Assert.Equal(source.ConversationId, updates[0].ConversationId);
+        Assert.Equal(source.AuthorName, updates[0].AuthorName);
+        Assert.Equal(source.CreatedAt, updates[0].CreatedAt);
+        Assert.Equal(source.FinishReason, updates[0].FinishReason);
+        Assert.Same(source.RawRepresentation, updates[0].RawRepresentation);
+        Assert.Same(source.AdditionalProperties, updates[0].AdditionalProperties);
+        Assert.Equal("Second", Assert.IsType<TextContent>(Assert.Single(updates[1].Contents)).Text);
+        Assert.Equal(4, duplicates.Contents.Count);
+        Assert.Same(call, duplicates.Contents[0]);
+        Assert.Same(usage, duplicates.Contents[1]);
+        Assert.Same(result, duplicates.Contents[3]);
+        Assert.True(call.InformationalOnly);
     }
 
     [Fact]
