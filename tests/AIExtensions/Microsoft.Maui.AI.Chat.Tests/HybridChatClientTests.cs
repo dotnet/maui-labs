@@ -127,11 +127,70 @@ public sealed class HybridChatClientTests
         Assert.Equal(["the end"], cloud.ReceivedOptions.StopSequences);
         Assert.NotSame(options.StopSequences, cloud.ReceivedOptions.StopSequences);
         AssertSafeOptions(cloud.ReceivedOptions);
-        Assert.Contains("Write clearly.", local.ClassifierMessages![0].Text);
+        Assert.Equal("Follow-up", Assert.Single(local.ClassifierMessages!).Text);
         Assert.DoesNotContain("Write clearly.", local.ClassifierOptions!.Instructions);
         Assert.Contains("untrusted", local.ClassifierOptions.Instructions);
         Assert.NotNull(local.ClassifierOptions.ResponseFormat);
         Assert.Equal(1, local.ClassifierCalls);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Routing_EachRequestClassifiesOnlyLastUserMessageAndCanChangeLeaf(bool streaming)
+    {
+        var local = new FakeClient("apple-model") { Decision = LocalDecision };
+        var cloud = new FakeClient("azure-model");
+        using var hybrid = Create(local, cloud);
+        ChatMessage[] messages =
+        [
+            new(ChatRole.System, "Earlier system instruction"),
+            new(ChatRole.User, "Earlier complex task"),
+            new(ChatRole.Assistant, "Earlier answer"),
+            new(ChatRole.User, "Hi"),
+            new(ChatRole.Assistant, "Trailing assistant message"),
+        ];
+        var options = new ChatOptions { Instructions = "Answer instructions" };
+
+        Assert.Equal("apple-model", await AnswerModel(hybrid, streaming, messages, options));
+        Assert.Equal("Hi", Assert.Single(local.ClassifierMessages!).Text);
+
+        local.Decision = CloudDecision;
+        messages = [.. messages, new(ChatRole.User, "Compare distributed job scheduler architectures")];
+        Assert.Equal("azure-model", await AnswerModel(hybrid, streaming, messages, options));
+        Assert.Equal(messages[^1].Text, Assert.Single(local.ClassifierMessages!).Text);
+        Assert.Equal(messages.Select(message => message.Text),
+            cloud.ReceivedMessages!.Select(message => message.Text));
+        Assert.Equal(options.Instructions, cloud.ReceivedOptions!.Instructions);
+
+        local.Decision = LocalDecision;
+        messages = [.. messages, new(ChatRole.User, "Hi again")];
+        Assert.Equal("apple-model", await AnswerModel(hybrid, streaming, messages, options));
+        Assert.Equal("Hi again", Assert.Single(local.ClassifierMessages!).Text);
+        Assert.Equal(3, local.ClassifierCalls);
+        Assert.Equal(2, local.AnswerCalls + local.StreamCalls);
+        Assert.Equal(1, cloud.AnswerCalls + cloud.StreamCalls);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MissingOrBlankLastUserMessage_AnswersLocallyWithoutClassification(bool streaming)
+    {
+        var local = new FakeClient("apple-model") { Decision = "invalid" };
+        var cloud = new FakeClient("azure-model");
+        using var hybrid = Create(local, cloud);
+        foreach (var messages in new ChatMessage[][]
+        {
+            [new(ChatRole.System, "System instruction"), new(ChatRole.Assistant, "Previous answer")],
+            [new(ChatRole.User, "")],
+            [new(ChatRole.User, "Earlier question"), new(ChatRole.User, "   ")],
+        })
+            Assert.Equal("apple-model", await AnswerModel(hybrid, streaming, messages));
+
+        Assert.Equal(0, local.ClassifierCalls);
+        Assert.Equal(3, local.AnswerCalls + local.StreamCalls);
+        Assert.Equal(0, cloud.AnswerCalls + cloud.StreamCalls);
     }
 
     [Theory]
