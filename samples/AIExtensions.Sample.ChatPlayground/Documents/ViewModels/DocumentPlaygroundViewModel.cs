@@ -14,10 +14,12 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
     private const int MaximumDisplayedNodes = 2000;
 
     private readonly DocumentInputService _inputService;
+#if DEBUG
     private readonly IConfiguration _configuration;
+    private bool _launchOptionsApplied;
+#endif
     private DocumentInput? _selectedInput;
     private DocumentExtractionResult? _result;
-    private bool _launchOptionsApplied;
 
     public DocumentPlaygroundViewModel(
         DocumentInputService inputService,
@@ -25,7 +27,9 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         IConfiguration configuration)
     {
         _inputService = inputService;
+#if DEBUG
         _configuration = configuration;
+#endif
         Settings = settings;
         Settings.PropertyChanged += SettingsPropertyChanged;
         StatusMessage = settings.HasClient

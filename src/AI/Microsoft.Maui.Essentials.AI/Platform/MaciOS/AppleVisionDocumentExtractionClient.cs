@@ -344,11 +344,11 @@ public sealed class AppleVisionDocumentExtractionClient : IDocumentExtractionCli
 		using var source = CGImageSource.FromData(imageData)
 			?? throw new ArgumentException("The stream does not contain a supported image.", nameof(imageData));
 		var properties = source.GetProperties(0);
-		var orientation = properties.Orientation is { } value
+		var orientation = properties?.Orientation is { } value
 			? (nint)(int)value
 			: (nint)(int)CIImageOrientation.TopLeft;
-		int? width = properties.PixelWidth is { } pixelWidth ? checked((int)pixelWidth) : null;
-		int? height = properties.PixelHeight is { } pixelHeight ? checked((int)pixelHeight) : null;
+		int? width = properties?.PixelWidth is { } pixelWidth ? checked((int)pixelWidth) : null;
+		int? height = properties?.PixelHeight is { } pixelHeight ? checked((int)pixelHeight) : null;
 		if (orientation is >= 5 and <= 8)
 		{
 			(width, height) = (height, width);
