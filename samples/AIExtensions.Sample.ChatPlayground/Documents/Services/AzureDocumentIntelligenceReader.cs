@@ -64,21 +64,22 @@ internal sealed class AzureDocumentIntelligenceReader : IngestionDocumentReader
         foreach (var paragraph in result.Paragraphs ?? [])
         {
             if (string.IsNullOrWhiteSpace(paragraph.Content))
-                    continue;
+                continue;
             var pageNumber = GetPage(paragraph.BoundingRegions, paragraph.Spans, result.Pages);
             if (paragraph.Spans is { Count: > 0 } && tables.Any(table =>
                     GetTablePage(table, result.Pages) == pageNumber && table.Spans is { Count: > 0 } &&
                     paragraph.Spans.All(span => table.Spans.Any(tableSpan =>
                         span.Offset >= tableSpan.Offset &&
                         (long)span.Offset + span.Length <= (long)tableSpan.Offset + tableSpan.Length))))
-                    continue;
+                continue;
 
             IngestionDocumentElement element = paragraph.Role == ParagraphRole.Title
-                    ? new IngestionDocumentHeader(paragraph.Content) { Level = 1 }
-                    : paragraph.Role == ParagraphRole.SectionHeading
-                        ? new IngestionDocumentHeader(paragraph.Content) { Level = 2 }
+                ? new IngestionDocumentHeader(paragraph.Content) { Level = 1 }
+                : paragraph.Role == ParagraphRole.SectionHeading
+                    ? new IngestionDocumentHeader(paragraph.Content) { Level = 2 }
                     : new IngestionDocumentParagraph(paragraph.Content);
             element.Text = paragraph.Content;
+            element.PageNumber = pageNumber;
             elements.Add((pageNumber, GetOffset(paragraph.Spans), order++, element));
         }
 
@@ -87,7 +88,7 @@ internal sealed class AzureDocumentIntelligenceReader : IngestionDocumentReader
             var rows = table.RowCount;
             var columns = table.ColumnCount;
             if (rows <= 0 || columns <= 0 || rows > 1000 || columns > 100)
-                    throw new InvalidDataException("Cloud returned invalid table dimensions.");
+                throw new InvalidDataException("Cloud returned invalid table dimensions.");
 
             var cells = new IngestionDocumentElement?[rows, columns];
             var positions = new Dictionary<(int Row, int Column), DocumentTableCell>();
@@ -95,59 +96,59 @@ internal sealed class AzureDocumentIntelligenceReader : IngestionDocumentReader
             var pageNumber = GetTablePage(table, result.Pages);
             foreach (var cell in table.Cells)
             {
-                    var rowSpan = cell.RowSpan ?? 1;
-                    var columnSpan = cell.ColumnSpan ?? 1;
-                    if (cell.RowIndex < 0 || cell.ColumnIndex < 0 || rowSpan <= 0 || columnSpan <= 0 ||
-                        (long)cell.RowIndex + rowSpan > rows || (long)cell.ColumnIndex + columnSpan > columns)
-                        throw new InvalidDataException("Cloud returned a table cell outside its dimensions.");
-                    for (var row = cell.RowIndex; row < cell.RowIndex + rowSpan; row++)
-                        for (var column = cell.ColumnIndex; column < cell.ColumnIndex + columnSpan; column++)
-                        {
-                            if (occupied[row, column])
-                                throw new InvalidDataException("Cloud returned overlapping table cells.");
-                            occupied[row, column] = true;
-                        }
-                    positions.Add((cell.RowIndex, cell.ColumnIndex), cell);
-                    var content = cell.Content ?? "";
-                    if (!string.IsNullOrWhiteSpace(content))
+                var rowSpan = cell.RowSpan ?? 1;
+                var columnSpan = cell.ColumnSpan ?? 1;
+                if (cell.RowIndex < 0 || cell.ColumnIndex < 0 || rowSpan <= 0 || columnSpan <= 0 ||
+                    (long)cell.RowIndex + rowSpan > rows || (long)cell.ColumnIndex + columnSpan > columns)
+                    throw new InvalidDataException("Cloud returned a table cell outside its dimensions.");
+                for (var row = cell.RowIndex; row < cell.RowIndex + rowSpan; row++)
+                    for (var column = cell.ColumnIndex; column < cell.ColumnIndex + columnSpan; column++)
                     {
-                        var element = new IngestionDocumentParagraph(content) { Text = content };
-                        cells[cell.RowIndex, cell.ColumnIndex] = element;
+                        if (occupied[row, column])
+                            throw new InvalidDataException("Cloud returned overlapping table cells.");
+                        occupied[row, column] = true;
                     }
+                positions.Add((cell.RowIndex, cell.ColumnIndex), cell);
+                var content = cell.Content ?? "";
+                if (!string.IsNullOrWhiteSpace(content))
+                {
+                    var element = new IngestionDocumentParagraph(content) { Text = content, PageNumber = pageNumber };
+                    cells[cell.RowIndex, cell.ColumnIndex] = element;
+                }
             }
 
             var markdown = new StringBuilder("<table>");
             var text = new StringBuilder();
             for (var row = 0; row < rows; row++)
             {
-                    markdown.Append("<tr>");
-                    for (var column = 0; column < columns; column++)
+                markdown.Append("<tr>");
+                for (var column = 0; column < columns; column++)
+                {
+                    if (positions.TryGetValue((row, column), out var cell))
                     {
-                        if (positions.TryGetValue((row, column), out var cell))
-                        {
-                            var header = cell.Kind == DocumentTableCellKind.ColumnHeader ||
-                                cell.Kind == DocumentTableCellKind.RowHeader ||
-                                cell.Kind == DocumentTableCellKind.StubHead;
-                            var tag = header ? "th" : "td";
-                            markdown.Append('<').Append(tag);
-                            if (cell.RowSpan is > 1)
-                                markdown.Append(" rowspan=\"").Append(cell.RowSpan.Value).Append('"');
-                            if (cell.ColumnSpan is > 1)
-                                markdown.Append(" colspan=\"").Append(cell.ColumnSpan.Value).Append('"');
-                            markdown.Append('>').Append(WebUtility.HtmlEncode(cell.Content ?? ""))
-                                .Append("</").Append(tag).Append('>');
-                            if (text.Length > 0)
-                                text.Append(' ');
-                            text.Append(cell.Content);
-                        }
-                        else if (!occupied[row, column])
-                            markdown.Append("<td></td>");
+                        var header = cell.Kind == DocumentTableCellKind.ColumnHeader ||
+                            cell.Kind == DocumentTableCellKind.RowHeader ||
+                            cell.Kind == DocumentTableCellKind.StubHead;
+                        var tag = header ? "th" : "td";
+                        markdown.Append('<').Append(tag);
+                        if (cell.RowSpan is > 1)
+                            markdown.Append(" rowspan=\"").Append(cell.RowSpan.Value).Append('"');
+                        if (cell.ColumnSpan is > 1)
+                            markdown.Append(" colspan=\"").Append(cell.ColumnSpan.Value).Append('"');
+                        markdown.Append('>').Append(WebUtility.HtmlEncode(cell.Content ?? ""))
+                            .Append("</").Append(tag).Append('>');
+                        if (text.Length > 0)
+                            text.Append(' ');
+                        text.Append(cell.Content);
                     }
-                    markdown.Append("</tr>");
+                    else if (!occupied[row, column])
+                        markdown.Append("<td></td>");
+                }
+                markdown.Append("</tr>");
             }
             markdown.Append("</table>");
             elements.Add((pageNumber, GetOffset(table.Spans), order++,
-                    new IngestionDocumentTable(markdown.ToString(), cells) { Text = text.ToString() }));
+                new IngestionDocumentTable(markdown.ToString(), cells) { Text = text.ToString(), PageNumber = pageNumber }));
         }
 
         foreach (var item in elements.OrderBy(item => item.Page).ThenBy(item => item.Offset).ThenBy(item => item.Order))

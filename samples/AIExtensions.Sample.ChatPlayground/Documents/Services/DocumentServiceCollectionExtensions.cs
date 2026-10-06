@@ -23,13 +23,8 @@ internal static class DocumentServiceCollectionExtensions
 
         if (settings.DocumentIntelligenceEndpoint is not null &&
             !string.IsNullOrWhiteSpace(settings.DocumentIntelligenceKey))
-            services.AddSingleton<IngestionDocumentReader>(_ => new DescribedDocumentReader(
-                new AzureDocumentIntelligenceReader(settings.DocumentIntelligenceEndpoint, settings.DocumentIntelligenceKey),
-                new DocumentReaderDescriptor(
-                    "azure-document-intelligence",
-                    "Azure Document Intelligence",
-                    "Uploads the entire document to Azure for prebuilt-layout analysis; may incur charges.",
-                    IsCloud: true)));
+            services.AddSingleton<IngestionDocumentReader>(_ => CreateAzureDocumentReader(settings));
+
         return services;
     }
 
@@ -44,4 +39,13 @@ internal static class DocumentServiceCollectionExtensions
                 "Apple Vision",
                 "Reads images and PDFs on-device with Apple Vision; requires iOS or Mac Catalyst 26+."));
 #endif
+
+    private static IngestionDocumentReader CreateAzureDocumentReader(AISettings settings) =>
+        new DescribedDocumentReader(
+            new AzureDocumentIntelligenceReader(settings.DocumentIntelligenceEndpoint!, settings.DocumentIntelligenceKey!),
+            new DocumentReaderDescriptor(
+                "azure-document-intelligence",
+                "Azure Document Intelligence",
+                "Uploads the entire document to Azure for prebuilt-layout analysis; may incur charges.",
+                IsCloud: true));
 }

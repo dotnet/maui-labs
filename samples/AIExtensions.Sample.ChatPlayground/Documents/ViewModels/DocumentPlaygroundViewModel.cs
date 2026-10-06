@@ -97,11 +97,15 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            StatusMessage = "Document reading timed out; a submitted Azure operation may continue server-side.";
+            StatusMessage = option.Descriptor.IsCloud
+                ? "Document reading timed out; a submitted Azure operation may continue server-side."
+                : "Document reading timed out.";
         }
         catch (OperationCanceledException)
         {
-            StatusMessage = "Document reading cancelled; a submitted Azure operation may continue server-side.";
+            StatusMessage = option.Descriptor.IsCloud
+                ? "Document reading cancelled; a submitted Azure operation may continue server-side."
+                : "Document reading cancelled.";
         }
         catch (Exception exception)
         {

@@ -38,7 +38,9 @@ public sealed class DocumentMappingTests
             document.Sections[0].Elements.Select(element => element.Text ?? "").ToArray());
         Assert.IsType<IngestionDocumentHeader>(document.Sections[0].Elements[0]);
         Assert.IsType<IngestionDocumentTable>(document.Sections[0].Elements[1]);
+        Assert.All(document.Sections[0].Elements, element => Assert.Equal(1, element.PageNumber));
         Assert.Equal("On page 2", Assert.Single(document.Sections[1].Elements).Text);
+        Assert.Equal(2, Assert.Single(document.Sections[1].Elements).PageNumber);
     }
 
     [Fact]
@@ -77,6 +79,10 @@ public sealed class DocumentMappingTests
         Assert.Null(mapped.Cells[2, 0]);
         Assert.Equal("Names & roles", mapped.Cells[0, 0]!.Text);
         Assert.Equal("Team", mapped.Cells[1, 0]!.Text);
+        Assert.Equal(1, mapped.PageNumber);
+        Assert.Equal(1, mapped.Cells[0, 0]!.PageNumber);
+        Assert.False(mapped.HasMetadata);
+        Assert.False(mapped.Cells[0, 0]!.HasMetadata);
     }
 
     [Fact]

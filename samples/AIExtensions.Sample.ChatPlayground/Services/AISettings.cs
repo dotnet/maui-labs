@@ -14,6 +14,14 @@ public sealed class AISettings
 
     public void Validate()
     {
+        if (DocumentIntelligenceEndpoint is not null || !string.IsNullOrWhiteSpace(DocumentIntelligenceKey))
+        {
+            if (DocumentIntelligenceEndpoint is null)
+                throw new InvalidOperationException("AI:DocumentIntelligenceEndpoint is required when Document Intelligence is configured.");
+            if (string.IsNullOrWhiteSpace(DocumentIntelligenceKey))
+                throw new InvalidOperationException("AI:DocumentIntelligenceKey is required when Document Intelligence is configured.");
+        }
+
         if (string.IsNullOrWhiteSpace(DeploymentName) &&
             string.IsNullOrWhiteSpace(ImageDeploymentName) &&
             string.IsNullOrWhiteSpace(EmbeddingDeploymentName))
