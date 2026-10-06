@@ -54,7 +54,7 @@ public sealed class HybridChatDiagnosticsTests
             if (route == "cloud")
             {
                 Assert.Equal(2, spans.Count(span => span.Details.Contains("gen_ai.response.model: actual-cloud-model")));
-                Assert.Equal(Summary, Assert.Single(cloud.ReceivedMessages!).Text);
+                Assert.Equal("private-original-prompt", Assert.Single(cloud.ReceivedMessages!).Text);
             }
             if (route == "fallback")
             {
@@ -147,7 +147,7 @@ public sealed class HybridChatDiagnosticsTests
         Assert.All(entries, entry => Assert.Contains(trace, entry.Details));
         Assert.Equal(spans.Length, spans.Select(span => span.Details.Split('\n')[0]).Distinct().Count());
         var text = string.Join("\n", entries.Select(entry => entry.Heading + entry.Message + entry.Details));
-        foreach (var payload in new[] { "private-original-prompt", Summary, "Simple greeting", "Complex task",
+        foreach (var payload in new[] { "private-original-prompt", "Simple greeting", "Complex task",
             "routing classifier", "Transient cloud failure before output; answering locally." })
             Assert.DoesNotContain(payload, text);
         Assert.DoesNotContain("| Trace |", text);

@@ -1,7 +1,6 @@
 using System.Collections;
 using System.ClientModel;
 using System.Net;
-using System.Text.Json;
 using AIExtensions.Sample.ChatPlayground;
 using Microsoft.Extensions.AI;
 
@@ -15,7 +14,8 @@ public sealed class HybridChatClientTests
         var format = Assert.IsType<ChatResponseFormatJson>(
             ChatResponseFormat.ForJsonSchema<HybridRoutingDecision>(HybridRoutingJsonContext.Default.Options));
         var fields = format.Schema!.Value.GetProperty("properties");
-        foreach (var name in new[] { "route", "reason", "cloudSummary" })
+        Assert.Equal(new[] { "route", "reason" }, fields.EnumerateObject().Select(field => field.Name));
+        foreach (var name in new[] { "route", "reason" })
             Assert.Equal("string", fields.GetProperty(name).GetProperty("type").GetString());
     }
 
@@ -37,7 +37,7 @@ public sealed class HybridChatClientTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task CloudSummary_ForwardsOnlyPreparedSummaryAndSafeKnobsWithoutMutation(bool streaming)
+    public async Task CloudRequest_ForwardsOriginalTextAndSafeKnobsWithoutMutation(bool streaming)
     {
         const string secret = "jane@example.com at 123 Main Street";
         var local = new FakeClient("apple-model") { Decision = CloudDecision };
@@ -72,12 +72,14 @@ public sealed class HybridChatClientTests
 
         Assert.Equal("azure-model", await AnswerModel(hybrid, streaming, [original], options));
         var forwarded = Assert.Single(cloud.ReceivedMessages!);
-        Assert.Equal(Summary, forwarded.Text);
+        Assert.Equal(original.Text, forwarded.Text);
+        Assert.NotSame(original, forwarded);
         Assert.Equal(ChatRole.User, forwarded.Role);
         AssertCleanMessage(forwarded);
         AssertSafeOptions(cloud.ReceivedOptions!);
-        Assert.Null(cloud.ReceivedOptions!.Instructions);
-        Assert.Null(cloud.ReceivedOptions.StopSequences);
+        Assert.Equal(options.Instructions, cloud.ReceivedOptions!.Instructions);
+        Assert.Equal(options.StopSequences, cloud.ReceivedOptions.StopSequences);
+        Assert.NotSame(options.StopSequences, cloud.ReceivedOptions.StopSequences);
         Assert.Equal(options.Temperature, cloud.ReceivedOptions.Temperature);
         Assert.Equal(options.MaxOutputTokens, cloud.ReceivedOptions.MaxOutputTokens);
         Assert.Equal(options.TopP, cloud.ReceivedOptions.TopP);
@@ -99,12 +101,9 @@ public sealed class HybridChatClientTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task OriginalPayload_PreservesCleanHistoryInstructionsAndStopSequences(bool streaming)
+    public async Task CloudRequest_PreservesCleanHistoryInstructionsAndStopSequences(bool streaming)
     {
-        var local = new FakeClient("apple-model")
-        {
-            Decision = """{"route":"cloud","reason":"Complex task","cloudSummary":""}""",
-        };
+        var local = new FakeClient("apple-model") { Decision = CloudDecision };
         var cloud = new FakeClient("azure-model");
         using var hybrid = Create(local, cloud);
         var history = new[]
@@ -118,7 +117,6 @@ public sealed class HybridChatClientTests
         {
             Instructions = "Write clearly.",
             StopSequences = ["the end"],
-            AdditionalProperties = new() { [HybridChatClient.OriginalCloudPayloadOption] = true },
         };
 
         Assert.Equal("azure-model", await AnswerModel(hybrid, streaming, history, options));
@@ -137,26 +135,6 @@ public sealed class HybridChatClientTests
     }
 
     [Theory]
-    [InlineData("true", true)]
-    [InlineData("false", false)]
-    [InlineData("\"true\"", true)]
-    public async Task OriginalPayloadOption_AcceptsRecordedJsonBooleans(string json, bool original)
-    {
-        var local = new FakeClient("apple-model") { Decision = CloudDecision };
-        var cloud = new FakeClient("azure-model");
-        using var hybrid = Create(local, cloud);
-        var options = new ChatOptions
-        {
-            AdditionalProperties = new()
-            {
-                [HybridChatClient.OriginalCloudPayloadOption] = JsonDocument.Parse(json).RootElement.Clone(),
-            },
-        };
-        Assert.Equal("azure-model", await AnswerModel(hybrid, false, options: options));
-        Assert.Equal(original ? "Question" : Summary, Assert.Single(cloud.ReceivedMessages!).Text);
-    }
-
-    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task NoCloud_BypassesClassifier(bool streaming)
@@ -168,10 +146,10 @@ public sealed class HybridChatClientTests
     }
 
     [Theory]
-    [InlineData("""{"route":"cloud","reason":"X","cloudSummary":""}""")]
-    [InlineData("""{"route":"Cloud","reason":"X","cloudSummary":"s"}""")]
-    [InlineData("""{"route":"cloud","reason":"","cloudSummary":"s"}""")]
-    [InlineData("""{"route":"cloud","reason":"X","cloudSummary":null}""")]
+    [InlineData("""{"reason":"X"}""")]
+    [InlineData("""{"route":"Cloud","reason":"X"}""")]
+    [InlineData("""{"route":"cloud","reason":""}""")]
+    [InlineData("""{"route":"cloud","reason":null}""")]
     [InlineData("not json")]
     [InlineData("null")]
     public async Task InvalidDecision_FailsClosed(string decision)
@@ -205,8 +183,14 @@ public sealed class HybridChatClientTests
         Assert.Equal(1, local.ClassifierCalls);
         Assert.Equal(1, cloud.AnswerCalls + cloud.StreamCalls);
         Assert.Equal(1, local.AnswerCalls + local.StreamCalls);
-        Assert.Equal(Summary, Assert.Single(cloud.ReceivedMessages!).Text);
+        var cloudMessage = Assert.Single(cloud.ReceivedMessages!);
+        Assert.Equal("Original task", cloudMessage.Text);
+        Assert.Single(cloudMessage.Contents);
+        AssertCleanMessage(cloudMessage);
+        Assert.Equal(options.Instructions, cloud.ReceivedOptions!.Instructions);
+        Assert.Equal(options.StopSequences, cloud.ReceivedOptions.StopSequences);
         var fallback = Assert.Single(local.ReceivedMessages!);
+        Assert.NotSame(cloudMessage, fallback);
         Assert.Equal("Original task", fallback.Text);
         Assert.Single(fallback.Contents);
         AssertCleanMessage(fallback);
@@ -454,11 +438,6 @@ public sealed class HybridChatClientTests
             [new(ChatRole.User, "hello")], new ChatOptions { ToolMode = ChatToolMode.RequireAny }));
         await Assert.ThrowsAsync<NotSupportedException>(() => hybrid.GetResponseAsync(
             [new(ChatRole.User, "hello")], new ChatOptions { Tools = [AIFunctionFactory.Create(() => "tool")] }));
-        await Assert.ThrowsAsync<ArgumentException>(() => hybrid.GetResponseAsync(
-            [new(ChatRole.User, "hello")], new ChatOptions
-            {
-                AdditionalProperties = new() { [HybridChatClient.OriginalCloudPayloadOption] = "not boolean" },
-            }));
         Assert.Equal(1, local.ClassifierCalls);
     }
 
@@ -466,22 +445,18 @@ public sealed class HybridChatClientTests
     public async Task ConcurrentRequests_KeepRoutingAndFallbackPayloadsIsolated()
     {
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var local = new ConcurrentClient(async (messages, options) =>
+        var local = new ConcurrentClient((messages, options) =>
         {
             if (options?.ResponseFormat is ChatResponseFormatJson)
             {
-                var original = JsonDocument.Parse(messages[0].Text).RootElement
-                    .GetProperty("conversation")[0].GetProperty("text").GetString();
-                return new ChatResponse(new ChatMessage(ChatRole.Assistant, JsonSerializer.Serialize(new
-                {
-                    route = "cloud", reason = "Complex", cloudSummary = $"Summary {original}",
-                })));
+                return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, CloudDecision)));
             }
-            return new ChatResponse(new ChatMessage(ChatRole.Assistant, messages[0].Text)) { ModelId = "local-model" };
+            return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, messages[0].Text))
+                { ModelId = "local-model" });
         });
         var cloud = new ConcurrentClient(async (messages, options) =>
         {
-            if (messages[0].Text == "Summary first")
+            if (messages[0].Text == "first")
             {
                 await gate.Task;
                 throw new IOException("First request offline");
@@ -495,7 +470,7 @@ public sealed class HybridChatClientTests
         var results = await Task.WhenAll(first, second);
         Assert.Equal("first", results[0].Text);
         Assert.Equal("local-model", results[0].ModelId);
-        Assert.Equal("Summary second", results[1].Text);
+        Assert.Equal("second", results[1].Text);
         Assert.Equal("cloud-model", results[1].ModelId);
     }
 
@@ -524,9 +499,8 @@ public sealed class HybridChatClientTests
         Assert.Equal(1, shared.DisposeCalls);
     }
 
-    internal const string Summary = "Explain the fictional task.";
-    internal const string CloudDecision = """{"route":"cloud","reason":"Complex task","cloudSummary":"Explain the fictional task."}""";
-    internal const string LocalDecision = """{"route":"local","reason":"Simple greeting","cloudSummary":""}""";
+    internal const string CloudDecision = """{"route":"cloud","reason":"Complex task"}""";
+    internal const string LocalDecision = """{"route":"local","reason":"Simple greeting"}""";
 
     private static HybridChatClient Create(FakeClient local, FakeClient? cloud) =>
         new(local, cloud);
