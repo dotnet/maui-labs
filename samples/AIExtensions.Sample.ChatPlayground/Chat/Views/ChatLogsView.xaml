@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
+             x:Class="AIExtensions.Sample.ChatPlayground.ChatLogsView"
+             x:Name="LogsView" x:DataType="local:ChatLogsView">
+    <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8" Padding="12">
+        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+            <Label Text="Chat diagnostics" FontSize="20" FontAttributes="Bold" VerticalOptions="Center" />
+            <Button Grid.Column="1" Text="Clear" Style="{StaticResource SecondaryButtonStyle}"
+                    Clicked="ClearClicked" AutomationId="ClearChatLogsButton"
+                    SemanticProperties.Description="Clear local chat diagnostics" />
+            <ImageButton Grid.Column="2" Source="close.png" Style="{StaticResource AttachmentButton}"
+                         Clicked="CloseClicked" AutomationId="CloseChatLogsButton"
+                         SemanticProperties.Description="Close chat diagnostics" />
+        </Grid>
+        <Label Grid.Row="1" Text="Local logs and completed spans. No prompt capture."
+               Style="{StaticResource MutedLabel}" FontSize="12" />
+        <CollectionView Grid.Row="2" ItemsSource="{Binding Entries, Source={x:Reference LogsView}}"
+                        SelectionMode="None" AutomationId="ChatLogEntries">
+            <CollectionView.EmptyView>
+                <Label Text="Send a live chat request to see built-in diagnostics."
+                       AutomationId="ChatLogsEmpty" Margin="12"
+                       Style="{StaticResource MutedLabel}" />
+            </CollectionView.EmptyView>
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="local:ChatDiagnosticEntry">
+                    <Border Style="{StaticResource PlaygroundPanel}" Padding="10" Margin="0,0,0,8">
+                        <VerticalStackLayout Spacing="6">
+                            <Label Text="{Binding Heading}" FontSize="11" Style="{StaticResource MutedLabel}" />
+                            <Label Text="{Binding Message}" FontSize="12" />
+                            <Label Text="{Binding Details}" FontSize="11" Style="{StaticResource MutedLabel}" />
+                        </VerticalStackLayout>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </Grid>
+</ContentView>

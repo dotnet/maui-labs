@@ -53,6 +53,7 @@ internal static class ChatServiceCollectionExtensions
                 "Apple Intelligence",
                 "Apple Intelligence is supported on this OS. The first request confirms that the local model is enabled and available.",
                 SupportsToolCalling: true))
+            .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
             .UseFunctionInvocation()
             .Build();
@@ -83,6 +84,7 @@ internal static class ChatServiceCollectionExtensions
                 SupportsReasoningSummary: true,
                 SupportsImageGeneration: imageGenerator is not null,
                 SupportsToolCalling: true))
+            .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>());
         if (imageGenerator is not null)
             builder.UseImageGenerationPreservingInputs(imageGenerator);
