@@ -497,6 +497,27 @@ public sealed class ChatConversationTests
     }
 
     [Fact]
+    public async Task ExecuteTurn_CompleteResponseWithRepeatedToolContent_EmitsOneCallAndResult()
+    {
+        var call = new FunctionCallContent("call", "calculate");
+        var result = new FunctionResultContent("call", 4);
+        using var client = new ScriptedClient(
+            new ChatResponse([
+                new ChatMessage(ChatRole.Assistant, [new TextContent("Before"), call, call]),
+                new ChatMessage(ChatRole.Tool, [result, result]),
+                new ChatMessage(ChatRole.Assistant, [call, new TextContent("After")]),
+            ]) { ModelId = "actual-model" }, []);
+
+        var changes = await CollectChangesAsync(client, streaming: false);
+
+        Assert.Single(changes.OfType<TranscriptChange.EntryAdded>(),
+            entry => entry.EntryKind == TranscriptEntryKind.Tool);
+        Assert.Single(changes.OfType<TranscriptChange.ToolCallResolved>());
+        Assert.Equal(new[] { "Before", "After" }, changes.OfType<TranscriptChange.EntryAdded>()
+            .Where(entry => entry.EntryKind == TranscriptEntryKind.Assistant).Select(entry => entry.Text));
+    }
+
+    [Fact]
     public async Task ExecuteTurn_MetadataOnlyUpdate_DoesNotCreateTranscriptEntry()
     {
         using var client = new ScriptedClient(new ChatResponse([]),

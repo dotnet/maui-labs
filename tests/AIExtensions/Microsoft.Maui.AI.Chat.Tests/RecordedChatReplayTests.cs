@@ -524,6 +524,32 @@ public sealed class RecordedChatReplayTests
     }
 
     [Fact]
+    public void RestoredRequestHistory_UsesUpdateProjectionWithoutLosingMessageBoundaries()
+    {
+        var changes = new List<TranscriptChange>();
+        new TranscriptEmitter().EmitRecordedRequest(
+            [
+                new ChatMessage(ChatRole.Assistant, "First") { MessageId = "first" },
+                new ChatMessage(ChatRole.Assistant,
+                    [new TextReasoningContent("Checking"), new FunctionCallContent("call", "calculate")]),
+                new ChatMessage(ChatRole.Tool, [new FunctionResultContent("call", 4)]),
+                new ChatMessage(ChatRole.Assistant, "Second") { MessageId = "second" },
+                new ChatMessage(ChatRole.User, "Continue"),
+            ],
+            "Be concise", changes.Add);
+
+        var entries = changes.OfType<TranscriptChange.EntryAdded>().ToArray();
+        Assert.All(entries, entry => Assert.Null(entry.ModelId));
+        Assert.Equal(new[] { "First", "Second" }, entries
+            .Where(entry => entry.EntryKind == TranscriptEntryKind.Assistant).Select(entry => entry.Text));
+        Assert.Single(entries, entry => entry.EntryKind == TranscriptEntryKind.Reasoning);
+        Assert.Single(entries, entry => entry.EntryKind == TranscriptEntryKind.Tool);
+        Assert.Single(entries, entry => entry.EntryKind == TranscriptEntryKind.System);
+        Assert.Equal("Continue", Assert.Single(entries, entry => entry.EntryKind == TranscriptEntryKind.User).Text);
+        Assert.Single(changes.OfType<TranscriptChange.ToolCallResolved>());
+    }
+
+    [Fact]
     public async Task Load_InvalidSchema_LeavesCurrentChatIntact()
     {
         using var directory = new RecordingDirectory();

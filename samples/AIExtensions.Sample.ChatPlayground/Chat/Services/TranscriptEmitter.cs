@@ -63,8 +63,8 @@ internal sealed class TranscriptEmitter
         void Flush()
         {
             var projector = new ChatResponseProjector(this, emit, streaming: false, structuredJson: false);
-            foreach (var item in pending)
-                projector.ProjectMessage(item);
+            foreach (var update in new ChatResponse(pending).ToChatResponseUpdates())
+                projector.ProjectUpdate(update);
             pending.Clear();
         }
 
