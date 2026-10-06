@@ -13,7 +13,7 @@ namespace AIExtensions.Sample.ChatPlayground;
 
 internal static class ChatServiceCollectionExtensions
 {
-    public static IServiceCollection AddChatFeature(this IServiceCollection services)
+    public static IServiceCollection AddChatFeature(this IServiceCollection services, AISettings settings)
     {
         services.AddSingleton<ConnectionStatusService>();
         services.AddSingleton(serviceProvider => new PlaygroundTools(
@@ -28,13 +28,29 @@ internal static class ChatServiceCollectionExtensions
         services.AddSingleton<ChatViewModel>();
         services.AddTransient<Page, ChatPage>();
 
+#if IOS || MACCATALYST
+        if (OperatingSystem.IsIOSVersionAtLeast(26) || OperatingSystem.IsMacCatalystVersionAtLeast(26))
+            AddAppleChatClients(services, settings);
+#endif
+        if (!string.IsNullOrWhiteSpace(settings.DeploymentName))
+            services.AddSingleton<IChatClient>(provider => CreateAzureChatClient(provider, settings));
+        services.AddSingleton<IChatClient>(CreateReplayChatClient);
+
         return services;
     }
 
 #if IOS || MACCATALYST
     [SupportedOSPlatform("ios26.0")]
     [SupportedOSPlatform("maccatalyst26.0")]
-    internal static IChatClient CreateAppleChatClient(IServiceProvider serviceProvider) =>
+    private static void AddAppleChatClients(IServiceCollection services, AISettings settings)
+    {
+        services.AddSingleton<IChatClient>(CreateAppleChatClient);
+        services.AddSingleton<IChatClient>(provider => CreateHybridChatClient(provider, settings));
+    }
+
+    [SupportedOSPlatform("ios26.0")]
+    [SupportedOSPlatform("maccatalyst26.0")]
+    private static IChatClient CreateAppleChatClient(IServiceProvider serviceProvider) =>
         new AppleIntelligenceChatClient(serviceProvider.GetRequiredService<ILoggerFactory>())
             .AsBuilder()
             .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
@@ -51,7 +67,7 @@ internal static class ChatServiceCollectionExtensions
 
     [SupportedOSPlatform("ios26.0")]
     [SupportedOSPlatform("maccatalyst26.0")]
-    internal static IChatClient CreateHybridChatClient(IServiceProvider serviceProvider, AISettings settings)
+    private static IChatClient CreateHybridChatClient(IServiceProvider serviceProvider, AISettings settings)
     {
         var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
         var local = new AppleIntelligenceChatClient(loggerFactory)
@@ -81,7 +97,7 @@ internal static class ChatServiceCollectionExtensions
             new ApiKeyCredential(settings.ApiKey!),
             new OpenAIClientOptions { Endpoint = settings.Endpoint! });
 
-    internal static IChatClient CreateAzureChatClient(IServiceProvider serviceProvider, AISettings settings)
+    private static IChatClient CreateAzureChatClient(IServiceProvider serviceProvider, AISettings settings)
     {
         var deploymentName = settings.DeploymentName!;
         var openAIClient = CreateOpenAIClient(settings);
@@ -111,7 +127,7 @@ internal static class ChatServiceCollectionExtensions
         return builder.UseFunctionInvocation(serviceProvider.GetRequiredService<ILoggerFactory>()).Build();
     }
 
-    internal static IChatClient CreateReplayChatClient(IServiceProvider serviceProvider) =>
+    private static IChatClient CreateReplayChatClient(IServiceProvider serviceProvider) =>
         new ReplayChatClient(serviceProvider.GetRequiredService<IChatRecordingSession>())
             .AsBuilder()
             .UseDescriptor(new ChatClientDescriptor(
