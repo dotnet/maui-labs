@@ -11,7 +11,6 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
 {
     private readonly DocumentInputService _input;
     private SelectedDocument? _selected;
-    private int _selectionVersion;
 
     public DocumentPlaygroundViewModel(DocumentInputService input, DocumentSettingsViewModel settings)
     {
@@ -20,7 +19,7 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         Settings.PropertyChanged += SettingsPropertyChanged;
         StatusMessage = Settings.HasReader
             ? $"Selected {Settings.SelectedDescriptor!.DisplayName}. Choose a document to read."
-            : "No document reader available. On Apple, use iOS or Mac Catalyst 26+; for cloud, configure Document Intelligence.";
+            : "No document reader available. On Apple, use iOS or Mac Catalyst 26+; for cloud, configure Document Intelligence or Foundry.";
     }
 
     public DocumentSettingsViewModel Settings { get; }
@@ -32,7 +31,6 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
     [ObservableProperty] private bool isBusy;
     [ObservableProperty] private ImageSource? selectedPreview;
 
-    public int SelectionVersion => _selectionVersion;
     public bool HasDocument => _selected is not null;
     public bool HasResult => ResultOutput.Length > 0;
     public bool IsIdle => !IsBusy;
@@ -61,7 +59,6 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
     private void RemoveDocument()
     {
         _selected = null;
-        _selectionVersion++;
         SelectedName = "No document selected.";
         SelectedPreview = null;
         ResultOutput = string.Empty;
@@ -85,7 +82,6 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
                 return;
             }
             _selected = file;
-            _selectionVersion++;
             SelectedName = file.FileName;
             SelectedPreview = file.MediaType.StartsWith("image/", StringComparison.Ordinal)
                 ? ImageSource.FromStream(() => new MemoryStream(file.Bytes, writable: false))

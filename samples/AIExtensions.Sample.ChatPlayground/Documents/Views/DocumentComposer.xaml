@@ -42,7 +42,7 @@
                                  SemanticProperties.Description="Cancel document reading" AutomationId="DocumentCancelButton" />
                 </Grid>
             </Grid>
-            <Label Text="Azure uploads the entire document only after you confirm each read. Charges may apply; no automatic cloud fallback."
+            <Label Text="Read uploads the entire document to the selected Azure reader. Charges may apply; no automatic cloud fallback."
                    IsVisible="{Binding IsCloudSelected}" Style="{StaticResource MutedLabel}" FontSize="12"
                    AutomationId="DocumentCloudDisclosure" />
         </VerticalStackLayout>

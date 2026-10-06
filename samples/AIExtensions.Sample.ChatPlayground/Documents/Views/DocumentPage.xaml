@@ -8,7 +8,7 @@
              BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}">
     <Grid>
         <local:PlaygroundPageLayout HeaderTitle="Documents"
-                                    HeaderInfo="Choose an IngestionDocumentReader in settings. Select one file, then read it with Apple Vision on-device or explicitly authorize an Azure upload. Switch readers to compare."
+                                    HeaderInfo="Choose an IngestionDocumentReader in settings. Select one file, then read it with Apple Vision on-device or upload it to the selected Azure reader. Switch readers to compare."
                                     HeaderStatus="{Binding StatusMessage}"
                                     StatusAutomationId="DocumentStatusLabel"
                                     SidebarTitle="Document settings">

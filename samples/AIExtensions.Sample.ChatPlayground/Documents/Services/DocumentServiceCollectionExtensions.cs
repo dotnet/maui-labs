@@ -25,6 +25,28 @@ internal static class DocumentServiceCollectionExtensions
             !string.IsNullOrWhiteSpace(settings.DocumentIntelligenceKey))
             services.AddSingleton<IngestionDocumentReader>(_ => CreateAzureDocumentReader(settings));
 
+        if (!string.IsNullOrWhiteSpace(settings.DocumentDeploymentName))
+        {
+            services.AddKeyedSingleton<HttpClient>("foundry-document", (_, _) =>
+            {
+                var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
+                {
+                    BaseAddress = settings.GetFoundryDocumentEndpoint(),
+                    Timeout = Timeout.InfiniteTimeSpan,
+                };
+                client.DefaultRequestHeaders.Add("api-key", settings.ApiKey);
+                return client;
+            });
+            services.AddSingleton<IngestionDocumentReader>(provider => new DescribedDocumentReader(
+                new FoundryMistralDocumentReader(
+                    provider.GetRequiredKeyedService<HttpClient>("foundry-document"), settings.DocumentDeploymentName),
+                new DocumentReaderDescriptor(
+                    "foundry-mistral-document",
+                    "Foundry Mistral Document AI",
+                    "Uploads the entire document to the configured Foundry document model; may incur charges.",
+                    IsCloud: true)));
+        }
+
         return services;
     }
 

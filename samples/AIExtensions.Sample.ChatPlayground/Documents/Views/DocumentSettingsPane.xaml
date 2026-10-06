@@ -8,7 +8,7 @@
         <VerticalStackLayout Padding="16" Spacing="12">
             <HorizontalStackLayout Spacing="4">
                 <Label Text="READER" Style="{StaticResource SectionHeading}" VerticalOptions="Center" />
-                <local:InfoTip Text="Choose a real IngestionDocumentReader. Apple reads on-device; Azure uploads the selected document only after you confirm. Switch readers and re-run the same file to compare." />
+                <local:InfoTip Text="Choose a real IngestionDocumentReader. Apple reads on-device; Azure uploads the selected document when you press Read. Switch readers and re-run the same file to compare." />
             </HorizontalStackLayout>
             <VerticalStackLayout Spacing="4" IsEnabled="{Binding IsIdle}"
                                  RadioButtonGroup.GroupName="DocumentReader"
@@ -28,7 +28,7 @@
             </VerticalStackLayout>
             <BoxView HeightRequest="1"
                      Color="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}" />
-            <Label Text="Azure Document Intelligence needs its own endpoint and key in Debug user secrets, separate from Azure OpenAI. If it is not configured, it is not listed above."
+            <Label Text="Document Intelligence uses its explicit endpoint/key settings. Foundry Mistral uses the shared Azure endpoint/key plus DocumentDeploymentName. Only configured readers are listed. Debug builds embed local secrets; do not distribute them."
                    Style="{StaticResource MutedLabel}" FontSize="12"
                    AutomationId="DocumentReaderSettingsInfo" />
         </VerticalStackLayout>

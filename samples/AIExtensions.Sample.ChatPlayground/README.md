@@ -54,23 +54,24 @@ User secrets are **embedded in Debug builds** for device testing: never
 distribute those builds or commit keys. Azure prompts, images, and indexed
 text may leave the device and incur charges.
 
-### Optional Document Intelligence comparison
+### Optional cloud document comparison
 
 The Documents tab registers selectable `IngestionDocumentReader` providers:
-Apple Vision on-device on iOS/Mac Catalyst 26+, and optional Azure Document
-Intelligence on all platforms. On Android and Windows, only the cloud reader
-is available. Use the input area's **+** menu to select a PDF, PNG, JPEG, HEIC, or TIFF file (20 MB maximum),
+Apple Vision on-device on iOS/Mac Catalyst 26+, optional Azure Document Intelligence, and optional Foundry Mistral Document AI.
+Both cloud readers work on all platforms. On Android and Windows, only configured cloud readers are available.
+Use the input area's **+** menu to select a PDF, PNG, JPEG, HEIC, or TIFF file (20 MB maximum),
 or load the bundled two-page sample PDF or sample document image. Choose a reader in settings and select **Read**.
 The attachment preview and remove/read/stop buttons use the same composer styles as Chat and Images. To compare, switch
-readers and re-run the same selected file. Each Azure read asks for explicit
-upload confirmation. There is **no automatic cloud fallback** if local
+readers and re-run the same selected file. Pressing **Read** with a cloud reader selected uploads the document immediately,
+without a confirmation popup. There is **no automatic cloud fallback** if local
 recognition fails. The result displays standard `IngestionDocument` pages,
 element types/text, and Markdown. Azure paragraphs and tables follow reading
 order from the SDK spans; merged cells and actual header kinds use HTML table
 markup in the Markdown result.
 
-Azure AI Document Intelligence is a **separate resource** from Azure OpenAI:
-set its HTTPS resource root endpoint and subscription key independently. The
+Azure AI Document Intelligence uses a **separate API** from Azure OpenAI:
+set its HTTPS resource root endpoint and subscription key explicitly. A compatible multi-service Foundry resource can host
+both services, but an Azure OpenAI-only resource does not imply Document Intelligence support. The
 sample uses the official `Azure.AI.DocumentIntelligence` 1.0.0 SDK and the
 `prebuilt-layout` model (2024-11-30 service API).
 
@@ -89,6 +90,20 @@ in source files; the endpoint and key below belong in local user secrets.
 dotnet user-secrets set "AI:DocumentIntelligenceEndpoint" "https://<document-resource>.cognitiveservices.azure.com/" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
 dotnet user-secrets set "AI:DocumentIntelligenceKey" "<document-resource-key>" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
 ```
+
+Foundry Mistral Document AI reuses `AI:Endpoint` and `AI:ApiKey`; set `AI:DocumentDeploymentName` to an existing document-model
+deployment (for example, a deployment of `mistral-ocr-4-0` or `mistral-document-ai-2512`). It does not use the Chat deployment.
+The reader converts an Azure OpenAI resource hostname to its corresponding `.services.ai.azure.com` hostname and calls
+`/providers/mistral/azure/ocr` on the resource root, not the OpenAI chat-completions API.
+
+```powershell
+dotnet user-secrets set "AI:DocumentDeploymentName" "<document-deployment>" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
+```
+
+Rebuild and relaunch after changing secrets because the Debug app embeds the settings at build time.
+The Foundry reader projects pages, headings, text, and tables into standard ingestion elements without provider metadata.
+It does not request image crops or expose geometry, confidence, or raw-provider results. It uses a five-minute deadline and bounded
+retries for HTTP 503; it never switches to another reader. The Document Intelligence reader retains its 100-second deadline.
 
 Cloud comparison uploads the **entire document** to Azure and may incur
 charges. The sample embeds developer secrets in Debug app binaries; never
@@ -122,7 +137,7 @@ contents are logged.
   result. Configured Azure providers are offered; there is no on-device image
   provider in this branch. The Images tab does not save generated results.
 - **Documents:** Use **+** to pick an image/PDF or load a bundled sample, choose a reader in settings, and re-run
-  with another reader for comparison. Azure runs only after upload confirmation.
+  with another reader for comparison. A selected Azure reader uploads the document when you press **Read**.
 
 The app saves one Chat recording locally for replay. Use the Chat **More**
 menu to load a bundled example without credentials, or import/export a
