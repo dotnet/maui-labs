@@ -51,34 +51,39 @@ public class ImageContentNative: AIContentNative {
     /// File URL pointing at an image on disk.
     @objc public var imageURL: URL?
     @objc public var mimeType: String?
-    /// EXIF orientation (1…8); 0 means unset.
-    @objc public var orientationRaw: Int32 = 0
+    /// Boxed EXIF orientation (1…8); nil uses the image's natural orientation.
+    @objc public var orientationValue: NSNumber?
     @objc public var label: String?
 
-    @objc public init(cgImage: CGImage, orientationRaw: Int32, label: String?) {
+    @objc public init(cgImage: CGImage, orientationValue: NSNumber?, label: String?) {
         self.cgImage = cgImage
-        self.orientationRaw = orientationRaw
+        self.orientationValue = orientationValue
         self.label = label
         super.init()
     }
 
-    @objc public init(data: Data, mimeType: String, orientationRaw: Int32, label: String?) {
+    @objc public init(data: Data, mimeType: String, orientationValue: NSNumber?, label: String?) {
         self.data = data
         self.mimeType = mimeType
-        self.orientationRaw = orientationRaw == 0 ? Self.imageOrientation(from: data) : orientationRaw
+        self.orientationValue = orientationValue ?? Self.imageOrientation(from: data)
         self.label = label
         super.init()
     }
 
-    @objc public init(imageURL: URL, orientationRaw: Int32, label: String?) {
+    @objc public init(imageURL: URL, orientationValue: NSNumber?, label: String?) {
         self.imageURL = imageURL
-        self.orientationRaw = orientationRaw
+        self.orientationValue = orientationValue
         self.label = label
         super.init()
     }
 
-    var orientation: CGImagePropertyOrientation? {
-        orientationRaw > 0 ? CGImagePropertyOrientation(rawValue: UInt32(orientationRaw)) : nil
+    private func resolvedOrientation() throws -> CGImagePropertyOrientation? {
+        guard let orientationValue else { return nil }
+        guard (1...8).contains(orientationValue.int64Value),
+              let orientation = CGImagePropertyOrientation(rawValue: orientationValue.uint32Value) else {
+            throw NSError.chatError(.invalidContent, description: "Unsupported EXIF orientation: \(orientationValue).")
+        }
+        return orientation
     }
 
     func resolvedCGImage() -> CGImage? {
@@ -92,12 +97,13 @@ public class ImageContentNative: AIContentNative {
         return CGImageSourceCreateImageAtIndex(source, 0, nil)
     }
 
-    private static func imageOrientation(from data: Data) -> Int32 {
+    private static func imageOrientation(from data: Data) -> NSNumber? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
               let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any],
               let raw = properties[kCGImagePropertyOrientation as String] as? NSNumber,
-              (1...8).contains(raw.intValue) else { return 0 }
-        return raw.int32Value
+              (1...8).contains(raw.int64Value),
+              CGImagePropertyOrientation(rawValue: raw.uint32Value) != nil else { return nil }
+        return raw
     }
 }
 
@@ -105,6 +111,7 @@ public class ImageContentNative: AIContentNative {
 extension ImageContentNative {
     /// Builds a FoundationModels prompt attachment. Throws if there is no usable payload.
     func toAttachment() throws -> Attachment<ImageAttachmentContent> {
+        let orientation = try resolvedOrientation()
         var attachment: Attachment<ImageAttachmentContent>
         if let cgImage {
             attachment = Attachment(cgImage, orientation: orientation)
@@ -123,6 +130,7 @@ extension ImageContentNative {
 
     /// Builds a transcript-history image attachment (for prior turns).
     func toTranscriptAttachment() throws -> Transcript.Attachment {
+        let orientation = try resolvedOrientation()
         if let imageURL {
             return .image(Transcript.ImageAttachment(imageURL: imageURL, orientation: orientation))
         }

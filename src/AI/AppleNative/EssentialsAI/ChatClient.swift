@@ -253,15 +253,7 @@ public class ChatClientNative: NSObject {
             throw NSError.chatError(.invalidContent, description: "The Apple Intelligence model does not support image input.")
         }
 
-        // Wrap the (Sendable) watcher's methods in explicit @Sendable closures so the partially
-        // applied references carry Sendable-correctness through to ToolNative.
-        let onToolCall: (@Sendable (String, String, String) -> Void)? = toolWatcher.map { watcher in
-            { @Sendable id, name, arguments in watcher.notifyToolCall(id: id, name: name, arguments: arguments) }
-        }
-        let onToolResult: (@Sendable (String, String, String) -> Void)? = toolWatcher.map { watcher in
-            { @Sendable id, name, result in watcher.notifyToolResult(id: id, name: name, result: result) }
-        }
-        let tools = options?.tools?.map { ToolNative($0, onToolCall, onToolResult) } ?? []
+        let tools = options?.tools?.map { ToolNative($0, toolWatcher?.notifyToolCall, toolWatcher?.notifyToolResult) } ?? []
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
         if let log = AppleIntelligenceLogger.log, let toolList = options?.tools {
@@ -585,7 +577,7 @@ public class ChatClientNative: NSObject {
                case .image(let image) = attachmentSegment.content {
                 return ImageContentNative(
                     cgImage: image.cgImage,
-                    orientationRaw: Int32(image.orientation.rawValue),
+                    orientationValue: NSNumber(value: image.orientation.rawValue),
                     label: attachmentSegment.label)
             }
             return nil

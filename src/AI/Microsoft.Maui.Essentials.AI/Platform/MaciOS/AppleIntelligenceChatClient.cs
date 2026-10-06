@@ -551,14 +551,15 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 
 	internal static AIContent FromNative(ImageContentNative image)
 	{
-		if ((int)image.Orientation is < 0 or > 8)
-			throw new InvalidDataException($"Unsupported EXIF orientation: {(int)image.Orientation}.");
+		var orientation = image.Orientation;
+		if (orientation is { } value && (int)value is < 1 or > 8)
+			throw new InvalidDataException($"Unsupported EXIF orientation: {(int)value}.");
 
-		if (image.Orientation > CGImagePropertyOrientation.Up)
+		if (orientation is { } orientedValue && orientedValue != CGImagePropertyOrientation.Up)
 		{
 			using var decoded = image.CgImage is null ? DecodeImage(image) : null;
 			using var source = CIImage.FromCGImage(image.CgImage ?? decoded!);
-			using var oriented = source.CreateByApplyingOrientation(image.Orientation);
+			using var oriented = source.CreateByApplyingOrientation(orientedValue);
 			using var context = new CIContext();
 			var rendered = context.CreateCGImage(oriented, oriented.Extent)
 				?? throw new InvalidDataException("Failed to render the oriented native image.");

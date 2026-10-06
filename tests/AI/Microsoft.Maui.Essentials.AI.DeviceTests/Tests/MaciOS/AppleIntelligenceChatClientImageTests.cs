@@ -70,7 +70,7 @@ public class AppleIntelligenceChatClientImageTests
 		var oriented = Assert.IsType<CGImage>(portable.RawRepresentation);
 		Assert.Equal((nint)3, oriented.Width);
 		Assert.Equal((nint)2, oriented.Height);
-		Assert.Equal(default(CGImagePropertyOrientation), AppleIntelligenceChatClient.ToNative(portable).Orientation);
+		Assert.Null(AppleIntelligenceChatClient.ToNative(portable).Orientation);
 	}
 
 	[Fact]
@@ -84,6 +84,7 @@ public class AppleIntelligenceChatClientImageTests
 		// Fast path: the native CGImage flows through and the byte payload is skipped.
 		Assert.NotNull(native.CgImage);
 		Assert.Null(native.Data);
+		Assert.Null(native.Orientation);
 	}
 
 	[Fact]
@@ -150,6 +151,18 @@ public class AppleIntelligenceChatClientImageTests
 		Assert.NotNull(data.RawRepresentation);
 	}
 
+	[Theory]
+	[InlineData(0)]
+	[InlineData(9)]
+	public void FromNative_InvalidOrientation_Throws(int orientation)
+	{
+		using var image = CreateTestImage();
+		var native = new ImageContentNative(image, (CGImagePropertyOrientation)orientation, null);
+
+		var error = Assert.Throws<InvalidDataException>(() => AppleIntelligenceChatClient.FromNative(native));
+		Assert.Contains("Unsupported EXIF orientation", error.Message);
+	}
+
 	[Fact]
 	public void RoundTrip_CGImage_SurvivesConversion()
 	{
@@ -181,7 +194,7 @@ public class AppleIntelligenceChatClientImageTests
 		var oriented = Assert.IsType<CGImage>(portable.RawRepresentation);
 		Assert.Equal((nint)width, oriented.Width);
 		Assert.Equal((nint)height, oriented.Height);
-		Assert.Equal(default(CGImagePropertyOrientation), AppleIntelligenceChatClient.ToNative(portable).Orientation);
+		Assert.Null(AppleIntelligenceChatClient.ToNative(portable).Orientation);
 
 		using var png = NSData.FromArray(portable.Data.ToArray());
 		using var source = CGImageSource.FromData(png);

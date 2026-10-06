@@ -279,26 +279,26 @@ interface ImageContentNative
 	[NullAllowed, Export("mimeType")]
 	string MimeType { get; set; }
 
-	// @property (nonatomic) int orientationRaw;
-	[Export("orientationRaw")]
-	CGImagePropertyOrientation Orientation { get; set; }
+	// @property (nonatomic, strong) NSNumber * _Nullable orientationValue;
+	[NullAllowed, BindAs(typeof(CGImagePropertyOrientation?)), Export("orientationValue")]
+	NSNumber Orientation { get; set; }
 
 	// @property (nonatomic, copy) NSString * _Nullable label;
 	[NullAllowed, Export("label")]
 	string Label { get; set; }
 
-	// - (nonnull instancetype)initWithCgImage:(CGImageRef _Nonnull)cgImage orientationRaw:(int)orientationRaw label:(NSString * _Nullable)label OBJC_DESIGNATED_INITIALIZER;
-	[Export("initWithCgImage:orientationRaw:label:")]
+	// - (nonnull instancetype)initWithCgImage:(CGImageRef _Nonnull)cgImage orientationValue:(NSNumber * _Nullable)orientationValue label:(NSString * _Nullable)label OBJC_DESIGNATED_INITIALIZER;
+	[Export("initWithCgImage:orientationValue:label:")]
 	[DesignatedInitializer]
-	NativeHandle Constructor(CGImage cgImage, CGImagePropertyOrientation orientation, [NullAllowed] string label);
+	NativeHandle Constructor(CGImage cgImage, [NullAllowed, BindAs(typeof(CGImagePropertyOrientation?))] NSNumber orientation, [NullAllowed] string label);
 
-	// - (nonnull instancetype)initWithData:(NSData * _Nonnull)data mimeType:(NSString * _Nonnull)mimeType orientationRaw:(int)orientationRaw label:(NSString * _Nullable)label;
-	[Export("initWithData:mimeType:orientationRaw:label:")]
-	NativeHandle Constructor(NSData data, string mimeType, CGImagePropertyOrientation orientation, [NullAllowed] string label);
+	// - (nonnull instancetype)initWithData:(NSData * _Nonnull)data mimeType:(NSString * _Nonnull)mimeType orientationValue:(NSNumber * _Nullable)orientationValue label:(NSString * _Nullable)label;
+	[Export("initWithData:mimeType:orientationValue:label:")]
+	NativeHandle Constructor(NSData data, string mimeType, [NullAllowed, BindAs(typeof(CGImagePropertyOrientation?))] NSNumber orientation, [NullAllowed] string label);
 
-	// - (nonnull instancetype)initWithImageURL:(NSURL * _Nonnull)imageURL orientationRaw:(int)orientationRaw label:(NSString * _Nullable)label;
-	[Export("initWithImageURL:orientationRaw:label:")]
-	NativeHandle Constructor(NSUrl imageURL, CGImagePropertyOrientation orientation, [NullAllowed] string label);
+	// - (nonnull instancetype)initWithImageURL:(NSURL * _Nonnull)imageURL orientationValue:(NSNumber * _Nullable)orientationValue label:(NSString * _Nullable)label;
+	[Export("initWithImageURL:orientationValue:label:")]
+	NativeHandle Constructor(NSUrl imageURL, [NullAllowed, BindAs(typeof(CGImagePropertyOrientation?))] NSNumber orientation, [NullAllowed] string label);
 }
 
 // @interface ResponseUpdateNative : NSObject

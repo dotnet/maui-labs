@@ -61,6 +61,8 @@ The Apple adapter prefers the native image for the current request, avoiding
 an unnecessary managed byte decode; the encoded bytes remain usable by
 providers and recordings that do not understand the native handle. `UIImage`
 orientation and encoded EXIF orientation are passed through the bridge.
+The binding uses an optional `CGImagePropertyOrientation`: `nil` means use the
+image's natural orientation, while explicit values match EXIF orientations 1–8.
 There is no separate `AppleImage` helper or new public M.E.AI content type.
 
 ## Native conversion and transcript history
