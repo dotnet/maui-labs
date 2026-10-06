@@ -120,4 +120,15 @@
     <PackageVersion Include="ZXing.Net.Maui.Controls" Version="$(ZXingNetMauiVersion)" />
   </ItemGroup>
 
+  <!-- Released routing/failover experiment, scoped to the chat sample and its linked-source tests. -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'AIExtensions.Sample.ChatPlayground' or '$(MSBuildProjectName)' == 'Microsoft.Maui.AI.Chat.Tests'">
+    <PackageVersion Update="Microsoft.Extensions.AI" Version="10.10.0" />
+    <PackageVersion Update="Microsoft.Extensions.AI.Abstractions" Version="10.10.1" />
+    <PackageVersion Update="Microsoft.Extensions.AI.OpenAI" Version="10.10.1" />
+    <PackageVersion Update="OpenAI" Version="2.14.0" />
+    <PackageVersion Update="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+    <PackageVersion Update="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+    <PackageVersion Update="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.9" />
+  </ItemGroup>
+
 </Project>

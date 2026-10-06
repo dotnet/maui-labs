@@ -13,7 +13,7 @@ namespace AIExtensions.Sample.ChatPlayground;
 
 internal static class ChatServiceCollectionExtensions
 {
-    public static IServiceCollection AddChatFeature(this IServiceCollection services, AISettings settings)
+    public static IServiceCollection AddChatFeature(this IServiceCollection services)
     {
         services.AddSingleton<ConnectionStatusService>();
         services.AddSingleton(serviceProvider => new PlaygroundTools(
@@ -28,23 +28,13 @@ internal static class ChatServiceCollectionExtensions
         services.AddSingleton<ChatViewModel>();
         services.AddTransient<Page, ChatPage>();
 
-#if IOS || MACCATALYST
-        if (OperatingSystem.IsIOSVersionAtLeast(26) || OperatingSystem.IsMacCatalystVersionAtLeast(26))
-            services.AddSingleton<IChatClient>(CreateAppleChatClient);
-#endif
-
-        if (!string.IsNullOrWhiteSpace(settings.DeploymentName))
-            services.AddSingleton<IChatClient>(serviceProvider => CreateAzureChatClient(serviceProvider, settings));
-
-        services.AddSingleton<IChatClient>(CreateReplayChatClient);
-
         return services;
     }
 
 #if IOS || MACCATALYST
     [SupportedOSPlatform("ios26.0")]
     [SupportedOSPlatform("maccatalyst26.0")]
-    private static IChatClient CreateAppleChatClient(IServiceProvider serviceProvider) =>
+    internal static IChatClient CreateAppleChatClient(IServiceProvider serviceProvider) =>
         new AppleIntelligenceChatClient(serviceProvider.GetRequiredService<ILoggerFactory>())
             .AsBuilder()
             .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
@@ -56,14 +46,43 @@ internal static class ChatServiceCollectionExtensions
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
             .UseFunctionInvocation()
             .Build();
+
+    [SupportedOSPlatform("ios26.0")]
+    [SupportedOSPlatform("maccatalyst26.0")]
+    internal static IChatClient CreateHybridChatClient(IServiceProvider serviceProvider, AISettings settings)
+    {
+        var local = new AppleIntelligenceChatClient(serviceProvider.GetRequiredService<ILoggerFactory>());
+        var cloud = string.IsNullOrWhiteSpace(settings.DeploymentName)
+            ? null
+            : CreateOpenAIClient(settings).GetResponsesClient().AsIChatClient(settings.DeploymentName);
+        return new HybridChatClient(
+                local,
+                cloud,
+                serviceProvider.GetRequiredService<ILogger<HybridChatClient>>())
+            .AsBuilder()
+            .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
+            .UseDescriptor(new ChatClientDescriptor(
+                "hybrid-chat",
+                "Hybrid (local + cloud)",
+                "Apple Intelligence chooses local or cloud for each text-only turn. " +
+                    "Complex turns attempt cloud, with local recovery for transient failures before output. " +
+                    (cloud is null ? "Azure is not configured, so all turns stay local." :
+                        "Cloud receives a local summary by default; redaction is best-effort, not guaranteed."),
+                IsHybrid: true))
+            .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
+            .Build();
+    }
 #endif
 
-    private static IChatClient CreateAzureChatClient(IServiceProvider serviceProvider, AISettings settings)
-    {
-        var deploymentName = settings.DeploymentName!;
-        var openAIClient = new OpenAIClient(
+    private static OpenAIClient CreateOpenAIClient(AISettings settings) =>
+        new(
             new ApiKeyCredential(settings.ApiKey!),
             new OpenAIClientOptions { Endpoint = settings.Endpoint! });
+
+    internal static IChatClient CreateAzureChatClient(IServiceProvider serviceProvider, AISettings settings)
+    {
+        var deploymentName = settings.DeploymentName!;
+        var openAIClient = CreateOpenAIClient(settings);
         var imageDeployment = settings.ImageDeploymentName;
         var imageGenerator = string.IsNullOrWhiteSpace(imageDeployment)
             ? null
@@ -89,7 +108,7 @@ internal static class ChatServiceCollectionExtensions
         return builder.UseFunctionInvocation().Build();
     }
 
-    private static IChatClient CreateReplayChatClient(IServiceProvider serviceProvider) =>
+    internal static IChatClient CreateReplayChatClient(IServiceProvider serviceProvider) =>
         new ReplayChatClient(serviceProvider.GetRequiredService<IChatRecordingSession>())
             .AsBuilder()
             .UseDescriptor(new ChatClientDescriptor(
