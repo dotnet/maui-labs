@@ -9,5 +9,4 @@ public sealed record ChatClientDescriptor(
     bool SupportsReasoningSummary = false,
     bool SupportsImageGeneration = false,
     bool IsReplay = false,
-    bool SupportsToolCalling = false,
-    bool IsHybrid = false);
+    bool SupportsToolCalling = false);

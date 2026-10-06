@@ -12,31 +12,30 @@ public sealed class SettingsPaneViewModelTests
     }
 
     [Fact]
-    public void HybridCloudPayload_DefaultsToSummaryAndDoesNotAffectDirectClients()
+    public void TextOnlyClient_UsesOrdinaryOptionsWithoutProviderSpecificProperties()
     {
         using var hybrid = new DescribedChatClient(new StubChatClient(),
-            new ChatClientDescriptor("hybrid", "Hybrid", "Ready", IsHybrid: true));
+            new ChatClientDescriptor("hybrid", "Hybrid", "Ready"));
         using var live = CreateClient("Live", isReplay: false);
-        var settings = new SettingsPaneViewModel([hybrid, live]);
+        var settings = new SettingsPaneViewModel([hybrid, live])
+        {
+            Instructions = "Explain clearly.",
+            EnableTemperature = true,
+            Temperature = "0.3",
+            UseStructuredJson = true,
+        };
 
-        Assert.True(settings.UseCloudSummary);
-        Assert.False(settings.SendOriginalToCloud);
-        var summary = settings.CreateChatOptions([]);
-        Assert.Equal(false, summary.AdditionalProperties![HybridChatClient.OriginalCloudPayloadOption]);
-        Assert.Null(summary.Tools);
-        Assert.Null(summary.Reasoning);
-
-        settings.SendOriginalToCloud = true;
-        Assert.False(settings.UseCloudSummary);
-        Assert.Equal(true, settings.CreateChatOptions([]).AdditionalProperties![HybridChatClient.OriginalCloudPayloadOption]);
+        var options = settings.CreateChatOptions([]);
+        Assert.Null(options.AdditionalProperties);
+        Assert.Null(options.Tools);
+        Assert.Null(options.Reasoning);
+        Assert.Same(ChatToolMode.None, options.ToolMode);
+        Assert.Equal("Explain clearly.", options.Instructions);
+        Assert.Equal(0.3f, options.Temperature);
+        Assert.IsType<ChatResponseFormatJson>(options.ResponseFormat);
 
         settings.SelectedClient = live;
         Assert.Null(settings.CreateChatOptions([]).AdditionalProperties);
-
-        settings.SelectedClient = hybrid;
-        settings.UseCloudSummary = true;
-        Assert.False(settings.SendOriginalToCloud);
-        Assert.Equal(false, settings.CreateChatOptions([]).AdditionalProperties![HybridChatClient.OriginalCloudPayloadOption]);
     }
 
     [Fact]

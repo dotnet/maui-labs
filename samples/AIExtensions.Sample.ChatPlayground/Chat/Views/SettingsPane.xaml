@@ -35,20 +35,6 @@
                         <Setter Property="IsVisible" Value="False" />
                     </DataTrigger>
                 </VerticalStackLayout.Triggers>
-                <VerticalStackLayout IsVisible="{Binding SelectedDescriptor.IsHybrid}" Spacing="8"
-                                     AutomationId="HybridOptionsPanel">
-                    <Label Text="HYBRID CLOUD PAYLOAD" Style="{StaticResource SectionHeading}" />
-                    <RadioButton Content="Local summary (best-effort redaction)" GroupName="HybridPayload"
-                                 IsChecked="{Binding UseCloudSummary}"
-                                 AutomationId="HybridSummaryRadio" />
-                    <RadioButton Content="Original conversation" GroupName="HybridPayload"
-                                 IsChecked="{Binding SendOriginalToCloud}"
-                                 AutomationId="HybridOriginalRadio" />
-                    <Label                     Text="Cloud routes send automatically. Local summary prepares task and context; personal data may remain. Response formats and generation settings are sent unchanged. Original sends the full text conversation and instructions. Neither mode is suitable for secrets."
-                           Style="{StaticResource MutedLabel}" FontSize="12" />
-                    <Label Text="Local model decides each turn. Complex turns attempt cloud, with local fallback for transient failures before output. Hybrid is text-only and does not call tools."
-                           Style="{StaticResource MutedLabel}" FontSize="12" />
-                </VerticalStackLayout>
                 <BoxView HeightRequest="1"
                          Color="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}" />
                 <Label Text="RESPONSE" Style="{StaticResource SectionHeading}" />

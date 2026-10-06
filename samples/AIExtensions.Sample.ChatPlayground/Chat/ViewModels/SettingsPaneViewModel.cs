@@ -29,9 +29,6 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
     [ObservableProperty] private bool useStreaming = true;
     [ObservableProperty] private bool useStructuredJson;
     [ObservableProperty] private bool useReasoningSummary = true;
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(UseCloudSummary))]
-    private bool sendOriginalToCloud;
     [ObservableProperty] private string instructions = string.Empty;
     [ObservableProperty] private bool useDateTimeTool = true;
     [ObservableProperty] private bool useCalculatorTool = true;
@@ -67,12 +64,6 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
         ? client.GetRequiredService<ChatClientDescriptor>()
         : null;
     public bool CanEditOptions => !IsBusy && SelectedDescriptor is { IsReplay: false };
-
-    public bool UseCloudSummary
-    {
-        get => !SendOriginalToCloud;
-        set { if (value) SendOriginalToCloud = false; }
-    }
 
     public bool IsMultipleToolCallsDefault
     {
@@ -128,11 +119,6 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
             };
         if (UseStructuredJson)
             options.ResponseFormat = ChatResponseFormat.ForJsonSchema<PlaygroundResponse>(PlaygroundJsonContext.Default.Options);
-        if (SelectedDescriptor?.IsHybrid == true)
-            options.AdditionalProperties = new AdditionalPropertiesDictionary
-            {
-                [HybridChatClient.OriginalCloudPayloadOption] = SendOriginalToCloud,
-            };
         return options;
     }
 

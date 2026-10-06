@@ -40,12 +40,13 @@ It is an ordinary `IChatClient` registered by `AddChatFeature(aiSettings)` in
 locally without classification. Routing is model-decided, not deterministic;
 tools and images are unsupported.
 
-Cloud routes automatically send a locally prepared summary by default;
-original conversation mode is opt-in. Redaction is best-effort, not a privacy
-guarantee. Generation settings and response schemas are forwarded unchanged.
-Do not use secrets or data that must stay on-device. Only transient cloud
-failures before any streaming update allow local recovery; authentication,
-validation, local failures and caller cancellation propagate.
+Cloud routes automatically send the **full original text conversation and
+instructions**, preserving supported generation settings, stop sequences and
+response schemas. There is no summarization, redaction or per-turn approval;
+do not send secrets or data that must stay on-device. Only transient cloud
+failures before any streaming update allow local recovery, with at most two
+answer attempts. Authentication, validation, local failures and caller
+cancellation propagate.
 
 Built-in diagnostics on the local/cloud leaves expose classification, answer
 attempts and recovery under the outer trace. Only this sample and its host tests

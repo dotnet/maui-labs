@@ -85,8 +85,7 @@ internal static class ChatServiceCollectionExtensions
                 "Apple Intelligence chooses local or cloud for each text-only turn. " +
                     "Complex turns attempt cloud, with local recovery for transient failures before output. " +
                     (cloud is null ? "Azure is not configured, so all turns stay local." :
-                        "Cloud receives a local summary by default; redaction is best-effort, not guaranteed."),
-                IsHybrid: true))
+                        "Cloud receives the original text conversation and instructions automatically.")))
             .UsePlaygroundDiagnostics(loggerFactory)
             .Build();
     }
