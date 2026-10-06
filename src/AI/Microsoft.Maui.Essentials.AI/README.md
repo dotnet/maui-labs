@@ -74,8 +74,10 @@ var embeddings = await generator.GenerateAsync(["sunset beach", "mountain hiking
 On iOS 26+, Mac Catalyst 26+, or macOS 26+, use `AppleVisionDocumentReader` as an `IngestionDocumentReader`.
 Recognition runs locally through Apple's Vision `RecognizeDocumentsRequest`. PDFKit renders PDFs internally,
 producing one numbered `IngestionDocumentSection` per page; an image produces one section.
-The reader is a thin projection over an internal, abstraction-neutral recognition pipeline. Other document abstractions can
-reuse the same Swift binding, complete native snapshot, image orientation, PDF rendering, and cancellation machinery.
+The reader projects a typed page stream from an internal extraction client backed by the shared recognition pipeline.
+One canonical internal mapper retains the complete native snapshot and rich structure; the reader preserves Vision's
+paragraph/column order without interpreting raw JSON. The Swift binding, image orientation, PDF rendering, and
+cancellation machinery remain shared.
 
 ```csharp
 using Microsoft.Extensions.DataIngestion;
@@ -103,6 +105,8 @@ sections, elements, and cells. List text becomes paragraphs because the current 
 The reader omits geometry, confidence, typed barcodes/entities/lists, request options, raw observations, and
 progress/streaming. It does not invent provider metadata or expose native results. A future official
 `IDocumentExtractionClient` is the likely home for these typed capabilities and raw-provider escape hatches.
+Until an official abstraction is available, a minimal private extraction model retains them internally; no temporary
+extraction API or model types are exposed to consumers. `AppleVisionDocumentReader` remains the only public document API.
 Embedded images are not emitted because the recognition API does not provide usable image content.
 
 The [AI Playground](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)

@@ -6,6 +6,9 @@ namespace Microsoft.Maui.Essentials.AI.UnitTests;
 
 public class AppleVisionIngestionMapperTests
 {
+	private static IngestionDocumentSection MapPage(JsonElement snapshot, int pageNumber) =>
+		AppleVisionIngestionMapper.MapPage(AppleVisionDocumentMapper.ToPage(snapshot, pageNumber));
+
 	[Fact]
 	public void MapPage_FullSnapshot_PreservesParagraphOrderAndOmitsAdvancedFields()
 	{
@@ -19,7 +22,7 @@ public class AppleVisionIngestionMapperTests
 				{"path":"barcode","kind":"barcode","payloadString":"not ingestion text","confidence":1}
 			]}]
 			""");
-		var section = AppleVisionIngestionMapper.MapPage(json.RootElement, 2);
+		var section = MapPage(json.RootElement, 2);
 
 		Assert.Equal(2, section.PageNumber);
 		Assert.Collection(section.Elements,
@@ -51,7 +54,7 @@ public class AppleVisionIngestionMapperTests
 				{"path":"after","kind":"paragraph","text":"After"}
 			]}]
 			""");
-		var section = AppleVisionIngestionMapper.MapPage(json.RootElement, 3);
+		var section = MapPage(json.RootElement, 3);
 		Assert.Equal(3, section.Elements.Count);
 		Assert.Equal("Before", section.Elements[0].Text);
 		var table = Assert.IsType<IngestionDocumentTable>(section.Elements[1]);
@@ -85,7 +88,7 @@ public class AppleVisionIngestionMapperTests
 				{"path":"p","kind":"paragraph","text":"Apples","polygon":[0,0.5,1,0.5,1,0.6,0,0.6]}
 			]}]
 			""");
-		var section = AppleVisionIngestionMapper.MapPage(json.RootElement, 1);
+		var section = MapPage(json.RootElement, 1);
 		Assert.Equal(["Apples", "Coffee"], section.Elements.Select(element => element.Text));
 		Assert.All(section.Elements, element => Assert.IsType<IngestionDocumentParagraph>(element));
 	}
@@ -102,7 +105,7 @@ public class AppleVisionIngestionMapperTests
 			{"path":"c","kind":"tableCell","parentPath":"t","text":"bad",
 			 "rowIndex":{{row}},"columnIndex":{{column}},"rowSpan":{{rowSpan}},"columnSpan":{{columnSpan}}}]}]
 			""");
-		Assert.Throws<InvalidDataException>(() => AppleVisionIngestionMapper.MapPage(json.RootElement, 1));
+		Assert.Throws<InvalidDataException>(() => MapPage(json.RootElement, 1));
 	}
 
 	[Fact]
@@ -117,7 +120,7 @@ public class AppleVisionIngestionMapperTests
 				 "rowIndex":0,"columnIndex":1,"rowSpan":1,"columnSpan":1}
 			]}]
 			""");
-		Assert.Throws<InvalidDataException>(() => AppleVisionIngestionMapper.MapPage(json.RootElement, 1));
+		Assert.Throws<InvalidDataException>(() => MapPage(json.RootElement, 1));
 	}
 
 	[Fact]
@@ -129,6 +132,78 @@ public class AppleVisionIngestionMapperTests
 				{"path":"item","parentPath":"list","kind":"listItem","text":"Apples"}
 			]}]
 			""");
-		Assert.Throws<InvalidDataException>(() => AppleVisionIngestionMapper.MapPage(json.RootElement, 1));
+		Assert.Throws<InvalidDataException>(() => MapPage(json.RootElement, 1));
+	}
+
+	[Theory]
+	[InlineData("title", 0.69, false)]
+	[InlineData("title", 0.7, true)]
+	[InlineData("table", 0.69, false)]
+	[InlineData("table", 0.7, true)]
+	[InlineData("listItem", 0.54, false)]
+	[InlineData("listItem", 0.55, true)]
+	public void MapPage_OverlapThresholds_PreserveStructuredReplacement(string kind, double width, bool replaces)
+	{
+		var parent = kind == "listItem" ? """{"path":"list","kind":"list"},""" : "";
+		var parentPath = kind == "listItem" ? ""","parentPath":"list" """ : "";
+		var cell = kind == "table" ? """
+			{"path":"cell","parentPath":"structured","kind":"tableCell","text":"Item",
+			 "rowIndex":0,"columnIndex":0,"rowSpan":1,"columnSpan":1},
+			""" : "";
+		var paragraphText = kind == "listItem" ? "ITEM with extra text" : "Item";
+		var extent = width.ToString(System.Globalization.CultureInfo.InvariantCulture);
+		using var json = JsonDocument.Parse($$"""
+			[{"nodes":[{{parent}}
+				{"path":"structured","kind":"{{kind}}","text":"Item"{{parentPath}},
+				 "polygon":[0,0,{{extent}},0,{{extent}},1,0,1]},
+				{{cell}}
+				{"path":"paragraph","kind":"paragraph","text":"{{paragraphText}}","polygon":[0,0,1,0,1,1,0,1]}
+			]}]
+			""");
+		var section = MapPage(json.RootElement, 1);
+		Assert.Equal(replaces ? 1 : 2, section.Elements.Count);
+		if (!replaces)
+			Assert.IsType<IngestionDocumentParagraph>(section.Elements[0]);
+		switch (kind)
+		{
+			case "title": Assert.IsType<IngestionDocumentHeader>(section.Elements[^1]); break;
+			case "table": Assert.IsType<IngestionDocumentTable>(section.Elements[^1]); break;
+			default: Assert.Equal("Item", section.Elements[^1].Text); break;
+		}
+	}
+
+	[Fact]
+	public void MapPage_TitleReplacement_RequiresEqualText()
+	{
+		using var json = JsonDocument.Parse("""
+			[{"nodes":[
+				{"path":"title","kind":"title","text":"ITEM","polygon":[0,0,1,0,1,1,0,1]},
+				{"path":"p","kind":"paragraph","text":"Item","polygon":[0,0,1,0,1,1,0,1]}
+			]}]
+			""");
+		var section = MapPage(json.RootElement, 1);
+		Assert.Equal(["Item", "ITEM"], section.Elements.Select(element => element.Text));
+		Assert.IsType<IngestionDocumentParagraph>(section.Elements[0]);
+		Assert.IsType<IngestionDocumentHeader>(section.Elements[1]);
+	}
+
+	[Fact]
+	public void MapPage_ListDuplicates_RequireBidirectionalOverlapAndAppendAfterParagraphs()
+	{
+		using var json = JsonDocument.Parse("""
+			[{"nodes":[
+				{"path":"list","kind":"list"},
+				{"path":"large","parentPath":"list","kind":"listItem","text":"Same","polygon":[0,0,1,0,1,0.3,0,0.3]},
+				{"path":"small","parentPath":"list","kind":"listItem","text":"Same","polygon":[0,0,0.5,0,0.5,0.3,0,0.3]},
+				{"path":"duplicate","parentPath":"list","kind":"listItem","text":"Same","polygon":[0,0,1,0,1,0.3,0,0.3]},
+				{"path":"near","parentPath":"list","kind":"listItem","text":"Same","polygon":[0,0,0.9,0,0.9,0.3,0,0.3]},
+				{"path":"elsewhere","parentPath":"list","kind":"listItem","text":"Same","polygon":[0,0.5,1,0.5,1,0.8,0,0.8]},
+				{"path":"p","kind":"paragraph","text":"Paragraph first"}
+			]}]
+			""");
+		var rich = AppleVisionDocumentMapper.ToPage(json.RootElement, 1);
+		Assert.Equal(7, Assert.Single(rich.Observations).Nodes.Count);
+		Assert.Equal(["Paragraph first", "Same", "Same", "Same"],
+			AppleVisionIngestionMapper.MapPage(rich).Elements.Select(element => element.Text));
 	}
 }

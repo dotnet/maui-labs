@@ -80,10 +80,25 @@ A future official `IDocumentExtractionClient` is the likely home for these typed
 
 - **Native Swift bindings** (`AppleNative/EssentialsAI/`) compiled via Xcode, producing `.xcframework` bundles
 - **Shared document recognition** — internal `AppleVisionDocumentRecognizer` owns the full native snapshot, request
-  controls, capabilities, image orientation, PDF page rendering, and cancellation. `AppleVisionDocumentReader` only
-  projects those pages into the standard ingestion model; other document adapters can reuse the same native pipeline.
+  controls, capabilities, image orientation, PDF page rendering, and cancellation.
+- **Transitional document extraction** — `AppleVisionDocumentReader` consumes the internal
+  `AppleVisionDocumentExtractionClient` page stream with default options and projects typed pages into ingestion.
+  The client's portable canonical mapper is the only snapshot interpreter. It validates hierarchy, geometry, table
+  ranges/spans, and bounded logical grids while retaining list containers/items and nested cell content.
+  Observation groups isolate local paths; the mapper creates a reading-order sequence from the original root paragraphs
+  (including column order), replacing overlapping titles, tables, and list items while retaining the full source hierarchy.
+  The ingestion projection only converts these ordered rich elements to standard ingestion types; it never reads raw JSON.
+  The internal result retains cloned page/observation/node snapshots, normalized bottom-left geometry, confidence,
+  source dimensions, PDF facts, page totals/progress, and request controls/capabilities. Provider property bags retain
+  native field names for list markers, barcode data/flags, detected data, languages, candidates, words, and diagnostics.
+  The minimal temporary model lives in `Internal.DocumentExtraction`; it is not an official extraction contract,
+  namespace, dependency, or public API. Future official abstraction adoption can replace this private contract without
+  changing the recognizer or adding another snapshot mapper. No image model is included because Vision emits no image content.
 - **`AppleBindings.targets`** — MSBuild targets for cross-platform native artifact flow
 - **Streaming infrastructure** — `JsonStreamChunker`, `PlainTextStreamChunker`, `StreamingResponseHandler` for progressive deserialization
+
+Portable document mapping, projection, and client orchestration tests access the shipped assembly through its friend
+assembly declaration, not linked copies. Apple-only wiring adapts the unchanged recognizer DTOs to the internal client seam.
 
 ## Documentation
 

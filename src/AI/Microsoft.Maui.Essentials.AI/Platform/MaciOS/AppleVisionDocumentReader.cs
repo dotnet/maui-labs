@@ -15,12 +15,12 @@ public sealed class AppleVisionDocumentReader : IngestionDocumentReader
 	{
 		ArgumentNullException.ThrowIfNull(identifier);
 		var document = new IngestionDocument(identifier);
-		var recognizer = new AppleVisionDocumentRecognizer();
-		await foreach (var page in recognizer.RecognizePagesAsync(source, mediaType, options: null, cancellationToken)
+		var client = new AppleVisionDocumentExtractionClient();
+		await foreach (var page in client.ExtractPagesAsync(source, mediaType, options: null, cancellationToken)
 			.ConfigureAwait(false))
 		{
 			cancellationToken.ThrowIfCancellationRequested();
-			document.Sections.Add(AppleVisionIngestionMapper.MapPage(page.Snapshot, page.PageNumber));
+			document.Sections.Add(AppleVisionIngestionMapper.MapPage(page.Page));
 		}
 		cancellationToken.ThrowIfCancellationRequested();
 		return document;
