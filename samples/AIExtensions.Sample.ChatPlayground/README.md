@@ -34,8 +34,25 @@ works without credentials or a model.
 
 ## Build and run
 
-Install the repo's pinned .NET 10 SDK, the matching MAUI workload, and Xcode 27.
+Install the repo's pinned .NET 10 SDK, the matching MAUI workload, and a
+compatible Xcode for Apple builds.
 From the repository root on macOS, build and run the Mac Catalyst sample with:
+
+```sh
+dotnet build samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
+  -f net10.0-maccatalyst -c Debug -t:Build,Run
+```
+
+For iOS, use `-f net10.0-ios` instead. Apple Intelligence text chat requires
+iOS or Mac Catalyst 26+ on a supported
+device with the model enabled. Apple embeddings require the English
+sentence-embedding asset, which may be absent on simulators. Azure-backed
+features also run on Android and Windows.
+
+### Xcode 27 builds
+
+To opt into Apple 27 reference packs, select Xcode 27 and enable
+`UseXcode27Preview`:
 
 ```sh
 DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer \
@@ -43,12 +60,7 @@ DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer \
   -f net10.0-maccatalyst27.0 -c Debug -t:Build,Run -p:UseXcode27Preview=true
 ```
 
-For iOS, use `-f net10.0-ios27.0` instead. With a compatible stable Xcode,
-omit `UseXcode27Preview` and use `net10.0-maccatalyst` or `net10.0-ios`.
-Apple Intelligence text chat requires iOS or Mac Catalyst 26+ on a supported
-device with the model enabled. Apple embeddings require the English
-sentence-embedding asset, which may be absent on simulators. Azure-backed
-features also run on Android and Windows.
+For iOS, use `-f net10.0-ios27.0` instead.
 
 ## Optional Azure configuration
 
