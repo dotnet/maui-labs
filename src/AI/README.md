@@ -69,15 +69,17 @@ dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests \
 For live OpenAI testing, add `-p:EnableOpenAIClient=true`. Configure the device
 test project's user secrets (`808cc184-141a-409e-addd-565c973dbce6`) with
 `AI:ApiKey`, `AI:Endpoint`, `AI:DeploymentName`, and `AI:EmbeddingDeploymentName`.
-Use an OpenAI-compatible endpoint, such as Azure OpenAI's `/openai/v1/` endpoint.
-The opt-in also enables a native SDK streaming test that distinguishes completion
-updates from prompt annotations, which can have an empty model field.
+Use an OpenAI-compatible Responses endpoint, such as Azure OpenAI's `/openai/v1/`
+endpoint. The OpenAI tests use `GetResponsesClient().AsIChatClient(...)`, matching
+the chat playground's Responses API path rather than the older Chat Completions
+adapter.
 
-The opt-in currently exposes an upstream Chat Completions adapter defect:
+The older Chat Completions adapter has a separately tracked
+[streaming model-ID defect](https://github.com/dotnet/extensions/issues/7812):
 an empty model field on the initial annotation is retained for the entire
 adapted stream, despite later native completion chunks carrying model IDs.
-This was reproduced with adapter versions 10.4.1 and 10.10.1. The Responses
-adapter used by the chat playground is a separate path.
+This was reproduced with adapter versions 10.4.1 and 10.10.1. These tests and
+the chat playground use the Responses adapter, not the affected adapter.
 
 These tests contact real models and require Apple Intelligence to be available
 for the Apple cases. Debug builds embed the configured user secrets; do not
