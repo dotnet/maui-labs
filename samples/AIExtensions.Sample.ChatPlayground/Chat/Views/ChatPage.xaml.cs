@@ -12,6 +12,7 @@ public partial class ChatPage : ContentPage
         InitializeComponent();
         BindingContext = viewModel;
         ChatLayout.DiagnosticsContent = new ChatLogsView(diagnostics, ChatLayout.CloseDiagnostics);
+        ChatLayout.ToggleDiagnostics();
         Loaded += PageLoaded;
     }
 

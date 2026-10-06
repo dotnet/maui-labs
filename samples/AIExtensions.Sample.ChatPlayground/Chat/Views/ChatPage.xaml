@@ -8,16 +8,12 @@
              BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}">
     <Grid>
         <local:PlaygroundPageLayout x:Name="ChatLayout" HeaderTitle="Chat"
-                                       HeaderInfo="Send messages with the selected real client. Replay plays only the current chat offline; More imports or exports that recording."
+                                       HeaderInfo="Send messages with the selected real client. Replay plays only the current chat offline; More imports or exports that recording and toggles chat diagnostics."
                                        HeaderStatus="{Binding Chat.StatusMessage}"
                                        StatusAutomationId="RequestStatusLabel"
                                        SidebarTitle="Chat settings">
             <local:PlaygroundPageLayout.HeaderActions>
                 <HorizontalStackLayout Spacing="4">
-                    <Button Text="Logs" Style="{StaticResource SecondaryButtonStyle}"
-                            Clicked="ToggleLogsClicked" VerticalOptions="Center"
-                            SemanticProperties.Description="Show or hide chat diagnostics"
-                            AutomationId="ToggleChatLogsButton" />
                     <VerticalStackLayout Spacing="2">
                         <ImageButton Source="add.png" Style="{StaticResource ChatActionButton}"
                                      Command="{Binding NewChatAction}"
@@ -29,7 +25,7 @@
                     <VerticalStackLayout Spacing="2">
                         <ImageButton x:Name="MoreButton" Source="more.png"
                                      Style="{StaticResource ChatActionButton}"
-                                     SemanticProperties.Description="Import or export the current chat"
+                                     SemanticProperties.Description="Chat recording and diagnostics options"
                                      AutomationId="ChatMoreButton">
                             <local:PopupMenu.Content>
                                 <VerticalStackLayout Spacing="8" x:DataType="local:ChatViewModel">
@@ -46,6 +42,9 @@
                                             Command="{Binding ExportChatAction}"
                                             CommandParameter="{x:Reference MoreButton}"
                                             AutomationId="ExportChatButton" />
+                                    <Button Text="Show / hide logs" Clicked="ToggleLogsClicked"
+                                            SemanticProperties.Description="Show or hide chat diagnostics"
+                                            AutomationId="ToggleChatLogsButton" />
                                 </VerticalStackLayout>
                             </local:PopupMenu.Content>
                         </ImageButton>
