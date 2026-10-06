@@ -21,13 +21,12 @@ public abstract record TranscriptChange
         TranscriptEntryKind EntryKind,
         string Label,
         string Text,
+        string ModelId,
         string? Details = null,
         byte[]? ImageBytes = null,
-        bool IsStreaming = false,
-        string? ModelId = null) : TranscriptChange;
+        bool IsStreaming = false) : TranscriptChange;
 
     public sealed record EntryTextChanged(long EntryId, string Text) : TranscriptChange;
-    public sealed record EntryModelIdChanged(long EntryId, string ModelId) : TranscriptChange;
     public sealed record ToolCallResolved(long EntryId, string Label, string Details) : TranscriptChange;
     public sealed record EntryStreamingStopped(long EntryId) : TranscriptChange;
     public sealed record EntryRemoved(long EntryId) : TranscriptChange;

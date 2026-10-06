@@ -19,35 +19,25 @@ internal sealed class ChatResponseProjector(TranscriptEmitter transcript, Action
     private readonly HashSet<string> _seenResultIds = new(StringComparer.Ordinal);
     private bool _hasToolActivity;
     private bool _hasImage;
-    private string? _modelId;
-    private bool _canLabelModel = true;
-    private bool _canLabelStructuredTextModel = true;
-    private readonly HashSet<long> _untaggedEntries = [];
+    private string _modelId = string.Empty;
 
     public void ProjectResponse(ChatResponse response)
     {
-        SetModelId(response.ModelId);
+        _modelId = response.ModelId ?? string.Empty;
         foreach (var message in response.Messages)
             ProjectMessage(message);
     }
 
-    public void ProjectUpdateMetadata(ChatResponseUpdate update)
-    {
-        _canLabelModel = CanLabelModel(update.Role);
-        if (_canLabelModel)
-            SetModelId(update.ModelId);
-    }
-
     public void ProjectMessage(ChatMessage message)
     {
-        _canLabelModel = CanLabelModel(message.Role);
         foreach (var content in message.Contents)
-            ProjectContent(content);
+            ProjectContent(content, _modelId);
         FlushText();
     }
 
-    public void ProjectContent(AIContent content)
+    public void ProjectContent(AIContent content, string modelId)
     {
+        _modelId = modelId;
         // Tool results can resolve call bubbles; text, reasoning, and images update visible entries.
         switch (content)
         {
@@ -59,8 +49,8 @@ internal sealed class ChatResponseProjector(TranscriptEmitter transcript, Action
                     ? $"{arguments}\n\nCall error:\n{call.Exception.Message}"
                     : $"{arguments}\n\nResult:\nWaiting for result…";
                 var callEntryId = transcript.NextEntryId();
-                EmitEntry(new TranscriptChange.EntryAdded(callEntryId, TranscriptEntryKind.Tool, "Tool call",
-                    string.IsNullOrWhiteSpace(call.Name) ? "Unnamed function" : call.Name, details));
+                emit(new TranscriptChange.EntryAdded(callEntryId, TranscriptEntryKind.Tool, "Tool call",
+                    string.IsNullOrWhiteSpace(call.Name) ? "Unnamed function" : call.Name, _modelId, details));
                 if (!string.IsNullOrEmpty(call.CallId))
                     _toolEntriesByCallId[call.CallId] = (callEntryId, arguments);
                 break;
@@ -79,22 +69,21 @@ internal sealed class ChatResponseProjector(TranscriptEmitter transcript, Action
                 }
                 else
                 {
-                    EmitEntry(new TranscriptChange.EntryAdded(
+                    emit(new TranscriptChange.EntryAdded(
                         transcript.NextEntryId(), TranscriptEntryKind.Tool, "Tool result",
-                        "Result for unknown function",
+                        "Result for unknown function", _modelId,
                         $"Call ID: {result.CallId ?? "(none)"}\n\n{resultLabel}:\n{resultText}"));
                 }
                 break;
 
             case TextContent text when !string.IsNullOrEmpty(text.Text):
-                _canLabelStructuredTextModel &= _canLabelModel;
                 if (streaming)
                 {
                     if (_activeTextEntryId is null)
                     {
                         _activeTextEntryId = transcript.NextEntryId();
-                        EmitEntry(new TranscriptChange.EntryAdded(_activeTextEntryId.Value, TranscriptEntryKind.Assistant,
-                            structuredJson ? "Streaming JSON" : "Streaming text", "Thinking…", IsStreaming: true));
+                        emit(new TranscriptChange.EntryAdded(_activeTextEntryId.Value, TranscriptEntryKind.Assistant,
+                            structuredJson ? "Streaming JSON" : "Streaming text", "Thinking…", _modelId, IsStreaming: true));
                     }
                     _activeText.Append(text.Text);
                     emit(new TranscriptChange.EntryTextChanged(_activeTextEntryId.Value, _activeText.ToString()));
@@ -114,8 +103,8 @@ internal sealed class ChatResponseProjector(TranscriptEmitter transcript, Action
                     if (_reasoningEntryId is null)
                     {
                         _reasoningEntryId = transcript.NextEntryId();
-                        EmitEntry(new TranscriptChange.EntryAdded(_reasoningEntryId.Value, TranscriptEntryKind.Reasoning,
-                            "Reasoning summary", _reasoningText.ToString()));
+                        emit(new TranscriptChange.EntryAdded(_reasoningEntryId.Value, TranscriptEntryKind.Reasoning,
+                            "Reasoning summary", _reasoningText.ToString(), _modelId));
                     }
                     else
                     {
@@ -124,8 +113,8 @@ internal sealed class ChatResponseProjector(TranscriptEmitter transcript, Action
                 }
                 else
                 {
-                    EmitEntry(new TranscriptChange.EntryAdded(transcript.NextEntryId(), TranscriptEntryKind.Reasoning,
-                        "Reasoning summary", reasoning.Text));
+                    emit(new TranscriptChange.EntryAdded(transcript.NextEntryId(), TranscriptEntryKind.Reasoning,
+                        "Reasoning summary", reasoning.Text, _modelId));
                 }
                 break;
 
@@ -157,10 +146,10 @@ internal sealed class ChatResponseProjector(TranscriptEmitter transcript, Action
             if (structuredJson)
             {
                 var text = _allText.ToString();
-                EmitEntry(new TranscriptChange.EntryAdded(transcript.NextEntryId(), TranscriptEntryKind.Assistant,
+                emit(new TranscriptChange.EntryAdded(transcript.NextEntryId(), TranscriptEntryKind.Assistant,
                     "Structured JSON", string.IsNullOrWhiteSpace(text) && _hasToolActivity
                         ? "(The provider completed tool activity without a final structured response.)"
-                        : FormatStructuredJson(text)), _canLabelStructuredTextModel);
+                        : FormatStructuredJson(text), _modelId));
             }
             return;
         }
@@ -170,11 +159,11 @@ internal sealed class ChatResponseProjector(TranscriptEmitter transcript, Action
             if (!_hasToolActivity && !_hasImage && _reasoningEntryId is null)
                 throw new InvalidOperationException("The model returned an empty response.");
             if (_hasToolActivity && !_hasImage && _reasoningEntryId is null)
-                EmitEntry(new TranscriptChange.EntryAdded(transcript.NextEntryId(), TranscriptEntryKind.Assistant,
+                emit(new TranscriptChange.EntryAdded(transcript.NextEntryId(), TranscriptEntryKind.Assistant,
                     structuredJson ? "Streaming JSON" : "Streaming text",
                     structuredJson
                         ? "(The provider completed tool activity without a final structured response.)"
-                        : "(The provider completed tool activity without a final text response.)"));
+                        : "(The provider completed tool activity without a final text response.)", _modelId));
             return;
         }
 
@@ -190,10 +179,7 @@ internal sealed class ChatResponseProjector(TranscriptEmitter transcript, Action
         {
             emit(new TranscriptChange.EntryStreamingStopped(entryId));
             if (_activeText.Length == 0)
-            {
-                _untaggedEntries.Remove(entryId);
                 emit(new TranscriptChange.EntryRemoved(entryId));
-            }
         }
     }
 
@@ -212,43 +198,18 @@ internal sealed class ChatResponseProjector(TranscriptEmitter transcript, Action
             // Tool boundaries flush visible text, but structured JSON still needs the complete response.
             _allText.Append(text);
             if (!structuredJson)
-                EmitEntry(new TranscriptChange.EntryAdded(
-                    transcript.NextEntryId(), TranscriptEntryKind.Assistant, "Text", text));
+                emit(new TranscriptChange.EntryAdded(
+                    transcript.NextEntryId(), TranscriptEntryKind.Assistant, "Text", text, _modelId));
             _pendingText.Clear();
         }
     }
 
     private void AddImage(DataContent image)
     {
-        EmitEntry(new TranscriptChange.EntryAdded(transcript.NextEntryId(), TranscriptEntryKind.Image,
-            "Generated image", string.Empty, ImageBytes: image.Data.ToArray()));
+        emit(new TranscriptChange.EntryAdded(transcript.NextEntryId(), TranscriptEntryKind.Image,
+            "Generated image", string.Empty, _modelId, ImageBytes: image.Data.ToArray()));
         _hasImage = true;
     }
-
-    private void EmitEntry(TranscriptChange.EntryAdded entry, bool? canLabelModel = null)
-    {
-        if (canLabelModel ?? _canLabelModel)
-        {
-            entry = entry with { ModelId = _modelId };
-            if (_modelId is null)
-                _untaggedEntries.Add(entry.EntryId);
-        }
-        emit(entry);
-    }
-
-    private void SetModelId(string? modelId)
-    {
-        if (string.IsNullOrWhiteSpace(modelId))
-            return;
-
-        _modelId = modelId;
-        // Metadata can arrive after text has been flushed or a tool bubble has been resolved.
-        foreach (var entryId in _untaggedEntries)
-            emit(new TranscriptChange.EntryModelIdChanged(entryId, modelId));
-        _untaggedEntries.Clear();
-    }
-
-    private static bool CanLabelModel(ChatRole? role) => role != ChatRole.User && role != ChatRole.System;
 
     private static bool ShouldProcess(string? callId, ISet<string> seenCallIds) =>
         string.IsNullOrEmpty(callId) || seenCallIds.Add(callId);

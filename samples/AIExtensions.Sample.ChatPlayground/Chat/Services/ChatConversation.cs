@@ -121,7 +121,6 @@ public sealed class ChatConversation
             await _turns.ExecuteTurnAsync(client, options, streaming,
                 projector.ProjectResponse,
                 projector.ProjectContent,
-                projector.ProjectUpdateMetadata,
                 cancellationToken);
             projector.Complete();
         }

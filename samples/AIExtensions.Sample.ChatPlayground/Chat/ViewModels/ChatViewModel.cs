@@ -585,5 +585,5 @@ public partial class ChatViewModel : ObservableObject
     private bool IsCurrentRequest(long requestGeneration) => requestGeneration == _requestGeneration;
 
     private void AddError(string text) =>
-        Chat.Messages.Add(new ChatMessageViewModel { Text = text, IsError = true, Label = "Error" });
+        Chat.Messages.Add(new ChatMessageViewModel { Text = text, IsError = true, Label = "Error", ModelId = string.Empty });
 }

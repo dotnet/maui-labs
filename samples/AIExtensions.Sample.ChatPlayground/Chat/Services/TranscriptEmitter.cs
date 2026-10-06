@@ -32,7 +32,8 @@ internal sealed class TranscriptEmitter
                 entryId,
                 TranscriptEntryKind.System,
                 "System instructions",
-                instructions));
+                instructions,
+                string.Empty));
             _systemEntryId = entryId;
         }
     }
@@ -45,6 +46,7 @@ internal sealed class TranscriptEmitter
             TranscriptEntryKind.User,
             "You",
             displayText,
+            string.Empty,
             ImageBytes: image?.Data.ToArray()));
     }
 

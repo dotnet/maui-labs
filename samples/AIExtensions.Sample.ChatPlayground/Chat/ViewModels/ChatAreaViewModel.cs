@@ -189,10 +189,6 @@ public sealed partial class ChatAreaViewModel : ObservableObject
                 GetEntry(text.EntryId).Text = text.Text;
                 break;
 
-            case TranscriptChange.EntryModelIdChanged model:
-                GetEntry(model.EntryId).ModelId = model.ModelId;
-                break;
-
             case TranscriptChange.ToolCallResolved result:
                 var tool = GetEntry(result.EntryId);
                 tool.Label = result.Label;
