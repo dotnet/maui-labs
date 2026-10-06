@@ -10,10 +10,10 @@ and Windows (not native macOS); available providers vary by platform.
 
 Switch between providers, stream responses, request structured JSON, and try
 optional tools. `Microsoft.Maui.Essentials.AI` provides on-device text chat
-through `AppleIntelligenceChatClient`. On iOS and Mac Catalyst 27+, image attachments
-require a ready vision-capable model. Azure uses the Responses API and also
-supports image input, reasoning summaries, and an optional image-generation
-tool. Apple does not generate images or fall back to Azure.
+through `AppleIntelligenceChatClient`. On iOS and Mac Catalyst 27+, image
+attachments require a ready vision-capable model. Azure uses the Responses
+API and also supports image input, reasoning summaries, and an optional
+image-generation tool. Apple does not generate images or fall back to Azure.
 
 Chat displays the model ID reported by the provider, including during replay.
 Save the current chat locally, import or export recordings, and replay them
@@ -45,8 +45,8 @@ works without credentials or a model.
 ## Build and run
 
 Install the repo's pinned .NET 10 SDK, the matching MAUI workload, and a
-compatible Xcode for Apple builds.
-From the repository root on macOS, build and run the Mac Catalyst sample with:
+compatible Xcode for Apple builds. From the repository root on macOS, build
+and run the Mac Catalyst sample with:
 
 ```sh
 dotnet build samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
@@ -54,10 +54,10 @@ dotnet build samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.Chat
 ```
 
 For iOS, use `-f net10.0-ios` instead. Apple Intelligence text chat requires
-iOS or Mac Catalyst 26+ on a supported
-device with the model enabled. Apple embeddings require the English
-sentence-embedding asset, which may be absent on simulators. Azure-backed
-features also run on Android and Windows.
+iOS or Mac Catalyst 26+ on a supported device with the model enabled. Apple
+image input requires 27+ and a ready vision-capable model. Apple embeddings
+require the English sentence-embedding asset, which may be absent on
+simulators. Azure-backed features also run on Android and Windows.
 
 ### Xcode 27 builds
 
