@@ -3,7 +3,9 @@
   <PropertyGroup>
     <TargetFrameworks>net10.0-android</TargetFrameworks>
     <TargetFrameworks Condition="!$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
+    <TargetFrameworks Condition="'$(UseXcode27Preview)' == 'true' and !$([MSBuild]::IsOSPlatform('linux'))">net10.0-android;net10.0-ios27.0;net10.0-maccatalyst27.0</TargetFrameworks>
     <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
+    <SupportedOSPlatformVersion Condition="'$(UseXcode27Preview)' == 'true' and $(TargetFramework.Contains('-maccatalyst'))">17.0</SupportedOSPlatformVersion>
     <OutputType>Exe</OutputType>
     <SingleProject>true</SingleProject>
     <UseMaui>true</UseMaui>
@@ -14,7 +16,7 @@
     <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst')) and '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'arm64'">maccatalyst-arm64</RuntimeIdentifier>
     <RuntimeIdentifiers Condition="$(TargetFramework.Contains('-android'))">android-arm64;android-x64</RuntimeIdentifiers>
     <Nullable>enable</Nullable>
-    <NoWarn>$(NoWarn);MAUIAI0001;CA1416</NoWarn>
+    <NoWarn>$(NoWarn);MAUIAI0001;CA1416;XCODE_27_0_PREVIEW</NoWarn>
     <UserSecretsId>808cc184-141a-409e-addd-565c973dbce6</UserSecretsId>
     <!-- Required for DeviceRunners dotnet test integration -->
     <GenerateTestingPlatformEntryPoint>false</GenerateTestingPlatformEntryPoint>
