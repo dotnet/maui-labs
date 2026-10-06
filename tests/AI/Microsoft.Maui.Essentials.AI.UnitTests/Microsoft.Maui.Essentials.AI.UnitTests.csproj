@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\..\..\src\AI\Microsoft.Maui.Essentials.AI\Platform\MaciOS\AppleVisionIngestionMapper.cs" Link="Documents\AppleVisionIngestionMapper.cs" />
     <PackageReference Include="Azure.AI.DocumentIntelligence" />
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="Microsoft.Extensions.AI" />
