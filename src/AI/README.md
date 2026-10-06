@@ -79,6 +79,9 @@ A future official `IDocumentExtractionClient` is the likely home for these typed
 ## Architecture
 
 - **Native Swift bindings** (`AppleNative/EssentialsAI/`) compiled via Xcode, producing `.xcframework` bundles
+- **Shared document recognition** — internal `AppleVisionDocumentRecognizer` owns the full native snapshot, request
+  controls, capabilities, image orientation, PDF page rendering, and cancellation. `AppleVisionDocumentReader` only
+  projects those pages into the standard ingestion model; other document adapters can reuse the same native pipeline.
 - **`AppleBindings.targets`** — MSBuild targets for cross-platform native artifact flow
 - **Streaming infrastructure** — `JsonStreamChunker`, `PlainTextStreamChunker`, `StreamingResponseHandler` for progressive deserialization
 

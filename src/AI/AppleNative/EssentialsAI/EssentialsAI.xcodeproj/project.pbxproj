@@ -18,7 +18,6 @@
 		3400193C2EDF4D6800DAB0A3 /* ChatResponseUpdateNative.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3400192D2EDF4D6800DAB0A3 /* ChatResponseUpdateNative.swift */; };
 		3400193D2EDF4D6800DAB0A3 /* Cancellation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 340019272EDF4D6800DAB0A3 /* Cancellation.swift */; };
 		3400193E2EDF4D6800DAB0A3 /* ChatTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3400192E2EDF4D6800DAB0A3 /* ChatTool.swift */; };
-		AB1000012EDF4D6800DAB0A3 /* DocumentReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1000022EDF4D6800DAB0A3 /* DocumentReader.swift */; };
 		A20000012F00000100000001 /* AppleVisionDocumentRecognitionOptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000112F00000100000001 /* AppleVisionDocumentRecognitionOptions.swift */; };
 		A20000022F00000100000001 /* AppleVisionDocumentSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000122F00000100000001 /* AppleVisionDocumentSnapshot.swift */; };
 		A20000032F00000100000001 /* AppleVisionDocumentRecognizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000132F00000100000001 /* AppleVisionDocumentRecognizer.swift */; };
@@ -37,7 +36,6 @@
 		340019302EDF4D6800DAB0A3 /* JsonSchemaDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JsonSchemaDecoder.swift; sourceTree = "<group>"; };
 		340019312EDF4D6800DAB0A3 /* ToolCallWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolCallWatcher.swift; sourceTree = "<group>"; };
 		340019322EDF4D6800DAB0A3 /* ToolNative.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolNative.swift; sourceTree = "<group>"; };
-		AB1000022EDF4D6800DAB0A3 /* DocumentReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentReader.swift; sourceTree = "<group>"; };
 		A20000112F00000100000001 /* AppleVisionDocumentRecognitionOptions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleVisionDocumentRecognitionOptions.swift; sourceTree = "<group>"; };
 		A20000122F00000100000001 /* AppleVisionDocumentSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleVisionDocumentSnapshot.swift; sourceTree = "<group>"; };
 		A20000132F00000100000001 /* AppleVisionDocumentRecognizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleVisionDocumentRecognizer.swift; sourceTree = "<group>"; };
@@ -72,7 +70,6 @@
 				340019302EDF4D6800DAB0A3 /* JsonSchemaDecoder.swift */,
 				340019312EDF4D6800DAB0A3 /* ToolCallWatcher.swift */,
 				340019322EDF4D6800DAB0A3 /* ToolNative.swift */,
-				AB1000022EDF4D6800DAB0A3 /* DocumentReader.swift */,
 				A20000112F00000100000001 /* AppleVisionDocumentRecognitionOptions.swift */,
 				A20000122F00000100000001 /* AppleVisionDocumentSnapshot.swift */,
 				A20000132F00000100000001 /* AppleVisionDocumentRecognizer.swift */,
@@ -182,7 +179,6 @@
 				3400193C2EDF4D6800DAB0A3 /* ChatResponseUpdateNative.swift in Sources */,
 				3400193D2EDF4D6800DAB0A3 /* Cancellation.swift in Sources */,
 				3400193E2EDF4D6800DAB0A3 /* ChatTool.swift in Sources */,
-				AB1000012EDF4D6800DAB0A3 /* DocumentReader.swift in Sources */,
 				A20000012F00000100000001 /* AppleVisionDocumentRecognitionOptions.swift in Sources */,
 				A20000022F00000100000001 /* AppleVisionDocumentSnapshot.swift in Sources */,
 				A20000032F00000100000001 /* AppleVisionDocumentRecognizer.swift in Sources */,

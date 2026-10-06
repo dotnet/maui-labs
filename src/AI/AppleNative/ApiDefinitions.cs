@@ -7,19 +7,6 @@ using ObjCRuntime;
 
 namespace Microsoft.Maui.Essentials.AI;
 
-[Internal] delegate void OnVisionDocumentRead([NullAllowed] NSData result, [NullAllowed] NSError error);
-
-[Introduced(PlatformName.iOS, 26, 0)]
-[Introduced(PlatformName.MacCatalyst, 26, 0)]
-[Introduced(PlatformName.MacOSX, 26, 0)]
-[BaseType(typeof(NSObject))]
-[Internal]
-interface VisionDocumentReaderNative
-{
-	[Export("recognizeWithImageData:orientation:onComplete:")]
-	CancellationTokenNative Recognize(NSData imageData, nint orientation, OnVisionDocumentRead onComplete);
-}
-
 // // typedef void (^AppleIntelligenceLogAction)(NSString * _Nonnull);
 // [Internal] delegate void AppleIntelligenceLogAction(string message);
 //

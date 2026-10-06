@@ -133,6 +133,32 @@ public class AppleVisionDocumentReaderTests
 	}
 
 	[Fact]
+	public async Task ReadAsync_FileInfo_InheritsIdentifierAndMediaTypeContract()
+	{
+		if (!IsSupported()) return;
+		var path = Path.Combine(FileSystem.CacheDirectory, $"reader-{Guid.NewGuid():N}.pdf");
+		try
+		{
+			using (var input = await OpenAsync("two-pages.pdf"))
+			using (var output = File.Create(path))
+				await input.CopyToAsync(output);
+
+			var reader = new AppleVisionDocumentReader();
+			var file = new FileInfo(path);
+			var supplied = await reader.ReadAsync(file, identifier: "supplied-pdf");
+			Assert.Equal("supplied-pdf", supplied.Identifier);
+			Assert.Equal(2, supplied.Sections.Count);
+			var inferred = await reader.ReadAsync(file);
+			Assert.Equal(file.FullName, inferred.Identifier);
+			Assert.Equal(2, inferred.Sections.Count);
+		}
+		finally
+		{
+			File.Delete(path);
+		}
+	}
+
+	[Fact]
 	public async Task ReadAsync_UnsupportedMediaAndCorruptInput_ThrowExplicitErrors()
 	{
 		if (!IsSupported()) return;

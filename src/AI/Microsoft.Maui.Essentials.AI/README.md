@@ -74,6 +74,8 @@ var embeddings = await generator.GenerateAsync(["sunset beach", "mountain hiking
 On iOS 26+, Mac Catalyst 26+, or macOS 26+, use `AppleVisionDocumentReader` as an `IngestionDocumentReader`.
 Recognition runs locally through Apple's Vision `RecognizeDocumentsRequest`. PDFKit renders PDFs internally,
 producing one numbered `IngestionDocumentSection` per page; an image produces one section.
+The reader is a thin projection over an internal, abstraction-neutral recognition pipeline. Other document abstractions can
+reuse the same Swift binding, complete native snapshot, image orientation, PDF rendering, and cancellation machinery.
 
 ```csharp
 using Microsoft.Extensions.DataIngestion;
