@@ -23,6 +23,7 @@ tool calls.
 The header's **Logs** button toggles the local, bounded diagnostics sidebar
 (also available on Embeddings and Images). It groups built-in logs and spans
 by trace, including existing tool-invocation lifecycle logs from MEAI and Apple.
+Apple's native tool callbacks retain the originating request's trace/span.
 Chat and embeddings emit spans, while the pinned MEAI version
 provides image logging only. Model and usage data appear only when emitted
 by the provider. Trace payload logging and sensitive telemetry capture are

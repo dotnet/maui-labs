@@ -485,6 +485,9 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 
 	private sealed partial class AIFunctionToolAdapter(AIFunction function, ILogger logger, CancellationToken cancellationToken, IServiceProvider? services) : AIToolNative
 	{
+		// Swift invokes tools on native threads without the managed request context.
+		private readonly NativeCallbackContext _requestContext = new();
+
 		public override string Name => function.Name;
 
 		public override string Desc => function.Description;
@@ -495,6 +498,11 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 
 #pragma warning disable IL3050, IL2026 // DefaultJsonTypeInfoResolver is only used when reflection-based serialization is enabled
 		public override async void CallWithArguments(NSString arguments, AIToolCompletionHandler completionHandler)
+		{
+			await _requestContext.RunAsync(() => InvokeAsync(arguments, completionHandler));
+		}
+
+		private async Task InvokeAsync(NSString arguments, AIToolCompletionHandler completionHandler)
 		{
 			try
 			{
