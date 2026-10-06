@@ -67,30 +67,6 @@ building the normal Apple 26.x reference packs with Xcode 27, the native
 CI job passes `ValidateXcodeVersion=false` to bypass the older packs' Xcode
 version check.
 
-## Device tests
-
-The shared chat response tests require a nonempty `ChatResponse.ModelId`. The
-streaming tests check every `ChatResponseUpdate`, including metadata-only updates,
-for a nonempty, consistent model ID and verify the aggregated response retains it.
-Apple Intelligence and OpenAI inherit the same assertions.
-
-```bash
-dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests \
-  -f net10.0-maccatalyst --filter "FullyQualifiedName~ModelId"
-```
-
-For live OpenAI testing, add `-p:EnableOpenAIClient=true`. Configure the device
-test project's user secrets (`808cc184-141a-409e-addd-565c973dbce6`) with
-`AI:ApiKey`, `AI:Endpoint`, `AI:DeploymentName`, and `AI:EmbeddingDeploymentName`.
-Use an OpenAI-compatible Responses endpoint, such as Azure OpenAI's `/openai/v1/`
-endpoint. The OpenAI tests use `GetResponsesClient().AsIChatClient(...)`, matching
-the chat playground's Responses API path rather than the older Chat Completions
-adapter.
-
-These tests contact real models and require Apple Intelligence to be available
-for the Apple cases. Debug builds embed the configured user secrets; do not
-distribute the resulting test app.
-
 ## Architecture
 
 - **Native Swift bindings** (`AppleNative/EssentialsAI/`) compiled via Xcode, producing `.xcframework` bundles
